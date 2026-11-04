@@ -55,6 +55,7 @@ Good, bad, and follow-ups this creates.
 | Date | Record | Status |
 |---|---|---|
 | 2026-11-04 | [Broker policy is a versioned, engine-agnostic JSON document; the broker is driven by JSON-RPC over exec stdio](20261104-broker-policy-and-control-protocol.md) | accepted |
+| 2026-11-04 | [Defeat folder-open loaders and beacons (tasks.json abuse, DPRK "Contagious Interview")](20261104-defeat-folder-open-loaders.md) | accepted |
 | 2026-11-04 | [Extension placement hardening: built-in-only `ui`, no `web` default, nothing runs in local windows](20261104-extension-placement-hardening.md) | accepted |
 | 2026-11-04 | [Every non-built-in extension runs in the tab (product `extensionKind` default `*`)](20261104-extensionkind-default-workspace.md) | superseded-by [20261104-extension-placement-hardening](20261104-extension-placement-hardening.md) |
 | 2026-11-04 | [The trusted editor runs natively on macOS, built unsigned on GitHub Actions](20261104-native-editor-on-actions.md) | accepted |

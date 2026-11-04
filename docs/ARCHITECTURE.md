@@ -11,6 +11,7 @@
 - **Extension placement.** Every non-built-in extension is forced into the tab, and nothing extension-based runs in local windows (patches 0002–0004; [ADR](adr/20261104-extension-placement-hardening.md)).
 - **Pre-mount secret scan.** Before a folder is mounted into a tab, gitleaks scans it (the worktree, every git dir, history, the object store and archives) in a network-less container. Findings block the open until each one is moved to the broker vault or accepted as a recorded exception ([ADR](adr/20261104-pre-mount-secret-scan.md)).
 - **Broker.** One policy and credential engine for all drivers, with a versioned stdio control protocol ([ADR](adr/20261104-broker-policy-and-control-protocol.md), [protocol](broker-protocol.md)). It's built and tested standalone; wiring it into tabs is M2/M3.
+- **Folder-open loaders (tasks.json campaigns).** Automatic tasks stay off at application scope, so a workspace can't turn them on ([EDR](edr/20261104-automatic-tasks-off.md)). Whatever runs anyway runs in the tab, and the broker denies a loader's first fetch and beacon: no raw IPs or risky hosts before a user action, with origin-flagged prompts ([ADR](adr/20261104-defeat-folder-open-loaders.md)).
 - **Repository.** This is a private GitHub repo, so that macOS builds can run on Actions ([ADR](adr/20261104-private-github-repo.md)).
 - **Open items.**
   - Main-process routing is proposed ([ADR](adr/20261104-route-folder-opens-in-main.md)); a high-severity residual remains.
