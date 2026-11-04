@@ -193,7 +193,16 @@ These are enforced three ways: `probe-safety.js` at runtime,
    directory. Environment alone does not arm them, so the extension installed
    anywhere else does nothing.
 7. **Teardown** removes markers, keychain entries, sandboxes and windows, and a
-   post-run check asserts nothing outside the run directory changed.
+   post-run check asserts nothing outside the run directory changed:
+
+   ```sh
+   node test/containment/teardown.ts snapshot <run-dir>   # before the run
+   node test/containment/teardown.ts verify   <run-dir>   # after it
+   ```
+
+   `verify` is a tripwire over `$HOME`, `~/Library/LaunchAgents`, `~/.ssh`,
+   `~/.aws` and `~/.config`, plus the run-scoped keychain key and any sandbox
+   left running. It is not a guarantee; it is the thing that notices.
 
 A safety refusal throws `SafetyError`, which is tagged so `classify()` records
 it as `ERROR`. It must never be scored as a denial: a mis-targeted probe would
