@@ -48,7 +48,7 @@ without `id` is a notification):
 <!-- check: jsonrpc -->
 ```json
 {"jsonrpc": "2.0", "id": 1, "method": "broker.hello"}
-{"jsonrpc": "2.0", "id": 2, "method": "proxy.auth.set", "params": {"username": "seclab", "password": "Zm9vYmFyYmF6cXV4cXV1eA"}}
+{"jsonrpc": "2.0", "id": 2, "method": "proxy.auth.set", "params": {"username": "seclab", "password": "example_only_xxxxxxxxxxxx"}}
 {"jsonrpc": "2.0", "id": 3, "method": "policy.load", "params": {"policy": {"version": 1, "allow": [{"host": "api.github.com", "methods": ["GET"]}]}}}
 {"jsonrpc": "2.0", "method": "audit.event", "params": {"seq": 4, "ts": 1793800000.0, "type": "policy.loaded", "revision": 1}}
 ```
@@ -205,7 +205,7 @@ Example:
 ```json
 {
  "username": "seclab",
- "password": "Zm9vYmFyYmF6cXV4cXV1eA"
+ "password": "example_only_xxxxxxxxxxxx"
 }
 ```
 <!-- check: method.result proxy.auth.set -->

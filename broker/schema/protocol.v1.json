@@ -60,7 +60,7 @@
       },
       "result": { "type": "object", "additionalProperties": false, "required": ["epoch"],
                   "properties": { "epoch": { "type": "integer", "description": "Increments on every rotation." } } },
-      "examples": [{ "params": { "username": "seclab", "password": "Zm9vYmFyYmF6cXV4cXV1eA" }, "result": { "epoch": 1 } }]
+      "examples": [{ "params": { "username": "seclab", "password": "example_only_xxxxxxxxxxxx" }, "result": { "epoch": 1 } }]
     },
     "policy.load": {
       "description": "Replace the tab's policy. Rules added at runtime by `allow-tab` are discarded (persist them from `policy.changed`). Sentinels are stable across reloads for the same credential id, and already-provided values are kept. Credentials no longer in the policy are dropped from memory; imported credentials are unaffected. A `tabId` that differs from the broker's `SECLAB_TAB_ID` is rejected.",
