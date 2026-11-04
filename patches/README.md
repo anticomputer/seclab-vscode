@@ -1,8 +1,14 @@
 # Core patch queue
 
-Ordered `NNNN-short-concern.patch` files, applied with `git apply` by
-`build/prepare.sh` in lexical order against the commit in `upstream.lock`.
-A patch that doesn't apply fails the build.
+`NNNN-short-concern.patch` files, applied with `git apply` by
+`build/apply-patches.sh` (called by `build/prepare.sh`) **in the order listed in
+[`series`](series)** against the commit in `upstream.lock`.
+- A patch that doesn't apply fails the build.
+- Any file here not listed in `series` (other than this README) fails the build, so a
+  test-only patch can't ship by being dropped in the directory
+  ([EDR](../docs/edr/20261104-patch-series.md)).
+- Test-only hooks never go here; they belong to the test harness.
+- `build/apply-patches.sh --check` validates the queue without a checkout (CI).
 
 Rules ([ADR](../docs/adr/20261104-vscodium-style-fork.md)):
 - One concern per patch, under about 50 lines.

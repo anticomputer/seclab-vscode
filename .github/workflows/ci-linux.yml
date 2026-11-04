@@ -36,6 +36,8 @@ jobs:
         run: ./seclab test unit
       - name: Fixture-safety lint
         run: ./seclab lint fixtures
+      - name: Patch queue is exactly patches/series
+        run: build/apply-patches.sh --check
 
   oci:
     runs-on: ubuntu-24.04
@@ -49,6 +51,8 @@ jobs:
           node-version: 24.22.1
       - name: Build REH (container, pinned upstream)
         run: ./seclab build linux reh
+      - name: Release check (no test hooks in the REH)
+        run: build/check-release.sh .work/out/seclab-reh-linux-*.tar.gz
       - name: Build OCI tab images
         run: ./seclab image oci
       - name: tabd end-to-end (OCI)

@@ -38,9 +38,6 @@ mv "$tmp" "$DEST/product.json"
 rm -f "$ui_json"
 echo "prepare: product.json overrides applied (ui-kind built-ins: $(jq -c '.extensionKind | with_entries(select(.value|index("ui"))) | keys' "$DEST/product.json"))"
 
-# 4. Patch queue, in lexical order; any failure aborts the build.
-for p in "$ROOT"/patches/[0-9][0-9][0-9][0-9]-*.patch; do
-	git -C "$DEST" apply --whitespace=nowarn "$p"
-	echo "prepare: applied $(basename "$p")"
-done
+# 4. Patch queue: exactly what patches/series lists (build/apply-patches.sh, EDR patch-series).
+"$ROOT/build/apply-patches.sh" "$DEST"
 echo "prepare: done ($DEST)"
