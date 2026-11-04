@@ -49,3 +49,4 @@ Same rules as ADRs:
 | 2026-11-04 | [Tab Manager routing (M1): extension-level redirect, fail closed](20261104-tab-manager-routing.md) | superseded-by local-window-close-first (local part) |
 | 2026-11-04 | [Local folder windows are closed before any dialog](20261104-local-window-close-first.md) | accepted |
 | 2026-11-04 | [Canary acceptance harness](20261104-canary-harness.md) | accepted |
+| 2026-11-04 | [OCI tabs on a native Linux engine run as the workspace owner](20261104-oci-tab-user-on-linux.md) | accepted |
