@@ -38,6 +38,7 @@ file has been run. Anything not yet built is marked **TODO**.
 | `schema/capabilities.v1.json` | Capability matrix notes, sbx-native column, and the tests behind each row |
 | `tools/docs.py`, `docs-check.sh` | Doc generator and drift checker (`--write`, `--run-commands`) |
 | `tools/fixture_lint.py` | Fixtures may only target test-owned endpoints; no token-shaped literals |
+| `tools/pin_check.py` | Every external base image pinned by digest; every pip install hash-pinned (run by docs-check) |
 | `examples/` | Example policies, validated by unit tests |
 | `tests/unit/` | pytest, run inside the broker image with `--network none` |
 | `tests/integration/` | Pod-shaped suite: harness container + docker.sock |
