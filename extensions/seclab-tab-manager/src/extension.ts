@@ -233,7 +233,7 @@ async function chooseAllowedRoot(near: string): Promise<void> {
 	}
 	const root = await vscode.window.showOpenDialog({
 		canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
-		defaultUri: vscode.Uri.file(path.dirname(near)), openLabel: 'Use as Projects Folder',
+		defaultUri: vscode.Uri.file(process.env.HOME ?? '/'), openLabel: 'Use as Projects Folder',
 	});
 	if (!root?.[0] || root[0].scheme !== 'file') {
 		throw new Error('no projects folder chosen');
@@ -268,26 +268,41 @@ async function openFolderWithDialog(): Promise<void> {
 }
 
 /**
- * A local (unsandboxed) window was opened with a folder: CLI, recents, File > Open,
- * Finder, a link. Re-open it as a tab in the same window, or close the folder: a local
- * folder window is never left running (fail closed). New paths need explicit
- * confirmation because the source of a local open can't be distinguished from here.
- * Until main-process routing lands (ADR 20261104-route-folder-opens-in-main, proposed), the
- * local window exists briefly before the reroute. Residual: if the user previously trusted
- * the folder, built-ins (git, tasks) can run on the host in that moment.
+ * A local (unsandboxed) window was opened with a folder or workspace: CLI, recents,
+ * File > Open, Finder, a link. Close it FIRST (before any dialog, so the local folder
+ * window lives as briefly as possible), carrying the request to the now-empty window,
+ * which then confirms, claims and re-opens it as a tab. With patch 0003 no workspace-kind
+ * extension (built-in git included) runs in a local window at all; the residual is core
+ * auto-tasks in a previously trusted folder during the moment before closeFolder.
+ * The full fix is main-process routing (ADR 20261104-route-folder-opens-in-main, proposed).
  */
+const PENDING_KEY = 'seclab.pendingRoute';
+const PENDING_TTL_MS = 60_000;
+interface PendingRoute { readonly hostPath?: string; readonly unsupported?: boolean; readonly at: number }
+
 async function routeLocalWindow(): Promise<void> {
 	const folders = vscode.workspace.workspaceFolders ?? [];
-	if (folders.length === 0 && !vscode.workspace.workspaceFile) {
-		return; // empty window: stays local (built-in extensions only); see the routing EDR
-	}
-	if (folders.length !== 1 || vscode.workspace.workspaceFile || folders[0].uri.scheme !== 'file') {
-		await vscode.window.showWarningMessage('Multi-root and non-file workspaces cannot be opened as sandboxed tabs yet, so this workspace was closed.',
-			{ modal: true, detail: 'Open each folder with "seclab: Open Folder in New Tab…".' });
+	if (folders.length > 0 || vscode.workspace.workspaceFile) {
+		const single = folders.length === 1 && !vscode.workspace.workspaceFile && folders[0].uri.scheme === 'file';
+		const pending: PendingRoute = single ? { hostPath: folders[0].uri.fsPath, at: Date.now() } : { unsupported: true, at: Date.now() };
+		await extensionContext.globalState.update(PENDING_KEY, pending);
 		await vscode.commands.executeCommand('workbench.action.closeFolder');
 		return;
 	}
-	const hostPath = folders[0].uri.fsPath;
+	// Empty local window: continue a routing request handed over by closeFolder, if any.
+	const pending = extensionContext.globalState.get<PendingRoute>(PENDING_KEY);
+	if (!pending) {
+		return;
+	}
+	await extensionContext.globalState.update(PENDING_KEY, undefined);
+	if (Date.now() - pending.at > PENDING_TTL_MS) {
+		return;
+	}
+	if (pending.unsupported || !pending.hostPath) {
+		void vscode.window.showWarningMessage('Multi-root and non-file workspaces cannot be opened as sandboxed tabs yet, so it was closed. Open each folder with "seclab: Open Folder in New Tab…".');
+		return;
+	}
+	const hostPath = pending.hostPath;
 	try {
 		const c = await getClient();
 		const known = (await c.request<{ tabs: TabView[] }>('tab.list')).tabs
@@ -295,18 +310,16 @@ async function routeLocalWindow(): Promise<void> {
 		if (!known) {
 			const ok = await vscode.window.showWarningMessage(
 				`Open "${hostPath}" in a sandboxed tab?`,
-				{ modal: true, detail: 'Extensions, terminals and tasks for this folder will run in an isolated sandbox with only this folder mounted. Choosing Cancel closes the folder.' },
+				{ modal: true, detail: 'Extensions, terminals and tasks for this folder will run in an isolated sandbox with only this folder mounted.' },
 				'Open in Sandboxed Tab');
 			if (ok !== 'Open in Sandboxed Tab') {
-				await vscode.commands.executeCommand('workbench.action.closeFolder');
 				return;
 			}
 		}
 		const tab = await claim(hostPath);
 		await vscode.commands.executeCommand('vscode.openFolder', tabUri(tab.metadata.name, tab.spec.workspace.hostPath), { forceReuseWindow: true });
 	} catch (e) {
-		await vscode.window.showErrorMessage(`Cannot open as a tab, closing the folder: ${(e as Error).message}`, { modal: true });
-		await vscode.commands.executeCommand('workbench.action.closeFolder');
+		void vscode.window.showErrorMessage(`Cannot open as a tab: ${(e as Error).message}`);
 	}
 }
 

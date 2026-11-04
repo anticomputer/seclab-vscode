@@ -10,6 +10,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
+import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
 import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
 
 const [mode, userDataArg, driverArg] = process.argv.slice(2);
@@ -37,14 +38,20 @@ if (mode === 'prepare') {
 	execFileSync('git', ['-C', ws, 'init', '-q']);
 	execFileSync('git', ['-C', ws, 'config', 'core.fsmonitor', 'sh .seclab/probe.sh fsmonitor']);
 	// Test profile: Workspace Trust off and automatic tasks on, i.e. the worst case for us
-	// (trust is UX, not a boundary).
+	// (trust is UX, not a boundary). Plus editor-side canaries (shared canary harness):
+	// user settings (incl. a real secret-bearing setting) and the host clipboard.
+	const canaries = [mintCanary('user-settings'), mintCanary('user-settings-proxy-auth'), mintCanary('clipboard'), mintCanary('editor-env')];
+	fs.writeFileSync(path.join(base, 'canaries.json'), serialize(canaries));
 	fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
 	fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 		'security.workspace.trust.enabled': false,
 		'task.allowAutomaticTasks': 'on',
 		'seclab.tabs.driver': driver,
 		'seclab.tabs.allowedRoots': [base],
+		'seclab.test.canary': canaries[0].value,
+		'http.proxyAuthorization': `Basic ${canaries[1].value}`,
 	}, null, '\t'));
+	spawnSync('pbcopy', [], { input: canaries[2].value });
 	// Package the rogue extension (vsce in a container) and preinstall it into the tab.
 	const vsixDir = path.join(ws, '.seclab');
 	execFileSync('docker', ['run', '--rm', '-v', `${path.join(import.meta.dirname, 'rogue-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
@@ -65,7 +72,7 @@ if (mode === 'prepare') {
 	console.log(r.stdout.trim(), r.stderr.trim());
 	client.dispose(); // stops the tab; the editor restarts it (extensions persist in the tab)
 	await new Promise(res => client.once('exit', res));
-	console.log(`\nprepared tab ${tab.metadata.name} for ${ws}\nnow open it with the fork:\n  <app>/Contents/Resources/app/bin/seclab-code --user-data-dir ${userData} ${ws}`);
+	console.log(`\nprepared tab ${tab.metadata.name} for ${ws}\nnow open the TAB directly (never the local path: a local window must not open this hostile workspace):\n  env SECLAB_EDITOR_CANARY=${canaries[3].value} <app>/Contents/Resources/app/bin/seclab-code --user-data-dir ${userData} --folder-uri vscode-remote://seclab+${tab.metadata.name}${ws}`);
 } else {
 	const checks: Check[] = [];
 	for (const vector of ['task', 'fsmonitor', 'rogue-extension']) {
@@ -75,6 +82,19 @@ if (mode === 'prepare') {
 	const host = fs.existsSync(hostFile) ? JSON.parse(fs.readFileSync(hostFile, 'utf8')) : undefined;
 	checks.push({ vector: 'rogue-extension', name: 'ui-kind rogue extension was forced into the tab (remoteName=seclab)', ok: host?.remoteName === 'seclab' && host?.seclabTab === '1', detail: JSON.stringify(host) });
 	checks.push({ vector: 'host', name: 'canary intact', ok: fs.readFileSync(canary, 'utf8') === 'HOST-SECRET-CANARY\n', detail: '' });
+	// Shared canary harness, editor side: nothing the rogue extension observed through the
+	// API (env, configuration, clipboard, auth sessions, secrets) nor any evidence may
+	// contain an editor-side canary in any encoding.
+	const canaries = deserialize(fs.readFileSync(path.join(base, 'canaries.json'), 'utf8'));
+	const evDir = path.join(ws, '.seclab-evidence');
+	const observedOk = fs.existsSync(path.join(evDir, 'rogue-observed.json'));
+	checks.push({ vector: 'canary', name: 'rogue extension recorded its API observations', ok: observedOk, detail: '' });
+	for (const f of fs.existsSync(evDir) ? fs.readdirSync(evDir) : []) {
+		for (const h of scan(canaries, f, fs.readFileSync(path.join(evDir, f)))) {
+			checks.push({ vector: 'canary', name: `no ${h.store} canary in tab-observable data`, ok: false, detail: `${h.encoding} in ${h.source}` });
+		}
+	}
+	checks.push({ vector: 'canary', name: 'no editor-side canary observed by the tab', ok: !checks.some(c => c.vector === 'canary' && !c.ok), detail: '' });
 	const ok = report(checks);
 	// Disarm the hostile git config left in the host work dir.
 	fs.rmSync(path.join(ws, '.git'), { recursive: true, force: true });

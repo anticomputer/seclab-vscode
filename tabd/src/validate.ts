@@ -130,12 +130,6 @@ export function canonicalWorkspacePath(input: unknown, policy: PathPolicy = {}):
 		throw new ValidationError('workspace path is not a directory');
 	}
 	const realHome = safeRealpath(policy.home ?? os.homedir());
-	for (const r of policy.allowedRoots ?? []) {
-		// A root must itself be a reasonable place for projects, not e.g. $HOME or /.
-		if (!path.isAbsolute(r) || ['/', '/Users', '/home', realHome].includes(safeRealpath(r) ?? r)) {
-			throw new ValidationError(`allowed root ${r} is too broad`);
-		}
-	}
 	// Exact matches refused: system roots and the home directory itself.
 	const exact = ['/', '/Users', '/home', '/root', '/private', '/System', '/Library',
 		'/Applications', '/Volumes', '/etc', '/var', '/usr', '/opt', '/bin', '/sbin', '/tmp', '/dev', '/proc', '/run'];
@@ -179,6 +173,18 @@ export function canonicalWorkspacePath(input: unknown, policy: PathPolicy = {}):
 	if (roots.length === 0) {
 		// Fail closed: tabs may only be opened under explicitly configured project roots.
 		throw new ValidationError('no allowed roots configured (seclab.tabs.allowedRoots / --allowed-root)');
+	}
+	// Roots get the same vetting as workspaces (and no dot-directories under $HOME), so an
+	// over-broad or sensitive root can't widen what the allowlist admits.
+	for (const r of roots) {
+		const rr = path.isAbsolute(r) ? (safeRealpath(r) ?? r) : '';
+		if (!rr || exact.some(e => foldPath(e) === foldPath(rr)) || sensitive.some(s => within(rr, s) || within(s, rr))) {
+			throw new ValidationError(`allowed root ${r} is too broad or sensitive`);
+		}
+		// A dot-directory directly under $HOME (~/.claude, ~/.npm, ...) is tool state, not a projects folder.
+		if (realHome && foldPath(path.dirname(rr)) === foldPath(realHome) && path.basename(rr).startsWith('.')) {
+			throw new ValidationError(`allowed root ${r} is a dot-directory in the home directory`);
+		}
 	}
 	if (!roots.some(r => path.isAbsolute(r) && within(real, safeRealpath(r) ?? r))) {
 		throw new ValidationError(`workspace is outside the allowed roots`);
