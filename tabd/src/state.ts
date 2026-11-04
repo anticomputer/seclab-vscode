@@ -122,6 +122,31 @@ export class TabStore {
 		const key = createHash('sha256').update(foldPath(r.hostPath)).digest('hex');
 		fs.rmSync(path.join(this.byPathDir, `${key}.json`), { force: true });
 		fs.rmSync(this.recordFile(tabId), { force: true });
+		this.clearLease(tabId);
+	}
+
+	// Leases: which live supervisor (pid) is monitoring a running tab's fence.
+	private leaseFile(tabId: string): string {
+		return path.join(this.tabsDir, `${assertTabId(tabId)}.lease`);
+	}
+
+	writeLease(tabId: string, pid: number): void {
+		fs.writeFileSync(this.leaseFile(tabId), String(pid), { mode: 0o600 });
+	}
+
+	leaseHolder(tabId: string): number | undefined {
+		try {
+			const pid = Number(fs.readFileSync(this.leaseFile(tabId), 'utf8'));
+			return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+		} catch {
+			return undefined;
+		}
+	}
+
+	clearLease(tabId: string, onlyIfPid?: number): void {
+		if (onlyIfPid === undefined || this.leaseHolder(tabId) === onlyIfPid) {
+			fs.rmSync(this.leaseFile(tabId), { force: true });
+		}
 	}
 
 	private recordFile(tabId: string): string {

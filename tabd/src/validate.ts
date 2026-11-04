@@ -138,9 +138,20 @@ export function canonicalWorkspacePath(input: unknown, policy: PathPolicy = {}):
 	if (realHome) {
 		exact.push(realHome);
 		for (const sub of ['.ssh', '.docker', '.config', '.aws', '.azure', '.gnupg', '.kube', 'Library', '.local',
-			'.gitconfig', '.netrc', '.npmrc', '.seclab-vscode', '.seclab-vscode-server', '.vscode', '.vscode-oss']) {
+			'.gitconfig', '.netrc', '.npmrc', '.seclab-vscode', '.seclab-vscode-server', '.vscode', '.vscode-oss',
+			// Directories host tools execute from or load code/config from.
+			'bin', '.cargo', '.rustup', '.nvm', '.pyenv', '.rbenv', '.bun', '.deno', '.oh-my-zsh', '.gradle', '.m2', '.sdkman',
+			'.zshrc', '.zprofile', '.bashrc', '.bash_profile', '.profile',
+			// Agent CLI configs (MCP servers = host commands). Files, so only the file and its
+			// ancestors are refused; project dirs below e.g. ~/.copilot stay openable.
+			'.copilot/mcp-config.json', '.copilot/config.json', '.claude/settings.json', '.claude.json',
+			'.codex/config.toml', '.cursor/mcp.json']) {
 			sensitive.push(path.join(realHome, sub));
 		}
+	}
+	// Host binary locations (tabd executes sbx/docker from here): a tab must never mount them.
+	for (const d of ['/opt/homebrew', '/usr/local', '/Applications']) {
+		sensitive.push(d);
 	}
 	for (const s of policy.sensitive ?? []) {
 		if (path.isAbsolute(s)) {

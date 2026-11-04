@@ -61,6 +61,8 @@ export interface Driver {
 	quarantine(spec: TabRuntimeSpec): Promise<void>;
 	/** Open a byte stream to the REH socket inside the sandbox (fixed in-sandbox argv). */
 	connectReh(spec: TabRuntimeSpec): ChildProcessWithoutNullStreams;
+	/** Names of this driver's sandboxes that are currently running. */
+	runningSandboxes(): Promise<Set<string>>;
 	stop(spec: TabRuntimeSpec): Promise<void>;
 	remove(spec: TabRuntimeSpec): Promise<void>;
 }

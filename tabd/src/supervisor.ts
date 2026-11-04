@@ -45,7 +45,7 @@ export class Supervisor {
 	private readonly channels = new Map<number, Channel>();
 	private readonly fenceTimers = new Map<string, NodeJS.Timeout>();
 	private readonly phases = new Map<string, string>();
-	private readonly connectedTabs = new Set<string>();
+	private readonly owned = new Set<string>();
 	private dead = false;
 
 	constructor(o: SupervisorOptions) {
@@ -98,17 +98,18 @@ export class Supervisor {
 
 	/**
 	 * Client went away (stdin EOF). Without a supervisor nobody re-verifies the fence,
-	 * so stop every tab this supervisor connected (fail closed).
+	 * so stop every tab this supervisor started, connected or adopted (fail closed).
 	 */
 	async clientGone(): Promise<void> {
 		this.shutdown();
-		for (const tabId of this.connectedTabs) {
+		for (const tabId of this.owned) {
 			try {
 				const r = this.o.store.get(tabId);
 				if (r) {
 					const spec = this.spec(r);
 					await this.driverFor(spec.template).stop(spec);
 				}
+				this.o.store.clearLease(tabId, process.pid);
 			} catch { /* best effort */ }
 		}
 	}
@@ -166,6 +167,7 @@ export class Supervisor {
 			}
 			this.initialized = true;
 			const drivers: DriverInfo[] = await Promise.all([...this.o.drivers.values()].map(d => d.probe()));
+			await this.reconcile();
 			return { protocolVersion: PROTOCOL_VERSION, supervisor: { version: SUPERVISOR_VERSION }, drivers, templates: [...this.o.templates.values()] };
 		}
 		if (!this.initialized) {
@@ -282,8 +284,9 @@ export class Supervisor {
 			throw e;
 		}
 		this.setPhase(r.tabId, 'Running', [{ type: 'Ready', status: 'True' }, { type: 'FenceVerified', status: 'True' }, { type: 'RehReady', status: 'True' }]);
+		this.own(r.tabId);
 		this.audit('tab.ensureRunning', 'ok', { tabId: r.tabId });
-		return { tab: this.view(r) };
+		return { tab: this.view(r), connectionToken: r.connectionToken };
 	}
 
 	private async verify(r: TabRecord): Promise<FenceReport> {
@@ -304,10 +307,15 @@ export class Supervisor {
 			throw new RpcError(-32010, `fence verification failed: ${report.problems.join('; ')}`);
 		}
 		const spec = this.spec(r);
+		// `exec` would silently start a stopped (e.g. quarantined) sandbox, bypassing the
+		// identity re-check in ensureRunning; only connect to a running one.
+		if (!(await this.driverFor(spec.template).runningSandboxes()).has(spec.sandboxName)) {
+			throw new RpcError(-32012, 'tab is not running; call tab.ensureRunning first');
+		}
 		const child = this.driverFor(spec.template).connectReh(spec);
 		const id = this.nextChannel++;
 		this.channels.set(id, { tabId: r.tabId, child });
-		this.connectedTabs.add(r.tabId);
+		this.own(r.tabId);
 		child.stdout.on('data', (d: Buffer) => {
 			if (this.channels.has(id)) {
 				for (const f of encodeData(id, d)) {
@@ -320,7 +328,6 @@ export class Supervisor {
 		child.stderr.on('data', (d: Buffer) => { stderrTail = (stderrTail + d.toString('utf8')).slice(-400); });
 		child.on('error', err => this.closeChannel(id, `exec error: ${err.message}`));
 		child.on('close', code => this.closeChannel(id, code === 0 ? undefined : `exec exited ${code}: ${stderrTail.trim()}`));
-		this.ensureReverify(r.tabId);
 		this.audit('tab.connect', 'ok', { tabId: r.tabId, channel: id });
 		return { channel: id, connectionToken: r.connectionToken };
 	}
@@ -329,25 +336,80 @@ export class Supervisor {
 		if (this.fenceTimers.has(tabId)) {
 			return;
 		}
-		const timer = setInterval(() => {
-			const open = [...this.channels.entries()].filter(([, c]) => c.tabId === tabId);
-			if (open.length === 0) {
-				clearInterval(timer);
-				this.fenceTimers.delete(tabId);
-				return;
+		const stopMonitoring = () => {
+			clearInterval(timer);
+			this.fenceTimers.delete(tabId);
+		};
+		const tick = async () => {
+			const r = this.o.store.get(tabId);
+			if (!r) {
+				return stopMonitoring(); // removed (possibly by another supervisor)
 			}
-			void this.verify(this.record(tabId)).then(async report => {
-				if (!report.ok) {
-					for (const [id] of open) {
-						this.closeChannel(id, `fence drift: ${report.problems.join('; ')}`);
-					}
-					this.setPhase(tabId, 'Failed', [{ type: 'FenceVerified', status: 'False', reason: 'Drift', message: report.problems.join('; ') }]);
-					await this.quarantine(this.record(tabId));
+			const spec = this.spec(r);
+			// Keep verifying for as long as the sandbox runs, connected or not: workspace
+			// code can keep running in the sandbox after the UI disconnects.
+			if (!(await this.driverFor(spec.template).runningSandboxes()).has(spec.sandboxName)) {
+				return stopMonitoring();
+			}
+			const report = await this.verify(r);
+			if (!report.ok) {
+				this.setPhase(tabId, 'Failed', [{ type: 'FenceVerified', status: 'False', reason: 'Drift', message: report.problems.join('; ') }]);
+				await this.quarantine(r);
+			}
+		};
+		const timer = setInterval(() => {
+			tick().catch(async e => {
+				// Fail closed: an error while verifying quarantines the tab.
+				this.audit('fence.monitor', 'error', { tabId, error: (e as Error).message });
+				const r = this.o.store.get(tabId);
+				if (r) {
+					await this.quarantine(r).catch(() => { /* audited inside */ });
 				}
 			});
 		}, this.o.fenceReverifyMs ?? FENCE_REVERIFY_MS);
 		timer.unref?.();
 		this.fenceTimers.set(tabId, timer);
+	}
+
+	/** Take responsibility for a running tab: monitor its fence and stop it when we exit. */
+	private own(tabId: string): void {
+		this.owned.add(tabId);
+		this.o.store.writeLease(tabId, process.pid);
+		this.ensureReverify(tabId);
+	}
+
+	/**
+	 * Startup reconciliation. A running tab whose lease holder is gone (supervisor crash,
+	 * editor killed) has had no fence monitoring: verify it now and either adopt it or
+	 * quarantine it. Tabs leased by another live supervisor are left to that supervisor.
+	 */
+	private async reconcile(): Promise<void> {
+		for (const [name, driver] of this.o.drivers) {
+			let running: Set<string>;
+			try {
+				running = await driver.runningSandboxes();
+			} catch {
+				continue;
+			}
+			for (const r of this.o.store.list()) {
+				const spec = this.spec(r);
+				if (spec.template.spec.driver !== name || !running.has(spec.sandboxName)) {
+					continue;
+				}
+				const holder = this.o.store.leaseHolder(r.tabId);
+				if (holder !== undefined && holder !== process.pid && pidAlive(holder)) {
+					continue;
+				}
+				const report = await this.verify(r).catch(() => ({ ok: false, problems: ['verify failed'], checkedAt: '' }));
+				if (report.ok) {
+					this.own(r.tabId);
+					this.audit('tab.reconcile', 'adopted', { tabId: r.tabId });
+				} else {
+					await this.quarantine(r);
+					this.audit('tab.reconcile', 'quarantined', { tabId: r.tabId });
+				}
+			}
+		}
 	}
 
 	/** Fence failed: drop every channel of the tab, re-apply missing rules and stop the sandbox. */
@@ -398,5 +460,14 @@ export class Supervisor {
 		this.o.store.forget(r.tabId);
 		this.audit('tab.remove', 'ok', { tabId: r.tabId });
 		return {};
+	}
+}
+
+function pidAlive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (e) {
+		return (e as NodeJS.ErrnoException).code === 'EPERM';
 	}
 }

@@ -69,6 +69,17 @@ test('validate: workspace paths', () => {
 	assert.throws(() => canonicalWorkspacePath(ws, { home, allowedRoots: [path.join(home, 'other')] }), /allowed roots/);
 	// ancestor of an extra sensitive dir
 	assert.throws(() => canonicalWorkspacePath(path.join(home, 'src'), { home, sensitive: [ws] }), /contains/);
+	// host binary locations are never mountable (tabd executes sbx/docker from there)
+	for (const p of ['/opt/homebrew', '/usr/local', '/Applications']) {
+		if (fs.existsSync(p)) {
+			assert.throws(() => canonicalWorkspacePath(p, pol), /sensitive|inside|contains/);
+		}
+	}
+	// agent config files: their directory is refused, project dirs beneath stay openable
+	fs.mkdirSync(path.join(home, '.copilot', 'worktrees', 'p'), { recursive: true });
+	fs.writeFileSync(path.join(home, '.copilot', 'mcp-config.json'), '{}');
+	assert.throws(() => canonicalWorkspacePath(path.join(home, '.copilot'), pol), /contains/);
+	assert.ok(canonicalWorkspacePath(path.join(home, '.copilot', 'worktrees', 'p'), pol));
 });
 
 test('validate: policy resources', () => {
@@ -120,6 +131,8 @@ test('fence: fails closed on unknown shapes', () => {
 	assert.match(checkFence(parsePolicyJson(RULES([kind])), S).join(), /unknown resource type/);
 	const act = { ...weird, decision: 'allow', actions: ['net:connect:quic'] };
 	assert.match(checkFence(parsePolicyJson(RULES([act])), S).join(), /unknown action/);
+	const scope = { ...weird, decision: 'allow', applies_to: 'kit:shell' };
+	assert.match(checkFence(parsePolicyJson(RULES([scope])), S).join(), /unknown applies_to/);
 	const badRes = { ...weird, decision: 'allow', resources: ['--sandbox'] };
 	assert.throws(() => resourcesToMirror(parsePolicyJson(RULES([badRes]))), ValidationError);
 });
