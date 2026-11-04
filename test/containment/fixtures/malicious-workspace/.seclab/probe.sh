@@ -4,13 +4,24 @@
 # .seclab-evidence/<vector>.json inside the workspace. The harness checks the evidence
 # (and the host side) afterwards. It must never succeed at anything it tries.
 # Usage: probe.sh <vector>
+#
+# Fixture safety (AGENTS.md; EDR fixture-safety): inert unless armed by a harness run
+# (.seclab/targets with a per-run nonce, and this workspace inside that run's dir). Even
+# if containment failed it only reads harness-seeded canaries, writes one fixed marker
+# under the run's .work dir, and talks only to the run's loopback beacon or to
+# non-routable test addresses (RFC 5737, *.example.test).
 VECTOR="$(printf '%s' "${1:-unknown}" | tr -cd 'a-z0-9-')"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="$HERE/.seclab-evidence"
-mkdir -p "$OUT"
 TARGETS="$HERE/.seclab/targets"
 
 get() { sed -n "s/^$1=//p" "$TARGETS" 2>/dev/null | head -1; }
+ARM="$(get arm)"
+RUN="$(get run)"
+case "$ARM" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;; *) exit 0 ;; esac
+case "$HERE/" in "$RUN"/*) ;; *) exit 0 ;; esac
+
+OUT="$HERE/.seclab-evidence"
+mkdir -p "$OUT"
 clean() { printf '%s' "$1" | tr -cd 'A-Za-z0-9._:/@+= -' | cut -c1-200; }
 code() { curl -s -m 6 -o /dev/null -w '%{http_code}' "$@" 2>/dev/null || true; }
 
@@ -30,23 +41,28 @@ for s in /var/run/docker.sock /run/docker.sock "$HOME/.docker/run/docker.sock"; 
 	[ -S "$s" ] && [ -w "$s" ] && docker_sock=yes
 done
 sudo_ok=no
-command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1 && sudo_ok=yes
+# Lists privileges only (never executes anything as root, even on a host).
+command -v sudo >/dev/null 2>&1 && sudo -n -l >/dev/null 2>&1 && sudo_ok=yes
 secret_env="$(env | cut -d= -f1 | grep -E 'TOKEN|_KEY$|SECRET|PASSWORD|SSH_AUTH_SOCK|GITHUB_|AWS_' | tr '\n' ' ')"
 # REH plumbing that bridges back to the UI (git askpass -> UI auth providers): reported
 # separately as a known M4 gap. ELECTRON_RUN_AS_NODE is a mode flag, not a secret.
 ui_bridge="$(env | cut -d= -f1 | grep -E '^VSCODE_GIT_(IPC_HANDLE|ASKPASS)' | tr '\n' ' ')"
 
-# Egress: everything must fail. Using the env proxies (as tools do) and directly.
-eg_example="$(code https://example.com/)"
-eg_example_direct="$(code --noproxy '*' https://example.com/)"
-eg_global_allow="$(code https://api.anthropic.com/)"
-eg_global_allow_direct="$(code --noproxy '*' https://api.anthropic.com/)"
-eg_sbx_proxy="$(code -x http://gateway.docker.internal:3128 https://api.anthropic.com/)"
+# Egress: everything must fail. Using the env proxies (as tools do) and directly. Targets
+# are non-routable test addresses (RFC 5737) or reserved names, so even an escaped probe
+# reaches nothing real. Whether sbx's global allows are fenced off is checked with
+# `sbx policy check` by the harness, not by connecting to those hosts.
+TESTNET=http://192.0.2.1/
+eg_testnet="$(code "$TESTNET")"
+eg_testnet_direct="$(code --noproxy '*' "$TESTNET")"
+eg_name="$(code https://egress.example.test/)"
+eg_name_direct="$(code --noproxy '*' https://egress.example.test/)"
+eg_sbx_proxy="$(code -x http://gateway.docker.internal:3128 "$TESTNET")"
 eg_hostloop=""
 [ -n "$LOOPBACK" ] && eg_hostloop="$(code --noproxy '*' "http://host.docker.internal:$LOOPBACK/")"
 eg_hostloop_proxy=""
 [ -n "$LOOPBACK" ] && eg_hostloop_proxy="$(code "http://host.docker.internal:$LOOPBACK/")"
-dns_external="$(getent hosts example.com >/dev/null 2>&1 && echo resolved || echo blocked)"
+dns_external="$(getent hosts dns-probe.example.test >/dev/null 2>&1 && echo resolved || echo blocked)"
 
 cat > "$OUT/$VECTOR.json" <<EOF
 {
@@ -67,11 +83,11 @@ cat > "$OUT/$VECTOR.json" <<EOF
   "http_proxy": "$(clean "${http_proxy:-}")",
   "HTTPS_PROXY": "$(clean "${HTTPS_PROXY:-}")",
   "egress": {
-    "example_via_env_proxy": "$eg_example",
-    "example_direct": "$eg_example_direct",
-    "global_allow_via_env_proxy": "$eg_global_allow",
-    "global_allow_direct": "$eg_global_allow_direct",
-    "global_allow_via_sbx_proxy": "$eg_sbx_proxy",
+    "testnet_via_env_proxy": "$eg_testnet",
+    "testnet_direct": "$eg_testnet_direct",
+    "reserved_name_via_env_proxy": "$eg_name",
+    "reserved_name_direct": "$eg_name_direct",
+    "testnet_via_sbx_proxy": "$eg_sbx_proxy",
     "host_loopback_direct": "$eg_hostloop",
     "host_loopback_via_env_proxy": "$eg_hostloop_proxy",
     "dns_external": "$dns_external"
