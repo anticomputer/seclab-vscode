@@ -143,33 +143,33 @@ over RPC. Reviewing only the `.protocol.ts` interfaces misses them.
 
 ## (b) Command registry reachable via `$executeCommand`
 
-2792 commands found. `$executeCommand` takes the id from the caller, so
+3205 commands found. `$executeCommand` takes the id from the caller, so
 the whole registry is reachable from a tab.
 
 | Category | Commands |
 |---|---:|
-| `editor-local` | 388 |
-| `extension-management` | 99 |
-| `external-and-uri` | 21 |
-| `host-filesystem` | 50 |
-| `host-process` | 152 |
+| `editor-local` | 412 |
+| `extension-management` | 118 |
+| `external-and-uri` | 24 |
+| `host-filesystem` | 55 |
+| `host-process` | 288 |
 | `internal-underscore` | 108 |
-| `remote-and-tunnel` | 24 |
-| `secrets-and-auth` | 10 |
-| `settings-and-policy` | 41 |
-| `unclassified` | 1881 |
-| `window-and-workspace` | 18 |
+| `remote-and-tunnel` | 26 |
+| `secrets-and-auth` | 11 |
+| `settings-and-policy` | 44 |
+| `unclassified` | 2100 |
+| `window-and-workspace` | 19 |
 
 Categories are a review aid only. They grant nothing: the policy
 table still needs a verdict per command id.
 
 ### Command ids built from non-literal expressions
 
-150 registrations use a constant or computed id that this static scan
+168 registrations use a constant or computed id that this static scan
 cannot resolve. Default-deny means these are denied until classified,
 so the cost is compatibility, not containment.
 
-`ACTION_ID_NEW_CHAT`, `AICustomizationManagementCommands.CreateCanvas`, `AICustomizationManagementCommands.DismissMigrationHint`, `AICustomizationManagementCommands.GenerateDebugReport`, `AICustomizationManagementCommands.OpenEditor`, `AICustomizationManagementCommands.OpenMarketplace`, `AddAreaScreenshotToChatAction.ID`, `AddConsoleLogsToChatAction.ID`, `AddElementCommentToChatAction.ID`, `AddElementToChatAction.ID`, `AddFullPageScreenshotToChatAction.ID`, `AddScreenshotToChatAction.ID`, `BranchChatSessionAction.ID`, `BrowserFindNextAction.ID`, `BrowserFindPreviousAction.ID`, `BrowserViewCommandId.CloseAll`, `BrowserViewCommandId.CloseAllInGroup`, `BrowserViewCommandId.NewTab`, `BrowserViewCommandId.Open`, `BrowserViewCommandId.OpenFile`, `BrowserViewCommandId.OpenOrList`, `BrowserViewCommandId.QuickOpen`, `BuiltinDynamicCompletions.addReferenceCommand`, `CUSTOMIZATION_OVERVIEW_ITEM.id`, `CancelAction.ID`, `CancelEdit.ID`, `CancelSnoozeInlineCompletion.ID`, `ChangeChatModelAction.ID`, `ChatSetupSignInTitleBarAction.ID`, `ClearAgentBrowserStorageAction.ID`, `ClearEphemeralBrowserStorageAction.ID`, `ClearGlobalBrowserStorageAction.ID`, `ClearWorkspaceBrowserStorageAction.ID`, `Constants.SearchCommandIds.AddCursorsAtSearchResults`, `Constants.SearchCommandIds.CancelSearchActionId`, `Constants.SearchCommandIds.ClearSearchHistoryCommandId`, `Constants.SearchCommandIds.ClearSearchResultsActionId`, `Constants.SearchCommandIds.CloseReplaceWidgetActionId`, `Constants.SearchCommandIds.CollapseSearchResultsActionId`, `Constants.SearchCommandIds.CopyAllCommandId`
+`ACTION_ID_NEW_CHAT`, `ACTION_ID_NEW_EDIT_SESSION`, `AICustomizationManagementCommands.CreateCanvas`, `AICustomizationManagementCommands.DismissMigrationHint`, `AICustomizationManagementCommands.GenerateDebugReport`, `AICustomizationManagementCommands.OpenEditor`, `AICustomizationManagementCommands.OpenMarketplace`, `AICustomizationManagementSection.Canvases`, `AICustomizationManagementSection.Extensions`, `AICustomizationManagementSection.HarnessSettings`, `AbstractTaskService.OutputChannelId`, `AddAreaScreenshotToChatAction.ID`, `AddConsoleLogsToChatAction.ID`, `AddElementCommentToChatAction.ID`, `AddElementToChatAction.ID`, `AddFullPageScreenshotToChatAction.ID`, `AddScreenshotToChatAction.ID`, `BranchChatSessionAction.ID`, `BrowserFindNextAction.ID`, `BrowserFindPreviousAction.ID`, `BrowserViewCommandId.CloseAll`, `BrowserViewCommandId.CloseAllInGroup`, `BrowserViewCommandId.NewTab`, `BrowserViewCommandId.Open`, `BrowserViewCommandId.OpenFile`, `BrowserViewCommandId.OpenOrList`, `BrowserViewCommandId.QuickOpen`, `BuiltinDynamicCompletions.addReferenceCommand`, `CUSTOMIZATION_OVERVIEW_ITEM.id`, `CancelAction.ID`, `CancelEdit.ID`, `CancelSnoozeInlineCompletion.ID`, `ChangeChatModelAction.ID`, `ChatSetupSignInTitleBarAction.ID`, `ClearAgentBrowserStorageAction.ID`, `ClearEphemeralBrowserStorageAction.ID`, `ClearGlobalBrowserStorageAction.ID`, `ClearWorkspaceBrowserStorageAction.ID`, `Constants.SearchCommandIds.AddCursorsAtSearchResults`, `Constants.SearchCommandIds.CancelSearchActionId`
 
 Full list in `inventory.json`.
 

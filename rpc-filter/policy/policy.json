@@ -305,7 +305,8 @@
     }
   },
   "commands": {
-    "note": "Resolution is ordered: exact id first, then rules in order, then default_verdict. Every command id in the inventory must resolve; the drift check pins the full id-to-verdict mapping by digest so any change surfaces for review.",
+    "note": "Resolution is ordered: exact id first, then rules in order, then default_verdict. Categories are a GROUPING HINT and may only carry the verdict 'deny'. A command becomes reachable only through an explicit entry in 'exact', individually reviewed against its implementation. This is deliberate: the category is a substring heuristic over the command id, and the 2026-11-04 design review demonstrated it mis-grouped host-authority commands as editor-local (e.g. editor.action.accessibilityHelpOpenHelpLink opens an external link, and _workbench.editor.configureDefaultEditor matched 'editor.' before the underscore rule). A heuristic may withhold authority; it may not grant it.",
+    "reachable_allowlist_status": "empty by design until Phase 3. The allow set is built from measured need: run a popular extension against the filter, observe the denial, review the command's implementation, then add an entry here with evidence. Nothing is allowed because it looked harmless in bulk.",
     "exact": {
       "_remoteCLI.openExternal": {
         "verdict": "deny",
@@ -402,15 +403,15 @@
       },
       {
         "match": {"category": "external-and-uri"},
-        "verdict": "prompt",
+        "verdict": "deny",
         "impact": ["exfiltration"],
-        "rationale": "Legitimately used by extensions to open docs and auth pages, but it is an egress path around the broker, so it is never silent."
+        "rationale": "Legitimately used by extensions to open docs and auth pages, and also an egress path around the broker. It is denied in bulk; individual ids are promoted to prompt in 'exact' once reviewed, because the category match is too coarse to tell vscode.open of a workspace file from one of an arbitrary external URI."
       },
       {
         "match": {"category": "remote-and-tunnel"},
-        "verdict": "prompt",
+        "verdict": "deny",
         "impact": ["exfiltration", "cross-tab-access"],
-        "rationale": "Port forwarding is a normal remote-development need and a route around the broker."
+        "rationale": "Port forwarding is a normal remote-development need and a route around the broker. Promoted to prompt per id in 'exact' once reviewed."
       },
       {
         "match": {"category": "internal-underscore"},
@@ -420,9 +421,9 @@
       },
       {
         "match": {"category": "editor-local"},
-        "verdict": "allow",
+        "verdict": "deny",
         "impact": [],
-        "rationale": "Cursor movement, selection and navigation inside documents this tab already owns. No host authority."
+        "rationale": "Mostly cursor, selection and navigation inside documents this tab already owns, but the category is a substring match on the id and demonstrably captures commands with host authority. Denied in bulk; the genuinely local ones are promoted individually in 'exact'."
       },
       {
         "match": {"category": "unclassified"},
