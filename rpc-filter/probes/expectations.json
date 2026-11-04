@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "note": "Expected probe outcome per build. A probe MUST succeed on the unpatched build before the patch that denies it lands: a probe that has never succeeded proves nothing, because it may simply be broken. 'beacon' names a path that must appear in the beacon log when the probe succeeds, since a return value does not prove egress.",
+  "note": "Expected probe outcome per build. A probe MUST succeed on the unpatched build before the patch that denies it lands: a probe that has never succeeded proves nothing, because it may simply be broken. 'beacon' names a path that must appear in the beacon log when the probe succeeds, since a return value does not prove egress. A patchedOutcome other than 'denied' REQUIRES an executable predicate in test/containment/check-probes.ts; free text is not an assertion.",
   "builds": {
     "unpatched": "every probe with required=true must report 'succeeded'",
-    "patched": "every probe with required=true must report 'denied', unless patchedOutcome says otherwise"
+    "patched": "every probe with required=true must not succeed AND its denial must be corroborated by the host-side filter denial log, unless patchedOutcome names another outcome, in which case an executable predicate must hold"
   },
   "probes": {
     "host-terminal-newlocal": {
@@ -51,16 +51,14 @@
       "policyRef": "rpc:MainThreadSecretState.$getPassword",
       "why": "SecretStorage is keyed {extensionId, key} globally, so tab B reads what tab A wrote",
       "crossTab": true,
-      "patchedOutcome": "succeeded",
-      "patchedAssertion": "a value may be returned, but it must be this tab's own, never the other tab's"
+      "patchedOutcome": "succeeded"
     },
     "auth-get-session": {
       "required": true,
       "surface": "credential-access",
       "policyRef": "rpc:MainThreadAuthentication.$getSession",
       "why": "must return a sentinel, never a reusable token",
-      "patchedOutcome": "succeeded",
-      "patchedAssertion": "a session is returned but its accessToken is a tab-scoped sentinel, and no canary appears in it"
+      "patchedOutcome": "succeeded"
     },
     "clipboard-read": {
       "required": true,
@@ -89,16 +87,14 @@
       "policyRef": "data:webview-content",
       "why": "webviews render in the local trusted renderer, so their fetches have the host's network position",
       "beacon": "/webview",
-      "patchedOutcome": "succeeded",
-      "patchedAssertion": "no beacon hit: the webview session is routed through the tab broker or blocked by CSP"
+      "patchedOutcome": "succeeded"
     },
     "command-enumeration": {
       "required": true,
       "surface": "reconnaissance",
       "policyRef": "rpc:MainThreadCommands.$getCommands",
       "why": "returning the full registry tells an attacker which host commands to try",
-      "patchedOutcome": "succeeded",
-      "patchedAssertion": "dangerousVisible is empty: the list is filtered to ids this tab may execute"
+      "patchedOutcome": "succeeded"
     },
     "launder-direct": {
       "required": true,
