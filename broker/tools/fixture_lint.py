@@ -8,8 +8,8 @@ Rules (scope: broker/tests/integration, broker/tests/sbx):
     pod's own containers (broker), loopback, host.docker.internal (sbx: only to the
     run's own loopback-published broker port, enforced by the sbx fence), or
     RFC 5737 documentation ranges;
-  * every IPv4 literal is loopback, RFC 5737, or a test subnet created by the suite
-    (11.250.0.0/16, 11.251.0.0/16);
+  * every IPv4 literal is loopback, RFC 5737, or the suite's test range 11.250.0.0/16;
+  * single-label hostnames are not test-owned (they can resolve via a LAN search domain);
   * no committed literal matches a minted-token rule (data/token-rules.json) or the
     gitleaks GitHub/AWS formats.
 Scope: broker/tests/unit is exempt from the URL/IP rules (it never opens sockets:
@@ -38,7 +38,7 @@ ALLOWED_HOST_RE = re.compile(
     r"|^\{.*\}$|^\$.*$")  # templated hosts are checked where they are built
 TEST_NETS = [ipaddress.ip_network(n) for n in
              ("127.0.0.0/8", "192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24",
-              "11.250.0.0/16", "11.251.0.0/16", "0.0.0.0/32")]
+              "11.250.0.0/16", "0.0.0.0/32")]
 SUFFIXES = {".py", ".sh", ".json", ".toml", ".txt", ""}
 
 

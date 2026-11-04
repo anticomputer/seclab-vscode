@@ -217,8 +217,14 @@ Each has a unit or integration test; grep for the phrase.
   - Never probe real hosts, metadata IPs, the Docker gateway or host ports,
     even in "should be blocked" tests. A regression turns the probe into an
     attack.
-  - `tools/fixture_lint.py` enforces this. Mark a non-network mention with
-    `# fixture-lint: ignore`.
+  - Two lints enforce this, and both run from `broker/test.sh`:
+    - `tools/fixture_lint.py` is broker-scoped and stricter. Opt a line out with
+      `# fixture-lint: ignore`.
+    - The repo-wide `test/safety/fixture-lint.sh broker/tests` is shared and owned
+      by the Fork-build session. It also checks host-secret paths,
+      persistence, destructive and download-exec calls. Opt a line out with
+      `fixture-lint: allow <rule> -- <reason>`. `test.sh` skips it, with a
+      notice, if the script isn't in the tree yet.
 - **The sbx script never touches global sbx state.** It snapshots that state
   and verifies it at teardown.
   - New sbx probes must target this run's own loopback ports.

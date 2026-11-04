@@ -80,7 +80,7 @@ GIT_CANARY="seclab-canary-git-$(openssl rand -hex 16)"
 SECLAB_PW=$(openssl rand -base64 24 | tr '+/' '-_' | tr -d '=\n')
 export API_CANARY GIT_CANARY SECLAB_PW
 
-docker network create --subnet "11.251.$(($(od -An -N1 -tu1 /dev/urandom) % 250 + 1)).0/24" "seclab-$tag-inet" >/dev/null
+docker network create --subnet "11.250.$(($(od -An -N1 -tu1 /dev/urandom) % 250 + 1)).0/24" "seclab-$tag-inet" >/dev/null
 docker network create -o com.docker.network.bridge.enable_icc=false "seclab-$tag-egress" >/dev/null
 docker network create -o com.docker.network.bridge.enable_icc=false "seclab-$tag-egress2" >/dev/null
 docker run -d --name "seclab-$tag-upstream" --network "seclab-$tag-inet" \
