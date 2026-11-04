@@ -123,7 +123,7 @@ gdir() {
   grep -a 'skipping binary file' "$O/glog" > "$O/binlog"
   rm -f "$O/glog" "$O/warn"
   [ -s "$O/binlog" ] || { rm -f "$O/binlog"; return 0; }
-  : > "$O/binmap"; : > "$O/binbad"; : > "$O/amap"; rm -rf "$O/a"; mkdir -p "$O/a"
+  : > "$O/binmap"; : > "$O/binbad"; : > "$O/amap"; : > "$O/unarch"; rm -rf "$O/a"; mkdir -p "$O/a"
   { pad; local L=$((PADL+1)) p n line mime ext k=0
     while IFS= read -r line; do
       p=$(gounquote "${$}{line#* path=}")
@@ -140,7 +140,11 @@ gdir() {
         application/zip|application/java-archive|application/epub+zip|application/vnd.openxmlformats*|application/vnd.oasis.opendocument*|application/x-zip*) ext=zip ;;
         application/gzip|application/x-gzip) ext=gz ;; application/x-xz) ext=xz ;; application/zstd) ext=zst ;;
         application/x-bzip2) ext=bz2 ;; application/x-7z-compressed) ext=7z ;; application/vnd.rar|application/x-rar*) ext=rar ;;
-        application/x-tar) ext=tar ;; *) ext= ;;
+        application/x-tar) ext=tar ;;
+        application/x-compress|application/x-lzip|application/x-lz4|application/vnd.ms-cab-compressed|application/x-deb|application/vnd.debian.binary-package|application/x-rpm|application/x-cpio|application/x-unix-archive|application/x-archive)
+          # Compressed/archive formats gitleaks can't open: block (via a synthetic warning).
+          ext=; printf 'X WRN unsupported archive type path=%s\n' "$p" >> "$O/unarch" ;;
+        *) ext= ;;
       esac
       if [ -n "$ext" ]; then
         k=$((k+1)); cp "$p" "$O/a/$k.$ext" || echo 1 > "$O/binbad"; printf '%s\0' "$p" >> "$O/amap"
@@ -160,7 +164,8 @@ gdir() {
   fi
   emit binmap "$1" 0 "$O/binmap"
   emit bin "$2" "$rc" "$O/rb.json"
-  rm -rf "$O/binlog" "$O/binbad" "$O/amap" "$O/a"
+  if [ -s "$O/unarch" ]; then emit warnings "$1:$2" 0 "$O/unarch"; fi
+  rm -rf "$O/binlog" "$O/binbad" "$O/amap" "$O/a" "$O/unarch"
 }
 gdir worktree . /scan
 # gitleaks reads nothing (and logs nothing) from an archive nested inside a tar-family
