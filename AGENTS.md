@@ -195,9 +195,12 @@ Electron with `ELECTRON_RUN_AS_NODE=1`); nothing is installed.
   A native Linux engine is different: the tab and scanner run as the
   workspace owner ([EDR](docs/edr/20261104-oci-tab-user-on-linux.md)).
 - **gitleaks always loads `<source>/.gitleaksignore`** and skips the file at
-  its config path. Its default allowlist applies to *resolved* symlink
-  paths, and `--log-level error` hides permission skips. Hence the framed
-  scanner script in `tabd/src/scan.ts`
+  its config path. Its default allowlist applies to *resolved* symlink paths,
+  can't be removed via `[extend]` (allowlists append), and `--log-level
+  error` hides permission skips. It silently skips files (and `stdin`
+  streams) whose first chunk has an `application/*` magic, and it colours
+  its logs even off a TTY (use `--no-color`). Hence the framed scanner script
+  in `tabd/src/scan.ts`
   ([ADR](docs/adr/20261104-pre-mount-secret-scan.md)).
 - **Secret-finding ids must be deterministic** across rescans, because
   `acceptFindings` must match on the re-gate. gitleaks reports concurrently,
