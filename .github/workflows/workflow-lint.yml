@@ -1,0 +1,36 @@
+name: workflow-lint
+
+# CI/CD hardening gate (EDR ci-hardening), on every push and PR: workflow static analysis
+# (actionlint, zizmor) and the digest/SHA pin check over the whole tree. Cheap and fast.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-lint-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Pin check self-test
+        run: ./seclab lint pins --self-test
+      - name: Every image and action is pinned by digest/SHA
+        run: ./seclab lint pins
+      - name: actionlint + zizmor
+        env:
+          # zizmor's online audits (impostor commits, ref confusion, vulnerable actions) on
+          # pushes only; a PR's scripts never see a token.
+          GH_TOKEN: ${{ github.event_name == 'push' && github.token || '' }}
+        run: ./seclab lint workflows

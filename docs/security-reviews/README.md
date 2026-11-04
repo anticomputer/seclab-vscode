@@ -52,6 +52,7 @@ File: `YYYYMMDD-short-slug.md`.
 |---|---|---|---|
 | 2026-11-04 | [broker docs-drift tooling, protocol enforcement and fixture safety](20261104-broker-docs-drift-and-fixtures.md) | 1bcae4b..e6fdfe7, plus the follow-up in this commit. Areas given explicit attention: | see record |
 | 2026-11-04 | [broker M2 and M3 (egress and credential broker)](20261104-broker-m2-m3.md) | - Round 1: 296594c..1e9084c (all of broker/). | see record |
+| 2026-11-04 | [CI/CD hardening](20261104-ci-hardening.md) | - workflows build-macos, ci-linux, ci-unit, docs-check, workflow-lint, and dependabot.yml; | see record |
 | 2026-11-04 | [docs-check gate (CI workflow and checker)](20261104-docs-check.md) | a3d19d2..47d768d: .github/workflows/docs-check.yml, build/docs/docs-check.ts, ./seclab doc | none |
 | 2026-11-04 | [test fixtures are host-safe](20261104-fixture-safety.md) | - d02dec5..cf6738e; | see record |
 | 2026-11-04 | [harness teardown, clean-host, tab GC/reset](20261104-harness-teardown.md) | - test/containment/teardown.ts (shared teardown, adopted from the RPC-lockdown | see record |

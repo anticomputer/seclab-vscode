@@ -91,14 +91,14 @@ Kernel and hypervisor escapes are out of scope; the microVM is defence in depth.
 
 ## Quick start
 
-> The `./seclab` CLI and the tab code are on branch
-> `anticomputer-fork-build-and-sandboxed-tabs` until it merges to `main`. You need
-> Docker, `gh` and, on macOS, [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/)
-> (`sbx`). Nothing else is installed on the host.
+> You need Docker, `gh` and, on macOS,
+> [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) (`sbx`). Nothing else is
+> installed on the host.
 
 ```sh
-# macOS: fetch the unsigned app built by GitHub Actions (verifies checksums), then clear quarantine
-SECLAB_ALLOW_UNREVIEWED_BUILD=1 ./seclab fetch macos
+# macOS: fetch the unsigned app built by GitHub Actions from main. It verifies the
+# checksums and the build provenance attestation before extracting; then clear quarantine.
+./seclab fetch macos
 xattr -dr com.apple.quarantine .work/app/seclab-vscode.app
 
 # run it with a separate profile; opening a folder routes it into a sandboxed tab

@@ -16,19 +16,28 @@ permissions:
 
 concurrency:
   group: docs-check-${{ github.ref }}
-  cancel-in-progress: true
+  # PRs and branches: newest push wins. main: every SHA is checked.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  ALPINE: alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
 
 jobs:
   docs:
+    name: docs
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
+      # Link-check cache: keyed per ref, restored read-only on PRs (never saved from a PR,
+      # so PR content can't seed what main or a tag restores).
       - name: Restore the link-check cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .work/lychee-cache
           key: lychee-${{ github.ref }}-${{ github.run_id }}
@@ -39,7 +48,7 @@ jobs:
         run: |
           docker volume create seclab-lychee-cache >/dev/null
           if [ -f .work/lychee-cache/.lycheecache ]; then
-            docker run --rm -v seclab-lychee-cache:/cache -v "$PWD/.work/lychee-cache:/in:ro" alpine:3.22 cp /in/.lycheecache /cache/
+            docker run --rm -v seclab-lychee-cache:/cache -v "$PWD/.work/lychee-cache:/in:ro" "$ALPINE" cp /in/.lycheecache /cache/
           fi
       - name: Docs gate (records, links, commands, paired docs)
         env:
@@ -48,10 +57,18 @@ jobs:
         run: ./seclab docs check --run-commands --paired
       - name: External links resolve
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Only on pushes (trusted refs): a PR's own scripts run here with network access,
+          # so they never see a token. PRs check links unauthenticated (cache absorbs limits).
+          GITHUB_TOKEN: ${{ github.event_name == 'push' && secrets.GITHUB_TOKEN || '' }}
         run: ./seclab docs check --online
-      - name: Save the lychee cache
-        if: always()
+      - name: Export the lychee cache
+        if: always() && github.event_name == 'push'
         run: |
           mkdir -p .work/lychee-cache
-          docker run --rm -v seclab-lychee-cache:/cache:ro -v "$PWD/.work/lychee-cache:/out" alpine:3.22 sh -c 'cp /cache/.lycheecache /out/ 2>/dev/null || true'
+          docker run --rm -v seclab-lychee-cache:/cache:ro -v "$PWD/.work/lychee-cache:/out" "$ALPINE" sh -c 'cp /cache/.lycheecache /out/ 2>/dev/null || true'
+      - name: Save the link-check cache
+        if: always() && github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .work/lychee-cache
+          key: lychee-${{ github.ref }}-${{ github.run_id }}

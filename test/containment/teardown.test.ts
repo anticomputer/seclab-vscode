@@ -14,7 +14,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { checkIsolatedProfile } from '../harness.ts';
+import { checkIsolatedProfile, NODE_IMAGE } from '../harness.ts';
 import { runLeftovers, runProcesses, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
 
 const repo = path.resolve(import.meta.dirname, '../..');
@@ -92,7 +92,7 @@ check('a clean run verifies clean', verifyTeardown(runDir).every(c => c.ok));
 const fakeTab = `t-${'a'.repeat(26)}`;
 spawnSync('docker', ['rm', '-f', `seclab-${fakeTab}`], { stdio: 'ignore' }); // from an aborted earlier run
 const c = spawnSync('docker', ['run', '-d', '--rm', '--network', 'none', '--label', `seclab.tab=${fakeTab}`, '--name', `seclab-${fakeTab}`,
-	'node:24.22.1-trixie', 'sleep', '600'], { encoding: 'utf8' });
+	NODE_IMAGE, 'sleep', '600'], { encoding: 'utf8' });
 if (c.status === 0) {
 	const stateDir = path.join(runDir, 'state');
 	fs.mkdirSync(path.join(stateDir, 'tabs'), { recursive: true });

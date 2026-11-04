@@ -13,7 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
-import { beaconPort, checkUserDataDir, lockRun } from '../harness.ts';
+import { beaconPort, checkUserDataDir, lockRun, NODE_IMAGE } from '../harness.ts';
 import { randomBytes } from 'node:crypto';
 import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
 import { teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
@@ -90,7 +90,7 @@ if (mode === 'prepare') {
 	// Package the rogue extension (vsce in a container) and preinstall it into the tab.
 	const vsixDir = path.join(ws, '.seclab');
 	execFileSync('docker', ['run', '--rm', '-v', `${path.join(import.meta.dirname, 'rogue-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
-		'node:24.22.1-trixie', 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && npx --yes @vscode/vsce@3 package --allow-missing-repository --skip-license -o /out/rogue.vsix'], { stdio: 'inherit' });
+		NODE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && npx --yes @vscode/vsce@3.9.2 package --allow-missing-repository --skip-license -o /out/rogue.vsix'], { stdio: 'inherit' });
 	const client = new TabdClient({
 		command: process.execPath,
 		args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', driver, '--allowed-root', base],

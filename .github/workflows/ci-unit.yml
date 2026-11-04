@@ -1,0 +1,36 @@
+name: ci-unit
+
+# Fast checks on every push and PR (no path filter, so it can be a required status check):
+# tabd unit tests, fixture-safety lint (with self-test), patch queue, shipped-source review.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-unit-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  unit:
+    name: unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: tabd unit tests (in the pinned node container)
+        run: ./seclab test unit
+      - name: Fixture-safety lint (self-test, then the tree)
+        run: |
+          test/safety/fixture-lint.sh --self-test
+          ./seclab lint fixtures
+      - name: Patch queue is exactly patches/series
+        run: build/apply-patches.sh --check
+      - name: Shipped sources have no test hooks (env/spawn review, dynamic loading)
+        run: ./seclab lint source
