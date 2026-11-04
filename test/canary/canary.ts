@@ -86,9 +86,17 @@ export class StreamScanner {
 }
 
 function scanForms(value: string): Record<string, string> {
-	const forms = encodings(value);
-	for (const shift of [1, 2]) {
-		forms[`base64+${shift}`] = Buffer.concat([Buffer.alloc(shift), Buffer.from(value)]).toString('base64').slice(4, -4);
+	const forms: Record<string, string> = { ...encodings(value) };
+	delete forms.base64;
+	delete forms.base64url;
+	// Base64 of an embedded value depends on its byte alignment and on the bytes around it,
+	// so match only the stable inner part at each of the three alignments (both alphabets).
+	for (const shift of [0, 1, 2]) {
+		const b = Buffer.concat([Buffer.alloc(shift), Buffer.from(value)]);
+		const lead = shift === 0 ? 0 : 4; // first quad mixes in the unknown preceding bytes
+		const usable = Math.floor(b.length / 3) * 4; // drop the trailing partial group
+		forms[`base64+${shift}`] = b.toString('base64').slice(lead, usable);
+		forms[`base64url+${shift}`] = b.toString('base64url').slice(lead, usable);
 	}
 	return forms;
 }

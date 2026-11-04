@@ -18,7 +18,7 @@ const repo = path.resolve(import.meta.dirname, '../..');
 const work = path.join(repo, '.work', 'canary', driver);
 const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
 fs.rmSync(work, { recursive: true, force: true });
-const ws = path.join(work, 'ws');
+const ws = path.join(work, 'tabs', 'ws');
 fs.mkdirSync(ws, { recursive: true });
 fs.writeFileSync(path.join(ws, 'README.md'), 'canary workspace\n');
 
@@ -49,7 +49,7 @@ const stateDir = path.join(work, 'state');
 const stderrLog: string[] = [];
 const client = new TabdClient({
 	command: process.execPath,
-	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', driver, '--allowed-root', work],
+	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', driver, '--allowed-root', path.join(work, 'tabs')],
 	// Deliberately leaky: the supervisor must scrub all of this before any runtime call.
 	env: { ...leakyEnv, HOME: process.env.HOME, USER: process.env.USER },
 });
@@ -72,15 +72,25 @@ try {
 	// ---- observe (as root inside the tab: stronger than the attacker) ------------------
 	const name = `seclab-${tabId}`;
 	const tabScanner = new StreamScanner(canaries, 'tab: process environ/cmdline + filesystem (root view)');
+	// Positive controls go through the very same pipeline: a separate control canary is
+	// planted (base64, odd alignment) in the tab user's home volume and in the /tmp tmpfs,
+	// i.e. on other mounts than /. It must be found; the seeded canaries must not.
+	const controlCanary = mintCanary('positive-control');
+	const planted = `xx${Buffer.from(`y${controlCanary.value}z`).toString('base64')}xx`;
+	const control = new StreamScanner([controlCanary], 'positive control');
 	const dumpStatus = await new Promise<number | null>(resolve => {
-		const p = spawn(runtime, ['exec', '-u', '0', name, 'sh', '-c', [
+		const p = spawn(runtime, ['exec', '-i', '-u', '0', name, 'sh', '-c', [
+			'IFS= read -r PLANT; for d in /home/agent /tmp; do printf %s "$PLANT" > "$d/.seclab-positive-control"; done',
 			'for p in /proc/[0-9]*; do cat "$p/environ" "$p/cmdline" 2>/dev/null; echo; done',
-			// Whole VM filesystem except the workspace mount and pseudo filesystems.
-			`find / -xdev \\( -path /proc -o -path /sys -o -path /dev -o -path '${ws}' \\) -prune -o -type f -size -5M -print0 2>/dev/null | xargs -0 cat 2>/dev/null; true`,
-		].join('; ')], { stdio: ['ignore', 'pipe', 'ignore'] });
-		p.stdout.on('data', (d: Buffer) => tabScanner.push(d));
+			// Whole VM filesystem across all mounts, except pseudo filesystems and the workspace.
+			`find / \\( -path /proc -o -path /sys -o -path /dev -o -path '${ws}' \\) -prune -o -type f -size -5M -print0 2>/dev/null | xargs -0 cat 2>/dev/null`,
+			'rm -f /home/agent/.seclab-positive-control /tmp/.seclab-positive-control; true',
+		].join('; ')], { stdio: ['pipe', 'pipe', 'ignore'] });
+		p.stdout.on('data', (d: Buffer) => { tabScanner.push(d); control.push(d); });
 		p.on('close', resolve);
+		p.stdin.end(`${planted}\n`);
 	});
+	const controlOk = control.hits.size > 0;
 	const observed: Array<[string, Buffer | string]> = [
 		['tabd: audit.log', fs.readFileSync(path.join(stateDir, 'audit.log'))],
 		['tabd: stderr', stderrLog.join('')],
@@ -99,18 +109,7 @@ try {
 	}
 	// Sanity: the scanner must find canaries where they legitimately are (host side).
 	const selfTest = scan(canaries, 'self-test', fs.readFileSync(path.join(work, 'canaries.json'))).length;
-	// Positive control: plant one canary (base64-encoded) inside the tab and prove the
-	// same observation pipeline finds it.
-	const planted = Buffer.from(canaries[0].value).toString('base64');
-	const control = new StreamScanner(canaries, 'positive control');
-	await new Promise<void>(resolve => {
-		const p = spawn(runtime, ['exec', '-i', '-u', '0', name, 'sh', '-c', 'cat > /tmp/seclab-positive-control && cat /tmp/seclab-positive-control && rm -f /tmp/seclab-positive-control'], { stdio: ['pipe', 'pipe', 'ignore'] });
-		p.stdout.on('data', (d: Buffer) => control.push(d));
-		p.on('close', () => resolve());
-		p.stdin.end(`junk ${planted} junk`);
-	});
-	const controlOk = control.hits.size > 0;
-	console.log(`${controlOk ? 'PASS' : 'FAIL'}  positive control: planted base64 canary is detected`);
+	console.log(`${controlOk ? 'PASS' : 'FAIL'}  positive control: base64 canary planted in /home/agent and /tmp is found by the same find pipeline`);
 	const ok = hits.length === 0 && dumpStatus === 0 && tabScanner.bytes > 1e6 && selfTest >= canaries.length && controlOk;
 	console.log(ok ? `PASS  no canary in anything the tab can observe or in supervisor logs (scanner self-test ${selfTest} hits)` : `FAIL  (dump status ${dumpStatus}, self-test ${selfTest})`);
 	exitCode = ok ? 0 : 1;
