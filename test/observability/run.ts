@@ -7,12 +7,13 @@
 // collector reports it as untraced and attaches; the trigger waits 1 s first.
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import type { ObsEvent } from '../../tabd/src/obs/schema.ts';
-import { hostSnapshot, lockRun, snapshotDiff } from '../harness.ts';
+import { exitedOrTimeout, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
+import { lockRun } from '../harness.ts';
 
 const driver = process.argv[2] ?? 'sbx';
 if (driver !== 'sbx' && driver !== 'oci') {
@@ -24,8 +25,11 @@ const work = path.join(repo, '.work', 'observability', driver);
 const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
 lockRun(path.join(repo, '.work', 'observability-lock', driver));
 const ARM = randomBytes(16).toString('hex');
-const snapshotBefore = hostSnapshot();
 fs.rmSync(work, { recursive: true, force: true });
+// Shared teardown gate (test/containment/teardown.ts): host snapshot and everything this
+// run starts (the tab, and tabd's Falco container, found by the state dir's label).
+writeSnapshot(work);
+writeManifest(work, { driver, stateDirs: [path.join(work, 'state')] });
 const ws = path.join(work, 'tabs', 'loader');
 fs.cpSync(fixture, ws, { recursive: true });
 const marker = path.join(ws, '.envrc');
@@ -37,6 +41,7 @@ const client = new TabdClient({
 	env: { HOME: process.env.HOME, USER: process.env.USER },
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));
+const tabdExit = new Promise(res => client.once('exit', res));
 const events: ObsEvent[] = [];
 const observations: Array<{ state: string; reason: string }> = [];
 client.on('notification', (method: string, p: Record<string, unknown>) => {
@@ -68,11 +73,14 @@ async function cleanup(): Promise<void> {
 	}
 	await client.request('shutdown', {}).catch(() => undefined);
 	client.dispose();
-	await sleep(1500);
+	await exitedOrTimeout(tabdExit);
 }
 process.on('uncaughtException', e => {
 	console.error(e);
-	void cleanup().finally(() => process.exit(2));
+	void cleanup().finally(() => {
+		verifyTeardown(work);
+		process.exit(2);
+	});
 });
 
 await client.initialize('observability-e2e', '0');
@@ -163,14 +171,13 @@ if (driver === 'sbx') {
 }
 
 await cleanup();
-// Teardown: nothing may survive.
-const leftovers = driver === 'sbx'
-	? (JSON.parse(execFileSync(runtime, ['ls', '--json'], { encoding: 'utf8' })) as Array<{ name: string }>).filter(e => e.name === sandbox).map(e => e.name)
-	: execFileSync('docker', ['ps', '-a', '--filter', `label=seclab.tab=${tabId}`, '--filter', 'label=seclab.obs=falco', '--format', '{{.Names}}'], { encoding: 'utf8' }).split('\n').filter(Boolean);
-const stateTag = createHash('sha256').update(path.join(work, 'state')).digest('hex').slice(0, 8);
-const falcoLeft = execFileSync('docker', ['ps', '-a', '--filter', 'label=seclab.obs=falco', '--filter', `label=seclab.state=${stateTag}`, '--format', '{{.Names}}'], { encoding: 'utf8' }).split('\n').filter(Boolean);
-check('teardown: no sandbox, tab container or sensor survives', leftovers.length === 0 && falcoLeft.length === 0, [...leftovers, ...falcoLeft].join(', '));
-const changed = snapshotDiff(snapshotBefore, hostSnapshot());
-check('host: nothing outside .work changed', changed.length === 0, changed.join(', '));
+// Teardown gate: no process, sandbox, container (incl. the Falco sensor) survives; host unchanged.
+if (process.env.KEEP === '1') {
+	check('teardown verified (KEEP=1 skips it: not a pass)', false);
+} else {
+	for (const c of verifyTeardown(work)) {
+		check(`teardown: ${c.name}`, c.ok, c.detail);
+	}
+}
 console.log(failures ? `\n${failures} check(s) failed` : '\nOBSERVABILITY OK');
 process.exit(failures ? 1 : 0);

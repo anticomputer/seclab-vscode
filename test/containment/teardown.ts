@@ -20,7 +20,7 @@
 // worktree owns other resources (`./seclab clean-host` is the global sweep).
 
 import { spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { checkIsolatedProfile, hostSnapshot, snapshotDiff, type Snapshot } from '../harness.ts';
@@ -309,7 +309,18 @@ export function runLeftovers(runDir: string, m: RunManifest = readManifest(runDi
 			left.push(`container ${c}`);
 		}
 	}
+	// Host-side observability sensor (OCI Falco) that tabd started for this run's state dirs.
+	for (const tag of falcoStateTags(m)) {
+		for (const c of docker(['ps', '-a', '--filter', 'label=seclab.obs=falco', '--filter', `label=seclab.state=${tag}`, '--format', '{{.Names}}'])) {
+			left.push(`container ${c}`);
+		}
+	}
 	return { left, unknown: [...unknown] };
+}
+
+/** tabd labels its Falco container with sha256(state dir)[0:8] (tabd/src/main.ts). */
+function falcoStateTags(m: RunManifest): string[] {
+	return (m.stateDirs ?? []).map(d => createHash('sha256').update(d).digest('hex').slice(0, 8));
 }
 
 /** Remove the run's tabs and helpers directly in the runtimes (after tabd is gone). */
@@ -325,6 +336,12 @@ export function removeRunResources(runDir: string, m: RunManifest = readManifest
 	}
 	for (const c of m.containers ?? []) {
 		spawnSync('docker', ['rm', '-f', c], { stdio: 'ignore' });
+	}
+	for (const tag of falcoStateTags(m)) {
+		const cs = dockerLines(['ps', '-aq', '--filter', 'label=seclab.obs=falco', '--filter', `label=seclab.state=${tag}`]) ?? [];
+		if (cs.length) {
+			spawnSync('docker', ['rm', '-f', ...cs], { stdio: 'ignore' });
+		}
 	}
 }
 
