@@ -8,6 +8,12 @@ umask 077
 RUN="/run/user/$(id -u)/seclab"
 mkdir -p "$RUN"
 chmod 700 "$RUN"
+# sbx: the observability collector (root) creates /run/seclab/reh, group seclab-relay, so the
+# relay can connect under its own uid. Elsewhere (OCI) the socket stays private to the tab user.
+SOCK="$RUN/reh.sock"
+if [ -d /run/seclab/reh ] && [ -w /run/seclab/reh ]; then
+	SOCK=/run/seclab/reh/reh.sock
+fi
 
 IFS= read -r TOKEN || true
 case "$TOKEN" in
@@ -15,7 +21,7 @@ case "$TOKEN" in
 esac
 [ "${#TOKEN}" -eq 64 ] || { echo "seclab-reh-start: invalid token length" >&2; exit 2; }
 
-if [ -S "$RUN/reh.sock" ] && [ -f "$RUN/reh.pid" ] && kill -0 "$(cat "$RUN/reh.pid")" 2>/dev/null; then
+if [ -S "$SOCK" ] && [ -f "$RUN/reh.pid" ] && kill -0 "$(cat "$RUN/reh.pid")" 2>/dev/null; then
 	if [ "$(cat "$RUN/token")" = "$TOKEN" ]; then
 		exit 0
 	fi
@@ -24,12 +30,12 @@ if [ -S "$RUN/reh.sock" ] && [ -f "$RUN/reh.pid" ] && kill -0 "$(cat "$RUN/reh.p
 fi
 
 printf '%s' "$TOKEN" > "$RUN/token"
-rm -f "$RUN/reh.sock"
+rm -f "$SOCK"
 
 # Everything the REH runs inherits the clean tab environment (see seclab-tab-env).
 setsid /opt/seclab/bin/seclab-tab-env \
 	/opt/seclab-reh/bin/seclab-code-server \
-		--socket-path "$RUN/reh.sock" \
+		--socket-path "$SOCK" \
 		--connection-token-file "$RUN/token" \
 		--disable-telemetry \
 		</dev/null >"$RUN/reh.log" 2>&1 &
@@ -37,7 +43,10 @@ echo $! > "$RUN/reh.pid"
 
 i=0
 while [ $i -lt 150 ]; do
-	[ -S "$RUN/reh.sock" ] && exit 0
+	if [ -S "$SOCK" ]; then
+		[ "$SOCK" = "$RUN/reh.sock" ] || chmod 0660 "$SOCK"
+		exit 0
+	fi
 	kill -0 "$(cat "$RUN/reh.pid")" 2>/dev/null || break
 	sleep 0.2
 	i=$((i + 1))

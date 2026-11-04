@@ -6,12 +6,14 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { checkFence, parsePolicyJson, resourcesToMirror } from '../fence.ts';
 import type { Runner } from '../run.ts';
 import { assertImageRef, assertPolicyResource, SANDBOX_NAME_RE, CONNECTION_TOKEN_RE } from '../validate.ts';
-import { DriverError, type Driver, type DriverInfo, type FenceReport, type TabRuntimeSpec } from './types.ts';
+import { DriverError, type Driver, type DriverInfo, type FenceReport, type SensorHooks, type TabRuntimeSpec } from './types.ts';
 
 const MIN_VERSION = [0, 51, 0];
-const REH_START = '/opt/seclab/bin/seclab-reh-start';
 const REH_CONNECT = '/opt/seclab/bin/seclab-reh-connect';
-const SANDBOX_USER = 'agent';
+const OBS_COLLECT = '/opt/seclab/bin/seclab-obs-collect';
+// The REH relay runs as its own fixed uid:gid (template), so the tab user cannot ptrace it.
+// Always both ids: a bare uid would take the passwd lookup's gid, and gid 999 is docker.
+const RELAY_USER = '990:990';
 // Destinations that must never be reachable from a tab; probed on every verify.
 const CANARY_TARGETS = ['example.com:443', 'localhost:22'];
 
@@ -97,7 +99,7 @@ export class SbxDriver implements Driver {
 		return problems;
 	}
 
-	async ensureRunning(spec: TabRuntimeSpec, connectionToken: string): Promise<void> {
+	async ensureRunning(spec: TabRuntimeSpec, connectionToken: string, sensor?: SensorHooks): Promise<void> {
 		checkSpec(spec);
 		if (!CONNECTION_TOKEN_RE.test(connectionToken)) {
 			throw new DriverError(-32602, 'invalid connection token');
@@ -117,11 +119,16 @@ export class SbxDriver implements Driver {
 		if (!fence.ok) {
 			throw new DriverError(-32010, `fence verification failed: ${fence.problems.join('; ')}`);
 		}
-		// Token goes over stdin, never argv. exec starts a stopped sandbox.
-		const r = await this.runner.run(this.sbx, ['exec', '-i', '-u', SANDBOX_USER, spec.sandboxName, REH_START],
-			{ input: connectionToken + '\n', timeoutMs: 90_000 });
-		if (r.code !== 0) {
-			throw new DriverError(-32012, `REH failed to start: ${tail(r.stderr || r.stdout)}`);
+		// The REH starts under the observability collector (root in the VM, strace + seccomp
+		// guard), so every tab process is traced from birth. No collector, no REH (fail closed).
+		// The token goes over stdin, never argv. exec starts a stopped sandbox.
+		if (!sensor?.startCollector) {
+			throw new DriverError(-32012, 'sbx tabs require the observability collector');
+		}
+		try {
+			await sensor.startCollector(() => this.runner.spawnStream(this.sbx, ['exec', '-i', '-u', 'root', spec.sandboxName, OBS_COLLECT]), connectionToken);
+		} catch (e) {
+			throw new DriverError(-32012, `REH failed to start: ${(e as Error).message}`);
 		}
 	}
 
@@ -233,7 +240,7 @@ export class SbxDriver implements Driver {
 
 	connectReh(spec: TabRuntimeSpec): ChildProcessWithoutNullStreams {
 		checkSpec(spec);
-		return this.runner.spawnStream(this.sbx, ['exec', '-i', '-u', SANDBOX_USER, spec.sandboxName, REH_CONNECT]);
+		return this.runner.spawnStream(this.sbx, ['exec', '-i', '-u', RELAY_USER, spec.sandboxName, REH_CONNECT]);
 	}
 
 	async runningSandboxes(): Promise<Set<string>> {

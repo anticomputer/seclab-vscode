@@ -1,0 +1,247 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://seclab.dev/tabd/event.v1.json",
+	"title": "seclab tab observability event",
+	"description": "Generated from tabd/src/obs/schema.ts by tabd/tools/gen-obs-docs.ts; do not edit.",
+	"type": "object",
+	"additionalProperties": false,
+	"required": [
+		"v",
+		"seq",
+		"time",
+		"tabId",
+		"source",
+		"integrity",
+		"class",
+		"priority",
+		"summary"
+	],
+	"properties": {
+		"v": {
+			"const": 1
+		},
+		"seq": {
+			"type": "integer",
+			"minimum": 1,
+			"description": "Per-tab sequence number assigned by the supervisor; contiguous in the log."
+		},
+		"time": {
+			"type": "string",
+			"format": "date-time",
+			"description": "Supervisor receive time (trusted clock)."
+		},
+		"tabId": {
+			"type": "string",
+			"pattern": "^t-[a-z2-7]{26}$"
+		},
+		"source": {
+			"enum": [
+				"tabd",
+				"scan",
+				"broker",
+				"rpc-filter",
+				"sbx-policy",
+				"workspace-watch",
+				"gate",
+				"sbx-collector",
+				"falco",
+				"detector"
+			]
+		},
+		"integrity": {
+			"enum": [
+				"trusted",
+				"host-observed",
+				"tab-vm-root"
+			]
+		},
+		"class": {
+			"enum": [
+				"tab.lifecycle",
+				"fence.verify",
+				"scan.result",
+				"egress.request",
+				"egress.approval",
+				"credential.use",
+				"broker.status",
+				"rpc.decision",
+				"policy.log",
+				"workspace.change",
+				"process.exec",
+				"process.exit",
+				"file.open",
+				"file.write",
+				"file.delete",
+				"file.rename",
+				"file.chmod",
+				"net.connect",
+				"priv.change",
+				"proc.ptrace",
+				"proc.signal",
+				"proc.sensitive",
+				"honeypot.access",
+				"sensor.status",
+				"detection"
+			]
+		},
+		"priority": {
+			"enum": [
+				"emergency",
+				"alert",
+				"critical",
+				"error",
+				"warning",
+				"notice",
+				"informational",
+				"debug"
+			]
+		},
+		"summary": {
+			"type": "string",
+			"maxLength": 512
+		},
+		"rule": {
+			"type": "string",
+			"pattern": "^[a-z][a-z0-9.-]{0,63}$"
+		},
+		"proc": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"pid": {
+					"type": "integer"
+				},
+				"ppid": {
+					"type": "integer"
+				},
+				"uid": {
+					"type": "integer"
+				},
+				"exe": {
+					"type": "string",
+					"maxLength": 512
+				},
+				"argv": {
+					"type": "array",
+					"maxItems": 33,
+					"items": {
+						"type": "string",
+						"maxLength": 256
+					}
+				},
+				"lineage": {
+					"type": "array",
+					"maxItems": 8,
+					"items": {
+						"type": "object",
+						"additionalProperties": false,
+						"required": [
+							"pid",
+							"exe"
+						],
+						"properties": {
+							"pid": {
+								"type": "integer"
+							},
+							"exe": {
+								"type": "string",
+								"maxLength": 512
+							}
+						}
+					}
+				}
+			}
+		},
+		"file": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": [
+				"path"
+			],
+			"properties": {
+				"path": {
+					"type": "string",
+					"maxLength": 1024
+				},
+				"op": {
+					"type": "string",
+					"maxLength": 32
+				}
+			}
+		},
+		"net": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": [
+				"addr"
+			],
+			"properties": {
+				"addr": {
+					"type": "string",
+					"maxLength": 128
+				},
+				"port": {
+					"type": "integer",
+					"minimum": 0,
+					"maximum": 65535
+				},
+				"family": {
+					"enum": [
+						"inet",
+						"inet6",
+						"unix",
+						"other"
+					]
+				},
+				"result": {
+					"type": "string",
+					"maxLength": 64
+				}
+			}
+		},
+		"detail": {
+			"type": "object",
+			"maxProperties": 16,
+			"propertyNames": {
+				"pattern": "^[a-zA-Z][a-zA-Z0-9_.]{0,31}$"
+			},
+			"properties": {
+				"ref": {
+					"type": "string",
+					"pattern": "^(?:rpc|cmd|chan):[\\x21-\\x7e]{1,1024}$"
+				}
+			},
+			"additionalProperties": {
+				"oneOf": [
+					{
+						"type": "string",
+						"maxLength": 256
+					},
+					{
+						"type": "number"
+					},
+					{
+						"type": "boolean"
+					}
+				]
+			}
+		},
+		"cause": {
+			"type": "array",
+			"maxItems": 16,
+			"items": {
+				"type": "integer",
+				"minimum": 1
+			}
+		},
+		"sensorTime": {
+			"type": "string",
+			"format": "date-time",
+			"description": "Sensor clock; tab-controlled for in-tab sensors."
+		},
+		"redacted": {
+			"const": true,
+			"description": "A redaction pattern matched somewhere in this event."
+		}
+	}
+}

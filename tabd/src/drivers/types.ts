@@ -50,11 +50,25 @@ export interface FenceReport {
 	readonly checkedAt: string;
 }
 
+/**
+ * Observability hooks the supervisor hands to a driver (ADR tab-observability). The driver
+ * only knows how to spawn its sensor; the supervisor owns parsing, state and fail-closed policy.
+ */
+export interface SensorHooks {
+	/**
+	 * sbx: start (or reuse) the in-VM collector and have it start the REH under tracing.
+	 * Resolves once the REH is up; rejects (fail closed) otherwise.
+	 */
+	startCollector?(spawnCollector: () => ChildProcessWithoutNullStreams, connectionToken: string): Promise<void>;
+	/** OCI: the workspace container exists; make sure the host sensor watches it before the REH starts. */
+	beforeReh?(info: { containerId: string }): Promise<void>;
+}
+
 export interface Driver {
 	readonly name: string;
 	probe(): Promise<DriverInfo>;
 	/** Create if missing (with fence applied atomically where possible), start, install token, start REH. */
-	ensureRunning(spec: TabRuntimeSpec, connectionToken: string): Promise<void>;
+	ensureRunning(spec: TabRuntimeSpec, connectionToken: string, sensor?: SensorHooks): Promise<void>;
 	/** Re-read the effective network policy and check it against the fence invariant. Must fail closed. */
 	verifyFence(spec: TabRuntimeSpec): Promise<FenceReport>;
 	/** On fence failure: re-apply whatever fence rules are missing, then stop the sandbox. */
