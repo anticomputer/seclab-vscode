@@ -26,13 +26,29 @@ node_image() {
 fetch_macos() {
 	local run="${1:-}"
 	local dest="$ROOT/.work/app"
+	local repo="anticomputer/seclab-vscode"
 	if [[ -z "$run" ]]; then
-		run="$(gh run list --workflow build-macos.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+		# Only builds of main triggered by a push (reviewed code), never dispatch/PR runs.
+		run="$(gh run list -R "$repo" --workflow build-macos.yml --branch main --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
 	fi
-	[[ "$run" =~ ^[0-9]+$ ]] || { echo "no successful build-macos run found" >&2; exit 1; }
+	[[ "$run" =~ ^[0-9]+$ ]] || { echo "no successful build-macos run on main found" >&2; exit 1; }
+	local meta
+	meta="$(gh run view -R "$repo" "$run" --json headBranch,event,conclusion,workflowName,headSha --jq '[.headBranch,.event,.conclusion,.workflowName,.headSha]|join(" ")')"
+	read -r branch event conclusion workflow head_sha <<<"$meta"
+	if [[ "$workflow" != "build-macos" || "$conclusion" != "success" ]]; then
+		echo "refusing run $run: $meta" >&2; exit 1
+	fi
+	if [[ "$branch" != "main" || "$event" != "push" ]] && [[ "${SECLAB_ALLOW_UNREVIEWED_BUILD:-}" != "1" ]]; then
+		echo "refusing run $run from $branch/$event (not main/push); set SECLAB_ALLOW_UNREVIEWED_BUILD=1 for your own branch builds" >&2; exit 1
+	fi
 	rm -rf "$dest" && mkdir -p "$dest"
-	gh run download "$run" --name seclab-vscode-darwin-arm64 --dir "$dest"
+	gh run download -R "$repo" "$run" --name seclab-vscode-darwin-arm64 --dir "$dest"
+	# Integrity only (same artifact); authenticity comes from the run checks above.
 	(cd "$dest" && shasum -a 256 -c SHA256SUMS)
+	# shellcheck source=/dev/null
+	. "$ROOT/upstream.lock"
+	jq -e --arg u "$UPSTREAM_SHA" --arg h "$head_sha" '.upstreamSha == $u and .repoSha == $h' "$dest/build-info.json" >/dev/null \
+		|| { echo "build-info.json does not match upstream.lock / run head SHA" >&2; exit 1; }
 	ditto -x -k "$dest/seclab-vscode-darwin-arm64.zip" "$dest"
 	cat "$dest/build-info.json"
 	echo
@@ -71,7 +87,7 @@ case "${1:-help}" in
 	test)
 		shift
 		case "${1:-}" in
-			unit) docker run --rm -v "$ROOT:/repo" -w /repo "$(node_image)" node --test tabd/test/unit.test.ts ;;
+			unit) docker run --rm -v "$ROOT:/repo" -w /repo "$(node_image)" node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts ;;
 			# e2e drives sbx/docker on the host, so it runs on the host. It uses the editor's own
 			# Node when SECLAB_NODE points at it, else an already-present node (nothing is installed).
 			e2e) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/test/e2e.ts" "${1:-sbx}" ;;
