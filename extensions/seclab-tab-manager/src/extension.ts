@@ -227,7 +227,7 @@ function safeText(s: unknown, max = 200): string {
 	return esc.length > max ? `${esc.slice(0, max - 1)}…` : esc;
 }
 
-const SOURCE_LABEL: Record<string, string> = { history: '  (git history)', objects: '  (git object store)', 'git-config': '  (git config)' };
+const SOURCE_LABEL: Record<string, string> = { history: '  (git history)', objects: '  (git object store)', 'git-dir': '  (git directory)' };
 
 // Suggested credential bindings for "move to broker", by gitleaks rule prefix.
 const BIND_SUGGESTIONS: Array<[RegExp, string]> = [
@@ -258,7 +258,7 @@ async function resolveSecretFindings(c: TabdClient, tabId: string, hostPath: str
 	}
 	// File names come from the user's folder: escaped plain text, values are never shown.
 	const shown = findings.slice(0, 50);
-	const list = shown.map(f => `• ${safeText(f.file)}${f.source === 'objects' ? '' : `:${Number(f.line)}`}  ${safeText(f.rule, 64)}${SOURCE_LABEL[f.source] ?? ''}  [redacted]`).join('\n')
+	const list = shown.map(f => `• ${safeText(f.file)}${f.source === 'objects' ? '' : `:${Number(f.line)}`}  ${safeText(f.rule, 64)}${SOURCE_LABEL[f.source] ?? ''}${/^(unscanned-|unrecognised-)/.test(f.rule) ? '  (could not be scanned)' : '  [redacted]'}`).join('\n')
 		+ (findings.length > shown.length ? `\n… and ${findings.length - shown.length} more` : '');
 	const movable = findings.filter(f => f.movable);
 	const choices = movable.length ? ['Move to Broker…', 'Open Anyway'] : ['Open Anyway'];
