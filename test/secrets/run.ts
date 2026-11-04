@@ -55,24 +55,24 @@ write('ignored.env', `KEY=${C.ignored}\n`);
 write('.gitleaksignore', ['app.env', 'allow.env', 'ignored.env', '/scan/ws/app.env', '/scan/ws/allow.env', '/scan/ws/ignored.env', 'ws/ignored.env']
 	.flatMap(f => [1, 2].map(l => `${f}:seclab-canary:${l}`)).join('\n') + '\n');
 fs.writeFileSync(path.join(ws, '.git', 'info', 'attributes'), '* -diff\n* binary\n');
-git('config', 'remote.origin.url', `https://x-access-token:${C.config}@github.com/example/repo.git`);
+git('config', 'remote.origin.url', `https://x-access-token:${C.config}@git.example.test/example/repo.git`);
 for (const [k, v] of [['core.bigFileThreshold', '1'], ['diff.noprefix', 'true'], ['color.diff', 'always'], ['log.showRoot', 'false']]) {
 	git('config', k, v);
 }
 fs.mkdirSync(path.join(ws, 'sub'));
 gitIn(path.join(ws, 'sub'), 'init', '-q');
-gitIn(path.join(ws, 'sub'), 'config', 'remote.origin.url', `https://x-access-token:${C.nested}@github.com/example/sub.git`);
+gitIn(path.join(ws, 'sub'), 'config', 'remote.origin.url', `https://x-access-token:${C.nested}@git.example.test/example/sub.git`);
 // N1: symlinked HEAD (valid to git).
 fs.mkdirSync(path.join(ws, 'symhead'));
 gitIn(path.join(ws, 'symhead'), 'init', '-q');
-gitIn(path.join(ws, 'symhead'), 'config', 'remote.origin.url', `https://x-access-token:${C.symhead}@github.com/example/s.git`);
+gitIn(path.join(ws, 'symhead'), 'config', 'remote.origin.url', `https://x-access-token:${C.symhead}@git.example.test/example/s.git`);
 fs.rmSync(path.join(ws, 'symhead', '.git', 'HEAD'));
 fs.symlinkSync('refs/heads/main', path.join(ws, 'symhead', '.git', 'HEAD'));
 // N1: commondir layout: .git holds only HEAD + commondir; objects/refs/config live in .git/c.
 const cdir = path.join(ws, 'cdir', '.git');
 fs.mkdirSync(cdir, { recursive: true });
 execFileSync('git', ['init', '-q', '--bare', path.join(cdir, 'c')], { stdio: 'ignore' });
-execFileSync('git', ['--git-dir', path.join(cdir, 'c'), 'config', 'remote.origin.url', `https://x-access-token:${C.common}@github.com/example/c.git`], { stdio: 'ignore' });
+execFileSync('git', ['--git-dir', path.join(cdir, 'c'), 'config', 'remote.origin.url', `https://x-access-token:${C.common}@git.example.test/example/c.git`], { stdio: 'ignore' });
 fs.rmSync(path.join(cdir, 'c', 'HEAD'));
 fs.writeFileSync(path.join(cdir, 'HEAD'), 'ref: refs/heads/main\n');
 fs.writeFileSync(path.join(cdir, 'commondir'), 'c\n');
@@ -99,7 +99,7 @@ if (process.platform === 'darwin') {
 const acd = path.join(ws, 'acd', '.git');
 fs.mkdirSync(acd, { recursive: true });
 execFileSync('git', ['init', '-q', '--bare', path.join(acd, 'c')], { stdio: 'ignore' });
-execFileSync('git', ['--git-dir', path.join(acd, 'c'), 'config', 'remote.origin.url', `https://x-access-token:${C.abscommon}@github.com/example/a.git`], { stdio: 'ignore' });
+execFileSync('git', ['--git-dir', path.join(acd, 'c'), 'config', 'remote.origin.url', `https://x-access-token:${C.abscommon}@git.example.test/example/a.git`], { stdio: 'ignore' });
 fs.rmSync(path.join(acd, 'c', 'HEAD'));
 fs.writeFileSync(path.join(acd, 'HEAD'), 'ref: refs/heads/main\n');
 fs.writeFileSync(path.join(acd, 'commondir'), `${path.join(acd, 'c')}\n`);

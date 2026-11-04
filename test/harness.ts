@@ -5,6 +5,7 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 export const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -59,10 +60,38 @@ export function lockRun(dir: string): void {
 /**
  * Electron's main IPC socket lives in the user-data dir; macOS caps unix socket paths at
  * 104 bytes, so a deep path (e.g. inside a worktree's .work/) makes the editor exit at
- * start. Fail early with a hint instead.
+ * start. Fail early with a hint instead. Test profiles must also be isolated: never a real
+ * editor profile (they hold auth sessions and settings with secrets).
  */
 export function checkUserDataDir(userData: string): void {
+	const home = os.homedir();
+	if (!(userData.startsWith(path.join(home, '.seclab-test') + path.sep) || userData.startsWith(path.join(repoRoot, '.work') + path.sep))) {
+		throw new Error(`test user-data-dir must be under ~/.seclab-test/ or this worktree's .work/ (isolated profile), got ${userData}`);
+	}
 	if (process.platform === 'darwin' && path.join(userData, '1.14-main.sock').length >= 104) {
 		throw new Error(`user-data-dir too long for macOS unix sockets (${userData}); use a short one such as ~/.seclab-test/<name>`);
 	}
+}
+
+/** Host paths a payload that escaped containment might touch. Stat only: never read. */
+const WATCHED = ['.ssh', '.gitconfig', '.zshrc', '.zprofile', '.bashrc', '.bash_profile', '.profile', 'Library/LaunchAgents', '.config/git'];
+
+export type Snapshot = Record<string, string>;
+
+export function hostSnapshot(): Snapshot {
+	const out: Snapshot = {};
+	for (const rel of WATCHED) {
+		const p = path.join(os.homedir(), rel);
+		try {
+			const st = fs.lstatSync(p);
+			out[rel] = `${st.ino}:${st.size}:${st.mtimeMs}`;
+		} catch {
+			out[rel] = 'absent';
+		}
+	}
+	return out;
+}
+
+export function snapshotDiff(before: Snapshot, after: Snapshot): string[] {
+	return Object.keys({ ...before, ...after }).filter(k => before[k] !== after[k]).map(k => `~/${k}`);
 }

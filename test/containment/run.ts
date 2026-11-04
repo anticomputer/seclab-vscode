@@ -6,10 +6,11 @@
 // Level B (editor-driven, rogue extension) is check-evidence.ts.
 
 import { execFileSync, spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
-import { beaconPort, lockRun, worktreeId } from '../harness.ts';
+import { beaconPort, hostSnapshot, lockRun, snapshotDiff, worktreeId } from '../harness.ts';
 import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
 
 const driver = process.argv[2] ?? 'sbx';
@@ -23,6 +24,9 @@ const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
 lockRun(path.join(repo, '.work', 'containment-lock', driver));
 const LOOPBACK_PORT = await beaconPort();
 const LOOPBACK_NAME = `seclab-containment-hostsvc-${driver}-${worktreeId}`;
+// Per-run arming nonce: fixtures are inert anywhere else (EDR fixture-safety).
+const ARM = randomBytes(16).toString('hex');
+const snapshotBefore = hostSnapshot();
 
 fs.rmSync(work, { recursive: true, force: true });
 fs.mkdirSync(path.join(work, 'canary'), { recursive: true });
@@ -36,7 +40,7 @@ function makeWorkspace(name: string, othertab: string): string {
 	fs.chmodSync(path.join(ws, '.seclab', 'probe.sh'), 0o755);
 	fs.chmodSync(path.join(ws, '.seclab', 'fake-python'), 0o755);
 	fs.writeFileSync(path.join(ws, '.seclab', 'targets'),
-		`canary=${canary}\nothertab=${othertab}\nmarker=${marker}\nloopback=${LOOPBACK_PORT}\n`);
+		`canary=${canary}\nothertab=${othertab}\nmarker=${marker}\nloopback=${LOOPBACK_PORT}\narm=${ARM}\nrun=${work}\n`);
 	return ws;
 }
 const wsB = makeWorkspace('ws-b', '');
@@ -132,6 +136,8 @@ if (driver === 'sbx') {
 	checks.push({ vector: 'mount', name: 'only the workspace is mounted', ok: JSON.stringify(a?.workspaces) === JSON.stringify([wsA]), detail: JSON.stringify(a?.workspaces) });
 }
 checks.push({ vector: 'host', name: 'canary still intact on host', ok: fs.readFileSync(canary, 'utf8') === 'HOST-SECRET-CANARY\n', detail: '' });
+const changed = snapshotDiff(snapshotBefore, hostSnapshot());
+checks.push({ vector: 'host', name: 'nothing outside .work changed (watched host paths, stat only)', ok: changed.length === 0, detail: changed.join(', ') });
 
 const ok = report(checks);
 await cleanup();

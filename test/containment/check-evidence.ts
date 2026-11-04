@@ -11,7 +11,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
-import { beaconPort, checkUserDataDir, lockRun } from '../harness.ts';
+import { beaconPort, checkUserDataDir, hostSnapshot, lockRun, snapshotDiff } from '../harness.ts';
+import { randomBytes } from 'node:crypto';
 import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
 
 const [mode, userDataArg, driverArg] = process.argv.slice(2);
@@ -51,14 +52,19 @@ if (mode === 'prepare') {
 	fs.writeFileSync(canary, 'HOST-SECRET-CANARY\n');
 	fs.cpSync(path.join(import.meta.dirname, 'fixtures', 'malicious-workspace'), ws, { recursive: true });
 	const port = await beaconPort();
-	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${canary}\nmarker=${marker}\nloopback=${port}\n`);
+	// Per-run arming nonce: the fixture is inert anywhere but inside this run dir.
+	const arm = randomBytes(16).toString('hex');
+	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${canary}\nmarker=${marker}\nloopback=${port}\narm=${arm}\nrun=${base}\n`
+		+ (process.env.SECLAB_CANARY_CLIPBOARD === '1' ? 'clipboard=1\n' : ''));
+	fs.writeFileSync(path.join(base, 'host-snapshot.json'), JSON.stringify(hostSnapshot()));
 	// Git repo with a hostile core.fsmonitor. Only `init` and `config` run on the host;
 	// neither reads core.fsmonitor. Nothing here may run `git status` on the host.
 	execFileSync('git', ['-C', ws, 'init', '-q']);
 	execFileSync('git', ['-C', ws, 'config', 'core.fsmonitor', 'sh .seclab/probe.sh fsmonitor']);
 	// Test profile: Workspace Trust off and automatic tasks on, i.e. the worst case for us
 	// (trust is UX, not a boundary). Plus editor-side canaries (shared canary harness):
-	// user settings (incl. a real secret-bearing setting) and the host clipboard.
+	// user settings (incl. a secret-bearing setting) and, only if opted in, the clipboard
+	// (seeding it overwrites the user's real clipboard: SECLAB_CANARY_CLIPBOARD=1).
 	const canaries = [mintCanary('user-settings'), mintCanary('user-settings-proxy-auth'), mintCanary('clipboard'), mintCanary('editor-env')];
 	fs.writeFileSync(path.join(base, 'canaries.json'), serialize(canaries));
 	fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
@@ -70,7 +76,9 @@ if (mode === 'prepare') {
 		'seclab.test.canary': canaries[0].value,
 		'http.proxyAuthorization': `Basic ${canaries[1].value}`,
 	}, null, '\t'));
-	spawnSync('pbcopy', [], { input: canaries[2].value });
+	if (process.env.SECLAB_CANARY_CLIPBOARD === '1') {
+		spawnSync('pbcopy', [], { input: canaries[2].value });
+	}
 	// Package the rogue extension (vsce in a container) and preinstall it into the tab.
 	const vsixDir = path.join(ws, '.seclab');
 	execFileSync('docker', ['run', '--rm', '-v', `${path.join(import.meta.dirname, 'rogue-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
@@ -101,6 +109,9 @@ if (mode === 'prepare') {
 	const host = fs.existsSync(hostFile) ? JSON.parse(fs.readFileSync(hostFile, 'utf8')) : undefined;
 	checks.push({ vector: 'rogue-extension', name: 'ui-kind rogue extension was forced into the tab (remoteName=seclab)', ok: host?.remoteName === 'seclab' && host?.seclabTab === '1', detail: JSON.stringify(host) });
 	checks.push({ vector: 'host', name: 'canary intact', ok: fs.readFileSync(canary, 'utf8') === 'HOST-SECRET-CANARY\n', detail: '' });
+	const snapFile = path.join(base, 'host-snapshot.json');
+	const changed = fs.existsSync(snapFile) ? snapshotDiff(JSON.parse(fs.readFileSync(snapFile, 'utf8')), hostSnapshot()) : ['no snapshot from prepare'];
+	checks.push({ vector: 'host', name: 'nothing outside .work changed (watched host paths, stat only)', ok: changed.length === 0, detail: changed.join(', ') });
 	// Shared canary harness, editor side: nothing the rogue extension observed through the
 	// API (env, configuration, clipboard, auth sessions, secrets) nor any evidence may
 	// contain an editor-side canary in any encoding.
