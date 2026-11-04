@@ -67,3 +67,4 @@ Good, bad, and follow-ups this creates.
 | 2026-11-04 | [Every non-built-in extension runs in the tab (`extensionKind` `*`)](20261104-extensionkind-default-workspace.md) | superseded-by extension-placement-hardening |
 | 2026-11-04 | [Route folder opens into tabs in the main process](20261104-route-folder-opens-in-main.md) | proposed |
 | 2026-11-04 | [Extension placement hardening: built-in-only `ui`, no `web`, nothing runs in local windows](20261104-extension-placement-hardening.md) | accepted |
+| 2026-11-04 | [Scan a folder for secrets before it is mounted into a tab](20261104-pre-mount-secret-scan.md) | accepted |
