@@ -41,10 +41,12 @@ class FakeDriver implements Driver {
 
 const noFindings = async (): Promise<ScanResult> => ({ complete: true, findings: [], secrets: new Map() });
 
-function setup(name: string, scanArg: ((p: string) => Promise<ScanResult>) | null = noFindings) {
+function setup(name: string, scanArg: ((p: string) => Promise<ScanResult>) | null = noFindings, extra: { gcDays?: number; keepState?: boolean } = {}) {
 	const scan = scanArg ?? undefined;
 	const dir = path.join(SCRATCH, name);
-	fs.rmSync(dir, { recursive: true, force: true });
+	if (!extra.keepState) {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
 	const ws = path.join(dir, 'home', 'src', 'proj');
 	fs.mkdirSync(ws, { recursive: true });
 	const driver = new FakeDriver();
@@ -56,7 +58,7 @@ function setup(name: string, scanArg: ((p: string) => Promise<ScanResult>) | nul
 		drivers: new Map([['fake', driver]]), templates: new Map([['default', template]]),
 		store: new TabStore(path.join(dir, 'state')),
 		write: b => out.push(...dec.push(b)), onFatal: r => { fatal = r; },
-		fenceReverifyMs: 20, pathPolicy: { home: path.join(dir, 'home'), allowedRoots: [path.join(dir, 'home', 'src')] }, scan,
+		fenceReverifyMs: 20, pathPolicy: { home: path.join(dir, 'home'), allowedRoots: [path.join(dir, 'home', 'src')] }, scan, gcDays: extra.gcDays,
 	});
 	let id = 1;
 	const call = async (method: string, params: unknown = {}) => {
@@ -177,4 +179,62 @@ test('supervisor: an incomplete scan still reports its findings first; both must
 	assert.equal(driver.calls.filter(c => c.startsWith('start')).length, 0);
 	await call('tab.ensureRunning', { tabId, acceptFindings: ['f1', 'scan-incomplete'] });
 	assert.equal(driver.calls.filter(c => c.startsWith('start')).length, 1);
+});
+
+test('supervisor: GC removes only stopped tabs unused past the cutoff; never in-use or vault-holding tabs', async () => {
+	const first = setup('gc');
+	await first.call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	const src = path.dirname(first.ws);
+	const ids: Record<string, string> = {};
+	for (const k of ['old', 'leased', 'vault', 'recent', 'otherdrv']) {
+		fs.mkdirSync(path.join(src, k));
+		ids[k] = (await first.call('tab.claim', { workspace: { hostPath: path.join(src, k) } })).tab.metadata.name;
+		await first.call('tab.ensureRunning', { tabId: ids[k] });
+	}
+	await first.sup.clientGone();
+	const state = path.join(SCRATCH, 'gc', 'state');
+	const store = new TabStore(state);
+	const old = new Date(Date.now() - 40 * 86_400_000).toISOString();
+	for (const k of ['old', 'leased', 'vault', 'otherdrv']) {
+		fs.writeFileSync(path.join(state, 'tabs', `${ids[k]}.used`), old);
+	}
+	// Created under another driver (R-5): removing it through this one would orphan it.
+	const recFile = path.join(state, 'tabs', `${ids.otherdrv}.json`);
+	fs.writeFileSync(recFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(recFile, 'utf8')), driver: 'sbx' }));
+	store.writeLease(ids.leased, process.ppid); // another live supervisor holds it
+	store.writeSide(ids.vault, 'vault', [{ id: 'f1' }]);
+	const second = setup('gc', noFindings, { gcDays: 30, keepState: true });
+	await second.call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	assert.deepEqual(second.driver.calls.filter(c => c.startsWith('remove')), [`remove ${ids.old}`]);
+	const left = (await second.call('tab.list')).tabs.map((t: { metadata: { name: string } }) => t.metadata.name).sort();
+	assert.deepEqual(left, [ids.leased, ids.vault, ids.recent, ids.otherdrv].sort());
+	// Disabled: nothing is collected.
+	fs.writeFileSync(path.join(state, 'tabs', `${ids.recent}.used`), old);
+	store.clearLease(ids.leased);
+	const third = setup('gc', noFindings, { gcDays: 0, keepState: true });
+	await third.call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	assert.equal(third.driver.calls.filter(c => c.startsWith('remove')).length, 0);
+});
+
+test('supervisor: reset discards the sandbox but keeps the tab; the next start is fresh', async () => {
+	const { call, driver, ws } = setup('reset');
+	await call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	const tabId = (await call('tab.claim', { workspace: { hostPath: ws } })).tab.metadata.name;
+	await call('tab.ensureRunning', { tabId });
+	const r = await call('tab.reset', { tabId });
+	assert.equal(r.tab.metadata.name, tabId);
+	assert.deepEqual(driver.calls.slice(-2), [`stop ${tabId}`, `remove ${tabId}`]);
+	assert.equal((await call('tab.get', { tabId })).tab.metadata.name, tabId);
+	await call('tab.ensureRunning', { tabId });
+	assert.equal(driver.calls.filter(c => c.startsWith('start')).length, 2);
+});
+
+test('supervisor: remove is refused while the vault holds moved secrets', async () => {
+	const { call, driver, ws } = setup('remove-vault');
+	await call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	const tabId = (await call('tab.claim', { workspace: { hostPath: ws } })).tab.metadata.name;
+	new TabStore(path.join(SCRATCH, 'remove-vault', 'state')).writeSide(tabId, 'vault', [{ id: 'f1' }]);
+	await assert.rejects(call('tab.remove', { tabId }), (e: Error & { code?: number }) => e.code === -32022);
+	assert.ok(!driver.calls.some(c => c.startsWith('remove')));
+	assert.equal((await call('tab.get', { tabId })).tab.metadata.name, tabId);
 });

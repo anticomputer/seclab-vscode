@@ -60,7 +60,7 @@ never derived from paths or other input. The editor uses the authority
 ## 3. Methods (client → supervisor)
 | Method | Params | Result | Notes |
 |---|---|---|---|
-| `initialize` | `{ protocolVersion: "seclab-tabd/0.1", client: { name, version } }` | `{ protocolVersion, supervisor: { version }, drivers: DriverInfo[], templates: TabTemplate[] }` | Must be first. A major-version mismatch is an error. |
+| `initialize` | `{ protocolVersion: "seclab-tabd/0.1", client: { name, version } }` | `{ protocolVersion, supervisor: { version }, drivers: DriverInfo[], templates: TabTemplate[] }` | Must be first. A major-version mismatch is an error. Reconciles running tabs left by a dead supervisor (adopt after fence verification, or quarantine), then garbage-collects: stopped tabs unused for `--gc-days` (default 30; 0 disables) are removed, except tabs that are running, leased by a live supervisor, or holding vaulted secrets. |
 | `tab.claim` | `{ workspace: { hostPath }, templateRef?: { name } }` | `{ tab }` | The **only** method that accepts a host path. Validates it (absolute, canonical, an existing directory, not a denylisted root) and returns the existing tab for that path or mints a new one. Persists the mapping. Does not start anything. |
 | `tab.get` | `{ tabId }` | `{ tab }` | Unknown ID → error `-32004`. |
 | `tab.list` | `{}` | `{ tabs: Tab[] }` | |
@@ -70,7 +70,8 @@ never derived from paths or other input. The editor uses the authority
 | `tab.restoreSecrets` | `{ tabId }` | `{ restored, notRestored }` | Reverses `moveSecrets` (tab stopped). |
 | `tab.connect` | `{ tabId }` | `{ channel, connectionToken }` | **Re-verifies the fence first.** On mismatch: error `-32010` with the reason. Opens an exec stream to the REH socket on a new channel. |
 | `tab.stop` | `{ tabId }` | `{ tab }` | Ends the tab's channels, then stops the sandbox. |
-| `tab.remove` | `{ tabId }` | `{}` | Removes the sandbox and fence rules; forgets the mapping. |
+| `tab.remove` | `{ tabId }` | `{}` | Removes the sandbox and fence rules; forgets the mapping. Refused (`-32022`) while the tab's vault holds moved secrets: restore them first. |
+| `tab.reset` | `{ tabId }` | `{ tab }` | Rebuilds the tab from its template: stops it and removes the sandbox and its home (installed extensions, anything dropped there). Keeps the tab ID, workspace mapping, vault and exceptions; the next `ensureRunning` starts it fresh. |
 | `stream.end` | `{ channel }` | — (notification) | Client half-close (client → REH EOF). |
 | `stream.close` | `{ channel }` | — (notification) | Client abort; the supervisor kills the exec child. |
 | `shutdown` | `{ stopTabs?: boolean }` | `{}` | Graceful: ends channels; leaves tabs running unless `stopTabs`. |
