@@ -67,6 +67,7 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-04 | [M0 pipeline, seclab-tabd implementation, Tab Manager, containment suite](20261104-m0-tabd-code.md) | 296594c..7d7a1cf (round 2a), then the fixes and new code 7d7a1cf..2c07708 (round 2b), with | see record |
 | 2026-11-04 | [patch queue and release guard](20261104-patch-guard.md) | - 1aa8ccb: build/apply-patches.sh, patches/series, build/prepare.sh, | see record |
 | 2026-11-04 | [probe payload safety against the host (Phase 3, increment 2)](20261104-probe-safety.md) | see record | see record |
+| 2026-11-04 | [the RPC filter patches 0005–0007 (Phase 3, increment 3)](20261104-rpc-filter-patches.md) | see record | see record |
 | 2026-11-04 | [RPC lockdown design (Phase 2)](20261104-rpc-lockdown-design.md) | see record | see record |
 | 2026-11-04 | [RPC escape probes and rogue-REH fixture (Phase 3, increment 1)](20261104-rpc-probes-increment.md) | see record | see record |
 | 2026-11-04 | [supply-chain provenance and CI credential sweep](20261104-supply-chain.md) | - the dependency register (deps/registry.json, build/deps.ts, docs/DEPENDENCIES.md); | see record |
