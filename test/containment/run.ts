@@ -29,7 +29,7 @@ fs.writeFileSync(canary, 'HOST-SECRET-CANARY\n');
 const marker = path.join(work, 'PWNED');
 
 function makeWorkspace(name: string, othertab: string): string {
-	const ws = path.join(work, name);
+	const ws = path.join(work, 'tabs', name);
 	fs.cpSync(fixture, ws, { recursive: true });
 	fs.chmodSync(path.join(ws, '.seclab', 'probe.sh'), 0o755);
 	fs.chmodSync(path.join(ws, '.seclab', 'fake-python'), 0o755);
@@ -47,7 +47,7 @@ execFileSync('docker', ['run', '-d', '--rm', '--name', LOOPBACK_NAME, '-p', `127
 
 const client = new TabdClient({
 	command: process.execPath,
-	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', work],
+	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', path.join(work, 'tabs')],
 	env: { HOME: process.env.HOME, USER: process.env.USER },
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));
