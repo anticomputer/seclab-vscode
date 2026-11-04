@@ -1,0 +1,52 @@
+name: build-macos
+
+# Builds the unsigned darwin-arm64 editor from the pinned upstream + product.json
+# overrides + patch queue + our built-in extensions. Fetch with `./seclab fetch macos`.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - upstream.lock
+      - build/**
+      - patches/**
+      - extensions/**
+      - tabd/**
+      - .github/workflows/build-macos.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch pinned upstream (verifies tag -> SHA)
+        run: build/fetch-upstream.sh "$GITHUB_WORKSPACE/vscode"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: vscode/.nvmrc
+
+      - name: Build unsigned app
+        env:
+          ARCH: arm64
+          SRC: ${{ github.workspace }}/vscode
+          OUT_DIR: ${{ github.workspace }}/dist
+        run: build/build-darwin.sh
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: seclab-vscode-darwin-arm64
+          path: dist/
+          retention-days: 7
+          if-no-files-found: error
