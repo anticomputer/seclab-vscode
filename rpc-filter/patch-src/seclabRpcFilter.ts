@@ -29,6 +29,84 @@ export interface SeclabDenial {
 	readonly at: number;
 }
 
+/**
+ * One filter decision, in the shape agreed with the tab-observability session.
+ *
+ * `id` is the wire sid for the `rpc` surface, not the MainContext property
+ * name: seven diverge, so mapping from the property name mislabels those.
+ *
+ * `claimedExtensionId` is exactly that -- a claim. Extension identity arrives
+ * as an RPC *argument* (`$getPassword(extensionId, key)` is the canonical
+ * case), so a hostile host names whatever it likes. It must never be used for
+ * authorization, and a UI must present it as "claims to be X".
+ */
+export interface SeclabDecision {
+	readonly surface: 'rpc' | 'cmd' | 'chan' | 'data';
+	readonly id: string;
+	readonly ref: string;
+	readonly tabId: string;
+	readonly verdict: SeclabVerdict;
+	readonly reason?: string;
+	readonly constraint?: string;
+	readonly claimedExtensionId?: string;
+	/** Aggregated allows: how many were collapsed into this event. */
+	readonly count?: number;
+	readonly at: number;
+}
+
+type SeclabDecisionListener = (d: SeclabDecision) => void;
+
+const seclabListeners = new Set<SeclabDecisionListener>();
+
+/** Window over which permitted decisions are collapsed, as agreed: 10s. */
+const SECLAB_AGGREGATE_MS = 10_000;
+const seclabPending = new Map<string, { decision: SeclabDecision; count: number; timer: unknown }>();
+
+export function seclabOnDecision(listener: SeclabDecisionListener): { dispose(): void } {
+	seclabListeners.add(listener);
+	return { dispose: () => { seclabListeners.delete(listener); } };
+}
+
+function seclabDeliver(d: SeclabDecision): void {
+	for (const l of seclabListeners) {
+		try {
+			l(d);
+		} catch {
+			// A broken listener must never break the filter.
+		}
+	}
+}
+
+/**
+ * deny, prompt and rewrite are delivered individually: they are the decisions a
+ * user or an investigator acts on. allow and allow_with_constraint are
+ * collapsed per (surface, id, verdict) so a chatty extension cannot drown the
+ * stream.
+ */
+function seclabRecord(d: SeclabDecision): void {
+	if (d.verdict !== 'allow' && d.verdict !== 'allow_with_constraint') {
+		seclabDeliver(d);
+		return;
+	}
+	const key = `${d.surface}\u0000${d.id}\u0000${d.verdict}`;
+	const open = seclabPending.get(key);
+	if (open) {
+		open.count++;
+		return;
+	}
+	const entry = {
+		decision: d, count: 1,
+		timer: setTimeout(() => {
+			const done = seclabPending.get(key);
+			seclabPending.delete(key);
+			if (done) {
+				seclabDeliver({ ...done.decision, count: done.count });
+			}
+		}, SECLAB_AGGREGATE_MS),
+	};
+	seclabPending.set(key, entry);
+}
+
 export interface ISeclabFilter {
 	/** @returns an error to reject with, or undefined to let the call through. */
 	checkRpc(sid: string, method: string, args: readonly unknown[]): Error | undefined;
@@ -93,11 +171,30 @@ class SeclabFilter implements ISeclabFilter {
 		return this._denials;
 	}
 
+	private _surfaceOf(ref: string): SeclabDecision['surface'] {
+		const kind = ref.split(':', 1)[0];
+		return kind === 'cmd' || kind === 'chan' || kind === 'data' ? kind : 'rpc';
+	}
+
+	private _record(ref: string, verdict: SeclabVerdict, reason?: string, constraint?: string): void {
+		seclabRecord({
+			surface: this._surfaceOf(ref),
+			id: ref.slice(ref.indexOf(':') + 1),
+			ref, tabId: this.tabId, verdict, reason, constraint, at: Date.now(),
+		});
+	}
+
 	private _deny(ref: string, reason: string): Error {
 		const record: SeclabDenial = { ref, tabId: this.tabId, reason, at: Date.now() };
 		this._denials.push(record);
 		this._onDenial?.(record);
+		this._record(ref, 'deny', reason);
 		return denied();
+	}
+
+	private _permit(ref: string, verdict: SeclabVerdict, constraint?: string): undefined {
+		this._record(ref, verdict, undefined, constraint);
+		return undefined;
 	}
 
 	private _entry(sid: string, method: string): SeclabEntry | undefined {
@@ -125,7 +222,7 @@ class SeclabFilter implements ISeclabFilter {
 		if (verdict === 'allow' || verdict === 'rewrite') {
 			// `rewrite` is applied by the customer itself (sentinel credential,
 			// partitioned storage key); the call is permitted to reach it.
-			return undefined;
+			return this._permit(ref, verdict);
 		}
 		if (verdict === 'prompt') {
 			// Prompting is routed through the Tab Manager, which is not on this
@@ -133,7 +230,8 @@ class SeclabFilter implements ISeclabFilter {
 			// closed direction.
 			return this._deny(ref, 'prompt not yet wired; failing closed');
 		}
-		return this._constrain(sid, method, args, entry, ref);
+		const refused = this._constrain(sid, method, args, entry, ref);
+		return refused ?? this._permit(ref, verdict, entry?.constraint);
 	}
 
 	private _constrain(
@@ -182,10 +280,11 @@ class SeclabFilter implements ISeclabFilter {
 	public checkChannel(channel: string, method: string): Error | undefined {
 		const entry = SECLAB_CHANNELS.get(channel);
 		const verdict = entry?.verdict ?? SECLAB_DEFAULT_VERDICT;
+		const ref = entry?.ref ?? `chan:${channel}`;
 		if (verdict === 'deny') {
-			return this._deny(entry?.ref ?? `chan:${channel}`, `method ${method}`);
+			return this._deny(ref, `method ${method}`);
 		}
-		return undefined;
+		return this._permit(ref, verdict);
 	}
 
 	public commandVerdict(id: string): SeclabVerdict {
