@@ -1,0 +1,125 @@
+{
+  "tab": "1",
+  "remoteName": "seclab",
+  "results": [
+    {
+      "id": "host-terminal-newlocal",
+      "policyRef": "cmd:workbench.action.terminal.newLocal",
+      "outcome": "succeeded",
+      "detail": "null",
+      "ms": 64
+    },
+    {
+      "id": "host-terminal-sendsequence",
+      "policyRef": "cmd:workbench.action.terminal.sendSequence",
+      "outcome": "succeeded",
+      "detail": "null",
+      "ms": 128
+    },
+    {
+      "id": "host-fs-read-userdata",
+      "policyRef": "rpc:MainThreadFileSystem.$readFile",
+      "outcome": "error",
+      "detail": "Unable to read file 'vscode-userdata:/User/settings.json' (Error: Unable to resolve nonexistent file 'vscode-userdata:/User/settings.json')",
+      "ms": 8
+    },
+    {
+      "id": "host-fs-read-file-scheme",
+      "policyRef": "rpc:MainThreadFileSystem.$readFile",
+      "outcome": "error",
+      "detail": "Error: ENOENT: no such file or directory, open '/Users/dev/src/seclab-vscode/.work/containment-editor/canary.txt'",
+      "ms": 3
+    },
+    {
+      "id": "host-fs-write-file-scheme",
+      "policyRef": "rpc:MainThreadFileSystem.$writeFile",
+      "outcome": "succeeded",
+      "detail": "file:///Users/dev/src/seclab-vscode/.work/containment-editor/PWNED.rpcwrite",
+      "ms": 5
+    },
+    {
+      "id": "secret-write-own",
+      "policyRef": "rpc:MainThreadSecretState.$setPassword",
+      "outcome": "succeeded",
+      "detail": "stored",
+      "ms": 7
+    },
+    {
+      "id": "secret-read-cross-tab",
+      "policyRef": "rpc:MainThreadSecretState.$getPassword",
+      "outcome": "succeeded",
+      "detail": "from-unknown",
+      "ms": 2
+    },
+    {
+      "id": "auth-get-session",
+      "policyRef": "rpc:MainThreadAuthentication.$getSession",
+      "outcome": "error",
+      "detail": "Timed out waiting for authentication provider 'seclab-fake-auth' to register.",
+      "ms": 5009
+    },
+    {
+      "id": "clipboard-read",
+      "policyRef": "rpc:MainThreadClipboard.$readText",
+      "outcome": "succeeded",
+      "detail": "<redacted>",
+      "ms": 5
+    },
+    {
+      "id": "command-enumeration",
+      "policyRef": "rpc:MainThreadCommands.$getCommands",
+      "outcome": "succeeded",
+      "detail": "{\"total\":3105,\"dangerousVisible\":[\"workbench.action.terminal.newLocal\"]}",
+      "ms": 8
+    },
+    {
+      "id": "launder-direct",
+      "policyRef": "cmd:_remoteCLI.windowOpen",
+      "outcome": "succeeded",
+      "detail": "null",
+      "ms": 19
+    },
+    {
+      "id": "launder-open-external",
+      "policyRef": "cmd:_remoteCLI.openExternal",
+      "outcome": "error",
+      "detail": "probe safety: remoteCLI openExternal: only the local beacon is allowed, got null/remotecli",
+      "ms": 0
+    },
+    {
+      "id": "launder-manage-extensions",
+      "policyRef": "cmd:_remoteCLI.manageExtensions",
+      "outcome": "succeeded",
+      "detail": "Extensions installed on Tab:\nseclab-test.rogue-ui",
+      "ms": 9
+    },
+    {
+      "id": "launder-await",
+      "policyRef": "cmd:_seclabTest.launder",
+      "outcome": "error",
+      "detail": "command '_seclabTest.launder' not found",
+      "ms": 30319
+    },
+    {
+      "id": "launder-timer",
+      "policyRef": "cmd:_seclabTest.launder",
+      "outcome": "error",
+      "detail": "command '_seclabTest.launder' not found",
+      "ms": 6
+    },
+    {
+      "id": "launder-event",
+      "policyRef": "cmd:_seclabTest.launder",
+      "outcome": "error",
+      "detail": "command '_seclabTest.launder' not found",
+      "ms": 7
+    },
+    {
+      "id": "launder-captured-service",
+      "policyRef": "cmd:_seclabTest.launder",
+      "outcome": "error",
+      "detail": "command '_seclabTest.launder' not found",
+      "ms": 8
+    }
+  ]
+}

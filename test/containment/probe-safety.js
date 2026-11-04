@@ -57,28 +57,53 @@ const FORBIDDEN = [
  * Arming requires a run directory supplied by the HARNESS -- never a fallback
  * to workspace-supplied data -- plus a nonce that matches a file inside it.
  */
-function arm() {
-	const nonce = process.env.SECLAB_PROBE_NONCE;
-	const runDir = process.env.SECLAB_PROBE_RUNDIR;
-	if (!nonce || !runDir) {
-		return { armed: false, reason: 'SECLAB_PROBE_NONCE / SECLAB_PROBE_RUNDIR not set by the harness' };
+function arm(armingFile) {
+	// Two delivery routes, because the two fixtures live on opposite sides of
+	// the boundary:
+	//
+	//  * Host side (and the REH payload): the environment. Trusted, because
+	//    only the harness sets it.
+	//  * Inside the tab: a file the harness wrote into the workspace. The tab
+	//    gets `env -i` (sandbox/rootfs/opt/seclab/bin/seclab-tab-env), so no
+	//    host environment reaches an extension -- by design.
+	//
+	// The in-tab route is weaker: the workspace is attacker-writable, so a
+	// hostile workspace could self-arm. That is accepted. Arming exists to stop
+	// this extension doing anything if it is installed somewhere that is not a
+	// harness run; it is not a containment boundary. The real boundary is
+	// enforced host-side by the teardown tripwire and the beacon.
+	let nonce = process.env.SECLAB_PROBE_NONCE;
+	let runDir = process.env.SECLAB_PROBE_RUNDIR;
+	let advisory = false;
+	if ((!nonce || !runDir) && armingFile) {
+		try {
+			const a = JSON.parse(fs.readFileSync(armingFile, 'utf8'));
+			nonce = a.nonce;
+			runDir = a.runDir;
+			advisory = true;
+		} catch { /* fall through to unarmed */ }
 	}
-	let root;
+	if (!nonce || !runDir) {
+		return { armed: false, reason: 'no arming nonce / run directory from the harness' };
+	}
+	// The run directory is a HOST path. Inside the tab it is not mounted, so it
+	// cannot be stat-ed and containment has to be lexical. Say so explicitly
+	// rather than silently weakening the check.
+	let root = path.resolve(runDir);
+	let lexicalOnly = true;
 	try {
 		root = fs.realpathSync(runDir);
-	} catch (err) {
-		return { armed: false, reason: `run directory does not resolve: ${err.message}` };
-	}
-	let onDisk;
-	try {
-		onDisk = fs.readFileSync(path.join(root, NONCE_FILE), 'utf8').trim();
+		const onDisk = fs.readFileSync(path.join(root, NONCE_FILE), 'utf8').trim();
+		if (onDisk !== nonce) {
+			return { armed: false, reason: 'nonce mismatch' };
+		}
+		lexicalOnly = false;
 	} catch {
-		return { armed: false, reason: 'nonce file absent from the run directory' };
+		if (!advisory) {
+			return { armed: false, reason: 'run directory or nonce file not readable' };
+		}
 	}
-	if (onDisk !== nonce) {
-		return { armed: false, reason: 'nonce mismatch' };
-	}
-	return { armed: true, runDir: root };
+	return { armed: true, runDir: root, lexicalOnly, advisory };
 }
 
 /**
@@ -106,6 +131,16 @@ function safePath(ctx, p, what) {
 		}
 	}
 	const resolved = path.resolve(p);
+	const root = ctx.runDir;
+	if (ctx.lexicalOnly) {
+		// Inside the tab the target is a host path we cannot stat. Charset and
+		// FORBIDDEN have already run; all that is left is a strict prefix test.
+		// Advisory, as recorded in arm().
+		if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+			throw new SafetyError(`${what}: ${resolved} is outside ${root}`);
+		}
+		return resolved;
+	}
 	const parent = path.dirname(resolved);
 	let realParent;
 	try {
@@ -113,7 +148,6 @@ function safePath(ctx, p, what) {
 	} catch (err) {
 		throw new SafetyError(`${what}: parent does not resolve: ${err.message}`);
 	}
-	const root = ctx.runDir;
 	const inside = (q) => q === root || q.startsWith(root + path.sep);
 	if (!inside(realParent)) {
 		throw new SafetyError(`${what}: ${resolved} is under ${realParent}, outside ${root}`);
@@ -178,19 +212,21 @@ function note(ctx, artefact) {
 	} catch { /* best effort */ }
 }
 
-function context() {
-	const armed = arm();
+function context(armingFile) {
+	const armed = arm(armingFile);
 	if (!armed.armed) {
 		return { armed: false, reason: armed.reason };
 	}
 	const ctx = {
 		armed: true,
 		runDir: armed.runDir,
+		lexicalOnly: armed.lexicalOnly,
+		advisory: armed.advisory,
 		beaconPort: process.env.SECLAB_PROBE_BEACON_PORT
 			? Number(process.env.SECLAB_PROBE_BEACON_PORT) : null,
 		artefacts: [],
 		// Per-run so teardown can delete exactly what this run created.
-		secretKey: `seclab-probe-${process.env.SECLAB_PROBE_NONCE}`,
+		secretKey: `seclab-probe-${(process.env.SECLAB_PROBE_NONCE || 'run').slice(0, 16)}`,
 	};
 	ctx.marker = path.join(ctx.runDir, MARKER_BASENAME);
 	ctx.canary = path.join(ctx.runDir, CANARY_BASENAME);

@@ -91,6 +91,7 @@ exports.activate = async function (context) {
 				const i = line.indexOf('=');
 				if (i > 0) { targets[line.slice(0, i)] = line.slice(i + 1); }
 			}
+			targets.armingFile = path.join(root, '.seclab', 'probe-arming.json');
 			const { runProbes } = require('./rpc-probes.js');
 			const results = await runProbes(vscode, context, targets);
 			fs.writeFileSync(path.join(out, 'rpc-probes.json'), JSON.stringify({

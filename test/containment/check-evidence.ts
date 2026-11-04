@@ -115,6 +115,15 @@ if (mode === 'prepare') {
 		spawnSync('pbcopy', [], { input: canaries[2].value });
 	}
 	// Package the rogue extension (vsce in a container) and preinstall it into the tab.
+	// The guards live in one place (test/containment/probe-safety.js) but must
+	// ship inside the .vsix: a require() reaching outside the extension root
+	// throws at activation, which silently produced no probe evidence at all.
+	// Copied at package time so there is still a single source of truth; the
+	// lint asserts the copies match.
+	for (const dir of ['rogue-extension', 'rogue-reh']) {
+		fs.copyFileSync(path.join(import.meta.dirname, 'probe-safety.js'),
+			path.join(import.meta.dirname, dir, 'probe-safety.js'));
+	}
 	const vsixDir = path.join(ws, '.seclab');
 	execFileSync('docker', ['run', '--rm', '-v', `${path.join(import.meta.dirname, 'rogue-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
 		NODE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && npx --yes @vscode/vsce@3.9.2 package --allow-missing-repository --skip-license -o /out/rogue.vsix'], { stdio: 'inherit' });
