@@ -62,5 +62,6 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-04 | [probe payload safety against the host (Phase 3, increment 2)](20261104-probe-safety.md) | see record | see record |
 | 2026-11-04 | [RPC lockdown design (Phase 2)](20261104-rpc-lockdown-design.md) | see record | see record |
 | 2026-11-04 | [RPC escape probes and rogue-REH fixture (Phase 3, increment 1)](20261104-rpc-probes-increment.md) | see record | see record |
+| 2026-11-04 | [tab observability (one-way event stream, sbx collector, OCI Falco, Tab Activity view)](20261104-tab-observability.md) | - Round 1: origin/main..8b1df33 (pre-rebase), that is the whole layer: | see record |
 | 2026-11-04 | [seclab-tabd design (protocol and process model)](20261104-tabd-protocol-design.md) | design docs at 296594c plus the uncommitted drafts of docs/adr/20261104-tab-supervisor.md, | see record |
 <!-- index:end -->

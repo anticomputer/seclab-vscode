@@ -364,6 +364,17 @@ export class StraceTracker {
 		return p;
 	}
 
+	/** An exec whose strace record exceeded the line cap: report the program, flag the argv. */
+	truncatedExec(pid: number, path: string): Array<Omit<EventDraft, 'source' | 'integrity'>> {
+		const p = this.get(pid);
+		p.exe = path;
+		p.argv = [path, '[argv not recorded: oversized]'];
+		return [{
+			class: 'process.exec', priority: 'warning', proc: this.proc(pid),
+			summary: `exec ${path} with an oversized argument list (not recorded)`, detail: { truncated: true },
+		}];
+	}
+
 	/** Turn one record into zero or more drafts (integrity/source filled by the caller). */
 	handle(r: StraceRecord): Array<Omit<EventDraft, 'source' | 'integrity'>> {
 		if (r.kind === 'exit') {

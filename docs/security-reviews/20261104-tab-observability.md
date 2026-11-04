@@ -1,0 +1,48 @@
+# Security review: tab observability (one-way event stream, sbx collector, OCI Falco, Tab Activity view)
+
+- **Date:** 2026-11-04
+- **Scope:**
+  - Round 1: `origin/main..8b1df33` (pre-rebase), that is the whole layer:
+    - `tabd/src/obs/*`, plus the hooks in `supervisor.ts`, `main.ts`, `drivers/{sbx,oci,types}.ts`;
+    - `sandbox/rootfs/opt/seclab/bin/seclab-obs-collect`, `seclab-reh-{start,connect}`;
+    - `sandbox/sbx/{seclab-obs-guard.c,build-template.sh,obs-debs.lock}`;
+    - `tabd/tools/*`;
+    - `extensions/seclab-tab-manager/src/activity.ts`;
+    - the tests.
+  - Round 2: the round-1 fixes in `80c98bb`, after the linear rebase onto `10415e3`.
+  - Round 3: the round-2 fixes in this commit.
+- **Question:** does the layer add any channel from a tab into the trusted side beyond a one-way, size-limited, schema-validated event stream? Can the tab user, or a rogue extension (not root in the VM), forge or hide events?
+- **Reviewer:** `security-review` agent (default model); triage by the tab-observability session.
+- **Related:** [ADR tab observability](../adr/20261104-tab-observability.md), [EDR sensor spike](../edr/20261104-tab-observability-sensor-spike.md), [events](../tabd/EVENTS.md)
+
+## Round 1
+| # | Sev | Area | Finding | Disposition | Fix | Regression |
+|---|---|---|---|---|---|---|
+| OR-1 | **High** | sbx guard | The tab user can install its own seccomp filter that has a listener (`SECCOMP_FILTER_FLAG_NEW_LISTENER`) and returns `USER_NOTIF`. That outranks strace's `SECCOMP_RET_TRACE`; a sibling `CONTINUE`s the syscall, so it runs with no trace line. io_uring ops never pass syscall tracing at all. Reproduced with strace 6.13 and the guard. | Fixed | The guard refuses `seccomp()` with `NEW_LISTENER` (`EPERM`) and `io_uring_*` (`ENOSYS`). The collector also sets `kernel.io_uring_disabled=2`. | `test/observability/guard-check.py` in `./seclab test obs sbx`: refused under the guard; the control run without the guard succeeds, which proves the bypass is real |
+| OR-2 | Medium | sbx collector | The REH inherited the write end of strace's output pipe, so the tab user could forge `tab-vm-root` trace lines or corrupt real ones. Corrupt lines were only counted. | Fixed | The guard runs `close_range(3, ~0U)` before exec. tabd marks the tab `degraded` on corrupted or forged sensor output. | guard-check (`fds` empty; control sees fd 7); unit `obs review OR-2` |
+| OR-3 | Medium | hub | Tab-driven trusted sources (workspace watcher) shared one rate bucket with RPC-filter decisions and supervisor events, so a tab could push those out. | Fixed | Separate buckets: sensor; tab-driven (watcher, policy log, broker, scan); client (RPC filter, gate). Supervisor (`tabd`) events are never limited. | unit `obs review OR-3` |
+| OR-4 | Medium | sbx collector | Root `chown`ed honeypot directories by name inside the agent-owned home, so a hardlink race could hand the agent a root-owned file. | Fixed | `fchown` through the opened, verified directory fd. `fs.protected_hardlinks` and `fs.protected_symlinks` are set to 1 before seeding. | `./seclab test obs sbx` asserts the sysctls |
+| OR-L1 | Low | UI | Observation reasons (which can carry collector text) weren't escaped. | Fixed | `safeText` in `setObservation`. | unit `obs review low` |
+| OR-L2 | Low | watcher | The `package.json` read could follow a parent swapped for a symlink after `realpath`. | Partly fixed; accepted | dev/ino are checked after open. Only a scripts hash is computed and nothing returns to the tab. | — |
+
+## Round 2 (verifies round 1; reviews the rebase and the write-back mount hook)
+No high or critical findings. OR-1 to OR-4 are verified correct, including the BPF jump offsets on both architectures.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression |
+|---|---|---|---|---|---|---|
+| OR-5 | Medium | watcher | Regression from the OR-3 fix: past the 50-per-flush cap, host-executable writes were folded into a debug-level bulk summary. Fifty create-and-delete decoys hid a git hook. | Fixed | Host-executable paths are never bulked. Deletions don't count toward the cap. Overflow becomes a `warning` that names the paths (hidden config paths first) and feeds the detector. | unit `obs review OR-5` (real fs.watch) |
+| OR-6 | Medium | sbx collector | An `execve` with a padded argv makes an over-cap strace line, which the collector dropped whole, so the exec and its detections vanished. | Fixed | The collector keeps the record's head (pid, syscall, program path). tabd emits a `warning` exec with `truncated`, and degrades the tab on the first corrupt or oversized record. | unit `obs review OR-6` |
+| OR-L3 | Low | guard | fd 2 of the guarded tree was strace's stderr pipe, so the tab could inject `strace-err` debug lines. | Fixed | The guard points fd 2 at `/dev/null` before exec. | guard-check |
+| OR-L4 | Low | collector | A process the watchdog re-attached after it ran untraced only warned. | Fixed | Any untraced process marks the tab `degraded`. | e2e (harness execs are external) |
+| OR-R1 | — | design | Tab-driven trusted sources (watcher, policy log, broker, scan) still share one bucket with each other: a workspace flood can drop a broker egress event, which is then summarised as "tabDriven events dropped". | Accepted | Separate from RPC and supervisor events, as OR-3 requires. Broker audit is also in the broker's own log. | — |
+| OR-R2 | — | design | Agent processes the collector attaches to with `-p` (PID 1, its `sleep`) never ran under the guard; a same-uid `/proc/<pid>/mem` write could make one call `clone(CLONE_UNTRACED)`. | Accepted | The 250 ms watchdog attaches the child and marks the tab degraded (OR-L4). Removing it would need Yama, which the sbx kernel lacks (Docker request draft). | — |
+| OR-R3 | — | future | `seclab-wb-mount` runs as root on `ensure-reh`, after the tab has run. | Constraint handed to fork-build | It must resolve the workspace with `RESOLVE_NO_SYMLINKS` and check that the parents are root-owned. | — |
+
+## Round 3
+Fixes for OR-5, OR-6, OR-L3 and OR-L4 are in this commit, with the regressions above.
+`./seclab test unit` (48/48), `./seclab test obs sbx|oci`, `./seclab test e2e sbx` and the
+containment suites pass. **No high or critical findings are open.**
+
+## Accepted residuals (documented in the ADR)
+- `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.
+- Under OCI the privileged Falco sees every container on the Docker host. Only rules for the exact tab container ids are loaded, and its only output is stdout to tabd.

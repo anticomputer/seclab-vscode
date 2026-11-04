@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-11-04
 - **Deciders:** anticomputer (user: "a falco style mode that gives the host a full event log stream of anything happening in the sandbox"; "Accept strace for now, and file a request with Docker for a guest kernel with BTF and ftrace so we can move to Falco later"; OCI Falco: "run it only while container tabs are open, filter events to tab containers at the source, and keep output local"); coordinator (three integrity labels; honeypot file coverage by default with opt-in deep mode); tab-observability session; fork-build session (template, relay uid, collector lifecycle); RPC-lockdown session (filter decision shape and transport)
-- **Related:** [EDR sensor spike](../edr/20261104-tab-observability-sensor-spike.md), [ADR tab supervisor](20261104-tab-supervisor.md), [ADR threat model](20261104-threat-model-rogue-extension.md), [ADR no real secret in a tab](20261104-no-real-secret-in-a-tab.md), [ADR RPC capability filter](20261104-rpc-capability-filter.md), [Docker kernel request (draft)](../upstream-requests/docker-sbx-guest-kernel-tracing.md), [event reference](../tabd/EVENTS.md)
+- **Related:** [EDR sensor spike](../edr/20261104-tab-observability-sensor-spike.md), [security review](../security-reviews/20261104-tab-observability.md), [ADR tab supervisor](20261104-tab-supervisor.md), [ADR threat model](20261104-threat-model-rogue-extension.md), [ADR no real secret in a tab](20261104-no-real-secret-in-a-tab.md), [ADR RPC capability filter](20261104-rpc-capability-filter.md), [Docker kernel request (draft)](../upstream-requests/docker-sbx-guest-kernel-tracing.md), [event reference](../tabd/EVENTS.md)
 
 ## Context
 Users should be able to watch what happens inside a tab. The motivating case is

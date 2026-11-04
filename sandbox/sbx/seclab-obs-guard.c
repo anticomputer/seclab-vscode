@@ -15,6 +15,7 @@
 // It also sets no_new_privs and closes every fd above 2 before exec, so the tab never holds
 // the tracer's output pipe (review OR-2). See docs/adr/20261104-tab-observability.md §2.
 #include <errno.h>
+#include <fcntl.h>
 #include <linux/audit.h>
 #include <linux/filter.h>
 #include <linux/sched.h>
@@ -95,7 +96,12 @@ int main(int argc, char **argv) {
 		perror("seclab-obs-guard: close_range");
 		return 126;
 	}
+	// fd 2 is strace's stderr pipe to the collector; the tab must not be able to write to it.
+	int devnull = open("/dev/null", O_WRONLY | O_CLOEXEC);
+	if (devnull < 0 || dup2(devnull, 2) != 2) {
+		perror("seclab-obs-guard: stderr");
+		return 126;
+	}
 	execv(argv[1], &argv[1]);
-	perror("seclab-obs-guard: exec");
 	return 127;
 }
