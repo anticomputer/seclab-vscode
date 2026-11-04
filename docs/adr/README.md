@@ -56,8 +56,9 @@ Good, bad, and follow-ups this creates.
 | 2026-11-04 | [The workspace window ("tab") is the containment unit; Workspace Trust is UX only](20261104-tab-is-the-containment-unit.md) | accepted |
 | 2026-11-04 | [Reuse the remote extension host split via a built-in `seclab+` resolver](20261104-reuse-remote-extension-host.md) | accepted |
 | 2026-11-04 | [Fork VSCodium-style: pinned upstream, jq product.json, small patch queue](20261104-vscodium-style-fork.md) | accepted |
-| 2026-11-04 | [Tab runtime is a pluggable SandboxProvider; sbx primary, OCI second](20261104-pluggable-sandbox-provider.md) | accepted |
+| 2026-11-04 | [Tab runtime is a pluggable SandboxProvider; sbx primary, OCI second](20261104-pluggable-sandbox-provider.md) | superseded-by tab-supervisor |
 | 2026-11-04 | [One broker engine for every provider; sbx is only the outer fence](20261104-single-broker-sbx-fence.md) | accepted |
 | 2026-11-04 | [The trusted editor runs natively on macOS, built unsigned on GitHub Actions](20261104-native-editor-on-actions.md) | accepted |
 | 2026-11-04 | [RPC capability filter is a required, default-deny boundary](20261104-rpc-capability-filter.md) | proposed |
 | 2026-11-04 | [Move from a local-only repo to private anticomputer/seclab-vscode](20261104-private-github-repo.md) | accepted |
+| 2026-11-04 | [Tab supervisor `seclab-tabd` with a versioned stdio protocol](20261104-tab-supervisor.md) | accepted |

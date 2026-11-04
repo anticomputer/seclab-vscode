@@ -1,6 +1,6 @@
 # Tab runtime is a pluggable SandboxProvider; sbx primary, OCI second
 
-- **Status:** accepted
+- **Status:** superseded-by [20261104-tab-supervisor](20261104-tab-supervisor.md). The provider interface moved out of the editor into the supervisor's driver contract; "sbx primary, OCI second" still holds.
 - **Date:** 2026-11-04
 - **Deciders:** anticomputer (user decision: "let's build the PoC with docker sbx but keep the design pluggable/swappable as intended"); seclab-vscode coordinator
 

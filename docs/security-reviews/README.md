@@ -49,4 +49,4 @@ File: `YYYYMMDD-short-slug.md`.
 
 | Date | Review | Scope | Open high/critical |
 |---|---|---|---|
-| | _none yet_ | | |
+| 2026-11-04 | [seclab-tabd design (protocol, process model)](20261104-tabd-protocol-design.md) | design docs before code | 1 critical (REH server→client IPC; owned by M4) |
