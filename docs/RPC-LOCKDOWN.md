@@ -35,12 +35,14 @@ that connection, which the server calls directly. Those never reach
 
 So the surface is four things, not one:
 
-| | Surface | Size today |
+<!-- seclab:begin surface-counts -->
+| | Surface | Size at this pin |
 |---|---|---|
 | (a) | `MainThread*` RPC the extension host calls | 89 services, 546 methods |
-| (b) | The command registry reachable via `$executeCommand` | 2792 ids |
-| (c) | Channels the client serves to the server, and server-initiated callbacks | 2 channels, 1 callback path |
-| (d) | Tab-supplied data the trusted side interprets with authority | 15 sink classes |
+| (b) | The command registry reachable via `$executeCommand` | 3184 ids |
+| (c) | Channels the client serves to the server, and server-initiated callbacks | 2 channels, 20 callback sites |
+| (d) | Tab-supplied data the trusted side interprets with authority | 15 sink classes over 474 sites |
+<!-- seclab:end surface-counts -->
 
 ## 2. Enforcement points
 
@@ -304,6 +306,15 @@ scheme and authority constraint is empty. Without the split, the invariant check
 either has to ignore constrained methods or forbid them, and both are wrong. An
 entry may only claim reduced residual impact if it names a constraint.
 
+The invariants the table is checked against, from `policy.json`:
+
+<!-- seclab:begin invariants -->
+1. **no-real-secret-in-tab** — No real secret may enter a tab, in any form, through any surface.
+2. **identity-never-from-arguments** — Caller identity (tab, extension) is bound to the connection and is never read from call arguments.
+3. **default-deny** — Any surface with no explicit verdict is denied.
+4. **key-on-wire-sid** — RPC policy is keyed on the createProxyIdentifier sid string, never the MainContext property name and never the numeric nid.
+<!-- seclab:end invariants -->
+
 ### 3.2 Categories may withhold authority; they may not grant it
 
 The commands table groups ids into categories by substring. The first draft used
@@ -401,7 +412,41 @@ Two properties of the digest matter:
   Without that, a generator that silently skips a directory produces a green
   build over a stale surface. **Open work**, noted in §7.
 
-Current baseline: **3768 surfaces, 14 reachable, 3754 denied.**
+<!-- seclab:begin baseline -->
+Current baseline at `a717861c0758`: **3747 surfaces, 3726 denied, 21 not denied** (1 allow, 9 allow_with_constraint, 4 prompt, 7 rewrite).
+<!-- seclab:end baseline -->
+
+### 4.1 What is reachable right now
+
+<!-- seclab:begin reachable -->
+Every surface below is reachable from a tab. Each one has an entry in
+`policy/policy.json` with an impact assessment; the drift check fails if
+any becomes reachable without one.
+
+| Surface | Verdict |
+|---|---|
+| `data:mcp-server-definition` | rewrite |
+| `data:quick-input-password` | rewrite |
+| `data:terminal-osc-sequence` | allow_with_constraint |
+| `data:uri-handler` | prompt |
+| `data:webview-content` | allow_with_constraint |
+| `data:workspace-configuration` | allow_with_constraint |
+| `rpc:MainThreadAuthentication.$getSession` | rewrite |
+| `rpc:MainThreadClipboard.$writeText` | allow |
+| `rpc:MainThreadCommands.$executeCommand` | allow_with_constraint |
+| `rpc:MainThreadCommands.$getCommands` | allow_with_constraint |
+| `rpc:MainThreadCommands.$registerCommand` | allow_with_constraint |
+| `rpc:MainThreadCommands.$unregisterCommand` | allow_with_constraint |
+| `rpc:MainThreadFileSystem.$readFile` | allow_with_constraint |
+| `rpc:MainThreadFileSystem.$writeFile` | allow_with_constraint |
+| `rpc:MainThreadSecretState.$deletePassword` | rewrite |
+| `rpc:MainThreadSecretState.$getKeys` | rewrite |
+| `rpc:MainThreadSecretState.$getPassword` | rewrite |
+| `rpc:MainThreadSecretState.$setPassword` | rewrite |
+| `rpc:MainThreadTunnelService.$openTunnel` | prompt |
+| `rpc:MainThreadWindow.$asExternalUri` | prompt |
+| `rpc:MainThreadWindow.$openUri` | prompt |
+<!-- seclab:end reachable -->
 
 ## 5. Integration with the broker
 
