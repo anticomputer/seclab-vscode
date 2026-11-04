@@ -1,7 +1,28 @@
 # seclab-vscode: Browser-Style Containment for the VS Code Editor
 
-**Status:** Architecture proposal v0.1 (2026-11-04). Not yet built.
+**Status:** v0.2 (2026-11-04). M0 and M1 are built; see "As built" below. The rest is the design. Each section links the ADRs behind it ([index](adr/README.md)); engineering decisions and spike results are in [docs/edr/](edr/README.md), and security reviews in [docs/security-reviews/](security-reviews/README.md).
 **Goal:** Contain a rogue extension, or any code a workspace can make run, to one **tab** by default. A tab is one workspace window, analogous to a site in Chrome. The front-end experience stays the same.
+
+### As built (M0/M1), and how it differs from the original proposal
+- **Native editor.** The trusted editor runs natively on macOS. It is an unsigned darwin-arm64 build from the pinned upstream, made on GitHub Actions ([ADR](adr/20261104-native-editor-on-actions.md)). The Linux container build produces the REH and runs CI. There is no containerised editor and no host bridge.
+- **Tab supervisor.** `seclab-tabd` sits between the editor and the runtimes, speaking a versioned stdio protocol ([ADR](adr/20261104-tab-supervisor.md), [protocol](tabd/PROTOCOL.md)). The Tab Manager extension is now only the resolver, the routing and the UI.
+- **Drivers.** sbx is the primary runtime (one microVM per tab); OCI is the second ([ADR](adr/20261104-pluggable-sandbox-provider.md), superseded by the supervisor ADR for the interface).
+- **Egress fence and broker.** Under sbx, the per-tab sbx policy is an outer fence. It allows only that tab's broker, mirrors every global allow as a per-tab deny, re-verifies on every connect and every 60 s, and fails closed ([ADR](adr/20261104-single-broker-sbx-fence.md), [EDR](edr/20261104-sbx-fence-spike.md)). Our broker is the only engine.
+- **Extension placement.** Every non-built-in extension is forced into the tab, and nothing extension-based runs in local windows (patches 0002/0003; [ADR](adr/20261104-extension-placement-hardening.md)).
+- **Open items.**
+  - Main-process routing is proposed ([ADR](adr/20261104-route-folder-opens-in-main.md)); a high-severity residual remains.
+  - The REH server→client IPC filter (`download` channel, pty commands) is a critical item owned by M4 ([review](security-reviews/20261104-tabd-protocol-design.md)).
+  - Under sbx, the broker runs as a separate Docker Desktop container, not a pod sidecar.
+  - Under sbx there is no hold-and-resume: a request is denied, the user is prompted, then the tool retries.
+  - sbx secrets bind to a host only, which is why our broker is the engine.
+
+#### Constraints revised, and why
+| Original | Revised | Why |
+|---|---|---|
+| Nothing on the host; everything in containers, viewed through noVNC | Toolchains stay off the host. The editor is a native app built on Actions; sbx is upgraded through its existing Homebrew cask. | A Linux editor in a container would have needed a privileged host bridge to drive sbx. That is more attack surface than a native app. |
+| Local-only git repo | Private GitHub repo | Needed for macOS builds on Actions. |
+| M0/M1 need no core patches | Three small patches: one build-only, two for extension placement | Without them, a rogue extension can choose to run on the host (`extensionKind: ui`, or local windows). That is the primary threat. |
+| `/tmp` scratch | `.work/` (gitignored) and named volumes | Durability. |
 
 Supporting research, with full citations, is in `docs/research/`:
 - `vscode-internals.md`
@@ -27,14 +48,17 @@ Control 3 is the one that is easy to miss (§4.6). Without it, a sandboxed exten
 
 ## 2. Threat model
 
+([ADR threat model](adr/20261104-threat-model-rogue-extension.md), [ADR no real secret](adr/20261104-no-real-secret-in-a-tab.md))
+
 | | |
 |---|---|
-| **Attackers** | (a) A malicious or compromised marketplace extension. (b) A malicious workspace that makes code run through `tasks.json`, `.git/config` (`core.fsmonitor`, hooks, filters), config files that are executable code (ESLint, Prettier, tsserver plugins), interpreter-path settings, `build.rs` and proc macros, Gradle wrappers, notebooks, or `.vscode/mcp.json`. (c) A prompt-injected agent or extension. |
-| **Assets** | Host filesystem, host credentials (PATs, OAuth tokens, SSH keys, cloud credentials, LLM keys), other tabs' data and secrets, the ability to run code on the host, and the network position (exfiltration and reaching localhost services). |
-| **Guarantee** | Code running in tab *T* can affect only *T*'s mounted workspace and *T*'s granted scope. It cannot run code on the host or read host files. It cannot obtain a reusable real credential. It cannot reach the network except as *T*'s policy allows, and it cannot read or affect other tabs. |
-| **Non-goals (v0)** | Isolating extensions from each other *within* one tab (that is the tab's accepted blast radius; see §8 for per-extension processes later). Chromium renderer 0-days (we rely on Electron's renderer sandbox). Malicious first-party UI code. |
+| **Primary attacker** | A **rogue extension the user installs** (gallery or VSIX) into a tab. It has full control of that tab's extension host **and REH server**: it can replace the REH and speak the remote protocol to the UI as a hostile server. |
+| **Secondary** | Malicious workspace content: `tasks.json`, `.git/config` (`core.fsmonitor`, hooks, filters), config-as-code (ESLint, Prettier, tsserver plugins), interpreter-path settings, `build.rs` and proc macros, Gradle wrappers, notebooks, `.vscode/mcp.json`. It is contained by the same boundary, since it can do at most what a rogue extension in that tab can. |
+| **Assets** | Host filesystem, host credentials (PATs, OAuth tokens, SSH keys, cloud credentials, LLM keys), other tabs' data and secrets, code execution on the host, persistence (into other tabs or onto the host), and the network position (exfiltration, localhost services). |
+| **Guarantee** | Code running in tab *T* can affect only *T*'s mounted workspace and *T*'s granted scope. It can't run code on the host, read host files, persist outside *T*, reach the network except as *T*'s policy allows, or read or affect other tabs. **No real secret ever enters a tab.** A real secret is any credential that works outside our broker, including derived and newly minted ones. Tab-scoped capabilities (sentinels, per-tab proxy auth, the REH connection token) are allowed. |
+| **Out of scope** | Kernel and hypervisor escapes (each driver's VM or namespace isolation is defence in depth). Isolating extensions from each other *within* one tab (§8). Chromium renderer 0-days. Malicious first-party UI code. |
 
-Workspace Trust is **not** part of the boundary. Microsoft states that it "can't prevent a malicious extension from executing code and ignoring Restricted Mode" ([docs](https://code.visualstudio.com/docs/editing/workspaces/workspace-trust)). Leaving Restricted Mode only restarts extension hosts and changes no privileges ([source](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/extensions/browser/extensionEnablementWorkspaceTrustTransitionParticipant.ts#L32-L49)). We keep it purely as UX.
+Workspace Trust is **not** part of the boundary. Microsoft states that it "can't prevent a malicious extension from executing code and ignoring Restricted Mode" ([docs](https://code.visualstudio.com/docs/editing/workspaces/workspace-trust)). Leaving Restricted Mode only restarts extension hosts and changes no privileges ([source](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/extensions/browser/extensionEnablementWorkspaceTrustTransitionParticipant.ts#L32-L49)). We keep it purely as UX: tabs report `isTrusted` from the resolver.
 
 ## 3. Chrome ↔ seclab-vscode mapping
 
@@ -78,6 +102,8 @@ flowchart LR
 
 ### 4.1 Fork build (keep the patch set small)
 
+> As built: Code-OSS 1.145.0 is pinned in `upstream.lock`. The patch queue has three patches (one build-only, two for extension placement), and the built-in Copilot extension is removed ([EDR](edr/20261104-remove-builtin-copilot.md)).
+
 We follow VSCodium's model ([prepare_vscode.sh](https://github.com/VSCodium/vscodium/blob/ca7f7b44b5e5c3faa663f6cdc043998f71936653/prepare_vscode.sh#L1-L40)) and avoid a hard fork like Positron's:
 
 - `upstream.lock` pins a Code-OSS tag and SHA. The build script fetches that exact source.
@@ -91,6 +117,8 @@ We follow VSCodium's model ([prepare_vscode.sh](https://github.com/VSCodium/vsco
 
 ### 4.2 Tab Manager: a built-in UI-side extension
 
+> As built: the Tab Manager is now only the resolver, the routing and the UI. Lifecycle, fencing and runtime calls live in the tab supervisor `seclab-tabd` ([ADR](adr/20261104-tab-supervisor.md)). Routing is fail-closed ([EDR](edr/20261104-local-window-close-first.md)), and the authority is bound to the tab's own workspace.
+
 This is the only new orchestration code. It runs in the local, first-party-only extension host.
 
 - It registers the `seclab+<tabId>` remote authority through `registerRemoteAuthorityResolver` and returns a **`ManagedResolvedAuthority`**. Every REH connection becomes a byte stream over `<runtime> exec -i` stdio ([resolvers.d.ts](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vscode-dts/vscode.proposed.resolvers.d.ts#L33-L51)). Nothing listens on the host, and the sandbox exposes no ports.
@@ -99,6 +127,8 @@ This is the only new orchestration code. It runs in the local, first-party-only 
 - It holds the host side of the broker control channel. It gets real credentials from the keychain and existing auth providers just in time, and turns broker "needs approval" events into standard VS Code dialogs.
 
 ### 4.3 Tab sandbox: a pluggable runtime
+
+> As built: this interface became the supervisor's driver contract, with capability descriptors ([ADR](adr/20261104-tab-supervisor.md)). sbx (microVM per tab) is primary; OCI is the second driver. Extensions never persist across tabs ([EDR](edr/20261104-extension-persistence.md)).
 
 ```ts
 interface SandboxProvider {
@@ -125,6 +155,8 @@ Why not Docker Sandboxes as *the* design: it already ships most of this (microVM
 
 ### 4.4 Network: fail-closed by topology, not by configuration
 
+> As built under sbx: sbx's per-tab policy is the outer fence. It allows only `localhost:<broker port>`, mirrors global allows as per-tab denies, and is verified on every connect and every 60 s. The tab's upper- and lowercase proxy variables are overridden so sbx's own proxy never wins ([EDR](edr/20261104-sbx-fence-spike.md)). Under OCI the fence is the `--internal` network.
+
 - The workspace container's only peer is the broker sidecar. There is no default route and no external DNS; the proxy resolves names. Proxy-unaware clients therefore **fail closed** instead of leaking.
 - The workspace gets `HTTP(S)_PROXY` and `NO_PROXY=localhost` set, and the per-tab CA is installed in its trust store, `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE` and git's config.
 - Policy is default-deny with a small baseline: the extension gallery and the package registries the user opts into per tab.
@@ -149,6 +181,8 @@ Why not Docker Sandboxes as *the* design: it already ships most of this (microVM
   - MCP: one gateway endpoint per tab, following the gh-aw MCP gateway spec.
 
 ### 4.6 RPC capability filter: the piece that is easy to miss
+
+> Scope extended by the design security review: the REH **server** is hostile too, so server→client IPC (the `download` channel and pty `onExecuteCommand` → `_remoteCLI.*`) must be filtered as well as `MainThread*` ([review](security-reviews/20261104-tabd-protocol-design.md), [ADR, proposed](adr/20261104-rpc-capability-filter.md)).
 
 The sandboxed extension host talks back to the trusted workbench through `MainThread*` RPC services, and today those services do not check where the caller runs. Verified in source:
 
@@ -194,8 +228,8 @@ The UI does not care which. The resolver returns a managed byte stream either wa
 
 | # | Milestone | Proves |
 |---|---|---|
-| M0 | Reproducible build pipeline: pinned Code-OSS, jq-applied product.json, empty patch queue, REH image | We can track upstream cheaply |
-| M1 | Tab Manager, OCI provider, managed exec-stdio resolver. Every folder opens as a tab; UI unchanged | Process and filesystem containment |
+| M0 | Reproducible build pipeline: pinned Code-OSS, jq-applied product.json, small patch queue, REH image. **Built**: `./seclab build linux`, Actions `build-macos` ([ADR](adr/20261104-vscodium-style-fork.md)) | We can track upstream cheaply |
+| M1 | Tab Manager, tab supervisor (sbx + OCI drivers), managed exec-stdio resolver. Every folder opens as a tab; UI unchanged. **Built**: containment suite 89/89 (sbx) and 86/86 (OCI); canary level A clean on both; editor-level (Level B) pending the macOS app | Process and filesystem containment |
 | M2 | Broker sidecar: default-deny, hold-and-prompt, per-tab CA | Network containment and the scope-expansion UX |
 | M3 | Sentinel credentials: GitHub auth patch, git over HTTPS | "Cred sidecar routed" tokens |
 | M4 | RPC capability filter, storage partitioning, webview egress | No confused-deputy escape back to the host |
