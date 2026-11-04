@@ -5,7 +5,9 @@ name: build-macos
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    # main = reviewed builds (what `./seclab fetch macos` accepts by default); the session
+    # branch builds too while the workflow is not yet on the default branch.
+    branches: [main, anticomputer-fork-build-and-sandboxed-tabs]
     paths:
       - upstream.lock
       - build/**
