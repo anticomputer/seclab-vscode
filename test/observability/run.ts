@@ -127,6 +127,20 @@ check('seclab tab logs --format falco renders the log', cli.status === 0 && cli.
 
 // 3. Tampering.
 if (driver === 'sbx') {
+	// Guard regressions (security review OR-1, OR-2), with a control run without the guard. An
+	// extra fd (7) is open when the guard starts: it must not reach the tab user.
+	fs.copyFileSync(path.join(import.meta.dirname, 'guard-check.py'), path.join(ws, '.seclab', 'guard-check.py'));
+	const asAgent = '/usr/bin/setpriv --reuid=1000 --regid=1000 --init-groups --reset-env /usr/bin/python3 -I .seclab/guard-check.py';
+	const runCheck = (guarded: boolean) => JSON.parse(execFileSync(runtime, ['exec', '-u', 'root', '-w', ws, sandbox, 'sh', '-c',
+		`exec 7</dev/null; exec ${guarded ? '/opt/seclab/bin/seclab-obs-guard ' : ''}${asAgent}`], { encoding: 'utf8' }).trim()) as Record<string, unknown>;
+	const g = runCheck(true), c = runCheck(false);
+	check('guard: a seccomp listener (USER_NOTIF bypass) is refused', g.seccompListener === 'Operation not permitted' && c.seccompListener === 'ok', JSON.stringify({ g, c }));
+	check('guard: io_uring is unavailable', g.ioUringSetup === 'Function not implemented', JSON.stringify(g));
+	check('guard: clone(CLONE_UNTRACED) is refused', g.cloneUntraced === 'Operation not permitted', JSON.stringify(g));
+	check('guard: no inherited fd reaches the tab user', Array.isArray(g.fds) && g.fds.length === 0 && Array.isArray(c.fds) && c.fds.includes(7), JSON.stringify({ g: g.fds, c: c.fds }));
+	const sysctl = (n: string) => execFileSync(runtime, ['exec', '-u', 'root', sandbox, 'cat', `/proc/sys/${n}`], { encoding: 'utf8' }).trim();
+	check('collector hardened the VM (protected_hardlinks/symlinks, unprivileged BPF off)', sysctl('fs/protected_hardlinks') === '1' && sysctl('fs/protected_symlinks') === '1' && sysctl('kernel/unprivileged_bpf_disabled') !== '0');
+
 	const pid = execFileSync(runtime, ['exec', '-u', 'root', sandbox, 'sh', '-c', 'pgrep -o -f seclab-obs-collect'], { encoding: 'utf8' }).trim();
 	inTab(`sleep 1; kill -9 ${pid} 2>/dev/null; true`);
 	await until(() => events.some(e => e.rule === 'sensor.tamper'), 10_000);

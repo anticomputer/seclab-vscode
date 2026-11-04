@@ -7,7 +7,7 @@
 
 ## Context
 Users should be able to watch what happens inside a tab. The motivating case is
-a "Contagious Interview" `tasks.json` folder-open loader: `nohup curl | node`,
+a "Contagious Interview" `tasks.json` folder-open loader: a `nohup`-detached download piped into `node`,
 a 5-second beacon, and reads of browser, wallet and keychain data. The
 containment boundary stops the damage, but the user can't see the attempt.
 

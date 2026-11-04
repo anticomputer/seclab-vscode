@@ -18,7 +18,7 @@ export interface TabContext {
 export interface RuleInfo { readonly id: string; readonly priority: Priority; readonly desc: string }
 
 export const RULES: readonly RuleInfo[] = [
-	{ id: 'loader.pipe-to-interpreter', priority: 'critical', desc: 'A download is piped straight into an interpreter (`curl … | node`, `wget … | sh`).' },
+	{ id: 'loader.pipe-to-interpreter', priority: 'critical', desc: 'A download tool\'s output is piped straight into an interpreter (node, a shell, python, perl, ruby).' },
 	{ id: 'loader.eval', priority: 'warning', desc: 'An interpreter runs inline code that decodes or evaluates a payload (`node -e`, `python -c` with eval/exec/base64/child_process).' },
 	{ id: 'task.network-tool', priority: 'warning', desc: 'A network tool runs inside the tab; critical when spawned from the extension host within 60 s of open (folder-open task pattern).' },
 	{ id: 'process.detach', priority: 'warning', desc: 'A process detaches from its parent (`nohup`, `setsid`, `daemonize`, `screen -dm`, `tmux new -d`).' },

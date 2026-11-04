@@ -7,6 +7,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Detector, type TabContext } from './detect.ts';
 import { EventError, isTabId, normalizeDraft, type EventDraft, type ObsEvent, type ObservationState } from './schema.ts';
+import { safeText } from './text.ts';
 
 export const RING_SIZE = 2000;
 export const SEGMENT_BYTES = 8 << 20;
@@ -21,8 +22,7 @@ export interface Observation { state: ObservationState; since: string; reason: s
 interface TabState {
 	seq: number;
 	ring: ObsEvent[];
-	sensorBucket: Bucket;
-	trustedBucket: Bucket;
+	buckets: Record<BucketName, Bucket>;
 	observation: Observation;
 	lastHeartbeat?: number;
 	expectEnd: boolean;
@@ -43,6 +43,17 @@ export interface HubOptions {
 	readonly sensorRate?: { rate: number; burst: number };
 	readonly trustedRate?: { rate: number; burst: number };
 }
+
+/**
+ * Rate-limit groups (security review OR-3): volume a tab can drive never shares a bucket with
+ * events it must not be able to push out. Supervisor events (`tabd`) are never limited.
+ */
+type BucketName = 'sensor' | 'tabDriven' | 'client';
+const BUCKET_OF: Readonly<Record<string, BucketName | undefined>> = {
+	'sbx-collector': 'sensor', 'falco': 'sensor', 'detector': 'sensor',
+	'workspace-watch': 'tabDriven', 'sbx-policy': 'tabDriven', 'broker': 'tabDriven', 'scan': 'tabDriven',
+	'rpc-filter': 'client', 'gate': 'client',
+};
 
 export class ObsHub {
 	private readonly tabs = new Map<string, TabState>();
@@ -73,8 +84,11 @@ export class ObsHub {
 			const tr = this.o.trustedRate ?? { rate: 200, burst: 2000 };
 			s = {
 				seq: 0, ring: [], invalid: 0, expectEnd: false, ctx: {}, detector: new Detector(),
-				sensorBucket: { tokens: sr.burst, last: t, rate: sr.rate, burst: sr.burst, dropped: 0 },
-				trustedBucket: { tokens: tr.burst, last: t, rate: tr.rate, burst: tr.burst, dropped: 0 },
+				buckets: {
+					sensor: { tokens: sr.burst, last: t, rate: sr.rate, burst: sr.burst, dropped: 0 },
+					tabDriven: { tokens: tr.burst, last: t, rate: tr.rate, burst: tr.burst, dropped: 0 },
+					client: { tokens: tr.burst, last: t, rate: tr.rate, burst: tr.burst, dropped: 0 },
+				},
 				observation: { state: 'unavailable', since: new Date(t).toISOString(), reason: 'no sensor attached' },
 			};
 			if (this.o.dir && (this.o.persist?.(tabId) ?? true)) {
@@ -112,8 +126,9 @@ export class ObsHub {
 			s.invalid++;
 			return undefined;
 		}
-		const bucket = draft.integrity === 'trusted' && draft.source !== 'detector' ? s.trustedBucket : s.sensorBucket;
-		if (!take(bucket, this.now())) {
+		const group = BUCKET_OF[draft.source];
+		const bucket = group ? s.buckets[group] : undefined;
+		if (bucket && !take(bucket, this.now())) {
 			bucket.dropped++;
 			return undefined;
 		}
@@ -158,8 +173,10 @@ export class ObsHub {
 	}
 
 	/** A sensor attached or reported state. */
-	setObservation(tabId: string, state: ObservationState, reason: string, extra: { sensor?: string; mode?: string } = {}): void {
+	setObservation(tabId: string, state: ObservationState, rawReason: string, extra: { sensor?: string; mode?: string } = {}): void {
 		const s = this.state(tabId);
+		// Reasons can carry sensor-derived text (exit codes, stderr tails): escape and cap.
+		const reason = safeText(rawReason, 300);
 		const prev = s.observation;
 		if (prev.state === state && prev.reason === reason) {
 			return;
@@ -202,7 +219,8 @@ export class ObsHub {
 	private tick(): void {
 		const t = this.now();
 		for (const [tabId, s] of this.tabs) {
-			for (const [b, what] of [[s.sensorBucket, 'sensor'], [s.trustedBucket, 'host']] as const) {
+			for (const what of ['sensor', 'tabDriven', 'client'] as const) {
+				const b = s.buckets[what];
 				if (b.dropped > 0) {
 					const n = b.dropped;
 					b.dropped = 0;

