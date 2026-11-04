@@ -1,0 +1,14 @@
+# OCI tab workspace image: the REH built from the pinned source + our in-sandbox scripts.
+# Same paths and user (agent, uid 1000) as the sbx template, so drivers and tests share
+# one in-sandbox contract. Built by sandbox/oci/build-images.sh.
+FROM debian:trixie-slim
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      socat git curl ca-certificates procps \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd -m -u 1000 -s /bin/bash agent
+COPY reh/ /opt/seclab-reh/
+COPY seclab/ /opt/seclab/
+RUN chmod 0755 /opt/seclab/bin/* && chown -R root:root /opt/seclab /opt/seclab-reh
+USER 1000:1000
+WORKDIR /home/agent
