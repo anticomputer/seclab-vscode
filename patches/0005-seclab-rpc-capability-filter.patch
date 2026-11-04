@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/services/extensions/common/extensionHostManager.ts b/src/vs/workbench/services/extensions/common/extensionHostManager.ts
---- a/src/vs/workbench/services/extensions/common/extensionHostManager.ts	2026-11-04 17:27:25
-+++ b/src/vs/workbench/services/extensions/common/extensionHostManager.ts	2026-11-04 17:27:43
+--- a/src/vs/workbench/services/extensions/common/extensionHostManager.ts	2026-11-04 17:42:30
++++ b/src/vs/workbench/services/extensions/common/extensionHostManager.ts	2026-11-04 17:42:30
 @@ -22,6 +22,7 @@
  import { IEditorService } from '../../editor/common/editorService.js';
  import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
@@ -22,8 +22,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/extensionHostManager.ts 
  		let extensionHostProxy: IExtensionHostProxy | null = null as IExtensionHostProxy | null;
  		let mainProxyIdentifiers: ProxyIdentifier<any>[] = [];
 diff -ruN a/src/vs/workbench/services/extensions/common/rpcProtocol.ts b/src/vs/workbench/services/extensions/common/rpcProtocol.ts
---- a/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-04 17:27:25
-+++ b/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-04 17:27:43
+--- a/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-04 17:42:30
++++ b/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-04 17:42:30
 @@ -16,6 +16,7 @@
  import { IMessagePassingProtocol } from '../../../../base/parts/ipc/common/ipc.js';
  import { CanceledLazyPromise, LazyPromise } from './lazyPromise.js';
@@ -71,7 +71,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/rpcProtocol.ts b/src/vs/
  		let cancel: (() => void) | undefined;
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/src/vs/workbench/services/extensions/common/seclabPolicyData.ts
 --- a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts	1969-12-31 19:00:00
-+++ b/src/vs/workbench/services/extensions/common/seclabPolicyData.ts	2026-11-04 17:27:25
++++ b/src/vs/workbench/services/extensions/common/seclabPolicyData.ts	2026-11-04 17:42:30
 @@ -0,0 +1,77 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: generated RPC capability policy. DO NOT EDIT.
@@ -152,8 +152,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 +
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
-+++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-04 17:27:56
-@@ -0,0 +1,242 @@
++++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-04 17:42:30
+@@ -0,0 +1,421 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -165,6 +165,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 + *  into it. This is the choke point that closes that.
 + *--------------------------------------------------------------------------------------------*/
 +
++import { setSeclabChannelGuard } from '../../../../base/parts/ipc/common/ipc.js';
 +import { URI } from '../../../../base/common/uri.js';
 +import {
 +	SECLAB_CHANNELS, SECLAB_COMMANDS, SECLAB_DEFAULT_VERDICT, SECLAB_RPC,
@@ -182,6 +183,84 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +	readonly tabId: string;
 +	readonly reason: string;
 +	readonly at: number;
++}
++
++/**
++ * One filter decision, in the shape agreed with the tab-observability session.
++ *
++ * `id` is the wire sid for the `rpc` surface, not the MainContext property
++ * name: seven diverge, so mapping from the property name mislabels those.
++ *
++ * `claimedExtensionId` is exactly that -- a claim. Extension identity arrives
++ * as an RPC *argument* (`$getPassword(extensionId, key)` is the canonical
++ * case), so a hostile host names whatever it likes. It must never be used for
++ * authorization, and a UI must present it as "claims to be X".
++ */
++export interface SeclabDecision {
++	readonly surface: 'rpc' | 'cmd' | 'chan' | 'data';
++	readonly id: string;
++	readonly ref: string;
++	readonly tabId: string;
++	readonly verdict: SeclabVerdict;
++	readonly reason?: string;
++	readonly constraint?: string;
++	readonly claimedExtensionId?: string;
++	/** Aggregated allows: how many were collapsed into this event. */
++	readonly count?: number;
++	readonly at: number;
++}
++
++type SeclabDecisionListener = (d: SeclabDecision) => void;
++
++const seclabListeners = new Set<SeclabDecisionListener>();
++
++/** Window over which permitted decisions are collapsed, as agreed: 10s. */
++const SECLAB_AGGREGATE_MS = 10_000;
++const seclabPending = new Map<string, { decision: SeclabDecision; count: number; timer: unknown }>();
++
++export function seclabOnDecision(listener: SeclabDecisionListener): { dispose(): void } {
++	seclabListeners.add(listener);
++	return { dispose: () => { seclabListeners.delete(listener); } };
++}
++
++function seclabDeliver(d: SeclabDecision): void {
++	for (const l of seclabListeners) {
++		try {
++			l(d);
++		} catch {
++			// A broken listener must never break the filter.
++		}
++	}
++}
++
++/**
++ * deny, prompt and rewrite are delivered individually: they are the decisions a
++ * user or an investigator acts on. allow and allow_with_constraint are
++ * collapsed per (surface, id, verdict) so a chatty extension cannot drown the
++ * stream.
++ */
++function seclabRecord(d: SeclabDecision): void {
++	if (d.verdict !== 'allow' && d.verdict !== 'allow_with_constraint') {
++		seclabDeliver(d);
++		return;
++	}
++	const key = `${d.surface}\u0000${d.id}\u0000${d.verdict}`;
++	const open = seclabPending.get(key);
++	if (open) {
++		open.count++;
++		return;
++	}
++	const entry = {
++		decision: d, count: 1,
++		timer: setTimeout(() => {
++			const done = seclabPending.get(key);
++			seclabPending.delete(key);
++			if (done) {
++				seclabDeliver({ ...done.decision, count: done.count });
++			}
++		}, SECLAB_AGGREGATE_MS),
++	};
++	seclabPending.set(key, entry);
 +}
 +
 +export interface ISeclabFilter {
@@ -248,11 +327,30 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +		return this._denials;
 +	}
 +
++	private _surfaceOf(ref: string): SeclabDecision['surface'] {
++		const kind = ref.split(':', 1)[0];
++		return kind === 'cmd' || kind === 'chan' || kind === 'data' ? kind : 'rpc';
++	}
++
++	private _record(ref: string, verdict: SeclabVerdict, reason?: string, constraint?: string): void {
++		seclabRecord({
++			surface: this._surfaceOf(ref),
++			id: ref.slice(ref.indexOf(':') + 1),
++			ref, tabId: this.tabId, verdict, reason, constraint, at: Date.now(),
++		});
++	}
++
 +	private _deny(ref: string, reason: string): Error {
 +		const record: SeclabDenial = { ref, tabId: this.tabId, reason, at: Date.now() };
 +		this._denials.push(record);
 +		this._onDenial?.(record);
++		this._record(ref, 'deny', reason);
 +		return denied();
++	}
++
++	private _permit(ref: string, verdict: SeclabVerdict, constraint?: string): undefined {
++		this._record(ref, verdict, undefined, constraint);
++		return undefined;
 +	}
 +
 +	private _entry(sid: string, method: string): SeclabEntry | undefined {
@@ -280,7 +378,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +		if (verdict === 'allow' || verdict === 'rewrite') {
 +			// `rewrite` is applied by the customer itself (sentinel credential,
 +			// partitioned storage key); the call is permitted to reach it.
-+			return undefined;
++			return this._permit(ref, verdict);
 +		}
 +		if (verdict === 'prompt') {
 +			// Prompting is routed through the Tab Manager, which is not on this
@@ -288,7 +386,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +			// closed direction.
 +			return this._deny(ref, 'prompt not yet wired; failing closed');
 +		}
-+		return this._constrain(sid, method, args, entry, ref);
++		const refused = this._constrain(sid, method, args, entry, ref);
++		return refused ?? this._permit(ref, verdict, entry?.constraint);
 +	}
 +
 +	private _constrain(
@@ -337,15 +436,77 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +	public checkChannel(channel: string, method: string): Error | undefined {
 +		const entry = SECLAB_CHANNELS.get(channel);
 +		const verdict = entry?.verdict ?? SECLAB_DEFAULT_VERDICT;
++		const ref = entry?.ref ?? `chan:${channel}`;
 +		if (verdict === 'deny') {
-+			return this._deny(entry?.ref ?? `chan:${channel}`, `method ${method}`);
++			return this._deny(ref, `method ${method}`);
 +		}
-+		return undefined;
++		return this._permit(ref, verdict);
 +	}
 +
 +	public commandVerdict(id: string): SeclabVerdict {
 +		return SECLAB_COMMANDS.get(id)?.verdict ?? SECLAB_DEFAULT_VERDICT;
 +	}
++}
++
++/**
++ * Commands a tab asked for that are still running. The capability taint below
++ * is the primary mechanism; this counter is the fail-closed backstop for a
++ * handler that reaches the GLOBAL ICommandService instead of the one threaded
++ * through its accessor -- a constructor-injected or module-imported reference.
++ * While any tab command is in flight, a denied command is refused whoever asks.
++ *
++ * Over-denial is possible if the user triggers a denied command concurrently.
++ * That is the closed direction and is accepted (ADR 20261104-tab-command-taint).
++ */
++let seclabInFlight = 0;
++const seclabEscapes: string[] = [];
++
++/** Denied escapes observed via the global service. Probes assert on these. */
++export function seclabTaintEscapes(): readonly string[] {
++	return seclabEscapes;
++}
++
++/**
++ * Consulted by CommandService before every execution. `origin` is set only when
++ * the call came from a tab, directly or through the tainted service.
++ */
++export function seclabTaintInFlight(id: string, origin: unknown): Error | undefined {
++	const filter = origin as ISeclabFilter | undefined;
++	if (filter) {
++		const verdict = filter.commandVerdict(id);
++		if (verdict !== 'allow' && verdict !== 'allow_with_constraint') {
++			return new Error('Unsupported operation');
++		}
++		return undefined;
++	}
++	if (seclabInFlight > 0 && SECLAB_COMMANDS.get(id)?.verdict !== 'allow') {
++		// Not tab-originated as far as the call path knows, but a tab command is
++		// running: this is the laundering shape the backstop exists for.
++		seclabEscapes.push(id);
++		return new Error('Unsupported operation');
++	}
++	return undefined;
++}
++
++/**
++ * The ICommandService a tab-originated handler sees. Recursing with the same
++ * origin means depth is unbounded and every level is checked against the same
++ * table.
++ */
++export function seclabTaintedCommandService(
++	real: { seclabExecuteFromTab<T>(id: string, args: unknown[], origin: unknown): Promise<T> },
++	origin: unknown,
++): unknown {
++	return {
++		_serviceBrand: undefined,
++		onWillExecuteCommand: () => ({ dispose() { } }),
++		onDidExecuteCommand: () => ({ dispose() { } }),
++		executeCommand<T>(id: string, ...args: unknown[]): Promise<T | undefined> {
++			seclabInFlight++;
++			return real.seclabExecuteFromTab<T>(id, args, origin)
++				.finally(() => { seclabInFlight--; });
++		},
++	};
 +}
 +
 +/**
@@ -396,3 +557,21 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +	}
 +	return new SeclabFilter(tabId, remoteAuthority, onDenial);
 +}
++
++/**
++ * Install the channel guard. Registering it here rather than from a workbench
++ * contribution keeps the core diff to the two files this patch already touches.
++ *
++ * A context whose remoteAuthority is `seclab+*` is a tab's connection, so every
++ * channel the client serves on it is checked. Channels on other connections
++ * (shared process, Electron main) are untouched: those peers are trusted.
++ */
++setSeclabChannelGuard((ctx, channelName, method) => {
++	const authority = (ctx as { remoteAuthority?: string } | undefined)?.remoteAuthority;
++	if (typeof authority !== 'string' || !SECLAB_AUTHORITY.test(authority)) {
++		return undefined;
++	}
++	const tabId = seclabResolveTabId(authority) ?? 'unregistered';
++	const filter = new SeclabFilter(tabId, authority);
++	return filter.checkChannel(channelName, method);
++});
