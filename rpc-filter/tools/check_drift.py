@@ -82,28 +82,48 @@ def resolve_command(policy: dict, command: dict) -> tuple:
 
 
 def build_mapping(inv: dict, policy: dict) -> dict:
-    """The full surface -> verdict mapping, which the digest pins."""
+    """The full surface -> verdict mapping, which the digest pins.
+
+    Reachable surfaces record a fingerprint of their whole policy entry, not
+    just the verdict. Otherwise editing ``residual_impact`` or weakening a
+    ``constraint`` leaves the digest unchanged and the change never surfaces in
+    review -- which is how a relabelling silently becomes a mitigation.
+    """
     mapping = {}
+
+    def record(key: str, verdict: str, entry) -> None:
+        if verdict in REACHABLE and isinstance(entry, dict):
+            blob = json.dumps(entry, sort_keys=True)
+            mapping[key] = "%s#%s" % (verdict, hashlib.sha256(
+                blob.encode("utf-8")).hexdigest()[:12])
+        else:
+            mapping[key] = verdict
+
     for service in inv["surfaces"]["a_mainthread_rpc"]["services"]:
         sid = service["sid"]
         methods = sorted(set(service["declared_methods"])
                          | set(service["implemented_methods"]))
         for m in methods:
-            verdict, _ = resolve_rpc(policy, sid, m)
-            mapping["rpc:%s.%s" % (sid, m)] = verdict
+            verdict, entry = resolve_rpc(policy, sid, m)
+            record("rpc:%s.%s" % (sid, m), verdict, entry)
     for command in inv["surfaces"]["b_command_registry"]["commands"]:
-        verdict, _ = resolve_command(policy, command)
-        mapping["cmd:%s" % command["id"]] = verdict
+        verdict, entry = resolve_command(policy, command)
+        record("cmd:%s" % command["id"], verdict, entry)
     channels = policy.get("channels", {})
     for ch in inv["surfaces"]["c_client_served_channels"]["client_served_channels"]:
         name = ch["channel"]
         entry = channels.get(name)
-        mapping["chan:%s" % name] = entry["verdict"] if entry else policy["default_verdict"]
+        record("chan:%s" % name,
+               entry["verdict"] if entry else policy["default_verdict"], entry)
     for sink in inv["surfaces"]["d_tab_supplied_data"]["upstream_sinks"]:
         entry = (policy.get("tab_data") or {}).get(sink["surface"])
-        mapping["data:%s" % sink["surface"]] = entry["verdict"] if entry \
-            else policy["default_verdict"]
+        record("data:%s" % sink["surface"],
+               entry["verdict"] if entry else policy["default_verdict"], entry)
     return mapping
+
+
+def _verdict_of(value: str) -> str:
+    return value.split("#", 1)[0]
 
 
 def digest(mapping: dict) -> str:
@@ -131,6 +151,27 @@ def check_keys(inv: dict, policy: dict) -> list:
             continue
         if name not in known_channels:
             errors.append("policy.channels['%s'] matches no channel in the inventory." % name)
+
+    # A policy entry for a command the inventory does not know about is a
+    # warning sign about the *scanner*, not the policy: the command exists
+    # upstream (that is why someone wrote a verdict for it) but the generator
+    # did not find it, so sibling commands registered the same way are also
+    # missing and are silently resolving to the category default.
+    known_commands = {c["id"] for c in inv["surfaces"]["b_command_registry"]["commands"]}
+    for cid in (policy.get("commands", {}).get("exact") or {}):
+        if cid not in known_commands:
+            errors.append(
+                "policy.commands.exact['%s'] is not in the inventory. The scanner is missing "
+                "its registration form, so other commands registered the same way are "
+                "unclassified. Fix the generator rather than the policy." % cid)
+
+    # Categories may only withhold authority, never grant it.
+    for rule in policy.get("commands", {}).get("rules") or []:
+        if rule.get("verdict") != "deny":
+            errors.append(
+                "commands rule %s has verdict '%s'. Category rules are a substring heuristic "
+                "over command ids and may only carry 'deny'; promote individual ids in "
+                "commands.exact instead." % (rule.get("match"), rule.get("verdict")))
     return errors
 
 
@@ -201,6 +242,37 @@ def check_invariants(inv: dict, policy: dict) -> list:
         if any(i in CREDENTIAL_IMPACTS for i in _residual(entry)) \
                 and entry.get("verdict") in REACHABLE:
             errors.append("invariant no-real-secret-in-tab: channel '%s' is reachable." % name)
+
+    # Every surface that is actually reachable must have been reviewed as an
+    # individual entry carrying an impact assessment. Checking only the entries
+    # someone chose to write misses exactly the dangerous case: a surface made
+    # reachable by a bulk rule that nobody looked at.
+    for service in inv["surfaces"]["a_mainthread_rpc"]["services"]:
+        methods = sorted(set(service["declared_methods"])
+                         | set(service["implemented_methods"]))
+        for method in methods:
+            verdict, entry = resolve_rpc(policy, service["sid"], method)
+            if verdict not in REACHABLE:
+                continue
+            if entry is None:
+                errors.append(
+                    "%s.%s is reachable ('%s') through a service default with no reviewed "
+                    "entry. Reachability must be granted per method."
+                    % (service["sid"], method, verdict))
+            elif "impact" not in entry:
+                errors.append("%s.%s is reachable but records no impact."
+                              % (service["sid"], method))
+    for command in inv["surfaces"]["b_command_registry"]["commands"]:
+        verdict, entry = resolve_command(policy, command)
+        if verdict not in REACHABLE:
+            continue
+        exact = (policy.get("commands", {}).get("exact") or {})
+        if command["id"] not in exact:
+            errors.append(
+                "command '%s' is reachable ('%s') through a category rule. Reachability must "
+                "be granted per id in commands.exact." % (command["id"], verdict))
+        elif "impact" not in entry:
+            errors.append("command '%s' is reachable but records no impact." % command["id"])
     return errors
 
 
@@ -260,7 +332,7 @@ def main(argv=None) -> int:
             failures.append((name, errors))
 
     if not failures:
-        reachable = sum(1 for v in mapping.values() if v in REACHABLE)
+        reachable = sum(1 for v in mapping.values() if _verdict_of(v) in REACHABLE)
         print("drift check passed: %d surfaces, %d reachable, %d denied"
               % (len(mapping), reachable, len(mapping) - reachable))
         return 0

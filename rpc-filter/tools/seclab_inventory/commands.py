@@ -42,6 +42,18 @@ _PATTERNS = (
     # registerEditorCommand/registerEditorAction style: id: 'x' next to a known base
     ("EditorCommand",
      re.compile(r"\bid\s*:\s*'(?P<id>[a-zA-Z][\w.+-]*\.[\w.+-]+)'\s*,[^\n]*\n\s*(?:precondition|label|title|weight)")),
+    # Any register*(...) helper taking an object literal with a string id.
+    # Upstream defines many domain-specific wrappers -- registerTerminalAction,
+    # registerActiveInstanceAction and friends -- and enumerating them by name
+    # is how workbench.action.terminal.newLocal went missing from a 2792-id
+    # scan. Match the shape instead of the helper name.
+    ("register*Action",
+     re.compile(r"\bregister\w*\(\s*\{(?:[^{}]|\{[^{}]*\})*?\bid\s*:\s*'(?P<id>[^']+)'")),
+    # registerCommandAlias('old', 'new'): the old id stays callable.
+    ("registerCommandAlias",
+     re.compile(r"registerCommandAlias\(\s*'(?P<id>[^']+)'")),
+    ("registerCommandAlias",
+     re.compile(r"registerCommandAlias\(\s*'[^']+'\s*,\s*'(?P<id>[^']+)'")),
 )
 
 # Same registration forms, but with a non-literal id. Captured so that a
@@ -51,6 +63,9 @@ _UNRESOLVED = (
     re.compile(r"(?:CommandsRegistry\.registerCommand|registerCommandAndKeybindingRule|MenuRegistry\.addCommand)"
                r"\(\s*\{\s*id\s*:\s*(?P<expr>[A-Za-z_$][\w.]*)\s*[,}]"),
     re.compile(r"super\(\s*\{\s*id\s*:\s*(?P<expr>[A-Z][\w.]*(?:\.\w+)*)\s*[,}]"),
+    # The generic register*({ id: Constant }) form, e.g. registerTerminalAction.
+    re.compile(r"\bregister\w*\(\s*\{(?:[^{}]|\{[^{}]*\})*?\bid\s*:\s*(?P<expr>[A-Za-z_$][\w.]*)\s*[,}]"),
+    re.compile(r"registerCommandAlias\(\s*(?P<expr>[A-Za-z_$][\w.]*)\s*[,)]"),
 )
 
 
@@ -110,7 +125,7 @@ def _scan_typescript(tree: SourceTree) -> tuple:
     for subdir in SCAN_DIRS:
         for rel in tree.walk(subdir):
             raw = tree.text(rel)
-            if "registerCommand" not in raw and "super({" not in raw \
+            if "register" not in raw and "super({" not in raw \
                     and "addCommand" not in raw:
                 continue
             text = strip_block_comments(raw)
