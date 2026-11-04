@@ -1,0 +1,8 @@
+# Patches that ship, in apply order. One file name per line; '#' starts a comment.
+# build/prepare.sh applies exactly these and fails on any other file in patches/
+# (EDR patch-series). A change here is a patch-queue change: security review + records.
+# Test-only hooks never go in patches/: they belong to the test harness.
+0001-build-skip-copilot-shim-without-extension.patch
+0002-extensionkind-product-default.patch
+0003-no-workspace-extensions-in-local-windows.patch
+0004-extension-description-computed-fields-win.patch

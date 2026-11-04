@@ -20,6 +20,9 @@ npm run gulp "vscode-darwin-${ARCH}-min"
 APP_DIR="$(cd .. && pwd)/VSCode-darwin-${ARCH}"
 app="$(find "$APP_DIR" -maxdepth 1 -name '*.app' -print -quit)"
 [[ -n "$app" ]] || { echo "no .app in $APP_DIR" >&2; exit 1; }
+# No test hooks in what ships (EDR patch-series). Hosted macOS runners have no docker, so
+# check-release.sh runs its POSIX scan natively under CI.
+CI="${CI:-1}" "$ROOT/build/check-release.sh" "$app/Contents/Resources/app"
 
 mkdir -p "$OUT_DIR"
 zip="$OUT_DIR/seclab-vscode-darwin-${ARCH}.zip"
