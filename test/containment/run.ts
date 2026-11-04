@@ -9,6 +9,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
+import { beaconPort, lockRun, worktreeId } from '../harness.ts';
 import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
 
 const driver = process.argv[2] ?? 'sbx';
@@ -19,8 +20,9 @@ const repo = path.resolve(import.meta.dirname, '../..');
 const fixture = path.join(import.meta.dirname, 'fixtures', 'malicious-workspace');
 const work = path.join(repo, '.work', 'containment', driver);
 const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
-const LOOPBACK_PORT = 18099;
-const LOOPBACK_NAME = `seclab-containment-hostsvc-${driver}`;
+lockRun(path.join(repo, '.work', 'containment-lock', driver));
+const LOOPBACK_PORT = await beaconPort();
+const LOOPBACK_NAME = `seclab-containment-hostsvc-${driver}-${worktreeId}`;
 
 fs.rmSync(work, { recursive: true, force: true });
 fs.mkdirSync(path.join(work, 'canary'), { recursive: true });
