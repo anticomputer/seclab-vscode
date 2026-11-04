@@ -47,4 +47,15 @@ echo "prepare: product.json overrides applied (ui-kind built-ins: $(jq -c '.exte
 
 # 4. Patch queue: exactly what patches/series lists (build/apply-patches.sh, EDR patch-series).
 "$ROOT/build/apply-patches.sh" "$DEST"
+
+# 5. Upstream security defaults we rely on, asserted (not patched): a bump that changes one
+#    fails the build. task.allowAutomaticTasks must default to "off" at application scope,
+#    so folderOpen tasks never run without a user action and a workspace can't enable them
+#    (EDR automatic-tasks-off; tasks.json campaigns).
+tc="$DEST/src/vs/workbench/contrib/tasks/browser/task.contribution.ts"
+if ! awk '/\[TaskSettingId.AllowAutomaticTasks\]: \{/{f=1} f&&/^\t\t\}/{exit} f' "$tc" \
+	| tr -d '\t\n' | grep -q "default: 'off',scope: ConfigurationScope.APPLICATION,restricted: true"; then
+	echo "prepare: upstream task.allowAutomaticTasks is no longer default 'off' at application scope (refusing to build)" >&2
+	exit 1
+fi
 echo "prepare: done ($DEST)"
