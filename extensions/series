@@ -1,0 +1,4 @@
+# Built-in extensions that ship, one directory name per line ('#' comments).
+# build/prepare.sh overlays exactly these and fails on any other extensions/seclab-*
+# (EDR patch-series). Test-only extensions never live here.
+seclab-tab-manager

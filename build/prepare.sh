@@ -13,9 +13,16 @@ DEST="${1:-$ROOT/vscode}"
 "$ROOT/build/fetch-upstream.sh" "$DEST"
 
 # 2. Built-in extensions live in our repo and are copied in, so upstream stays pristine.
+#    Exactly those listed in extensions/series ship; any other extensions/seclab-* fails.
 shopt -s nullglob
+shipped=" $(sed -e 's/#.*//' "$ROOT/extensions/series" | tr -s '[:space:]' ' ') "
 for ext in "$ROOT"/extensions/seclab-*/; do
 	name="$(basename "$ext")"
+	case "$shipped" in *" $name "*) ;; *) echo "prepare: extensions/$name is not in extensions/series (refusing to build)" >&2; exit 1 ;; esac
+done
+for name in $shipped; do
+	ext="$ROOT/extensions/$name/"
+	[ -d "$ext" ] || { echo "prepare: extensions/series lists a missing extension: $name" >&2; exit 1; }
 	rm -rf "$DEST/extensions/$name"
 	mkdir -p "$DEST/extensions/$name"
 	# Copy sources only; no node_modules/out/dist from the developer's tree. -h dereferences

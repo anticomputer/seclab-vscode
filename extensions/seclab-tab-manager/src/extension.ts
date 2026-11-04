@@ -92,7 +92,7 @@ function getClient(): Promise<TabdClient> {
 		fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
 		// Allowlisted environment only (the supervisor wipes its env anyway).
 		const env: NodeJS.ProcessEnv = { ELECTRON_RUN_AS_NODE: '1' };
-		for (const k of ['HOME', 'USER', 'LOGNAME', 'LANG', 'TMPDIR', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'SECLAB_SBX', 'SECLAB_DOCKER']) {
+		for (const k of ['HOME', 'USER', 'LOGNAME', 'LANG', 'TMPDIR', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG']) {
 			if (process.env[k]) {
 				env[k] = process.env[k];
 			}

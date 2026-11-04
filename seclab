@@ -20,6 +20,7 @@ usage: ./seclab <command>
   test evidence prepare|check DIR [sbx|oci]
                                 Editor-driven run (rogue extension, editor-side canaries)
   lint fixtures [PATH...]       Fixture-safety lint (no real secrets/hosts/persistence in test payloads)
+  lint source                   Shipped sources: no unreviewed env/spawn sites, no dynamic loading, no test markers
   fetch macos [RUN_ID]          Download the unsigned macOS app from Actions -> .work/app/
   help                          This text
 EOF
@@ -123,6 +124,7 @@ case "${1:-help}" in
 		shift
 		case "${1:-}" in
 			fixtures) shift; "$ROOT/test/safety/fixture-lint.sh" "$@" ;;
+			source) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-source.ts ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	help|-h|--help) usage ;;
