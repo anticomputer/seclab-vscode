@@ -53,6 +53,10 @@ export function isCredentialPath(p: string): boolean {
 	return CRED_PATH.test(p);
 }
 
+export function isHostExecutablePath(p: string): boolean {
+	return HOST_EXEC.test(p);
+}
+
 const base = (p: string | undefined) => (p ?? '').slice((p ?? '').lastIndexOf('/') + 1);
 
 interface Beacon { times: number[]; reportedAt: number }
@@ -136,7 +140,8 @@ export class Detector {
 				this.beacon(`${n.addr}:${n.port ?? ''}`, Date.parse(e.time), hits);
 				break;
 			}
-			case 'egress.request': case 'policy.log':
+			case 'egress.request':
+				// Per-request broker decisions only: policy.log is polled (its timing is ours).
 				if (e.detail?.decision === 'denied' || e.detail?.decision === 'blocked') {
 					this.beacon(String(e.detail?.host ?? e.net?.addr ?? ''), Date.parse(e.time), hits);
 				}
@@ -178,6 +183,10 @@ export class Detector {
 			}
 			b = { times: [], reportedAt: 0 };
 			this.beacons.set(key, b);
+		}
+		// Coalesce bursts (several sockets per attempt, or a fetch right before the first beacon).
+		if (b.times.length && t - b.times[b.times.length - 1] < 250) {
+			return;
 		}
 		b.times.push(t);
 		if (b.times.length > 6) {

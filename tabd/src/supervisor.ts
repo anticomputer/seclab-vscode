@@ -447,6 +447,8 @@ export class Supervisor {
 		}
 		this.setPhase(r.tabId, 'Running', [{ type: 'Ready', status: 'True' }, { type: 'FenceVerified', status: 'True' }, { type: 'RehReady', status: 'True' }]);
 		this.own(r.tabId);
+		const drv = this.driverFor(spec.template);
+		this.obs.started(r.tabId, r.hostPath, drv.policyLog ? () => drv.policyLog!(spec) : undefined);
 		this.audit('tab.ensureRunning', 'ok', { tabId: r.tabId });
 		return { tab: this.view(r), connectionToken: r.connectionToken };
 	}

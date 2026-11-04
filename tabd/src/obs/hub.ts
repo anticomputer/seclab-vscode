@@ -188,14 +188,15 @@ export class ObsHub {
 		this.state(tabId).expectEnd = true;
 	}
 
-	/** The sensor stream ended. */
+	/** The sensor stream ended. Only a stop the supervisor asked for is "unavailable". */
 	sensorEnded(tabId: string, reason: string, sandboxRunning: boolean): void {
 		const s = this.state(tabId);
-		if (s.expectEnd || !sandboxRunning) {
-			this.setObservation(tabId, 'unavailable', s.expectEnd ? 'tab stopped' : `sandbox stopped (${reason})`);
+		if (s.expectEnd) {
+			this.setObservation(tabId, 'unavailable', 'tab stopped');
 			return;
 		}
-		this.setObservation(tabId, 'unobserved', `sensor ended: ${reason}`, { sensor: s.observation.sensor });
+		// A tab can stop its own sandbox (e.g. SIGTERM to PID 1 under sbx): that blinds the sensor too.
+		this.setObservation(tabId, 'unobserved', sandboxRunning ? `sensor ended: ${reason}` : `sandbox stopped unexpectedly (${reason})`, { sensor: s.observation.sensor });
 	}
 
 	private tick(): void {
