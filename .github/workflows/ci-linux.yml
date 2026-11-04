@@ -34,6 +34,8 @@ jobs:
           persist-credentials: false
       - name: tabd unit tests (in the pinned node container)
         run: ./seclab test unit
+      - name: Fixture-safety lint
+        run: ./seclab lint fixtures
 
   oci:
     runs-on: ubuntu-24.04

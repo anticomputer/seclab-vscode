@@ -19,6 +19,7 @@ usage: ./seclab <command>
   test secrets [sbx|oci]        Pre-mount secret scan (gitleaks) gate, move-to-vault, restore
   test evidence prepare|check DIR [sbx|oci]
                                 Editor-driven run (rogue extension, editor-side canaries)
+  lint fixtures [PATH...]       Fixture-safety lint (no real secrets/hosts/persistence in test payloads)
   fetch macos [RUN_ID]          Download the unsigned macOS app from Actions -> .work/app/
   help                          This text
 EOF
@@ -116,6 +117,12 @@ case "${1:-help}" in
 		shift
 		case "${1:-}" in
 			macos) shift; fetch_macos "$@" ;;
+			*) usage; exit 2 ;;
+		esac ;;
+	lint)
+		shift
+		case "${1:-}" in
+			fixtures) shift; "$ROOT/test/safety/fixture-lint.sh" "$@" ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	help|-h|--help) usage ;;
