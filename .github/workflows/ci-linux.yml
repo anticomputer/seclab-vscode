@@ -1,11 +1,23 @@
 name: ci-linux
 
-# Linux CI: unit tests, REH build in the builder container, OCI tab images, and the
-# OCI-provider end-to-end + containment suites. (sbx needs nested virtualisation, which
-# hosted runners lack; the sbx suite runs locally: ./seclab test containment sbx.)
+# Linux CI, heavy part: REH build in the builder container, OCI tab images, and the
+# OCI-provider end-to-end + containment suites, on changes to code that affects them.
+# (sbx needs nested virtualisation, which hosted runners lack; the sbx suite runs locally:
+# ./seclab test containment sbx.) The fast unit/lint job is ci-unit.yml (every push).
 on:
   workflow_dispatch:
   push:
+    paths:
+      - upstream.lock
+      - build/**
+      - patches/**
+      - extensions/**
+      - tabd/**
+      - sandbox/**
+      - test/**
+      - seclab
+      - .github/workflows/ci-linux.yml
+  pull_request:
     paths:
       - upstream.lock
       - build/**
@@ -22,28 +34,16 @@ permissions:
 
 concurrency:
   group: ci-linux-${{ github.ref }}
-  cancel-in-progress: true
+  # PRs and branches: newest push wins. main: every SHA is checked.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  unit:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: tabd unit tests (in the pinned node container)
-        run: ./seclab test unit
-      - name: Fixture-safety lint
-        run: ./seclab lint fixtures
-      - name: Patch queue is exactly patches/series
-        run: build/apply-patches.sh --check
-      - name: Shipped sources have no test hooks (env/spawn review, dynamic loading)
-        run: ./seclab lint source
-
   oci:
+    name: oci
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -51,6 +51,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.22.1
+          package-manager-cache: false
+      - name: Teardown regression (orphaned editor tree, leftover tab pod, refused run.json)
+        run: node test/containment/teardown.test.ts
       - name: Build REH (container, pinned upstream)
         run: ./seclab build linux reh
       - name: Release check (no test hooks in the REH)

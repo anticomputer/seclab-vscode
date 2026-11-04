@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
-import { beaconPort, lockRun, worktreeId } from '../harness.ts';
+import { beaconPort, lockRun, NGINX_IMAGE, worktreeId } from '../harness.ts';
 import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
 import { exitedOrTimeout, teardownGate, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
 
@@ -52,7 +52,7 @@ const wsA = makeWorkspace('ws-a', path.join(wsB, 'tab-b-secret.txt'));
 
 // A host-loopback service: stands in for another tab's broker or any localhost service.
 spawnSync('docker', ['rm', '-f', LOOPBACK_NAME], { stdio: 'ignore' });
-execFileSync('docker', ['run', '-d', '--rm', '--name', LOOPBACK_NAME, '-p', `127.0.0.1:${LOOPBACK_PORT}:80`, 'nginx:alpine'], { stdio: 'ignore' });
+execFileSync('docker', ['run', '-d', '--rm', '--name', LOOPBACK_NAME, '-p', `127.0.0.1:${LOOPBACK_PORT}:80`, NGINX_IMAGE], { stdio: 'ignore' });
 
 const client = new TabdClient({
 	command: process.execPath,

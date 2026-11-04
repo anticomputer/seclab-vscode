@@ -10,6 +10,10 @@ import * as path from 'node:path';
 
 export const repoRoot = path.resolve(import.meta.dirname, '..');
 
+/** Third-party images the harness runs, pinned by digest (build/check-pins.ts enforces it). */
+export const NODE_IMAGE = 'node:24.22.1-trixie@sha256:f1e034976f948cf212ef1f659c12e5dd58ac7eab947831813e81a62401ca38be';
+export const NGINX_IMAGE = 'nginx:alpine@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606';
+
 /** Short, stable id for this worktree: keeps global names (docker containers) apart. */
 export const worktreeId = createHash('sha256').update(repoRoot).digest('hex').slice(0, 8);
 

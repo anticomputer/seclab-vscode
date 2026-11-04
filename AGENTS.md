@@ -101,6 +101,21 @@ this file.
 - **Fixture canaries must be obviously fake** (`seclabcanary_…`, no real token
   prefixes), and staged changes are checked with gitleaks before a push. Why:
   GitHub push protection, and no real-looking secrets in history.
+- **Every workflow change gets its own security-review round**
+  ([EDR](docs/edr/20261104-ci-hardening.md)), recorded in `docs/security-reviews/`,
+  iterated until no high or critical finding remains. `./seclab lint workflows`
+  (actionlint + zizmor) and `./seclab lint pins` must pass. Baseline:
+  - actions are pinned to a full SHA with a version comment;
+  - images are pinned by digest;
+  - `permissions` are set per job, least privilege;
+  - `persist-credentials: false`;
+  - no `pull_request_target`/`workflow_run`, and no `${{ github.event.* }}` in
+    `run:` (pass it through `env:`);
+  - no token for PR-controlled code with network access;
+  - caches are read-only on PRs;
+  - release artifacts come only from main or tags, with provenance attested.
+  
+  Why: CI builds the app the user runs unsigned.
 
 ## 4. Common tasks
 CI runs these on every push and PR (`./seclab docs check --run-commands`); they must
@@ -112,6 +127,10 @@ keep working:
 ./seclab lint source
 build/apply-patches.sh --check
 ./seclab clean-host --self-test
+test/safety/fixture-lint.sh --self-test
+./seclab lint pins --self-test
+./seclab lint pins
+./seclab lint workflows
 ```
 
 Verified commands (one entry point: `./seclab help`):
@@ -131,10 +150,13 @@ build/apply-patches.sh --check  # patch queue == patches/series (no unlisted pat
 ./seclab docs check --run-commands --paired   # docs gate (records, links, ARCHITECTURE, ci: run blocks, paired docs); --online adds lychee
 build/check-release.sh .work/out/seclab-reh-linux-arm64.tar.gz   # no test hooks in a release artifact (also: <app>/Contents/Resources/app)
 node test/containment/teardown.test.ts   # teardown regression: orphaned editor tree + leftover tab pod are stopped/removed
-./seclab clean-host [--apply] [--running] [--caches]   # list (dry run) / remove every seclab-vscode resource; never copilot-* or other projects
+./seclab clean-host [--apply] [--running] [--caches] [--all-tabs]   # list (dry run) / remove seclab-vscode resources; test tabs only unless --all-tabs; never copilot-* or other projects
+./seclab lint pins              # every third-party image and action pinned by digest/SHA (--self-test too)
+./seclab lint workflows         # actionlint + zizmor (digest-pinned; online audits with GH_TOKEN)
 
-# macOS app from Actions (branch builds need the override), then quarantine (user approval)
-SECLAB_ALLOW_UNREVIEWED_BUILD=1 ./seclab fetch macos [RUN_ID]
+# macOS app from Actions: main builds only; verifies SHA256SUMS and the build provenance
+# attestation (gh attestation verify) before extracting. Then quarantine (user approval).
+./seclab fetch macos [RUN_ID]
 xattr -dr com.apple.quarantine .work/app/seclab-vscode.app
 
 # Level B (editor-driven). The profile dir must be short (macOS 104-byte socket path) and isolated.

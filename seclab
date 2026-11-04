@@ -37,6 +37,22 @@ EOF
 }
 
 LYCHEE_IMAGE="lycheeverse/lychee@sha256:eaff3e0a13603c9a701accfcc84f44158bb77bf36ecfa4622b626056c3463892" # 0.24.2
+ACTIONLINT_IMAGE="rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
+ZIZMOR_IMAGE="ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d"
+
+# Workflow static analysis (EDR ci-hardening): actionlint, then zizmor. zizmor's online
+# audits (impostor commits, ref confusion, known-vulnerable actions) need GH_TOKEN; without
+# it they are skipped (CI passes the read-only token on pushes).
+lint_workflows() {
+	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ACTIONLINT_IMAGE" -no-color
+	local online=(--offline)
+	[[ -n "${GH_TOKEN:-}" ]] && online=(-e GH_TOKEN)
+	if [[ "${online[0]}" == --offline ]]; then
+		docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ZIZMOR_IMAGE" --offline --no-progress --persona=regular .github/workflows
+	else
+		docker run --rm -e GH_TOKEN -v "$ROOT:/repo:ro" -w /repo "$ZIZMOR_IMAGE" --no-progress --persona=regular .github/workflows
+	fi
+}
 
 docs_check() {
 	local run=0 online=0 paired=0
@@ -64,7 +80,9 @@ docs_check() {
 	fi
 	if [[ $online = 1 ]]; then
 		# External links and permalinks must resolve; results are cached (named volume) so CI isn't flaky.
-		docker run --rm -e GITHUB_TOKEN -v "$ROOT:/input:ro" -v seclab-lychee-cache:/cache -w /cache "$LYCHEE_IMAGE" \
+		local tok=()
+		[[ -n "${GITHUB_TOKEN:-}" ]] && tok=(-e GITHUB_TOKEN)
+		docker run --rm ${tok[@]+"${tok[@]}"} -v "$ROOT:/input:ro" -v seclab-lychee-cache:/cache -w /cache "$LYCHEE_IMAGE" \
 			--no-progress --cache --max-cache-age 3d --max-concurrency 8 --accept 200,206,429 \
 			--exclude-path /input/.work --exclude-path /input/vscode --exclude-path /input/node_modules \
 			--exclude '^https?://([^/]+\.)?(test|invalid|example|localhost)(/|:|$)' --exclude '^https?://(127\.|localhost|host\.docker\.internal)' \
@@ -79,7 +97,7 @@ docs_check() {
 
 node_image() {
 	# Same Node major as upstream's .nvmrc; used for tests so the host needs no toolchain.
-	echo "node:24.22.1-trixie"
+	echo "node:24.22.1-trixie@sha256:f1e034976f948cf212ef1f659c12e5dd58ac7eab947831813e81a62401ca38be"
 }
 
 fetch_macos() {
@@ -94,23 +112,49 @@ fetch_macos() {
 	local meta
 	meta="$(gh run view -R "$repo" "$run" --json headBranch,event,conclusion,workflowName,headSha --jq '[.headBranch,.event,.conclusion,.workflowName,.headSha]|join(" ")')"
 	read -r branch event conclusion workflow head_sha <<<"$meta"
-	if [[ "$workflow" != "build-macos" || "$conclusion" != "success" ]]; then
-		echo "refusing run $run: $meta" >&2; exit 1
+	if [[ "$workflow" != "build-macos" || "$conclusion" != "success" || "$branch" != "main" || "$event" != "push" ]]; then
+		echo "refusing run $run: $meta (only successful main push builds are released)" >&2; exit 1
 	fi
-	if [[ "$branch" != "main" || "$event" != "push" ]] && [[ "${SECLAB_ALLOW_UNREVIEWED_BUILD:-}" != "1" ]]; then
-		echo "refusing run $run from $branch/$event (not main/push); set SECLAB_ALLOW_UNREVIEWED_BUILD=1 for your own branch builds" >&2; exit 1
-	fi
-	rm -rf "$dest" && mkdir -p "$dest"
-	gh run download -R "$repo" "$run" --name seclab-vscode-darwin-arm64 --dir "$dest"
-	# Integrity only (same artifact); authenticity comes from the run checks above.
-	(cd "$dest" && shasum -a 256 -c SHA256SUMS)
+	[[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "bad head SHA $head_sha" >&2; exit 1; }
+	# The commit itself must have passed the gates, not just been built (CI-1): the required
+	# checks (ci-unit, workflow-lint, docs-check) succeeded on this exact SHA.
+	local c ok
+	for c in unit lint docs; do
+		# Latest attempt per check name (a re-run leaves the failed attempt as its own run).
+		ok="$(gh api --paginate "repos/$repo/commits/$head_sha/check-runs?per_page=100" --jq ".check_runs[] | select(.name == \"$c\" and .app.slug == \"github-actions\") | [.id, .conclusion] | @tsv" \
+			| sort -n | tail -1 | cut -f2)"
+		[[ "$ok" == success ]] || { echo "refusing $head_sha: required check '$c' has not succeeded on it" >&2; exit 1; }
+	done
+	# Download into a private staging dir; verify there; extract only after re-hashing (CI-3).
+	mkdir -p "$ROOT/.work"
+	local stage
+	stage="$(mktemp -d "$ROOT/.work/app-staging.XXXXXX")"
+	chmod 700 "$stage"
+	trap 'rm -rf "$stage"' RETURN
+	gh run download -R "$repo" "$run" --name seclab-vscode-darwin-arm64 --dir "$stage/dl"
+	# Integrity of the download (same artifact)...
+	(cd "$stage/dl" && shasum -a 256 -c SHA256SUMS)
+	# ...and provenance, before anything is extracted or run: signed by this repo's
+	# build-macos workflow on a GitHub-hosted runner, from main at that commit (EDR ci-hardening).
+	local f
+	for f in seclab-vscode-darwin-arm64.zip build-info.json; do
+		gh attestation verify "$stage/dl/$f" -R "$repo" \
+			--signer-workflow "$repo/.github/workflows/build-macos.yml" \
+			--source-ref "refs/heads/main" --source-digest "$head_sha" --deny-self-hosted-runners >/dev/null \
+			|| { echo "provenance verification failed for $f; not extracting" >&2; exit 1; }
+	done
+	echo "provenance verified: $repo build-macos.yml @ main $head_sha"
 	# shellcheck source=/dev/null
 	. "$ROOT/upstream.lock"
-	jq -e --arg u "$UPSTREAM_SHA" --arg h "$head_sha" '.upstreamSha == $u and .repoSha == $h' "$dest/build-info.json" >/dev/null \
+	jq -e --arg u "$UPSTREAM_SHA" --arg h "$head_sha" '.upstreamSha == $u and .repoSha == $h' "$stage/dl/build-info.json" >/dev/null \
 		|| { echo "build-info.json does not match upstream.lock / run head SHA" >&2; exit 1; }
-	ditto -x -k "$dest/seclab-vscode-darwin-arm64.zip" "$dest"
+	(cd "$stage/dl" && shasum -a 256 -c SHA256SUMS >/dev/null) || { echo "artifact changed after verification" >&2; exit 1; }
+	ditto -x -k "$stage/dl/seclab-vscode-darwin-arm64.zip" "$stage/app"
+	cp "$stage/dl/build-info.json" "$stage/dl/SHA256SUMS" "$stage/app/"
+	rm -rf "$dest" && mv "$stage/app" "$dest"
 	cat "$dest/build-info.json"
 	echo
+	grep seclab-vscode-darwin-arm64.zip "$dest/SHA256SUMS"
 	echo "Unsigned app extracted to $dest. Gatekeeper will block it until quarantine is cleared;"
 	echo "that step needs your explicit approval:  xattr -dr com.apple.quarantine \"$dest/seclab-vscode.app\""
 }
@@ -175,6 +219,14 @@ case "${1:-help}" in
 		shift
 		case "${1:-}" in
 			fixtures) shift; "$ROOT/test/safety/fixture-lint.sh" "$@" ;;
+			pins) shift
+				if [[ "${1:-}" == --self-test ]]; then
+					docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-pins.ts --self-test
+				else
+					mkdir -p "$ROOT/.work"; git -C "$ROOT" ls-files -z > "$ROOT/.work/pins-files"
+					docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-pins.ts .work/pins-files
+				fi ;;
+			workflows) lint_workflows ;;
 			source) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-source.ts ;;
 			*) usage; exit 2 ;;
 		esac ;;

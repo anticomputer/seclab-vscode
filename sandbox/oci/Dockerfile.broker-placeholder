@@ -2,7 +2,7 @@
 # from the broker session). It holds the sidecar slot on the tab's --internal network and
 # answers the stdio control channel (`docker exec -i <tab>-broker seclab-broker-control`)
 # with a fixed "placeholder" reply so the control path is exercised end to end.
-FROM alpine:3.22
+FROM alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
 COPY seclab-broker-control /usr/local/bin/seclab-broker-control
 RUN chmod 0755 /usr/local/bin/seclab-broker-control
 USER 65534:65534

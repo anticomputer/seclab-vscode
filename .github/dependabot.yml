@@ -1,0 +1,44 @@
+# Keep digest/SHA pins from rotting (EDR ci-hardening). Updates are grouped per ecosystem
+# and land as PRs, so they go through the same CI, workflow-lint and review as any change.
+# Not covered here (Dependabot can't see them): image digests in shell/TS (`seclab`
+# node_image, test/harness.ts, the lychee/actionlint/zizmor/gitleaks pins) and the
+# Code-OSS pin (upstream.lock); those are bumped by hand, and `./seclab lint pins` keeps
+# them pinned. npm: our extensions declare no dependencies.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
+  - package-ecosystem: docker
+    directories:
+      - /build/linux
+      - /sandbox/oci
+      - /broker
+      - /broker/tests/integration/images/harness
+      - /broker/tests/integration/images/upstream
+      - /broker/tests/integration/images/workspace
+    schedule:
+      interval: weekly
+    groups:
+      images:
+        patterns: ['*']
+    commit-message:
+      prefix: deps
+  - package-ecosystem: pip
+    directories:
+      - /broker
+      - /broker/tests/integration/images/harness
+      - /broker/tests/integration/images/upstream
+    schedule:
+      interval: weekly
+    groups:
+      python:
+        patterns: ['*']
+    commit-message:
+      prefix: deps
