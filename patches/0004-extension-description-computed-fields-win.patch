@@ -20,3 +20,25 @@ index df80d99f..a8b20e31 100644
  	};
  }
  
+diff --git a/src/vs/workbench/services/extensions/common/extensions.ts b/src/vs/workbench/services/extensions/common/extensions.ts
+index cd1f9837..6b4a5577 100644
+--- a/src/vs/workbench/services/extensions/common/extensions.ts
++++ b/src/vs/workbench/services/extensions/common/extensions.ts
+@@ -579,7 +579,9 @@ export function toExtension(extensionDescription: IExtensionDescription): IExten
+ 
+ export function toExtensionDescription(extension: IExtension, isUnderDevelopment?: boolean): IExtensionDescription {
+ 	const id = getExtensionId(extension.manifest.publisher, extension.manifest.name);
++	// seclab: manifest first, so a package.json cannot override computed fields such as isBuiltin
+ 	return {
++		...extension.manifest,
+ 		id,
+ 		identifier: new ExtensionIdentifier(id),
+ 		isBuiltin: extension.type === ExtensionType.System,
+@@ -590,7 +592,6 @@ export function toExtensionDescription(extension: IExtension, isUnderDevelopment
+ 		targetPlatform: extension.targetPlatform,
+ 		publisherDisplayName: extension.publisherDisplayName,
+ 		preRelease: extension.preRelease,
+-		...extension.manifest
+ 	};
+ }
+ 
