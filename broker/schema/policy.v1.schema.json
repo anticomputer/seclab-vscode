@@ -1,0 +1,145 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/anticomputer/seclab-vscode/broker/schema/policy.v1.schema.json",
+  "title": "seclab-vscode broker policy, version 1",
+  "description": "Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, schemes, methods and paths, never engine internals. Default is deny.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "version": { "const": 1, "description": "Schema major version. Additive optional fields keep 1." },
+    "tabId": { "$ref": "#/definitions/id", "description": "If set, must equal the broker's `SECLAB_TAB_ID`." },
+    "baseline": {
+      "type": "boolean",
+      "default": true,
+      "description": "Merge the broker's built-in baseline allow rules (extension gallery)."
+    },
+    "prompt": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Hold-and-prompt behaviour for requests no rule allows.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true, "description": "When false, unmatched requests are denied at once." },
+        "timeoutSeconds": { "type": "number", "minimum": 0.1, "maximum": 600, "default": 60, "description": "A held request is denied when no decision (or JIT credential) arrives in time." },
+        "maxPending": { "type": "integer", "minimum": 1, "maximum": 256, "default": 16, "description": "Open prompts at once; more are denied." },
+        "maxHeldFlows": { "type": "integer", "minimum": 1, "maximum": 4096, "default": 256, "description": "Requests held at once, across all prompts and JIT waits." },
+        "denyCooldownSeconds": { "type": "number", "minimum": 0, "maximum": 3600, "default": 30, "description": "After a deny or timeout, the same prompt key is denied without asking for this long." }
+      }
+    },
+    "sentinelMismatch": {
+      "enum": ["block", "log"],
+      "default": "block",
+      "description": "What to do when a sentinel appears anywhere other than the header a matching binding names. It is never swapped either way."
+    },
+    "allow": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": { "$ref": "#/definitions/rule" },
+      "description": "Egress allow rules. Anything not matched is held for a prompt, or denied."
+    },
+    "credentials": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "$ref": "#/definitions/credential" },
+      "description": "Sentinel credentials. A binding does not imply egress: the request must also be allowed."
+    }
+  },
+  "definitions": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", "description": "Identifier for rules, credentials and tabs." },
+    "host": {
+      "type": "string",
+      "description": "Lowercase ASCII hostname, '*.' + hostname for strict subdomains, or an IPv4/IPv6 literal (no brackets). Non-ASCII names must be given in punycode.",
+      "maxLength": 253,
+      "pattern": "^(\\*\\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$|^[0-9a-f:.]+$"
+    },
+    "method": { "type": "string", "pattern": "^([A-Z]{1,16}|\\*)$", "description": "Upper-case HTTP method, or `*` (any; not allowed in bindings)." },
+    "methods": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/definitions/method" }
+    },
+    "path": {
+      "type": "string",
+      "description": "Glob over the decoded, canonical request path (no query). '*' matches within one segment, '**' matches across segments.",
+      "pattern": "^/[A-Za-z0-9._~!\\$&'()*+,=:@/-]*$",
+      "maxLength": 1024
+    },
+    "ports": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "integer", "minimum": 1, "maximum": 65535 }
+    },
+    "schemes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["https", "http"] }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host"],
+      "description": "An egress allow rule. A request matches if every field matches.",
+      "properties": {
+        "id": { "$ref": "#/definitions/id", "description": "Needed to remove the rule with `policy.update`." },
+        "host": { "$ref": "#/definitions/host" },
+        "schemes": { "$ref": "#/definitions/schemes", "default": ["https"], "description": "Cleartext must be named explicitly." },
+        "ports": { "$ref": "#/definitions/ports", "description": "Defaults to the scheme's default port." },
+        "methods": { "$ref": "#/definitions/methods", "default": ["*"] },
+        "path": { "$ref": "#/definitions/path", "default": "/**" }
+      }
+    },
+    "inject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["header", "fmt"],
+      "description": "Where and how the real value is written. Some headers are refused; the list is in docs/broker-policy.md.",
+      "properties": {
+        "header": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,63}$",
+          "description": "The only header the real value is ever written to. Chosen by the host, never by the caller."
+        },
+        "fmt": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Template. '{value}' is the real secret; '{base64:TEXT}' base64-encodes TEXT after substituting {value}. Example: 'Basic {base64:x-access-token:{value}}'."
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "path", "methods"],
+      "description": "Where a credential may be injected. Matches HTTPS only. Methods must be explicit.",
+      "properties": {
+        "host": { "$ref": "#/definitions/host" },
+        "path": { "$ref": "#/definitions/path" },
+        "methods": { "$ref": "#/definitions/methods" },
+        "ports": { "$ref": "#/definitions/ports", "default": [443] },
+        "inject": { "$ref": "#/definitions/inject", "description": "Overrides the credential's `inject`." }
+      }
+    },
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "bind"],
+      "description": "A sentinel credential. The broker mints its sentinel (returned by `policy.load`); the host supplies the real value (`credential.provide`).",
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "bind": {
+          "description": "One binding or a list of bindings.",
+          "oneOf": [
+            { "$ref": "#/definitions/binding" },
+            { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "#/definitions/binding" } }
+          ]
+        },
+        "inject": { "$ref": "#/definitions/inject", "description": "Default for bindings without their own `inject`." },
+        "provider": { "type": "string", "pattern": "^[a-z0-9-]{1,32}$", "description": "Extra provider backstop deny-list to apply (by name). Providers are also applied automatically by host." },
+        "sentinelPrefix": { "type": "string", "pattern": "^[A-Za-z0-9_-]{0,16}$", "description": "Replaces `SECLAB_SNTL_` for clients that check a token format." }
+      }
+    }
+  }
+}

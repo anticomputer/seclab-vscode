@@ -1,0 +1,857 @@
+# Broker control protocol (`seclab-broker/1`)
+
+The per-tab broker (`broker/`) is driven by exactly one kind of trusted
+client: the host-side tab supervisor (today `seclab-tabd`). This document is
+the whole contract between them. It is runtime-neutral: the same messages
+are used whether the broker is a Docker Desktop container in front of an sbx
+microVM, an OCI pod sidecar, or a Kubernetes sidecar.
+
+**This document cannot drift from the code.** Sections marked *generated* are
+rendered from [`broker/schema/protocol.v1.json`](../broker/schema/protocol.v1.json).
+The broker validates every request against that file, and the tests validate
+every result and notification against it. Every JSON example here is
+validated, and every shell block is either run in CI or carries a reason to
+skip. `broker/docs-check.sh` enforces all of this. To change the protocol,
+edit `protocol.v1.json` and the code together, then run
+`broker/docs-check.sh --write`.
+
+- Decision record: [ADR 20261104-broker-policy-and-control-protocol](adr/20261104-broker-policy-and-control-protocol.md).
+- Policy document: [docs/broker-policy.md](broker-policy.md).
+
+## 1. Transport
+
+- The client starts `seclab-broker control` **inside the broker container** with
+  stdio attached: `docker exec -i <broker> seclab-broker control` (or the
+  `kubectl exec -i` / runtime equivalent). That process bridges its stdio to a
+  private Unix socket (`/run/seclab/control/control.sock`, directory `0700`,
+  on the broker's tmpfs). **Nothing listens on the host or on any network.**
+- Framing: **newline-delimited JSON**. One UTF-8 JSON object per line, no
+  embedded newlines, at most 1 MiB per line. No LSP `Content-Length` headers.
+- Messages are [JSON-RPC 2.0](https://www.jsonrpc.org/specification).
+  Batches are rejected (`-32600`).
+- Direction: the **client sends requests**, the **broker sends notifications**.
+  The broker never sends requests, so the client never answers anything.
+- Several clients may be connected at once. All of them receive every
+  notification, and any of them may decide an approval. The supervisor should
+  keep one long-lived connection and reconnect if it drops. The broker keeps
+  running and keeps its state while no client is connected.
+- If the socket is not up yet (broker still starting), `seclab-broker control`
+  prints one JSON-RPC error with `id: null` and code `-32002` and exits 2.
+  Retry.
+- Params are validated against the method's schema below. Unknown fields are
+  rejected with `-32602`, so a client must check `broker.hello` before using
+  anything newer than this document.
+
+A session, one message per line (client lines are requests, the broker line
+without `id` is a notification):
+
+<!-- check: jsonrpc -->
+```json
+{"jsonrpc": "2.0", "id": 1, "method": "broker.hello"}
+{"jsonrpc": "2.0", "id": 2, "method": "proxy.auth.set", "params": {"username": "seclab", "password": "example_only_xxxxxxxxxxxx"}}
+{"jsonrpc": "2.0", "id": 3, "method": "policy.load", "params": {"policy": {"version": 1, "allow": [{"host": "api.github.com", "methods": ["GET"]}]}}}
+{"jsonrpc": "2.0", "method": "audit.event", "params": {"seq": 4, "ts": 1793800000.0, "type": "policy.loaded", "revision": 1}}
+```
+
+### Errors (generated)
+
+<!-- BEGIN GENERATED: protocol-errors (broker/tools/docs.py; do not edit) -->
+| Code | Name | Meaning |
+|---|---|---|
+| -32700 | `parse-error` | Line is not JSON. |
+| -32600 | `invalid-request` | Not a JSON-RPC 2.0 request, a batch, or a bad `id`. |
+| -32601 | `method-not-found` | Unknown method. |
+| -32602 | `invalid-params` | Params fail the method's schema or a semantic check. The message is safe to show and never contains a credential value. |
+| -32603 | `internal-error` | Unexpected failure inside the broker. |
+| -32001 | `not-ready` | The broker is not ready for this call yet, for example `ca.get` before the CA exists. |
+| -32002 | `control-unavailable` | Emitted by the `seclab-broker control` bridge itself (`id: null`) when the control socket is not up yet. Retry. |
+<!-- END GENERATED: protocol-errors -->
+
+## 2. Lifecycle
+
+1. Create the broker's networks and attach them **before** starting it. The
+   upstream address guard reads the routing table once, at start.
+2. Start the broker (see [§6](#6-running-the-broker)).
+3. Connect: `docker exec -i <broker> seclab-broker control`. Call `health`
+   until `status` is `"ok"`.
+4. `proxy.auth.set`: until this succeeds every proxy request gets `407`.
+5. `policy.load`. Keep the returned sentinels for the tab.
+6. `ca.get`, then install the public cert in the tab (see [§7](#7-tab-configuration)).
+7. Optionally `credential.provide` now, or wait for `credential.needed`.
+8. Handle notifications for the lifetime of the tab.
+9. On tab close: `broker.shutdown`. It drops every credential from memory and
+   exits the process.
+
+## 3. Methods: client → broker (generated)
+
+<!-- BEGIN GENERATED: protocol-methods (broker/tools/docs.py; do not edit) -->
+### `broker.hello`
+
+Identify the broker. Clients must check `protocol` and degrade explicitly when a capability they rely on is `false` or absent (see the engine capability matrix in broker/README.md).
+
+**Params**
+
+none
+
+**Result**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `protocol` | `"seclab-broker/1"` | yes | Protocol name and major version. |
+| `version` | `string` | yes | Broker package version. |
+| `tabId` | `string` \| `null` | yes | `SECLAB_TAB_ID` the broker was started with. |
+| `engine` | `string` | yes | Enforcement engine, for example `mitmproxy`. |
+| `engineVersion` | `string` | yes |  |
+| `capabilities` | map of `boolean` | yes | Feature flags; see the capability matrix. |
+
+
+Example:
+
+<!-- check: method.params broker.hello -->
+```json
+{}
+```
+<!-- check: method.result broker.hello -->
+```json
+{
+ "protocol": "seclab-broker/1",
+ "version": "0.1.0",
+ "tabId": "tab-1",
+ "engine": "mitmproxy",
+ "engineVersion": "12.3.1",
+ "capabilities": {
+  "holdAndResume": true
+ }
+}
+```
+
+
+### `health`
+
+Liveness and counters. `status` is `starting` until the proxy is listening.
+
+**Params**
+
+none
+
+**Result**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `status` | `"ok"` \| `"starting"` | yes |  |
+| `uptimeSeconds` | `number` | yes |  |
+| `proxy` | `object` | yes |  |
+| `proxy.listening` | `boolean` | yes |  |
+| `proxy.authConfigured` | `boolean` | yes |  |
+| `policy` | `object` | yes |  |
+| `policy.revision` | `integer` | yes |  |
+| `policy.rules` | `integer` | yes |  |
+| `policy.credentials` | `integer` | yes |  |
+| `pendingApprovals` | `integer` | yes |  |
+| `heldFlows` | `integer` | yes | Requests currently held waiting for a decision or a credential. |
+| `credentials` | `integer` | yes | Credentials known to the broker (policy, imported and derived). |
+| `controllers` | `integer` | yes | Connected control clients. |
+
+
+Example:
+
+<!-- check: method.params health -->
+```json
+{}
+```
+<!-- check: method.result health -->
+```json
+{
+ "status": "ok",
+ "uptimeSeconds": 12.3,
+ "proxy": {
+  "listening": true,
+  "authConfigured": true
+ },
+ "policy": {
+  "revision": 3,
+  "rules": 4,
+  "credentials": 1
+ },
+ "pendingApprovals": 0,
+ "heldFlows": 0,
+ "credentials": 2,
+ "controllers": 1
+}
+```
+
+
+### `proxy.auth.set`
+
+Set the per-tab proxy credential. The tab sends it as HTTP Basic `Proxy-Authorization`, normally via userinfo in its proxy URL. Until this succeeds every proxy request gets `407`; unauthenticated clients are never held, prompted, resolved or connected upstream. Comparison is constant time; the value is never logged or echoed. Calling it again rotates the credential, and tunnels opened under the old one must re-authenticate.
+
+**Params**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `username` | `string` | yes | Convention: `seclab`. (pattern `^[A-Za-z0-9._-]{1,64}$`) |
+| `password` | `string` | yes | At least 128 bits as base64url, from a CSPRNG (for example `secrets.token_urlsafe(16)`). (pattern `^[A-Za-z0-9_-]{22,128}$`) |
+
+**Result**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `epoch` | `integer` | yes | Increments on every rotation. |
+
+
+Example:
+
+<!-- check: method.params proxy.auth.set -->
+```json
+{
+ "username": "seclab",
+ "password": "example_only_xxxxxxxxxxxx"
+}
+```
+<!-- check: method.result proxy.auth.set -->
+```json
+{
+ "epoch": 1
+}
+```
+
+
+### `policy.load`
+
+Replace the tab's policy. Rules added at runtime by `allow-tab` are discarded (persist them from `policy.changed`). Sentinels are stable across reloads for the same credential id, and already-provided values are kept. Credentials no longer in the policy are dropped from memory; imported credentials are unaffected. A `tabId` that differs from the broker's `SECLAB_TAB_ID` is rejected.
+
+**Params**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `policy` | [`Policy`](broker-policy.md) | yes | A policy document (see docs/broker-policy.md). |
+
+**Result**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `revision` | `integer` | yes |  |
+| `sentinels` | map of `string` | yes | Credential id to sentinel, for policy credentials. |
+
+
+Example:
+
+<!-- check: method.params policy.load -->
+```json
+{
+ "policy": {
+  "version": 1,
+  "allow": [
+   {
+    "host": "api.github.com",
+    "methods": [
+     "GET"
+    ]
+   }
+  ]
+ }
+}
+```
+<!-- check: method.result policy.load -->
+```json
+{
+ "revision": 1,
+ "sentinels": {}
+}
+```
+
+
+### `policy.get`
+
+The effective policy, including rules added at runtime. Never includes credential values.
+
+**Params**
+
+none
+
+**Result**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `revision` | `integer` | yes |  |
+| `policy` | [`Policy`](broker-policy.md) | yes |  |
+
+
+### `policy.update`
+
+Live edit of the allow list. Emits `policy.changed`. Removing a rule requires that it has an `id`.
+
+**Params**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `addAllow` | [`rule`](broker-policy.md#rule)[] |  | (max items `256`) |
+| `removeAllow` | [`id`](broker-policy.md#id)[] |  | Ids of runtime or policy rules to remove. (max items `256`) |
+
+**Result**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `revision` | `integer` | yes |  |
+
+
+Example:
+
+<!-- check: method.params policy.update -->
+```json
+{
+ "addAllow": [
+  {
+   "id": "npm",
+   "host": "registry.npmjs.org",
+   "methods": [
+    "GET"
+   ]
+  }
+ ]
+}
+```
+<!-- check: method.result policy.update -->
+```json
+{
+ "revision": 2
+}
+```
+
+
+### `credential.provide`
+
+Supply a credential's real value just in time. After `expiresAt` the value is dropped and the next use raises `credential.needed` again. Held requests waiting for this credential resume immediately.
+
+**Params**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | yes | (min length `1`; max length `200`) |
+| `value` | [`secretValue`](#secretvalue) | yes |  |
+| `expiresAt` | `number` \| `null` |  | Unix seconds. |
+
+**Result**
+
+none
+
+
+Example:
+
+<!-- check: method.params credential.provide -->
+```json
+{
+ "id": "github",
+ "value": "<real value from the keychain>",
+ "expiresAt": 1793900000
+}
+```
+<!-- check: method.result credential.provide -->
+```json
+{}
+```
+
+
+### `credential.revoke`
+
+Drop a credential's real value, and every credential derived from it. With `rotateSentinel` the credential gets a new sentinel and the old one stops matching.
+
+**Params**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | yes | (min length `1`; max length `200`) |
+| `rotateSentinel` | `boolean` |  | (default `false`) |
+
+**Result**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `sentinel` | `string` | yes | Current sentinel (new if rotated). |
+
+
+### `credential.import`
+
+Import a user-supplied secret: one found by the pre-mount workspace scan, or captured password input. The broker never writes the value anywhere; the supervisor persists `{id, sentinel, value, bind}` (keychain) and re-imports with `bind` on every broker start.
+
+With no `bind` the credential is *unconfirmed*. On first use (its sentinel in a request header, over HTTPS, to a host the tab may reach) the broker holds the request and emits `approval.requested` with `kind: credential-binding`. **That path is attacker-steerable**: the tab chooses which host, path and header it first sends the sentinel to, so `suggestedBinding` is advisory only and the broker never confirms a binding on its own. Supervisors should show the host prominently, default to deny, never pre-select `allow-tab`, and prefer importing with `bind` from a trusted host-side prompt.
+
+**Params**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | [`id`](broker-policy.md#id) | yes |  |
+| `value` | [`secretValue`](#secretvalue) | yes |  |
+| `sentinel` | `string` |  | Host-chosen sentinel, so a sentinel already written into a workspace file stays valid across restarts. Must be unique. Minted by the broker if absent. (pattern `^[A-Za-z0-9_.~-]{32,256}$`) |
+| `bind` | [`bindOrBindings`](#bindorbindings) |  | Confirmed bindings. |
+| `proposedBind` | [`bindOrBindings`](#bindorbindings) |  | Only shapes the first-use prompt. |
+| `inject` | [`inject`](broker-policy.md#inject) |  | Default inject for bindings that have none. |
+| `provider` | `string` |  | (pattern `^[a-z0-9-]{1,32}$`) |
+| `source` | `object` |  | Where the secret came from (audit only). Defaults to `{kind: host}`. |
+| `source.kind` | `"workspace-scan"` \| `"password-input"` \| `"user"` \| `"host"` | yes |  |
+| `source.path` | `string` |  | (max length `512`) |
+| `source.rule` | `string` |  | (max length `512`) |
+| `source.label` | `string` |  | (max length `512`) |
+
+**Result**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | yes |  |
+| `sentinel` | `string` | yes |  |
+| `confirmed` | `boolean` | yes |  |
+
+
+Example:
+
+<!-- check: method.params credential.import -->
+```json
+{
+ "id": "dotenv-openai",
+ "value": "<real value from the scan>",
+ "sentinel": "seclab_sentinel_openai_0123456789abcdef0123456789abcdef",
+ "bind": [
+  {
+   "host": "api.openai.com",
+   "path": "/v1/**",
+   "methods": [
+    "GET",
+    "POST"
+   ]
+  }
+ ],
+ "inject": {
+  "header": "Authorization",
+  "fmt": "Bearer {value}"
+ },
+ "source": {
+  "kind": "workspace-scan",
+  "path": ".env",
+  "rule": "openai-api-key"
+ }
+}
+```
+<!-- check: method.result credential.import -->
+```json
+{
+ "id": "dotenv-openai",
+ "sentinel": "seclab_sentinel_openai_0123456789abcdef0123456789abcdef",
+ "confirmed": true
+}
+```
+
+
+### `credential.list`
+
+Every credential the broker knows. Values are never included.
+
+**Params**
+
+none
+
+**Result**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `credentials` | [`credentialInfo`](#credentialinfo)[] | yes |  |
+
+
+### `approval.list`
+
+Pending approvals. Use after reconnecting.
+
+**Params**
+
+none
+
+**Result**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `approvals` | [`approval`](#approval)[] | yes |  |
+
+
+### `approval.decide`
+
+Answer an approval. For `kind: egress`, `allow-tab` adds `rule` (or `suggestedRule`) to the tab's runtime policy. For `kind: credential-binding`, `allow-tab` confirms `binding` (or `suggestedBinding`); a binding that does not cover the held request causes that request to be denied. `allow-once` releases the held request(s) only. Deciding an unknown or already resolved approval is `-32602`.
+
+**Params**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `approvalId` | `string` | yes | (max length `64`) |
+| `decision` | [`decision`](#decision) | yes |  |
+| `rule` | [`rule`](broker-policy.md#rule) |  | Egress `allow-tab` only: the rule to add instead of `suggestedRule`. |
+| `binding` | [`binding`](broker-policy.md#binding) |  | Credential-binding `allow-tab` only: the binding to confirm instead of `suggestedBinding`. |
+
+**Result**
+
+none
+
+
+Example:
+
+<!-- check: method.params approval.decide -->
+```json
+{
+ "approvalId": "9f2c6d0e5b8a4f7e9d1c3b5a7e9f1d2c",
+ "decision": "allow-once"
+}
+```
+<!-- check: method.result approval.decide -->
+```json
+{}
+```
+
+
+### `ca.get`
+
+The tab CA's public certificate. The private key never leaves the broker's tmpfs.
+
+**Params**
+
+none
+
+**Result**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `certPem` | `string` | yes |  |
+| `pemSha256` | `string` | yes | (pattern `^[0-9a-f]{64}$`) |
+
+
+### `audit.tail`
+
+The most recent audit events (the broker keeps at most 2000).
+
+**Params**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `limit` | `integer` |  | (min `1`; max `2000`; default `100`) |
+
+**Result**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `events` | [`auditEvent`](#auditevent)[] | yes |  |
+
+
+### `broker.shutdown`
+
+Drop every credential and sentinel from memory, then stop the proxy and exit. Call it when the tab closes.
+
+**Params**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `reason` | `string` |  | (max length `64`) |
+
+**Result**
+
+none
+<!-- END GENERATED: protocol-methods -->
+
+## 4. Notifications: broker → client (generated)
+
+<!-- BEGIN GENERATED: protocol-notifications (broker/tools/docs.py; do not edit) -->
+### `approval.requested`
+
+A request is held. Show a prompt and answer with `approval.decide` before `expiresAt`, or the broker denies. Egress approvals are per origin (every request to the same `scheme, host, port` waits on one prompt). Credential-binding approvals are per exact request shape (credential, origin, method, path, inject header and format).
+
+**Params**: [`approval`](#approval)
+
+Example:
+
+<!-- check: notification approval.requested -->
+```json
+{
+ "approvalId": "9f2c6d0e5b8a4f7e9d1c3b5a7e9f1d2c",
+ "kind": "egress",
+ "request": {
+  "scheme": "https",
+  "host": "api.example.com",
+  "port": 443,
+  "method": "GET",
+  "path": "/x"
+ },
+ "createdAt": 1793800000.0,
+ "expiresAt": 1793800060.0,
+ "waiting": 1,
+ "decisions": [
+  "allow-once",
+  "allow-tab",
+  "deny"
+ ],
+ "suggestedRule": {
+  "host": "api.example.com",
+  "schemes": [
+   "https"
+  ],
+  "ports": [
+   443
+  ],
+  "methods": [
+   "*"
+  ],
+  "path": "/**"
+ }
+}
+```
+
+### `approval.resolved`
+
+Dismiss the prompt.
+
+**Params**: | Field | Type | Required | Description |
+|---|---|---|---|
+| `approvalId` | `string` | yes |  |
+| `decision` | [`decision`](#decision) | yes |  |
+| `by` | `"controller"` \| `"timeout"` | yes |  |
+
+### `policy.changed`
+
+The allow list changed at runtime. Persist it if the user chose "always".
+
+**Params**: | Field | Type | Required | Description |
+|---|---|---|---|
+| `revision` | `integer` | yes |  |
+| `added` | [`rule`](broker-policy.md#rule)[] | yes |  |
+| `removed` | `string`[] | yes |  |
+| `by` | `"controller"` \| `"approval"` | yes |  |
+| `approvalId` | `string` |  |  |
+
+### `credential.needed`
+
+A request is held for a credential with no value. Answer with `credential.provide`, or the request fails with `503` after the hold timeout.
+
+**Params**: | Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | yes |  |
+
+### `credential.bindingConfirmed`
+
+An imported credential's binding was confirmed by `allow-tab`. Persist it with the credential and pass it as `bind` on the next import.
+
+**Params**: | Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | yes |  |
+| `binding` | [`binding`](broker-policy.md#binding) | yes |  |
+| `approvalId` | `string` | yes |  |
+
+### `credential.derived`
+
+An upstream minted a credential in answer to a credentialed request. The tab only ever sees `sentinel`, which inherits the parent's bindings.
+
+**Params**: | Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | yes |  |
+| `parentId` | `string` | yes |  |
+| `rule` | `string` | yes |  |
+| `sentinel` | `string` | yes |  |
+
+### `audit.event`
+
+One audit event (also printed as `{"audit": …}` on the broker's stderr). Every string is scrubbed: audit events never contain a real value or a sentinel.
+
+**Params**: [`auditEvent`](#auditevent)
+<!-- END GENERATED: protocol-notifications -->
+
+### Shared types (generated)
+
+Policy types (`rule`, `binding`, `inject`, `id`, …) are defined in
+[docs/broker-policy.md](broker-policy.md).
+
+<!-- BEGIN GENERATED: protocol-types (broker/tools/docs.py; do not edit) -->
+<a id="secretvalue"></a>
+#### `secretValue`
+
+A real secret: 8-16384 characters, valid UTF-8, no control characters.
+
+Type: `string` (pattern `^[^\u0000-\u001f\u007f]*$`; min length `8`; max length `16384`)
+
+<a id="decision"></a>
+#### `decision`
+
+Type: `"allow-once"` \| `"allow-tab"` \| `"deny"`
+
+<a id="bindorbindings"></a>
+#### `bindOrBindings`
+
+Type: [`binding`](broker-policy.md#binding) \| [`binding`](broker-policy.md#binding)[]
+
+<a id="requestsummary"></a>
+#### `requestSummary`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `scheme` | `"https"` \| `"http"` | yes |  |
+| `host` | `string` | yes |  |
+| `port` | `integer` | yes |  |
+| `method` | `string` | yes |  |
+| `path` | `string` | yes |  |
+
+<a id="approval"></a>
+#### `approval`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `approvalId` | `string` | yes |  |
+| `kind` | `"egress"` \| `"credential-binding"` | yes |  |
+| `request` | [`requestSummary`](#requestsummary) | yes |  |
+| `createdAt` | `number` | yes |  |
+| `expiresAt` | `number` | yes |  |
+| `waiting` | `integer` | yes | Requests held on this approval. |
+| `decisions` | [`decision`](#decision)[] | yes |  |
+| `suggestedRule` | [`rule`](broker-policy.md#rule) |  | Egress only. |
+| `credentialId` | `string` |  | Credential-binding only. |
+| `suggestedBinding` | [`binding`](broker-policy.md#binding) |  | Credential-binding only. Advisory and tab-steerable. |
+
+<a id="credentialinfo"></a>
+#### `credentialInfo`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | yes |  |
+| `origin` | `"policy"` \| `"import"` \| `"derived"` | yes |  |
+| `sentinel` | `string` | yes |  |
+| `confirmed` | `boolean` | yes |  |
+| `hasValue` | `boolean` | yes |  |
+| `bind` | [`binding`](broker-policy.md#binding)[] | yes |  |
+| `proposedBind` | [`binding`](broker-policy.md#binding)[] | yes |  |
+| `provider` | `string` \| `null` | yes |  |
+| `parentId` | `string` \| `null` | yes |  |
+
+<a id="auditevent"></a>
+#### `auditEvent`
+
+`type` is one of the audit types below; other fields depend on the type.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `seq` | `integer` | yes |  |
+| `ts` | `number` | yes |  |
+| `type` | `string` | yes |  |
+| `tabId` | `string` |  |  |
+<!-- END GENERATED: protocol-types -->
+
+### Audit event types (generated)
+
+The checker fails if the code emits a type that is not listed here, or if a
+listed type is never emitted.
+
+<!-- BEGIN GENERATED: protocol-audit-types (broker/tools/docs.py; do not edit) -->
+| Type | Meaning |
+|---|---|
+| `broker.started` | The proxy started. |
+| `broker.shutdown` | `broker.shutdown` was called. |
+| `control.connected` | A control client connected. |
+| `control.disconnected` | A control client disconnected. |
+| `proxy.auth_set` | The proxy credential was set or rotated. |
+| `proxy.auth_failed` | Proxy authentication failed (rate-limited to one event per second, with a count). |
+| `policy.loaded` | `policy.load` succeeded. |
+| `policy.updated` | `policy.update` succeeded. |
+| `request.allowed` | A request was forwarded. |
+| `request.denied` | A request was answered by the broker with an error status. |
+| `approval.requested` | A prompt was opened. |
+| `approval.resolved` | A prompt was answered or timed out. |
+| `approval.queue_full` | A prompt could not be opened because a hold limit was reached. |
+| `credential.provided` | A real value was provided. |
+| `credential.revoked` | A real value was revoked. |
+| `credential.imported` | A credential was imported. |
+| `credential.needed` | A request is waiting for a value. |
+| `credential.unavailable` | No value arrived before the hold timeout. |
+| `credential.injected` | A real value was written into a request header. |
+| `credential.derived` | A minted token was re-sentinelised. |
+| `credential.backstop_denied` | A credentialed request hit the provider backstop. |
+| `sentinel.misplaced` | A sentinel appeared outside its binding. |
+| `token.redacted` | A minted token was redacted (no parent credential, or a limit was reached). |
+| `session.stripped` | A session header was stripped from a credentialed response. |
+| `response.blocked` | A response or WebSocket frame was blocked by the scanner. |
+| `upstream.blocked` | The upstream address guard refused a connection. |
+| `upstream.dns_failed` | The broker could not resolve an upstream name. |
+| `tcp.blocked` | A non-HTTP TCP stream was killed. |
+| `udp.blocked` | A UDP flow was killed. |
+| `engine.error` | A hook failed and the flow was failed closed. |
+<!-- END GENERATED: protocol-audit-types -->
+
+## 5. Proxy behaviour the tab observes
+
+| Situation | Response |
+|---|---|
+| Missing or wrong proxy credentials | `407` + `Proxy-Authenticate: Basic realm="seclab-broker"` |
+| Denied by policy, prompt off, denied, timed out, queue full, cooldown | `403`, `X-Seclab-Broker: denied`, JSON body `{error, status, reason}` |
+| Host, SNI, `:authority` or CONNECT target disagree | `421` |
+| Non-canonical path (`..`, encoded `/` `.` `\` `;` `%` NUL, `//`), method-override header or `_method` | `400` |
+| Sentinel used outside its binding (`sentinelMismatch: block`) | `403` |
+| Unconfirmed credential used on a path that can't be an exact binding (contains `*`) | `403` |
+| Endpoint on the provider backstop with a credential | `403` |
+| Credential has no value and none arrives before the hold timeout | `503` |
+| Upstream resolves to a non-public or broker-local address | `502` |
+| Response echoes a real value in a non-raw encoding, or a non-text credentialed response contains token-like material | `502`, `X-Seclab-Broker: blocked` |
+
+A held request is answered when the decision arrives. The client sees one
+slow request, not a retry.
+
+## 6. Running the broker
+
+This block runs in CI, exactly as written. It assumes `broker/build.sh` has
+already built `seclab-broker:dev`.
+
+<!-- ci: run -->
+```sh
+tab="seclab-doc-$$"
+trap 'docker rm -f "$tab-broker" >/dev/null 2>&1; docker network rm "$tab-egress" "$tab-internal" >/dev/null 2>&1' EXIT
+docker network create -o com.docker.network.bridge.enable_icc=false "$tab-egress"
+docker network create --internal "$tab-internal"
+docker create --name "$tab-broker" --network "$tab-egress" \
+  --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 \
+  --tmpfs /run/seclab:rw,nosuid,nodev,noexec,size=16m,uid=1000,gid=1000,mode=0700 \
+  -e SECLAB_TAB_ID="$tab" \
+  seclab-broker:dev
+docker network connect "$tab-internal" "$tab-broker"
+docker start "$tab-broker"
+for i in $(seq 1 60); do
+  if printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"health"}' \
+     | docker exec -i "$tab-broker" seclab-broker control | grep -q '"status":"ok"'; then break; fi
+  sleep 0.5
+done
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"health"}' \
+  | docker exec -i "$tab-broker" seclab-broker control | grep -q '"status":"ok"'
+```
+- `<tab>-egress` is the broker's own network, with ICC disabled. Under the OCI
+  provider, `<tab>-internal` is the pod's `--internal` network, shared with the
+  workspace.
+- Under sbx, add `-p 127.0.0.1::8080` to `docker create`. That publishes the
+  proxy on an ephemeral loopback port, which `docker port <tab>-broker 8080`
+  reports. Never publish on a non-loopback address.
+- Environment: `SECLAB_TAB_ID` (optional), `SECLAB_BODY_SIZE_LIMIT` (default
+  `512m`), `SECLAB_CA_EXPORT_DIR` (optional: the public cert is also written
+  there as `ca.pem`). Credentials are never passed through the environment.
+- `SECLAB_EXTRA_UPSTREAM_CA_PEM` adds a trusted upstream CA. It exists **only
+  for tests**; never set it in production.
+
+## 7. Tab configuration
+
+- **Proxy variables:** set `HTTPS_PROXY`, `HTTP_PROXY`, `https_proxy` and
+  `http_proxy` to `http://seclab:<password>@<broker>:<port>`. `<broker>` is
+  `host.docker.internal:<P>` under sbx and `broker:8080` in the OCI pod. Set
+  both cases because sbx pre-sets the lowercase ones, and curl prefers them.
+- **No-proxy list:** set both `NO_PROXY` and `no_proxy` to `localhost,127.0.0.1,::1`.
+- **CA:** install the `ca.get` certificate in the tab's system store, as root
+  at creation. Point `NODE_EXTRA_CA_CERTS` at it, and `REQUESTS_CA_BUNDLE`
+  and `SSL_CERT_FILE` at the system bundle.
+- **git:** git over HTTPS needs no special plumbing. The credential helper or
+  askpass returns `x-access-token` with the sentinel as the password. The
+  broker swaps it only on the bound git endpoints.
+
+## 8. Versioning
+
+`protocol` is `seclab-broker/<major>`.
+- **Minor change, keeps the major:** adding methods, notification types,
+  optional params or result fields.
+- **Major bump:** removing anything or changing what it means. The supervisor
+  must check `broker.hello` first.
+
+The policy schema is versioned separately (`version: 1`); see
+[`broker/AGENTS.md`](../broker/AGENTS.md#changing-the-schema-or-protocol-safely).
