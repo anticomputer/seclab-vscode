@@ -19,6 +19,7 @@ API_CRED = {
         {"host": "api.example.test", "path": "/mint", "methods": ["POST"]},
         {"host": "api.example.test", "path": "/mint-form", "methods": ["POST"]},
         {"host": "api.example.test", "path": "/user/keys", "methods": ["POST"]},
+        {"host": "api.example.test", "path": "/session", "methods": ["GET"]},
         {"host": "ws.example.test", "path": "/ws", "methods": ["GET"]},
     ],
 }
@@ -126,6 +127,18 @@ def test_minted_token_is_resentinelised(pod, ctl):
     assert r.code == 403
     r = pod.curl("https://api.example.test/mint-form", "-X", "POST", "-H", f"Authorization: Bearer {s}")
     assert r.code == 200 and r.body.startswith("access_token=SECLAB_SNTL_") and "gho_" not in r.body
+
+
+def test_session_cookies_from_credentialed_requests_are_stripped(pod, ctl):
+    """Regression (security review 2026-11-04 round 1b #1): a session cookie issued in
+    answer to a credentialed request is a derived credential."""
+    s = setup(pod, ctl)["api"]
+    r = pod.curl("https://api.example.test/session", "-H", f"Authorization: Bearer {s}")
+    assert r.code == 200 and "set-cookie" not in r.headers.lower()
+    # Control: without an injected credential the cookie is not derived from our secret.
+    r = pod.curl("https://api.example.test/session")
+    assert r.code == 200 and "set-cookie" in r.headers.lower()
+    assert any(e["type"] == "session.stripped" for e in pod.audit())
 
 
 def test_provider_backstop_beats_binding(pod, ctl):

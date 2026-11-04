@@ -35,6 +35,7 @@ log = logging.getLogger("seclab.engine")
 _METHOD = re.compile(r"^[A-Z]{1,16}$")
 _TEXTUAL = re.compile(r"^(text/|application/(.*json|.*xml|javascript|x-www-form-urlencoded))|json")
 DNS_TIMEOUT = 10.0
+SESSION_HEADERS = {"set-cookie", "set-cookie2", "authentication-info", "proxy-authentication-info"}
 
 
 def fail_closed(fn):
@@ -88,8 +89,7 @@ class SeclabAddon:
         self.b.proxy_listening = True
 
     def _hook_failed(self, hook: str, obj: Any) -> None:
-        log.exception("hook %s failed; failing closed", hook)
-        self.b.audit("engine.error", hook=hook)
+        # Contain first; auditing may fail for the same reason the hook did.
         if isinstance(obj, http.HTTPFlow):
             if hook == "websocket_message" and obj.websocket is not None:
                 obj.websocket.messages[-1].drop()
@@ -100,6 +100,11 @@ class SeclabAddon:
             obj.server.error = "seclab: broker internal error"
         elif hasattr(obj, "kill") and getattr(obj, "killable", False):
             obj.kill()
+        try:
+            log.exception("hook %s failed; failed closed", hook)
+            self.b.audit("engine.error", hook=hook)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------ responses
     def _respond(self, flow: http.HTTPFlow, status: int, reason: str, kind: str = "denied",
@@ -258,7 +263,10 @@ class SeclabAddon:
     @fail_closed
     async def request(self, flow: http.HTTPFlow) -> None:
         view: RequestView | None = flow.metadata.get("seclab.view")
-        if flow.response is not None or view is None:
+        if flow.response is not None:
+            return
+        if view is None:
+            self._deny(flow, 403, "request was not classified")
             return
         planned: dict[str, tuple[Credential, Binding]] = {}
         unbound: list[tuple[Credential, str, str]] = []
@@ -425,6 +433,11 @@ class SeclabAddon:
         new_fields = []
         for name, value in resp.headers.fields:
             hname = name.decode("latin-1").lower()
+            if injected and hname in SESSION_HEADERS:
+                # A session issued in answer to a credentialed request is a derived
+                # credential the tab could replay on any path; never pass it on.
+                self.b.audit("session.stripped", header=hname, **self._summary(flow))
+                continue
             value, why = self._scrub_real(value, True)
             if why:
                 return self._block_response(flow, f"header {hname}: {why}")
