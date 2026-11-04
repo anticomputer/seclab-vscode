@@ -1,0 +1,7 @@
+{
+  "description": "Built-in baseline merged into every policy unless it sets baseline:false. Read-only access to the Open VSX extension gallery only. Package registries are opt-in per tab.",
+  "allow": [
+    { "id": "baseline-openvsx", "host": "open-vsx.org", "methods": ["GET", "HEAD"], "path": "/**" },
+    { "id": "baseline-openvsx-blob", "host": "openvsxorg.blob.core.windows.net", "methods": ["GET", "HEAD"], "path": "/**" }
+  ]
+}

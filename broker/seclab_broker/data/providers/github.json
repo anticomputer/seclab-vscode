@@ -1,0 +1,38 @@
+{
+  "provider": "github",
+  "description": "Backstop deny-list: endpoints that let a credentialed tab mint or register its own durable credential (or move work outside the tab with its own credential), after which it no longer needs the broker. Applied to any request the broker would inject a credential into. Bindings remain allowlist-first; this is defence in depth. Paths are matched case-insensitively against the canonical path with any trailing slash removed.",
+  "source": {
+    "openapi": "https://github.com/github/rest-api-description/blob/99b1432b55b9a71d0881fd792a87f1807cf4c8f2/descriptions/api.github.com/api.github.com.json",
+    "note": "operationId and docs URL per entry come from that pinned OpenAPI description unless marked otherwise."
+  },
+  "hosts": ["api.github.com"],
+  "pathPrefixes": ["", "/api/v3"],
+  "deny": [
+    { "methods": ["POST"], "path": "/user/keys", "reason": "users/create-public-ssh-key-for-authenticated-user https://docs.github.com/rest/users/keys#create-a-public-ssh-key-for-the-authenticated-user" },
+    { "methods": ["POST"], "path": "/user/ssh_signing_keys", "reason": "users/create-ssh-signing-key-for-authenticated-user https://docs.github.com/rest/users/ssh-signing-keys#create-a-ssh-signing-key-for-the-authenticated-user" },
+    { "methods": ["POST"], "path": "/user/gpg_keys", "reason": "users/create-gpg-key-for-authenticated-user https://docs.github.com/rest/users/gpg-keys#create-a-gpg-key-for-the-authenticated-user" },
+    { "methods": ["POST"], "path": "/repos/*/*/keys", "reason": "repos/create-deploy-key https://docs.github.com/rest/deploy-keys/deploy-keys#create-a-deploy-key" },
+    { "methods": ["POST"], "path": "/app/installations/*/access_tokens", "reason": "apps/create-installation-access-token https://docs.github.com/rest/apps/apps#create-an-installation-access-token-for-an-app" },
+    { "methods": ["POST"], "path": "/app-manifests/*/conversions", "reason": "apps/create-from-manifest (returns an app private key and client secret) https://docs.github.com/rest/apps/apps#create-a-github-app-from-a-manifest" },
+    { "methods": ["POST", "PATCH"], "path": "/applications/*/token", "reason": "apps/check-token, apps/reset-token (reset mints a new token) https://docs.github.com/rest/apps/oauth-applications#reset-a-token" },
+    { "methods": ["POST"], "path": "/applications/*/token/scoped", "reason": "apps/scope-token https://docs.github.com/rest/apps/apps#create-a-scoped-access-token" },
+    { "methods": ["POST"], "path": "/repos/*/*/actions/runners/registration-token", "reason": "actions/create-registration-token-for-repo https://docs.github.com/rest/actions/self-hosted-runners#create-a-registration-token-for-a-repository" },
+    { "methods": ["POST"], "path": "/repos/*/*/actions/runners/remove-token", "reason": "actions/create-remove-token-for-repo https://docs.github.com/rest/actions/self-hosted-runners#create-a-remove-token-for-a-repository" },
+    { "methods": ["POST"], "path": "/repos/*/*/actions/runners/generate-jitconfig", "reason": "actions/generate-runner-jitconfig-for-repo https://docs.github.com/rest/actions/self-hosted-runners#create-configuration-for-a-just-in-time-runner-for-a-repository" },
+    { "methods": ["POST"], "path": "/orgs/*/actions/runners/registration-token", "reason": "actions/create-registration-token-for-org https://docs.github.com/rest/actions/self-hosted-runners#create-a-registration-token-for-an-organization" },
+    { "methods": ["POST"], "path": "/orgs/*/actions/runners/remove-token", "reason": "actions/create-remove-token-for-org https://docs.github.com/rest/actions/self-hosted-runners#create-a-remove-token-for-an-organization" },
+    { "methods": ["POST"], "path": "/orgs/*/actions/runners/generate-jitconfig", "reason": "actions/generate-runner-jitconfig-for-org https://docs.github.com/rest/actions/self-hosted-runners#create-configuration-for-a-just-in-time-runner-for-an-organization" },
+    { "methods": ["POST"], "path": "/enterprises/*/actions/runners/registration-token", "reason": "enterprise runner registration token; not in the api.github.com description at the pinned SHA, included as defence in depth for GHEC/GHES" },
+    { "methods": ["POST"], "path": "/enterprises/*/actions/runners/remove-token", "reason": "enterprise runner remove token; defence in depth (see above)" },
+    { "methods": ["POST"], "path": "/enterprises/*/actions/runners/generate-jitconfig", "reason": "enterprise JIT runner config; defence in depth (see above)" },
+    { "methods": ["*"], "path": "/authorizations", "reason": "legacy OAuth Authorizations API (removed upstream; absent from the pinned description). Denied in case a GHES version still serves it" },
+    { "methods": ["*"], "path": "/authorizations/**", "reason": "legacy OAuth Authorizations API (see above)" },
+    { "methods": ["POST"], "path": "/user/codespaces", "reason": "codespaces/create-for-authenticated-user: a codespace runs outside the tab with its own GitHub token https://docs.github.com/rest/codespaces/codespaces#create-a-codespace-for-the-authenticated-user" },
+    { "methods": ["POST"], "path": "/repos/*/*/codespaces", "reason": "codespaces/create-with-repo-for-authenticated-user https://docs.github.com/rest/codespaces/codespaces#create-a-codespace-in-a-repository" },
+    { "methods": ["POST"], "path": "/repos/*/*/pulls/*/codespaces", "reason": "codespaces/create-with-pr-for-authenticated-user https://docs.github.com/rest/codespaces/codespaces#create-a-codespace-from-a-pull-request" },
+    { "methods": ["POST"], "path": "/user/codespaces/*/start", "reason": "codespaces/start-for-authenticated-user https://docs.github.com/rest/codespaces/codespaces#start-a-codespace-for-the-authenticated-user" },
+    { "methods": ["POST"], "path": "/user/codespaces/*/exports", "reason": "codespaces/export-for-authenticated-user https://docs.github.com/rest/codespaces/codespaces#export-a-codespace-for-the-authenticated-user" },
+    { "methods": ["POST"], "path": "/user/codespaces/*/publish", "reason": "codespaces/publish-for-authenticated-user https://docs.github.com/rest/codespaces/codespaces#create-a-repository-from-an-unpublished-codespace" },
+    { "methods": ["*"], "path": "/copilot_internal/**", "reason": "undocumented Copilot internal API, including the Copilot session-token endpoint /copilot_internal/v2/token. No first-party public reference; widely observed in third-party Copilot clients. Copilot tokens must be minted by the host, not the tab" }
+  ]
+}
