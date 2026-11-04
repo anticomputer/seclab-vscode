@@ -60,6 +60,19 @@ this file.
   GitHub, and fixtures are read by rogue-extension tests. Use sentinels.
 - **Probes and escape tests run only against our own local builds and
   sandboxes.** Why: no testing against third-party systems.
+- **Hostile fixtures are inert and host-safe** ([EDR](docs/edr/20261104-fixture-safety.md)).
+  Why: if containment fails, the payload runs on the host. Concretely:
+  - A payload may only read harness-seeded canaries and write one marker under
+    the run's `.work/`. No downloads, persistence, deletes or setting changes.
+  - Never touch real `~/.ssh`, `~/.aws`, the keychain, editor or browser
+    profiles, or other repos.
+  - Use fake `seclabcanary_` values only, and isolated profiles under
+    `~/.seclab-test/` or `.work/`.
+  - Network only to the run's loopback beacon, RFC 5737 addresses, `*.test` /
+    `*.invalid` names or the broker.
+  - Fixtures act only when armed by a run's nonce. Teardown checks that watched
+    host paths are unchanged.
+  - `./seclab lint fixtures` must pass.
 - **Base claims on code, with permalinks pinned to a SHA.** Why: upstream
   moves; unpinned claims rot.
 - **Keep core patches minimal: one concern per patch, under about 50 lines.**
@@ -93,6 +106,7 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab test containment sbx   # malicious-workspace vectors in real tabs (sbx 89/89, oci 86/86)
 ./seclab test canary sbx        # canary acceptance test, level A (also: oci)
 ./seclab test secrets sbx       # pre-mount gitleaks gate: block, move-to-vault + sentinel, restore, accept (also: oci)
+./seclab lint fixtures          # fixture-safety lint (docker, no network); also: test/safety/fixture-lint.sh PATH...
 ./seclab test evidence prepare .work/editor-test/user-data sbx   # level B setup (then open the printed --folder-uri)
 
 # sbx inspection
