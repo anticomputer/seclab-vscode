@@ -93,3 +93,24 @@ harmless even then.
 - A planted file with `cat ~/.ssh/id_rsa`, `curl … | sh`, a `ghp_`-shaped literal and
   `launchctl` gives 5 violations.
 - `./seclab test containment oci`: 92/92, including the host-snapshot check.
+
+## Addendum (2026-11-04): no AV-signature content on the host
+Microsoft Defender for Endpoint on the developer Mac quarantined a faithful, inert
+Contagious-Interview `tasks.json` twice (`Trojan:Script/MalTask.A`), within a second of
+it being written. Because the build is enterprise Defender, each detection can alert the
+user's security team. It was never committed or pushed, on any branch.
+
+Rule (user decision: "Defang on disk"):
+- **No file on the host may match an endpoint-protection signature for a live-malware
+  pattern.** Signature-bearing content is stored as parts, for example
+  `test/containment/fixtures/contagious-interview/.seclab/loader.parts.json`. The harness
+  assembles it in memory and runs it inside the tab. A file such as a real `tasks.json`
+  is only ever written inside a tab's VM-private storage; with the write-back overlay,
+  that is the upper layer, which never reaches the host.
+- **The lint enforces it.** `download-exec` (fetch piped into an interpreter) can no
+  longer be opted out, and the new file-level `av-loader` rule refuses a folder-open
+  task and a fetch tool in the same file. Both are covered by
+  `test/safety/fixture-lint.sh --self-test`.
+- **If a detection happens anyway:** stop, check `mdatp threat list`, tell the user so
+  they can inform their security team, and never retry variants of the content to find
+  what triggers the signature.
