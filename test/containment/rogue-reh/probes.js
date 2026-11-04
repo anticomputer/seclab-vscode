@@ -20,6 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const safety = require('./probe-safety.js');
 
 const SUCCEEDED = 'succeeded';
 const DENIED = 'denied';
@@ -27,6 +28,10 @@ const ERROR = 'error';
 
 function classify(err) {
 	const msg = String((err && err.message) || err);
+	// A safety refusal is a harness fault, never containment.
+	if (err && err.seclabSafety) {
+		return { outcome: ERROR, detail: msg };
+	}
 	if (/seclab: denied|not allowed in a sandboxed|unsupported operation|channel not found/i.test(msg)) {
 		return { outcome: DENIED, detail: msg };
 	}
@@ -54,6 +59,10 @@ async function probe(results, id, policyRef, fn) {
  */
 async function runRehProbes(socketServer, router, targets) {
 	const results = [];
+	const ctx = safety.context(targets);
+	if (!ctx.armed) {
+		return [{ id: 'harness', policyRef: '', outcome: ERROR, detail: `not armed: ${ctx.reason}` }];
+	}
 
 	// --- download channel ----------------------------------------------------
 	// DownloadServiceChannel revives BOTH URIs from arguments the server sends,
@@ -62,19 +71,22 @@ async function runRehProbes(socketServer, router, targets) {
 	// read; writing a marker proves host FS write.
 	const download = () => socketServer.getChannel('download', router);
 	await probe(results, 'channel-download-host-read', 'chan:download', async () => {
-		const dest = `${targets.marker}.download-read`;
+		const dest = safety.safePath(ctx, `${ctx.marker}.download-read`, 'download dest');
+		safety.note(ctx, dest);
 		await download().call('download', [
-			{ scheme: 'file', path: targets.canary },
+			{ scheme: 'file', path: safety.safePath(ctx, ctx.canary, 'download source') },
 			{ scheme: 'file', path: dest },
 		]);
 		return fs.existsSync(dest) ? fs.readFileSync(dest, 'utf8') : 'call returned without error';
 	});
 	await probe(results, 'channel-download-host-write', 'chan:download', async () => {
+		const dest = safety.safePath(ctx, `${ctx.marker}.download`, 'download dest');
+		safety.note(ctx, dest);
 		await download().call('download', [
-			{ scheme: 'file', path: targets.canary },
-			{ scheme: 'file', path: `${targets.marker}.download` },
+			{ scheme: 'file', path: safety.safePath(ctx, ctx.canary, 'download source') },
+			{ scheme: 'file', path: dest },
 		]);
-		return `${targets.marker}.download`;
+		return dest;
 	});
 
 	// --- MCP gateway tool broker --------------------------------------------
@@ -87,7 +99,9 @@ async function runRehProbes(socketServer, router, targets) {
 		async () => await mcp().call('callToolForServer', [{
 			serverId: process.env.SECLAB_PROBE_MCP_SERVER || 'host-probe',
 			toolName: process.env.SECLAB_PROBE_MCP_TOOL || 'run',
-			arguments: { command: `touch '${targets.marker}.mcp'` },
+			// Marker only. A tool invocation is the escape being demonstrated;
+			// the payload must not also be an attack.
+			arguments: { command: safety.markerCommand(ctx, '.mcp') },
 		}]));
 
 	// --- raw RPC: spoofed extension identity ---------------------------------
