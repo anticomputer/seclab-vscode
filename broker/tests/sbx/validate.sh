@@ -79,7 +79,7 @@ sbx exec -i -u root "$sb" sh -c 'cat > /usr/local/share/ca-certificates/seclab-t
 PROXY="http://seclab:$SECLAB_PW@host.docker.internal:$P"
 inbroker() {  # run in the tab with both cases of the proxy variables pointed at the broker
   sbx exec -e "HTTPS_PROXY=$PROXY" -e "https_proxy=$PROXY" -e "HTTP_PROXY=$PROXY" -e "http_proxy=$PROXY" \
-    -e "NO_PROXY=localhost,127.0.0.1" -e "no_proxy=localhost,127.0.0.1" -e "API_SENTINEL=$API_SENTINEL" \
+    -e "NO_PROXY=localhost,127.0.0.1,::1" -e "no_proxy=localhost,127.0.0.1,::1" -e "API_SENTINEL=$API_SENTINEL" \
     -e "GIT_SENTINEL=$GIT_SENTINEL" "$sb" sh -c "$1" 2>&1 | tee -a "$out/tab-output.txt"
 }
 raw() { sbx exec "$sb" sh -c "$1" 2>&1 | tee -a "$out/tab-output.txt"; }
