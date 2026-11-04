@@ -59,6 +59,10 @@ class SeclabAddon:
         self._last_auth_audit = 0.0
         self._auth_failures = 0
 
+    # ------------------------------------------------------------ lifecycle
+    def running(self) -> None:
+        self.b.proxy_listening = True
+
     # ------------------------------------------------------------ responses
     def _respond(self, flow: http.HTTPFlow, status: int, reason: str, kind: str = "denied",
                  headers: dict | None = None) -> None:

@@ -105,7 +105,6 @@ async def run(args: argparse.Namespace) -> int:
 
     server = await serve(broker, Path(os.environ.get("SECLAB_CONTROL_SOCKET", str(DEFAULT_SOCKET))))
     broker.on_shutdown = master.shutdown
-    broker.proxy_listening = True
     broker.audit("broker.started", version=VERSION, engine=f"mitmproxy {version.VERSION}",
                  listen=f"{args.listen_host}:{args.listen_port}")
     try:

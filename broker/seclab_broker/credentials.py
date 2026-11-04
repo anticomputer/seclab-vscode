@@ -85,8 +85,13 @@ def _basic_decode(header_value: str) -> str | None:
         return None
 
 
+def _canonical_header(name: str) -> str:
+    return "-".join(part.capitalize() for part in name.split("-"))
+
+
 def infer_inject(header: str, header_value: str, sentinel: str) -> Inject | None:
     """Propose an inject spec from where the caller put an unbound sentinel."""
+    header = _canonical_header(header)
     try:
         if sentinel in header_value and "{" not in header_value and "}" not in header_value:
             return Inject.from_json({"header": header, "fmt": header_value.replace(sentinel, "{value}")})
