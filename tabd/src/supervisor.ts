@@ -283,24 +283,29 @@ export class Supervisor {
 		if (!this.o.scan) {
 			const res: ScanResult = { complete: false, error: 'secret scanner unavailable', findings: [], secrets: new Map() };
 			this.scans.set(r.tabId, res);
-			return { complete: false, error: res.error, findings: [] };
+			return { complete: false, error: res.error, overflow: false, findings: [] };
 		}
 		const res = await this.o.scan(r.hostPath);
 		this.scans.set(r.tabId, res);
-		this.audit('secret.scan', res.complete ? 'ok' : 'incomplete', { tabId: r.tabId, findings: res.findings.map(f => f.id), error: res.error ?? null });
-		return { complete: res.complete, error: res.error, findings: res.findings };
+		this.audit('secret.scan', res.complete ? 'ok' : 'incomplete', { tabId: r.tabId, findings: res.findings.map(f => f.id), error: res.error ?? null, overflow: !!res.overflow });
+		return { complete: res.complete, error: res.error, overflow: !!res.overflow, findings: res.findings };
 	}
 
-	/** Block unless every finding is moved or explicitly accepted (recorded exception). */
+	/**
+	 * Block unless every finding is moved or explicitly accepted (recorded exception), and
+	 * an incomplete scan is explicitly accepted too. Findings are always reported first, even
+	 * from an incomplete scan, so a failing pass can't hide what the other passes found.
+	 */
 	private async gateSecrets(r: TabRecord, accept: unknown): Promise<void> {
 		const res = await this.scanTab(r);
 		const accepted = new Set(Array.isArray(accept) ? accept.filter((x): x is string => typeof x === 'string') : []);
 		const blocking = res.findings.filter(f => !accepted.has(f.id));
-		if (!res.complete && !accepted.has('scan-incomplete')) {
-			throw new RpcError(-32021, res.error ?? 'secret scan incomplete', { findings: [], incomplete: true } as Json);
-		}
+		const status = { incomplete: !res.complete, overflow: res.overflow ?? false, error: res.error ?? null };
 		if (blocking.length) {
-			throw new RpcError(-32020, `${blocking.length} secret(s) found in the workspace`, { findings: blocking as unknown as Json });
+			throw new RpcError(-32020, `${blocking.length} secret(s) found in the workspace`, { findings: blocking as unknown as Json, ...status });
+		}
+		if (!res.complete && !accepted.has('scan-incomplete')) {
+			throw new RpcError(-32021, res.error ?? 'secret scan incomplete', { findings: [], ...status });
 		}
 		const exceptions = [...res.findings.map(f => ({ id: f.id, file: f.file, line: f.line, rule: f.rule, source: f.source }))];
 		if (!res.complete) {
@@ -340,9 +345,16 @@ export class Supervisor {
 				throw new RpcError(-32602, 'invalid credential binding');
 			}
 			const sentinel = mintSentinel(f.rule);
-			rewriteSecret(r.hostPath, f.file, f.line, secret, sentinel);
-			vault.push({ id: f.id, file: f.file, line: f.line, rule: f.rule, sentinel, secret, bind: { host, path: bindPath }, movedAt: new Date().toISOString() });
-			this.o.store.writeSide(r.tabId, 'vault', vault);
+			// Vault first: a crash after the rewrite must never lose the only copy.
+			const entry: VaultEntry = { id: f.id, file: f.file, line: f.line, rule: f.rule, sentinel, secret, bind: { host, path: bindPath }, movedAt: new Date().toISOString() };
+			this.o.store.writeSide(r.tabId, 'vault', [...vault, entry]);
+			try {
+				rewriteSecret(r.hostPath, f.file, f.line, secret, sentinel);
+			} catch (e) {
+				this.o.store.writeSide(r.tabId, 'vault', vault);
+				throw new RpcError(-32000, `could not move ${f.file}:${f.line}: ${(e as Error).message}`);
+			}
+			vault.push(entry);
 			moved.push({ id: f.id, sentinel });
 			this.audit('secret.move', 'ok', { tabId: r.tabId, file: `${f.file}:${f.line}`, rule: f.rule, bindHost: host });
 		}

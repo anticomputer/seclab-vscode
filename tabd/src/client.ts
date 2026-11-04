@@ -67,13 +67,14 @@ export class TabdClient extends EventEmitter {
 				this.channels.get(f.channel)?.emit('data', f.payload);
 				continue;
 			}
-			const msg = JSON.parse(f.payload.toString('utf8')) as { id?: number; result?: unknown; error?: { code: number; message: string }; method?: string; params?: Record<string, unknown> };
+			const msg = JSON.parse(f.payload.toString('utf8')) as { id?: number; result?: unknown; error?: { code: number; message: string; data?: unknown }; method?: string; params?: Record<string, unknown> };
 			if (msg.id !== undefined && (msg.result !== undefined || msg.error !== undefined)) {
 				const p = this.pending.get(msg.id);
 				this.pending.delete(msg.id);
 				if (msg.error) {
-					const e = new Error(msg.error.message) as Error & { code?: number };
+					const e = new Error(msg.error.message) as Error & { code?: number; data?: unknown };
 					e.code = msg.error.code;
+					e.data = msg.error.data;
 					p?.reject(e);
 				} else {
 					p?.resolve(msg.result);

@@ -53,6 +53,10 @@ export interface RunResult {
 	readonly code: number | null;
 	readonly stdout: string;
 	readonly stderr: string;
+	/** Raw stdout bytes (as captured, up to the cap). */
+	readonly stdoutBytes?: Buffer;
+	/** stdout exceeded the cap and was cut. */
+	readonly truncated?: boolean;
 }
 
 export type Auditor = (action: string, outcome: string, detail: Record<string, unknown>) => void;
@@ -62,8 +66,29 @@ export function redactArgs(args: readonly string[]): string[] {
 	return args.map(a => a.replace(/[0-9a-f]{32,}/gi, '<redacted>').replace(/[A-Za-z0-9+/=_-]{40,}/g, '<redacted>'));
 }
 
+/** Byte-accurate output capture with a hard cap (chunks are never decoded mid-character). */
+function capture(cap: number) {
+	const chunks: Buffer[] = [];
+	let size = 0;
+	let truncated = false;
+	return {
+		add(d: Buffer) {
+			if (size >= cap) {
+				truncated = true;
+				return;
+			}
+			const take = d.subarray(0, cap - size);
+			truncated ||= take.length < d.length;
+			chunks.push(take);
+			size += take.length;
+		},
+		bytes: () => Buffer.concat(chunks),
+		get truncated() { return truncated; },
+	};
+}
+
 export interface Runner {
-	run(bin: string, args: readonly string[], opts?: { input?: string; timeoutMs?: number }): Promise<RunResult>;
+	run(bin: string, args: readonly string[], opts?: { input?: string; timeoutMs?: number; maxOutputBytes?: number }): Promise<RunResult>;
 	spawnStream(bin: string, args: readonly string[]): ChildProcessWithoutNullStreams;
 }
 
@@ -73,20 +98,24 @@ export function createRunner(audit: Auditor, env: NodeJS.ProcessEnv = cleanEnv()
 			const argv = [...args];
 			return new Promise((resolve) => {
 				const child = spawn(bin, argv, { env, cwd, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
-				let stdout = '', stderr = '';
-				const cap = 4 << 20;
-				child.stdout.on('data', d => { if (stdout.length < cap) { stdout += d; } });
-				child.stderr.on('data', d => { if (stderr.length < cap) { stderr += d; } });
+				const cap = opts.maxOutputBytes ?? 4 << 20;
+				const out = capture(cap), err = capture(4 << 20);
+				child.stdout.on('data', (d: Buffer) => out.add(d));
+				child.stderr.on('data', (d: Buffer) => err.add(d));
 				const timer = setTimeout(() => child.kill('SIGKILL'), opts.timeoutMs ?? 120_000);
-				child.on('error', err => {
+				const result = (code: number | null, extra = ''): RunResult => {
+					const bytes = out.bytes();
+					return { code, stdout: bytes.toString('utf8'), stderr: err.bytes().toString('utf8') + extra, stdoutBytes: bytes, truncated: out.truncated };
+				};
+				child.on('error', e => {
 					clearTimeout(timer);
-					audit('spawn', 'error', { bin: path.basename(bin), args: redactArgs(argv), error: String(err) });
-					resolve({ code: null, stdout, stderr: stderr + String(err) });
+					audit('spawn', 'error', { bin: path.basename(bin), args: redactArgs(argv), error: String(e) });
+					resolve(result(null, String(e)));
 				});
 				child.on('close', code => {
 					clearTimeout(timer);
-					audit('spawn', code === 0 ? 'ok' : 'fail', { bin: path.basename(bin), args: redactArgs(argv), code });
-					resolve({ code, stdout, stderr });
+					audit('spawn', code === 0 ? 'ok' : 'fail', { bin: path.basename(bin), args: redactArgs(argv), code, ...(out.truncated ? { truncated: true } : {}) });
+					resolve(result(code));
 				});
 				child.stdin.on('error', () => { /* child exited before reading stdin */ });
 				child.stdin.end(opts.input ?? '');
