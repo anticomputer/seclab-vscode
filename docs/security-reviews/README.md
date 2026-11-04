@@ -52,6 +52,7 @@ File: `YYYYMMDD-short-slug.md`.
 |---|---|---|---|
 | 2026-11-04 | [broker docs-drift tooling, protocol enforcement and fixture safety](20261104-broker-docs-drift-and-fixtures.md) | 1bcae4b..e6fdfe7, plus the follow-up in this commit. Areas given explicit attention: | see record |
 | 2026-11-04 | [broker M2 and M3 (egress and credential broker)](20261104-broker-m2-m3.md) | - Round 1: 296594c..1e9084c (all of broker/). | see record |
+| 2026-11-04 | [docs-check gate (CI workflow and checker)](20261104-docs-check.md) | a3d19d2..47d768d: .github/workflows/docs-check.yml, build/docs/docs-check.ts, ./seclab doc | none |
 | 2026-11-04 | [test fixtures are host-safe](20261104-fixture-safety.md) | - d02dec5..cf6738e; | see record |
 | 2026-11-04 | [M0 pipeline, seclab-tabd implementation, Tab Manager, containment suite](20261104-m0-tabd-code.md) | 296594c..7d7a1cf (round 2a), then the fixes and new code 7d7a1cf..2c07708 (round 2b), with | see record |
 | 2026-11-04 | [patch queue and release guard](20261104-patch-guard.md) | - 1aa8ccb: build/apply-patches.sh, patches/series, build/prepare.sh, | see record |
