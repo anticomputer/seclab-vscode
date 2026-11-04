@@ -86,8 +86,9 @@ const expectHostname = driver === 'sbx' ? containerA : 'tab';
 
 /** Run argv inside tab A as the tab user, with the REH's environment and the workspace as cwd. */
 function inTab(argv: string[]): void {
-	const user = driver === 'sbx' ? 'agent' : '1000:1000';
-	const r = spawnSync(runtime, ['exec', '-u', user, '-w', wsA, containerA, '/opt/seclab/bin/seclab-tab-env', ...argv],
+	// sbx: the kit user; OCI: the container's own user (the workspace owner on a Linux host).
+	const user = driver === 'sbx' ? ['-u', 'agent'] : [];
+	const r = spawnSync(runtime, ['exec', ...user, '-w', wsA, containerA, '/opt/seclab/bin/seclab-tab-env', ...argv],
 		{ encoding: 'utf8', timeout: 120_000 });
 	if (r.status !== 0) {
 		console.log(`  (trigger exit ${r.status}: ${(r.stderr || '').trim().slice(-200)})`);
