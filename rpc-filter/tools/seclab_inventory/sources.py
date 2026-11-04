@@ -1,7 +1,7 @@
 """Source tree access and permalink helpers.
 
-Standard library only, on purpose: the generator must run in a bare
-``python:3-slim`` container with no install step.
+Standard library only, on purpose: the generator runs in a stock, digest-pinned
+Python container with no install step (see rpc-filter/tools/*.sh).
 """
 
 from __future__ import annotations

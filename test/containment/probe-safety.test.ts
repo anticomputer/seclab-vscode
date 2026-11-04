@@ -3,7 +3,7 @@
 // These guards are the only thing standing between "a probe demonstrates an
 // escape" and "a probe attacks the user's Mac", so they are tested directly
 // rather than trusted. Run in a container:
-//   docker run --rm -v "$PWD":/repo -w /repo node:24.22.1-trixie \
+//   docker run --rm -v "$PWD":/repo -w /repo node:24.22.1-trixie@sha256:f1e034976f948cf212ef1f659c12e5dd58ac7eab947831813e81a62401ca38be \
 //     node test/containment/probe-safety.test.ts
 
 import * as assert from 'node:assert/strict';

@@ -55,13 +55,18 @@ Same rules as ADRs:
 | 2026-11-04 | [Local folder windows are closed before any dialog (routing hand-off)](20261104-local-window-close-first.md) | accepted |
 | 2026-11-04 | [OCI tabs on a native Linux engine run as the workspace owner](20261104-oci-tab-user-on-linux.md) | accepted |
 | 2026-11-04 | [Ship exactly the reviewed patch series; check release artifacts for test hooks](20261104-patch-series.md) | accepted |
+| 2026-11-04 | [Probe payloads must be inert against the host](20261104-probe-safety.md) | accepted |
 | 2026-11-04 | [REH transport over `sbx exec -i` stdio works end to end](20261104-reh-transport-e2e.md) | accepted |
 | 2026-11-04 | [REH transport over `exec -i` stdio (viability spike)](20261104-reh-transport-exec-stdio.md) | superseded-by [20261104-reh-transport-e2e](20261104-reh-transport-e2e.md) |
 | 2026-11-04 | [Remove the built-in Copilot extension from our build (one build patch)](20261104-remove-builtin-copilot.md) | accepted |
+| 2026-11-04 | [Drift check: a digest gate over the surface-to-verdict mapping](20261104-rpc-drift-check.md) | accepted |
+| 2026-11-04 | [RPC escape probes: validity before coverage](20261104-rpc-escape-probes.md) | accepted |
+| 2026-11-04 | [RPC attack-surface inventory is generated, not hand-written](20261104-rpc-inventory-generator.md) | accepted |
 | 2026-11-04 | [sbx per-tab egress fence and broker chaining (spike)](20261104-sbx-fence-spike.md) | accepted |
 | 2026-11-04 | [sbx upgraded to 0.51.0: findings](20261104-sbx-upgrade-0-51.md) | accepted |
 | 2026-11-04 | [Sentinel format, binding and detection](20261104-sentinel-format-and-binding.md) | accepted |
 | 2026-11-04 | [Tab Manager routing (M1): extension-level redirect, fail closed](20261104-tab-manager-routing.md) | superseded-by [20261104-local-window-close-first](20261104-local-window-close-first.md) |
 | 2026-11-04 | [seclab-tabd is dependency-free TypeScript, run on the editor's own Node runtime](20261104-tabd-implementation-language.md) | accepted |
+| 2026-11-04 | [Unpatched proof run: which escapes are real](20261104-unpatched-proof-run.md) | accepted |
 | 2026-11-04 | [Write-back gate spike: keeping tab writes to code-running files off the host](20261104-write-back-gate-spike.md) | accepted |
 <!-- index:end -->
