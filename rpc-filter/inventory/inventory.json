@@ -34547,8 +34547,24 @@
       "client_served_channel_count": 2,
       "client_served_channels": [
         {
-          "channel": "McpGatewayToolBrokerChannelName",
+          "channel": "download",
+          "channel_name_is_constant": false,
+          "channel_name_token": "'download'",
+          "implementation": "DownloadServiceChannel",
+          "implementation_permalink": "https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/platform/download/common/downloadIpc.ts#L9",
+          "methods": [
+            "download"
+          ],
+          "proxy_channel": false,
+          "registered_in": "src/vs/workbench/contrib/remote/common/remote.contribution.ts",
+          "registered_line": 77,
+          "registration_permalink": "https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L77",
+          "revives_caller_supplied_uri": true
+        },
+        {
+          "channel": "mcpGatewayToolBroker",
           "channel_name_is_constant": true,
+          "channel_name_token": "McpGatewayToolBrokerChannelName",
           "implementation": "McpGatewayToolBrokerChannel",
           "implementation_permalink": "https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/mcp/common/mcpGatewayToolBrokerChannel.ts#L32",
           "methods": [
@@ -34567,20 +34583,6 @@
           "registered_line": 16,
           "registration_permalink": "https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts#L16",
           "revives_caller_supplied_uri": false
-        },
-        {
-          "channel": "download",
-          "channel_name_is_constant": false,
-          "implementation": "DownloadServiceChannel",
-          "implementation_permalink": "https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/platform/download/common/downloadIpc.ts#L9",
-          "methods": [
-            "download"
-          ],
-          "proxy_channel": false,
-          "registered_in": "src/vs/workbench/contrib/remote/common/remote.contribution.ts",
-          "registered_line": 77,
-          "registration_permalink": "https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L77",
-          "revives_caller_supplied_uri": true
         }
       ],
       "server_initiated_callback_count": 20,

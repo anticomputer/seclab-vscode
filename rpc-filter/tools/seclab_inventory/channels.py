@@ -82,6 +82,31 @@ def _channel_methods(tree: SourceTree, cls: str) -> dict:
             "proxy_channel": False, "revives_caller_supplied_uri": False}
 
 
+def _resolve_channel_name(tree: SourceTree, token: str) -> str:
+    """Resolve a channel name given as a constant rather than a literal.
+
+    ``registerChannel(McpGatewayToolBrokerChannelName, ...)`` must become
+    ``'mcpGatewayToolBroker'``: the policy keys on the name that travels on the
+    wire, and recording the identifier instead would make the policy entry
+    silently fail to match.
+    """
+    if token.startswith("'"):
+        return token.strip("'")
+    name = token.split(".")[-1]
+    pattern = re.compile(
+        r"(?:export\s+)?const\s+%s\s*(?::\s*[\w<>.\[\]| ]+)?\s*=\s*'(?P<val>[^']+)'"
+        % re.escape(name))
+    for subdir in SCAN_DIRS:
+        for rel in tree.walk(subdir):
+            raw = tree.text(rel)
+            if name not in raw:
+                continue
+            m = pattern.search(strip_block_comments(raw))
+            if m:
+                return m.group("val")
+    return token
+
+
 def _served_channels(tree: SourceTree) -> list:
     out = []
     for subdir in SCAN_DIRS:
@@ -97,11 +122,12 @@ def _served_channels(tree: SourceTree) -> list:
                 if not any(x in recv for x in _REMOTE_RECEIVERS):
                     continue
                 line = 1 + text[: m.start()].count("\n")
-                name = m.group("name").strip("'")
+                name = _resolve_channel_name(tree, m.group("name"))
                 impl = _channel_methods(tree, m.group("cls"))
                 out.append({
                     "channel": name,
                     "channel_name_is_constant": not m.group("name").startswith("'"),
+                    "channel_name_token": m.group("name"),
                     "implementation": m.group("cls"),
                     "registered_in": rel,
                     "registered_line": line,

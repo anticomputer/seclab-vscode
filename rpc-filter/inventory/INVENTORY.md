@@ -182,18 +182,18 @@ see them.
 
 2 client-served channels, 20 server-initiated callbacks.
 
-### `McpGatewayToolBrokerChannelName` → `McpGatewayToolBrokerChannel`
-
-- Registered: [`src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts:16`](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts#L16)
-- Implementation: [`McpGatewayToolBrokerChannel`](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/mcp/common/mcpGatewayToolBrokerChannel.ts#L32)
-- Methods: `callToolForServer`, `listResourceTemplatesForServer`, `listResourcesForServer`, `listServers`, `listToolsForServer`, `onDidChangeResources`, `onDidChangeServers`, `onDidChangeTools`, `readResourceForServer`
-
 ### `download` → `DownloadServiceChannel`
 
 - Registered: [`src/vs/workbench/contrib/remote/common/remote.contribution.ts:77`](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L77)
 - Implementation: [`DownloadServiceChannel`](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/platform/download/common/downloadIpc.ts#L9)
 - Methods: `download`
 - **Revives a caller-supplied URI**: the server chooses the URI, so this reads and writes wherever the trusted side can.
+
+### `mcpGatewayToolBroker` → `McpGatewayToolBrokerChannel`
+
+- Registered: [`src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts:16`](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts#L16)
+- Implementation: [`McpGatewayToolBrokerChannel`](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/mcp/common/mcpGatewayToolBrokerChannel.ts#L32)
+- Methods: `callToolForServer`, `listResourceTemplatesForServer`, `listResourcesForServer`, `listServers`, `listToolsForServer`, `onDidChangeResources`, `onDidChangeServers`, `onDidChangeTools`, `readResourceForServer`
 
 ### Server-initiated callbacks the client acts on
 
