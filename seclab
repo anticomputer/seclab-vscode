@@ -17,6 +17,9 @@ usage: ./seclab <command>
   test containment [sbx|oci]    Containment suite: malicious-workspace vectors inside real tabs
   test canary [sbx|oci]         Canary acceptance test: no host secret observable from a tab
   test secrets [sbx|oci]        Pre-mount secret scan (gitleaks) gate, move-to-vault, restore
+  test obs [sbx|oci]            Tab observability: inert loader -> expected events and labels; sensor tampering -> gap
+  tab logs [-f] [--format text|json|falco] [--min PRIORITY] [--state-dir DIR] <tabId|all>
+                                Read a tab's observability log (default: the editor's state dir)
   test evidence prepare|check DIR [sbx|oci]
                                 Editor-driven run (rogue extension, editor-side canaries)
   lint fixtures [PATH...]       Fixture-safety lint (no real secrets/hosts/persistence in test payloads)
@@ -207,6 +210,14 @@ case "${1:-help}" in
 			canary) shift; "${SECLAB_NODE:-node}" "$ROOT/test/canary/run.ts" "${1:-sbx}" ;;
 			secrets) shift; "${SECLAB_NODE:-node}" "$ROOT/test/secrets/run.ts" "${1:-sbx}" ;;
 			evidence) shift; "${SECLAB_NODE:-node}" "$ROOT/test/containment/check-evidence.ts" "$@" ;;
+			obs) shift; "${SECLAB_NODE:-node}" "$ROOT/test/observability/run.ts" "${1:-sbx}" ;;
+			*) usage; exit 2 ;;
+		esac ;;
+	tab)
+		shift
+		case "${1:-}" in
+			# Reads the supervisor's log files on the host (read-only; no supervisor connection).
+			logs) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/tools/tab-logs.ts" "$@" ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	image)

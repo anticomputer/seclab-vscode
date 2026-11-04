@@ -6,7 +6,7 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { checkFence, parsePolicyJson, resourcesToMirror } from '../fence.ts';
 import type { Runner } from '../run.ts';
 import { assertImageRef, assertPolicyResource, SANDBOX_NAME_RE, CONNECTION_TOKEN_RE } from '../validate.ts';
-import { DriverError, type Driver, type DriverInfo, type FenceReport, type SensorHooks, type TabRuntimeSpec } from './types.ts';
+import { DriverError, type Driver, type DriverInfo, type FenceReport, type PolicyLogEntry, type SensorHooks, type TabRuntimeSpec } from './types.ts';
 
 const MIN_VERSION = [0, 51, 0];
 const REH_CONNECT = '/opt/seclab/bin/seclab-reh-connect';
@@ -241,6 +241,30 @@ export class SbxDriver implements Driver {
 	connectReh(spec: TabRuntimeSpec): ChildProcessWithoutNullStreams {
 		checkSpec(spec);
 		return this.runner.spawnStream(this.sbx, ['exec', '-i', '-u', RELAY_USER, spec.sandboxName, REH_CONNECT]);
+	}
+
+	/** `sbx policy log <tab> --json`: untrusted CLI output, validated field by field. */
+	async policyLog(spec: TabRuntimeSpec): Promise<PolicyLogEntry[]> {
+		checkSpec(spec);
+		const r = await this.runner.run(this.sbx, ['policy', 'log', spec.sandboxName, '--json', '--limit', '500'], { timeoutMs: 30_000, maxOutputBytes: 2 << 20 });
+		if (r.code !== 0) {
+			throw new DriverError(-32003, `sbx policy log failed: ${tail(r.stderr)}`);
+		}
+		const doc = JSON.parse(r.stdout || '{}') as Record<string, unknown>;
+		const out: PolicyLogEntry[] = [];
+		for (const decision of ['allowed', 'blocked'] as const) {
+			const list = Array.isArray(doc[decision]) ? doc[decision] as Array<Record<string, unknown>> : [];
+			for (const e of list.slice(0, 1000)) {
+				if (e?.sandbox_id !== spec.sandboxName || typeof e.host !== 'string' || typeof e.count !== 'number' || !Number.isSafeInteger(e.count)) {
+					continue;
+				}
+				out.push({
+					decision, host: e.host.slice(0, 300), count: e.count, proxyType: typeof e.proxy_type === 'string' ? e.proxy_type.slice(0, 32) : '?',
+					reason: typeof e.reason === 'string' ? e.reason.slice(0, 200) : undefined, lastSeen: typeof e.last_seen === 'string' ? e.last_seen.slice(0, 40) : undefined,
+				});
+			}
+		}
+		return out;
 	}
 
 	async runningSandboxes(): Promise<Set<string>> {

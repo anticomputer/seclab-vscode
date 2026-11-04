@@ -197,6 +197,8 @@ test('obs detect: a regular beacon is reported once; jitter is not a beacon', ()
 	assert.equal([0, 5, 10, 15].flatMap(s => at(s)).length, 1);
 	assert.equal([20, 25].flatMap(s => at(s)).length, 0); // once per 10 min
 	assert.equal([0, 1, 9, 30, 31].flatMap(s => at(s, '192.0.2.11')).length, 0);
+	// A burst right before the first beacon (the loader's fetch) is coalesced.
+	assert.equal([0, 0.011, 1.55, 3.11, 4.67].flatMap(s => at(s, '192.0.2.12')).length, 1);
 });
 
 // ---- hub --------------------------------------------------------------------------------

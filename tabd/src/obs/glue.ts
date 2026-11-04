@@ -3,13 +3,16 @@
 // core stays small. Spec: docs/tabd/PROTOCOL.md §3-4, docs/tabd/EVENTS.md.
 
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
-import type { SensorHooks } from '../drivers/types.ts';
+import type { PolicyLogEntry, SensorHooks } from '../drivers/types.ts';
 import type { FalcoSensor } from './falco.ts';
 import { ObsHub, type Observation } from './hub.ts';
 import { CollectorSession } from './sbx-collector.ts';
 import { CLASSES, isTabId, PRIORITIES, priorityRank, type EventClass, type ObsEvent, type Priority } from './schema.ts';
+import { WorkspaceWatcher } from './workspace-watch.ts';
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
+
+export const POLICY_POLL_MS = 10_000;
 
 export const MAX_SUBSCRIPTIONS = 16;
 export const MAX_REPORT_EVENTS = 64;
@@ -45,6 +48,8 @@ export class ObsGlue {
 	private readonly sessions = new Map<string, CollectorSession>();
 	private readonly modes = new Map<string, 'default' | 'deep'>();
 	private readonly falco?: FalcoSensor;
+	private readonly watchers = new Map<string, WorkspaceWatcher>();
+	private readonly pollers = new Map<string, NodeJS.Timeout>();
 
 	constructor(o: ObsGlueOptions) {
 		this.o = o;
@@ -204,11 +209,60 @@ export class ObsGlue {
 		};
 	}
 
+	/** The tab is running: start the trusted host-side sources (workspace watcher, runtime policy log). */
+	started(tabId: string, workspace: string, policyLog?: () => Promise<PolicyLogEntry[]>): void {
+		if (!this.watchers.has(tabId)) {
+			try {
+				const w = new WorkspaceWatcher(tabId, workspace, this.hub);
+				w.start();
+				this.watchers.set(tabId, w);
+			} catch (e) {
+				this.hub.trusted(tabId, { class: 'sensor.status', priority: 'warning', summary: `workspace watcher failed: ${(e as Error).message}`, detail: { status: 'workspace-watch' } });
+			}
+		}
+		if (policyLog && !this.pollers.has(tabId)) {
+			const seen = new Map<string, number>();
+			let first = true;
+			const tick = async () => {
+				let entries: PolicyLogEntry[];
+				try {
+					entries = await policyLog();
+				} catch {
+					return;
+				}
+				for (const e of entries) {
+					const key = `${e.decision}|${e.host}|${e.proxyType}`;
+					const delta = e.count - (seen.get(key) ?? 0);
+					seen.set(key, e.count);
+					if (first || delta <= 0) {
+						continue; // the first read is the baseline (the log outlives restarts)
+					}
+					const m = /^(.*):(\d{1,5})$/.exec(e.host);
+					this.hub.emit(tabId, {
+						source: 'sbx-policy', integrity: 'trusted', class: 'policy.log', priority: e.decision === 'blocked' ? 'notice' : 'debug',
+						summary: `sbx ${e.decision} ${e.host} ×${delta}${e.reason ? ` (${e.reason})` : ''}`,
+						net: { addr: m ? m[1] : e.host, port: m ? Number(m[2]) : undefined, result: e.decision },
+						detail: { decision: e.decision, host: e.host, count: delta, proxyType: e.proxyType, ...(e.reason ? { reason: e.reason } : {}) },
+					});
+				}
+				first = false;
+			};
+			void tick();
+			const t = setInterval(() => void tick(), POLICY_POLL_MS);
+			t.unref?.();
+			this.pollers.set(tabId, t);
+		}
+	}
+
 	/** The supervisor is stopping, removing or quarantining the tab. */
 	stopping(tabId: string): void {
 		this.hub.expectEnd(tabId);
 		this.sessions.get(tabId)?.close();
 		this.sessions.delete(tabId);
+		this.watchers.get(tabId)?.stop();
+		this.watchers.delete(tabId);
+		clearInterval(this.pollers.get(tabId));
+		this.pollers.delete(tabId);
 		void this.falco?.remove(tabId).catch(() => undefined);
 	}
 
@@ -255,6 +309,12 @@ export class ObsGlue {
 	}
 
 	shutdown(): Promise<void> {
+		for (const tabId of [...this.watchers.keys(), ...this.pollers.keys()]) {
+			this.watchers.get(tabId)?.stop();
+			clearInterval(this.pollers.get(tabId));
+		}
+		this.watchers.clear();
+		this.pollers.clear();
 		for (const [tabId, s] of this.sessions) {
 			this.hub.expectEnd(tabId);
 			s.close();

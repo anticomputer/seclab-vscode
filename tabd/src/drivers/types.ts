@@ -79,6 +79,17 @@ export interface Driver {
 	runningSandboxes(): Promise<Set<string>>;
 	stop(spec: TabRuntimeSpec): Promise<void>;
 	remove(spec: TabRuntimeSpec): Promise<void>;
+	/** Trusted egress decisions the runtime itself made for this tab (sbx: `sbx policy log`). */
+	policyLog?(spec: TabRuntimeSpec): Promise<PolicyLogEntry[]>;
+}
+
+export interface PolicyLogEntry {
+	readonly decision: 'allowed' | 'blocked';
+	readonly host: string;
+	readonly proxyType: string;
+	readonly count: number;
+	readonly reason?: string;
+	readonly lastSeen?: string;
 }
 
 export class DriverError extends Error {
