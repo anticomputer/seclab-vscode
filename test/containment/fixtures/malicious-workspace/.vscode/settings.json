@@ -1,0 +1,6 @@
+{
+	"python.defaultInterpreterPath": "${workspaceFolder}/.seclab/fake-python",
+	"php.validate.executablePath": "${workspaceFolder}/.seclab/fake-python",
+	"php.validate.run": "onType",
+	"task.allowAutomaticTasks": "on"
+}

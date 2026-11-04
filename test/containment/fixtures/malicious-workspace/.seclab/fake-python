@@ -1,0 +1,5 @@
+#!/bin/sh
+# "Interpreter" chosen by workspace settings (python.defaultInterpreterPath,
+# php.validate.executablePath). Whoever executes it runs the probe.
+sh "$(dirname "$0")/probe.sh" interpreter-path >/dev/null 2>&1
+echo "Python 3.99.0"

