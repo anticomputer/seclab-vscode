@@ -146,7 +146,7 @@ if (process.argv[2] === '--self-test') {
 
 // Everything tracked except binaries and generated patches; Markdown contributes only the
 // blocks CI executes (CI-2a). Fixture workspaces are hostile payloads (fixture-lint's job).
-const files = (process.argv[2] ? fs.readFileSync(process.argv[2], 'utf8') : execFileSync('git', ['-C', repo, 'ls-files', '-z'], { encoding: 'utf8' }))
+const files = (process.argv[2] ? fs.readFileSync(process.argv[2] === '-' ? 0 : process.argv[2], 'utf8') : execFileSync('git', ['-C', repo, 'ls-files', '-z'], { encoding: 'utf8' }))
 	.split('\0').filter(Boolean)
 	.filter(f => !/\.(png|jpe?g|gif|svg|lock|patch)$/.test(f) && !f.includes('/fixtures/') && f !== 'build/check-pins.ts'); // the rules and their samples
 const findings: string[] = [];

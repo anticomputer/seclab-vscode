@@ -202,7 +202,7 @@ case "${1:-help}" in
 			# Scratch dirs on a named volume: Docker Desktop's bind-mount inode numbers are not
 			# stable, which trips tabd's (dev, ino) workspace identity check.
 			unit) docker run --rm -v "$ROOT:/repo" -v seclab-test-scratch:/repo/.work/test-scratch -w /repo "$(node_image)" \
-				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts tabd/test/obs.test.ts' ;;
+				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts tabd/test/obs.test.ts tabd/test/writeback.test.ts' ;;
 			# e2e drives sbx/docker on the host, so it runs on the host. It uses the editor's own
 			# Node when SECLAB_NODE points at it, else an already-present node (nothing is installed).
 			e2e) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/test/e2e.ts" "${1:-sbx}" ;;
@@ -237,16 +237,14 @@ case "${1:-help}" in
 		case "${1:-}" in
 			fixtures) shift
 				"$ROOT/test/safety/fixture-lint.sh" "$@"
-				if [[ $# -eq 0 ]]; then # whole tree: also the repo-wide AV-signature pass
-					mkdir -p "$ROOT/.work"; git -C "$ROOT" ls-files -z > "$ROOT/.work/av-files"
-					docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/safety/fixture-lint.ts --av .work/av-files
+				if [[ $# -eq 0 ]]; then # whole tree: also the repo-wide AV-signature pass (file list on stdin)
+					git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/safety/fixture-lint.ts --av -
 				fi ;;
 			pins) shift
 				if [[ "${1:-}" == --self-test ]]; then
 					docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-pins.ts --self-test
 				else
-					mkdir -p "$ROOT/.work"; git -C "$ROOT" ls-files -z > "$ROOT/.work/pins-files"
-					docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-pins.ts .work/pins-files
+					git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-pins.ts -
 				fi ;;
 			workflows) lint_workflows ;;
 			source) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-source.ts ;;
