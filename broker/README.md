@@ -91,8 +91,10 @@ Decision records:
   [sentinels](../docs/edr/20261104-sentinel-format-and-binding.md),
   [CA](../docs/edr/20261104-broker-per-tab-ca.md),
   [DNS](../docs/edr/20261104-internal-network-dns-exfiltration.md),
-  [sbx chaining](../docs/edr/20261104-broker-behind-sbx-fence.md).
-- **Security review:** [20261104-broker-m2-m3](../docs/security-reviews/20261104-broker-m2-m3.md).
+  [sbx chaining](../docs/edr/20261104-broker-behind-sbx-fence.md),
+  [docs from sources and safe fixtures](../docs/edr/20261104-broker-docs-from-sources-and-safe-fixtures.md).
+- **Security reviews:** [20261104-broker-m2-m3](../docs/security-reviews/20261104-broker-m2-m3.md),
+  [20261104-broker-docs-drift-and-fixtures](../docs/security-reviews/20261104-broker-docs-drift-and-fixtures.md).
 
 ## Engine capability matrix
 
