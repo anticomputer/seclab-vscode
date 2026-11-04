@@ -194,6 +194,10 @@ export class SbxDriver implements Driver {
 		return this.runner.spawnStream(this.sbx, ['exec', '-i', '-u', SANDBOX_USER, spec.sandboxName, REH_CONNECT]);
 	}
 
+	async runningSandboxes(): Promise<Set<string>> {
+		return new Set((await this.list()).filter(e => e.status === 'running' && SANDBOX_NAME_RE.test(e.name)).map(e => e.name));
+	}
+
 	async stop(spec: TabRuntimeSpec): Promise<void> {
 		checkSpec(spec);
 		await this.runner.run(this.sbx, ['stop', spec.sandboxName], { timeoutMs: 60_000 });

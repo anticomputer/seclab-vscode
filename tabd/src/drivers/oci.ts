@@ -154,6 +154,14 @@ export class OciDriver implements Driver {
 		return this.runner.spawnStream(this.docker, ['exec', '-i', '-u', UID, '--', n.ws, REH_CONNECT]);
 	}
 
+	async runningSandboxes(): Promise<Set<string>> {
+		const r = await this.runner.run(this.docker, ['ps', '--filter', 'label=seclab.tab', '--format', '{{.Names}}'], { timeoutMs: 30_000 });
+		if (r.code !== 0) {
+			throw new DriverError(-32003, 'docker ps failed');
+		}
+		return new Set(r.stdout.split('\n').map(s => s.trim()).filter(s => SANDBOX_NAME_RE.test(s)));
+	}
+
 	async quarantine(spec: TabRuntimeSpec): Promise<void> {
 		const n = this.names(spec);
 		await this.runner.run(this.docker, ['stop', '--', n.ws, n.broker], { timeoutMs: 60_000 });

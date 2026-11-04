@@ -64,7 +64,7 @@ never derived from paths or other input. The editor uses the authority
 | `tab.claim` | `{ workspace: { hostPath }, templateRef?: { name } }` | `{ tab }` | The **only** method that accepts a host path. Validates it (absolute, canonical, an existing directory, not a denylisted root) and returns the existing tab for that path or mints a new one. Persists the mapping. Does not start anything. |
 | `tab.get` | `{ tabId }` | `{ tab }` | Unknown ID → error `-32004`. |
 | `tab.list` | `{}` | `{ tabs: Tab[] }` | |
-| `tab.ensureRunning` | `{ tabId }` | `{ tab }` | Creates or starts the sandbox, REH and broker; applies the fence. Emits `tab.status` notifications. |
+| `tab.ensureRunning` | `{ tabId }` | `{ tab, connectionToken }` | Creates or starts the sandbox, REH and broker; applies the fence. Emits `tab.status` notifications. |
 | `tab.connect` | `{ tabId }` | `{ channel, connectionToken }` | **Re-verifies the fence first.** On mismatch: error `-32010` with the reason. Opens an exec stream to the REH socket on a new channel. |
 | `tab.stop` | `{ tabId }` | `{ tab }` | Ends the tab's channels, then stops the sandbox. |
 | `tab.remove` | `{ tabId }` | `{}` | Removes the sandbox and fence rules; forgets the mapping. |

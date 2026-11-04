@@ -97,7 +97,14 @@ const supervisor = new Supervisor({
 	fenceReverifyMs: values['fence-reverify-ms'] ? Number(values['fence-reverify-ms']) : undefined,
 	pathPolicy: {
 		allowedRoots: values['allowed-root'],
-		sensitive: [stateDir, ...values.sensitive!],
+		// The state dir and the real locations of the runtime CLIs we execute.
+		sensitive: [stateDir, ...values.sensitive!, ...[sbxPath, dockerPath].flatMap(p => {
+			if (!p) {
+				return [];
+			}
+			const real = fs.realpathSync.native(p);
+			return [path.dirname(p), path.dirname(real)];
+		})],
 	},
 });
 

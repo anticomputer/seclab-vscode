@@ -78,6 +78,10 @@ function applicable(rules: readonly PolicyRule[], sandboxName: string): PolicyRu
 		(r.applies_to === 'all' || r.applies_to === `sandbox:${sandboxName}`));
 }
 
+// Every network rule must apply either to all sandboxes or to one named sandbox (kit
+// rules show up as sandbox-scoped). Any other scope form is unknown and fails closed.
+const KNOWN_APPLIES_TO = /^(?:all|sandbox:[A-Za-z0-9][A-Za-z0-9.-]{0,127})$/;
+
 /** Resources to deny per-sandbox at create time: every allow that applies globally. */
 export function resourcesToMirror(rules: readonly PolicyRule[]): string[] {
 	const set = new Set<string>();
@@ -106,6 +110,10 @@ export function checkFence(rules: readonly PolicyRule[], sandboxName: string, br
 			continue;
 		}
 		if (r.resource_type !== 'network') {
+			continue;
+		}
+		if (!KNOWN_APPLIES_TO.test(r.applies_to)) {
+			problems.push(`rule ${r.id}: unknown applies_to ${JSON.stringify(r.applies_to)}`);
 			continue;
 		}
 		if (r.applies_to !== 'all' && r.applies_to !== scoped) {
