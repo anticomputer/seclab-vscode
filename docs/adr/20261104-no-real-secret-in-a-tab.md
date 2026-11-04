@@ -52,3 +52,15 @@ newly minted.
   clients that the broker can't serve are denied.
 - The canary harness is the headline acceptance test. A canary found in a tab
   is a release blocker.
+
+## Addendum (2026-11-04): environment invariant
+**No host environment variable reaches anything in a tab.** This holds by construction:
+- tabd spawns runtimes with an allowlisted env (`tabd/src/run.ts` `cleanEnv`);
+- the tab template starts every REH process through `/opt/seclab/bin/seclab-tab-env`,
+  which runs `env -i` with a fixed list;
+- proxy variables are overridden in both cases.
+
+So nothing may rely on passing configuration into a tab through environment variables:
+not tests, not arming switches, not features. Use a file in the workspace, or the
+tabd protocol. The RPC-lockdown session's env-based arming broke on exactly this, and
+it now arms via a workspace file, as the fixture harness does.

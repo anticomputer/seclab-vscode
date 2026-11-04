@@ -223,6 +223,14 @@ Electron with `ELECTRON_RUN_AS_NODE=1`); nothing is installed.
 - **Secret-finding ids must be deterministic** across rescans, because
   `acceptFindings` must match on the re-gate. gitleaks reports concurrently,
   so sort.
+- **No host env var ever reaches a tab** (`env -i` in `seclab-tab-env`, plus
+  tabd's `cleanEnv`). Pass anything a tab needs via a workspace file or the tabd
+  protocol, never the environment
+  ([ADR addendum](docs/adr/20261104-no-real-secret-in-a-tab.md)).
+- **`--user-data-dir` must be short on macOS.** Electron's main IPC socket lives
+  there, and unix socket paths are capped at 104 bytes. A deep worktree path
+  makes the editor exit at start with no window. Use `~/.seclab-test/<name>`;
+  `test/harness.ts` refuses longer ones.
 
 ## 7. Where to look first when something breaks
 - A tab won't connect: the "seclab Tab Manager" output channel, then
