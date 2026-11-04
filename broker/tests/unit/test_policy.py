@@ -49,7 +49,7 @@ def test_canonical_path_ok(raw, expected):
 @pytest.mark.parametrize("raw", [
     "/repos/../user/keys", "/repos/./x", "/repos/%2e%2e/user/keys", "/repos/%2E%2E/user",
     "/repos%2fo", "/a%5cb", "/a\\b", "/a;b", "/a%3bb", "//user/keys", "/user//keys",
-    "/a%00", "/a%25", "*", "http://x/", "/a#b", "/%ff", "/a\tb",
+    "/a%00", "/a%25", "*", "http://x.test/", "/a#b", "/%ff", "/a\tb",
 ])
 def test_canonical_path_rejects(raw):
     assert canonical_path(raw) is None
