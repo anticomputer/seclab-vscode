@@ -1,0 +1,8 @@
+src/**
+tabd-src/**
+out/**
+**/*.ts
+**/*.map
+tsconfig*.json
+esbuild*.mts
+**/*.tsbuildinfo
