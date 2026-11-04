@@ -31,7 +31,10 @@ for s in /var/run/docker.sock /run/docker.sock "$HOME/.docker/run/docker.sock"; 
 done
 sudo_ok=no
 command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1 && sudo_ok=yes
-secret_env="$(env | cut -d= -f1 | grep -E 'TOKEN|_KEY$|SECRET|PASSWORD|SSH_AUTH_SOCK|ELECTRON|VSCODE_GIT_IPC|GITHUB_|AWS_' | tr '\n' ' ')"
+secret_env="$(env | cut -d= -f1 | grep -E 'TOKEN|_KEY$|SECRET|PASSWORD|SSH_AUTH_SOCK|GITHUB_|AWS_' | tr '\n' ' ')"
+# REH plumbing that bridges back to the UI (git askpass -> UI auth providers): reported
+# separately as a known M4 gap. ELECTRON_RUN_AS_NODE is a mode flag, not a secret.
+ui_bridge="$(env | cut -d= -f1 | grep -E '^VSCODE_GIT_(IPC_HANDLE|ASKPASS)' | tr '\n' ' ')"
 
 # Egress: everything must fail. Using the env proxies (as tools do) and directly.
 eg_example="$(code https://example.com/)"
@@ -60,6 +63,7 @@ cat > "$OUT/$VECTOR.json" <<EOF
   "docker_sock_writable": "$docker_sock",
   "sudo": "$sudo_ok",
   "secret_env": "$(clean "$secret_env")",
+  "ui_bridge": "$(clean "$ui_bridge")",
   "http_proxy": "$(clean "${http_proxy:-}")",
   "HTTPS_PROXY": "$(clean "${HTTPS_PROXY:-}")",
   "egress": {

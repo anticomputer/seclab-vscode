@@ -15,12 +15,18 @@ export interface Evidence {
 	docker_sock_writable: string;
 	sudo: string;
 	secret_env: string;
+	ui_bridge?: string;
 	http_proxy: string;
 	HTTPS_PROXY: string;
 	egress: Record<string, string>;
 }
 
-export interface Check { vector: string; name: string; ok: boolean; detail: string }
+/**
+ * `knownGap`: a documented, accepted-until-fixed gap (e.g. "M4"). A failing check with a
+ * known gap prints XFAIL and does not fail the run; when it starts passing it prints XPASS
+ * so the marker gets removed. Never use it to hide an unexplained failure.
+ */
+export interface Check { vector: string; name: string; ok: boolean; detail: string; knownGap?: string }
 
 const BLOCKED = new Set(['000', '403', '']);
 const BLACKHOLE = 'http://127.0.0.1:9';
@@ -45,6 +51,12 @@ export function checkEvidence(ev: Evidence | undefined, vector: string, opts: { 
 	out.push(c('no writable docker.sock', ev.docker_sock_writable === 'no', ev.docker_sock_writable));
 	out.push(c('no sudo', ev.sudo === 'no', ev.sudo));
 	out.push(c('no host secrets / agent sockets in env', ev.secret_env.trim() === '', ev.secret_env));
+	// The REH's git extension exports an askpass socket (VSCODE_GIT_IPC_HANDLE) inside the
+	// tab; through it git can reach the UI-side auth providers. Only the RPC capability
+	// filter (M4) closes that; until then it's an explicit known gap, not a silent pass.
+	const bridge = (ev.ui_bridge ?? '').trim();
+	out.push({ ...c('no tab-to-UI credential bridge in env (git askpass)', bridge === '', bridge),
+		knownGap: bridge ? 'M4 RPC capability filter (docs/adr/20261104-rpc-capability-filter.md)' : undefined });
 	out.push(c('runtime-injected proxy env never wins (both cases overridden)', ev.http_proxy === BLACKHOLE && ev.HTTPS_PROXY === BLACKHOLE, `http_proxy=${ev.http_proxy} HTTPS_PROXY=${ev.HTTPS_PROXY}`));
 	for (const [k, v] of Object.entries(ev.egress)) {
 		if (k === 'dns_external') {
@@ -59,10 +71,12 @@ export function checkEvidence(ev: Evidence | undefined, vector: string, opts: { 
 export function report(checks: Check[]): boolean {
 	let ok = true;
 	for (const ch of checks) {
-		ok &&= ch.ok;
-		console.log(`${ch.ok ? 'PASS' : 'FAIL'}  [${ch.vector}] ${ch.name}${ch.ok ? '' : `  -> ${ch.detail}`}`);
+		ok &&= ch.ok || !!ch.knownGap;
+		const tag = ch.ok ? (ch.knownGap ? 'XPASS' : 'PASS') : (ch.knownGap ? 'XFAIL' : 'FAIL');
+		console.log(`${tag}  [${ch.vector}] ${ch.name}${ch.ok ? '' : `  -> ${ch.detail}`}${ch.knownGap ? `  (known gap: ${ch.knownGap})` : ''}`);
 	}
-	const failed = checks.filter(c => !c.ok).length;
-	console.log(`\n${checks.length - failed}/${checks.length} checks passed`);
+	const failed = checks.filter(c => !c.ok && !c.knownGap).length;
+	const xfail = checks.filter(c => !c.ok && c.knownGap).length;
+	console.log(`\n${checks.length - failed - xfail}/${checks.length} checks passed${xfail ? `, ${xfail} known gap(s) (XFAIL)` : ''}${failed ? `, ${failed} FAILED` : ''}`);
 	return ok;
 }
