@@ -74,19 +74,37 @@ export class WorkspaceWatcher {
 	private flush(): void {
 		const now = Date.now();
 		let individual = 0;
+		const overflowExec: string[] = [];
 		for (const [rel, at] of this.pending) {
 			if (now - at < 300) {
 				continue; // let bursts of writes to one file settle
 			}
 			this.pending.delete(rel);
-			// At most MAX_INDIVIDUAL per flush; the rest is summarised, so a tab can't flood.
-			if (QUIET.test(rel) || !isHostExecutablePath(rel) || individual >= MAX_INDIVIDUAL) {
+			if (QUIET.test(rel) || !isHostExecutablePath(rel)) {
 				const top = rel.split('/').slice(0, 2).join('/');
 				this.bulk.set(top, (this.bulk.get(top) ?? 0) + 1);
 				continue;
 			}
-			individual++;
-			this.report(rel);
+			// Host-executable paths are never folded into the anonymous bulk (review OR-5): up to
+			// MAX_INDIVIDUAL writes per flush are reported one by one (deletions don't count), the
+			// rest in a warning that names them and still feeds the detector.
+			if (individual >= MAX_INDIVIDUAL) {
+				overflowExec.push(rel);
+				continue;
+			}
+			if (this.report(rel) !== 'deleted') {
+				individual++;
+			}
+		}
+		if (overflowExec.length) {
+			// Hidden config paths (.git/hooks, .envrc, .vscode/…) first: they are the usual targets.
+			overflowExec.sort((a, b) => Number(!/(^|\/)\./.test(a)) - Number(!/(^|\/)\./.test(b)) || a.localeCompare(b));
+			const shown = overflowExec.slice(0, 10);
+			this.hub.emit(this.tabId, {
+				source: 'workspace-watch', integrity: 'trusted', class: 'workspace.change', priority: 'warning',
+				summary: `${overflowExec.length} more host-executable files changed at once: ${shown.join(', ')}${overflowExec.length > shown.length ? ', …' : ''}`,
+				file: { path: path.join(this.root, overflowExec[0]), op: 'overflow' }, detail: { change: 'overflow', count: overflowExec.length, paths: shown.join(', ') },
+			});
 		}
 		if (this.bulk.size && (this.pending.size === 0 || this.bulk.size > 50)) {
 			const total = [...this.bulk.values()].reduce((a, b) => a + b, 0);
@@ -100,7 +118,7 @@ export class WorkspaceWatcher {
 		}
 	}
 
-	private report(rel: string): void {
+	private report(rel: string): string {
 		const abs = path.join(this.root, rel);
 		let change: string;
 		let mode = 0;
@@ -126,6 +144,7 @@ export class WorkspaceWatcher {
 			source: 'workspace-watch', integrity: 'trusted', class: 'workspace.change', priority: change === 'deleted' ? 'informational' : 'notice',
 			summary: `workspace ${change}: ${rel}${detail.scriptsChanged ? ' (scripts changed)' : ''}`, file: { path: abs, op: change }, detail,
 		});
+		return change;
 	}
 
 	/** Hash of package.json "scripts", read only when it is a regular file inside the root. */

@@ -5,7 +5,7 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { isCredentialPath } from './detect.ts';
 import type { ObsHub } from './hub.ts';
-import { StraceParser, StraceTracker } from './strace.ts';
+import { StraceParser, StraceTracker, unescapeStrace } from './strace.ts';
 
 export const MAX_RECORD = 160 * 1024; // a 64 KiB strace line, JSON-escaped
 const SOURCE = { source: 'sbx-collector', integrity: 'tab-vm-root' } as const;
@@ -75,7 +75,6 @@ export class CollectorSession {
 	private closed = false;
 	private nextRehId = 0;
 	private readonly rehWaiters = new Map<number, (err?: Error) => void>();
-	private corruptTimes: number[] = [];
 
 	constructor(tabId: string, child: ChildProcessWithoutNullStreams, hub: ObsHub, o: CollectorOptions) {
 		this.tabId = tabId;
@@ -169,15 +168,10 @@ export class CollectorSession {
 		this.hub.emit(this.tabId, { ...SOURCE, class: 'sensor.status', priority, summary, detail });
 	}
 
-	/** Unparseable or oversized sensor output: counted; repeated, it marks the tab degraded (review OR-2). */
+	/** Unparseable or oversized sensor output: counted, and the tab is degraded at once (review OR-2, OR-6). */
 	private corrupt(): void {
 		this.hub.countInvalid(this.tabId);
-		const now = Date.now();
-		this.corruptTimes = this.corruptTimes.filter(t => now - t < 10_000);
-		this.corruptTimes.push(now);
-		if (this.corruptTimes.length === 3) {
-			this.hub.setObservation(this.tabId, 'degraded', 'sensor output is being corrupted or forged', { sensor: 'sbx-collector', mode: this.o.mode });
-		}
+		this.hub.setObservation(this.tabId, 'degraded', 'sensor output is being corrupted or forged', { sensor: 'sbx-collector', mode: this.o.mode });
 	}
 
 	private record(line: Buffer): void {
@@ -277,9 +271,8 @@ export class CollectorSession {
 						summary: foreign ? `process ${pid} is traced by another process (${tracer}): unobserved` : `process ${pid} was untraced${r.attached === true ? '; now attached' : ' and could not be attached'}`,
 						detail: { status: 'untraced', tracer, attached: r.attached === true },
 					});
-					if (foreign || r.attached !== true) {
-						this.hub.setObservation(this.tabId, 'degraded', `process ${pid} escaped tracing`, { sensor: 'sbx-collector', mode: this.o.mode });
-					}
+					// Any process that ran untraced, even briefly, is a gap in the record.
+					this.hub.setObservation(this.tabId, 'degraded', foreign || r.attached !== true ? `process ${pid} escaped tracing` : `process ${pid} ran untraced before it was attached`, { sensor: 'sbx-collector', mode: this.o.mode });
 				}
 				return;
 			}
@@ -301,8 +294,22 @@ export class CollectorSession {
 			case 'strace-err':
 				this.status('debug', `strace: ${s(r.msg, 200) ?? ''}`, { status: 'strace-stderr' });
 				return;
-			case 'oversize':
-				return this.corrupt();
+			case 'oversize': {
+				// A record over the line cap (e.g. an exec with a padded argv): keep its identity.
+				const pid = int(r.pid);
+				const sc = s(r.sc, 32);
+				let path: string | undefined;
+				try {
+					path = typeof r.path === 'string' ? unescapeStrace(r.path.slice(0, 4096)) : undefined;
+				} catch {
+					path = undefined;
+				}
+				if (pid && (sc === 'execve' || sc === 'execveat') && path !== undefined) {
+					this.emitAll(this.tracker.truncatedExec(pid, path));
+				}
+				this.hub.setObservation(this.tabId, 'degraded', `oversized ${sc ?? 'syscall'} record from pid ${pid ?? '?'}; its arguments were not recorded`, { sensor: 'sbx-collector', mode: this.o.mode });
+				return this.hub.countInvalid(this.tabId);
+			}
 			case 'err':
 				this.status('error', `collector error: ${s(r.msg, 300) ?? '?'}`, { status: 'error' });
 				if (r.fatal === true) {

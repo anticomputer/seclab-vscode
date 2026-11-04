@@ -259,6 +259,9 @@ class Stracer:
 
     def pump(self):
         head = re.compile(rb"^(\d+) ")
+        # Head of an oversized record: pid, time, syscall and its first string argument (for
+        # execve, the program path; strace never truncates it below -s).
+        trunc_head = re.compile(rb'^(\d+) +([0-9.]+) +([a-z0-9_]{1,32})\((?:[A-Z_]+, )?"((?:[^"\\]|\\.){0,4096})"')
         while True:
             line = self.out.readline(MAX_LINE + 1)
             if not line:
@@ -268,7 +271,12 @@ class Stracer:
                     more = self.out.readline(MAX_LINE)
                     if not more or more.endswith(b"\n"):
                         break
-                emit({"k": "oversize", "i": self.idx})
+                # Keep what identifies it (review OR-6): a padded argv must not hide an exec.
+                m = trunc_head.match(line)
+                rec = {"k": "oversize", "i": self.idx}
+                if m:
+                    rec.update(pid=int(m.group(1)), ts=m.group(2).decode(), sc=m.group(3).decode(), path=m.group(4).decode("latin-1"))
+                emit(rec)
                 continue
             line = line.rstrip(b"\n")
             m = head.match(line)

@@ -539,3 +539,52 @@ test('obs review OR-2: repeated unparseable collector output marks the tab degra
 	assert.match(hub.observation(tab).reason, /corrupted or forged/);
 	hub.close();
 });
+
+test('obs review OR-6: an oversized exec record still reports the program and degrades the tab', async () => {
+	const seen: ObsEvent[] = [];
+	const hub = new ObsHub({ onEvent: e => seen.push(e) });
+	const tab = mintTabId();
+	const f = fakeChild();
+	new CollectorSession(tab, f.child, hub, { mode: 'default', isRunning: async () => true });
+	f.stdout.write(`${JSON.stringify({ k: 'hello', n: 1, pid: 400 })}\n`);
+	f.stdout.write(`${JSON.stringify({ k: 'oversize', n: 2, i: 0, pid: 77, ts: '1.0', sc: 'execve', path: '/usr/bin/nod\\145' })}\n`);
+	await tick(20);
+	const ex = seen.find(e => e.class === 'process.exec');
+	assert.equal(ex?.proc?.exe, '/usr/bin/node');
+	assert.equal(ex?.detail?.truncated, true);
+	assert.equal(hub.observation(tab).state, 'degraded');
+	hub.close();
+});
+
+test('obs review OR-5: host-executable writes are never hidden in the bulk summary', async () => {
+	const { WorkspaceWatcher } = await import('../src/obs/workspace-watch.ts');
+	const root = path.join(SCRATCH, 'ws-overflow');
+	fs.rmSync(root, { recursive: true, force: true });
+	fs.mkdirSync(path.join(root, '.git', 'hooks'), { recursive: true });
+	const seen: ObsEvent[] = [];
+	const hub = new ObsHub({ onEvent: e => seen.push(e) });
+	const tab = mintTabId();
+	const w = new WorkspaceWatcher(tab, root, hub);
+	w.start();
+	await tick(200);
+	for (let i = 0; i < 60; i++) {
+		fs.mkdirSync(path.join(root, `d${i}`));
+		fs.writeFileSync(path.join(root, `d${i}`, 'Makefile'), 'all:\n');
+	}
+	fs.writeFileSync(path.join(root, '.git', 'hooks', 'pre-commit'), '#!/bin/sh\n', { mode: 0o755 });
+	await until(() => seen.some(e => e.class === 'detection' && /pre-commit/.test(e.summary)), 5000);
+	w.stop();
+	assert.ok(seen.some(e => e.class === 'detection' && e.rule === 'workspace.host-executable-write' && /pre-commit/.test(e.summary)),
+		seen.filter(e => e.class !== 'detection').map(e => e.summary).slice(-5).join(' | '));
+	assert.ok(seen.every(e => !(e.detail?.change === 'bulk' && /Makefile|pre-commit/.test(e.summary))), 'host-executable paths are not in bulk');
+	hub.close();
+});
+
+async function until(what: () => boolean, ms: number): Promise<boolean> {
+	for (const end = Date.now() + ms; Date.now() < end; await tick(100)) {
+		if (what()) {
+			return true;
+		}
+	}
+	return what();
+}
