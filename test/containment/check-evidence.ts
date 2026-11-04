@@ -104,12 +104,17 @@ if (mode === 'prepare') {
 	const evDir = path.join(ws, '.seclab-evidence');
 	const observedOk = fs.existsSync(path.join(evDir, 'rogue-observed.json'));
 	checks.push({ vector: 'canary', name: 'rogue extension recorded its API observations', ok: observedOk, detail: '' });
+	// Stores the rogue extension can still read through the extension API until the RPC
+	// capability filter (M4) lands: configuration (user settings) and the clipboard.
+	const M4 = 'M4 RPC capability filter (docs/adr/20261104-rpc-capability-filter.md)';
+	const knownUntilM4 = new Set(['user-settings', 'clipboard']);
 	for (const f of fs.existsSync(evDir) ? fs.readdirSync(evDir) : []) {
 		for (const h of scan(canaries, f, fs.readFileSync(path.join(evDir, f)))) {
-			checks.push({ vector: 'canary', name: `no ${h.store} canary in tab-observable data`, ok: false, detail: `${h.encoding} in ${h.source}` });
+			checks.push({ vector: 'canary', name: `no ${h.store} canary in tab-observable data`, ok: false, detail: `${h.encoding} in ${h.source}`,
+				knownGap: knownUntilM4.has(h.store) ? M4 : undefined });
 		}
 	}
-	checks.push({ vector: 'canary', name: 'no editor-side canary observed by the tab', ok: !checks.some(c => c.vector === 'canary' && !c.ok), detail: '' });
+	checks.push({ vector: 'canary', name: 'no editor-side canary observed by the tab (outside known gaps)', ok: !checks.some(c => c.vector === 'canary' && !c.ok && !c.knownGap), detail: '' });
 	const ok = report(checks);
 	// Disarm the hostile git config left in the host work dir.
 	fs.rmSync(path.join(ws, '.git'), { recursive: true, force: true });
