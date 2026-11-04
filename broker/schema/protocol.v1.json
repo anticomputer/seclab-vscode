@@ -1,0 +1,312 @@
+{
+  "$comment": "Single source of truth for the broker control protocol. The broker validates every request's params against it (core.dispatch); unit tests validate every result, and the integration harness validates all live traffic. docs/broker-protocol.md sections 'Errors', 'Methods' and 'Notifications' are generated from this file by broker/tools/docs.py. Definitions from policy.v1.schema.json are merged in at load time, so '#/definitions/rule', '#/definitions/binding' and '#/definitions/policy' resolve.",
+  "protocol": "seclab-broker/1",
+  "errors": [
+    { "code": -32700, "name": "parse-error", "description": "Line is not JSON." },
+    { "code": -32600, "name": "invalid-request", "description": "Not a JSON-RPC 2.0 request, a batch, or a bad `id`." },
+    { "code": -32601, "name": "method-not-found", "description": "Unknown method." },
+    { "code": -32602, "name": "invalid-params", "description": "Params fail the method's schema or a semantic check. The message is safe to show and never contains a credential value." },
+    { "code": -32603, "name": "internal-error", "description": "Unexpected failure inside the broker." },
+    { "code": -32001, "name": "not-ready", "description": "The broker is not ready for this call yet, for example `ca.get` before the CA exists." },
+    { "code": -32002, "name": "control-unavailable", "description": "Emitted by the `seclab-broker control` bridge itself (`id: null`) when the control socket is not up yet. Retry." }
+  ],
+  "methods": {
+    "broker.hello": {
+      "description": "Identify the broker. Clients must check `protocol` and degrade explicitly when a capability they rely on is `false` or absent (see the engine capability matrix in broker/README.md).",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": {
+        "type": "object", "additionalProperties": false,
+        "required": ["protocol", "version", "tabId", "engine", "engineVersion", "capabilities"],
+        "properties": {
+          "protocol": { "const": "seclab-broker/1", "description": "Protocol name and major version." },
+          "version": { "type": "string", "description": "Broker package version." },
+          "tabId": { "type": ["string", "null"], "description": "`SECLAB_TAB_ID` the broker was started with." },
+          "engine": { "type": "string", "description": "Enforcement engine, for example `mitmproxy`." },
+          "engineVersion": { "type": "string" },
+          "capabilities": { "type": "object", "additionalProperties": { "type": "boolean" }, "description": "Feature flags; see the capability matrix." }
+        }
+      },
+      "examples": [{ "params": {}, "result": { "protocol": "seclab-broker/1", "version": "0.1.0", "tabId": "tab-1", "engine": "mitmproxy", "engineVersion": "12.3.1", "capabilities": { "holdAndResume": true } } }]
+    },
+    "health": {
+      "description": "Liveness and counters. `status` is `starting` until the proxy is listening.",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": {
+        "type": "object", "additionalProperties": false,
+        "required": ["status", "uptimeSeconds", "proxy", "policy", "pendingApprovals", "heldFlows", "credentials", "controllers"],
+        "properties": {
+          "status": { "enum": ["ok", "starting"] },
+          "uptimeSeconds": { "type": "number" },
+          "proxy": { "type": "object", "additionalProperties": false, "required": ["listening", "authConfigured"],
+                     "properties": { "listening": { "type": "boolean" }, "authConfigured": { "type": "boolean" } } },
+          "policy": { "type": "object", "additionalProperties": false, "required": ["revision", "rules", "credentials"],
+                      "properties": { "revision": { "type": "integer" }, "rules": { "type": "integer" }, "credentials": { "type": "integer" } } },
+          "pendingApprovals": { "type": "integer" },
+          "heldFlows": { "type": "integer", "description": "Requests currently held waiting for a decision or a credential." },
+          "credentials": { "type": "integer", "description": "Credentials known to the broker (policy, imported and derived)." },
+          "controllers": { "type": "integer", "description": "Connected control clients." }
+        }
+      },
+      "examples": [{ "params": {}, "result": { "status": "ok", "uptimeSeconds": 12.3, "proxy": { "listening": true, "authConfigured": true }, "policy": { "revision": 3, "rules": 4, "credentials": 1 }, "pendingApprovals": 0, "heldFlows": 0, "credentials": 2, "controllers": 1 } }]
+    },
+    "proxy.auth.set": {
+      "description": "Set the per-tab proxy credential. The tab sends it as HTTP Basic `Proxy-Authorization`, normally via userinfo in its proxy URL. Until this succeeds every proxy request gets `407`; unauthenticated clients are never held, prompted, resolved or connected upstream. Comparison is constant time; the value is never logged or echoed. Calling it again rotates the credential, and tunnels opened under the old one must re-authenticate.",
+      "params": {
+        "type": "object", "additionalProperties": false, "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$", "description": "Convention: `seclab`." },
+          "password": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22,128}$", "description": "At least 128 bits as base64url, from a CSPRNG (for example `secrets.token_urlsafe(16)`)." }
+        }
+      },
+      "result": { "type": "object", "additionalProperties": false, "required": ["epoch"],
+                  "properties": { "epoch": { "type": "integer", "description": "Increments on every rotation." } } },
+      "examples": [{ "params": { "username": "seclab", "password": "Zm9vYmFyYmF6cXV4cXV1eA" }, "result": { "epoch": 1 } }]
+    },
+    "policy.load": {
+      "description": "Replace the tab's policy. Rules added at runtime by `allow-tab` are discarded (persist them from `policy.changed`). Sentinels are stable across reloads for the same credential id, and already-provided values are kept. Credentials no longer in the policy are dropped from memory; imported credentials are unaffected. A `tabId` that differs from the broker's `SECLAB_TAB_ID` is rejected.",
+      "params": {
+        "type": "object", "additionalProperties": false, "required": ["policy"],
+        "properties": { "policy": { "$ref": "#/definitions/policy", "description": "A policy document (see docs/broker-policy.md)." } }
+      },
+      "result": {
+        "type": "object", "additionalProperties": false, "required": ["revision", "sentinels"],
+        "properties": {
+          "revision": { "type": "integer" },
+          "sentinels": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Credential id to sentinel, for policy credentials." }
+        }
+      },
+      "examples": [{ "params": { "policy": { "version": 1, "allow": [{ "host": "api.github.com", "methods": ["GET"] }] } }, "result": { "revision": 1, "sentinels": {} } }]
+    },
+    "policy.get": {
+      "description": "The effective policy, including rules added at runtime. Never includes credential values.",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": { "type": "object", "additionalProperties": false, "required": ["revision", "policy"],
+                  "properties": { "revision": { "type": "integer" }, "policy": { "$ref": "#/definitions/policy" } } }
+    },
+    "policy.update": {
+      "description": "Live edit of the allow list. Emits `policy.changed`. Removing a rule requires that it has an `id`.",
+      "params": {
+        "type": "object", "additionalProperties": false,
+        "properties": {
+          "addAllow": { "type": "array", "maxItems": 256, "items": { "$ref": "#/definitions/rule" } },
+          "removeAllow": { "type": "array", "maxItems": 256, "items": { "$ref": "#/definitions/id" }, "description": "Ids of runtime or policy rules to remove." }
+        }
+      },
+      "result": { "type": "object", "additionalProperties": false, "required": ["revision"], "properties": { "revision": { "type": "integer" } } },
+      "examples": [{ "params": { "addAllow": [{ "id": "npm", "host": "registry.npmjs.org", "methods": ["GET"] }] }, "result": { "revision": 2 } }]
+    },
+    "credential.provide": {
+      "description": "Supply a credential's real value just in time. After `expiresAt` the value is dropped and the next use raises `credential.needed` again. Held requests waiting for this credential resume immediately.",
+      "params": {
+        "type": "object", "additionalProperties": false, "required": ["id", "value"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "value": { "$ref": "#/definitions/secretValue" },
+          "expiresAt": { "type": ["number", "null"], "description": "Unix seconds." }
+        }
+      },
+      "result": { "type": "object", "additionalProperties": false, "properties": {} },
+      "examples": [{ "params": { "id": "github", "value": "<real value from the keychain>", "expiresAt": 1793900000 }, "result": {} }]
+    },
+    "credential.revoke": {
+      "description": "Drop a credential's real value, and every credential derived from it. With `rotateSentinel` the credential gets a new sentinel and the old one stops matching.",
+      "params": {
+        "type": "object", "additionalProperties": false, "required": ["id"],
+        "properties": { "id": { "type": "string", "minLength": 1, "maxLength": 200 }, "rotateSentinel": { "type": "boolean", "default": false } }
+      },
+      "result": { "type": "object", "additionalProperties": false, "required": ["sentinel"], "properties": { "sentinel": { "type": "string", "description": "Current sentinel (new if rotated)." } } }
+    },
+    "credential.import": {
+      "description": "Import a user-supplied secret: one found by the pre-mount workspace scan, or captured password input. The broker never writes the value anywhere; the supervisor persists `{id, sentinel, value, bind}` (keychain) and re-imports with `bind` on every broker start.\n\nWith no `bind` the credential is *unconfirmed*. On first use (its sentinel in a request header, over HTTPS, to a host the tab may reach) the broker holds the request and emits `approval.requested` with `kind: credential-binding`. **That path is attacker-steerable**: the tab chooses which host, path and header it first sends the sentinel to, so `suggestedBinding` is advisory only and the broker never confirms a binding on its own. Supervisors should show the host prominently, default to deny, never pre-select `allow-tab`, and prefer importing with `bind` from a trusted host-side prompt.",
+      "params": {
+        "type": "object", "additionalProperties": false, "required": ["id", "value"],
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "value": { "$ref": "#/definitions/secretValue" },
+          "sentinel": { "type": "string", "pattern": "^[A-Za-z0-9_.~-]{32,256}$", "description": "Host-chosen sentinel, so a sentinel already written into a workspace file stays valid across restarts. Must be unique. Minted by the broker if absent." },
+          "bind": { "$ref": "#/definitions/bindOrBindings", "description": "Confirmed bindings." },
+          "proposedBind": { "$ref": "#/definitions/bindOrBindings", "description": "Only shapes the first-use prompt." },
+          "inject": { "$ref": "#/definitions/inject", "description": "Default inject for bindings that have none." },
+          "provider": { "type": "string", "pattern": "^[a-z0-9-]{1,32}$" },
+          "source": {
+            "type": "object", "additionalProperties": false, "required": ["kind"],
+            "properties": {
+              "kind": { "enum": ["workspace-scan", "password-input", "user", "host"] },
+              "path": { "type": "string", "maxLength": 512 },
+              "rule": { "type": "string", "maxLength": 512 },
+              "label": { "type": "string", "maxLength": 512 }
+            },
+            "description": "Where the secret came from (audit only). Defaults to `{kind: host}`."
+          }
+        }
+      },
+      "result": { "type": "object", "additionalProperties": false, "required": ["id", "sentinel", "confirmed"],
+                  "properties": { "id": { "type": "string" }, "sentinel": { "type": "string" }, "confirmed": { "type": "boolean" } } },
+      "examples": [{
+        "params": { "id": "dotenv-openai", "value": "<real value from the scan>", "sentinel": "seclab_sentinel_openai_0123456789abcdef0123456789abcdef",
+                    "bind": [{ "host": "api.openai.com", "path": "/v1/**", "methods": ["GET", "POST"] }],
+                    "inject": { "header": "Authorization", "fmt": "Bearer {value}" },
+                    "source": { "kind": "workspace-scan", "path": ".env", "rule": "openai-api-key" } },
+        "result": { "id": "dotenv-openai", "sentinel": "seclab_sentinel_openai_0123456789abcdef0123456789abcdef", "confirmed": true }
+      }]
+    },
+    "credential.list": {
+      "description": "Every credential the broker knows. Values are never included.",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": { "type": "object", "additionalProperties": false, "required": ["credentials"],
+                  "properties": { "credentials": { "type": "array", "items": { "$ref": "#/definitions/credentialInfo" } } } }
+    },
+    "approval.list": {
+      "description": "Pending approvals. Use after reconnecting.",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": { "type": "object", "additionalProperties": false, "required": ["approvals"],
+                  "properties": { "approvals": { "type": "array", "items": { "$ref": "#/definitions/approval" } } } }
+    },
+    "approval.decide": {
+      "description": "Answer an approval. For `kind: egress`, `allow-tab` adds `rule` (or `suggestedRule`) to the tab's runtime policy. For `kind: credential-binding`, `allow-tab` confirms `binding` (or `suggestedBinding`); a binding that does not cover the held request causes that request to be denied. `allow-once` releases the held request(s) only. Deciding an unknown or already resolved approval is `-32602`.",
+      "params": {
+        "type": "object", "additionalProperties": false, "required": ["approvalId", "decision"],
+        "properties": {
+          "approvalId": { "type": "string", "maxLength": 64 },
+          "decision": { "$ref": "#/definitions/decision" },
+          "rule": { "$ref": "#/definitions/rule", "description": "Egress `allow-tab` only: the rule to add instead of `suggestedRule`." },
+          "binding": { "$ref": "#/definitions/binding", "description": "Credential-binding `allow-tab` only: the binding to confirm instead of `suggestedBinding`." }
+        }
+      },
+      "result": { "type": "object", "additionalProperties": false, "properties": {} },
+      "examples": [{ "params": { "approvalId": "9f2c6d0e5b8a4f7e9d1c3b5a7e9f1d2c", "decision": "allow-once" }, "result": {} }]
+    },
+    "ca.get": {
+      "description": "The tab CA's public certificate. The private key never leaves the broker's tmpfs.",
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": { "type": "object", "additionalProperties": false, "required": ["certPem", "pemSha256"],
+                  "properties": { "certPem": { "type": "string" }, "pemSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" } } }
+    },
+    "audit.tail": {
+      "description": "The most recent audit events (the broker keeps at most 2000).",
+      "params": { "type": "object", "additionalProperties": false,
+                  "properties": { "limit": { "type": "integer", "minimum": 1, "maximum": 2000, "default": 100 } } },
+      "result": { "type": "object", "additionalProperties": false, "required": ["events"],
+                  "properties": { "events": { "type": "array", "items": { "$ref": "#/definitions/auditEvent" } } } }
+    },
+    "broker.shutdown": {
+      "description": "Drop every credential and sentinel from memory, then stop the proxy and exit. Call it when the tab closes.",
+      "params": { "type": "object", "additionalProperties": false, "properties": { "reason": { "type": "string", "maxLength": 64 } } },
+      "result": { "type": "object", "additionalProperties": false, "properties": {} }
+    }
+  },
+  "notifications": {
+    "approval.requested": {
+      "description": "A request is held. Show a prompt and answer with `approval.decide` before `expiresAt`, or the broker denies. Egress approvals are per origin (every request to the same `scheme, host, port` waits on one prompt). Credential-binding approvals are per exact request shape (credential, origin, method, path, inject header and format).",
+      "params": { "$ref": "#/definitions/approval" }
+    },
+    "approval.resolved": {
+      "description": "Dismiss the prompt.",
+      "params": { "type": "object", "additionalProperties": false, "required": ["approvalId", "decision", "by"],
+                  "properties": { "approvalId": { "type": "string" }, "decision": { "$ref": "#/definitions/decision" }, "by": { "enum": ["controller", "timeout"] } } }
+    },
+    "policy.changed": {
+      "description": "The allow list changed at runtime. Persist it if the user chose \"always\".",
+      "params": { "type": "object", "additionalProperties": false, "required": ["revision", "added", "removed", "by"],
+                  "properties": { "revision": { "type": "integer" }, "added": { "type": "array", "items": { "$ref": "#/definitions/rule" } },
+                                  "removed": { "type": "array", "items": { "type": "string" } }, "by": { "enum": ["controller", "approval"] },
+                                  "approvalId": { "type": "string" } } }
+    },
+    "credential.needed": {
+      "description": "A request is held for a credential with no value. Answer with `credential.provide`, or the request fails with `503` after the hold timeout.",
+      "params": { "type": "object", "additionalProperties": false, "required": ["id"], "properties": { "id": { "type": "string" } } }
+    },
+    "credential.bindingConfirmed": {
+      "description": "An imported credential's binding was confirmed by `allow-tab`. Persist it with the credential and pass it as `bind` on the next import.",
+      "params": { "type": "object", "additionalProperties": false, "required": ["id", "binding", "approvalId"],
+                  "properties": { "id": { "type": "string" }, "binding": { "$ref": "#/definitions/binding" }, "approvalId": { "type": "string" } } }
+    },
+    "credential.derived": {
+      "description": "An upstream minted a credential in answer to a credentialed request. The tab only ever sees `sentinel`, which inherits the parent's bindings.",
+      "params": { "type": "object", "additionalProperties": false, "required": ["id", "parentId", "rule", "sentinel"],
+                  "properties": { "id": { "type": "string" }, "parentId": { "type": "string" }, "rule": { "type": "string" }, "sentinel": { "type": "string" } } }
+    },
+    "audit.event": {
+      "description": "One audit event (also printed as `{\"audit\": …}` on the broker's stderr). Every string is scrubbed: audit events never contain a real value or a sentinel.",
+      "params": { "$ref": "#/definitions/auditEvent" }
+    }
+  },
+  "auditTypes": {
+    "broker.started": "The proxy started.",
+    "broker.shutdown": "`broker.shutdown` was called.",
+    "control.connected": "A control client connected.",
+    "control.disconnected": "A control client disconnected.",
+    "proxy.auth_set": "The proxy credential was set or rotated.",
+    "proxy.auth_failed": "Proxy authentication failed (rate-limited to one event per second, with a count).",
+    "policy.loaded": "`policy.load` succeeded.",
+    "policy.updated": "`policy.update` succeeded.",
+    "request.allowed": "A request was forwarded.",
+    "request.denied": "A request was answered by the broker with an error status.",
+    "approval.requested": "A prompt was opened.",
+    "approval.resolved": "A prompt was answered or timed out.",
+    "approval.queue_full": "A prompt could not be opened because a hold limit was reached.",
+    "credential.provided": "A real value was provided.",
+    "credential.revoked": "A real value was revoked.",
+    "credential.imported": "A credential was imported.",
+    "credential.needed": "A request is waiting for a value.",
+    "credential.unavailable": "No value arrived before the hold timeout.",
+    "credential.injected": "A real value was written into a request header.",
+    "credential.derived": "A minted token was re-sentinelised.",
+    "credential.backstop_denied": "A credentialed request hit the provider backstop.",
+    "sentinel.misplaced": "A sentinel appeared outside its binding.",
+    "token.redacted": "A minted token was redacted (no parent credential, or a limit was reached).",
+    "session.stripped": "A session header was stripped from a credentialed response.",
+    "response.blocked": "A response or WebSocket frame was blocked by the scanner.",
+    "upstream.blocked": "The upstream address guard refused a connection.",
+    "upstream.dns_failed": "The broker could not resolve an upstream name.",
+    "tcp.blocked": "A non-HTTP TCP stream was killed.",
+    "udp.blocked": "A UDP flow was killed.",
+    "engine.error": "A hook failed and the flow was failed closed."
+  },
+  "definitions": {
+    "secretValue": { "type": "string", "minLength": 8, "maxLength": 16384, "pattern": "^[^\\u0000-\\u001f\\u007f]*$", "description": "A real secret: 8-16384 characters, valid UTF-8, no control characters." },
+    "decision": { "enum": ["allow-once", "allow-tab", "deny"] },
+    "bindOrBindings": { "oneOf": [{ "$ref": "#/definitions/binding" }, { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "#/definitions/binding" } }] },
+    "requestSummary": {
+      "type": "object", "additionalProperties": false, "required": ["scheme", "host", "port", "method", "path"],
+      "properties": { "scheme": { "enum": ["https", "http"] }, "host": { "type": "string" }, "port": { "type": "integer" },
+                      "method": { "type": "string" }, "path": { "type": "string" } }
+    },
+    "approval": {
+      "type": "object", "additionalProperties": false,
+      "required": ["approvalId", "kind", "request", "createdAt", "expiresAt", "waiting", "decisions"],
+      "properties": {
+        "approvalId": { "type": "string" },
+        "kind": { "enum": ["egress", "credential-binding"] },
+        "request": { "$ref": "#/definitions/requestSummary" },
+        "createdAt": { "type": "number" },
+        "expiresAt": { "type": "number" },
+        "waiting": { "type": "integer", "description": "Requests held on this approval." },
+        "decisions": { "type": "array", "items": { "$ref": "#/definitions/decision" } },
+        "suggestedRule": { "$ref": "#/definitions/rule", "description": "Egress only." },
+        "credentialId": { "type": "string", "description": "Credential-binding only." },
+        "suggestedBinding": { "$ref": "#/definitions/binding", "description": "Credential-binding only. Advisory and tab-steerable." }
+      }
+    },
+    "credentialInfo": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "origin", "sentinel", "confirmed", "hasValue", "bind", "proposedBind", "provider", "parentId"],
+      "properties": {
+        "id": { "type": "string" },
+        "origin": { "enum": ["policy", "import", "derived"] },
+        "sentinel": { "type": "string" },
+        "confirmed": { "type": "boolean" },
+        "hasValue": { "type": "boolean" },
+        "bind": { "type": "array", "items": { "$ref": "#/definitions/binding" } },
+        "proposedBind": { "type": "array", "items": { "$ref": "#/definitions/binding" } },
+        "provider": { "type": ["string", "null"] },
+        "parentId": { "type": ["string", "null"] }
+      }
+    },
+    "auditEvent": {
+      "type": "object", "required": ["seq", "ts", "type"],
+      "properties": { "seq": { "type": "integer" }, "ts": { "type": "number" }, "type": { "type": "string" }, "tabId": { "type": "string" } },
+      "description": "`type` is one of the audit types below; other fields depend on the type."
+    }
+  }
+}
