@@ -11,6 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { TabdClient, type TabdChannel } from '../tabd-src/client.ts';
+import { TabActivity } from './activity.ts';
 
 const AUTHORITY_PREFIX = 'seclab';
 const TAB_ID_RE = /^t-[a-z2-7]{26}$/;
@@ -25,6 +26,7 @@ let log: vscode.LogOutputChannel;
 let client: TabdClient | undefined;
 let clientReady: Promise<TabdClient> | undefined;
 let extensionContext: vscode.ExtensionContext;
+let activity: TabActivity | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
 	extensionContext = context;
@@ -43,6 +45,8 @@ export function activate(context: vscode.ExtensionContext): void {
 	);
 
 	showStatus();
+	// Tab activity (observability) for this window's tab; filled in by resolve().
+	activity = new TabActivity(context);
 
 	// Route local folder windows into tabs (no core patch; see docs/edr/20261104-tab-manager-routing.md).
 	if (vscode.env.remoteName === undefined) {
@@ -108,6 +112,7 @@ function getClient(): Promise<TabdClient> {
 			log.warn(`seclab-tabd exited (${String(code)})`);
 			client = undefined;
 			clientReady = undefined;
+			activity?.detach();
 		});
 		const init = await c.initialize('seclab-tab-manager', '0.1.0');
 		log.info(`seclab-tabd ${init.protocolVersion}; drivers ${JSON.stringify(init.drivers)}`);
@@ -119,6 +124,10 @@ function getClient(): Promise<TabdClient> {
 }
 
 function onNotification(method: string, params: Record<string, unknown>): void {
+	if (method === 'tab.event' || method === 'tab.observation') {
+		activity?.onNotification(method, params);
+		return;
+	}
 	if (method === 'tab.status') {
 		log.info(`tab ${String(params.tabId)}: ${String(params.phase)}`);
 		const conditions = (params.conditions as Array<{ type: string; status: string; message?: string }> | undefined) ?? [];
@@ -186,6 +195,7 @@ async function resolve(authority: string, ctx: vscode.RemoteAuthorityResolverCon
 			}
 			throw vscode.RemoteAuthorityResolverError.NotAvailable('Tab not opened: secrets unresolved', false);
 		});
+	void activity?.attach(c, tabId).catch(e => log.warn(`tab activity unavailable: ${(e as Error).message}`));
 
 	const authorityResult = new vscode.ManagedResolvedAuthority(async () => {
 		const cl = await getClient();

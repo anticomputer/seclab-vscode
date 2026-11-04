@@ -61,8 +61,56 @@
 				"title": "Reset This Tab…",
 				"category": "seclab",
 				"enablement": "remoteName == seclab"
+			},
+			{
+				"command": "seclab.activity.focus",
+				"title": "Show Tab Activity",
+				"category": "seclab"
+			},
+			{
+				"command": "seclab.activity.filter",
+				"title": "Filter by Priority…",
+				"category": "seclab",
+				"icon": "$(filter)"
+			},
+			{
+				"command": "seclab.activity.toggleDetections",
+				"title": "Toggle Detections Only",
+				"category": "seclab",
+				"icon": "$(alert)"
+			},
+			{
+				"command": "seclab.activity.deepMode",
+				"title": "Observation Mode…",
+				"category": "seclab",
+				"icon": "$(telescope)"
 			}
 		],
+		"viewsContainers": {
+			"panel": [
+				{
+					"id": "seclabActivity",
+					"title": "Tab Activity",
+					"icon": "media/activity.svg"
+				}
+			]
+		},
+		"views": {
+			"seclabActivity": [
+				{
+					"id": "seclab.tabActivity",
+					"name": "Tab Activity",
+					"when": "remoteName == seclab"
+				}
+			]
+		},
+		"menus": {
+			"view/title": [
+				{ "command": "seclab.activity.filter", "when": "view == seclab.tabActivity", "group": "navigation@1" },
+				{ "command": "seclab.activity.toggleDetections", "when": "view == seclab.tabActivity", "group": "navigation@2" },
+				{ "command": "seclab.activity.deepMode", "when": "view == seclab.tabActivity", "group": "navigation@3" }
+			]
+		},
 		"keybindings": [
 			{
 				"command": "seclab.openFolder",
