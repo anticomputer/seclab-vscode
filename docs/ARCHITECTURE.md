@@ -8,7 +8,10 @@
 - **Tab supervisor.** `seclab-tabd` sits between the editor and the runtimes, speaking a versioned stdio protocol ([ADR](adr/20261104-tab-supervisor.md), [protocol](tabd/PROTOCOL.md)). The Tab Manager extension is now only the resolver, the routing and the UI.
 - **Drivers.** sbx is the primary runtime (one microVM per tab); OCI is the second ([ADR](adr/20261104-pluggable-sandbox-provider.md), superseded by the supervisor ADR for the interface).
 - **Egress fence and broker.** Under sbx, the per-tab sbx policy is an outer fence. It allows only that tab's broker, mirrors every global allow as a per-tab deny, re-verifies on every connect and every 60 s, and fails closed ([ADR](adr/20261104-single-broker-sbx-fence.md), [EDR](edr/20261104-sbx-fence-spike.md)). Our broker is the only engine.
-- **Extension placement.** Every non-built-in extension is forced into the tab, and nothing extension-based runs in local windows (patches 0002/0003; [ADR](adr/20261104-extension-placement-hardening.md)).
+- **Extension placement.** Every non-built-in extension is forced into the tab, and nothing extension-based runs in local windows (patches 0002–0004; [ADR](adr/20261104-extension-placement-hardening.md)).
+- **Pre-mount secret scan.** Before a folder is mounted into a tab, gitleaks scans it (the worktree, every git dir, history, the object store and archives) in a network-less container. Findings block the open until each one is moved to the broker vault or accepted as a recorded exception ([ADR](adr/20261104-pre-mount-secret-scan.md)).
+- **Broker.** One policy and credential engine for all drivers, with a versioned stdio control protocol ([ADR](adr/20261104-broker-policy-and-control-protocol.md), [protocol](broker-protocol.md)). It's built and tested standalone; wiring it into tabs is M2/M3.
+- **Repository.** This is a private GitHub repo, so that macOS builds can run on Actions ([ADR](adr/20261104-private-github-repo.md)).
 - **Open items.**
   - Main-process routing is proposed ([ADR](adr/20261104-route-folder-opens-in-main.md)); a high-severity residual remains.
   - The REH server→client IPC filter (`download` channel, pty commands) is a critical item owned by M4 ([review](security-reviews/20261104-tabd-protocol-design.md)).
@@ -36,6 +39,8 @@ All VS Code permalinks are pinned to `microsoft/vscode@8819991`.
 
 ## 1. The core idea in one paragraph
 
+([ADR tab is the containment unit](adr/20261104-tab-is-the-containment-unit.md), [ADR reuse the remote extension host](adr/20261104-reuse-remote-extension-host.md))
+
 VS Code already splits the trusted UI from the code that runs extensions. The UI is a Chromium-sandboxed renderer plus the Electron main process. Extension code runs in a *remote extension host* (REH) that can live on another machine or container. That split was built for **connectivity** (SSH, Dev Containers, Codespaces). It was never built as a **security boundary**.
 
 We turn it into one. Every workspace window is forced through a built-in remote resolver into its **own sandbox** that runs the REH. Three controls make that sandbox actually contain things:
@@ -48,7 +53,7 @@ Control 3 is the one that is easy to miss (§4.6). Without it, a sandboxed exten
 
 ## 2. Threat model
 
-([ADR threat model](adr/20261104-threat-model-rogue-extension.md), [ADR no real secret](adr/20261104-no-real-secret-in-a-tab.md))
+([ADR threat model](adr/20261104-threat-model-rogue-extension.md), [ADR no real secret](adr/20261104-no-real-secret-in-a-tab.md) and its broker-side counterpart [ADR no real secret enters a tab](adr/20261104-no-real-secret-enters-a-tab.md))
 
 | | |
 |---|---|
