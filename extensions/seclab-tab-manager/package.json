@@ -1,0 +1,88 @@
+{
+	"name": "tab-manager",
+	"displayName": "seclab Tab Manager",
+	"description": "Opens every folder as a sandboxed tab (remote extension host in a per-tab sandbox).",
+	"version": "0.1.0",
+	"publisher": "seclab",
+	"license": "MIT",
+	"private": true,
+	"engines": {
+		"vscode": "^1.100.0"
+	},
+	"extensionKind": [
+		"ui"
+	],
+	"enabledApiProposals": [
+		"resolvers"
+	],
+	"activationEvents": [
+		"onResolveRemoteAuthority:seclab",
+		"*"
+	],
+	"main": "./out/extension",
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": true
+		},
+		"virtualWorkspaces": true
+	},
+	"contributes": {
+		"resourceLabelFormatters": [
+			{
+				"scheme": "vscode-remote",
+				"authority": "seclab+*",
+				"formatting": {
+					"label": "${path}",
+					"separator": "/",
+					"tildify": true,
+					"workspaceSuffix": "Tab",
+					"workspaceTooltip": "Sandboxed tab"
+				}
+			}
+		],
+		"commands": [
+			{
+				"command": "seclab.openFolder",
+				"title": "Open Folder in New Tab…",
+				"category": "seclab"
+			},
+			{
+				"command": "seclab.showLog",
+				"title": "Show Tab Manager Log",
+				"category": "seclab"
+			}
+		],
+		"keybindings": [
+			{
+				"command": "seclab.openFolder",
+				"key": "ctrl+k ctrl+o",
+				"mac": "cmd+o"
+			}
+		],
+		"configuration": {
+			"title": "seclab tabs",
+			"properties": {
+				"seclab.tabs.driver": {
+					"type": "string",
+					"enum": ["sbx", "oci"],
+					"default": "sbx",
+					"scope": "application",
+					"description": "Sandbox runtime driver for new tabs."
+				},
+				"seclab.tabs.image": {
+					"type": "string",
+					"default": "",
+					"scope": "application",
+					"description": "Tab template image (default: seclab-tab:local for sbx, seclab-tab-oci:local for oci)."
+				},
+				"seclab.tabs.allowedRoots": {
+					"type": "array",
+					"items": { "type": "string" },
+					"default": [],
+					"scope": "application",
+					"description": "If set, folders may only be opened as tabs under these absolute paths."
+				}
+			}
+		}
+	}
+}

@@ -18,8 +18,9 @@ for ext in "$ROOT"/extensions/seclab-*/; do
 	name="$(basename "$ext")"
 	rm -rf "$DEST/extensions/$name"
 	mkdir -p "$DEST/extensions/$name"
-	# Copy sources only; no node_modules/out/dist from the developer's tree.
-	tar -C "$ext" --exclude=node_modules --exclude=out --exclude=dist -cf - . | tar -C "$DEST/extensions/$name" -xf -
+	# Copy sources only; no node_modules/out/dist from the developer's tree. -h dereferences
+	# the tabd-src symlink so the supervisor sources ship inside the extension.
+	tar -C "$ext" -h --exclude=node_modules --exclude=out --exclude=dist -cf - . | tar -C "$DEST/extensions/$name" -xf -
 	echo "prepare: overlay extensions/$name"
 done
 
