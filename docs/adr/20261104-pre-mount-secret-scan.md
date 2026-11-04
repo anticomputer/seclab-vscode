@@ -66,3 +66,56 @@ read them.
 
 ## Evidence
 `node test/secrets/run.ts oci|sbx`: blocked with worktree, .git/config and history findings; the moves rewrite to sentinels; history needs an exception; the audit log has no secret values; the moved values aren't visible in the tab; restore works. Supervisor unit tests cover block, accept, move, restore and the no-scanner fail-closed path.
+
+## Addendum (2026-11-04, security review round 5)
+The decision stands. The review showed that a tab could blind later scans by
+leaving files in its workspace, so the scanner was hardened:
+- **Coverage now includes:**
+  - every git dir under the workspace (nested repositories, submodules
+    under `.git/modules`, bare repos), with each one's config and history;
+  - history with `--all --reflog`;
+  - an **object-store pass** over every blob, commit and tag object
+    (`git cat-file --batch-all-objects`), which covers the index, stash,
+    reflog-only and dangling objects. It backstops any history rewriting.
+- **Workspace suppression inputs are ignored:**
+  - gitleaks config and ignore files come from our tmpfs;
+  - no pass uses the workspace itself as gitleaks' source, because gitleaks
+    always loads `<source>/.gitleaksignore`;
+  - `--ignore-gitleaks-allow` is set;
+  - git uses `--text` plus `GIT_CONFIG_*` overrides (colour, prefixes,
+    `bigFileThreshold`, `format.pretty`, `log.showRoot`, attributes, …) and
+    `GIT_NO_REPLACE_OBJECTS`.
+- **Partial results always block:** each pass is framed separately, so a
+  failed or oversized pass can't discard another pass's findings. A report
+  over 64 MiB, or more than 64 git dirs, is an *overflow*. It gets its own
+  warning that decoys may be hiding real secrets.
+- **Moving and restoring a value** is a byte-exact splice, verified by
+  reading the file back. The vault entry is written before the file and
+  removed only after a verified restore.
+- **Displayed file names are escaped** (control, bidi and line-separator
+  characters), and files with such names are never movable.
+
+Residuals added:
+- **Paths in gitleaks' default global allowlist are not scanned in the working
+  tree.** This covers lockfiles, `node_modules/`, some `vendor/` trees, images
+  and any path containing `gitleaks.toml`. Committed copies are still caught by
+  the object-store pass.
+- **The scanner needs Docker.** Docker Desktop is already required for the
+  per-tab broker. Without it, every open shows the scan-incomplete prompt.
+- **A git dir whose `.git` file points outside the workspace** (for example a
+  worktree or submodule checkout) isn't mounted, so the tab can't read it
+  either.
+
+Regressions: `test/secrets/run.ts` adds:
+- `.gitleaksignore` and `gitleaks:allow`;
+- `-diff`/`binary` attributes, `core.bigFileThreshold=1`,
+  `diff.noprefix`, `color.diff=always` and `log.showRoot=false`;
+- a reflog-only commit, a staged-only blob, and a nested repo's config.
+
+Unit tests cover frame parsing (partial results, overflow, malformed output),
+name escaping, and byte-exact rewrites containing `$&` and non-UTF-8 bytes.
+Evidence in gitleaks at
+[83d9cd6](https://github.com/gitleaks/gitleaks/blob/83d9cd684c87d95d656c1458ef04895a7f1cbd8e/cmd/root.go#L317)
+(the source `.gitleaksignore` is always loaded) and
+[detect.go#L296](https://github.com/gitleaks/gitleaks/blob/83d9cd684c87d95d656c1458ef04895a7f1cbd8e/detect/detect.go#L296)
+(the file at the config path is skipped).
