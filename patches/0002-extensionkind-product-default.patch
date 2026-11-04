@@ -1,5 +1,5 @@
 diff --git a/src/vs/workbench/services/extensions/common/extensionManifestPropertiesService.ts b/src/vs/workbench/services/extensions/common/extensionManifestPropertiesService.ts
-index d9982d9e..a3455171 100644
+index d9982d9e..d3dca553 100644
 --- a/src/vs/workbench/services/extensions/common/extensionManifestPropertiesService.ts
 +++ b/src/vs/workbench/services/extensions/common/extensionManifestPropertiesService.ts
 @@ -468,8 +468,8 @@ export class ExtensionManifestPropertiesService extends Disposable implements IE
@@ -13,13 +13,19 @@ index d9982d9e..a3455171 100644
  		if (typeof result !== 'undefined') {
  			return this.toArray(result);
  		}
-@@ -502,7 +502,8 @@ export class ExtensionManifestPropertiesService extends Disposable implements IE
+@@ -502,7 +502,14 @@ export class ExtensionManifestPropertiesService extends Disposable implements IE
  		}
  
  		const extensionId = getGalleryExtensionId(manifest.publisher, manifest.name);
 -		return this._productExtensionKindsMap.get(extensionId);
-+		// seclab: '*' is the kind of every extension that product.json does not list explicitly
-+		return this._productExtensionKindsMap.get(extensionId) ?? this._productExtensionKindsMap.get('*');
++		const kinds = this._productExtensionKindsMap.get(extensionId);
++		const defaultKinds = this._productExtensionKindsMap.get('*');
++		// seclab: '*' is the kind of every extension that product.json does not list explicitly, and
++		// explicit entries only apply to built-in extensions (a gallery copy cannot claim a built-in id)
++		if (defaultKinds && (!kinds || (manifest as { isBuiltin?: boolean }).isBuiltin !== true)) {
++			return defaultKinds;
++		}
++		return kinds;
  	}
  
  	private getProductVirtualWorkspaceSupport(manifest: IExtensionManifest): { default?: boolean; override?: boolean } | undefined {
