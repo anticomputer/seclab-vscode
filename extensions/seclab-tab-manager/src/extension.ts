@@ -171,10 +171,10 @@ async function resolve(authority: string, ctx: vscode.RemoteAuthorityResolverCon
 				try {
 					return await c.request<{ connectionToken: string }>('tab.ensureRunning', { tabId, acceptFindings: accept });
 				} catch (e) {
-					const err = e as Error & { code?: number };
+					const err = e as Error & { code?: number; data?: unknown };
 					if (err.code === -32020 || err.code === -32021) {
 						// Secrets found in the folder (or the scan could not complete): decide in trusted UI.
-						accept = await resolveSecretFindings(c, tabId, hostPath, err.code === -32021);
+						accept = await resolveSecretFindings(c, tabId, hostPath, err.data as ScanStatus | undefined);
 						continue;
 					}
 					throw vscode.RemoteAuthorityResolverError.TemporarilyNotAvailable(`Tab failed to start: ${err.message}`);
@@ -219,6 +219,15 @@ function toMessagePassing(ch: TabdChannel): vscode.ManagedMessagePassing {
 // ---- pre-mount secret findings (ADR 20261104-pre-mount-secret-scan) -------------------------
 
 interface SecretFinding { id: string; source: string; file: string; line: number; rule: string; movable: boolean }
+interface ScanStatus { findings?: SecretFinding[]; incomplete?: boolean; overflow?: boolean; error?: string | null }
+
+/** Text from the user's folder (file names) is data: escape anything that could fake layout. */
+function safeText(s: unknown, max = 200): string {
+	const esc = String(s).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/gu, c => `\\u{${c.codePointAt(0)!.toString(16)}}`);
+	return esc.length > max ? `${esc.slice(0, max - 1)}…` : esc;
+}
+
+const SOURCE_LABEL: Record<string, string> = { history: '  (git history)', objects: '  (git object store)', 'git-config': '  (git config)' };
 
 // Suggested credential bindings for "move to broker", by gitleaks rule prefix.
 const BIND_SUGGESTIONS: Array<[RegExp, string]> = [
@@ -227,32 +236,37 @@ const BIND_SUGGESTIONS: Array<[RegExp, string]> = [
 ];
 
 /**
- * Secrets were found in the folder (or the scan failed). Returns the finding ids to accept
+ * Secrets were found in the folder (or the scan failed). Returns the ids to accept
  * (recorded as an exception) after the user decides, or throws to cancel. "Move to broker"
  * rewrites the working copy (sentinels) and returns undefined so the caller rescans.
  */
-async function resolveSecretFindings(c: TabdClient, tabId: string, hostPath: string, incomplete: boolean): Promise<string[] | undefined> {
-	if (incomplete) {
-		const pick = await vscode.window.showWarningMessage(`The secret scan of "${hostPath}" could not complete.`,
-			{ modal: true, detail: 'Opening without a completed scan is recorded as an exception in the audit log.' }, 'Open Anyway');
+async function resolveSecretFindings(c: TabdClient, tabId: string, hostPath: string, status: ScanStatus | undefined): Promise<string[] | undefined> {
+	const findings = Array.isArray(status?.findings) ? status.findings : [];
+	const incomplete = status?.incomplete !== false;
+	const name = safeText(path.basename(hostPath), 80);
+	const incompleteNote = !incomplete ? '' : status?.overflow
+		? '\n\nWARNING: the scan produced more secret-like matches than can be reviewed. This can be a deliberate attempt (for example by an extension that ran in this tab before) to hide real secrets among decoys. Opening exposes every file in the folder to the tab.'
+		: `\n\nThe scan did not complete (${safeText(status?.error ?? 'unknown error', 300)}). Other secrets may be present.`;
+	if (findings.length === 0) {
+		const title = status?.overflow ? `Too many secret-like values in "${name}" to review.` : `The secret scan of "${name}" could not complete.`;
+		const pick = await vscode.window.showWarningMessage(title,
+			{ modal: true, detail: `${incompleteNote.trim()}\n\nOpening anyway is recorded as an exception in the audit log.` }, 'Open Anyway');
 		if (pick !== 'Open Anyway') {
 			throw vscode.RemoteAuthorityResolverError.NotAvailable('Tab not opened: secret scan incomplete', false);
 		}
 		return ['scan-incomplete'];
 	}
-	const { findings } = await c.request<{ findings: SecretFinding[] }>('tab.scan', { tabId });
-	if (findings.length === 0) {
-		return undefined;
-	}
-	// File names come from the user's folder: shown as plain text, values are never shown.
-	const list = findings.map(f => `• ${f.file}:${f.line}  ${f.rule}${f.source === 'history' ? '  (git history)' : ''}  [redacted]`).join('\n');
+	// File names come from the user's folder: escaped plain text, values are never shown.
+	const shown = findings.slice(0, 50);
+	const list = shown.map(f => `• ${safeText(f.file)}${f.source === 'objects' ? '' : `:${Number(f.line)}`}  ${safeText(f.rule, 64)}${SOURCE_LABEL[f.source] ?? ''}  [redacted]`).join('\n')
+		+ (findings.length > shown.length ? `\n… and ${findings.length - shown.length} more` : '');
 	const movable = findings.filter(f => f.movable);
 	const choices = movable.length ? ['Move to Broker…', 'Open Anyway'] : ['Open Anyway'];
-	const pick = await vscode.window.showWarningMessage(`${findings.length} secret(s) found in "${path.basename(hostPath)}". A sandboxed tab must never see a real secret.`,
-		{ modal: true, detail: `${list}\n\nMove to Broker replaces each value in your working copy with a sentinel (no commit is made; restorable). Open Anyway records an exception.` },
+	const pick = await vscode.window.showWarningMessage(`${findings.length} secret(s) found in "${name}". A sandboxed tab must never see a real secret.`,
+		{ modal: true, detail: `${list}${incompleteNote}\n\nMove to Broker replaces each value in your working copy with a sentinel (no commit is made; restorable). Git history and object-store copies can't be moved: purge them (for example git filter-repo, then expire the reflog and gc) or open anyway. Open Anyway records an exception.` },
 		...choices);
 	if (pick === 'Open Anyway') {
-		return findings.map(f => f.id);
+		return [...findings.map(f => f.id), ...(incomplete ? ['scan-incomplete'] : [])];
 	}
 	if (pick !== 'Move to Broker…') {
 		throw vscode.RemoteAuthorityResolverError.NotAvailable('Tab not opened: secrets in folder', false);
@@ -261,7 +275,7 @@ async function resolveSecretFindings(c: TabdClient, tabId: string, hostPath: str
 	for (const f of movable) {
 		const suggestion = BIND_SUGGESTIONS.find(([re]) => re.test(f.rule))?.[1] ?? '';
 		const host = await vscode.window.showInputBox({
-			title: `Bind ${f.file}:${f.line} (${f.rule}) to a host`,
+			title: `Bind ${safeText(f.file, 120)}:${Number(f.line)} (${safeText(f.rule, 64)}) to a host`,
 			prompt: 'The broker will only ever send this credential to this host (wildcard *.example.com allowed).',
 			value: suggestion, ignoreFocusOut: true,
 			validateInput: v => /^(?:\*\.)?[a-z0-9.-]{1,253}$/i.test(v) ? undefined : 'Enter a hostname',
