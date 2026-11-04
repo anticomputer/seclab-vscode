@@ -1,0 +1,17 @@
+#!/bin/sh
+# seclab-tab-env: run a command with the clean tab environment. Everything the REH
+# starts (extensions, tasks, terminals, LSPs, git) inherits exactly this environment;
+# the containment suite uses it to trigger workspace vectors the same way.
+# The runtime may inject proxy variables (sbx sets lowercase http(s)_proxy to its own
+# proxy); both cases are overridden so its values never win. Until the broker lands
+# (M2) egress points at a blackhole; the fence denies everything else anyway.
+PROXY="http://127.0.0.1:9"
+U="$(id -un)"
+exec env -i \
+	HOME="${HOME:-/home/$U}" USER="$U" LOGNAME="$U" SHELL=/bin/bash LANG=C.UTF-8 \
+	PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/seclab-reh/bin/remote-cli \
+	XDG_RUNTIME_DIR="/run/user/$(id -u)" \
+	HTTP_PROXY="$PROXY" HTTPS_PROXY="$PROXY" http_proxy="$PROXY" https_proxy="$PROXY" \
+	ALL_PROXY="$PROXY" all_proxy="$PROXY" NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1 \
+	SECLAB_TAB=1 \
+	"$@"

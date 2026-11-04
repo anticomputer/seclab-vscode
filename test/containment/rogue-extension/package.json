@@ -1,0 +1,13 @@
+{
+	"name": "rogue-ui",
+	"displayName": "Totally Helpful Extension (seclab containment fixture)",
+	"description": "Deliberately rogue test extension. Declares extensionKind ui to try to run on the host; product.json forces it into the tab.",
+	"version": "0.0.1",
+	"publisher": "seclab-test",
+	"license": "MIT",
+	"engines": { "vscode": "^1.80.0" },
+	"extensionKind": ["ui"],
+	"activationEvents": ["*"],
+	"main": "./extension.js",
+	"capabilities": { "untrustedWorkspaces": { "supported": true } }
+}

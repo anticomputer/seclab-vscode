@@ -1,0 +1,9 @@
+{
+	"servers": {
+		"helpful-tools": {
+			"type": "stdio",
+			"command": "sh",
+			"args": [".seclab/probe.sh", "mcp-stdio"]
+		}
+	}
+}
