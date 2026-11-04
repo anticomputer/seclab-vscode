@@ -194,6 +194,67 @@ class SeclabFilter implements ISeclabFilter {
 }
 
 /**
+ * Commands a tab asked for that are still running. The capability taint below
+ * is the primary mechanism; this counter is the fail-closed backstop for a
+ * handler that reaches the GLOBAL ICommandService instead of the one threaded
+ * through its accessor -- a constructor-injected or module-imported reference.
+ * While any tab command is in flight, a denied command is refused whoever asks.
+ *
+ * Over-denial is possible if the user triggers a denied command concurrently.
+ * That is the closed direction and is accepted (ADR 20261104-tab-command-taint).
+ */
+let seclabInFlight = 0;
+const seclabEscapes: string[] = [];
+
+/** Denied escapes observed via the global service. Probes assert on these. */
+export function seclabTaintEscapes(): readonly string[] {
+	return seclabEscapes;
+}
+
+/**
+ * Consulted by CommandService before every execution. `origin` is set only when
+ * the call came from a tab, directly or through the tainted service.
+ */
+export function seclabTaintInFlight(id: string, origin: unknown): Error | undefined {
+	const filter = origin as ISeclabFilter | undefined;
+	if (filter) {
+		const verdict = filter.commandVerdict(id);
+		if (verdict !== 'allow' && verdict !== 'allow_with_constraint') {
+			return new Error('Unsupported operation');
+		}
+		return undefined;
+	}
+	if (seclabInFlight > 0 && SECLAB_COMMANDS.get(id)?.verdict !== 'allow') {
+		// Not tab-originated as far as the call path knows, but a tab command is
+		// running: this is the laundering shape the backstop exists for.
+		seclabEscapes.push(id);
+		return new Error('Unsupported operation');
+	}
+	return undefined;
+}
+
+/**
+ * The ICommandService a tab-originated handler sees. Recursing with the same
+ * origin means depth is unbounded and every level is checked against the same
+ * table.
+ */
+export function seclabTaintedCommandService(
+	real: { seclabExecuteFromTab<T>(id: string, args: unknown[], origin: unknown): Promise<T> },
+	origin: unknown,
+): unknown {
+	return {
+		_serviceBrand: undefined,
+		onWillExecuteCommand: () => ({ dispose() { } }),
+		onDidExecuteCommand: () => ({ dispose() { } }),
+		executeCommand<T>(id: string, ...args: unknown[]): Promise<T | undefined> {
+			seclabInFlight++;
+			return real.seclabExecuteFromTab<T>(id, args, origin)
+				.finally(() => { seclabInFlight--; });
+		},
+	};
+}
+
+/**
  * Authority -> tab id, registered by the Tab Manager when it resolves an
  * authority. The filter's identity comes from here and never from anything the
  * tab sends: `MainThreadSecretState.$getPassword` takes the extension identity

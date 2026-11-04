@@ -8,3 +8,4 @@
 0004-extension-description-computed-fields-win.patch
 0005-seclab-rpc-capability-filter.patch
 0006-seclab-channel-guard.patch
+0007-seclab-command-taint.patch
