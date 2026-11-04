@@ -88,6 +88,42 @@ never the `MainContext` property name (7 diverge) and never the numeric `nid`
 | `… is reachable through a category rule` | Someone granted authority in bulk. | Move it to `commands.exact` with a review. |
 | `… claims reduced residual impact but names no constraint` | Relabelling, not mitigating. | Write the constraint or change the verdict. |
 
+## 5a. The probe registry
+
+Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
+
+<!-- seclab:begin probes -->
+| Probe | Fixture | Policy entry | Patched expectation |
+|---|---|---|---|
+| `as-external-uri` | rogue extension | `rpc:MainThreadWindow.$asExternalUri` | denied |
+| `auth-get-session` | rogue extension | `rpc:MainThreadAuthentication.$getSession` | succeeded |
+| `clipboard-read` | rogue extension | `rpc:MainThreadClipboard.$readText` | denied |
+| `command-enumeration` | rogue extension | `rpc:MainThreadCommands.$getCommands` | succeeded |
+| `host-fs-read-file-scheme` | rogue extension | `rpc:MainThreadFileSystem.$readFile` | denied |
+| `host-fs-read-userdata` | rogue extension | `rpc:MainThreadFileSystem.$readFile` | denied |
+| `host-fs-write-file-scheme` | rogue extension | `rpc:MainThreadFileSystem.$writeFile` | denied |
+| `host-terminal-newlocal` | rogue extension | `cmd:workbench.action.terminal.newLocal` | denied |
+| `host-terminal-sendsequence` | rogue extension | `cmd:workbench.action.terminal.sendSequence` | denied |
+| `launder-await` | rogue extension | `cmd:_seclabTest.launder` | denied |
+| `launder-captured-service` | rogue extension | `cmd:_seclabTest.launder` | denied |
+| `launder-direct` | rogue extension | `cmd:_remoteCLI.windowOpen` | denied |
+| `launder-event` | rogue extension | `cmd:_seclabTest.launder` | denied |
+| `launder-manage-extensions` | rogue extension | `cmd:_remoteCLI.manageExtensions` | denied |
+| `launder-open-external` | rogue extension | `cmd:_remoteCLI.openExternal` | denied |
+| `launder-timer` | rogue extension | `cmd:_seclabTest.launder` | denied |
+| `open-external-silent` | rogue extension | `rpc:MainThreadWindow.$openUri` | denied |
+| `secret-read-cross-tab` | rogue extension | `rpc:MainThreadSecretState.$getPassword` | succeeded |
+| `secret-write-own` | rogue extension | `rpc:MainThreadSecretState.$setPassword` | denied |
+| `webview-egress` | rogue extension | `data:webview-content` | succeeded |
+| `channel-download-host-read` | rogue REH | `chan:download` | denied |
+| `channel-download-host-write` | rogue REH | `chan:download` | denied |
+| `channel-mcp-call-tool` | rogue REH | `chan:mcpGatewayToolBroker` | denied |
+| `channel-mcp-list-servers` | rogue REH | `chan:mcpGatewayToolBroker` | denied |
+| `rpc-proxy-auth` | rogue REH | `rpc:MainThreadWorkspace.$lookupAuthorization` | denied |
+| `rpc-secret-identity-spoof` | rogue REH | `rpc:MainThreadSecretState.$getKeys` | denied |
+| `terminal-onexecutecommand` | rogue REH | `chan:server_initiated.remoteTerminal.onExecuteCommand` | denied |
+<!-- seclab:end probes -->
+
 ## 6. Adding a probe (Phase 3)
 
 **The rule: a probe must SUCCEED against the unpatched build before the patch
