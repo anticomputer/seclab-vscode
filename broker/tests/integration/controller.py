@@ -16,6 +16,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable
 
+from seclab_broker import protocol
+
 
 class RpcFailure(Exception):
     def __init__(self, error: dict):
@@ -30,6 +32,8 @@ class Controller:
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
         self._ids = itertools.count(1)
         self._pending: dict[int, queue.Queue] = {}
+        self._methods: dict[int, str] = {}
+        self.violations: list[str] = []
         self._lock = threading.Lock()
         self.notes: list[dict] = []
         self._cv = threading.Condition()
@@ -44,10 +48,23 @@ class Controller:
             self.raw_lines.append(line)
             msg = json.loads(line)
             if "id" in msg and ("result" in msg or "error" in msg) and msg["id"] is not None:
+                method = self._methods.get(msg["id"])
+                if method and "result" in msg:
+                    err = protocol.check("result", method, msg["result"])
+                    if err:
+                        self.violations.append(f"result of {method}: {err}")
                 q = self._pending.get(msg["id"])
                 if q:
                     q.put(msg)
                 continue
+            if msg.get("method") not in protocol.notification_names():
+                self.violations.append(f"unknown notification {msg.get('method')}")
+            else:
+                err = protocol.check("notification", msg["method"], msg.get("params"))
+                if err:
+                    self.violations.append(f"notification {msg['method']}: {err}")
+                elif msg["method"] == "audit.event" and msg["params"]["type"] not in protocol.audit_types():
+                    self.violations.append(f"unknown audit type {msg['params']['type']}")
             with self._cv:
                 self.notes.append(msg)
                 self._cv.notify_all()
@@ -64,6 +81,7 @@ class Controller:
         mid = next(self._ids)
         q: queue.Queue = queue.Queue()
         self._pending[mid] = q
+        self._methods[mid] = method
         msg = {"jsonrpc": "2.0", "id": mid, "method": method}
         if params is not None:
             msg["params"] = params

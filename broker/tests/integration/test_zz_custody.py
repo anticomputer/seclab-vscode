@@ -51,6 +51,13 @@ def test_broker_process_custody(pod, ctl):
     assert p.stdout.strip() == b""
 
 
+def test_all_control_traffic_matched_protocol_definition(pod, ctl):
+    """Every result and notification seen during the suite validated against
+    schema/protocol.v1.json (drift guard between code, definition and docs)."""
+    assert ctl.violations == []
+    assert len(ctl.notes) > 50
+
+
 def test_canary_sweep(pod, ctl):
     """No canary, in any encoding, in anything the tab saw, in audit, or in broker logs."""
     pod.assert_no_canary("\n".join(pod.tab_output))

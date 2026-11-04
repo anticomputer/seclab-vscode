@@ -21,7 +21,8 @@ def test_proxy_unaware_clients_fail_closed(pod, ctl):
     upstream_ip = ip_on(pod, pod.name("upstream"), pod.name("inet"))
     p = pod.ws(f"{unset} curl -sS --max-time 5 -k https://{upstream_ip}/echo/x")
     assert p.returncode != 0
-    p = pod.ws(f"{unset} curl -sS --max-time 5 http://1.1.1.1/")
+    # TEST-NET-1 (RFC 5737): reserved for documentation, never a real host.
+    p = pod.ws(f"{unset} curl -sS --max-time 5 http://192.0.2.1/")
     assert p.returncode != 0
     assert pod.ws("getent hosts api.example.test").returncode != 0
     # Only the default route-less internal network: no default gateway.
@@ -54,23 +55,23 @@ def test_no_dns_exfiltration_via_embedded_resolver(pod, ctl):
 
 
 def test_upstream_address_guard(pod, ctl):
-    gateway = json.loads(docker("network", "inspect", pod.name("inet")).stdout)[0]["IPAM"]["Config"][0]["Gateway"]
+    """Every probe targets something this test owns (the private-network upstream, the
+    broker itself), so a broken guard can never reach a real host service. Link-local and
+    metadata addresses (169.254.169.254) are covered by unit tests instead of live probes."""  # fixture-lint: ignore
+    broker_ip = ip_on(pod, pod.name("broker"), pod.name("inet"))
     pod.load({"allow": [
         {"host": "internal.example.test"},
-        {"host": "host.docker.internal", "schemes": ["http", "https"]},
-        {"host": "169.254.169.254", "schemes": ["http"]},
-        {"host": gateway, "schemes": ["http", "https"]},
+        {"host": broker_ip, "schemes": ["http"], "ports": [8080]},
         {"host": "localhost", "schemes": ["http"], "ports": [8080]},
+        {"host": "127.0.0.1", "schemes": ["http"], "ports": [8080]},
     ], "prompt": {"enabled": False}})
-    for url in ("https://internal.example.test/echo/x", "http://host.docker.internal/",
-                "http://169.254.169.254/latest/meta-data/", "http://[::ffff:169.254.169.254]/",
-                f"http://{gateway}/", "http://localhost:8080/"):
+    for url in ("https://internal.example.test/echo/x", f"http://{broker_ip}:8080/",
+                "http://localhost:8080/", "http://[::ffff:127.0.0.1]:8080/"):
         r = pod.curl(url, "--noproxy", "")
         assert r.code in (502, 503), (url, r.code, r.body[:200])
     events = [e for e in pod.audit() if e["type"] in ("upstream.blocked", "upstream.dns_failed")]
     reasons = {e.get("reason") for e in events if e["type"] == "upstream.blocked"}
-    assert "non-global" in reasons and "link-local" in reasons and "loopback" in reasons
-    assert "broker-local" in reasons
+    assert {"non-global", "loopback", "broker-local"} <= reasons, reasons
     assert not [s for s in pod.seen() if s["host"] == "internal.example.test"]
 
 

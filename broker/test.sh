@@ -16,7 +16,7 @@ docker run --rm --network none seclab-broker-unit:test
 
 docker build -q -t seclab-broker-it-upstream:test "$it/images/upstream" >/dev/null
 docker build -q -t seclab-broker-it-workspace:test "$it/images/workspace" >/dev/null
-docker build -q -t seclab-broker-it-harness:test -f "$it/images/harness/Dockerfile" "$it" >/dev/null
+docker build -q -t seclab-broker-it-harness:test -f "$it/images/harness/Dockerfile" "$here" >/dev/null
 echo "== integration tests"
 exec docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
