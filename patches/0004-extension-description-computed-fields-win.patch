@@ -1,0 +1,22 @@
+diff --git a/src/vs/platform/extensionManagement/common/extensionsScannerService.ts b/src/vs/platform/extensionManagement/common/extensionsScannerService.ts
+index df80d99f..a8b20e31 100644
+--- a/src/vs/platform/extensionManagement/common/extensionsScannerService.ts
++++ b/src/vs/platform/extensionManagement/common/extensionsScannerService.ts
+@@ -1054,7 +1054,9 @@ class CachedExtensionsScanner extends ExtensionsScanner {
+ 
+ export function toExtensionDescription(extension: IScannedExtension, isUnderDevelopment: boolean): IExtensionDescription {
+ 	const id = getExtensionId(extension.manifest.publisher, extension.manifest.name);
++	// seclab: manifest first, so a package.json cannot override computed fields such as isBuiltin
+ 	return {
++		...extension.manifest,
+ 		id,
+ 		identifier: new ExtensionIdentifier(id),
+ 		isBuiltin: extension.type === ExtensionType.System,
+@@ -1065,7 +1067,6 @@ export function toExtensionDescription(extension: IScannedExtension, isUnderDeve
+ 		targetPlatform: extension.targetPlatform,
+ 		publisherDisplayName: extension.publisherDisplayName,
+ 		preRelease: extension.preRelease,
+-		...extension.manifest,
+ 	};
+ }
+ 

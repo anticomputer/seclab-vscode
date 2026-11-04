@@ -1,8 +1,16 @@
 diff --git a/src/vs/workbench/services/extensions/common/extensionManifestPropertiesService.ts b/src/vs/workbench/services/extensions/common/extensionManifestPropertiesService.ts
-index d9982d9e..d3dca553 100644
+index d9982d9e..ea918adc 100644
 --- a/src/vs/workbench/services/extensions/common/extensionManifestPropertiesService.ts
 +++ b/src/vs/workbench/services/extensions/common/extensionManifestPropertiesService.ts
-@@ -468,8 +468,8 @@ export class ExtensionManifestPropertiesService extends Disposable implements IE
+@@ -19,6 +19,7 @@ import { isBoolean, isObject, isString } from '../../../../base/common/types.js'
+ import { IWorkspaceTrustEnablementService } from '../../../../platform/workspace/common/workspaceTrust.js';
+ import { ILogService } from '../../../../platform/log/common/log.js';
+ import { isWeb } from '../../../../base/common/platform.js';
++import { URI } from '../../../../base/common/uri.js';
+ import { localize } from '../../../../nls.js';
+ import { ConfigurationScope, Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
+ import { Registry } from '../../../../platform/registry/common/platform.js';
+@@ -468,8 +469,8 @@ export class ExtensionManifestPropertiesService extends Disposable implements IE
  	private getConfiguredExtensionKind(manifest: IExtensionManifest): (ExtensionKind | '-web')[] | null {
  		const extensionIdentifier = { id: getGalleryExtensionId(manifest.publisher, manifest.name) };
  
@@ -13,16 +21,19 @@ index d9982d9e..d3dca553 100644
  		if (typeof result !== 'undefined') {
  			return this.toArray(result);
  		}
-@@ -502,7 +502,14 @@ export class ExtensionManifestPropertiesService extends Disposable implements IE
+@@ -502,7 +503,17 @@ export class ExtensionManifestPropertiesService extends Disposable implements IE
  		}
  
  		const extensionId = getGalleryExtensionId(manifest.publisher, manifest.name);
 -		return this._productExtensionKindsMap.get(extensionId);
 +		const kinds = this._productExtensionKindsMap.get(extensionId);
 +		const defaultKinds = this._productExtensionKindsMap.get('*');
-+		// seclab: '*' is the kind of every extension that product.json does not list explicitly, and
-+		// explicit entries only apply to built-in extensions (a gallery copy cannot claim a built-in id)
-+		if (defaultKinds && (!kinds || (manifest as { isBuiltin?: boolean }).isBuiltin !== true)) {
++		// seclab: '*' is the kind of every extension that product.json does not list explicitly.
++		// Explicit entries apply only to a scanned system (built-in) extension description; a raw
++		// manifest (gallery, VSIX) or a user copy shadowing a built-in id never gets them.
++		const desc = manifest as IExtensionManifest & { isBuiltin?: unknown; isUserBuiltin?: unknown; extensionLocation?: unknown };
++		const isSystem = desc.isBuiltin === true && desc.isUserBuiltin !== true && URI.isUri(desc.extensionLocation);
++		if (defaultKinds && (!kinds || !isSystem)) {
 +			return defaultKinds;
 +		}
 +		return kinds;
