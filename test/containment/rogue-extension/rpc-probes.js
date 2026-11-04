@@ -20,10 +20,12 @@ const DENIED = 'denied';
 const ERROR = 'error';
 
 /**
- * A denial raised by our filter, as opposed to an unrelated failure. The filter
- * rejects with a recognisable message so a probe cannot score a denial just by
- * being broken -- that distinction is the whole point of running probes against
- * the unpatched build first.
+ * Best-effort hint only. The filter deliberately makes a denial look like an
+ * unsupported operation to the tab, so the message cannot reliably separate
+ * "denied" from "broken" -- and treating it as authoritative is how a probe
+ * that fails for an incidental reason gets scored as containment. The host-side
+ * denial log is the real oracle; check-probes.ts corroborates against it and
+ * does not trust this field alone.
  */
 function classify(err) {
 	const msg = String(err && err.message ? err.message : err);

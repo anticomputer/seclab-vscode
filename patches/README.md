@@ -28,13 +28,13 @@ Current queue:
   remote run only `ui`-kind (built-in) extensions.
 - `0004-extension-description-computed-fields-win.patch`: a `package.json`
   can't override computed description fields such as `isBuiltin`.
-- `0005-test-only-rogue-reh-hook.patch`: **test fixture, not behaviour.** Loads
-  the rogue-REH probe payload, and only when `SECLAB_ROGUE_REH=1` and
-  `SECLAB_ROGUE_REH_PAYLOAD` are both set, which only the containment harness
-  does. It exists because the REH server runs inside the tab and is hostile
-  under our threat model, so the probes need the server's own handle on the
-  channels the *client* registers — a surface the extension host cannot reach
-  at all ([EDR](../docs/edr/20261104-rpc-escape-probes.md)).
 
-Expected later patches (M4): the RPC capability filter, auth mediation, storage
+Test-only patches are **not** kept here. `build/prepare.sh` applies this
+directory unconditionally, so a fixture placed here would ship in release
+builds. The rogue-REH hook lives at
+`test/containment/rogue-reh/serverServices-hook.patch` and is applied by the
+containment harness for a dedicated probe build
+([EDR](../docs/edr/20261104-rpc-escape-probes.md)).
+
+Expected later patches (M4): the RPC capability filter, auth mediation,
 partitioning, webview egress, and main-process folder routing (proposed).

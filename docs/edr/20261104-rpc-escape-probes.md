@@ -68,7 +68,7 @@ Three properties make the checker hard to fool, each verified by running it:
 
 ## The test-only patch
 
-`patches/0005-test-only-rogue-reh-hook.patch` (16 lines) loads the rogue-REH
+`test/containment/rogue-reh/serverServices-hook.patch` (16 lines) loads the rogue-REH
 payload in `serverServices.ts`, next to where the server already builds its
 `StaticRouter` to the renderer. It is inert unless both `SECLAB_ROGUE_REH=1` and
 `SECLAB_ROGUE_REH_PAYLOAD` are set.
@@ -78,10 +78,17 @@ It uses `createRequire(import.meta.url)` because the server bundle is ESM
 `remoteExtensionHostAgentServer.ts:43`. Verified to apply cleanly against the
 `upstream.lock` commit.
 
-Carrying a fixture in the patch queue is a real cost and was weighed: the
-alternative is reimplementing enough of the remote protocol to speak as a
-server, which would be far more code and would test our reimplementation rather
-than the real server.
+It is deliberately **not** in `patches/`. `build/prepare.sh` globs
+`patches/NNNN-*.patch` unconditionally, so a fixture placed there ships in every
+release build: an env-gated `require()` of an unvalidated path, handed the
+`socketServer` and a renderer-targeted router. That is a greppable RCE primitive
+in an isolation product, so the containment harness applies this patch itself
+for a dedicated probe build ([review](../security-reviews/20261104-rpc-probes-increment.md)).
+
+Carrying a fixture at all is a real cost and was weighed: the alternative is
+reimplementing enough of the remote protocol to speak as a server, which would
+be far more code and would test our reimplementation rather than the real
+server.
 
 ## Consequences
 

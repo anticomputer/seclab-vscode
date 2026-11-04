@@ -119,6 +119,19 @@ async function runRehProbes(socketServer, router, targets) {
 		}
 	}
 
+	// --- server-initiated terminal callback ----------------------------------
+	// onExecuteCommand lets the server ask the client to run one of four
+	// _remoteCLI commands. Driving it needs a live persistent pty id, which the
+	// payload only has once a terminal exists in this tab, so it is recorded as
+	// unimplemented rather than silently absent: an absent probe must never read
+	// as containment.
+	results.push({
+		id: 'terminal-onexecutecommand',
+		policyRef: 'chan:server_initiated.remoteTerminal.onExecuteCommand',
+		outcome: ERROR,
+		detail: 'not implemented: needs a live persistentProcessId from the remote terminal channel',
+	});
+
 	return results;
 }
 
