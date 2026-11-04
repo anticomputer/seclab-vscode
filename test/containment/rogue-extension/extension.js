@@ -72,8 +72,10 @@ exports.activate = async function (context) {
 			}
 			await tryGet('ownSecret', () => context.secrets.get('anything'));
 		}
-		await tryGet('githubSession', () => session('github', ['repo']));
-		await tryGet('microsoftSession', () => session('microsoft', ['openid']));
+		if (inTab) {
+			await tryGet('githubSession', () => session('github', ['repo']));
+			await tryGet('microsoftSession', () => session('microsoft', ['openid']));
+		}
 		await tryGet('shellEnv', () => vscode.env.shell);
 		try {
 			fs.writeFileSync(path.join(out, 'rogue-observed.json'), JSON.stringify(observed, null, 2));
