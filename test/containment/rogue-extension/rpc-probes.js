@@ -15,6 +15,8 @@
 //
 // Only ever run against our own local builds. Never against anything else.
 
+const safety = require('./probe-safety.js');
+
 const SUCCEEDED = 'succeeded';
 const DENIED = 'denied';
 const ERROR = 'error';
@@ -29,6 +31,11 @@ const ERROR = 'error';
  */
 function classify(err) {
 	const msg = String(err && err.message ? err.message : err);
+	// A safety refusal is a harness fault. It must never look like a denial,
+	// or a mis-targeted probe would read as containment.
+	if (err && err.seclabSafety) {
+		return { outcome: ERROR, detail: msg };
+	}
 	if (/seclab: denied|not allowed in a sandboxed|unsupported operation/i.test(msg)) {
 		return { outcome: DENIED, detail: msg };
 	}
@@ -57,8 +64,17 @@ async function probe(results, id, policyRef, fn) {
  */
 async function runProbes(vscode, context, targets) {
 	const results = [];
+	// Inert unless the harness armed this run. Installed anywhere else -- or
+	// run against a user's real profile -- the probes do nothing at all.
+	const ctx = safety.context(targets);
+	if (!ctx.armed) {
+		return [{
+			id: 'harness', policyRef: '', outcome: ERROR,
+			detail: `not armed: ${ctx.reason}`,
+		}];
+	}
 	const Uri = vscode.Uri;
-	const beacon = targets.beacon ? `http://127.0.0.1:${targets.beacon}` : null;
+	const beacon = ctx.beaconPort ? `http://127.0.0.1:${ctx.beaconPort}` : null;
 
 	// --- host code execution -------------------------------------------------
 	// workbench.action.terminal.newLocal creates a terminal on the HOST even in a
@@ -68,7 +84,7 @@ async function runProbes(vscode, context, targets) {
 		() => vscode.commands.executeCommand('workbench.action.terminal.newLocal'));
 	await probe(results, 'host-terminal-sendsequence', 'cmd:workbench.action.terminal.sendSequence',
 		() => vscode.commands.executeCommand('workbench.action.terminal.sendSequence',
-			{ text: `touch '${targets.marker}'\n` }));
+			{ text: safety.markerCommand(ctx, '') }));
 
 	// --- host filesystem -----------------------------------------------------
 	// $readFile accepts any scheme the IFileService can resolve. vscode-userdata:
@@ -80,12 +96,14 @@ async function runProbes(vscode, context, targets) {
 		});
 	await probe(results, 'host-fs-read-file-scheme', 'rpc:MainThreadFileSystem.$readFile',
 		async () => {
-			const buf = await vscode.workspace.fs.readFile(Uri.file(targets.canary));
+			const buf = await vscode.workspace.fs.readFile(
+				Uri.file(safety.safePath(ctx, ctx.canary, 'canary read')));
 			return Buffer.from(buf).toString('utf8');
 		});
 	await probe(results, 'host-fs-write-file-scheme', 'rpc:MainThreadFileSystem.$writeFile',
 		async () => {
-			const target = Uri.file(`${targets.marker}.rpcwrite`);
+			const target = Uri.file(safety.safePath(ctx, `${ctx.marker}.rpcwrite`, 'marker write'));
+			safety.note(ctx, `${ctx.marker}.rpcwrite`);
 			await vscode.workspace.fs.writeFile(target, Buffer.from('written by a tab\n'));
 			return target.toString();
 		});
@@ -107,7 +125,10 @@ async function runProbes(vscode, context, targets) {
 	// harness checks the value; this records whether a session came back at all.
 	await probe(results, 'auth-get-session', 'rpc:MainThreadAuthentication.$getSession',
 		async () => {
-			const s = await vscode.authentication.getSession('github', ['repo'], { silent: true });
+			// A fake provider seeded by the harness in the isolated user-data-dir.
+			// Never the user's real GitHub or Microsoft session.
+			const provider = process.env.SECLAB_FAKE_AUTH_PROVIDER || 'seclab-fake-auth';
+			const s = await vscode.authentication.getSession(provider, ['repo'], { silent: true });
 			return s ? { account: s.account?.label ?? null, tokenLength: String(s.accessToken ?? '').length } : null;
 		});
 	// The clipboard routinely holds a token the user just copied.
@@ -120,9 +141,9 @@ async function runProbes(vscode, context, targets) {
 	// value.
 	if (beacon) {
 		await probe(results, 'open-external-silent', 'rpc:MainThreadWindow.$openUri',
-			() => vscode.env.openExternal(Uri.parse(`${beacon}/open-external`)));
+			() => vscode.env.openExternal(Uri.parse(safety.safeUrl(ctx, `${beacon}/open-external`, 'openExternal'))));
 		await probe(results, 'as-external-uri', 'rpc:MainThreadWindow.$asExternalUri',
-			async () => (await vscode.env.asExternalUri(Uri.parse(`${beacon}/as-external`))).toString());
+			async () => (await vscode.env.asExternalUri(Uri.parse(safety.safeUrl(ctx, `${beacon}/as-external`, 'asExternalUri')))).toString());
 		// Webviews render in the LOCAL trusted renderer, so their fetches have the
 		// host's network position and bypass the tab broker entirely.
 		await probe(results, 'webview-egress', 'data:webview-content',
@@ -130,7 +151,7 @@ async function runProbes(vscode, context, targets) {
 				const panel = vscode.window.createWebviewPanel('seclabProbe', 'probe',
 					{ viewColumn: 1, preserveFocus: true }, { enableScripts: true });
 				panel.webview.html = `<!doctype html><script>
-					fetch(${JSON.stringify(`${beacon}/webview`)}, { mode: 'no-cors' })
+					fetch(${JSON.stringify(safety.safeUrl(ctx, `${beacon}/webview`, 'webview'))}, { mode: 'no-cors' })
 						.catch(() => {});
 				</script>`;
 				await new Promise(r => setTimeout(r, 2000));
@@ -158,7 +179,7 @@ async function runProbes(vscode, context, targets) {
 		() => vscode.commands.executeCommand('_remoteCLI.windowOpen', [], {}));
 	await probe(results, 'launder-open-external', 'cmd:_remoteCLI.openExternal',
 		() => vscode.commands.executeCommand('_remoteCLI.openExternal',
-			beacon ? `${beacon}/remotecli` : 'https://example.invalid/'));
+			safety.safeUrl(ctx, `${beacon}/remotecli`, 'remoteCLI openExternal')));
 	await probe(results, 'launder-manage-extensions', 'cmd:_remoteCLI.manageExtensions',
 		() => vscode.commands.executeCommand('_remoteCLI.manageExtensions', { list: {} }));
 

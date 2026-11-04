@@ -160,3 +160,45 @@ because the test is wrong. Record the before-and-after in an EDR.
    cap, and rejects graphs deeper than the cap rather than guessing.
 7. **Every reachable surface has a reviewed entry recording an impact.** The
    drift check enforces this across the whole mapping.
+
+## 8. Probe safety: never attack the host
+
+On the **unpatched** build a "successful" probe really executes on the user's
+Mac. The probe set is a working exploit chain against the machine it is
+validated on, so every payload is inert by construction.
+
+These are enforced three ways: `probe-safety.js` at runtime,
+`rpc-filter/tools/lint.sh` at review time, and
+`test/containment/probe-safety.test.ts` on the guards themselves.
+
+1. **Success demonstrates reach, nothing more.** Host code execution means
+   writing one fixed marker file under the run directory, built only by
+   `safety.markerCommand()`. No other shell, no downloads, no persistence, no
+   deletes, no process control, no settings changes.
+2. **Reads touch only harness-seeded canaries.** Never `~/.ssh`, `~/.aws`, the
+   keychain, real editor or browser profiles, or other repos. Every path goes
+   through `safety.safePath()`, which resolves symlinks and refuses anything
+   outside the run directory.
+3. **Fake credentials only**, in the isolated user-data-dir. Never the user's
+   real GitHub or Microsoft sessions. Seeded keychain entries are namespaced
+   per run and removed in teardown, including on failure.
+4. **Network only to the harness beacon** on `127.0.0.1`, via
+   `safety.safeUrl()`. No external host, ever.
+5. **Extension and window probes are reversible** and act only on fixtures
+   inside the run directory or the isolated profile. `manageExtensions` lists;
+   it does not install. `openExternal` targets the beacon, so no real browser
+   opens.
+6. **Arming.** Probes are inert unless the harness supplies a per-run nonce in
+   `SECLAB_PROBE_NONCE` **and** a matching `.seclab-probe-nonce` file in the run
+   directory. Environment alone does not arm them, so the extension installed
+   anywhere else does nothing.
+7. **Teardown** removes markers, keychain entries, sandboxes and windows, and a
+   post-run check asserts nothing outside the run directory changed.
+
+A safety refusal throws `SafetyError`, which is tagged so `classify()` records
+it as `ERROR`. It must never be scored as a denial: a mis-targeted probe would
+otherwise read as containment.
+
+Adding or changing a probe means re-running `rpc-filter/tools/lint.sh` and the
+safety unit tests, and a security review round before the next unpatched run.
+
