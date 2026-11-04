@@ -235,18 +235,30 @@ test('scan: unscannable content blocks; links report under the link; trailing ou
 	assert.equal(parseFrames(Buffer.concat([frame('large', '.', 1, nul('/scan/ws/x')), END]), 0, false).overflow, true);
 });
 
-test('scan: links that only resolve inside the workspace on the host are blocked (R1)', () => {
+test('scan: links that only resolve inside the workspace on the host are blocked, without touching outside paths (R1, D2)', () => {
 	const base = path.join(SCRATCH, 'alias');
 	const ws = path.join(base, 'ws');
-	fs.mkdirSync(ws, { recursive: true });
+	fs.mkdirSync(path.join(ws, 'node_modules'), { recursive: true });
 	fs.writeFileSync(path.join(ws, 'target.env'), 'x');
-	fs.symlinkSync(ws, path.join(base, 'alias-of-ws')); // another spelling of the workspace
-	fs.symlinkSync(path.join(base, 'alias-of-ws', 'target.env'), path.join(ws, '.env'));
-	fs.symlinkSync('/nonexistent/elsewhere', path.join(ws, 'dangling'));
+	fs.symlinkSync(ws, path.join(base, 'alias-of-ws'));
+	fs.symlinkSync(`/System/Volumes/Data${ws}/target.env`, path.join(ws, '.env'));  // firmlink spelling: inside
+	fs.symlinkSync('node_modules/.cache/not-yet', path.join(ws, '.env.later'));        // dangling, inside: a write lands there
+	fs.symlinkSync(path.join(base, 'alias-of-ws', 'target.env'), path.join(ws, 'via-outside')); // unknown spelling: never touched
+	fs.symlinkSync('/net/beacon.example.invalid/x', path.join(ws, 'beacon'));          // outside: never touched
 	const res = parseFrames(Buffer.concat([END]), 0, false);
-	const withLinks = { ...res, externalLinks: ['/scan/ws/.env', '/scan/ws/dangling'] };
+	const withLinks = { ...res, externalLinks: ['/scan/ws/.env', '/scan/ws/.env.later', '/scan/ws/via-outside', '/scan/ws/beacon'] };
 	checkExternalLinks(withLinks, ws);
-	assert.deepEqual(withLinks.findings.map(f => [f.file, f.rule]), [['.env', 'unscanned-link-alias']]);
+	assert.deepEqual(withLinks.findings.map(f => [f.file, f.rule]), [['.env', 'unscanned-link-alias'], ['.env.later', 'unscanned-link-alias']]);
+});
+
+test('scan: binary-skipped files are rescanned and mapped back by line (round 8)', () => {
+	const r = parseFrames(Buffer.concat([
+		frame('worktree', '.', 0, '[]'),
+		frame('binmap', 'worktree', 0, '/scan/ws/a.bin\x00131074\x00/scan/ws/.env\x00131080\x00'),
+		frame('bin', '.', 0, report({ File: '', StartLine: 131081, Secret: 'REAL_TOKEN_AFTER_MAGIC' })),
+		END]), 0, false);
+	assert.equal(r.complete, true, r.error);
+	assert.deepEqual(r.findings.map(f => [f.source, f.file, f.line]), [['worktree', '.env', 2]]);
 });
 
 test('scan: rewrite is byte-exact both ways ($ patterns, non-UTF-8 bytes) (S4)', () => {
