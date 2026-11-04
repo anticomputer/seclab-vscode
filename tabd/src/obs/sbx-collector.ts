@@ -75,6 +75,7 @@ export class CollectorSession {
 	private closed = false;
 	private nextRehId = 0;
 	private readonly rehWaiters = new Map<number, (err?: Error) => void>();
+	private corruptTimes: number[] = [];
 
 	constructor(tabId: string, child: ChildProcessWithoutNullStreams, hub: ObsHub, o: CollectorOptions) {
 		this.tabId = tabId;
@@ -90,7 +91,7 @@ export class CollectorSession {
 		timeout.unref?.();
 		void this.rehReady.catch(() => undefined).finally(() => clearTimeout(timeout));
 		const split = new LineSplitter(MAX_RECORD);
-		child.stdout.on('data', (d: Buffer) => split.push(d, l => this.record(l), () => this.hub.countInvalid(tabId)));
+		child.stdout.on('data', (d: Buffer) => split.push(d, l => this.record(l), () => this.corrupt()));
 		child.stderr.on('data', (d: Buffer) => { this.stderrTail = (this.stderrTail + d.toString('utf8')).slice(-400); });
 		child.on('error', e => this.ended(`exec error: ${e.message}`));
 		child.on('close', code => this.ended(`collector exited (${code})${this.stderrTail ? `: ${this.stderrTail.trim()}` : ''}`));
@@ -99,8 +100,8 @@ export class CollectorSession {
 	}
 
 	/** Send the one config line. The token goes over stdin, never argv. */
-	configure(token: string): void {
-		this.child.stdin.write(`${JSON.stringify({ v: 1, mode: this.o.mode, token, user: 'agent', relayUser: 'seclab-relay' })}\n`);
+	configure(token: string, workspace: string): void {
+		this.child.stdin.write(`${JSON.stringify({ v: 1, mode: this.o.mode, token, user: 'agent', relayUser: 'seclab-relay', workspace })}\n`);
 	}
 
 	/** Ask the running collector to make sure the REH runs, under a fresh tracer and guard. */
@@ -168,12 +169,23 @@ export class CollectorSession {
 		this.hub.emit(this.tabId, { ...SOURCE, class: 'sensor.status', priority, summary, detail });
 	}
 
+	/** Unparseable or oversized sensor output: counted; repeated, it marks the tab degraded (review OR-2). */
+	private corrupt(): void {
+		this.hub.countInvalid(this.tabId);
+		const now = Date.now();
+		this.corruptTimes = this.corruptTimes.filter(t => now - t < 10_000);
+		this.corruptTimes.push(now);
+		if (this.corruptTimes.length === 3) {
+			this.hub.setObservation(this.tabId, 'degraded', 'sensor output is being corrupted or forged', { sensor: 'sbx-collector', mode: this.o.mode });
+		}
+	}
+
 	private record(line: Buffer): void {
 		let r: Record<string, unknown>;
 		try {
 			r = JSON.parse(line.toString('utf8'));
 		} catch {
-			return this.hub.countInvalid(this.tabId);
+			return this.corrupt();
 		}
 		if (typeof r !== 'object' || r === null || Array.isArray(r) || typeof r.k !== 'string') {
 			return this.hub.countInvalid(this.tabId);
@@ -198,7 +210,7 @@ export class CollectorSession {
 				try {
 					rec = this.parser.parse(l);
 				} catch {
-					return this.hub.countInvalid(this.tabId);
+					return this.corrupt();
 				}
 				if (rec) {
 					this.emitAll(this.tracker.handle(rec));
@@ -290,7 +302,7 @@ export class CollectorSession {
 				this.status('debug', `strace: ${s(r.msg, 200) ?? ''}`, { status: 'strace-stderr' });
 				return;
 			case 'oversize':
-				return this.hub.countInvalid(this.tabId);
+				return this.corrupt();
 			case 'err':
 				this.status('error', `collector error: ${s(r.msg, 300) ?? '?'}`, { status: 'error' });
 				if (r.fatal === true) {

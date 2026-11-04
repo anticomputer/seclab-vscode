@@ -16,6 +16,7 @@ TRACE_DEEP_EXTRA = ",openat,?openat2,?open,?creat"
 STRACE = "/usr/bin/strace"
 GUARD = "/opt/seclab/bin/seclab-obs-guard"
 REH_START = "/opt/seclab/bin/seclab-reh-start"
+WB_MOUNT = "/opt/seclab/bin/seclab-wb-mount"
 RELAY_DIR = "/run/seclab/reh"
 MAX_LINE = 64 * 1024
 MAX_EXTRA_STRACERS = 32
@@ -28,8 +29,9 @@ HONEYPOTS = [
     ".config/BraveSoftware/Brave-Browser/Default/Login Data", ".mozilla/firefox/seclab.default/logins.json",
     ".local/share/keyrings/login.keyring",
 ]
-SYSCTLS = [("kernel/unprivileged_bpf_disabled", "1"), ("kernel/kptr_restrict", "2"),
-           ("kernel/dmesg_restrict", "1"), ("kernel/perf_event_paranoid", "3")]
+SYSCTLS = [("fs/protected_hardlinks", "1"), ("fs/protected_symlinks", "1"),
+           ("kernel/unprivileged_bpf_disabled", "1"), ("kernel/kptr_restrict", "2"),
+           ("kernel/dmesg_restrict", "1"), ("kernel/perf_event_paranoid", "3"), ("kernel/io_uring_disabled", "2")]
 
 out_lock = threading.Lock()
 seq = 0
@@ -65,7 +67,23 @@ def read_config():
     for k in ("user", "relayUser"):
         if not isinstance(cfg.get(k), str) or not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", cfg[k]):
             fail("bad " + k)
+    ws = cfg.get("workspace")
+    if not isinstance(ws, str) or not ws.startswith("/") or len(ws) > 4096 or "\0" in ws or "/../" in ws + "/" or "/./" in ws + "/":
+        fail("bad workspace")
     return cfg
+
+
+def wb_mount(ws):
+    # Write-back gate (fork-build ADR write-back-gate): the overlay must be in place before
+    # any REH starts. Idempotent helper; non-zero = fail closed. Absent until it ships.
+    if not os.path.exists(WB_MOUNT):
+        return True
+    r = subprocess.run([WB_MOUNT, ws], stdin=subprocess.DEVNULL, capture_output=True, timeout=60,
+                       env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+    if r.returncode != 0:
+        emit({"k": "err", "msg": "workspace overlay mount failed: " + r.stderr.decode("latin-1", "replace").strip()[:300]})
+        return False
+    return True
 
 
 def proc_status(pid):
@@ -151,12 +169,20 @@ def seed_honeypots(home, uid, gid):
             fds.append(os.open(home, dflags))
             parts = rel.split("/")
             for p in parts[:-1]:
+                made_dir = False
                 try:
                     os.mkdir(p, 0o700, dir_fd=fds[-1])
-                    os.chown(p, uid, gid, dir_fd=fds[-1], follow_symlinks=False)
+                    made_dir = True
                 except FileExistsError:
                     pass
                 fds.append(os.open(p, dflags, dir_fd=fds[-1]))
+                if made_dir:
+                    # chown through the fd we verified, never by name: the tab user owns the
+                    # parent and could swap in a hardlink to a root file (review OR-4).
+                    st = os.fstat(fds[-1])
+                    if st.st_uid != 0:
+                        raise OSError("directory replaced while seeding")
+                    os.fchown(fds[-1], uid, gid)
             try:
                 fd = os.open(parts[-1], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o644, dir_fd=fds[-1])
                 os.write(fd, ("seclabcanary_honeypot_%s\n" % secrets.token_hex(12)).encode())
@@ -276,6 +302,8 @@ def main():
     emit({"k": "hello", "v": 1, "pid": os.getpid(), "mode": cfg["mode"], "kernel": os.uname().release,
           "strace": version.decode("latin-1")[:64], "brokerAddrs": broker_addrs()})
     harden()
+    if not wb_mount(cfg["workspace"]):
+        fail("workspace overlay not mounted; refusing to start the REH")
 
     # REH relay socket dir: the tab user creates the socket, the relay uid connects to it.
     os.makedirs("/run/seclab", mode=0o755, exist_ok=True)
@@ -355,7 +383,7 @@ def main():
                 or not isinstance(c.get("token"), str) or not re.fullmatch(r"[0-9a-f]{64}", c["token"])):
             emit({"k": "err", "msg": "bad command"})
             continue
-        if len(stracers) > MAX_EXTRA_STRACERS:
+        if len(stracers) > MAX_EXTRA_STRACERS or not wb_mount(cfg["workspace"]):
             emit({"k": "reh", "id": c["id"], "code": -2})
             continue
         s = Stracer(len(stracers), base + reh_cmd, stdin=subprocess.PIPE)

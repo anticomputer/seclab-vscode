@@ -11,6 +11,7 @@ import type { ObsHub } from './hub.ts';
 
 const QUIET = /(?:^|\/)(?:\.git\/objects|\.git\/logs|node_modules|\.seclab-evidence)(?:\/|$)/;
 const MAX_PENDING = 2000;
+const MAX_INDIVIDUAL = 50;
 const MAX_JSON = 256 * 1024;
 
 export class WorkspaceWatcher {
@@ -72,16 +73,19 @@ export class WorkspaceWatcher {
 
 	private flush(): void {
 		const now = Date.now();
+		let individual = 0;
 		for (const [rel, at] of this.pending) {
 			if (now - at < 300) {
 				continue; // let bursts of writes to one file settle
 			}
 			this.pending.delete(rel);
-			if (QUIET.test(rel) || !isHostExecutablePath(rel)) {
+			// At most MAX_INDIVIDUAL per flush; the rest is summarised, so a tab can't flood.
+			if (QUIET.test(rel) || !isHostExecutablePath(rel) || individual >= MAX_INDIVIDUAL) {
 				const top = rel.split('/').slice(0, 2).join('/');
 				this.bulk.set(top, (this.bulk.get(top) ?? 0) + 1);
 				continue;
 			}
+			individual++;
 			this.report(rel);
 		}
 		if (this.bulk.size && (this.pending.size === 0 || this.bulk.size > 50)) {
@@ -133,9 +137,11 @@ export class WorkspaceWatcher {
 			if (!real.startsWith(`${this.realRoot}/`)) {
 				return undefined;
 			}
+			const before = fs.lstatSync(real);
 			fd = fs.openSync(real, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
 			const st = fs.fstatSync(fd);
-			if (!st.isFile() || st.size > MAX_JSON) {
+			// A parent swapped for a symlink between realpath and open lands on another inode.
+			if (!st.isFile() || st.size > MAX_JSON || st.dev !== before.dev || st.ino !== before.ino) {
 				return undefined;
 			}
 			const doc = JSON.parse(fs.readFileSync(fd, 'utf8')) as { scripts?: unknown };

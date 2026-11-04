@@ -197,7 +197,7 @@ export class ObsGlue {
 				const mode = this.modes.get(tabId) ?? 'default';
 				const s = new CollectorSession(tabId, spawnCollector(), this.hub, { mode, isRunning: () => this.o.isRunning(tabId) });
 				this.sessions.set(tabId, s);
-				s.configure(token);
+				s.configure(token, workspace);
 				try {
 					await s.rehReady;
 				} catch (e) {

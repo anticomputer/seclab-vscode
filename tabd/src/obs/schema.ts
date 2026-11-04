@@ -45,6 +45,7 @@ export const CLASSES = {
 	'rpc.decision': { ocsf: 6003, desc: 'RPC capability filter verdict.' },
 	'policy.log': { ocsf: 4001, desc: 'sbx proxy allowed or blocked a destination (aggregated count delta).' },
 	'workspace.change': { ocsf: 1001, desc: 'A workspace file was created, changed or removed (host watcher).' },
+	'workspace.gate': { ocsf: 1001, desc: 'Write-back gate: a tab change to a workspace file was synced, held, approved or rejected (reserved for the gate).' },
 	'process.exec': { ocsf: 1007, desc: 'A process executed a program.' },
 	'process.exit': { ocsf: 1007, desc: 'A process exited.' },
 	'file.open': { ocsf: 1001, desc: 'A file was opened (deep mode or sensitive path).' },
