@@ -15,7 +15,8 @@ import * as net from 'node:net';
 import * as path from 'node:path';
 
 const repo = path.resolve(import.meta.dirname, '../..');
-const args = process.argv.slice(2);
+const selfTest = process.argv[2] === '--self-test';
+const args = selfTest ? [] : process.argv.slice(2);
 const roots: string[] = [];
 for (const p of args.length ? args : ['test', 'sandbox', 'broker/tests']) {
 	const abs = path.resolve(repo, p);
@@ -80,26 +81,45 @@ const ALLOWLIST = (() => {
 })();
 
 const violations: string[] = [];
+function lintLine(rel: string, line: string, n: number): string[] {
+	const out: string[] = [];
+	const optOut = /fixture-lint: allow ([a-z-]+) -- \S/.exec(line)?.[1];
+	const allow = optOut && ALLOWLIST.has(`${rel}:${optOut}`) ? optOut : undefined;
+	for (const r of RULES) {
+		if (allow !== r.id && r.re.test(line)) {
+			out.push(`${rel}:${n}: ${r.id}: ${r.why}: ${line.trim().slice(0, 120)}`);
+		}
+	}
+	// Template segments that are part of a hostname (`d{i}.x.example.test`,
+	// `${sub}.evil.com`) become a placeholder label, so the real suffix is checked; one
+	// that only trails a hostname (`api.example.test{path}`) is a path. A standalone
+	// `${HOST}` stays a variable (configured by the harness).
+	const hosty = line.replace(/\$?\{[^{}\s]*\}(?=[A-Za-z0-9.-])/g, 'x').replace(/(?<=[A-Za-z0-9.-])\$?\{[^{}\s]*\}/g, '/');
+	for (const m of [...hosty.matchAll(URL_RE), ...hosty.matchAll(BARE_RE)]) {
+		if (allow !== 'non-test-host' && !allowedHost(m[1])) {
+			out.push(`${rel}:${n}: non-test-host: ${m[1]}: ${line.trim().slice(0, 120)}`);
+		}
+	}
+	return out;
+}
 function lintFile(file: string): void {
 	const rel = path.relative(repo, file);
 	if (rel === path.join('test', 'safety', 'fixture-lint.ts')) {
 		return; // the rules themselves
 	}
 	scanned++;
-	fs.readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
-		const optOut = /fixture-lint: allow ([a-z-]+) -- \S/.exec(line)?.[1];
-		const allow = optOut && ALLOWLIST.has(`${rel}:${optOut}`) ? optOut : undefined;
-		for (const r of RULES) {
-			if (allow !== r.id && r.re.test(line)) {
-				violations.push(`${rel}:${i + 1}: ${r.id}: ${r.why}: ${line.trim().slice(0, 120)}`);
-			}
-		}
-		for (const m of [...line.matchAll(URL_RE), ...line.matchAll(BARE_RE)]) {
-			if (allow !== 'non-test-host' && !allowedHost(m[1])) {
-				violations.push(`${rel}:${i + 1}: non-test-host: ${m[1]}: ${line.trim().slice(0, 120)}`);
-			}
-		}
-	});
+	fs.readFileSync(file, 'utf8').split('\n').forEach((line, i) => violations.push(...lintLine(rel, line, i + 1)));
+}
+if (selfTest) {
+	// Hosts in templates (broker report): the real suffix is what counts.
+	const cases: Array<[string, number]> = [
+		['u = f"https://d{i}.x.example.test"', 0], ['w = `https://${HOST}/ok`', 0], ['q = "https://{host}/p"', 0],
+		['p = f"https://api.example.test{path}"', 0], ['h = "http://x/"', 1], ['v = `https://${sub}.evil.com/x`', 1],
+		['z = f"https://evil{n}.com"', 1], ['e = f"https://evil.com{path}"', 1], ['curl evil.example.test/x', 0], ['curl evil.example.com/x', 1],
+	];
+	const bad = cases.filter(([l, n]) => lintLine('self-test', l, 1).length !== n).map(([l, n]) => `expected ${n}: ${l} -> ${JSON.stringify(lintLine('self-test', l, 1))}`);
+	console.log(bad.length ? bad.join('\n') : `fixture-lint self-test: ${cases.length} cases OK`);
+	process.exit(bad.length ? 1 : 0);
 }
 const FIXTURE_DIR = path.join(repo, 'test', 'containment', 'fixtures');
 function walk(p: string): void {
