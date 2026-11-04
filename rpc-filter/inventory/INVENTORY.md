@@ -250,4 +250,4 @@ Representative sites, with permalinks, are in `inventory.json`.
 | Component | Role | Status |
 |---|---|---|
 | `seclab-tabd` | tab supervisor JSON-RPC over stdio; issues the per-tab identity | TODO (not built yet) |
-| `broker` | per-tab mitmproxy broker; the only egress and the sentinel swap point | TODO (not built yet) |
+| `broker` | per-tab mitmproxy broker; the only egress and the sentinel swap point | present |

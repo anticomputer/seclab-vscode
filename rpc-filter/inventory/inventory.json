@@ -39308,8 +39308,8 @@
         {
           "authority": "per-tab mitmproxy broker; the only egress and the sentinel swap point",
           "path": "broker",
-          "present": false,
-          "status": "TODO (not built yet)",
+          "present": true,
+          "status": "present",
           "surface": "broker"
         }
       ],

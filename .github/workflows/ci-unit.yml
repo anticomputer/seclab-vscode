@@ -34,3 +34,15 @@ jobs:
         run: build/apply-patches.sh --check
       - name: Shipped sources have no test hooks (env/spawn review, dynamic loading)
         run: ./seclab lint source
+      # RPC capability filter (rpc-filter/AGENTS.md): policy drift, generated docs and
+      # policy module in sync, probe payload lint, probe-safety guards.
+      - name: RPC policy drift
+        run: rpc-filter/tools/check.sh
+      - name: RPC docs in sync
+        run: rpc-filter/tools/docs.sh --check
+      - name: RPC policy module in sync
+        run: rpc-filter/tools/emit.sh --check
+      - name: RPC probe payload lint
+        run: rpc-filter/tools/lint.sh
+      - name: RPC probe-safety guards
+        run: ./seclab test probe-safety
