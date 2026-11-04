@@ -16,6 +16,7 @@ on:
       - sandbox/**
       - test/**
       - seclab
+      - rpc-filter/**
       - .github/workflows/ci-linux.yml
   pull_request:
     paths:
@@ -27,6 +28,7 @@ on:
       - sandbox/**
       - test/**
       - seclab
+      - rpc-filter/**
       - .github/workflows/ci-linux.yml
 
 permissions:
@@ -38,6 +40,30 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # The RPC attack-surface inventory regenerated from the exact source the build uses
+  # (build/fetch-upstream.sh: upstream.lock SHA, tag verified); any diff fails, so the
+  # drift gate compares the policy with what ships, not with a committed artefact.
+  rpc-inventory:
+    name: rpc-inventory
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fetch pinned upstream (verifies tag -> SHA)
+        run: build/fetch-upstream.sh "$GITHUB_WORKSPACE/.work/upstream-src"
+      - name: Regenerate the inventory from it; fail on any diff
+        run: |
+          rpc-filter/tools/run.sh "$GITHUB_WORKSPACE/.work/upstream-src"
+          git diff --exit-code rpc-filter/inventory/
+          # git diff misses untracked files (review B-1).
+          test -z "$(git status --porcelain -- rpc-filter/inventory/)"
+      - name: Policy drift against the regenerated inventory
+        run: rpc-filter/tools/check.sh
+
   oci:
     name: oci
     runs-on: ubuntu-24.04
