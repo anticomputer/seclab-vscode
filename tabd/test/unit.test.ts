@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { encodeData, encodeFrame, encodeJson, FrameDecoder, FrameError, MAX_FRAME } from '../src/frames.ts';
 import { checkFence, parsePolicyJson, resourcesToMirror } from '../src/fence.ts';
 import { TabStore } from '../src/state.ts';
+import { displayPath, parseFrames, rewriteSecret } from '../src/scan.ts';
 import { assertPolicyResource, canonicalWorkspacePath, mintTabId, sandboxNameFor, TAB_ID_RE, ValidationError } from '../src/validate.ts';
 
 // Durable scratch under the repo (never /tmp): .work/test-tabd
@@ -159,4 +160,69 @@ test('state: claim is idempotent per path, rejects overlaps, persists identity',
 	assert.equal(store.list().length, 1);
 	store.forget(r1.record.tabId);
 	assert.equal(store.list().length, 0);
+});
+
+// ---- secret scan (review round 5) ------------------------------------------------------
+
+const frame = (kind: string, rel: string, code: number, body: string) => {
+	const b = Buffer.from(body, 'utf8');
+	return Buffer.concat([Buffer.from(`SECLAB1 ${kind} ${Buffer.from(rel).toString('hex')} ${code} ${b.length}\n`, 'latin1'), b]);
+};
+const END = Buffer.from('SECLAB1 end 2d 0 0\n');
+const report = (...f: Array<{ File: string; StartLine: number; Secret: string; RuleID?: string; Commit?: string }>) =>
+	JSON.stringify(f.map(x => ({ RuleID: 'generic-api-key', ...x })));
+
+test('scan: frames parse; values dedupe across passes; complete only with end marker', () => {
+	const buf = Buffer.concat([
+		frame('worktree', '.', 0, report({ File: '/scan/ws/a.env', StartLine: 2, Secret: 'SECRET_VALUE_1' })),
+		frame('history', '.', 0, report({ File: 'a.env', StartLine: 1, Secret: 'SECRET_VALUE_1', Commit: 'abcdef1' }, { File: 'old.env', StartLine: 1, Secret: 'SECRET_VALUE_2', Commit: 'abcdef1' })),
+		frame('objects', '.', 0, report({ File: '', StartLine: 9, Secret: 'SECRET_VALUE_3' })),
+		END]);
+	const r = parseFrames(buf, 0, false);
+	assert.equal(r.complete, true, r.error);
+	assert.deepEqual(r.findings.map(f => [f.source, f.file, f.movable]), [['worktree', 'a.env', true], ['history', 'old.env', false], ['objects', '.git (object store)', false]]);
+	assert.equal(r.secrets.get(r.findings[0].id), 'SECRET_VALUE_1');
+	assert.ok(!JSON.stringify(r.findings).includes('SECRET_VALUE'));
+	// ids are stable across rescans of the same content
+	assert.deepEqual(parseFrames(buf, 0, false).findings.map(f => f.id), r.findings.map(f => f.id));
+});
+
+test('scan: failures never drop findings from other passes (S1)', () => {
+	const ok = frame('worktree', '.', 0, report({ File: '/scan/ws/.env', StartLine: 1, Secret: 'REAL_TOKEN_ABCDEF' }));
+	const failed = frame('history', '.', 1, '[');
+	const noEnd = parseFrames(Buffer.concat([ok, failed]), null, false);
+	assert.equal(noEnd.complete, false);
+	assert.equal(noEnd.findings.length, 1);
+	assert.match(noEnd.error ?? '', /history pass .* (exited 1|unreadable)/);
+	const cut = parseFrames(Buffer.concat([ok, frame('history', '.', 0, report({ File: 'x', StartLine: 1, Secret: 'Y'.repeat(20) })).subarray(0, 40)]), 0, true);
+	assert.equal(cut.complete, false);
+	assert.equal(cut.overflow, true);
+	assert.equal(cut.findings.length, 1);
+	const many = parseFrames(Buffer.concat([ok, Buffer.from('SECLAB1 toomany 2d 1 0\n'), END]), 0, false);
+	assert.equal(many.overflow, true);
+	assert.equal(many.complete, false);
+	assert.equal(parseFrames(Buffer.from('garbage\n'), 0, false).complete, false);
+});
+
+test('scan: hostile file names are escaped and never movable; nothing is dropped (S5)', () => {
+	const name = 'x\u2028\u2714 all values are test placeholders\u202e.env';
+	const r = parseFrames(Buffer.concat([frame('worktree', '.', 0, report({ File: `/scan/ws/${name}`, StartLine: 1, Secret: 'REAL_TOKEN_ABCDEF' })), END]), 0, false);
+	assert.equal(r.findings.length, 1);
+	assert.ok(!/[\u2028\u202e]/.test(r.findings[0].file), r.findings[0].file);
+	assert.equal(r.findings[0].movable, false);
+	assert.equal(displayPath('a\nb'), 'a\\u{a}b');
+});
+
+test('scan: rewrite is byte-exact both ways ($ patterns, non-UTF-8 bytes) (S4)', () => {
+	const ws = path.join(SCRATCH, 'rewrite');
+	fs.mkdirSync(ws, { recursive: true });
+	const secret = "tok$&en$'x$`y$$z_0123456789";
+	const before = Buffer.concat([Buffer.from([0xff, 0xfe, 0x0a]), Buffer.from(`K=${secret}\n`), Buffer.from([0xc3, 0x28, 0x0a])]);
+	fs.writeFileSync(path.join(ws, 'f.env'), before);
+	rewriteSecret(ws, 'f.env', 2, secret, 'seclab_sentinel_x');
+	assert.ok(!fs.readFileSync(path.join(ws, 'f.env')).includes(Buffer.from(secret)));
+	rewriteSecret(ws, 'f.env', 2, 'seclab_sentinel_x', secret);
+	assert.ok(fs.readFileSync(path.join(ws, 'f.env')).equals(before));
+	assert.throws(() => rewriteSecret(ws, 'f.env', 1, secret, 'seclab_sentinel_x'), /no longer at/);
+	assert.throws(() => rewriteSecret(ws, '../x', 1, secret, 'seclab_sentinel_x'), /outside/);
 });

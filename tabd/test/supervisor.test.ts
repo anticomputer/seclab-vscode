@@ -66,7 +66,7 @@ function setup(name: string, scanArg: ((p: string) => Promise<ScanResult>) | nul
 			const m = out.filter(f => f.channel === 0).map(f => JSON.parse(f.payload.toString())).find(x => x.id === myId);
 			if (m) {
 				if (m.error) {
-					throw Object.assign(new Error(m.error.message), { code: m.error.code });
+					throw Object.assign(new Error(m.error.message), { code: m.error.code, data: m.error.data });
 				}
 				return m.result;
 			}
@@ -160,4 +160,21 @@ test('supervisor: no scanner = fail closed', async () => {
 	const { tab } = await call('tab.claim', { workspace: { hostPath: ws } });
 	await assert.rejects(call('tab.ensureRunning', { tabId: tab.metadata.name }), (e: Error & { code?: number }) => e.code === -32021);
 	await call('tab.ensureRunning', { tabId: tab.metadata.name, acceptFindings: ['scan-incomplete'] });
+});
+
+test('supervisor: an incomplete scan still reports its findings first; both must be accepted (S1)', async () => {
+	const scan = async (): Promise<ScanResult> => ({
+		complete: false, overflow: true, error: 'secret scan incomplete: scanner report too large to review',
+		findings: [{ id: 'f1', source: 'worktree', file: '.env', line: 1, rule: 'generic-api-key', movable: true }], secrets: new Map([['f1', 'REAL_TOKEN_ABCDEF']]),
+	});
+	const { call, driver, ws } = setup('partial', scan);
+	await call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	const tabId = (await call('tab.claim', { workspace: { hostPath: ws } })).tab.metadata.name;
+	await assert.rejects(call('tab.ensureRunning', { tabId }), (e: Error & { code?: number; data?: { findings: unknown[]; overflow: boolean } }) =>
+		e.code === -32020 && e.data?.findings.length === 1 && e.data.overflow === true);
+	await assert.rejects(call('tab.ensureRunning', { tabId, acceptFindings: ['scan-incomplete'] }), (e: Error & { code?: number }) => e.code === -32020);
+	await assert.rejects(call('tab.ensureRunning', { tabId, acceptFindings: ['f1'] }), (e: Error & { code?: number }) => e.code === -32021);
+	assert.equal(driver.calls.filter(c => c.startsWith('start')).length, 0);
+	await call('tab.ensureRunning', { tabId, acceptFindings: ['f1', 'scan-incomplete'] });
+	assert.equal(driver.calls.filter(c => c.startsWith('start')).length, 1);
 });
