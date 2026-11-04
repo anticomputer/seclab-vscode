@@ -154,7 +154,8 @@ class Broker:
         return await self._ask(key, "egress", req, suggested, None)
 
     async def ask_binding(self, req: RequestView, cred: Credential, inject: Inject | None) -> Decision:
-        key = ("binding", cred.id, req.scheme, req.host, req.port)
+        key = ("binding", cred.id, req.scheme, req.host, req.port, req.method, req.path,
+               inject.header.lower() if inject else None, inject.fmt if inject else None)
         suggested = {"host": req.host, "path": req.path, "methods": [req.method], "ports": [req.port]}
         if inject is not None:
             suggested["inject"] = inject.to_json()

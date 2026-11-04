@@ -22,6 +22,8 @@ SENTINEL_PREFIX = "SECLAB_SNTL_"
 _ALPHABET = string.ascii_letters + string.digits
 _SENTINEL_OK = re.compile(r"^[A-Za-z0-9_.~-]{32,256}$")
 MAX_VALUE_LEN = 16384
+MAX_DERIVED_PER_PARENT = 64
+MAX_CREDENTIALS = 1024
 
 
 def new_sentinel(prefix: str | None = None) -> str:
@@ -40,6 +42,10 @@ def check_value(v: object) -> str:
         raise PolicyError("credential value must be a string of 8..16384 characters")
     if any(ord(c) < 0x20 or ord(c) == 0x7F for c in v):
         raise PolicyError("credential value contains control characters")
+    try:
+        v.encode("utf-8")
+    except UnicodeEncodeError:
+        raise PolicyError("credential value is not valid UTF-8") from None
     return v
 
 
@@ -193,10 +199,17 @@ class CredentialStore:
         return cred
 
     def derive(self, parent: Credential, value: str, rule_id: str) -> Credential:
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError:
+            raise PolicyError("minted value is not valid UTF-8") from None
+        check_value(value)
         for c in self._by_id.values():
             if c.value == value:
                 return c
         n = 1 + sum(1 for c in self._by_id.values() if c.parent_id == parent.id)
+        if n > MAX_DERIVED_PER_PARENT or len(self._by_id) >= MAX_CREDENTIALS:
+            raise PolicyError("derived credential limit reached")
         cred = Credential(
             id=f"{parent.id}.derived-{n}", sentinel=new_sentinel(), bindings=list(parent.bindings),
             origin="derived", provider=parent.provider, parent_id=parent.id, value=value,
@@ -256,20 +269,23 @@ class CredentialStore:
         return self._by_id.get(cid) if cid else None
 
     def _rebuild(self) -> None:
-        self._sentinel_ids = {c.sentinel: c.id for c in self._by_id.values()}
+        # Build everything first, then swap, so a failure never leaves stale matchers.
+        sentinel_ids = {c.sentinel: c.id for c in self._by_id.values()}
         stable: dict[bytes, tuple[str, str]] = {}
         for c in self._by_id.values():
             raw = c.sentinel.encode()
             stable[raw] = (c.id, "raw")
             for core in b64_cores(raw):
                 stable.setdefault(core, (c.id, "base64"))
-        self._sentinel_matcher = _Matcher(stable)
         real: dict[bytes, tuple[str, str]] = {}
         for c in self._by_id.values():
             if c.value is not None:
                 for k, kind in encoded_variants(c.value).items():
                     real.setdefault(k, (c.id, kind))
-        self._real_matcher = _Matcher(real)
+        sentinel_matcher, real_matcher = _Matcher(stable), _Matcher(real)
+        self._sentinel_ids = sentinel_ids
+        self._sentinel_matcher = sentinel_matcher
+        self._real_matcher = real_matcher
 
     # ---- scanning --------------------------------------------------------
     def find_sentinels(self, data: bytes) -> list[tuple[str, str, int, int]]:

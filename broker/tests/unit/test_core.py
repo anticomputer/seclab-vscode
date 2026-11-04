@@ -96,8 +96,30 @@ def test_import_validation():
         s.import_credential("x", "short", None, [], [], None, {})
     with pytest.raises(PolicyError):
         s.import_credential("x", CANARY, "bad sentinel!", [], [], None, {})
+    with pytest.raises(PolicyError):
+        s.import_credential("x", CANARY + "\udcff", None, [], [], None, {})
     c = s.import_credential("x", CANARY, "S" * 40, [], [], None, {"kind": "workspace-scan"})
     assert not c.confirmed and c.sentinel == "S" * 40
+
+
+def test_derive_rejects_bad_values_and_store_survives():
+    """Regression (security review 2026-11-04 #4): an unencodable minted value
+    poisoned the store and disabled reflection scanning for later credentials."""
+    s = store_with()
+    parent = s.get("c1")
+    with pytest.raises(PolicyError):
+        s.derive(parent, "x" * 20 + "\udcff", "json-token-field")
+    s.provide("c1", "another-canary-value-123", None)
+    assert s.find_real(b"another-canary-value-123")
+
+
+def test_derived_credentials_are_capped():
+    s = store_with()
+    parent = s.get("c1")
+    for i in range(64):
+        s.derive(parent, f"minted-token-value-{i:04d}", "r")
+    with pytest.raises(PolicyError):
+        s.derive(parent, "minted-token-value-9999", "r")
 
 
 @pytest.mark.parametrize("ip", [

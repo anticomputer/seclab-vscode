@@ -4,6 +4,7 @@ scanning, minted tokens, backstop, JIT, import, WebSocket, git over HTTPS."""
 import hashlib
 import json
 import secrets
+import time
 
 ALLOW = [{"id": "api", "host": "api.example.test"}, {"id": "gist", "host": "gist.example.test"},
          {"id": "git", "host": "git.example.test"}, {"id": "ws", "host": "ws.example.test"}]
@@ -177,6 +178,44 @@ def test_imported_credential_binding_confirmed_on_first_use(pod, ctl):
     assert len(ctl.notes_since(mark, "approval.requested")) == 1
     # Confirmed binding is exact: another path is a misplacement.
     assert pod.curl("https://api.example.test/echo/other", "-H", f"Authorization: Token {sentinel}").code == 403
+
+
+def test_allow_once_binding_still_scans_minted_tokens(pod, ctl):
+    """Regression (security review 2026-11-04 #1): with an allow-once binding for an
+    imported credential, the response was not scanned and a minted token reached the tab."""
+    pod.load({"allow": ALLOW, "prompt": {"timeoutSeconds": 10, "denyCooldownSeconds": 0}})
+    s = ctl.call("credential.import", {"id": "imp-a1", "value": pod.canaries["imported"],
+                                        "source": {"kind": "password-input"}})["sentinel"]
+    ctl.handlers["approval.requested"] = lambda p: ctl.call(
+        "approval.decide", {"approvalId": p["approvalId"], "decision": "allow-once"})
+    r = pod.curl("https://api.example.test/mint", "-X", "POST", "-H", f"Authorization: Bearer {s}")
+    assert r.code == 201, r.body
+    assert r.json()["token"].startswith("SECLAB_SNTL_") and "ghs_" not in r.body
+
+
+def test_binding_approvals_are_not_coalesced_across_requests(pod, ctl):
+    """Regression (security review 2026-11-04 #2): a second request joined the first
+    request's binding approval and got the real value on an unapproved path/method/header."""
+    pod.load({"allow": ALLOW, "prompt": {"timeoutSeconds": 10, "denyCooldownSeconds": 0}})
+    s = ctl.call("credential.import", {"id": "imp-a2", "value": pod.canaries["imported"],
+                                        "source": {"kind": "workspace-scan"}})["sentinel"]
+    mark = ctl.mark()
+
+    def decide(p):
+        time.sleep(1.0)
+        ok = p["request"]["path"] == "/echo/a2-ok" and p["request"]["method"] == "GET"
+        ctl.call("approval.decide", {"approvalId": p["approvalId"],
+                                     "decision": "allow-once" if ok else "deny"})
+
+    ctl.handlers["approval.requested"] = decide
+    out = pod.ws(
+        f"(curl -s -o /dev/null -w 'A=%{{http_code}}' -H 'Authorization: Bearer {s}' "
+        f"https://api.example.test/echo/a2-ok > /tmp/a.out &) ; sleep 0.3; "
+        f"curl -s -o /dev/null -w 'B=%{{http_code}}' -X DELETE -H 'X-Smuggle: {s}' "
+        f"https://api.example.test/echo/a2-bad; sleep 2; echo; cat /tmp/a.out").stdout.decode()
+    assert "B=403" in out and "A=200" in out, out
+    assert len(ctl.notes_since(mark, "approval.requested")) == 2
+    assert not [x for x in pod.seen() if x["path"] == "/echo/a2-bad"]
 
 
 def test_websocket_handshake_injection_and_message_scanning(pod, ctl):
