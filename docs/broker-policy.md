@@ -200,6 +200,10 @@ General-purpose hosting, paste, raw-content, IP-echo, tunnel and request-capture
 
 Source: Contagious Interview (DPRK) VS Code tasks.json campaign: loader on *.vercel.app, public-IP lookup via ipify.org, fallback C2 on api.npoint.io, raw-IP C2 on port 1224. https://www.jamf.com/blog/threat-actors-expand-abuse-of-visual-studio-code/ and https://opensourcemalware.com/blog/latest-contagious-interview-malware-campaign-abuses-microsoft-vscode-tasks (both read 2026-11-04). Other entries are the same service classes.
 
+Reviewed baseline exceptions (exact hosts the baseline may name despite the list):
+
+- `openvsxorg.blob.core.windows.net`: Open VSX's own extension download bucket (exact host, GET/HEAD only), part of the baseline extension gallery. Reviewed 2026-11-04.
+
 | Host | Category | Note |
 |---|---|---|
 | `vercel.app` | hosting |  |
@@ -258,6 +262,23 @@ Source: Contagious Interview (DPRK) VS Code tasks.json campaign: loader on *.ver
 | `*.burpcollaborator.net` | request-capture |  |
 | `*.oast.fun` | request-capture |  |
 | `*.interact.sh` | request-capture |  |
+| `*.oastify.com` | request-capture |  |
+| `*.devtunnels.ms` | tunnel |  |
+| `*.ngrok.dev` | tunnel |  |
+| `bore.pub` | tunnel |  |
+| `nip.io` | ip-dns | wildcard DNS: <ip>.nip.io resolves to <ip>, a raw IP in disguise |
+| `*.nip.io` | ip-dns |  |
+| `sslip.io` | ip-dns |  |
+| `*.sslip.io` | ip-dns |  |
+| `*.traefik.me` | ip-dns |  |
+| `*.xip.io` | ip-dns |  |
+| `*.nip.direct` | ip-dns |  |
+| `*.s3.amazonaws.com` | object-storage |  |
+| `storage.googleapis.com` | object-storage |  |
+| `*.blob.core.windows.net` | object-storage |  |
+| `*.r2.dev` | object-storage |  |
+| `objects.githubusercontent.com` | raw-content | GitHub release assets |
+| `release-assets.githubusercontent.com` | raw-content | GitHub release assets |
 <!-- END GENERATED: policy-risky-destinations -->
 
 ## Provider backstop (generated)

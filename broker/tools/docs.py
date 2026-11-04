@@ -42,6 +42,7 @@ CHECKED_DOCS = [
     "docs/broker-policy.md",
     "docs/adr/20261104-broker-policy-and-control-protocol.md",
     "docs/adr/20261104-no-real-secret-enters-a-tab.md",
+    "docs/adr/20261104-defeat-folder-open-loaders.md",
     "docs/edr/20261104-broker-engine-mitmproxy.md",
     "docs/edr/20261104-sentinel-format-and-binding.md",
     "docs/edr/20261104-broker-per-tab-ca.md",
@@ -50,6 +51,7 @@ CHECKED_DOCS = [
     "docs/edr/20261104-broker-docs-from-sources-and-safe-fixtures.md",
     "docs/security-reviews/20261104-broker-m2-m3.md",
     "docs/security-reviews/20261104-broker-docs-drift-and-fixtures.md",
+    "docs/security-reviews/20261104-broker-folder-open-loaders.md",
 ]
 GEN_RE = re.compile(r"(<!-- BEGIN GENERATED: (\S+) [^>]*-->\n)(.*?)(<!-- END GENERATED: \2 -->)", re.S)
 FENCE_RE = re.compile(r"^```(\w*)[^\n]*\n(.*?)^```[ \t]*$", re.S | re.M)
@@ -255,8 +257,10 @@ def gen_forbidden_headers() -> str:
 def gen_risky() -> str:
     d = json.loads((DATA_DIR / "risky-destinations.v1.json").read_text())
     rows = [f"| `{e['host']}` | {e['category']} | {esc(e.get('note', ''))} |" for e in d["entries"]]
-    return (f"{d['description']}\n\nSource: {d['source']}\n\n| Host | Category | Note |\n|---|---|---|\n"
-            + "\n".join(rows) + "\n")
+    exc = "".join(f"- `{e['host']}`: {e['reason']}\n" for e in d.get("baselineExceptions", []))
+    return (f"{d['description']}\n\nSource: {d['source']}\n\n"
+            + (f"Reviewed baseline exceptions (exact hosts the baseline may name despite the list):\n\n{exc}\n" if exc else "")
+            + "| Host | Category | Note |\n|---|---|---|\n" + "\n".join(rows) + "\n")
 
 
 GENERATORS = {
@@ -373,16 +377,16 @@ def cross_checks(errors: list[str]) -> None:
                 errors.append(f"protocol.v1.json example for notification {name}: {err}")
     cap = _cap()
     flags = {r["flag"] for r in cap["rows"] if r.get("flag")}
-    from seclab_broker.policy import baseline_rules, risky_category
+    from seclab_broker.policy import baseline_rules, pattern_overlaps_risky
+    risky_doc = json.loads((DATA_DIR / "risky-destinations.v1.json").read_text())
+    exceptions = {e["host"] for e in risky_doc.get("baselineExceptions", [])}
     for rule in baseline_rules():
-        h = rule.host.text.removeprefix("*.")
-        if risky_category(h) or risky_category("x." + h):
-            errors.append(f"baseline rule {rule.id} matches a risky destination")
+        if rule.host.text not in exceptions and pattern_overlaps_risky(rule.host.text):
+            errors.append(f"baseline rule {rule.id} overlaps a risky destination")
     for f in sorted((BROKER / "examples").glob("*.json")):
         for r in json.loads(f.read_text()).get("allow", []):
-            h = r["host"].removeprefix("*.")
-            if risky_category(h) or risky_category("x." + h):
-                errors.append(f"examples/{f.name}: allow rule for risky destination {r['host']}")
+            if pattern_overlaps_risky(r["host"]):
+                errors.append(f"examples/{f.name}: allow rule for {r['host']} overlaps a risky destination")
     if flags != set(CAPABILITIES):
         errors.append(f"capability flags differ: descriptor {sorted(CAPABILITIES)} vs matrix {sorted(flags)}")
     engine_ids = {e["id"] for e in cap["engines"]}

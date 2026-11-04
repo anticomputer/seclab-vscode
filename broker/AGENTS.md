@@ -202,6 +202,21 @@ Each has a unit or integration test; grep for the phrase.
   spec, and a decision never releases a request that the approved binding does
   not cover.
 
+**Prompts (folder-open loaders, beacons)**
+- `allow-tab` is never offered for a raw IP, an IP-in-hostname name or a
+  risky destination, and `approval.decide` rejects any decision the approval
+  didn't offer.
+- An approval-sourced rule or binding must cover the held request, and must
+  never name a raw IP or overlap a risky destination (`pattern_overlaps_risky`).
+  The broker enforces this even when the client asks otherwise.
+- Before the first `tab.event userAction`, risky and raw-IP egress is denied
+  without a prompt. Raw IPs are denied by default even after a user action.
+- Every way into a prompt goes through the rate limit, the cooldown and the
+  `deny-new-destinations` checks.
+- The baseline and examples never match the risky list (enforced by
+  docs-check).
+- The origin label is display-only. Never use it for a decision.
+
 **Proxy auth and upstream guard**
 - Proxy auth happens before everything. Unauthenticated requests are never
   held, prompted, resolved or connected.

@@ -56,7 +56,7 @@
         "type": "object", "additionalProperties": false, "required": ["host", "category"],
         "properties": {
           "host": { "$ref": "#/definitions/host" },
-          "category": { "enum": ["hosting", "paste", "raw-content", "ip-echo", "tunnel", "request-capture", "other"] }
+          "category": { "enum": ["hosting", "paste", "raw-content", "ip-echo", "ip-dns", "tunnel", "request-capture", "object-storage", "other"] }
         }
       }
     }
