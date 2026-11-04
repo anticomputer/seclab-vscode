@@ -143,6 +143,13 @@ password input (`"password-input"`).
   `credential.bindingConfirmed`, which the supervisor should persist (keychain)
   and pass as `bind` on the next import. `allow-once` injects for that single
   request.
+- **The first-use path is attacker-steerable.** The tab chooses which allowed
+  host, path and header it first sends the sentinel to, so `suggestedBinding`
+  is advisory only. The broker never confirms a binding on its own; only an
+  explicit `allow-tab` does. Supervisors should show the requested host
+  prominently, default to deny, and never pre-select `allow-tab`. Prefer
+  importing with `bind` from a trusted host-side prompt (`seclab-tabd` always
+  does), so imports arrive confirmed.
 - **Storage:** the broker never writes the value anywhere. Persistence is the
   supervisor's job, in the macOS keychain.
 
@@ -257,7 +264,7 @@ docker start <tab>-broker
   `http_proxy` to `http://seclab:<password>@<broker>:<port>`. `<broker>` is
   `host.docker.internal:<P>` under sbx and `broker:8080` in the OCI pod. Set
   both cases because sbx pre-sets the lowercase ones, and curl prefers them.
-- **No-proxy list:** set both `NO_PROXY` and `no_proxy` to `localhost,127.0.0.1`.
+- **No-proxy list:** set both `NO_PROXY` and `no_proxy` to `localhost,127.0.0.1,::1`.
 - **CA:** install the `ca.get` certificate in the tab's system store, as root
   at creation. Point `NODE_EXTRA_CA_CERTS` at it, and `REQUESTS_CA_BUNDLE`
   and `SSL_CERT_FILE` at the system bundle.

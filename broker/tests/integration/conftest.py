@@ -115,7 +115,7 @@ class Pod:
         env = []
         for k in ("HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"):
             env += ["-e", f"{k}={proxy}"]
-        env += ["-e", "NO_PROXY=localhost,127.0.0.1", "-e", "no_proxy=localhost,127.0.0.1",
+        env += ["-e", "NO_PROXY=localhost,127.0.0.1,::1", "-e", "no_proxy=localhost,127.0.0.1,::1",
                 "-e", "NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/seclab-tab.crt",
                 "-e", "REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt",
                 "-e", "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt",
