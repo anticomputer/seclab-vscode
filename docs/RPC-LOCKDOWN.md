@@ -453,6 +453,25 @@ Numbers 1 to 4 came out of the independent design review
 
 ## 8. Decisions needed before implementation
 
-See the Phase 2 report. In short: whether `prompt` or `deny` is the default for
-`external-and-uri`; whether clipboard write stays allowed; and the broker
-protocol for user-typed passwords.
+1. **Verdict laundering must be designed first** (residual risk 1). An allowed
+   command that internally invokes a denied one defeats the commands table.
+   Proposal: taint the execution context for the dynamic extent of a
+   tab-originated command, so nested `executeCommand` calls inherit the tab
+   identity and are filtered too. This needs a decision because it touches
+   `ICommandService` rather than our choke points, and it is the one change
+   that cannot be deferred to Phase 3.
+2. **Is a hard denial the right failure mode?** Today a denied call returns an
+   error the extension sees as unsupported. The alternative is to prompt on
+   first denial, which is friendlier but turns every rogue probe into a user
+   decision — and users click through prompts. Recommendation: keep hard
+   denial, and treat prompts as a per-capability choice rather than a fallback.
+3. **Clipboard write stays allowed.** Read is denied; write is allowed, so a
+   tab can poison the clipboard and the user may paste attacker text into a
+   host terminal. Recommendation: accept for v0, revisit if a probe shows it
+   chains into something worse.
+4. **The broker protocol for user-typed passwords** (§5) is not yet agreed with
+   the broker session: how a password QuickInput value is registered as a
+   broker credential and what its sentinel looks like.
+5. **Does CI regenerate the inventory from the built source?** (residual risk
+   3.) This is the difference between a gate and a formality, and it depends on
+   the fork-build session's pipeline.
