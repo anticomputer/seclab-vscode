@@ -68,8 +68,10 @@ harmless even then.
    - token-shaped literals.
    
    A line can opt out of one rule with `fixture-lint: allow <rule> -- <reason>`. The
-   interface (`test/safety/fixture-lint.sh [PATH...]`, exit 0 or 1) is shared with
-   the broker and RPC sessions.
+   interface (`test/safety/fixture-lint.sh [PATH...]`) is shared with the broker and
+   RPC sessions. It exits 0 when clean, 1 on violations, and 2 when an explicit PATH
+   does not exist, so a typo or a tree that lacks the directory can never report
+   "clean". The summary line gives the number of files scanned.
 
 ## Alternatives considered
 - **Run hostile fixtures only in CI:** rejected. sbx needs local nested virtualisation,

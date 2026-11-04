@@ -6,7 +6,8 @@
 //   - persist, delete broadly, download-and-execute or change host settings
 //   - carry token-shaped literals (real credential formats)
 // Usage: node test/safety/fixture-lint.ts [PATH...]    (default: test sandbox broker/tests)
-// Exit 0 clean, 1 violations ("file:line: rule: ..."). A line may opt out of one rule
+// Exit 0 clean, 1 violations ("file:line: rule: ..."), 2 an explicit PATH does not exist
+// (so a typo or a tree without that dir can never report "clean"). A line may opt out of one rule
 // with a reason:   fixture-lint: allow <rule> -- <reason>
 
 import * as fs from 'node:fs';
@@ -15,7 +16,19 @@ import * as path from 'node:path';
 
 const repo = path.resolve(import.meta.dirname, '../..');
 const args = process.argv.slice(2);
-const roots = (args.length ? args : ['test', 'sandbox', 'broker/tests']).map(p => path.resolve(repo, p));
+const roots: string[] = [];
+for (const p of args.length ? args : ['test', 'sandbox', 'broker/tests']) {
+	const abs = path.resolve(repo, p);
+	if (fs.existsSync(abs)) {
+		roots.push(abs);
+	} else if (args.length) {
+		console.error(`fixture-lint: no such path: ${p}`);
+		process.exit(2);
+	} else {
+		console.log(`fixture-lint: default root absent, skipped: ${p}`);
+	}
+}
+let scanned = 0;
 const SKIP_DIRS = new Set(['node_modules', '.git', '.work', '__pycache__', '.venv']);
 const TEXT = /\.(ts|js|mjs|cjs|json|jsonc|sh|py|toml|ya?ml|md|txt|env|cfg|ini|conf)$|(^|\/)(probe\.sh|fake-python|Dockerfile[^/]*)$/;
 
@@ -72,6 +85,7 @@ function lintFile(file: string): void {
 	if (rel === path.join('test', 'safety', 'fixture-lint.ts')) {
 		return; // the rules themselves
 	}
+	scanned++;
 	fs.readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
 		const optOut = /fixture-lint: allow ([a-z-]+) -- \S/.exec(line)?.[1];
 		const allow = optOut && ALLOWLIST.has(`${rel}:${optOut}`) ? optOut : undefined;
@@ -113,5 +127,5 @@ for (const r of roots) {
 for (const v of violations) {
 	console.log(v);
 }
-console.log(violations.length ? `fixture-lint: ${violations.length} violation(s)` : 'fixture-lint: clean');
+console.log(violations.length ? `fixture-lint: ${violations.length} violation(s) in ${scanned} file(s)` : `fixture-lint: clean (${scanned} file(s))`);
 process.exit(violations.length ? 1 : 0);
