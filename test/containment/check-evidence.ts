@@ -11,6 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
+import { beaconPort, checkUserDataDir, lockRun } from '../harness.ts';
 import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
 
 const [mode, userDataArg, driverArg] = process.argv.slice(2);
@@ -21,7 +22,9 @@ if ((mode !== 'prepare' && mode !== 'check') || !userDataArg) {
 const driver = driverArg ?? 'sbx';
 const repo = path.resolve(import.meta.dirname, '../..');
 const userData = path.resolve(userDataArg);
-const base = path.join(repo, '.work', 'containment-editor');
+checkUserDataDir(userData);
+const base = path.resolve(process.env.SECLAB_EVIDENCE_DIR ?? path.join(repo, '.work', 'containment-editor'));
+lockRun(path.join(base, '..', `${path.basename(base)}.lock.d`));
 const ws = path.join(base, 'ws-editor');
 const canary = path.join(base, 'canary', 'secret.txt');
 const marker = path.join(base, 'PWNED');
@@ -47,7 +50,8 @@ if (mode === 'prepare') {
 	fs.mkdirSync(path.dirname(canary), { recursive: true });
 	fs.writeFileSync(canary, 'HOST-SECRET-CANARY\n');
 	fs.cpSync(path.join(import.meta.dirname, 'fixtures', 'malicious-workspace'), ws, { recursive: true });
-	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${canary}\nmarker=${marker}\nloopback=18099\n`);
+	const port = await beaconPort();
+	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${canary}\nmarker=${marker}\nloopback=${port}\n`);
 	// Git repo with a hostile core.fsmonitor. Only `init` and `config` run on the host;
 	// neither reads core.fsmonitor. Nothing here may run `git status` on the host.
 	execFileSync('git', ['-C', ws, 'init', '-q']);
