@@ -238,16 +238,24 @@ test('scan: unscannable content blocks; links report under the link; trailing ou
 test('scan: external links and unopenable archives block; Go-quoted log paths decode (E1, E2, E3)', () => {
 	const r = parseFrames(Buffer.concat([
 		frame('extlinks', '.', 0, '/scan/ws/.env\0/scan/ws/beacon\0'),
-		frame('archives', 'worktree:.', 0,
+		frame('warnings', 'worktree:.', 0,
 			'7:02PM WRN skipping archive: exceeds max archive depth max_archive_depth=8 path=/scan/ws/deep.zip!a.zip!b.zip\n'
 			+ '7:02PM WRN skipping unknown archive type path="/scan/ws/My Backups/r\\u00e9sum\\u00e9.7z"\n'),
-		frame('archives', 'gitdir:.git', 0, '7:02PM ERR could read compressed file path=/seclab/g/x/info/x.gz\n'),
+		frame('warnings', 'gitdir:.git', 0, '7:02PM ERR could read compressed file path=/seclab/g/x/info/x.gz\n'),
+		frame('amap', 'worktree', 0, '/scan/ws/lib/app.jar\0'),
+		frame('arch', '.', 0, report({ File: '/seclab/a/1.zip!application.properties', StartLine: 4, Secret: 'REAL_TOKEN_IN_JAR' })),
+		frame('warnings', 'arch:.', 0, '7:02PM ERR could not create tmp file path=/seclab/a/1.zip!inner.zip\n'),
 		END]), 0, false);
 	assert.deepEqual(r.findings.map(f => [f.file, f.rule]), [
 		['.env', 'unscanned-link'], ['beacon', 'unscanned-link'],
 		['deep.zip', 'unscanned-archive'], ['My Backups/résumé.7z', 'unscanned-archive'],
 		['.git/info/x.gz', 'unscanned-archive'],
+		['lib/app.jar!application.properties', 'generic-api-key'],
+		['lib/app.jar', 'unscanned-archive'],
 	]);
+	assert.equal(r.findings.find(f => f.file.includes('!'))?.movable, false);
+	const pathless = parseFrames(Buffer.concat([frame('warnings', 'worktree:.', 0, '7:02PM ERR something odd happened\n'), END]), 0, false);
+	assert.equal(pathless.complete, false, 'a warning without a path makes the scan incomplete');
 	assert.equal(goUnquote('"a b\\"c\\\\d\\x41\\n"'), 'a b"c\\dA\n');
 	assert.equal(goUnquote('/plain/path'), '/plain/path');
 });

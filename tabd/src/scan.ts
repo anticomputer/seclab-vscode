@@ -81,7 +81,7 @@ const $ = '$'; // bash ${...} inside a JS template literal
 const SCRIPT = String.raw`set -u
 O=/seclab
 printf '%s' "$SECLAB_GITLEAKS_TOML" > "$O/gitleaks.toml"; unset SECLAB_GITLEAKS_TOML
-: > "$O/ignore"; mkdir "$O/empty" "$O/g"; cd "$O/empty" || exit 3
+: > "$O/ignore"; mkdir "$O/empty" "$O/g" "$O/tmp"; cd "$O/empty" || exit 3
 GL="--config $O/gitleaks.toml --gitleaks-ignore-path $O/ignore --ignore-gitleaks-allow --no-banner --report-format json --exit-code 0 --log-level error"
 LIM=${LIMIT_MB}
 hex() { printf '%s' "$1" | od -An -v -tx1 | tr -d ' \n'; }
@@ -113,16 +113,18 @@ gounquote() {
 }
 gdir() {
   timeout 300 gitleaks dir "$3" $GL --no-color --log-level debug --max-archive-depth 8 --max-target-megabytes $LIM --report-path "$O/r.json" 2>&1 >/dev/null \
-    | grep -a -E 'skipping binary file|archive|compressed file' > "$O/glog"; local rc=${$}{PIPESTATUS[0]}
+    | grep -a -E ' (WRN|ERR) |skipping binary file' > "$O/glog"; local rc=${$}{PIPESTATUS[0]}
   emit "$1" "$2" "$rc" "$O/r.json"
-  # Archives gitleaks could not open (or nested too deep): blocking, never silent.
-  grep -a -E 'skipping archive|unknown archive type|could not copy archive|could not open archive|could read compressed' "$O/glog" > "$O/arch"
-  emit archives "$1:$2" 0 "$O/arch"
+  # Every gitleaks warning/error (unopenable archive, temp-file failure, permission, ...)
+  # blocks on its path, or makes the scan incomplete: never an allow-list of messages.
+  # (Only its normal summary line "leaks found: N" is not a warning about coverage.)
+  grep -a -E ' (WRN|ERR) ' "$O/glog" | grep -a -v -E ' WRN leaks found: [0-9]+$' > "$O/warn"
+  emit warnings "$1:$2" 0 "$O/warn"
   grep -a 'skipping binary file' "$O/glog" > "$O/binlog"
-  rm -f "$O/glog" "$O/arch"
+  rm -f "$O/glog" "$O/warn"
   [ -s "$O/binlog" ] || { rm -f "$O/binlog"; return 0; }
-  : > "$O/binmap"; : > "$O/binbad"
-  { pad; local L=$((PADL+1)) p n line
+  : > "$O/binmap"; : > "$O/binbad"; : > "$O/amap"; rm -rf "$O/a"; mkdir -p "$O/a"
+  { pad; local L=$((PADL+1)) p n line mime ext k=0
     while IFS= read -r line; do
       p=$(gounquote "${$}{line#* path=}")
       if [ ! -f "$p" ]; then
@@ -131,16 +133,50 @@ gdir() {
         case "$p" in *'!'*) [ -f "${$}{p%%!*}" ] && continue ;; esac
         echo 1 > "$O/binbad"; continue
       fi
+      # Archives gitleaks didn't recognise by name (.jar, .docx, .whl, renamed .gz, ...):
+      # scan them as archives under a name it does recognise.
+      mime=${$}{line#*mime_type=}; mime=${$}{mime%% *}
+      case "$mime" in
+        application/zip|application/java-archive|application/epub+zip|application/vnd.openxmlformats*|application/vnd.oasis.opendocument*|application/x-zip*) ext=zip ;;
+        application/gzip|application/x-gzip) ext=gz ;; application/x-xz) ext=xz ;; application/zstd) ext=zst ;;
+        application/x-bzip2) ext=bz2 ;; application/x-7z-compressed) ext=7z ;; application/vnd.rar|application/x-rar*) ext=rar ;;
+        application/x-tar) ext=tar ;; *) ext= ;;
+      esac
+      if [ -n "$ext" ]; then
+        k=$((k+1)); cp "$p" "$O/a/$k.$ext" || echo 1 > "$O/binbad"; printf '%s\0' "$p" >> "$O/amap"
+      fi
+      # Also as text: a fake archive (magic header + plain text) must not hide its content.
       printf '%s\0%s\0' "$p" "$((L+1))" >> "$O/binmap"
       n=$(tr -cd '\n' < "$p" | wc -c); L=$((L+n+2))
       printf '\n'; cat "$p"; printf '\n'
-    done < "$O/binlog"; } | timeout 300 gitleaks stdin $GL --report-path "$O/r.json"; rc=$?
+    done < "$O/binlog"; } | timeout 300 gitleaks stdin $GL --report-path "$O/rb.json"; rc=$?
   [ ! -s "$O/binbad" ] || rc=1
+  # Archive pass first, so a member finding ("app.jar!x") wins over the raw-bytes copy.
+  if [ -s "$O/amap" ]; then
+    emit amap "$1" 0 "$O/amap"
+    timeout 300 gitleaks dir "$O/a" $GL --no-color --log-level warn --max-archive-depth 8 --max-target-megabytes $LIM --report-path "$O/r.json" 2>"$O/warn"
+    emit arch "$2" $? "$O/r.json"
+    grep -a -E ' (WRN|ERR) ' "$O/warn" | grep -a -v -E ' WRN leaks found: [0-9]+$' > "$O/warn2"; emit warnings "arch:$2" 0 "$O/warn2"; rm -f "$O/warn" "$O/warn2"
+  fi
   emit binmap "$1" 0 "$O/binmap"
-  emit bin "$2" "$rc" "$O/r.json"
-  rm -f "$O/binlog" "$O/binbad"
+  emit bin "$2" "$rc" "$O/rb.json"
+  rm -rf "$O/binlog" "$O/binbad" "$O/amap" "$O/a"
 }
 gdir worktree . /scan
+# gitleaks reads nothing (and logs nothing) from an archive nested inside a tar-family
+# archive (zip-in-tar.gz, tgz-in-tgz): block those outer archives as unscanned.
+: > "$O/nest"
+while IFS= read -r -d '' f; do
+  lf=$(printf '%s' "$f" | tr 'A-Z' 'a-z')
+  case "$lf" in
+    *.tar) m=$(tar -tf "$f" 2>/dev/null) ;; *.tgz|*.tar.gz) m=$(tar -tzf "$f" 2>/dev/null) ;;
+    *.tbz|*.tbz2|*.tar.bz2) m=$(tar -tjf "$f" 2>/dev/null) ;; *.txz|*.tar.xz) m=$(tar -tJf "$f" 2>/dev/null) ;;
+    *) continue ;;
+  esac
+  printf '%s\n' "$m" | grep -qiE '\.(zip|jar|war|ear|apk|aar|whl|nupkg|vsix|docx|xlsx|pptx|odt|ods|epub|tar|tgz|tbz2?|txz|gz|bz2|xz|zst|7z|rar)$' \
+    && printf '%s\0' "$f" >> "$O/nest"
+done < <(find /scan/ws -xdev -name node_modules -prune -o -type f -print0)
+emit nested . 0 "$O/nest"
 find /scan/ws -xdev -type f -size +$((LIM*1000000))c -print0 | cap "$O/r.json"; emit large . $? "$O/r.json"
 # Paths the scanner can't read or list (the tab may chmod its own files): blocking, never
 # silent. A real open per file (access(2) lies on Docker Desktop file sharing), plus every
@@ -227,19 +263,20 @@ const GIT_OVERRIDES: Array<[string, string]> = [
 	['log.decorate', 'no'], ['log.abbrevCommit', 'false'], ['i18n.logOutputEncoding', 'UTF-8'],
 ];
 
-type Kind = 'worktree' | 'large' | 'unreadable' | 'finderr' | 'links' | 'linked' | 'linkcopy' | 'extlinks' | 'manylinks' | 'archives' | 'binmap' | 'bin' | 'gitdir' | 'history' | 'objects' | 'largeobj' | 'badgit' | 'toomany' | 'end';
-const KINDS = new Set<Kind>(['worktree', 'large', 'unreadable', 'finderr', 'links', 'linked', 'linkcopy', 'extlinks', 'manylinks', 'archives', 'binmap', 'bin', 'gitdir', 'history', 'objects', 'largeobj', 'badgit', 'toomany', 'end']);
+type Kind = 'worktree' | 'large' | 'unreadable' | 'finderr' | 'links' | 'linked' | 'linkcopy' | 'extlinks' | 'manylinks' | 'warnings' | 'nested' | 'amap' | 'arch' | 'binmap' | 'bin' | 'gitdir' | 'history' | 'objects' | 'largeobj' | 'badgit' | 'toomany' | 'end';
+const KINDS = new Set<Kind>(['worktree', 'large', 'unreadable', 'finderr', 'links', 'linked', 'linkcopy', 'extlinks', 'manylinks', 'warnings', 'nested', 'amap', 'arch', 'binmap', 'bin', 'gitdir', 'history', 'objects', 'largeobj', 'badgit', 'toomany', 'end']);
 
-/** Scanner path of a file seen by a dir pass -> workspace-relative path. */
+/** Scanner path of a file seen by a dir pass -> workspace-relative path ("a.zip!m" kept). */
 function mapScannerPath(parent: string, rel: string, p: string, links: string[]): string | undefined {
 	if (parent === 'gitdir') {
 		const inner = workspaceRel(p, '/seclab/g/x/');
 		return inner === undefined ? undefined : path.posix.join(rel, inner);
 	}
 	if (parent === 'linked') {
-		const n = /^\/seclab\/l\/(x|d)\/(\d+)(\/.+)?$/.exec(p);
+		// /seclab/l/x/<n>[!member] (file link) or /seclab/l/d/<n>/<path> (directory link)
+		const n = /^\/seclab\/l\/(x|d)\/(\d+)(.*)$/.exec(p);
 		const link = n ? links[Number(n[2]) - 1] : undefined;
-		return link && n ? workspaceRel(n[1] === 'x' ? link : `${link}${n[3] ?? ''}`, '/scan/ws/') : undefined;
+		return link && n ? workspaceRel(`${link}${n[3]}`, '/scan/ws/') : undefined;
 	}
 	return workspaceRel(p, '/scan/ws/');
 }
@@ -292,9 +329,10 @@ export async function scanWorkspace(runner: Runner, docker: string, hostPath: st
 	const user = scanUser(hostPath);
 	const [uid, gid] = user.split(':');
 	const args = ['run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-		'--user', user, '--pids-limit', '256', '--memory', '1g',
-		'--tmpfs', `/seclab:rw,noexec,nosuid,nodev,size=256m,mode=0700,uid=${uid},gid=${gid}`, '--workdir', '/',
-		'-e', 'HOME=/seclab', '-e', 'GIT_CONFIG_NOSYSTEM=1', '-e', 'GIT_CONFIG_GLOBAL=/dev/null', '-e', 'GIT_ATTR_NOSYSTEM=1',
+		'--user', user, '--pids-limit', '256', '--memory', '2g',
+		// Nested zip/7z members are extracted to $TMPDIR; the root filesystem is read-only.
+		'--tmpfs', `/seclab:rw,noexec,nosuid,nodev,size=768m,mode=0700,uid=${uid},gid=${gid}`, '--workdir', '/',
+		'-e', 'HOME=/seclab', '-e', 'TMPDIR=/seclab/tmp', '-e', 'GIT_CONFIG_NOSYSTEM=1', '-e', 'GIT_CONFIG_GLOBAL=/dev/null', '-e', 'GIT_ATTR_NOSYSTEM=1',
 		'-e', 'GIT_NO_REPLACE_OBJECTS=1', '-e', 'GIT_TERMINAL_PROMPT=0', '-e', `GIT_CONFIG_COUNT=${GIT_OVERRIDES.length}`, ...env,
 		'-e', `SECLAB_GITLEAKS_TOML=${CONFIG}`, '-e', `SECLAB_WS=${hostPath}`,
 		'--mount', `type=bind,src=${hostPath},dst=/scan/ws,readonly`,
@@ -316,6 +354,8 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 	let links: string[] = [];
 	let binmap: Array<{ path: string; start: number }> = [];
 	let binParent = '';
+	let amap: string[] = [];
+	let amapParent = '';
 
 	let off = 0;
 	while (off < buf.length) {
@@ -409,22 +449,39 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 			case 'linkcopy':
 				errors.push('some symlink targets could not be copied for scanning');
 				continue;
-			case 'archives': {
-				// "<parent kind>:<rel>"; one gitleaks log line per archive it could not open or
-				// that nests deeper than --max-archive-depth: block on the (outer) file.
+			case 'warnings': {
+				// "<parent kind>:<rel>" (or "arch:<rel>" for the renamed-archive pass). Any gitleaks
+				// WRN/ERR line blocks on its path; one without a path makes the scan incomplete.
 				const sep = rel.indexOf(':');
 				const parent = rel.slice(0, sep);
 				const prel = rel.slice(sep + 1);
-				for (const lineText of body.toString('latin1').split('\n')) {
+				for (const lineText of body.toString('utf8').split('\n').filter(Boolean)) {
 					const at = lineText.indexOf(' path=');
 					if (at < 0) {
+						errors.push(`scanner warning: ${displayPath(lineText.replace(/^\S+ (WRN|ERR) /, '')).slice(0, 160)}`);
 						continue;
 					}
-					const scannerPath = goUnquote(lineText.slice(at + ' path='.length)).split('!')[0];
-					unscanned('worktree', mapScannerPath(parent, prel, scannerPath, links) ?? '(unknown archive)', 'unscanned-archive');
+					let scannerPath = goUnquote(lineText.slice(at + ' path='.length)).split('!')[0];
+					let kindOf = parent;
+					if (parent === 'arch') {
+						const a = /^\/seclab\/a\/(\d+)\.[a-z0-9]+$/.exec(scannerPath);
+						scannerPath = a ? amap[Number(a[1]) - 1] ?? '' : '';
+						kindOf = amapParent;
+					}
+					const rule = /archive|compressed|tmp file/i.test(lineText) ? 'unscanned-archive' : 'unscanned-warning';
+					unscanned('worktree', mapScannerPath(kindOf, prel, scannerPath, links) ?? '(unknown file)', rule);
 				}
 				continue;
 			}
+			case 'nested':
+				for (const p of body.toString('utf8').split('\0').filter(Boolean)) {
+					unscanned('worktree', workspaceRel(p, '/scan/ws/') ?? '(unknown archive)', 'unscanned-archive');
+				}
+				continue;
+			case 'amap':
+				amap = body.toString('utf8').split('\0').filter(Boolean);
+				amapParent = rel;
+				continue;
 			case 'binmap': {
 				// Pairs "<scanner path>\0<first stream line>\0" for the rescan of files the
 				// <rel>-kind dir pass skipped as binary.
@@ -469,6 +526,18 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 				}
 				return hit ? { ...f, File: hit.path, StartLine: line - hit.start + 1 } : { ...f, File: '' };
 			});
+		} else if (kind === 'arch') {
+			// Renamed archives copied to /seclab/a/<n>.<ext>: map back to the original file.
+			if (amapParent !== 'worktree' && amapParent !== 'linked' && amapParent !== 'gitdir') {
+				errors.push('archive rescan without a map');
+				continue;
+			}
+			as = amapParent;
+			raw = raw.map(f => {
+				const a = /^\/seclab\/a\/(\d+)\.[a-z0-9]+(!.*)?$/.exec(String(f.File ?? ''));
+				const orig = a ? amap[Number(a[1]) - 1] : undefined;
+				return { ...f, File: orig ? `${orig}${a?.[2] ?? ''}` : '' };
+			});
 		} else {
 			as = kind;
 		}
@@ -478,11 +547,11 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 			if (as !== 'linked') {
 				return f;
 			}
-			// Content of a symlink target, copied to /seclab/l/x/<n> (file) or
+			// Content of a symlink target, copied to /seclab/l/x/<n>[!member] (file) or
 			// /seclab/l/d/<n>/<path> (directory): report it under the link.
-			const n = /^\/seclab\/l\/(x|d)\/(\d+)(\/.+)?$/.exec(String(f.File ?? ''));
+			const n = /^\/seclab\/l\/(x|d)\/(\d+)(.*)$/.exec(String(f.File ?? ''));
 			const link = n ? links[Number(n[2]) - 1] : undefined;
-			return { ...f, File: link && n ? (n[1] === 'x' ? link : `${link}${n[3] ?? ''}`) : '' };
+			return { ...f, File: link && n ? `${link}${n[3]}` : '' };
 		}).sort((a, b) => cmp(String(a.File ?? ''), String(b.File ?? '')) || Number(a.StartLine) - Number(b.StartLine)
 			|| cmp(String(a.RuleID ?? ''), String(b.RuleID ?? '')) || cmp(String(a.Commit ?? ''), String(b.Commit ?? '')) || cmp(String(a.Secret ?? ''), String(b.Secret ?? '')));
 		for (const f of mapped) {

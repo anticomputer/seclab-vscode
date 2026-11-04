@@ -27,8 +27,8 @@ try {
 fs.rmSync(work, { recursive: true, force: true });
 const ws = path.join(work, 'tabs', 'ws');
 fs.mkdirSync(ws, { recursive: true });
-const C = Object.fromEntries(['tree', 'config', 'history', 'allow', 'ignored', 'reflog', 'staged', 'nested', 'symhead', 'common', 'link', 'dirlink', 'objplant', 'abscommon', 'magic', 'envlib', 'archive', 'quoted']
-	.map(k => [k, mintCanary(k).value])) as Record<'tree' | 'config' | 'history' | 'allow' | 'ignored' | 'reflog' | 'staged' | 'nested' | 'symhead' | 'common' | 'link' | 'dirlink' | 'objplant' | 'abscommon' | 'magic' | 'envlib' | 'archive' | 'quoted', string>;
+const C = Object.fromEntries(['tree', 'config', 'history', 'allow', 'ignored', 'reflog', 'staged', 'nested', 'symhead', 'common', 'link', 'dirlink', 'objplant', 'abscommon', 'magic', 'envlib', 'archive', 'quoted', 'jar', 'nested2']
+	.map(k => [k, mintCanary(k).value])) as Record<'tree' | 'config' | 'history' | 'allow' | 'ignored' | 'reflog' | 'staged' | 'nested' | 'symhead' | 'common' | 'link' | 'dirlink' | 'objplant' | 'abscommon' | 'magic' | 'envlib' | 'archive' | 'quoted' | 'jar' | 'nested2', string>;
 
 // Build the fixture repo. Hooks disabled; nothing here reads hostile config.
 const gitIn = (dir: string, ...a: string[]) => execFileSync('git', ['-C', dir, '-c', 'core.hooksPath=/dev/null', ...a], { stdio: 'ignore' });
@@ -120,6 +120,16 @@ fs.writeFileSync(path.join(arcSrc, 'creds.env'), `TOKEN=${C.archive}\n`);
 execFileSync('tar', ['-czf', path.join(ws, 'backup.tar.gz'), '-C', arcSrc, 'creds.env']);
 fs.rmSync(arcSrc, { recursive: true, force: true });
 fs.writeFileSync(path.join(ws, 'Résumé data.dat'), Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x0a]), Buffer.from(`TOKEN=${C.quoted}\n`)]));
+// Round 10 (F1): an archive gitleaks doesn't recognise by name (a .jar is a zip), and a
+// zip nested in a tar.gz (needs TMPDIR on the read-only scanner).
+const jarSrc = path.join(work, 'jar');
+fs.mkdirSync(jarSrc, { recursive: true });
+fs.writeFileSync(path.join(jarSrc, 'application.properties'), `db.password=${C.jar}\n`);
+execFileSync('zip', ['-q', '-j', path.join(ws, 'app.jar'), path.join(jarSrc, 'application.properties')]);
+fs.writeFileSync(path.join(jarSrc, 'inner.env'), `TOKEN=${C.nested2}\n`);
+execFileSync('zip', ['-q', '-j', path.join(jarSrc, 'inner.zip'), path.join(jarSrc, 'inner.env')]);
+execFileSync('tar', ['-czf', path.join(ws, 'nested.tar.gz'), '-C', jarSrc, 'inner.zip']);
+fs.rmSync(jarSrc, { recursive: true, force: true });
 
 const client = new TabdClient({
 	command: process.execPath,
@@ -161,6 +171,9 @@ try {
 	assert.equal(has('worktree', 'zip.env').length, 1, `secret behind a zip magic header missed: ${show}`);
 	assert.equal(canary.filter(f => f.file.startsWith('backup.tar.gz')).length, 1, `secret inside an archive missed: ${show}`);
 	assert.equal(has('worktree', 'Résumé data.dat').length, 1, `magic-header file with a quoted name missed: ${show}`);
+	assert.equal(canary.filter(f => f.file.startsWith('app.jar!')).length, 1, `secret in a .jar (zip not recognised by name) missed: ${show}`);
+	assert.equal(scan.findings.filter(f => f.file === 'nested.tar.gz' && f.rule === 'unscanned-archive').length
+		+ canary.filter(f => f.file.startsWith('nested.tar.gz!')).length >= 1, true, `zip nested in a tar.gz neither scanned nor blocked: ${show}`);
 	assert.equal(canary.filter(f => f.source === 'worktree' && ['Env/lib/stash/prod.env', 'secrets2/prod.env'].includes(f.file)).length, 1, `link into an allowlisted tree missed: ${show}`);
 	for (const p of ['locked.env', 'lockdir']) {
 		assert.equal(scan.findings.filter(f => f.rule === 'unscanned-unreadable' && f.file === p).length, 1, `unreadable ${p} skipped silently: ${show}`);
