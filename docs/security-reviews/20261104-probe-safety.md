@@ -56,16 +56,30 @@ three that directly target findings 1–3:
 `rpc-filter/tools/lint.sh` reports 3 files clean against 8 rules, having first
 failed on the `probe.sh` spawn.
 
-## Still open before a go
+## Closing the harness-side findings
 
-1. Unconditional `core.fsmonitor` disarm, including on abort (finding 5).
-2. Teardown: keychain entry, tunnel, terminal, window, markers, sandboxes, and
-   the post-run "nothing outside the run directory changed" check (finding 6).
-3. Clipboard save and restore (finding 7).
-4. Decide what to do about the real browser launch from `openExternal`, since
-   the destination is constrained but the handler is not.
+Addressed in `check-evidence.ts` and a new `test/containment/teardown.ts`:
 
-Items 1–3 are in harness files the fork-build session owns; they have been
-raised with them. The reviewer's fallback recommendation stands until teardown
-exists: run the unpatched proof under a dedicated throwaway macOS account
-rather than the developer's primary one.
+1. **`core.fsmonitor` disarm is now unconditional** — registered on `exit`,
+   `SIGINT`, `SIGTERM` and `uncaughtException` in `prepare`, not only on a
+   clean `check`. An aborted prepare no longer leaves an armed repo.
+2. **Teardown and the host tripwire exist.** `teardown.ts snapshot` before the
+   run, `verify` after: it checks the run-scoped keychain key is gone, that
+   every recorded artefact is inside the run directory, that no tab sandbox is
+   still running, and that `$HOME`, `~/Library/LaunchAgents`, `~/.ssh`,
+   `~/.aws` and `~/.config` are unchanged. Verified by planting a LaunchAgents
+   plist: it fails and names the file.
+3. **Clipboard is saved and restored** around the canary write.
+4. **Arming is wired up.** `prepare` mints a per-run nonce, writes it into the
+   run directory and prints it on the launch line, so probes are armed for that
+   run only and inert everywhere else.
+
+### Still open
+
+- **`openExternal` launches the real default browser.** The destination is
+  constrained to the loopback beacon, but the *handler* is not, so a browser
+  tab opens on `http://127.0.0.1:<port>/…`. Harmless content, visible nuisance.
+  Accepted for the proof run and recorded here rather than silently.
+- **Tunnel and host terminal** from `asExternalUri` and
+  `host-terminal-newlocal` are closed by ending the editor session rather than
+  by the probes themselves; the tripwire does not see them.

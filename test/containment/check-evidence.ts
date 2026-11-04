@@ -9,6 +9,7 @@
 //   .work/app/seclab-vscode.app/Contents/Resources/app/bin/code --user-data-dir <dir> --folder-uri <printed>  (the build keeps upstream's CLI name)
 
 import { execFileSync, spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
@@ -64,15 +65,34 @@ if (mode === 'prepare') {
 	writeSnapshot(base);
 	// What this run owns, for teardown.ts: the editor and its tabd are found by the unique
 	// user-data-dir (never by program name), the tab by id.
-	writeManifest(base, { driver: driver as 'sbx' | 'oci', userDataDir: userData, stateDirs: [stateDir] });
+	writeManifest(base, {
+		driver: driver as 'sbx' | 'oci', userDataDir: userData, stateDirs: [stateDir],
+		// The RPC-lockdown probe runs start an egress beacon at this path. It is
+		// not a tab, so teardown only reaps it if the run claims it: a mark must
+		// name a program plus arguments containing the run dir.
+		commandMarks: [`beacon.ts start ${path.join(base, 'beacon.log')}`],
+	});
 	// Git repo with a hostile core.fsmonitor. Only `init` and `config` run on the host;
 	// neither reads core.fsmonitor. Nothing here may run `git status` on the host.
 	execFileSync('git', ['-C', ws, 'init', '-q']);
 	execFileSync('git', ['-C', ws, 'config', 'core.fsmonitor', 'sh .seclab/probe.sh fsmonitor']);
+	// Disarm on EVERY exit, not just a clean `check`. An aborted or crashed
+	// prepare used to leave a host git repo whose core.fsmonitor runs probe.sh
+	// on the next `git status` -- from the user's own editor, a watcher or a
+	// grep. Probe safety review 2026-11-04, finding 5.
+	const disarm = (): void => {
+		try { fs.rmSync(path.join(ws, '.git'), { recursive: true, force: true }); } catch { /* best effort */ }
+	};
+	process.on('exit', disarm);
+	process.on('SIGINT', () => { disarm(); process.exit(130); });
+	process.on('SIGTERM', () => { disarm(); process.exit(143); });
+	process.on('uncaughtException', err => { disarm(); console.error(err); process.exit(2); });
 	// Test profile: Workspace Trust off and automatic tasks on, i.e. the worst case for us
 	// (trust is UX, not a boundary). Plus editor-side canaries (shared canary harness):
 	// user settings (incl. a secret-bearing setting) and, only if opted in, the clipboard
 	// (seeding it overwrites the user's real clipboard: SECLAB_CANARY_CLIPBOARD=1).
+	// The RPC escape probes are armed by the same arm=/run=/until= fields this
+	// harness already writes into .seclab/targets. One arming mechanism, not two.
 	const canaries = [mintCanary('user-settings'), mintCanary('user-settings-proxy-auth'), mintCanary('clipboard'), mintCanary('editor-env')];
 	fs.writeFileSync(path.join(base, 'canaries.json'), serialize(canaries));
 	fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
@@ -85,6 +105,13 @@ if (mode === 'prepare') {
 		'http.proxyAuthorization': `Basic ${canaries[1].value}`,
 	}, null, '\t'));
 	if (process.env.SECLAB_CANARY_CLIPBOARD === '1') {
+		// Opt-in only, and put the user's clipboard back afterwards: it is
+		// commonly a password or token, which is exactly why clipboard-read is
+		// a probe at all (probe safety review, finding 7).
+		const savedClipboard = spawnSync('pbpaste', [], { encoding: 'utf8' }).stdout ?? '';
+		process.on('exit', () => {
+			try { spawnSync('pbcopy', [], { input: savedClipboard }); } catch { /* best effort */ }
+		});
 		spawnSync('pbcopy', [], { input: canaries[2].value });
 	}
 	// Package the rogue extension (vsce in a container) and preinstall it into the tab.
@@ -108,7 +135,15 @@ if (mode === 'prepare') {
 	console.log(r.stdout.trim(), r.stderr.trim());
 	client.dispose(); // stops the tab; the editor restarts it (extensions persist in the tab)
 	await new Promise(res => client.once('exit', res));
-	console.log(`\nprepared tab ${tab.metadata.name} for ${ws}\nnow open the TAB directly (never the local path: a local window must not open this hostile workspace):\n  env SECLAB_EDITOR_CANARY=${canaries[3].value} <app>/Contents/Resources/app/bin/code --user-data-dir ${userData} --folder-uri vscode-remote://seclab+${tab.metadata.name}${ws}`);
+	console.log(`\nprepared tab ${tab.metadata.name} for ${ws}`);
+	console.log(`\nnow open the TAB directly (never the local path: a local window must not open this hostile workspace).`);
+	console.log(`Keep --user-data-dir SHORT: macOS caps unix socket paths at 104 bytes and a deep path silently fails to open a window.\n`);
+	console.log(`  env SECLAB_EDITOR_CANARY=${canaries[3].value} \\\n`
+		+ `      SECLAB_PROBE_NONCE=${nonce} \\\n`
+		+ `      SECLAB_PROBE_RUNDIR=${base} \\\n`
+		+ `      SECLAB_PROBE_BEACON_PORT=\${SECLAB_BEACON_PORT:-18099} \\\n`
+		+ `      <app>/Contents/Resources/app/bin/code --user-data-dir ${userData} \\\n`
+		+ `      --folder-uri vscode-remote://seclab+${tab.metadata.name}${ws}`);
 } else {
 	const checks: Check[] = [];
 	for (const vector of ['task', 'fsmonitor', 'rogue-extension']) {
