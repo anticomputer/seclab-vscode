@@ -2,12 +2,15 @@
 // Usage: seclab-tabd --state-dir ABS [--driver sbx|oci] [--image REF] [--broker-image REF]
 //                    [--allowed-root ABS]... [--sensitive ABS]... [--cpus N] [--memory 4g]
 
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseArgs } from 'node:util';
 import { OciDriver } from './drivers/oci.ts';
 import { SbxDriver } from './drivers/sbx.ts';
 import type { Driver, TabTemplate } from './drivers/types.ts';
+import { FalcoSensor } from './obs/falco.ts';
+import type { ObsHub } from './obs/hub.ts';
 import { cleanEnv, createRunner, resolveBinary } from './run.ts';
 import { TabStore } from './state.ts';
 import { scanWorkspace } from './scan.ts';
@@ -64,6 +67,7 @@ const runner = createRunner((action, outcome, detail) => {
 }, childEnv, stateDir);
 
 const drivers = new Map<string, Driver>();
+let hostSensor: ((hub: ObsHub) => FalcoSensor) | undefined;
 const driverName = values.driver;
 if (driverName === 'sbx') {
 	if (!sbxPath) {
@@ -75,6 +79,22 @@ if (driverName === 'sbx') {
 		die('docker not found in system locations');
 	}
 	drivers.set('oci', new OciDriver(dockerPath, runner, { brokerImage: values['broker-image']! }));
+	// Tab observability: Falco on the Docker host, only while OCI tabs run (ADR tab-observability).
+	const stateTag = createHash('sha256').update(stateDir).digest('hex').slice(0, 8);
+	hostSensor = hub => new FalcoSensor({
+		hub, rulesDir: path.join(stateDir, 'falco'), name: `seclab-falco-${stateTag}-${process.pid}`,
+		labels: { 'seclab.obs': 'falco', 'seclab.state': stateTag, 'seclab.pid': String(process.pid) },
+		spawnDocker: args => runner.spawnStream(dockerPath, args),
+		runDocker: args => runner.run(dockerPath, args, { timeoutMs: 60_000 }),
+		pidAlive: pid => {
+			try {
+				process.kill(pid, 0);
+				return true;
+			} catch (e) {
+				return (e as NodeJS.ErrnoException).code === 'EPERM';
+			}
+		},
+	});
 } else {
 	die(`unknown driver ${driverName}`);
 }
@@ -99,6 +119,7 @@ const supervisor = new Supervisor({
 	audit: entry => fs.writeSync(auditLog, JSON.stringify(entry) + '\n'),
 	eventsDir: path.join(stateDir, 'events'),
 	outputBacklog: () => process.stdout.writableLength,
+	hostSensor,
 	fenceReverifyMs: values['fence-reverify-ms'] ? Number(values['fence-reverify-ms']) : undefined,
 	gcDays: /^[0-9]{1,4}$/.test(values['gc-days']!) ? Number(values['gc-days']) : die('--gc-days must be a whole number of days'),
 	pathPolicy: {

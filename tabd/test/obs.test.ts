@@ -423,3 +423,70 @@ test('obs supervisor: collector gates the REH, is reused, events stream to subsc
 	assert.equal((await call('tab.events.tail', { tabId, limit: 5 })).observation.state, 'unavailable');
 	await sup.clientGone();
 });
+
+// ---- OCI Falco sensor -------------------------------------------------------------------
+
+test('obs falco: ruleset holds only validated container ids; args are fixed and output-free', async () => {
+	const { falcoRules, falcoArgs } = await import('../src/obs/falco.ts');
+	const y = falcoRules([{ shortId: 'abcdef012345', deep: false }, { shortId: '0123456789ab', deep: true }]);
+	assert.match(y, /container\.id in \("abcdef012345", "0123456789ab"\)/);
+	assert.match(y, /seclab_deep\n {2}condition: container\.id in \("0123456789ab"\)/);
+	assert.match(falcoRules([]), /container\.id in \("000000000000"\)/);
+	assert.throws(() => falcoRules([{ shortId: 'abc") or (1=1', deep: false }]));
+	const a = falcoArgs('seclab-falco-0a1b2c3d-123', '/state/falco', { 'seclab.obs': 'falco' });
+	for (const want of ['--network', 'none', 'webserver.enabled=false', 'http_output.enabled=false', 'grpc.enabled=false', 'program_output.enabled=false', 'file_output.enabled=false']) {
+		assert.ok(a.includes(want), want);
+	}
+	assert.ok(!a.some(x => x.includes('docker.sock')), 'no runtime socket');
+	assert.ok(a.indexOf('--') < a.indexOf('falco'));
+	assert.throws(() => falcoArgs('evil; rm', '/x', {}));
+	assert.throws(() => falcoArgs('seclab-falco-0a1b2c3d-1', '/a,b', {}));
+});
+
+test('obs falco: events map to drafts; other containers and non-JSON are ignored; ready means our ruleset', async () => {
+	const { FalcoSensor, falcoRules, falcoToDraft } = await import('../src/obs/falco.ts');
+	const { createHash } = await import('node:crypto');
+	const ex = falcoToDraft('seclab.connect', { 'proc.pid': 9, 'proc.exepath': '/usr/bin/curl', 'fd.typechar': '4', 'evt.args': 'res=-115(EINPROGRESS) tuple=NULL fd=4(<4>) addr=192.0.2.10:80' })!;
+	assert.deepEqual(ex.net, { addr: '192.0.2.10', port: 80, family: 'inet', result: 'pending' });
+	assert.equal(falcoToDraft('seclab.priv', { 'proc.pid': 9, 'evt.type': 'setresuid', 'evt.args': 'res=0 ruid=0 euid=0 suid=0' })!.priority, 'critical');
+	assert.equal(falcoToDraft('seclab.priv', { 'proc.pid': 9, 'evt.type': 'kill', 'evt.args': 'res=0 pid=9 sig=15' }), undefined);
+	assert.equal(falcoToDraft('Unknown rule', {}), undefined);
+
+	const dir = path.join(SCRATCH, 'falco');
+	const seen: ObsEvent[] = [];
+	const hub = new ObsHub({ onEvent: e => seen.push(e) });
+	const f = fakeChild();
+	const docker: string[][] = [];
+	const sensor = new FalcoSensor({
+		hub, rulesDir: dir, name: 'seclab-falco-0a1b2c3d-1', labels: { 'seclab.obs': 'falco', 'seclab.state': '0a1b2c3d' },
+		spawnDocker: () => f.child, runDocker: async a => { docker.push(a); return { code: 0, stdout: '', stderr: '' }; }, pidAlive: () => true, readyTimeoutMs: 2000,
+	});
+	const tab = mintTabId();
+	const cid = 'a'.repeat(12) + 'b'.repeat(52);
+	const added = sensor.add(tab, cid, false);
+	await tick(20);
+	const metrics = (sha: string) => f.stdout.write(`${JSON.stringify({ rule: 'Falco internal: metrics snapshot', output_fields: { 'falco.sha256_rules_file.rules_yaml': sha } })}\n`);
+	metrics('0'.repeat(64)); // an older ruleset is not ready
+	await tick(20);
+	let ready = false;
+	void added.then(() => { ready = true; });
+	await tick(20);
+	assert.equal(ready, false);
+	metrics(createHash('sha256').update(falcoRules([{ shortId: 'a'.repeat(12), deep: false }])).digest('hex'));
+	await added;
+	const w = (o: object) => f.stdout.write(`${JSON.stringify(o)}\n`);
+	w({ rule: 'seclab.exec', time: '2026-11-04T23:00:00.123456789Z', output_fields: { 'container.id': 'aaaaaaaaaaaa', 'proc.pid': 5, 'proc.exepath': '/usr/bin/wget', 'proc.name': 'wget', 'proc.args': 'http://192.0.2.1/' } });
+	w({ rule: 'seclab.exec', output_fields: { 'container.id': 'cccccccccccc', 'proc.pid': 6, 'proc.exepath': '/usr/bin/other' } });
+	f.stdout.write('Triggered rules by rule name:\n');
+	await tick(20);
+	const execs = seen.filter(e => e.class === 'process.exec');
+	assert.equal(execs.length, 1);
+	assert.equal(execs[0].integrity, 'host-observed');
+	assert.equal(execs[0].sensorTime, '2026-11-04T23:00:00.123Z');
+	assert.ok(seen.some(e => e.rule === 'task.network-tool'));
+	assert.equal(hub.observation(tab).state, 'observed');
+	await sensor.remove(tab);
+	assert.ok(docker.some(a => a[0] === 'rm' && a.includes('seclab-falco-0a1b2c3d-1')), 'last tab out removes Falco');
+	assert.equal(hub.observation(tab).state, 'unavailable');
+	hub.close();
+});

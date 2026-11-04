@@ -5,7 +5,7 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import * as fs from 'node:fs';
 import type { Runner } from '../run.ts';
 import { assertImageRef, SANDBOX_NAME_RE, CONNECTION_TOKEN_RE } from '../validate.ts';
-import { DriverError, type Driver, type DriverInfo, type FenceReport, type TabRuntimeSpec } from './types.ts';
+import { DriverError, type Driver, type DriverInfo, type FenceReport, type SensorHooks, type TabRuntimeSpec } from './types.ts';
 
 const REH_START = '/opt/seclab/bin/seclab-reh-start';
 const REH_CONNECT = '/opt/seclab/bin/seclab-reh-connect';
@@ -78,7 +78,7 @@ export class OciDriver implements Driver {
 		return r.code === 0;
 	}
 
-	async ensureRunning(spec: TabRuntimeSpec, connectionToken: string): Promise<void> {
+	async ensureRunning(spec: TabRuntimeSpec, connectionToken: string, sensor?: SensorHooks): Promise<void> {
 		if (!CONNECTION_TOKEN_RE.test(connectionToken)) {
 			throw new DriverError(-32602, 'invalid connection token');
 		}
@@ -124,6 +124,20 @@ export class OciDriver implements Driver {
 		const fence = await this.verifyFence(spec);
 		if (!fence.ok) {
 			throw new DriverError(-32010, `fence verification failed: ${fence.problems.join('; ')}`);
+		}
+		// Observability (ADR tab-observability): the host sensor must watch the container before
+		// the REH starts. Fail closed if it can't.
+		if (sensor?.beforeReh) {
+			const id = await this.runner.run(this.docker, ['container', 'inspect', '--format', '{{.Id}}', '--', n.ws]);
+			const containerId = id.stdout.trim();
+			if (id.code !== 0 || !/^[0-9a-f]{64}$/.test(containerId)) {
+				throw new DriverError(-32012, 'could not read the workspace container id');
+			}
+			try {
+				await sensor.beforeReh({ containerId });
+			} catch (e) {
+				throw new DriverError(-32012, `observability sensor failed: ${(e as Error).message}`);
+			}
 		}
 		const r = await this.runner.run(this.docker, ['exec', '-i', '-u', tabUser(spec), '--', n.ws, REH_START], { input: connectionToken + '\n', timeoutMs: 90_000 });
 		if (r.code !== 0) {
