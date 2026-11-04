@@ -2,7 +2,7 @@
 
 **Status:** design for review (Phase 2). Not implemented.
 **Milestone:** M4.
-**Upstream:** all permalinks pinned to `microsoft/vscode@881999100739fef36236fe0b93fedc9b730f94a9`.
+**Upstream:** all permalinks pinned to `microsoft/vscode@a717861c07586a53d83b80d742cd3f59b20a6273`.
 **Inventory this is built on:** [`rpc-filter/inventory/INVENTORY.md`](../rpc-filter/inventory/INVENTORY.md).
 **Policy table:** [`rpc-filter/policy/policy.json`](../rpc-filter/policy/policy.json).
 
@@ -17,7 +17,7 @@ tab can ask the workbench to open a host terminal and type into it.
 Three facts from the pinned source set the shape of the design.
 
 **The dispatcher does not check the caller's location.**
-[`RPCProtocol._doInvokeHandler`](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/services/extensions/common/rpcProtocol.ts#L449-L461)
+[`RPCProtocol._doInvokeHandler`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/common/rpcProtocol.ts#L449-L461)
 resolves the target with `actor[methodName]` and checks only that it is a
 function. There is no notion of where the caller runs, and no check against the
 declared interface.
@@ -91,7 +91,7 @@ flowchart LR
 The insertion is two core files.
 
 `extensionHostManager.ts` constructs the protocol at
-[L258](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/services/extensions/common/extensionHostManager.ts#L249-L270),
+[L258](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/common/extensionHostManager.ts#L249-L270),
 in a scope that already holds `this._extensionHost.remoteAuthority`. That is
 where the per-tab identity is attached. This is the **only** construction site
 outside tests, and it is on the single path taken for every `ExtensionHostKind`
@@ -130,7 +130,7 @@ Three properties of this location matter and were chosen from code, not taste:
 
 - **It is after URI transformation.** `_receiveOneMessage` applies
   `transformIncomingURIs` *before*
-  [`_receiveRequest`](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/services/extensions/common/rpcProtocol.ts#L280-L307),
+  [`_receiveRequest`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/common/rpcProtocol.ts#L280-L307),
   so argument validators see the same revived URIs the handler will see. A
   validator placed earlier could be bypassed by a representation the
   transformer normalises differently.
@@ -141,7 +141,7 @@ Three properties of this location matter and were chosen from code, not taste:
 ### 2.3 Keying: the wire `sid`, never the property name, never the `nid`
 
 `createProxyIdentifier` assigns `nid` from module load order
-([proxyIdentifier.ts L33-L50](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/services/extensions/common/proxyIdentifier.ts#L33-L50)),
+([proxyIdentifier.ts L33-L50](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/common/proxyIdentifier.ts#L33-L50)),
 so a `nid` is not stable across upstream bumps or even across a reordered
 import. The filter resolves `getStringIdentifierForProxy(rpcId)` and keys on the
 `sid` string.
@@ -161,12 +161,12 @@ channels are registered on the remote connection, not on the RPC protocol. This
 needs its own guard.
 
 The obvious place is
-[`AbstractRemoteAgentService.registerChannel`](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts#L193-L195),
+[`AbstractRemoteAgentService.registerChannel`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts#L193-L195),
 which is where both channels found today are registered. The design review
 showed that is the wrong level: it is a thin convenience wrapper, and a holder
 of the connection can register straight on the underlying `ChannelServer`, as
 upstream already does elsewhere
-([ipc.ts L1018-L1040](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/base/parts/ipc/common/ipc.ts#L1018-L1040)).
+([ipc.ts L1018-L1040](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/base/parts/ipc/common/ipc.ts#L1018-L1040)).
 "One caller" is a convention; the mechanism is the invariant. So the guard goes
 on `ChannelServer.registerChannel` / `IPCClient.registerChannel` for any client
 whose context is a `seclab+*` remote connection, and each `call`/`listen` is
@@ -181,27 +181,27 @@ Both channels found today are denied outright:
 
 - **`download`.** `DownloadServiceChannel` revives *both* URIs from
   server-supplied arguments
-  ([downloadIpc.ts L18-L26](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/platform/download/common/downloadIpc.ts#L18-L26),
+  ([downloadIpc.ts L18-L26](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/download/common/downloadIpc.ts#L18-L26),
   registered at
-  [remote.contribution.ts L77-L81](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L77-L81)).
+  [remote.contribution.ts L77-L81](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L77-L81)).
   The trusted side will fetch a URL the tab picks, bypassing the broker, and
   write it to a host path the tab picks. Our REH arrives over `sbx exec` stdio
   and never needs the client to download for it.
 - **`mcpGatewayToolBroker`.** Registered on the remote connection at
-  [mcpGatewayToolBrokerContribution.ts L13-L21](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts#L13-L21),
+  [mcpGatewayToolBrokerContribution.ts L13-L21](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts#L13-L21),
   exposing `callToolForServer`, `readResourceForServer` and the list methods
-  ([channel L167-L195](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/mcp/common/mcpGatewayToolBrokerChannel.ts#L167-L195)).
+  ([channel L167-L195](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/common/mcpGatewayToolBrokerChannel.ts#L167-L195)).
   `callToolForServer` invokes a **trusted-side** MCP tool with arguments the tab
   chooses. Host-side MCP servers are host processes holding host credentials, so
   this is a direct confused-deputy path to host code execution. This was found
   by the inventory scan and is not in the brief's list.
 
 And the one server-initiated callback: `remoteTerminalBackend.onExecuteCommand`
-([L102-L121](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L102-L121))
+([L102-L121](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L102-L121))
 runs a command the server names, from a four-entry allowlist. The allowlist is a
 stability measure, not a boundary: every entry on it is dangerous, and all four
 are *also* ordinary registry commands reachable straight from `$executeCommand`
-([mainThreadCLICommands.ts](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L29-L58)).
+([mainThreadCLICommands.ts](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L29-L58)).
 `_remoteCLI.openExternal` additionally passes `allowTunneling: true`.
 
 ### 2.5 Third choke point: `$executeCommand` arguments
@@ -218,7 +218,7 @@ Two companion rules close the obvious ways around it:
   registers are namespaced and routed back only to that tab. This is necessary,
   not defensive: `CommandsRegistry.registerCommand` does `commands.unshift(...)`
   and `getCommand` returns the head
-  ([commands.ts L99-L110](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/platform/commands/common/commands.ts#L99-L110)),
+  ([commands.ts L99-L110](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/commands/common/commands.ts#L99-L110)),
   so a later registration **wins over a built-in**. Without the rule a tab
   shadows a trusted id and gets invoked by the UI or by a `command:` link.
 - `$getCommands` returns only ids this tab may execute, so the registry is not
@@ -229,7 +229,7 @@ Two companion rules close the obvious ways around it:
 `$executeCommand` revives its arguments with `revive()`, which bails at
 `depth > 200` and turns `{$mid: MarshalledId.Regexp, source, flags}` into a live
 `RegExp`
-([marshalling.ts L44-L80](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/base/common/marshalling.ts#L44-L80)).
+([marshalling.ts L44-L80](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/base/common/marshalling.ts#L44-L80)).
 
 A validator that walks the argument graph differently is a bypass: a URI nested
 at depth 201 is *not* revived, so a validator that revives everywhere sees a URI
@@ -307,9 +307,9 @@ precisely to mark calls that violate this today.
 `MainThreadSecretState` is the worst case. `$getPassword(extensionId, key)`,
 `$setPassword`, `$deletePassword` and `$getKeys(extensionId)` all take the
 extension identity **as an argument**
-([L38-L80](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/api/browser/mainThreadSecretState.ts#L38-L80)),
+([L38-L80](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L38-L80)),
 and the stored key is `{extensionId, key}` globally
-([L90-L92](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/api/browser/mainThreadSecretState.ts#L90-L92)).
+([L90-L92](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L90-L92)).
 So a hostile host names `vscode.github-authentication` and reads its stored
 sessions, and `$getKeys` enumerates them first. The verdict is `rewrite`: the
 argument is discarded, identity comes from the connection, and the key becomes
@@ -416,7 +416,7 @@ Numbers 1 to 4 came out of the independent design review
    that internally executes a denied one launders the verdict, because the
    inner call does not arrive from the tab. `_remoteCLI.windowOpen` is exactly
    this shape: it forwards to `_files.windowOpen`
-   ([mainThreadCLICommands.ts L34-L40](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L34-L40)).
+   ([mainThreadCLICommands.ts L34-L40](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L34-L40)).
    Mitigation is to taint the execution context for the dynamic extent of a
    tab-originated command. **Not yet designed, and the most likely bypass.**
 2. **A verdict is pinned to an id, not to behaviour.** The digest covers policy
