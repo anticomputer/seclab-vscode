@@ -1,0 +1,360 @@
+# Broker policy (`version: 1`)
+
+A policy is a per-tab JSON document that tells the broker:
+- which egress is allowed;
+- which credentials exist;
+- where each credential's real value may be injected.
+
+Load it with `policy.load` ([protocol](broker-protocol.md)). It is
+engine-agnostic: it names hosts, ports, schemes, methods and paths, never
+engine internals. Default is deny.
+
+**This document cannot drift.** Sections marked *generated* are rendered by
+`broker/tools/docs.py` from these sources:
+- [`policy.v1.schema.json`](../broker/schema/policy.v1.schema.json);
+- the broker's data files (baseline, provider backstop, token rules);
+- [`broker/examples/`](../broker/examples/).
+
+Every example is validated by the broker's own parser. `broker/docs-check.sh`
+fails on any difference.
+
+## How matching works
+
+These semantics live in [`policy.py`](../broker/seclab_broker/policy.py) and
+are pinned by its unit tests (see the matcher invariants in
+[broker/AGENTS.md](../broker/AGENTS.md#matcher-invariants-that-must-never-regress)).
+
+**Hosts**
+- Hosts are compared after normalisation: lowercase, no trailing dot, IDNA,
+  IPv4-mapped IPv6 converted to IPv4.
+- Numeric or hex IPv4 spellings are rejected.
+- `*.example.com` matches strict subdomains only.
+
+**Paths**
+- Paths are matched on the decoded canonical path. Requests with dot
+  segments, encoded `/ . \ ; %`, NUL or `//` are rejected before matching.
+- In globs, `*` stays within one segment and `**` crosses segments.
+- Allow and binding globs are case-sensitive.
+
+**Rules**
+- A rule defaults to `https` on the scheme's default port, any method, and
+  `/**`.
+
+**Credentials**
+- A credential's real value is written only into its binding's
+  `inject.header`, only when the tab put the sentinel in that header, and only
+  on a request that matches the binding (HTTPS, host, path, method, port).
+- The request must also be allowed by a rule (or an approval).
+- A sentinel anywhere else is never swapped (`sentinelMismatch`).
+- The provider backstop below is checked first and beats any binding.
+
+## Top-level fields (generated)
+
+<!-- BEGIN GENERATED: policy-fields (broker/tools/docs.py; do not edit) -->
+Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, schemes, methods and paths, never engine internals. Default is deny.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `version` | `1` | yes | Schema major version. Additive optional fields keep 1. |
+| `tabId` | [`id`](broker-policy.md#id) |  | If set, must equal the broker's `SECLAB_TAB_ID`. |
+| `baseline` | `boolean` |  | Merge the broker's built-in baseline allow rules (extension gallery). (default `true`) |
+| `prompt` | `object` |  | Hold-and-prompt behaviour for requests no rule allows. |
+| `prompt.enabled` | `boolean` |  | When false, unmatched requests are denied at once. (default `true`) |
+| `prompt.timeoutSeconds` | `number` |  | A held request is denied when no decision (or JIT credential) arrives in time. (min `0.1`; max `600`; default `60`) |
+| `prompt.maxPending` | `integer` |  | Open prompts at once; more are denied. (min `1`; max `256`; default `16`) |
+| `prompt.maxHeldFlows` | `integer` |  | Requests held at once, across all prompts and JIT waits. (min `1`; max `4096`; default `256`) |
+| `prompt.denyCooldownSeconds` | `number` |  | After a deny or timeout, the same prompt key is denied without asking for this long. (min `0`; max `3600`; default `30`) |
+| `sentinelMismatch` | `"block"` \| `"log"` |  | What to do when a sentinel appears anywhere other than the header a matching binding names. It is never swapped either way. (default `"block"`) |
+| `allow` | [`rule`](broker-policy.md#rule)[] |  | Egress allow rules. Anything not matched is held for a prompt, or denied. (max items `1024`) |
+| `credentials` | [`credential`](broker-policy.md#credential)[] |  | Sentinel credentials. A binding does not imply egress: the request must also be allowed. (max items `256`) |
+<!-- END GENERATED: policy-fields -->
+
+## Types (generated)
+
+<!-- BEGIN GENERATED: policy-definitions (broker/tools/docs.py; do not edit) -->
+<a id="id"></a>
+### `id`
+
+Identifier for rules, credentials and tabs.
+
+Type: `string` (pattern `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+<a id="host"></a>
+### `host`
+
+Lowercase ASCII hostname, '*.' + hostname for strict subdomains, or an IPv4/IPv6 literal (no brackets). Non-ASCII names must be given in punycode.
+
+Type: `string` (pattern `^(\*\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$|^[0-9a-f:.]+$`; max length `253`)
+
+<a id="method"></a>
+### `method`
+
+Upper-case HTTP method, or `*` (any; not allowed in bindings).
+
+Type: `string` (pattern `^([A-Z]{1,16}|\*)$`)
+
+<a id="methods"></a>
+### `methods`
+
+Type: [`method`](broker-policy.md#method)[] (min items `1`)
+
+<a id="path"></a>
+### `path`
+
+Glob over the decoded, canonical request path (no query). '*' matches within one segment, '**' matches across segments.
+
+Type: `string` (pattern `^/[A-Za-z0-9._~!\$&'()*+,=:@/-]*$`; max length `1024`)
+
+<a id="ports"></a>
+### `ports`
+
+Type: `integer`[] (min items `1`)
+
+<a id="schemes"></a>
+### `schemes`
+
+Type: `"https"` \| `"http"`[] (min items `1`)
+
+<a id="rule"></a>
+### `rule`
+
+An egress allow rule. A request matches if every field matches.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | [`id`](broker-policy.md#id) |  | Needed to remove the rule with `policy.update`. |
+| `host` | [`host`](broker-policy.md#host) | yes |  |
+| `schemes` | [`schemes`](broker-policy.md#schemes) |  | Cleartext must be named explicitly. (default `["https"]`) |
+| `ports` | [`ports`](broker-policy.md#ports) |  | Defaults to the scheme's default port. |
+| `methods` | [`methods`](broker-policy.md#methods) |  | (default `["*"]`) |
+| `path` | [`path`](broker-policy.md#path) |  | (default `"/**"`) |
+
+<a id="inject"></a>
+### `inject`
+
+Where and how the real value is written. Some headers are refused; the list is in docs/broker-policy.md.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `header` | `string` | yes | The only header the real value is ever written to. Chosen by the host, never by the caller. (pattern `^[A-Za-z0-9][A-Za-z0-9-]{0,63}$`) |
+| `fmt` | `string` | yes | Template. '{value}' is the real secret; '{base64:TEXT}' base64-encodes TEXT after substituting {value}. Example: 'Basic {base64:x-access-token:{value}}'. (max length `256`) |
+
+<a id="binding"></a>
+### `binding`
+
+Where a credential may be injected. Matches HTTPS only. Methods must be explicit.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `host` | [`host`](broker-policy.md#host) | yes |  |
+| `path` | [`path`](broker-policy.md#path) | yes |  |
+| `methods` | [`methods`](broker-policy.md#methods) | yes |  |
+| `ports` | [`ports`](broker-policy.md#ports) |  | (default `[443]`) |
+| `inject` | [`inject`](broker-policy.md#inject) |  | Overrides the credential's `inject`. |
+
+<a id="credential"></a>
+### `credential`
+
+A sentinel credential. The broker mints its sentinel (returned by `policy.load`); the host supplies the real value (`credential.provide`).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | [`id`](broker-policy.md#id) | yes |  |
+| `bind` | [`binding`](broker-policy.md#binding) \| [`binding`](broker-policy.md#binding)[] | yes | One binding or a list of bindings. |
+| `inject` | [`inject`](broker-policy.md#inject) |  | Default for bindings without their own `inject`. |
+| `provider` | `string` |  | Extra provider backstop deny-list to apply (by name). Providers are also applied automatically by host. (pattern `^[a-z0-9-]{1,32}$`) |
+| `sentinelPrefix` | `string` |  | Replaces `SECLAB_SNTL_` for clients that check a token format. (pattern `^[A-Za-z0-9_-]{0,16}$`) |
+<!-- END GENERATED: policy-definitions -->
+
+## Forbidden headers (generated)
+
+<!-- BEGIN GENERATED: policy-forbidden-headers (broker/tools/docs.py; do not edit) -->
+`inject.header` may not be any of: `connection`, `content-encoding`, `content-length`, `content-type`, `cookie2`, `expect`, `host`, `keep-alive`, `proxy-authorization`, `proxy-connection`, `te`, `trailer`, `transfer-encoding`, `upgrade`, or any header starting with `proxy-`.
+
+Requests carrying any of `x-http-method-override`, `x-http-method`, `x-method-override`, or a `_method` query parameter, are rejected with `400`.
+<!-- END GENERATED: policy-forbidden-headers -->
+
+## Baseline (generated)
+
+Merged into every policy unless it sets `baseline: false`.
+
+<!-- BEGIN GENERATED: policy-baseline (broker/tools/docs.py; do not edit) -->
+Built-in baseline merged into every policy unless it sets baseline:false. Read-only access to the Open VSX extension gallery only. Package registries are opt-in per tab.
+
+| Id | Host | Methods | Path |
+|---|---|---|---|
+| `baseline-openvsx` | `open-vsx.org` | GET, HEAD | `/**` |
+| `baseline-openvsx-blob` | `openvsxorg.blob.core.windows.net` | GET, HEAD | `/**` |
+<!-- END GENERATED: policy-baseline -->
+
+## Provider backstop (generated)
+
+A credentialed request (one that would carry a real value) to any of these
+endpoints is refused with `403`, whatever the bindings say. These endpoints let
+a tab mint or register its own durable credential.
+
+<!-- BEGIN GENERATED: policy-backstop (broker/tools/docs.py; do not edit) -->
+#### `github`
+
+Hosts: `api.github.com`. Path prefixes: `/`, `/api/v3`. Source: https://github.com/github/rest-api-description/blob/99b1432b55b9a71d0881fd792a87f1807cf4c8f2/descriptions/api.github.com/api.github.com.json
+
+| Methods | Path | Why |
+|---|---|---|
+| POST | `/user/keys` | users/create-public-ssh-key-for-authenticated-user https://docs.github.com/rest/users/keys#create-a-public-ssh-key-for-the-authenticated-user |
+| POST | `/user/ssh_signing_keys` | users/create-ssh-signing-key-for-authenticated-user https://docs.github.com/rest/users/ssh-signing-keys#create-a-ssh-signing-key-for-the-authenticated-user |
+| POST | `/user/gpg_keys` | users/create-gpg-key-for-authenticated-user https://docs.github.com/rest/users/gpg-keys#create-a-gpg-key-for-the-authenticated-user |
+| POST | `/repos/*/*/keys` | repos/create-deploy-key https://docs.github.com/rest/deploy-keys/deploy-keys#create-a-deploy-key |
+| POST | `/app/installations/*/access_tokens` | apps/create-installation-access-token https://docs.github.com/rest/apps/apps#create-an-installation-access-token-for-an-app |
+| POST | `/app-manifests/*/conversions` | apps/create-from-manifest (returns an app private key and client secret) https://docs.github.com/rest/apps/apps#create-a-github-app-from-a-manifest |
+| POST, PATCH | `/applications/*/token` | apps/check-token, apps/reset-token (reset mints a new token) https://docs.github.com/rest/apps/oauth-applications#reset-a-token |
+| POST | `/applications/*/token/scoped` | apps/scope-token https://docs.github.com/rest/apps/apps#create-a-scoped-access-token |
+| POST | `/repos/*/*/actions/runners/registration-token` | actions/create-registration-token-for-repo https://docs.github.com/rest/actions/self-hosted-runners#create-a-registration-token-for-a-repository |
+| POST | `/repos/*/*/actions/runners/remove-token` | actions/create-remove-token-for-repo https://docs.github.com/rest/actions/self-hosted-runners#create-a-remove-token-for-a-repository |
+| POST | `/repos/*/*/actions/runners/generate-jitconfig` | actions/generate-runner-jitconfig-for-repo https://docs.github.com/rest/actions/self-hosted-runners#create-configuration-for-a-just-in-time-runner-for-a-repository |
+| POST | `/orgs/*/actions/runners/registration-token` | actions/create-registration-token-for-org https://docs.github.com/rest/actions/self-hosted-runners#create-a-registration-token-for-an-organization |
+| POST | `/orgs/*/actions/runners/remove-token` | actions/create-remove-token-for-org https://docs.github.com/rest/actions/self-hosted-runners#create-a-remove-token-for-an-organization |
+| POST | `/orgs/*/actions/runners/generate-jitconfig` | actions/generate-runner-jitconfig-for-org https://docs.github.com/rest/actions/self-hosted-runners#create-configuration-for-a-just-in-time-runner-for-an-organization |
+| POST | `/enterprises/*/actions/runners/registration-token` | enterprise runner registration token; not in the api.github.com description at the pinned SHA, included as defence in depth for GHEC/GHES |
+| POST | `/enterprises/*/actions/runners/remove-token` | enterprise runner remove token; defence in depth (see above) |
+| POST | `/enterprises/*/actions/runners/generate-jitconfig` | enterprise JIT runner config; defence in depth (see above) |
+| * | `/authorizations` | legacy OAuth Authorizations API (removed upstream; absent from the pinned description). Denied in case a GHES version still serves it |
+| * | `/authorizations/**` | legacy OAuth Authorizations API (see above) |
+| POST | `/user/codespaces` | codespaces/create-for-authenticated-user: a codespace runs outside the tab with its own GitHub token https://docs.github.com/rest/codespaces/codespaces#create-a-codespace-for-the-authenticated-user |
+| POST | `/repos/*/*/codespaces` | codespaces/create-with-repo-for-authenticated-user https://docs.github.com/rest/codespaces/codespaces#create-a-codespace-in-a-repository |
+| POST | `/repos/*/*/pulls/*/codespaces` | codespaces/create-with-pr-for-authenticated-user https://docs.github.com/rest/codespaces/codespaces#create-a-codespace-from-a-pull-request |
+| POST | `/user/codespaces/*/start` | codespaces/start-for-authenticated-user https://docs.github.com/rest/codespaces/codespaces#start-a-codespace-for-the-authenticated-user |
+| POST | `/user/codespaces/*/exports` | codespaces/export-for-authenticated-user https://docs.github.com/rest/codespaces/codespaces#export-a-codespace-for-the-authenticated-user |
+| POST | `/user/codespaces/*/publish` | codespaces/publish-for-authenticated-user https://docs.github.com/rest/codespaces/codespaces#create-a-repository-from-an-unpublished-codespace |
+| * | `/copilot_internal/**` | undocumented Copilot internal API, including the Copilot session-token endpoint /copilot_internal/v2/token. No first-party public reference; widely observed in third-party Copilot clients. Copilot tokens must be minted by the host, not the tab |
+<!-- END GENERATED: policy-backstop -->
+
+## Minted-token rules (generated)
+
+On credentialed flows and bound hosts, response text matching these rules is
+re-sentinelised as a derived credential, or redacted.
+
+<!-- BEGIN GENERATED: policy-token-rules (broker/tools/docs.py; do not edit) -->
+Rules marked gitleaks are taken from https://github.com/gitleaks/gitleaks/blob/5f6ec56cfa6f8c67648d863582c7ae2f206d5c1c/config/gitleaks.toml (MIT). Length quantifiers on GitHub token bodies are widened from {36} to {36,255} because GitHub documents that token lengths may grow.
+
+| Rule | Origin | Note |
+|---|---|---|
+| `github-app-token` | gitleaks |  |
+| `github-fine-grained-pat` | gitleaks |  |
+| `github-oauth` | gitleaks |  |
+| `github-pat` | gitleaks |  |
+| `github-refresh-token` | gitleaks |  |
+| `jwt` | gitleaks |  |
+| `npm-access-token` | gitleaks |  |
+| `pypi-upload-token` | gitleaks |  |
+| `copilot-session-token` | seclab | Format observed in third-party Copilot clients (tid=...;exp=...;...). No first-party documentation. |
+| `json-token-field` | seclab | Generic: any JSON token field on a bound host, whatever its format. |
+| `form-token-field` | seclab | Generic: form-encoded OAuth token responses (GitHub's default for /login/oauth/access_token). |
+<!-- END GENERATED: policy-token-rules -->
+
+## Examples (generated)
+
+<!-- BEGIN GENERATED: policy-examples (broker/tools/docs.py; do not edit) -->
+#### [`broker/examples/default-deny.policy.json`](../broker/examples/default-deny.policy.json)
+
+<!-- check: policy -->
+```json
+{
+ "version": 1,
+ "baseline": true
+}
+```
+
+#### [`broker/examples/github.policy.json`](../broker/examples/github.policy.json)
+
+<!-- check: policy -->
+```json
+{
+ "version": 1,
+ "tabId": "example-github",
+ "baseline": true,
+ "prompt": {
+  "enabled": true,
+  "timeoutSeconds": 60
+ },
+ "sentinelMismatch": "block",
+ "allow": [
+  {
+   "id": "github-web",
+   "host": "github.com",
+   "methods": [
+    "GET",
+    "HEAD",
+    "POST"
+   ],
+   "path": "/**"
+  },
+  {
+   "id": "github-api-read",
+   "host": "api.github.com",
+   "methods": [
+    "GET",
+    "HEAD"
+   ],
+   "path": "/**"
+  },
+  {
+   "id": "github-raw",
+   "host": "raw.githubusercontent.com",
+   "methods": [
+    "GET"
+   ],
+   "path": "/**"
+  },
+  {
+   "id": "npm-registry",
+   "host": "registry.npmjs.org",
+   "methods": [
+    "GET"
+   ],
+   "path": "/**"
+  }
+ ],
+ "credentials": [
+  {
+   "id": "github",
+   "provider": "github",
+   "bind": [
+    {
+     "host": "github.com",
+     "path": "/*/*/info/refs",
+     "methods": [
+      "GET"
+     ],
+     "inject": {
+      "header": "Authorization",
+      "fmt": "Basic {base64:x-access-token:{value}}"
+     }
+    },
+    {
+     "host": "github.com",
+     "path": "/*/*/git-upload-pack",
+     "methods": [
+      "POST"
+     ],
+     "inject": {
+      "header": "Authorization",
+      "fmt": "Basic {base64:x-access-token:{value}}"
+     }
+    },
+    {
+     "host": "api.github.com",
+     "path": "/repos/**",
+     "methods": [
+      "GET"
+     ],
+     "inject": {
+      "header": "Authorization",
+      "fmt": "Bearer {value}"
+     }
+    }
+   ]
+  }
+ ]
+}
+```
+<!-- END GENERATED: policy-examples -->

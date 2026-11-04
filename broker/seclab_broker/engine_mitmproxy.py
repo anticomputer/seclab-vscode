@@ -28,7 +28,8 @@ from .core import Broker
 from .credentials import Credential, header_has_sentinel, infer_inject
 from .netguard import deny_reason
 from .policy import (METHOD_OVERRIDE_HEADERS, Binding, PolicyError, RequestView, backstop_denies,
-                     canonical_path, normalize_host, normalize_ip, query_has_method_override)
+                     canonical_path, normalize_host, normalize_ip, query_has_method_override,
+                     validate_fragment)
 from .scanner import find_minted
 
 log = logging.getLogger("seclab.engine")
@@ -73,6 +74,14 @@ def _parse_basic(value: str) -> tuple[str, str] | None:
 def _textual(headers: http.Headers) -> bool:
     ctype = headers.get("content-type", "").lower().strip()
     return not ctype or bool(_TEXTUAL.search(ctype))
+
+
+def _path_representable(path: str) -> bool:
+    try:
+        validate_fragment("path", path)
+    except PolicyError:
+        return False
+    return True
 
 
 class SeclabAddon:
@@ -309,6 +318,12 @@ class SeclabAddon:
         flow.intercept()
         try:
             for cred, hname, hvalue in unbound:
+                # The suggested binding is built from the tab-chosen path. A path with glob
+                # metacharacters (or one the schema cannot express) would turn "allow" into a
+                # wildcard binding, so it is never offered.
+                if "*" in view.path or not _path_representable(view.path):
+                    self._deny(flow, 403, "request path cannot be expressed as an exact binding")
+                    return
                 inject = infer_inject(hname, hvalue, cred.sentinel)
                 proposed = next((b for b in cred.proposed if b.matches(view)), None)
                 if proposed is not None and proposed.inject is not None:

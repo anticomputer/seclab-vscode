@@ -7,6 +7,8 @@ set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 it="$here/tests/integration"
 
+echo "== docs-check"
+"$here/docs-check.sh"
 docker build -q --target broker -t seclab-broker:test "$here" >/dev/null
 docker build -q --target unit -t seclab-broker-unit:test "$here" >/dev/null
 echo "== unit tests"

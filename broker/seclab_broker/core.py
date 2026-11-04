@@ -20,7 +20,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from . import PROTOCOL, VERSION
+from . import PROTOCOL, VERSION, protocol
 from .credentials import Credential, CredentialStore
 from .policy import (Binding, Inject, Policy, PolicyError, RequestView, Rule, parse_bindings,
                      validate_fragment)
@@ -428,12 +428,15 @@ class Broker:
 
     def dispatch(self, method: str, params: Any) -> Any:
         name = self.METHODS.get(method)
-        if name is None:
+        if name is None or method not in protocol.method_names():
             raise RpcError(-32601, "method not found")
         if params is None:
             params = {}
         if not isinstance(params, dict):
             raise invalid("params must be an object")
+        problem = protocol.check("params", method, params)
+        if problem is not None:
+            raise invalid(self.creds.scrub(problem))
         try:
             return getattr(self, name)(params)
         except PolicyError as e:

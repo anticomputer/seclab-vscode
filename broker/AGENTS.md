@@ -38,31 +38,78 @@ file has been run. Anything not yet built is marked **TODO**.
 | `tests/integration/` | Pod-shaped suite: harness container + docker.sock |
 | `tests/sbx/` | Real sbx fence validation (host: docker + sbx only) |
 
-## Commands (all verified)
+## Commands (all verified; `ci: run` blocks run in CI via `broker/docs-check.sh --run-commands`)
+Build and test, in containers:
+
+<!-- ci: run -->
 ```sh
-broker/build.sh                      # -> seclab-broker:dev
-broker/test.sh                       # unit + integration, all in containers (~1 min after first build)
-broker/test.sh -k "absolute_form"    # pass pytest args to the integration suite
-broker/tests/sbx/validate.sh         # sbx 0.51 fence; results in .work/broker/sbx-validation/results.txt
-docker run --rm --network none seclab-broker-unit:test   # unit tests only (after test.sh built it)
+broker/build.sh
+broker/test.sh
+broker/test.sh -k "absolute_form"
+docker run --rm --network none seclab-broker-unit:test
+broker/docs-check.sh
+```
+- `build.sh` produces `seclab-broker:dev`.
+- `test.sh` runs docs-check, then the unit tests, then the integration suite.
+  It takes about a minute after the first build. Arguments are passed to
+  pytest for the integration suite.
+- The unit image `seclab-broker-unit:test` exists after `test.sh` has run;
+  `docker run` it, as in the block above, to rerun only the unit tests.
+
+Regenerate generated doc sections after changing the protocol, schema, data,
+examples or capabilities:
+
+<!-- ci: skip: rewrites files; CI runs the read-only check above -->
+```sh
+broker/docs-check.sh --write
+```
+Real sbx fence. Results land in `.work/broker/sbx-validation/results.txt`:
+
+<!-- ci: skip: needs sbx (nested virtualisation), unavailable on hosted runners -->
+```sh
+broker/tests/sbx/validate.sh
 ```
 Driving the protocol by hand, with a fake host, against a throwaway broker:
+
+<!-- ci: run -->
 ```sh
-docker run -d --name sb-smoke --read-only --cap-drop ALL --security-opt no-new-privileges \
+docker run -d --name sb-smoke-$$ --read-only --cap-drop ALL --security-opt no-new-privileges \
   --tmpfs /run/seclab:rw,nosuid,nodev,noexec,size=16m,uid=1000,gid=1000,mode=0700 seclab-broker:dev
+trap 'docker rm -f sb-smoke-$$ >/dev/null' EXIT
+sleep 3
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"broker.hello"}' \
   '{"jsonrpc":"2.0","id":2,"method":"health"}' \
   '{"jsonrpc":"2.0","id":3,"method":"policy.load","params":{"policy":{"version":1}}}' \
-  | docker exec -i sb-smoke seclab-broker control
-docker rm -f sb-smoke
+  | docker exec -i sb-smoke-$$ seclab-broker control
 ```
 For an interactive fake host, use `tests/integration/controller.py`
 (`Controller(container).call(method, params)`; `handlers[...]` auto-answer
 notifications).
 
-## Schema and protocol docs
-- Protocol: [../docs/broker-protocol.md](../docs/broker-protocol.md).
-- Schema: [schema/policy.v1.schema.json](schema/policy.v1.schema.json).
+## Docs, schema and protocol: single sources of truth
+| Source | Feeds |
+|---|---|
+| `schema/protocol.v1.json` | Request validation in `core.dispatch`; result and notification validation in the tests; generated sections of [docs/broker-protocol.md](../docs/broker-protocol.md) |
+| `schema/policy.v1.schema.json` | `Policy.from_json`; generated sections of [docs/broker-policy.md](../docs/broker-policy.md) |
+| `core.CAPABILITIES` + `schema/capabilities.v1.json` | `broker.hello`; the generated matrix in [README](README.md#engine-capability-matrix) |
+| `seclab_broker/data/*`, `examples/*` | Runtime behaviour; generated sections of the policy doc |
+
+`broker/docs-check.sh` (run by `test.sh`, and in CI) fails when:
+- any generated section is stale;
+- any ```json block in the broker docs lacks a `<!-- check: … -->`
+  annotation, or fails validation;
+- any ```sh block lacks a `<!-- ci: run -->` or `<!-- ci: skip: reason -->`
+  annotation;
+- the code's methods, notifications, audit types or error codes differ from
+  `protocol.v1.json`;
+- a capability flag lacks a matrix row, or a row names a test that doesn't
+  exist.
+
+**Same-change rule.** A behaviour change and the docs that describe it (the
+protocol or schema JSON, generated docs, README, this file, and the ADR or EDR)
+go in **one commit**. That includes changes made while integrating the broker
+into the supervisor. Never edit inside `BEGIN GENERATED` blocks; edit the source
+and run `--write`.
 
 ### Changing the schema or protocol safely
 - **Schema `version` is an integer.**
@@ -78,20 +125,26 @@ notifications).
   pattern, including inside a character class, and Python 3.15 rejects that.
   Escape a literal `$` as `\\$`.
 - **The validator must never fetch.** `policy.py` strips `$id` and installs
-  handlers that refuse http, https and file refs. Keep it that way: an earlier
-  version fetched the `$id` URL from the network.
-- **Protocol:** additive changes (new methods, notifications, optional params
-  or result fields) keep `seclab-broker/1`. Anything else bumps the major in
-  `__init__.PROTOCOL`.
-  - Update `docs/broker-protocol.md` and `CAPABILITIES` in `core.py` in the
-    same commit.
+  handlers that refuse http, https and file refs; `protocol.py` reuses them.
+  Keep it that way: an earlier version fetched the `$id` URL from the network.
+- **Protocol:**
+  - New methods, notifications, optional params and result fields keep
+    `seclab-broker/1`. Anything else bumps the major in `__init__.PROTOCOL`
+    and in `protocol.v1.json`.
+  - Params are strict (`additionalProperties: false`), so clients must check
+    `broker.hello` before sending anything newer.
   - Tell the Fork-build session, which owns `seclab-tabd`.
 
 ## Engine capability matrix
-See the [README](README.md#engine-capability-matrix). In short: mitmproxy (OCI
-or behind the sbx fence) does everything. The sbx native proxy cannot hold
-and resume, or bind a credential by path or method, so it is a fallback only
-and never used for credentials.
+See the generated [README matrix](README.md#engine-capability-matrix).
+- **mitmproxy** (OCI, or behind the sbx fence) does everything.
+- **The sbx native proxy** cannot hold and resume, or bind a credential by
+  path or method, so it is a fallback only and never used for credentials.
+
+To add a capability:
+1. Add the flag to `core.CAPABILITIES`.
+2. Add a row to `schema/capabilities.v1.json` that names the tests proving it.
+3. Run `--write`.
 
 ## Matcher invariants that must never regress
 Each has a unit or integration test; grep for the phrase.

@@ -231,6 +231,20 @@ def test_binding_approvals_are_not_coalesced_across_requests(pod, ctl):
     assert not [x for x in pod.seen() if x["path"] == "/echo/a2-bad"]
 
 
+def test_unbound_credential_never_offers_a_wildcard_binding(pod, ctl):
+    """Regression (self-review 2026-11-04): a literal '*' in the tab-chosen path became a
+    glob in suggestedBinding, so 'allow-tab' would have confirmed a wildcard binding."""
+    pod.load({"allow": ALLOW, "prompt": {"timeoutSeconds": 10, "denyCooldownSeconds": 0}})
+    s = ctl.call("credential.import", {"id": "imp-glob", "value": pod.canaries["imported"],
+                                        "source": {"kind": "workspace-scan"}})["sentinel"]
+    mark = ctl.mark()
+    ctl.handlers["approval.requested"] = lambda p: ctl.call(
+        "approval.decide", {"approvalId": p["approvalId"], "decision": "allow-tab"})
+    r = pod.curl("https://api.example.test/echo/**", "-H", f"Authorization: Bearer {s}")
+    assert r.code == 403 and "exact binding" in r.body
+    assert ctl.notes_since(mark, "approval.requested") == []
+
+
 def test_websocket_handshake_injection_and_message_scanning(pod, ctl):
     s = setup(pod, ctl)["api"]
     p = pod.ws(f"python3 /usr/local/bin/wsclient.py wss://ws.example.test/ws hello {s}",

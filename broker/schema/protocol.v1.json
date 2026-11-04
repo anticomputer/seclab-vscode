@@ -198,7 +198,12 @@
   "notifications": {
     "approval.requested": {
       "description": "A request is held. Show a prompt and answer with `approval.decide` before `expiresAt`, or the broker denies. Egress approvals are per origin (every request to the same `scheme, host, port` waits on one prompt). Credential-binding approvals are per exact request shape (credential, origin, method, path, inject header and format).",
-      "params": { "$ref": "#/definitions/approval" }
+      "params": { "$ref": "#/definitions/approval" },
+      "examples": [{ "approvalId": "9f2c6d0e5b8a4f7e9d1c3b5a7e9f1d2c", "kind": "egress",
+                     "request": { "scheme": "https", "host": "api.example.com", "port": 443, "method": "GET", "path": "/x" },
+                     "createdAt": 1793800000.0, "expiresAt": 1793800060.0, "waiting": 1,
+                     "decisions": ["allow-once", "allow-tab", "deny"],
+                     "suggestedRule": { "host": "api.example.com", "schemes": ["https"], "ports": [443], "methods": ["*"], "path": "/**" } }]
     },
     "approval.resolved": {
       "description": "Dismiss the prompt.",
