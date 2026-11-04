@@ -1,0 +1,124 @@
+diff -ruN a/src/vs/workbench/services/commands/common/commandService.ts b/src/vs/workbench/services/commands/common/commandService.ts
+--- a/src/vs/workbench/services/commands/common/commandService.ts	2026-11-04 17:32:25
++++ b/src/vs/workbench/services/commands/common/commandService.ts	2026-11-04 17:32:39
+@@ -11,6 +11,8 @@
+ import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
+ import { ILogService } from '../../../../platform/log/common/log.js';
+ import { IExtensionService } from '../../extensions/common/extensions.js';
++import { ServiceCollection } from '../../../../platform/instantiation/common/serviceCollection.js';
++import { seclabTaintedCommandService, seclabTaintInFlight } from '../../extensions/common/seclabRpcFilter.js';
+ 
+ export class CommandService extends Disposable implements ICommandService {
+ 
+@@ -89,19 +91,38 @@
+ 		return this._tryExecuteCommand(id, args);
+ 	}
+ 
+-	private _tryExecuteCommand(id: string, args: unknown[]): Promise<any> {
++	private _tryExecuteCommand(id: string, args: unknown[], seclabOrigin?: unknown): Promise<any> {
+ 		const command = CommandsRegistry.getCommand(id);
+ 		if (!command) {
+ 			return Promise.reject(new Error(`command '${id}' not found`));
+ 		}
++		// seclab: a tab-originated command carries the tab identity into
++		// everything it triggers. The taint is a CAPABILITY, not ambient state:
++		// the handler resolves ICommandService from the accessor below, so an
++		// await, a timer or an event handler still calls the tainted instance.
++		// The workbench renderer has no AsyncLocalStorage, and ambient taint is
++		// exactly what breaks across those hops.
++		const seclabRefused = seclabTaintInFlight(id, seclabOrigin);
++		if (seclabRefused) {
++			return Promise.reject(seclabRefused);
++		}
+ 		try {
+ 			this._onWillExecuteCommand.fire({ commandId: id, args });
+-			const result = this._instantiationService.invokeFunction(command.handler, ...args);
++			const invoker = seclabOrigin
++				? this._instantiationService.createChild(new ServiceCollection(
++					[ICommandService, seclabTaintedCommandService(this, seclabOrigin)]))
++				: this._instantiationService;
++			const result = invoker.invokeFunction(command.handler, ...args);
+ 			this._onDidExecuteCommand.fire({ commandId: id, args });
+ 			return Promise.resolve(result);
+ 		} catch (err) {
+ 			return Promise.reject(err);
+ 		}
++	}
++
++	/** seclab: entry point for a command a sandboxed tab asked for. */
++	public seclabExecuteFromTab<T>(id: string, args: unknown[], origin: unknown): Promise<T> {
++		return this._tryExecuteCommand(id, args, origin);
+ 	}
+ 
+ 	public override dispose(): void {
+diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
+--- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-04 17:32:58
++++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-04 17:32:58
+@@ -194,6 +194,67 @@
+ }
+ 
+ /**
++ * Commands a tab asked for that are still running. The capability taint below
++ * is the primary mechanism; this counter is the fail-closed backstop for a
++ * handler that reaches the GLOBAL ICommandService instead of the one threaded
++ * through its accessor -- a constructor-injected or module-imported reference.
++ * While any tab command is in flight, a denied command is refused whoever asks.
++ *
++ * Over-denial is possible if the user triggers a denied command concurrently.
++ * That is the closed direction and is accepted (ADR 20261104-tab-command-taint).
++ */
++let seclabInFlight = 0;
++const seclabEscapes: string[] = [];
++
++/** Denied escapes observed via the global service. Probes assert on these. */
++export function seclabTaintEscapes(): readonly string[] {
++	return seclabEscapes;
++}
++
++/**
++ * Consulted by CommandService before every execution. `origin` is set only when
++ * the call came from a tab, directly or through the tainted service.
++ */
++export function seclabTaintInFlight(id: string, origin: unknown): Error | undefined {
++	const filter = origin as ISeclabFilter | undefined;
++	if (filter) {
++		const verdict = filter.commandVerdict(id);
++		if (verdict !== 'allow' && verdict !== 'allow_with_constraint') {
++			return new Error('Unsupported operation');
++		}
++		return undefined;
++	}
++	if (seclabInFlight > 0 && SECLAB_COMMANDS.get(id)?.verdict !== 'allow') {
++		// Not tab-originated as far as the call path knows, but a tab command is
++		// running: this is the laundering shape the backstop exists for.
++		seclabEscapes.push(id);
++		return new Error('Unsupported operation');
++	}
++	return undefined;
++}
++
++/**
++ * The ICommandService a tab-originated handler sees. Recursing with the same
++ * origin means depth is unbounded and every level is checked against the same
++ * table.
++ */
++export function seclabTaintedCommandService(
++	real: { seclabExecuteFromTab<T>(id: string, args: unknown[], origin: unknown): Promise<T> },
++	origin: unknown,
++): unknown {
++	return {
++		_serviceBrand: undefined,
++		onWillExecuteCommand: () => ({ dispose() { } }),
++		onDidExecuteCommand: () => ({ dispose() { } }),
++		executeCommand<T>(id: string, ...args: unknown[]): Promise<T | undefined> {
++			seclabInFlight++;
++			return real.seclabExecuteFromTab<T>(id, args, origin)
++				.finally(() => { seclabInFlight--; });
++		},
++	};
++}
++
++/**
+  * Authority -> tab id, registered by the Tab Manager when it resolves an
+  * authority. The filter's identity comes from here and never from anything the
+  * tab sends: `MainThreadSecretState.$getPassword` takes the extension identity
