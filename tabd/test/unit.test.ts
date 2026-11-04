@@ -213,6 +213,28 @@ test('scan: hostile file names are escaped and never movable; nothing is dropped
 	assert.equal(displayPath('a\nb'), 'a\\u{a}b');
 });
 
+test('scan: unscannable content blocks; links report under the link; trailing output is rejected (N1)', () => {
+	const nul = (...p: string[]) => p.map(x => `${x}\0`).join('');
+	const r = parseFrames(Buffer.concat([
+		frame('large', '.', 0, nul('/scan/ws/big.env')),
+		frame('links', '.', 0, nul('/scan/ws/a', '/scan/ws/.env')),
+		frame('linked', '.', 0, report({ File: '/seclab/l/x/2', StartLine: 1, Secret: 'REAL_TOKEN_LINKED' })),
+		frame('gitdir', '.git', 0, report({ File: '/seclab/g/x/c/config', StartLine: 3, Secret: 'REAL_TOKEN_CONFIG' })),
+		Buffer.from(`SECLAB1 badgit ${Buffer.from('x/.git').toString('hex')} 1 0\n`),
+		frame('largeobj', '.', 0, `${'a'.repeat(40)}\n`),
+		END]), 0, false);
+	assert.equal(r.complete, true, r.error);
+	assert.deepEqual(r.findings.map(f => [f.source, f.file, f.rule, f.movable]), [
+		['worktree', 'big.env', 'unscanned-large-file', false],
+		['worktree', '.env', 'generic-api-key', false],
+		['git-dir', '.git/c/config', 'generic-api-key', true],
+		['git-dir', 'x/.git', 'unrecognised-git-dir', false],
+		['objects', '.git (object store)', 'unscanned-large-object', false],
+	]);
+	assert.equal(parseFrames(Buffer.concat([END, frame('worktree', '.', 0, '[]')]), 0, false).complete, false, 'bytes after end');
+	assert.equal(parseFrames(Buffer.concat([frame('large', '.', 1, nul('/scan/ws/x')), END]), 0, false).overflow, true);
+});
+
 test('scan: rewrite is byte-exact both ways ($ patterns, non-UTF-8 bytes) (S4)', () => {
 	const ws = path.join(SCRATCH, 'rewrite');
 	fs.mkdirSync(ws, { recursive: true });
