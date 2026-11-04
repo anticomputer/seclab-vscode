@@ -145,5 +145,9 @@ async def app(scope, receive, send) -> None:
                                    ctype=b"application/x-www-form-urlencoded")
         if path == "/user/keys":
             return await send_resp(send, 201, b'{"created": true}')
+        if path == "/session":
+            sid = secrets.token_hex(16)
+            return await send_resp(send, 200, b'{"ok": true}',
+                                   [(b"set-cookie", f"sid={sid}; Path=/; HttpOnly".encode())])
     echo = dict(record, query=scope["query_string"].decode(), headers=hdrs)
     await send_resp(send, 200, json.dumps(echo).encode())
