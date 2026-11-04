@@ -17,7 +17,7 @@ way: [docs/adr/](docs/adr/README.md).
 |---|---|
 | `upstream.lock` | Pinned Code-OSS tag and SHA (1.145.0 @ a717861c) |
 | `build/` | `fetch-upstream.sh` (verifies tag→SHA), `prepare.sh` (overlay, jq product.json, patches), `product/` (overrides.json, product.jq with invariants, remove-extensions.txt), `linux/` (builder image + build.sh), `build-darwin.sh` (Actions only) |
-| `patches/` | Ordered core patch queue (`NNNN-*.patch`): 0001 build-only, 0002/0003 extension placement |
+| `patches/` | Core patch queue; exactly what `patches/series` lists ships: 0001 build-only, 0002–0004 extension placement |
 | `.github/workflows/` | `build-macos.yml` (unsigned darwin-arm64 app), `ci-linux.yml` (unit, REH, OCI e2e/containment/canary/secrets) |
 | `extensions/seclab-tab-manager/` | Built-in UI-side extension: `seclab+` resolver, routing, UI. `tabd-src` symlinks `tabd/src` and is bundled in |
 | `tabd/` | `seclab-tabd` supervisor: protocol, validation, sbx and OCI drivers, fence. Tests in `tabd/test/`. Spec: `docs/tabd/PROTOCOL.md` |
@@ -103,11 +103,20 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab image oci              # OCI images seclab-tab-oci:local + seclab-broker-placeholder:local
 ./seclab test unit              # tabd unit + supervisor tests (node container)
 ./seclab test e2e sbx           # tabd end to end: claim -> fence -> REH 101 handshake over exec stdio (also: oci)
-./seclab test containment sbx   # malicious-workspace vectors in real tabs (sbx 89/89, oci 86/86)
+./seclab test containment sbx   # malicious-workspace vectors in real tabs (sbx 95/95, oci 92/92)
 ./seclab test canary sbx        # canary acceptance test, level A (also: oci)
 ./seclab test secrets sbx       # pre-mount gitleaks gate: block, move-to-vault + sentinel, restore, accept (also: oci)
 ./seclab lint fixtures          # fixture-safety lint (docker, no network); also: test/safety/fixture-lint.sh PATH...
-./seclab test evidence prepare .work/editor-test/user-data sbx   # level B setup (then open the printed --folder-uri)
+build/apply-patches.sh --check  # patch queue == patches/series (no unlisted patch can ship)
+build/check-release.sh .work/out/seclab-reh-linux-arm64.tar.gz   # no test hooks in a release artifact (also: <app>/Contents/Resources/app)
+
+# macOS app from Actions (branch builds need the override), then quarantine (user approval)
+SECLAB_ALLOW_UNREVIEWED_BUILD=1 ./seclab fetch macos [RUN_ID]
+xattr -dr com.apple.quarantine .work/app/seclab-vscode.app
+
+# Level B (editor-driven). The profile dir must be short (macOS 104-byte socket path) and isolated.
+./seclab test evidence prepare ~/.seclab-test/ud sbx    # then run the printed `.../bin/code --user-data-dir ... --folder-uri ...`
+./seclab test evidence check ~/.seclab-test/ud sbx      # known M4 gaps (settings/clipboard canaries, git askpass) report as XFAIL
 
 # sbx inspection
 sbx ls; sbx policy ls --wide --json; sbx policy log <sandbox>; sbx secret ls --json
@@ -118,15 +127,10 @@ Electron with `ELECTRON_RUN_AS_NODE=1`); nothing is installed.
 
 **TODO** (written but not yet run end to end):
 - `./seclab build linux editor` needs at least 12 GB of Docker memory (esbuild is OOM-killed at 8 GB).
-- macOS app: `gh workflow run build-macos.yml --ref <branch>`, then
-  `SECLAB_ALLOW_UNREVIEWED_BUILD=1 ./seclab fetch macos` for branch builds
-  (main/push builds need no override). Then clear quarantine, with the user's
-  approval.
-- `./seclab test evidence check .work/editor-test/user-data`, after the editor ran the prepared tab.
 - Broker tests (see `broker/AGENTS.md`), and the RPC inventory and drift check (RPC-lockdown session).
 - **Bump upstream:**
   1. Edit `upstream.lock` (tag + SHA from `git ls-remote`).
-  2. `./seclab build linux`, which re-runs fetch, jq and patches; fix any patch that fails to apply.
+  2. `./seclab build linux`, which re-runs fetch, jq and the `patches/series` queue; fix any patch that fails to apply (and keep `series` exact).
   3. Drift check.
   4. `./seclab template sbx && ./seclab image oci`.
   5. Containment + canary suites (sbx and oci).

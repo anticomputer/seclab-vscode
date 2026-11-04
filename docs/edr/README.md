@@ -51,3 +51,4 @@ Same rules as ADRs:
 | 2026-11-04 | [Canary acceptance harness](20261104-canary-harness.md) | accepted |
 | 2026-11-04 | [OCI tabs on a native Linux engine run as the workspace owner](20261104-oci-tab-user-on-linux.md) | accepted |
 | 2026-11-04 | [Test fixtures are inert and host-safe by construction](20261104-fixture-safety.md) | accepted |
+| 2026-11-04 | [Ship exactly the reviewed patch series; check release artifacts for test hooks](20261104-patch-series.md) | accepted |
