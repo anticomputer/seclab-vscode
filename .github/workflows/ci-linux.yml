@@ -38,6 +38,8 @@ jobs:
         run: ./seclab lint fixtures
       - name: Patch queue is exactly patches/series
         run: build/apply-patches.sh --check
+      - name: Shipped sources have no test hooks (env/spawn review, dynamic loading)
+        run: ./seclab lint source
 
   oci:
     runs-on: ubuntu-24.04

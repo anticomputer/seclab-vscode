@@ -27,7 +27,8 @@ if [ "${1:-}" = "--inner" ]; then
 	bad=0
 	scan() { # $1 = ERE, $2 = label; grep exit 1 = no match, >1 = error (fail closed)
 		set +e
-		out=$(find "$d" -type f \( -name "*.js" -o -name "*.mjs" -o -name "*.cjs" -o -name "*.json" \) -exec grep -HIoE "$1" {} + 2>&1)
+		# -a: a NUL byte must not hide a file. JS/JSON plus shell launchers (bin/, *.sh).
+		out=$(find "$d" -type f \( -name "*.js" -o -name "*.mjs" -o -name "*.cjs" -o -name "*.json" -o -name "*.sh" -o -path "*/bin/*" \) -exec grep -HaoE "$1" {} + 2>&1)
 		rc=$?
 		set -e
 		if [ "$rc" -gt 1 ]; then echo "check-release: scan error ($2): $(echo "$out" | head -3)"; bad=1; return 0; fi

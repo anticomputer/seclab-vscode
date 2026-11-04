@@ -1,0 +1,19 @@
+# Reviewed sites in shipped sources (build/check-source.ts): "<file>:<rule>:<exact trimmed line>".
+# Every entry is a reviewed decision (2026-11-04, patch-guard review PG-1); a changed line drops out
+# and must be re-reviewed. Env: allowlisted keys only (extension), HOME for a file dialog, tabd
+# wiping and allowlisting its own env. Spawn: tabd client (fixed node + args) and the runner
+# (shell:false, resolved runtime binaries only).
+extensions/seclab-tab-manager/src/extension.ts:env:if (process.env[k]) {
+extensions/seclab-tab-manager/src/extension.ts:env:env[k] = process.env[k];
+extensions/seclab-tab-manager/src/extension.ts:env:defaultUri: vscode.Uri.file(process.env.HOME ?? '/'), openLabel: 'Use as Projects Folder',
+extensions/seclab-tab-manager/src/extension.ts:env:defaultUri: vscode.Uri.file(process.env.HOME ?? '/'),
+tabd/src/client.ts:process-spawn:import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+tabd/src/client.ts:process-spawn:this.proc = spawn(opts.command, [...opts.args], { env: opts.env, stdio: ['pipe', 'pipe', 'pipe'], shell: false });
+tabd/src/main.ts:env:const childEnv = cleanEnv(process.env);
+tabd/src/main.ts:env:for (const k of Object.keys(process.env)) {
+tabd/src/main.ts:env:delete process.env[k];
+tabd/src/run.ts:process-spawn:import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+tabd/src/run.ts:env:export function cleanEnv(src: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+tabd/src/run.ts:env:export function resolveBinary(name: 'sbx' | 'docker', env: NodeJS.ProcessEnv = process.env): string | undefined {
+tabd/src/run.ts:process-spawn:const child = spawn(bin, argv, { env, cwd, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
+tabd/src/run.ts:process-spawn:return spawn(bin, argv, { env, cwd, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
