@@ -20,7 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const safety = require('./probe-safety.js');
+const safety = require('../probe-safety.js');
 
 const SUCCEEDED = 'succeeded';
 const DENIED = 'denied';
@@ -55,11 +55,10 @@ async function probe(results, id, policyRef, fn) {
  * @param socketServer the server's SocketServer; getChannel(name, router)
  *   returns a proxy to a channel the CLIENT registered.
  * @param router a StaticRouter selecting the renderer connection.
- * @param targets { canary, marker } host paths seeded by the harness.
  */
-async function runRehProbes(socketServer, router, targets) {
+async function runRehProbes(socketServer, router) {
 	const results = [];
-	const ctx = safety.context(targets);
+	const ctx = safety.context();
 	if (!ctx.armed) {
 		return [{ id: 'harness', policyRef: '', outcome: ERROR, detail: `not armed: ${ctx.reason}` }];
 	}
@@ -154,13 +153,12 @@ async function main(socketServer, router) {
 	if (!out) {
 		return;
 	}
-	const targets = {
-		canary: process.env.SECLAB_PROBE_CANARY || '/nonexistent',
-		marker: process.env.SECLAB_PROBE_MARKER || '/seclab-reh-marker',
-	};
 	let results;
 	try {
-		results = await runRehProbes(socketServer, router, targets);
+		// Targets come from the safety context, which derives them from the
+		// harness-supplied run directory. Nothing here is read from the
+		// environment the tab controls.
+		results = await runRehProbes(socketServer, router);
 	} catch (err) {
 		results = [{ id: 'harness', policyRef: '', outcome: ERROR, detail: String(err && err.stack) }];
 	}

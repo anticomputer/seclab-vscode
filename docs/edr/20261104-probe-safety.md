@@ -96,6 +96,21 @@ the symlink check entirely. A symlink inside the run directory pointing at
 verified to catch an injected real-user path, external host, and chained shell
 command.
 
+## Review outcome
+
+A dedicated safety review ([round 3](../security-reviews/20261104-probe-safety.md))
+returned **NO-GO** on the first version and found nine issues, including a
+working command injection into a real host shell: the marker came from the
+hostile workspace and `safePath()` did not reject quotes, so
+`markerCommand()` emitted an attacker-chosen command that was typed into a host
+terminal. Also a dangling-symlink bypass that turned the one permitted write
+into arbitrary host file creation, and an arming gate the tab could satisfy by
+itself because the nonce leaked in an environment dump.
+
+The guard and payload findings are fixed; harness-side ones (teardown, the
+`core.fsmonitor` disarm, the clipboard) remain open and the run stays no-go
+until they close.
+
 ## Outstanding
 
 - Teardown and the post-run "nothing outside the run directory changed" check

@@ -43,9 +43,10 @@ exports.activate = async function (context) {
 				home: os.homedir(),
 			}, null, 2));
 		} catch { /* evidence is best effort */ }
-		if (fs.existsSync(probe)) {
-			execFile('sh', [probe, 'rogue-extension'], { cwd: root }, () => { /* ignore */ });
-		}
+		// NOTE: probe.sh is deliberately not spawned from here. It makes external
+		// network calls and writes an unconstrained marker, and on an unpatched
+		// build this extension can land host-side. The Level-A runner triggers it
+		// inside the tab, which is where it belongs.
 		// Everything this extension can observe through the API, for the canary harness.
 		// Values are recorded only when it really runs in a tab (clean env, isolated test
 		// profile). If containment failed and it runs on the host, the env and settings are
