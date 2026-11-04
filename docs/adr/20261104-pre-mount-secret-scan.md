@@ -153,3 +153,13 @@ Round 8 (D1–D3):
 
 Residual: host symlinks *outside* the workspace that point back into it are
 not followed (the D2 trade-off; the tab can't create them).
+
+Round 9 (E1–E3):
+- every link that doesn't resolve inside the workspace in the scanner blocks
+  (no host-side resolution at all);
+- archives are scanned (depth 8), and any archive that can't be opened
+  blocks;
+- quoted log paths are decoded.
+
+Residual: compressed blobs that exist only in git history are scanned as raw
+bytes.
