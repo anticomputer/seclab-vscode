@@ -31,8 +31,10 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .work/lychee-cache
-          key: lychee-${{ github.run_id }}
-          restore-keys: lychee-
+          key: lychee-${{ github.ref }}-${{ github.run_id }}
+          restore-keys: |
+            lychee-${{ github.ref }}-
+            lychee-refs/heads/main-
       - name: Seed the lychee cache volume
         run: |
           docker volume create seclab-lychee-cache >/dev/null
@@ -40,6 +42,9 @@ jobs:
             docker run --rm -v seclab-lychee-cache:/cache -v "$PWD/.work/lychee-cache:/in:ro" alpine:3.22 cp /in/.lycheecache /cache/
           fi
       - name: Docs gate (records, links, commands, paired docs)
+        env:
+          # Exact range: the PR's base, or the push's previous head (all-zero for a new branch).
+          DOCS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: ./seclab docs check --run-commands --paired
       - name: External links resolve
         env:

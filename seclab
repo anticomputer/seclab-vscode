@@ -43,27 +43,29 @@ docs_check() {
 		esac
 	done
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/docs-check.ts check
-	if [[ -x "$ROOT/broker/docs-check.sh" ]]; then
-		if [[ $run = 1 ]]; then "$ROOT/broker/docs-check.sh" --run-commands; else "$ROOT/broker/docs-check.sh"; fi
+	if [[ -d "$ROOT/broker" ]]; then
+		[[ -f "$ROOT/broker/docs-check.sh" ]] || { echo "docs-check: broker/ exists but broker/docs-check.sh is missing" >&2; exit 1; }
+		if [[ $run = 1 ]]; then bash "$ROOT/broker/docs-check.sh" --run-commands; else bash "$ROOT/broker/docs-check.sh"; fi
 	fi
 	if [[ $paired = 1 ]]; then
 		local base f
-		base="$(git -C "$ROOT" merge-base origin/main HEAD)"
+		# CI passes the exact base (PR base SHA, or the push's previous head); locally: origin/main.
+		base="${DOCS_BASE:-}"
+		[[ -n "$base" && ! "$base" =~ ^0+$ ]] || base="$(git -C "$ROOT" merge-base origin/main HEAD)"
+		git -C "$ROOT" cat-file -e "$base^{commit}" || { echo "docs-check: paired base $base not available (shallow clone?)" >&2; exit 1; }
 		f="$ROOT/.work/docs-paired.txt"
 		mkdir -p "$ROOT/.work"
-		{ git -C "$ROOT" diff --name-only "$base"..HEAD; echo '--'; git -C "$ROOT" log --format=%B "$base"..HEAD; } > "$f"
+		{ git -C "$ROOT" diff --name-only "$base"..HEAD; echo '--'; git -C "$ROOT" log --format='%(trailers:key=docs-not-needed,valueonly)' "$base"..HEAD; } > "$f"
 		docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/docs-check.ts paired .work/docs-paired.txt
 	fi
 	if [[ $online = 1 ]]; then
 		# External links and permalinks must resolve; results are cached (named volume) so CI isn't flaky.
-		local token=()
-		[[ -n "${GITHUB_TOKEN:-}" ]] && token=(--github-token "$GITHUB_TOKEN")
-		docker run --rm -v "$ROOT:/input:ro" -v seclab-lychee-cache:/cache -w /cache "$LYCHEE_IMAGE" \
+		docker run --rm -e GITHUB_TOKEN -v "$ROOT:/input:ro" -v seclab-lychee-cache:/cache -w /cache "$LYCHEE_IMAGE" \
 			--no-progress --cache --max-cache-age 3d --max-concurrency 8 --accept 200,206,429 \
 			--exclude-path /input/.work --exclude-path /input/vscode --exclude-path /input/node_modules \
 			--exclude '^https?://([^/]+\.)?(test|invalid|example|localhost)(/|:|$)' --exclude '^https?://(127\.|localhost|host\.docker\.internal)' \
 			--exclude '^vscode-remote:' --exclude '^https://github\.com/anticomputer/seclab-vscode' \
-			"${token[@]}" '/input/**/*.md'
+			'/input/**/*.md'
 	fi
 	if [[ $run = 1 ]]; then
 		docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/docs-check.ts commands > "$ROOT/.work/docs-commands.sh"
