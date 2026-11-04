@@ -95,6 +95,13 @@ MUST_ARM = (
     "test/containment/rogue-reh/probes.js",
     "test/containment/rogue-extension/extension.js",
 )
+# An arming gate, in either of the two forms in use: the shared guard's
+# safety.context(), or extension.js's own armed(root) check on .seclab/targets.
+ARMING = ("safety.context(", "armed(root)")
+# Decoding base64 to COMPARE against a canary is the opposite of obfuscation --
+# it is how the canary harness catches a token that was encoded to slip past a
+# plain-text scan. Only flag it where a payload builds a value to use.
+OBFUSCATION_EXEMPT = ("test/containment/rogue-extension/extension.js",)
 
 
 def main() -> int:
@@ -123,12 +130,14 @@ def main() -> int:
         for rid, pattern, why in RULES:
             if pattern.search(flat) and not any(v[0] == rel and v[2] == rid for v in violations):
                 violations.append((rel, 0, rid, f"{why} (matched after joining lines)"))
-        if "fromCharCode" in joined or "'base64'" in joined:
+        if rel not in OBFUSCATION_EXEMPT and (
+                "fromCharCode" in joined or "'base64'" in joined):
             violations.append((rel, 0, "obfuscation",
                                "builds strings via character codes or base64"))
-        if rel in MUST_ARM and "safety.context(" not in joined:
+        if rel in MUST_ARM and not any(a in joined for a in ARMING):
             violations.append((rel, 0, "no-arming",
-                               "does not call safety.context(); it would run unarmed"))
+                               "has no arming gate (%s); it would run unarmed"
+                               % " or ".join(ARMING)))
         # Any shell command must come from the guard, in this file.
         for n, line in code:
             if "touch '" in line and "markerCommand" not in line:
