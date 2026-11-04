@@ -51,4 +51,5 @@ File: `YYYYMMDD-short-slug.md`.
 |---|---|---|---|
 | 2026-11-04 | [seclab-tabd design (protocol, process model)](20261104-tabd-protocol-design.md) | design docs before code | 1 critical (REH server→client IPC; owned by M4) |
 | 2026-11-04 | [M0 pipeline, tabd, Tab Manager, containment suite, pre-mount secret scan](20261104-m0-tabd-code.md) | 296594c..d02dec5 (rounds 1–11) | none (scanner series closed in round 11) |
-| 2026-11-04 | [Test fixtures are host-safe](20261104-fixture-safety.md) | d02dec5..cf6738e + test trees | none after fixes (round 2 pending) |
+| 2026-11-04 | [Test fixtures are host-safe](20261104-fixture-safety.md) | d02dec5..cf6738e + test trees | none (2 rounds) |
+| 2026-11-04 | [Patch queue and release guard](20261104-patch-guard.md) | patches/series, extensions/series, check-source, check-release | none |

@@ -34,6 +34,19 @@
    `SECLAB_TEST_ONLY`, so the check finds it. Test hooks live in the harness, not in
    `patches/`.
 
+## Addendum (review PG-1, same day)
+The guard covers everything we overlay, not just `patches/`:
+- **`extensions/series`** lists the built-in extensions that ship, and `prepare.sh`
+  fails on any other `extensions/seclab-*`.
+- **`build/check-source.ts`** (`./seclab lint source`, CI) scans the shipped sources,
+  that is the series extensions plus `tabd/src`:
+  - every `process.env` and child-process site must be in the reviewed
+    `build/source-allowlist.txt`, matching the exact line, and stale entries fail;
+  - dynamic module loading and test markers always fail.
+- The Tab Manager no longer forwards the `SECLAB_SBX`/`SECLAB_DOCKER` overrides.
+
+Record: [security review](../security-reviews/20261104-patch-guard.md).
+
 ## Alternatives considered
 - **Separate `patches-test/` directory, applied by a flag:** possible later, but the
   series file plus the release check already make shipping by accident impossible.
