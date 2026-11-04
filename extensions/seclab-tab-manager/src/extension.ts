@@ -38,6 +38,8 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('seclab.openFolder', openFolderWithDialog),
 		vscode.commands.registerCommand('seclab.showLog', () => log.show()),
+		vscode.commands.registerCommand('seclab.removeTab', removeTab),
+		vscode.commands.registerCommand('seclab.resetTab', resetThisTab),
 	);
 
 	showStatus();
@@ -89,6 +91,8 @@ function getClient(): Promise<TabdClient> {
 		for (const s of sensitivePaths()) {
 			args.push('--sensitive', s);
 		}
+		const gcDays = cfg.get<number>('gcDays', 30);
+		args.push('--gc-days', String(Number.isInteger(gcDays) && gcDays >= 0 && gcDays <= 3650 ? gcDays : 30));
 		fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
 		// Allowlisted environment only (the supervisor wipes its env anyway).
 		const env: NodeJS.ProcessEnv = { ELECTRON_RUN_AS_NODE: '1' };
@@ -410,6 +414,72 @@ async function routeLocalWindow(): Promise<void> {
 		await vscode.commands.executeCommand('vscode.openFolder', tabUri(tab.metadata.name, tab.spec.workspace.hostPath), { forceReuseWindow: true });
 	} catch (e) {
 		void vscode.window.showErrorMessage(`Cannot open as a tab: ${(e as Error).message}`);
+	}
+}
+
+/** This window's tab id, if it is a tab. */
+function currentTabId(): string | undefined {
+	const id = vscode.env.remoteAuthority?.startsWith(`${AUTHORITY_PREFIX}+`) ? vscode.env.remoteAuthority.slice(AUTHORITY_PREFIX.length + 1) : undefined;
+	return id && TAB_ID_RE.test(id) ? id : undefined;
+}
+
+/**
+ * Remove a tab: its sandbox, installed extensions and tab home. The folder itself is never
+ * touched. Not this window's tab (use Reset), and tabd refuses tabs holding moved secrets.
+ */
+async function removeTab(): Promise<void> {
+	try {
+		const c = await getClient();
+		const here = currentTabId();
+		const tabs = (await c.request<{ tabs: TabView[] }>('tab.list')).tabs.filter(t => t.metadata.name !== here);
+		if (!tabs.length) {
+			void vscode.window.showInformationMessage('No other tabs to remove.');
+			return;
+		}
+		const pick = await vscode.window.showQuickPick(tabs.map(t => ({
+			label: safeText(t.spec.workspace.hostPath), description: safeText(t.status.phase, 20), tabId: t.metadata.name,
+		})), { title: 'Remove a sandboxed tab', placeHolder: 'The folder is kept; the tab\'s sandbox, extensions and home are deleted' });
+		if (!pick) {
+			return;
+		}
+		const ok = await vscode.window.showWarningMessage(`Remove the tab for "${pick.label}"?`, {
+			modal: true,
+			detail: 'Its sandbox, the extensions installed in it and its home directory are deleted. Your folder is not touched. A window open on this tab will disconnect.',
+		}, 'Remove Tab');
+		if (ok !== 'Remove Tab') {
+			return;
+		}
+		await c.request('tab.remove', { tabId: pick.tabId });
+		void vscode.window.showInformationMessage(`Removed the tab for "${pick.label}".`);
+	} catch (e) {
+		void vscode.window.showErrorMessage(`Cannot remove the tab: ${safeText((e as Error).message)}`);
+	}
+}
+
+/**
+ * Rebuild this window's tab from the template: discards everything the tab accumulated in
+ * its sandbox (installed extensions, its home, anything a payload dropped there). The folder,
+ * the tab id and any moved secrets are kept. The window reloads into the fresh tab.
+ */
+async function resetThisTab(): Promise<void> {
+	const tabId = currentTabId();
+	if (!tabId) {
+		void vscode.window.showInformationMessage('This window is not a sandboxed tab.');
+		return;
+	}
+	const ok = await vscode.window.showWarningMessage('Reset this tab to a clean sandbox?', {
+		modal: true,
+		detail: 'The tab\'s sandbox is rebuilt from the template: extensions installed in it, its home directory and anything that ran there are discarded. Your folder is not touched. The window reloads.',
+	}, 'Reset Tab');
+	if (ok !== 'Reset Tab') {
+		return;
+	}
+	try {
+		const c = await getClient();
+		await c.request('tab.reset', { tabId });
+		await vscode.commands.executeCommand('workbench.action.reloadWindow');
+	} catch (e) {
+		void vscode.window.showErrorMessage(`Cannot reset the tab: ${safeText((e as Error).message)}`);
 	}
 }
 

@@ -28,6 +28,8 @@ export interface SupervisorOptions {
 	readonly pathPolicy?: PathPolicy;
 	/** Pre-mount secret scanner; absent = scanning unavailable (fails closed). */
 	readonly scan?: (hostPath: string) => Promise<ScanResult>;
+	/** Remove stopped tabs unused for this many days at initialize; 0 or absent disables. */
+	readonly gcDays?: number;
 }
 
 interface Channel { tabId: string; child: ChildProcessWithoutNullStreams }
@@ -174,6 +176,7 @@ export class Supervisor {
 			this.initialized = true;
 			const drivers: DriverInfo[] = await Promise.all([...this.o.drivers.values()].map(d => d.probe()));
 			await this.reconcile();
+			await this.collectGarbage();
 			return { protocolVersion: PROTOCOL_VERSION, supervisor: { version: SUPERVISOR_VERSION }, drivers, templates: [...this.o.templates.values()] };
 		}
 		if (!this.initialized) {
@@ -190,6 +193,7 @@ export class Supervisor {
 			case 'tab.connect': return this.connect(this.record(p.tabId));
 			case 'tab.stop': return this.stop(this.record(p.tabId));
 			case 'tab.remove': return this.remove(this.record(p.tabId));
+			case 'tab.reset': return this.reset(this.record(p.tabId));
 			case 'stream.end': {
 				const ch = this.channels.get(this.channelId(p.channel));
 				ch?.child.stdin.end();
@@ -269,8 +273,8 @@ export class Supervisor {
 		if (typeof tref !== 'string' || !TEMPLATE_NAME_RE.test(tref)) {
 			throw new RpcError(-32602, 'invalid templateRef');
 		}
-		this.template(tref);
-		const { record, created } = this.o.store.claim(hostPath, tref);
+		const template = this.template(tref);
+		const { record, created } = this.o.store.claim(hostPath, tref, template.spec.driver);
 		this.audit('tab.claim', created ? 'created' : 'existing', { tabId: record.tabId, hostPath });
 		return { tab: this.view(record) };
 	}
@@ -494,6 +498,7 @@ export class Supervisor {
 	private own(tabId: string): void {
 		this.owned.add(tabId);
 		this.o.store.writeLease(tabId, process.pid);
+		this.o.store.touch(tabId);
 		this.ensureReverify(tabId);
 	}
 
@@ -573,12 +578,81 @@ export class Supervisor {
 	}
 
 	private async remove(r: TabRecord) {
+		// The vault is the only copy of secrets moved out of the workspace: removing the tab
+		// would orphan it. Restore first (tab.restoreSecrets).
+		if (this.o.store.readSide(r.tabId, 'vault').length) {
+			throw new RpcError(-32022, 'tab holds moved secrets; restore them (tab.restoreSecrets) before removing the tab');
+		}
 		await this.stop(r);
 		const spec = this.spec(r);
 		await this.driverFor(spec.template).remove(spec);
 		this.o.store.forget(r.tabId);
 		this.audit('tab.remove', 'ok', { tabId: r.tabId });
 		return {};
+	}
+
+	/**
+	 * Rebuild the tab from its template: the sandbox and its home (installed extensions,
+	 * anything a payload dropped there) are discarded; the tab id, workspace mapping,
+	 * vault and exceptions are kept, so the next ensureRunning starts it fresh.
+	 */
+	private async reset(r: TabRecord) {
+		await this.stop(r);
+		const spec = this.spec(r);
+		await this.driverFor(spec.template).remove(spec);
+		this.owned.delete(r.tabId);
+		this.o.store.clearLease(r.tabId);
+		this.setPhase(r.tabId, 'Stopped');
+		this.audit('tab.reset', 'ok', { tabId: r.tabId });
+		return { tab: this.view(r) };
+	}
+
+	/**
+	 * Garbage collection: stopped tabs unused for gcDays are removed. Never a tab that is
+	 * running (any driver), leased by a live supervisor, or holding vaulted secrets (its
+	 * vault is the only copy of values moved out of the workspace).
+	 */
+	private async collectGarbage(): Promise<void> {
+		const days = this.o.gcDays ?? 0;
+		if (!(days > 0)) {
+			return;
+		}
+		const cutoff = Date.now() - days * 86_400_000;
+		const running = new Set<string>();
+		for (const d of this.o.drivers.values()) {
+			try {
+				for (const n of await d.runningSandboxes()) {
+					running.add(n);
+				}
+			} catch {
+				return; // can't tell what is running: collect nothing
+			}
+		}
+		for (const r of this.o.store.list()) {
+			const spec = this.spec(r);
+			// Only tabs created under the driver this supervisor runs: removing through another
+			// driver would forget the tab and orphan its real sandbox (R-5). Older records
+			// without a driver are never collected.
+			if (r.driver !== spec.template.spec.driver) {
+				continue;
+			}
+			const holder = this.o.store.leaseHolder(r.tabId);
+			if (this.o.store.lastUsed(r) > cutoff || running.has(spec.sandboxName) || this.owned.has(r.tabId)
+				|| (holder !== undefined && pidAlive(holder))) {
+				continue;
+			}
+			if (this.o.store.readSide(r.tabId, 'vault').length) {
+				this.audit('tab.gc', 'skipped', { tabId: r.tabId, reason: 'vault holds moved secrets' });
+				continue;
+			}
+			try {
+				await this.driverFor(spec.template).remove(spec);
+				this.o.store.forget(r.tabId);
+				this.audit('tab.gc', 'removed', { tabId: r.tabId, unusedDays: days });
+			} catch (e) {
+				this.audit('tab.gc', 'fail', { tabId: r.tabId, error: (e as Error).message });
+			}
+		}
 	}
 }
 

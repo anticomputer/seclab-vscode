@@ -50,6 +50,17 @@
 				"command": "seclab.showLog",
 				"title": "Show Tab Manager Log",
 				"category": "seclab"
+			},
+			{
+				"command": "seclab.removeTab",
+				"title": "Remove Tab…",
+				"category": "seclab"
+			},
+			{
+				"command": "seclab.resetTab",
+				"title": "Reset This Tab…",
+				"category": "seclab",
+				"enablement": "remoteName == seclab"
 			}
 		],
 		"keybindings": [
@@ -81,6 +92,14 @@
 					"default": [],
 					"scope": "application",
 					"description": "If set, folders may only be opened as tabs under these absolute paths."
+				},
+				"seclab.tabs.gcDays": {
+					"type": "integer",
+					"default": 30,
+					"minimum": 0,
+					"maximum": 3650,
+					"scope": "application",
+					"description": "Stopped tabs unused for this many days are removed (their sandbox, installed extensions and tab home; never your folder). 0 keeps them forever. Tabs holding moved secrets are never removed."
 				}
 			}
 		}

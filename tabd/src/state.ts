@@ -15,6 +15,8 @@ export interface TabRecord {
 	/** Filesystem identity at claim time; re-checked before every start. */
 	readonly dev: string;
 	readonly ino: string;
+	/** Runtime driver the tab was created for (absent in records from before it was kept). */
+	readonly driver?: string;
 }
 
 export function fileIdentity(p: string): { dev: string; ino: string } {
@@ -43,7 +45,7 @@ export class TabStore {
 	}
 
 	/** Returns the tab for hostPath (already canonical), creating it if needed. */
-	claim(hostPath: string, templateName: string): { record: TabRecord; created: boolean } {
+	claim(hostPath: string, templateName: string, driver?: string): { record: TabRecord; created: boolean } {
 		if (!TEMPLATE_NAME_RE.test(templateName)) {
 			throw new Error('invalid template name');
 		}
@@ -59,7 +61,7 @@ export class TabStore {
 		}
 		const candidate: TabRecord = {
 			tabId: mintTabId(), hostPath, templateName, createdAt: new Date().toISOString(), connectionToken: mintConnectionToken(),
-			...fileIdentity(hostPath),
+			...fileIdentity(hostPath), ...(driver ? { driver } : {}),
 		};
 		// Write the tab record first, then race for the path claim.
 		this.writeRecord(candidate);
@@ -94,7 +96,7 @@ export class TabStore {
 		const r = JSON.parse(raw) as TabRecord;
 		if (r.tabId !== tabId || typeof r.hostPath !== 'string' || !path.isAbsolute(r.hostPath) ||
 			!TEMPLATE_NAME_RE.test(r.templateName) || !CONNECTION_TOKEN_RE.test(r.connectionToken) ||
-			!/^[0-9]+$/.test(String(r.dev)) || !/^[0-9]+$/.test(String(r.ino))) {
+			!/^[0-9]+$/.test(String(r.dev)) || !/^[0-9]+$/.test(String(r.ino)) || (r.driver !== undefined && !/^[a-z]{1,16}$/.test(String(r.driver)))) {
 			throw new Error(`corrupt tab record ${tabId}`);
 		}
 		return r;
@@ -122,6 +124,7 @@ export class TabStore {
 		const key = createHash('sha256').update(foldPath(r.hostPath)).digest('hex');
 		fs.rmSync(path.join(this.byPathDir, `${key}.json`), { force: true });
 		fs.rmSync(this.recordFile(tabId), { force: true });
+		fs.rmSync(path.join(this.tabsDir, `${tabId}.used`), { force: true });
 		this.clearLease(tabId);
 	}
 
@@ -154,6 +157,23 @@ export class TabStore {
 
 	writeLease(tabId: string, pid: number): void {
 		fs.writeFileSync(this.leaseFile(tabId), String(pid), { mode: 0o600 });
+	}
+
+	/** Last use (start or connect), for garbage collection of stopped tabs. */
+	touch(tabId: string): void {
+		fs.writeFileSync(path.join(this.tabsDir, `${assertTabId(tabId)}.used`), new Date().toISOString(), { mode: 0o600 });
+	}
+
+	/** Last use in ms since the epoch; tabs never used since this existed count from creation. */
+	lastUsed(r: TabRecord): number {
+		try {
+			const t = Date.parse(fs.readFileSync(path.join(this.tabsDir, `${assertTabId(r.tabId)}.used`), 'utf8'));
+			if (Number.isFinite(t)) {
+				return t;
+			}
+		} catch { /* never touched */ }
+		const c = Date.parse(r.createdAt);
+		return Number.isFinite(c) ? c : Date.now();
 	}
 
 	leaseHolder(tabId: string): number | undefined {

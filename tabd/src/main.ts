@@ -40,6 +40,8 @@ const { values } = parseArgs({
 		'cpus': { type: 'string' },
 		'memory': { type: 'string' },
 		'fence-reverify-ms': { type: 'string' },
+		// Stopped tabs unused this long are removed at initialize (0 disables).
+		'gc-days': { type: 'string', default: '30' },
 	},
 	strict: true,
 });
@@ -96,6 +98,7 @@ const supervisor = new Supervisor({
 	},
 	audit: entry => fs.writeSync(auditLog, JSON.stringify(entry) + '\n'),
 	fenceReverifyMs: values['fence-reverify-ms'] ? Number(values['fence-reverify-ms']) : undefined,
+	gcDays: /^[0-9]{1,4}$/.test(values['gc-days']!) ? Number(values['gc-days']) : die('--gc-days must be a whole number of days'),
 	pathPolicy: {
 		allowedRoots: values['allowed-root'],
 		// The state dir and the real locations of the runtime CLIs we execute.
