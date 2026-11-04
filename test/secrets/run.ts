@@ -27,8 +27,8 @@ try {
 fs.rmSync(work, { recursive: true, force: true });
 const ws = path.join(work, 'tabs', 'ws');
 fs.mkdirSync(ws, { recursive: true });
-const C = Object.fromEntries(['tree', 'config', 'history', 'allow', 'ignored', 'reflog', 'staged', 'nested', 'symhead', 'common', 'link', 'dirlink', 'objplant', 'abscommon']
-	.map(k => [k, mintCanary(k).value])) as Record<'tree' | 'config' | 'history' | 'allow' | 'ignored' | 'reflog' | 'staged' | 'nested' | 'symhead' | 'common' | 'link' | 'dirlink' | 'objplant' | 'abscommon', string>;
+const C = Object.fromEntries(['tree', 'config', 'history', 'allow', 'ignored', 'reflog', 'staged', 'nested', 'symhead', 'common', 'link', 'dirlink', 'objplant', 'abscommon', 'magic', 'envlib']
+	.map(k => [k, mintCanary(k).value])) as Record<'tree' | 'config' | 'history' | 'allow' | 'ignored' | 'reflog' | 'staged' | 'nested' | 'symhead' | 'common' | 'link' | 'dirlink' | 'objplant' | 'abscommon' | 'magic' | 'envlib', string>;
 
 // Build the fixture repo. Hooks disabled; nothing here reads hostile config.
 const gitIn = (dir: string, ...a: string[]) => execFileSync('git', ['-C', dir, '-c', 'core.hooksPath=/dev/null', ...a], { stdio: 'ignore' });
@@ -106,6 +106,12 @@ fs.writeFileSync(path.join(acd, 'commondir'), `${path.join(acd, 'c')}\n`);
 // R3: a file the scanner can't read and a directory it can't list.
 fs.writeFileSync(path.join(ws, 'locked.env'), 'TOKEN=placeholder\n', { mode: 0o200 });
 fs.mkdirSync(path.join(ws, 'lockdir'), { mode: 0o300 });
+// Round 8: a zip magic header in front of a secret (gitleaks skips "binary" files), and a
+// directory link into a tree gitleaks allowlists case-insensitively (Env/lib).
+fs.writeFileSync(path.join(ws, 'zip.env'), Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x0a]), Buffer.from(`TOKEN=${C.magic}\n`)]));
+fs.mkdirSync(path.join(ws, 'Env', 'lib', 'stash'), { recursive: true });
+fs.writeFileSync(path.join(ws, 'Env', 'lib', 'stash', 'prod.env'), `TOKEN=${C.envlib}\n`);
+fs.symlinkSync('Env/lib/stash', path.join(ws, 'secrets2'));
 
 const client = new TabdClient({
 	command: process.execPath,
@@ -144,6 +150,8 @@ try {
 	assert.equal(has('worktree', 'secrets/prod.env').length, 1, `directory link into a git dir missed: ${show}`);
 	assert.equal(has('git-dir', '.git/objects/ab/abc.env').length, 1, `file planted under objects/ missed: ${show}`);
 	assert.equal(has('git-dir', 'acd/.git/c/config').length, 1, `absolute commondir missed: ${show}`);
+	assert.equal(has('worktree', 'zip.env').length, 1, `secret behind a zip magic header missed: ${show}`);
+	assert.equal(canary.filter(f => f.source === 'worktree' && ['Env/lib/stash/prod.env', 'secrets2/prod.env'].includes(f.file)).length, 1, `link into an allowlisted tree missed: ${show}`);
 	for (const p of ['locked.env', 'lockdir']) {
 		assert.equal(scan.findings.filter(f => f.rule === 'unscanned-unreadable' && f.file === p).length, 1, `unreadable ${p} skipped silently: ${show}`);
 	}

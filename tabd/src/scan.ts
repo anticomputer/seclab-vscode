@@ -99,7 +99,33 @@ h=[0-9a-f]; h38=; h64=; for k in $(seq 38); do h38=$h38$h; done; for k in $(seq 
 OBJX=("--exclude=*/objects/$h$h/$h38" "--exclude=*/lfs/objects/$h$h/$h$h/$h64")
 for e in pack idx rev bitmap promisor keep mtimes; do OBJX+=("--exclude=*/objects/pack/pack-$h*.$e"); done
 copy() { ( set -o pipefail; tar -C "$1" "${$}{OBJX[@]}" -cf - . | tar -C "$2" -xf - ); }
-timeout 300 gitleaks dir /scan $GL --max-target-megabytes $LIM --report-path "$O/r.json"; emit worktree . $? "$O/r.json"
+# gitleaks skips a file (or a whole stdin stream) whose FIRST chunk carries an
+# application/* magic (sources/file.go at 83d9cd6), so a tab could blind .env with a zip
+# header and wait for the user to append a token. Every stdin stream starts with 128 KiB of
+# newlines (a pipe read is at most 100 KB, so the first chunk is blank), and every file a
+# dir pass skipped as binary is rescanned as text, mapped back by line offsets.
+PADL=131072
+pad() { head -c $PADL /dev/zero | tr '\0' '\n'; }
+gdir() {
+  timeout 300 gitleaks dir "$3" $GL --no-color --log-level debug --max-target-megabytes $LIM --report-path "$O/r.json" 2>&1 >/dev/null \
+    | sed 's/\x1b\[[0-9;]*m//g' | grep -a 'skipping binary file' > "$O/binlog"; local rc=${$}{PIPESTATUS[0]}
+  emit "$1" "$2" "$rc" "$O/r.json"
+  [ -s "$O/binlog" ] || { rm -f "$O/binlog"; return 0; }
+  : > "$O/binmap"; : > "$O/binbad"
+  { pad; local L=$((PADL+1)) p n line
+    while IFS= read -r line; do
+      p=${$}{line#* path=}
+      if [ "$p" = "$line" ] || [ ! -f "$p" ]; then echo 1 > "$O/binbad"; continue; fi
+      printf '%s\0%s\0' "$p" "$((L+1))" >> "$O/binmap"
+      n=$(tr -cd '\n' < "$p" | wc -c); L=$((L+n+2))
+      printf '\n'; cat "$p"; printf '\n'
+    done < "$O/binlog"; } | timeout 300 gitleaks stdin $GL --report-path "$O/r.json"; rc=$?
+  [ ! -s "$O/binbad" ] || rc=1
+  emit binmap "$1" 0 "$O/binmap"
+  emit bin "$2" "$rc" "$O/r.json"
+  rm -f "$O/binlog" "$O/binbad"
+}
+gdir worktree . /scan
 find /scan/ws -xdev -type f -size +$((LIM*1000000))c -print0 | cap "$O/r.json"; emit large . $? "$O/r.json"
 # Paths the scanner can't read or list (the tab may chmod its own files): blocking, never
 # silent. A real open per file (access(2) lies on Docker Desktop file sharing), plus every
@@ -123,10 +149,10 @@ while IFS= read -r -d '' l; do
     i=$((i+1)); if [ "$i" -gt 500 ]; then flag manylinks . 1; break; fi
     cp "$t" "$O/l/x/$i" || lf=1
   elif [ -d "$t" ]; then
-    # Only targets in places the worktree pass skips (git dirs, allowlisted trees); and
-    # never a link into its own ancestor (that content is the worktree itself).
+    # Never a link into its own ancestor (that content is the worktree itself). Every other
+    # directory target is copied and scanned under the link (bounded by the tmpfs; running
+    # out makes the scan incomplete, never silent).
     case "$l/" in "$t"/*) continue ;; esac
-    case "$t/" in */.git/*|*/node_modules/*|*/bower_components/*|*/vendor/*|*/venv/*|*/.venv/*|*/env/*|*/virtualenv/*|*/lib/python*|*/lib64/python*|*.dist-info/*) ;; *) continue ;; esac
     i=$((i+1)); if [ "$i" -gt 500 ]; then flag manylinks . 1; break; fi
     mkdir "$O/l/d/$i" && copy "$t" "$O/l/d/$i" || lf=1
   else
@@ -135,7 +161,8 @@ while IFS= read -r -d '' l; do
   printf '%s\0' "$l" >> "$O/links"
 done < <(find /scan/ws -xdev -name node_modules -prune -o -type l -print0 | sort -z)
 emit links . 0 "$O/links"
-timeout 300 gitleaks dir "$O/l" $GL --max-target-megabytes $LIM --report-path "$O/r.json"; rc=$?; [ "$lf" = 0 ] || rc=1; emit linked . $rc "$O/r.json"
+gdir linked . "$O/l"
+[ "$lf" = 0 ] || flag linkcopy . 1
 emit large . 0 "$O/biglinks"
 emit extlinks . 0 "$O/extlinks"
 rm -rf "$O/l"
@@ -160,8 +187,7 @@ while IFS= read -r -d '' h; do
     n=$((n+1)); if [ "$n" -gt ${MAX_GIT_DIRS} ]; then flag toomany . 1; break 2; fi
     drel=${$}{d#/scan/ws}; drel=${$}{drel#/}; [ -n "$drel" ] || drel=.
     rm -rf "$O/g/x"; mkdir "$O/g/x"
-    copy "$d" "$O/g/x" && timeout 120 gitleaks dir "$O/g" $GL --max-target-megabytes $LIM --report-path "$O/r.json"
-    emit gitdir "$drel" $? "$O/r.json"
+    if copy "$d" "$O/g/x"; then gdir gitdir "$drel" "$O/g"; else flag gitdir "$drel" 1; fi
   done
   [ -z "${$}{seen[repo:$common]:-}" ] || continue
   seen[repo:$common]=1
@@ -170,7 +196,7 @@ while IFS= read -r -d '' h; do
   ( set -o pipefail; export GIT_DIR=$gd
     git cat-file --batch-all-objects --batch-check='%(objectname) %(objecttype) %(objectsize)' \
       | awk -v L=$((LIM*1000000)) -v B="$O/big" '($2=="blob"||$2=="commit"||$2=="tag") { if ($3 <= L) print $1; else print $1 > B }' \
-      | git cat-file --batch | timeout 300 gitleaks stdin $GL --report-path "$O/r.json" )
+      | { pad; git cat-file --batch; } | timeout 300 gitleaks stdin $GL --report-path "$O/r.json" )
   emit objects "$rel" $? "$O/r.json"
   if [ -s "$O/big" ]; then head -n 200 "$O/big" > "$O/r.json"; [ "$(wc -l < "$O/big")" -le 200 ]; emit largeobj "$rel" $? "$O/r.json"; fi
   rm -f "$O/big"
@@ -186,8 +212,8 @@ const GIT_OVERRIDES: Array<[string, string]> = [
 	['log.decorate', 'no'], ['log.abbrevCommit', 'false'], ['i18n.logOutputEncoding', 'UTF-8'],
 ];
 
-type Kind = 'worktree' | 'large' | 'unreadable' | 'finderr' | 'links' | 'linked' | 'extlinks' | 'manylinks' | 'gitdir' | 'history' | 'objects' | 'largeobj' | 'badgit' | 'toomany' | 'end';
-const KINDS = new Set<Kind>(['worktree', 'large', 'unreadable', 'finderr', 'links', 'linked', 'extlinks', 'manylinks', 'gitdir', 'history', 'objects', 'largeobj', 'badgit', 'toomany', 'end']);
+type Kind = 'worktree' | 'large' | 'unreadable' | 'finderr' | 'links' | 'linked' | 'linkcopy' | 'extlinks' | 'manylinks' | 'binmap' | 'bin' | 'gitdir' | 'history' | 'objects' | 'largeobj' | 'badgit' | 'toomany' | 'end';
+const KINDS = new Set<Kind>(['worktree', 'large', 'unreadable', 'finderr', 'links', 'linked', 'linkcopy', 'extlinks', 'manylinks', 'binmap', 'bin', 'gitdir', 'history', 'objects', 'largeobj', 'badgit', 'toomany', 'end']);
 
 /** The scanner runs as whoever can read the workspace like its owner (see scanUser). */
 function scanUser(hostPath: string): string {
@@ -229,31 +255,74 @@ export async function scanWorkspace(runner: Runner, docker: string, hostPath: st
  * the link. Only stat-level calls; no content is read on the host.
  */
 export function checkExternalLinks(res: ScanResult, hostPath: string): void {
-	const root = fs.statSync(hostPath);
 	for (const l of res.externalLinks ?? []) {
 		const rel = workspaceRel(l, '/scan/ws/');
-		if (!rel) {
-			continue;
+		if (rel && resolvesInside(path.join(hostPath, rel), hostPath)) {
+			pushFinding('worktree', displayPath(rel), 1, 'unscanned-link-alias', undefined, false, '', res.findings, res.secrets);
 		}
-		let real: string;
-		try {
-			real = fs.realpathSync.native(path.join(hostPath, rel));
-		} catch {
-			continue; // dangling on the host too: a write through it fails or lands nowhere the tab sees
+	}
+}
+
+/**
+ * Does the link at `p` (inside the workspace) resolve to something inside the workspace on
+ * the host? Resolved one hop at a time with lstat/readlink only, and never touching any
+ * path outside the workspace: a target is mapped back into the workspace through its known
+ * spellings (case-insensitively on macOS; firmlink and /private prefixes) or dropped
+ * without a filesystem call (review round 8 D2: no automount/DNS triggered by the tab).
+ */
+function resolvesInside(p: string, hostPath: string): boolean {
+	const fold = (s: string) => process.platform === 'darwin' ? s.toLowerCase() : s;
+	const aliases = [hostPath, `/System/Volumes/Data${hostPath}`];
+	if (hostPath.startsWith('/private/')) {
+		aliases.push(hostPath.slice('/private'.length));
+	}
+	const toWorkspace = (abs: string): string | undefined => {
+		const n = path.posix.normalize(abs);
+		for (const a of aliases) {
+			if (fold(n) === fold(a)) {
+				return hostPath;
+			}
+			if (fold(n).startsWith(fold(a) + '/')) {
+				return hostPath + n.slice(a.length);
+			}
 		}
-		for (let p = real; ; p = path.dirname(p)) {
-			let st: fs.Stats | undefined;
+		return undefined;
+	};
+	let hops = 0;
+	const walk = (inside: string): string | undefined => {
+		// `inside` is hostPath or below it (lexically); resolve component by component.
+		let cur = hostPath;
+		const parts = inside.slice(hostPath.length).split('/').filter(Boolean);
+		for (let k = 0; k < parts.length; k++) {
+			const next = path.join(cur, parts[k]);
+			let st: fs.Stats;
 			try {
-				st = fs.statSync(p);
-			} catch { /* keep walking up */ }
-			if (st && st.dev === root.dev && st.ino === root.ino) {
-				pushFinding('worktree', displayPath(rel), 1, 'unscanned-link-alias', undefined, false, '', res.findings, res.secrets);
-				break;
+				st = fs.lstatSync(next);
+			} catch {
+				// Not there yet: a host write through the link would create it here, inside.
+				return path.join(cur, ...parts.slice(k));
 			}
-			if (path.dirname(p) === p) {
-				break;
+			if (st.isSymbolicLink()) {
+				if (++hops > 40) {
+					return undefined;
+				}
+				const target = toWorkspace(path.resolve(cur, fs.readlinkSync(next)));
+				const r = target === undefined ? undefined : walk(target);
+				if (r === undefined) {
+					return undefined;
+				}
+				cur = r;
+			} else {
+				cur = next;
 			}
 		}
+		return cur;
+	};
+	try {
+		const target = toWorkspace(path.resolve(path.dirname(p), fs.readlinkSync(p)));
+		return target !== undefined && walk(target) !== undefined;
+	} catch {
+		return false;
 	}
 }
 
@@ -266,6 +335,8 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 	let overflow = truncated;
 	let ended = false;
 	let links: string[] = [];
+	let binmap: Array<{ path: string; start: number }> = [];
+	let binParent = '';
 	const externalLinks: string[] = [];
 	let off = 0;
 	while (off < buf.length) {
@@ -351,6 +422,20 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 					errors.push('more than 200 git objects too large to scan');
 				}
 				continue;
+			case 'linkcopy':
+				errors.push('some symlink targets could not be copied for scanning');
+				continue;
+			case 'binmap': {
+				// Pairs "<scanner path>\0<first stream line>\0" for the rescan of files the
+				// <rel>-kind dir pass skipped as binary.
+				const parts = body.toString('utf8').split('\0');
+				binmap = [];
+				for (let k = 0; k + 1 < parts.length; k += 2) {
+					binmap.push({ path: parts[k], start: Number(parts[k + 1]) });
+				}
+				binParent = rel;
+				continue;
+			}
 		}
 		if (failed) {
 			errors.push(`${kind} pass (${displayPath(rel)}) exited ${m[3]}`);
@@ -365,10 +450,32 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 			errors.push(`${kind} pass (${displayPath(rel)}) report unreadable`);
 			continue;
 		}
+		let as: 'worktree' | 'linked' | 'gitdir' | 'history' | 'objects';
+		if (kind === 'bin') {
+			// Map stream lines back to the binary-looking file they came from.
+			if (binParent !== 'worktree' && binParent !== 'linked' && binParent !== 'gitdir') {
+				errors.push('binary rescan without a map');
+				continue;
+			}
+			as = binParent;
+			const map = binmap;
+			raw = raw.map(f => {
+				const line = Number(f.StartLine);
+				let hit: { path: string; start: number } | undefined;
+				for (const e of map) {
+					if (e.start <= line && (!hit || e.start > hit.start)) {
+						hit = e;
+					}
+				}
+				return hit ? { ...f, File: hit.path, StartLine: line - hit.start + 1 } : { ...f, File: '' };
+			});
+		} else {
+			as = kind;
+		}
 		// gitleaks reports in nondeterministic (concurrent) order, and dedupe-by-value keeps
 		// the first copy: sort, so finding ids are stable across rescans ("accept" must match).
 		const mapped = raw.map(f => {
-			if (kind !== 'linked') {
+			if (as !== 'linked') {
 				return f;
 			}
 			// Content of a symlink target, copied to /seclab/l/x/<n> (file) or
@@ -379,10 +486,10 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 		}).sort((a, b) => cmp(String(a.File ?? ''), String(b.File ?? '')) || Number(a.StartLine) - Number(b.StartLine)
 			|| cmp(String(a.RuleID ?? ''), String(b.RuleID ?? '')) || cmp(String(a.Commit ?? ''), String(b.Commit ?? '')) || cmp(String(a.Secret ?? ''), String(b.Secret ?? '')));
 		for (const f of mapped) {
-			if (kind === 'linked') {
+			if (as === 'linked') {
 				addFinding('worktree', '.', f, findings, secrets, seenValues, false);
 			} else {
-				addFinding(kind, rel, f, findings, secrets, seenValues);
+				addFinding(as, rel, f, findings, secrets, seenValues, kind !== 'bin');
 			}
 		}
 	}
