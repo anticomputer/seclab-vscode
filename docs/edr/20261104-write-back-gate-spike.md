@@ -1,0 +1,45 @@
+# Write-back gate spike: keeping tab writes to code-running files off the host
+
+- **Status:** accepted (spike result; the design goes to an ADR)
+- **Date:** 2026-11-04
+- **Deciders:** anticomputer ("Watch and warn: the supervisor flags any change a tab makes to files that run code … and requires approval before that file goes live in your real checkout"); fork-build session
+- **Related:** [ADR defeat folder-open loaders](../adr/20261104-defeat-folder-open-loaders.md), [EDR automatic-tasks-off](20261104-automatic-tasks-off.md)
+
+## Question
+The tab mounts the workspace read-write, so a payload can plant host-executed code
+(`.git/hooks/*`, `.git/config` `core.fsmonitor`, `.envrc`, `package.json` scripts,
+`Makefile`, …) that runs the next time the user uses git, direnv or npm in a **host**
+terminal. The requirement is that unapproved content is never live in the host
+checkout, not even briefly. Detect-and-revert is acceptable only as a documented fallback.
+
+## Experiments (sbx 0.51, guest kernel 7.0.14; Docker Desktop 29.8)
+| # | Setup | Result |
+|---|---|---|
+| 1 | sbx: workspace as an extra `PATH:/seclab/host-ro:ro` mount | The primary workspace must be read-write (`sbx create` refuses `:ro` for it); extra mounts can be read-only, and writes there fail with `EROFS`. |
+| 2 | sbx: kernel `overlay` (lower = read-only mount, upper = VM-private `/run`) mounted as root | Mounts. As root: the tab's writes (`a.txt`, a new `.git/hooks/pre-commit`) land only in the upper layer; the host files are untouched; host-side changes (a new `b.txt`) show through. |
+| 3 | sbx: the same, writing as the tab user (`agent`, uid 1000) | **Denied.** virtiofs presents host files as uid 0. Plain virtiofs writes work because permissions are enforced by the virtiofs server, but overlayfs checks the lower inode's root ownership itself. |
+| 4 | sbx: idmapped lower (`mount_setattr` `MOUNT_ATTR_IDMAP`, 0→1000) under the overlay | `EINVAL`: sbx's virtiofs doesn't offer idmapped mounts. |
+| 5 | sbx: overlay or bind mounts don't survive a sandbox stop/start | They must be set up on every start, as root, **before** the REH starts (the same slot as the observability collector). |
+| 6 | sbx: FUSE in the VM | `/dev/fuse` is present and `fuse` is registered; the template is Debian trixie, which packages `fuse-overlayfs` (with `uidmapping`/`gidmapping`). |
+| 7 | OCI: Docker `local` volume driver with `type=overlay` (lower = the host path in the Docker VM, upper = a Docker volume) | Mounts with `--cap-drop ALL`. On Docker Desktop the lower is root-owned (`/host_mnt`), so the uid-1000 tab can't write, as in experiment 3. On native Linux, where CI runs, the tab runs as the workspace owner (EDR oci-tab-user-on-linux), so ownership matches. |
+
+## Findings
+- **Not feasible:**
+  - read-only sub-mounts over the sensitive paths alone: writes fail, which breaks git and `npm install` (they rewrite `package.json`), and there is nothing to show as a diff;
+  - kernel overlay as the tab user on virtiofs (experiment 3);
+  - idmapped mounts on sbx (experiment 4).
+- **Feasible, sbx:** a **VM-private overlay with uid mapping**: `fuse-overlayfs`, lower = the host workspace (read-only extra mount), upper = VM-private, `uidmapping` 0→agent. It is mounted as root at the workspace's absolute path before the REH, and the original mount is hidden underneath. Every tab write lands in the upper layer, never on the host. A **write-back engine** in tabd then:
+  - copies upper-layer changes (including whiteouts and renames) back to the host checkout;
+  - does this immediately for ordinary files;
+  - for files on the reviewed code-running list, holds the change and prompts with the diff, attributed to the tab;
+  - on approval, writes to the host;
+  - on rejection, restores the host version into the tab view.
+- **Feasible, OCI on native Linux:** the same engine over a Docker `local` overlay volume (experiment 7). Docker Desktop needs `fuse-overlayfs` in a helper too (experiment 7's ownership issue); until then OCI on Desktop is a development driver without the gate.
+- **`sbx --clone`** (a private in-VM git clone, with commits pulled back from a `sandbox-<name>` remote) also keeps the host untouched. But unsaved and uncommitted edits never reach the host, which changes the editing UX the user chose to keep. It is rejected as the default and could be a "strict" mode.
+
+## Costs and open questions (for the ADR)
+- **Host-side changes don't raise inotify events in the merged view.** A host `git pull` might not refresh the editor until the next access. This needs a measurement with `fuse-overlayfs`; the fallback is the REH's polling watcher for the workspace.
+- **Conflicts:** a file both the host and the tab changed. Policy: the tab's view wins inside the tab, and the host keeps its version until the user resolves it in the prompt.
+- **The write-back engine is new code** on the trust boundary. It parses an attacker-controlled upper layer (paths, symlinks, whiteouts, xattrs), so it needs the same hardening as the scanner (`O_NOFOLLOW`, no `..`, size caps) and a review round.
+- **The primary sbx workspace must be read-write.** It becomes an empty per-tab scratch dir that nothing on the host reads.
+- **Detect-and-revert** (host FSEvents on the sensitive paths, restore from a shadow copy) stays as the documented fallback for drivers without the overlay. It has a race window.

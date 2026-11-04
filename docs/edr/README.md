@@ -63,4 +63,5 @@ Same rules as ADRs:
 | 2026-11-04 | [Sentinel format, binding and detection](20261104-sentinel-format-and-binding.md) | accepted |
 | 2026-11-04 | [Tab Manager routing (M1): extension-level redirect, fail closed](20261104-tab-manager-routing.md) | superseded-by [20261104-local-window-close-first](20261104-local-window-close-first.md) |
 | 2026-11-04 | [seclab-tabd is dependency-free TypeScript, run on the editor's own Node runtime](20261104-tabd-implementation-language.md) | accepted |
+| 2026-11-04 | [Write-back gate spike: keeping tab writes to code-running files off the host](20261104-write-back-gate-spike.md) | accepted |
 <!-- index:end -->
