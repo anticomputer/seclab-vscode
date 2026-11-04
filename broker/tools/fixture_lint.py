@@ -30,14 +30,14 @@ from seclab_broker.scanner import find_minted  # noqa: E402
 
 NETWORK_SCOPES = [BROKER / "tests" / "integration", BROKER / "tests" / "sbx"]
 TOKEN_SCOPES = NETWORK_SCOPES + [BROKER / "tests" / "unit", BROKER / "examples"]
-URL_RE = re.compile(r"\b(?:https?|wss?)://(?:[^@/\s'\"]*@)?(\[[0-9a-fA-F:.]+\]|\$\{?\w+\}?"
-                    r"|[A-Za-z0-9._-]*(?:\{[^}]*\}[A-Za-z0-9._-]*)*)")
+URL_RE = re.compile(r"\b(?:https?|wss?)://(?:[^@/\s'\"]*@)?(\[[0-9a-fA-F:.]+\]"
+                    r"|(?:\$\{?\w+\}?|[A-Za-z0-9._-])*(?:\{[^}]*\}[A-Za-z0-9._-]*)*)")
 PLACEHOLDER_RE = re.compile(r"\{[^}]*\}")
+SHELL_VAR_RE = re.compile(r"\$\{?\w+\}?")
 IPV4_RE = re.compile(r"(?<![\w.])(\d{1,3}(?:\.\d{1,3}){3})(?![\w.])")
 EXTRA_TOKEN_RE = re.compile(r"\b(?:AKIA|ASIA)[A-Z2-7]{16}\b")
 ALLOWED_HOST_RE = re.compile(
-    r"^(?:[a-z0-9-]+\.)*example\.test$|^broker$|^localhost$|^host\.docker\.internal$"
-    r"|^\{.*\}$|^\$.*$")  # templated hosts are checked where they are built
+    r"^(?:[a-z0-9-]+\.)*example\.test$|^broker$|^localhost$|^host\.docker\.internal$")
 TEST_NETS = [ipaddress.ip_network(n) for n in
              ("127.0.0.0/8", "192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24",
               "11.250.0.0/16", "0.0.0.0/32")]
@@ -52,11 +52,15 @@ def files(scopes):
 
 
 def host_ok(h: str) -> bool:
-    # f-string placeholders: a whole-host placeholder is checked where it is built; a
-    # trailing one is the path (`{host}{path}`); an inner one is a label (`d{i}.x.test`).
-    if PLACEHOLDER_RE.fullmatch(h) or h.startswith("$"):
+    # f-string placeholders and shell variables: a whole-host one is checked where it is
+    # built; a trailing f-string one is the path (`{host}{path}`); one inside a name is a
+    # label (`d{i}.x.test`, `${sub}.evil.com`) and the rest of the name must be test-owned.
+    if PLACEHOLDER_RE.fullmatch(h) or SHELL_VAR_RE.fullmatch(h):
         return True
-    h = PLACEHOLDER_RE.sub("x", re.sub(r"\{[^}]*\}$", "", h))
+    h = re.sub(r"(?<=.)\{[^}]*\}$", "", h)
+    if PLACEHOLDER_RE.fullmatch(h) or SHELL_VAR_RE.fullmatch(h):
+        return True
+    h = SHELL_VAR_RE.sub("x", PLACEHOLDER_RE.sub("x", h))
     if not h:
         return False
     if h.startswith("["):
