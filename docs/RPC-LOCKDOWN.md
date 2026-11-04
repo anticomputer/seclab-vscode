@@ -224,7 +224,41 @@ Two companion rules close the obvious ways around it:
 - `$getCommands` returns only ids this tab may execute, so the registry is not
   a reconnaissance oracle.
 
-### 2.5.1 The argument walker must match `marshalling.revive` exactly
+### 2.5.2 Taint: nested commands carry the tab identity
+
+Checking only the command the tab *names* is not enough: its handler can execute
+others, and those calls do not arrive from the tab. `_remoteCLI.windowOpen`
+resolves `ICommandService` from its accessor and executes `_files.windowOpen`
+([L35-L41](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L35-L41)).
+
+The taint is propagated as a **capability, not ambient state**. A tab-originated
+command is invoked through a child instantiation service whose `ICommandService`
+binding is a tainted wrapper carrying the origin, so the handler's
+`accessor.get(ICommandService)` returns it and every nested call is filtered
+with the same table:
+
+```ts
+const tainted = new TaintedCommandService(this, origin);
+const scoped = this._instantiationService.createChild(
+    new ServiceCollection([ICommandService, tainted]));
+return scoped.invokeFunction(command.handler, ...args);
+```
+
+This is the answer to "must survive async hops". There is **no
+`AsyncLocalStorage`** available: the workbench renderer is a browser context,
+and no use of `node:async_hooks` exists anywhere in `src/vs/workbench` or
+`src/vs/platform`. Ambient taint is exactly what breaks across `await`,
+`setTimeout` and event re-entry. A captured object reference does not break,
+because it is not time-scoped at all.
+
+Escapes fail closed: the global `CommandService` refuses any `deny` verdict
+while a tab-originated command is in flight, and logs the attempt. The known
+residual is a handler that uses a constructor-injected or imported command
+service rather than its accessor; the backstop catches the denied subset.
+Rationale and alternatives are in
+[the ADR](adr/20261104-tab-command-taint.md).
+
+### 2.5.3 The argument walker must match `marshalling.revive` exactly
 
 `$executeCommand` revives its arguments with `revive()`, which bails at
 `depth > 200` and turns `{$mid: MarshalledId.Regexp, source, flags}` into a live
@@ -412,13 +446,7 @@ Stated plainly, because each one is a thing this design does **not** stop.
 Numbers 1 to 4 came out of the independent design review
 ([`docs/security-reviews/20261104-rpc-lockdown-design.md`](security-reviews/20261104-rpc-lockdown-design.md)).
 
-1. **Commands that call other commands.** A command with a reachable verdict
-   that internally executes a denied one launders the verdict, because the
-   inner call does not arrive from the tab. `_remoteCLI.windowOpen` is exactly
-   this shape: it forwards to `_files.windowOpen`
-   ([mainThreadCLICommands.ts L34-L40](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L34-L40)).
-   Mitigation is to taint the execution context for the dynamic extent of a
-   tab-originated command. **Not yet designed, and the most likely bypass.**
+1. **Verdict laundering through nested commands.** Addressed by the command taint (§2.5.2, [ADR](adr/20261104-tab-command-taint.md)), but two escapes remain: a handler using a constructor-injected or imported `ICommandService` rather than its accessor, and services that run commands for a caller such as `IOpenerService` for `command:` URIs. The global-service backstop catches the denied subset; the allowed subset is unfiltered. Probed, not assumed.
 2. **A verdict is pinned to an id, not to behaviour.** The digest covers policy
    entries and surface names. If upstream changes what an allowed command
    *does*, the mapping is byte-identical and the build passes. Candidate fix:
@@ -451,27 +479,30 @@ Numbers 1 to 4 came out of the independent design review
 9. **A denied call is a compatibility break**, surfacing as an error rather than
    a prompt. Which popular extensions this hits is unmeasured until Phase 3.
 
-## 8. Decisions needed before implementation
+## 8. Decisions taken
 
-1. **Verdict laundering must be designed first** (residual risk 1). An allowed
-   command that internally invokes a denied one defeats the commands table.
-   Proposal: taint the execution context for the dynamic extent of a
-   tab-originated command, so nested `executeCommand` calls inherit the tab
-   identity and are filtered too. This needs a decision because it touches
-   `ICommandService` rather than our choke points, and it is the one change
-   that cannot be deferred to Phase 3.
-2. **Is a hard denial the right failure mode?** Today a denied call returns an
-   error the extension sees as unsupported. The alternative is to prompt on
-   first denial, which is friendlier but turns every rogue probe into a user
-   decision — and users click through prompts. Recommendation: keep hard
-   denial, and treat prompts as a per-capability choice rather than a fallback.
-3. **Clipboard write stays allowed.** Read is denied; write is allowed, so a
-   tab can poison the clipboard and the user may paste attacker text into a
-   host terminal. Recommendation: accept for v0, revisit if a probe shows it
-   chains into something worse.
-4. **The broker protocol for user-typed passwords** (§5) is not yet agreed with
-   the broker session: how a password QuickInput value is registered as a
-   broker credential and what its sentinel looks like.
-5. **Does CI regenerate the inventory from the built source?** (residual risk
-   3.) This is the difference between a gate and a formality, and it depends on
-   the fork-build session's pipeline.
+All five are now settled; the design above reflects them.
+
+1. **Verdict laundering: taint the command context.** The user's decision, in
+   their words: *"anything a tab command triggers carries the tab's identity and
+   goes through the filter."* Mechanism and alternatives in §2.5.2 and
+   [the ADR](adr/20261104-tab-command-taint.md). Taint is carried as a
+   capability rather than ambient state, because the renderer has no
+   `AsyncLocalStorage`.
+2. **Hard denial is the failure mode.** A denied call returns an error the
+   extension sees as an unsupported operation. Prompting on first denial was
+   rejected: it turns every rogue probe into a user decision, and users click
+   through prompts. `prompt` stays a deliberate per-capability verdict, not a
+   fallback.
+3. **Clipboard write stays allowed for v0.** Read is denied. The residual is
+   poisoning so the user pastes attacker text into a host terminal; a probe
+   checks whether it chains into anything worse, and the decision is revisited
+   if it does.
+4. **Password inputs use the broker's `credential.import`.** A password
+   QuickInput value is captured on the trusted side, imported into the broker as
+   a user-supplied credential, and a tab-scoped sentinel is returned to the
+   extension. Aligns with `docs/broker-protocol.md`.
+5. **CI regenerates the inventory from the built source** and fails on any diff
+   against the committed copy. Without this the gate compares policy to a
+   committed artefact rather than to what is being built. Wiring it into the
+   fork-build pipeline is tracked with that session.
