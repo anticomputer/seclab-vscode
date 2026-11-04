@@ -42,8 +42,47 @@ test('unarmed without a nonce', () => {
 test('unarmed when the run directory comes only from the workspace', () => {
 	process.env.SECLAB_PROBE_NONCE = 'abc123';
 	delete process.env.SECLAB_PROBE_RUNDIR;
-	// A hostile workspace supplying its own rundir must not arm anything.
+	// No targets at all: nothing to arm from.
 	assert.equal(safety.context().armed, false);
+});
+
+// The workspace route IS reachable (the tab gets env -i, so it is the only one
+// that works in a tab). An earlier version of this test passed no targets at
+// all, so it never exercised this route and would have passed against a guard
+// with no workspace handling whatsoever. These cases drive it directly.
+const hostile = (run: string) => ({
+	arm: 'a'.repeat(32), run, until: String(Math.floor(Date.now() / 1000) + 3600),
+});
+
+test('a workspace-chosen root yields only an advisory, lexical context', () => {
+	delete process.env.SECLAB_PROBE_NONCE;
+	delete process.env.SECLAB_PROBE_RUNDIR;
+	const c = safety.context(hostile('/'));
+	assert.equal(c.armed, true, 'the in-tab route must still arm; it is the only one in a tab');
+	assert.equal(c.lexicalOnly, true);
+	assert.equal(c.advisory, true);
+});
+
+test('an advisory context refuses every write, whatever root it was given', () => {
+	for (const root of ['/', os.homedir(), '/usr/local']) {
+		const c = safety.context(hostile(root));
+		assert.throws(() => safety.safeWrite(c, path.join(root, 'PWNED'), 't'),
+			/advisory context/, `write allowed under ${root}`);
+	}
+});
+
+test('an advisory context still refuses forbidden paths outright', () => {
+	const c = safety.context(hostile(os.homedir()));
+	for (const bad of ['.ssh/id_rsa', '.git/hooks/pre-commit', 'bin/x', '.zshrc']) {
+		assert.throws(() => safety.safePath(c, path.join(os.homedir(), bad), 't'), /probe safety/,
+			`${bad} not refused`);
+	}
+});
+
+test('an expired or malformed arm token does not arm', () => {
+	assert.equal(safety.context({ arm: 'nothex', run: '/tmp', until: '99999999999' }).armed, false);
+	assert.equal(safety.context({ arm: 'a'.repeat(32), run: '/tmp', until: '1' }).armed, false);
+	assert.equal(safety.context({ arm: 'a'.repeat(32), run: 'relative', until: '99999999999' }).armed, false);
 });
 
 test('unarmed when the env nonce has no file on disk', () => {
@@ -101,7 +140,8 @@ for (const bad of [
 }
 
 test('refuses a path outside the run directory', () => {
-	assert.throws(() => safety.safePath(ctx, '/usr/local/bin/x', 't'), /outside/);
+	// Either rule may fire first (FORBIDDEN now covers bin/); what matters is refusal.
+	assert.throws(() => safety.safePath(ctx, '/usr/local/bin/x', 't'), /probe safety/);
 });
 
 test('refuses traversal out of the run directory', () => {
@@ -111,7 +151,7 @@ test('refuses traversal out of the run directory', () => {
 test('refuses a symlink pointing out of the run directory', () => {
 	const link = path.join(runDir, 'link-out');
 	fs.symlinkSync('/usr/local', link);
-	assert.throws(() => safety.safePath(ctx, path.join(link, 'bin', 'x'), 't'), /outside/);
+	assert.throws(() => safety.safePath(ctx, path.join(link, 'bin', 'x'), 't'), /probe safety/);
 });
 
 test('accepts the local beacon', () => {
