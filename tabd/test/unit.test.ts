@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import { encodeData, encodeFrame, encodeJson, FrameDecoder, FrameError, MAX_FRAME } from '../src/frames.ts';
 import { checkFence, parsePolicyJson, resourcesToMirror } from '../src/fence.ts';
 import { TabStore } from '../src/state.ts';
-import { displayPath, parseFrames, rewriteSecret } from '../src/scan.ts';
+import { checkExternalLinks, displayPath, parseFrames, rewriteSecret } from '../src/scan.ts';
 import { assertPolicyResource, canonicalWorkspacePath, mintTabId, sandboxNameFor, TAB_ID_RE, ValidationError } from '../src/validate.ts';
 
-// Durable scratch under the repo (never /tmp): .work/test-tabd
-const SCRATCH = path.resolve(import.meta.dirname, '../../.work/test-tabd');
+// Durable scratch under the repo (never /tmp); a named volume when run via ./seclab test unit.
+const SCRATCH = path.resolve(import.meta.dirname, '../../.work/test-scratch/unit');
 fs.rmSync(SCRATCH, { recursive: true, force: true });
 fs.mkdirSync(SCRATCH, { recursive: true });
 
@@ -233,6 +233,20 @@ test('scan: unscannable content blocks; links report under the link; trailing ou
 	]);
 	assert.equal(parseFrames(Buffer.concat([END, frame('worktree', '.', 0, '[]')]), 0, false).complete, false, 'bytes after end');
 	assert.equal(parseFrames(Buffer.concat([frame('large', '.', 1, nul('/scan/ws/x')), END]), 0, false).overflow, true);
+});
+
+test('scan: links that only resolve inside the workspace on the host are blocked (R1)', () => {
+	const base = path.join(SCRATCH, 'alias');
+	const ws = path.join(base, 'ws');
+	fs.mkdirSync(ws, { recursive: true });
+	fs.writeFileSync(path.join(ws, 'target.env'), 'x');
+	fs.symlinkSync(ws, path.join(base, 'alias-of-ws')); // another spelling of the workspace
+	fs.symlinkSync(path.join(base, 'alias-of-ws', 'target.env'), path.join(ws, '.env'));
+	fs.symlinkSync('/nonexistent/elsewhere', path.join(ws, 'dangling'));
+	const res = parseFrames(Buffer.concat([END]), 0, false);
+	const withLinks = { ...res, externalLinks: ['/scan/ws/.env', '/scan/ws/dangling'] };
+	checkExternalLinks(withLinks, ws);
+	assert.deepEqual(withLinks.findings.map(f => [f.file, f.rule]), [['.env', 'unscanned-link-alias']]);
 });
 
 test('scan: rewrite is byte-exact both ways ($ patterns, non-UTF-8 bytes) (S4)', () => {

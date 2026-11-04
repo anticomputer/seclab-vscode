@@ -44,6 +44,8 @@ export interface ScanResult {
 	readonly findings: Finding[];
 	/** finding id -> secret value. Never serialised. */
 	readonly secrets: Map<string, string>;
+	/** Links (scanner paths) that did not resolve inside the workspace in the scanner. */
+	readonly externalLinks?: string[];
 }
 
 interface RawFinding { File?: unknown; StartLine?: unknown; RuleID?: unknown; Commit?: unknown; Secret?: unknown }
@@ -88,21 +90,55 @@ hex() { printf '%s' "$1" | od -An -v -tx1 | tr -d ' \n'; }
 emit() { [ -f "$4" ] || : > "$4"; printf 'SECLAB1 %s %s %s %s\n' "$1" "$(hex "$2")" "$3" "$(wc -c < "$4" | tr -d ' ')"; cat "$4"; rm -f "$4"; }
 flag() { printf 'SECLAB1 %s %s %s 0\n' "$1" "$(hex "$2")" "$3"; }
 cap() { local c=0; : > "$1"; while IFS= read -r -d '' x; do c=$((c+1)); [ "$c" -le 200 ] || return 1; printf '%s\0' "$x" >> "$1"; done; }
+# Workspace path as the scanner sees it: /scan/ws, or its real path (mounted too, so
+# absolute links and an absolute commondir resolve as they do in the tab).
+inws() { case "$1" in "$SECLAB_WS"|"$SECLAB_WS"/*) printf '/scan/ws%s' "${$}{1#"$SECLAB_WS"}" ;; /scan/ws|/scan/ws/*) printf '%s' "$1" ;; *) return 1 ;; esac; }
+# Copy a git dir (or a linked dir) for scanning: everything except well-formed object and
+# pack files (the object pass reads those), so files planted under objects/ are scanned.
+h=[0-9a-f]; h38=; h64=; for k in $(seq 38); do h38=$h38$h; done; for k in $(seq 64); do h64=$h64$h; done
+OBJX=("--exclude=*/objects/$h$h/$h38" "--exclude=*/lfs/objects/$h$h/$h$h/$h64")
+for e in pack idx rev bitmap promisor keep mtimes; do OBJX+=("--exclude=*/objects/pack/pack-$h*.$e"); done
+copy() { ( set -o pipefail; tar -C "$1" "${$}{OBJX[@]}" -cf - . | tar -C "$2" -xf - ); }
 timeout 300 gitleaks dir /scan $GL --max-target-megabytes $LIM --report-path "$O/r.json"; emit worktree . $? "$O/r.json"
 find /scan/ws -xdev -type f -size +$((LIM*1000000))c -print0 | cap "$O/r.json"; emit large . $? "$O/r.json"
-mkdir -p "$O/l/x"; : > "$O/links"; : > "$O/biglinks"; i=0; lf=0
+# Paths the scanner can't read or list (the tab may chmod its own files): blocking, never
+# silent. A real open per file (access(2) lies on Docker Desktop file sharing), plus every
+# path find itself could not stat or list (from its stderr).
+( set -o pipefail; find /scan/ws -xdev -name node_modules -prune -o -type f -print0 2>"$O/finderr" \
+  | while IFS= read -r -d '' p; do { : < "$p"; } 2>/dev/null || printf '%s\0' "$p"; done \
+  | cap "$O/r.json" ); emit unreadable . $? "$O/r.json"
+head -c 65536 "$O/finderr" > "$O/r.json"; [ ! -s "$O/finderr" ]; emit finderr . $? "$O/r.json"; rm -f "$O/finderr"
+# Symlinks: a planted link can steer a later host write into a path gitleaks skips (its
+# allowlist applies to the resolved path). Scan each target under the link's name. Links
+# that don't resolve inside the workspace here are listed for tabd to resolve on the host
+# (case-insensitive APFS, firmlinks).
+mkdir -p "$O/l/x" "$O/l/d"; : > "$O/links"; : > "$O/biglinks"; : > "$O/extlinks"; i=0; lf=0; ne=0
 while IFS= read -r -d '' l; do
-  t=$(readlink -f "$l" 2>/dev/null) || continue
-  case "$t" in "$SECLAB_WS"/*) t="/scan/ws/${$}{t#"$SECLAB_WS"/}" ;; /scan/ws/*) ;; *) continue ;; esac
-  [ -f "$t" ] || continue
-  if [ "$(stat -c %s "$t")" -gt $((LIM*1000000)) ]; then printf '%s\0' "$l" >> "$O/biglinks"; continue; fi
-  i=$((i+1)); if [ "$i" -gt 500 ]; then flag manylinks . 1; break; fi
-  cp "$t" "$O/l/x/$i" || lf=1
+  if ! r=$(readlink -f "$l" 2>/dev/null) || ! t=$(inws "$r") || [ ! -e "$t" ]; then
+    ne=$((ne+1)); if [ "$ne" -gt 500 ]; then flag manylinks . 1; break; fi
+    printf '%s\0' "$l" >> "$O/extlinks"; continue
+  fi
+  if [ -f "$t" ]; then
+    if [ "$(stat -c %s "$t")" -gt $((LIM*1000000)) ]; then printf '%s\0' "$l" >> "$O/biglinks"; continue; fi
+    i=$((i+1)); if [ "$i" -gt 500 ]; then flag manylinks . 1; break; fi
+    cp "$t" "$O/l/x/$i" || lf=1
+  elif [ -d "$t" ]; then
+    # Only targets in places the worktree pass skips (git dirs, allowlisted trees); and
+    # never a link into its own ancestor (that content is the worktree itself).
+    case "$l/" in "$t"/*) continue ;; esac
+    case "$t/" in */.git/*|*/node_modules/*|*/bower_components/*|*/vendor/*|*/venv/*|*/.venv/*|*/env/*|*/virtualenv/*|*/lib/python*|*/lib64/python*|*.dist-info/*) ;; *) continue ;; esac
+    i=$((i+1)); if [ "$i" -gt 500 ]; then flag manylinks . 1; break; fi
+    mkdir "$O/l/d/$i" && copy "$t" "$O/l/d/$i" || lf=1
+  else
+    continue
+  fi
   printf '%s\0' "$l" >> "$O/links"
-done < <(find /scan/ws -xdev -name node_modules -prune -o -type l -print0)
+done < <(find /scan/ws -xdev -name node_modules -prune -o -type l -print0 | sort -z)
 emit links . 0 "$O/links"
-timeout 300 gitleaks dir "$O/l" $GL --report-path "$O/r.json"; rc=$?; [ "$lf" = 0 ] || rc=1; emit linked . $rc "$O/r.json"
+timeout 300 gitleaks dir "$O/l" $GL --max-target-megabytes $LIM --report-path "$O/r.json"; rc=$?; [ "$lf" = 0 ] || rc=1; emit linked . $rc "$O/r.json"
 emit large . 0 "$O/biglinks"
+emit extlinks . 0 "$O/extlinks"
+rm -rf "$O/l"
 declare -A seen
 n=0
 while IFS= read -r -d '' h; do
@@ -115,19 +151,16 @@ while IFS= read -r -d '' h; do
   fi
   { [ -e "$gd/objects" ] || [ -e "$gd/commondir" ]; } || continue
   rel=${$}{gd#/scan/ws}; rel=${$}{rel#/}; [ -n "$rel" ] || rel=.
-  if ! common=$(GIT_DIR=$gd git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || [ ! -d "$common" ]; then
+  if ! common=$(GIT_DIR=$gd git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || ! common=$(inws "$common") || [ ! -d "$common" ]; then
     flag badgit "$rel" 1; continue
   fi
   for d in "$gd" "$common"; do
-    case "$d" in /scan/ws|/scan/ws/*) ;; *) continue ;; esac
     [ -z "${$}{seen[$d]:-}" ] || continue
     seen[$d]=1
     n=$((n+1)); if [ "$n" -gt ${MAX_GIT_DIRS} ]; then flag toomany . 1; break 2; fi
     drel=${$}{d#/scan/ws}; drel=${$}{drel#/}; [ -n "$drel" ] || drel=.
     rm -rf "$O/g/x"; mkdir "$O/g/x"
-    ( set -o pipefail
-      tar -C "$d" --exclude=./objects --exclude=./modules --exclude=./worktrees --exclude=./lfs -cf - . | tar -C "$O/g/x" -xf - ) \
-      && timeout 120 gitleaks dir "$O/g" $GL --max-target-megabytes $LIM --report-path "$O/r.json"
+    copy "$d" "$O/g/x" && timeout 120 gitleaks dir "$O/g" $GL --max-target-megabytes $LIM --report-path "$O/r.json"
     emit gitdir "$drel" $? "$O/r.json"
   done
   [ -z "${$}{seen[repo:$common]:-}" ] || continue
@@ -141,7 +174,7 @@ while IFS= read -r -d '' h; do
   emit objects "$rel" $? "$O/r.json"
   if [ -s "$O/big" ]; then head -n 200 "$O/big" > "$O/r.json"; [ "$(wc -l < "$O/big")" -le 200 ]; emit largeobj "$rel" $? "$O/r.json"; fi
   rm -f "$O/big"
-done < <(find /scan/ws -xdev -name HEAD \( -type f -o -type l \) -print0)
+done < <(find /scan/ws -xdev -name HEAD \( -type f -o -type l \) -print0 | sort -z)
 printf 'SECLAB1 end 2d 0 0\n'
 `;
 
@@ -153,8 +186,8 @@ const GIT_OVERRIDES: Array<[string, string]> = [
 	['log.decorate', 'no'], ['log.abbrevCommit', 'false'], ['i18n.logOutputEncoding', 'UTF-8'],
 ];
 
-type Kind = 'worktree' | 'large' | 'links' | 'linked' | 'manylinks' | 'gitdir' | 'history' | 'objects' | 'largeobj' | 'badgit' | 'toomany' | 'end';
-const KINDS = new Set<Kind>(['worktree', 'large', 'links', 'linked', 'manylinks', 'gitdir', 'history', 'objects', 'largeobj', 'badgit', 'toomany', 'end']);
+type Kind = 'worktree' | 'large' | 'unreadable' | 'finderr' | 'links' | 'linked' | 'extlinks' | 'manylinks' | 'gitdir' | 'history' | 'objects' | 'largeobj' | 'badgit' | 'toomany' | 'end';
+const KINDS = new Set<Kind>(['worktree', 'large', 'unreadable', 'finderr', 'links', 'linked', 'extlinks', 'manylinks', 'gitdir', 'history', 'objects', 'largeobj', 'badgit', 'toomany', 'end']);
 
 /** The scanner runs as whoever can read the workspace like its owner (see scanUser). */
 function scanUser(hostPath: string): string {
@@ -183,7 +216,45 @@ export async function scanWorkspace(runner: Runner, docker: string, hostPath: st
 		'--mount', `type=bind,src=${hostPath},dst=${hostPath},readonly`,
 		'--entrypoint', 'bash', GITLEAKS_IMAGE, '-c', SCRIPT];
 	const r = await runner.run(docker, args, { timeoutMs: 1_200_000, maxOutputBytes: MAX_REPORT_BYTES });
-	return parseFrames(r.stdoutBytes ?? Buffer.from(r.stdout), r.code, !!r.truncated);
+	const res = parseFrames(r.stdoutBytes ?? Buffer.from(r.stdout), r.code, !!r.truncated);
+	checkExternalLinks(res, hostPath);
+	return res;
+}
+
+/**
+ * Links that didn't resolve inside the workspace in the (case-sensitive, Linux) scanner may
+ * still do so on the host: case-insensitive APFS (`Node_Modules/x`), firmlinks
+ * (`/System/Volumes/Data/...`), other spellings of the real path. Resolve each on the
+ * host and block any that land inside the workspace: their target was not scanned under
+ * the link. Only stat-level calls; no content is read on the host.
+ */
+export function checkExternalLinks(res: ScanResult, hostPath: string): void {
+	const root = fs.statSync(hostPath);
+	for (const l of res.externalLinks ?? []) {
+		const rel = workspaceRel(l, '/scan/ws/');
+		if (!rel) {
+			continue;
+		}
+		let real: string;
+		try {
+			real = fs.realpathSync.native(path.join(hostPath, rel));
+		} catch {
+			continue; // dangling on the host too: a write through it fails or lands nowhere the tab sees
+		}
+		for (let p = real; ; p = path.dirname(p)) {
+			let st: fs.Stats | undefined;
+			try {
+				st = fs.statSync(p);
+			} catch { /* keep walking up */ }
+			if (st && st.dev === root.dev && st.ino === root.ino) {
+				pushFinding('worktree', displayPath(rel), 1, 'unscanned-link-alias', undefined, false, '', res.findings, res.secrets);
+				break;
+			}
+			if (path.dirname(p) === p) {
+				break;
+			}
+		}
+	}
 }
 
 /** Exported for tests. Keeps every finding it can parse, even when the scan is incomplete. */
@@ -195,6 +266,7 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 	let overflow = truncated;
 	let ended = false;
 	let links: string[] = [];
+	const externalLinks: string[] = [];
 	let off = 0;
 	while (off < buf.length) {
 		const nl = buf.indexOf(0x0a, off);
@@ -233,6 +305,29 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 			case 'links':
 				links = body.toString('utf8').split('\0').filter(Boolean);
 				continue;
+			case 'extlinks':
+				externalLinks.push(...body.toString('utf8').split('\0').filter(Boolean));
+				continue;
+			case 'unreadable':
+				for (const p of body.toString('utf8').split('\0').filter(Boolean)) {
+					unscanned('worktree', workspaceRel(p, '/scan/ws/') ?? '.', 'unscanned-unreadable');
+				}
+				if (failed) {
+					errors.push('some paths could not be listed or read');
+				}
+				continue;
+			case 'finderr':
+				// "find: <path>: <reason>" per line; the path may itself contain ': '.
+				for (const lineText of body.toString('utf8').split('\n')) {
+					const fm = /^find: (\/scan\/ws\/.*): [^:]+$/.exec(lineText);
+					if (fm) {
+						unscanned('worktree', workspaceRel(fm[1], '/scan/ws/') ?? '.', 'unscanned-unreadable');
+					}
+				}
+				if (failed && !errors.includes('some paths could not be listed or read')) {
+					errors.push('some paths could not be listed or read');
+				}
+				continue;
 			case 'badgit':
 				// Looks like a git dir (HEAD + objects/refs/commondir) but git rejects it: the tab
 				// may have built it to dodge discovery. Block until the user decides.
@@ -270,15 +365,25 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 			errors.push(`${kind} pass (${displayPath(rel)}) report unreadable`);
 			continue;
 		}
-		for (const f of raw) {
-			if (kind === 'linked') {
-				// Content of a symlink target, copied to /seclab/l/x/<n>: report it under the link.
-				const n = /^\/seclab\/l\/x\/(\d+)$/.exec(String(f.File ?? ''));
-				const link = n ? links[Number(n[1]) - 1] : undefined;
-				addFinding('worktree', '.', { ...f, File: link ?? '' }, findings, secrets, seenValues, false);
-				continue;
+		// gitleaks reports in nondeterministic (concurrent) order, and dedupe-by-value keeps
+		// the first copy: sort, so finding ids are stable across rescans ("accept" must match).
+		const mapped = raw.map(f => {
+			if (kind !== 'linked') {
+				return f;
 			}
-			addFinding(kind, rel, f, findings, secrets, seenValues);
+			// Content of a symlink target, copied to /seclab/l/x/<n> (file) or
+			// /seclab/l/d/<n>/<path> (directory): report it under the link.
+			const n = /^\/seclab\/l\/(x|d)\/(\d+)(\/.+)?$/.exec(String(f.File ?? ''));
+			const link = n ? links[Number(n[2]) - 1] : undefined;
+			return { ...f, File: link && n ? (n[1] === 'x' ? link : `${link}${n[3] ?? ''}`) : '' };
+		}).sort((a, b) => cmp(String(a.File ?? ''), String(b.File ?? '')) || Number(a.StartLine) - Number(b.StartLine)
+			|| cmp(String(a.RuleID ?? ''), String(b.RuleID ?? '')) || cmp(String(a.Commit ?? ''), String(b.Commit ?? '')) || cmp(String(a.Secret ?? ''), String(b.Secret ?? '')));
+		for (const f of mapped) {
+			if (kind === 'linked') {
+				addFinding('worktree', '.', f, findings, secrets, seenValues, false);
+			} else {
+				addFinding(kind, rel, f, findings, secrets, seenValues);
+			}
 		}
 	}
 	if (!ended && !overflow) {
@@ -288,10 +393,12 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 		errors.unshift('scanner report too large to review');
 	}
 	const complete = ended && !overflow && errors.length === 0;
-	return { complete, error: complete ? undefined : `secret scan incomplete: ${errors.join('; ')}`, overflow: overflow || undefined, findings, secrets };
+	return { complete, error: complete ? undefined : `secret scan incomplete: ${errors.join('; ')}`, overflow: overflow || undefined, findings, secrets, externalLinks };
 }
 
 const ID_KEY = randomBytes(32);
+
+const cmp = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 
 /** `/scan/ws/a/b` -> `a/b` (undefined if not strictly inside the prefix). */
 function workspaceRel(p: string, prefix: string): string | undefined {

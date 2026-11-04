@@ -21,11 +21,14 @@ import { mintCanary } from '../canary/canary.ts';
 const driver = process.argv[2] ?? 'sbx';
 const repo = path.resolve(import.meta.dirname, '../..');
 const work = path.join(repo, '.work', 'secrets', driver);
+try {
+	fs.chmodSync(path.join(work, 'tabs', 'ws', 'lockdir'), 0o700); // left by an aborted run
+} catch { /* absent */ }
 fs.rmSync(work, { recursive: true, force: true });
 const ws = path.join(work, 'tabs', 'ws');
 fs.mkdirSync(ws, { recursive: true });
-const C = Object.fromEntries(['tree', 'config', 'history', 'allow', 'ignored', 'reflog', 'staged', 'nested', 'symhead', 'common', 'link']
-	.map(k => [k, mintCanary(k).value])) as Record<'tree' | 'config' | 'history' | 'allow' | 'ignored' | 'reflog' | 'staged' | 'nested' | 'symhead' | 'common' | 'link', string>;
+const C = Object.fromEntries(['tree', 'config', 'history', 'allow', 'ignored', 'reflog', 'staged', 'nested', 'symhead', 'common', 'link', 'dirlink', 'objplant', 'abscommon']
+	.map(k => [k, mintCanary(k).value])) as Record<'tree' | 'config' | 'history' | 'allow' | 'ignored' | 'reflog' | 'staged' | 'nested' | 'symhead' | 'common' | 'link' | 'dirlink' | 'objplant' | 'abscommon', string>;
 
 // Build the fixture repo. Hooks disabled; nothing here reads hostile config.
 const gitIn = (dir: string, ...a: string[]) => execFileSync('git', ['-C', dir, '-c', 'core.hooksPath=/dev/null', ...a], { stdio: 'ignore' });
@@ -81,6 +84,28 @@ fs.symlinkSync('node_modules/.cache/x', path.join(ws, '.env.local'));
 // N1: padded past the size limit (sparse).
 fs.writeFileSync(path.join(ws, 'big.env'), '');
 fs.truncateSync(path.join(ws, 'big.env'), 65_000_000);
+// R1: a directory link into a git dir subtree the copy used to exclude, and a file planted
+// under objects/ with a non-object name.
+fs.mkdirSync(path.join(ws, '.git', 'modules', 'stash'), { recursive: true });
+fs.writeFileSync(path.join(ws, '.git', 'modules', 'stash', 'prod.env'), `TOKEN=${C.dirlink}\n`);
+fs.symlinkSync('.git/modules/stash', path.join(ws, 'secrets'));
+fs.mkdirSync(path.join(ws, '.git', 'objects', 'ab'), { recursive: true });
+fs.writeFileSync(path.join(ws, '.git', 'objects', 'ab', 'abc.env'), `TOKEN=${C.objplant}\n`);
+// R1 (macOS only): a link that resolves inside the workspace only on case-insensitive APFS.
+if (process.platform === 'darwin') {
+	fs.symlinkSync('NODE_MODULES/.cache/x', path.join(ws, '.env.alias'));
+}
+// R2: an absolute commondir (the workspace's real path, valid in the tab).
+const acd = path.join(ws, 'acd', '.git');
+fs.mkdirSync(acd, { recursive: true });
+execFileSync('git', ['init', '-q', '--bare', path.join(acd, 'c')], { stdio: 'ignore' });
+execFileSync('git', ['--git-dir', path.join(acd, 'c'), 'config', 'remote.origin.url', `https://x-access-token:${C.abscommon}@github.com/example/a.git`], { stdio: 'ignore' });
+fs.rmSync(path.join(acd, 'c', 'HEAD'));
+fs.writeFileSync(path.join(acd, 'HEAD'), 'ref: refs/heads/main\n');
+fs.writeFileSync(path.join(acd, 'commondir'), `${path.join(acd, 'c')}\n`);
+// R3: a file the scanner can't read and a directory it can't list.
+fs.writeFileSync(path.join(ws, 'locked.env'), 'TOKEN=placeholder\n', { mode: 0o200 });
+fs.mkdirSync(path.join(ws, 'lockdir'), { mode: 0o300 });
 
 const client = new TabdClient({
 	command: process.execPath,
@@ -102,7 +127,9 @@ try {
 	const canary = scan.findings.filter(f => f.rule === 'seclab-canary');
 	const has = (source: string | RegExp, file: string) => canary.filter(f => (typeof source === 'string' ? f.source === source : source.test(f.source)) && f.file === file);
 	const show = JSON.stringify(scan);
-	assert.ok(scan.complete, `scan incomplete: ${scan.error}`);
+	// The unlistable lockdir makes the scan incomplete (on purpose: never silent), and that is the only reason.
+	assert.equal(scan.complete, false, show);
+	assert.equal(scan.error, 'secret scan incomplete: some paths could not be listed or read', show);
 	assert.equal(has('worktree', 'app.env').length, 1, show);
 	assert.equal(has('git-dir', '.git/config').length, 1, show);
 	assert.ok(has('history', 'old.env').length >= 1, `history blinders not defeated: ${show}`);
@@ -112,8 +139,20 @@ try {
 	assert.equal(has('git-dir', 'sub/.git/config').length, 1, `nested repository missed: ${show}`);
 	assert.equal(has('git-dir', 'symhead/.git/config').length, 1, `symlinked-HEAD repository missed: ${show}`);
 	assert.equal(has('git-dir', 'cdir/.git/c/config').length, 1, `commondir repository missed: ${show}`);
-	assert.equal(canary.filter(f => f.source === 'worktree' && (f.file === 'node_modules/.cache/x' || f.file === '.env.local')).length, 1, `symlink write-through missed: ${show}`);
+	assert.equal(canary.filter(f => f.source === 'worktree' && ['node_modules/.cache/x', '.env.local', '.env.alias'].includes(f.file)).length, 1, `symlink write-through missed: ${show}`);
 	assert.equal(scan.findings.filter(f => f.rule === 'unscanned-large-file' && f.file === 'big.env').length, 1, `padded file dropped silently: ${show}`);
+	assert.equal(has('worktree', 'secrets/prod.env').length, 1, `directory link into a git dir missed: ${show}`);
+	assert.equal(has('git-dir', '.git/objects/ab/abc.env').length, 1, `file planted under objects/ missed: ${show}`);
+	assert.equal(has('git-dir', 'acd/.git/c/config').length, 1, `absolute commondir missed: ${show}`);
+	for (const p of ['locked.env', 'lockdir']) {
+		assert.equal(scan.findings.filter(f => f.rule === 'unscanned-unreadable' && f.file === p).length, 1, `unreadable ${p} skipped silently: ${show}`);
+	}
+	if (process.platform === 'darwin') {
+		// Docker Desktop file sharing is case-insensitive like APFS, so the alias resolves in
+		// the scanner (scanned under the link; value-deduped with .env.local) or, where it
+		// doesn't, tabd's host-side check blocks it.
+		assert.ok(scan.findings.some(f => f.file === '.env.alias') || canary.some(f => f.file === '.env.local'), `case-alias link missed: ${show}`);
+	}
 	assert.ok(!Object.values(C).some(v => show.includes(v)), 'findings must be redacted');
 	console.log(`PASS  blocked; findings: ${canary.map(f => `${f.source}:${f.file}:${f.line}`).join(', ')}`);
 
@@ -129,7 +168,7 @@ try {
 	assert.equal(err2?.code, -32020);
 	const rescan = await client.request<{ findings: F[] }>('tab.scan', { tabId });
 	assert.ok(!rescan.findings.some(f => (f.source === 'worktree' && f.file === 'app.env') || (f.source === 'git-dir' && f.file === '.git/config')), JSON.stringify(rescan.findings));
-	await client.request('tab.ensureRunning', { tabId, acceptFindings: rescan.findings.map(f => f.id) });
+	await client.request('tab.ensureRunning', { tabId, acceptFindings: [...rescan.findings.map(f => f.id), 'scan-incomplete'] });
 	const audit = fs.readFileSync(path.join(work, 'state', 'audit.log'), 'utf8');
 	assert.match(audit, /secret\.exception/);
 	assert.ok(!Object.values(C).some(v => audit.includes(v)), 'audit log must not contain secrets');
@@ -152,12 +191,13 @@ try {
 	console.log('PASS  restore puts the original values back');
 	ok = true;
 } catch (e) {
-	console.log(`FAIL  ${(e as Error).message}`);
+	console.log(`FAIL  ${(e as Error).message}${(e as { data?: unknown }).data ? ` ${JSON.stringify((e as { data?: unknown }).data)}` : ''}`);
 } finally {
 	if (tabId && process.env.KEEP !== '1') {
 		await client.request('tab.remove', { tabId }).catch(() => undefined);
 	}
 	client.dispose();
+	fs.chmodSync(path.join(ws, 'lockdir'), 0o700);
 	fs.rmSync(ws, { recursive: true, force: true }); // the fixture holds canary secrets
 }
 process.exit(ok ? 0 : 1);
