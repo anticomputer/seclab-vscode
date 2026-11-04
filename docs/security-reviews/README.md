@@ -59,5 +59,8 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-04 | [harness teardown, clean-host, tab GC/reset](20261104-harness-teardown.md) | - test/containment/teardown.ts (shared teardown, adopted from the RPC-lockdown | see record |
 | 2026-11-04 | [M0 pipeline, seclab-tabd implementation, Tab Manager, containment suite](20261104-m0-tabd-code.md) | 296594c..7d7a1cf (round 2a), then the fixes and new code 7d7a1cf..2c07708 (round 2b), with | see record |
 | 2026-11-04 | [patch queue and release guard](20261104-patch-guard.md) | - 1aa8ccb: build/apply-patches.sh, patches/series, build/prepare.sh, | see record |
+| 2026-11-04 | [probe payload safety against the host (Phase 3, increment 2)](20261104-probe-safety.md) | see record | see record |
+| 2026-11-04 | [RPC lockdown design (Phase 2)](20261104-rpc-lockdown-design.md) | see record | see record |
+| 2026-11-04 | [RPC escape probes and rogue-REH fixture (Phase 3, increment 1)](20261104-rpc-probes-increment.md) | see record | see record |
 | 2026-11-04 | [seclab-tabd design (protocol and process model)](20261104-tabd-protocol-design.md) | design docs at 296594c plus the uncommitted drafts of docs/adr/20261104-tab-supervisor.md, | see record |
 <!-- index:end -->

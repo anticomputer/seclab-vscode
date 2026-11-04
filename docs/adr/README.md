@@ -66,8 +66,10 @@ Good, bad, and follow-ups this creates.
 | 2026-11-04 | [Move from a local-only repo to private anticomputer/seclab-vscode](20261104-private-github-repo.md) | accepted |
 | 2026-11-04 | [Reuse the remote extension host split via a built-in `seclab+` resolver](20261104-reuse-remote-extension-host.md) | accepted |
 | 2026-11-04 | [Route folder opens into tabs in the main process (before any window loads them)](20261104-route-folder-opens-in-main.md) | proposed |
-| 2026-11-04 | [RPC capability filter is a required, default-deny boundary](20261104-rpc-capability-filter.md) | proposed |
+| 2026-11-04 | [RPC capability filter is a required, default-deny boundary](20261104-rpc-capability-filter.md) | superseded-by [20261104-rpc-filter-enforcement-points](20261104-rpc-filter-enforcement-points.md) |
+| 2026-11-04 | [RPC capability filter: choke points, policy as data, and a build-time gate](20261104-rpc-filter-enforcement-points.md) | accepted |
 | 2026-11-04 | [One broker engine for every provider; sbx is only the outer fence](20261104-single-broker-sbx-fence.md) | accepted |
+| 2026-11-04 | [Tab-originated commands carry the tab identity through a tainted command service](20261104-tab-command-taint.md) | accepted |
 | 2026-11-04 | [The workspace window ("tab") is the containment unit; Workspace Trust is UX only](20261104-tab-is-the-containment-unit.md) | accepted (partly superseded by [20261104-threat-model-rogue-extension](20261104-threat-model-rogue-extension.md)) |
 | 2026-11-04 | [Introduce a tab supervisor (`seclab-tabd`) with a versioned stdio protocol between the editor and sandbox runtimes](20261104-tab-supervisor.md) | accepted |
 | 2026-11-04 | [Threat model: the primary attacker is a rogue extension the user installs](20261104-threat-model-rogue-extension.md) | accepted |

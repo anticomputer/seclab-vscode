@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-11-04
 - **Deciders:** user; RPC-lockdown session
-- **Supersedes:** [20261104-rpc-filter-enforcement-points.md](20261104-rpc-filter-enforcement-points.md) (status: proposed)
+- **Extends:** [20261104-rpc-filter-enforcement-points.md](20261104-rpc-filter-enforcement-points.md)
 - **Design:** [docs/RPC-LOCKDOWN.md](../RPC-LOCKDOWN.md) §2.5.2
 
 ## Context
