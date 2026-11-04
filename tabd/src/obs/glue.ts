@@ -4,6 +4,7 @@
 
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { SensorHooks } from '../drivers/types.ts';
+import type { FalcoSensor } from './falco.ts';
 import { ObsHub, type Observation } from './hub.ts';
 import { CollectorSession } from './sbx-collector.ts';
 import { CLASSES, isTabId, PRIORITIES, priorityRank, type EventClass, type ObsEvent, type Priority } from './schema.ts';
@@ -32,6 +33,8 @@ export interface ObsGlueOptions {
 	readonly isRunning: (tabId: string) => Promise<boolean>;
 	/** Persist this tab's log (this supervisor holds the lease). */
 	readonly owns: (tabId: string) => boolean;
+	/** OCI host sensor (Falco), when the OCI driver is in use. */
+	readonly hostSensor?: (hub: ObsHub) => FalcoSensor;
 }
 
 export class ObsGlue {
@@ -41,6 +44,7 @@ export class ObsGlue {
 	private nextSub = 1;
 	private readonly sessions = new Map<string, CollectorSession>();
 	private readonly modes = new Map<string, 'default' | 'deep'>();
+	private readonly falco?: FalcoSensor;
 
 	constructor(o: ObsGlueOptions) {
 		this.o = o;
@@ -50,6 +54,7 @@ export class ObsGlue {
 			onEvent: e => this.fanout(e),
 			onObservation: (tabId, ob) => o.notify('tab.observation', { tabId, ...ob } as unknown as Json),
 		});
+		this.falco = o.hostSensor?.(this.hub);
 	}
 
 	private fanout(e: ObsEvent): void {
@@ -169,7 +174,14 @@ export class ObsGlue {
 
 	/** Hooks handed to driver.ensureRunning for this tab. */
 	sensorHooks(tabId: string, workspace: string): SensorHooks {
+		const falco = this.falco;
 		return {
+			...(falco ? {
+				beforeReh: async ({ containerId }: { containerId: string }) => {
+					this.hub.context(tabId, { openedAt: Date.now(), workspace });
+					await falco.add(tabId, containerId, this.modes.get(tabId) === 'deep');
+				},
+			} : {}),
 			startCollector: async (spawnCollector: () => ChildProcessWithoutNullStreams, token: string) => {
 				this.hub.context(tabId, { openedAt: Date.now(), workspace });
 				const existing = this.sessions.get(tabId);
@@ -197,6 +209,7 @@ export class ObsGlue {
 		this.hub.expectEnd(tabId);
 		this.sessions.get(tabId)?.close();
 		this.sessions.delete(tabId);
+		void this.falco?.remove(tabId).catch(() => undefined);
 	}
 
 	/** Adopted at startup without a collector: unobserved until the next ensureRunning. */
@@ -241,12 +254,13 @@ export class ObsGlue {
 		return this.hub.observation(tabId);
 	}
 
-	shutdown(): void {
+	shutdown(): Promise<void> {
 		for (const [tabId, s] of this.sessions) {
 			this.hub.expectEnd(tabId);
 			s.close();
 		}
 		this.sessions.clear();
 		this.hub.close();
+		return this.falco?.stop().catch(() => undefined) ?? Promise.resolve();
 	}
 }

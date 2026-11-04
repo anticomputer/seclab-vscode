@@ -9,6 +9,8 @@ import { mintSentinel, rewriteSecret, type ScanResult, type VaultEntry } from '.
 import { DriverError, type Driver, type DriverInfo, type FenceReport, type TabRuntimeSpec, type TabTemplate } from './drivers/types.ts';
 import { assertTabId, canonicalWorkspacePath, sandboxNameFor, TEMPLATE_NAME_RE, ValidationError, type PathPolicy } from './validate.ts';
 import { ObsGlue, ObsParamError } from './obs/glue.ts';
+import type { FalcoSensor } from './obs/falco.ts';
+import type { ObsHub } from './obs/hub.ts';
 
 export const PROTOCOL_VERSION = 'seclab-tabd/0.2';
 export const SUPERVISOR_VERSION = '0.1.0';
@@ -35,6 +37,8 @@ export interface SupervisorOptions {
 	readonly eventsDir?: string;
 	/** Bytes written to the client but not yet read; event notifications pause above a limit. */
 	readonly outputBacklog?: () => number;
+	/** OCI host sensor factory (Falco); see tabd/src/obs/falco.ts. */
+	readonly hostSensor?: (hub: ObsHub) => FalcoSensor;
 }
 
 interface Channel { tabId: string; child: ChildProcessWithoutNullStreams }
@@ -67,6 +71,7 @@ export class Supervisor {
 			eventsDir: o.eventsDir,
 			notify: (method, params) => this.notify(method, params),
 			backlog: o.outputBacklog,
+			hostSensor: o.hostSensor,
 			assertTab: tabId => this.record(tabId).tabId,
 			isRunning: async tabId => {
 				const r = this.o.store.get(tabId);
@@ -145,7 +150,7 @@ export class Supervisor {
 				this.o.store.clearLease(tabId, process.pid);
 			} catch { /* best effort */ }
 		}
-		this.obs.shutdown();
+		await this.obs.shutdown();
 	}
 
 	private fatal(reason: string): void {
