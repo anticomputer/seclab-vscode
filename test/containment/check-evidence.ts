@@ -66,8 +66,8 @@ if (mode === 'prepare') {
 	await client.request('tab.ensureRunning', { tabId: tab.metadata.name });
 	const name = `seclab-${tab.metadata.name}`;
 	const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
-	const user = driver === 'sbx' ? 'agent' : '1000:1000';
-	const r = spawnSync(runtime, ['exec', '-u', user, name, '/opt/seclab/bin/seclab-tab-env',
+	const user = driver === 'sbx' ? ['-u', 'agent'] : [];
+	const r = spawnSync(runtime, ['exec', ...user, name, '/opt/seclab/bin/seclab-tab-env',
 		'/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(vsixDir, 'rogue.vsix')], { encoding: 'utf8' });
 	console.log(r.stdout.trim(), r.stderr.trim());
 	client.dispose(); // stops the tab; the editor restarts it (extensions persist in the tab)

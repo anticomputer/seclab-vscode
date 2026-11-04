@@ -2,13 +2,30 @@
 // suite. A tab is a pod: workspace container + broker sidecar on an --internal network.
 
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import * as fs from 'node:fs';
 import type { Runner } from '../run.ts';
 import { assertImageRef, SANDBOX_NAME_RE, CONNECTION_TOKEN_RE } from '../validate.ts';
 import { DriverError, type Driver, type DriverInfo, type FenceReport, type TabRuntimeSpec } from './types.ts';
 
 const REH_START = '/opt/seclab/bin/seclab-reh-start';
 const REH_CONNECT = '/opt/seclab/bin/seclab-reh-connect';
-const UID = '1000:1000';
+const IMAGE_UID = '1000:1000';
+
+/**
+ * The tab's uid:gid. Docker Desktop (macOS) maps bind-mount ownership, so the image user
+ * works. A native Linux engine does not: the tab runs as the workspace owner so it can
+ * write its own folder (never as root).
+ */
+function tabUser(spec: TabRuntimeSpec): string {
+	if (process.platform !== 'linux') {
+		return IMAGE_UID;
+	}
+	const st = fs.statSync(spec.hostPath);
+	if (st.uid === 0 || st.gid === 0) {
+		throw new DriverError(-32602, 'refusing a root-owned workspace');
+	}
+	return `${st.uid}:${st.gid}`;
+}
 
 export interface OciOptions {
 	/** Image for the broker sidecar slot. The real broker (M2) replaces the placeholder. */
@@ -77,11 +94,20 @@ export class OciDriver implements Driver {
 		}
 		if (!await this.exists('container', n.ws)) {
 			const t = spec.template.spec;
+			const user = tabUser(spec);
+			const [uid, gid] = user.split(':');
+			if (user !== IMAGE_UID) {
+				// The per-tab home volume is populated from the image as uid 1000: hand it to the
+				// tab user. Throwaway, no network, only this tab's own volume mounted.
+				await this.must(['run', '--rm', '--user', '0:0', '--network', 'none', '--cap-drop', 'ALL', '--cap-add', 'CHOWN', '--cap-add', 'DAC_READ_SEARCH',
+					'--security-opt', 'no-new-privileges', '--mount', `type=volume,src=${n.home},dst=/home/agent`,
+					'--entrypoint', 'chown', '--', assertImageRef(t.image), '-R', user, '/home/agent'], 'home volume chown');
+			}
 			const args = ['run', '-d', '--init', '--name', n.ws, '--hostname', 'tab', '--label', label,
-				'--network', n.net, '--user', UID,
+				'--network', n.net, '--user', user, '--env', 'HOME=/home/agent',
 				'--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
 				'--pids-limit', '2048', '--memory', t.resources?.memory && /^[1-9][0-9]{0,4}[mg]$/.test(t.resources.memory) ? t.resources.memory : '4g',
-				'--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev,size=1g', '--tmpfs', '/run/user/1000:rw,nosuid,nodev,uid=1000,gid=1000,mode=0700',
+				'--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev,size=1g', '--tmpfs', `/run/user/1000:rw,nosuid,nodev,uid=${uid},gid=${gid},mode=0700`,
 				// hostPath is canonical and contains no ',' or ':' (validate.ts), so --mount parsing is unambiguous.
 				'--mount', `type=bind,src=${spec.hostPath},dst=${spec.hostPath}`,
 				'--mount', `type=volume,src=${n.home},dst=/home/agent`,
@@ -99,7 +125,7 @@ export class OciDriver implements Driver {
 		if (!fence.ok) {
 			throw new DriverError(-32010, `fence verification failed: ${fence.problems.join('; ')}`);
 		}
-		const r = await this.runner.run(this.docker, ['exec', '-i', '-u', UID, '--', n.ws, REH_START], { input: connectionToken + '\n', timeoutMs: 90_000 });
+		const r = await this.runner.run(this.docker, ['exec', '-i', '-u', tabUser(spec), '--', n.ws, REH_START], { input: connectionToken + '\n', timeoutMs: 90_000 });
 		if (r.code !== 0) {
 			throw new DriverError(-32012, `REH failed to start: ${r.stderr.trim().slice(-800)}`);
 		}
@@ -142,7 +168,7 @@ export class OciDriver implements Driver {
 			if (ports !== '{}' && ports !== 'null') {
 				problems.push('workspace publishes ports');
 			}
-			if (user !== UID) {
+			if (user !== tabUser(spec)) {
 				problems.push(`workspace user is ${user}`);
 			}
 		}
@@ -151,7 +177,7 @@ export class OciDriver implements Driver {
 
 	connectReh(spec: TabRuntimeSpec): ChildProcessWithoutNullStreams {
 		const n = this.names(spec);
-		return this.runner.spawnStream(this.docker, ['exec', '-i', '-u', UID, '--', n.ws, REH_CONNECT]);
+		return this.runner.spawnStream(this.docker, ['exec', '-i', '-u', tabUser(spec), '--', n.ws, REH_CONNECT]);
 	}
 
 	async runningSandboxes(): Promise<Set<string>> {

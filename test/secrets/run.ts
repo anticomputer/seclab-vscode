@@ -109,8 +109,8 @@ try {
 
 	// 4. Inside the tab, the moved canaries are gone from the working copy and git config.
 	const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
-	const user = driver === 'sbx' ? 'agent' : '1000:1000';
-	const r = spawnSync(runtime, ['exec', '-u', user, `seclab-${tabId}`, 'sh', '-c', `cat '${ws}/app.env' '${ws}/.git/config'`], { encoding: 'utf8' });
+	const user = driver === 'sbx' ? ['-u', 'agent'] : [];
+	const r = spawnSync(runtime, ['exec', ...user, `seclab-${tabId}`, 'sh', '-c', `cat '${ws}/app.env' '${ws}/.git/config'`], { encoding: 'utf8' });
 	assert.equal(r.status, 0, r.stderr);
 	assert.ok(!r.stdout.includes(C.tree) && !r.stdout.includes(C.config), 'moved secrets visible in the tab');
 	console.log('PASS  moved secrets are not visible inside the tab');
