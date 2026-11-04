@@ -95,13 +95,19 @@ MUST_ARM = (
     "test/containment/rogue-reh/probes.js",
     "test/containment/rogue-extension/extension.js",
 )
-# An arming gate, in either of the two forms in use: the shared guard's
-# safety.context(), or extension.js's own armed(root) check on .seclab/targets.
-ARMING = ("safety.context(", "armed(root)")
-# Decoding base64 to COMPARE against a canary is the opposite of obfuscation --
-# it is how the canary harness catches a token that was encoded to slip past a
-# plain-text scan. Only flag it where a payload builds a value to use.
-OBFUSCATION_EXEMPT = ("test/containment/rogue-extension/extension.js",)
+# An arming gate must not merely be MENTIONED: the call has to be followed
+# closely by a bail-out, so a future edit cannot keep the call while gutting the
+# check. Matches `const x = armed(root)` / `safety.context(...)` followed within
+# a few lines by continue/return/if (!...).
+ARMING_CALL = re.compile(r"(?:safety\.context\(|\barmed\s*\(\s*root\s*\))")
+ARMING_BAIL = re.compile(r"\b(?:continue|return)\b|\bif\s*\(\s*!")
+# Exemptions are LINE-scoped, never file-scoped. A file-wide exemption covered
+# every future base64 use in a 110-line payload that writes its output where the
+# attacker reads it; the justification only ever applied to one expression.
+# Opt out on the exact line with a pragma:
+#     const decoded = Buffer.from(t, 'base64');  // lint-allow: base64-canary-compare
+PRAGMA = re.compile(r"//\s*lint-allow:\s*(?P<id>[\w-]+)")
+ALLOWED_PRAGMAS = {"base64-canary-compare"}
 
 
 def main() -> int:
@@ -130,14 +136,27 @@ def main() -> int:
         for rid, pattern, why in RULES:
             if pattern.search(flat) and not any(v[0] == rel and v[2] == rid for v in violations):
                 violations.append((rel, 0, rid, f"{why} (matched after joining lines)"))
-        if rel not in OBFUSCATION_EXEMPT and (
-                "fromCharCode" in joined or "'base64'" in joined):
-            violations.append((rel, 0, "obfuscation",
-                               "builds strings via character codes or base64"))
-        if rel in MUST_ARM and not any(a in joined for a in ARMING):
-            violations.append((rel, 0, "no-arming",
-                               "has no arming gate (%s); it would run unarmed"
-                               % " or ".join(ARMING)))
+        for n, line in code:
+            if "fromCharCode" in line or "'base64'" in line:
+                m = PRAGMA.search(line)
+                if not m or m.group("id") not in ALLOWED_PRAGMAS:
+                    violations.append((rel, n, "obfuscation",
+                                       "builds strings via character codes or base64; "
+                                       "add `// lint-allow: base64-canary-compare` on this "
+                                       "line if it only decodes to compare against a canary"))
+        if rel in MUST_ARM:
+            gated = False
+            for i, (n, line) in enumerate(code):
+                if not ARMING_CALL.search(line):
+                    continue
+                window = "\n".join(l for _, l in code[i:i + 4])
+                if ARMING_BAIL.search(window):
+                    gated = True
+                    break
+            if not gated:
+                violations.append((rel, 0, "no-arming",
+                                   "no arming gate: a safety.context()/armed(root) call must be "
+                                   "followed within a few lines by a bail-out"))
         # Any shell command must come from the guard, in this file.
         for n, line in code:
             if "touch '" in line and "markerCommand" not in line:

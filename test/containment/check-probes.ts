@@ -53,7 +53,8 @@ const coverage = JSON.parse(
 interface Result { id: string; policyRef: string; outcome: string; detail: string }
 interface Spec {
 	required?: boolean; policyRef: string; why: string; beacon?: string;
-	patchedOutcome?: string; needsTestContribution?: boolean; hostEffect?: string;
+	patchedOutcome?: string; needsTestContribution?: boolean;
+	hostEffect?: string; hostEffectAbsolute?: string;
 }
 
 /**
@@ -75,6 +76,32 @@ const checks: Check[] = [];
 const c = (vector: string, ok: boolean, name: string, detail = ''): void => {
 	checks.push({ vector, ok, name, detail });
 };
+
+/**
+ * Resolve a hostEffectAbsolute like "userDataDir:/User/x.txt" against the run
+ * manifest. This exists because host-fs-write-userdata is the probe that
+ * demonstrates a write genuinely crossing to the host, and scoring it on its
+ * return value is exactly the mistake host-fs-write-file-scheme already made.
+ */
+function hostEffectAbsolutePath(effect: string): string | null {
+	const runDir = process.env.SECLAB_PROBE_RUNDIR;
+	if (!runDir) { return null; }
+	const m = /^userDataDir:(.+)$/.exec(effect);
+	if (!m) { return path.resolve(effect); }
+	try {
+		const manifest = JSON.parse(
+			fs.readFileSync(path.join(runDir, 'run.json'), 'utf8')) as { userDataDir?: string };
+		return manifest.userDataDir ? path.join(manifest.userDataDir, m[1]) : null;
+	} catch {
+		return null;
+	}
+}
+
+/** Both forms, or null when it cannot be resolved (which is a failure, not a pass). */
+function effectTarget(spec: { hostEffect?: string; hostEffectAbsolute?: string }): string | null {
+	if (spec.hostEffectAbsolute) { return hostEffectAbsolutePath(spec.hostEffectAbsolute); }
+	return spec.hostEffect ? hostEffectPath(spec.hostEffect) : null;
+}
 
 // ---------------------------------------------------------------- evidence
 const results = new Map<string, Result>();
@@ -183,10 +210,10 @@ for (const [id, spec] of Object.entries(specs)) {
 		// remote window routes file: writes to the REH's own provider. Without
 		// this check it would have been recorded as a proven escape and then
 		// "fixed" by a patch that changed nothing.
-		if (spec.hostEffect && spec.required) {
-			const target = hostEffectPath(spec.hostEffect);
+		if ((spec.hostEffect || spec.hostEffectAbsolute) && spec.required) {
+			const target = effectTarget(spec);
 			c('host-effect', !!target && fs.existsSync(target),
-				`${id} actually changed the host (${spec.hostEffect})`,
+				`${id} actually changed the host (${spec.hostEffect ?? spec.hostEffectAbsolute})`,
 				target ? `${target} ${fs.existsSync(target) ? 'exists' : 'MISSING: the call succeeded but nothing happened on the host'}`
 					: 'SECLAB_PROBE_RUNDIR not set, cannot verify');
 		}
@@ -221,11 +248,13 @@ for (const [id, spec] of Object.entries(specs)) {
 			`${id} did not reach the host network (${spec.beacon})`,
 			`seen: ${[...beaconPaths].join(', ') || 'none'}`);
 	}
-	if (spec.hostEffect && spec.required) {
-		const target = hostEffectPath(spec.hostEffect);
-		c('host-effect', !target || !fs.existsSync(target),
-			`${id} did not change the host (${spec.hostEffect})`,
-			target ?? 'SECLAB_PROBE_RUNDIR not set');
+	if ((spec.hostEffect || spec.hostEffectAbsolute) && spec.required) {
+		const target = effectTarget(spec);
+		// An unresolvable target must fail. Previously `!target || ...` made a
+		// forgotten SECLAB_PROBE_RUNDIR certify "did not change the host".
+		c('host-effect', !!target && !fs.existsSync(target),
+			`${id} did not change the host (${spec.hostEffect ?? spec.hostEffectAbsolute})`,
+			target ?? 'cannot resolve the target: SECLAB_PROBE_RUNDIR or run.json missing');
 	}
 }
 
