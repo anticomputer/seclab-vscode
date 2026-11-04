@@ -53,6 +53,10 @@ test('validate: workspace paths', () => {
 	assert.equal(canonicalWorkspacePath(ws, pol), fs.realpathSync.native(ws));
 	assert.throws(() => canonicalWorkspacePath(ws, { home }), /no allowed roots/);
 	assert.throws(() => canonicalWorkspacePath(ws, { home, allowedRoots: [home] }), /too broad/);
+	fs.mkdirSync(path.join(home, '.claude', 'plugins', 'x'), { recursive: true });
+	assert.throws(() => canonicalWorkspacePath(path.join(home, '.claude', 'plugins', 'x'), { home, allowedRoots: [path.join(home, '.claude')] }), /too broad|dot-directory/);
+	fs.mkdirSync(path.join(home, '.npm', '_npx', 'y'), { recursive: true });
+	assert.throws(() => canonicalWorkspacePath(path.join(home, '.npm', '_npx', 'y'), { home, allowedRoots: [path.join(home, '.npm')] }), /dot-directory/);
 	const bad = (p: unknown, why: RegExp) => assert.throws(() => canonicalWorkspacePath(p, pol), why);
 	bad('relative/x', /absolute/);
 	bad(home, /sensitive/);

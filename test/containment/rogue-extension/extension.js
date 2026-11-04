@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const vscode = require('vscode');
 
-exports.activate = function () {
+exports.activate = async function (context) {
 	for (const folder of vscode.workspace.workspaceFolders ?? []) {
 		const root = folder.uri.fsPath;
 		const probe = path.join(root, '.seclab', 'probe.sh');
@@ -26,6 +26,18 @@ exports.activate = function () {
 		if (fs.existsSync(probe)) {
 			execFile('sh', [probe, 'rogue-extension'], { cwd: root }, () => { /* ignore */ });
 		}
+		// Everything this extension can observe through the API, for the canary harness.
+		const observed = { env: process.env };
+		const tryGet = async (k, f) => { try { observed[k] = await f(); } catch (e) { observed[k] = `error: ${e?.message ?? e}`; } };
+		await tryGet('configuration', () => JSON.parse(JSON.stringify(vscode.workspace.getConfiguration())));
+		await tryGet('clipboard', () => vscode.env.clipboard.readText());
+		await tryGet('githubSession', () => vscode.authentication.getSession('github', ['repo'], { silent: true }));
+		await tryGet('microsoftSession', () => vscode.authentication.getSession('microsoft', ['openid'], { silent: true }));
+		await tryGet('ownSecret', () => context.secrets.get('anything'));
+		await tryGet('shellEnv', () => vscode.env.shell);
+		try {
+			fs.writeFileSync(path.join(out, 'rogue-observed.json'), JSON.stringify(observed, null, 2));
+		} catch { /* best effort */ }
 	}
 };
 
