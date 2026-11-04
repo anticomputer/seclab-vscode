@@ -143,3 +143,13 @@ Round 7 (R1–R3) adds the following, all blocking and never silent:
 - unreadable or unlistable paths.
 
 Git-dir copies now exclude only well-formed object and pack files.
+
+Round 8 (D1–D3):
+- every directory-link target is scanned (no allowlist mirror);
+- host-side link resolution never touches paths outside the workspace;
+- files gitleaks skips as "binary" (magic header) are rescanned as text;
+- `stdin` streams start with a blank 128 KiB prefix so a crafted first chunk
+  can't blind them.
+
+Residual: host symlinks *outside* the workspace that point back into it are
+not followed (the D2 trade-off; the tab can't create them).
