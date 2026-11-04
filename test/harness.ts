@@ -2,7 +2,7 @@
 //   SECLAB_BEACON_PORT  host-loopback beacon port (default: a free port picked per run)
 //   SECLAB_EVIDENCE_DIR level B fixture dir (default: <repo>/.work/containment-editor)
 
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as os from 'node:os';
@@ -64,39 +64,64 @@ export function lockRun(dir: string): void {
  * editor profile (they hold auth sessions and settings with secrets).
  */
 export function checkUserDataDir(userData: string): void {
-	const home = os.homedir();
-	if (!(userData.startsWith(path.join(home, '.seclab-test') + path.sep) || userData.startsWith(path.join(repoRoot, '.work') + path.sep))) {
-		throw new Error(`test user-data-dir must be under ~/.seclab-test/ or this worktree's .work/ (isolated profile), got ${userData}`);
-	}
+	checkIsolatedProfile(userData);
 	if (process.platform === 'darwin' && path.join(userData, '1.14-main.sock').length >= 104) {
 		throw new Error(`user-data-dir too long for macOS unix sockets (${userData}); use a short one such as ~/.seclab-test/<name>`);
 	}
 }
 
+/** Test profiles live only under ~/.seclab-test/ or this worktree's .work/ (never a real profile), also after resolving links (R-3). */
+export function checkIsolatedProfile(userData: string): void {
+	const home = os.homedir();
+	const roots = [path.join(home, '.seclab-test'), path.join(repoRoot, '.work')];
+	const under = (p: string, rs: string[]) => rs.some(r => p.startsWith(r + path.sep));
+	if (!under(userData, roots)) {
+		throw new Error(`test user-data-dir must be under ~/.seclab-test/ or this worktree's .work/ (isolated profile), got ${userData}`);
+	}
+	// The deepest existing ancestor, resolved, must still be inside a resolved root.
+	let p = userData;
+	while (!fs.existsSync(p) && path.dirname(p) !== p) {
+		p = path.dirname(p);
+	}
+	const real = fs.realpathSync.native(p);
+	const realRoots = roots.filter(r => fs.existsSync(r)).map(r => fs.realpathSync.native(r));
+	if (!realRoots.some(r => real === r || real.startsWith(r + path.sep))) {
+		throw new Error(`test user-data-dir resolves outside the test roots (symlink?): ${userData} -> ${real}`);
+	}
+}
+
 /** Host paths a payload that escaped containment might touch. Stat only: never read. */
-const WATCHED = ['.ssh', '.gitconfig', '.zshrc', '.zprofile', '.bashrc', '.bash_profile', '.profile', 'Library/LaunchAgents', '.config/git',
-	'.aws', '.npmrc', '.netrc', '.git-credentials'];
+const WATCHED = ['.ssh', '.gitconfig', '.zshrc', '.zprofile', '.zshenv', '.bashrc', '.bash_profile', '.profile', 'Library/LaunchAgents', '.config/git',
+	'.aws', '.npmrc', '.netrc', '.git-credentials', '.vimrc', '.tmux.conf', '.config/fish', '.config/autostart', '.config/starship.toml',
+	'.config/nvim/init.lua', '.config/nvim/init.vim'];
+
+const PRESENCE = ['', '.config'];
+// Entries tools create under normal use during a long (level B) run: not a tripwire.
+const PRESENCE_NOISE = new Set(['.DS_Store', '.lesshst', '.viminfo', '.zsh_history', '.zsh_sessions', '.bash_history', '.python_history',
+	'.node_repl_history', '.cache', '.Trash', '.CFUserTextEncoding']);
 
 export type Snapshot = Record<string, string>;
 
 /**
  * Stat-only snapshot of the watched paths, recursing into directories (FS-6). Entry names
- * inside them (e.g. key file names in the SSH directory) are never stored: they're hashed, and a
- * change is reported against the watched top-level path.
+ * inside them (e.g. key file names in the SSH directory) are never stored: they're HMAC'd
+ * with a per-run key (T-7: no precomputed dictionary), and a change is reported against the
+ * watched top-level path. Only snapshots taken with the same key are comparable.
  */
-export function hostSnapshot(): Snapshot {
+export function hostSnapshot(key: string): Snapshot {
 	const out: Snapshot = {};
+	const h = (s: string) => createHmac('sha256', key).update(s).digest('hex').slice(0, 16);
 	const visit = (top: string, rel: string, depth: number) => {
 		const p = path.join(os.homedir(), rel);
-		const key = rel === top ? top : `${top}#${createHash('sha256').update(rel).digest('hex').slice(0, 16)}`;
+		const k = rel === top ? top : `${top}#${h(rel)}`;
 		let st: fs.Stats;
 		try {
 			st = fs.lstatSync(p);
 		} catch {
-			out[key] = 'absent';
+			out[k] = 'absent';
 			return;
 		}
-		out[key] = `${st.ino}:${st.size}:${st.mtimeMs}`;
+		out[k] = `${st.ino}:${st.size}:${st.mtimeMs}`;
 		if (st.isDirectory()) {
 			let entries: string[] = [];
 			try {
@@ -115,6 +140,19 @@ export function hostSnapshot(): Snapshot {
 	};
 	for (const rel of WATCHED) {
 		visit(rel, rel, 0);
+	}
+	// New entries directly in $HOME or ~/.config (dropped dotfiles, persistence): presence
+	// only, names hashed. Their mtimes change under normal use, so they aren't recorded.
+	for (const rel of PRESENCE) {
+		let entries: string[] = [];
+		try {
+			entries = fs.readdirSync(path.join(os.homedir(), rel));
+		} catch { /* absent */ }
+		for (const e of entries) {
+			if (!PRESENCE_NOISE.has(e)) {
+				out[`${rel || '.'}#${h(path.join(rel, e))}`] = 'present';
+			}
+		}
 	}
 	return out;
 }

@@ -47,6 +47,7 @@ Same rules as ADRs:
 | 2026-11-04 | [Docs are generated or checked in CI (docs-check gate)](20261104-docs-check.md) | accepted |
 | 2026-11-04 | [Extensions never persist across tabs or onto the host](20261104-extension-persistence.md) | accepted |
 | 2026-11-04 | [Test fixtures are inert and host-safe by construction](20261104-fixture-safety.md) | accepted |
+| 2026-11-04 | [Runs tear themselves down; one host sweep for strays](20261104-harness-teardown.md) | accepted |
 | 2026-11-04 | [DNS on an `--internal` network: no exfiltration path through Docker's embedded resolver (Docker 29.8)](20261104-internal-network-dns-exfiltration.md) | accepted |
 | 2026-11-04 | [Linux builds run in a Debian trixie container; the sbx template is a saved sbx snapshot](20261104-linux-builder-and-sbx-template.md) | accepted |
 | 2026-11-04 | [Local folder windows are closed before any dialog (routing hand-off)](20261104-local-window-close-first.md) | accepted |

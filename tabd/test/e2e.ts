@@ -7,12 +7,21 @@ import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../src/client.ts';
+import { teardownGate, writeManifest, writeSnapshot } from '../../test/containment/teardown.ts';
 
 const driver = process.argv[2] ?? 'sbx';
 const repo = path.resolve(import.meta.dirname, '../..');
 const work = path.join(repo, '.work', `e2e-${driver}`);
 const ws = path.join(work, 'tabs', 'ws1');
 fs.mkdirSync(ws, { recursive: true });
+writeSnapshot(work);
+writeManifest(work, { driver: driver as 'sbx' | 'oci', stateDirs: [path.join(work, 'state')] });
+// Teardown gate on every exit path, assertion failures included (it is synchronous).
+process.on('exit', code => {
+	if (!teardownGate(work) && code === 0) {
+		process.exitCode = 1;
+	}
+});
 
 const client = new TabdClient({
 	command: process.execPath,
@@ -33,6 +42,7 @@ const init = await client.initialize('e2e', '0');
 console.log('drivers', JSON.stringify(init.drivers));
 const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
 const tabId = tab.metadata.name;
+writeManifest(work, { tabs: [tabId] });
 console.log('claimed', tabId);
 await client.request('tab.ensureRunning', { tabId });
 console.log(`running after ${Date.now() - t0} ms`);

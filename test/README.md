@@ -7,8 +7,23 @@
 | Canary | `./seclab test canary sbx` | No host secret is observable from a tab, in any encoding. |
 | Secrets | `./seclab test secrets sbx` | The pre-mount gitleaks gate: block, move to the vault, restore. |
 | Fixture lint | `./seclab lint fixtures` | The payloads themselves are host-safe ([EDR](../docs/edr/20261104-fixture-safety.md)). |
+| Teardown regression | `node test/containment/teardown.test.ts` | Teardown stops a run's editor process tree (orphans included) and its tab pods, and reports clean only after they're gone. |
+| Host sweep | `./seclab clean-host` (dry run), `--apply` | Lists or removes every seclab-vscode resource on this machine ([EDR](../docs/edr/20261104-harness-teardown.md)). |
 
 ## Rules that bite
+- **Every run tears itself down, and fails if it can't** ([EDR](../docs/edr/20261104-harness-teardown.md)).
+  A run records what it owns in `<run-dir>/run.json` before it starts anything:
+  its user-data-dir, tabd state dirs, tab ids and helper containers.
+  `teardown.ts` then:
+  - stops those process trees, matching the unique paths and never program
+    names;
+  - removes the tabs and helpers;
+  - deletes the profile;
+  - diffs the host snapshot.
+  
+  A survivor or leftover fails the run. Level B's `check` ends with that
+  teardown, so it closes the editor. `KEEP=1` skips it and prints the
+  `teardown.ts verify <run-dir>` command to run later.
 - **Hostile fixtures are armed per run.** A nonce, the run dir and an expiry are
   written to `.seclab/targets` in the workspace. Copied or opened anywhere else,
   they do nothing.
@@ -20,6 +35,8 @@
   `~/.seclab-test/<name>`. `harness.ts` refuses anything else.
 - **Concurrency.** Each run picks a free beacon port (`SECLAB_BEACON_PORT` pins
   it). Docker names carry a per-worktree id, and runs take a lock under `.work/`.
-  `SECLAB_EVIDENCE_DIR` moves the level B fixture dir.
+  `SECLAB_EVIDENCE_DIR` moves the level B fixture dir; it must stay under this
+  worktree's `.work/` or `~/.seclab-test/`, because teardown refuses to act
+  anywhere else.
 - **The clipboard canary is opt-in** (`SECLAB_CANARY_CLIPBOARD=1`), because it
   overwrites your clipboard.

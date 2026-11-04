@@ -12,12 +12,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { mintCanary, scan, serialize, StreamScanner, type Canary, type Hit } from './canary.ts';
+import { exitedOrTimeout, teardownGate, writeManifest, writeSnapshot } from '../containment/teardown.ts';
 
 const driver = process.argv[2] ?? 'sbx';
 const repo = path.resolve(import.meta.dirname, '../..');
 const work = path.join(repo, '.work', 'canary', driver);
 const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
 fs.rmSync(work, { recursive: true, force: true });
+writeSnapshot(work);
+writeManifest(work, { driver: driver as 'sbx' | 'oci', stateDirs: [path.join(work, 'state')] });
 const ws = path.join(work, 'tabs', 'ws');
 fs.mkdirSync(ws, { recursive: true });
 fs.writeFileSync(path.join(ws, 'README.md'), 'canary workspace\n');
@@ -54,6 +57,7 @@ const client = new TabdClient({
 	env: { ...leakyEnv, HOME: process.env.HOME, USER: process.env.USER },
 });
 client.on('stderr', (s: string) => stderrLog.push(s));
+const tabdExit = new Promise(res => client.once('exit', res));
 const notifications: string[] = [];
 client.on('notification', (m: string, p: unknown) => notifications.push(JSON.stringify({ m, p })));
 
@@ -62,6 +66,7 @@ let exitCode = 1;
 try {
 	await client.initialize('canary', '0');
 	tabId = (await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } })).tab.metadata.name;
+	writeManifest(work, { tabs: [tabId] });
 	await client.request('tab.ensureRunning', { tabId });
 	// Exercise the REH transport so its process tree is live.
 	const { channel } = await client.connect(tabId);
@@ -118,5 +123,9 @@ try {
 		await client.request('tab.remove', { tabId }).catch(() => undefined);
 	}
 	client.dispose();
+	await exitedOrTimeout(tabdExit);
+	if (!teardownGate(work)) {
+		exitCode = 1;
+	}
 }
 process.exit(exitCode);

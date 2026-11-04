@@ -17,6 +17,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { mintCanary } from '../canary/canary.ts';
+import { exitedOrTimeout, teardownGate, writeManifest, writeSnapshot } from '../containment/teardown.ts';
 
 const driver = process.argv[2] ?? 'sbx';
 const repo = path.resolve(import.meta.dirname, '../..');
@@ -25,6 +26,8 @@ try {
 	fs.chmodSync(path.join(work, 'tabs', 'ws', 'lockdir'), 0o700); // left by an aborted run
 } catch { /* absent */ }
 fs.rmSync(work, { recursive: true, force: true });
+writeSnapshot(work);
+writeManifest(work, { driver: driver as 'sbx' | 'oci', stateDirs: [path.join(work, 'state')] });
 const ws = path.join(work, 'tabs', 'ws');
 fs.mkdirSync(ws, { recursive: true });
 const C = Object.fromEntries(['tree', 'config', 'history', 'allow', 'ignored', 'reflog', 'staged', 'nested', 'symhead', 'common', 'link', 'dirlink', 'objplant', 'abscommon', 'magic', 'envlib', 'archive', 'quoted', 'jar', 'nested2']
@@ -137,12 +140,14 @@ const client = new TabdClient({
 	env: { HOME: process.env.HOME, USER: process.env.USER },
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));
+const tabdExit = new Promise(res => client.once('exit', res));
 interface F { id: string; source: string; file: string; line: number; rule: string; movable: boolean }
 let tabId = '';
 let ok = false;
 try {
 	await client.initialize('secrets', '0');
 	tabId = (await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } })).tab.metadata.name;
+	writeManifest(work, { tabs: [tabId] });
 
 	// 1. Blocked, with every canary attributed, and no secret value anywhere in the response.
 	const err = await client.request('tab.ensureRunning', { tabId }).then(() => undefined, e => e as Error & { code?: number });
@@ -228,7 +233,11 @@ try {
 		await client.request('tab.remove', { tabId }).catch(() => undefined);
 	}
 	client.dispose();
+	await exitedOrTimeout(tabdExit);
 	fs.chmodSync(path.join(ws, 'lockdir'), 0o700);
 	fs.rmSync(ws, { recursive: true, force: true }); // the fixture holds canary secrets
+	if (!teardownGate(work)) {
+		ok = false;
+	}
 }
 process.exit(ok ? 0 : 1);
