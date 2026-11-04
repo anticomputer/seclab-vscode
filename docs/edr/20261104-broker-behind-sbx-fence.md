@@ -77,3 +77,16 @@ All 15 checks passed (`.work/broker/sbx-validation/results.txt`):
 - Script: [`broker/tests/sbx/validate.sh`](https://github.com/anticomputer/seclab-vscode/blob/1e83fdc951ffccab6a2ae645f5ee90c441d178dd/broker/tests/sbx/validate.sh)
   (run 2026-11-04; all PASS).
 - sbx CLI help (`sbx policy allow network --help`, `sbx exec --help`) on v0.51.0.
+
+## Update 2026-11-04: fixture safety
+The script has been hardened (see
+[EDR docs and safe fixtures](20261104-broker-docs-from-sources-and-safe-fixtures.md)):
+- random per-run names;
+- ephemeral loopback-only ports;
+- verified teardown of the user's global sbx state.
+
+The `host.docker.internal:22` and `example.com` probes in the table above were
+**removed**: if the fence had failed, they would have touched the user's real
+sshd and an external name. Isolation is still shown by the probes to the other
+tab's broker port. A re-run passed every remaining check, plus "global policy
+and secrets unchanged" and "nothing left behind".

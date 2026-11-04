@@ -109,7 +109,8 @@ docker run -d --name "seclab-$tag-broker2" --network "seclab-$tag-egress2" -p "1
 P=$(docker port "seclab-$tag-broker" 8080/tcp | sed -n 's/^127\.0\.0\.1://p' | head -n1)
 P2=$(docker port "seclab-$tag-broker2" 8080/tcp | sed -n 's/^127\.0\.0\.1://p' | head -n1)
 [ -n "$P" ] && [ -n "$P2" ] || { echo "could not read published loopback ports"; exit 1; }
-if docker port "seclab-$tag-broker" 8080/tcp | grep -vq '^127\.0\.0\.1:'; then
+if docker port "seclab-$tag-broker" 8080/tcp | grep -vq '^127\.0\.0\.1:' \
+   || docker port "seclab-$tag-broker2" 8080/tcp | grep -vq '^127\.0\.0\.1:'; then
   echo "broker published beyond loopback"; exit 1
 fi
 

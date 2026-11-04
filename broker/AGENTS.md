@@ -28,11 +28,16 @@ file has been run. Anything not yet built is marked **TODO**.
 | `seclab_broker/scanner.py` | Minted-token detection (rules in `data/token-rules.json`) |
 | `seclab_broker/netguard.py` | Upstream address guard and broker-local address discovery |
 | `seclab_broker/core.py` | `Broker`: state, approvals, JIT waits, audit, every `rpc_*` control method |
+| `seclab_broker/protocol.py` | Loads `schema/protocol.v1.json` (+ policy definitions); validators used by dispatch and tests |
 | `seclab_broker/control.py` | NDJSON JSON-RPC server on the unix socket; stdio bridge |
 | `seclab_broker/engine_mitmproxy.py` | The only mitmproxy-specific code (hooks) |
 | `seclab_broker/__main__.py` | `seclab-broker run` / `control`; hardening, CA, mitmproxy options |
 | `seclab_broker/data/` | Baseline, `providers/github.json` (backstop), `token-rules.json` |
 | `schema/policy.v1.schema.json` | Policy schema (copied into the image's `data/`) |
+| `schema/protocol.v1.json` | Control-protocol definition: the single source for dispatch validation, tests and generated docs |
+| `schema/capabilities.v1.json` | Capability matrix notes, sbx-native column, and the tests behind each row |
+| `tools/docs.py`, `docs-check.sh` | Doc generator and drift checker (`--write`, `--run-commands`) |
+| `tools/fixture_lint.py` | Fixtures may only target test-owned endpoints; no token-shaped literals |
 | `examples/` | Example policies, validated by unit tests |
 | `tests/unit/` | pytest, run inside the broker image with `--network none` |
 | `tests/integration/` | Pod-shaped suite: harness container + docker.sock |
@@ -207,6 +212,17 @@ Each has a unit or integration test; grep for the phrase.
   or a server error, and never passes the flow through unchanged.
 
 ## Known pitfalls
+- **Fixtures must only target test-owned endpoints.** That means
+  `*.example.test`, the broker, loopback, or RFC 5737 addresses.
+  - Never probe real hosts, metadata IPs, the Docker gateway or host ports,
+    even in "should be blocked" tests. A regression turns the probe into an
+    attack.
+  - `tools/fixture_lint.py` enforces this. Mark a non-network mention with
+    `# fixture-lint: ignore`.
+- **The sbx script never touches global sbx state.** It snapshots that state
+  and verifies it at teardown.
+  - New sbx probes must target this run's own loopback ports.
+  - Per-sandbox rules must be removed in `cleanup()`.
 - **The broker's networks must be attached before `docker start`.**
   `local_addresses()` reads `/proc/net/route` once.
 - **mitmproxy logs hook exceptions and continues.** That is why
