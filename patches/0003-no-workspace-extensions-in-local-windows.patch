@@ -1,7 +1,16 @@
 diff --git a/src/vs/workbench/services/extensions/electron-browser/nativeExtensionService.ts b/src/vs/workbench/services/extensions/electron-browser/nativeExtensionService.ts
-index dcd36612..cf064c06 100644
+index dcd36612..f1f69d27 100644
 --- a/src/vs/workbench/services/extensions/electron-browser/nativeExtensionService.ts
 +++ b/src/vs/workbench/services/extensions/electron-browser/nativeExtensionService.ts
+@@ -107,7 +107,7 @@ export class NativeExtensionService extends AbstractExtensionService implements
+ 			{ hasLocalProcess: true, allowRemoteExtensionsInLocalWebWorker: false },
+ 			extensionsProposedApi,
+ 			extensionHostFactory,
+-			new NativeExtensionHostKindPicker(environmentService, configurationService, logService),
++			new NativeExtensionHostKindPicker(environmentService, configurationService, logService, productService),
+ 			instantiationService,
+ 			notificationService,
+ 			environmentService,
 @@ -695,6 +695,7 @@ export class NativeExtensionHostKindPicker implements IExtensionHostKindPicker {
  		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
  		@IConfigurationService configurationService: IConfigurationService,
