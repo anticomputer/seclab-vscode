@@ -33,11 +33,17 @@
       "why": "file: reaches a host path outside the tab mount"
     },
     "host-fs-write-file-scheme": {
+      "required": false,
+      "surface": "host-fs-write",
+      "policyRef": "rpc:MainThreadFileSystem.$writeFile",
+      "why": "a host write is a code-execution primitive, but a file: write from a remote window is served by the REH's own provider inside the tab: the 2026-11-04 run returned success while nothing happened on the host, so this is kept as a negative control, not a proof"
+    },
+    "host-fs-write-userdata": {
       "required": true,
       "surface": "host-fs-write",
       "policyRef": "rpc:MainThreadFileSystem.$writeFile",
-      "why": "a host write is a code-execution primitive: rc files, LaunchAgents, git hooks",
-      "hostEffect": "marker.rpcwrite"
+      "why": "vscode-userdata: resolves against the host profile directory, so the write actually crosses the boundary",
+      "hostEffectAbsolute": "userDataDir:/User/seclab-probe-marker.txt"
     },
     "secret-write-own": {
       "required": false,

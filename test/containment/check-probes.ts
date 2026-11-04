@@ -53,7 +53,22 @@ const coverage = JSON.parse(
 interface Result { id: string; policyRef: string; outcome: string; detail: string }
 interface Spec {
 	required?: boolean; policyRef: string; why: string; beacon?: string;
-	patchedOutcome?: string; needsTestContribution?: boolean;
+	patchedOutcome?: string; needsTestContribution?: boolean; hostEffect?: string;
+}
+
+/**
+ * Resolve a declared hostEffect to the file it must produce on the host.
+ * "marker" and "marker.<suffix>" map onto the run directory's fixed marker
+ * basename, which is what probe-safety.js markerCommand() writes.
+ */
+function hostEffectPath(effect: string): string | null {
+	const runDir = process.env.SECLAB_PROBE_RUNDIR;
+	if (!runDir) { return null; }
+	if (effect === 'marker') { return path.join(runDir, 'PWNED'); }
+	if (effect.startsWith('marker.')) {
+		return path.join(runDir, `PWNED${effect.slice('marker'.length)}`);
+	}
+	return path.join(runDir, effect);
 }
 
 const checks: Check[] = [];
@@ -163,6 +178,18 @@ for (const [id, spec] of Object.entries(specs)) {
 				`${id} actually reached the host network (${spec.beacon})`,
 				`seen: ${[...beaconPaths].join(', ') || 'none'}`);
 		}
+		// A return value is not an escape. host-fs-write-file-scheme reported
+		// success on 2026-11-04 while writing nothing on the host, because a
+		// remote window routes file: writes to the REH's own provider. Without
+		// this check it would have been recorded as a proven escape and then
+		// "fixed" by a patch that changed nothing.
+		if (spec.hostEffect && spec.required) {
+			const target = hostEffectPath(spec.hostEffect);
+			c('host-effect', !!target && fs.existsSync(target),
+				`${id} actually changed the host (${spec.hostEffect})`,
+				target ? `${target} ${fs.existsSync(target) ? 'exists' : 'MISSING: the call succeeded but nothing happened on the host'}`
+					: 'SECLAB_PROBE_RUNDIR not set, cannot verify');
+		}
 		continue;
 	}
 
@@ -193,6 +220,12 @@ for (const [id, spec] of Object.entries(specs)) {
 		c('beacon', !beaconPaths.has(spec.beacon),
 			`${id} did not reach the host network (${spec.beacon})`,
 			`seen: ${[...beaconPaths].join(', ') || 'none'}`);
+	}
+	if (spec.hostEffect && spec.required) {
+		const target = hostEffectPath(spec.hostEffect);
+		c('host-effect', !target || !fs.existsSync(target),
+			`${id} did not change the host (${spec.hostEffect})`,
+			target ?? 'SECLAB_PROBE_RUNDIR not set');
 	}
 }
 
