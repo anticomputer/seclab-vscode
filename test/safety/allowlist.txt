@@ -1,0 +1,2 @@
+# Reviewed per-line opt-outs for test/safety/fixture-lint.ts: one "file:rule" per line.
+# A line comment "fixture-lint: allow <rule> -- <reason>" only counts if listed here.

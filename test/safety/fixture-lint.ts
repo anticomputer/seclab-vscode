@@ -10,6 +10,7 @@
 // with a reason:   fixture-lint: allow <rule> -- <reason>
 
 import * as fs from 'node:fs';
+import * as net from 'node:net';
 import * as path from 'node:path';
 
 const repo = path.resolve(import.meta.dirname, '../..');
@@ -21,7 +22,7 @@ const TEXT = /\.(ts|js|mjs|cjs|json|jsonc|sh|py|toml|ya?ml|md|txt|env|cfg|ini|co
 interface Rule { id: string; re: RegExp; why: string }
 const RULES: Rule[] = [
 	{ id: 'host-secret-path', why: 'reads real host secrets/profiles',
-		re: /(~|\$HOME|\$\{HOME\}|homedir\(\)|\/Users\/[^/\s'"]+|\/home\/[^/\s'"]+)[^\n]{0,8}\/\.(ssh|aws|gnupg|kube|netrc|npmrc|pypirc|git-credentials)\b|Library\/Keychains|login\.keychain|\bsecurity\s+(find|dump|export)-|Library\/Application Support\/(Code|Cursor|Google|Chrome|Firefox|BraveSoftware|Microsoft Edge|GitHub Copilot)|Library\/Cookies/ },
+		re: /(~|\$HOME|\$\{HOME\}|homedir\(\)|\/Users\/[^/\s'"]+|\/home\/[^/\s'"]+)[^\n]{0,8}\/\.(ssh|aws|gnupg|kube|netrc|npmrc|pypirc|git-credentials)\b|(homedir\(\)|process\.env\.HOME|env\.HOME)[^\n]*['"`]\.(ssh|aws|gnupg|kube|netrc|npmrc|pypirc|git-credentials|docker)['"`/]|Library\/Keychains|login\.keychain|\bsecurity\s+(find|dump|export)-|Library\/Application Support\/(Code|Cursor|Google|Chrome|Firefox|BraveSoftware|Microsoft Edge|GitHub Copilot)|Library\/Cookies/ },
 	{ id: 'persistence', why: 'persists or changes host settings',
 		re: /\blaunchctl\b|LaunchAgents\/|LaunchDaemons|\bcrontab\b|\bdefaults\s+write\b|\bosascript\b|>>?\s*\S*\/\.(zshrc|bashrc|bash_profile|profile|zprofile)\b|\bsystemctl\s+(enable|start)\b|\bcsrutil\b/ },
 	{ id: 'destructive', why: 'broad delete outside the run dir',
@@ -29,24 +30,41 @@ const RULES: Rule[] = [
 	{ id: 'token-literal', why: 'token-shaped literal (real credential format)',
 		re: /\b(gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{60,}|AKIA[0-9A-Z]{16}|xox[abposr]-[A-Za-z0-9-]{10,}|sk-(proj-|ant-)?[A-Za-z0-9_-]{32,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20})\b/ },
 	{ id: 'download-exec', why: 'download-and-execute',
-		re: /\b(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(sh|bash|zsh|python3?|node)\b/ },
+		re: /\b(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(sh|bash|zsh|python3?|node)\b|<\(\s*(curl|wget)\b|\b(sh|bash|zsh)\s+-c\s+["'`]?\$\(\s*(curl|wget)\b/ },
 ];
 
-// Network: every URL host must be a test-owned target.
+// Network: every URL host must be a test-owned target. IPs are validated as literal IPs
+// (no prefix tricks like 127.evil.example.com), and only loopback, RFC 5737 and the
+// broker's own test net count; general LAN ranges are the developer's real network.
 const URL_RE = /\b(?:https?|wss?|ftp):\/\/(?:[^@\s/]*@)?(\[[0-9a-f:]+\]|[A-Za-z0-9.-]+|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?)/gi;
+// Scheme-less hosts handed to curl/wget (e.g. `curl evil.example.com/x`).
+const BARE_RE = /\b(?:curl|wget)\b[^\n|;&]*?\s((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}|\d{1,3}(?:\.\d{1,3}){3})(?=[/:\s'"`]|$)/g;
 function allowedHost(h: string): boolean {
 	const host = h.toLowerCase().replace(/^\[|\]$/g, '');
 	if (host.startsWith('$')) {
 		return true; // a variable: the target is configured by the harness
 	}
-	if (['localhost', 'broker', 'host.docker.internal', 'gateway.docker.internal', '::1', '0.0.0.0'].includes(host)) {
+	if (['localhost', 'broker', 'host.docker.internal', 'gateway.docker.internal'].includes(host)) {
 		return true;
 	}
-	return /^127\./.test(host)
-		|| /^(192\.0\.2|198\.51\.100|203\.0\.113)\.\d+$/.test(host) // RFC 5737
-		|| /^(10|172\.(1[6-9]|2\d|3[01])|192\.168|11\.250)\./.test(host) // private / broker test nets
-		|| /(^|\.)(test|invalid|example|localhost)$/.test(host); // RFC 2606 reserved names
+	const ipv = net.isIP(host);
+	if (ipv === 4) {
+		return /^127\./.test(host) || /^(192\.0\.2|198\.51\.100|203\.0\.113|11\.250)\./.test(host) || host === '0.0.0.0';
+	}
+	if (ipv === 6) {
+		return host === '::1';
+	}
+	return /(^|\.)(test|invalid|example|localhost)$/.test(host); // RFC 2606 reserved names
 }
+
+// Per-line opt-outs only count if also listed (file:rule) in this reviewed file.
+const ALLOWLIST = (() => {
+	try {
+		return new Set(fs.readFileSync(path.join(import.meta.dirname, 'allowlist.txt'), 'utf8').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(Boolean));
+	} catch {
+		return new Set<string>();
+	}
+})();
 
 const violations: string[] = [];
 function lintFile(file: string): void {
@@ -55,19 +73,21 @@ function lintFile(file: string): void {
 		return; // the rules themselves
 	}
 	fs.readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
-		const allow = /fixture-lint: allow ([a-z-]+) -- \S/.exec(line)?.[1];
+		const optOut = /fixture-lint: allow ([a-z-]+) -- \S/.exec(line)?.[1];
+		const allow = optOut && ALLOWLIST.has(`${rel}:${optOut}`) ? optOut : undefined;
 		for (const r of RULES) {
 			if (allow !== r.id && r.re.test(line)) {
 				violations.push(`${rel}:${i + 1}: ${r.id}: ${r.why}: ${line.trim().slice(0, 120)}`);
 			}
 		}
-		for (const m of line.matchAll(URL_RE)) {
+		for (const m of [...line.matchAll(URL_RE), ...line.matchAll(BARE_RE)]) {
 			if (allow !== 'non-test-host' && !allowedHost(m[1])) {
 				violations.push(`${rel}:${i + 1}: non-test-host: ${m[1]}: ${line.trim().slice(0, 120)}`);
 			}
 		}
 	});
 }
+const FIXTURE_DIR = path.join(repo, 'test', 'containment', 'fixtures');
 function walk(p: string): void {
 	let st: fs.Stats;
 	try {
@@ -75,13 +95,15 @@ function walk(p: string): void {
 	} catch {
 		return;
 	}
+	const inFixtures = p.startsWith(FIXTURE_DIR + path.sep);
 	if (st.isDirectory()) {
-		if (!SKIP_DIRS.has(path.basename(p))) {
+		// Fixture trees are linted whole: a payload can hide in any file name.
+		if (inFixtures || !SKIP_DIRS.has(path.basename(p))) {
 			for (const e of fs.readdirSync(p)) {
 				walk(path.join(p, e));
 			}
 		}
-	} else if (st.isFile() && st.size < 2 << 20 && TEXT.test(p)) {
+	} else if (st.isFile() && st.size < 2 << 20 && (inFixtures || TEXT.test(p))) {
 		lintFile(p);
 	}
 }

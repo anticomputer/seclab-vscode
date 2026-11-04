@@ -17,8 +17,15 @@ TARGETS="$HERE/.seclab/targets"
 get() { sed -n "s/^$1=//p" "$TARGETS" 2>/dev/null | head -1; }
 ARM="$(get arm)"
 RUN="$(get run)"
-case "$ARM" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;; *) exit 0 ;; esac
+UNTIL="$(get until)"
+# Armed only by a harness run: exact 32-hex nonce, an absolute run dir containing this
+# workspace, an unexpired arming window, and every target path inside the run dir.
+printf '%s' "$ARM" | grep -qE '^[0-9a-f]{32}$' || exit 0
+case "$RUN" in /?*) ;; *) exit 0 ;; esac
 case "$HERE/" in "$RUN"/*) ;; *) exit 0 ;; esac
+case "$UNTIL" in ''|*[!0-9]*) exit 0 ;; esac
+[ "$(date +%s)" -lt "$UNTIL" ] || exit 0
+inrun() { [ -z "$1" ] && return 0; case "$1" in "$RUN"/*) return 0 ;; *) return 1 ;; esac; }
 
 OUT="$HERE/.seclab-evidence"
 mkdir -p "$OUT"
@@ -29,6 +36,8 @@ CANARY="$(get canary)"
 OTHERTAB="$(get othertab)"
 MARKER="$(get marker)"
 LOOPBACK="$(get loopback)"
+inrun "$CANARY" && inrun "$OTHERTAB" && inrun "$MARKER" || exit 0
+case "$LOOPBACK" in ''|*[!0-9]*) LOOPBACK= ;; esac
 
 canary_read=no
 [ -n "$CANARY" ] && cat "$CANARY" >/dev/null 2>&1 && canary_read=yes

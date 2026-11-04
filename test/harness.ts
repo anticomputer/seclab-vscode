@@ -74,24 +74,47 @@ export function checkUserDataDir(userData: string): void {
 }
 
 /** Host paths a payload that escaped containment might touch. Stat only: never read. */
-const WATCHED = ['.ssh', '.gitconfig', '.zshrc', '.zprofile', '.bashrc', '.bash_profile', '.profile', 'Library/LaunchAgents', '.config/git'];
+const WATCHED = ['.ssh', '.gitconfig', '.zshrc', '.zprofile', '.bashrc', '.bash_profile', '.profile', 'Library/LaunchAgents', '.config/git',
+	'.aws', '.npmrc', '.docker/config.json', '.netrc', '.git-credentials', '.seclab-vscode'];
 
 export type Snapshot = Record<string, string>;
 
+/**
+ * Stat-only snapshot of the watched paths, recursing into directories (FS-6). Entry names
+ * inside them (e.g. key file names in the SSH directory) are never stored: they're hashed, and a
+ * change is reported against the watched top-level path.
+ */
 export function hostSnapshot(): Snapshot {
 	const out: Snapshot = {};
-	for (const rel of WATCHED) {
+	const visit = (top: string, rel: string, depth: number) => {
 		const p = path.join(os.homedir(), rel);
+		const key = rel === top ? top : `${top}#${createHash('sha256').update(rel).digest('hex').slice(0, 16)}`;
+		let st: fs.Stats;
 		try {
-			const st = fs.lstatSync(p);
-			out[rel] = `${st.ino}:${st.size}:${st.mtimeMs}`;
+			st = fs.lstatSync(p);
 		} catch {
-			out[rel] = 'absent';
+			out[key] = 'absent';
+			return;
 		}
+		out[key] = `${st.ino}:${st.size}:${st.mtimeMs}`;
+		if (st.isDirectory() && depth < 4) {
+			let entries: string[] = [];
+			try {
+				entries = fs.readdirSync(p);
+			} catch { /* unreadable: the dir's own stat still counts */ }
+			for (const e of entries.slice(0, 500)) {
+				visit(top, path.join(rel, e), depth + 1);
+			}
+		}
+	};
+	for (const rel of WATCHED) {
+		visit(rel, rel, 0);
 	}
 	return out;
 }
 
 export function snapshotDiff(before: Snapshot, after: Snapshot): string[] {
-	return Object.keys({ ...before, ...after }).filter(k => before[k] !== after[k]).map(k => `~/${k}`);
+	const changed = new Set(Object.keys({ ...before, ...after }).filter(k => before[k] !== after[k]).map(k => `~/${k.split('#')[0]}`));
+	return [...changed];
 }
+
