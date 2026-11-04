@@ -107,7 +107,7 @@ export class OciDriver implements Driver {
 				'--network', n.net, '--user', user, '--env', 'HOME=/home/agent',
 				'--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
 				'--pids-limit', '2048', '--memory', t.resources?.memory && /^[1-9][0-9]{0,4}[mg]$/.test(t.resources.memory) ? t.resources.memory : '4g',
-				'--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev,size=1g', '--tmpfs', `/run/user/1000:rw,nosuid,nodev,uid=${uid},gid=${gid},mode=0700`,
+				'--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev,size=1g', '--tmpfs', `/run/user/${uid}:rw,nosuid,nodev,uid=${uid},gid=${gid},mode=0700`,
 				// hostPath is canonical and contains no ',' or ':' (validate.ts), so --mount parsing is unambiguous.
 				'--mount', `type=bind,src=${spec.hostPath},dst=${spec.hostPath}`,
 				'--mount', `type=volume,src=${n.home},dst=/home/agent`,
