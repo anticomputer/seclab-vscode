@@ -40,4 +40,8 @@ Same rules as ADRs:
 |---|---|---|
 | 2026-11-04 | [sbx upgraded to 0.51.0: findings](20261104-sbx-upgrade-0-51.md) | accepted |
 | 2026-11-04 | [sbx per-tab egress fence and broker chaining (spike)](20261104-sbx-fence-spike.md) | accepted |
-| 2026-11-04 | [REH transport over `exec -i` stdio (viability spike)](20261104-reh-transport-exec-stdio.md) | accepted |
+| 2026-11-04 | [REH transport over `exec -i` stdio (viability spike)](20261104-reh-transport-exec-stdio.md) | superseded-by reh-transport-e2e |
+| 2026-11-04 | [seclab-tabd is dependency-free TypeScript on the editor's Node](20261104-tabd-implementation-language.md) | accepted |
+| 2026-11-04 | [Remove the built-in Copilot extension (one build patch)](20261104-remove-builtin-copilot.md) | accepted |
+| 2026-11-04 | [Linux builds in a trixie container; sbx template via snapshot](20261104-linux-builder-and-sbx-template.md) | accepted |
+| 2026-11-04 | [REH transport over `sbx exec -i` stdio works end to end](20261104-reh-transport-e2e.md) | accepted |

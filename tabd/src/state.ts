@@ -1,0 +1,137 @@
+// Durable tab registry. Lock-free across concurrent supervisors (one per editor
+// window): per-tab files plus an O_EXCL path claim keyed by sha256(hostPath).
+
+import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { assertTabId, CONNECTION_TOKEN_RE, foldPath, mintConnectionToken, mintTabId, TEMPLATE_NAME_RE, ValidationError } from './validate.ts';
+
+export interface TabRecord {
+	readonly tabId: string;
+	readonly hostPath: string;
+	readonly templateName: string;
+	readonly createdAt: string;
+	readonly connectionToken: string;
+	/** Filesystem identity at claim time; re-checked before every start. */
+	readonly dev: string;
+	readonly ino: string;
+}
+
+export function fileIdentity(p: string): { dev: string; ino: string } {
+	const st = fs.statSync(p, { bigint: true });
+	return { dev: st.dev.toString(), ino: st.ino.toString() };
+}
+
+function overlaps(a: string, b: string): boolean {
+	const x = foldPath(a), y = foldPath(b);
+	return x === y || x.startsWith(y + path.sep) || y.startsWith(x + path.sep);
+}
+
+export class TabStore {
+	private readonly tabsDir: string;
+	private readonly byPathDir: string;
+
+	constructor(stateDir: string) {
+		if (!path.isAbsolute(stateDir)) {
+			throw new Error('state dir must be absolute');
+		}
+		this.tabsDir = path.join(stateDir, 'tabs');
+		this.byPathDir = path.join(stateDir, 'by-path');
+		for (const d of [stateDir, this.tabsDir, this.byPathDir]) {
+			fs.mkdirSync(d, { recursive: true, mode: 0o700 });
+		}
+	}
+
+	/** Returns the tab for hostPath (already canonical), creating it if needed. */
+	claim(hostPath: string, templateName: string): { record: TabRecord; created: boolean } {
+		if (!TEMPLATE_NAME_RE.test(templateName)) {
+			throw new Error('invalid template name');
+		}
+		const key = createHash('sha256').update(foldPath(hostPath)).digest('hex');
+		const claimFile = path.join(this.byPathDir, `${key}.json`);
+		if (!fs.existsSync(claimFile)) {
+			// No nested or overlapping tabs: a parent tab could write a child's .vscode/.git config.
+			for (const other of this.list()) {
+				if (overlaps(other.hostPath, hostPath)) {
+					throw new ValidationError(`workspace overlaps existing tab ${other.tabId} (${other.hostPath})`);
+				}
+			}
+		}
+		const candidate: TabRecord = {
+			tabId: mintTabId(), hostPath, templateName, createdAt: new Date().toISOString(), connectionToken: mintConnectionToken(),
+			...fileIdentity(hostPath),
+		};
+		// Write the tab record first, then race for the path claim.
+		this.writeRecord(candidate);
+		try {
+			fs.writeFileSync(claimFile, JSON.stringify({ tabId: candidate.tabId, hostPath }), { flag: 'wx', mode: 0o600 });
+			return { record: candidate, created: true };
+		} catch (e) {
+			if ((e as NodeJS.ErrnoException).code !== 'EEXIST') {
+				throw e;
+			}
+			fs.rmSync(this.recordFile(candidate.tabId), { force: true });
+			const claimed = JSON.parse(fs.readFileSync(claimFile, 'utf8')) as { tabId: unknown; hostPath: unknown };
+			if (typeof claimed.hostPath !== 'string' || foldPath(claimed.hostPath) !== foldPath(hostPath)) {
+				throw new Error('path claim collision');
+			}
+			const existing = this.get(assertTabId(claimed.tabId));
+			if (!existing) {
+				throw new Error('dangling path claim');
+			}
+			return { record: existing, created: false };
+		}
+	}
+
+	get(tabId: string): TabRecord | undefined {
+		assertTabId(tabId);
+		let raw: string;
+		try {
+			raw = fs.readFileSync(this.recordFile(tabId), 'utf8');
+		} catch {
+			return undefined;
+		}
+		const r = JSON.parse(raw) as TabRecord;
+		if (r.tabId !== tabId || typeof r.hostPath !== 'string' || !path.isAbsolute(r.hostPath) ||
+			!TEMPLATE_NAME_RE.test(r.templateName) || !CONNECTION_TOKEN_RE.test(r.connectionToken) ||
+			!/^[0-9]+$/.test(String(r.dev)) || !/^[0-9]+$/.test(String(r.ino))) {
+			throw new Error(`corrupt tab record ${tabId}`);
+		}
+		return r;
+	}
+
+	list(): TabRecord[] {
+		const out: TabRecord[] = [];
+		for (const f of fs.readdirSync(this.tabsDir)) {
+			const m = /^(t-[a-z2-7]{26})\.json$/.exec(f);
+			if (m) {
+				const r = this.get(m[1]);
+				if (r) {
+					out.push(r);
+				}
+			}
+		}
+		return out;
+	}
+
+	forget(tabId: string): void {
+		const r = this.get(tabId);
+		if (!r) {
+			return;
+		}
+		const key = createHash('sha256').update(foldPath(r.hostPath)).digest('hex');
+		fs.rmSync(path.join(this.byPathDir, `${key}.json`), { force: true });
+		fs.rmSync(this.recordFile(tabId), { force: true });
+	}
+
+	private recordFile(tabId: string): string {
+		return path.join(this.tabsDir, `${assertTabId(tabId)}.json`);
+	}
+
+	private writeRecord(r: TabRecord): void {
+		const file = this.recordFile(r.tabId);
+		const tmp = `${file}.${process.pid}.tmp`;
+		fs.writeFileSync(tmp, JSON.stringify(r), { mode: 0o600 });
+		fs.renameSync(tmp, file);
+	}
+}
