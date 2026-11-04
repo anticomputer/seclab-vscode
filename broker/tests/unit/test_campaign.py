@@ -182,3 +182,63 @@ def test_proxy_auth_origin_label():
     assert b.check_proxy_auth("seclab", "A" * 22) == (True, None)
     assert b.check_proxy_auth("seclab+bad label", "A" * 22) == (False, None)
     assert b.check_proxy_auth("other+task:env", "A" * 22) == (False, None)
+    # Regression (review 2026-11-04 #2): `$` allowed a trailing newline in the label.
+    assert b.check_proxy_auth("seclab+a\n", "A" * 22) == (False, None)
+    with pytest.raises(RpcError):
+        b.dispatch("proxy.auth.set", {"username": "seclab\n", "password": "A" * 22})
+
+
+@pytest.mark.parametrize("host", ["146.70.41.188.sslip.io", "146-70-41-188.nip.io",  # fixture-lint: ignore
+                                  "c2.10.0.0.1.attacker.example", "ec2-1-2-3-4.compute.example"])
+def test_ip_in_hostname_is_treated_like_a_raw_ip(host):
+    """Regression (review 2026-11-04 #1): wildcard-DNS names bypassed the raw-IP controls."""
+    async def go():
+        assert "ip-in-hostname" in risk_flags(rv(host, "http", 1224))
+        b, notes = mk(user_action=False)
+        b.dispatch("tab.event", {"kind": "opened"})
+        d = await b.ask_egress(rv(host, "http", 1224))
+        assert d.reason == "risky-before-user-action" and prompts(notes) == []
+        b.dispatch("tab.event", {"kind": "userAction"})
+        t = asyncio.create_task(b.ask_egress(rv(host, "http", 1224)))
+        await asyncio.sleep(0.01)
+        assert "allow-tab" not in prompts(notes)[0]["decisions"]
+        b.dispatch("approval.decide", {"approvalId": prompts(notes)[0]["approvalId"], "decision": "deny"})
+        await t
+    run(go())
+
+
+@pytest.mark.parametrize("host", ["999.1.2.3.example.com", "v1.2.3.example.com", "api.example.com"])
+def test_ip_in_hostname_negatives(host):
+    assert "ip-in-hostname" not in risk_flags(rv(host))
+
+
+@pytest.mark.parametrize("rule", [
+    {"host": "*.vercel.app"},
+    {"host": "192.0.2.10", "schemes": ["http"], "ports": [1224]},
+    {"host": "other.example.com"},
+    {"host": "*.example.com", "path": "/elsewhere/**"},
+])
+def test_allow_tab_rule_is_enforced_by_the_broker(rule):
+    """Regression (review 2026-11-04 #3): a client-supplied allow-tab rule could add any
+    host, including risky ones and raw IPs, from an unrelated benign approval."""
+    async def go():
+        b, notes = mk()
+        t = asyncio.create_task(b.ask_egress(rv("new.example.com")))
+        await asyncio.sleep(0.01)
+        aid = prompts(notes)[0]["approvalId"]
+        with pytest.raises(RpcError):
+            b.dispatch("approval.decide", {"approvalId": aid, "decision": "allow-tab", "rule": rule})
+        b.dispatch("approval.decide", {"approvalId": aid, "decision": "allow-tab",
+                                       "rule": {"host": "*.example.com"}})
+        assert (await t).allow
+    run(go())
+
+
+@pytest.mark.parametrize("pattern,expected", [
+    ("*.github.com", True), ("*.amazonaws.com", True), ("*.app", True), ("gist.github.com", True),
+    ("api.github.com", False), ("*.example.com", False), ("registry.npmjs.org", False),
+    ("x.sslip.io", True), ("1.2.3.4.example.com", True),
+])
+def test_pattern_overlaps_risky(pattern, expected):
+    from seclab_broker.policy import pattern_overlaps_risky
+    assert pattern_overlaps_risky(pattern) is expected

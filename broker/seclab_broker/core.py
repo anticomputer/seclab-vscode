@@ -22,8 +22,8 @@ from typing import Any, Callable
 
 from . import PROTOCOL, VERSION, protocol
 from .credentials import Credential, CredentialStore
-from .policy import (Binding, Inject, Policy, PolicyError, RequestView, Rule, parse_bindings,
-                     risk_flags, validate_fragment)
+from .policy import (Binding, Inject, Policy, PolicyError, RequestView, Rule, normalize_ip,
+                     parse_bindings, pattern_overlaps_risky, risk_flags, validate_fragment)
 
 log = logging.getLogger("seclab.broker")
 
@@ -33,6 +33,11 @@ _PASS_RE = re.compile(r"^[A-Za-z0-9_-]{22,128}$")  # >= 128 bits as base64url
 _LABEL_RE = re.compile(r"^[A-Za-z0-9._:-]{1,96}$")
 _SOURCE_KINDS = ("workspace-scan", "password-input", "user", "host")
 TAB_EVENTS = ("opened", "userAction")
+
+
+def _hostile(flags: list[str]) -> bool:
+    """Destinations that never get `allow-tab` and are gated until the first user action."""
+    return any(f in ("raw-ip", "ip-in-hostname") or f.startswith("risky-destination:") for f in flags)
 
 
 class RpcError(Exception):
@@ -153,7 +158,7 @@ class Broker:
         if self._proxy_auth is None or username is None or password is None:
             return False, None
         base, sep, label = username.partition("+")
-        label_ok = not sep or bool(_LABEL_RE.match(label))
+        label_ok = not sep or bool(_LABEL_RE.fullmatch(label))
         u_ok = hmac.compare_digest(base.encode("utf-8", "surrogateescape"), self._proxy_auth[0])
         p_ok = hmac.compare_digest(password.encode("utf-8", "surrogateescape"), self._proxy_auth[1])
         if u_ok & p_ok & label_ok:
@@ -179,7 +184,7 @@ class Broker:
     async def ask_egress(self, req: RequestView, origin: str | None = None) -> Decision:
         risk = self.risk(req, origin)
         flags = risk["flags"]
-        hostile = "raw-ip" in flags or any(f.startswith("risky-destination:") for f in flags)
+        hostile = _hostile(flags)
         cfg = self.policy.prompt
         if self.deny_new:
             return self._deny_unprompted("deny-new-destinations", req, risk)
@@ -203,7 +208,7 @@ class Broker:
         if inject is not None:
             suggested["inject"] = inject.to_json()
         risk = self.risk(req, origin)
-        hostile = "raw-ip" in risk["flags"] or any(f.startswith("risky-destination:") for f in risk["flags"])
+        hostile = _hostile(risk["flags"])
         decisions = ("allow-once", "deny") if hostile else ("allow-once", "allow-tab", "deny")
         return await self._ask(key, "credential-binding", req, suggested, cred.id, decisions, risk)
 
@@ -345,9 +350,9 @@ class Broker:
 
     def rpc_proxy_auth_set(self, params: dict) -> dict:
         user, pw = params.get("username"), params.get("password")
-        if not isinstance(user, str) or not _USER_RE.match(user):
+        if not isinstance(user, str) or not _USER_RE.fullmatch(user):
             raise invalid("username must match [A-Za-z0-9._-]{1,64}")
-        if not isinstance(pw, str) or not _PASS_RE.match(pw):
+        if not isinstance(pw, str) or not _PASS_RE.fullmatch(pw):
             raise invalid("password must be 22-128 characters of [A-Za-z0-9_-] (>=128 bits)")
         self._proxy_auth = (user.encode(), pw.encode())
         self.auth_epoch += 1
@@ -460,8 +465,17 @@ class Broker:
                 self._resolve(other, "deny", by="controller")
             return {}
         if decision == "allow-tab":
+            r = approval.request
+            held = RequestView(r["scheme"], r["host"], r["port"], r["method"], r["path"], "")
             if approval.kind == "egress":
                 rule = Rule.from_json(params.get("rule") or approval.suggested)
+                # Broker-enforced, not just client-enforced: an approval can only widen
+                # policy around the request it was asked about, never onto risky hosts.
+                if not rule.matches(held):
+                    raise invalid("rule does not cover the held request")
+                if normalize_ip(rule.host.text.removeprefix("*.")) is not None or \
+                        pattern_overlaps_risky(rule.host.text, self.policy.risky):
+                    raise invalid("an approval cannot add a rule for a raw IP or a risky destination")
                 self.policy.rules.append(rule)
                 self.revision += 1
                 self.notify("policy.changed", {"revision": self.revision, "added": [rule.to_json()],
@@ -471,6 +485,10 @@ class Broker:
                 if cred is None:
                     raise invalid("credential no longer exists")
                 binding = Binding.from_json(params.get("binding") or approval.suggested)
+                if not binding.matches(held):
+                    raise invalid("binding does not cover the held request")
+                if pattern_overlaps_risky(binding.host.text, self.policy.risky):
+                    raise invalid("an approval cannot bind a credential to a risky destination")
                 self.creds.confirm_binding(cred.id, binding)
                 self.notify("credential.bindingConfirmed",
                             {"id": cred.id, "binding": binding.to_json(), "approvalId": aid})

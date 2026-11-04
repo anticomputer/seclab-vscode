@@ -550,7 +550,7 @@ The most recent audit events (the broker keeps at most 2000).
 
 ### `tab.event`
 
-Tell the broker about the tab's lifecycle, as seen by the trusted editor. `opened`: the workspace was just opened (resets the user-action clock). `userAction`: the user did something in this tab (keystroke, command, click). Until the first `userAction`, requests to raw IPs and risky destinations are denied without a prompt (policy `prompt.autoDenyRiskyBeforeUserAction`), and requests within `prompt.quietPeriodSeconds` of `opened` are flagged `early-after-open`. This is what defeats folder-open loaders such as tasks.json `runOn: folderOpen`: they run before anyone has touched the tab. The tab cannot send this; only the control client can. Send `userAction` at most about once a second.
+Tell the broker about the tab's lifecycle, as seen by the trusted editor. `opened`: the workspace was just opened (resets the user-action clock). `userAction`: the user did ordinary work in this tab after it opened: typing in an editor, running a command they chose, clicking in the workbench. **Consent interactions are not user actions**: accepting Workspace Trust, allowing automatic tasks, dismissing the broker's own prompts or other security dialogs must not send `userAction`, because a folder-open loader runs right after them. Until the first `userAction`, requests to raw IPs, IP-in-hostname names and risky destinations are denied without a prompt (policy `prompt.autoDenyRiskyBeforeUserAction`), and requests within `prompt.quietPeriodSeconds` of `opened` are flagged `early-after-open`. This defeats folder-open loaders such as tasks.json `runOn: folderOpen`: they run before anyone has touched the tab. After the first user action the gate stays open for the session; what remains is the flagged allow-once/deny prompt. The tab cannot send this; only the control client can. Send `userAction` at most about once a second.
 
 **Params**
 
@@ -870,7 +870,7 @@ Why this request deserves attention. Show it in the prompt.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `flags` | `string`[] | yes | `raw-ip`, `risky-destination:<category>` (see the risky-destination list in docs/broker-policy.md), `cleartext`, `nonstandard-port`, `early-after-open` (within `quietPeriodSeconds` of `tab.event opened` with no user action), `no-user-action-yet`. |
+| `flags` | `string`[] | yes | `raw-ip`, `ip-in-hostname` (an IPv4 address spelled inside the name, e.g. wildcard-DNS services such as `<ip>.sslip.io`; treated like a raw IP for gating and `allow-tab`), `risky-destination:<category>` (see the risky-destination list in docs/broker-policy.md), `cleartext`, `nonstandard-port`, `early-after-open` (within `quietPeriodSeconds` of `tab.event opened` with no user action), `no-user-action-yet`. |
 | `origin` | `object` | yes |  |
 | `origin.label` | `string` \| `null` | yes | Origin label from the proxy username (for example `task.env`), if any. |
 | `origin.verified` | `false` | yes | Always false: the label is claimed by the tab. |

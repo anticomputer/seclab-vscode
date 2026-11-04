@@ -394,11 +394,45 @@ def risky_category(host: str, extra: tuple[RiskyEntry, ...] = ()) -> str | None:
     return None
 
 
+_EMBEDDED_V4 = re.compile(r"(?:^|[.-])((?:\d{1,3}[.-]){3}\d{1,3})(?=$|[.-])")
+
+
+def embedded_ipv4(host: str) -> str | None:
+    """An IPv4 address spelled inside a hostname (`1.2.3.4.sslip.io`, `ec2-1-2-3-4.x`).
+    Wildcard-DNS services resolve such names to that address, so they are raw IPs in disguise."""
+    if normalize_ip(host) is not None:
+        return None
+    for m in _EMBEDDED_V4.finditer(host):
+        parts = re.split(r"[.-]", m.group(1))
+        if all(int(p) <= 255 for p in parts):
+            return ".".join(parts)
+    return None
+
+
+def pattern_overlaps_risky(pattern: str, extra: tuple[RiskyEntry, ...] = ()) -> bool:
+    """True if any host the pattern can match is a risky destination, or vice versa."""
+    if normalize_ip(pattern.removeprefix("*.")) is not None:
+        return False
+    if not pattern.startswith("*."):
+        return risky_category(pattern, extra) is not None or embedded_ipv4(pattern) is not None
+    suffix = pattern[2:]
+    for entry in risky_destinations() + extra:
+        e = entry.host.text
+        e_base = e.removeprefix("*.")
+        if e_base == suffix or e_base.endswith("." + suffix):  # listed host lies under the wildcard
+            return True
+        if e.startswith("*.") and (suffix.endswith("." + e_base)):  # wildcard lies under a listed wildcard
+            return True
+    return False
+
+
 def risk_flags(req: "RequestView", extra: tuple[RiskyEntry, ...] = ()) -> list[str]:
     """Destination properties worth showing in a prompt. Engine-agnostic."""
     flags = []
     if normalize_ip(req.host) is not None:
         flags.append("raw-ip")
+    elif embedded_ipv4(req.host):
+        flags.append("ip-in-hostname")
     cat = risky_category(req.host, extra)
     if cat:
         flags.append(f"risky-destination:{cat}")
