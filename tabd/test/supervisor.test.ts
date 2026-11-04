@@ -12,6 +12,7 @@ import { encodeJson, FrameDecoder } from '../src/frames.ts';
 import { TabStore } from '../src/state.ts';
 import { Supervisor } from '../src/supervisor.ts';
 import type { Driver, FenceReport, TabRuntimeSpec, TabTemplate } from '../src/drivers/types.ts';
+import type { ScanResult } from '../src/scan.ts';
 
 const SCRATCH = path.resolve(import.meta.dirname, '../../.work/test-tabd-supervisor');
 
@@ -38,7 +39,10 @@ class FakeDriver implements Driver {
 	async remove(spec: TabRuntimeSpec) { this.calls.push(`remove ${spec.tabId}`); }
 }
 
-function setup(name: string) {
+const noFindings = async (): Promise<ScanResult> => ({ complete: true, findings: [], secrets: new Map() });
+
+function setup(name: string, scanArg: ((p: string) => Promise<ScanResult>) | null = noFindings) {
+	const scan = scanArg ?? undefined;
 	const dir = path.join(SCRATCH, name);
 	fs.rmSync(dir, { recursive: true, force: true });
 	const ws = path.join(dir, 'home', 'src', 'proj');
@@ -52,7 +56,7 @@ function setup(name: string) {
 		drivers: new Map([['fake', driver]]), templates: new Map([['default', template]]),
 		store: new TabStore(path.join(dir, 'state')),
 		write: b => out.push(...dec.push(b)), onFatal: r => { fatal = r; },
-		fenceReverifyMs: 20, pathPolicy: { home: path.join(dir, 'home'), allowedRoots: [path.join(dir, 'home', 'src')] },
+		fenceReverifyMs: 20, pathPolicy: { home: path.join(dir, 'home'), allowedRoots: [path.join(dir, 'home', 'src')] }, scan,
 	});
 	let id = 1;
 	const call = async (method: string, params: unknown = {}) => {
@@ -113,4 +117,47 @@ test('supervisor: data for a never-opened channel is fatal', async () => {
 	const { sup, getFatal } = setup('fatal');
 	sup.receive(Buffer.concat([Buffer.from([0, 0, 0, 1, 0, 0, 0, 9]), Buffer.from('x')]));
 	assert.match(getFatal() ?? '', /unopened channel/);
+});
+
+test('supervisor: secrets block the mount; accept records an exception; move rewrites and restores', async () => {
+	const secret = 'seclabcanary_TEST_0123456789abcdef0123456789abcdef';
+	let wsPath = '';
+	const scan = async (p: string): Promise<ScanResult> => {
+		const has = fs.readFileSync(path.join(p, 'config.env'), 'utf8').includes(secret);
+		return has
+			? { complete: true, findings: [{ id: 'f1', source: 'worktree', file: 'config.env', line: 2, rule: 'seclab-canary', movable: true }], secrets: new Map([['f1', secret]]) }
+			: { complete: true, findings: [], secrets: new Map() };
+	};
+	const { call, driver, ws } = setup('secrets', scan);
+	wsPath = ws;
+	fs.writeFileSync(path.join(wsPath, 'config.env'), `A=1\nTOKEN=${secret}\n`);
+	await call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	const { tab } = await call('tab.claim', { workspace: { hostPath: wsPath } });
+	const tabId = tab.metadata.name;
+	await assert.rejects(call('tab.ensureRunning', { tabId }), (e: Error & { code?: number }) => e.code === -32020);
+	assert.equal(driver.calls.filter(c => c.startsWith('start')).length, 0, 'nothing mounted while secrets are unresolved');
+	// Move to broker: file now holds a sentinel; the secret only exists in the host vault.
+	await call('tab.scan', { tabId });
+	await assert.rejects(call('tab.moveSecrets', { tabId, moves: [{ id: 'f1', bind: { host: 'evil host' } }] }), /invalid credential binding/);
+	const { moved } = await call('tab.moveSecrets', { tabId, moves: [{ id: 'f1', bind: { host: 'api.example.com', path: '/v1/**' } }] });
+	const content = fs.readFileSync(path.join(wsPath, 'config.env'), 'utf8');
+	assert.ok(!content.includes(secret) && content.includes(moved[0].sentinel));
+	await call('tab.ensureRunning', { tabId });
+	assert.equal(driver.calls.filter(c => c.startsWith('start')).length, 1);
+	// Restore (tab must be stopped).
+	await call('tab.stop', { tabId });
+	const { restored } = await call('tab.restoreSecrets', { tabId });
+	assert.deepEqual(restored, ['config.env:2']);
+	assert.ok(fs.readFileSync(path.join(wsPath, 'config.env'), 'utf8').includes(secret));
+	// Open anyway: accepted finding ids are recorded as an exception.
+	await call('tab.ensureRunning', { tabId, acceptFindings: ['f1'] });
+	assert.equal(driver.calls.filter(c => c.startsWith('start')).length, 2);
+});
+
+test('supervisor: no scanner = fail closed', async () => {
+	const { call, ws } = setup('noscan', null);
+	await call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	const { tab } = await call('tab.claim', { workspace: { hostPath: ws } });
+	await assert.rejects(call('tab.ensureRunning', { tabId: tab.metadata.name }), (e: Error & { code?: number }) => e.code === -32021);
+	await call('tab.ensureRunning', { tabId: tab.metadata.name, acceptFindings: ['scan-incomplete'] });
 });

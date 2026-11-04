@@ -10,6 +10,7 @@ import { SbxDriver } from './drivers/sbx.ts';
 import type { Driver, TabTemplate } from './drivers/types.ts';
 import { cleanEnv, createRunner, resolveBinary } from './run.ts';
 import { TabStore } from './state.ts';
+import { scanWorkspace } from './scan.ts';
 import { Supervisor } from './supervisor.ts';
 import { assertImageRef } from './validate.ts';
 
@@ -106,6 +107,9 @@ const supervisor = new Supervisor({
 			return [path.dirname(p), path.dirname(real)];
 		})],
 	},
+	// Pre-mount secret scan (gitleaks in a network-less container). Without docker the
+	// scan is unavailable and opens fail closed unless the user records an exception.
+	scan: dockerPath ? (hostPath: string) => scanWorkspace(runner, dockerPath, hostPath) : undefined,
 });
 
 process.stdin.on('data', (d: Buffer) => supervisor.receive(d));

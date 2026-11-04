@@ -5,6 +5,7 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { encodeData, encodeJson, FrameDecoder, FrameError } from './frames.ts';
 import type { TabStore, TabRecord } from './state.ts';
 import { fileIdentity } from './state.ts';
+import { mintSentinel, rewriteSecret, type ScanResult, type VaultEntry } from './scan.ts';
 import { DriverError, type Driver, type DriverInfo, type FenceReport, type TabRuntimeSpec, type TabTemplate } from './drivers/types.ts';
 import { assertTabId, canonicalWorkspacePath, sandboxNameFor, TEMPLATE_NAME_RE, ValidationError, type PathPolicy } from './validate.ts';
 
@@ -25,15 +26,19 @@ export interface SupervisorOptions {
 	readonly audit?: (entry: Record<string, unknown>) => void;
 	readonly fenceReverifyMs?: number;
 	readonly pathPolicy?: PathPolicy;
+	/** Pre-mount secret scanner; absent = scanning unavailable (fails closed). */
+	readonly scan?: (hostPath: string) => Promise<ScanResult>;
 }
 
 interface Channel { tabId: string; child: ChildProcessWithoutNullStreams }
 
 class RpcError extends Error {
 	readonly code: number;
-	constructor(code: number, message: string) {
+	readonly data?: Json;
+	constructor(code: number, message: string, data?: Json) {
 		super(message);
 		this.code = code;
+		this.data = data;
 	}
 }
 
@@ -151,7 +156,8 @@ export class Supervisor {
 			const code = e instanceof RpcError || e instanceof DriverError ? e.code : e instanceof ValidationError ? -32002 : -32603;
 			const message = (e as Error).message ?? 'internal error';
 			if (isRequest) {
-				this.send({ id: req.id as Json, error: { code, message } });
+				const data = e instanceof RpcError ? e.data : undefined;
+				this.send({ id: req.id as Json, error: data === undefined ? { code, message } : { code, message, data } });
 			} else {
 				this.notify('log', { level: 'error', message: `${req.method}: ${message}` });
 			}
@@ -177,7 +183,10 @@ export class Supervisor {
 			case 'tab.claim': return this.claim(p);
 			case 'tab.get': return { tab: this.view(this.record(p.tabId)) };
 			case 'tab.list': return { tabs: this.o.store.list().map(r => this.view(r)) };
-			case 'tab.ensureRunning': return this.ensureRunning(this.record(p.tabId));
+			case 'tab.ensureRunning': return this.ensureRunning(this.record(p.tabId), p.acceptFindings);
+			case 'tab.scan': return this.scanTab(this.record(p.tabId));
+			case 'tab.moveSecrets': return this.moveSecrets(this.record(p.tabId), p.moves);
+			case 'tab.restoreSecrets': return this.restoreSecrets(this.record(p.tabId));
 			case 'tab.connect': return this.connect(this.record(p.tabId));
 			case 'tab.stop': return this.stop(this.record(p.tabId));
 			case 'tab.remove': return this.remove(this.record(p.tabId));
@@ -266,7 +275,103 @@ export class Supervisor {
 		return { tab: this.view(record) };
 	}
 
-	private async ensureRunning(r: TabRecord) {
+	// ---- pre-mount secret scanning (ADR 20261104-pre-mount-secret-scan) ------------------
+
+	private readonly scans = new Map<string, ScanResult>();
+
+	private async scanTab(r: TabRecord) {
+		if (!this.o.scan) {
+			const res: ScanResult = { complete: false, error: 'secret scanner unavailable', findings: [], secrets: new Map() };
+			this.scans.set(r.tabId, res);
+			return { complete: false, error: res.error, findings: [] };
+		}
+		const res = await this.o.scan(r.hostPath);
+		this.scans.set(r.tabId, res);
+		this.audit('secret.scan', res.complete ? 'ok' : 'incomplete', { tabId: r.tabId, findings: res.findings.map(f => f.id), error: res.error ?? null });
+		return { complete: res.complete, error: res.error, findings: res.findings };
+	}
+
+	/** Block unless every finding is moved or explicitly accepted (recorded exception). */
+	private async gateSecrets(r: TabRecord, accept: unknown): Promise<void> {
+		const res = await this.scanTab(r);
+		const accepted = new Set(Array.isArray(accept) ? accept.filter((x): x is string => typeof x === 'string') : []);
+		const blocking = res.findings.filter(f => !accepted.has(f.id));
+		if (!res.complete && !accepted.has('scan-incomplete')) {
+			throw new RpcError(-32021, res.error ?? 'secret scan incomplete', { findings: [], incomplete: true } as Json);
+		}
+		if (blocking.length) {
+			throw new RpcError(-32020, `${blocking.length} secret(s) found in the workspace`, { findings: blocking as unknown as Json });
+		}
+		const exceptions = [...res.findings.map(f => ({ id: f.id, file: f.file, line: f.line, rule: f.rule, source: f.source }))];
+		if (!res.complete) {
+			exceptions.push({ id: 'scan-incomplete', file: '', line: 0, rule: res.error ?? 'incomplete', source: 'worktree' as const });
+		}
+		if (exceptions.length) {
+			const at = new Date().toISOString();
+			const prior = this.o.store.readSide<Record<string, Json>>(r.tabId, 'exceptions');
+			this.o.store.writeSide(r.tabId, 'exceptions', [...prior, ...exceptions.map(e => ({ ...e, at }))]);
+			this.audit('secret.exception', 'opened-anyway', { tabId: r.tabId, at, files: exceptions.map(e => `${e.file}:${e.line} ${e.rule}`) });
+		}
+	}
+
+	private async moveSecrets(r: TabRecord, moves: unknown) {
+		const res = this.scans.get(r.tabId);
+		if (!res) {
+			throw new RpcError(-32602, 'scan the tab first');
+		}
+		const spec = this.spec(r);
+		if ((await this.driverFor(spec.template).runningSandboxes()).has(spec.sandboxName)) {
+			throw new RpcError(-32000, 'stop the tab before moving secrets (its workspace must not be in use)');
+		}
+		if (!Array.isArray(moves)) {
+			throw new RpcError(-32602, 'moves must be an array');
+		}
+		const vault = this.o.store.readSide<VaultEntry>(r.tabId, 'vault');
+		const moved: Array<{ id: string; sentinel: string }> = [];
+		for (const m of moves as Array<{ id?: unknown; bind?: { host?: unknown; path?: unknown } }>) {
+			const f = res.findings.find(x => x.id === m.id);
+			const secret = f ? res.secrets.get(f.id) : undefined;
+			const host = m.bind?.host;
+			const bindPath = m.bind?.path ?? '/**';
+			if (!f || !f.movable || !secret) {
+				throw new RpcError(-32602, `finding ${String(m.id)} is not movable`);
+			}
+			if (typeof host !== 'string' || !/^(?:\*\.)?[a-z0-9.-]{1,253}$/i.test(host) || typeof bindPath !== 'string' || !/^\/[\x21-\x7e]{0,512}$/.test(bindPath)) {
+				throw new RpcError(-32602, 'invalid credential binding');
+			}
+			const sentinel = mintSentinel(f.rule);
+			rewriteSecret(r.hostPath, f.file, f.line, secret, sentinel);
+			vault.push({ id: f.id, file: f.file, line: f.line, rule: f.rule, sentinel, secret, bind: { host, path: bindPath }, movedAt: new Date().toISOString() });
+			this.o.store.writeSide(r.tabId, 'vault', vault);
+			moved.push({ id: f.id, sentinel });
+			this.audit('secret.move', 'ok', { tabId: r.tabId, file: `${f.file}:${f.line}`, rule: f.rule, bindHost: host });
+		}
+		this.scans.delete(r.tabId);
+		return { moved };
+	}
+
+	private async restoreSecrets(r: TabRecord) {
+		const spec = this.spec(r);
+		if ((await this.driverFor(spec.template).runningSandboxes()).has(spec.sandboxName)) {
+			throw new RpcError(-32000, 'stop the tab before restoring secrets');
+		}
+		const vault = this.o.store.readSide<VaultEntry>(r.tabId, 'vault');
+		const kept: VaultEntry[] = [];
+		const restored: string[] = [];
+		for (const v of vault) {
+			try {
+				rewriteSecret(r.hostPath, v.file, v.line, v.sentinel, v.secret);
+				restored.push(`${v.file}:${v.line}`);
+			} catch {
+				kept.push(v);
+			}
+		}
+		this.o.store.writeSide(r.tabId, 'vault', kept);
+		this.audit('secret.restore', 'ok', { tabId: r.tabId, restored });
+		return { restored, notRestored: kept.map(v => `${v.file}:${v.line}`) };
+	}
+
+	private async ensureRunning(r: TabRecord, acceptFindings?: unknown) {
 		const spec = this.spec(r);
 		this.setPhase(r.tabId, 'Starting');
 		try {
@@ -277,6 +382,8 @@ export class Supervisor {
 			if (now !== r.hostPath || id.dev !== r.dev || id.ino !== r.ino) {
 				throw new ValidationError(`workspace ${r.hostPath} changed identity since it was claimed`);
 			}
+			// No real secret enters a tab: scan before every (re)mount.
+			await this.gateSecrets(r, acceptFindings);
 			await this.driverFor(spec.template).ensureRunning(spec, r.connectionToken);
 		} catch (e) {
 			this.setPhase(r.tabId, 'Failed', [{ type: 'Ready', status: 'False', reason: 'StartFailed', message: (e as Error).message }]);
