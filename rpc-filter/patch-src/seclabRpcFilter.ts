@@ -219,9 +219,22 @@ class SeclabFilter implements ISeclabFilter {
 		if (verdict === 'deny') {
 			return this._deny(ref, 'policy');
 		}
-		if (verdict === 'allow' || verdict === 'rewrite') {
-			// `rewrite` is applied by the customer itself (sentinel credential,
-			// partitioned storage key); the call is permitted to reach it.
+		if (verdict === 'allow') {
+			return this._permit(ref, verdict);
+		}
+		if (verdict === 'rewrite') {
+			// A `rewrite` verdict is a PROMISE that the customer substitutes a
+			// tab-scoped value -- a sentinel credential, a partitioned storage
+			// key. Permitting the call before that substitution exists does the
+			// opposite of what the verdict means: $getSession and the
+			// $getPassword family would hand a tab a real secret, inverting the
+			// invariant this whole control exists for.
+			//
+			// So a rewrite is denied unless its implementation has registered
+			// itself. Nothing registers today, so every one of them denies.
+			if (!seclabRewrites.has(`${sid}.${method}`)) {
+				return this._deny(ref, 'rewrite not implemented; failing closed');
+			}
 			return this._permit(ref, verdict);
 		}
 		if (verdict === 'prompt') {
@@ -290,6 +303,17 @@ class SeclabFilter implements ISeclabFilter {
 	public commandVerdict(id: string): SeclabVerdict {
 		return SECLAB_COMMANDS.get(id)?.verdict ?? SECLAB_DEFAULT_VERDICT;
 	}
+}
+
+/**
+ * `<sid>.<method>` whose rewrite is actually implemented. A customer that
+ * substitutes a tab-scoped value registers here; until it does, the filter
+ * refuses the call rather than letting the unrewritten original through.
+ */
+const seclabRewrites = new Set<string>();
+
+export function seclabRegisterRewrite(sid: string, method: string): void {
+	seclabRewrites.add(`${sid}.${method}`);
 }
 
 /**
