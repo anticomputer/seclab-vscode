@@ -1,0 +1,23 @@
+diff --git a/src/vs/workbench/services/extensions/electron-browser/nativeExtensionService.ts b/src/vs/workbench/services/extensions/electron-browser/nativeExtensionService.ts
+index dcd36612..cf064c06 100644
+--- a/src/vs/workbench/services/extensions/electron-browser/nativeExtensionService.ts
++++ b/src/vs/workbench/services/extensions/electron-browser/nativeExtensionService.ts
+@@ -695,6 +695,7 @@ export class NativeExtensionHostKindPicker implements IExtensionHostKindPicker {
+ 		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
+ 		@IConfigurationService configurationService: IConfigurationService,
+ 		@ILogService private readonly _logService: ILogService,
++		@IProductService private readonly _productService: IProductService,
+ 	) {
+ 		this._hasRemoteExtHost = Boolean(environmentService.remoteAuthority);
+ 		const webWorkerExtHostEnablement = determineLocalWebWorkerExtHostEnablement(environmentService, configurationService);
+@@ -702,6 +703,10 @@ export class NativeExtensionHostKindPicker implements IExtensionHostKindPicker {
+ 	}
+ 
+ 	public pickExtensionHostKind(extensionId: ExtensionIdentifier, extensionKinds: ExtensionKind[], isInstalledLocally: boolean, isInstalledRemotely: boolean, preference: ExtensionRunningPreference): ExtensionHostKind | null {
++		// seclab: with a product-wide default kind, nothing workspace- or web-kind runs in a local (unsandboxed) window
++		if (this._productService.extensionKind?.['*'] && !this._hasRemoteExtHost) {
++			extensionKinds = extensionKinds.filter(kind => kind === 'ui');
++		}
+ 		const result = NativeExtensionHostKindPicker.pickExtensionHostKind(extensionKinds, isInstalledLocally, isInstalledRemotely, preference, this._hasRemoteExtHost, this._hasWebWorkerExtHost);
+ 		this._logService.trace(`pickRunningLocation for ${extensionId.value}, extension kinds: [${extensionKinds.join(', ')}], isInstalledLocally: ${isInstalledLocally}, isInstalledRemotely: ${isInstalledRemotely}, preference: ${extensionRunningPreferenceToString(preference)} => ${extensionHostKindToString(result)}`);
+ 		return result;

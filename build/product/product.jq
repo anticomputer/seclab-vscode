@@ -11,7 +11,7 @@
 # Every extension runs in the tab ("workspace") unless listed: first-party built-ins that
 # declare "ui" keep their declared kind; everything else (any marketplace extension, ui or
 # not) is forced into the tab. Needs patches/0002 ('*' default in extensionKind).
-| .extensionKind = ($ui[0] + (.extensionKind // {}) + { "*": ["workspace"] })
+| .extensionKind = ($ui[0] + (.extensionKind // {}) + { "*": ["workspace", "-web"] })
 
 # Settings Sync off: without a store the sync service is unavailable.
 | del(."configurationSync.store")
@@ -20,7 +20,7 @@
 # Fail the build if any invariant does not hold after the merge.
 | if (.extensionEnabledApiProposals["seclab.tab-manager"] | index("resolvers")) == null
     then error("invariant: seclab.tab-manager must be granted the resolvers proposal") else . end
-| if .extensionKind["*"] != ["workspace"] then error("invariant: default extensionKind must be [\"workspace\"]") else . end
+| if .extensionKind["*"] != ["workspace", "-web"] then error("invariant: default extensionKind must be [\"workspace\", \"-web\"]") else . end
 | ($ui[0] | keys) as $allowedUi
 | if [.extensionKind | to_entries[] | select(.value | index("ui")) | .key
       | select(. != "seclab.tab-manager" and (. as $k | $allowedUi | index($k) | not))] | length > 0
