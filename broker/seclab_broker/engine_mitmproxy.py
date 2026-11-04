@@ -11,7 +11,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import functools
 import json
+import logging
 import re
 import socket
 import time
@@ -25,13 +27,35 @@ from mitmproxy.proxy import server_hooks
 from .core import Broker
 from .credentials import Credential, header_has_sentinel, infer_inject
 from .netguard import deny_reason
-from .policy import (METHOD_OVERRIDE_HEADERS, Binding, RequestView, backstop_denies,
+from .policy import (METHOD_OVERRIDE_HEADERS, Binding, PolicyError, RequestView, backstop_denies,
                      canonical_path, normalize_host, normalize_ip, query_has_method_override)
 from .scanner import find_minted
 
+log = logging.getLogger("seclab.engine")
 _METHOD = re.compile(r"^[A-Z]{1,16}$")
 _TEXTUAL = re.compile(r"^(text/|application/(.*json|.*xml|javascript|x-www-form-urlencoded))|json")
 DNS_TIMEOUT = 10.0
+
+
+def fail_closed(fn):
+    """An exception in a hook must never let a flow continue unmodified
+    (mitmproxy's addon manager logs hook exceptions and carries on)."""
+    if asyncio.iscoroutinefunction(fn):
+        @functools.wraps(fn)
+        async def awrapper(self, obj):
+            try:
+                return await fn(self, obj)
+            except Exception:
+                self._hook_failed(fn.__name__, obj)
+        return awrapper
+
+    @functools.wraps(fn)
+    def wrapper(self, obj):
+        try:
+            return fn(self, obj)
+        except Exception:
+            self._hook_failed(fn.__name__, obj)
+    return wrapper
 
 
 def _parse_basic(value: str) -> tuple[str, str] | None:
@@ -62,6 +86,20 @@ class SeclabAddon:
     # ------------------------------------------------------------ lifecycle
     def running(self) -> None:
         self.b.proxy_listening = True
+
+    def _hook_failed(self, hook: str, obj: Any) -> None:
+        log.exception("hook %s failed; failing closed", hook)
+        self.b.audit("engine.error", hook=hook)
+        if isinstance(obj, http.HTTPFlow):
+            if hook == "websocket_message" and obj.websocket is not None:
+                obj.websocket.messages[-1].drop()
+            else:
+                self._respond(obj, 502, "broker internal error", "error")
+            obj.resume()
+        elif isinstance(obj, server_hooks.ServerConnectionHookData):
+            obj.server.error = "seclab: broker internal error"
+        elif hasattr(obj, "kill") and getattr(obj, "killable", False):
+            obj.kill()
 
     # ------------------------------------------------------------ responses
     def _respond(self, flow: http.HTTPFlow, status: int, reason: str, kind: str = "denied",
@@ -100,6 +138,7 @@ class SeclabAddon:
                       {"Proxy-Authenticate": 'Basic realm="seclab-broker"'})
         return False
 
+    @fail_closed
     def http_connect(self, flow: http.HTTPFlow) -> None:
         if not self._authenticate(flow):
             return
@@ -127,7 +166,9 @@ class SeclabAddon:
             return None, "multiple Host headers"
         default_port = 443 if r.scheme == "https" else 80
         authorities = list(hosts)
-        if (r.is_http2 or r.is_http3) and r.authority:
+        # HTTP/1 absolute-form inside a tunnel keeps its authority and mitmproxy
+        # would forward it as-is; origin servers route on it (RFC 9112 §3.2.2).
+        if r.authority:
             authorities.append(r.authority)
         for a in authorities:
             try:
@@ -154,6 +195,7 @@ class SeclabAddon:
         return RequestView(r.scheme, host, port, method, path, query), ""
 
     # ------------------------------------------------------------ egress
+    @fail_closed
     async def requestheaders(self, flow: http.HTTPFlow) -> None:
         if flow.response is not None:
             return
@@ -166,6 +208,8 @@ class SeclabAddon:
         if view is None:
             self._deny(flow, 421 if "mismatch" in err or "SNI" in err else 400, err)
             return
+        if not (flow.request.is_http2 or flow.request.is_http3):
+            flow.request.authority = ""  # always forward origin-form
         flow.metadata["seclab.view"] = view
         rule = self.b.allowed(view)
         if rule is not None:
@@ -192,6 +236,10 @@ class SeclabAddon:
                 out.append((cid, f"header:{n.lower()}", n, value.decode("latin-1")))
         for cid, _k, _s, _e in self.b.creds.find_sentinels(r.path.encode("utf-8", "surrogateescape")):
             out.append((cid, "url", None, None))
+        if r.trailers:
+            for _name, value in r.trailers.fields:
+                for cid, _k, _s, _e in self.b.creds.find_sentinels(value):
+                    out.append((cid, "trailer", None, None))
         bodies = [r.raw_content or b""]
         try:
             decoded = r.get_content(strict=True)
@@ -207,6 +255,7 @@ class SeclabAddon:
                     out.append((cid, "body", None, None))
         return out
 
+    @fail_closed
     async def request(self, flow: http.HTTPFlow) -> None:
         view: RequestView | None = flow.metadata.get("seclab.view")
         if flow.response is not None or view is None:
@@ -263,8 +312,13 @@ class SeclabAddon:
                 if not decision.allow:
                     self._deny(flow, 403, f"credential binding denied ({decision.reason})")
                     return
-                binding = next((b for b in cred.bindings if b.matches(view)), None)
-                if binding is None:  # allow-once: a one-shot binding for this request only
+                binding = next((b for b in cred.bindings if b.matches(view) and b.inject
+                                and b.inject.header.lower() == inject.header.lower()), None)
+                if binding is None:
+                    if not decision.once:
+                        self._deny(flow, 403, "approved binding does not cover this request")
+                        return
+                    # allow-once: a one-shot binding for exactly this request
                     binding = Binding.from_json({"host": view.host, "path": view.path,
                                                  "methods": [view.method], "ports": [view.port],
                                                  "inject": inject.to_json()})
@@ -329,8 +383,14 @@ class SeclabAddon:
         for rule_id, secret, s, e in hits:
             out.append(text[pos:s])
             parent = self.b.creds.get(injected[0]) if injected else None
+            derived = None
             if parent is not None:
-                derived = self.b.creds.derive(parent, secret, rule_id)
+                try:
+                    derived = self.b.creds.derive(parent, secret, rule_id)
+                except PolicyError as err:
+                    self.b.audit("token.redacted", rule=rule_id, location=where, reason=str(err),
+                                 **(view.summary() if view else {}))
+            if derived is not None:
                 out.append(derived.sentinel)
                 self.b.audit("credential.derived", credentialId=derived.id, parentId=parent.id,
                              rule=rule_id, location=where, **(view.summary() if view else {}))
@@ -338,12 +398,19 @@ class SeclabAddon:
                                                      "rule": rule_id, "sentinel": derived.sentinel})
             else:
                 out.append(f"[seclab-redacted:{rule_id}]")
-                self.b.audit("token.redacted", rule=rule_id, location=where,
-                             **(view.summary() if view else {}))
+                if parent is None:
+                    self.b.audit("token.redacted", rule=rule_id, location=where,
+                                 **(view.summary() if view else {}))
             pos = e
         out.append(text[pos:])
         return "".join(out)
 
+    def _block_response(self, flow: http.HTTPFlow, reason: str) -> None:
+        status = flow.response.status_code if flow.response else None
+        self.b.audit("response.blocked", reason=reason, status=status, **self._summary(flow))
+        self._respond(flow, 502, f"response blocked: {reason}", "blocked")
+
+    @fail_closed
     def response(self, flow: http.HTTPFlow) -> None:
         resp = flow.response
         if resp is None or flow.metadata.get("seclab.synthetic"):
@@ -351,43 +418,48 @@ class SeclabAddon:
         view = flow.metadata.get("seclab.view")
         injected = bool(flow.metadata.get("seclab.injected"))
         textual = _textual(resp.headers)
-        bound = self._bound_host(view)
-
-        def block(reason: str) -> None:
-            self.b.audit("response.blocked", reason=reason, status=resp.status_code,
-                         **self._summary(flow))
-            self._respond(flow, 502, f"response blocked: {reason}", "blocked")
+        # Any flow that carried a real value, and any response from a bound host,
+        # is scanned for credentials the upstream may have minted.
+        scan_minted = injected or self._bound_host(view)
 
         new_fields = []
         for name, value in resp.headers.fields:
+            hname = name.decode("latin-1").lower()
             value, why = self._scrub_real(value, True)
             if why:
-                return block(f"header {name.decode('latin-1').lower()}: {why}")
-            if bound:
-                text = value.decode("latin-1")
-                scrubbed = self._scrub_minted(text, flow, f"header:{name.decode('latin-1').lower()}")
-                value = scrubbed.encode("latin-1", "replace")
+                return self._block_response(flow, f"header {hname}: {why}")
+            if scan_minted:
+                value = self._scrub_minted(value.decode("latin-1"), flow, f"header:{hname}").encode(
+                    "latin-1", "replace")
             new_fields.append((name, value))
         resp.headers.fields = tuple(new_fields)
+
+        if resp.trailers:
+            for name, value in resp.trailers.fields:
+                if self.b.creds.find_real(value) or (scan_minted and find_minted(value.decode("latin-1"))):
+                    return self._block_response(flow, "credential material in trailers")
 
         raw = resp.raw_content or b""
         try:
             body = resp.get_content(strict=True) or b""
         except ValueError:
             if self.b.creds.find_real(raw) or injected:
-                return block("undecodable response body on a credentialed flow")
+                return self._block_response(flow, "undecodable response body on a credentialed flow")
             return
         body2, why = self._scrub_real(body, textual)
         if why:
-            return block(why)
-        if bound and textual and body2:
-            text = body2.decode("utf-8", "surrogateescape")
-            scrubbed = self._scrub_minted(text, flow, "body")
-            body2 = scrubbed.encode("utf-8", "surrogateescape")
+            return self._block_response(flow, why)
+        if scan_minted and body2:
+            if textual:
+                body2 = self._scrub_minted(body2.decode("utf-8", "surrogateescape"), flow,
+                                           "body").encode("utf-8", "surrogateescape")
+            elif injected and find_minted(body2.decode("latin-1")):
+                return self._block_response(flow, "token-like material in a non-text credentialed response")
         if body2 != body:
             resp.content = body2
 
     # ------------------------------------------------------------ websockets
+    @fail_closed
     def websocket_message(self, flow: http.HTTPFlow) -> None:
         assert flow.websocket is not None
         msg = flow.websocket.messages[-1]
@@ -407,9 +479,15 @@ class SeclabAddon:
             self.b.audit("response.blocked", reason=f"websocket {why}", **(view.summary() if view else {}))
             msg.drop()
             return
-        if self._bound_host(view) and msg.is_text:
-            content = self._scrub_minted(content.decode("utf-8", "surrogateescape"), flow,
-                                         "websocket").encode("utf-8", "surrogateescape")
+        if flow.metadata.get("seclab.injected") or self._bound_host(view):
+            if msg.is_text:
+                content = self._scrub_minted(content.decode("utf-8", "surrogateescape"), flow,
+                                             "websocket").encode("utf-8", "surrogateescape")
+            elif find_minted(content.decode("latin-1")):
+                self.b.audit("response.blocked", reason="websocket token-like binary frame",
+                             **(view.summary() if view else {}))
+                msg.drop()
+                return
         if content != msg.content:
             msg.content = content
 
@@ -423,6 +501,7 @@ class SeclabAddon:
         flow.kill()
 
     # ------------------------------------------------------------ upstream guard
+    @fail_closed
     async def server_connect(self, data: server_hooks.ServerConnectionHookData) -> None:
         server = data.server
         if server.address is None:

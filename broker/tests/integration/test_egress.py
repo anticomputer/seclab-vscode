@@ -145,6 +145,27 @@ def test_method_override_and_path_tricks_rejected(pod, ctl):
     assert pod.curl("https://api.example.test//echo/x", "--path-as-is").code == 400
 
 
+def test_absolute_form_inside_tunnel_rejected(pod, ctl):
+    """Regression (security review 2026-11-04 #3): an HTTP/1 absolute-form target inside
+    a CONNECT tunnel was forwarded verbatim, so the origin could route on a different
+    authority from the one the policy checked."""
+    pod.load({"allow": ALLOW_API, "prompt": {"enabled": False}})
+    script = r'''
+import base64, socket, ssl, sys
+pw = sys.argv[1]
+s = socket.create_connection(("broker", 8080), timeout=10)
+auth = base64.b64encode(f"seclab:{pw}".encode()).decode()
+s.sendall(f"CONNECT api.example.test:443 HTTP/1.1\r\nHost: api.example.test:443\r\nProxy-Authorization: Basic {auth}\r\n\r\n".encode())
+assert s.recv(4096).startswith(b"HTTP/1.1 200")
+t = ssl.create_default_context().wrap_socket(s, server_hostname="api.example.test")
+t.sendall(b"GET https://gist.example.test/echo/a3 HTTP/1.1\r\nHost: api.example.test\r\nConnection: close\r\n\r\n")
+print(t.recv(4096).split(b"\r\n")[0].decode())
+'''
+    out = pod.ws(f"python3 - '{pod.proxy_password}' <<'EOF'\n{script}\nEOF").stdout.decode().strip()
+    assert out.startswith("HTTP/1.1 421"), out
+    assert not [s for s in pod.seen() if s["path"] == "/echo/a3"]
+
+
 def test_non_http_inside_tunnel_is_not_forwarded(pod, ctl):
     pod.load({"allow": ALLOW_API, "prompt": {"enabled": False}})
     out = raw_connect(pod, "api.example.test", 22, f"seclab:{pod.proxy_password}", "SSH-2.0-probe\\r\\n")
