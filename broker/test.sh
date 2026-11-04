@@ -9,6 +9,13 @@ it="$here/tests/integration"
 
 echo "== docs-check"
 "$here/docs-check.sh"
+shared_lint="$here/../test/safety/fixture-lint.sh"
+if [ -x "$shared_lint" ]; then
+  echo "== shared fixture-lint (broker/tests)"
+  "$shared_lint" broker/tests
+else
+  echo "== shared fixture-lint: not in this tree yet; broker-scoped fixture_lint.py ran above"
+fi
 docker build -q --target broker -t seclab-broker:test "$here" >/dev/null
 docker build -q --target unit -t seclab-broker-unit:test "$here" >/dev/null
 echo "== unit tests"
