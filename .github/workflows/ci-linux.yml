@@ -53,3 +53,5 @@ jobs:
         run: ./seclab test e2e oci
       - name: Containment suite (OCI)
         run: ./seclab test containment oci
+      - name: Canary acceptance test (OCI)
+        run: ./seclab test canary oci
