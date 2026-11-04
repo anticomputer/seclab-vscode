@@ -72,8 +72,8 @@ def test_prompt_allow_tab_persists_for_tab(pod, ctl):
     assert pod.curl("https://blocked.example.test/echo/a").code == 200
     assert pod.curl("https://blocked.example.test/echo/b").code == 200
     assert len(ctl.notes_since(mark, "approval.requested")) == 1
-    changed = ctl.notes_since(mark, "policy.changed")
-    assert changed and changed[0]["added"][0]["host"] == "blocked.example.test"
+    changed = ctl.wait_note("policy.changed", since=mark, timeout=10)
+    assert changed["added"][0]["host"] == "blocked.example.test"
 
 
 def test_prompt_deny(pod, ctl):
@@ -90,8 +90,8 @@ def test_hold_times_out_to_deny(pod, ctl):
     t0 = time.time()
     r = pod.curl("https://blocked.example.test/echo/timeout")
     assert r.code == 403 and time.time() - t0 >= 1.4
-    resolved = ctl.notes_since(mark, "approval.resolved")
-    assert resolved and resolved[0]["by"] == "timeout" and resolved[0]["decision"] == "deny"
+    resolved = ctl.wait_note("approval.resolved", since=mark, timeout=10)
+    assert resolved["by"] == "timeout" and resolved["decision"] == "deny"
 
 
 def test_held_request_resumes_without_retry(pod, ctl):

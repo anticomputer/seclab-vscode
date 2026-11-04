@@ -184,8 +184,9 @@ def test_imported_credential_binding_confirmed_on_first_use(pod, ctl):
     req = ctl.notes_since(mark, "approval.requested")
     assert len(req) == 1 and req[0]["kind"] == "credential-binding"
     assert req[0]["suggestedBinding"]["inject"] == {"header": "Authorization", "fmt": "Token {value}"}
-    confirmed = ctl.notes_since(mark, "credential.bindingConfirmed")
-    assert confirmed and confirmed[0]["binding"]["path"] == "/echo/svc"
+    # Notifications travel on the control channel, the response on a separate exec: wait for it.
+    confirmed = ctl.wait_note("credential.bindingConfirmed", since=mark, timeout=10)
+    assert confirmed["binding"]["path"] == "/echo/svc"
     r = pod.curl("https://api.example.test/echo/svc", "-H", f"Authorization: Token {sentinel}")
     assert r.code == 200
     assert len(ctl.notes_since(mark, "approval.requested")) == 1
