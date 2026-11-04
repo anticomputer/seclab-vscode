@@ -143,7 +143,7 @@ if (process.argv[2] === '--av') {
 	// argv[3]: NUL-separated tracked file list (git ls-files -z), relative to the repo.
 	const out: string[] = [];
 	let n = 0;
-	for (const rel of fs.readFileSync(process.argv[3], 'utf8').split('\0').filter(Boolean)) {
+	for (const rel of fs.readFileSync(process.argv[3] === '-' ? 0 : process.argv[3], 'utf8').split('\0').filter(Boolean)) {
 		if (rel === 'test/safety/fixture-lint.ts' || /\.(png|jpe?g|gif|ico|woff2?|zip|gz|tgz|vsix)$/.test(rel)) {
 			continue;
 		}
