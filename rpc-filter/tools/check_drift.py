@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+"""Build-time drift check for the RPC capability filter.
+
+This is what keeps the filter maintainable across upstream bumps. It fails the
+build when upstream adds or changes a surface that the policy table has not
+classified, and when a policy edit would break one of the stated invariants.
+
+Four checks:
+
+``check_keys``
+    Every ``rpc`` key in the policy is a real wire ``sid`` in the inventory, and
+    every ``channels`` key is a real channel. Catches a policy entry that looks
+    right but would never match -- the dangerous failure mode, because the call
+    then falls through to the default.
+
+``check_coverage``
+    Every inventoried surface resolves to a verdict, and the full
+    surface-to-verdict mapping matches the digest recorded in
+    ``policy/coverage.json``. A new upstream method or command changes the
+    digest and fails the build with an explicit diff.
+
+``check_invariants``
+    The invariants declared in the policy actually hold over the resolved
+    verdicts: nothing with credential-access impact is reachable, nothing whose
+    identity comes from arguments is merely allowed.
+
+``check_undeclared``
+    Every method that is callable but not declared in a ``MainThread*Shape``
+    has an explicit verdict, since review that reads only the protocol file
+    would miss it.
+
+Exit codes: 0 pass, 1 drift or violation, 2 bad input.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
+INVENTORY = os.path.join(REPO_ROOT, "rpc-filter", "inventory", "inventory.json")
+POLICY = os.path.join(REPO_ROOT, "rpc-filter", "policy", "policy.json")
+COVERAGE = os.path.join(REPO_ROOT, "rpc-filter", "policy", "coverage.json")
+
+REACHABLE = ("allow", "allow_with_constraint", "prompt")
+CREDENTIAL_IMPACTS = ("credential-access",)
+
+
+def _load(path: str):
+    with open(path, "r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def resolve_rpc(policy: dict, sid: str, method: str) -> tuple:
+    """Return (verdict, entry) for one RPC method."""
+    service = policy.get("rpc", {}).get(sid)
+    if service is None:
+        return policy["default_verdict"], None
+    entry = (service.get("methods") or {}).get(method)
+    if entry is None:
+        return service.get("service_default", policy["default_verdict"]), None
+    return entry["verdict"], entry
+
+
+def resolve_command(policy: dict, command: dict) -> tuple:
+    """Return (verdict, entry) for one command id."""
+    cmds = policy.get("commands", {})
+    exact = (cmds.get("exact") or {}).get(command["id"])
+    if exact is not None:
+        return exact["verdict"], exact
+    for rule in cmds.get("rules") or []:
+        match = rule.get("match") or {}
+        if "category" in match and match["category"] == command["category"]:
+            return rule["verdict"], rule
+        if "prefix" in match and command["id"].startswith(match["prefix"]):
+            return rule["verdict"], rule
+    return policy["default_verdict"], None
+
+
+def build_mapping(inv: dict, policy: dict) -> dict:
+    """The full surface -> verdict mapping, which the digest pins."""
+    mapping = {}
+    for service in inv["surfaces"]["a_mainthread_rpc"]["services"]:
+        sid = service["sid"]
+        methods = sorted(set(service["declared_methods"])
+                         | set(service["implemented_methods"]))
+        for m in methods:
+            verdict, _ = resolve_rpc(policy, sid, m)
+            mapping["rpc:%s.%s" % (sid, m)] = verdict
+    for command in inv["surfaces"]["b_command_registry"]["commands"]:
+        verdict, _ = resolve_command(policy, command)
+        mapping["cmd:%s" % command["id"]] = verdict
+    channels = policy.get("channels", {})
+    for ch in inv["surfaces"]["c_client_served_channels"]["client_served_channels"]:
+        name = ch["channel"]
+        entry = channels.get(name)
+        mapping["chan:%s" % name] = entry["verdict"] if entry else policy["default_verdict"]
+    for sink in inv["surfaces"]["d_tab_supplied_data"]["upstream_sinks"]:
+        entry = (policy.get("tab_data") or {}).get(sink["surface"])
+        mapping["data:%s" % sink["surface"]] = entry["verdict"] if entry \
+            else policy["default_verdict"]
+    return mapping
+
+
+def digest(mapping: dict) -> str:
+    blob = "\n".join("%s=%s" % (k, mapping[k]) for k in sorted(mapping))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def check_keys(inv: dict, policy: dict) -> list:
+    errors = []
+    sids = {s["sid"] for s in inv["surfaces"]["a_mainthread_rpc"]["services"]}
+    keys = {s["key"] for s in inv["surfaces"]["a_mainthread_rpc"]["services"]}
+    for key in policy.get("rpc", {}):
+        if key in sids:
+            continue
+        if key in keys:
+            errors.append(
+                "policy.rpc['%s'] uses the MainContext property name, not the wire sid. "
+                "It would never match. Key on the sid from inventory.json." % key)
+        else:
+            errors.append("policy.rpc['%s'] is not a known service sid." % key)
+    known_channels = {c["channel"] for c
+                      in inv["surfaces"]["c_client_served_channels"]["client_served_channels"]}
+    for name in policy.get("channels", {}):
+        if name in ("note", "server_initiated"):
+            continue
+        if name not in known_channels:
+            errors.append("policy.channels['%s'] matches no channel in the inventory." % name)
+    return errors
+
+
+def check_coverage(mapping: dict) -> list:
+    if not os.path.isfile(COVERAGE):
+        return ["%s is missing. Run with --accept to record the current mapping."
+                % os.path.relpath(COVERAGE, REPO_ROOT)]
+    recorded = _load(COVERAGE)
+    if recorded.get("digest") == digest(mapping):
+        return []
+    errors = ["the surface-to-verdict mapping changed since it was last reviewed."]
+    old = recorded.get("mapping") or {}
+    added = sorted(set(mapping) - set(old))
+    removed = sorted(set(old) - set(mapping))
+    changed = sorted(k for k in set(mapping) & set(old) if mapping[k] != old[k])
+    for k in added[:40]:
+        errors.append("  NEW       %s -> %s" % (k, mapping[k]))
+    if len(added) > 40:
+        errors.append("  ... and %d more new surfaces" % (len(added) - 40))
+    for k in changed[:40]:
+        errors.append("  CHANGED   %s: %s -> %s" % (k, old[k], mapping[k]))
+    for k in removed[:40]:
+        errors.append("  REMOVED   %s (was %s)" % (k, old[k]))
+    errors.append("Classify the new surfaces in policy.json, then re-run with --accept.")
+    return errors
+
+
+def _residual(entry: dict) -> list:
+    """Impact that remains after the verdict and its constraint are applied.
+
+    ``impact`` is the worst case with no filter at all, which is what makes the
+    inventory useful for ranking. The invariants have to be checked against
+    what survives mitigation, otherwise a correctly constrained method like
+    ``$readFile`` -- whose constraint is exactly what removes the credential
+    reach -- would be indistinguishable from an unmitigated one.
+
+    An entry that claims a constraint removes an impact must say so
+    explicitly; absent ``residual_impact`` the full impact stands.
+    """
+    if "residual_impact" in entry:
+        return entry["residual_impact"]
+    return entry.get("impact") or []
+
+
+def check_invariants(inv: dict, policy: dict) -> list:
+    errors = []
+    for sid, service in policy.get("rpc", {}).items():
+        for method, entry in (service.get("methods") or {}).items():
+            verdict = entry["verdict"]
+            if any(i in CREDENTIAL_IMPACTS for i in _residual(entry)) and verdict in REACHABLE:
+                errors.append(
+                    "invariant no-real-secret-in-tab: %s.%s still has credential-access impact "
+                    "after mitigation but verdict is '%s'. Must be deny or rewrite, or the "
+                    "constraint must remove it via residual_impact." % (sid, method, verdict))
+            if entry.get("identity_from_argument") and verdict in REACHABLE:
+                errors.append(
+                    "invariant identity-never-from-arguments: %s.%s takes identity from an "
+                    "argument but verdict is '%s'. Must be deny or rewrite."
+                    % (sid, method, verdict))
+            if entry.get("residual_impact") is not None and not entry.get("constraint") \
+                    and verdict not in ("deny", "rewrite"):
+                errors.append(
+                    "%s.%s claims reduced residual impact but names no constraint."
+                    % (sid, method))
+    for name, entry in (policy.get("channels") or {}).items():
+        if name in ("note", "server_initiated") or not isinstance(entry, dict):
+            continue
+        if any(i in CREDENTIAL_IMPACTS for i in _residual(entry)) \
+                and entry.get("verdict") in REACHABLE:
+            errors.append("invariant no-real-secret-in-tab: channel '%s' is reachable." % name)
+    return errors
+
+
+def check_undeclared(inv: dict, policy: dict) -> list:
+    errors = []
+    for service in inv["surfaces"]["a_mainthread_rpc"]["services"]:
+        for method in service["undeclared_methods"]:
+            _, entry = resolve_rpc(policy, service["sid"], method)
+            if entry is None:
+                errors.append(
+                    "%s.%s is callable via actor[methodName] but is not declared in %s and has "
+                    "no explicit verdict. Classify it explicitly."
+                    % (service["sid"], method, service["shape"]))
+    return errors
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--accept", action="store_true",
+                        help="record the current mapping as reviewed (use after classifying)")
+    args = parser.parse_args(argv)
+
+    for path in (INVENTORY, POLICY):
+        if not os.path.isfile(path):
+            print("error: %s missing; regenerate the inventory first" % path, file=sys.stderr)
+            return 2
+
+    inv = _load(INVENTORY)
+    policy = _load(POLICY)
+
+    if inv["upstream_sha"] != policy["upstream_sha"]:
+        print("error: inventory is at %s but policy claims %s"
+              % (inv["upstream_sha"][:12], policy["upstream_sha"][:12]), file=sys.stderr)
+        return 2
+
+    mapping = build_mapping(inv, policy)
+
+    if args.accept:
+        with open(COVERAGE, "w", encoding="utf-8") as fh:
+            json.dump({
+                "upstream_sha": inv["upstream_sha"],
+                "digest": digest(mapping),
+                "surface_count": len(mapping),
+                "mapping": mapping,
+            }, fh, indent=2, sort_keys=True)
+            fh.write("\n")
+        print("recorded %d surfaces, digest %s" % (len(mapping), digest(mapping)[:16]))
+        return 0
+
+    failures = []
+    for name, check in (("keys", lambda: check_keys(inv, policy)),
+                        ("undeclared", lambda: check_undeclared(inv, policy)),
+                        ("invariants", lambda: check_invariants(inv, policy)),
+                        ("coverage", lambda: check_coverage(mapping))):
+        errors = check()
+        if errors:
+            failures.append((name, errors))
+
+    if not failures:
+        reachable = sum(1 for v in mapping.values() if v in REACHABLE)
+        print("drift check passed: %d surfaces, %d reachable, %d denied"
+              % (len(mapping), reachable, len(mapping) - reachable))
+        return 0
+
+    for name, errors in failures:
+        print("FAIL [%s]" % name, file=sys.stderr)
+        for e in errors:
+            print("  %s" % e, file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

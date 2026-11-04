@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+# Run the RPC policy drift check in a container.
+#
+#   rpc-filter/tools/check.sh            # verify; non-zero on drift
+#   rpc-filter/tools/check.sh --accept   # record the current mapping as reviewed
+#
+# This is the build-time gate: it fails when upstream adds or changes a surface
+# that the policy table has not classified.
+set -eu
+
+HERE=$(cd "$(dirname "$0")" && pwd)
+REPO=$(cd "$HERE/../.." && pwd)
+
+exec docker run --rm \
+	--network none \
+	-v "$REPO":/repo \
+	-w /repo/rpc-filter/tools \
+	--platform linux/arm64 python:3.12-slim \
+	python3 check_drift.py "$@"
