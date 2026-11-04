@@ -162,13 +162,14 @@ function regenerate(kind: typeof KINDS[number], write: boolean): void {
 // ---- 2. links -------------------------------------------------------------------------------
 
 const mdFiles = walk(repo, p => p.endsWith('.md'));
+const PIN = /^https:\/\/(?:github\.com\/[^/]+\/[^/]+\/(?:blob|tree|blame|raw)|raw\.githubusercontent\.com\/[^/]+\/[^/]+)\/([^/]+)\//;
 for (const f of mdFiles) {
 	const text = fs.readFileSync(f, 'utf8').replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, ''); // links in code are examples
-	for (const m of text.matchAll(/\]\(([^)\s]+)\)/g)) {
-		const target = m[1];
+	const targets = [...text.matchAll(/\]\(([^)\s]+)\)/g), ...text.matchAll(/^\s{0,3}\[[^\]]+\]:\s*(\S+)/gm), ...text.matchAll(/<a\s[^>]*href=["']([^"']+)["']/gi)].map(m => m[1]);
+	for (const target of targets) {
 		if (/^(https?:|mailto:|#)/.test(target)) {
-			const gh = /^https:\/\/github\.com\/[^/]+\/[^/]+\/(blob|tree)\/([^/]+)\//.exec(target);
-			if (gh && !/^[0-9a-f]{40}$/.test(gh[2])) {
+			const gh = PIN.exec(target);
+			if (gh && !/^[0-9a-f]{40}$/.test(gh[1])) {
 				bad(rel(f), `GitHub link not pinned to a commit SHA: ${target}`);
 			}
 			continue;
@@ -209,18 +210,33 @@ for (const name of new Set([...arch.matchAll(/`(seclab-[a-z][a-z-]*[a-z])`/g)].m
 
 const [mode, arg] = process.argv.slice(2);
 if (mode === 'commands') {
-	// Runnable blocks: a fenced ```sh block directly preceded by <!-- ci: run -->.
+	// Runnable blocks: a fenced ```sh block directly preceded by <!-- ci: run -->. A marker
+	// that doesn't introduce such a block, or no blocks at all, fails (no silent skip).
+	let blocks = 0;
 	for (const f of ['AGENTS.md', 'README.md', 'test/README.md', 'patches/README.md'].map(p => path.join(repo, p)).filter(p => fs.existsSync(p))) {
-		for (const m of fs.readFileSync(f, 'utf8').matchAll(/<!-- ci: run -->\s*\n```(?:sh|bash)\n([\s\S]*?)```/g)) {
-			console.log(`echo '== ${rel(f)}'\nset -e\n${m[1]}`);
+		const text = fs.readFileSync(f, 'utf8');
+		const markers = (text.match(/<!-- ci: run -->/g) ?? []).length;
+		const found = [...text.matchAll(/<!-- ci: run -->[ \t]*\r?\n```(?:sh|bash|shell)[ \t]*\r?\n([\s\S]*?)```/g)];
+		if (found.length !== markers) {
+			console.error(`docs-check: ${rel(f)} has ${markers} "ci: run" marker(s) but ${found.length} runnable block(s) directly after them`);
+			process.exit(1);
 		}
+		for (const m of found) {
+			blocks++;
+			console.log(`echo '== ${rel(f)}'\nset -e\n${m[1].replace(/\r/g, '')}`);
+		}
+	}
+	if (blocks === 0) {
+		console.error('docs-check: no "ci: run" blocks found (AGENTS.md must have at least one)');
+		process.exit(1);
 	}
 	process.exit(0);
 }
 if (mode === 'paired') {
-	const [changedText, messages = ''] = fs.readFileSync(arg, 'utf8').split('\n--\n');
+	const [changedText, trailers = ''] = fs.readFileSync(arg, 'utf8').split('\n--\n');
 	const changed = changedText.split('\n').filter(Boolean);
-	const trailer = /^docs-not-needed:\s*\S.{3,}/im.test(messages);
+	// Only real git trailers count (the wrapper extracts them with %(trailers:key=...)).
+	const trailer = trailers.split('\n').some(l => l.trim().length >= 4);
 	// code path -> docs that must change with it
 	const PAIRS: Array<[RegExp, RegExp, string]> = [
 		[/^tabd\/src\/(supervisor|frames|client|protocol)\.ts$/, /^docs\/tabd\/PROTOCOL\.md$/, 'tabd protocol'],
