@@ -1,8 +1,6 @@
 # Every non-built-in extension runs in the tab (product `extensionKind` default `*`)
 
-- **Status:** accepted
-- **Date:** 2026-11-04
-- **Deciders:** fork-build session (from round-3 analysis; primary-threat-model driven)
+- **Status:** superseded-by [20261104-extension-placement-hardening](20261104-extension-placement-hardening.md) (decision kept; gaps closed)
 - **Related:** [threat model ADR](20261104-threat-model-rogue-extension.md), [fork ADR](20261104-vscodium-style-fork.md); deviation from "M1 needs no core patches"
 
 ## Context

@@ -46,4 +46,6 @@ Same rules as ADRs:
 | 2026-11-04 | [Linux builds in a trixie container; sbx template via snapshot](20261104-linux-builder-and-sbx-template.md) | accepted |
 | 2026-11-04 | [REH transport over `sbx exec -i` stdio works end to end](20261104-reh-transport-e2e.md) | accepted |
 | 2026-11-04 | [Extensions never persist across tabs or onto the host](20261104-extension-persistence.md) | accepted |
-| 2026-11-04 | [Tab Manager routing (M1): extension-level redirect, fail closed](20261104-tab-manager-routing.md) | accepted (interim) |
+| 2026-11-04 | [Tab Manager routing (M1): extension-level redirect, fail closed](20261104-tab-manager-routing.md) | superseded-by local-window-close-first (local part) |
+| 2026-11-04 | [Local folder windows are closed before any dialog](20261104-local-window-close-first.md) | accepted |
+| 2026-11-04 | [Canary acceptance harness](20261104-canary-harness.md) | accepted |
