@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { encodeData, encodeFrame, encodeJson, FrameDecoder, FrameError, MAX_FRAME } from '../src/frames.ts';
 import { checkFence, parsePolicyJson, resourcesToMirror } from '../src/fence.ts';
 import { TabStore } from '../src/state.ts';
-import { checkExternalLinks, displayPath, parseFrames, rewriteSecret } from '../src/scan.ts';
+import { displayPath, goUnquote, parseFrames, rewriteSecret } from '../src/scan.ts';
 import { assertPolicyResource, canonicalWorkspacePath, mintTabId, sandboxNameFor, TAB_ID_RE, ValidationError } from '../src/validate.ts';
 
 // Durable scratch under the repo (never /tmp); a named volume when run via ./seclab test unit.
@@ -235,20 +235,21 @@ test('scan: unscannable content blocks; links report under the link; trailing ou
 	assert.equal(parseFrames(Buffer.concat([frame('large', '.', 1, nul('/scan/ws/x')), END]), 0, false).overflow, true);
 });
 
-test('scan: links that only resolve inside the workspace on the host are blocked, without touching outside paths (R1, D2)', () => {
-	const base = path.join(SCRATCH, 'alias');
-	const ws = path.join(base, 'ws');
-	fs.mkdirSync(path.join(ws, 'node_modules'), { recursive: true });
-	fs.writeFileSync(path.join(ws, 'target.env'), 'x');
-	fs.symlinkSync(ws, path.join(base, 'alias-of-ws'));
-	fs.symlinkSync(`/System/Volumes/Data${ws}/target.env`, path.join(ws, '.env'));  // firmlink spelling: inside
-	fs.symlinkSync('node_modules/.cache/not-yet', path.join(ws, '.env.later'));        // dangling, inside: a write lands there
-	fs.symlinkSync(path.join(base, 'alias-of-ws', 'target.env'), path.join(ws, 'via-outside')); // unknown spelling: never touched
-	fs.symlinkSync('/net/beacon.example.invalid/x', path.join(ws, 'beacon'));          // outside: never touched
-	const res = parseFrames(Buffer.concat([END]), 0, false);
-	const withLinks = { ...res, externalLinks: ['/scan/ws/.env', '/scan/ws/.env.later', '/scan/ws/via-outside', '/scan/ws/beacon'] };
-	checkExternalLinks(withLinks, ws);
-	assert.deepEqual(withLinks.findings.map(f => [f.file, f.rule]), [['.env', 'unscanned-link-alias'], ['.env.later', 'unscanned-link-alias']]);
+test('scan: external links and unopenable archives block; Go-quoted log paths decode (E1, E2, E3)', () => {
+	const r = parseFrames(Buffer.concat([
+		frame('extlinks', '.', 0, '/scan/ws/.env\0/scan/ws/beacon\0'),
+		frame('archives', 'worktree:.', 0,
+			'7:02PM WRN skipping archive: exceeds max archive depth max_archive_depth=8 path=/scan/ws/deep.zip!a.zip!b.zip\n'
+			+ '7:02PM WRN skipping unknown archive type path="/scan/ws/My Backups/r\\u00e9sum\\u00e9.7z"\n'),
+		frame('archives', 'gitdir:.git', 0, '7:02PM ERR could read compressed file path=/seclab/g/x/info/x.gz\n'),
+		END]), 0, false);
+	assert.deepEqual(r.findings.map(f => [f.file, f.rule]), [
+		['.env', 'unscanned-link'], ['beacon', 'unscanned-link'],
+		['deep.zip', 'unscanned-archive'], ['My Backups/résumé.7z', 'unscanned-archive'],
+		['.git/info/x.gz', 'unscanned-archive'],
+	]);
+	assert.equal(goUnquote('"a b\\"c\\\\d\\x41\\n"'), 'a b"c\\dA\n');
+	assert.equal(goUnquote('/plain/path'), '/plain/path');
 });
 
 test('scan: binary-skipped files are rescanned and mapped back by line (round 8)', () => {
