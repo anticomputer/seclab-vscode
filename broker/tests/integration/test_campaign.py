@@ -31,7 +31,7 @@ def test_contagious_interview_loader_is_denied_without_a_prompt(pod, ctl):
                 "http://192.0.2.10:1224/client/7/701"):
         r = pod.curl(url, env=env)
         assert r.code == 403, (url, r.code, r.body[:200])
-    # The loader pipeline itself: `curl … | sh` receives the broker's 403 body, never a script.
+    # The loader fetch itself only ever receives the broker's 403 JSON body, never a script.
     p = pod.ws(f"curl -s '{LOADER}'", env=env)
     assert b'"error": "seclab-broker"' in p.stdout
     # Legitimate early traffic that a rule allows is unaffected.
@@ -83,7 +83,10 @@ def test_deny_new_destinations_after_repeated_denials(pod, ctl):
 
     ctl.handlers["approval.requested"] = decide
     mark = ctl.mark()
-    codes = [pod.curl(f"https://d{i}.rotate.example.test/beacon").code for i in range(1, 7)]
+    urls = ["https://d1.rotate.example.test/beacon", "https://d2.rotate.example.test/beacon",
+            "https://d3.rotate.example.test/beacon", "https://d4.rotate.example.test/beacon",
+            "https://d5.rotate.example.test/beacon", "https://d6.rotate.example.test/beacon"]
+    codes = [pod.curl(u).code for u in urls]
     assert codes == [403] * 6
     prompted = [n["request"]["host"] for n in ctl.notes_since(mark, "approval.requested")]
     assert prompted == ["d1.rotate.example.test", "d2.rotate.example.test", "d3.rotate.example.test"]
