@@ -47,7 +47,7 @@ const SAFE_PATH_CHARS = /^[A-Za-z0-9._\/-]+$/;
 const FORBIDDEN = [
 	/\/\.ssh(\/|$)/i, /\/\.aws(\/|$)/i, /\/\.gnupg(\/|$)/i, /\/\.config\/gh(\/|$)/i,
 	/\/\.kube(\/|$)/i, /\/\.docker(\/|$)/i, /\/\.netrc$/i, /\/\.git-credentials$/i,
-	/Library\/Keychains/i, /Library\/LaunchAgents/i, /Library\/LaunchDaemons/i,
+	/Library\/Keychains/i, /Library\/LaunchAgents/i, /Library\/LaunchDaemons/i, // fixture-lint: allow persistence -- this is the refusal list itself; naming a path here is how the guard blocks it
 	/Library\/Application Support\/(Code|Google|Firefox)/i, /Library\/Cookies/i,
 	/\/\.(bashrc|zshrc|bash_profile|zprofile|profile)$/i,
 	/\/\.git\/hooks(\/|$)/i, /\/hooks\/(pre|post|commit|update|prepare)-/i,

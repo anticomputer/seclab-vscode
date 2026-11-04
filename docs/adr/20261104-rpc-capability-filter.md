@@ -1,6 +1,6 @@
 # RPC capability filter is a required, default-deny boundary
 
-- **Status:** proposed (pending the RPC-lockdown session's approved design)
+- **Status:** superseded by [20261104-rpc-filter-enforcement-points.md](20261104-rpc-filter-enforcement-points.md)
 - **Date:** 2026-11-04
 - **Deciders:** seclab-vscode coordinator; RPC-lockdown session
 
