@@ -2,7 +2,7 @@
 # (checked by build/linux/build.sh); bump together with upstream.lock.
 # trixie: Electron 43 headers need gcc >= 13 (bookworm's gcc 12 fails on native-keymap),
 # and its glibc 2.41 matches the sbx shell kit (DHI Debian 13), so REH native modules load there.
-FROM node:24.22.1-trixie@sha256:f1e034976f948cf212ef1f659c12e5dd58ac7eab947831813e81a62401ca38be
+FROM node:26.13.0-trixie@sha256:6d2c7d5d074bf72f81ddc252b4fbb5d625bc028eeda49cb4b8c2ff8eda1ee617
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
