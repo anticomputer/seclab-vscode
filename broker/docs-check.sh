@@ -21,6 +21,9 @@ dock() {
     seclab-broker-unit:docs /repo/broker/tools/docs.py "$@"
 }
 dock "$mode"
+docker run --rm --network none -u "$(id -u):$(id -g)" -v "$repo:/repo:ro" \
+  -e PYTHONPATH=/repo/broker -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python \
+  seclab-broker-unit:docs /repo/broker/tools/fixture_lint.py
 if [ "${1:-}" = "--run-commands" ]; then
   script=$(dock commands)
   cd "$repo"
