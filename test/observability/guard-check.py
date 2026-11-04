@@ -31,14 +31,29 @@ def clone_untraced():
 
 
 # A one-instruction filter: return SECCOMP_RET_ALLOW. Asking for a listener must be refused.
+# Set no_new_privs first, as an attacker would (any process may), so the control run is real.
+libc.prctl(38, 1, 0, 0, 0)  # PR_SET_NO_NEW_PRIVS
 allow = (SockFilter * 1)(SockFilter(0x06, 0, 0, 0x7fff0000))
 prog = SockFprog(1, allow)
 SECCOMP_SET_MODE_FILTER, NEW_LISTENER = 1, 1 << 3
+def stray_fds():
+    # fds above 2 that are still open (listdir's own directory fd is gone by the time we look).
+    out = []
+    for f in os.listdir("/proc/self/fd"):
+        try:
+            os.readlink("/proc/self/fd/" + f)
+        except OSError:
+            continue
+        if int(f) > 2:
+            out.append(int(f))
+    return sorted(out)
+
+
 out = {
     "seccompListener": errno_of(libc.syscall(NR["seccomp"], SECCOMP_SET_MODE_FILTER, NEW_LISTENER, ctypes.byref(prog))),
     "ioUringSetup": errno_of(libc.syscall(NR["io_uring_setup"], 1, None)),
     "cloneUntraced": clone_untraced(),
-    "fds": sorted(int(f) for f in os.listdir("/proc/self/fd") if int(f) > 2 and os.readlink("/proc/self/fd/" + f) != "/proc/%d/fd" % os.getpid()),
+    "fds": stray_fds(),
     "uid": os.getuid(),
 }
 print(json.dumps(out))

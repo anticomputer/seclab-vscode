@@ -21,6 +21,7 @@ way: [docs/adr/](docs/adr/README.md).
 | `.github/workflows/` | `build-macos.yml` (unsigned darwin-arm64 app), `ci-linux.yml` (unit, REH, OCI e2e/containment/canary/secrets) |
 | `extensions/seclab-tab-manager/` | Built-in UI-side extension: `seclab+` resolver, routing, UI. `tabd-src` symlinks `tabd/src` and is bundled in |
 | `tabd/` | `seclab-tabd` supervisor: protocol, validation, sbx and OCI drivers, fence. Tests in `tabd/test/`. Spec: `docs/tabd/PROTOCOL.md` |
+| `tabd/src/obs/` | Tab observability: event schema, sbx collector session, OCI Falco sensor, hub, detections. Events: `docs/tabd/EVENTS.md`; see `tabd/src/obs/AGENTS.md` |
 | `sandbox/` | In-tab scripts (`rootfs/opt/seclab/bin`), the sbx template builder, OCI images |
 | `broker/` | mitmproxy broker; owned by the broker session; see `broker/AGENTS.md` once it lands |
 | `test/containment/` | Malicious-workspace fixtures, the rogue extension, level A runner and level B (editor) evidence check |
@@ -31,8 +32,8 @@ way: [docs/adr/](docs/adr/README.md).
 | `.work/` | Gitignored scratch and build outputs (`.work/out`). Durable, unlike `/tmp` |
 
 Nested AGENTS.md files (owned by their sessions): `broker/AGENTS.md`
-(broker), plus any the RPC-lockdown session adds. Keep them consistent with
-this file.
+(broker), `tabd/src/obs/AGENTS.md` (tab observability), plus any the
+RPC-lockdown session adds. Keep them consistent with this file.
 
 **Trust boundaries:**
 1. **Trusted host editor**: Electron main, workbench, and the local extension
@@ -154,6 +155,8 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab test containment sbx   # malicious-workspace vectors in real tabs, then the teardown gate (sbx 98/98, oci 95/95)
 ./seclab test canary sbx        # canary acceptance test, level A (also: oci)
 ./seclab test secrets sbx       # pre-mount gitleaks gate: block, move-to-vault + sentinel, restore, accept (also: oci)
+./seclab test obs sbx           # tab observability: inert loader -> expected events/labels; sensor tampering -> gap (also: oci)
+./seclab tab logs [-f] [--format text|json|falco] <tabId|all>   # read a tab's event log (--state-dir DIR for test runs)
 ./seclab lint fixtures          # fixture-safety lint (docker, no network); also: test/safety/fixture-lint.sh PATH...
 build/apply-patches.sh --check  # patch queue == patches/series (no unlisted patch can ship)
 ./seclab lint source            # shipped sources: reviewed env/spawn sites only (build/source-allowlist.txt), no dynamic loading
