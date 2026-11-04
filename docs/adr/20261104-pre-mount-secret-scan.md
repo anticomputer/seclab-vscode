@@ -119,3 +119,20 @@ Evidence in gitleaks at
 (the source `.gitleaksignore` is always loaded) and
 [detect.go#L296](https://github.com/gitleaks/gitleaks/blob/83d9cd684c87d95d656c1458ef04895a7f1cbd8e/detect/detect.go#L296)
 (the file at the config path is skipped).
+
+## Addendum 2 (2026-11-04, security review round 6, N1)
+The scanner now also prevents the tab from steering a later host-side
+secret into a place it skips:
+- **Git dirs are discovered by git's own rules:** a HEAD file or symlink, plus
+  `objects/` or `commondir`. Each one is validated with `git rev-parse`, and
+  any candidate that fails validation blocks.
+- **Each git dir and its common dir is scanned whole,** not just `config`.
+- **Every symlink target in the workspace is scanned** and reported under the
+  link.
+- **Files and blobs over 64 MB block** as "could not be scanned" instead of
+  being dropped.
+- **On a native Linux engine, the scanner runs as the workspace owner.**
+
+The residual about the default allowlist (above) now only covers files the
+user writes *directly* into allowlisted paths such as `node_modules/` or
+lockfiles. That is not tab-steerable: links into those paths are scanned.
