@@ -70,8 +70,13 @@ docs_check() {
 	if [[ $paired = 1 ]]; then
 		local base f
 		# CI passes the exact base (PR base SHA, or the push's previous head); locally: origin/main.
+		# A force-pushed branch's previous head no longer exists: fall back to the merge base
+		# with origin/main, which covers every commit on the branch (stricter, not looser).
 		base="${DOCS_BASE:-}"
-		[[ -n "$base" && ! "$base" =~ ^0+$ ]] || base="$(git -C "$ROOT" merge-base origin/main HEAD)"
+		if [[ -z "$base" || "$base" =~ ^0+$ ]] || ! git -C "$ROOT" cat-file -e "$base^{commit}" 2>/dev/null; then
+			[[ -n "$base" && ! "$base" =~ ^0+$ ]] && echo "docs-check: paired base $base not available; using merge-base with origin/main" >&2
+			base="$(git -C "$ROOT" merge-base origin/main HEAD)"
+		fi
 		git -C "$ROOT" cat-file -e "$base^{commit}" || { echo "docs-check: paired base $base not available (shallow clone?)" >&2; exit 1; }
 		f="$ROOT/.work/docs-paired.txt"
 		mkdir -p "$ROOT/.work"
