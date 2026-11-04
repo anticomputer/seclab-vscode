@@ -1,6 +1,6 @@
 # REH transport over `exec -i` stdio (viability spike)
 
-- **Status:** accepted (viability). End-to-end with our REH is pending; this EDR will be superseded by the end-to-end result.
+- **Status:** superseded-by [20261104-reh-transport-e2e](20261104-reh-transport-e2e.md) (viability confirmed end to end)
 - **Date:** 2026-11-04
 - **Deciders:** fork-build session
 - **Related:** [ADR remote extension host](../adr/20261104-reuse-remote-extension-host.md)

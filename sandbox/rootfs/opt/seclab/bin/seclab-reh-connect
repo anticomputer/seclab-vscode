@@ -1,0 +1,4 @@
+#!/bin/sh
+# seclab-reh-connect: one REH connection = this process's stdio <-> the REH Unix socket.
+# Invoked by seclab-tabd via `<runtime> exec -i <tab> /opt/seclab/bin/seclab-reh-connect`.
+exec socat - "UNIX-CONNECT:/run/user/$(id -u)/seclab/reh.sock"
