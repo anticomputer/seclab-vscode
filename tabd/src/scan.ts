@@ -44,8 +44,6 @@ export interface ScanResult {
 	readonly findings: Finding[];
 	/** finding id -> secret value. Never serialised. */
 	readonly secrets: Map<string, string>;
-	/** Links (scanner paths) that did not resolve inside the workspace in the scanner. */
-	readonly externalLinks?: string[];
 }
 
 interface RawFinding { File?: unknown; StartLine?: unknown; RuleID?: unknown; Commit?: unknown; Secret?: unknown }
@@ -106,16 +104,33 @@ copy() { ( set -o pipefail; tar -C "$1" "${$}{OBJX[@]}" -cf - . | tar -C "$2" -x
 # dir pass skipped as binary is rescanned as text, mapped back by line offsets.
 PADL=131072
 pad() { head -c $PADL /dev/zero | tr '\0' '\n'; }
+# zerolog (console) Go-quotes a value with spaces, non-ASCII, control chars, '"' or '\'.
+gounquote() {
+  local q=$1 r
+  case "$q" in \"*\") ;; *) printf '%s' "$q"; return ;; esac
+  q=${$}{q:1:-1}; q=${$}{q//\\\\/$'\001'}; q=${$}{q//\\\"/\"}; q=${$}{q//$'\001'/\\\\}
+  r=$(printf '%b' "$q"; printf x); printf '%s' "${$}{r%x}"
+}
 gdir() {
-  timeout 300 gitleaks dir "$3" $GL --no-color --log-level debug --max-target-megabytes $LIM --report-path "$O/r.json" 2>&1 >/dev/null \
-    | sed 's/\x1b\[[0-9;]*m//g' | grep -a 'skipping binary file' > "$O/binlog"; local rc=${$}{PIPESTATUS[0]}
+  timeout 300 gitleaks dir "$3" $GL --no-color --log-level debug --max-archive-depth 8 --max-target-megabytes $LIM --report-path "$O/r.json" 2>&1 >/dev/null \
+    | grep -a -E 'skipping binary file|archive|compressed file' > "$O/glog"; local rc=${$}{PIPESTATUS[0]}
   emit "$1" "$2" "$rc" "$O/r.json"
+  # Archives gitleaks could not open (or nested too deep): blocking, never silent.
+  grep -a -E 'skipping archive|unknown archive type|could not copy archive|could not open archive|could read compressed' "$O/glog" > "$O/arch"
+  emit archives "$1:$2" 0 "$O/arch"
+  grep -a 'skipping binary file' "$O/glog" > "$O/binlog"
+  rm -f "$O/glog" "$O/arch"
   [ -s "$O/binlog" ] || { rm -f "$O/binlog"; return 0; }
   : > "$O/binmap"; : > "$O/binbad"
   { pad; local L=$((PADL+1)) p n line
     while IFS= read -r line; do
-      p=${$}{line#* path=}
-      if [ "$p" = "$line" ] || [ ! -f "$p" ]; then echo 1 > "$O/binbad"; continue; fi
+      p=$(gounquote "${$}{line#* path=}")
+      if [ ! -f "$p" ]; then
+        # An archive member ("outer.zip!inner"): a user never appends to one, so a magic
+        # header there can't hide a later secret. Anything else unexpected: incomplete.
+        case "$p" in *'!'*) [ -f "${$}{p%%!*}" ] && continue ;; esac
+        echo 1 > "$O/binbad"; continue
+      fi
       printf '%s\0%s\0' "$p" "$((L+1))" >> "$O/binmap"
       n=$(tr -cd '\n' < "$p" | wc -c); L=$((L+n+2))
       printf '\n'; cat "$p"; printf '\n'
@@ -212,8 +227,53 @@ const GIT_OVERRIDES: Array<[string, string]> = [
 	['log.decorate', 'no'], ['log.abbrevCommit', 'false'], ['i18n.logOutputEncoding', 'UTF-8'],
 ];
 
-type Kind = 'worktree' | 'large' | 'unreadable' | 'finderr' | 'links' | 'linked' | 'linkcopy' | 'extlinks' | 'manylinks' | 'binmap' | 'bin' | 'gitdir' | 'history' | 'objects' | 'largeobj' | 'badgit' | 'toomany' | 'end';
-const KINDS = new Set<Kind>(['worktree', 'large', 'unreadable', 'finderr', 'links', 'linked', 'linkcopy', 'extlinks', 'manylinks', 'binmap', 'bin', 'gitdir', 'history', 'objects', 'largeobj', 'badgit', 'toomany', 'end']);
+type Kind = 'worktree' | 'large' | 'unreadable' | 'finderr' | 'links' | 'linked' | 'linkcopy' | 'extlinks' | 'manylinks' | 'archives' | 'binmap' | 'bin' | 'gitdir' | 'history' | 'objects' | 'largeobj' | 'badgit' | 'toomany' | 'end';
+const KINDS = new Set<Kind>(['worktree', 'large', 'unreadable', 'finderr', 'links', 'linked', 'linkcopy', 'extlinks', 'manylinks', 'archives', 'binmap', 'bin', 'gitdir', 'history', 'objects', 'largeobj', 'badgit', 'toomany', 'end']);
+
+/** Scanner path of a file seen by a dir pass -> workspace-relative path. */
+function mapScannerPath(parent: string, rel: string, p: string, links: string[]): string | undefined {
+	if (parent === 'gitdir') {
+		const inner = workspaceRel(p, '/seclab/g/x/');
+		return inner === undefined ? undefined : path.posix.join(rel, inner);
+	}
+	if (parent === 'linked') {
+		const n = /^\/seclab\/l\/(x|d)\/(\d+)(\/.+)?$/.exec(p);
+		const link = n ? links[Number(n[2]) - 1] : undefined;
+		return link && n ? workspaceRel(n[1] === 'x' ? link : `${link}${n[3] ?? ''}`, '/scan/ws/') : undefined;
+	}
+	return workspaceRel(p, '/scan/ws/');
+}
+
+/** Decode a Go strconv.Quote'd value (as zerolog's console writer emits); raw otherwise. */
+export function goUnquote(v: string): string {
+	if (!(v.length >= 2 && v.startsWith('"') && v.endsWith('"'))) {
+		return v;
+	}
+	const s = v.slice(1, -1);
+	const bytes: number[] = [];
+	const simple: Record<string, number> = { a: 7, b: 8, f: 12, n: 10, r: 13, t: 9, v: 11, '\\': 92, '"': 34, '\'': 39 };
+	for (let i = 0; i < s.length; i++) {
+		if (s[i] !== '\\') {
+			bytes.push(...Buffer.from(String.fromCodePoint(s.codePointAt(i)!), 'utf8'));
+			if (s.codePointAt(i)! > 0xffff) {
+				i++;
+			}
+			continue;
+		}
+		const e = s[++i];
+		if (e in simple) {
+			bytes.push(simple[e]);
+		} else if (e === 'x') {
+			bytes.push(parseInt(s.slice(i + 1, i + 3), 16));
+			i += 2;
+		} else if (e === 'u' || e === 'U') {
+			const len = e === 'u' ? 4 : 8;
+			bytes.push(...Buffer.from(String.fromCodePoint(parseInt(s.slice(i + 1, i + 1 + len), 16)), 'utf8'));
+			i += len;
+		}
+	}
+	return Buffer.from(bytes).toString('utf8');
+}
 
 /** The scanner runs as whoever can read the workspace like its owner (see scanUser). */
 function scanUser(hostPath: string): string {
@@ -242,88 +302,7 @@ export async function scanWorkspace(runner: Runner, docker: string, hostPath: st
 		'--mount', `type=bind,src=${hostPath},dst=${hostPath},readonly`,
 		'--entrypoint', 'bash', GITLEAKS_IMAGE, '-c', SCRIPT];
 	const r = await runner.run(docker, args, { timeoutMs: 1_200_000, maxOutputBytes: MAX_REPORT_BYTES });
-	const res = parseFrames(r.stdoutBytes ?? Buffer.from(r.stdout), r.code, !!r.truncated);
-	checkExternalLinks(res, hostPath);
-	return res;
-}
-
-/**
- * Links that didn't resolve inside the workspace in the (case-sensitive, Linux) scanner may
- * still do so on the host: case-insensitive APFS (`Node_Modules/x`), firmlinks
- * (`/System/Volumes/Data/...`), other spellings of the real path. Resolve each on the
- * host and block any that land inside the workspace: their target was not scanned under
- * the link. Only stat-level calls; no content is read on the host.
- */
-export function checkExternalLinks(res: ScanResult, hostPath: string): void {
-	for (const l of res.externalLinks ?? []) {
-		const rel = workspaceRel(l, '/scan/ws/');
-		if (rel && resolvesInside(path.join(hostPath, rel), hostPath)) {
-			pushFinding('worktree', displayPath(rel), 1, 'unscanned-link-alias', undefined, false, '', res.findings, res.secrets);
-		}
-	}
-}
-
-/**
- * Does the link at `p` (inside the workspace) resolve to something inside the workspace on
- * the host? Resolved one hop at a time with lstat/readlink only, and never touching any
- * path outside the workspace: a target is mapped back into the workspace through its known
- * spellings (case-insensitively on macOS; firmlink and /private prefixes) or dropped
- * without a filesystem call (review round 8 D2: no automount/DNS triggered by the tab).
- */
-function resolvesInside(p: string, hostPath: string): boolean {
-	const fold = (s: string) => process.platform === 'darwin' ? s.toLowerCase() : s;
-	const aliases = [hostPath, `/System/Volumes/Data${hostPath}`];
-	if (hostPath.startsWith('/private/')) {
-		aliases.push(hostPath.slice('/private'.length));
-	}
-	const toWorkspace = (abs: string): string | undefined => {
-		const n = path.posix.normalize(abs);
-		for (const a of aliases) {
-			if (fold(n) === fold(a)) {
-				return hostPath;
-			}
-			if (fold(n).startsWith(fold(a) + '/')) {
-				return hostPath + n.slice(a.length);
-			}
-		}
-		return undefined;
-	};
-	let hops = 0;
-	const walk = (inside: string): string | undefined => {
-		// `inside` is hostPath or below it (lexically); resolve component by component.
-		let cur = hostPath;
-		const parts = inside.slice(hostPath.length).split('/').filter(Boolean);
-		for (let k = 0; k < parts.length; k++) {
-			const next = path.join(cur, parts[k]);
-			let st: fs.Stats;
-			try {
-				st = fs.lstatSync(next);
-			} catch {
-				// Not there yet: a host write through the link would create it here, inside.
-				return path.join(cur, ...parts.slice(k));
-			}
-			if (st.isSymbolicLink()) {
-				if (++hops > 40) {
-					return undefined;
-				}
-				const target = toWorkspace(path.resolve(cur, fs.readlinkSync(next)));
-				const r = target === undefined ? undefined : walk(target);
-				if (r === undefined) {
-					return undefined;
-				}
-				cur = r;
-			} else {
-				cur = next;
-			}
-		}
-		return cur;
-	};
-	try {
-		const target = toWorkspace(path.resolve(path.dirname(p), fs.readlinkSync(p)));
-		return target !== undefined && walk(target) !== undefined;
-	} catch {
-		return false;
-	}
+	return parseFrames(r.stdoutBytes ?? Buffer.from(r.stdout), r.code, !!r.truncated);
 }
 
 /** Exported for tests. Keeps every finding it can parse, even when the scan is incomplete. */
@@ -337,7 +316,7 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 	let links: string[] = [];
 	let binmap: Array<{ path: string; start: number }> = [];
 	let binParent = '';
-	const externalLinks: string[] = [];
+
 	let off = 0;
 	while (off < buf.length) {
 		const nl = buf.indexOf(0x0a, off);
@@ -377,7 +356,12 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 				links = body.toString('utf8').split('\0').filter(Boolean);
 				continue;
 			case 'extlinks':
-				externalLinks.push(...body.toString('utf8').split('\0').filter(Boolean));
+				// A link that doesn't resolve inside the workspace in the scanner can't be shown
+				// harmless without resolving tab-chosen paths on the host (automount/DNS, review
+				// round 8 D2) or enumerating every spelling of the host path (round 9 E1): block.
+				for (const p of body.toString('utf8').split('\0').filter(Boolean)) {
+					unscanned('worktree', workspaceRel(p, '/scan/ws/') ?? '(unknown link)', 'unscanned-link');
+				}
 				continue;
 			case 'unreadable':
 				for (const p of body.toString('utf8').split('\0').filter(Boolean)) {
@@ -425,6 +409,22 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 			case 'linkcopy':
 				errors.push('some symlink targets could not be copied for scanning');
 				continue;
+			case 'archives': {
+				// "<parent kind>:<rel>"; one gitleaks log line per archive it could not open or
+				// that nests deeper than --max-archive-depth: block on the (outer) file.
+				const sep = rel.indexOf(':');
+				const parent = rel.slice(0, sep);
+				const prel = rel.slice(sep + 1);
+				for (const lineText of body.toString('latin1').split('\n')) {
+					const at = lineText.indexOf(' path=');
+					if (at < 0) {
+						continue;
+					}
+					const scannerPath = goUnquote(lineText.slice(at + ' path='.length)).split('!')[0];
+					unscanned('worktree', mapScannerPath(parent, prel, scannerPath, links) ?? '(unknown archive)', 'unscanned-archive');
+				}
+				continue;
+			}
 			case 'binmap': {
 				// Pairs "<scanner path>\0<first stream line>\0" for the rescan of files the
 				// <rel>-kind dir pass skipped as binary.
@@ -500,7 +500,7 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 		errors.unshift('scanner report too large to review');
 	}
 	const complete = ended && !overflow && errors.length === 0;
-	return { complete, error: complete ? undefined : `secret scan incomplete: ${errors.join('; ')}`, overflow: overflow || undefined, findings, secrets, externalLinks };
+	return { complete, error: complete ? undefined : `secret scan incomplete: ${errors.join('; ')}`, overflow: overflow || undefined, findings, secrets };
 }
 
 const ID_KEY = randomBytes(32);
@@ -555,7 +555,8 @@ function addFinding(kind: 'worktree' | 'gitdir' | 'history' | 'objects', repoRel
 		seenValues.add(secret);
 	}
 	const okLine = Number.isInteger(line) && line >= 1;
-	const movable = canMove && plain && okLine && !!secret && (source === 'worktree' || source === 'git-dir');
+	// Archive members ("a.tar.gz!inner") can't be rewritten in place.
+	const movable = canMove && plain && okLine && !!secret && !file.includes('!') && (source === 'worktree' || source === 'git-dir');
 	pushFinding(source, displayPath(file), okLine ? line : 1, rule, commit, movable, secret, findings, secrets);
 }
 
