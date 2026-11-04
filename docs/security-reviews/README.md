@@ -1,0 +1,52 @@
+# Security reviews
+
+Every major change gets a recorded security review round. This directory is
+the process and the index.
+
+## When a review is required
+- A new component, trust boundary or privileged code path.
+- A new or changed patch in `patches/`.
+- `product.json` policy changes (the jq program or its data).
+- A provider, fence or transport change (`SandboxProvider` implementations,
+  sbx or docker invocations, resolver transport, broker wiring).
+- CI and workflow changes: token `permissions:`, triggers (never
+  `pull_request_target`), third-party actions (pin by SHA), artifact
+  provenance.
+- Each milestone, before it is called done.
+
+## How to run a round
+1. Fix the scope to a commit range (`git diff <base>..<head>`) plus the threat
+   model in [ARCHITECTURE.md §2](../ARCHITECTURE.md#2-threat-model).
+2. Run the `security-review` agent on that scope. If it refuses, re-run it
+   with model an Opus-class model.
+3. Triage every finding: **fixed** (with commit), **accepted** (with reason)
+   or **false positive** (with reason).
+4. Re-review after fixes until no **high** or **critical** findings remain
+   open.
+5. For every real finding, add a regression test to the containment suite.
+6. Record the round here, and link it from the related ADR or EDR.
+
+## Record format
+File: `YYYYMMDD-short-slug.md`.
+
+```markdown
+# Security review: <scope title>
+
+- **Date:** YYYY-MM-DD
+- **Scope:** <base sha>..<head sha> (+ files/areas given explicit attention)
+- **Reviewer:** security-review agent (<model>), triage by <session>
+- **Related:** <ADR/EDR links>
+
+## Findings
+| # | Severity | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+
+## Re-review
+<range, result: "no open high/critical">
+```
+
+## Index
+
+| Date | Review | Scope | Open high/critical |
+|---|---|---|---|
+| | _none yet_ | | |

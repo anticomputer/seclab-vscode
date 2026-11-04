@@ -1,0 +1,63 @@
+# Architecture Decision Records (ADR)
+
+ADRs record **system-shape** decisions: boundaries, components, runtimes, the
+trust model and protocols. Engineering decisions (tooling, build/CI, library
+choice, test strategy, spike outcomes) go in [`../edr/`](../edr/README.md).
+[`../ARCHITECTURE.md`](../ARCHITECTURE.md) is the current-state summary and
+links to the ADRs behind each section.
+
+## Rules
+
+- **File name:** `YYYYMMDD-short-slug.md`, dated by the day of the decision. No
+  sequence numbers, because several sessions write records in parallel on
+  separate branches. If two records share a date and slug, add a suffix.
+- **Append-only.** Do not rewrite an accepted record's Decision. To change a
+  decision, write a new record that supersedes it, then set the old record's
+  status to `superseded-by <new file>` and link both ways. Typo fixes and added
+  evidence links are fine.
+- **Status lifecycle:** `proposed` → `accepted` → (`superseded-by …` |
+  `deprecated`). A `proposed` record is not yet binding.
+- **Evidence:** code permalinks pinned to a commit SHA, spike results (with the
+  command that produced them, or a link to the EDR that holds them) and doc
+  links. Opinions without evidence belong in Context, labelled as such.
+- Link the security review that covered the change, if one exists
+  ([`../security-reviews/`](../security-reviews/README.md)).
+
+## Template (MADR-style)
+
+```markdown
+# <Title: the decision, stated as a short imperative>
+
+- **Status:** proposed | accepted | superseded-by [YYYYMMDD-slug](YYYYMMDD-slug.md) | deprecated
+- **Date:** YYYY-MM-DD
+- **Deciders:** <people / sessions>
+- **Supersedes:** <link, if any>
+
+## Context
+What forces are at play; what problem this decides.
+
+## Decision
+What we do. One paragraph, then bullets if needed.
+
+## Alternatives considered
+- **<Alternative>**: rejected because …
+
+## Consequences
+Good, bad, and follow-ups this creates.
+
+## Evidence
+- <permalink pinned to SHA / spike EDR / doc link>
+```
+
+## Index
+
+| Date | Record | Status |
+|---|---|---|
+| 2026-11-04 | [The workspace window ("tab") is the containment unit; Workspace Trust is UX only](20261104-tab-is-the-containment-unit.md) | accepted |
+| 2026-11-04 | [Reuse the remote extension host split via a built-in `seclab+` resolver](20261104-reuse-remote-extension-host.md) | accepted |
+| 2026-11-04 | [Fork VSCodium-style: pinned upstream, jq product.json, small patch queue](20261104-vscodium-style-fork.md) | accepted |
+| 2026-11-04 | [Tab runtime is a pluggable SandboxProvider; sbx primary, OCI second](20261104-pluggable-sandbox-provider.md) | accepted |
+| 2026-11-04 | [One broker engine for every provider; sbx is only the outer fence](20261104-single-broker-sbx-fence.md) | accepted |
+| 2026-11-04 | [The trusted editor runs natively on macOS, built unsigned on GitHub Actions](20261104-native-editor-on-actions.md) | accepted |
+| 2026-11-04 | [RPC capability filter is a required, default-deny boundary](20261104-rpc-capability-filter.md) | proposed |
+| 2026-11-04 | [Move from a local-only repo to private anticomputer/seclab-vscode](20261104-private-github-repo.md) | accepted |

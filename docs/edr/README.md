@@ -1,0 +1,43 @@
+# Engineering Decision Records (EDR)
+
+EDRs record **engineering** decisions: implementation, tooling, build/CI,
+library choice, test strategy and **spike outcomes**. Write one when you make
+the decision or finish the spike, not afterwards. System-shape decisions
+(boundaries, components, runtimes, trust model, protocols) go in
+[`../adr/`](../adr/README.md). If an engineering finding forces a design
+change, write an ADR for the change and link this EDR as its evidence.
+
+Same rules as ADRs:
+
+- **File name:** `YYYYMMDD-short-slug.md`. No sequence numbers (parallel branches).
+- **Append-only:** supersede rather than rewrite, and link both ways.
+- **Status:** `proposed` → `accepted` → (`superseded-by …` | `deprecated`).
+- **Evidence:** the exact commands run and their relevant output, scrubbed of
+  secrets; code permalinks pinned to SHAs; doc links.
+
+## Template (MADR-style)
+
+```markdown
+# <Title>
+
+- **Status:** proposed | accepted | superseded-by [YYYYMMDD-slug](YYYYMMDD-slug.md) | deprecated
+- **Date:** YYYY-MM-DD
+- **Deciders:** <people / sessions>
+- **Related:** <ADR / EDR / security review links>
+
+## Context
+## Decision
+## Alternatives considered
+- **<Alternative>**: rejected because …
+## Consequences
+## Evidence
+<commands + trimmed output, permalinks>
+```
+
+## Index
+
+| Date | Record | Status |
+|---|---|---|
+| 2026-11-04 | [sbx upgraded to 0.51.0: findings](20261104-sbx-upgrade-0-51.md) | accepted |
+| 2026-11-04 | [sbx per-tab egress fence and broker chaining (spike)](20261104-sbx-fence-spike.md) | accepted |
+| 2026-11-04 | [REH transport over `exec -i` stdio (viability spike)](20261104-reh-transport-exec-stdio.md) | accepted |
