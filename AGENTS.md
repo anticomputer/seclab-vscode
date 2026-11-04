@@ -15,17 +15,20 @@ way: [docs/adr/](docs/adr/README.md).
 ## 2. Map
 | Path | What |
 |---|---|
-| `upstream.lock` | **TODO (M0)**: pinned Code-OSS tag and SHA |
-| `build/` | **TODO (M0)**: fetch, jq product.json, apply patches, Linux container build |
-| `patches/` | **TODO (M0)**: ordered core patch queue (`NNNN-*.patch`); empty for M0/M1 |
-| `.github/workflows/` | **TODO (M0)**: macOS arm64 unsigned app build; Linux CI |
-| `extensions/seclab-tab-manager/` | **TODO (M1)**: built-in UI-side extension: `seclab+` resolver, routing, `SandboxProvider` (sbx primary, OCI second) |
+| `upstream.lock` | Pinned Code-OSS tag and SHA (1.145.0 @ a717861c) |
+| `build/` | `fetch-upstream.sh` (verifies tag→SHA), `prepare.sh` (overlay, jq product.json, patches), `product/` (overrides.json, product.jq with invariants, remove-extensions.txt), `linux/` (builder image + build.sh), `build-darwin.sh` (Actions only) |
+| `patches/` | Ordered core patch queue (`NNNN-*.patch`): 0001 build-only, 0002/0003 extension placement |
+| `.github/workflows/` | `build-macos.yml` (unsigned darwin-arm64 app), `ci-linux.yml` (unit, REH, OCI e2e/containment/canary) |
+| `extensions/seclab-tab-manager/` | Built-in UI-side extension: `seclab+` resolver, routing, UI. `tabd-src` symlinks `tabd/src` and is bundled in |
+| `tabd/` | `seclab-tabd` supervisor: protocol, validation, sbx and OCI drivers, fence. Tests in `tabd/test/`. Spec: `docs/tabd/PROTOCOL.md` |
+| `sandbox/` | In-tab scripts (`rootfs/opt/seclab/bin`), the sbx template builder, OCI images |
 | `broker/` | mitmproxy broker; owned by the broker session; see `broker/AGENTS.md` once it lands |
-| `test/containment/` | **TODO (M1)**: rogue extension, malicious-workspace fixtures, assertions |
+| `test/containment/` | Malicious-workspace fixtures, the rogue extension, level A runner and level B (editor) evidence check |
+| `test/canary/` | Shared canary harness (headline acceptance test); other sessions plug in stores and observation sources |
 | `docs/adr/`, `docs/edr/` | Architecture and engineering decision records ([ADR README](docs/adr/README.md), [EDR README](docs/edr/README.md)) |
 | `docs/security-reviews/` | Security review rounds and process ([README](docs/security-reviews/README.md)) |
 | `docs/research/` | Cited research behind the design (pinned permalinks) |
-| `.work/` | Gitignored scratch (spikes). Durable, unlike `/tmp` |
+| `.work/` | Gitignored scratch and build outputs (`.work/out`). Durable, unlike `/tmp` |
 
 Nested AGENTS.md files (owned by their sessions): `broker/AGENTS.md`
 (broker), plus any the RPC-lockdown session adds. Keep them consistent with
@@ -71,33 +74,40 @@ this file.
   shared with their other sandboxes.
 
 ## 4. Common tasks
-Verified commands:
+Verified commands (one entry point: `./seclab help`):
 ```sh
-# sbx: version, daemon, sandboxes, effective policy (JSON), denial log
-sbx version
-sbx daemon status
-sbx ls
-sbx policy ls --wide --json
-sbx policy log <sandbox>
+./seclab build linux            # REH (linux-<arch>) in the trixie builder container -> .work/out/  (~10 min warm)
+./seclab template sbx           # sbx tab template seclab-tab:local (shell kit + REH + /opt/seclab), ~20 s
+./seclab image oci              # OCI images seclab-tab-oci:local + seclab-broker-placeholder:local
+./seclab test unit              # tabd unit + supervisor tests (node container)
+./seclab test e2e sbx           # tabd end to end: claim -> fence -> REH 101 handshake over exec stdio (also: oci)
+./seclab test containment sbx   # malicious-workspace vectors in real tabs (sbx 89/89, oci 86/86)
+./seclab test canary sbx        # canary acceptance test, level A (also: oci)
+./seclab test evidence prepare .work/editor-test/user-data sbx   # level B setup (then open the printed --folder-uri)
 
-# per-tab fence primitives (the resource must be localhost:P, not host.docker.internal:P)
-sbx policy allow network --sandbox <tab> localhost:<port>
-sbx policy deny  network --sandbox <tab> <resource>
-sbx policy rm    network --force --sandbox <tab> --resource <resource>
-
-# exec stdio (the REH transport primitive); binary-safe
-sbx exec -i <tab> cat < file > copy
+# sbx inspection
+sbx ls; sbx policy ls --wide --json; sbx policy log <sandbox>; sbx secret ls --json
+sbx policy check network --sandbox <tab> --json <host:port>    # exits 1 when denied; JSON on stdout
 ```
-**TODO**, not built yet:
-- Build Linux (editor + REH) in containers.
-- Trigger the macOS build on Actions and fetch it with `gh run download`, then
-  clear quarantine (needs user approval).
-- Run the editor.
-- Run the containment suite (sbx locally; OCI in CI).
-- Run the broker tests (see `broker/AGENTS.md`).
-- Regenerate the RPC inventory and drift check (RPC-lockdown session).
-- Bump upstream: update `upstream.lock` → re-run jq → rebase `patches/` →
-  drift check → containment suite → security review → write an EDR.
+Tests run on the host use the already-present `node` (or set `SECLAB_NODE` to the editor's
+Electron with `ELECTRON_RUN_AS_NODE=1`); nothing is installed.
+
+**TODO** (written but not yet run end to end):
+- `./seclab build linux editor` needs at least 12 GB of Docker memory (esbuild is OOM-killed at 8 GB).
+- macOS app: `gh workflow run build-macos.yml --ref <branch>`, then
+  `SECLAB_ALLOW_UNREVIEWED_BUILD=1 ./seclab fetch macos` for branch builds
+  (main/push builds need no override). Then clear quarantine, with the user's
+  approval.
+- `./seclab test evidence check .work/editor-test/user-data`, after the editor ran the prepared tab.
+- Broker tests (see `broker/AGENTS.md`), and the RPC inventory and drift check (RPC-lockdown session).
+- **Bump upstream:**
+  1. Edit `upstream.lock` (tag + SHA from `git ls-remote`).
+  2. `./seclab build linux`, which re-runs fetch, jq and patches; fix any patch that fails to apply.
+  3. Drift check.
+  4. `./seclab template sbx && ./seclab image oci`.
+  5. Containment + canary suites (sbx and oci).
+  6. Security review.
+  7. Write an EDR.
 
 ## 5. Process
 - **ADR or EDR?** An ADR records the shape of the system (boundaries,
@@ -145,13 +155,32 @@ sbx exec -i <tab> cat < file > copy
   runs locally and CI runs the OCI suite.
 - **Workspace Trust is not a boundary** (ADR). Tests run with the workspace
   trusted, the worst case.
-- **The `extensionKind` product.json map has no wildcard**, so overrides are
-  per extension ID.
+- **The `extensionKind` product.json map has no wildcard upstream**; patch 0002
+  adds `*` (built-in-only explicit entries). Patch 0003 stops local windows
+  running anything but `ui` built-ins. Upstream runs `workspace`-kind
+  extensions locally when there is no remote.
+- **Local windows**: the Tab Manager closes any local folder window *before*
+  asking anything. Never open a hostile fixture by local path; use
+  `--folder-uri vscode-remote://seclab+<tabId><path>`.
+- **sbx `browser.enabled` defaults true** (a sandbox can open URLs in the host
+  browser). It is a global setting; we haven't changed it (it needs the
+  user's consent).
+- **Docker Desktop VM has 8 GB.** The Linux *editor* bundle OOMs; the REH is fine.
+- **1.145.0 local builds fail in the Copilot shim**; we remove the built-in
+  Copilot extension (patch 0001, EDR).
+- **The Electron 43 headers need gcc ≥ 13**, so the builder is trixie, not bookworm.
+- **sbx sandboxes stop when the supervisor exits** (by design, fail closed),
+  and the REH must be restarted via `ensureRunning`.
+- **`sbx policy check` exits 1 on deny**, so parse stdout, not the exit code.
+- **Node type stripping**: no parameter properties or enums in `tabd/`
+  (`node --test` runs the `.ts` directly).
 
 ## 7. Where to look first when something breaks
-- A tab won't connect: the Tab Manager output channel (TODO: name), then
-  `sbx ls`, then `sbx policy log <tab>` (fence denials show the normalised
-  resource and the reason).
+- A tab won't connect: the "seclab Tab Manager" output channel, then
+  `<state>/audit.log`, where state is
+  `<userData>/User/globalStorage/seclab.tab-manager/tabd`. Then `sbx ls`, then
+  `sbx policy log <tab>` (fence denials show the normalised resource and the
+  reason). Inside the tab, the REH log is `/run/user/1000/seclab/reh.log`.
 - Egress fails inside a tab: `sbx policy log <tab>`, and `env | grep -i proxy`
   inside the tab (both cases must point at the broker).
 - A record seems contradicted: check for a superseding ADR or EDR before
