@@ -21,9 +21,54 @@ usage: ./seclab <command>
                                 Editor-driven run (rogue extension, editor-side canaries)
   lint fixtures [PATH...]       Fixture-safety lint (no real secrets/hosts/persistence in test payloads)
   lint source                   Shipped sources: no unreviewed env/spawn sites, no dynamic loading, no test markers
+  docs write                    Regenerate the ADR/EDR/security-review indexes from the records
+  docs check [--run-commands] [--online] [--paired]
+                                Docs drift gate: records, generated indexes, links, permalinks, ARCHITECTURE
+                                consistency; --run-commands runs <!-- ci: run --> blocks (and the broker's);
+                                --online resolves external links (lychee, cached); --paired enforces doc
+                                changes next to protocol/patch/provider/product changes vs origin/main
   fetch macos [RUN_ID]          Download the unsigned macOS app from Actions -> .work/app/
   help                          This text
 EOF
+}
+
+LYCHEE_IMAGE="lycheeverse/lychee@sha256:eaff3e0a13603c9a701accfcc84f44158bb77bf36ecfa4622b626056c3463892" # 0.24.2
+
+docs_check() {
+	local run=0 online=0 paired=0
+	for a in "$@"; do
+		case "$a" in
+			--run-commands) run=1 ;; --online) online=1 ;; --paired) paired=1 ;;
+			*) usage; exit 2 ;;
+		esac
+	done
+	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/docs-check.ts check
+	if [[ -x "$ROOT/broker/docs-check.sh" ]]; then
+		if [[ $run = 1 ]]; then "$ROOT/broker/docs-check.sh" --run-commands; else "$ROOT/broker/docs-check.sh"; fi
+	fi
+	if [[ $paired = 1 ]]; then
+		local base f
+		base="$(git -C "$ROOT" merge-base origin/main HEAD)"
+		f="$ROOT/.work/docs-paired.txt"
+		mkdir -p "$ROOT/.work"
+		{ git -C "$ROOT" diff --name-only "$base"..HEAD; echo '--'; git -C "$ROOT" log --format=%B "$base"..HEAD; } > "$f"
+		docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/docs-check.ts paired .work/docs-paired.txt
+	fi
+	if [[ $online = 1 ]]; then
+		# External links and permalinks must resolve; results are cached (named volume) so CI isn't flaky.
+		local token=()
+		[[ -n "${GITHUB_TOKEN:-}" ]] && token=(--github-token "$GITHUB_TOKEN")
+		docker run --rm -v "$ROOT:/input:ro" -v seclab-lychee-cache:/cache -w /cache "$LYCHEE_IMAGE" \
+			--no-progress --cache --max-cache-age 3d --max-concurrency 8 --accept 200,206,429 \
+			--exclude-path /input/.work --exclude-path /input/vscode --exclude-path /input/node_modules \
+			--exclude '^https?://([^/]+\.)?(test|invalid|example|localhost)(/|:|$)' --exclude '^https?://(127\.|localhost|host\.docker\.internal)' \
+			--exclude '^vscode-remote:' --exclude '^https://github\.com/anticomputer/seclab-vscode' \
+			"${token[@]}" '/input/**/*.md'
+	fi
+	if [[ $run = 1 ]]; then
+		docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/docs-check.ts commands > "$ROOT/.work/docs-commands.sh"
+		(cd "$ROOT" && bash -e .work/docs-commands.sh)
+	fi
 }
 
 node_image() {
@@ -125,6 +170,13 @@ case "${1:-help}" in
 		case "${1:-}" in
 			fixtures) shift; "$ROOT/test/safety/fixture-lint.sh" "$@" ;;
 			source) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-source.ts ;;
+			*) usage; exit 2 ;;
+		esac ;;
+	docs)
+		shift
+		case "${1:-}" in
+			write) docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" node build/docs/docs-check.ts write ;;
+			check) shift; docs_check "$@" ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	help|-h|--help) usage ;;

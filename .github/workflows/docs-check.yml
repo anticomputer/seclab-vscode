@@ -1,0 +1,52 @@
+name: docs-check
+
+# Docs are part of the change (EDR docs-check). On every push and PR:
+# - records, generated indexes, relative links, SHA-pinned permalinks and ARCHITECTURE
+#   consistency (offline, in a node container);
+# - the broker's own docs check, including running its documented commands;
+# - runnable blocks (<!-- ci: run -->) in AGENTS.md and the READMEs;
+# - external links resolve (lychee, cached between runs);
+# - paired doc changes for protocol, patch, provider and product.json changes.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Restore the link-check cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .work/lychee-cache
+          key: lychee-${{ github.run_id }}
+          restore-keys: lychee-
+      - name: Seed the lychee cache volume
+        run: |
+          docker volume create seclab-lychee-cache >/dev/null
+          if [ -f .work/lychee-cache/.lycheecache ]; then
+            docker run --rm -v seclab-lychee-cache:/cache -v "$PWD/.work/lychee-cache:/in:ro" alpine:3.22 cp /in/.lycheecache /cache/
+          fi
+      - name: Docs gate (records, links, commands, paired docs)
+        run: ./seclab docs check --run-commands --paired
+      - name: External links resolve
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./seclab docs check --online
+      - name: Save the lychee cache
+        if: always()
+        run: |
+          mkdir -p .work/lychee-cache
+          docker run --rm -v seclab-lychee-cache:/cache:ro -v "$PWD/.work/lychee-cache:/out" alpine:3.22 sh -c 'cp /cache/.lycheecache /out/ 2>/dev/null || true'
