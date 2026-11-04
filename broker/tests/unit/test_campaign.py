@@ -1,6 +1,8 @@
 """Controls against folder-open loaders and beacons (DPRK "Contagious Interview"
 tasks.json campaign; see docs/adr/20261104-defeat-folder-open-loaders.md).
-No sockets are opened here; hostnames are classifier inputs only."""
+No sockets are opened here; hostnames are classifier inputs only. The campaign's
+real loader hosts and C2 IP are deliberately not used: generic subdomains of the
+same services and RFC 5737 addresses exercise exactly the same classification."""
 
 import asyncio
 import json
@@ -12,7 +14,7 @@ from seclab_broker.core import Broker, RpcError
 from seclab_broker.policy import Policy, RequestView, baseline_rules, risky_category, risk_flags
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
-CAMPAIGN_HOSTS = ["vscode-setup.vercel.app", "ip-api-check-nine.vercel.app", "api.npoint.io",
+CAMPAIGN_HOSTS = ["loader.vercel.app", "stage2.vercel.app", "api.npoint.io",
                   "api.ipify.org", "ipify.org", "pastebin.com", "gist.githubusercontent.com",
                   "raw.githubusercontent.com", "x.netlify.app", "x.pages.dev", "x.workers.dev"]
 
@@ -35,7 +37,7 @@ def test_baseline_and_examples_exclude_risky_destinations():
 
 
 def test_risk_flags():
-    assert risk_flags(rv("146.70.41.188", "http", 1224)) == ["raw-ip", "cleartext", "nonstandard-port"]  # fixture-lint: ignore
+    assert risk_flags(rv("203.0.113.188", "http", 1224)) == ["raw-ip", "cleartext", "nonstandard-port"]
     assert risk_flags(rv("api.npoint.io")) == ["risky-destination:paste"]
     assert risk_flags(rv("api.example.com")) == []
 
@@ -188,7 +190,7 @@ def test_proxy_auth_origin_label():
         b.dispatch("proxy.auth.set", {"username": "seclab\n", "password": "A" * 22})
 
 
-@pytest.mark.parametrize("host", ["146.70.41.188.sslip.io", "146-70-41-188.nip.io",  # fixture-lint: ignore
+@pytest.mark.parametrize("host", ["203.0.113.188.sslip.io", "203-0-113-188.nip.io",
                                   "c2.10.0.0.1.attacker.example", "ec2-1-2-3-4.compute.example"])
 def test_ip_in_hostname_is_treated_like_a_raw_ip(host):
     """Regression (review 2026-11-04 #1): wildcard-DNS names bypassed the raw-IP controls."""
