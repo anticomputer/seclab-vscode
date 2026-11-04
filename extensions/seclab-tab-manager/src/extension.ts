@@ -173,12 +173,16 @@ async function resolve(authority: string, ctx: vscode.RemoteAuthorityResolverCon
 			}
 		});
 
-	return new vscode.ManagedResolvedAuthority(async () => {
+	const authorityResult = new vscode.ManagedResolvedAuthority(async () => {
 		const cl = await getClient();
 		const { channel } = await cl.connect(tabId); // the supervisor re-verifies the fence first
 		log.debug(`channel ${channel.id} open for ${tabId}`);
 		return toMessagePassing(channel);
 	}, connectionToken);
+	// Inside a tab, Workspace Trust is UX only: containment comes from the sandbox. Marking
+	// the remote trusted lets tasks etc. run in the tab without the trust prompt, which in
+	// turn lets local (unsandboxed) windows keep Restricted Mode as their default.
+	return Object.assign(authorityResult, { isTrusted: true });
 }
 
 function toMessagePassing(ch: TabdChannel): vscode.ManagedMessagePassing {
@@ -209,8 +213,39 @@ function tabUri(tabId: string, hostPath: string): vscode.Uri {
 }
 
 async function claim(hostPath: string): Promise<TabView> {
+	if (vscode.workspace.getConfiguration('seclab.tabs').get<string[]>('allowedRoots', []).length === 0) {
+		await chooseAllowedRoot(hostPath);
+	}
 	const c = await getClient();
 	return (await c.request<{ tab: TabView }>('tab.claim', { workspace: { hostPath } })).tab;
+}
+
+/**
+ * Tabs may only be opened under explicitly chosen project roots (tabd fails closed
+ * without one). Ask once, store it application-wide, restart the supervisor with it.
+ */
+async function chooseAllowedRoot(near: string): Promise<void> {
+	const pick = await vscode.window.showInformationMessage(
+		'Choose the folder that contains your projects. Only folders inside it can be opened as sandboxed tabs.',
+		{ modal: true, detail: `Opening: ${near}` }, 'Choose Projects Folder…');
+	if (!pick) {
+		throw new Error('no projects folder chosen');
+	}
+	const root = await vscode.window.showOpenDialog({
+		canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
+		defaultUri: vscode.Uri.file(path.dirname(near)), openLabel: 'Use as Projects Folder',
+	});
+	if (!root?.[0] || root[0].scheme !== 'file') {
+		throw new Error('no projects folder chosen');
+	}
+	await vscode.workspace.getConfiguration('seclab.tabs').update('allowedRoots', [root[0].fsPath], vscode.ConfigurationTarget.Global);
+	restartClient();
+}
+
+function restartClient(): void {
+	client?.dispose();
+	client = undefined;
+	clientReady = undefined;
 }
 
 /** Native host folder dialog (a user gesture), then open the folder as a tab. */
@@ -234,16 +269,22 @@ async function openFolderWithDialog(): Promise<void> {
 
 /**
  * A local (unsandboxed) window was opened with a folder: CLI, recents, File > Open,
- * a link. Re-open it as a tab in the same window. New paths need explicit confirmation
- * because the source of a local open can't be distinguished from here.
+ * Finder, a link. Re-open it as a tab in the same window, or close the folder: a local
+ * folder window is never left running (fail closed). New paths need explicit
+ * confirmation because the source of a local open can't be distinguished from here.
+ * Until main-process routing lands (ADR 20261104-route-folder-opens-in-main, proposed), the
+ * local window exists briefly before the reroute. Residual: if the user previously trusted
+ * the folder, built-ins (git, tasks) can run on the host in that moment.
  */
 async function routeLocalWindow(): Promise<void> {
 	const folders = vscode.workspace.workspaceFolders ?? [];
-	if (folders.length === 0) {
+	if (folders.length === 0 && !vscode.workspace.workspaceFile) {
 		return; // empty window: stays local (built-in extensions only); see the routing EDR
 	}
-	if (folders.length > 1 || vscode.workspace.workspaceFile || folders[0].uri.scheme !== 'file') {
-		void vscode.window.showWarningMessage('Multi-root and non-file workspaces cannot be opened as sandboxed tabs yet. Use "seclab: Open Folder in New Tab…".');
+	if (folders.length !== 1 || vscode.workspace.workspaceFile || folders[0].uri.scheme !== 'file') {
+		await vscode.window.showWarningMessage('Multi-root and non-file workspaces cannot be opened as sandboxed tabs yet, so this workspace was closed.',
+			{ modal: true, detail: 'Open each folder with "seclab: Open Folder in New Tab…".' });
+		await vscode.commands.executeCommand('workbench.action.closeFolder');
 		return;
 	}
 	const hostPath = folders[0].uri.fsPath;
@@ -254,16 +295,18 @@ async function routeLocalWindow(): Promise<void> {
 		if (!known) {
 			const ok = await vscode.window.showWarningMessage(
 				`Open "${hostPath}" in a sandboxed tab?`,
-				{ modal: true, detail: 'Extensions, terminals and tasks for this folder will run in an isolated sandbox with only this folder mounted.' },
+				{ modal: true, detail: 'Extensions, terminals and tasks for this folder will run in an isolated sandbox with only this folder mounted. Choosing Cancel closes the folder.' },
 				'Open in Sandboxed Tab');
 			if (ok !== 'Open in Sandboxed Tab') {
+				await vscode.commands.executeCommand('workbench.action.closeFolder');
 				return;
 			}
 		}
 		const tab = await claim(hostPath);
 		await vscode.commands.executeCommand('vscode.openFolder', tabUri(tab.metadata.name, tab.spec.workspace.hostPath), { forceReuseWindow: true });
 	} catch (e) {
-		void vscode.window.showErrorMessage(`Cannot open as a tab: ${(e as Error).message}`);
+		await vscode.window.showErrorMessage(`Cannot open as a tab, closing the folder: ${(e as Error).message}`, { modal: true });
+		await vscode.commands.executeCommand('workbench.action.closeFolder');
 	}
 }
 
