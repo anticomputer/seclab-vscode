@@ -108,6 +108,7 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab test secrets sbx       # pre-mount gitleaks gate: block, move-to-vault + sentinel, restore, accept (also: oci)
 ./seclab lint fixtures          # fixture-safety lint (docker, no network); also: test/safety/fixture-lint.sh PATH...
 build/apply-patches.sh --check  # patch queue == patches/series (no unlisted patch can ship)
+./seclab lint source            # shipped sources: reviewed env/spawn sites only (build/source-allowlist.txt), no dynamic loading
 build/check-release.sh .work/out/seclab-reh-linux-arm64.tar.gz   # no test hooks in a release artifact (also: <app>/Contents/Resources/app)
 
 # macOS app from Actions (branch builds need the override), then quarantine (user approval)

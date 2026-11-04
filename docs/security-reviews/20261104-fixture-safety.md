@@ -20,3 +20,13 @@
 | FS-6 | Low | Snapshot | The snapshot only covered directory stats, missed several paths, and Level B's window is long. | Fixed | The stat-only snapshot now recurses into watched directories (entry names hashed, never stored), and adds `~/.aws`, `~/.npmrc`, `~/.docker/config.json`, `~/.netrc`, `~/.git-credentials` and `~/.seclab-vscode`. | containment suites pass the snapshot check |
 
 Result: one medium finding (FS-1), fixed. Re-review: see round 2.
+
+## Round 2 (`cf6738e..c0b4436`)
+- FS-1 fixed, FS-2 fixed, FS-3 fixed, FS-4 fixed, FS-6 fixed.
+- FS-5 partly fixed; accepted as a tripwire. Variable hosts and `net.connect`/`getent` aren't linted; code review covers them.
+- The low residuals the reviewer listed are all fixed in the follow-up commit:
+  - off-tab, the rogue extension no longer even calls `getSession`;
+  - `inrun` rejects `..` components;
+  - the snapshot drops the two paths that change in normal use (`~/.docker/config.json`, `~/.seclab-vscode`) and reports when a depth or size cap is hit.
+
+**No medium-or-higher findings remain.**
