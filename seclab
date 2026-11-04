@@ -235,7 +235,12 @@ case "${1:-help}" in
 	lint)
 		shift
 		case "${1:-}" in
-			fixtures) shift; "$ROOT/test/safety/fixture-lint.sh" "$@" ;;
+			fixtures) shift
+				"$ROOT/test/safety/fixture-lint.sh" "$@"
+				if [[ $# -eq 0 ]]; then # whole tree: also the repo-wide AV-signature pass
+					mkdir -p "$ROOT/.work"; git -C "$ROOT" ls-files -z > "$ROOT/.work/av-files"
+					docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/safety/fixture-lint.ts --av .work/av-files
+				fi ;;
 			pins) shift
 				if [[ "${1:-}" == --self-test ]]; then
 					docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-pins.ts --self-test

@@ -73,6 +73,10 @@ RPC-lockdown session adds. Keep them consistent with this file.
     `*.invalid` names or the broker.
   - Fixtures act only when armed by a run's nonce. Teardown checks that watched
     host paths are unchanged.
+  - **No file on the host may match an antivirus/EDR signature** for a live-malware
+    pattern (endpoint protection quarantined a faithful campaign `tasks.json`; each hit raises a real security alert). Store such content as parts and assemble it only inside a
+    tab. If a detection happens, stop, check the endpoint protection's threat list, tell the user, and don't
+    probe the signature.
   - `./seclab lint fixtures` must pass.
 - **A run leaves nothing behind** ([EDR](docs/edr/20261104-harness-teardown.md)).
   Every harness records what it owns in `run.json` and ends with
@@ -152,7 +156,7 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab image oci              # OCI images seclab-tab-oci:local + seclab-broker-placeholder:local
 ./seclab test unit              # tabd unit + supervisor tests (node container)
 ./seclab test e2e sbx           # tabd end to end: claim -> fence -> REH 101 handshake over exec stdio (also: oci)
-./seclab test containment sbx   # malicious-workspace vectors in real tabs, then the teardown gate (sbx 98/98, oci 95/95)
+./seclab test containment sbx   # malicious-workspace vectors + Contagious-Interview loader in real tabs, then the teardown gate (sbx 108/111, oci 105/108; 3 known-gap XFAIL each)
 ./seclab test canary sbx        # canary acceptance test, level A (also: oci)
 ./seclab test secrets sbx       # pre-mount gitleaks gate: block, move-to-vault + sentinel, restore, accept (also: oci)
 ./seclab test obs sbx           # tab observability: inert loader -> expected events/labels; sensor tampering -> gap (also: oci)

