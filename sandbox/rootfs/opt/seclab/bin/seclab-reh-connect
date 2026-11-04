@@ -1,4 +1,9 @@
 #!/bin/sh
 # seclab-reh-connect: one REH connection = this process's stdio <-> the REH Unix socket.
 # Invoked by seclab-tabd via `<runtime> exec -i <tab> /opt/seclab/bin/seclab-reh-connect`.
+# Under sbx it runs as the seclab-relay uid (so the tab user cannot ptrace the relay) and the
+# socket lives in /run/seclab/reh, which only root (the observability collector) can create.
+if [ -S /run/seclab/reh/reh.sock ]; then
+	exec socat - "UNIX-CONNECT:/run/seclab/reh/reh.sock"
+fi
 exec socat - "UNIX-CONNECT:/run/user/$(id -u)/seclab/reh.sock"

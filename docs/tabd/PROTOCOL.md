@@ -1,6 +1,8 @@
-# seclab-tabd protocol, v0.1 (`seclab-tabd/0.1`)
+# seclab-tabd protocol, v0.2 (`seclab-tabd/0.2`)
 
-Status: **draft for v0.1**. Changes are versioned (§6). This protocol connects
+Status: **draft**. Changes are versioned (§6); 0.2 adds tab observability
+(`tab.events.*`, `tab.observe`, `tab.event`, `tab.observation`; [ADR](../adr/20261104-tab-observability.md),
+[event reference](EVENTS.md)). This protocol connects
 **clients** (the editor's Tab Manager, the containment test harness, a CLI, or
 other editors and agents) to the **tab supervisor** `seclab-tabd`. Rationale:
 [ADR tab supervisor](../adr/20261104-tab-supervisor.md).
@@ -75,6 +77,11 @@ never derived from paths or other input. The editor uses the authority
 | `stream.end` | `{ channel }` | — (notification) | Client half-close (client → REH EOF). |
 | `stream.close` | `{ channel }` | — (notification) | Client abort; the supervisor kills the exec child. |
 | `shutdown` | `{ stopTabs?: boolean }` | `{}` | Graceful: ends channels; leaves tabs running unless `stopTabs`. |
+| `tab.events.subscribe` | `{ tabId?, sinceSeq?, minPriority?, classes? }` | `{ subscription, lastSeq, observation }` | Live events as `tab.event` notifications; all tabs when `tabId` is absent. `sinceSeq` (needs `tabId`) replays buffered events after it (at most 1000). At most 16 subscriptions. |
+| `tab.events.unsubscribe` | `{ subscription }` | `{}` | |
+| `tab.events.tail` | `{ tabId, limit? (1–1000, default 200), beforeSeq? }` | `{ events, observation }` | From the supervisor's in-memory ring (last 2000 per tab). Older events: the log (`seclab tab logs`). |
+| `tab.events.report` | `{ tabId, events: [{ source, class, priority, summary, detail? }] }` (≤ 64) | `{ accepted, rejected }` | For trusted editor components only: `source: rpc-filter` with `class: rpc.decision` (`gate` reserved). `integrity` is always set to `trusted` by the supervisor; other sources or classes are rejected. RPC-filter decisions reach the Tab Manager over a `MainThreadSeclab*` service that sandboxed hosts can't call. |
+| `tab.observe` | `{ tabId, mode: default\|deep }` | `{ mode, appliesOnRestart, observation }` | `deep` also traces file opens under sbx (about 45 µs per open). Takes effect when the collector next starts. |
 
 Reserved (not in v0.1): `warmPool.*`, `tab.policy.*` (broker adapter),
 `prompt.respond`.
@@ -87,6 +94,8 @@ Reserved (not in v0.1): `warmPool.*`, `tab.policy.*` (broker adapter),
 | `stream.close` | `{ channel, error? }`: the exec child exited or failed; channel ID retired |
 | `audit` | `{ ts, tabId?, action, outcome, detail }`: every driver invocation and fence decision; also appended to the supervisor's audit log |
 | `log` | `{ level, message }` |
+| `tab.event` | `{ subscription, event, replay?, lagged? }`: one [event](EVENTS.md). `lagged: n` means `n` matching events were not sent while the client wasn't reading (stdout backlog over 4 MiB); fetch them with `tab.events.tail`. |
+| `tab.observation` | `{ tabId, state: observed\|degraded\|unobserved\|unavailable, since, reason, sensor?, mode? }` |
 
 ## 5. Errors
 JSON-RPC standard codes, plus: `-32001` not initialized, `-32002` invalid
@@ -112,3 +121,13 @@ must ignore unknown notification methods and unknown fields.
   error, timeout), `tab.connect` fails.
 - The per-tab REH connection token is minted by the supervisor and written
   into the sandbox by the supervisor. Tabs never choose it.
+- **Observability is one-way.** Under sbx the supervisor starts the in-VM
+  collector over `sbx exec -i -u root` before the REH; the collector's
+  stdout is the only tab → supervisor observability channel, and its stdin
+  carries only a config line and `ensure-reh` commands. Everything a sensor
+  says is tab-derived: lines are capped, parsed strictly, escaped, redacted
+  and rate-limited, never interpreted, and never become argv, paths, tab IDs
+  or policy. Sensor events carry `integrity` `tab-vm-root` (sbx) or
+  `host-observed` (OCI); only supervisor-produced events are `trusted`.
+- Under sbx the REH relay (`tab.connect`) runs as `990:990` (`seclab-relay`),
+  not as the tab user, so the tab can't ptrace it.

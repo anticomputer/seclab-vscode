@@ -8,8 +8,9 @@ import { fileIdentity } from './state.ts';
 import { mintSentinel, rewriteSecret, type ScanResult, type VaultEntry } from './scan.ts';
 import { DriverError, type Driver, type DriverInfo, type FenceReport, type TabRuntimeSpec, type TabTemplate } from './drivers/types.ts';
 import { assertTabId, canonicalWorkspacePath, sandboxNameFor, TEMPLATE_NAME_RE, ValidationError, type PathPolicy } from './validate.ts';
+import { ObsGlue, ObsParamError } from './obs/glue.ts';
 
-export const PROTOCOL_VERSION = 'seclab-tabd/0.1';
+export const PROTOCOL_VERSION = 'seclab-tabd/0.2';
 export const SUPERVISOR_VERSION = '0.1.0';
 const FENCE_REVERIFY_MS = 60_000;
 const MAX_CHANNELS = 64;
@@ -30,6 +31,10 @@ export interface SupervisorOptions {
 	readonly scan?: (hostPath: string) => Promise<ScanResult>;
 	/** Remove stopped tabs unused for this many days at initialize; 0 or absent disables. */
 	readonly gcDays?: number;
+	/** Tab event logs (`<state>/events`); absent = in memory only. ADR tab-observability. */
+	readonly eventsDir?: string;
+	/** Bytes written to the client but not yet read; event notifications pause above a limit. */
+	readonly outputBacklog?: () => number;
 }
 
 interface Channel { tabId: string; child: ChildProcessWithoutNullStreams }
@@ -54,9 +59,29 @@ export class Supervisor {
 	private readonly phases = new Map<string, string>();
 	private readonly owned = new Set<string>();
 	private dead = false;
+	private readonly obs: ObsGlue;
 
 	constructor(o: SupervisorOptions) {
 		this.o = o;
+		this.obs = new ObsGlue({
+			eventsDir: o.eventsDir,
+			notify: (method, params) => this.notify(method, params),
+			backlog: o.outputBacklog,
+			assertTab: tabId => this.record(tabId).tabId,
+			isRunning: async tabId => {
+				const r = this.o.store.get(tabId);
+				if (!r) {
+					return false;
+				}
+				const spec = this.spec(r);
+				return (await this.driverFor(spec.template).runningSandboxes()).has(spec.sandboxName);
+			},
+			// Persist a tab's log only where no other live supervisor holds its lease.
+			owns: tabId => {
+				const holder = this.o.store.leaseHolder(tabId);
+				return this.owned.has(tabId) || holder === undefined || holder === process.pid || !pidAlive(holder);
+			},
+		});
 	}
 
 	/** Feed bytes from the client. Protocol violations are fatal. */
@@ -111,6 +136,7 @@ export class Supervisor {
 		this.shutdown();
 		for (const tabId of this.owned) {
 			try {
+				this.obs.stopping(tabId);
 				const r = this.o.store.get(tabId);
 				if (r) {
 					const spec = this.spec(r);
@@ -119,6 +145,7 @@ export class Supervisor {
 				this.o.store.clearLease(tabId, process.pid);
 			} catch { /* best effort */ }
 		}
+		this.obs.shutdown();
 	}
 
 	private fatal(reason: string): void {
@@ -141,6 +168,7 @@ export class Supervisor {
 		const entry = { ts: new Date().toISOString(), action, outcome, ...detail };
 		this.o.audit?.(entry);
 		this.notify('audit', entry as Json);
+		this.obs.audit(entry);
 	}
 
 	private async dispatch(raw: unknown): Promise<void> {
@@ -155,7 +183,7 @@ export class Supervisor {
 				this.send({ id: req.id as Json, result: (result ?? {}) as Json });
 			}
 		} catch (e) {
-			const code = e instanceof RpcError || e instanceof DriverError ? e.code : e instanceof ValidationError ? -32002 : -32603;
+			const code = e instanceof RpcError || e instanceof DriverError ? e.code : e instanceof ValidationError ? -32002 : e instanceof ObsParamError ? -32602 : -32603;
 			const message = (e as Error).message ?? 'internal error';
 			if (isRequest) {
 				const data = e instanceof RpcError ? e.data : undefined;
@@ -211,7 +239,13 @@ export class Supervisor {
 				}
 				return {};
 			}
-			default: throw new RpcError(-32601, `unknown method ${method}`);
+			default: {
+				const r = this.obs.handle(method, p);
+				if (r !== undefined) {
+					return r;
+				}
+				throw new RpcError(-32601, `unknown method ${method}`);
+			}
 		}
 	}
 
@@ -400,7 +434,7 @@ export class Supervisor {
 			}
 			// No real secret enters a tab: scan before every (re)mount.
 			await this.gateSecrets(r, acceptFindings);
-			await this.driverFor(spec.template).ensureRunning(spec, r.connectionToken);
+			await this.driverFor(spec.template).ensureRunning(spec, r.connectionToken, this.obs.sensorHooks(r.tabId, r.hostPath));
 		} catch (e) {
 			this.setPhase(r.tabId, 'Failed', [{ type: 'Ready', status: 'False', reason: 'StartFailed', message: (e as Error).message }]);
 			this.audit('tab.ensureRunning', 'fail', { tabId: r.tabId, error: (e as Error).message });
@@ -499,6 +533,7 @@ export class Supervisor {
 		this.owned.add(tabId);
 		this.o.store.writeLease(tabId, process.pid);
 		this.o.store.touch(tabId);
+		this.obs.own(tabId);
 		this.ensureReverify(tabId);
 	}
 
@@ -528,6 +563,7 @@ export class Supervisor {
 				if (report.ok) {
 					this.own(r.tabId);
 					this.audit('tab.reconcile', 'adopted', { tabId: r.tabId });
+					this.obs.adopted(r.tabId);
 				} else {
 					await this.quarantine(r);
 					this.audit('tab.reconcile', 'quarantined', { tabId: r.tabId });
@@ -545,6 +581,7 @@ export class Supervisor {
 		}
 		try {
 			const spec = this.spec(r);
+			this.obs.stopping(r.tabId);
 			await this.driverFor(spec.template).quarantine(spec);
 			this.audit('tab.quarantine', 'ok', { tabId: r.tabId });
 		} catch (e) {
@@ -571,6 +608,7 @@ export class Supervisor {
 			}
 		}
 		const spec = this.spec(r);
+		this.obs.stopping(r.tabId);
 		await this.driverFor(spec.template).stop(spec);
 		this.setPhase(r.tabId, 'Stopped');
 		this.audit('tab.stop', 'ok', { tabId: r.tabId });

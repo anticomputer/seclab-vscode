@@ -1,0 +1,378 @@
+#!/usr/bin/python3 -I
+# seclab-obs-collect: the in-VM observability collector for sbx tabs (ADR tab-observability).
+# Runs as root inside the tab's microVM, started by seclab-tabd over `sbx exec -i -u root`.
+#   stdin : one JSON config line from the supervisor, then nothing (EOF = supervisor gone)
+#   stdout: JSON lines, one record per line, each with a contiguous sequence number "n"
+# It starts the REH itself, under strace and the seccomp guard, so every process the tab
+# creates is traced from birth. It never reads anything from the tab user except /proc.
+import ctypes, json, os, pwd, grp, re, select, secrets, signal, socket, subprocess, sys, threading, time
+
+TRACE_DEFAULT = ("execve,execveat,clone,clone3,fork,vfork,chdir,connect,unlinkat,?unlink,?rmdir,"
+                 "renameat,renameat2,?rename,linkat,?link,symlinkat,?symlink,fchmodat,?fchmodat2,?chmod,"
+                 "setuid,setgid,setreuid,setregid,setresuid,setresgid,setfsuid,setfsgid,capset,ptrace,"
+                 "kill,tkill,tgkill,mount,umount2,unshare,setns,bpf,memfd_create,?init_module,?finit_module,"
+                 "pivot_root,chroot,perf_event_open,keyctl,add_key")
+TRACE_DEEP_EXTRA = ",openat,?openat2,?open,?creat"
+STRACE = "/usr/bin/strace"
+GUARD = "/opt/seclab/bin/seclab-obs-guard"
+REH_START = "/opt/seclab/bin/seclab-reh-start"
+RELAY_DIR = "/run/seclab/reh"
+MAX_LINE = 64 * 1024
+MAX_EXTRA_STRACERS = 32
+HEARTBEAT_S = 2.0
+WATCHDOG_S = 0.25
+HONEYPOTS = [
+    ".ssh/id_rsa", ".aws/credentials", ".git-credentials", ".config/gh/hosts.yml",
+    ".docker/config.json", ".kube/config", ".config/solana/id.json", ".electrum/wallets/default_wallet",
+    ".config/Exodus/exodus.wallet/seed.seco", ".config/google-chrome/Default/Login Data",
+    ".config/BraveSoftware/Brave-Browser/Default/Login Data", ".mozilla/firefox/seclab.default/logins.json",
+    ".local/share/keyrings/login.keyring",
+]
+SYSCTLS = [("kernel/unprivileged_bpf_disabled", "1"), ("kernel/kptr_restrict", "2"),
+           ("kernel/dmesg_restrict", "1"), ("kernel/perf_event_paranoid", "3")]
+
+out_lock = threading.Lock()
+seq = 0
+stop = threading.Event()
+
+
+def emit(rec):
+    global seq
+    with out_lock:
+        seq += 1
+        rec["n"] = seq
+        sys.stdout.buffer.write(json.dumps(rec, ensure_ascii=True, separators=(",", ":")).encode() + b"\n")
+        sys.stdout.buffer.flush()
+
+
+def fail(msg):
+    emit({"k": "err", "msg": msg[:400], "fatal": True})
+    sys.exit(2)
+
+
+def read_config():
+    line = sys.stdin.buffer.readline(4096)
+    try:
+        cfg = json.loads(line)
+    except ValueError:
+        fail("config is not JSON")
+    if not isinstance(cfg, dict) or cfg.get("v") != 1:
+        fail("bad config version")
+    if cfg.get("mode") not in ("default", "deep"):
+        fail("bad mode")
+    if not isinstance(cfg.get("token"), str) or not re.fullmatch(r"[0-9a-f]{64}", cfg["token"]):
+        fail("bad token")
+    for k in ("user", "relayUser"):
+        if not isinstance(cfg.get(k), str) or not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", cfg[k]):
+            fail("bad " + k)
+    return cfg
+
+
+def proc_status(pid):
+    st = {}
+    try:
+        with open("/proc/%d/status" % pid, "rb") as f:
+            for raw in f.read(16384).split(b"\n"):
+                k, _, v = raw.partition(b":")
+                st[k.decode("latin-1")] = v.strip().decode("latin-1")
+    except OSError:
+        return None
+    return st
+
+
+def proc_info(pid):
+    def rd(p, n=8192):
+        try:
+            with open("/proc/%d/%s" % (pid, p), "rb") as f:
+                return f.read(n)
+        except OSError:
+            return b""
+
+    def link(p):
+        try:
+            return os.readlink("/proc/%d/%s" % (pid, p))
+        except OSError:
+            return ""
+
+    st = proc_status(pid) or {}
+    argv = [a.decode("utf-8", "replace") for a in rd("cmdline").split(b"\0") if a][:32]
+    return {"pid": pid, "ppid": int(st.get("PPid", "0") or 0), "uid": int((st.get("Uid", "0").split() or ["0"])[0]),
+            "exe": link("exe")[:512], "argv": [a[:256] for a in argv], "cwd": link("cwd")[:512]}
+
+
+def pids_of(uid):
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        st = proc_status(int(d))
+        if not st or st.get("State", "").startswith("Z"):
+            continue
+        if (st.get("Uid", "").split() or [""])[0] == str(uid):
+            yield int(d), st
+
+
+def broker_addrs():
+    # The broker is reached as host.docker.internal:<port>; detection needs its addresses to
+    # tell broker connects from bypass attempts. Bounded: DNS may be slow or blocked.
+    found = []
+
+    def look():
+        try:
+            for fam, _t, _p, _c, sa in socket.getaddrinfo("host.docker.internal", None):
+                if sa[0] not in found and len(found) < 8:
+                    found.append(sa[0])
+        except OSError:
+            pass
+    t = threading.Thread(target=look, daemon=True)
+    t.start()
+    t.join(2.0)
+    return list(found)
+
+
+def harden():
+    for name, val in SYSCTLS:
+        try:
+            with open("/proc/sys/" + name, "w") as f:
+                f.write(val)
+            emit({"k": "sysctl", "name": name, "ok": True, "value": val})
+        except OSError as e:
+            emit({"k": "sysctl", "name": name, "ok": False, "err": e.strerror or "error"})
+
+
+def seed_honeypots(home, uid, gid):
+    # The tab user owns its home and may race us with symlinks: walk with directory fds and
+    # O_NOFOLLOW at every step, so root never follows a tab-controlled link.
+    made = []
+    dflags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    for rel in HONEYPOTS:
+        path = os.path.join(home, rel)
+        fds = []
+        try:
+            fds.append(os.open(home, dflags))
+            parts = rel.split("/")
+            for p in parts[:-1]:
+                try:
+                    os.mkdir(p, 0o700, dir_fd=fds[-1])
+                    os.chown(p, uid, gid, dir_fd=fds[-1], follow_symlinks=False)
+                except FileExistsError:
+                    pass
+                fds.append(os.open(p, dflags, dir_fd=fds[-1]))
+            try:
+                fd = os.open(parts[-1], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o644, dir_fd=fds[-1])
+                os.write(fd, ("seclabcanary_honeypot_%s\n" % secrets.token_hex(12)).encode())
+                os.close(fd)
+            except FileExistsError:
+                fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=fds[-1])
+                os.close(fd)
+            # Watch through /proc/self/fd so the path is resolved via the fd we just verified.
+            made.append((path, "/proc/self/fd/%d/%s" % (fds[-1], parts[-1]), fds))
+            fds = []
+        except OSError as e:
+            emit({"k": "hp-skip", "path": path[:512], "err": (e.strerror or "error")[:120]})
+        finally:
+            for f in fds:
+                os.close(f)
+    return made
+
+
+IN = {"IN_ACCESS": 0x1, "IN_MODIFY": 0x2, "IN_ATTRIB": 0x4, "IN_CLOSE_WRITE": 0x8, "IN_OPEN": 0x20,
+      "IN_MOVE_SELF": 0x800, "IN_DELETE_SELF": 0x400, "IN_IGNORED": 0x8000}
+
+
+def watch_honeypots(paths):
+    libc = ctypes.CDLL(None, use_errno=True)
+    fd = libc.inotify_init1(os.O_CLOEXEC)
+    if fd < 0:
+        emit({"k": "err", "msg": "inotify_init1 failed"})
+        return
+    wd = {}
+    mask = sum(IN[k] for k in ("IN_ACCESS", "IN_MODIFY", "IN_ATTRIB", "IN_CLOSE_WRITE", "IN_OPEN", "IN_MOVE_SELF", "IN_DELETE_SELF"))
+    IN_DONT_FOLLOW = 0x02000000
+    for p, via, _fds in paths:
+        w = libc.inotify_add_watch(fd, via.encode(), mask | IN_DONT_FOLLOW)
+        if w >= 0:
+            wd[w] = p
+    emit({"k": "hp-ready", "count": len(wd)})
+    last = {}
+    while not stop.is_set():
+        r, _, _ = select.select([fd], [], [], 0.5)
+        if not r:
+            continue
+        buf = os.read(fd, 65536)
+        i = 0
+        while i + 16 <= len(buf):
+            w, m, _cookie, ln = int.from_bytes(buf[i:i + 4], "little", signed=True), int.from_bytes(buf[i + 4:i + 8], "little"), 0, int.from_bytes(buf[i + 12:i + 16], "little")
+            i += 16 + ln
+            p = wd.get(w)
+            if p is None or m & IN["IN_IGNORED"]:
+                continue
+            kinds = [k for k, v in IN.items() if m & v and k != "IN_IGNORED"]
+            kind = ("tamper" if m & (IN["IN_MOVE_SELF"] | IN["IN_DELETE_SELF"] | IN["IN_ATTRIB"]) else
+                    "write" if m & (IN["IN_MODIFY"] | IN["IN_CLOSE_WRITE"]) else "read")
+            now = time.monotonic()
+            if now - last.get((p, kind), -10) < 1.0:
+                continue
+            last[(p, kind)] = now
+            emit({"k": "hp", "path": p[:512], "kind": kind, "mask": kinds})
+
+
+class Stracer:
+    def __init__(self, idx, argv, stdin=None):
+        self.idx = idx
+        r, w = os.pipe()
+        self.proc = subprocess.Popen(argv[:1] + ["-o", "/dev/fd/%d" % w] + argv[1:], stdin=stdin,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, pass_fds=(w,), close_fds=True,
+                                     env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+        os.close(w)
+        self.out = os.fdopen(r, "rb")
+        self.cmd_pid = None
+        self.cmd_exit = threading.Event()
+        self.cmd_code = None
+        threading.Thread(target=self.pump, daemon=True).start()
+        threading.Thread(target=self.errs, daemon=True).start()
+
+    def pump(self):
+        head = re.compile(rb"^(\d+) ")
+        while True:
+            line = self.out.readline(MAX_LINE + 1)
+            if not line:
+                break
+            if len(line) > MAX_LINE and not line.endswith(b"\n"):
+                while True:  # drop the rest of an oversized line
+                    more = self.out.readline(MAX_LINE)
+                    if not more or more.endswith(b"\n"):
+                        break
+                emit({"k": "oversize", "i": self.idx})
+                continue
+            line = line.rstrip(b"\n")
+            m = head.match(line)
+            if m and self.cmd_pid is None:
+                self.cmd_pid = int(m.group(1))
+            if m and self.cmd_pid is not None and int(m.group(1)) == self.cmd_pid:
+                ex = re.search(rb"\+\+\+ (?:exited with (\d+)|killed by (\w+))", line)
+                if ex:
+                    self.cmd_code = int(ex.group(1)) if ex.group(1) else 128
+                    self.cmd_exit.set()
+            emit({"k": "s", "i": self.idx, "l": line.decode("latin-1")})
+        code = self.proc.wait()
+        emit({"k": "strace-exit", "i": self.idx, "code": code})
+
+    def errs(self):
+        for raw in self.proc.stderr:
+            emit({"k": "strace-err", "i": self.idx, "msg": raw.decode("latin-1", "replace").strip()[:300]})
+
+
+def main():
+    cfg = read_config()
+    try:
+        tab = pwd.getpwnam(cfg["user"])
+        relay_gid = grp.getgrnam(cfg["relayUser"]).gr_gid
+    except KeyError:
+        fail("tab user or relay group missing (template too old?)")
+    for p in (STRACE, GUARD, REH_START):
+        if not os.access(p, os.X_OK):
+            fail("missing " + p + " (rebuild the template: ./seclab template sbx)")
+    version = subprocess.run([STRACE, "-V"], capture_output=True, env={"PATH": "/usr/bin:/bin"}).stdout.split(b"\n")[0]
+    emit({"k": "hello", "v": 1, "pid": os.getpid(), "mode": cfg["mode"], "kernel": os.uname().release,
+          "strace": version.decode("latin-1")[:64], "brokerAddrs": broker_addrs()})
+    harden()
+
+    # REH relay socket dir: the tab user creates the socket, the relay uid connects to it.
+    os.makedirs("/run/seclab", mode=0o755, exist_ok=True)
+    if not os.path.isdir(RELAY_DIR) or os.path.islink(RELAY_DIR):
+        os.mkdir(RELAY_DIR, 0o750)
+    os.chown(RELAY_DIR, tab.pw_uid, relay_gid)
+    os.chmod(RELAY_DIR, 0o2750)
+
+    honeypots = seed_honeypots(tab.pw_dir, tab.pw_uid, tab.pw_gid)
+    threading.Thread(target=watch_honeypots, args=(honeypots,), daemon=True).start()
+
+    trace = TRACE_DEFAULT + (TRACE_DEEP_EXTRA if cfg["mode"] == "deep" else "")
+    base = [STRACE, "-f", "-q", "-ttt", "-s", "256", "-e", "signal=none", "-e", "trace=" + trace]
+    existing = []
+    for pid, _st in pids_of(tab.pw_uid):
+        existing.append(pid)
+        emit(dict(proc_info(pid), k="proc"))
+    attach = sum((["-p", str(p)] for p in existing), [])
+    cmd = ["--seccomp-bpf"] + attach + ["--", GUARD, "/usr/bin/setpriv", "--reuid=" + str(tab.pw_uid), "--regid=" + str(tab.pw_gid),
+                                        "--init-groups", "--reset-env", REH_START]
+    stracers = [Stracer(0, base + cmd, stdin=subprocess.PIPE)]
+    stracers[0].proc.stdin.write((cfg["token"] + "\n").encode())
+    stracers[0].proc.stdin.close()
+    tracer_pids = {stracers[0].proc.pid}
+    reh_cmd = ["--seccomp-bpf", "--", GUARD, "/usr/bin/setpriv", "--reuid=" + str(tab.pw_uid), "--regid=" + str(tab.pw_gid),
+               "--init-groups", "--reset-env", REH_START]
+
+    def reh_wait(s, rid):
+        ok = s.cmd_exit.wait(120)
+        emit({"k": "reh", "id": rid, "code": s.cmd_code if ok else -1})
+    threading.Thread(target=reh_wait, args=(stracers[0], 0), daemon=True).start()
+
+    def watchdog():
+        reported = set()
+        while not stop.is_set():
+            time.sleep(WATCHDOG_S)
+            if stracers[0].cmd_pid is None:
+                continue  # primary strace still starting: its tracee isn't attached yet
+            for pid, st in pids_of(tab.pw_uid):
+                tracer = int(st.get("TracerPid", "0") or 0)
+                if tracer in tracer_pids:
+                    continue
+                if pid in reported:
+                    continue
+                reported.add(pid)
+                info = proc_info(pid)
+                attached = False
+                if tracer == 0 and len(stracers) <= MAX_EXTRA_STRACERS:
+                    s = Stracer(len(stracers), base + ["-p", str(pid)])
+                    stracers.append(s)
+                    tracer_pids.add(s.proc.pid)
+                    attached = True
+                emit(dict(info, k="untraced", tracer=tracer, attached=attached))
+    threading.Thread(target=watchdog, daemon=True).start()
+
+    def heartbeat():
+        while not stop.is_set():
+            alive = sum(1 for s in stracers if s.proc.poll() is None)
+            emit({"k": "hb", "t": time.time(), "stracers": alive, "mode": cfg["mode"],
+                  "pids": [os.getpid()] + [s.proc.pid for s in stracers][:64]})
+            stop.wait(HEARTBEAT_S)
+    threading.Thread(target=heartbeat, daemon=True).start()
+
+    # The supervisor holds stdin open for as long as it wants the tab observed. Later lines
+    # are commands; the only one is ensure-reh: (re)start the REH under a new tracer + guard
+    # (seclab-reh-start is a no-op when the REH already runs with this token).
+    while True:
+        line = sys.stdin.buffer.readline(4096)
+        if not line:
+            break
+        try:
+            c = json.loads(line)
+        except ValueError:
+            emit({"k": "err", "msg": "bad command"})
+            continue
+        if (not isinstance(c, dict) or c.get("cmd") != "ensure-reh" or not isinstance(c.get("id"), int)
+                or not isinstance(c.get("token"), str) or not re.fullmatch(r"[0-9a-f]{64}", c["token"])):
+            emit({"k": "err", "msg": "bad command"})
+            continue
+        if len(stracers) > MAX_EXTRA_STRACERS:
+            emit({"k": "reh", "id": c["id"], "code": -2})
+            continue
+        s = Stracer(len(stracers), base + reh_cmd, stdin=subprocess.PIPE)
+        stracers.append(s)
+        tracer_pids.add(s.proc.pid)
+        s.proc.stdin.write((c["token"] + "\n").encode())
+        s.proc.stdin.close()
+        threading.Thread(target=reh_wait, args=(s, c["id"]), daemon=True).start()
+    stop.set()
+    for s in stracers:
+        try:
+            s.proc.terminate()  # strace detaches cleanly on SIGTERM
+        except OSError:
+            pass
+    emit({"k": "bye", "reason": "supervisor closed stdin"})
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    main()

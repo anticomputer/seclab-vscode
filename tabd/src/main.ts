@@ -97,6 +97,8 @@ const supervisor = new Supervisor({
 		void supervisor.clientGone().finally(() => process.exit(3));
 	},
 	audit: entry => fs.writeSync(auditLog, JSON.stringify(entry) + '\n'),
+	eventsDir: path.join(stateDir, 'events'),
+	outputBacklog: () => process.stdout.writableLength,
 	fenceReverifyMs: values['fence-reverify-ms'] ? Number(values['fence-reverify-ms']) : undefined,
 	gcDays: /^[0-9]{1,4}$/.test(values['gc-days']!) ? Number(values['gc-days']) : die('--gc-days must be a whole number of days'),
 	pathPolicy: {

@@ -63,6 +63,7 @@ docs_check() {
 		esac
 	done
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/docs-check.ts check
+	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node tabd/tools/gen-obs-docs.ts check
 	if [[ -d "$ROOT/broker" ]]; then
 		[[ -f "$ROOT/broker/docs-check.sh" ]] || { echo "docs-check: broker/ exists but broker/docs-check.sh is missing" >&2; exit 1; }
 		if [[ $run = 1 ]]; then bash "$ROOT/broker/docs-check.sh" --run-commands; else bash "$ROOT/broker/docs-check.sh"; fi
@@ -198,7 +199,7 @@ case "${1:-help}" in
 			# Scratch dirs on a named volume: Docker Desktop's bind-mount inode numbers are not
 			# stable, which trips tabd's (dev, ino) workspace identity check.
 			unit) docker run --rm -v "$ROOT:/repo" -v seclab-test-scratch:/repo/.work/test-scratch -w /repo "$(node_image)" \
-				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts' ;;
+				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts tabd/test/obs.test.ts' ;;
 			# e2e drives sbx/docker on the host, so it runs on the host. It uses the editor's own
 			# Node when SECLAB_NODE points at it, else an already-present node (nothing is installed).
 			e2e) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/test/e2e.ts" "${1:-sbx}" ;;
@@ -238,7 +239,7 @@ case "${1:-help}" in
 	docs)
 		shift
 		case "${1:-}" in
-			write) docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" node build/docs/docs-check.ts write ;;
+			write) docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" sh -c 'node tabd/tools/gen-obs-docs.ts write && node build/docs/docs-check.ts write' ;;
 			check) shift; docs_check "$@" ;;
 			*) usage; exit 2 ;;
 		esac ;;
