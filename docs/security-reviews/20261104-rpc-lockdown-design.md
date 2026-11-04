@@ -7,7 +7,7 @@
   [rpc-filter/policy/policy.json](../../rpc-filter/policy/policy.json),
   [rpc-filter/tools/check_drift.py](../../rpc-filter/tools/check_drift.py),
   the inventory generator
-- **Upstream:** `microsoft/vscode@881999100739fef36236fe0b93fedc9b730f94a9`
+- **Upstream:** `microsoft/vscode@a717861c07586a53d83b80d742cd3f59b20a6273`
 - **Outcome:** design changed in response; no high or critical findings left
   open. Several accepted as recorded residual risk with named follow-up.
 
@@ -39,7 +39,7 @@ tab; and whether the drift gate can pass while the real surface grows.
 - The requirement that `$registerCommand` must not shadow. Verified:
   `CommandsRegistry.registerCommand` does `commands.unshift(...)` and
   `getCommand` returns the head, so a later registration beats a built-in
-  ([commands.ts L99-L110](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/platform/commands/common/commands.ts#L99-L110)).
+  ([commands.ts L99-L110](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/commands/common/commands.ts#L99-L110)).
 - Denying both client-served channels, and the assessment that
   `mcpGatewayToolBroker.callToolForServer` is a direct confused-deputy path.
 - There is exactly one `new RPCProtocol(` outside tests, on the single path for

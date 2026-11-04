@@ -15,7 +15,7 @@ DEST="$REPO/.work/upstream"
 if [ -f "$REPO/upstream.lock" ]; then
 	SHA=$(grep -oE '[0-9a-f]{40}' "$REPO/upstream.lock" | head -1)
 else
-	SHA=881999100739fef36236fe0b93fedc9b730f94a9
+	SHA=a717861c07586a53d83b80d742cd3f59b20a6273
 	echo "note: no upstream.lock; using fallback $SHA" >&2
 fi
 

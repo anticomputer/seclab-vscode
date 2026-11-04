@@ -72,9 +72,9 @@ four defects that a hand-written list would have reproduced silently:
 
 ## Evidence
 
-- Verified counts at `microsoft/vscode@881999100739fef36236fe0b93fedc9b730f94a9`:
+- Verified counts at `microsoft/vscode@a717861c07586a53d83b80d742cd3f59b20a6273`:
   89 services, 546 methods, 3205 commands, 2 client-served channels, 15
   tab-data sink classes over 475 sites.
-- `actor[methodName]` dispatch: [rpcProtocol.ts L449-L461](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/services/extensions/common/rpcProtocol.ts#L449-L461)
-- `sid` vs `nid`: [proxyIdentifier.ts L33-L50](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/services/extensions/common/proxyIdentifier.ts#L33-L50)
-- `newLocal` via `registerTerminalAction`: [terminalRemote.ts L16-L42](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/terminal/electron-browser/terminalRemote.ts#L16-L42)
+- `actor[methodName]` dispatch: [rpcProtocol.ts L449-L461](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/common/rpcProtocol.ts#L449-L461)
+- `sid` vs `nid`: [proxyIdentifier.ts L33-L50](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/common/proxyIdentifier.ts#L33-L50)
+- `newLocal` via `registerTerminalAction`: [terminalRemote.ts L16-L42](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/electron-browser/terminalRemote.ts#L16-L42)

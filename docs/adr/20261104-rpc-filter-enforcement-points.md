@@ -83,12 +83,12 @@ tab-supplied data the trusted side interprets with authority.
 
 ## Evidence
 
-- Dispatcher resolves `actor[methodName]`: [rpcProtocol.ts L449-L461](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/services/extensions/common/rpcProtocol.ts#L449-L461)
-- Single construction site: [extensionHostManager.ts L249-L270](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/services/extensions/common/extensionHostManager.ts#L249-L270)
-- `nid` from load order: [proxyIdentifier.ts L33-L50](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/services/extensions/common/proxyIdentifier.ts#L33-L50)
-- `download` channel revives server URIs: [remote.contribution.ts L77-L81](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L77-L81), [downloadIpc.ts L18-L26](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/platform/download/common/downloadIpc.ts#L18-L26)
-- MCP gateway tool broker: [mcpGatewayToolBrokerContribution.ts L13-L21](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts#L13-L21)
-- Remote terminal `onExecuteCommand`: [remoteTerminalBackend.ts L102-L121](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L102-L121)
-- Caller-supplied secret identity: [mainThreadSecretState.ts L38-L80](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/workbench/api/browser/mainThreadSecretState.ts#L38-L80)
-- Later registration beats a built-in: [commands.ts L99-L110](https://github.com/microsoft/vscode/blob/881999100739fef36236fe0b93fedc9b730f94a9/src/vs/platform/commands/common/commands.ts#L99-L110)
+- Dispatcher resolves `actor[methodName]`: [rpcProtocol.ts L449-L461](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/common/rpcProtocol.ts#L449-L461)
+- Single construction site: [extensionHostManager.ts L249-L270](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/common/extensionHostManager.ts#L249-L270)
+- `nid` from load order: [proxyIdentifier.ts L33-L50](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/common/proxyIdentifier.ts#L33-L50)
+- `download` channel revives server URIs: [remote.contribution.ts L77-L81](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L77-L81), [downloadIpc.ts L18-L26](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/download/common/downloadIpc.ts#L18-L26)
+- MCP gateway tool broker: [mcpGatewayToolBrokerContribution.ts L13-L21](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts#L13-L21)
+- Remote terminal `onExecuteCommand`: [remoteTerminalBackend.ts L102-L121](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L102-L121)
+- Caller-supplied secret identity: [mainThreadSecretState.ts L38-L80](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L38-L80)
+- Later registration beats a built-in: [commands.ts L99-L110](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/commands/common/commands.ts#L99-L110)
 - Gate proven: injected surfaces exit 1 and are named; clean tree exits 0.

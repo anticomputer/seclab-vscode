@@ -25,7 +25,7 @@ from seclab_inventory.render import render_markdown  # noqa: E402
 from seclab_inventory.sources import SourceTree, read_pinned_sha  # noqa: E402
 
 # Used only when upstream.lock is absent. Keep in step with ARCHITECTURE.md.
-FALLBACK_SHA = "881999100739fef36236fe0b93fedc9b730f94a9"
+FALLBACK_SHA = "a717861c07586a53d83b80d742cd3f59b20a6273"
 
 REPO_ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 
