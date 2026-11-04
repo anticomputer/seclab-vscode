@@ -194,7 +194,7 @@ Why not Docker Sandboxes as *the* design: it already ships most of this (microVM
 
 ### 4.6 RPC capability filter: the piece that is easy to miss
 
-> Scope extended by the design security review: the REH **server** is hostile too, so server→client IPC (the `download` channel and pty `onExecuteCommand` → `_remoteCLI.*`) must be filtered as well as `MainThread*` ([review](security-reviews/20261104-tabd-protocol-design.md), [ADR](adr/20261104-rpc-filter-enforcement-points.md)). The patches land after their security-review round.
+> Scope extended by the design security review: the REH **server** is hostile too, so server→client IPC (the `download` channel and pty `onExecuteCommand` → `_remoteCLI.*`) must be filtered as well as `MainThread*` ([review](security-reviews/20261104-tabd-protocol-design.md), [ADR](adr/20261104-rpc-filter-enforcement-points.md)). Implemented as patches 0005–0007.
 
 The sandboxed extension host talks back to the trusted workbench through `MainThread*` RPC services, and today those services do not check where the caller runs. Verified in source:
 

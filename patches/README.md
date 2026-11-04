@@ -62,6 +62,18 @@ Current queue:
 `reach.json` requires targets per patch. `unreachable.json` lists modules, or `dir/` prefixes
 with explicit exceptions, that a target must not reach. Both are enforced by `build/check-patch-reach.ts` in the required `patch-build` check.
 
+- `0005-seclab-rpc-capability-filter.patch`: the RPC choke point in
+  `rpcProtocol.ts` plus the filter module and its generated policy. The module
+  carries the logic for all three enforcement points; 0006 and 0007 only wire
+  the other two in, so each core file is touched by exactly one patch
+  ([ADR](../docs/adr/20261104-rpc-filter-enforcement-points.md)).
+- `0006-seclab-channel-guard.patch`: `ipc.ts` only. Guards the channels the
+  client serves to a hostile REH, on `ChannelServer` rather than a wrapper a
+  caller can bypass.
+- `0007-seclab-command-taint.patch`: `commandService.ts` only. Tab-originated
+  commands carry the tab identity into everything they trigger
+  ([ADR](../docs/adr/20261104-tab-command-taint.md)).
+
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
 builds. The rogue-REH hook lives at

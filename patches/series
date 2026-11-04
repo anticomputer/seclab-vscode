@@ -2,11 +2,15 @@
 # build/prepare.sh applies exactly these and fails on any other file in patches/
 # (EDR patch-series). A change here is a patch-queue change: security review + records.
 # Test-only hooks never go in patches/: they belong to the test harness.
+# 0005-0011 are reserved for the RPC capability-filter series (anticomputer-rpc-filter-patches).
+# 0015 onwards: the secure-agentic-experiences series (plan section 10).
 0001-build-skip-copilot-shim-without-extension.patch
 0002-extensionkind-product-default.patch
 0003-no-workspace-extensions-in-local-windows.patch
 0004-extension-description-computed-fields-win.patch
-# 0005-0011 are reserved for the RPC capability-filter series (anticomputer-rpc-filter-patches).
+0005-seclab-rpc-capability-filter.patch
+0006-seclab-channel-guard.patch
+0007-seclab-command-taint.patch
 0012-background-windows-env.patch
 0013-no-local-agent-host.patch
 0014-build-desktop-without-copilot-runtime.patch
