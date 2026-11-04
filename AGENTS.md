@@ -72,6 +72,15 @@ this file.
   native-editor ADR).
 - **Never change sbx's global policy** without the user's consent. Why: it is
   shared with their other sandboxes.
+- **Push to origin on every major iteration:** a milestone or sub-milestone
+  working end to end, a new component or protocol, a patch-queue change, or a
+  fixed review round. Each push needs its review recorded, the relevant tests
+  passing, and the records updated. Fast-forward reviewed, coherent increments
+  to `main`; `main` always builds and passes. Never force-push `main`. Why:
+  the user asked for it, and other sessions build on `main`.
+- **Fixture canaries must be obviously fake** (`seclabcanary_…`, no real token
+  prefixes), and staged changes are checked with gitleaks before a push. Why:
+  GitHub push protection, and no real-looking secrets in history.
 
 ## 4. Common tasks
 Verified commands (one entry point: `./seclab help`):
@@ -175,6 +184,24 @@ Electron with `ELECTRON_RUN_AS_NODE=1`); nothing is installed.
 - **`sbx policy check` exits 1 on deny**, so parse stdout, not the exit code.
 - **Node type stripping**: no parameter properties or enums in `tabd/`
   (`node --test` runs the `.ts` directly).
+- **Docker Desktop (macOS) bind mounts:**
+  - files appear owned by the accessing uid;
+  - `access(2)` can report a path as readable while `open`/`stat` fail with
+    ENOENT;
+  - inode numbers aren't stable;
+  - the mount is case-insensitive.
+  
+  So test real reads, and keep (dev, ino)-checked scratch on named volumes.
+  A native Linux engine is different: the tab and scanner run as the
+  workspace owner ([EDR](docs/edr/20261104-oci-tab-user-on-linux.md)).
+- **gitleaks always loads `<source>/.gitleaksignore`** and skips the file at
+  its config path. Its default allowlist applies to *resolved* symlink
+  paths, and `--log-level error` hides permission skips. Hence the framed
+  scanner script in `tabd/src/scan.ts`
+  ([ADR](docs/adr/20261104-pre-mount-secret-scan.md)).
+- **Secret-finding ids must be deterministic** across rescans, because
+  `acceptFindings` must match on the re-gate. gitleaks reports concurrently,
+  so sort.
 
 ## 7. Where to look first when something breaks
 - A tab won't connect: the "seclab Tab Manager" output channel, then

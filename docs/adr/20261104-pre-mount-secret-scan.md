@@ -136,3 +136,10 @@ secret into a place it skips:
 The residual about the default allowlist (above) now only covers files the
 user writes *directly* into allowlisted paths such as `node_modules/` or
 lockfiles. That is not tab-steerable: links into those paths are scanned.
+
+Round 7 (R1–R3) adds the following, all blocking and never silent:
+- directory links and host-only aliases;
+- an absolute `commondir`;
+- unreadable or unlistable paths.
+
+Git-dir copies now exclude only well-formed object and pack files.
