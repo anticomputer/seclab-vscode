@@ -52,7 +52,7 @@ function setup(name: string) {
 		drivers: new Map([['fake', driver]]), templates: new Map([['default', template]]),
 		store: new TabStore(path.join(dir, 'state')),
 		write: b => out.push(...dec.push(b)), onFatal: r => { fatal = r; },
-		fenceReverifyMs: 20, pathPolicy: { home: path.join(dir, 'home') },
+		fenceReverifyMs: 20, pathPolicy: { home: path.join(dir, 'home'), allowedRoots: [path.join(dir, 'home', 'src')] },
 	});
 	let id = 1;
 	const call = async (method: string, params: unknown = {}) => {

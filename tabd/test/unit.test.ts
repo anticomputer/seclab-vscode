@@ -49,8 +49,10 @@ test('validate: workspace paths', () => {
 	const ws = path.join(home, 'src', 'proj');
 	fs.mkdirSync(ws, { recursive: true });
 	fs.mkdirSync(path.join(home, '.ssh'), { recursive: true });
-	const pol = { home };
+	const pol = { home, allowedRoots: [path.join(home, 'src'), path.join(home, '.copilot', 'worktrees')] };
 	assert.equal(canonicalWorkspacePath(ws, pol), fs.realpathSync.native(ws));
+	assert.throws(() => canonicalWorkspacePath(ws, { home }), /no allowed roots/);
+	assert.throws(() => canonicalWorkspacePath(ws, { home, allowedRoots: [home] }), /too broad/);
 	const bad = (p: unknown, why: RegExp) => assert.throws(() => canonicalWorkspacePath(p, pol), why);
 	bad('relative/x', /absolute/);
 	bad(home, /sensitive/);

@@ -16,7 +16,7 @@ fs.mkdirSync(ws, { recursive: true });
 
 const client = new TabdClient({
 	command: process.execPath,
-	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver],
+	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', work],
 	env: { HOME: process.env.HOME, USER: process.env.USER, PATH: '/usr/bin:/bin' },
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));
