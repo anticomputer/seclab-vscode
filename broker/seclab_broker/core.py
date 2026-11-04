@@ -23,14 +23,16 @@ from typing import Any, Callable
 from . import PROTOCOL, VERSION, protocol
 from .credentials import Credential, CredentialStore
 from .policy import (Binding, Inject, Policy, PolicyError, RequestView, Rule, parse_bindings,
-                     validate_fragment)
+                     risk_flags, validate_fragment)
 
 log = logging.getLogger("seclab.broker")
 
-DECISIONS = ("allow-once", "allow-tab", "deny")
+DECISIONS = ("allow-once", "allow-tab", "deny", "deny-new-destinations")
 _USER_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _PASS_RE = re.compile(r"^[A-Za-z0-9_-]{22,128}$")  # >= 128 bits as base64url
+_LABEL_RE = re.compile(r"^[A-Za-z0-9._:-]{1,96}$")
 _SOURCE_KINDS = ("workspace-scan", "password-input", "user", "host")
+TAB_EVENTS = ("opened", "userAction")
 
 
 class RpcError(Exception):
@@ -52,13 +54,15 @@ class Approval:
     created: float
     deadline: float
     suggested: dict
+    decisions: tuple[str, ...]
+    risk: dict
     credential_id: str | None = None
     waiters: list[asyncio.Future] = field(default_factory=list)
 
     def public(self) -> dict:
         out = {"approvalId": self.id, "kind": self.kind, "request": self.request,
                "createdAt": self.created, "expiresAt": self.deadline, "waiting": len(self.waiters),
-               "decisions": list(DECISIONS)}
+               "decisions": list(self.decisions), "risk": self.risk}
         if self.kind == "egress":
             out["suggestedRule"] = self.suggested
         else:
@@ -96,6 +100,12 @@ class Broker:
         self._sinks: set[Callable[[str, dict], None]] = set()
         self.proxy_listening = False
         self.on_shutdown: Callable[[], None] | None = None
+        # Session prompt state (survives policy.load; cleared by prompt.reset).
+        self.opened_at = time.time()
+        self.user_action_at: float | None = None
+        self.deny_new = False
+        self.session_denials = 0
+        self._prompt_times: deque[float] = deque()
 
     # ------------------------------------------------------------------ sinks
     def add_sink(self, sink: Callable[[str, dict], None]) -> None:
@@ -136,33 +146,73 @@ class Broker:
         return obj
 
     # ------------------------------------------------------------- proxy auth
-    def check_proxy_auth(self, username: str | None, password: str | None) -> bool:
+    def check_proxy_auth(self, username: str | None, password: str | None) -> tuple[bool, str | None]:
+        """(ok, origin label). The username may carry an origin label: `<user>+<label>`.
+        The label is set by whatever launched the client inside the tab, so it is
+        advisory only (any process in the tab can claim any label)."""
         if self._proxy_auth is None or username is None or password is None:
-            return False
-        u_ok = hmac.compare_digest(username.encode("utf-8", "surrogateescape"), self._proxy_auth[0])
+            return False, None
+        base, sep, label = username.partition("+")
+        label_ok = not sep or bool(_LABEL_RE.match(label))
+        u_ok = hmac.compare_digest(base.encode("utf-8", "surrogateescape"), self._proxy_auth[0])
         p_ok = hmac.compare_digest(password.encode("utf-8", "surrogateescape"), self._proxy_auth[1])
-        return u_ok & p_ok
+        if u_ok & p_ok & label_ok:
+            return True, (label if sep else None)
+        return False, None
+
+    # ------------------------------------------------------------------ risk
+    def risk(self, req: RequestView, origin: str | None) -> dict:
+        now = time.time()
+        since_open = round(now - self.opened_at, 1)
+        flags = risk_flags(req, self.policy.risky)
+        if self.user_action_at is None and since_open <= self.policy.prompt.quiet_period_seconds:
+            flags.append("early-after-open")
+        if self.user_action_at is None:
+            flags.append("no-user-action-yet")
+        return {"flags": flags, "origin": {"label": origin, "verified": False},
+                "secondsSinceOpen": since_open, "userActionSeen": self.user_action_at is not None}
 
     # -------------------------------------------------------------- decisions
     def allowed(self, req: RequestView) -> Rule | None:
         return self.policy.allow_match(req)
 
-    async def ask_egress(self, req: RequestView) -> Decision:
+    async def ask_egress(self, req: RequestView, origin: str | None = None) -> Decision:
+        risk = self.risk(req, origin)
+        flags = risk["flags"]
+        hostile = "raw-ip" in flags or any(f.startswith("risky-destination:") for f in flags)
+        cfg = self.policy.prompt
+        if self.deny_new:
+            return self._deny_unprompted("deny-new-destinations", req, risk)
+        if "raw-ip" in flags and cfg.raw_ip_destinations == "deny":
+            return self._deny_unprompted("raw-ip-destination", req, risk)
+        if hostile and cfg.auto_deny_risky_before_user_action and self.user_action_at is None:
+            return self._deny_unprompted("risky-before-user-action", req, risk)
         key = ("egress",) + req.origin
         suggested = {"host": req.host, "schemes": [req.scheme], "ports": [req.port],
                      "methods": ["*"], "path": "/**"}
-        return await self._ask(key, "egress", req, suggested, None)
+        decisions = ["allow-once"] + ([] if hostile else ["allow-tab"]) + ["deny"]
+        if self.session_denials >= cfg.offer_deny_new_after:
+            decisions.append("deny-new-destinations")
+        return await self._ask(key, "egress", req, suggested, None, tuple(decisions), risk)
 
-    async def ask_binding(self, req: RequestView, cred: Credential, inject: Inject | None) -> Decision:
+    async def ask_binding(self, req: RequestView, cred: Credential, inject: Inject | None,
+                          origin: str | None = None) -> Decision:
         key = ("binding", cred.id, req.scheme, req.host, req.port, req.method, req.path,
                inject.header.lower() if inject else None, inject.fmt if inject else None)
         suggested = {"host": req.host, "path": req.path, "methods": [req.method], "ports": [req.port]}
         if inject is not None:
             suggested["inject"] = inject.to_json()
-        return await self._ask(key, "credential-binding", req, suggested, cred.id)
+        risk = self.risk(req, origin)
+        hostile = "raw-ip" in risk["flags"] or any(f.startswith("risky-destination:") for f in risk["flags"])
+        decisions = ("allow-once", "deny") if hostile else ("allow-once", "allow-tab", "deny")
+        return await self._ask(key, "credential-binding", req, suggested, cred.id, decisions, risk)
+
+    def _deny_unprompted(self, reason: str, req: RequestView, risk: dict) -> Decision:
+        self.audit("request.denied_unprompted", reason=reason, risk=risk, **req.summary())
+        return Decision(False, reason)
 
     async def _ask(self, key: tuple, kind: str, req: RequestView, suggested: dict,
-                   cred_id: str | None) -> Decision:
+                   cred_id: str | None, decisions: tuple[str, ...], risk: dict) -> Decision:
         cfg = self.policy.prompt
         if not cfg.enabled:
             return Decision(False, "prompt-disabled")
@@ -180,16 +230,23 @@ class Broker:
             if len(self.approvals) >= cfg.max_pending:
                 self.audit("approval.queue_full", limit="maxPending", **req.summary())
                 return Decision(False, "approval-queue-full")
+            while self._prompt_times and now - self._prompt_times[0] > 60:
+                self._prompt_times.popleft()
+            if len(self._prompt_times) >= cfg.max_per_minute:
+                self.audit("approval.rate_limited", limit=cfg.max_per_minute, risk=risk, **req.summary())
+                return Decision(False, "prompt-rate-limited")
+            self._prompt_times.append(now)
             approval = Approval(id=uuid.uuid4().hex, kind=kind, key=key, request=req.summary(),
                                 created=now, deadline=now + cfg.timeout_seconds,
-                                suggested=suggested, credential_id=cred_id)
+                                suggested=suggested, decisions=decisions, risk=risk,
+                                credential_id=cred_id)
             self.approvals[approval.id] = approval
             self._approval_by_key[key] = approval.id
             asyncio.get_running_loop().call_at(
                 asyncio.get_running_loop().time() + cfg.timeout_seconds,
                 self._expire, approval.id)
             self.audit("approval.requested", approvalId=approval.id, kind=kind,
-                       credentialId=cred_id, **req.summary())
+                       credentialId=cred_id, risk=risk, **req.summary())
             self.notify("approval.requested", approval.public())
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         approval.waiters.append(fut)
@@ -208,6 +265,7 @@ class Broker:
         self._approval_by_key.pop(approval.key, None)
         allow = decision in ("allow-once", "allow-tab")
         if not allow:
+            self.session_denials += 1
             self._cooldown[approval.key] = time.time() + self.policy.prompt.deny_cooldown_seconds
         result = Decision(allow, f"{decision}:{by}", once=decision == "allow-once")
         for fut in approval.waiters:
@@ -262,7 +320,28 @@ class Broker:
             "heldFlows": self.held,
             "credentials": len(self.creds.all()),
             "controllers": self.controllers,
+            "prompt": {"denyNewDestinations": self.deny_new, "sessionDenials": self.session_denials,
+                       "promptsLastMinute": sum(1 for t in self._prompt_times if time.time() - t <= 60),
+                       "userActionSeen": self.user_action_at is not None},
         }
+
+    def rpc_tab_event(self, params: dict) -> dict:
+        kind = params["kind"]
+        if kind == "opened":
+            self.opened_at = time.time()
+            self.user_action_at = None
+        else:
+            self.user_action_at = time.time()
+        self.audit("tab.event", kind=kind)
+        return {}
+
+    def rpc_prompt_reset(self, params: dict) -> dict:
+        self.deny_new = False
+        self.session_denials = 0
+        self._cooldown.clear()
+        self._prompt_times.clear()
+        self.audit("prompt.reset")
+        return {}
 
     def rpc_proxy_auth_set(self, params: dict) -> dict:
         user, pw = params.get("username"), params.get("password")
@@ -371,6 +450,15 @@ class Broker:
         approval = self.approvals.get(aid) if isinstance(aid, str) else None
         if approval is None:
             raise invalid("unknown or already resolved approvalId")
+        if decision not in approval.decisions:
+            raise invalid(f"decision {decision!r} is not offered for this approval")
+        if decision == "deny-new-destinations":
+            self.deny_new = True
+            self.audit("prompt.deny_new", approvalId=aid)
+            self._resolve(aid, decision, by="controller")
+            for other in [a.id for a in self.approvals.values() if a.kind == "egress"]:
+                self._resolve(other, "deny", by="controller")
+            return {}
         if decision == "allow-tab":
             if approval.kind == "egress":
                 rule = Rule.from_json(params.get("rule") or approval.suggested)
@@ -424,6 +512,8 @@ class Broker:
         "ca.get": "rpc_ca_get",
         "audit.tail": "rpc_audit_tail",
         "broker.shutdown": "rpc_broker_shutdown",
+        "tab.event": "rpc_tab_event",
+        "prompt.reset": "rpc_prompt_reset",
     }
 
     def dispatch(self, method: str, params: Any) -> Any:
@@ -457,6 +547,11 @@ CAPABILITIES = {
     "proxyAuth": True,
     "upstreamAddressGuard": True,
     "credentialImport": True,
+    "riskyDestinationList": True,
+    "rawIpDeny": True,
+    "promptFloodControl": True,
+    "userActionGating": True,
+    "originLabel": True,
 }
 
 

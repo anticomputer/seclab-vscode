@@ -57,6 +57,9 @@ def test_every_method_result_matches_definition():
         c("approval.decide", {"approvalId": approvals[0]["approvalId"], "decision": "allow-tab"})
         await task
         c("audit.tail", {"limit": 2000})
+        c("tab.event", {"kind": "opened"})
+        c("tab.event", {"kind": "userAction"})
+        c("prompt.reset")
         c("broker.shutdown", {"reason": "test"})
         assert seen == protocol.method_names()
         for method, params in notes:

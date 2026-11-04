@@ -34,8 +34,9 @@ def test_no_dns_exfiltration_via_embedded_resolver(pod, ctl):
     dns_ip = ip_on(pod, pod.name("dns"), pod.name("inet"))
     tag = secrets.token_hex(4)
     names = {k: f"{k}-{tag}.exfil.test" for k in ("control", "default", "direct", "dnsflag", "tcp")}
-    # Positive control: a container on a normal network with --dns reaches the logger.
-    docker("run", "--rm", "--network", pod.name("inet"), "--dns", dns_ip, "--entrypoint", "getent",
+    # Positive control: a container on a normal (non-internal) network with --dns reaches the logger.
+    ctl_dns_ip = ip_on(pod, pod.name("dns"), pod.name("ctl"))
+    docker("run", "--rm", "--network", pod.name("ctl"), "--dns", ctl_dns_ip, "--entrypoint", "getent",
            WORKSPACE_IMAGE, "hosts", names["control"], check=False)
     # 1. The workspace's default resolver (Docker embedded DNS, 127.0.0.11).
     pod.ws(f"getent hosts {names['default']}; dig +time=2 +tries=1 @127.0.0.11 {names['default']}")

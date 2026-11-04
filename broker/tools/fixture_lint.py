@@ -30,7 +30,9 @@ from seclab_broker.scanner import find_minted  # noqa: E402
 
 NETWORK_SCOPES = [BROKER / "tests" / "integration", BROKER / "tests" / "sbx"]
 TOKEN_SCOPES = NETWORK_SCOPES + [BROKER / "tests" / "unit", BROKER / "examples"]
-URL_RE = re.compile(r"\b(?:https?|wss?)://(?:[^@/\s'\"]*@)?(\[[0-9a-fA-F:.]+\]|\{[^}]*\}|\$\{?\w+\}?|[A-Za-z0-9._-]+)")
+URL_RE = re.compile(r"\b(?:https?|wss?)://(?:[^@/\s'\"]*@)?(\[[0-9a-fA-F:.]+\]|\$\{?\w+\}?"
+                    r"|[A-Za-z0-9._-]*(?:\{[^}]*\}[A-Za-z0-9._-]*)*)")
+PLACEHOLDER_RE = re.compile(r"\{[^}]*\}")
 IPV4_RE = re.compile(r"(?<![\w.])(\d{1,3}(?:\.\d{1,3}){3})(?![\w.])")
 EXTRA_TOKEN_RE = re.compile(r"\b(?:AKIA|ASIA)[A-Z2-7]{16}\b")
 ALLOWED_HOST_RE = re.compile(
@@ -50,6 +52,13 @@ def files(scopes):
 
 
 def host_ok(h: str) -> bool:
+    # f-string placeholders: a whole-host placeholder is checked where it is built; a
+    # trailing one is the path (`{host}{path}`); an inner one is a label (`d{i}.x.test`).
+    if PLACEHOLDER_RE.fullmatch(h) or h.startswith("$"):
+        return True
+    h = PLACEHOLDER_RE.sub("x", re.sub(r"\{[^}]*\}$", "", h))
+    if not h:
+        return False
     if h.startswith("["):
         try:
             ip = ipaddress.ip_address(h[1:-1])

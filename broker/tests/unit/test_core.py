@@ -247,14 +247,14 @@ def test_decide_unknown_and_bad_decision():
 
 def test_proxy_auth():
     b = Broker()
-    assert not b.check_proxy_auth("seclab", "x" * 22)  # nothing configured: reject all
+    assert not b.check_proxy_auth("seclab", "x" * 22)[0]  # nothing configured: reject all
     with pytest.raises(RpcError):
         b.dispatch("proxy.auth.set", {"username": "seclab", "password": "tooshort"})
     b.dispatch("proxy.auth.set", {"username": "seclab", "password": "A" * 22})
-    assert b.check_proxy_auth("seclab", "A" * 22)
-    assert not b.check_proxy_auth("seclab", "A" * 21 + "B")
-    assert not b.check_proxy_auth("other", "A" * 22)
-    assert not b.check_proxy_auth(None, None)
+    assert b.check_proxy_auth("seclab", "A" * 22)[0]
+    assert not b.check_proxy_auth("seclab", "A" * 21 + "B")[0]
+    assert not b.check_proxy_auth("other", "A" * 22)[0]
+    assert not b.check_proxy_auth(None, None)[0]
 
 
 def test_audit_never_contains_value_or_sentinel():

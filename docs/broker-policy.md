@@ -63,10 +63,16 @@ Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, sc
 | `prompt.timeoutSeconds` | `number` |  | A held request is denied when no decision (or JIT credential) arrives in time. (min `0.1`; max `600`; default `60`) |
 | `prompt.maxPending` | `integer` |  | Open prompts at once; more are denied. (min `1`; max `256`; default `16`) |
 | `prompt.maxHeldFlows` | `integer` |  | Requests held at once, across all prompts and JIT waits. (min `1`; max `4096`; default `256`) |
-| `prompt.denyCooldownSeconds` | `number` |  | After a deny or timeout, the same prompt key is denied without asking for this long. (min `0`; max `3600`; default `30`) |
+| `prompt.denyCooldownSeconds` | `number` |  | After a deny or timeout, the same prompt key is denied without asking for this long. Keeps a polling beacon from becoming a prompt stream. (min `0`; max `3600`; default `300`) |
+| `prompt.maxPerMinute` | `integer` |  | New prompts per tab per rolling minute. Beyond this, unmatched requests are denied without a prompt. (min `1`; max `120`; default `6`) |
+| `prompt.offerDenyNewAfter` | `integer` |  | After this many denials (including timeouts) in the broker's session, egress prompts also offer `deny-new-destinations`, which denies every new destination for the rest of the session without asking. (min `1`; max `100`; default `3`) |
+| `prompt.rawIpDestinations` | `"deny"` \| `"prompt-once"` |  | Requests to an IP literal that no rule allows. `deny`: denied without a prompt. `prompt-once`: prompted, but only `allow-once` or `deny` is offered, never `allow-tab`. (default `"deny"`) |
+| `prompt.quietPeriodSeconds` | `number` |  | Requests made this soon after the tab opened, with no user action yet, are flagged `early-after-open` in prompts and audit. (min `0`; max `3600`; default `30`) |
+| `prompt.autoDenyRiskyBeforeUserAction` | `boolean` |  | Until the supervisor reports the first user action (`tab.event userAction`), requests to raw IPs and risky destinations are denied without a prompt. This defeats folder-open loaders that need no click. (default `true`) |
 | `sentinelMismatch` | `"block"` \| `"log"` |  | What to do when a sentinel appears anywhere other than the header a matching binding names. It is never swapped either way. (default `"block"`) |
 | `allow` | [`rule`](broker-policy.md#rule)[] |  | Egress allow rules. Anything not matched is held for a prompt, or denied. (max items `1024`) |
 | `credentials` | [`credential`](broker-policy.md#credential)[] |  | Sentinel credentials. A binding does not imply egress: the request must also be allowed. (max items `256`) |
+| `riskyDestinations` | `object`[] |  | Extra risky destinations for this tab, added to the broker's maintained list (see docs/broker-policy.md). Same treatment: no `allow-tab`, auto-deny before the first user action. (max items `1024`) |
 <!-- END GENERATED: policy-fields -->
 
 ## Types (generated)
@@ -187,6 +193,73 @@ Built-in baseline merged into every policy unless it sets baseline:false. Read-o
 | `baseline-openvsx-blob` | `openvsxorg.blob.core.windows.net` | GET, HEAD | `/**` |
 <!-- END GENERATED: policy-baseline -->
 
+## Risky destinations (generated)
+
+<!-- BEGIN GENERATED: policy-risky-destinations (broker/tools/docs.py; do not edit) -->
+General-purpose hosting, paste, raw-content, IP-echo, tunnel and request-capture services. Anyone can publish on them in seconds, so a destination on these hosts says nothing about who is on the other end. The broker never offers 'always allow' for them, auto-denies them before the first user action in a tab, and the built-in baseline (and the shipped examples) must never match them. Policies may add entries with `riskyDestinations`. Matching uses policy host patterns: `*.x` is strict subdomains, so list the apex separately when it serves content too.
+
+Source: Contagious Interview (DPRK) VS Code tasks.json campaign: loader on *.vercel.app, public-IP lookup via ipify.org, fallback C2 on api.npoint.io, raw-IP C2 on port 1224. https://www.jamf.com/blog/threat-actors-expand-abuse-of-visual-studio-code/ and https://opensourcemalware.com/blog/latest-contagious-interview-malware-campaign-abuses-microsoft-vscode-tasks (both read 2026-11-04). Other entries are the same service classes.
+
+| Host | Category | Note |
+|---|---|---|
+| `vercel.app` | hosting |  |
+| `*.vercel.app` | hosting |  |
+| `*.netlify.app` | hosting |  |
+| `*.pages.dev` | hosting |  |
+| `*.workers.dev` | hosting |  |
+| `*.herokuapp.com` | hosting |  |
+| `*.onrender.com` | hosting |  |
+| `*.glitch.me` | hosting |  |
+| `*.replit.app` | hosting |  |
+| `*.repl.co` | hosting |  |
+| `*.fly.dev` | hosting |  |
+| `*.web.app` | hosting |  |
+| `*.firebaseapp.com` | hosting |  |
+| `*.github.io` | hosting |  |
+| `*.gitlab.io` | hosting |  |
+| `*.surge.sh` | hosting |  |
+| `*.azurewebsites.net` | hosting |  |
+| `*.appspot.com` | hosting |  |
+| `npoint.io` | paste |  |
+| `api.npoint.io` | paste |  |
+| `pastebin.com` | paste |  |
+| `paste.ee` | paste |  |
+| `hastebin.com` | paste |  |
+| `rentry.co` | paste |  |
+| `jsonbin.io` | paste |  |
+| `api.jsonbin.io` | paste |  |
+| `transfer.sh` | paste |  |
+| `gist.github.com` | raw-content |  |
+| `gist.githubusercontent.com` | raw-content |  |
+| `raw.githubusercontent.com` | raw-content |  |
+| `bitbucket.org` | raw-content | listed for its raw/download endpoints; bind specific paths if needed |
+| `cdn.discordapp.com` | raw-content |  |
+| `ipify.org` | ip-echo |  |
+| `*.ipify.org` | ip-echo |  |
+| `ifconfig.me` | ip-echo |  |
+| `ifconfig.co` | ip-echo |  |
+| `icanhazip.com` | ip-echo |  |
+| `ipinfo.io` | ip-echo |  |
+| `ip-api.com` | ip-echo |  |
+| `checkip.amazonaws.com` | ip-echo |  |
+| `api.myip.com` | ip-echo |  |
+| `ident.me` | ip-echo |  |
+| `ipecho.net` | ip-echo |  |
+| `*.ngrok.io` | tunnel |  |
+| `*.ngrok-free.app` | tunnel |  |
+| `*.ngrok.app` | tunnel |  |
+| `*.trycloudflare.com` | tunnel |  |
+| `*.loca.lt` | tunnel |  |
+| `*.serveo.net` | tunnel |  |
+| `*.localhost.run` | tunnel |  |
+| `webhook.site` | request-capture |  |
+| `*.pipedream.net` | request-capture |  |
+| `*.requestcatcher.com` | request-capture |  |
+| `*.burpcollaborator.net` | request-capture |  |
+| `*.oast.fun` | request-capture |  |
+| `*.interact.sh` | request-capture |  |
+<!-- END GENERATED: policy-risky-destinations -->
+
 ## Provider backstop (generated)
 
 A credentialed request (one that would carry a real value) to any of these
@@ -294,14 +367,6 @@ Rules marked gitleaks are taken from https://github.com/gitleaks/gitleaks/blob/5
    "methods": [
     "GET",
     "HEAD"
-   ],
-   "path": "/**"
-  },
-  {
-   "id": "github-raw",
-   "host": "raw.githubusercontent.com",
-   "methods": [
-    "GET"
    ],
    "path": "/**"
   },

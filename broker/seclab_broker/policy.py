@@ -367,7 +367,46 @@ class PromptConfig:
     timeout_seconds: float = 60.0
     max_pending: int = 16
     max_held_flows: int = 256
-    deny_cooldown_seconds: float = 30.0
+    deny_cooldown_seconds: float = 300.0
+    max_per_minute: int = 6
+    offer_deny_new_after: int = 3
+    raw_ip_destinations: str = "deny"
+    quiet_period_seconds: float = 30.0
+    auto_deny_risky_before_user_action: bool = True
+
+
+@dataclass(frozen=True)
+class RiskyEntry:
+    host: HostPattern
+    category: str
+
+
+@lru_cache(maxsize=1)
+def risky_destinations() -> tuple[RiskyEntry, ...]:
+    data = json.loads((DATA_DIR / "risky-destinations.v1.json").read_text())
+    return tuple(RiskyEntry(_parse_host_pattern(e["host"]), e["category"]) for e in data["entries"])
+
+
+def risky_category(host: str, extra: tuple[RiskyEntry, ...] = ()) -> str | None:
+    for entry in risky_destinations() + extra:
+        if entry.host.matches(host):
+            return entry.category
+    return None
+
+
+def risk_flags(req: "RequestView", extra: tuple[RiskyEntry, ...] = ()) -> list[str]:
+    """Destination properties worth showing in a prompt. Engine-agnostic."""
+    flags = []
+    if normalize_ip(req.host) is not None:
+        flags.append("raw-ip")
+    cat = risky_category(req.host, extra)
+    if cat:
+        flags.append(f"risky-destination:{cat}")
+    if req.scheme == "http":
+        flags.append("cleartext")
+    if req.port != DEFAULT_PORTS[req.scheme]:
+        flags.append("nonstandard-port")
+    return flags
 
 
 @dataclass
@@ -379,6 +418,7 @@ class Policy:
     sentinel_mismatch: str
     rules: list[Rule]
     credentials: list[CredentialSpec]
+    risky: tuple[RiskyEntry, ...] = ()
     raw: dict = field(repr=False, default_factory=dict)
 
     @classmethod
@@ -405,11 +445,18 @@ class Policy:
                 timeout_seconds=float(p.get("timeoutSeconds", 60)),
                 max_pending=int(p.get("maxPending", 16)),
                 max_held_flows=int(p.get("maxHeldFlows", 256)),
-                deny_cooldown_seconds=float(p.get("denyCooldownSeconds", 30)),
+                deny_cooldown_seconds=float(p.get("denyCooldownSeconds", 300)),
+                max_per_minute=int(p.get("maxPerMinute", 6)),
+                offer_deny_new_after=int(p.get("offerDenyNewAfter", 3)),
+                raw_ip_destinations=p.get("rawIpDestinations", "deny"),
+                quiet_period_seconds=float(p.get("quietPeriodSeconds", 30)),
+                auto_deny_risky_before_user_action=bool(p.get("autoDenyRiskyBeforeUserAction", True)),
             ),
             sentinel_mismatch=obj.get("sentinelMismatch", "block"),
             rules=rules,
             credentials=creds,
+            risky=tuple(RiskyEntry(_parse_host_pattern(e["host"]), e["category"])
+                        for e in obj.get("riskyDestinations", [])),
             raw=obj,
         )
 
