@@ -13,7 +13,7 @@
 - **Broker.** One policy and credential engine for all drivers, with a versioned stdio control protocol ([ADR](adr/20261104-broker-policy-and-control-protocol.md), [protocol](broker-protocol.md)). It's built and tested standalone; wiring it into tabs is M2/M3.
 - **Folder-open loaders (tasks.json campaigns).** Automatic tasks stay off at application scope, so a workspace can't turn them on ([EDR](edr/20261104-automatic-tasks-off.md)). Whatever runs anyway runs in the tab, and the broker denies a loader's first fetch and beacon: no raw IPs or risky hosts before a user action, with origin-flagged prompts ([ADR](adr/20261104-defeat-folder-open-loaders.md)).
 - **Repository.** This is a private GitHub repo, so that macOS builds can run on Actions ([ADR](adr/20261104-private-github-repo.md)).
-- **RPC capability filter.** Default-deny on the RPC channel from a sandboxed host back into the trusted workbench, keyed on the wire `sid`, with a guard on the channels the client serves to the server and a capability taint so anything a tab command triggers is filtered too ([ADR](adr/20261104-rpc-filter-enforcement-points.md), [taint](adr/20261104-tab-command-taint.md), [design](RPC-LOCKDOWN.md)). Patches 0005–0007.
+- **RPC capability filter.** Default-deny on the RPC channel from a sandboxed host back into the trusted workbench, keyed on the wire `sid`, with a guard on the channels the client serves to the server and a capability taint so anything a tab command triggers is filtered too ([ADR](adr/20261104-rpc-filter-enforcement-points.md), [taint](adr/20261104-tab-command-taint.md), [design](RPC-LOCKDOWN.md)). The patches land after their security-review round; the policy table, inventory and gates are in `rpc-filter/`.
 - **Folder-open loaders.** Config files that are executable code are defused before a folder is opened ([ADR](adr/20261104-defeat-folder-open-loaders.md)).
 - **Open items.**
   - Main-process routing is proposed ([ADR](adr/20261104-route-folder-opens-in-main.md)); a high-severity residual remains.
@@ -190,7 +190,7 @@ Why not Docker Sandboxes as *the* design: it already ships most of this (microVM
 
 ### 4.6 RPC capability filter: the piece that is easy to miss
 
-> Scope extended by the design security review: the REH **server** is hostile too, so server→client IPC (the `download` channel and pty `onExecuteCommand` → `_remoteCLI.*`) must be filtered as well as `MainThread*` ([review](security-reviews/20261104-tabd-protocol-design.md), [ADR](adr/20261104-rpc-filter-enforcement-points.md)). Implemented as patches 0005–0007.
+> Scope extended by the design security review: the REH **server** is hostile too, so server→client IPC (the `download` channel and pty `onExecuteCommand` → `_remoteCLI.*`) must be filtered as well as `MainThread*` ([review](security-reviews/20261104-tabd-protocol-design.md), [ADR](adr/20261104-rpc-filter-enforcement-points.md)). The patches land after their security-review round.
 
 The sandboxed extension host talks back to the trusted workbench through `MainThread*` RPC services, and today those services do not check where the caller runs. Verified in source:
 
