@@ -9,6 +9,7 @@
  *  into it. This is the choke point that closes that.
  *--------------------------------------------------------------------------------------------*/
 
+import { setSeclabChannelGuard } from '../../../../base/parts/ipc/common/ipc.js';
 import { URI } from '../../../../base/common/uri.js';
 import {
 	SECLAB_CHANNELS, SECLAB_COMMANDS, SECLAB_DEFAULT_VERDICT, SECLAB_RPC,
@@ -240,3 +241,21 @@ export function seclabFilterFor(
 	}
 	return new SeclabFilter(tabId, remoteAuthority, onDenial);
 }
+
+/**
+ * Install the channel guard. Registering it here rather than from a workbench
+ * contribution keeps the core diff to the two files this patch already touches.
+ *
+ * A context whose remoteAuthority is `seclab+*` is a tab's connection, so every
+ * channel the client serves on it is checked. Channels on other connections
+ * (shared process, Electron main) are untouched: those peers are trusted.
+ */
+setSeclabChannelGuard((ctx, channelName, method) => {
+	const authority = (ctx as { remoteAuthority?: string } | undefined)?.remoteAuthority;
+	if (typeof authority !== 'string' || !SECLAB_AUTHORITY.test(authority)) {
+		return undefined;
+	}
+	const tabId = seclabResolveTabId(authority) ?? 'unregistered';
+	const filter = new SeclabFilter(tabId, authority);
+	return filter.checkChannel(channelName, method);
+});
