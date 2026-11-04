@@ -14,7 +14,7 @@ import { Supervisor } from '../src/supervisor.ts';
 import type { Driver, FenceReport, TabRuntimeSpec, TabTemplate } from '../src/drivers/types.ts';
 import type { ScanResult } from '../src/scan.ts';
 
-const SCRATCH = path.resolve(import.meta.dirname, '../../.work/test-tabd-supervisor');
+const SCRATCH = path.resolve(import.meta.dirname, '../../.work/test-scratch/supervisor');
 
 class FakeDriver implements Driver {
 	readonly name = 'fake';
