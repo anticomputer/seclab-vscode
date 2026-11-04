@@ -1,0 +1,29 @@
+{
+	"nameShort": "seclab-vscode",
+	"nameLong": "seclab-vscode",
+	"applicationName": "seclab-code",
+	"dataFolderName": ".seclab-vscode",
+	"sharedDataFolderName": ".seclab-vscode-shared",
+	"serverApplicationName": "seclab-code-server",
+	"serverDataFolderName": ".seclab-vscode-server",
+	"darwinBundleIdentifier": "dev.seclab.vscode",
+	"linuxDesktopName": "dev.seclab.vscode",
+	"linuxIconName": "seclab-code",
+	"urlProtocol": "seclab-vscode",
+	"reportIssueUrl": "https://github.com/anticomputer/seclab-vscode/issues/new",
+	"enableTelemetry": false,
+	"extensionsGallery": {
+		"serviceUrl": "https://open-vsx.org/vscode/gallery",
+		"itemUrl": "https://open-vsx.org/vscode/item",
+		"latestUrlTemplate": "https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest",
+		"controlUrl": "https://raw.githubusercontent.com/EclipseFdn/publish-extensions/refs/heads/master/extension-control/extensions.json"
+	},
+	"linkProtectionTrustedDomains": ["https://open-vsx.org"],
+	"extensionEnabledApiProposals": {
+		"seclab.tab-manager": ["resolvers"]
+	},
+	"extensionKind": {
+		"seclab-test.rogue-ui": ["workspace"],
+		"vscodevim.vim": ["workspace"]
+	}
+}

@@ -1,0 +1,4 @@
+# Built-in extensions removed from the upstream tree before packaging (one dir name per line).
+# copilot: bundles the proprietary @github/copilot CLI SDK (license: "SEE LICENSE IN LICENSE.md"),
+#          and its local-build path is broken at 1.145.0. See docs/edr/20261104-remove-builtin-copilot.md.
+copilot

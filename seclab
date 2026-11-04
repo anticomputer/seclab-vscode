@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# seclab: one entry point for the build and dev loop. Runs only docker/sbx/gh on the
+# host; all toolchains live in containers or on GitHub Actions.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OUT="$ROOT/.work/out"
+
+usage() {
+	cat <<'EOF'
+usage: ./seclab <command>
+  build linux [reh|editor ...]  Build Linux REH (default) and/or editor in containers -> .work/out/
+                                (editor needs >= 12 GB Docker memory: esbuild peaks ~5 GB RSS)
+  template sbx                  Build the sbx tab template (shell kit + REH) -> seclab-tab:local
+  test unit                     seclab-tabd unit tests (in a node container)
+  test e2e [sbx|oci]            seclab-tabd end-to-end against a real runtime (local)
+  fetch macos [RUN_ID]          Download the unsigned macOS app from Actions -> .work/app/
+  help                          This text
+EOF
+}
+
+node_image() {
+	# Same Node major as upstream's .nvmrc; used for tests so the host needs no toolchain.
+	echo "node:24.22.1-trixie"
+}
+
+fetch_macos() {
+	local run="${1:-}"
+	local dest="$ROOT/.work/app"
+	if [[ -z "$run" ]]; then
+		run="$(gh run list --workflow build-macos.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+	fi
+	[[ "$run" =~ ^[0-9]+$ ]] || { echo "no successful build-macos run found" >&2; exit 1; }
+	rm -rf "$dest" && mkdir -p "$dest"
+	gh run download "$run" --name seclab-vscode-darwin-arm64 --dir "$dest"
+	(cd "$dest" && shasum -a 256 -c SHA256SUMS)
+	ditto -x -k "$dest/seclab-vscode-darwin-arm64.zip" "$dest"
+	cat "$dest/build-info.json"
+	echo
+	echo "Unsigned app extracted to $dest. Gatekeeper will block it until quarantine is cleared;"
+	echo "that step needs your explicit approval:  xattr -dr com.apple.quarantine \"$dest/seclab-vscode.app\""
+}
+
+build_linux() {
+	local targets="${*:-reh}"
+	mkdir -p "$OUT"
+	docker build -q -t seclab-builder:local "$ROOT/build/linux" >/dev/null
+	# Durable named volume for the upstream checkout + node_modules (not /tmp, not the Mac FS).
+	docker volume create seclab-vscode-work >/dev/null
+	docker run --rm -u 0 -v seclab-vscode-work:/work seclab-builder:local chown builder:builder /work
+	docker run --rm \
+		-v "$ROOT:/repo:ro" \
+		-v seclab-vscode-work:/work \
+		-v "$OUT:/out" \
+		-e TARGETS="$targets" -e ARCH -e MAX_OLD_SPACE_SIZE -e GOGC \
+		seclab-builder:local bash /repo/build/linux/build.sh
+}
+
+case "${1:-help}" in
+	build)
+		shift
+		case "${1:-}" in
+			linux) shift; build_linux "$@" ;;
+			*) usage; exit 2 ;;
+		esac ;;
+	template)
+		shift
+		case "${1:-}" in
+			sbx) shift; "$ROOT/sandbox/sbx/build-template.sh" "$@" ;;
+			*) usage; exit 2 ;;
+		esac ;;
+	test)
+		shift
+		case "${1:-}" in
+			unit) docker run --rm -v "$ROOT:/repo" -w /repo "$(node_image)" node --test tabd/test/unit.test.ts ;;
+			# e2e drives sbx/docker on the host, so it runs on the host. It uses the editor's own
+			# Node when SECLAB_NODE points at it, else an already-present node (nothing is installed).
+			e2e) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/test/e2e.ts" "${1:-sbx}" ;;
+			*) usage; exit 2 ;;
+		esac ;;
+	fetch)
+		shift
+		case "${1:-}" in
+			macos) shift; fetch_macos "$@" ;;
+			*) usage; exit 2 ;;
+		esac ;;
+	help|-h|--help) usage ;;
+	*) usage; exit 2 ;;
+esac

@@ -1,0 +1,15 @@
+diff --git a/build/lib/copilot.ts b/build/lib/copilot.ts
+index dc9941b7..4a0e193e 100644
+--- a/build/lib/copilot.ts
++++ b/build/lib/copilot.ts
+@@ -270,6 +270,10 @@ export function prepareBuiltInCopilotRipgrepShim(platform: string, arch: string,
+ 	const copilotPackagePlatformArch = toCopilotPackagePlatformArch(platform, arch);
+ 	const tgrepPlatformArch = toCopilotTgrepPlatformArch(platform, arch);
+ 
++	// seclab: the built-in Copilot extension is removed (build/product/remove-extensions.txt).
++	if (!fs.existsSync(builtInCopilotExtensionDir)) {
++		return;
++	}
+ 	const extensionNodeModules = path.join(builtInCopilotExtensionDir, 'node_modules');
+ 	const copilotBase = path.join(extensionNodeModules, '@github', 'copilot');
+ 	const copilotSdkBase = path.join(copilotBase, 'sdk');
