@@ -71,6 +71,7 @@ Good, bad, and follow-ups this creates.
 | 2026-11-04 | [One broker engine for every provider; sbx is only the outer fence](20261104-single-broker-sbx-fence.md) | accepted |
 | 2026-11-04 | [Tab-originated commands carry the tab identity through a tainted command service](20261104-tab-command-taint.md) | accepted |
 | 2026-11-04 | [The workspace window ("tab") is the containment unit; Workspace Trust is UX only](20261104-tab-is-the-containment-unit.md) | accepted (partly superseded by [20261104-threat-model-rogue-extension](20261104-threat-model-rogue-extension.md)) |
+| 2026-11-04 | [Tab observability: a one-way, integrity-labelled event stream per tab](20261104-tab-observability.md) | accepted |
 | 2026-11-04 | [Introduce a tab supervisor (`seclab-tabd`) with a versioned stdio protocol between the editor and sandbox runtimes](20261104-tab-supervisor.md) | accepted |
 | 2026-11-04 | [Threat model: the primary attacker is a rogue extension the user installs](20261104-threat-model-rogue-extension.md) | accepted |
 | 2026-11-04 | [Fork VSCodium-style: pinned upstream, jq product.json, small patch queue](20261104-vscodium-style-fork.md) | accepted |
