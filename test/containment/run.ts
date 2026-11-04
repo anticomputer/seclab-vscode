@@ -10,8 +10,9 @@ import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
-import { beaconPort, hostSnapshot, lockRun, snapshotDiff, worktreeId } from '../harness.ts';
+import { beaconPort, lockRun, worktreeId } from '../harness.ts';
 import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
+import { exitedOrTimeout, teardownGate, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
 
 const driver = process.argv[2] ?? 'sbx';
 if (driver !== 'sbx' && driver !== 'oci') {
@@ -26,9 +27,11 @@ const LOOPBACK_PORT = await beaconPort();
 const LOOPBACK_NAME = `seclab-containment-hostsvc-${driver}-${worktreeId}`;
 // Per-run arming nonce: fixtures are inert anywhere else (EDR fixture-safety).
 const ARM = randomBytes(16).toString('hex');
-const snapshotBefore = hostSnapshot();
 
 fs.rmSync(work, { recursive: true, force: true });
+writeSnapshot(work);
+// Everything this run starts, recorded before it starts (teardown.ts).
+writeManifest(work, { driver, stateDirs: [path.join(work, 'state')], containers: [LOOPBACK_NAME] });
 fs.mkdirSync(path.join(work, 'canary'), { recursive: true });
 const canary = path.join(work, 'canary', 'secret.txt');
 fs.writeFileSync(canary, 'HOST-SECRET-CANARY\n');
@@ -57,6 +60,7 @@ const client = new TabdClient({
 	env: { HOME: process.env.HOME, USER: process.env.USER },
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));
+const tabdExit = new Promise(res => client.once('exit', res));
 
 interface Tab { metadata: { name: string } }
 const tabs: Record<string, string> = {};
@@ -70,19 +74,35 @@ async function cleanup(): Promise<void> {
 	}
 	spawnSync('docker', ['rm', '-f', LOOPBACK_NAME], { stdio: 'ignore' });
 	client.dispose();
+	await exitedOrTimeout(tabdExit);
+}
+/** Teardown gate: a run that leaves a process, sandbox or container behind fails. */
+function teardownChecks(): Check[] {
+	if (process.env.KEEP === '1') {
+		teardownGate(work); // prints the verify command
+		return [{ vector: 'teardown', name: 'teardown verified (KEEP=1 skips it: not a pass)', ok: false, detail: '' }];
+	}
+	return verifyTeardown(work).map(c => ({ vector: 'teardown', name: c.name, ok: c.ok, detail: c.detail }));
 }
 process.on('uncaughtException', e => {
 	console.error(e);
-	void cleanup().finally(() => process.exit(2));
+	void cleanup().finally(() => {
+		teardownChecks();
+		process.exit(2);
+	});
 });
 process.on('unhandledRejection', e => {
 	console.error(e);
-	void cleanup().finally(() => process.exit(2));
+	void cleanup().finally(() => {
+		teardownChecks();
+		process.exit(2);
+	});
 });
 await client.initialize('containment', '0');
 for (const [k, ws] of [['a', wsA], ['b', wsB]] as const) {
 	const { tab } = await client.request<{ tab: Tab }>('tab.claim', { workspace: { hostPath: ws } });
 	tabs[k] = tab.metadata.name;
+	writeManifest(work, { tabs: [tab.metadata.name] });
 	await client.request('tab.ensureRunning', { tabId: tab.metadata.name });
 	console.log(`tab ${k}: ${tab.metadata.name} running`);
 }
@@ -136,9 +156,8 @@ if (driver === 'sbx') {
 	checks.push({ vector: 'mount', name: 'only the workspace is mounted', ok: JSON.stringify(a?.workspaces) === JSON.stringify([wsA]), detail: JSON.stringify(a?.workspaces) });
 }
 checks.push({ vector: 'host', name: 'canary still intact on host', ok: fs.readFileSync(canary, 'utf8') === 'HOST-SECRET-CANARY\n', detail: '' });
-const changed = snapshotDiff(snapshotBefore, hostSnapshot());
-checks.push({ vector: 'host', name: 'nothing outside .work changed (watched host paths, stat only)', ok: changed.length === 0, detail: changed.join(', ') });
 
-const ok = report(checks);
 await cleanup();
+checks.push(...teardownChecks());
+const ok = report(checks);
 process.exit(ok ? 0 : 1);

@@ -73,6 +73,13 @@ this file.
   - Fixtures act only when armed by a run's nonce. Teardown checks that watched
     host paths are unchanged.
   - `./seclab lint fixtures` must pass.
+- **A run leaves nothing behind** ([EDR](docs/edr/20261104-harness-teardown.md)).
+  Every harness records what it owns in `run.json` and ends with
+  `test/containment/teardown.ts`. That stops the run's editor and tabd process
+  trees, found by unique path and never by program name, then removes its tabs
+  and profile, and fails the run on any survivor. Use `./seclab clean-host` to
+  find strays from older runs. Why: an orphaned editor running the armed rogue
+  extension was once left on the user's desktop.
 - **Base claims on code, with permalinks pinned to a SHA.** Why: upstream
   moves; unpinned claims rot.
 - **Keep core patches minimal: one concern per patch, under about 50 lines.**
@@ -104,6 +111,7 @@ keep working:
 ./seclab lint fixtures
 ./seclab lint source
 build/apply-patches.sh --check
+./seclab clean-host --self-test
 ```
 
 Verified commands (one entry point: `./seclab help`):
@@ -113,7 +121,7 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab image oci              # OCI images seclab-tab-oci:local + seclab-broker-placeholder:local
 ./seclab test unit              # tabd unit + supervisor tests (node container)
 ./seclab test e2e sbx           # tabd end to end: claim -> fence -> REH 101 handshake over exec stdio (also: oci)
-./seclab test containment sbx   # malicious-workspace vectors in real tabs (sbx 95/95, oci 92/92)
+./seclab test containment sbx   # malicious-workspace vectors in real tabs, then the teardown gate (sbx 98/98, oci 95/95)
 ./seclab test canary sbx        # canary acceptance test, level A (also: oci)
 ./seclab test secrets sbx       # pre-mount gitleaks gate: block, move-to-vault + sentinel, restore, accept (also: oci)
 ./seclab lint fixtures          # fixture-safety lint (docker, no network); also: test/safety/fixture-lint.sh PATH...
@@ -122,6 +130,8 @@ build/apply-patches.sh --check  # patch queue == patches/series (no unlisted pat
 ./seclab docs write             # regenerate ADR/EDR/review indexes from the records
 ./seclab docs check --run-commands --paired   # docs gate (records, links, ARCHITECTURE, ci: run blocks, paired docs); --online adds lychee
 build/check-release.sh .work/out/seclab-reh-linux-arm64.tar.gz   # no test hooks in a release artifact (also: <app>/Contents/Resources/app)
+node test/containment/teardown.test.ts   # teardown regression: orphaned editor tree + leftover tab pod are stopped/removed
+./seclab clean-host [--apply] [--running] [--caches]   # list (dry run) / remove every seclab-vscode resource; never copilot-* or other projects
 
 # macOS app from Actions (branch builds need the override), then quarantine (user approval)
 SECLAB_ALLOW_UNREVIEWED_BUILD=1 ./seclab fetch macos [RUN_ID]

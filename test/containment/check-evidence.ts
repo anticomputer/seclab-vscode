@@ -2,7 +2,9 @@
 //   prepare <user-data-dir> [sbx|oci]  create the fixture workspace, claim its tab in the
 //                                      editor's tabd state, preinstall the rogue extension
 //                                      into the tab, write test user settings
-//   check   <user-data-dir>            assert the evidence the editor-run vectors left behind
+//   check   <user-data-dir>            assert the evidence the editor-run vectors left behind,
+//                                      then tear the run down (teardown.ts): stops the editor,
+//                                      removes the tab and the profile; fails on leftovers
 // In between, open the workspace with the fork, e.g.
 //   .work/app/seclab-vscode.app/Contents/Resources/app/bin/code --user-data-dir <dir> --folder-uri <printed>  (the build keeps upstream's CLI name)
 
@@ -11,9 +13,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
-import { beaconPort, checkUserDataDir, hostSnapshot, lockRun, snapshotDiff } from '../harness.ts';
+import { beaconPort, checkUserDataDir, lockRun } from '../harness.ts';
 import { randomBytes } from 'node:crypto';
 import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
+import { teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
 const [mode, userDataArg, driverArg] = process.argv.slice(2);
 if ((mode !== 'prepare' && mode !== 'check') || !userDataArg) {
@@ -58,7 +61,10 @@ if (mode === 'prepare') {
 	const until = Math.floor(Date.now() / 1000) + Number(process.env.SECLAB_ARM_SECONDS ?? 4 * 3600);
 	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${canary}\nmarker=${marker}\nloopback=${port}\narm=${arm}\nrun=${base}\nuntil=${until}\n`
 		+ (process.env.SECLAB_CANARY_CLIPBOARD === '1' ? 'clipboard=1\n' : ''));
-	fs.writeFileSync(path.join(base, 'host-snapshot.json'), JSON.stringify(hostSnapshot()));
+	writeSnapshot(base);
+	// What this run owns, for teardown.ts: the editor and its tabd are found by the unique
+	// user-data-dir (never by program name), the tab by id.
+	writeManifest(base, { driver: driver as 'sbx' | 'oci', userDataDir: userData, stateDirs: [stateDir] });
 	// Git repo with a hostile core.fsmonitor. Only `init` and `config` run on the host;
 	// neither reads core.fsmonitor. Nothing here may run `git status` on the host.
 	execFileSync('git', ['-C', ws, 'init', '-q']);
@@ -92,6 +98,7 @@ if (mode === 'prepare') {
 	});
 	await client.initialize('containment-editor', '0');
 	const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
+	writeManifest(base, { tabs: [tab.metadata.name] });
 	await client.request('tab.ensureRunning', { tabId: tab.metadata.name });
 	const name = `seclab-${tab.metadata.name}`;
 	const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
@@ -111,9 +118,6 @@ if (mode === 'prepare') {
 	const host = fs.existsSync(hostFile) ? JSON.parse(fs.readFileSync(hostFile, 'utf8')) : undefined;
 	checks.push({ vector: 'rogue-extension', name: 'ui-kind rogue extension was forced into the tab (remoteName=seclab)', ok: host?.remoteName === 'seclab' && host?.seclabTab === '1', detail: JSON.stringify(host) });
 	checks.push({ vector: 'host', name: 'canary intact', ok: fs.readFileSync(canary, 'utf8') === 'HOST-SECRET-CANARY\n', detail: '' });
-	const snapFile = path.join(base, 'host-snapshot.json');
-	const changed = fs.existsSync(snapFile) ? snapshotDiff(JSON.parse(fs.readFileSync(snapFile, 'utf8')), hostSnapshot()) : ['no snapshot from prepare'];
-	checks.push({ vector: 'host', name: 'nothing outside .work changed (watched host paths, stat only)', ok: changed.length === 0, detail: changed.join(', ') });
 	// Shared canary harness, editor side: nothing the rogue extension observed through the
 	// API (env, configuration, clipboard, auth sessions, secrets) nor any evidence may
 	// contain an editor-side canary in any encoding.
@@ -135,5 +139,8 @@ if (mode === 'prepare') {
 	const ok = report(checks);
 	// Disarm the hostile git config left in the host work dir.
 	fs.rmSync(path.join(ws, '.git'), { recursive: true, force: true });
-	process.exit(ok ? 0 : 1);
+	// End of run: stop the editor (by its user-data-dir) and everything it started, remove
+	// the tab, delete the profile holding the armed rogue extension, diff the host.
+	const clean = teardownGate(base);
+	process.exit(ok && clean ? 0 : 1);
 }

@@ -28,6 +28,10 @@ usage: ./seclab <command>
                                 --online resolves external links (lychee, cached); --paired enforces doc
                                 changes next to protocol/patch/provider/product changes vs origin/main
   fetch macos [RUN_ID]          Download the unsigned macOS app from Actions -> .work/app/
+  clean-host [--apply] [--running] [--caches]
+                                List (dry run) or remove every seclab resource on this host: sandboxes,
+                                containers, networks, volumes, test profiles, stray test editors/tabd.
+                                Never touches other sandboxes (e.g. copilot-*)
   help                          This text
 EOF
 }
@@ -182,5 +186,12 @@ case "${1:-help}" in
 			*) usage; exit 2 ;;
 		esac ;;
 	help|-h|--help) usage ;;
+	# Host hygiene: runs on the host (it drives docker/sbx/ps); dry run unless --apply.
+	clean-host) shift
+		if [[ "${1:-}" == --self-test ]]; then
+			docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/clean-host.ts --self-test
+		else
+			"${SECLAB_NODE:-node}" "$ROOT/test/clean-host.ts" "$@"
+		fi ;;
 	*) usage; exit 2 ;;
 esac
