@@ -1,0 +1,6 @@
+#!/bin/sh
+# Placeholder broker control channel: one JSON object per line in, one per line out.
+# The real protocol is defined by the broker session (docs/broker-protocol.md).
+while IFS= read -r line; do
+	printf '{"ok":false,"placeholder":true,"error":"broker not implemented (M2)"}\n'
+done

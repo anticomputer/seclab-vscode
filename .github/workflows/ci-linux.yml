@@ -1,0 +1,55 @@
+name: ci-linux
+
+# Linux CI: unit tests, REH build in the builder container, OCI tab images, and the
+# OCI-provider end-to-end + containment suites. (sbx needs nested virtualisation, which
+# hosted runners lack; the sbx suite runs locally: ./seclab test containment sbx.)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - upstream.lock
+      - build/**
+      - patches/**
+      - extensions/**
+      - tabd/**
+      - sandbox/**
+      - test/**
+      - seclab
+      - .github/workflows/ci-linux.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: tabd unit tests (in the pinned node container)
+        run: ./seclab test unit
+
+  oci:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.1
+      - name: Build REH (container, pinned upstream)
+        run: ./seclab build linux reh
+      - name: Build OCI tab images
+        run: ./seclab image oci
+      - name: tabd end-to-end (OCI)
+        run: ./seclab test e2e oci
+      - name: Containment suite (OCI)
+        run: ./seclab test containment oci

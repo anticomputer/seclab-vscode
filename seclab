@@ -11,8 +11,11 @@ usage: ./seclab <command>
   build linux [reh|editor ...]  Build Linux REH (default) and/or editor in containers -> .work/out/
                                 (editor needs >= 12 GB Docker memory: esbuild peaks ~5 GB RSS)
   template sbx                  Build the sbx tab template (shell kit + REH) -> seclab-tab:local
+  image oci                     Build the OCI tab images (seclab-tab-oci:local, broker placeholder)
   test unit                     seclab-tabd unit tests (in a node container)
   test e2e [sbx|oci]            seclab-tabd end-to-end against a real runtime (local)
+  test containment [sbx|oci]    Containment suite: malicious-workspace vectors inside real tabs
+  test evidence WORKSPACE       Check evidence left by the editor-driven run (rogue extension etc.)
   fetch macos [RUN_ID]          Download the unsigned macOS app from Actions -> .work/app/
   help                          This text
 EOF
@@ -91,6 +94,14 @@ case "${1:-help}" in
 			# e2e drives sbx/docker on the host, so it runs on the host. It uses the editor's own
 			# Node when SECLAB_NODE points at it, else an already-present node (nothing is installed).
 			e2e) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/test/e2e.ts" "${1:-sbx}" ;;
+			containment) shift; "${SECLAB_NODE:-node}" "$ROOT/test/containment/run.ts" "${1:-sbx}" ;;
+			evidence) shift; "${SECLAB_NODE:-node}" "$ROOT/test/containment/check-evidence.ts" "$@" ;;
+			*) usage; exit 2 ;;
+		esac ;;
+	image)
+		shift
+		case "${1:-}" in
+			oci) shift; "$ROOT/sandbox/oci/build-images.sh" "$@" ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	fetch)
