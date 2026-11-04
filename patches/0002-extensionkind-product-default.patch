@@ -1,0 +1,25 @@
+diff --git a/src/vs/workbench/services/extensions/common/extensionManifestPropertiesService.ts b/src/vs/workbench/services/extensions/common/extensionManifestPropertiesService.ts
+index d9982d9e..a3455171 100644
+--- a/src/vs/workbench/services/extensions/common/extensionManifestPropertiesService.ts
++++ b/src/vs/workbench/services/extensions/common/extensionManifestPropertiesService.ts
+@@ -468,8 +468,8 @@ export class ExtensionManifestPropertiesService extends Disposable implements IE
+ 	private getConfiguredExtensionKind(manifest: IExtensionManifest): (ExtensionKind | '-web')[] | null {
+ 		const extensionIdentifier = { id: getGalleryExtensionId(manifest.publisher, manifest.name) };
+ 
+-		// check in config
+-		let result: ExtensionKind | ExtensionKind[] | undefined = this.getUserConfiguredExtensionKind(extensionIdentifier);
++		// check in config (seclab: not when product.json sets a default kind; users must not move extensions out of the tab)
++		let result: ExtensionKind | ExtensionKind[] | undefined = this.productService.extensionKind?.['*'] ? undefined : this.getUserConfiguredExtensionKind(extensionIdentifier);
+ 		if (typeof result !== 'undefined') {
+ 			return this.toArray(result);
+ 		}
+@@ -502,7 +502,8 @@ export class ExtensionManifestPropertiesService extends Disposable implements IE
+ 		}
+ 
+ 		const extensionId = getGalleryExtensionId(manifest.publisher, manifest.name);
+-		return this._productExtensionKindsMap.get(extensionId);
++		// seclab: '*' is the kind of every extension that product.json does not list explicitly
++		return this._productExtensionKindsMap.get(extensionId) ?? this._productExtensionKindsMap.get('*');
+ 	}
+ 
+ 	private getProductVirtualWorkspaceSupport(manifest: IExtensionManifest): { default?: boolean; override?: boolean } | undefined {

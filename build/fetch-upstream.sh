@@ -23,7 +23,7 @@ fi
 
 if [[ -d "$DEST/.git" ]] && [[ "$(git -C "$DEST" rev-parse HEAD 2>/dev/null)" == "$UPSTREAM_SHA" ]]; then
 	git -C "$DEST" reset -q --hard "$UPSTREAM_SHA"
-	git -C "$DEST" clean -q -fd -- extensions/ src/ build/ product.json
+	git -C "$DEST" clean -q -fd -- extensions/ src/ build/ product.json product.json.seclab .seclab-builtin-ui.json
 	echo "upstream: reusing $DEST at $UPSTREAM_TAG ($UPSTREAM_SHA), reset to pristine"
 	exit 0
 fi
