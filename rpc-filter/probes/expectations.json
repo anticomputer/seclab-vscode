@@ -1,0 +1,200 @@
+{
+  "schema": 1,
+  "note": "Expected probe outcome per build. A probe MUST succeed on the unpatched build before the patch that denies it lands: a probe that has never succeeded proves nothing, because it may simply be broken. 'beacon' names a path that must appear in the beacon log when the probe succeeds, since a return value does not prove egress.",
+  "builds": {
+    "unpatched": "every probe with required=true must report 'succeeded'",
+    "patched": "every probe with required=true must report 'denied', unless patchedOutcome says otherwise"
+  },
+  "probes": {
+    "host-terminal-newlocal": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "cmd:workbench.action.terminal.newLocal",
+      "why": "creates a terminal on the host even in a remote window"
+    },
+    "host-terminal-sendsequence": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "cmd:workbench.action.terminal.sendSequence",
+      "why": "types into the active terminal; with newLocal this writes the host marker file",
+      "hostEffect": "marker"
+    },
+    "host-fs-read-userdata": {
+      "required": true,
+      "surface": "host-fs-read",
+      "policyRef": "rpc:MainThreadFileSystem.$readFile",
+      "why": "vscode-userdata: reaches real user settings, which hold a seeded canary",
+      "canary": "user-settings"
+    },
+    "host-fs-read-file-scheme": {
+      "required": true,
+      "surface": "host-fs-read",
+      "policyRef": "rpc:MainThreadFileSystem.$readFile",
+      "why": "file: reaches a host path outside the tab mount"
+    },
+    "host-fs-write-file-scheme": {
+      "required": true,
+      "surface": "host-fs-write",
+      "policyRef": "rpc:MainThreadFileSystem.$writeFile",
+      "why": "a host write is a code-execution primitive: rc files, LaunchAgents, git hooks",
+      "hostEffect": "marker.rpcwrite"
+    },
+    "secret-write-own": {
+      "required": false,
+      "surface": "setup",
+      "policyRef": "rpc:MainThreadSecretState.$setPassword",
+      "why": "seeds the cross-tab read; after patching this is a rewrite, not a denial"
+    },
+    "secret-read-cross-tab": {
+      "required": true,
+      "surface": "cross-tab-access",
+      "policyRef": "rpc:MainThreadSecretState.$getPassword",
+      "why": "SecretStorage is keyed {extensionId, key} globally, so tab B reads what tab A wrote",
+      "crossTab": true,
+      "patchedOutcome": "succeeded",
+      "patchedAssertion": "a value may be returned, but it must be this tab's own, never the other tab's"
+    },
+    "auth-get-session": {
+      "required": true,
+      "surface": "credential-access",
+      "policyRef": "rpc:MainThreadAuthentication.$getSession",
+      "why": "must return a sentinel, never a reusable token",
+      "patchedOutcome": "succeeded",
+      "patchedAssertion": "a session is returned but its accessToken is a tab-scoped sentinel, and no canary appears in it"
+    },
+    "clipboard-read": {
+      "required": true,
+      "surface": "credential-access",
+      "policyRef": "rpc:MainThreadClipboard.$readText",
+      "why": "the clipboard routinely holds a token the user just copied",
+      "canary": "clipboard"
+    },
+    "open-external-silent": {
+      "required": true,
+      "surface": "exfiltration",
+      "policyRef": "rpc:MainThreadWindow.$openUri",
+      "why": "hands a URI to the host opener, leaving the tab without passing its broker",
+      "beacon": "/open-external"
+    },
+    "as-external-uri": {
+      "required": true,
+      "surface": "exfiltration",
+      "policyRef": "rpc:MainThreadWindow.$asExternalUri",
+      "why": "can mint a tunnel the broker does not see",
+      "beacon": "/as-external"
+    },
+    "webview-egress": {
+      "required": true,
+      "surface": "exfiltration",
+      "policyRef": "data:webview-content",
+      "why": "webviews render in the local trusted renderer, so their fetches have the host's network position",
+      "beacon": "/webview",
+      "patchedOutcome": "succeeded",
+      "patchedAssertion": "no beacon hit: the webview session is routed through the tab broker or blocked by CSP"
+    },
+    "command-enumeration": {
+      "required": true,
+      "surface": "reconnaissance",
+      "policyRef": "rpc:MainThreadCommands.$getCommands",
+      "why": "returning the full registry tells an attacker which host commands to try",
+      "patchedOutcome": "succeeded",
+      "patchedAssertion": "dangerousVisible is empty: the list is filtered to ids this tab may execute"
+    },
+    "launder-direct": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "cmd:_remoteCLI.windowOpen",
+      "why": "its handler resolves ICommandService from the accessor and executes _files.windowOpen"
+    },
+    "launder-open-external": {
+      "required": true,
+      "surface": "exfiltration",
+      "policyRef": "cmd:_remoteCLI.openExternal",
+      "why": "passes allowTunneling: true, and is reachable directly from $executeCommand",
+      "beacon": "/remotecli"
+    },
+    "launder-manage-extensions": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "cmd:_remoteCLI.manageExtensions",
+      "why": "installing an extension is arbitrary code execution"
+    },
+    "launder-await": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "cmd:_seclabTest.launder",
+      "why": "the taint must survive an await; ambient context would not",
+      "needsTestContribution": true
+    },
+    "launder-timer": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "cmd:_seclabTest.launder",
+      "why": "the taint must survive a setTimeout",
+      "needsTestContribution": true
+    },
+    "launder-event": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "cmd:_seclabTest.launder",
+      "why": "the taint must survive event re-entry",
+      "needsTestContribution": true
+    },
+    "launder-captured-service": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "cmd:_seclabTest.launder",
+      "why": "handler uses a constructor-injected command service, escaping capability threading; must be caught by the fail-closed backstop",
+      "needsTestContribution": true,
+      "knownResidual": "ADR 20261104-tab-command-taint.md records this as the taint's main escape"
+    }
+  },
+  "rehProbes": {
+    "note": "Reachable only from the rogue REH fixture; the extension host cannot call these.",
+    "channel-download-host-read": {
+      "required": true,
+      "surface": "host-fs-read",
+      "policyRef": "chan:download",
+      "why": "DownloadServiceChannel revives both URIs from server-supplied arguments"
+    },
+    "channel-download-host-write": {
+      "required": true,
+      "surface": "host-fs-write",
+      "policyRef": "chan:download",
+      "why": "the destination URI is chosen by the server",
+      "hostEffect": "marker.download"
+    },
+    "channel-mcp-call-tool": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "chan:mcpGatewayToolBroker",
+      "why": "callToolForServer invokes a trusted-side MCP tool, a host process with host credentials, with tab-chosen arguments"
+    },
+    "channel-mcp-list-servers": {
+      "required": true,
+      "surface": "reconnaissance",
+      "policyRef": "chan:mcpGatewayToolBroker",
+      "why": "enumerates host-side MCP servers"
+    },
+    "terminal-onexecutecommand": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "chan:server_initiated.remoteTerminal.onExecuteCommand",
+      "why": "the server names a command from a four-entry allowlist, every entry of which is dangerous"
+    },
+    "rpc-secret-identity-spoof": {
+      "required": true,
+      "surface": "credential-access",
+      "policyRef": "rpc:MainThreadSecretState.$getKeys",
+      "why": "extensionId is an RPC argument, so the caller can name vscode.github-authentication and enumerate its stored secrets",
+      "canary": "auth-session"
+    },
+    "rpc-proxy-auth": {
+      "required": true,
+      "surface": "credential-access",
+      "policyRef": "rpc:MainThreadWorkspace.$lookupAuthorization",
+      "why": "returns the host's configured proxy credentials",
+      "canary": "user-settings-proxy-auth"
+    }
+  }
+}

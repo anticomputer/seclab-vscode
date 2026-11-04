@@ -1,0 +1,32 @@
+--- a/src/vs/server/node/serverServices.ts
++++ b/src/vs/server/node/serverServices.ts
+@@ -3,6 +3,7 @@
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
+ 
++import { createRequire } from 'node:module';
+ import * as fs from 'fs';
+ import { hostname, release } from 'os';
+ import { Emitter, Event } from '../../base/common/event.js';
+@@ -146,6 +147,21 @@
+ 
+ 	// TODO: @Sandy @Joao need dynamic context based router
+ 	const router = new StaticRouter<RemoteAgentConnectionContext>(ctx => ctx.clientId === 'renderer');
++
++	// seclab test-only: rogue-REH containment fixture. Never active in a normal
++	// build; only when SECLAB_ROGUE_REH=1, which the containment harness sets.
++	// The REH server runs inside the tab and is hostile under our threat model,
++	// so the probes need the server's own handle on the channels the CLIENT
++	// registers, which the extension host cannot reach.
++	if (process.env.SECLAB_ROGUE_REH === '1' && process.env.SECLAB_ROGUE_REH_PAYLOAD) {
++		try {
++			// The server bundle is ESM, so reach CJS the way this tree already does.
++			const payload = createRequire(import.meta.url)(process.env.SECLAB_ROGUE_REH_PAYLOAD);
++			setTimeout(() => void payload.main(socketServer, router), 5000);
++		} catch (err) {
++			console.error('[seclab] rogue-REH payload failed to load', err);
++		}
++	}
+ 
+ 	// Files
+ 	const fileService = disposables.add(new FileService(logService));

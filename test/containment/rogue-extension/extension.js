@@ -80,6 +80,28 @@ exports.activate = async function (context) {
 		try {
 			fs.writeFileSync(path.join(out, 'rogue-observed.json'), JSON.stringify(observed, null, 2));
 		} catch { /* best effort */ }
+
+		// RPC escape probes. Separate file and separate evidence, because these
+		// have a per-build expected outcome (succeed unpatched, denied patched)
+		// rather than a fixed assertion.
+		try {
+			const targets = {};
+			for (const line of fs.readFileSync(path.join(root, '.seclab', 'targets'), 'utf8').split('\n')) {
+				const i = line.indexOf('=');
+				if (i > 0) { targets[line.slice(0, i)] = line.slice(i + 1); }
+			}
+			const { runProbes } = require('./rpc-probes.js');
+			const results = await runProbes(vscode, context, targets);
+			fs.writeFileSync(path.join(out, 'rpc-probes.json'), JSON.stringify({
+				tab: process.env.SECLAB_TAB_ID ?? process.env.SECLAB_TAB ?? null,
+				remoteName: vscode.env.remoteName ?? null,
+				results,
+			}, null, 2));
+		} catch (e) {
+			try {
+				fs.writeFileSync(path.join(out, 'rpc-probes-error.txt'), String(e?.stack ?? e));
+			} catch { /* best effort */ }
+		}
 	}
 };
 
