@@ -4,7 +4,7 @@
 //                                      into the tab, write test user settings
 //   check   <user-data-dir>            assert the evidence the editor-run vectors left behind
 // In between, open the workspace with the fork, e.g.
-//   .work/app/seclab-vscode.app/Contents/Resources/app/bin/seclab-code --user-data-dir <dir> <workspace>
+//   .work/app/seclab-vscode.app/Contents/Resources/app/bin/code --user-data-dir <dir> --folder-uri <printed>  (the build keeps upstream's CLI name)
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -28,6 +28,21 @@ const marker = path.join(base, 'PWNED');
 const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
 
 if (mode === 'prepare') {
+	// A previous run's claim points at the old fixture (a new folder has a new inode, which
+	// tabd rightly refuses): remove its tabs and sandboxes, then start from clean state.
+	if (fs.existsSync(stateDir)) {
+		const old = new TabdClient({
+			command: process.execPath,
+			args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', driver, '--allowed-root', base],
+			env: { HOME: process.env.HOME, USER: process.env.USER },
+		});
+		await old.initialize('containment-editor-cleanup', '0');
+		for (const t of (await old.request<{ tabs: Array<{ metadata: { name: string } }> }>('tab.list')).tabs) {
+			await old.request('tab.remove', { tabId: t.metadata.name }).catch(() => undefined);
+		}
+		old.dispose();
+		fs.rmSync(stateDir, { recursive: true, force: true });
+	}
 	fs.rmSync(base, { recursive: true, force: true });
 	fs.mkdirSync(path.dirname(canary), { recursive: true });
 	fs.writeFileSync(canary, 'HOST-SECRET-CANARY\n');
@@ -72,7 +87,7 @@ if (mode === 'prepare') {
 	console.log(r.stdout.trim(), r.stderr.trim());
 	client.dispose(); // stops the tab; the editor restarts it (extensions persist in the tab)
 	await new Promise(res => client.once('exit', res));
-	console.log(`\nprepared tab ${tab.metadata.name} for ${ws}\nnow open the TAB directly (never the local path: a local window must not open this hostile workspace):\n  env SECLAB_EDITOR_CANARY=${canaries[3].value} <app>/Contents/Resources/app/bin/seclab-code --user-data-dir ${userData} --folder-uri vscode-remote://seclab+${tab.metadata.name}${ws}`);
+	console.log(`\nprepared tab ${tab.metadata.name} for ${ws}\nnow open the TAB directly (never the local path: a local window must not open this hostile workspace):\n  env SECLAB_EDITOR_CANARY=${canaries[3].value} <app>/Contents/Resources/app/bin/code --user-data-dir ${userData} --folder-uri vscode-remote://seclab+${tab.metadata.name}${ws}`);
 } else {
 	const checks: Check[] = [];
 	for (const vector of ['task', 'fsmonitor', 'rogue-extension']) {
