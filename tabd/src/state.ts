@@ -130,6 +130,28 @@ export class TabStore {
 		return path.join(this.tabsDir, `${assertTabId(tabId)}.lease`);
 	}
 
+	// Host-side vault of secrets moved out of a workspace (until the broker imports them)
+	// and the record of "open anyway" secret exceptions. Both 0600, outside every tab.
+	private sideFile(tabId: string, kind: 'vault' | 'exceptions'): string {
+		return path.join(this.tabsDir, `${assertTabId(tabId)}.${kind}.json`);
+	}
+
+	readSide<T>(tabId: string, kind: 'vault' | 'exceptions'): T[] {
+		try {
+			const v = JSON.parse(fs.readFileSync(this.sideFile(tabId, kind), 'utf8'));
+			return Array.isArray(v) ? v as T[] : [];
+		} catch {
+			return [];
+		}
+	}
+
+	writeSide<T>(tabId: string, kind: 'vault' | 'exceptions', entries: readonly T[]): void {
+		const file = this.sideFile(tabId, kind);
+		const tmp = `${file}.${process.pid}.tmp`;
+		fs.writeFileSync(tmp, JSON.stringify(entries), { mode: 0o600 });
+		fs.renameSync(tmp, file);
+	}
+
 	writeLease(tabId: string, pid: number): void {
 		fs.writeFileSync(this.leaseFile(tabId), String(pid), { mode: 0o600 });
 	}

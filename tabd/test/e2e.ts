@@ -11,12 +11,12 @@ import { TabdClient } from '../src/client.ts';
 const driver = process.argv[2] ?? 'sbx';
 const repo = path.resolve(import.meta.dirname, '../..');
 const work = path.join(repo, '.work', `e2e-${driver}`);
-const ws = path.join(work, 'ws1');
+const ws = path.join(work, 'tabs', 'ws1');
 fs.mkdirSync(ws, { recursive: true });
 
 const client = new TabdClient({
 	command: process.execPath,
-	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', work],
+	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', path.join(work, 'tabs')],
 	env: { HOME: process.env.HOME, USER: process.env.USER, PATH: '/usr/bin:/bin' },
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));

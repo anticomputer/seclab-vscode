@@ -64,7 +64,10 @@ never derived from paths or other input. The editor uses the authority
 | `tab.claim` | `{ workspace: { hostPath }, templateRef?: { name } }` | `{ tab }` | The **only** method that accepts a host path. Validates it (absolute, canonical, an existing directory, not a denylisted root) and returns the existing tab for that path or mints a new one. Persists the mapping. Does not start anything. |
 | `tab.get` | `{ tabId }` | `{ tab }` | Unknown ID → error `-32004`. |
 | `tab.list` | `{}` | `{ tabs: Tab[] }` | |
-| `tab.ensureRunning` | `{ tabId }` | `{ tab, connectionToken }` | Creates or starts the sandbox, REH and broker; applies the fence. Emits `tab.status` notifications. |
+| `tab.ensureRunning` | `{ tabId, acceptFindings?: string[] }` | `{ tab, connectionToken }` | **Scans the workspace for secrets first** (gitleaks; ADR pre-mount-secret-scan). If there are unresolved findings, errors `-32020` with `data.findings` (redacted); if the scan is incomplete, `-32021`. `acceptFindings` (finding ids, or `scan-incomplete`) records an exception. Then creates or starts the sandbox, REH and broker, and applies the fence. Emits `tab.status`. |
+| `tab.scan` | `{ tabId }` | `{ complete, error?, findings: [{ id, source: worktree\|git-config\|history, file, line, rule, commit?, movable }] }` | Never returns secret values. |
+| `tab.moveSecrets` | `{ tabId, moves: [{ id, bind: { host, path? } }] }` | `{ moved: [{ id, sentinel }] }` | Tab must be stopped. Rewrites each value to a sentinel in the working copy (atomic, no symlinks, never commits) and records it in the host vault. |
+| `tab.restoreSecrets` | `{ tabId }` | `{ restored, notRestored }` | Reverses `moveSecrets` (tab stopped). |
 | `tab.connect` | `{ tabId }` | `{ channel, connectionToken }` | **Re-verifies the fence first.** On mismatch: error `-32010` with the reason. Opens an exec stream to the REH socket on a new channel. |
 | `tab.stop` | `{ tabId }` | `{ tab }` | Ends the tab's channels, then stops the sandbox. |
 | `tab.remove` | `{ tabId }` | `{}` | Removes the sandbox and fence rules; forgets the mapping. |
@@ -88,7 +91,8 @@ Reserved (not in v0.1): `warmPool.*`, `tab.policy.*` (broker adapter),
 JSON-RPC standard codes, plus: `-32001` not initialized, `-32002` invalid
 path, `-32003` driver unavailable, `-32004` unknown tab, `-32010` fence
 verification failed, `-32011` sandbox failed to start, `-32012` REH not
-ready.
+ready, `-32020` secrets found in the workspace, `-32021` secret scan
+incomplete.
 
 ## 6. Versioning
 `protocolVersion` is `seclab-tabd/<major>.<minor>`. A minor bump only adds
