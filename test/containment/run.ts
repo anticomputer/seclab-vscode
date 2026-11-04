@@ -47,7 +47,7 @@ execFileSync('docker', ['run', '-d', '--rm', '--name', LOOPBACK_NAME, '-p', `127
 
 const client = new TabdClient({
 	command: process.execPath,
-	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver],
+	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', work],
 	env: { HOME: process.env.HOME, USER: process.env.USER },
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));
@@ -59,6 +59,8 @@ async function cleanup(): Promise<void> {
 		for (const t of Object.values(tabs)) {
 			await client.request('tab.remove', { tabId: t }).catch(e => console.log(`remove ${t}: ${(e as Error).message}`));
 		}
+		// Disarm the hostile git config left in the host work dir.
+		fs.rmSync(path.join(wsA, '.git'), { recursive: true, force: true });
 	}
 	spawnSync('docker', ['rm', '-f', LOOPBACK_NAME], { stdio: 'ignore' });
 	client.dispose();

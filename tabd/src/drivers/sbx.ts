@@ -60,6 +60,43 @@ export class SbxDriver implements Driver {
 		return parsePolicyJson(r.stdout);
 	}
 
+	/**
+	 * No real secret ever enters a tab (ADR 20261104-no-real-secret-in-a-tab). sbx can inject
+	 * stored service/custom secrets into sandboxes through its proxy; refuse to run a tab if
+	 * any stored secret could apply to it. Fails closed on unknown output.
+	 */
+	private async secretProblems(spec: TabRuntimeSpec): Promise<string[]> {
+		const r = await this.runner.run(this.sbx, ['secret', 'ls', '--json'], { timeoutMs: 30_000 });
+		if (r.code !== 0) {
+			return [`sbx secret ls failed: ${tail(r.stderr)}`];
+		}
+		let doc: Record<string, unknown>;
+		try {
+			doc = JSON.parse(r.stdout) as Record<string, unknown>;
+		} catch {
+			return ['sbx secret ls output is not JSON'];
+		}
+		const problems: string[] = [];
+		for (const key of ['secrets', 'custom_secrets']) {
+			const list = doc[key];
+			if (!Array.isArray(list)) {
+				problems.push(`sbx secret ls: ${key} missing`);
+				continue;
+			}
+			for (const s of list as Array<Record<string, unknown>>) {
+				const scopedElsewhere = typeof s?.sandbox === 'string' && s.sandbox !== '' && s.sandbox !== spec.sandboxName;
+				if (!scopedElsewhere) {
+					problems.push(`sbx ${key} entry ${JSON.stringify(s?.name ?? s?.service ?? '?')} could apply to this tab`);
+				}
+			}
+		}
+		// Supervisor runs sbx with a scrubbed environment, so this must be zero.
+		if (typeof doc.env_only_count === 'number' && doc.env_only_count > 0) {
+			problems.push(`sbx sees ${doc.env_only_count} secret-like variable(s) in the supervisor environment`);
+		}
+		return problems;
+	}
+
 	async ensureRunning(spec: TabRuntimeSpec, connectionToken: string): Promise<void> {
 		checkSpec(spec);
 		if (!CONNECTION_TOKEN_RE.test(connectionToken)) {
@@ -90,6 +127,10 @@ export class SbxDriver implements Driver {
 
 	private async create(spec: TabRuntimeSpec): Promise<void> {
 		const t = spec.template.spec;
+		const secretProblems = await this.secretProblems(spec);
+		if (secretProblems.length) {
+			throw new DriverError(-32010, `refusing to create tab: ${secretProblems.join('; ')}`);
+		}
 		const mirror = resourcesToMirror(await this.policyRules());
 		const args = ['create', '--name', spec.sandboxName, '--no-progress', '--pull', 'never', '-t', assertImageRef(t.image)];
 		if (t.resources?.cpus !== undefined) {
@@ -160,6 +201,7 @@ export class SbxDriver implements Driver {
 		try {
 			const rules = await this.policyRules();
 			const problems = checkFence(rules, spec.sandboxName, spec.brokerPort);
+			problems.push(...await this.secretProblems(spec));
 			const probes: Array<[string, boolean]> = CANARY_TARGETS.map(t => [t, false]);
 			// Plus a few concrete (non-glob) global allows: these must be denied for the tab.
 			for (const res of resourcesToMirror(rules).filter(r => !/[*?[\]]/.test(r)).slice(0, 3)) {
