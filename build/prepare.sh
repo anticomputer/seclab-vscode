@@ -24,11 +24,19 @@ for ext in "$ROOT"/extensions/seclab-*/; do
 	echo "prepare: overlay extensions/$name"
 done
 
-# 3. product.json as data.
+# 3. product.json as data. The ui allowlist is generated from the upstream built-in
+#    manifests (publisher "vscode", extensionKind preferring "ui"), excluding test-only ones.
+ui_json="$DEST/.seclab-builtin-ui.json"
+for m in "$DEST"/extensions/*/package.json; do
+	jq -c 'select(.publisher == "vscode" and (.extensionKind // [] | .[0]) == "ui" and (.name | test("test") | not))
+		| {("vscode." + .name): .extensionKind}' "$m"
+done | jq -s 'add // {}' > "$ui_json"
 tmp="$DEST/product.json.seclab"
-jq --tab --slurpfile ov "$ROOT/build/product/overrides.json" -f "$ROOT/build/product/product.jq" "$DEST/product.json" > "$tmp"
+jq --tab --slurpfile ov "$ROOT/build/product/overrides.json" --slurpfile ui "$ui_json" \
+	-f "$ROOT/build/product/product.jq" "$DEST/product.json" > "$tmp"
 mv "$tmp" "$DEST/product.json"
-echo "prepare: product.json overrides applied"
+rm -f "$ui_json"
+echo "prepare: product.json overrides applied (ui-kind built-ins: $(jq -c '.extensionKind | with_entries(select(.value|index("ui"))) | keys' "$DEST/product.json"))"
 
 # 4. Patch queue, in lexical order; any failure aborts the build.
 for p in "$ROOT"/patches/[0-9][0-9][0-9][0-9]-*.patch; do

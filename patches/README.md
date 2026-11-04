@@ -11,6 +11,12 @@ Rules ([ADR](../docs/adr/20261104-vscodium-style-fork.md)):
 - Policy that can be expressed in `product.json` goes in
   `build/product/overrides.json`, not here.
 
-The queue is **empty** for M0 and M1. The expected M4 patches are the RPC
-capability filter, auth mediation, storage partitioning, webview egress, and an
-`extensionKind` wildcard.
+Current queue:
+- `0001-build-skip-copilot-shim-without-extension.patch`: build only; the
+  built-in Copilot extension is removed ([EDR](../docs/edr/20261104-remove-builtin-copilot.md)).
+- `0002-extensionkind-product-default.patch`: `extensionKind["*"]` default, so
+  every non-built-in extension runs in the tab, and the user setting can't
+  override it ([ADR](../docs/adr/20261104-extensionkind-default-workspace.md)).
+
+Expected later patches (M4): the RPC capability filter, auth mediation, storage
+partitioning, webview egress, and main-process folder routing (proposed).

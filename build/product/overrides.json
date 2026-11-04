@@ -23,7 +23,6 @@
 		"seclab.tab-manager": ["resolvers"]
 	},
 	"extensionKind": {
-		"seclab-test.rogue-ui": ["workspace"],
-		"vscodevim.vim": ["workspace"]
+		"seclab.tab-manager": ["ui"]
 	}
 }
