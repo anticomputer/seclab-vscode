@@ -63,7 +63,7 @@ exports.activate = async function (context) {
 			}
 			const t = String(s.accessToken ?? '');
 			let decoded = '';
-			try { decoded = Buffer.from(t, 'base64').toString('latin1'); } catch { /* not base64 */ }
+			try { decoded = Buffer.from(t, 'base64').toString('latin1'); } catch { /* not base64 */ } // lint-allow: base64-canary-compare
 			return { present: true, account: inTab ? s.account?.label : undefined, tokenLength: t.length, carriesCanary: /seclabcanary_/.test(t) || /seclabcanary_/.test(decoded) };
 		};
 		if (inTab) {
