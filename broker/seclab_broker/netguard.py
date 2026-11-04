@@ -39,8 +39,6 @@ def deny_reason(ip: IP, extra: frozenset[IP] = frozenset()) -> str | None:
         if v4 is not None:
             inner = deny_reason(v4, extra)
             return f"embedded-ipv4:{inner}" if inner else None
-    if ip in extra:
-        return "broker-local"
     if ip.is_loopback:
         return "loopback"
     if ip.is_link_local:
@@ -51,6 +49,8 @@ def deny_reason(ip: IP, extra: frozenset[IP] = frozenset()) -> str | None:
         return "multicast"
     if ip.is_reserved:
         return "reserved"
+    if ip in extra:
+        return "broker-local"
     if not ip.is_global:
         return "non-global"
     return None
@@ -62,9 +62,19 @@ def local_addresses(proc: Path = Path("/proc/net")) -> frozenset[IP]:
     try:
         for line in (proc / "route").read_text().splitlines()[1:]:
             cols = line.split()
-            if len(cols) > 2 and cols[2] != "00000000":
+            if len(cols) < 8:
+                continue
+            if cols[2] != "00000000":
                 found.add(ipaddress.IPv4Address(bytes.fromhex(cols[2])[::-1]))
-    except OSError:
+            elif cols[7] != "00000000":
+                # Directly connected subnet: Docker IPAM puts the bridge gateway on the
+                # first host address unless a custom --gateway is given.
+                net = ipaddress.IPv4Network((ipaddress.IPv4Address(bytes.fromhex(cols[1])[::-1]),
+                                             str(ipaddress.IPv4Address(bytes.fromhex(cols[7])[::-1]))),
+                                            strict=False)
+                if net.num_addresses > 2:
+                    found.add(net.network_address + 1)
+    except (OSError, ValueError):
         pass
     try:
         lines = (proc / "fib_trie").read_text().splitlines()
