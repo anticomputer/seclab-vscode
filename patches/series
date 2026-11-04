@@ -6,6 +6,3 @@
 0002-extensionkind-product-default.patch
 0003-no-workspace-extensions-in-local-windows.patch
 0004-extension-description-computed-fields-win.patch
-0005-seclab-rpc-capability-filter.patch
-0006-seclab-channel-guard.patch
-0007-seclab-command-taint.patch
