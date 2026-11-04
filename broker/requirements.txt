@@ -1,0 +1,1 @@
+fastjsonschema==2.22.3 --hash=sha256:f670b443830b75aca3f00b75949efa20f4b2a80302ec7a21505c28dd54cffd43

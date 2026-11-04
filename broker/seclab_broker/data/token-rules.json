@@ -1,0 +1,17 @@
+{
+  "description": "Patterns for credentials newly minted by an upstream and returned in a response. Applied to responses from hosts that a credential is bound to. Regexes are Python 're' syntax over decoded text; group 'secret' (or the whole match) is the credential.",
+  "source": "Rules marked gitleaks are taken from https://github.com/gitleaks/gitleaks/blob/5f6ec56cfa6f8c67648d863582c7ae2f206d5c1c/config/gitleaks.toml (MIT). Length quantifiers on GitHub token bodies are widened from {36} to {36,255} because GitHub documents that token lengths may grow.",
+  "rules": [
+    { "id": "github-app-token", "origin": "gitleaks", "regex": "(?P<secret>(?:ghu|ghs)_[0-9a-zA-Z]{36,255})" },
+    { "id": "github-fine-grained-pat", "origin": "gitleaks", "regex": "(?P<secret>github_pat_\\w{82,255})" },
+    { "id": "github-oauth", "origin": "gitleaks", "regex": "(?P<secret>gho_[0-9a-zA-Z]{36,255})" },
+    { "id": "github-pat", "origin": "gitleaks", "regex": "(?P<secret>ghp_[0-9a-zA-Z]{36,255})" },
+    { "id": "github-refresh-token", "origin": "gitleaks", "regex": "(?P<secret>ghr_[0-9a-zA-Z]{36,255})" },
+    { "id": "jwt", "origin": "gitleaks", "regex": "\\b(?P<secret>ey[a-zA-Z0-9]{17,}\\.ey[a-zA-Z0-9\\/\\\\_-]{17,}\\.(?:[a-zA-Z0-9\\/\\\\_-]{10,}={0,2})?)" },
+    { "id": "npm-access-token", "origin": "gitleaks", "regex": "(?i)\\b(?P<secret>npm_[a-z0-9]{36})" },
+    { "id": "pypi-upload-token", "origin": "gitleaks", "regex": "(?P<secret>pypi-AgEIcHlwaS5vcmc[\\w-]{50,1000})" },
+    { "id": "copilot-session-token", "origin": "seclab", "regex": "(?P<secret>tid=[0-9a-fA-F]{16,64};[^\\s\"'<>]{8,2048})", "note": "Format observed in third-party Copilot clients (tid=...;exp=...;...). No first-party documentation." },
+    { "id": "json-token-field", "origin": "seclab", "regex": "\"(?:access_token|refresh_token|id_token|token)\"\\s*:\\s*\"(?P<secret>[^\"\\\\\\s]{16,4096})\"", "note": "Generic: any JSON token field on a bound host, whatever its format." },
+    { "id": "form-token-field", "origin": "seclab", "regex": "(?:^|&)(?:access_token|refresh_token)=(?P<secret>[^&\\s]{16,4096})", "note": "Generic: form-encoded OAuth token responses (GitHub's default for /login/oauth/access_token)." }
+  ]
+}

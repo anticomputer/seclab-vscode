@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "tabId": "example-github",
+  "baseline": true,
+  "prompt": { "enabled": true, "timeoutSeconds": 60 },
+  "sentinelMismatch": "block",
+  "allow": [
+    { "id": "github-web", "host": "github.com", "methods": ["GET", "HEAD", "POST"], "path": "/**" },
+    { "id": "github-api-read", "host": "api.github.com", "methods": ["GET", "HEAD"], "path": "/**" },
+    { "id": "github-raw", "host": "raw.githubusercontent.com", "methods": ["GET"], "path": "/**" },
+    { "id": "npm-registry", "host": "registry.npmjs.org", "methods": ["GET"], "path": "/**" }
+  ],
+  "credentials": [
+    {
+      "id": "github",
+      "provider": "github",
+      "bind": [
+        {
+          "host": "github.com",
+          "path": "/*/*/info/refs",
+          "methods": ["GET"],
+          "inject": { "header": "Authorization", "fmt": "Basic {base64:x-access-token:{value}}" }
+        },
+        {
+          "host": "github.com",
+          "path": "/*/*/git-upload-pack",
+          "methods": ["POST"],
+          "inject": { "header": "Authorization", "fmt": "Basic {base64:x-access-token:{value}}" }
+        },
+        {
+          "host": "api.github.com",
+          "path": "/repos/**",
+          "methods": ["GET"],
+          "inject": { "header": "Authorization", "fmt": "Bearer {value}" }
+        }
+      ]
+    }
+  ]
+}
