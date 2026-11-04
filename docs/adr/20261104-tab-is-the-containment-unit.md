@@ -1,6 +1,6 @@
 # The workspace window ("tab") is the containment unit; Workspace Trust is UX only
 
-- **Status:** accepted
+- **Status:** accepted. The attacker list is superseded by [20261104-threat-model-rogue-extension](20261104-threat-model-rogue-extension.md); the containment-unit decision stands.
 - **Date:** 2026-11-04
 - **Deciders:** anticomputer (user); seclab-vscode coordinator
 
