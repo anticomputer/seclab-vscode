@@ -1,9 +1,9 @@
 # Tab observability: which runtime sensor can run where (spike)
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** tab-observability session (spike); coordinator; user decisions pending (see Consequences)
-- **Related:** [ADR tab supervisor](../adr/20261104-tab-supervisor.md), [ADR threat model](../adr/20261104-threat-model-rogue-extension.md), [EDR sbx fence spike](20261104-sbx-fence-spike.md), [EDR sbx 0.51](20261104-sbx-upgrade-0-51.md)
+- **Deciders:** tab-observability session (spike); coordinator; user (decisions recorded in [ADR tab observability](../adr/20261104-tab-observability.md))
+- **Related:** [ADR tab observability](../adr/20261104-tab-observability.md), [ADR tab supervisor](../adr/20261104-tab-supervisor.md), [ADR threat model](../adr/20261104-threat-model-rogue-extension.md), [EDR sbx fence spike](20261104-sbx-fence-spike.md), [EDR sbx 0.51](20261104-sbx-upgrade-0-51.md)
 
 ## Context
 The user asked for "a falco style mode that gives the host a full event log
