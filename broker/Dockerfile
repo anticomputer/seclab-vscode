@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir --no-deps --require-hashes -r /opt/seclab/require
  && chmod 0755 /usr/local/bin/seclab-broker \
  && install -d -o mitmproxy -g mitmproxy -m 0700 /run/seclab
 COPY seclab_broker /opt/seclab/seclab_broker
-COPY schema/policy.v1.schema.json /opt/seclab/seclab_broker/data/policy.v1.schema.json
+COPY schema/policy.v1.schema.json schema/protocol.v1.json /opt/seclab/seclab_broker/data/
 ENV PYTHONPATH=/opt/seclab PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
 USER mitmproxy
