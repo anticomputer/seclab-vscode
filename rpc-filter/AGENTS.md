@@ -102,6 +102,7 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 | `host-fs-read-file-scheme` | rogue extension | `rpc:MainThreadFileSystem.$readFile` | denied |
 | `host-fs-read-userdata` | rogue extension | `rpc:MainThreadFileSystem.$readFile` | denied |
 | `host-fs-write-file-scheme` | rogue extension | `rpc:MainThreadFileSystem.$writeFile` | denied |
+| `host-fs-write-userdata` | rogue extension | `rpc:MainThreadFileSystem.$writeFile` | denied |
 | `host-terminal-newlocal` | rogue extension | `cmd:workbench.action.terminal.newLocal` | denied |
 | `host-terminal-sendsequence` | rogue extension | `cmd:workbench.action.terminal.sendSequence` | denied |
 | `launder-await` | rogue extension | `cmd:_seclabTest.launder` | denied |

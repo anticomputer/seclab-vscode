@@ -49,6 +49,24 @@ The same doubt applies to `launder-direct` and the terminal pair: the terminal
 pair is corroborated by the marker file, `launder-direct` is not corroborated by
 anything yet.
 
+**Closed.** `check-probes.ts` now verifies `hostEffect`: in `unpatched` mode a
+probe that declares one must have produced the file, and in `patched` mode it
+must not. Replaying this run's archived evidence against the new checker gives
+exactly the right split:
+
+```
+PASS  [host-effect] host-terminal-sendsequence actually changed the host (marker)
+FAIL  [host-effect] host-fs-write-file-scheme actually changed the host (marker.rpcwrite)
+      -> PWNED.rpcwrite MISSING: the call succeeded but nothing happened on the host
+```
+
+`host-fs-write-file-scheme` is demoted to a **negative control**: it is kept,
+because "this call succeeds and changes nothing on the host" is worth asserting,
+but it no longer claims to prove an escape. A new `host-fs-write-userdata`
+probe targets `vscode-userdata:`, which resolves against the host profile
+directory and therefore does cross the boundary. It has not run yet, and the
+checker reports it as such rather than passing it.
+
 ## The eight errors, all explained
 
 None of these is containment; every one is a harness or fixture gap.

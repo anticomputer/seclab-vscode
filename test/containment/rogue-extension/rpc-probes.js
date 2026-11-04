@@ -108,6 +108,17 @@ async function runProbes(vscode, context, targets) {
 			return target.toString();
 		});
 
+	// A `file:` write from a remote window is served by the REH's own provider,
+	// inside the tab, so it proves nothing about the host (2026-11-04 run).
+	// `vscode-userdata:` resolves against the HOST profile directory, so it is
+	// the scheme that actually crosses the boundary.
+	await probe(results, 'host-fs-write-userdata', 'rpc:MainThreadFileSystem.$writeFile',
+		async () => {
+			const target = Uri.parse('vscode-userdata:/User/seclab-probe-marker.txt');
+			await vscode.workspace.fs.writeFile(target, Buffer.from('written by a tab\n'));
+			return target.toString();
+		});
+
 	// --- secrets -------------------------------------------------------------
 	// SecretStorage is keyed {extensionId, key} globally, so a value written in
 	// one tab is readable in another by the same extension. The harness opens two
