@@ -50,6 +50,8 @@ const FORBIDDEN = [
 	/Library\/Keychains/i, /Library\/LaunchAgents/i, /Library\/LaunchDaemons/i,
 	/Library\/Application Support\/(Code|Google|Firefox)/i, /Library\/Cookies/i,
 	/\/\.(bashrc|zshrc|bash_profile|zprofile|profile)$/i,
+	/\/\.git\/hooks(\/|$)/i, /\/hooks\/(pre|post|commit|update|prepare)-/i,
+	/\/bin(\/|$)/i, /\/\.local\/bin(\/|$)/i, /\/Library\/(Preferences|Services)/i,
 	/\/etc\/(passwd|shadow|sudoers)/i,
 ];
 
@@ -57,7 +59,7 @@ const FORBIDDEN = [
  * Arming requires a run directory supplied by the HARNESS -- never a fallback
  * to workspace-supplied data -- plus a nonce that matches a file inside it.
  */
-function arm(armingFile) {
+function arm(targets) {
 	// Two delivery routes, because the two fixtures live on opposite sides of
 	// the boundary:
 	//
@@ -75,13 +77,22 @@ function arm(armingFile) {
 	let nonce = process.env.SECLAB_PROBE_NONCE;
 	let runDir = process.env.SECLAB_PROBE_RUNDIR;
 	let advisory = false;
-	if ((!nonce || !runDir) && armingFile) {
-		try {
-			const a = JSON.parse(fs.readFileSync(armingFile, 'utf8'));
-			nonce = a.nonce;
-			runDir = a.runDir;
+	// In-tab route: the harness's own arm/run/until fields in .seclab/targets,
+	// the same ones extension.js validates. One mechanism, not two.
+	//
+	// This route is ADVISORY and the workspace is attacker-writable, so `run`
+	// is attacker-chosen. It therefore only ever enables read-only reach
+	// demonstrations; anything that writes is refused unless the root was
+	// confirmed on the trusted side (see lexicalOnly below and safeWrite()).
+	if ((!nonce || !runDir) && targets) {
+		const until = Number(targets.until);
+		if (/^[0-9a-f]{32}$/.test(String(targets.arm ?? ''))
+			&& String(targets.run ?? '').startsWith('/')
+			&& until > Date.now() / 1000) {
+			nonce = targets.arm;
+			runDir = targets.run;
 			advisory = true;
-		} catch { /* fall through to unarmed */ }
+		}
 	}
 	if (!nonce || !runDir) {
 		return { armed: false, reason: 'no arming nonce / run directory from the harness' };
@@ -103,7 +114,7 @@ function arm(armingFile) {
 			return { armed: false, reason: 'run directory or nonce file not readable' };
 		}
 	}
-	return { armed: true, runDir: root, lexicalOnly, advisory };
+	return { armed: true, runDir: root, lexicalOnly, advisory, nonce };
 }
 
 /**
@@ -165,6 +176,22 @@ function safePath(ctx, p, what) {
 	return verified;
 }
 
+/**
+ * A path a probe may WRITE to. Stricter than safePath: in an advisory context
+ * the confinement root came from the attacker-writable workspace, so a lexical
+ * prefix test proves nothing about where the write lands on the host. Reach can
+ * still be demonstrated by reads and by the host-side marker, both of which the
+ * harness verifies out-of-band.
+ */
+function safeWrite(ctx, p, what) {
+	if (ctx.lexicalOnly) {
+		throw new SafetyError(
+			`${what}: refusing to write from an advisory context; the run directory `
+			+ 'was not confirmed on the trusted side');
+	}
+	return safePath(ctx, p, what);
+}
+
 /** The only network destination any probe may name. */
 function safeUrl(ctx, url, what) {
 	const s = String(url);
@@ -212,8 +239,8 @@ function note(ctx, artefact) {
 	} catch { /* best effort */ }
 }
 
-function context(armingFile) {
-	const armed = arm(armingFile);
+function context(targets) {
+	const armed = arm(targets);
 	if (!armed.armed) {
 		return { armed: false, reason: armed.reason };
 	}
@@ -226,7 +253,7 @@ function context(armingFile) {
 			? Number(process.env.SECLAB_PROBE_BEACON_PORT) : null,
 		artefacts: [],
 		// Per-run so teardown can delete exactly what this run created.
-		secretKey: `seclab-probe-${(process.env.SECLAB_PROBE_NONCE || 'run').slice(0, 16)}`,
+		secretKey: `seclab-probe-${String(armed.nonce || 'run').slice(0, 16)}`,
 	};
 	ctx.marker = path.join(ctx.runDir, MARKER_BASENAME);
 	ctx.canary = path.join(ctx.runDir, CANARY_BASENAME);
@@ -234,6 +261,6 @@ function context(armingFile) {
 }
 
 module.exports = {
-	SafetyError, context, safePath, safeUrl, markerCommand, runPath, note,
+	SafetyError, context, safePath, safeWrite, safeUrl, markerCommand, runPath, note,
 	FORBIDDEN, MARKER_BASENAME, CANARY_BASENAME, NONCE_FILE,
 };

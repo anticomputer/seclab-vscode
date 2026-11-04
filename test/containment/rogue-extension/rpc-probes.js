@@ -66,7 +66,7 @@ async function runProbes(vscode, context, targets) {
 	const results = [];
 	// Inert unless the harness armed this run. Installed anywhere else -- or
 	// run against a user's real profile -- the probes do nothing at all.
-	const ctx = safety.context(targets.armingFile || null);
+	const ctx = safety.context(targets);
 	if (!ctx.armed) {
 		return [{
 			id: 'harness', policyRef: '', outcome: ERROR,
@@ -102,7 +102,7 @@ async function runProbes(vscode, context, targets) {
 		});
 	await probe(results, 'host-fs-write-file-scheme', 'rpc:MainThreadFileSystem.$writeFile',
 		async () => {
-			const target = Uri.file(safety.safePath(ctx, `${ctx.marker}.rpcwrite`, 'marker write'));
+			const target = Uri.file(safety.safeWrite(ctx, `${ctx.marker}.rpcwrite`, 'marker write'));
 			safety.note(ctx, `${ctx.marker}.rpcwrite`);
 			await vscode.workspace.fs.writeFile(target, Buffer.from('written by a tab\n'));
 			return target.toString();

@@ -83,3 +83,33 @@ Addressed in `check-evidence.ts` and a new `test/containment/teardown.ts`:
 - **Tunnel and host terminal** from `asExternalUri` and
   `host-terminal-newlocal` are closed by ending the editor session rather than
   by the probes themselves; the tripwire does not see them.
+
+---
+
+## Round 4: pre-landing review of the increment (2026-11-04)
+
+Reviewer: independent `security-review` agent, `cvp-claude-opus-5`, on `694f1db`.
+**Verdict: DO-NOT-LAND.** It was right, and two of its findings were failures of
+mine to verify my own claims.
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| 1 | High | `teardown.ts` drives `rmSync(recursive)` and SIGKILL from `run.json`, a file inside the run directory — the one place an escaped tab is *designed* to be able to write. `userDataDir: "/"` or `"-"` would match nearly every process in `ps`, and delete arbitrary paths. | **Open.** Must validate the manifest (absolute, passes `checkUserDataDir`, minimum depth) and match on a second run-unique token before any destructive action. |
+| 2 | High | `arm()` still read `runDir` from a workspace JSON file, reinstating the attacker-chosen confinement root that round 3 closed. | **Fixed.** Consolidated onto the harness's `arm`/`run`/`until` fields, and an advisory context now refuses **every write** via `safeWrite()`: a lexical prefix test against an attacker-chosen root proves nothing about where a write lands. `FORBIDDEN` extended to `.git/hooks`, `bin/`, `.local/bin`, `Library/Preferences`. |
+| 3 | High | `nonce` was undefined in `check-evidence.ts`, so `prepare` would throw a `ReferenceError` *after* claiming the tab and installing the rogue extension; and nothing wrote `.seclab-probe-nonce`, so teardown's keychain check silently skipped. | **Fixed.** The rebase had renamed it to `arm`; the usage is corrected and the nonce anchor is written host-side. |
+| 4 | Medium | `hostEffectAbsolute` on the one required probe that proves a real host crossing is read by nothing, and patched-mode `hostEffect` passes when `SECLAB_PROBE_RUNDIR` is unset. | **Open.** |
+| 5 | Medium | The test named for round 3 finding 3 passed no `armingFile`, so it never exercised the workspace route and would have passed against a guard with no workspace handling at all. | **Fixed.** Four cases now drive that route directly: it arms but only as advisory/lexical, refuses every write under `/`, `$HOME` and `/usr/local`, still refuses forbidden paths, and rejects malformed or expired tokens. 29 assertions. |
+| 6 | Medium | Lint exemptions are file-wide and substring-based (`OBFUSCATION_EXEMPT`, `ARMING`). | **Open.** Should be line-scoped pragmas. |
+
+### What I got wrong, recorded deliberately
+
+The commit message on `694f1db` described an arming consolidation that **was not
+in the tree**: my rebase conflict resolution had silently dropped the edit, and I
+described the intent rather than verifying the result. The reviewer caught it
+with `git show`. Separately I reported "all gates green", which was true and
+misleading: no gate runs `prepare`, so a `ReferenceError` on its last statement
+sat undetected.
+
+The lesson is narrow and worth keeping: **after a conflict-heavy rebase, re-read
+the resolved file rather than trusting that the change survived**, and do not
+describe work in a commit message without checking it is in the diff.

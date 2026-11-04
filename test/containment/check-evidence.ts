@@ -60,6 +60,11 @@ if (mode === 'prepare') {
 	const arm = randomBytes(16).toString('hex');
 	// Armed for a bounded window only (FS-3): a prepared hostile repo shouldn't stay live.
 	const until = Math.floor(Date.now() / 1000) + Number(process.env.SECLAB_ARM_SECONDS ?? 4 * 3600);
+	// Anchor the arming nonce on the host side too: probe-safety's env route and
+	// teardown's keychain check both read it, and a missing anchor must fail
+	// loudly rather than silently skip those checks.
+	fs.mkdirSync(base, { recursive: true });
+	fs.writeFileSync(path.join(base, '.seclab-probe-nonce'), arm);
 	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${canary}\nmarker=${marker}\nloopback=${port}\narm=${arm}\nrun=${base}\nuntil=${until}\n`
 		+ (process.env.SECLAB_CANARY_CLIPBOARD === '1' ? 'clipboard=1\n' : ''));
 	writeSnapshot(base);
@@ -148,9 +153,9 @@ if (mode === 'prepare') {
 	console.log(`\nnow open the TAB directly (never the local path: a local window must not open this hostile workspace).`);
 	console.log(`Keep --user-data-dir SHORT: macOS caps unix socket paths at 104 bytes and a deep path silently fails to open a window.\n`);
 	console.log(`  env SECLAB_EDITOR_CANARY=${canaries[3].value} \\\n`
-		+ `      SECLAB_PROBE_NONCE=${nonce} \\\n`
+		+ `      SECLAB_PROBE_NONCE=${arm} \\\n`
 		+ `      SECLAB_PROBE_RUNDIR=${base} \\\n`
-		+ `      SECLAB_PROBE_BEACON_PORT=\${SECLAB_BEACON_PORT:-18099} \\\n`
+		+ `      SECLAB_PROBE_BEACON_PORT=${port} \\\n`
 		+ `      <app>/Contents/Resources/app/bin/code --user-data-dir ${userData} \\\n`
 		+ `      --folder-uri vscode-remote://seclab+${tab.metadata.name}${ws}`);
 } else {

@@ -70,7 +70,7 @@ async function runRehProbes(socketServer, router) {
 	// read; writing a marker proves host FS write.
 	const download = () => socketServer.getChannel('download', router);
 	await probe(results, 'channel-download-host-read', 'chan:download', async () => {
-		const dest = safety.safePath(ctx, `${ctx.marker}.download-read`, 'download dest');
+		const dest = safety.safeWrite(ctx, `${ctx.marker}.download-read`, 'download dest');
 		safety.note(ctx, dest);
 		await download().call('download', [
 			{ scheme: 'file', path: safety.safePath(ctx, ctx.canary, 'download source') },
@@ -79,7 +79,7 @@ async function runRehProbes(socketServer, router) {
 		return fs.existsSync(dest) ? fs.readFileSync(dest, 'utf8') : 'call returned without error';
 	});
 	await probe(results, 'channel-download-host-write', 'chan:download', async () => {
-		const dest = safety.safePath(ctx, `${ctx.marker}.download`, 'download dest');
+		const dest = safety.safeWrite(ctx, `${ctx.marker}.download`, 'download dest');
 		safety.note(ctx, dest);
 		await download().call('download', [
 			{ scheme: 'file', path: safety.safePath(ctx, ctx.canary, 'download source') },
