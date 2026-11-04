@@ -62,3 +62,7 @@ Good, bad, and follow-ups this creates.
 | 2026-11-04 | [RPC capability filter is a required, default-deny boundary](20261104-rpc-capability-filter.md) | proposed |
 | 2026-11-04 | [Move from a local-only repo to private anticomputer/seclab-vscode](20261104-private-github-repo.md) | accepted |
 | 2026-11-04 | [Tab supervisor `seclab-tabd` with a versioned stdio protocol](20261104-tab-supervisor.md) | accepted |
+| 2026-11-04 | [No real secret ever enters a tab](20261104-no-real-secret-in-a-tab.md) | accepted |
+| 2026-11-04 | [Threat model: the primary attacker is a rogue extension](20261104-threat-model-rogue-extension.md) | accepted (supersedes attacker list) |
+| 2026-11-04 | [Every non-built-in extension runs in the tab (`extensionKind` `*`)](20261104-extensionkind-default-workspace.md) | accepted |
+| 2026-11-04 | [Route folder opens into tabs in the main process](20261104-route-folder-opens-in-main.md) | proposed |

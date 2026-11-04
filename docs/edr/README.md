@@ -45,3 +45,5 @@ Same rules as ADRs:
 | 2026-11-04 | [Remove the built-in Copilot extension (one build patch)](20261104-remove-builtin-copilot.md) | accepted |
 | 2026-11-04 | [Linux builds in a trixie container; sbx template via snapshot](20261104-linux-builder-and-sbx-template.md) | accepted |
 | 2026-11-04 | [REH transport over `sbx exec -i` stdio works end to end](20261104-reh-transport-e2e.md) | accepted |
+| 2026-11-04 | [Extensions never persist across tabs or onto the host](20261104-extension-persistence.md) | accepted |
+| 2026-11-04 | [Tab Manager routing (M1): extension-level redirect, fail closed](20261104-tab-manager-routing.md) | accepted (interim) |

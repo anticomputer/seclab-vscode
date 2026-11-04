@@ -50,3 +50,4 @@ File: `YYYYMMDD-short-slug.md`.
 | Date | Review | Scope | Open high/critical |
 |---|---|---|---|
 | 2026-11-04 | [seclab-tabd design (protocol, process model)](20261104-tabd-protocol-design.md) | design docs before code | 1 critical (REH server→client IPC; owned by M4) |
+| 2026-11-04 | [M0 pipeline, tabd, Tab Manager, containment suite](20261104-m0-tabd-code.md) | 296594c..2c07708 (+ round 3 pending) | 1 high (local-window routing race; fix proposed) |
