@@ -96,6 +96,16 @@ this file.
   GitHub push protection, and no real-looking secrets in history.
 
 ## 4. Common tasks
+CI runs these on every push and PR (`./seclab docs check --run-commands`); they must
+keep working:
+<!-- ci: run -->
+```sh
+./seclab test unit
+./seclab lint fixtures
+./seclab lint source
+build/apply-patches.sh --check
+```
+
 Verified commands (one entry point: `./seclab help`):
 ```sh
 ./seclab build linux            # REH (linux-<arch>) in the trixie builder container -> .work/out/  (~10 min warm)
@@ -109,6 +119,8 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab lint fixtures          # fixture-safety lint (docker, no network); also: test/safety/fixture-lint.sh PATH...
 build/apply-patches.sh --check  # patch queue == patches/series (no unlisted patch can ship)
 ./seclab lint source            # shipped sources: reviewed env/spawn sites only (build/source-allowlist.txt), no dynamic loading
+./seclab docs write             # regenerate ADR/EDR/review indexes from the records
+./seclab docs check --run-commands --paired   # docs gate (records, links, ARCHITECTURE, ci: run blocks, paired docs); --online adds lychee
 build/check-release.sh .work/out/seclab-reh-linux-arm64.tar.gz   # no test hooks in a release artifact (also: <app>/Contents/Resources/app)
 
 # macOS app from Actions (branch builds need the override), then quarantine (user approval)
@@ -157,6 +169,11 @@ Electron with `ELECTRON_RUN_AS_NODE=1`); nothing is installed.
   - ADRs and EDRs are written or updated;
   - ARCHITECTURE.md is updated if the current state changed;
   - this file is updated if commands changed.
+- **Docs are part of the change.** `./seclab docs check` must pass before every push
+  ([EDR](docs/edr/20261104-docs-check.md)). Indexes are generated: after adding or
+  changing a record, run `./seclab docs write`; never edit an index table by hand.
+  Protocol, patch, provider and product.json changes need their docs in the same
+  range, or a `docs-not-needed: <reason>` commit trailer.
 
 ## 6. Gotchas learned so far
 - **sbx policy layers:** a global `local-policy` (on this host "balanced",
