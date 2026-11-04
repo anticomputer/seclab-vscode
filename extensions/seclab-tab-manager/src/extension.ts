@@ -166,11 +166,21 @@ async function resolve(authority: string, ctx: vscode.RemoteAuthorityResolverCon
 	const { connectionToken } = await vscode.window.withProgress(
 		{ location: vscode.ProgressLocation.Notification, title: `Starting sandboxed tab for ${path.basename(hostPath)}` },
 		async () => {
-			try {
-				return await c.request<{ connectionToken: string }>('tab.ensureRunning', { tabId });
-			} catch (e) {
-				throw vscode.RemoteAuthorityResolverError.TemporarilyNotAvailable(`Tab failed to start: ${(e as Error).message}`);
+			let accept: string[] | undefined;
+			for (let attempt = 0; attempt < 5; attempt++) {
+				try {
+					return await c.request<{ connectionToken: string }>('tab.ensureRunning', { tabId, acceptFindings: accept });
+				} catch (e) {
+					const err = e as Error & { code?: number };
+					if (err.code === -32020 || err.code === -32021) {
+						// Secrets found in the folder (or the scan could not complete): decide in trusted UI.
+						accept = await resolveSecretFindings(c, tabId, hostPath, err.code === -32021);
+						continue;
+					}
+					throw vscode.RemoteAuthorityResolverError.TemporarilyNotAvailable(`Tab failed to start: ${err.message}`);
+				}
 			}
+			throw vscode.RemoteAuthorityResolverError.NotAvailable('Tab not opened: secrets unresolved', false);
 		});
 
 	const authorityResult = new vscode.ManagedResolvedAuthority(async () => {
@@ -204,6 +214,72 @@ function toMessagePassing(ch: TabdChannel): vscode.ManagedMessagePassing {
 		send: d => ch.write(d),
 		end: () => ch.end(),
 	};
+}
+
+// ---- pre-mount secret findings (ADR 20261104-pre-mount-secret-scan) -------------------------
+
+interface SecretFinding { id: string; source: string; file: string; line: number; rule: string; movable: boolean }
+
+// Suggested credential bindings for "move to broker", by gitleaks rule prefix.
+const BIND_SUGGESTIONS: Array<[RegExp, string]> = [
+	[/^github/, 'api.github.com'], [/^gitlab/, 'gitlab.com'], [/^aws/, '*.amazonaws.com'], [/^npm/, 'registry.npmjs.org'],
+	[/^slack/, 'slack.com'], [/^openai/, 'api.openai.com'], [/^anthropic/, 'api.anthropic.com'], [/^stripe/, 'api.stripe.com'],
+];
+
+/**
+ * Secrets were found in the folder (or the scan failed). Returns the finding ids to accept
+ * (recorded as an exception) after the user decides, or throws to cancel. "Move to broker"
+ * rewrites the working copy (sentinels) and returns undefined so the caller rescans.
+ */
+async function resolveSecretFindings(c: TabdClient, tabId: string, hostPath: string, incomplete: boolean): Promise<string[] | undefined> {
+	if (incomplete) {
+		const pick = await vscode.window.showWarningMessage(`The secret scan of "${hostPath}" could not complete.`,
+			{ modal: true, detail: 'Opening without a completed scan is recorded as an exception in the audit log.' }, 'Open Anyway');
+		if (pick !== 'Open Anyway') {
+			throw vscode.RemoteAuthorityResolverError.NotAvailable('Tab not opened: secret scan incomplete', false);
+		}
+		return ['scan-incomplete'];
+	}
+	const { findings } = await c.request<{ findings: SecretFinding[] }>('tab.scan', { tabId });
+	if (findings.length === 0) {
+		return undefined;
+	}
+	// File names come from the user's folder: shown as plain text, values are never shown.
+	const list = findings.map(f => `• ${f.file}:${f.line}  ${f.rule}${f.source === 'history' ? '  (git history)' : ''}  [redacted]`).join('\n');
+	const movable = findings.filter(f => f.movable);
+	const choices = movable.length ? ['Move to Broker…', 'Open Anyway'] : ['Open Anyway'];
+	const pick = await vscode.window.showWarningMessage(`${findings.length} secret(s) found in "${path.basename(hostPath)}". A sandboxed tab must never see a real secret.`,
+		{ modal: true, detail: `${list}\n\nMove to Broker replaces each value in your working copy with a sentinel (no commit is made; restorable). Open Anyway records an exception.` },
+		...choices);
+	if (pick === 'Open Anyway') {
+		return findings.map(f => f.id);
+	}
+	if (pick !== 'Move to Broker…') {
+		throw vscode.RemoteAuthorityResolverError.NotAvailable('Tab not opened: secrets in folder', false);
+	}
+	const moves: Array<{ id: string; bind: { host: string; path: string } }> = [];
+	for (const f of movable) {
+		const suggestion = BIND_SUGGESTIONS.find(([re]) => re.test(f.rule))?.[1] ?? '';
+		const host = await vscode.window.showInputBox({
+			title: `Bind ${f.file}:${f.line} (${f.rule}) to a host`,
+			prompt: 'The broker will only ever send this credential to this host (wildcard *.example.com allowed).',
+			value: suggestion, ignoreFocusOut: true,
+			validateInput: v => /^(?:\*\.)?[a-z0-9.-]{1,253}$/i.test(v) ? undefined : 'Enter a hostname',
+		});
+		if (!host) {
+			throw vscode.RemoteAuthorityResolverError.NotAvailable('Tab not opened: move cancelled', false);
+		}
+		moves.push({ id: f.id, bind: { host, path: '/**' } });
+	}
+	const confirm = await vscode.window.showWarningMessage(`Rewrite ${moves.length} file location(s) in "${hostPath}"?`,
+		{ modal: true, detail: 'Each secret value is replaced by a sentinel in your working copy. Nothing is committed. You can restore the originals later.' }, 'Rewrite Files');
+	if (confirm !== 'Rewrite Files') {
+		throw vscode.RemoteAuthorityResolverError.NotAvailable('Tab not opened: move cancelled', false);
+	}
+	await c.request('tab.stop', { tabId }).catch(() => undefined);
+	await c.request('tab.moveSecrets', { tabId, moves });
+	// Remaining (history) findings, if any, are decided on the next attempt.
+	return undefined;
 }
 
 // ---- routing --------------------------------------------------------------------------------
