@@ -64,5 +64,6 @@ Good, bad, and follow-ups this creates.
 | 2026-11-04 | [Tab supervisor `seclab-tabd` with a versioned stdio protocol](20261104-tab-supervisor.md) | accepted |
 | 2026-11-04 | [No real secret ever enters a tab](20261104-no-real-secret-in-a-tab.md) | accepted |
 | 2026-11-04 | [Threat model: the primary attacker is a rogue extension](20261104-threat-model-rogue-extension.md) | accepted (supersedes attacker list) |
-| 2026-11-04 | [Every non-built-in extension runs in the tab (`extensionKind` `*`)](20261104-extensionkind-default-workspace.md) | accepted |
+| 2026-11-04 | [Every non-built-in extension runs in the tab (`extensionKind` `*`)](20261104-extensionkind-default-workspace.md) | superseded-by extension-placement-hardening |
 | 2026-11-04 | [Route folder opens into tabs in the main process](20261104-route-folder-opens-in-main.md) | proposed |
+| 2026-11-04 | [Extension placement hardening: built-in-only `ui`, no `web`, nothing runs in local windows](20261104-extension-placement-hardening.md) | accepted |

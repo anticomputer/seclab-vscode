@@ -1,6 +1,6 @@
 # Tab Manager routing (M1): extension-level redirect, fail closed
 
-- **Status:** accepted (interim; see the proposed [main-process routing ADR](../adr/20261104-route-folder-opens-in-main.md))
+- **Status:** superseded-by [20261104-local-window-close-first](20261104-local-window-close-first.md) (local-window part)
 - **Date:** 2026-11-04
 - **Deciders:** fork-build session
 
