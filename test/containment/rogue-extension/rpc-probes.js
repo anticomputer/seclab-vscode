@@ -15,7 +15,7 @@
 //
 // Only ever run against our own local builds. Never against anything else.
 
-const safety = require('../probe-safety.js');
+const safety = require('./probe-safety.js');
 
 const SUCCEEDED = 'succeeded';
 const DENIED = 'denied';
@@ -66,7 +66,7 @@ async function runProbes(vscode, context, targets) {
 	const results = [];
 	// Inert unless the harness armed this run. Installed anywhere else -- or
 	// run against a user's real profile -- the probes do nothing at all.
-	const ctx = safety.context();
+	const ctx = safety.context(targets.armingFile || null);
 	if (!ctx.armed) {
 		return [{
 			id: 'harness', policyRef: '', outcome: ERROR,

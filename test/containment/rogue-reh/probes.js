@@ -20,7 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const safety = require('../probe-safety.js');
+const safety = require('./probe-safety.js');
 
 const SUCCEEDED = 'succeeded';
 const DENIED = 'denied';

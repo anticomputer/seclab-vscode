@@ -30,8 +30,13 @@ REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
 PAYLOAD_ROOT = "test/containment"
 PAYLOAD_SUFFIXES = (".js", ".sh")
 # The guards legitimately name forbidden paths, in order to refuse them.
+# The guards legitimately name forbidden paths in order to refuse them. The
+# build-time copies are exempt too, but only because the guard-divergence check
+# below proves they are byte-identical to the source.
 EXEMPT = (
     "test/containment/probe-safety.js",
+    "test/containment/rogue-extension/probe-safety.js",
+    "test/containment/rogue-reh/probe-safety.js",
 )
 
 
@@ -129,6 +134,20 @@ def main() -> int:
             if "touch '" in line and "markerCommand" not in line:
                 violations.append((rel, n, "raw-shell-command",
                                    "builds a shell command without safety.markerCommand()"))
+
+    # Build-time copies of the guard must match the single source exactly.
+    src = os.path.join(REPO, "test/containment/probe-safety.js")
+    if os.path.isfile(src):
+        with open(src, "rb") as fh:
+            want = fh.read()
+        for d in ("rogue-extension", "rogue-reh"):
+            copy = os.path.join(REPO, "test/containment", d, "probe-safety.js")
+            if os.path.isfile(copy):
+                with open(copy, "rb") as fh:
+                    if fh.read() != want:
+                        violations.append((f"test/containment/{d}/probe-safety.js", 0,
+                                           "guard-divergence",
+                                           "differs from test/containment/probe-safety.js"))
 
     if not violations:
         print("probe payloads clean: %d files, %d rules" % (len(payloads), len(RULES)))
