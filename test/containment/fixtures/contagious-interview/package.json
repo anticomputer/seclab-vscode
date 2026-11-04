@@ -1,0 +1,9 @@
+{
+	"name": "take-home-exercise",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Coding exercise: implement the order book in src/book.js",
+	"scripts": {
+		"test": "node --test"
+	}
+}

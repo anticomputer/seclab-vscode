@@ -2,7 +2,7 @@
 
 | Suite | Command | What it proves |
 |---|---|---|
-| Containment, level A | `./seclab test containment sbx` (or `oci`) | Malicious-workspace vectors run inside real tabs and reach nothing on the host. |
+| Containment, level A | `./seclab test containment sbx` (or `oci`) | Malicious-workspace vectors run inside real tabs and reach nothing on the host. Includes the Contagious-Interview loader (`campaign.ts`, own tab): every TTP mapped in the [threat-model ADR](../docs/adr/20261104-threat-model-rogue-extension.md). |
 | Containment, level B | `./seclab test evidence prepare ~/.seclab-test/ud sbx`, then open the printed URI in the app, then `… check …` | The same, driven by the real editor, plus a rogue extension and editor-side canaries. |
 | Canary | `./seclab test canary sbx` | No host secret is observable from a tab, in any encoding. |
 | Secrets | `./seclab test secrets sbx` | The pre-mount gitleaks gate: block, move to the vault, restore. |

