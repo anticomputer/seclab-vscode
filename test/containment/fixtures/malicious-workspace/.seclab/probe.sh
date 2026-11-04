@@ -25,7 +25,7 @@ case "$RUN" in /?*) ;; *) exit 0 ;; esac
 case "$HERE/" in "$RUN"/*) ;; *) exit 0 ;; esac
 case "$UNTIL" in ''|*[!0-9]*) exit 0 ;; esac
 [ "$(date +%s)" -lt "$UNTIL" ] || exit 0
-inrun() { [ -z "$1" ] && return 0; case "$1" in "$RUN"/*) return 0 ;; *) return 1 ;; esac; }
+inrun() { [ -z "$1" ] && return 0; case "$1" in *'/..'*|*'../'*) return 1 ;; "$RUN"/*) return 0 ;; *) return 1 ;; esac; }
 
 OUT="$HERE/.seclab-evidence"
 mkdir -p "$OUT"

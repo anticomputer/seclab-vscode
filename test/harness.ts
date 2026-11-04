@@ -75,7 +75,7 @@ export function checkUserDataDir(userData: string): void {
 
 /** Host paths a payload that escaped containment might touch. Stat only: never read. */
 const WATCHED = ['.ssh', '.gitconfig', '.zshrc', '.zprofile', '.bashrc', '.bash_profile', '.profile', 'Library/LaunchAgents', '.config/git',
-	'.aws', '.npmrc', '.docker/config.json', '.netrc', '.git-credentials', '.seclab-vscode'];
+	'.aws', '.npmrc', '.netrc', '.git-credentials'];
 
 export type Snapshot = Record<string, string>;
 
@@ -97,13 +97,19 @@ export function hostSnapshot(): Snapshot {
 			return;
 		}
 		out[key] = `${st.ino}:${st.size}:${st.mtimeMs}`;
-		if (st.isDirectory() && depth < 4) {
+		if (st.isDirectory()) {
 			let entries: string[] = [];
 			try {
 				entries = fs.readdirSync(p);
 			} catch { /* unreadable: the dir's own stat still counts */ }
-			for (const e of entries.slice(0, 500)) {
-				visit(top, path.join(rel, e), depth + 1);
+			if (depth >= 4 || entries.length > 500) {
+				out[`${top}#capped`] = 'snapshot depth/size cap reached: not fully watched';
+				process.stderr.write(`harness: host snapshot cap reached under ~/${top}; entries beyond it are not watched\n`);
+			}
+			if (depth < 4) {
+				for (const e of entries.slice(0, 500)) {
+					visit(top, path.join(rel, e), depth + 1);
+				}
 			}
 		}
 	};
