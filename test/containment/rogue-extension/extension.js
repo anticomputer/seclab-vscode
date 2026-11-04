@@ -15,7 +15,9 @@ function armed(root) {
 	try { t = fs.readFileSync(path.join(root, '.seclab', 'targets'), 'utf8'); } catch { return undefined; }
 	const get = k => (t.match(new RegExp(`^${k}=(.*)$`, 'm')) ?? [])[1] ?? '';
 	const run = get('run');
-	if (!/^[0-9a-f]{32}$/.test(get('arm')) || !run || !(root + path.sep).startsWith(run + path.sep)) {
+	const until = Number(get('until'));
+	if (!/^[0-9a-f]{32}$/.test(get('arm')) || !run.startsWith('/') || !(root + path.sep).startsWith(run + path.sep)
+		|| !(until > Date.now() / 1000)) {
 		return undefined;
 	}
 	return { clipboard: get('clipboard') === '1' };
@@ -45,15 +47,33 @@ exports.activate = async function (context) {
 			execFile('sh', [probe, 'rogue-extension'], { cwd: root }, () => { /* ignore */ });
 		}
 		// Everything this extension can observe through the API, for the canary harness.
-		const observed = { env: process.env };
+		// Values are recorded only when it really runs in a tab (clean env, isolated test
+		// profile). If containment failed and it runs on the host, the env and settings are
+		// the developer's real ones: record names/presence only, never values (FS-1).
+		const inTab = vscode.env.remoteName === 'seclab' && process.env.SECLAB_TAB === '1';
+		const observed = inTab ? { inTab, env: process.env } : { inTab, ranOnHost: true, envNames: Object.keys(process.env).sort() };
 		const tryGet = async (k, f) => { try { observed[k] = await f(); } catch (e) { observed[k] = `error: ${e?.message ?? e}`; } };
-		await tryGet('configuration', () => JSON.parse(JSON.stringify(vscode.workspace.getConfiguration())));
-		if (arm.clipboard) {
-			await tryGet('clipboard', () => vscode.env.clipboard.readText());
+		// Auth sessions: never a raw token, in or out of a tab; only whether one exists and
+		// whether it carries a (fake) canary, raw or base64.
+		const session = async (id, scopes) => {
+			const s = await vscode.authentication.getSession(id, scopes, { silent: true });
+			if (!s) {
+				return null;
+			}
+			const t = String(s.accessToken ?? '');
+			let decoded = '';
+			try { decoded = Buffer.from(t, 'base64').toString('latin1'); } catch { /* not base64 */ }
+			return { present: true, account: inTab ? s.account?.label : undefined, tokenLength: t.length, carriesCanary: /seclabcanary_/.test(t) || /seclabcanary_/.test(decoded) };
+		};
+		if (inTab) {
+			await tryGet('configuration', () => JSON.parse(JSON.stringify(vscode.workspace.getConfiguration())));
+			if (arm.clipboard) {
+				await tryGet('clipboard', () => vscode.env.clipboard.readText());
+			}
+			await tryGet('ownSecret', () => context.secrets.get('anything'));
 		}
-		await tryGet('githubSession', () => vscode.authentication.getSession('github', ['repo'], { silent: true }));
-		await tryGet('microsoftSession', () => vscode.authentication.getSession('microsoft', ['openid'], { silent: true }));
-		await tryGet('ownSecret', () => context.secrets.get('anything'));
+		await tryGet('githubSession', () => session('github', ['repo']));
+		await tryGet('microsoftSession', () => session('microsoft', ['openid']));
 		await tryGet('shellEnv', () => vscode.env.shell);
 		try {
 			fs.writeFileSync(path.join(out, 'rogue-observed.json'), JSON.stringify(observed, null, 2));

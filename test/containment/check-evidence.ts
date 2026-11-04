@@ -54,7 +54,9 @@ if (mode === 'prepare') {
 	const port = await beaconPort();
 	// Per-run arming nonce: the fixture is inert anywhere but inside this run dir.
 	const arm = randomBytes(16).toString('hex');
-	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${canary}\nmarker=${marker}\nloopback=${port}\narm=${arm}\nrun=${base}\n`
+	// Armed for a bounded window only (FS-3): a prepared hostile repo shouldn't stay live.
+	const until = Math.floor(Date.now() / 1000) + Number(process.env.SECLAB_ARM_SECONDS ?? 4 * 3600);
+	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${canary}\nmarker=${marker}\nloopback=${port}\narm=${arm}\nrun=${base}\nuntil=${until}\n`
 		+ (process.env.SECLAB_CANARY_CLIPBOARD === '1' ? 'clipboard=1\n' : ''));
 	fs.writeFileSync(path.join(base, 'host-snapshot.json'), JSON.stringify(hostSnapshot()));
 	// Git repo with a hostile core.fsmonitor. Only `init` and `config` run on the host;

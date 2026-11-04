@@ -40,7 +40,7 @@ function makeWorkspace(name: string, othertab: string): string {
 	fs.chmodSync(path.join(ws, '.seclab', 'probe.sh'), 0o755);
 	fs.chmodSync(path.join(ws, '.seclab', 'fake-python'), 0o755);
 	fs.writeFileSync(path.join(ws, '.seclab', 'targets'),
-		`canary=${canary}\nothertab=${othertab}\nmarker=${marker}\nloopback=${LOOPBACK_PORT}\narm=${ARM}\nrun=${work}\n`);
+		`canary=${canary}\nothertab=${othertab}\nmarker=${marker}\nloopback=${LOOPBACK_PORT}\narm=${ARM}\nrun=${work}\nuntil=${Math.floor(Date.now() / 1000) + 3600}\n`);
 	return ws;
 }
 const wsB = makeWorkspace('ws-b', '');
