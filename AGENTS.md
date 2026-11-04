@@ -18,7 +18,7 @@ way: [docs/adr/](docs/adr/README.md).
 | `upstream.lock` | Pinned Code-OSS tag and SHA (1.145.0 @ a717861c) |
 | `build/` | `fetch-upstream.sh` (verifies tag→SHA), `prepare.sh` (overlay, jq product.json, patches), `product/` (overrides.json, product.jq with invariants, remove-extensions.txt), `linux/` (builder image + build.sh), `build-darwin.sh` (Actions only) |
 | `patches/` | Ordered core patch queue (`NNNN-*.patch`): 0001 build-only, 0002/0003 extension placement |
-| `.github/workflows/` | `build-macos.yml` (unsigned darwin-arm64 app), `ci-linux.yml` (unit, REH, OCI e2e/containment/canary) |
+| `.github/workflows/` | `build-macos.yml` (unsigned darwin-arm64 app), `ci-linux.yml` (unit, REH, OCI e2e/containment/canary/secrets) |
 | `extensions/seclab-tab-manager/` | Built-in UI-side extension: `seclab+` resolver, routing, UI. `tabd-src` symlinks `tabd/src` and is bundled in |
 | `tabd/` | `seclab-tabd` supervisor: protocol, validation, sbx and OCI drivers, fence. Tests in `tabd/test/`. Spec: `docs/tabd/PROTOCOL.md` |
 | `sandbox/` | In-tab scripts (`rootfs/opt/seclab/bin`), the sbx template builder, OCI images |
@@ -83,6 +83,7 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab test e2e sbx           # tabd end to end: claim -> fence -> REH 101 handshake over exec stdio (also: oci)
 ./seclab test containment sbx   # malicious-workspace vectors in real tabs (sbx 89/89, oci 86/86)
 ./seclab test canary sbx        # canary acceptance test, level A (also: oci)
+./seclab test secrets sbx       # pre-mount gitleaks gate: block, move-to-vault + sentinel, restore, accept (also: oci)
 ./seclab test evidence prepare .work/editor-test/user-data sbx   # level B setup (then open the printed --folder-uri)
 
 # sbx inspection

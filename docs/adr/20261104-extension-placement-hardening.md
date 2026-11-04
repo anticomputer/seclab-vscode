@@ -48,3 +48,14 @@ Round 3 showed that a product-wide `workspace` default isn't enough on its own:
 ## Evidence
 - `nativeExtensionService.ts` `NativeExtensionHostKindPicker.pickExtensionHostKind` at a717861c (the "workspace extensions also run locally if there is no remote" branch).
 - Open VSX: `{"error":"Namespace not found: seclab"}`; `vscode.github-authentication` is published there by `open-vsx` (reported by the reviewer).
+
+## Addendum (2026-11-04, review round 4)
+The decision is unchanged; this records how it is enforced.
+- **`isBuiltin` alone is spoofable.** `toExtensionDescription` spread the
+  manifest last, so a `package.json` could set `isBuiltin: true`.
+  - **Patch 0004** spreads the manifest first, so computed fields win.
+  - **0002 v3** also requires `isUserBuiltin !== true` and a real `URI`
+    `extensionLocation`. Only scanned system extensions qualify.
+- **0003 constructor fix.** `NativeExtensionService` constructs the picker
+  directly, so 0003 passes `productService` at that call site.
+- Review record: [round 4](../security-reviews/20261104-m0-tabd-code.md).

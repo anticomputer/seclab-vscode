@@ -16,6 +16,7 @@ usage: ./seclab <command>
   test e2e [sbx|oci]            seclab-tabd end-to-end against a real runtime (local)
   test containment [sbx|oci]    Containment suite: malicious-workspace vectors inside real tabs
   test canary [sbx|oci]         Canary acceptance test: no host secret observable from a tab
+  test secrets [sbx|oci]        Pre-mount secret scan (gitleaks) gate, move-to-vault, restore
   test evidence prepare|check DIR [sbx|oci]
                                 Editor-driven run (rogue extension, editor-side canaries)
   fetch macos [RUN_ID]          Download the unsigned macOS app from Actions -> .work/app/
@@ -98,6 +99,7 @@ case "${1:-help}" in
 			e2e) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/test/e2e.ts" "${1:-sbx}" ;;
 			containment) shift; "${SECLAB_NODE:-node}" "$ROOT/test/containment/run.ts" "${1:-sbx}" ;;
 			canary) shift; "${SECLAB_NODE:-node}" "$ROOT/test/canary/run.ts" "${1:-sbx}" ;;
+			secrets) shift; "${SECLAB_NODE:-node}" "$ROOT/test/secrets/run.ts" "${1:-sbx}" ;;
 			evidence) shift; "${SECLAB_NODE:-node}" "$ROOT/test/containment/check-evidence.ts" "$@" ;;
 			*) usage; exit 2 ;;
 		esac ;;

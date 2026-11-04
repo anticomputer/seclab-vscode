@@ -55,3 +55,5 @@ jobs:
         run: ./seclab test containment oci
       - name: Canary acceptance test (OCI)
         run: ./seclab test canary oci
+      - name: Pre-mount secret scan (OCI)
+        run: ./seclab test secrets oci
