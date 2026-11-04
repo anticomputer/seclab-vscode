@@ -134,14 +134,20 @@ class SeclabAddon:
 
     def _deny(self, flow: http.HTTPFlow, status: int, reason: str, **extra: Any) -> None:
         self._respond(flow, status, reason)
+        origin = flow.metadata.get("seclab.origin")
+        if origin:
+            extra.setdefault("origin", {"label": origin, "verified": False})
         self.b.audit("request.denied", status=status, reason=reason, **self._summary(flow), **extra)
 
     # ------------------------------------------------------------ proxy auth
     def _authenticate(self, flow: http.HTTPFlow) -> bool:
         creds = _parse_basic(flow.request.headers.get("Proxy-Authorization", ""))
         flow.request.headers.pop("Proxy-Authorization", None)
-        if creds is not None and self.b.check_proxy_auth(*creds):
-            return True
+        if creds is not None:
+            ok, label = self.b.check_proxy_auth(*creds)
+            if ok:
+                flow.metadata["seclab.origin"] = label
+                return True
         self._auth_failures += 1
         now = time.monotonic()
         if now - self._last_auth_audit >= 1.0:
@@ -160,7 +166,7 @@ class SeclabAddon:
         if host is None:
             self._deny(flow, 400, "invalid CONNECT target")
             return
-        self.authed[flow.client_conn] = self.b.auth_epoch
+        self.authed[flow.client_conn] = (self.b.auth_epoch, flow.metadata.get("seclab.origin"))
         self.tunnels[flow.client_conn] = (host, flow.request.port)
 
     # ------------------------------------------------------------ request view
@@ -213,11 +219,13 @@ class SeclabAddon:
     async def requestheaders(self, flow: http.HTTPFlow) -> None:
         if flow.response is not None:
             return
-        if self.authed.get(flow.client_conn) != self.b.auth_epoch:
+        tunnel_auth = self.authed.get(flow.client_conn)
+        if tunnel_auth is None or tunnel_auth[0] != self.b.auth_epoch:
             if not self._authenticate(flow):
                 return
         else:
             flow.request.headers.pop("Proxy-Authorization", None)
+            flow.metadata["seclab.origin"] = tunnel_auth[1]
         view, err = self._view(flow)
         if view is None:
             self._deny(flow, 421 if "mismatch" in err or "SNI" in err else 400, err)
@@ -231,7 +239,7 @@ class SeclabAddon:
             return
         flow.intercept()
         try:
-            decision = await self.b.ask_egress(view)
+            decision = await self.b.ask_egress(view, flow.metadata.get("seclab.origin"))
             if decision.allow:
                 flow.metadata["seclab.rule"] = f"approval:{decision.reason}"
             else:
@@ -331,7 +339,7 @@ class SeclabAddon:
                 if inject is None:
                     self._deny(flow, 403, "cannot infer how to inject an unbound credential")
                     return
-                decision = await self.b.ask_binding(view, cred, inject)
+                decision = await self.b.ask_binding(view, cred, inject, flow.metadata.get("seclab.origin"))
                 if not decision.allow:
                     self._deny(flow, 403, f"credential binding denied ({decision.reason})")
                     return
@@ -368,8 +376,10 @@ class SeclabAddon:
                              header=binding.inject.header, **view.summary())
             if injected:
                 flow.metadata["seclab.injected"] = injected
+            origin = flow.metadata.get("seclab.origin")
             self.b.audit("request.allowed", rule=flow.metadata.get("seclab.rule"),
-                         injected=injected, **view.summary())
+                         injected=injected, **({"origin": {"label": origin, "verified": False}}
+                                               if origin else {}), **view.summary())
         finally:
             flow.resume()
 

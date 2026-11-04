@@ -80,9 +80,14 @@ class Pod:
     def up(self) -> None:
         third = random.randint(1, 254)
         self.inet_subnet = f"11.250.{third}.0/24"
+        # Every network the broker sits on is --internal: the fake "internet" and the
+        # private network have no route out, so even a broken guard cannot reach a real
+        # host during tests. `ctl` (not internal) exists only for the DNS test's positive
+        # control and never carries the broker or the workspace.
         docker("network", "create", "--internal", self.name("int"))
-        docker("network", "create", "--subnet", self.inet_subnet, self.name("inet"))
-        docker("network", "create", self.name("priv"))
+        docker("network", "create", "--internal", "--subnet", self.inet_subnet, self.name("inet"))
+        docker("network", "create", "--internal", self.name("priv"))
+        docker("network", "create", self.name("ctl"))
         self.canaries = {
             "api": "seclab-canary-api-" + secrets.token_hex(16),
             "git": "seclab-canary-git-" + secrets.token_hex(16),
@@ -95,6 +100,7 @@ class Pod:
                "--network-alias", "internal.example.test", "-e", "UPSTREAM_GIT_TOKEN=unused", UPSTREAM_IMAGE)
         docker("run", "-d", "--name", self.name("dns"), "--network", self.name("inet"),
                UPSTREAM_IMAGE, "dns")
+        docker("network", "connect", self.name("ctl"), self.name("dns"))
         self.upstream_ca = self._wait_file(self.name("upstream"), "/srv/tls/ca.pem")
         self._wait_file(self.name("internal"), "/srv/tls/ca.pem")
 
@@ -161,7 +167,7 @@ class Pod:
             return
         for part in ("ws", "broker", "upstream", "internal", "dns"):
             docker("rm", "-f", self.name(part), check=False)
-        for part in ("int", "inet", "priv"):
+        for part in ("int", "inet", "priv", "ctl"):
             docker("network", "rm", self.name(part), check=False)
 
     # ---------------------------------------------------------------- helpers
@@ -218,6 +224,10 @@ def pod():
 
 @pytest.fixture
 def ctl(pod):
+    """Each test starts from a fresh prompt session in a tab the user has interacted
+    with; tests about pre-interaction behaviour send `tab.event opened` themselves."""
     pod.ctl.handlers.clear()
+    pod.ctl.call("prompt.reset")
+    pod.ctl.call("tab.event", {"kind": "userAction"})
     yield pod.ctl
     pod.ctl.handlers.clear()

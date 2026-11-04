@@ -252,6 +252,13 @@ def gen_forbidden_headers() -> str:
             + ", or a `_method` query parameter, are rejected with `400`.\n")
 
 
+def gen_risky() -> str:
+    d = json.loads((DATA_DIR / "risky-destinations.v1.json").read_text())
+    rows = [f"| `{e['host']}` | {e['category']} | {esc(e.get('note', ''))} |" for e in d["entries"]]
+    return (f"{d['description']}\n\nSource: {d['source']}\n\n| Host | Category | Note |\n|---|---|---|\n"
+            + "\n".join(rows) + "\n")
+
+
 GENERATORS = {
     "protocol-errors": gen_errors, "protocol-methods": gen_methods,
     "protocol-notifications": gen_notifications, "protocol-types": gen_types,
@@ -260,6 +267,7 @@ GENERATORS = {
     "policy-examples": gen_policy_examples, "policy-baseline": gen_baseline,
     "policy-backstop": gen_backstop, "policy-token-rules": gen_token_rules,
     "policy-forbidden-headers": gen_forbidden_headers,
+    "policy-risky-destinations": gen_risky,
 }
 
 
@@ -365,6 +373,16 @@ def cross_checks(errors: list[str]) -> None:
                 errors.append(f"protocol.v1.json example for notification {name}: {err}")
     cap = _cap()
     flags = {r["flag"] for r in cap["rows"] if r.get("flag")}
+    from seclab_broker.policy import baseline_rules, risky_category
+    for rule in baseline_rules():
+        h = rule.host.text.removeprefix("*.")
+        if risky_category(h) or risky_category("x." + h):
+            errors.append(f"baseline rule {rule.id} matches a risky destination")
+    for f in sorted((BROKER / "examples").glob("*.json")):
+        for r in json.loads(f.read_text()).get("allow", []):
+            h = r["host"].removeprefix("*.")
+            if risky_category(h) or risky_category("x." + h):
+                errors.append(f"examples/{f.name}: allow rule for risky destination {r['host']}")
     if flags != set(CAPABILITIES):
         errors.append(f"capability flags differ: descriptor {sorted(CAPABILITIES)} vs matrix {sorted(flags)}")
     engine_ids = {e["id"] for e in cap["engines"]}

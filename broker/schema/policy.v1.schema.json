@@ -23,7 +23,12 @@
         "timeoutSeconds": { "type": "number", "minimum": 0.1, "maximum": 600, "default": 60, "description": "A held request is denied when no decision (or JIT credential) arrives in time." },
         "maxPending": { "type": "integer", "minimum": 1, "maximum": 256, "default": 16, "description": "Open prompts at once; more are denied." },
         "maxHeldFlows": { "type": "integer", "minimum": 1, "maximum": 4096, "default": 256, "description": "Requests held at once, across all prompts and JIT waits." },
-        "denyCooldownSeconds": { "type": "number", "minimum": 0, "maximum": 3600, "default": 30, "description": "After a deny or timeout, the same prompt key is denied without asking for this long." }
+        "denyCooldownSeconds": { "type": "number", "minimum": 0, "maximum": 3600, "default": 300, "description": "After a deny or timeout, the same prompt key is denied without asking for this long. Keeps a polling beacon from becoming a prompt stream." },
+        "maxPerMinute": { "type": "integer", "minimum": 1, "maximum": 120, "default": 6, "description": "New prompts per tab per rolling minute. Beyond this, unmatched requests are denied without a prompt." },
+        "offerDenyNewAfter": { "type": "integer", "minimum": 1, "maximum": 100, "default": 3, "description": "After this many denials (including timeouts) in the broker's session, egress prompts also offer `deny-new-destinations`, which denies every new destination for the rest of the session without asking." },
+        "rawIpDestinations": { "enum": ["deny", "prompt-once"], "default": "deny", "description": "Requests to an IP literal that no rule allows. `deny`: denied without a prompt. `prompt-once`: prompted, but only `allow-once` or `deny` is offered, never `allow-tab`." },
+        "quietPeriodSeconds": { "type": "number", "minimum": 0, "maximum": 3600, "default": 30, "description": "Requests made this soon after the tab opened, with no user action yet, are flagged `early-after-open` in prompts and audit." },
+        "autoDenyRiskyBeforeUserAction": { "type": "boolean", "default": true, "description": "Until the supervisor reports the first user action (`tab.event userAction`), requests to raw IPs and risky destinations are denied without a prompt. This defeats folder-open loaders that need no click." }
       }
     },
     "sentinelMismatch": {
@@ -42,6 +47,18 @@
       "maxItems": 256,
       "items": { "$ref": "#/definitions/credential" },
       "description": "Sentinel credentials. A binding does not imply egress: the request must also be allowed."
+    },
+    "riskyDestinations": {
+      "type": "array",
+      "maxItems": 1024,
+      "description": "Extra risky destinations for this tab, added to the broker's maintained list (see docs/broker-policy.md). Same treatment: no `allow-tab`, auto-deny before the first user action.",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["host", "category"],
+        "properties": {
+          "host": { "$ref": "#/definitions/host" },
+          "category": { "enum": ["hosting", "paste", "raw-content", "ip-echo", "tunnel", "request-capture", "other"] }
+        }
+      }
     }
   },
   "definitions": {

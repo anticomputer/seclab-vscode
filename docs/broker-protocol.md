@@ -151,6 +151,11 @@ none
 | `heldFlows` | `integer` | yes | Requests currently held waiting for a decision or a credential. |
 | `credentials` | `integer` | yes | Credentials known to the broker (policy, imported and derived). |
 | `controllers` | `integer` | yes | Connected control clients. |
+| `prompt` | `object` | yes | Session prompt state (see `tab.event`, `prompt.reset`). |
+| `prompt.denyNewDestinations` | `boolean` | yes |  |
+| `prompt.sessionDenials` | `integer` | yes |  |
+| `prompt.promptsLastMinute` | `integer` | yes |  |
+| `prompt.userActionSeen` | `boolean` | yes |  |
 
 
 Example:
@@ -176,14 +181,20 @@ Example:
  "pendingApprovals": 0,
  "heldFlows": 0,
  "credentials": 2,
- "controllers": 1
+ "controllers": 1,
+ "prompt": {
+  "denyNewDestinations": false,
+  "sessionDenials": 0,
+  "promptsLastMinute": 0,
+  "userActionSeen": true
+ }
 }
 ```
 
 
 ### `proxy.auth.set`
 
-Set the per-tab proxy credential. The tab sends it as HTTP Basic `Proxy-Authorization`, normally via userinfo in its proxy URL. Until this succeeds every proxy request gets `407`; unauthenticated clients are never held, prompted, resolved or connected upstream. Comparison is constant time; the value is never logged or echoed. Calling it again rotates the credential, and tunnels opened under the old one must re-authenticate.
+Set the per-tab proxy credential. The tab sends it as HTTP Basic `Proxy-Authorization`, normally via userinfo in its proxy URL. Until this succeeds every proxy request gets `407`; unauthenticated clients are never held, prompted, resolved or connected upstream. Comparison is constant time; the value is never logged or echoed. Calling it again rotates the credential, and tunnels opened under the old one must re-authenticate. The tab may append an origin label to the username, `seclab+<label>` (label `[A-Za-z0-9._:-]{1,96}`, for example `seclab+task.env`; percent-encode `:` in a proxy URL), set by whatever launched the client inside the tab. The broker shows it in prompts and audit as `origin: {label, verified: false}`: any process in the tab can claim any label, so it is a hint, never an access decision.
 
 **Params**
 
@@ -473,7 +484,7 @@ none
 
 ### `approval.decide`
 
-Answer an approval. For `kind: egress`, `allow-tab` adds `rule` (or `suggestedRule`) to the tab's runtime policy. For `kind: credential-binding`, `allow-tab` confirms `binding` (or `suggestedBinding`); a binding that does not cover the held request causes that request to be denied. `allow-once` releases the held request(s) only. Deciding an unknown or already resolved approval is `-32602`.
+Answer an approval with one of the `decisions` it offers; anything else is `-32602`. For `kind: egress`, `allow-tab` adds `rule` (or `suggestedRule`) to the tab's runtime policy. For `kind: credential-binding`, `allow-tab` confirms `binding` (or `suggestedBinding`); a binding that does not cover the held request causes that request to be denied. `allow-once` releases the held request(s) only. `deny-new-destinations` denies this request and every pending egress prompt, and every new destination for the rest of the broker's session (until `prompt.reset`). `allow-tab` is never offered for raw IPs or risky destinations. Deciding an unknown or already resolved approval is `-32602`.
 
 **Params**
 
@@ -537,6 +548,62 @@ The most recent audit events (the broker keeps at most 2000).
 | `events` | [`auditEvent`](#auditevent)[] | yes |  |
 
 
+### `tab.event`
+
+Tell the broker about the tab's lifecycle, as seen by the trusted editor. `opened`: the workspace was just opened (resets the user-action clock). `userAction`: the user did something in this tab (keystroke, command, click). Until the first `userAction`, requests to raw IPs and risky destinations are denied without a prompt (policy `prompt.autoDenyRiskyBeforeUserAction`), and requests within `prompt.quietPeriodSeconds` of `opened` are flagged `early-after-open`. This is what defeats folder-open loaders such as tasks.json `runOn: folderOpen`: they run before anyone has touched the tab. The tab cannot send this; only the control client can. Send `userAction` at most about once a second.
+
+**Params**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `kind` | `"opened"` \| `"userAction"` | yes |  |
+
+**Result**
+
+none
+
+
+Example:
+
+<!-- check: method.params tab.event -->
+```json
+{
+ "kind": "opened"
+}
+```
+<!-- check: method.result tab.event -->
+```json
+{}
+```
+
+
+Example 2:
+
+<!-- check: method.params tab.event -->
+```json
+{
+ "kind": "userAction"
+}
+```
+<!-- check: method.result tab.event -->
+```json
+{}
+```
+
+
+### `prompt.reset`
+
+Clear the session's prompt state: `deny-new-destinations`, the denial count, per-destination deny cooldowns and the prompt rate window. Use it when the user explicitly asks to be prompted again.
+
+**Params**
+
+none
+
+**Result**
+
+none
+
+
 ### `broker.shutdown`
 
 Drop every credential and sentinel from memory, then stop the proxy and exit. Call it when the tab closes.
@@ -557,7 +624,7 @@ none
 <!-- BEGIN GENERATED: protocol-notifications (broker/tools/docs.py; do not edit) -->
 ### `approval.requested`
 
-A request is held. Show a prompt and answer with `approval.decide` before `expiresAt`, or the broker denies. Egress approvals are per origin (every request to the same `scheme, host, port` waits on one prompt). Credential-binding approvals are per exact request shape (credential, origin, method, path, inject header and format).
+A request is held. Show a prompt with the `risk` flags and origin, offering exactly `decisions`, and answer with `approval.decide` before `expiresAt`, or the broker denies. Egress approvals are per origin (every request to the same `scheme, host, port` waits on one prompt). Credential-binding approvals are per exact request shape (credential, origin, method, path, inject header and format). New prompts are rate-limited per tab (`prompt.maxPerMinute`), and a denied destination is not prompted again for `prompt.denyCooldownSeconds`, so a polling beacon produces one prompt, not a stream.
 
 **Params**: [`approval`](#approval)
 
@@ -595,6 +662,67 @@ Example:
    "*"
   ],
   "path": "/**"
+ },
+ "risk": {
+  "flags": [
+   "early-after-open",
+   "no-user-action-yet"
+  ],
+  "origin": {
+   "label": "task.env",
+   "verified": false
+  },
+  "secondsSinceOpen": 2.5,
+  "userActionSeen": false
+ }
+}
+```
+
+Example:
+
+<!-- check: notification approval.requested -->
+```json
+{
+ "approvalId": "0c1d2e3f405162738495a6b7c8d9e0f1",
+ "kind": "egress",
+ "request": {
+  "scheme": "https",
+  "host": "loader.vercel.app",
+  "port": 443,
+  "method": "GET",
+  "path": "/settings/mac"
+ },
+ "createdAt": 1793800100.0,
+ "expiresAt": 1793800160.0,
+ "waiting": 1,
+ "decisions": [
+  "allow-once",
+  "deny",
+  "deny-new-destinations"
+ ],
+ "suggestedRule": {
+  "host": "loader.vercel.app",
+  "schemes": [
+   "https"
+  ],
+  "ports": [
+   443
+  ],
+  "methods": [
+   "*"
+  ],
+  "path": "/**"
+ },
+ "risk": {
+  "flags": [
+   "risky-destination:hosting"
+  ],
+  "origin": {
+   "label": "task.env",
+   "verified": false
+  },
+  "secondsSinceOpen": 412.0,
+  "userActionSeen": true
  }
 }
 ```
@@ -673,7 +801,7 @@ Type: `string` (pattern `^[^\u0000-\u001f\u007f]*$`; min length `8`; max length 
 <a id="decision"></a>
 #### `decision`
 
-Type: `"allow-once"` \| `"allow-tab"` \| `"deny"`
+Type: `"allow-once"` \| `"allow-tab"` \| `"deny"` \| `"deny-new-destinations"`
 
 <a id="bindorbindings"></a>
 #### `bindOrBindings`
@@ -702,10 +830,11 @@ Type: [`binding`](broker-policy.md#binding) \| [`binding`](broker-policy.md#bind
 | `createdAt` | `number` | yes |  |
 | `expiresAt` | `number` | yes |  |
 | `waiting` | `integer` | yes | Requests held on this approval. |
-| `decisions` | [`decision`](#decision)[] | yes |  |
+| `decisions` | [`decision`](#decision)[] | yes | The decisions this approval accepts. `allow-tab` is absent for raw IPs and risky destinations; `deny-new-destinations` appears after `offerDenyNewAfter` denials. |
 | `suggestedRule` | [`rule`](broker-policy.md#rule) |  | Egress only. |
 | `credentialId` | `string` |  | Credential-binding only. |
 | `suggestedBinding` | [`binding`](broker-policy.md#binding) |  | Credential-binding only. Advisory and tab-steerable. |
+| `risk` | [`risk`](#risk) | yes |  |
 
 <a id="credentialinfo"></a>
 #### `credentialInfo`
@@ -733,6 +862,20 @@ Type: [`binding`](broker-policy.md#binding) \| [`binding`](broker-policy.md#bind
 | `ts` | `number` | yes |  |
 | `type` | `string` | yes |  |
 | `tabId` | `string` |  |  |
+
+<a id="risk"></a>
+#### `risk`
+
+Why this request deserves attention. Show it in the prompt.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `flags` | `string`[] | yes | `raw-ip`, `risky-destination:<category>` (see the risky-destination list in docs/broker-policy.md), `cleartext`, `nonstandard-port`, `early-after-open` (within `quietPeriodSeconds` of `tab.event opened` with no user action), `no-user-action-yet`. |
+| `origin` | `object` | yes |  |
+| `origin.label` | `string` \| `null` | yes | Origin label from the proxy username (for example `task.env`), if any. |
+| `origin.verified` | `false` | yes | Always false: the label is claimed by the tab. |
+| `secondsSinceOpen` | `number` | yes |  |
+| `userActionSeen` | `boolean` | yes |  |
 <!-- END GENERATED: protocol-types -->
 
 ### Audit event types (generated)
@@ -773,6 +916,11 @@ listed type is never emitted.
 | `tcp.blocked` | A non-HTTP TCP stream was killed. |
 | `udp.blocked` | A UDP flow was killed. |
 | `engine.error` | A hook failed and the flow was failed closed. |
+| `request.denied_unprompted` | A request was denied without a prompt: raw IP, risky destination before any user action, or `deny-new-destinations` in force. Carries `reason` and `risk`. |
+| `approval.rate_limited` | A prompt was not opened because `prompt.maxPerMinute` was reached; the request was denied. |
+| `tab.event` | `tab.event` was called. |
+| `prompt.reset` | `prompt.reset` was called. |
+| `prompt.deny_new` | The user chose `deny-new-destinations`. |
 <!-- END GENERATED: protocol-audit-types -->
 
 ## 5. Proxy behaviour the tab observes
