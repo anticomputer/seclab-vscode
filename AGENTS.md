@@ -95,9 +95,20 @@ this file.
 - **Push to origin on every major iteration:** a milestone or sub-milestone
   working end to end, a new component or protocol, a patch-queue change, or a
   fixed review round. Each push needs its review recorded, the relevant tests
-  passing, and the records updated. Fast-forward reviewed, coherent increments
-  to `main`; `main` always builds and passes. Never force-push `main`. Why:
-  the user asked for it, and other sessions build on `main`.
+  passing, and the records updated. `main` always builds and passes. Why: the
+  user asked for it, and other sessions build on `main`.
+- **How a change reaches `main`.** A ruleset enforces this
+  ([EDR](docs/edr/20261104-ci-hardening.md)):
+  1. Push your branch.
+  2. Wait for the required checks `unit` (ci-unit), `lint` (workflow-lint) and
+     `docs` (docs-check) to go green on that exact SHA. If your change touches
+     code that ci-linux covers, wait for ci-linux `oci` too.
+  3. Fast-forward: `git push origin <sha>:refs/heads/main`.
+  
+  GitHub rejects a SHA without green required checks, any non-fast-forward
+  push, and deletion. There are no bypass actors. Never force-push `main`. When
+  landing another session's branch, run `./seclab docs check` on it as well,
+  not only its own suite.
 - **Fixture canaries must be obviously fake** (`seclabcanary_…`, no real token
   prefixes), and staged changes are checked with gitleaks before a push. Why:
   GitHub push protection, and no real-looking secrets in history.
