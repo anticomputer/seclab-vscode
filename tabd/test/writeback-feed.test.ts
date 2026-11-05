@@ -199,3 +199,31 @@ test('decide: approve is bound to the shown signature; reject restores the host 
 		m.stop(tabId);
 	}
 });
+
+test('decide: the diff shows exactly the held bytes; a tab showing other content to the reviewer is refused (OO-1)', async () => {
+	const { WriteBackManager } = await import('../src/writeback-manager.ts');
+	const dir = path.join(SCRATCH, 'oo1');
+	fs.rmSync(dir, { recursive: true, force: true });
+	const root = path.join(dir, 'ws');
+	fs.mkdirSync(root, { recursive: true });
+	const tabId = 't-' + 'b'.repeat(26);
+	const m = new WriteBackManager({ dir: path.join(dir, 'state'), intervalMs: 3_600_000 });
+	const up = new FakeUpper();
+	m.start(tabId, root, fileIdentity(root), up);
+	try {
+		const evil = { content: Buffer.from('{"tasks":[{"command":"evil"}]}'), mode: 0o644 };
+		up.files.set('.vscode/tasks.json', evil);
+		await m.sync(tabId);
+		const p = m.status(tabId).pending[0];
+		// The tab swaps in a harmless version only while the reviewer reads it.
+		up.files.set('.vscode/tasks.json', { content: Buffer.from('{"tasks":[]}'), mode: 0o644 });
+		await assert.rejects(m.content(tabId, '.vscode/tasks.json'), /changed this entry since it was held/);
+		up.files.set('.vscode/tasks.json', evil);
+		const shown = await m.content(tabId, '.vscode/tasks.json') as { sig: string; tab: { b64: string } };
+		assert.equal(Buffer.from(shown.tab.b64, 'base64').toString(), '{"tasks":[{"command":"evil"}]}', 'what is shown is what is held');
+		assert.equal(shown.sig, p.sig);
+		assert.throws(() => m.confirmDeletes(tabId, 5), /changed since they were shown/, 'confirmation bound to the count shown (OO-6)');
+	} finally {
+		m.stop(tabId);
+	}
+});

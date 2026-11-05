@@ -549,6 +549,16 @@ export class WriteBackEngine {
 		return metaSig({ kind: c.kind, mode: c.mode, target: c.target, sha: c.kind === 'file' ? sha(c.content ?? Buffer.alloc(0)) : undefined, nlink: c.nlink });
 	}
 
+	/** The binding signature of an entry as read now (what the UI displays must carry this; OO-1). */
+	sigOf(c: UpperChange): string {
+		return this.sig(c);
+	}
+
+	/** Number of held deletions under the sticky mass-deletion brake (what confirmDeletes releases). */
+	heldMassDeletions(): number {
+		return this.state.pending.filter(p => p.reasons.some(r => r.startsWith('mass deletion'))).length;
+	}
+
 	// ---- incremental feed (increment 2b) ------------------------------------------------------
 
 	/** True if this entry is exactly what was last synced (applied or decided): skip it. */

@@ -22,31 +22,51 @@ export function plainText(s: unknown, max = 300): string {
 	return esc.length > max ? `${esc.slice(0, max - 1)}…` : esc;
 }
 
-/** File content for display: text if it is valid UTF-8 without NULs, else a summary line. */
-function render(side: Side, label: string): string {
-	if (side.kind === 'absent' || side.exists === false) {
-		return `(${label}: does not exist)\n`;
+/** A tab path for display: escaped, and long ones elided in the middle so the tail (the part
+ *  that decides what the file is, e.g. `.claude/settings.json`) always shows (review OO-3). */
+export function plainPath(p: string, max = 120): string {
+	const esc = plainText(p, 10_000);
+	if (esc.length <= max) {
+		return esc;
 	}
-	if (side.kind === 'symlink') {
-		return `(${label}: symbolic link → ${plainText(side.target ?? '', 1000)})\n`;
-	}
-	if (side.kind === 'deleted') {
-		return `(${label}: deleted)\n`;
-	}
-	if (side.kind && side.kind !== 'file') {
-		return `(${label}: ${plainText(side.kind)})\n`;
-	}
-	const buf = Buffer.from(side.b64 ?? '', 'base64');
-	let text: string | undefined;
+	const segs = esc.split('/');
+	const tail = segs.slice(-2).join('/');
+	const keep = Math.max(10, max - tail.length - 2);
+	return tail.length + 2 >= max ? `…${tail.slice(-(max - 1))}` : `${esc.slice(0, keep)}…/${tail}`;
+}
+
+const WRAP = 160;
+
+/** Bytes as text the user can read completely: UTF-8 if valid (NULs escaped), else \xNN escapes. */
+function readable(buf: Buffer): string {
+	let text: string;
 	try {
 		text = new TextDecoder('utf-8', { fatal: true }).decode(buf);
 	} catch {
-		text = undefined;
+		text = [...buf].map(b => (b >= 0x20 && b < 0x7f) || b === 0x0a || b === 0x09 ? String.fromCharCode(b) : `\\x${b.toString(16).padStart(2, '0')}`).join('');
 	}
-	if (text === undefined || text.includes('\0')) {
-		return `(${label}: binary, ${side.size ?? buf.length} bytes)\n`;
+	// No line may hide content off-screen: hard-wrap with a visible continuation marker (OO-2).
+	return text.replace(/\0/g, '\\x00').split('\n').map(l => l.length <= WRAP ? l : l.match(new RegExp(`.{1,${WRAP}}`, 'gu'))!.join('\n↪ ')).join('\n');
+}
+
+/** File content for display, and whether everything that would be applied is shown. */
+function render(side: Side, label: string): { text: string; complete: boolean } {
+	if (side.kind === 'absent' || side.exists === false) {
+		return { text: `(${label}: does not exist)\n`, complete: true };
 	}
-	return side.truncated ? `${text}\n… (${label}: truncated for display; ${side.size} bytes in total)\n` : text;
+	if (side.kind === 'symlink') {
+		return { text: `(${label}: symbolic link → ${plainText(side.target ?? '', 1000)})\n`, complete: true };
+	}
+	if (side.kind === 'deleted') {
+		return { text: `(${label}: deleted)\n`, complete: true };
+	}
+	if (side.kind && side.kind !== 'file') {
+		return { text: `(${label}: ${plainText(side.kind)})\n`, complete: true };
+	}
+	const text = readable(Buffer.from(side.b64 ?? '', 'base64'));
+	return side.truncated
+		? { text: `${text}\n\n… NOT SHOWN: the rest of this file (${label}: ${side.size} bytes in total) …\n`, complete: false }
+		: { text, complete: true };
 }
 
 export class WriteBackReview implements vscode.TextDocumentContentProvider {
@@ -58,6 +78,7 @@ export class WriteBackReview implements vscode.TextDocumentContentProvider {
 	private count = 0;
 	private gated: boolean | undefined;
 	private prompted = false;
+	private lastPrompt = 0;
 
 	constructor(ctx: vscode.ExtensionContext, getClient: () => Promise<TabdClient>, tabId: string | undefined, log: vscode.LogOutputChannel) {
 		this.getClient = getClient;
@@ -85,8 +106,10 @@ export class WriteBackReview implements vscode.TextDocumentContentProvider {
 		}
 		this.count = params.count;
 		this.show();
-		if (this.count > 0 && !this.prompted) {
+		// At most one prompt a minute: a tab flipping its pending count can't spam the user.
+		if (this.count > 0 && !this.prompted && Date.now() - this.lastPrompt > 60_000) {
 			this.prompted = true;
+			this.lastPrompt = Date.now();
 			void vscode.window.showWarningMessage(
 				`This tab changed ${this.count} file(s) that can run code on your machine (tasks, git hooks, build or agent config). They are held until you review them.`,
 				'Review Changes').then(pick => {
@@ -141,7 +164,7 @@ export class WriteBackReview implements vscode.TextDocumentContentProvider {
 			return;
 		}
 		const items = s.pending.map(p => ({
-			label: plainText(p.path),
+			label: plainPath(p.path),
 			description: plainText(p.kind),
 			detail: plainText(p.reasons.join('; '), 400),
 			p,
@@ -161,24 +184,35 @@ export class WriteBackReview implements vscode.TextDocumentContentProvider {
 			void vscode.window.showErrorMessage(`Cannot show the change: ${plainText((e as Error).message)}`);
 			return;
 		}
-		const left = vscode.Uri.from({ scheme: SCHEME, path: `/host/${p.sig}/${encodeURIComponent(p.path)}` });
-		const right = vscode.Uri.from({ scheme: SCHEME, path: `/tab/${p.sig}/${encodeURIComponent(p.path)}` });
-		this.cache.set(left.toString(), render(content.host, 'on your machine'));
-		this.cache.set(right.toString(), render(content.tab, 'in the tab'));
-		await vscode.commands.executeCommand('vscode.diff', left, right, `${plainText(p.path, 80)}: your machine ↔ tab (read-only)`, { preview: true });
+		const left = vscode.Uri.from({ scheme: SCHEME, path: `/host/${content.sig}/review.txt`, query: encodeURIComponent(p.path) });
+		const right = vscode.Uri.from({ scheme: SCHEME, path: `/tab/${content.sig}/review.txt`, query: encodeURIComponent(p.path) });
+		// A neutral .txt name: no language features (JSON schemas, TS servers) run on tab content (OO-5).
+		const hostSide = render(content.host, 'on your machine');
+		const tabSide = render(content.tab, 'in the tab');
+		this.cache.set(left.toString(), hostSide.text);
+		this.cache.set(right.toString(), tabSide.text);
+		await vscode.commands.executeCommand('vscode.diff', left, right, `${plainPath(p.path, 80)}: your machine ↔ tab (read-only)`, { preview: true });
 		const massDelete = p.reasons.some(r => r.startsWith('mass deletion'));
-		const buttons = ['Approve', 'Reject (keep the original)', 'Always allow for this tab and path'];
-		const choice = await vscode.window.showWarningMessage(`Apply the tab's change to "${plainText(p.path, 120)}"?`, {
+		// Reject first: Enter never approves (OO-4). If not all of the tab's version could be
+		// shown, plain Approve and Always aren't offered (OO-2).
+		const reject = 'Reject (keep the original)';
+		const buttons = tabSide.complete
+			? [reject, 'Approve', 'Always allow for this tab and path']
+			: [reject, 'Approve without seeing all of it'];
+		const choice = await vscode.window.showWarningMessage(`Apply the tab's change to "${plainPath(p.path)}"?`, {
 			modal: true,
-			detail: `${plainText(p.kind)}. Held because: ${plainText(p.reasons.join('; '), 600)}.\n\nApprove copies exactly what is shown into your folder. Reject keeps your folder's version.${massDelete ? '\n\nThis tab deleted many files; use "seclab: Confirm Held Deletions" to release them as a batch.' : ''}`,
+			detail: `${plainText(p.kind)}. Held because: ${plainText(p.reasons.join('; '), 600)}.\n\n`
+				+ (tabSide.complete ? 'Approve copies exactly the version shown into your folder.' : 'Only the start of the tab\'s version could be shown: the rest is NOT shown and would also be copied.')
+				+ ' Reject keeps your folder\'s version.'
+				+ (massDelete ? '\n\nThis tab deleted many files; "seclab: Confirm Held Deletions…" releases them as a batch.' : ''),
 		}, ...buttons);
-		const decision = choice === 'Approve' ? 'approve' : choice === buttons[1] ? 'reject' : choice === buttons[2] ? 'always' : undefined;
+		const decision = choice === 'Approve' || choice === 'Approve without seeing all of it' ? 'approve' : choice === reject ? 'reject' : choice === 'Always allow for this tab and path' ? 'always' : undefined;
 		if (!decision) {
 			return;
 		}
 		try {
 			const r = await c.request<{ result: string }>('tab.writeback.decide', { tabId: this.tabId, path: p.path, decision, sig: content.sig });
-			void vscode.window.showInformationMessage(`${plainText(p.path, 120)}: ${plainText(r.result)}`);
+			void vscode.window.showInformationMessage(`${plainPath(p.path)}: ${plainText(r.result)}`);
 		} catch (e) {
 			void vscode.window.showErrorMessage(`Not applied: ${plainText((e as Error).message)}`);
 		} finally {
@@ -192,16 +226,24 @@ export class WriteBackReview implements vscode.TextDocumentContentProvider {
 		if (!this.tabId) {
 			return;
 		}
-		const ok = await vscode.window.showWarningMessage('Release the hold on this tab\'s deletions?', {
+		const c = await this.getClient();
+		const s = await c.request<{ pending: Pending[] }>('tab.writeback.status', { tabId: this.tabId });
+		const held = s.pending.filter(p => p.reasons.some(r => r.startsWith('mass deletion')));
+		if (!held.length) {
+			void vscode.window.showInformationMessage('No deletions from this tab are held.');
+			return;
+		}
+		const sample = held.slice(0, 8).map(p => `  ${plainPath(p.path, 100)}`).join('\n');
+		const ok = await vscode.window.showWarningMessage(`Release ${held.length} held deletion(s) from this tab?`, {
 			modal: true,
-			detail: 'This tab deleted many files, so further deletions were held. Releasing lets ordinary deletions sync again; deletions of files that run code stay held for review.',
+			detail: `This tab deleted many files, so its deletions were held. Releasing deletes these from your folder (deletions of files that run code stay held for review):\n${sample}${held.length > 8 ? `\n  … and ${held.length - 8} more` : ''}`,
 		}, 'Release Deletions');
 		if (ok !== 'Release Deletions') {
 			return;
 		}
 		try {
-			const c = await this.getClient();
-			await c.request('tab.writeback.confirmDeletes', { tabId: this.tabId });
+			// Bound to the count shown: refused if the tab changed the set meanwhile (OO-6).
+			await c.request('tab.writeback.confirmDeletes', { tabId: this.tabId, count: held.length });
 		} catch (e) {
 			void vscode.window.showErrorMessage(`Not released: ${plainText((e as Error).message)}`);
 		}
