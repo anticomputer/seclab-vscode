@@ -204,6 +204,7 @@ async function resolve(authority: string, ctx: vscode.RemoteAuthorityResolverCon
 			throw vscode.RemoteAuthorityResolverError.NotAvailable('Tab not opened: secrets unresolved', false);
 		});
 	void activity?.attach(c, tabId).catch(e => log.warn(`tab activity unavailable: ${(e as Error).message}`));
+	void showWorkspaceSummary(c, tabId, hostPath);
 
 	const authorityResult = new vscode.ManagedResolvedAuthority(async () => {
 		const cl = await getClient();
@@ -236,6 +237,34 @@ function toMessagePassing(ch: TabdChannel): vscode.ManagedMessagePassing {
 		send: d => ch.write(d),
 		end: () => ch.end(),
 	};
+}
+
+// ---- pre-open workspace summary (informational) ---------------------------------------------
+
+/**
+ * What this folder would run automatically or feed to AI agents (tabd `tab.inspect`). Shown
+ * once per open, informational only: in a tab these run inside the sandbox. All text is the
+ * folder's own content, shown as plain text in a read-only document.
+ */
+async function showWorkspaceSummary(c: TabdClient, tabId: string, hostPath: string): Promise<void> {
+	try {
+		const r = await c.request<{ items: Array<{ kind: string; path: string; detail: string }>; truncated: boolean }>('tab.inspect', { tabId });
+		if (!r.items.length) {
+			return;
+		}
+		const kinds = [...new Set(r.items.map(i => i.kind))];
+		const pick = await vscode.window.showInformationMessage(
+			`"${safeText(path.basename(hostPath), 60)}" configures ${r.items.length} thing(s) that run automatically or steer AI agents (${safeText(kinds.slice(0, 3).join(', '), 120)}${kinds.length > 3 ? ', …' : ''}). They run inside this tab's sandbox.`,
+			'Show Details');
+		if (pick === 'Show Details') {
+			const text = r.items.map(i => `${safeText(i.kind, 80)}\n  ${safeText(i.path, 200)}\n  ${safeText(i.detail, 600)}\n`).join('\n')
+				+ (r.truncated ? '\n… more not listed\n' : '');
+			const doc = await vscode.workspace.openTextDocument({ content: `What this folder runs automatically or feeds to AI agents (informational)\n\n${text}`, language: 'plaintext' });
+			await vscode.window.showTextDocument(doc, { preview: true });
+		}
+	} catch (e) {
+		log.debug(`workspace summary unavailable: ${safeText((e as Error).message)}`);
+	}
 }
 
 // ---- pre-mount secret findings (ADR 20261104-pre-mount-secret-scan) -------------------------

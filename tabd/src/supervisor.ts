@@ -12,6 +12,7 @@ import { ObsGlue, ObsParamError } from './obs/glue.ts';
 import type { FalcoSensor } from './obs/falco.ts';
 import type { ObsHub } from './obs/hub.ts';
 import { WriteBackManager } from './writeback-manager.ts';
+import { inspectWorkspace } from './inspect.ts';
 import { checkRel } from './writeback.ts';
 
 /** A workspace-relative path parameter for the write-back methods (validated, never a host path). */
@@ -248,6 +249,7 @@ export class Supervisor {
 			case 'tab.list': return { tabs: this.o.store.list().map(r => this.view(r)) };
 			case 'tab.ensureRunning': return this.ensureRunning(this.record(p.tabId), p.acceptFindings);
 			case 'tab.scan': return this.scanTab(this.record(p.tabId));
+			case 'tab.inspect': return inspectWorkspace(this.record(p.tabId).hostPath) as unknown as Json;
 			case 'tab.moveSecrets': return this.moveSecrets(this.record(p.tabId), p.moves);
 			case 'tab.restoreSecrets': return this.restoreSecrets(this.record(p.tabId));
 			case 'tab.connect': return this.connect(this.record(p.tabId));
