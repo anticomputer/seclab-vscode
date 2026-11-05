@@ -466,6 +466,38 @@ export function seclabExecuteCommandFromTab<T>(
 }
 
 /**
+ * Whether VS Code's built-in chat and agent tools are disabled for a window.
+ *
+ * True for a window whose remote authority is `seclab+*`, i.e. a tab.
+ *
+ * This is the class the RPC filter cannot reach. The chat agent runs in the
+ * *trusted* workbench, so when it reads a tab's files and invokes a
+ * trusted-side tool, no RPC crosses the sandbox boundary and there is nothing
+ * for the filter to inspect. The tab's contribution is data, not a call:
+ * `.github/copilot-instructions.md` and `.github/instructions/` are located in
+ * workspace root folders and auto-attached when `applyTo` is `**`, and the
+ * generated system prompt instructs the model to follow them. The tab writes a
+ * file; the trusted agent obeys it; the host effect follows from a tool the
+ * agent chose.
+ *
+ * v0 turns the feature off rather than filtering it, and the reason is
+ * measured rather than precautionary: of the 54 tool definitions upstream at
+ * the pinned SHA, not one statically declares `runsInWorkspace: true`
+ * (`rpc-filter/inventory/inventory.json`, surface (e)). A policy of "allow only
+ * tools that run in the workspace" would have an empty allow set, so there is
+ * no safe subset to keep.
+ *
+ * It is enforced here, in code, and deliberately not through
+ * `configurationDefaults`. A default is a value, and values can be overridden
+ * -- including by a workspace setting the tab itself writes, which would let
+ * the sandboxed side switch its own containment back on. Moving chat into the
+ * tab is the real answer; see `docs/plans/chat-in-tabs.md`.
+ */
+export function seclabAiDisabled(remoteAuthority: string | null | undefined): boolean {
+	return typeof remoteAuthority === 'string' && SECLAB_AUTHORITY.test(remoteAuthority);
+}
+
+/**
  * Tab id for an authority, derived from the authority itself.
  *
  * The authority a remote window connects to *is* `seclab+<tabId>`: the Tab

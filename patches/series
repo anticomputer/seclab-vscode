@@ -11,4 +11,5 @@
 0006-seclab-channel-guard.patch
 0007-seclab-command-taint.patch
 0008-seclab-route-tab-commands.patch
+0009-seclab-no-builtin-chat-in-tabs.patch
 0012-background-windows-env.patch

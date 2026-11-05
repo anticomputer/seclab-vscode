@@ -95,6 +95,8 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 <!-- seclab:begin probes -->
 | Probe | Fixture | Policy entry | Patched expectation |
 |---|---|---|---|
+| `ai-instructions-tool-call` | rogue extension | `ai-tool:fetch_webpage` | denied |
+| `ai-settings-reenable` | rogue extension | `ai-setting:chat.agent.enabled` | denied |
 | `as-external-uri` | rogue extension | `rpc:MainThreadWindow.$asExternalUri` | denied |
 | `auth-get-session` | rogue extension | `rpc:MainThreadAuthentication.$getSession` | succeeded |
 | `clipboard-read` | rogue extension | `rpc:MainThreadClipboard.$readText` | denied |
