@@ -62,13 +62,17 @@ lint_workflows() {
 # calling repository and tag. Cached per index digest; needs network once (registry, TUF root).
 COSIGN_IMAGE="ghcr.io/sigstore/cosign/cosign:v3.0.3@sha256:774391ac9f0c137ee419ce56522df5fd3b1f52be90c5b77e97f7c053bdd67a67"
 verify_signed_image() {
-	local image="$1" identity="$2" wf_repo="$3" wf_ref="$4" digest marker repo line att
+	local image="$1" identity="$2" wf_repo="$3" wf_ref="$4" digest marker repo line att key
 	digest="${image##*@}"
 	repo="${image%%@*}"; repo="${repo%:*}"
-	marker="$ROOT/.work/deps-verified/${digest#sha256:}"
-	[[ -f "$marker" ]] && return 0
+	# Keyed by digest AND the expected identity, so tightening the identity re-verifies (DD-5);
+	# CI always re-verifies (no cache there).
+	key="$(printf '%s\n' "$digest" "$identity" "$wf_repo" "$wf_ref" "$COSIGN_IMAGE" | shasum -a 256 | cut -c1-64)"
+	marker="$ROOT/.work/deps-verified/$key"
+	[[ -z "${CI:-}" && -f "$marker" ]] && return 0
 	local pairs
-	pairs="$(docker run --rm -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/verify-image.ts "$repo@$digest")" \
+	# Only the two scripts are mounted: the verifier sees no repo content or run state (DD-4).
+	pairs="$(docker run --rm -v "$ROOT/build/verify-image.ts:/v/verify-image.ts:ro" -v "$ROOT/build/registry.ts:/v/registry.ts:ro" -w /v "$(node_image)" node verify-image.ts "$repo@$digest")" \
 		|| { echo "verify: $image: attestation chain incomplete (refusing to run it)" >&2; return 1; }
 	while read -r line; do
 		att="${line##* }"

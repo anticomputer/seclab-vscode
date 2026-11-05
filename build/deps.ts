@@ -18,8 +18,9 @@ const REGISTRY = 'deps/registry.json';
 const DOC = 'docs/DEPENDENCIES.md';
 
 export const KINDS = ['source', 'oci-image', 'github-action', 'pip-set', 'npm-tree', 'apt-set', 'binary', 'extension', 'host-tool'] as const;
-/** The provenance bar (ADR): one of these, or a recorded, user-approved exception. */
-export const BARS = ['signed-verified', 'official-pinned', 'built-from-source', 'exception'] as const;
+/** The provenance bar (ADR): one of these, or a recorded, user-approved exception. Host tools
+ *  the user installs (not pinned by us) are `host-installed` and must state their gap (DD-8). */
+export const BARS = ['signed-verified', 'official-pinned', 'built-from-source', 'host-installed', 'exception'] as const;
 
 export interface Dep {
 	id: string;
@@ -44,6 +45,13 @@ export interface Dep {
 	bump: string;
 	/** Open gap against the bar, if any (rendered as an audit finding). */
 	gap?: string;
+	/**
+	 * signed-verified entries: where the verification is implemented, as `<file>` plus a string
+	 * that file must contain (the verifier call). A claimed verification must exist (DD-3).
+	 */
+	verifiedBy?: { file: string; contains: string };
+	/** Update tracking for build/deps-outdated.ts. */
+	track?: { github?: string; version?: string };
 }
 
 export interface TreePin {
@@ -68,16 +76,43 @@ export function aptPackages(text: string): string[] {
 	return [...out].sort();
 }
 
+/** Markdown: only the blocks CI executes (`<!-- ci: run -->` fenced shell), line numbers kept. */
+function ciRunBlocks(text: string): string {
+	const keep = new Set<number>();
+	const lines = text.split('\n');
+	for (let i = 0; i < lines.length; i++) {
+		if (/<!-- ci: run -->/.test(lines[i]) && /^```(sh|bash|shell)\s*$/.test(lines[i + 1] ?? '')) {
+			for (let j = i + 2; j < lines.length && !/^```\s*$/.test(lines[j]); j++) {
+				keep.add(j);
+			}
+		}
+	}
+	return lines.map((l, i) => keep.has(i) ? l : '').join('\n');
+}
+
 /** Pins in one tracked file. */
 export function pinsIn(f: string, text: string): TreePin[] {
 	const out: TreePin[] = [];
 	if (f.endsWith('.md')) {
-		return out; // prose; runnable blocks call ./seclab, whose pins are checked at their source
+		text = ciRunBlocks(text); // only what CI executes (DD-7)
+	} else if (f.endsWith('.patch')) {
+		text = text.split('\n').map(l => l.startsWith('+') && !l.startsWith('+++') ? l.slice(1) : '').join('\n'); // what a patch adds
 	}
 	text.split('\n').forEach((line, i) => {
 		const where = `${f}:${i + 1}`;
-		for (const m of line.matchAll(IMAGE_PIN)) {
+		// `docker://name@sha256:` (workflow steps) starts the image name after the scheme (DD-2).
+		const l = line.replace(/docker:\/\//g, ' ');
+		const seen = new Set<string>();
+		for (const m of l.matchAll(IMAGE_PIN)) {
 			out.push({ pin: m[1], where });
+			seen.add(m[1].slice(-71));
+		}
+		// Any other digest reference ("$REG/name@sha256:…", a templated name) can't be matched to an
+		// entry: it is reported as an unregistered pin until written as a literal reference (DD-2).
+		for (const m of l.matchAll(/@(sha256:[0-9a-f]{64})/g)) {
+			if (!seen.has(m[1])) {
+				out.push({ pin: `unrecognised-image-reference@${m[1]}`, where });
+			}
 		}
 		const a = /(^|\/)\.github\//.test(f) ? ACTION_PIN.exec(line) : null;
 		if (a) {
@@ -102,7 +137,7 @@ export function pinsIn(f: string, text: string): TreePin[] {
 	return out;
 }
 
-export function validate(deps: Dep[], tree: TreePin[], exists: (p: string) => boolean): string[] {
+export function validate(deps: Dep[], tree: TreePin[], exists: (p: string) => boolean, read: (p: string) => string | undefined = () => undefined): string[] {
 	const problems: string[] = [];
 	const ids = new Set<string>();
 	const registered = new Map<string, string>();
@@ -132,6 +167,21 @@ export function validate(deps: Dep[], tree: TreePin[], exists: (p: string) => bo
 		}
 		if (d.bar === 'official-pinned' && !d.official) {
 			problems.push(`${at}: official-pinned requires an official publisher`);
+		}
+		if ((d.kind === 'host-tool') !== (d.bar === 'host-installed')) {
+			problems.push(`${at}: host tools (and only they) use the host-installed bar`);
+		}
+		if (d.bar === 'host-installed' && !d.gap) {
+			problems.push(`${at}: host-installed needs a gap (we neither pin nor verify it)`);
+		}
+		// A claimed verification must be implemented in the tree (apt verifies by default) (DD-3).
+		if (d.bar === 'signed-verified' && d.kind !== 'apt-set') {
+			const v = d.verifiedBy;
+			if (!v?.file || !v.contains) {
+				problems.push(`${at}: signed-verified needs verifiedBy {file, contains} naming the verifier call`);
+			} else if (!(read(v.file) ?? '').includes(v.contains)) {
+				problems.push(`${at}: verifiedBy ${v.file} does not contain the verifier call ${JSON.stringify(v.contains).slice(0, 80)}`);
+			}
 		}
 		if (d.record && !exists(d.record)) {
 			problems.push(`${at}: record ${d.record} does not exist`);
@@ -217,6 +267,14 @@ function selfTest(): number {
 		['official-pinned needs official', validate([{ ...base, official: false }], tree.slice(0, 1), () => true).some(p => /requires an official/.test(p))],
 		['missing record file', validate([base], tree.slice(0, 1), () => false).some(p => /does not exist/.test(p))],
 		['clean', validate([base], tree.slice(0, 1), () => true).length === 0],
+		// DD-2: docker:// steps and templated references are pins too.
+		['docker:// is captured', pinsIn('.github/workflows/b.yml', `  - uses: docker://${pin}\n`).some(t => t.pin === pin)],
+		['templated reference is reported', pinsIn('x.sh', `docker run "$REG/alpine@sha256:${'d'.repeat(64)}"\n`).some(t => t.pin.startsWith('unrecognised-image-reference@'))],
+		['ci: run blocks and patch additions are scanned', pinsIn('A.md', `<!-- ci: run -->\n\`\`\`sh\ndocker run ${pin}\n\`\`\`\nprose ${pin.replace('3.22', '9')}\n`).length === 1
+			&& pinsIn('p.patch', `+FROM ${pin}\n-FROM old@sha256:${'e'.repeat(64)}\n`).length === 1],
+		// DD-3: a claimed verification must exist; DD-8: host tools state their gap.
+		['signed-verified needs its verifier', validate([{ ...base, bar: 'signed-verified', verifiedBy: { file: 'seclab', contains: 'verify_signed_image "$X"' } }], tree.slice(0, 1), () => true, () => 'nothing').some(p => /does not contain the verifier/.test(p))],
+		['host tool needs host-installed and a gap', validate([{ ...base, kind: 'host-tool', pins: [], bar: 'host-installed' }], [], () => true).some(p => /needs a gap/.test(p))],
 	];
 	const failed = cases.filter(([, ok]) => !ok).map(([n]) => n);
 	console.log(failed.length ? `deps self-test FAILED: ${failed.join(', ')}` : `deps self-test: ${cases.length} cases OK`);
@@ -240,7 +298,7 @@ if (mode === 'write') {
 }
 const files = (arg ? fs.readFileSync(arg === '-' ? 0 : arg, 'utf8') : execFileSync('git', ['-C', repo, 'ls-files', '-z'], { encoding: 'utf8' }))
 	.split('\0').filter(Boolean)
-	.filter(f => !/\.(png|jpe?g|gif|svg|patch)$/.test(f) && !f.includes('/fixtures/') && !f.startsWith('rpc-filter/inventory/') && f !== 'build/deps.ts' && f !== 'build/check-pins.ts' && f !== REGISTRY);
+	.filter(f => !/\.(png|jpe?g|gif|svg)$/.test(f) && !f.includes('/fixtures/') && !f.startsWith('rpc-filter/inventory/') && f !== 'build/deps.ts' && f !== 'build/check-pins.ts' && f !== REGISTRY);
 const tree: TreePin[] = [];
 for (const f of files) {
 	try {
@@ -250,7 +308,17 @@ for (const f of files) {
 		}
 	} catch { /* deleted in the worktree */ }
 }
-const problems = validate(deps, tree, p => fs.existsSync(path.join(repo, p)));
+const problems = validate(deps, tree, p => fs.existsSync(path.join(repo, p)), p => {
+	try {
+		return fs.readFileSync(path.join(repo, p), 'utf8');
+	} catch {
+		return undefined;
+	}
+});
+// Nothing under .work/ may be tracked: it holds verification caches and run state (DD-5).
+if (files.some(f => f.startsWith('.work/'))) {
+	problems.push('.work/ has tracked files (verification caches and run state must never be committed)');
+}
 // Artifacts derived from the upstream source must name the SHA the build uses (review CC-2):
 // otherwise an upstream.lock bump with a stale RPC inventory/policy passes every gate.
 const lockSha = /^UPSTREAM_SHA=["']?([0-9a-f]{40})/m.exec(fs.readFileSync(path.join(repo, 'upstream.lock'), 'utf8'))?.[1];

@@ -23,8 +23,19 @@ if (!Array.isArray(index.manifests)) {
 	console.error('verify-image: the pinned digest is not an index');
 	process.exit(1);
 }
-const images = index.manifests.filter(d => d.platform && d.platform.os !== 'unknown');
-const atts = index.manifests.filter(d => d.annotations?.['vnd.docker.reference.type'] === 'attestation-manifest');
+const images = index.manifests.filter(d => !isAttestation(d));
+const atts = index.manifests.filter(isAttestation);
+// Every non-attestation entry is something a runtime may select (containerd matches a
+// platform-less entry to any platform), so each must name a platform and be bound (DD-1).
+function isAttestation(d: Desc): boolean {
+	return d.annotations?.['vnd.docker.reference.type'] === 'attestation-manifest' && d.platform?.os === 'unknown' && d.platform?.architecture === 'unknown';
+}
+for (const img of images) {
+	if (!img.platform?.os || !img.platform.architecture || img.platform.os === 'unknown' || img.platform.architecture === 'unknown') {
+		console.error(`verify-image: index entry ${img.digest} has no concrete platform (refusing)`);
+		process.exit(1);
+	}
+}
 // Subjects named by each attestation's in-toto statements (content-addressed through the index).
 const subjects = new Map<string, Set<string>>();
 for (const a of atts) {

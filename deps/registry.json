@@ -171,10 +171,11 @@
       "pins": ["mitmproxy/mitmproxy:12.3.1@sha256:2711066c855659b5af8b1dbb84494ed3eff69b42ece439c60b4fe09a2db829d4"],
       "used": ["broker/Dockerfile"],
       "provenance": "GitHub artifact attestation (SLSA v1 provenance, Sigstore), signer mitmproxy/mitmproxy .github/workflows/main.yml@refs/tags/v12.3.1.",
-      "verify": "Broker session's provenance check (gh attestation verify oci://… pinned to the signer workflow and source commit) before the broker image build; lands with the broker's review record.",
-      "bar": "signed-verified",
+      "verify": "Digest pin today. The broker session's provenance check (gh attestation verify oci://… pinned to the signer workflow and source commit) lands with the broker's review record; then this entry moves to signed-verified with verifiedBy.",
+      "bar": "official-pinned",
       "record": "docs/adr/20261104-supply-chain-provenance.md",
-      "bump": "Broker session (broker/deps.json); Dependabot (docker), then re-verify."
+      "bump": "Broker session (broker/deps.json); Dependabot (docker), then re-verify.",
+      "gap": "Publisher attests it (GitHub attestation) but nothing on main verifies it yet; the broker holds the real credentials, so this is the largest gap."
     },
     {
       "id": "img-lychee",
@@ -223,6 +224,7 @@
       "provenance": "cosign keyless signature on each platform's BuildKit attestation manifest via docker/github-builder (workflow repository zizmorcore/zizmor, ref refs/tags/v1.32.0; issuer token.actions.githubusercontent.com).",
       "verify": "./seclab lint workflows -> verify_signed_image: build/verify-image.ts walks the pinned index by digest and binds every platform image to an attestation whose in-toto subject names it; cosign verifies each attestation's keyless signature (identity docker/github-builder build.yml, workflow repository zizmorcore/zizmor, ref refs/tags/v1.32.0, issuer GitHub Actions). Cached per digest under .work/deps-verified. Runs offline, --network none, no credentials.",
       "bar": "signed-verified",
+      "verifiedBy": { "file": "seclab", "contains": "verify_signed_image \"$ZIZMOR_IMAGE\"" },
       "record": "docs/adr/20261104-supply-chain-provenance.md",
       "bump": "Fork-build session; scheduled pin check; update the ref in seclab with the pin."
     },
@@ -406,10 +408,10 @@
       "used": ["tabd/src/drivers/sbx.ts", "sandbox/sbx/build-template.sh"],
       "provenance": "Installed by the user; the shell kit (docker.io/sbx/shell, built from DHI's Debian 13 template) is chosen by the sbx version. Whether the kit is signed is unconfirmed.",
       "verify": "None by us beyond the sbx version; the template we save is rebuilt from it plus our pinned REH.",
-      "bar": "official-pinned",
+      "bar": "host-installed",
       "record": "docs/adr/20261104-supply-chain-provenance.md",
       "bump": "The user (host tool).",
-      "gap": "Kit provenance unconfirmed; check sbx kit verify for Docker's own kits."
+      "gap": "Neither pinned nor verified by us; the shell kit's own signature is unconfirmed (check sbx kit verify for Docker's kits)."
     },
     {
       "id": "host-docker-desktop",
@@ -422,9 +424,10 @@
       "used": ["seclab", "tabd/src/drivers/oci.ts"],
       "provenance": "Developer-ID signed, Apple-notarized app.",
       "verify": "macOS Gatekeeper at install.",
-      "bar": "official-pinned",
+      "bar": "host-installed",
       "record": "docs/adr/20261104-supply-chain-provenance.md",
-      "bump": "The user (host tool)."
+      "bump": "The user (host tool).",
+      "gap": "Not pinned by us; trust rests on Apple notarization of the user's install."
     },
     {
       "id": "host-gh",
@@ -437,9 +440,10 @@
       "used": ["seclab"],
       "provenance": "Release binaries carry GitHub attestations; Homebrew bottle / signed apt repo / notarized pkg.",
       "verify": "Installed by the user or preinstalled on Actions runners.",
-      "bar": "official-pinned",
+      "bar": "host-installed",
       "record": "docs/adr/20261104-supply-chain-provenance.md",
-      "bump": "The user (host tool)."
+      "bump": "The user (host tool).",
+      "gap": "Not pinned by us, yet gh is the trust root of fetch macos; a user can check their install with gh attestation verify against cli/cli."
     }
   ]
 }
