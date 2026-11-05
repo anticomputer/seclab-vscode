@@ -46,5 +46,7 @@ jobs:
         run: rpc-filter/tools/emit.sh --check
       - name: RPC probe payload lint
         run: rpc-filter/tools/lint.sh
+      - name: RPC generator tests (order-independence, import-scoped resolution, ambiguity)
+        run: rpc-filter/tools/test.sh
       - name: RPC probe-safety guards
         run: ./seclab test probe-safety

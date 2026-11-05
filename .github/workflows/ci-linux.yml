@@ -47,11 +47,6 @@ jobs:
     name: rpc-inventory
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    # Non-blocking until the generator is deterministic: its output (including surface
-    # classification counts) depends on directory traversal order, which differs between
-    # the macOS bind mount and ext4. Owned by the RPC filter session; flip this off with
-    # their fix.
-    continue-on-error: true
     permissions:
       contents: read
     steps:
