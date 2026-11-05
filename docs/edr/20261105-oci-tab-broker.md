@@ -48,8 +48,12 @@ credentials yet.
   `broker/build.sh` with its base provenance verified. `--broker none` keeps the placeholder
   and blackhole egress. sbx refuses `required` until B2. Every OCI suite (containment,
   canary, secret scan, observability, e2e) now runs behind a real broker. The containment
-  check "runtime-injected proxy env never wins" accepts the tab's own broker URL as well as
-  the blackhole, with both cases equal.
+  check "runtime-injected proxy env never wins" requires exactly the tab's own broker URL on
+  OCI and exactly the blackhole on sbx (review XX-4).
+- **No implicit pulls** (review XX-6): every tab, broker and placeholder container is created
+  with `--pull never`, so a missing local image fails the start rather than fetching from a
+  registry. Pinning the broker by image ID or a build label, as tabd does for its scanner, is
+  still open.
 
 ## Deviation from the protocol doc
 Protocol §7 asks for the CA in the tab's system store, installed as root at creation. The OCI
