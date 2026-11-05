@@ -88,3 +88,90 @@ export const SECLAB_CHANNELS: ReadonlyMap<string, SeclabEntry> = new Map([
 	['mcpGatewayToolBroker', { verdict: 'deny', ref: 'chan:mcpGatewayToolBroker' }],
 ]);
 
+/**
+ * Parameter positions each method hands to `URI.revive`, taken from the
+ * `UriComponents` parameters declared in extHost.protocol.ts.
+ *
+ * The URI constraint is positional because the consumer is. `URI.revive`
+ * does not look for a `$mid` marker -- it builds a URI from any truthy
+ * object it is given -- and a consumer such as `$readFile` calls it on a
+ * fixed argument regardless of what arrived on the wire. Searching the
+ * argument graph for URI-shaped values disagrees with that in both
+ * directions, and the dangerous direction is a miss: plain `{scheme, path}`
+ * with no marker is revived by the consumer and invisible to a shape
+ * search.
+ */
+export const SECLAB_URI_ARGS: ReadonlyMap<string, readonly number[]> = new Map([
+	['MainThreadAgentEditorComments.$createAgentEditorComments', [1]],
+	['MainThreadAuthentication.$sendDidChangeDynamicProviderInfo', [0]],
+	['MainThreadAuthentication.$waitForUriHandler', [0]],
+	['MainThreadChatAgents2.$transferActiveChatSession', [0]],
+	['MainThreadChatOutputRenderer.$registerChatOutputRenderer', [2]],
+	['MainThreadChatSessions.$handleAnchorResolve', [1]],
+	['MainThreadChatSessions.$handleProgressChunk', [1]],
+	['MainThreadChatSessions.$handleProgressComplete', [1]],
+	['MainThreadChatSessions.$onDidChangeChatSessionOptions', [1]],
+	['MainThreadChatSessions.$onDidCommitChatSessionItem', [1, 2]],
+	['MainThreadChatSessions.$updateChatSessionInputState', [1]],
+	['MainThreadComments.$createCommentThread', [3]],
+	['MainThreadComments.$updateCommentThread', [3]],
+	['MainThreadCustomEditors.$onContentChange', [0]],
+	['MainThreadCustomEditors.$onDidEdit', [0]],
+	['MainThreadDataChannels.$createLinkPresentationWatcher', [3]],
+	['MainThreadDebugService.$startDebugging', [0]],
+	['MainThreadDecorations.$onDidChange', [1]],
+	['MainThreadDocumentContentProviders.$onVirtualDocumentChange', [0]],
+	['MainThreadDocumentDiff.$computeDocumentDiff', [0, 1]],
+	['MainThreadDocuments.$tryOpenDocument', [0]],
+	['MainThreadDocuments.$trySaveDocument', [0]],
+	['MainThreadDownloadService.$download', [0, 1]],
+	['MainThreadEditorInsets.$createEditorInset', [2, 7]],
+	['MainThreadExtensionService.$asBrowserUri', [0]],
+	['MainThreadFileSystem.$copy', [0, 1]],
+	['MainThreadFileSystem.$delete', [0]],
+	['MainThreadFileSystem.$mkdir', [0]],
+	['MainThreadFileSystem.$readFile', [0]],
+	['MainThreadFileSystem.$readdir', [0]],
+	['MainThreadFileSystem.$rename', [0, 1]],
+	['MainThreadFileSystem.$stat', [0]],
+	['MainThreadFileSystem.$writeFile', [0]],
+	['MainThreadFileSystemEventService.$watch', [2]],
+	['MainThreadLanguageModels.$fileIsIgnored', [0]],
+	['MainThreadLanguages.$changeLanguage', [0]],
+	['MainThreadLanguages.$tokensAtPosition', [0]],
+	['MainThreadLocalizationShape.$fetchBundleContents', [0]],
+	['MainThreadLogger.$createLogger', [0]],
+	['MainThreadLogger.$deregisterLogger', [0]],
+	['MainThreadLogger.$flush', [0]],
+	['MainThreadLogger.$log', [0]],
+	['MainThreadLogger.$setVisibility', [0]],
+	['MainThreadMcpShape.$startMcpGateway', [0]],
+	['MainThreadNotebookDocumentsShape.$tryOpenNotebook', [0]],
+	['MainThreadNotebookDocumentsShape.$trySaveNotebook', [0]],
+	['MainThreadNotebookEditorsShape.$tryShowNotebookDocument', [0]],
+	['MainThreadNotebookKernels.$createExecution', [2]],
+	['MainThreadNotebookKernels.$createNotebookExecution', [2]],
+	['MainThreadNotebookKernels.$updateNotebookPriority', [1]],
+	['MainThreadNotebookKernels.$variablesUpdated', [0]],
+	['MainThreadOutputService.$register', [1]],
+	['MainThreadQuickDiff.$createSourceControlDiffInformation', [1]],
+	['MainThreadQuickDiff.$registerQuickDiffProvider', [4]],
+	['MainThreadSCM.$registerSourceControl', [4, 7]],
+	['MainThreadSearch.$handleFileMatch', [2]],
+	['MainThreadTesting.$getCoverageDetails', [2]],
+	['MainThreadTextEditors.$tryShowTextDocument', [0]],
+	['MainThreadTimeline.$emitTimelineChangeEvent', [1]],
+	['MainThreadUrls.$createAppUri', [0]],
+	['MainThreadWindow.$asExternalUri', [0]],
+	['MainThreadWindow.$openUri', [0]],
+	['MainThreadWorkspace.$checkExists', [0]],
+	['MainThreadWorkspace.$isResourceTrusted', [0]],
+	['MainThreadWorkspace.$resolveDecoding', [0]],
+	['MainThreadWorkspace.$resolveEncoding', [0]],
+	['MainThreadWorkspace.$save', [0]],
+	['MainThreadWorkspace.$startFileSearch', [0]],
+	['MainThreadWorkspace.$startTextSearch', [1]],
+	['MainThreadWorkspace.$updateWorkspaceFolders', [3]],
+	['MainThreadWorkspace.$validateDetectedEncoding', [0]],
+]);
+

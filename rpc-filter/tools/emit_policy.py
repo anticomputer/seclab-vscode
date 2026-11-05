@@ -30,6 +30,7 @@ REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
 POLICY = os.path.join(REPO, "rpc-filter", "policy", "policy.json")
 COVERAGE = os.path.join(REPO, "rpc-filter", "policy", "coverage.json")
 DEFAULT_OUT = os.path.join(REPO, "rpc-filter", "patch-src", "seclabPolicyData.ts")
+INVENTORY = os.path.join(REPO, "rpc-filter", "inventory", "inventory.json")
 
 HEADER = """/*---------------------------------------------------------------------------------------------
  *  seclab-vscode: generated RPC capability policy. DO NOT EDIT.
@@ -59,7 +60,7 @@ def _load(path):
         return json.load(fh)
 
 
-def build(policy: dict) -> dict:
+def build(policy: dict, inventory: dict | None = None) -> dict:
     """The compact (key -> entry) form the filter indexes at run time."""
     rpc = {}
     for sid, service in policy.get("rpc", {}).items():
@@ -89,17 +90,23 @@ def build(policy: dict) -> dict:
             "ref": "chan:%s" % name,
             "constraint": entry.get("constraint"),
         }
+    uri_args = {}
+    for service in ((inventory or {}).get("surfaces", {})
+                    .get("a_mainthread_rpc", {}).get("services", [])):
+        for method, positions in (service.get("uri_arg_positions") or {}).items():
+            uri_args["%s.%s" % (service["sid"], method)] = list(positions)
     return {
         "default": policy["default_verdict"],
         "serviceDefaults": service_defaults,
         "rpc": rpc,
         "commands": commands,
         "channels": channels,
+        "uriArgs": uri_args,
     }
 
 
-def render(policy: dict, sha: str) -> str:
-    data = build(policy)
+def render(policy: dict, sha: str, inventory: dict | None = None) -> str:
+    data = build(policy, inventory)
     out = [HEADER % sha[:12]]
 
     def emit(name: str, mapping: dict, comment: str) -> None:
@@ -128,6 +135,24 @@ def render(policy: dict, sha: str) -> str:
          "reachable; categories may withhold authority but never grant it.")
     emit("SECLAB_CHANNELS", data["channels"],
          "Channels the client serves to the server over the remote connection.")
+    out.append(
+        "/**\n"
+        " * Parameter positions each method hands to `URI.revive`, taken from the\n"
+        " * `UriComponents` parameters declared in extHost.protocol.ts.\n"
+        " *\n"
+        " * The URI constraint is positional because the consumer is. `URI.revive`\n"
+        " * does not look for a `$mid` marker -- it builds a URI from any truthy\n"
+        " * object it is given -- and a consumer such as `$readFile` calls it on a\n"
+        " * fixed argument regardless of what arrived on the wire. Searching the\n"
+        " * argument graph for URI-shaped values disagrees with that in both\n"
+        " * directions, and the dangerous direction is a miss: plain `{scheme, path}`\n"
+        " * with no marker is revived by the consumer and invisible to a shape\n"
+        " * search.\n"
+        " */\n")
+    out.append("export const SECLAB_URI_ARGS: ReadonlyMap<string, readonly number[]> = new Map([\n")
+    for key in sorted(data["uriArgs"]):
+        out.append("\t['%s', [%s]],\n" % (key, ", ".join(str(i) for i in data["uriArgs"][key])))
+    out.append("]);\n\n")
     return "".join(out)
 
 
@@ -139,7 +164,8 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     policy = _load(POLICY)
-    text = render(policy, policy["upstream_sha"])
+    inventory = _load(INVENTORY)
+    text = render(policy, policy["upstream_sha"], inventory)
 
     if args.check:
         try:
