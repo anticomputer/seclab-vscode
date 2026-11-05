@@ -117,6 +117,7 @@ export class OciDriver implements Driver {
 					'--env', `SECLAB_TAB_ID=${spec.tabId}`, '--', assertImageRef(this.opts.brokerImage)], 'broker create');
 				await this.must(['network', 'connect', '--alias', 'broker', '--', n.net, n.broker], 'broker network connect');
 			}
+			await this.must(['start', '--', n.broker], 'broker start');
 		} else if (!await this.exists('container', n.broker)) {
 			await this.must(['run', '-d', '--name', n.broker, '--label', label, '--network', n.net,
 				'--network-alias', 'broker', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
