@@ -500,7 +500,16 @@ follow it.
 **This filter does not contain that class, and nothing here should be read as
 if it did.** For v0 the feature is **turned off** in `seclab+` windows
 (patches 0009–0011, [ADR](adr/20261105-no-builtin-chat-in-tabs.md)) — a
-withdrawal, not containment. The vulnerable architecture is unchanged; we have
+withdrawal, not containment.
+
+> **Not in effect (2026-11-05).** Patch 0011, which closes the outbound
+> agent-host dial, was written against `workbench.web.main.ts`. The product
+> builds desktop targets, which load `workbench.desktop.main.ts` and do not
+> import the web entry point, so the lock does not load. The subclass also
+> does not compile. **The dial path is open until this is fixed and
+> re-reviewed** — see
+> [the re-review](security-reviews/20261105-rpc-filter-rereview.md). 0009 and
+> 0010 are not implicated. The vulnerable architecture is unchanged; we have
 stopped using it in tab windows. Containing it is a separate workstream.
 
 The surface *is* enumerated and pinned by the drift gate, so a new tool or a
