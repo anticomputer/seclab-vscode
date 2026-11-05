@@ -374,10 +374,16 @@ In a `seclab+` window the gate replaces that with:
 
 **[interface: broker session]** For the Copilot harness this needs:
 
-- a GitHub credential bound to `GET api.github.com/copilot_internal/v2/token`, injected
-  as `Authorization: token …`, which is the extension's own call shape
-  ([copilotTokenManager.ts#L250-L262](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/copilot/src/platform/authentication/node/copilotTokenManager.ts#L250-L262));
-  the runtime's exact call is confirmed in the spike;
+- a GitHub credential imported only for the `https://api.github.com` resource
+  (`read:user`, `user:email`), injected as `Authorization: Bearer {value}` (the runtime's
+  measured call shape, [spike EDR](../edr/20261105-agents-in-tab-spike.md); the
+  extension's own code uses `token …`). It is bound to exactly
+  `GET api.github.com/copilot_internal/user` (the runtime's first call) and
+  `GET api.github.com/copilot_internal/v2/token` (the derive route). The broker allows the
+  first only with no query and no body, and only when its response is strict JSON with
+  no credential-like field. It allows the second only as a confirmed derive route. The
+  optional `repo`-scoped resource the harness also advertises is not imported unless a
+  narrow binding is designed for it;
 - the minted Copilot token re-sentinelised as a derived credential. Today a derived
   credential inherits exactly its parent's bindings, but the Copilot token is used on
   different hosts (the Copilot API hosts). **Proposed:** the provider table declares the
