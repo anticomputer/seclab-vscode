@@ -177,6 +177,20 @@
 			"policyRef": "ai-setting:chat.disableAIFeatures",
 			"why": "chat.disableAIFeatures is WINDOW scope and the tab supplies remote user settings, so a tab-written false must not revive the agent host client",
 			"hostEffect": "the agent host client connects from a tab window"
+		},
+		"ai-remote-agent-host-dial": {
+			"required": true,
+			"surface": "client-push",
+			"policyRef": "ai-setting:chat.workspaceRemoteAgentHosts",
+			"why": "the tab writes chat.workspaceRemoteAgentHosts pointing at a local beacon, through both .vscode/settings.json and remote user settings. The host renderer would dial it from the host network, bypassing the broker, and the dialled connection is not seclab+ so the authority predicate never fires",
+			"hostEffect": "a host-side connection to the beacon, or a token delivered to it"
+		},
+		"ai-agent-host-autoapprove-setting": {
+			"required": true,
+			"surface": "client-push",
+			"policyRef": "ai-tool:run_in_terminal",
+			"why": "a rogue agent host asserts _meta.autoApproveBySetting for a host tool; 0009's invokeTool refusal must hold regardless of what the host claims",
+			"hostEffect": "a trusted-side tool runs without confirmation"
 		}
 	},
 	"rehProbes": {
