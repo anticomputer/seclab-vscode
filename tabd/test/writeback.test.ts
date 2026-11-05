@@ -415,6 +415,9 @@ test('writeback: AA-1 subfolder of a host repo is checked against the parent; a 
 	fs.writeFileSync(path.join(dir, '.gitignore'), 'dist/\n*.so\n!keep.so\n');
 	const sub = path.join(dir, 'packages', 'app');
 	assert.deepEqual([...(hostGitIgnored(sub, ['dist/index.js', 'src/a.ts', 'keep.so', 'x.so']) ?? ['null'])].sort(), ['dist/index.js', 'x.so'], 'parent .gitignore applies; negation respected');
+	fs.mkdirSync(path.join(dir, 'ignored-area', 'ws'), { recursive: true });
+	fs.appendFileSync(path.join(dir, '.gitignore'), 'ignored-area/\n');
+	assert.deepEqual([...(hostGitIgnored(path.join(dir, 'ignored-area', 'ws'), ['a.txt', 'x.so']) ?? ['null'])], [], 'a workspace the enclosing repo ignores is not part of it');
 	fs.writeFileSync(path.join(dir, '.git', 'HEAD'), 'garbage\n');
 	assert.equal(hostGitIgnored(dir, ['dist/a']), null, 'own .git broken → unknown (held)');
 	const { mk } = setup('aa1-head');

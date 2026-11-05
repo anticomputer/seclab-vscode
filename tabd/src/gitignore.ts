@@ -36,7 +36,11 @@ export function hostGitIgnored(root: string, paths: readonly string[]): Set<stri
 	}
 	const argv = ['-C', root, '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', '-c', 'core.hooksPath=/dev/null',
 		'check-ignore', '--no-index', '--stdin', '-z', '--verbose', '--non-matching'];
-	const r = spawnSync(git, argv, { env, input: paths.map(p => `./${p}\0`).join(''), timeout: 10_000, maxBuffer: 64 << 20, shell: false });
+	// Without our own .git, git discovers an enclosing repo. If that repo ignores the workspace
+	// root itself, the workspace isn't part of it: treat it as not in a checkout (nothing hidden),
+	// rather than letting the outer ignore rule make every file tab-local. "./" probes the root.
+	const all = ownGitDir ? [...paths] : ['', ...paths];
+	const r = spawnSync(git, argv, { env, input: all.map(p => `./${p}\0`).join(''), timeout: 10_000, maxBuffer: 64 << 20, shell: false });
 	if (r.error || r.signal) {
 		return null;
 	}
@@ -46,13 +50,16 @@ export function hostGitIgnored(root: string, paths: readonly string[]): Set<stri
 		return !ownGitDir && /not a git repository/.test(r.stderr.toString('utf8')) ? new Set() : null;
 	}
 	const f = r.stdout.toString('utf8').split('\0');
-	if (f.length !== paths.length * 4 + 1 || f[f.length - 1] !== '') {
+	if (f.length !== all.length * 4 + 1 || f[f.length - 1] !== '') {
 		return null;
 	}
+	const ignoredAt = (i: number) => f[i * 4 + 2] !== '' && !f[i * 4 + 2].startsWith('!');
+	if (!ownGitDir && ignoredAt(0)) {
+		return new Set();
+	}
 	const out = new Set<string>();
-	paths.forEach((p, i) => {
-		const pattern = f[i * 4 + 2];
-		if (pattern !== '' && !pattern.startsWith('!')) {
+	all.forEach((p, i) => {
+		if ((ownGitDir || i > 0) && ignoredAt(i)) {
 			out.add(p);
 		}
 	});

@@ -11,6 +11,7 @@ import { assertTabId, canonicalWorkspacePath, sandboxNameFor, TEMPLATE_NAME_RE, 
 import { ObsGlue, ObsParamError } from './obs/glue.ts';
 import type { FalcoSensor } from './obs/falco.ts';
 import type { ObsHub } from './obs/hub.ts';
+import { WriteBackManager } from './writeback-manager.ts';
 
 export const PROTOCOL_VERSION = 'seclab-tabd/0.2';
 export const SUPERVISOR_VERSION = '0.1.0';
@@ -39,6 +40,10 @@ export interface SupervisorOptions {
 	readonly outputBacklog?: () => number;
 	/** OCI host sensor factory (Falco); see tabd/src/obs/falco.ts. */
 	readonly hostSensor?: (hub: ObsHub) => FalcoSensor;
+	/** Write-back gate state (`<state>/writeback`); absent = no write-back sync (tabs stay gated, nothing syncs). */
+	readonly writebackDir?: string;
+	/** Write-back sync interval (ms). */
+	readonly writebackIntervalMs?: number;
 }
 
 interface Channel { tabId: string; child: ChildProcessWithoutNullStreams }
@@ -64,6 +69,7 @@ export class Supervisor {
 	private readonly owned = new Set<string>();
 	private dead = false;
 	private readonly obs: ObsGlue;
+	private readonly wb?: WriteBackManager;
 
 	constructor(o: SupervisorOptions) {
 		this.o = o;
@@ -87,6 +93,16 @@ export class Supervisor {
 				return this.owned.has(tabId) || holder === undefined || holder === process.pid || !pidAlive(holder);
 			},
 		});
+		if (o.writebackDir) {
+			this.wb = new WriteBackManager({
+				dir: o.writebackDir,
+				intervalMs: o.writebackIntervalMs,
+				emit: (tabId, ev) => {
+					this.obs.hub.trusted(tabId, { ...ev, source: 'gate' });
+				},
+				audit: (event, outcome, detail) => this.audit(event, outcome, detail as Record<string, Json>),
+			});
+		}
 	}
 
 	/** Feed bytes from the client. Protocol violations are fatal. */
@@ -227,6 +243,8 @@ export class Supervisor {
 			case 'tab.stop': return this.stop(this.record(p.tabId));
 			case 'tab.remove': return this.remove(this.record(p.tabId));
 			case 'tab.reset': return this.reset(this.record(p.tabId));
+			case 'tab.writeback.status': return this.writebackStatus(this.record(p.tabId));
+			case 'tab.writeback.sync': return this.writebackSync(this.record(p.tabId));
 			case 'stream.end': {
 				const ch = this.channels.get(this.channelId(p.channel));
 				ch?.child.stdin.end();
@@ -542,6 +560,20 @@ export class Supervisor {
 		this.o.store.touch(tabId);
 		this.obs.own(tabId);
 		this.ensureReverify(tabId);
+		this.startWriteBack(tabId);
+	}
+
+	/** Write-back gate 2b: sync a gated tab's upper layer while we own it. */
+	private startWriteBack(tabId: string): void {
+		const r = this.o.store.get(tabId);
+		if (!this.wb || !r) {
+			return;
+		}
+		const spec = this.spec(r);
+		const driver = this.driverFor(spec.template);
+		if (driver.upperReader) {
+			this.wb.start(tabId, r.hostPath, { dev: r.dev, ino: r.ino }, driver.upperReader(spec));
+		}
 	}
 
 	/**
@@ -589,6 +621,7 @@ export class Supervisor {
 		try {
 			const spec = this.spec(r);
 			this.obs.stopping(r.tabId);
+			this.wb?.stop(r.tabId);
 			await this.driverFor(spec.template).quarantine(spec);
 			this.audit('tab.quarantine', 'ok', { tabId: r.tabId });
 		} catch (e) {
@@ -608,6 +641,25 @@ export class Supervisor {
 		this.notify('stream.close', error ? { channel: id, error } : { channel: id });
 	}
 
+	/** Write-back gate: is the tab gated, is sync active, and what is held for review. */
+	private writebackStatus(r: TabRecord) {
+		const spec = this.spec(r);
+		const gated = !!this.driverFor(spec.template).upperReader;
+		const s = this.wb?.status(r.tabId) ?? { active: false, pending: [] };
+		return { gated, ...s } as unknown as Json;
+	}
+
+	/** Write-back gate: sync now (the loop also runs on its own). */
+	private async writebackSync(r: TabRecord) {
+		if (!this.wb || !this.driverFor(this.spec(r).template).upperReader) {
+			throw new RpcError(-32013, 'write-back is not gated for this tab');
+		}
+		const res = await this.wb.sync(r.tabId).catch(e => {
+			throw new RpcError(-32013, `write-back sync failed: ${(e as Error).message}`);
+		});
+		return { applied: res.applied, held: res.held.map(h => ({ path: h.path, kind: h.kind, reasons: h.reasons })), refused: res.refused, mirrored: res.mirrored } as unknown as Json;
+	}
+
 	private async stop(r: TabRecord) {
 		for (const [id, c] of [...this.channels.entries()]) {
 			if (c.tabId === r.tabId) {
@@ -615,6 +667,9 @@ export class Supervisor {
 			}
 		}
 		const spec = this.spec(r);
+		// Last write-back sync while the VM is up (best effort; held changes stay pending).
+		await this.wb?.sync(r.tabId).catch(() => { /* recorded */ });
+		this.wb?.stop(r.tabId);
 		this.obs.stopping(r.tabId);
 		await this.driverFor(spec.template).stop(spec);
 		this.setPhase(r.tabId, 'Stopped');
@@ -631,6 +686,7 @@ export class Supervisor {
 		await this.stop(r);
 		const spec = this.spec(r);
 		await this.driverFor(spec.template).remove(spec);
+		this.wb?.discard(r.tabId);
 		this.o.store.forget(r.tabId);
 		this.audit('tab.remove', 'ok', { tabId: r.tabId });
 		return {};
@@ -645,6 +701,8 @@ export class Supervisor {
 		await this.stop(r);
 		const spec = this.spec(r);
 		await this.driverFor(spec.template).remove(spec);
+		// The VM, and with it the upper layer, is gone: anything still held there is discarded.
+		this.wb?.discard(r.tabId);
 		this.owned.delete(r.tabId);
 		this.o.store.clearLease(r.tabId);
 		this.setPhase(r.tabId, 'Stopped');

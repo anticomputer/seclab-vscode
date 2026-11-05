@@ -175,8 +175,23 @@ and is not implemented as protection.
   `.git/hooks/pre-commit` and `.envrc` must never appear in the host checkout.
 - Increments:
   1. engine and policy (unit-tested against a hostile upper layer);
-  2. sbx overlay (2a, built: tab writes stay in the VM) and sync (2b);
+  2. sbx overlay (2a, built: tab writes stay in the VM) and sync (2b, built);
   3. Tab Manager prompt;
   4. OCI on native Linux.
-- Until 2b lands, nothing a sbx tab writes reaches the host checkout, ordinary
-  edits included. The containment harness reads tab output through the tab.
+
+> **As built (increment 2b):** tabd syncs each running gated tab every 3 s, and again
+> before it stops. A root helper in the VM, `seclab-wb-feed`, reads the upper layer
+> directly and never through the overlay: it lists entries with their sha256, fetches
+> the content of changed files, and mirrors host edits in place (compare-and-swap).
+> - Directories aren't synced on their own; files carry their parents.
+> - `.wh.<name>` is a deletion. An opaque directory expands, against the host, into
+>   per-file deletions, which are subject to the engine's limits.
+> - The engine remembers each entry's signature once it has been applied or decided, so
+>   applied files are not re-applied.
+> - A host edit to a synced file that the tab hasn't touched is mirrored into the upper
+>   copy. A host deletion of such a file isn't reflected until the next tab start.
+> - The root `.git` auto set applies only into an existing host repository. A tab can't
+>   turn a plain host folder into a repo.
+> - A workspace that an enclosing repo ignores is treated as outside that repo.
+> - Protocol: `tab.writeback.status` and `tab.writeback.sync`. Decisions on held changes
+>   come with increment 3.

@@ -21,4 +21,4 @@ tabd/src/run.ts:process-spawn:return spawn(bin, argv, { env, cwd, shell: false, 
 # fixed argv, shell:false, cleanEnv + git hardening vars (GIT_DIR pinned when the root has .git),
 # resolved git, `./`-prefixed stdin paths, results matched by position.
 tabd/src/gitignore.ts:process-spawn:import { spawnSync } from 'node:child_process';
-tabd/src/gitignore.ts:process-spawn:const r = spawnSync(git, argv, { env, input: paths.map(p => `./${p}\0`).join(''), timeout: 10_000, maxBuffer: 64 << 20, shell: false });
+tabd/src/gitignore.ts:process-spawn:const r = spawnSync(git, argv, { env, input: all.map(p => `./${p}\0`).join(''), timeout: 10_000, maxBuffer: 64 << 20, shell: false });

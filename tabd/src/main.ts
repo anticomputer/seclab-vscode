@@ -118,6 +118,7 @@ const supervisor = new Supervisor({
 	},
 	audit: entry => fs.writeSync(auditLog, JSON.stringify(entry) + '\n'),
 	eventsDir: path.join(stateDir, 'events'),
+	writebackDir: path.join(stateDir, 'writeback'),
 	outputBacklog: () => process.stdout.writableLength,
 	hostSensor,
 	fenceReverifyMs: values['fence-reverify-ms'] ? Number(values['fence-reverify-ms']) : undefined,

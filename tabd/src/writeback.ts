@@ -54,11 +54,17 @@ interface State {
 	seeded: boolean;
 	/** "Always allow for this tab and path" rules (exact paths, safe kinds only). */
 	always: string[];
+	/** Upper entries already synced (applied or decided), by path: their signature (2b). */
+	synced?: Record<string, string>;
 }
 
 export class WriteBackError extends Error {}
 
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
+/** Binding of an upper entry: kind, mode, link target, content hash, link count (review W-3). */
+export function metaSig(m: { kind: string; mode?: number; target?: string; sha?: string; nlink?: number }): string {
+	return sha(Buffer.from(JSON.stringify({ k: m.kind, m: (m.mode ?? 0) & 0o7777, t: m.target ?? null, c: m.kind === 'file' ? m.sha ?? null : null, n: m.nlink ?? 1 })));
+}
 /** Default-ignorable and bidi code points (HFS+ ignores some in names: CVE-2014-9390). */
 const IGNORABLE = /[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\u{1bca0}-\u{1bca3}\u{1d173}-\u{1d17a}\u{e0000}-\u{e0fff}]/gu;
 const STRUCTURAL = ['symlink', 'special file', 'directory change', 'hardlink', 'larger than the per-file cap', 'newly executable', 'host file is executable', 'invisible characters in name', 'native code module'];
@@ -361,14 +367,19 @@ export class WriteBackEngine {
 				res.refused.push({ path: String(c.path).slice(0, 200), reason: (e as Error).message });
 				continue;
 			}
+			if (this.isSynced(rel, this.sig(c))) {
+				continue; // unchanged since it was last synced (the upper layer keeps applied entries)
+			}
 			files++;
 			bytes += c.content?.length ?? 0;
 			if (this.isTabLocal(rel)) {
 				res.refused.push({ path: rel, reason: 'tab-local (generated or installed; never written back)' });
+				this.markSynced(rel, c);
 				continue;
 			}
 			if (ignored?.has(rel) && !reviewable(rel)) {
 				res.refused.push({ path: rel, reason: 'tab-local (ignored by the host\'s git, so invisible to review)' });
+				this.markSynced(rel, c);
 				continue;
 			}
 			const extra: string[] = [];
@@ -392,6 +403,7 @@ export class WriteBackEngine {
 				const out = this.one(rel, c, extra, batchNames);
 				if (out === 'applied') {
 					res.applied.push(rel);
+					this.markSynced(rel, c);
 					if (c.kind === 'deleted') {
 						this.deleteTimes.push(t);
 					}
@@ -431,6 +443,7 @@ export class WriteBackEngine {
 			throw new WriteBackError('the host file changed since it was shown; review the conflict');
 		}
 		this.apply(rel, c, true);
+		this.markSynced(rel, c);
 		this.state.pending = this.state.pending.filter(x => x.path !== rel);
 		this.save();
 	}
@@ -491,7 +504,59 @@ export class WriteBackEngine {
 	}
 
 	private sig(c: UpperChange): string {
-		return sha(Buffer.from(JSON.stringify({ k: c.kind, m: (c.mode ?? 0) & 0o7777, t: c.target ?? null, c: c.kind === 'file' ? sha(c.content ?? Buffer.alloc(0)) : null, n: c.nlink ?? 1 })));
+		return metaSig({ kind: c.kind, mode: c.mode, target: c.target, sha: c.kind === 'file' ? sha(c.content ?? Buffer.alloc(0)) : undefined, nlink: c.nlink });
+	}
+
+	// ---- incremental feed (increment 2b) ------------------------------------------------------
+
+	/** True if this entry is exactly what was last synced (applied or decided): skip it. */
+	isSynced(rel: string, entrySig: string): boolean {
+		return this.state.synced?.[rel] === entrySig;
+	}
+
+	/**
+	 * Host edits to files the tab hasn't touched since they were synced would be shadowed by the
+	 * upper copy: return in-place mirror operations (compare-and-swap on the upper sha).
+	 */
+	mirrorPlan(entries: ReadonlyArray<{ path: string; sha: string; mode: number; nlink: number }>): Array<{ path: string; expect: string; content: Buffer }> {
+		const ops: Array<{ path: string; expect: string; content: Buffer }> = [];
+		for (const e of entries) {
+			if (!this.isSynced(e.path, metaSig({ kind: 'file', mode: e.mode, sha: e.sha, nlink: e.nlink }))) {
+				continue;
+			}
+			try {
+				const f = this.resolveOrNull(e.path);
+				const st = f ? lstatOrNull(f) : null;
+				if (!f || !st?.isFile() || st.size > this.policy.caps.maxFileBytes) {
+					continue; // host deleted or replaced it: not mirrored while mounted (EDR)
+				}
+				const content = fs.readFileSync(f);
+				if (sha(content) !== e.sha) {
+					ops.push({ path: e.path, expect: e.sha, content });
+				}
+			} catch { /* unreadable: leave it */ }
+		}
+		return ops;
+	}
+
+	/** A mirror landed: the upper entry now holds the host's content. */
+	noteMirrored(rel: string, upperSha: string, mode: number, nlink: number): void {
+		checkRel(rel);
+		this.state.synced = { ...this.state.synced, [rel]: metaSig({ kind: 'file', mode, sha: upperSha, nlink }) };
+		this.state.baseline[foldPath(rel)] = this.hostSig(rel);
+		this.save();
+	}
+
+	/** Entries no longer in the upper layer (the tab removed a never-applied file): forget them. */
+	forgetAbsent(present: ReadonlySet<string>): void {
+		const synced = this.state.synced ?? {};
+		this.state.synced = Object.fromEntries(Object.entries(synced).filter(([p]) => present.has(p)));
+		this.state.pending = this.state.pending.filter(p => present.has(p.path));
+		this.save();
+	}
+
+	private markSynced(rel: string, c: UpperChange): void {
+		this.state.synced = { ...this.state.synced, [rel]: this.sig(c) };
 	}
 
 	private holdReasons(rel: string, c: UpperChange, hostHash: string, batchNames: Set<string>): string[] {
@@ -529,8 +594,11 @@ export class WriteBackEngine {
 		const gitPath = this.isGitPath(rel);
 		if (gitPath) {
 			const headOk = rel !== '.git/HEAD' || (c.kind === 'file' && /^(?:ref: refs\/[\x21-\x7e]{1,1024}|[0-9a-f]{40}|[0-9a-f]{64})\n?$/.test((c.content ?? Buffer.alloc(0)).toString('latin1')));
-			const rootAuto = this.isRootGitAuto(rel) && c.kind !== 'deleted' && headOk; // AA-1: a broken HEAD is held
-			const indexOk = rel === '.git/index' && c.kind === 'file' && indexIsSafe(c.content ?? Buffer.alloc(0));
+			// Only into an existing host repository: a tab must not create one (2b finding: a
+			// `git init` in the tab would otherwise make the host folder a repo).
+			const hostRepo = lstatOrNull(path.join(this.o.root, '.git'))?.isDirectory() === true;
+			const rootAuto = hostRepo && this.isRootGitAuto(rel) && c.kind !== 'deleted' && headOk; // AA-1: a broken HEAD is held
+			const indexOk = hostRepo && rel === '.git/index' && c.kind === 'file' && indexIsSafe(c.content ?? Buffer.alloc(0));
 			if (!rootAuto && !indexOk) {
 				r.push('git metadata');
 			}

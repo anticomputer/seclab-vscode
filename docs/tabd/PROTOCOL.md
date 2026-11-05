@@ -80,7 +80,9 @@ never derived from paths or other input. The editor uses the authority
 | `tab.connect` | `{ tabId }` | `{ channel, connectionToken }` | **Re-verifies the fence first.** On mismatch: error `-32010` with the reason. Opens an exec stream to the REH socket on a new channel. |
 | `tab.stop` | `{ tabId }` | `{ tab }` | Ends the tab's channels, then stops the sandbox. |
 | `tab.remove` | `{ tabId }` | `{}` | Removes the sandbox and fence rules; forgets the mapping. Refused (`-32022`) while the tab's vault holds moved secrets: restore them first. |
-| `tab.reset` | `{ tabId }` | `{ tab }` | Rebuilds the tab from its template: stops it and removes the sandbox and its home (installed extensions, anything dropped there). Keeps the tab ID, workspace mapping, vault and exceptions; the next `ensureRunning` starts it fresh. |
+| `tab.reset` | `{ tabId }` | `{ tab }` | Rebuilds the tab from its template: stops it and removes the sandbox and its home (installed extensions, anything dropped there). Keeps the tab ID, workspace mapping, vault and exceptions; the next `ensureRunning` starts it fresh. Discards the tab's write-back state (its upper layer is gone). |
+| `tab.writeback.status` | `{ tabId }` | `{ gated, active, pending: [{ path, kind, reasons, sig, hostHash, size?, mode?, target? }], lastSync?, lastError? }` | Write-back gate ([ADR](../adr/20261104-write-back-gate.md)). `pending` are held changes, listed again after a restart and never auto-applied. `path` and `target` are tab-controlled: escape them for display. |
+| `tab.writeback.sync` | `{ tabId }` | `{ applied, held: [{ path, kind, reasons }], refused: [{ path, reason }], mirrored }` | Syncs now (tabd also syncs every 3 s and before stopping). Error `-32013` if the tab isn't gated or the in-VM feed fails (nothing is applied then). |
 | `stream.end` | `{ channel }` | — (notification) | Client half-close (client → REH EOF). |
 | `stream.close` | `{ channel }` | — (notification) | Client abort; the supervisor kills the exec child. |
 | `shutdown` | `{ stopTabs?: boolean }` | `{}` | Graceful: ends channels; leaves tabs running unless `stopTabs`. |
