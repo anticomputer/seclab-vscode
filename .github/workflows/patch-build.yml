@@ -59,6 +59,12 @@ jobs:
         with:
           path: .work/patch-build/vscode/node_modules
           key: patch-build-nm-${{ hashFiles('upstream.lock', '.work/patch-build/vscode/package-lock.json') }}
+      - name: Electron typings (upstream's checksum-verified fetch)
+        # Upstream's postinstall (skipped above) is what fetches electron.d.ts, which src/tsconfig
+        # maps `electron` to. Run only that piece: upstream's own script, checksum-pinned by
+        # build/checksums/electron.txt in the pinned tree.
+        working-directory: .work/patch-build/vscode
+        run: node build/npm/electronTypes.ts
       - name: Type-check the patched tree (upstream's typecheck-client)
         working-directory: .work/patch-build/vscode
         env:
