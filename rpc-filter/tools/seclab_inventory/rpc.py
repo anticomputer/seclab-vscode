@@ -118,6 +118,77 @@ def extract_shape_methods(tree: SourceTree, shape: str) -> list:
     return seen
 
 
+def _split_params(params: str) -> list:
+    """Split a parameter list on top-level commas, respecting nesting."""
+    out, depth, cur, quote = [], 0, [], None
+    for ch in params:
+        if quote:
+            cur.append(ch)
+            if ch == quote:
+                quote = None
+            continue
+        if ch in "'\"`":
+            quote = ch
+            cur.append(ch)
+            continue
+        if ch in "<([{":
+            depth += 1
+        elif ch in ">)]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            out.append("".join(cur))
+            cur = []
+            continue
+        cur.append(ch)
+    if "".join(cur).strip():
+        out.append("".join(cur))
+    return out
+
+
+def _param_list(body: str, start: int) -> str:
+    """Text between the parentheses of a method whose '(' is at ``start``."""
+    depth = 0
+    for j in range(start, len(body)):
+        if body[j] == "(":
+            depth += 1
+        elif body[j] == ")":
+            depth -= 1
+            if depth == 0:
+                return body[start + 1:j]
+    return ""
+
+
+def extract_uri_positions(tree: SourceTree, shape: str) -> dict:
+    """Map method -> parameter positions whose declared type mentions UriComponents.
+
+    This is the positional truth the filter's URI constraint has to mirror.
+    It matters because ``URI.revive`` does not look for a ``$mid`` marker: it
+    builds a URI from any truthy object it is handed
+    (``src/vs/base/common/uri.ts``), and a consumer like
+    ``MainThreadFileSystem.$readFile`` calls it on a fixed argument position
+    regardless of what that object looks like on the wire. A validator that
+    hunts the argument graph for URI-*shaped* values therefore disagrees with
+    the consumer in both directions, and the dangerous direction is a miss:
+    plain ``{scheme, path}`` components with no marker are revived by the
+    consumer but invisible to a shape-based search.
+
+    Positions are reported for any parameter whose type mentions
+    ``UriComponents``, including arrays and optionals, so a nested or repeated
+    URI argument is not silently dropped.
+    """
+    text = strip_block_comments(tree.text(PROTOCOL))
+    body, _ = _interface_body(text, shape.split("<")[0])
+    out = {}
+    if not body:
+        return out
+    for m in _IFACE_METHOD.finditer(body):
+        params = _split_params(_param_list(body, m.end() - 1))
+        positions = [i for i, p in enumerate(params) if "UriComponents" in p]
+        if positions:
+            out.setdefault(m.group("name"), positions)
+    return out
+
+
 def extract_named_customers(tree: SourceTree) -> dict:
     """Map MainContext key -> {class, file, line, methods}.
 
@@ -235,6 +306,11 @@ def build(tree: SourceTree) -> dict:
             # Reachable via actor[methodName] despite not being in the Shape.
             "undeclared_methods": undeclared,
             "declared_but_not_found": unimplemented,
+            # Parameter positions the consumer will hand to URI.revive. The
+            # filter's URI constraint is keyed on these rather than on the
+            # shape of values found in the argument graph; see
+            # extract_uri_positions for why a shape-based search is unsound.
+            "uri_arg_positions": extract_uri_positions(tree, proxy["shape"]),
         })
 
     return {
