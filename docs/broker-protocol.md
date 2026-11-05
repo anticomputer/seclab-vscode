@@ -286,6 +286,7 @@ none
 |---|---|---|---|
 | `revision` | `integer` | yes |  |
 | `policy` | [`Policy`](broker-policy.md) | yes |  |
+| `untrusted` | [`untrusted`](#untrusted) |  |  |
 
 
 ### `policy.update`
@@ -465,6 +466,7 @@ none
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `credentials` | [`credentialInfo`](#credentialinfo)[] | yes |  |
+| `untrusted` | [`untrusted`](#untrusted) |  |  |
 
 
 ### `approval.list`
@@ -762,6 +764,7 @@ The allow list changed at runtime. Persist it if the user chose "always".
 | `removed` | `string`[] | yes |  |
 | `by` | `"controller"` \| `"approval"` | yes |  |
 | `approvalId` | `string` |  |  |
+| `untrusted` | [`untrusted`](#untrusted) |  |  |
 
 ### `credential.needed`
 
@@ -780,6 +783,7 @@ An imported credential's binding was confirmed by `allow-tab`. Persist it with t
 | `id` | `string` | yes |  |
 | `binding` | [`binding`](broker-policy.md#binding) | yes |  |
 | `approvalId` | `string` | yes |  |
+| `untrusted` | [`untrusted`](#untrusted) |  |  |
 
 ### `credential.derived`
 
@@ -896,7 +900,7 @@ Why this request deserves attention. Show it in the prompt.
 <a id="untrusted"></a>
 #### `untrusted`
 
-JSON paths (dot-separated) of fields in this object whose text the tab, or an upstream the tab chose, controls. Show them to people as quoted data. If you hand them to an LLM, put them in a data-only section and never treat them as instructions. All strings the broker emits are already stripped of control, format (bidi, zero-width) and line-separator characters and length-capped, and paths are percent-encoded ASCII.
+JSON paths (dot-separated, array indexes as numbers) of fields in this object whose text the tab, or an upstream the tab chose, controls. Show them to people as quoted data. If you hand them to an LLM, put them in a data-only section and never treat them as instructions. Strings in approvals and audit events are already stripped of control, format (bidi, zero-width), line-separator and other default-ignorable characters and length-capped, and paths and raw authorities are percent-encoded ASCII. Rules and bindings (policy.get, credential.list, policy.changed, credential.bindingConfirmed) are schema-restricted ASCII and are not truncated, so they can be persisted as-is.
 
 Type: `string`[]
 <!-- END GENERATED: protocol-types -->

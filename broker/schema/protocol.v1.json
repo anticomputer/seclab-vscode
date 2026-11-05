@@ -367,6 +367,9 @@
           },
           "policy": {
             "$ref": "#/definitions/policy"
+          },
+          "untrusted": {
+            "$ref": "#/definitions/untrusted"
           }
         }
       }
@@ -644,6 +647,9 @@
             "items": {
               "$ref": "#/definitions/credentialInfo"
             }
+          },
+          "untrusted": {
+            "$ref": "#/definitions/untrusted"
           }
         }
       }
@@ -1008,6 +1014,9 @@
           },
           "approvalId": {
             "type": "string"
+          },
+          "untrusted": {
+            "$ref": "#/definitions/untrusted"
           }
         }
       }
@@ -1046,6 +1055,9 @@
           },
           "approvalId": {
             "type": "string"
+          },
+          "untrusted": {
+            "$ref": "#/definitions/untrusted"
           }
         }
       }
@@ -1389,7 +1401,7 @@
         "type": "string",
         "pattern": "^[A-Za-z0-9_.]+$"
       },
-      "description": "JSON paths (dot-separated) of fields in this object whose text the tab, or an upstream the tab chose, controls. Show them to people as quoted data. If you hand them to an LLM, put them in a data-only section and never treat them as instructions. All strings the broker emits are already stripped of control, format (bidi, zero-width) and line-separator characters and length-capped, and paths are percent-encoded ASCII."
+      "description": "JSON paths (dot-separated, array indexes as numbers) of fields in this object whose text the tab, or an upstream the tab chose, controls. Show them to people as quoted data. If you hand them to an LLM, put them in a data-only section and never treat them as instructions. Strings in approvals and audit events are already stripped of control, format (bidi, zero-width), line-separator and other default-ignorable characters and length-capped, and paths and raw authorities are percent-encoded ASCII. Rules and bindings (policy.get, credential.list, policy.changed, credential.bindingConfirmed) are schema-restricted ASCII and are not truncated, so they can be persisted as-is."
     }
   }
 }

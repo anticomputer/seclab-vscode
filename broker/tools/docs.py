@@ -55,6 +55,7 @@ CHECKED_DOCS = [
     "docs/security-reviews/20261104-broker-docs-drift-and-fixtures.md",
     "docs/security-reviews/20261104-broker-folder-open-loaders.md",
     "docs/security-reviews/20261104-broker-dependency-provenance.md",
+    "docs/security-reviews/20261104-broker-prompt-injection.md",
 ]
 GEN_RE = re.compile(r"(<!-- BEGIN GENERATED: (\S+) [^>]*-->\n)(.*?)(<!-- END GENERATED: \2 -->)", re.S)
 FENCE_RE = re.compile(r"^```(\w*)[^\n]*\n(.*?)^```[ \t]*$", re.S | re.M)

@@ -294,10 +294,15 @@ class CredentialStore:
     def find_real(self, data: bytes) -> list[tuple[str, str, int, int]]:
         return self._real_matcher.find(data)
 
-    def scrub(self, text: str) -> str:
-        """Replace any real value or sentinel in text (for audit, logs, errors)."""
+    def scrub(self, text: str, derived: bool = True) -> str:
+        """Replace any real value or sentinel in text (for audit, logs, errors). With
+        derived=False, values minted by an upstream are left alone: an upstream chooses
+        them, so it could otherwise choose what disappears from the audit log."""
         data = text.encode("utf-8", "surrogateescape")
-        hits = sorted(self.find_real(data) + self.find_sentinels(data), key=lambda h: h[2])
+        real = self.find_real(data)
+        if not derived:
+            real = [h for h in real if (c := self._by_id.get(h[0])) is None or c.origin != "derived"]
+        hits = sorted(real + self.find_sentinels(data), key=lambda h: h[2])
         if not hits:
             return text
         out, pos = [], 0

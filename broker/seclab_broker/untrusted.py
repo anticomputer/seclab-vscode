@@ -13,21 +13,50 @@ from typing import Any
 
 MAX_TEXT = 512
 _DROP = {"Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp"}
+# Unicode Default_Ignorable_Code_Point characters outside the categories above (fillers,
+# variation selectors, combining grapheme joiner): invisible, so they can hide or spoof.
+_IGNORABLE = ((0x034F, 0x034F), (0x115F, 0x1160), (0x17B4, 0x17B5), (0x180B, 0x180F),
+              (0x3164, 0x3164), (0xFE00, 0xFE0F), (0xFFA0, 0xFFA0), (0xE0100, 0xE01EF))
 # Audit-event keys whose values the tab (or an upstream it chose) controls.
 UNTRUSTED_AUDIT_KEYS = ("host", "path", "method", "location", "header", "server", "origin")
 
 
+def _ignorable(ch: str) -> bool:
+    o = ord(ch)
+    return any(lo <= o <= hi for lo, hi in _IGNORABLE)
+
+
 def clean(text: str, cap: int = MAX_TEXT) -> str:
-    out = "".join(ch for ch in text if unicodedata.category(ch) not in _DROP)
+    out = "".join(ch for ch in text if unicodedata.category(ch) not in _DROP and not _ignorable(ch))
     if len(out) > cap:
         out = out[:cap] + f"…[+{len(out) - cap}]"
     return out
 
 
-def display_path(path: str, cap: int = 512) -> str:
+def _elide(text: str, cap: int) -> str:
+    """ASCII middle elision that never splits a %XX escape and fits within cap. The
+    marker uses brackets, which the encoders below always escape, so it can't be forged."""
+    if len(text) <= cap:
+        return text
+    keep = cap - 24
+    end, start = keep * 2 // 3, len(text) - (keep - keep * 2 // 3)
+    while "%" in text[max(0, end - 2):end]:
+        end -= 1
+    while "%" in text[max(0, start - 2):start]:
+        start += 1
+    return f"{text[:end]}...[{start - end} elided]...{text[start:]}"
+
+
+def display_path(path: str, cap: int = MAX_TEXT) -> str:
     """Decoded canonical path -> ASCII for display: non-ASCII, spaces and anything that is
-    not a plain URL path character is percent-encoded, so nothing can hide or reorder."""
-    return clean(urllib.parse.quote(path, safe="/!$&'()*+,;=:@-._~"), cap)
+    not a plain URL path character is percent-encoded, so nothing can hide or reorder.
+    Long paths keep their beginning and end."""
+    return _elide(urllib.parse.quote(path, safe="/!$&'()*+,;=:@-._~"), cap)
+
+
+def display_host(host: str) -> str:
+    """A raw, unvalidated authority -> ASCII (canonical hosts pass through unchanged)."""
+    return _elide(urllib.parse.quote(host, safe="-._~:"), 253)
 
 
 def sanitize(obj: Any) -> Any:

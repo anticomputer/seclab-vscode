@@ -246,6 +246,8 @@ class Rule:
     methods: tuple[str, ...] = ("*",)
     path: str = "/**"
     id: str | None = None
+    # "approval": its host came from a request the tab made.
+    source: str = field(default="policy", compare=False)
 
     @classmethod
     def from_json(cls, obj: dict) -> "Rule":
@@ -321,6 +323,8 @@ class Binding:
     methods: tuple[str, ...]
     ports: tuple[int, ...] = (443,)
     inject: Inject | None = None
+    # "approval": its host, path, methods and inject came from a request the tab made.
+    source: str = field(default="policy", compare=False)
 
     @classmethod
     def from_json(cls, obj: dict, default_inject: Inject | None = None) -> "Binding":

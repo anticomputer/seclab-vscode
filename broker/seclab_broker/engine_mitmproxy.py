@@ -31,7 +31,7 @@ from .policy import (METHOD_OVERRIDE_HEADERS, Binding, PolicyError, RequestView,
                      canonical_path, normalize_host, normalize_ip, query_has_method_override,
                      validate_fragment)
 from .scanner import find_minted
-from .untrusted import display_path
+from .untrusted import display_host, display_path
 
 log = logging.getLogger("seclab.engine")
 _METHOD = re.compile(r"^[A-Z]{1,16}$")
@@ -130,8 +130,8 @@ class SeclabAddon:
         if view is not None:
             return view.summary()
         r = flow.request
-        return {"scheme": r.scheme, "host": r.pretty_host[:253], "port": r.port,
-                "method": r.method[:16], "path": display_path(r.path.split("?", 1)[0], 512)}
+        return {"scheme": r.scheme, "host": display_host(r.pretty_host), "port": r.port,
+                "method": display_host(r.method)[:16], "path": display_path(r.path.split("?", 1)[0])}
 
     def _deny(self, flow: http.HTTPFlow, status: int, reason: str, **extra: Any) -> None:
         self._respond(flow, status, reason)
@@ -439,9 +439,9 @@ class SeclabAddon:
         out.append(text[pos:])
         return "".join(out)
 
-    def _block_response(self, flow: http.HTTPFlow, reason: str) -> None:
+    def _block_response(self, flow: http.HTTPFlow, reason: str, **extra: Any) -> None:
         status = flow.response.status_code if flow.response else None
-        self.b.audit("response.blocked", reason=reason, status=status, **self._summary(flow))
+        self.b.audit("response.blocked", reason=reason, status=status, **extra, **self._summary(flow))
         self._respond(flow, 502, f"response blocked: {reason}", "blocked")
 
     @fail_closed
@@ -466,7 +466,9 @@ class SeclabAddon:
                 continue
             value, why = self._scrub_real(value, True)
             if why:
-                return self._block_response(flow, f"header {hname}: {why}")
+                # The header name is the upstream's choice: keep it out of `reason`, in the
+                # tagged `header` field.
+                return self._block_response(flow, f"response header: {why}", header=hname)
             if scan_minted:
                 value = self._scrub_minted(value.decode("latin-1"), flow, f"header:{hname}").encode(
                     "latin-1", "replace")

@@ -228,6 +228,14 @@ Each has a unit or integration test; grep for the phrase.
   `untrusted` list. A new field carrying tab, upstream or workspace text must
   be added to `UNTRUSTED_AUDIT_KEYS` or `Approval.public`, to the schema
   descriptions, and to `test_untrusted.py`.
+- Rules and bindings created by `allow-tab` carry `source="approval"`, and
+  every surface that shows them tags them. They are never truncated, because
+  the controller persists them.
+- Audit scrubbing of the tab's own request fields ignores upstream-derived
+  values (`REQUEST_KEYS`, `scrub(derived=False)`), so an upstream cannot choose
+  what disappears from the log.
+- Upstream-chosen text (header names and the like) goes in a tagged field,
+  never into `reason`.
 - Paths in prompts and audit go through `display_path` (percent-encoded ASCII).
 - A suggested binding path is the request path as a literal. A path the binding
   grammar can't express without globs is shown encoded, and gets only
