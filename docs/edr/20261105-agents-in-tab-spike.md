@@ -55,7 +55,7 @@ RPC-lockdown to adapt into its generator and drift gate.
 
 ## Results
 
-### Rogue agent host against the real client (run `20261105T183750Z-bba99291413b8bc0`)
+### Rogue agent host against the real client (run `20261105T185614Z-97e0f87244241e60`)
 
 | Probe | Baseline (unmodified upstream) | Gated (prototype) | Verdict |
 |---|---|---|---|
@@ -63,12 +63,33 @@ RPC-lockdown to adapt into its generator and drift gate.
 | A16-write: `resourceWrite` under a grant the tab wrote into remote user settings | Host file overwritten on disk with the run marker (sha256 changed; visible on the macOS filesystem in the run dir) | Reverse request denied; file unchanged | PASS |
 | A16-read: `resourceRead` of a host file | Host canary returned to the agent host | Reverse request denied | PASS |
 | A19-config: the user's `http.proxy` credentials | Proxy-credential canary mirrored in `root/configChanged` | Gate stripped every non-allowlisted mirrored setting | PASS |
-| A18: the agent host asks for a workbench tool | The real `AgentHostSessionHandler` invoked `run_playwright_code`. The client never advertised that tool, the pre-approval was `{Setting, autoApprove}` from the agent host's own `_meta`, and the payload carried the marker | Prototype patch refused client-tool execution; decision recorded | PASS |
+| A18: a client-tool execution request for a workbench tool | The real `AgentHostSessionHandler`, entered at `_executeClientTool`, called `invokeTool` for `run_playwright_code`. The client never advertised that tool, the pre-approval passed on was `{Setting, autoApprove}` taken from the agent host's own `_meta`, and the payload carried the marker | Prototype patch refused client-tool execution; decision recorded | PASS |
 
-In the disarmed control, A1, A16 and A18 report INVALID. A19 still leaks, because the client
-pushes its configuration on connect whether or not the agent host does anything.
+In the disarmed control (run `20261105T185618Z-38414d7c8b059707`) every probe reports
+INVALID and the run exits 1. A19 still leaks unarmed, because the client pushes its
+configuration on connect whatever the agent host does, but a disarmed run never scores a
+pass.
 
-### The shipped agent host, offline (runs `20261105T1844*-intab`)
+**What A18 does and does not show.**
+- It shows two of the handler's decisions:
+  - it resolves a requested tool over all tools, not the set it advertised
+    ([#L3330-L3350](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostSessionHandler.ts#L3330-L3350));
+  - it forwards the agent host's own claim of approval as a confirmed reason
+    ([#L584-L608](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostSessionHandler.ts#L584-L608)).
+- It does not exercise:
+  - the ownership check and the autorun that claims or denies requests (the harness
+    enters past them);
+  - the unclaimed path (the probe passes a context session).
+- `invokeTool` is a recording stand-in. Whether the real `LanguageModelToolsService` then
+  skips confirmation is established by reading code, not by this run: it honours
+  `preApproved`, apart from a few tool and hook exceptions.
+- In a real window, `run_playwright_code` is registered only when browser sharing is
+  available.
+- Strengthening it (the rogue delivers the request over the protocol; the real tools
+  service with an inert marker-writing tool; recorded dialogs) is the next step for this
+  probe.
+
+### The shipped agent host, offline (runs `20261105T1856*-intab`, one per proxy mode, each with `run.json`)
 - **Protected resources the Copilot harness (`copilotcli`) advertises:**
   - `https://api.github.com`, scopes `read:user`, `user:email`, required;
   - `https://api.github.com/repos`, scope `repo`, optional.
@@ -81,7 +102,7 @@ pushes its configuration on connect whether or not the agent host does anything.
 
   | Variant | Result |
   |---|---|
-  | No proxy | Direct egress fails; nothing reaches the recorder |
+  | No proxy | Direct egress fails: the agent host's own log records each failed request to `copilot_internal/user`, and nothing reaches the recorder |
   | Proxy, without our CA | TLS refused with `UNKNOWN_CA`: the runtime verifies certificates |
   | Proxy with `SSL_CERT_FILE` only | Handshake completes; request arrives |
   | Proxy with `NODE_EXTRA_CA_CERTS` only | Handshake completes; request arrives |
@@ -106,8 +127,8 @@ pushes its configuration on connect whether or not the agent host does anything.
 1. **The client-tool ownership check authenticates nothing.**
    - It compares `request.clientId` with the client's own id
      ([agentHostSessionHandler.ts#L3243-L3245](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostSessionHandler.ts#L3243-L3245)),
-     and the client sends that id to the agent host in `initialize`; the rogue host echoed
-     it.
+     and the client sends that id to the agent host in `initialize`. Anything that
+     receives it can repeat it back; the A18 probe supplies it the same way.
    - Upstream uses `clientId` to route work among cooperating clients of one agent host,
      not as authentication. Against a hostile agent host, the connection is the only
      identity, which is why the plan puts the gate on the connection. (RPC-lockdown
@@ -158,7 +179,9 @@ pushes its configuration on connect whether or not the agent host does anything.
   patch contains all five probes.
 - The runner is reusable. RPC-lockdown can wire A17, A18 and A23 behind it.
 - Spike output (bundles, run directories, keys) lives under `.work/agentic/` and is never
-  committed. Bundles are deleted after each run, and CA keys exist only for the run.
+  committed. Bundles are deleted after each run, and the per-run CA and leaf private keys
+  are deleted before the container exits. The CA is trusted only inside that container,
+  through `SSL_CERT_FILE` or `NODE_EXTRA_CA_CERTS`, and never on the host.
 
 ## Evidence
 - `test/agentic/ahp/run.sh`; results in `.work/agentic/runs/<id>/verdicts.json` and

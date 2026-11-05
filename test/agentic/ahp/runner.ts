@@ -322,8 +322,10 @@ async function runMode(mode: 'baseline' | 'gated') {
 	// _executeClientTool, the single place a client tool is invoked; the rogue can satisfy
 	// the ownership check in front of it because the clientId is sent to it in initialize.
 	const initParams = rogue.log.find(e => e.dir === 'client->rogue' && e.message.method === 'initialize')?.message.params as { clientId?: string } | undefined;
-	const a18 = await probeClientTool(log, configService, inst, client.clientId, mode);
-	a18.evidence.rogueLearnedClientIdFromInitialize = initParams?.clientId === client.clientId;
+	// A18 is fired by the harness at _executeClientTool rather than delivered by the rogue
+	// over the protocol, so it is gated on the same nonce arming as every other trigger.
+	const a18 = await probeClientTool(log, configService, inst, client.clientId, mode, rogue.armed);
+	a18.evidence.clientIdSentToAgentHostInInitialize = initParams?.clientId === client.clientId;
 	results.push(a18);
 
 	client.dispose();
@@ -343,7 +345,10 @@ function inert(): never {
 	}) as never;
 }
 
-async function probeClientTool(log: RecordingLogService, configService: LayeredConfigurationService, inst: InstantiationService, clientId: string, mode: string): Promise<ProbeResult> {
+async function probeClientTool(log: RecordingLogService, configService: LayeredConfigurationService, inst: InstantiationService, clientId: string, mode: string, armed: boolean): Promise<ProbeResult> {
+	if (!armed) {
+		return { id: 'A18', title: 'agent host runs an unadvertised workbench tool with self-asserted pre-approval', outcome: 'contained', triggerSent: false, evidence: { disarmed: true } };
+	}
 	const invoked: { toolId: string; preApproved: unknown; parameters: unknown }[] = [];
 	const advertised: string[] = []; // this client advertised no client tools at all
 	const tools = {

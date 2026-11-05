@@ -11,6 +11,9 @@ IMG='node:24.22.1-trixie@sha256:f1e034976f948cf212ef1f659c12e5dd58ac7eab94783181
 NONCE="$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 RUN="$ROOT/.work/agentic/runs/$(date -u +%Y%m%dT%H%M%SZ)-$NONCE-intab"
 mkdir -p "$RUN"
+. "$ROOT/upstream.lock"
+[[ "$(git -C "$ROOT/.work/vscode" rev-parse HEAD)" == "$UPSTREAM_SHA" ]] || { echo "in-tab: .work/vscode is not at $UPSTREAM_SHA" >&2; exit 2; }
+printf '{"nonce":"%s","upstream":"%s","image":"%s","proxyMode":"%s","agentHost":"seclab-vscode-work:/vscode-reh-linux-arm64 (shipped REH build)"}\n' "$NONCE" "$UPSTREAM_SHA" "$IMG" "${PROXY_MODE:-proxy+ca}" > "$RUN/run.json"
 status=0
 docker run --rm --network none -u "$(id -u):$(id -g)" \
 	-v seclab-vscode-work:/shared:ro \
@@ -47,9 +50,14 @@ export VSCODE_NLS_CONFIG="{\"userLocale\":\"en\",\"osLocale\":\"en\",\"resolvedL
 	timeout 60 ./node out/bootstrap-fork.js --logsPath /run/logs --user-data-dir /run/ud > /run/agent-host.stdout 2>&1 & )
 MODE=baseline ENTRY=/harness/in-tab.ts OUT=/run/in-tab.mjs node /harness/bundle.mjs
 for i in $(seq 1 50); do grep -q "listening" /run/agent-host.stdout 2>/dev/null && break; sleep 0.2; done
+grep -q "listening" /run/agent-host.stdout || { echo "in-tab: agent host never listened" >&2; exit 3; }
 node /run/in-tab.mjs
+sleep 1
+# Positive evidence for every mode: the agent host'"'"'s own record of each egress failure.
+grep -h -o "error sending request for url ([^)]*)" -r /run/logs | sort | uniq -c > /run/egress-errors.txt || true
+rm -f /run/ca/ca.key /run/ca/leaf.key /run/ca/leaf.csr /run/ca/ca.srl
 echo "--- proxy events"; cat /run/proxy-events.json
 ' || status=$?
-rm -f "$RUN/in-tab.mjs"
+rm -f "$RUN/in-tab.mjs" "$RUN"/ca/*.key "$RUN"/ca/leaf.csr "$RUN"/ca/ca.srl
 echo "run: $RUN (exit $status)"
 exit $status

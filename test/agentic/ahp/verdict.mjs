@@ -22,8 +22,8 @@ const verdicts = baseline.results.map(b => {
 	const g = gated.results.find(r => r.id === b.id);
 	const decided = !!g && gated.gateDecisions.some(requiredDecision[b.id] ?? (() => false));
 	let verdict;
-	if (!b.triggerSent || b.outcome !== 'vulnerable') {
-		verdict = 'invalid';
+	if (!baseline.armed || !gated.armed || !b.triggerSent || b.outcome !== 'vulnerable') {
+		verdict = 'invalid'; // a disarmed run, or a probe that could not fail on baseline, proves nothing
 	} else if (g && g.triggerSent && g.outcome === 'contained' && decided) {
 		verdict = 'pass';
 	} else {
