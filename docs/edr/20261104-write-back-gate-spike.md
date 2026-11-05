@@ -43,3 +43,30 @@ checkout, not even briefly. Detect-and-revert is acceptable only as a documented
 - **The write-back engine is new code** on the trust boundary. It parses an attacker-controlled upper layer (paths, symlinks, whiteouts, xattrs), so it needs the same hardening as the scanner (`O_NOFOLLOW`, no `..`, size caps) and a review round.
 - **The primary sbx workspace must be read-write.** It becomes an empty per-tab scratch dir that nothing on the host reads.
 - **Detect-and-revert** (host FSEvents on the sensitive paths, restore from a shadow copy) stays as the documented fallback for drivers without the overlay. It has a race window.
+
+## Addendum 2026-11-05: fuse-overlayfs in sbx (increment 2 spike)
+fuse-overlayfs 1.14 (Debian trixie debs fetched with apt in the pinned debian image, since sbx's
+global policy blocks deb.debian.org), mounted by root over the workspace path with the same path
+as its lower layer, `upperdir`/`workdir` under root-only `/var/lib/seclab/wb`, `allow_other`,
+`squash_to_uid=1000,squash_to_gid=1000`:
+- **Works:**
+  - the tab user sees and edits the workspace as `agent`; edits land only in the upper layer,
+    and the host file is unchanged;
+  - the tab user can't unmount it (`fusermount3 -u`: not permitted) or list the upper/work dirs;
+  - with `timeout=0` (fuse-overlayfs then reloads directories on every lookup, and the kernel
+    entry/attribute timeouts are 0), files the host creates or deletes show through;
+  - rewriting an upper file's **content** in place under the live mount is visible.
+- **Unsafe:** removing an entry from the upper layer under the live mount made that path
+  return ENOENT and later emptied the directory listing. Never change the upper layer's
+  directory structure while mounted.
+- **Without `timeout=0`:** host-side creates never appear (layer trees are cached).
+- **The tab user owns `/dev/fuse`** (0600, `agent`) in the shell kit, so it can mount its own
+  FUSE filesystems inside its VM. That only affects its own view; noted for the threat model.
+- **No `mount` binary** in the kit; the overlay is mounted by fuse-overlayfs itself.
+
+Consequence for the design (ADR write-back-gate, increment 2): an applied file stays in the
+upper layer; a later host edit is mirrored into that upper copy in place while the tab hasn't
+changed it (otherwise it is a conflict); entries identical to the host are pruned from the
+upper layer only at tab start, before the mount (overlay mounts don't survive stop/start). A
+process with a working directory inside the workspace from before the mount would see the
+lower layer, so the mount must precede every tab process (the collector mounts first).
