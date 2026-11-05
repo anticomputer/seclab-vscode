@@ -1,27 +1,69 @@
 diff -ruN a/src/vs/platform/agentHost/browser/remoteAgentHostServiceImpl.ts b/src/vs/platform/agentHost/browser/remoteAgentHostServiceImpl.ts
---- a/src/vs/platform/agentHost/browser/remoteAgentHostServiceImpl.ts	2026-11-05 13:09:32
-+++ b/src/vs/platform/agentHost/browser/remoteAgentHostServiceImpl.ts	2026-11-05 13:09:32
-@@ -611,7 +611,16 @@
- 		}
+--- a/src/vs/platform/agentHost/browser/remoteAgentHostServiceImpl.ts	2026-11-05 13:57:38
++++ b/src/vs/platform/agentHost/browser/remoteAgentHostServiceImpl.ts	2026-11-05 13:58:33
+@@ -703,6 +703,31 @@
  	}
  
--	private _reconcileConnections(): void {
-+	/**
-+	 * seclab: protected so a window that must not dial can refuse here.
-+	 *
-+	 * This is the only safe override point. `webSocketEntriesSettingId` is read
-+	 * inside the constructor, before any subclass field is assigned, so a
-+	 * subclass that decided there would read `undefined` and fail *open*.
-+	 * `_reconcileConnections` runs from an autorun after construction, and on
-+	 * every settings change, so a refusal here holds for the object's life.
-+	 */
-+	protected _reconcileConnections(): void {
- 		// Disposing a factory invalidates its `entries` observable, which can
- 		// re-enter this autorun while the service is tearing down. Reconciling
- 		// then would re-register state the dispose path has already cleared.
+ 	private _connectTo(entryToConnect: IRemoteAgentHostEntry, options: IRemoteAgentHostConnectOptions): Promise<void> {
++		if (seclabDialPolicy !== 'allow') {
++			// seclab: this window must not dial an agent host.
++			//
++			// `chat.workspaceRemoteAgentHosts` is WINDOW scope, so in a remote
++			// window a tab supplies it through the REH's own remote user settings.
++			// The host renderer would dial that address over the *host* network,
++			// outside the broker, and the setting's own description says connected
++			// hosts receive the user's GitHub credentials. `restricted: true` does
++			// not help: it only withholds a setting in untrusted workspaces, and a
++			// tab reports trusted.
++			//
++			// Refused here because `_connectTo` is the single funnel every dial
++			// passes through -- reconnect, auto-connect and user-initiated alike --
++			// and because it is consulted per call. An earlier attempt overrode
++			// `_reconcileConnections` from a subclass and was wrong twice over: the
++			// subclass only registered in the *web* entry point while the product
++			// builds desktop, and `autorun` runs synchronously inside the base
++			// constructor, so the first reconcile saw an undefined injected service
++			// and threw into `onBugIndicatingError` instead of refusing.
++			//
++			// A module-level guard rather than an injected service, for the same
++			// reason: it has no construction order, and it applies in every entry
++			// point that loads this file. Same shape as `setSeclabChannelGuard`.
++			return Promise.resolve();
++		}
+ 		if (this._store.isDisposed) {
+ 			return Promise.resolve();
+ 		}
+@@ -1246,6 +1271,27 @@
+ 		this._labelFormatters.clear();
+ 		super.dispose();
+ 	}
++}
++
++/**
++ * seclab: returns true when this window must not dial a remote agent host.
++ *
++ * Declared by the workbench, which is the only layer that knows the window's
++ * remote authority; `platform/` must not import it.
++ *
++ * **Undeclared means deny.** A guard that defaults to permitting fails open
++ * whenever it is consulted before installation, and service instantiation
++ * order does not guarantee otherwise. Our fork always ships the declaration,
++ * so the only way to reach `_connectTo` undeclared is a bug -- and the safe
++ * answer to a bug here is not to dial. A late declaration can only
++ * over-refuse, never under-refuse.
++ */
++export type SeclabDialPolicy = 'allow' | 'deny';
++
++let seclabDialPolicy: SeclabDialPolicy | undefined;
++
++export function setSeclabDialPolicy(policy: SeclabDialPolicy): void {
++	seclabDialPolicy = policy;
+ }
+ 
+ export class EditorWindowRemoteAgentHostService extends RemoteAgentHostService {
 diff -ruN a/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostAuth.ts b/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostAuth.ts
---- a/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostAuth.ts	2026-11-05 13:09:32
-+++ b/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostAuth.ts	2026-11-05 13:09:32
+--- a/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostAuth.ts	2026-11-05 13:57:38
++++ b/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostAuth.ts	2026-11-05 13:57:38
 @@ -32,6 +32,8 @@
  import { ServicesAccessor } from '../../../../../../platform/instantiation/common/instantiation.js';
  import { ILabelService } from '../../../../../../platform/label/common/label.js';
@@ -39,84 +81,9 @@ diff -ruN a/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentH
 +		// seclab: never forward a real token from a tab window, whatever asked.
 +		// `protectedResources` is chosen by the agent host, so this resolves the
 +		// user's session for an endpoint the attacker named. Defence in depth
-+		// behind the dialling refusal.
++		// behind the dial refusal.
 +		return;
 +	}
  	const authenticationService = accessor.get(IAuthenticationService);
  	const defaultAccountService = accessor.get(IDefaultAccountService);
  	const logService = accessor.get(ILogService);
-diff -ruN a/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts b/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts
---- a/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts	2026-11-05 13:09:32
-+++ b/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts	2026-11-05 13:09:32
-@@ -6,6 +6,9 @@
- import { localize } from '../../../../../nls.js';
- import { PolicyCategory } from '../../../../../base/common/policy.js';
- import { CloudSandboxAutoConnectOnOpenSettingId, CloudSandboxEarlyPreparationSettingId, CloudSandboxEnabledSettingId, CloudSandboxSessionFeedEnabledSettingId, ICloudSandboxAgentHostService, ICloudSandboxApiService, ICloudSandboxDraftPreparationService } from '../../../../../platform/agentHost/common/cloudSandboxAgentHost.js';
-+import { EditorWindowRemoteAgentHostService } from '../../../../../platform/agentHost/browser/remoteAgentHostServiceImpl.js';
-+import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
-+import { seclabAiDisabled } from '../../../../services/extensions/common/seclabRpcFilter.js';
- import { RemoteAgentHostsEnabledSettingId, WorkspaceRemoteAgentHostsSettingId } from '../../../../../platform/agentHost/common/remoteAgentHostService.js';
- import { ConfigurationScope, Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../../platform/configuration/common/configurationRegistry.js';
- import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
-@@ -162,3 +165,40 @@
- 		},
- 	},
- });
-+
-+
-+/**
-+ * seclab: the editor-window agent host service, which refuses to dial in a tab.
-+ *
-+ * `chat.workspaceRemoteAgentHosts` is WINDOW scope, so a tab supplies it
-+ * through workspace settings or through the REH-supplied remote user settings.
-+ * The host renderer would then dial that address over the *host* network,
-+ * bypassing the broker, and hand the real GitHub token to whatever answered --
-+ * the setting's own description says "connected hosts receive your GitHub
-+ * credentials". `restricted: true` does not help, because it only withholds a
-+ * setting in untrusted workspaces and a tab reports trusted.
-+ *
-+ * Refusing here, rather than re-scoping the setting, keeps upstream's
-+ * per-workspace behaviour in ordinary windows. The check runs on every
-+ * reconcile, so it cannot be outrun by a settings change arriving later.
-+ */
-+export class SeclabEditorWindowRemoteAgentHostService extends EditorWindowRemoteAgentHostService {
-+
-+	protected override _reconcileConnections(): void {
-+		if (seclabAiDisabled(this._seclabEnvironmentService.remoteAuthority)) {
-+			return;
-+		}
-+		super._reconcileConnections();
-+	}
-+
-+	constructor(
-+		@IConfigurationService configurationService: IConfigurationService,
-+		@IInstantiationService instantiationService: IInstantiationService,
-+		@ILogService logService: ILogService,
-+		@ILabelService labelService: ILabelService,
-+		@IStorageService storageService: IStorageService,
-+		@IWorkbenchEnvironmentService private readonly _seclabEnvironmentService: IWorkbenchEnvironmentService,
-+	) {
-+		super(configurationService, instantiationService, logService, labelService, storageService);
-+	}
-+}
-diff -ruN a/src/vs/workbench/workbench.web.main.ts b/src/vs/workbench/workbench.web.main.ts
---- a/src/vs/workbench/workbench.web.main.ts	2026-11-05 13:09:32
-+++ b/src/vs/workbench/workbench.web.main.ts	2026-11-05 13:09:32
-@@ -106,6 +106,7 @@
- import { EditorRemoteAgentHostServiceClient } from './services/agentHost/browser/editorRemoteAgentHostServiceClient.js';
- import { IRemoteAgentHostService } from '../platform/agentHost/common/remoteAgentHostService.js';
- import { EditorWindowRemoteAgentHostService } from '../platform/agentHost/browser/remoteAgentHostServiceImpl.js';
-+import { SeclabEditorWindowRemoteAgentHostService } from './contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.js';
- import { BrowserAgentHostDebugLogsExportService, IAgentHostDebugLogsExportService } from './contrib/chat/browser/actions/exportAgentHostDebugLogsAction.js';
- import './services/agentHost/browser/webAgentHostEnablementService.js';
- 
-@@ -129,7 +130,8 @@
- registerSingleton(ISharedWebContentExtractorService, NullSharedWebContentExtractorService, InstantiationType.Delayed);
- registerSingleton(IMcpGalleryManifestService, WorkbenchMcpGalleryManifestService, InstantiationType.Delayed);
- registerSingleton(IAgentHostService, EditorRemoteAgentHostServiceClient, InstantiationType.Delayed);
--registerSingleton(IRemoteAgentHostService, EditorWindowRemoteAgentHostService, InstantiationType.Delayed);
-+// seclab: refuses to dial in a `seclab+` window; upstream behaviour elsewhere.
-+registerSingleton(IRemoteAgentHostService, SeclabEditorWindowRemoteAgentHostService, InstantiationType.Delayed);
- registerSingleton(IAgentHostDebugLogsExportService, BrowserAgentHostDebugLogsExportService, InstantiationType.Delayed);
- 
- //#endregion
