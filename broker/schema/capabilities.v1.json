@@ -178,6 +178,48 @@
       ]
     },
     {
+      "flag": "modelBodyPolicy",
+      "label": "Model-host body policy: declared providers only, endpoint allowlist, no upgrades, strict JSON, field and tool-type allowlists, sentinel-only credentials (fails closed)",
+      "cells": {
+        "sbx-native": {
+          "value": false
+        }
+      },
+      "tests": [
+        "unit:test_a22_smuggling_shapes_are_denied",
+        "unit:test_body_policy_denials",
+        "it:test_a22_relay_shapes_denied_before_upstream",
+        "it:test_model_host_credentials_are_sentinels_only"
+      ]
+    },
+    {
+      "flag": "modelBudget",
+      "label": "Per-tab model budget (requests, bytes); over budget denied, never prompted; `model.call` audit",
+      "cells": {
+        "sbx-native": {
+          "value": false
+        }
+      },
+      "tests": [
+        "unit:test_budget_and_policy_wiring",
+        "it:test_model_call_allowed_audited_and_budgeted"
+      ]
+    },
+    {
+      "flag": "trustedDerivation",
+      "label": "Controller-declared token derivation: exact route, structural JSON field, child bound to declared bindings, fails closed",
+      "cells": {
+        "sbx-native": {
+          "value": false
+        }
+      },
+      "tests": [
+        "unit:test_derive_trusted_widens_only_to_the_rule_and_keeps_its_sentinel",
+        "it:test_trusted_derivation_binds_child_where_the_controller_said",
+        "it:test_trusted_derivation_fails_closed"
+      ]
+    },
+    {
       "label": "DNS control",
       "cells": {
         "mitmproxy-oci": {

@@ -22,9 +22,10 @@ from typing import Any, Callable
 
 from . import POLICY_SCHEMA_REVISION, POLICY_SCHEMA_VERSION, PROTOCOL, VERSION, protocol
 from .credentials import Credential, CredentialStore
+from .models import Budget
 from .untrusted import display_path, sanitize, untrusted_paths
 from .policy import (LITERAL_PATH_RE, Binding, Inject, Policy, PolicyError, RequestView, Rule, normalize_ip,
-                     parse_bindings, pattern_overlaps_risky, risk_flags, validate_fragment)
+                     parse_bindings, parse_derive, pattern_overlaps_risky, risk_flags, validate_fragment)
 
 log = logging.getLogger("seclab.broker")
 
@@ -123,6 +124,8 @@ class Broker:
         self.deny_new = False
         self.session_denials = 0
         self._prompt_times: deque[float] = deque()
+        # Model-host usage for this tab's lifetime (never reset by policy.load).
+        self.model_usage = Budget()
 
     # ------------------------------------------------------------------ sinks
     def add_sink(self, sink: Callable[[str, dict], None]) -> None:
@@ -354,6 +357,8 @@ class Broker:
             "prompt": {"denyNewDestinations": self.deny_new, "sessionDenials": self.session_denials,
                        "promptsLastMinute": sum(1 for t in self._prompt_times if time.time() - t <= 60),
                        "userActionSeen": self.user_action_at is not None},
+            "models": {"requests": self.model_usage.requests, "bytes": self.model_usage.bytes,
+                       "maxRequests": self.policy.models.max_requests, "maxBytes": self.policy.models.max_bytes},
         }
 
     def rpc_tab_event(self, params: dict) -> dict:
@@ -467,7 +472,8 @@ class Broker:
         source = {k: v for k, v in source.items() if k in ("kind", "path", "rule", "label")
                   and isinstance(v, str) and len(v) <= 512}
         cred = self.creds.import_credential(cid, params.get("value"), params.get("sentinel"),
-                                            bind, proposed, provider, source)
+                                            bind, proposed, provider, source,
+                                            parse_derive(params.get("derive", [])))
         self.audit("credential.imported", credentialId=cred.id, confirmed=cred.confirmed,
                    source=source)
         return {"id": cred.id, "sentinel": cred.sentinel, "confirmed": cred.confirmed}
@@ -611,6 +617,9 @@ CAPABILITIES = {
     "originLabel": True,
     "untrustedTextTagged": True,
     "websocketOptIn": True,
+    "modelBodyPolicy": True,
+    "modelBudget": True,
+    "trustedDerivation": True,
 }
 
 

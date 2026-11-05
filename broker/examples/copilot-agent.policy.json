@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "tabId": "example-copilot-agent",
+  "baseline": true,
+  "prompt": {
+    "enabled": true,
+    "timeoutSeconds": 60
+  },
+  "allow": [
+    {
+      "id": "copilot-token",
+      "host": "api.github.com",
+      "methods": [
+        "GET"
+      ],
+      "path": "/copilot_internal/v2/token"
+    },
+    {
+      "id": "copilot-api",
+      "host": "api.githubcopilot.com",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "path": "/**"
+    }
+  ],
+  "credentials": [
+    {
+      "id": "github",
+      "inject": {
+        "header": "Authorization",
+        "fmt": "token {value}"
+      },
+      "bind": [
+        {
+          "host": "api.github.com",
+          "path": "/copilot_internal/v2/token",
+          "methods": [
+            "GET"
+          ]
+        }
+      ],
+      "derive": [
+        {
+          "id": "copilot",
+          "from": {
+            "host": "api.github.com",
+            "path": "/copilot_internal/v2/token",
+            "method": "GET"
+          },
+          "field": "token",
+          "inject": {
+            "header": "Authorization",
+            "fmt": "Bearer {value}"
+          },
+          "bind": [
+            {
+              "host": "api.githubcopilot.com",
+              "path": "/chat/completions",
+              "methods": [
+                "POST"
+              ]
+            },
+            {
+              "host": "api.githubcopilot.com",
+              "path": "/responses",
+              "methods": [
+                "POST"
+              ]
+            },
+            {
+              "host": "api.githubcopilot.com",
+              "path": "/models",
+              "methods": [
+                "GET"
+              ]
+            },
+            {
+              "host": "api.githubcopilot.com",
+              "path": "/embeddings",
+              "methods": [
+                "POST"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "models": {
+    "providers": [
+      "copilot"
+    ],
+    "budget": {
+      "requests": 2000,
+      "bytes": 536870912
+    }
+  }
+}

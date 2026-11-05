@@ -18,7 +18,7 @@ _DROP = {"Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp"}
 _IGNORABLE = ((0x034F, 0x034F), (0x115F, 0x1160), (0x17B4, 0x17B5), (0x180B, 0x180F),
               (0x3164, 0x3164), (0xFE00, 0xFE0F), (0xFFA0, 0xFFA0), (0xE0100, 0xE01EF))
 # Audit-event keys whose values the tab (or an upstream it chose) controls.
-UNTRUSTED_AUDIT_KEYS = ("host", "path", "method", "location", "header", "server", "origin")
+UNTRUSTED_AUDIT_KEYS = ("host", "path", "method", "location", "header", "server", "origin", "detail", "tools")
 
 
 def _ignorable(ch: str) -> bool:

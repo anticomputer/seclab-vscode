@@ -261,6 +261,25 @@ Each has a unit or integration test; grep for the phrase.
   and the restrictive response scanner. Decisions come from policy, the
   authenticated tab and the controller.
 
+**Model hosts ([ADR](../docs/adr/20261105-broker-model-access.md))**
+- `is_model_host` (declared provider or `data/model-hosts.v1.json`) routes a
+  request through `models.check_request` before credentials are considered.
+  Every check only denies. Never add a branch that allows a model request the
+  allowlists don't cover; add the field, endpoint or grant instead.
+- Bodies are parsed with `models.parse_strict` only. Never `json.loads` a
+  model body: duplicate and escaped keys must be refused, not resolved.
+- Tab-chosen names (fields, tool types) go in the tagged `detail` audit key,
+  never into `reason`.
+- Credential headers to model hosts must be this tab's sentinels. Sealed
+  agent-host tokens (`copilot-sealed.v1.`) are never forwarded anywhere.
+- A derived credential is bound beyond its parent only by a `derive` rule the
+  controller declared, for one exact route. It is replaced structurally
+  (`_derive`), fails closed, and never reads other response fields.
+  Pattern-based derivation (`CredentialStore.derive`) keeps copying the
+  parent's bindings.
+- Built-in provider ids in the policy schema enum must equal
+  `data/model-providers.v1.json`; docs-check enforces this.
+
 **Proxy auth and upstream guard**
 - Proxy auth happens before everything. Unauthenticated requests are never
   held, prompted, resolved or connected.

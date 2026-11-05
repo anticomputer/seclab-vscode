@@ -15,6 +15,7 @@ import string
 import time
 import urllib.parse
 from dataclasses import dataclass, field
+from typing import Any
 
 from .policy import Binding, CredentialSpec, Inject, PolicyError
 
@@ -123,6 +124,8 @@ class Credential:
     value: str | None = field(default=None, repr=False)
     expires_at: float | None = None
     source: dict = field(default_factory=dict)
+    # Controller-declared derivations (policy.DeriveRule); only for confirmed credentials.
+    derive_rules: tuple = ()
 
     def has_value(self) -> bool:
         if self.value is None:
@@ -172,16 +175,20 @@ class CredentialStore:
             if existing is None:
                 self._by_id[spec.id] = Credential(
                     id=spec.id, sentinel=new_sentinel(spec.sentinel_prefix),
-                    bindings=list(spec.bindings), origin="policy", provider=spec.provider)
+                    bindings=list(spec.bindings), origin="policy", provider=spec.provider,
+                    derive_rules=spec.derive)
             else:
                 existing.bindings = list(spec.bindings)
                 existing.provider = spec.provider
+                existing.derive_rules = spec.derive
         self._rebuild()
 
     def import_credential(self, cid: str, value: str, sentinel: str | None,
                           bindings: list[Binding], proposed: list[Binding],
-                          provider: str | None, source: dict) -> Credential:
+                          provider: str | None, source: dict, derive_rules: tuple = ()) -> Credential:
         check_value(value)
+        if derive_rules and not bindings:
+            raise PolicyError("derive needs bind: an unconfirmed import never derives")
         if sentinel is not None:
             check_sentinel(sentinel)
             owner = self.by_sentinel(sentinel)
@@ -193,8 +200,31 @@ class CredentialStore:
         cred = Credential(
             id=cid, sentinel=sentinel or (existing.sentinel if existing else new_sentinel()),
             bindings=list(bindings), origin="import", confirmed=bool(bindings),
-            provider=provider, proposed=list(proposed), value=value, source=source)
+            provider=provider, proposed=list(proposed), value=value, source=source,
+            derive_rules=tuple(derive_rules))
         self._by_id[cid] = cred
+        self._rebuild()
+        return cred
+
+    def derive_trusted(self, parent: Credential, rule: Any, value: str) -> Credential:
+        """A token minted on a controller-declared route (`rule`: policy.DeriveRule). One
+        child per parent and rule, id `<parent>.<rule>`; a re-mint replaces the value and
+        keeps the sentinel. Bound to the rule's bindings: the controller's choice."""
+        check_value(value)
+        cid = f"{parent.id}.{rule.id}"
+        owner = next((c for c in self._by_id.values() if c.value == value and c.id != cid), None)
+        if owner is not None:
+            raise PolicyError("minted value is already another credential's value")
+        cred = self._by_id.get(cid)
+        if cred is None:
+            if len(self._by_id) >= MAX_CREDENTIALS:
+                raise PolicyError("credential limit reached")
+            cred = Credential(id=cid, sentinel=new_sentinel(), bindings=list(rule.bindings), origin="derived",
+                              provider=parent.provider, parent_id=parent.id, value=value,
+                              source={"rule": f"derive:{rule.id}"})
+            self._by_id[cid] = cred
+        else:
+            cred.value, cred.bindings = value, list(rule.bindings)
         self._rebuild()
         return cred
 

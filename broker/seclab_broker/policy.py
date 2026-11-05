@@ -372,12 +372,54 @@ class CredentialSpec:
     bindings: tuple[Binding, ...]
     provider: str | None = None
     sentinel_prefix: str | None = None
+    derive: tuple["DeriveRule", ...] = ()
 
     @classmethod
     def from_json(cls, obj: dict) -> "CredentialSpec":
         default_inject = Inject.from_json(obj["inject"]) if "inject" in obj else None
         return cls(id=obj["id"], bindings=tuple(parse_bindings(obj["bind"], default_inject)),
-                   provider=obj.get("provider"), sentinel_prefix=obj.get("sentinelPrefix"))
+                   provider=obj.get("provider"), sentinel_prefix=obj.get("sentinelPrefix"),
+                   derive=parse_derive(obj.get("derive", [])))
+
+
+@dataclass(frozen=True)
+class DeriveRule:
+    """A controller-declared derivation (secure-agentic D7): when a credentialed request on
+    exactly this route succeeds, the JSON string at top-level `field` is a credential the
+    upstream minted. It is replaced by a sentinel and bound to `bindings`, which the
+    controller chose, never anything the response says. The only way a derived credential
+    can be bound wider than its parent."""
+    id: str
+    host: str
+    path: str
+    method: str
+    field: str
+    bindings: tuple[Binding, ...]
+
+    def matches(self, req: RequestView) -> bool:
+        return (req.scheme == "https" and req.host == self.host and req.path == self.path
+                and req.method == self.method)
+
+    @classmethod
+    def from_json(cls, obj: dict) -> "DeriveRule":
+        validate_fragment("derive", obj)
+        frm = obj["from"]
+        host = _parse_host_pattern(frm["host"])
+        if host.text.startswith("*.") or "*" in frm["path"]:
+            raise PolicyError("derive.from must name one exact host and path")
+        inject = Inject.from_json(obj["inject"]) if "inject" in obj else None
+        bindings = tuple(parse_bindings(obj["bind"], inject))
+        if any(b.host.text.startswith("*.") for b in bindings):
+            raise PolicyError("derived bindings must name exact hosts")
+        return cls(id=obj["id"], host=host.text, path=frm["path"], method=frm["method"],
+                   field=obj["field"], bindings=bindings)
+
+
+def parse_derive(items: list) -> tuple[DeriveRule, ...]:
+    rules = tuple(DeriveRule.from_json(d) for d in items)
+    if len({r.id for r in rules}) != len(rules):
+        raise PolicyError("duplicate derive rule id")
+    return rules
 
 
 @dataclass(frozen=True)
@@ -472,10 +514,12 @@ class Policy:
     rules: list[Rule]
     credentials: list[CredentialSpec]
     risky: tuple[RiskyEntry, ...] = ()
+    models: Any = None  # models.ModelPolicy
     raw: dict = field(repr=False, default_factory=dict)
 
     @classmethod
     def from_json(cls, obj: Any) -> "Policy":
+        from .models import ModelPolicy
         try:
             _validator()(obj)
         except fastjsonschema.JsonSchemaException as e:
@@ -510,6 +554,7 @@ class Policy:
             credentials=creds,
             risky=tuple(RiskyEntry(_parse_host_pattern(e["host"]), e["category"])
                         for e in obj.get("riskyDestinations", [])),
+            models=ModelPolicy.from_json(obj.get("models")),
             raw=obj,
         )
 

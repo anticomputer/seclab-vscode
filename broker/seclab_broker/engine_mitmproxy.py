@@ -31,6 +31,7 @@ from .policy import (METHOD_OVERRIDE_HEADERS, Binding, PolicyError, RequestView,
                      canonical_path, normalize_host, normalize_ip, query_has_method_override,
                      validate_fragment)
 from .scanner import find_minted
+from .models import StrictJSONError, check_request, is_model_host, parse_strict
 from .untrusted import display_host, display_path
 
 log = logging.getLogger("seclab.engine")
@@ -43,6 +44,10 @@ SESSION_HEADERS = {"set-cookie", "set-cookie2", "authentication-info", "proxy-au
 # exceed the longest token rule (json-token-field: 4096 plus its key).
 WS_WINDOW = 8192
 REDACTED_MARK = "[seclab-redacted:"
+# Agent-host tokens sealed to an advertised key (upstream agentHostAuth); never forwarded.
+SEALED_PREFIX = "copilot-sealed.v1."
+# Headers that carry an API credential to a model host; only a sentinel of this tab may.
+MODEL_AUTH_HEADERS = ("authorization", "x-api-key", "api-key")
 
 
 def fail_closed(fn):
@@ -299,6 +304,40 @@ class SeclabAddon:
                     out.append((cid, "body", None, None))
         return out
 
+    def _model_gate(self, flow: http.HTTPFlow, view: RequestView, upgrade: str | None) -> bool:
+        """Model-host body policy and budget. True to continue; False after denying."""
+        r, models = flow.request, self.b.policy.models
+        headers: dict[str, list[str]] = {}
+        for k, v in r.headers.fields:
+            headers.setdefault(k.decode("latin-1").lower(), []).append(v.decode("latin-1"))
+        body = r.raw_content or b""
+        verdict = check_request(models, view.host, view.method, view.path, headers, body, upgrade)
+        if not verdict.ok:
+            self.b.audit("model.denied", reason=verdict.reason, provider=verdict.provider,
+                         **({"detail": verdict.detail} if verdict.detail is not None else {}), **view.summary())
+            self._deny(flow, 403, f"model request denied: {verdict.reason}")
+            return False
+        for name in MODEL_AUTH_HEADERS:
+            for value in headers.get(name, []):
+                if not self.b.creds.find_sentinels(value.encode("latin-1")):
+                    # Only this tab's sentinels authenticate to a model host: no tab-held key,
+                    # so every model call is the user's, budgeted and audited here.
+                    self.b.audit("sentinel.misplaced", credentialId="none", location=f"header:{name}",
+                                 action="block", **view.summary())
+                    self._deny(flow, 403, f"model host credential must be a sentinel of this tab ({name})")
+                    return False
+        why = self.b.model_usage.exhausted(models)
+        if why:
+            self.b.audit("model.budget_exceeded", reason=why, provider=verdict.provider,
+                         requests=self.b.model_usage.requests, bytes=self.b.model_usage.bytes, **view.summary())
+            self._deny(flow, 429, f"model budget for this tab: {why}")
+            return False
+        self.b.model_usage.requests += 1
+        self.b.model_usage.bytes += len(body)
+        flow.metadata["seclab.model"] = {"provider": verdict.provider, "reqBytes": len(body),
+                                         "tools": verdict.tools, "start": time.monotonic()}
+        return True
+
     @fail_closed
     async def request(self, flow: http.HTTPFlow) -> None:
         view: RequestView | None = flow.metadata.get("seclab.view")
@@ -307,10 +346,20 @@ class SeclabAddon:
         if view is None:
             self._deny(flow, 403, "request was not classified")
             return
+        upgrade = _upgrade_token(flow.request)
+        for name, value in flow.request.headers.fields:
+            if SEALED_PREFIX.encode() in value.lower():
+                # A token sealed for the agent host is never forwarded, wherever it goes.
+                self.b.audit("sentinel.misplaced", credentialId="sealed-token",
+                             location=f"header:{name.decode('latin-1').lower()}", action="block",
+                             **view.summary())
+                self._deny(flow, 403, "sealed token in a request")
+                return
+        if is_model_host(view.host, self.b.policy.models) and not self._model_gate(flow, view, upgrade):
+            return
         planned: dict[str, tuple[Credential, Binding]] = {}
         unbound: list[tuple[Credential, str, str]] = []
         misplaced: list[tuple[str, str]] = []
-        upgrade = _upgrade_token(flow.request)
         ws_refused = False
         for cid, where, hname, hvalue in self._sentinel_locations(flow):
             cred = self.b.creds.get(cid)
@@ -492,6 +541,13 @@ class SeclabAddon:
             return
         view = flow.metadata.get("seclab.view")
         injected = bool(flow.metadata.get("seclab.injected"))
+        model = flow.metadata.pop("seclab.model", None)
+        if model is not None and view is not None:
+            resp_bytes = len(resp.raw_content or b"")
+            self.b.model_usage.bytes += resp_bytes
+            self.b.audit("model.call", provider=model["provider"], reqBytes=model["reqBytes"],
+                         respBytes=resp_bytes, status=resp.status_code, tools=model["tools"],
+                         durationMs=round((time.monotonic() - model["start"]) * 1000), **view.summary())
         if resp.status_code == 101 and injected and not flow.metadata.get("seclab.ws_ok"):
             # The upstream switched protocols on a credentialed request that was not approved
             # as a WebSocket (mitmproxy decides on the response); never relay the stream.
@@ -534,6 +590,12 @@ class SeclabAddon:
             if self.b.creds.find_real(raw) or injected:
                 return self._block_response(flow, "undecodable response body on a credentialed flow")
             return
+        orig = body
+        derivations = self._derivations(flow, view)
+        if derivations and 200 <= resp.status_code < 300:
+            body, why = self._derive(flow, view, derivations, body)
+            if why:
+                return self._block_response(flow, f"trusted derivation failed: {why}")
         body2, why = self._scrub_real(body, textual)
         if why:
             return self._block_response(flow, why)
@@ -543,8 +605,43 @@ class SeclabAddon:
                                            "body").encode("utf-8", "surrogateescape")
             elif injected and find_minted(body2.decode("latin-1")):
                 return self._block_response(flow, "token-like material in a non-text credentialed response")
-        if body2 != body:
+        if body2 != orig:
             resp.content = body2
+
+    def _derivations(self, flow: http.HTTPFlow, view: RequestView | None) -> list:
+        if view is None:
+            return []
+        out = []
+        for cid in flow.metadata.get("seclab.injected") or []:
+            cred = self.b.creds.get(cid)
+            if cred is not None and cred.confirmed:
+                out += [(cred, r) for r in cred.derive_rules if r.matches(view)]
+        return out
+
+    def _derive(self, flow: http.HTTPFlow, view: RequestView, derivations: list,
+                body: bytes) -> tuple[bytes, str | None]:
+        """Structural, never pattern-based: the declared field of a strict JSON object is the
+        minted token. Anything else on this route fails closed."""
+        try:
+            doc = parse_strict(body)
+        except StrictJSONError as e:
+            return body, f"response is not strict JSON ({e})"
+        if not isinstance(doc, dict):
+            return body, "response is not a JSON object"
+        for parent, rule in derivations:
+            token = doc.get(rule.field)
+            if not isinstance(token, str):
+                return body, f"no string field {rule.field!r}"
+            try:
+                child = self.b.creds.derive_trusted(parent, rule, token)
+            except PolicyError as e:
+                return body, str(e)
+            doc[rule.field] = child.sentinel
+            self.b.audit("credential.derived", credentialId=child.id, parentId=parent.id,
+                         rule=f"derive:{rule.id}", location="body", **view.summary())
+            self.b.notify("credential.derived", {"id": child.id, "parentId": parent.id,
+                                                 "rule": f"derive:{rule.id}", "sentinel": child.sentinel})
+        return json.dumps(doc, ensure_ascii=False).encode("utf-8"), None
 
     # ------------------------------------------------------------ websockets
     @fail_closed

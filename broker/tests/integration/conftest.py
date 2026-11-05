@@ -25,7 +25,7 @@ BROKER_IMAGE = os.environ.get("BROKER_IMAGE", "seclab-broker:test")
 UPSTREAM_IMAGE = os.environ.get("UPSTREAM_IMAGE", "seclab-broker-it-upstream:test")
 WORKSPACE_IMAGE = os.environ.get("WORKSPACE_IMAGE", "seclab-broker-it-workspace:test")
 UPSTREAM_HOSTS = ["api.example.test", "gist.example.test", "git.example.test", "ws.example.test",
-                  "blocked.example.test"]
+                  "blocked.example.test", "model.example.test"]
 HARDENING = ["--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
              "--pids-limit", "256"]
 

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/anticomputer/seclab-vscode/broker/schema/policy.v1.schema.json",
   "title": "seclab-vscode broker policy, version 1",
-  "x-revision": 2,
+  "x-revision": 3,
   "description": "Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, schemes, methods and paths, never engine internals. Default is deny.",
   "type": "object",
   "additionalProperties": false,
@@ -121,6 +121,72 @@
       },
       "description": "Sentinel credentials. A binding does not imply egress: the request must also be allowed."
     },
+    "models": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Model-host policy (revision 3). A request to a host of a declared provider, or to any host on the broker's known model-host list, is checked before forwarding: the provider must be declared, the method and path must be one of its endpoints, no upgrades, the body must be strict JSON with only listed top-level fields, and every tool must have an allowed `type`. Requests and bytes on model hosts count against a per-tab budget; over budget is denied, never prompted. All of this only denies.",
+      "properties": {
+        "providers": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "copilot",
+                  "openai",
+                  "anthropic"
+                ],
+                "description": "A built-in provider (see docs/broker-policy.md)."
+              },
+              {
+                "$ref": "#/definitions/modelProvider"
+              }
+            ]
+          }
+        },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Per-tab totals over the broker's lifetime.",
+          "properties": {
+            "requests": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 5000
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 1073741824,
+              "description": "Request plus response body bytes."
+            }
+          }
+        },
+        "grants": {
+          "type": "array",
+          "maxItems": 64,
+          "description": "Tier C exceptions: a server-side tool type the user granted for this tab.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "provider",
+              "toolType"
+            ],
+            "properties": {
+              "provider": {
+                "$ref": "#/definitions/id"
+              },
+              "toolType": {
+                "$ref": "#/definitions/toolType"
+              }
+            }
+          }
+        }
+      }
+    },
     "riskyDestinations": {
       "type": "array",
       "maxItems": 1024,
@@ -158,6 +224,88 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
       "description": "Identifier for rules, credentials and tabs."
+    },
+    "toolType": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    },
+    "modelProvider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "hosts",
+        "endpoints",
+        "fields"
+      ],
+      "description": "A model API and what may be sent to it. Every list is an allowlist.",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "hosts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/definitions/host"
+          }
+        },
+        "endpoints": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "methods"
+            ],
+            "properties": {
+              "path": {
+                "$ref": "#/definitions/path"
+              },
+              "methods": {
+                "$ref": "#/definitions/methods"
+              }
+            }
+          }
+        },
+        "fields": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "description": "Top-level JSON body fields allowed. Any other field is denied."
+        },
+        "toolFields": {
+          "type": "array",
+          "maxItems": 8,
+          "default": [
+            "tools"
+          ],
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "description": "Top-level fields holding arrays of tool objects."
+        },
+        "toolTypes": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/definitions/toolType"
+          },
+          "description": "Tool `type` values allowed (client-side tools only, for example `function`)."
+        },
+        "untypedTool": {
+          "$ref": "#/definitions/toolType",
+          "description": "The type a tool object with no `type` counts as (Anthropic custom tools)."
+        }
+      }
     },
     "host": {
       "type": "string",
@@ -342,6 +490,66 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9_-]{0,16}$",
           "description": "Replaces `SECLAB_SNTL_` for clients that check a token format."
+        },
+        "derive": {
+          "type": "array",
+          "maxItems": 8,
+          "description": "Trusted derivation rules (revision 3). See `derive`.",
+          "items": {
+            "$ref": "#/definitions/derive"
+          }
+        }
+      }
+    },
+    "derive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "from",
+        "field",
+        "bind"
+      ],
+      "description": "A credential minted by one exact route, declared by the controller. When a request carrying this credential to `from` succeeds (2xx), the response must be a strict JSON object whose top-level string `field` is the minted token, or the response is blocked. The token reaches the tab only as a sentinel (stable across re-mints), bound to `bind`, which may name other hosts than the parent's. That widening comes from this trusted rule only, never from the response (for example a response's `endpoints` field is ignored). `bind` names exact hosts, explicit paths and methods.",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "from": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "host",
+            "path",
+            "method"
+          ],
+          "properties": {
+            "host": {
+              "$ref": "#/definitions/host"
+            },
+            "path": {
+              "$ref": "#/definitions/path"
+            },
+            "method": {
+              "$ref": "#/definitions/method"
+            }
+          }
+        },
+        "field": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]{1,64}$"
+        },
+        "inject": {
+          "$ref": "#/definitions/inject",
+          "description": "Default for `bind` entries without their own `inject`."
+        },
+        "bind": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/definitions/binding"
+          }
         }
       }
     }

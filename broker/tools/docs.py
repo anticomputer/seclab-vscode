@@ -44,6 +44,7 @@ CHECKED_DOCS = [
     "docs/adr/20261104-no-real-secret-enters-a-tab.md",
     "docs/adr/20261104-defeat-folder-open-loaders.md",
     "docs/adr/20261104-broker-output-is-data.md",
+    "docs/adr/20261105-broker-model-access.md",
     "docs/edr/20261104-broker-engine-mitmproxy.md",
     "docs/edr/20261104-sentinel-format-and-binding.md",
     "docs/edr/20261104-broker-per-tab-ca.md",
@@ -276,7 +277,26 @@ def gen_changelog() -> str:
     return "\n".join(out)
 
 
+def gen_models() -> str:
+    from seclab_broker.models import builtin_providers
+    out = []
+    for p in builtin_providers().values():
+        eps = ", ".join(f"`{' '.join(e['methods'])} {e['path']}`" for e in p["endpoints"])
+        untyped = f"; untyped tools count as `{p['untypedTool']}`" if p.get("untypedTool") else ""
+        out.append(f"**`{p['id']}`**: hosts {', '.join(f'`{h}`' for h in p['hosts'])}.\n"
+                   f"- Endpoints: {eps}.\n"
+                   f"- Tool types: {', '.join(f'`{t}`' for t in p.get('toolTypes', [])) or 'none'}{untyped}.\n"
+                   f"- Top-level fields: {', '.join(f'`{f}`' for f in p['fields'])}.\n")
+    hosts = json.loads((DATA_DIR / "model-hosts.v1.json").read_text())
+    return ("Built-in providers (`seclab_broker/data/model-providers.v1.json`; "
+            "a draft until confirmed against real runtime traffic):\n\n" + "\n".join(out)
+            + "\nKnown model hosts (`seclab_broker/data/model-hosts.v1.json`). A request to one of these "
+            "is denied unless the policy declares a provider for its host:\n\n"
+            + ", ".join(f"`{e['host']}`" for e in hosts["entries"]) + ".\n")
+
+
 GENERATORS = {
+    "policy-models": gen_models,
     "protocol-changelog": gen_changelog,
     "protocol-errors": gen_errors, "protocol-methods": gen_methods,
     "protocol-notifications": gen_notifications, "protocol-types": gen_types,
@@ -386,6 +406,16 @@ def cross_checks(errors: list[str]) -> None:
                  policy_schema().get("x-revision")}
     if len(revisions) != 1:
         errors.append(f"policy schema revision differs: changelog, POLICY_SCHEMA_REVISION and x-revision are {revisions}")
+    from seclab_broker.models import builtin_providers
+    enum = policy_schema()["properties"]["models"]["properties"]["providers"]["items"]["oneOf"][0]["enum"]
+    if sorted(enum) != sorted(builtin_providers()):
+        errors.append(f"policy schema's built-in provider enum {sorted(enum)} != model-providers.v1.json "
+                      f"{sorted(builtin_providers())}")
+    for pid, p in builtin_providers().items():
+        try:
+            Policy.from_json({"version": 1, "models": {"providers": [p]}})
+        except PolicyError as e:
+            errors.append(f"built-in model provider {pid} does not validate: {e}")
     for name, m in d["methods"].items():
         for ex in m.get("examples", []):
             for kind in ("params", "result"):

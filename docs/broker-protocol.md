@@ -163,6 +163,11 @@ none
 | `prompt.sessionDenials` | `integer` | yes |  |
 | `prompt.promptsLastMinute` | `integer` | yes |  |
 | `prompt.userActionSeen` | `boolean` | yes |  |
+| `models` | `object` | yes | Model-host usage over the tab's lifetime and the budget (policy `models.budget`). |
+| `models.requests` | `integer` | yes |  |
+| `models.bytes` | `integer` | yes |  |
+| `models.maxRequests` | `integer` | yes |  |
+| `models.maxBytes` | `integer` | yes |  |
 
 
 Example:
@@ -194,6 +199,12 @@ Example:
   "sessionDenials": 0,
   "promptsLastMinute": 0,
   "userActionSeen": true
+ },
+ "models": {
+  "requests": 12,
+  "bytes": 48213,
+  "maxRequests": 5000,
+  "maxBytes": 1073741824
  }
 }
 ```
@@ -405,6 +416,7 @@ With no `bind` the credential is *unconfirmed*. On first use (its sentinel in a 
 | `bind` | [`bindOrBindings`](#bindorbindings) |  | Confirmed bindings. |
 | `proposedBind` | [`bindOrBindings`](#bindorbindings) |  | Only shapes the first-use prompt. |
 | `inject` | [`inject`](broker-policy.md#inject) |  | Default inject for bindings that have none. |
+| `derive` | [`derive`](broker-policy.md#derive)[] |  | Trusted derivation rules (revision 3), for example the Copilot token minted from a GitHub token. Requires `bind`: an unconfirmed import never derives. (max items `8`) |
 | `provider` | `string` |  | (pattern `^[a-z0-9-]{1,32}$`) |
 | `source` | `object` |  | Where the secret came from (audit only). Defaults to `{kind: host}`. |
 | `source.kind` | `"workspace-scan"` \| `"password-input"` \| `"user"` \| `"host"` | yes |  |
@@ -794,7 +806,7 @@ An imported credential's binding was confirmed by `allow-tab`. Persist it with t
 
 ### `credential.derived`
 
-An upstream minted a credential in answer to a credentialed request. The tab only ever sees `sentinel`, which inherits the parent's bindings.
+An upstream minted a credential in answer to a credentialed request. The tab only ever sees `sentinel`. Found by the token scanner, it is bound to no more than its parent's bindings; minted on a route a `derive` rule declares (`rule: derive:<id>`), it is bound to that rule's bindings.
 
 **Params**: | Field | Type | Required | Description |
 |---|---|---|---|
@@ -920,6 +932,9 @@ listed type is never emitted.
 <!-- BEGIN GENERATED: protocol-audit-types (broker/tools/docs.py; do not edit) -->
 | Type | Meaning |
 |---|---|
+| `model.call` | A request to a model host completed: `provider`, `host`, `path`, `method`, `reqBytes`, `respBytes`, `status`, `durationMs`, and the tool `type`s it declared. The single source of model-call facts for observability; never bodies. |
+| `model.denied` | A model-host request failed the body policy (undeclared provider, endpoint, upgrade, encoding, content type, strict JSON, field or tool type); `reason` says which. |
+| `model.budget_exceeded` | The tab's model budget (`models.budget`) is spent; the request was denied with `429`, never prompted. |
 | `broker.started` | The proxy started. |
 | `broker.shutdown` | `broker.shutdown` was called. |
 | `control.connected` | A control client connected. |
@@ -1048,6 +1063,15 @@ as `version` and `policySchema.revision`, so a supervisor can detect it.
 ### Changelog (generated)
 
 <!-- BEGIN GENERATED: protocol-changelog (broker/tools/docs.py; do not edit) -->
+**0.3.0** (2026-11-05; policy schema revision 3)
+
+- **Behaviour change:** model hosts get a fail-closed body policy (policy `models`). A request to a declared provider's host, or to any host on the broker's known model-host list, is denied with `403` unless the provider is declared, the method and path are one of its endpoints, it is not an upgrade, and its body is strict JSON (identity encoding, JSON media type, no duplicate or escaped keys) with only listed top-level fields and tool `type`s. Tier C exceptions are `models.grants`. Why: a model API with server-side tools can relay workspace data to a URL the tab chooses (secure-agentic plan 4.4).
+- **Behaviour change:** credential headers to a model host must carry a sentinel of this tab; a token containing `copilot-sealed.v1.` is never forwarded to any host.
+- Per-tab model budget (`models.budget`, requests and bytes over the tab's lifetime, default 5000 and 1 GiB); over budget is `429`, never prompted. `health` reports `models` usage.
+- Audit types `model.call`, `model.denied`, `model.budget_exceeded`; audit key `detail` (tab-chosen field or tool name) is tagged untrusted.
+- Trusted derivation: a credential (policy or `credential.import` with `bind`) may carry `derive` rules. On exactly the declared route, a 2xx response's top-level JSON string field is replaced by a sentinel for child `<parent>.<rule>` (stable across re-mints), bound to the rule's bindings; any other response shape on that route is blocked. The only way a derived credential is bound beyond its parent (secure-agentic D7).
+- Capabilities `modelBodyPolicy`, `modelBudget`, `trustedDerivation`.
+
 **0.2.0** (2026-11-05; policy schema revision 2)
 
 - **Behaviour change:** credentials are injected into a WebSocket upgrade only when the matching binding has `websocket: true` (new optional binding field, default `false`). A credentialed upgrade without the opt-in is refused with `403`, and an unconfirmed imported credential is never offered for an upgrade by prompt. Why: a minted token streamed across structured WebSocket messages can't be reliably recognised, so it could reach the tab whole. Supervisors that relied on credentialed WebSockets must add `websocket: true` to those bindings.
