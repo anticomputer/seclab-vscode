@@ -90,10 +90,10 @@ def main(argv=None) -> int:
     print("  (d) %d tab-data sink classes over %d sites"
           % (d["upstream_sink_count"], d["upstream_site_count"]))
     print("  (e) %d AI tools (%d may reach the host, %d of those undeclared), "
-          "%d agent settings (%d workspace-writable)"
+          "%d agent settings (%d tab-writable)"
           % (e["tool_count"], e["may_reach_host_count"],
              e["may_reach_host_undeclared_count"], e["setting_count"],
-             e["workspace_writable_setting_count"]))
+             e["tab_writable_setting_count"]))
     print("wrote %s and %s" % (json_path, md_path))
     return 0
 
