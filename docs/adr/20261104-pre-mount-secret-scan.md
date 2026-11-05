@@ -13,8 +13,9 @@ read them.
 
 ## Decision
 `seclab-tabd` scans **before every mount** (each `tab.ensureRunning`, i.e. every open and reopen):
-- **Scanner:** gitleaks v8.30.1, pinned by digest
-  (`ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0…`). It runs in a throwaway
+- **Scanner:** gitleaks v8.30.1, built from the pinned source commit with reproducible,
+  pinned binary hashes (`seclab-tool-gitleaks:8.30.1`, never pulled; [EDR pinned
+  tools](../edr/20261105-pinned-tools.md); originally the upstream image by digest). It runs in a throwaway
   container with:
   - `--network none --read-only --cap-drop ALL --security-opt no-new-privileges`;
   - uid 65534, 256 pids, 1 GB memory;

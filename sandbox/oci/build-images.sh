@@ -16,4 +16,6 @@ docker build -q -t seclab-broker-placeholder:local -f "$ROOT/sandbox/oci/Dockerf
 # The observability sensor OCI tabs need (ADR tab-observability): signature-verified, by digest.
 mkdir -p "$ROOT/.work"
 "$ROOT/sandbox/oci/verify-falco.sh"
-echo "images: seclab-tab-oci:local seclab-broker-placeholder:local (+ verified Falco)"
+# The pre-mount secret scanner tabd runs before any mount (built from pinned gitleaks source).
+"$ROOT/build/tools/tool.sh" gitleaks >/dev/null
+echo "images: seclab-tab-oci:local seclab-broker-placeholder:local (+ verified Falco, gitleaks from source)"

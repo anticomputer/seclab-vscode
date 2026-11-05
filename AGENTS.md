@@ -233,6 +233,10 @@ node test/containment/teardown.test.ts   # teardown regression: orphaned editor 
 ./seclab clean-host [--apply] [--running] [--caches] [--all-tabs]   # list (dry run) / remove seclab-vscode resources; test tabs only unless --all-tabs; never copilot-* or other projects
 ./seclab lint pins              # every third-party image and action pinned by digest/SHA (--self-test too)
 ./seclab lint deps              # every pin registered in deps/registry.json with provenance (--self-test too)
+./seclab tool gitleaks          # pinned tools (build/tools/tools.json): verify + build locally; prints the image tag
+./seclab deps host              # host prerequisites: gh = attested release bytes; Docker/sbx = Docker, Inc. Developer ID
+# Pre-push secret check of a diff (gitleaks built from pinned source):
+#   git diff origin/main HEAD | docker run --rm -i "$(./seclab tool gitleaks)" stdin --no-banner
 ./seclab lint workflows         # actionlint + zizmor (digest-pinned; offline, no network, no token)
 
 # macOS app from Actions: main builds only; verifies SHA256SUMS and the build provenance

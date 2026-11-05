@@ -14,6 +14,7 @@ OUT_DIR="${OUT_DIR:-$ROOT/.work/out}"
 cd "$SRC"
 export NODE_OPTIONS="--max-old-space-size=${MAX_OLD_SPACE_SIZE:-6144}"
 npm ci
+"$ROOT/build/npm-audit-signatures.sh" "$SRC"
 "$ROOT/build/remove-extensions.sh" "$SRC"
 npm run gulp "vscode-darwin-${ARCH}-min"
 

@@ -5,5 +5,5 @@
 image docker.io/falcosecurity/falco:0.45.2@sha256:1562a643953f938e02f47319b5214d93a235f11f646d60e9b8a516fd5a64698e
 issuer https://token.actions.githubusercontent.com
 identity https://github.com/falcosecurity/falco/.github/workflows/reusable_publish_docker.yaml@refs/tags/0.45.2
-# The verifier itself: sigstore's official cosign image, pinned by digest (the project's one cosign pin).
-cosign ghcr.io/sigstore/cosign/cosign:v3.0.3@sha256:774391ac9f0c137ee419ce56522df5fd3b1f52be90c5b77e97f7c053bdd67a67
+# The verifier is the project's one cosign pin: build/tools/tools.json (release binary whose own
+# sigstore signature is verified with sigstore-python), via build/tools/tool.sh cosign.

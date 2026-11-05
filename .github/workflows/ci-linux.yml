@@ -96,3 +96,29 @@ jobs:
         run: ./seclab test secrets oci
       - name: Tab observability (OCI; Falco, signature-verified by ./seclab image oci)
         run: ./seclab test obs oci
+
+  # gitleaks gates a security control and its upstream publishes nothing signed, so we build it
+  # from the pinned commit (build/tools/tools.json). This job rebuilds both arches on a fresh
+  # amd64 runner, so the pinned binary hashes are proven reproducible across hosts, and on main
+  # attests them (EDR 20261105-pinned-tools): `gh attestation verify <bin> --repo <this repo>`.
+  tools:
+    name: tools
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build gitleaks from the pinned commit; both binaries must match their pins
+        run: build/tools/tool.sh --bins gitleaks "$GITHUB_WORKSPACE/.work/gitleaks-bins"
+      - name: Build provenance attestation (main only)
+        if: github.ref == 'refs/heads/main'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            .work/gitleaks-bins/gitleaks-linux-arm64
+            .work/gitleaks-bins/gitleaks-linux-amd64

@@ -1,0 +1,50 @@
+{
+	"$comment": "Tools we run, pinned and verified (ADR supply-chain provenance; registered in deps/registry.json). release: an upstream release artifact, sha256-pinned per arch and verified against the publisher's signature or attestation before use. source: built by us from a tag whose commit is pinned, in pinned toolchain images; binarySha256 (reproducible builds) is checked on every build, locally and in CI, which also attests it. Built by build/tools/tool.sh (./seclab tool NAME).",
+	"cosign": {
+		"kind": "release",
+		"version": "3.1.4",
+		"url": "https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-{arch}",
+		"sha256": {
+			"arm64": "ade83b7aac62e131cacfe96d958948b2150cc9efec46a570a2649b8e27dedad2",
+			"amd64": "424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa"
+		},
+		"sigstoreBundle": {
+			"url": "https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-{arch}.sigstore.json",
+			"identity": "keyless@projectsigstore.iam.gserviceaccount.com",
+			"issuer": "https://accounts.google.com"
+		}
+	},
+	"actionlint": {
+		"kind": "release",
+		"version": "1.7.12",
+		"url": "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_{arch}.tar.gz",
+		"sha256": {
+			"arm64": "325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6",
+			"amd64": "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+		},
+		"ghAttestation": {
+			"repo": "rhysd/actionlint",
+			"signerWorkflow": "rhysd/actionlint/.github/workflows/release.yaml",
+			"sourceRef": "refs/tags/v1.7.12",
+			"sourceDigest": "914e7df21a07ef503a81201c76d2b11c789d3fca"
+		}
+	},
+	"gitleaks": {
+		"kind": "source",
+		"version": "8.30.1",
+		"git": "https://github.com/gitleaks/gitleaks.git",
+		"tag": "v8.30.1",
+		"commit": "83d9cd684c87d95d656c1458ef04895a7f1cbd8e",
+		"binarySha256": {
+			"arm64": "862cec60152e8b0e5d332322af03eebd68046ea71428e9f952100721535596d5",
+			"amd64": "4e4bcd807c6fbddc1b763ced93b521ee048d1f07d64197553d71dc384182d74d"
+		}
+	},
+	"lychee": {
+		"kind": "source",
+		"version": "0.24.2",
+		"git": "https://github.com/lycheeverse/lychee.git",
+		"tag": "lychee-v0.24.2",
+		"commit": "2bba271688c1abb1503097a064e6c3bc1d1b6a9b"
+	}
+}
