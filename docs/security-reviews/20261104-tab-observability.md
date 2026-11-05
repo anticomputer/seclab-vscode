@@ -62,6 +62,26 @@ Re-checked as sound: the delimiter can't be forged (96-bit nonce the tab never s
 JSON-encoded values can't break out, reveal-on-alert fires at most once per tab
 (application-scoped setting), and the CLI text format re-escapes `summary`.
 
+## Round 5: README screenshot, demo harness, `fetch macos` fix
+Scope: `origin/main..HEAD` at 9e5e926 (the screenshot and its alt text, the demo
+profile settings and background launch, `fetch_macos` parsing `UPSTREAM_SHA`
+instead of sourcing `upstream.lock`, and the dependency EDR addendum).
+
+No findings. Checked:
+- the parse runs only after SHA256SUMS and both attestation checks, accepts only a
+  whole 40-hex line, and reaches `jq` via `--arg`. Not sourcing the lock file is
+  also stricter than before;
+- the demo profile is confined to `~/.seclab-test/` or `.work/`
+  (`checkUserDataDir`, symlinks resolved). A separate `--user-data-dir` with
+  `open -n` gives a separate instance, so nothing is handed off to the user's own
+  editor;
+- the screenshot holds demo data only: an RFC 5737 beacon, a seeded honeypot path,
+  the worktree path, no tokens;
+- the addendum's cosign, Falco and Debian pins match `falco.lock`, `seclab`,
+  `tabd/src/obs/falco.ts` and the register.
+
+Gitleaks over the diff: no leaks.
+
 ## Accepted residuals (documented in the ADR)
 - `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.
 - Under OCI the privileged Falco sees every container on the Docker host. Only rules for the exact tab container ids are loaded, and its only output is stdout to tabd.
