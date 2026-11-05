@@ -243,6 +243,18 @@ def check_invariants(inv: dict, policy: dict) -> list:
                 and entry.get("verdict") in REACHABLE:
             errors.append("invariant no-real-secret-in-tab: channel '%s' is reachable." % name)
 
+    # An invariant that names no enforcement is decoration, and decoration in a
+    # policy table reads as assurance. Every listed invariant must say what
+    # enforces it and what checks it -- including "not checkable here", which is
+    # an honest answer for a rule shared with another component.
+    for entry in policy.get("invariants", []):
+        for field in ("enforced_by", "checked_by"):
+            if not entry.get(field):
+                errors.append(
+                    "invariant '%s' has no %s. State what enforces it and what checks it; "
+                    "if it is an agreement enforced elsewhere, say so explicitly."
+                    % (entry.get("id", "<unnamed>"), field))
+
     # Every surface that is actually reachable must have been reviewed as an
     # individual entry carrying an impact assessment. Checking only the entries
     # someone chose to write misses exactly the dangerous case: a surface made
