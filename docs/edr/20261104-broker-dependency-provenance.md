@@ -79,11 +79,13 @@ two parts:
     `verify-images.sh --download [DIR]` is the only step that calls the GitHub
     API, so it is the only one that may need a token; it writes
     `DIR/<digest>.jsonl`.
-  - Verification then uses `--bundle` when a bundle exists and needs no token,
-    which CI uses to keep the docs gate tokenless. DIR defaults to
-    `$SECLAB_ATTESTATION_DIR`, else `.work/attestations`.
-  - With no bundle, gh fetches the attestation online, so local use is
-    unchanged.
+  - Verification then uses `--bundle` and needs no token, which CI uses to keep
+    the docs gate tokenless. It does so only when `$CI` or
+    `$SECLAB_ATTESTATION_DIR` is set, meaning the same job has just downloaded
+    the bundle. DIR defaults to `$SECLAB_ATTESTATION_DIR`, else
+    `.work/attestations`.
+  - Otherwise gh fetches the attestation online. A local run therefore never
+    trusts a cached bundle that could predate a revocation (CI review II-1).
   - A downloaded bundle is not trusted: it is verified cryptographically, and a
     tampered bundle fails.
 

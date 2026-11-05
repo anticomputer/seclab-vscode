@@ -10,8 +10,10 @@
 #       talks to the GitHub API (it may need GH_TOKEN). Downloads are not trusted:
 #       verification below checks them cryptographically.
 #   broker/tools/verify-images.sh
-#       Verify. If DIR/<digest>.jsonl exists it is used (`--bundle`; no GitHub token
-#       needed), otherwise gh fetches the attestation online.
+#       Verify. A bundle DIR/<digest>.jsonl is used (`--bundle`; no GitHub token
+#       needed) only when $CI or $SECLAB_ATTESTATION_DIR is set, i.e. when the same job
+#       has just downloaded it. Otherwise gh fetches the attestation online, so a local
+#       run never trusts a stale cached bundle that could predate a revocation.
 # DIR defaults to $SECLAB_ATTESTATION_DIR, else <repo>/.work/attestations.
 # Needs: gh (user-approved host tool), docker.
 set -eu
@@ -55,7 +57,7 @@ while read -r ref repo workflow sref sdigest; do
     done_n=$((done_n + 1))
     continue
   fi
-  if [ -f "$dir/$digest.jsonl" ]; then
+  if [ -n "${CI:-}${SECLAB_ATTESTATION_DIR:-}" ] && [ -f "$dir/$digest.jsonl" ]; then
     set -- --bundle "$dir/$digest.jsonl"
     how="bundle"
   else
