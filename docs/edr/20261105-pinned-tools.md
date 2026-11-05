@@ -70,7 +70,9 @@ which the postinstall then uses. It refuses if upstream's lockfile moves to anot
 `@vscode/ripgrep` version. No token is involved. The cache sits in a fresh private `TMPDIR`, and
 after `npm ci` (and on every Linux build, cached tree or not) `--verify-installed` checks the
 installed `rg` against the binary's own pinned sha256, whatever path the postinstall took
-(review VV-5).
+(review VV-5). This `rg` is build-time only: `@vscode/ripgrep` is a dev dependency of
+`@vscode/telemetry-extractor`. The shipped search binary comes from `@vscode/ripgrep-universal`,
+inside its npm tarball, covered by lockfile integrity and `npm audit signatures`.
 
 **The tab's seccomp guard.** sbx now resolves its shell kit as `:latest`, and the 2026-11 kit
 ships no `gcc`. So `sandbox/sbx/seclab-obs-guard.c` is compiled statically in our pinned
