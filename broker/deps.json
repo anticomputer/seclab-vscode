@@ -1,0 +1,685 @@
+{
+ "$comment": "Broker dependency register. Tiers: 'attested' = publisher-signed provenance verified at use time; 'hash-pinned' = exact artifact from the project's official index or registry, pinned by sha256/digest and enforced at install; 'built-from-source' = built by us from pinned source. Python entries are checked against PyPI by broker/tools/provenance.py (broker/provenance-check.sh); images by broker/tools/verify-images.sh. Anything else needs an approved exception in an EDR.",
+ "images": [
+  {
+   "name": "mitmproxy/mitmproxy",
+   "version": "12.3.1",
+   "ref": "mitmproxy/mitmproxy:12.3.1@sha256:2711066c855659b5af8b1dbb84494ed3eff69b42ece439c60b4fe09a2db829d4",
+   "source": "https://hub.docker.com/r/mitmproxy/mitmproxy (published by mitmproxy's release workflow)",
+   "usedBy": [
+    "broker image base"
+   ],
+   "tier": "attested",
+   "verify": {
+    "kind": "github-attestation",
+    "repo": "mitmproxy/mitmproxy",
+    "signerWorkflow": "mitmproxy/mitmproxy/.github/workflows/main.yml",
+    "sourceRef": "refs/tags/v12.3.1",
+    "sourceDigest": "51c1d6b2d8d3367a773411eb7a3eeccec82b3ea7"
+   },
+   "note": "SLSA build provenance signed via Sigstore by actions/attest-build-provenance; contents (mitmproxy and its Python closure) are covered by that provenance."
+  },
+  {
+   "name": "python",
+   "version": "3.13-slim-trixie",
+   "ref": "python:3.13-slim-trixie@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1",
+   "source": "Docker Official Image (docker-library)",
+   "usedBy": [
+    "test upstream image",
+    "test harness image",
+    "attestation verifier image"
+   ],
+   "tier": "hash-pinned",
+   "note": "Carries in-registry BuildKit SLSA provenance bound to the index digest, but no publisher signature (no cosign/sigstore artifacts)."
+  },
+  {
+   "name": "debian",
+   "version": "trixie-slim",
+   "ref": "debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4",
+   "source": "Docker Official Image (docker-library)",
+   "usedBy": [
+    "test workspace image"
+   ],
+   "tier": "hash-pinned",
+   "note": "As above: in-registry provenance, unsigned."
+  },
+  {
+   "name": "docker",
+   "version": "29-cli",
+   "ref": "docker:29-cli@sha256:4d742ab934c2149b628bf26369ac3ec51cb91e2e28fe6722a0e86a6d6efc4bd5",
+   "source": "Docker Official Image (docker-library)",
+   "usedBy": [
+    "test harness image (docker CLI binary)"
+   ],
+   "tier": "hash-pinned",
+   "note": "As above: in-registry provenance, unsigned."
+  },
+  {
+   "name": "seclab-broker",
+   "version": "local",
+   "ref": "built from broker/Dockerfile",
+   "source": "this repository",
+   "usedBy": [
+    "the broker"
+   ],
+   "tier": "built-from-source"
+  },
+  {
+   "name": "seclab-attest",
+   "version": "local",
+   "ref": "built from broker/tools/attest/Dockerfile",
+   "source": "this repository",
+   "usedBy": [
+    "attestation verification (tool)"
+   ],
+   "tier": "built-from-source"
+  }
+ ],
+ "system": [
+  {
+   "name": "debian apt packages (test images only)",
+   "packages": {
+    "test workspace image": [
+     "ca-certificates",
+     "curl",
+     "git",
+     "python3",
+     "python3-aiohttp",
+     "dnsutils"
+    ],
+    "test upstream image": [
+     "git",
+     "openssl"
+    ]
+   },
+   "source": "deb.debian.org (trixie, trixie-updates, trixie-security)",
+   "tier": "attested",
+   "verify": {
+    "kind": "apt",
+    "detail": "apt verifies the InRelease signature with debian-archive-keyring from the digest-pinned base image, and each package's sha256 from the signed index"
+   },
+   "note": "Versions are not pinned: they follow Debian's signed archive. Test images only; the broker image installs no apt packages. snapshot.debian.org pinning was tried and rejected (see EDR)."
+  }
+ ],
+ "python": [
+  {
+   "name": "annotated-types",
+   "version": "0.8.0",
+   "source": "https://pypi.org/project/annotated-types/0.8.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "certifi",
+   "version": "2026.10.23",
+   "source": "https://pypi.org/project/certifi/2026.10.23/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "certifi/python-certifi",
+    "workflow": "release.yml"
+   }
+  },
+  {
+   "name": "cffi",
+   "version": "2.1.1",
+   "source": "https://pypi.org/project/cffi/2.1.1/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "charset-normalizer",
+   "version": "3.5.2",
+   "source": "https://pypi.org/project/charset-normalizer/3.5.2/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "jawah/charset_normalizer",
+    "workflow": "cd.yml"
+   }
+  },
+  {
+   "name": "cryptography",
+   "version": "50.0.2",
+   "source": "https://pypi.org/project/cryptography/50.0.2/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "pyca/cryptography",
+    "workflow": "pypi-publish.yml"
+   }
+  },
+  {
+   "name": "dnspython",
+   "version": "2.9.2",
+   "source": "https://pypi.org/project/dnspython/2.9.2/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "rthalley/dnspython",
+    "workflow": "publish.yml"
+   }
+  },
+  {
+   "name": "email-validator",
+   "version": "2.3.0",
+   "source": "https://pypi.org/project/email-validator/2.3.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "fastjsonschema",
+   "version": "2.22.3",
+   "source": "https://pypi.org/project/fastjsonschema/2.22.3/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "broker runtime",
+    "integration test harness"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "h11",
+   "version": "0.16.0",
+   "source": "https://pypi.org/project/h11/0.16.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "integration test upstream"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "h2",
+   "version": "4.4.1",
+   "source": "https://pypi.org/project/h2/4.4.1/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "integration test upstream"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "hpack",
+   "version": "4.2.0",
+   "source": "https://pypi.org/project/hpack/4.2.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "integration test upstream"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "hypercorn",
+   "version": "0.18.0",
+   "source": "https://pypi.org/project/hypercorn/0.18.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "integration test upstream"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "pgjones/hypercorn",
+    "workflow": "publish.yml"
+   }
+  },
+  {
+   "name": "hyperframe",
+   "version": "6.1.0",
+   "source": "https://pypi.org/project/hyperframe/6.1.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "integration test upstream"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "id",
+   "version": "1.6.1",
+   "source": "https://pypi.org/project/id/1.6.1/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "di/id",
+    "workflow": "release.yml"
+   }
+  },
+  {
+   "name": "idna",
+   "version": "3.20",
+   "source": "https://pypi.org/project/idna/3.20/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "kjd/idna",
+    "workflow": "deploy.yml"
+   }
+  },
+  {
+   "name": "iniconfig",
+   "version": "2.3.1",
+   "source": "https://pypi.org/project/iniconfig/2.3.1/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "broker unit tests",
+    "integration test harness"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "pytest-dev/iniconfig",
+    "workflow": "test.yml"
+   }
+  },
+  {
+   "name": "markdown-it-py",
+   "version": "4.2.0",
+   "source": "https://pypi.org/project/markdown-it-py/4.2.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "mdurl",
+   "version": "0.1.2",
+   "source": "https://pypi.org/project/mdurl/0.1.2/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "packaging",
+   "version": "26.3",
+   "source": "https://pypi.org/project/packaging/26.3/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "broker unit tests",
+    "integration test harness",
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "pypa/packaging",
+    "workflow": "publish.yml"
+   }
+  },
+  {
+   "name": "platformdirs",
+   "version": "4.14.5",
+   "source": "https://pypi.org/project/platformdirs/4.14.5/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "tox-dev/platformdirs",
+    "workflow": "release.yaml"
+   }
+  },
+  {
+   "name": "pluggy",
+   "version": "1.7.0",
+   "source": "https://pypi.org/project/pluggy/1.7.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "broker unit tests",
+    "integration test harness"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "pytest-dev/pluggy",
+    "workflow": "deploy.yml"
+   }
+  },
+  {
+   "name": "priority",
+   "version": "2.0.0",
+   "source": "https://pypi.org/project/priority/2.0.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "integration test upstream"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "pycparser",
+   "version": "3.12",
+   "source": "https://pypi.org/project/pycparser/3.12/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "pydantic",
+   "version": "2.14.2",
+   "source": "https://pypi.org/project/pydantic/2.14.2/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "pydantic/pydantic",
+    "workflow": "ci.yml"
+   }
+  },
+  {
+   "name": "pydantic-core",
+   "version": "2.50.2",
+   "source": "https://pypi.org/project/pydantic-core/2.50.2/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "pygments",
+   "version": "2.21.0",
+   "source": "https://pypi.org/project/pygments/2.21.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "broker unit tests",
+    "integration test harness",
+    "attestation verifier (tool)"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "pyjwt",
+   "version": "2.15.1",
+   "source": "https://pypi.org/project/pyjwt/2.15.1/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "jpadilla/pyjwt",
+    "workflow": "pypi-package.yml"
+   }
+  },
+  {
+   "name": "pypi-attestations",
+   "version": "0.0.31",
+   "source": "https://pypi.org/project/pypi-attestations/0.0.31/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "pypi/pypi-attestations",
+    "workflow": "release.yml"
+   }
+  },
+  {
+   "name": "pytest",
+   "version": "9.2.0",
+   "source": "https://pypi.org/project/pytest/9.2.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "broker unit tests",
+    "integration test harness"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "pytest-dev/pytest",
+    "workflow": "deploy.yml"
+   }
+  },
+  {
+   "name": "requests",
+   "version": "2.34.2",
+   "source": "https://pypi.org/project/requests/2.34.2/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "psf/requests",
+    "workflow": "publish.yml"
+   }
+  },
+  {
+   "name": "rfc3161-client",
+   "version": "1.0.9",
+   "source": "https://pypi.org/project/rfc3161-client/1.0.9/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "trailofbits/rfc3161-client",
+    "workflow": "CI.yml"
+   }
+  },
+  {
+   "name": "rfc3986",
+   "version": "2.0.0",
+   "source": "https://pypi.org/project/rfc3986/2.0.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "rfc8785",
+   "version": "0.1.4",
+   "source": "https://pypi.org/project/rfc8785/0.1.4/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "rich",
+   "version": "15.0.0",
+   "source": "https://pypi.org/project/rich/15.0.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
+   "name": "securesystemslib",
+   "version": "1.6.0",
+   "source": "https://pypi.org/project/securesystemslib/1.6.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "secure-systems-lab/securesystemslib",
+    "workflow": "cd.yml"
+   }
+  },
+  {
+   "name": "sigstore",
+   "version": "4.5.1",
+   "source": "https://pypi.org/project/sigstore/4.5.1/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "sigstore/sigstore-python",
+    "workflow": "release.yml"
+   }
+  },
+  {
+   "name": "sigstore-models",
+   "version": "0.0.6",
+   "source": "https://pypi.org/project/sigstore-models/0.0.6/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "astral-sh/sigstore-models",
+    "workflow": "publish.yml"
+   }
+  },
+  {
+   "name": "sigstore-rekor-types",
+   "version": "0.0.18",
+   "source": "https://pypi.org/project/sigstore-rekor-types/0.0.18/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "trailofbits/sigstore-rekor-types",
+    "workflow": "release.yml"
+   }
+  },
+  {
+   "name": "tuf",
+   "version": "7.0.1",
+   "source": "https://pypi.org/project/tuf/7.0.1/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "theupdateframework/python-tuf",
+    "workflow": "cd.yml"
+   }
+  },
+  {
+   "name": "typing-extensions",
+   "version": "4.16.0",
+   "source": "https://pypi.org/project/typing-extensions/4.16.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "python/typing_extensions",
+    "workflow": "publish.yml"
+   }
+  },
+  {
+   "name": "typing-inspection",
+   "version": "0.4.5",
+   "source": "https://pypi.org/project/typing-inspection/0.4.5/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "pydantic/typing-inspection",
+    "workflow": "ci.yml"
+   }
+  },
+  {
+   "name": "urllib3",
+   "version": "2.8.0",
+   "source": "https://pypi.org/project/urllib3/2.8.0/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "attested",
+   "publisher": {
+    "kind": "GitHub",
+    "repository": "urllib3/urllib3",
+    "workflow": "publish.yml"
+   }
+  },
+  {
+   "name": "wsproto",
+   "version": "1.3.2",
+   "source": "https://pypi.org/project/wsproto/1.3.2/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "integration test upstream"
+   ],
+   "tier": "hash-pinned"
+  }
+ ],
+ "hostTools": [
+  {
+   "name": "gh",
+   "usedBy": [
+    "broker/tools/verify-images.sh"
+   ],
+   "note": "User-approved host tool; verifies GitHub artifact attestations (sigstore) for images."
+  },
+  {
+   "name": "docker",
+   "usedBy": [
+    "everything"
+   ],
+   "note": "User-approved host tool (Docker Desktop)."
+  }
+ ]
+}
