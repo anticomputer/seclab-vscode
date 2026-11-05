@@ -111,7 +111,7 @@ export class OciDriver implements Driver {
 				await this.must(['network', 'create', '-o', 'com.docker.network.bridge.enable_icc=false', '--label', label, '--', n.egress], 'egress network create');
 			}
 			if (!await this.exists('container', n.broker)) {
-				await this.must(['create', '--name', n.broker, '--label', label, '--network', n.egress,
+				await this.must(['create', '--pull', 'never', '--name', n.broker, '--label', label, '--network', n.egress,
 					'--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '256', '--memory', '512m',
 					'--tmpfs', '/run/seclab:rw,nosuid,nodev,noexec,size=16m,uid=1000,gid=1000,mode=0700',
 					'--env', `SECLAB_TAB_ID=${spec.tabId}`, '--', assertImageRef(this.opts.brokerImage)], 'broker create');
@@ -119,7 +119,7 @@ export class OciDriver implements Driver {
 			}
 			await this.must(['start', '--', n.broker], 'broker start');
 		} else if (!await this.exists('container', n.broker)) {
-			await this.must(['run', '-d', '--name', n.broker, '--label', label, '--network', n.net,
+			await this.must(['run', '-d', '--pull', 'never', '--name', n.broker, '--label', label, '--network', n.net,
 				'--network-alias', 'broker', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
 				'--read-only', '--pids-limit', '64', '--memory', '256m', '--', assertImageRef(this.opts.brokerImage)], 'broker run');
 		}
@@ -130,11 +130,11 @@ export class OciDriver implements Driver {
 			if (user !== IMAGE_UID) {
 				// The per-tab home volume is populated from the image as uid 1000: hand it to the
 				// tab user. Throwaway, no network, only this tab's own volume mounted.
-				await this.must(['run', '--rm', '--user', '0:0', '--network', 'none', '--cap-drop', 'ALL', '--cap-add', 'CHOWN', '--cap-add', 'DAC_READ_SEARCH',
+				await this.must(['run', '--rm', '--pull', 'never', '--user', '0:0', '--network', 'none', '--cap-drop', 'ALL', '--cap-add', 'CHOWN', '--cap-add', 'DAC_READ_SEARCH',
 					'--security-opt', 'no-new-privileges', '--mount', `type=volume,src=${n.home},dst=/home/agent`,
 					'--entrypoint', 'chown', '--', assertImageRef(t.image), '-R', user, '/home/agent'], 'home volume chown');
 			}
-			const args = ['run', '-d', '--init', '--name', n.ws, '--hostname', 'tab', '--label', label,
+			const args = ['run', '-d', '--pull', 'never', '--init', '--name', n.ws, '--hostname', 'tab', '--label', label,
 				'--network', n.net, '--user', user, '--env', 'HOME=/home/agent',
 				'--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
 				'--pids-limit', '2048', '--memory', t.resources?.memory && /^[1-9][0-9]{0,4}[mg]$/.test(t.resources.memory) ? t.resources.memory : '4g',

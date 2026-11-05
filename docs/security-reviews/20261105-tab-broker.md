@@ -29,3 +29,13 @@ Nothing medium or higher. The review answered six questions:
 | XX-3 | Low (inferred) | tab env | The proxy credential is in every tab process's environment. The terminal backend may report that to the trusted side and persist it there. | Accepted | The credential works only on the tab's own `--internal` network, against its own broker. It grants nothing a process in the tab doesn't already have, and it rotates on every start. |
 | note | Info | tabd | The `ca.get` sha256 check is the broker vouching for itself. | Recorded | Described as a format check. The control is `PEM_RE` (exactly one certificate), written only to the tab's tmpfs. |
 | note | Info | clean-host | Register images include Docker Official images, so a user's own containers from them are reported as "possibly ours". | Accepted | Report only, as the coordinator specified. |
+
+## Round XX, part 2: the OCI broker becomes the default (`3b7a9db..40d6025`)
+Nothing medium or higher, and nothing fails open: a missing image, a placeholder container
+left over from older tabs, or a wrong schema revision all refuse the start.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| XX-4 | Low | containment | The proxy check accepted the blackhole *or* a broker URL for every tab, so an OCI tab that silently lost its broker would still pass. | Fixed | The check takes the expected mode. OCI requires exactly the broker URL; sbx (until B2) requires exactly the blackhole. |
+| XX-5 | Low | CI | On PR runs the broker build has no attestation bundle (the token step is push-only), so the `oci` job fails on PRs. | Accepted | Same as HH-2: changes land by branch push and fast-forward, never by PR. It fails closed. |
+| XX-6 | Low | tabd | The broker image is trusted by its mutable local tag (`seclab-broker:dev`). A missing image made `docker create` try a registry pull. | Fixed / open | `--pull never` on every tab, broker and placeholder container. Open: pin the broker by a build label or image ID checked before create, as tabd does for the scanner (UU-4). Tracked for B2. |
