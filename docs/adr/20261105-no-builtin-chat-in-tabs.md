@@ -127,6 +127,46 @@ tab could have overridden it.
   `$registerLanguageModelProvider` — the inverted case where a tab *becomes*
   the model for the trusted agent and returns tool calls it will execute.
 
+### Correction 2 (2026-11-05): the predicate has a blind side
+
+`seclabAiDisabled` keys on *this window's* remote authority. That covers a tab
+dialling in. It does **not** cover the host renderer dialling **out**, and that
+path is reachable from workspace content alone:
+
+- `chat.workspaceRemoteAgentHosts` is `WINDOW` scope and `restricted`. The
+  restriction only withholds it in *untrusted* workspaces, and a tab reports
+  trusted. Its own description says *"connected hosts receive your GitHub
+  credentials"*.
+- `EditorWindowRemoteAgentHostService` dials those entries and auto-connects.
+  **The dialled connection is not `seclab+`**, so the predicate never fires.
+- The attacker's host then receives the real token via
+  `authenticateProtectedResources`, server-to-client `resourceRead`/`Write`/
+  `Delete`/`Move`/`Copy` on raw host URIs, and pre-approved tool execution.
+
+Patch 0011 closes it at the settings layer rather than the connection layer,
+because the connection is the attacker's and carries no marker we can key on:
+
+- `chat.workspaceRemoteAgentHosts` is re-scoped to `APPLICATION`, so only the
+  user's own global settings can list a host — in every window, not just tabs,
+  since the workspace-content path threatens ordinary windows too;
+- `chat.agentHost.localFilePermissions` is **registered** in the editor window
+  at `APPLICATION` scope. Upstream registers it only in the Agents window while
+  reading it in every window, and an unregistered setting has no scope, so
+  nothing filtered it out of workspace or remote user settings;
+- `authenticateProtectedResources` refuses outright in a tab window.
+
+The generalisable lesson, and the reason the inventory rule changed: **scope is
+only enforced where a setting is registered.** `tab_writable` is now true when
+`scope != APPLICATION` **or** the setting is unregistered in the window that
+reads it. Applying that rule found **10** agent-host settings in this class,
+including `chat.sshRemoteAgentHostCommand` and `chat.wslRemoteAgentHostCommand`
+— command strings for launching a host.
+
+Fixing the computed-key gap in the same scan took the settings surface from 67
+to **146**. The earlier number was not a smaller surface; it was a scan that
+could not see the dangerous half, and it reported a clean sheet for the wrong
+reason.
+
 ### Residual risks
 
 - **Extension-contributed chat.** This disables VS Code's built-in surface.

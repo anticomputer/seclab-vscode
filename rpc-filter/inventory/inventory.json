@@ -40816,479 +40816,1749 @@
       "may_reach_host_count": 54,
       "may_reach_host_undeclared_count": 38,
       "note": "Tools a trusted-side agent can invoke, and the agent settings a workspace might influence. The RPC filter does not cover this surface: the agent runs in the trusted workbench, so a tab that steers it through instruction files causes a host effect without any RPC crossing the sandbox boundary. 'may_reach_host' is conservative -- only an explicit runsInWorkspace: true clears a tool -- because assuming the other way loses containment.",
-      "setting_count": 67,
+      "setting_count": 146,
       "settings": [
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.agent.collapseCompletedResponses",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L686",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.agent.maxRequests",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L1181",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chatNetworkConfiguration.ts",
+          "id": "chat.agent.sandbox.network.allowedDomains",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chatNetworkConfiguration.ts#L13",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chatNetworkConfiguration.ts",
+          "id": "chat.agent.sandbox.network.deniedDomains",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chatNetworkConfiguration.ts#L55",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.agentOrchestrationLimits",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L292",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.ahpJsonlLoggingEnabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L138",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.byokModels.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L359",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.claudeAgent.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L337",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts",
+          "id": "chat.agentHost.cloudSandbox.autoConnectOnOpen",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts#L136",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts",
+          "id": "chat.agentHost.cloudSandbox.earlyPreparation",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts#L144",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts",
+          "id": "chat.agentHost.cloudSandbox.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts#L128",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts",
+          "id": "chat.agentHost.cloudSandbox.sessionFeed.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts#L153",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.codexAgent.binaryArgs",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L410",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.codexAgent.codexHome",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L403",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.codexAgent.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L367",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.codexAgent.sdkRoot",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L396",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.computerUse.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L321",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts",
+          "id": "chat.agentHost.defaultCloneDirectory",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts#L110",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "APPLICATION_MACHINE",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/devContainerAgentHostConnector.contribution.ts",
+          "id": "chat.agentHost.devContainer.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/devContainerAgentHostConnector.contribution.ts#L551",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/devContainerAgentHostConnector.contribution.ts",
+          "id": "chat.agentHost.devContainer.idleTimeout",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/devContainerAgentHostConnector.contribution.ts#L574",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/devContainerAgentHostConnector.contribution.ts",
+          "id": "chat.agentHost.devContainer.samples.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/devContainerAgentHostConnector.contribution.ts#L567",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/devContainerAgentHostConnector.contribution.ts",
+          "id": "chat.agentHost.devContainer.worktree.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/electron-browser/devContainerAgentHostConnector.contribution.ts#L558",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.experimental.autoAttachPullRequests",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L247",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.experimental.markdownPlanRichLinks",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L256",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.experimental.mcpToolRouting",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L329",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.experimental.overlapProviderPreparation",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L265",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.experimental.prewarmSessions",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L274",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/titleGenerationConfiguration.ts",
+          "id": "chat.agentHost.experimental.titleGeneration",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/titleGenerationConfiguration.ts#L11",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts",
+          "id": "chat.agentHost.experimentalMissionControl.useLocalCredentials",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts#L118",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts",
           "id": "chat.agentHost.forwardSSHAgent",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts#L43",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "agents",
           "scope": "APPLICATION",
-          "tab_writable": false
+          "tab_writable": true,
+          "unregistered_where_read": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts",
+          "id": "chat.agentHost.githubEnvironments.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts#L89",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.githubMcpServer.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L313",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts",
+          "id": "chat.agentHost.localFilePermissions",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts#L82",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": true,
+          "unregistered_where_read": true
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.otel.captureContent",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L524",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.otel.captureIdentity",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L550",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.otel.dbSpanExporter.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L596",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.otel.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L418",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.otel.exporterType",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L443",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.otel.otlpEndpoint",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L501",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.otel.otlpProtocol",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L474",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.otel.outfile",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L571",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.otel.resourceAttributes",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L629",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.otel.serviceName",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L603",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts",
+          "id": "chat.agentHost.remoteConnections",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts#L51",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/chat/browser/chat.contribution.ts",
+          "id": "chat.agentHost.runWorktreeCreatedTasks",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/chat.contribution.ts#L749",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.agentHost.systemProxy.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L305",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts",
+          "id": "chat.agentHost.wsl.autoStart",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts#L50",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": true,
+          "unregistered_where_read": true
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.agentSessionProjection.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L494",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/chat/browser/chat.contribution.ts",
+          "id": "chat.agentSessions.appearanceTools.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/chat.contribution.ts#L848",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/chat/browser/chat.contribution.ts",
+          "id": "chat.agentSessions.archiveNudge.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/chat.contribution.ts#L704",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
           "id": "chat.agentSessions.autoDeleteMarkedAsDoneMergedSessionsAfterDays",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L127",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "APPLICATION",
-          "tab_writable": false
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
           "id": "chat.agentSessions.autoMarkAsDoneMergedSessionsAfterDays",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L118",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "APPLICATION",
-          "tab_writable": false
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/chat/browser/chat.contribution.ts",
+          "id": "chat.agentSessions.backgroundImageTint",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/chat.contribution.ts#L856",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/inboxOne/browser/inboxOne.contribution.ts",
+          "id": "chat.agentSessions.inbox.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/inboxOne/browser/inboxOne.contribution.ts#L35",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "MACHINE",
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.agentSessions.migrateLegacyCopilotCli",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L500",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "APPLICATION",
-          "tab_writable": false
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.agentSessions.openInEditor",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L529",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/chat/browser/chat.contribution.ts",
+          "id": "chat.agentSessions.preferredDarkBackgroundImage",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/chat.contribution.ts#L863",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "MACHINE",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/chat/browser/chat.contribution.ts",
+          "id": "chat.agentSessions.preferredDarkBackgroundImageLayout",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/chat.contribution.ts#L881",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "MACHINE",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/chat/browser/chat.contribution.ts",
+          "id": "chat.agentSessions.preferredLightBackgroundImage",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/chat.contribution.ts#L872",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "MACHINE",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/chat/browser/chat.contribution.ts",
+          "id": "chat.agentSessions.preferredLightBackgroundImageLayout",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/chat.contribution.ts#L890",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "MACHINE",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/chat/browser/chat.contribution.ts",
+          "id": "chat.agentSessions.responseSelectionMenu.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/chat.contribution.ts#L696",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/chat/browser/chat.contribution.ts",
+          "id": "chat.agentSessions.scopedInputHistory",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/chat.contribution.ts#L755",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/chat/browser/chat.contribution.ts",
+          "id": "chat.agentSessions.sessionStorageCleanupSuggestion.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/chat.contribution.ts#L712",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.agentSessions.showExternal",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L513",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.agentsControl.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L476",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
           "id": "chat.agentsHandoffTip.delaySeconds",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L77",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
           "id": "chat.agentsParallelWorkBanner.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L49",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
           "id": "chat.agentsWindowBanner.developerMode",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L27",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "APPLICATION",
-          "tab_writable": false
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
           "id": "chat.agentsWindowBanner.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L19",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "APPLICATION",
-          "tab_writable": false
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
           "id": "chat.agentsWindowBanner.revealCurrentSession",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L34",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "APPLICATION",
-          "tab_writable": false
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/artifactToolsConfiguration.ts",
+          "id": "chat.artifactIntegrations.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/artifactToolsConfiguration.ts#L11",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/artifactToolsConfiguration.ts",
+          "id": "chat.artifactIntegrations.githubPullRequests.autoMarkReadyIgnoredChecks",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/artifactToolsConfiguration.ts#L28",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "RESOURCE",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/artifactToolsConfiguration.ts",
+          "id": "chat.artifactTools.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/artifactToolsConfiguration.ts#L19",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.artifacts.rules.byMemoryFilePath",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L906",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.autoReply",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L738",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "APPLICATION_MACHINE",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/automations/browser/automations.contribution.ts",
+          "id": "chat.automations.cloud.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/automations/browser/automations.contribution.ts#L181",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "agents",
+          "scope": "MACHINE",
+          "tab_writable": true,
+          "unregistered_where_read": true
+        },
+        {
+          "file": "src/vs/sessions/contrib/automations/browser/automations.contribution.ts",
+          "id": "chat.automations.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/automations/browser/automations.contribution.ts#L189",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "agents",
+          "scope": "MACHINE",
+          "tab_writable": true,
+          "unregistered_where_read": true
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.autopilot.advanced.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L746",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.canvases.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L226",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/dynamicAutoTiersConfiguration.ts",
+          "id": "chat.copilot.dynamicAutoTiers.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/dynamicAutoTiersConfiguration.ts#L8",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION_MACHINE",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/imageGenerationConfiguration.ts",
+          "id": "chat.copilot.imageGeneration.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/imageGenerationConfiguration.ts#L71",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/imageGenerationConfiguration.ts",
+          "id": "chat.copilot.imageGeneration.model",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/imageGenerationConfiguration.ts#L46",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/imageGenerationConfiguration.ts",
+          "id": "chat.copilot.imageGeneration.watermark",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/imageGenerationConfiguration.ts#L62",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
           "id": "chat.copilotHarnessIntroduction.mode",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L57",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMarketplaceConfiguration.ts",
+          "id": "chat.customizations.copilotConnectors.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMarketplaceConfiguration.ts#L32",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMarketplaceConfiguration.ts",
+          "id": "chat.customizations.marketplace.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMarketplaceConfiguration.ts#L13",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMarketplaceConfiguration.ts",
+          "id": "chat.customizations.marketplace.sources.publicFeed.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMarketplaceConfiguration.ts#L53",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.defaultConfiguration",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L770",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.defaultModel",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L819",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/platform/agentHost/common/agentHostEnablementService.ts",
           "id": "chat.defaultToCopilotHarness",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostEnablementService.ts#L78",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "platform",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.detectParticipant.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L691",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.editing.autoAcceptDelay",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L575",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.editing.confirmEditRequestRemoval",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L582",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "APPLICATION",
-          "tab_writable": false
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.editing.confirmEditRequestRetry",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L588",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "APPLICATION",
-          "tab_writable": false
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.editing.explainChanges.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L594",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.editing.openChangedFileInDiffEditor",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L608",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.editing.revealNextChangeOnResolve",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L603",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostEnablementService.ts",
+          "id": "chat.editor.agentHost.existingSessionHarnessPicker.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostEnablementService.ts#L92",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.editor.fontFamily",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L455",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.editor.fontSize",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L450",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.editor.fontWeight",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L460",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.editor.lineHeight",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L471",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/platform/agentHost/common/agentHostEnablementService.ts",
           "id": "chat.editor.localAgent.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostEnablementService.ts#L85",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "platform",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/platform/agentHost/common/agentHostEnablementService.ts",
           "id": "chat.editor.preferCopilotHarness",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostEnablementService.ts#L60",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "platform",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.editor.wordWrap",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L465",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.editor.workingSet.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L613",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.editorAssociations",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L718",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts",
+          "id": "chat.experimental.agentsWindowPRComments",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/agentFeedback/browser/agentFeedback.contribution.ts#L95",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.experimental.detectParticipant.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L639",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.experimental.incrementalRendering.animationStyle",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L658",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.experimental.incrementalRendering.buffering",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L674",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.experimental.incrementalRendering.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L645",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
           "id": "chat.experimental.openInAgentsWindow.transferDraft",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L42",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.experimental.richLinks.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L651",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.experimental.stickyScroll.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L696",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts",
+          "id": "chat.experimental.workspaceSnapshot",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostStarter.config.contribution.ts#L283",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.experimentalModePermissionsPicker",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L336",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.experimentalSessionsWindowOverride",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L329",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.fontFamily",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L349",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.fontSize",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L342",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
           "id": "chat.harnessSwitchFeedbackSurvey.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L70",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.implicitContext.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L540",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.implicitContext.includeActiveEditor",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L568",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.implicitContext.suggestedContext",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L562",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.inlineAttachments.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L712",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.inlineReferences.style",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L702",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.newSession.defaultMode",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L1215",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.notifyWindowOnConfirmation",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L727",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.permissions.default",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L752",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts",
+          "id": "chat.remoteAgentHosts",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts#L57",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": true,
+          "unregistered_where_read": true
+        },
+        {
+          "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts",
+          "id": "chat.remoteAgentHostsAutoConnect",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts#L22",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": true,
+          "unregistered_where_read": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts",
+          "id": "chat.remoteAgentHostsEnabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts#L64",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts",
+          "id": "chat.remoteAgentTunnels",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts#L74",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": true,
+          "unregistered_where_read": true
+        },
+        {
+          "file": "src/vs/sessions/contrib/remoteSessions/browser/remoteSessions.contribution.ts",
+          "id": "chat.remoteSessions.tools.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/remoteSessions/browser/remoteSessions.contribution.ts#L24",
+          "read_in": [],
+          "registered_in": "agents",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.saveBeforeSend",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L535",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.sessionSync.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L867",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.sessionSync.excludeRepositories",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L888",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts",
           "id": "chat.sshRemoteAgentHostCommand",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts#L29",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "agents",
           "scope": "APPLICATION",
-          "tab_writable": false
+          "tab_writable": true,
+          "unregistered_where_read": true
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostEnablementService.ts",
+          "id": "chat.temporaryDefaultToLocalHarness",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostEnablementService.ts#L38",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "platform",
+          "scope": "APPLICATION",
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.tips.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L620",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "APPLICATION",
-          "tab_writable": false
+          "tab_writable": false,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.tools.global.autoApprove",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L844",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "editor",
           "scope": "APPLICATION_MACHINE",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.unifiedAgentsBar.enabled",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L488",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
           "id": "chat.upvoteAnimation",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L626",
+          "read_in": [
+            "editor"
+          ],
+          "registered_in": "editor",
           "scope": "WINDOW",
-          "tab_writable": true
+          "tab_writable": true,
+          "unregistered_where_read": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts",
+          "id": "chat.workspaceRemoteAgentHosts",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts#L72",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
         },
         {
           "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts",
           "id": "chat.wslRemoteAgentHostCommand",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts#L36",
+          "read_in": [
+            "platform"
+          ],
+          "registered_in": "agents",
           "scope": "APPLICATION",
-          "tab_writable": false
+          "tab_writable": true,
+          "unregistered_where_read": true
+        },
+        {
+          "file": "src/vs/workbench/api/common/configurationExtensionPoint.ts",
+          "id": "mcp",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/configurationExtensionPoint.ts#L426",
+          "read_in": [
+            "editor",
+            "platform"
+          ],
+          "registered_in": "editor",
+          "scope": "WINDOW",
+          "tab_writable": true,
+          "unregistered_where_read": false
         }
       ],
-      "tab_writable_setting_count": 55,
+      "tab_writable_setting_count": 89,
       "tool_count": 54,
       "tools": [
         {

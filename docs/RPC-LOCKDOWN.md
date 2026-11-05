@@ -415,7 +415,7 @@ Two properties of the digest matter:
   build over a stale surface. **Open work**, noted in §7.
 
 <!-- seclab:begin baseline -->
-Current baseline at `a717861c0758`: **3883 surfaces, 3862 denied, 21 not denied** (1 allow, 9 allow_with_constraint, 4 prompt, 7 rewrite).
+Current baseline at `a717861c0758`: **3962 surfaces, 3941 denied, 21 not denied** (1 allow, 9 allow_with_constraint, 4 prompt, 7 rewrite).
 <!-- seclab:end baseline -->
 
 ### 4.1 What is reachable right now
