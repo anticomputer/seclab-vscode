@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test } from 'node:test';
 import { encodeData, encodeFrame, encodeJson, FrameDecoder, FrameError, MAX_FRAME } from '../src/frames.ts';
+import { BROKER_POLICY_SCHEMA, checkBrokerHello } from '../src/broker.ts';
 import { checkFence, parsePolicyJson, resourcesToMirror } from '../src/fence.ts';
 import { TabStore } from '../src/state.ts';
 import { displayPath, goUnquote, parseFrames, rewriteSecret } from '../src/scan.ts';
@@ -293,4 +294,20 @@ test('scan: rewrite is byte-exact both ways ($ patterns, non-UTF-8 bytes) (S4)',
 	assert.ok(fs.readFileSync(path.join(ws, 'f.env')).equals(before));
 	assert.throws(() => rewriteSecret(ws, 'f.env', 1, secret, 'seclab_sentinel_x'), /no longer at/);
 	assert.throws(() => rewriteSecret(ws, '../x', 1, secret, 'seclab_sentinel_x'), /outside/);
+});
+
+test('broker.hello: policy schema revision, protocol and tab must match (fail closed)', () => {
+	// The documented example result (docs/broker-protocol.md) for broker 0.2.0.
+	const doc = fs.readFileSync(path.resolve(import.meta.dirname, '../../docs/broker-protocol.md'), 'utf8');
+	const ex = /<!-- check: method\.result broker\.hello -->\s*```json\n([\s\S]*?)```/.exec(doc);
+	assert.ok(ex, 'broker.hello example present in the protocol doc');
+	const hello = JSON.parse(ex![1]) as Record<string, unknown>;
+	assert.deepEqual(hello.policySchema, BROKER_POLICY_SCHEMA, 'tabd pins the revision the protocol doc documents');
+	checkBrokerHello(hello, String(hello.tabId));
+	assert.throws(() => checkBrokerHello({ ...hello, policySchema: { version: 1, revision: 1 } }, String(hello.tabId)), /policy schema/);
+	assert.throws(() => checkBrokerHello({ ...hello, policySchema: { version: 1, revision: 3 } }, String(hello.tabId)), /policy schema/);
+	assert.throws(() => checkBrokerHello({ ...hello, policySchema: undefined }, String(hello.tabId)), /policy schema/);
+	assert.throws(() => checkBrokerHello({ ...hello, protocol: 'seclab-broker/2' }, String(hello.tabId)), /protocol/);
+	assert.throws(() => checkBrokerHello(hello, 'another-tab'), /not another-tab/);
+	assert.throws(() => checkBrokerHello(null, 'x'), /no result/);
 });
