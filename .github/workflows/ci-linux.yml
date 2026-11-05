@@ -78,6 +78,14 @@ jobs:
         with:
           node-version: 24.22.1
           package-manager-cache: false
+      # The only step with a token (gh on the runner, download only; review HH-1), and first in
+      # the job, before any hostile fixture or privileged sensor runs (review XX-1).
+      - name: Download attestation bundles for the broker build
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SECLAB_ATTESTATION_DIR: ${{ github.workspace }}/.work/attestations
+        run: broker/tools/verify-images.sh --download "$SECLAB_ATTESTATION_DIR"
       - name: Teardown regression (orphaned editor tree, leftover tab pod, refused run.json)
         run: node test/containment/teardown.test.ts
       - name: Build REH (container, pinned upstream)
@@ -96,15 +104,8 @@ jobs:
         run: ./seclab test secrets oci
       - name: Tab observability (OCI; Falco, signature-verified by ./seclab image oci)
         run: ./seclab test obs oci
-      # Plan tabd-broker-wiring B1. Same split as docs-check (review HH-1): only gh gets the
-      # token, in a download-only step; the broker image build verifies its base image's signed
-      # provenance offline from those bundles, and the e2e runs with no token.
-      - name: Download attestation bundles (the only step with a token; gh on the runner)
-        if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SECLAB_ATTESTATION_DIR: ${{ github.workspace }}/.work/attestations
-        run: broker/tools/verify-images.sh --download "$SECLAB_ATTESTATION_DIR"
+      # Plan tabd-broker-wiring B1. The attestation bundles were downloaded first (above), before
+      # any fixture or privileged step; the build verifies offline and the e2e has no token.
       - name: Build the broker image (base provenance verified offline)
         if: github.event_name == 'push'
         env:

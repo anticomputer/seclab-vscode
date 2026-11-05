@@ -5,7 +5,7 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import * as fs from 'node:fs';
 import type { Runner } from '../run.ts';
 import { assertImageRef, SANDBOX_NAME_RE, CONNECTION_TOKEN_RE } from '../validate.ts';
-import { DriverError, type BrokerHooks, type Driver, type DriverInfo, type FenceReport, type SensorHooks, type TabRuntimeSpec } from './types.ts';
+import { DriverError, type BrokerHooks, type BrokerSetup, type Driver, type DriverInfo, type FenceReport, type SensorHooks, type TabRuntimeSpec } from './types.ts';
 
 const REH_START = '/opt/seclab/bin/seclab-reh-start';
 const REH_CONNECT = '/opt/seclab/bin/seclab-reh-connect';
@@ -174,12 +174,10 @@ export class OciDriver implements Driver {
 		if (realBroker) {
 			// Plan tabd-broker-wiring B1: the supervisor connects, authenticates and loads policy;
 			// the workspace gets the CA and the proxy URL before anything in it starts.
-			let setup;
-			try {
-				setup = await broker!.configure(() => this.runner.spawnStream(this.docker, ['exec', '-i', '--', n.broker, 'seclab-broker', 'control']));
-			} catch (e) {
-				throw new DriverError(-32013, `broker setup failed: ${(e as Error).message}`);
-			}
+			const setup: BrokerSetup = await broker!.configure(() => this.runner.spawnStream(this.docker, ['exec', '-i', '--', n.broker, 'seclab-broker', 'control']))
+				.catch((e: unknown) => {
+					throw new DriverError(-32013, `broker setup failed: ${(e as Error).message}`);
+				});
 			if (!PEM_RE.test(setup.caPem) || !/^[A-Za-z0-9_-]{1,64}$/.test(setup.proxyUser) || !/^[A-Za-z0-9_-]{16,128}$/.test(setup.proxyPassword)) {
 				throw new DriverError(-32013, 'broker setup returned an invalid CA or proxy credential');
 			}

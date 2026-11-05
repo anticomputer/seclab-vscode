@@ -31,6 +31,8 @@ export const PROTOCOL_VERSION = 'seclab-tabd/0.2';
 export const SUPERVISOR_VERSION = '0.1.0';
 const FENCE_REVERIFY_MS = 60_000;
 const MAX_CHANNELS = 64;
+/** Whole broker bring-up, connect to CA (review XX-2). */
+const BROKER_SETUP_MS = 60_000;
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 interface RpcRequest { jsonrpc: '2.0'; id?: number | string; method: string; params?: unknown }
@@ -522,24 +524,35 @@ export class Supervisor {
 		return {
 			configure: async openControl => {
 				this.closeBroker(r.tabId).catch(() => undefined);
-				const c = await connectBroker(openControl, r.tabId);
+				// One deadline for the whole bring-up (review XX-2): connect, health and every request.
+				const deadline = Date.now() + BROKER_SETUP_MS;
+				const left = () => {
+					const ms = deadline - Date.now();
+					if (ms <= 0) {
+						throw new Error(`broker setup exceeded ${BROKER_SETUP_MS / 1000} s`);
+					}
+					return Math.min(ms, 15_000);
+				};
+				const c = await connectBroker(openControl, r.tabId, { deadline });
 				try {
-					for (let i = 0; ; i++) {
-						const h = await c.request('health') as { status?: unknown };
+					for (;;) {
+						const h = await c.request('health', undefined, left()) as { status?: unknown } | undefined;
 						if (h?.status === 'ok') {
 							break;
 						}
-						if (i >= 60) {
-							throw new Error('broker did not become healthy');
-						}
+						left();
 						await new Promise(res => setTimeout(res, 500));
 					}
 					const proxyPassword = randomBytes(24).toString('base64url');
-					await c.request('proxy.auth.set', { username: 'seclab', password: proxyPassword });
+					await c.request('proxy.auth.set', { username: 'seclab', password: proxyPassword }, left());
 					const policy = this.o.brokerPolicy ? this.o.brokerPolicy(r.tabId) : defaultPolicy(r.tabId);
-					const loaded = await c.request('policy.load', { policy }) as { revision?: unknown };
-					const ca = await c.request('ca.get') as { certPem?: unknown; pemSha256?: unknown };
-					if (typeof ca?.certPem !== 'string' || createHash('sha256').update(ca.certPem).digest('hex') !== ca.pemSha256) {
+					const loaded = await c.request('policy.load', { policy }, left()) as { revision?: unknown } | undefined;
+					const ca = await c.request('ca.get', undefined, left()) as { certPem?: unknown; pemSha256?: unknown } | undefined;
+					const certPem = ca?.certPem;
+					const pemSha256 = ca?.pemSha256;
+					// Format, not integrity: the broker supplies both values (review XX note). The
+					// driver also requires exactly one PEM certificate before writing it to the tab.
+					if (typeof certPem !== 'string' || typeof pemSha256 !== 'string' || createHash('sha256').update(certPem).digest('hex') !== pemSha256) {
 						throw new Error('ca.get: certificate does not match its sha256');
 					}
 					c.onClose(e => {
@@ -549,8 +562,8 @@ export class Supervisor {
 						}
 					});
 					this.brokers.set(r.tabId, c);
-					this.audit('broker.configure', 'ok', { tabId: r.tabId, policyRevision: loaded?.revision, caSha256: ca.pemSha256 });
-					return { caPem: ca.certPem, proxyUser: 'seclab', proxyPassword };
+					this.audit('broker.configure', 'ok', { tabId: r.tabId, policyRevision: typeof loaded?.revision === 'number' ? loaded.revision : null, caSha256: pemSha256 });
+					return { caPem: certPem, proxyUser: 'seclab', proxyPassword };
 				} catch (e) {
 					c.close();
 					this.audit('broker.configure', 'fail', { tabId: r.tabId, error: (e as Error).message });
