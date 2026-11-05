@@ -155,3 +155,12 @@ OO-1 and OO-3..OO-6 verified closed; OO-2 closed for truncation and binary, not 
 |---|---|---|---|---|---|
 | PP-1 | **Medium** | Display | Wrapping counted characters, not display columns: tabs, wide blanks, or 90 spaces under 160 characters still pushed a payload off-screen. | Fixed | Runs of 8+ blanks (any Unicode space or tab) become a visible `⟨N blanks⟩`, tabs `→`, other non-ASCII spaces `·`, `\r` escaped; lines wrap at 80 display columns with wide characters counted as 2. |
 | PP-2 | Low | confirmDeletes | Bound to the count, not the set. | Fixed | Bound to a digest of the sorted held-deletion paths (`massDeleteDigest`). |
+
+### Increment 3, second re-review (5ab2fb7)
+PP-1 and PP-2 verified closed. **Nothing medium or higher remains.** Lows fixed:
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| QQ-1 | Low | Display | Format/bidi/zero-width characters in content relied on editor Unicode highlighting. | Fixed | Escaped as `\u{…}` in content (Cf, Zl, Zp, Co, Cn, Cs, tags, variation selectors). |
+| QQ-2 | Low | Display | Some glyphs wider than counted. | Fixed | Any non-ASCII that isn't a letter, mark, digit or punctuation counts as width 2. |
+| QQ-3 | Low | Display | Content could forge the renderer's markers. | Fixed | Marker characters in content are escaped. |

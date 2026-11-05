@@ -39,6 +39,17 @@ const WRAP_COLUMNS = 80;
 /** East Asian wide/fullwidth ranges: two display columns each. */
 const WIDE = /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6\u{1F300}-\u{1FAFF}\u{20000}-\u{3FFFD}]/u;
 
+/** Escaped in content (review QQ-1, QQ-3): format/bidi/zero-width, private-use, unassigned,
+ *  surrogates, line/paragraph separators, tag characters, variation selectors, and the
+ *  renderer's own marker characters (so only the renderer's markers appear literally). */
+const ESCAPE = /[\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{Cn}\p{Cs}\u{E0000}-\u{E007F}\u{FE00}-\u{FE0F}⟨⟩↪→·…]/gu;
+
+/** Display width: wide ranges, and any non-ASCII that isn't a letter, mark, digit or
+ *  punctuation (symbols, emoji, presentation forms), count 2 (review QQ-2: over-, not under-). */
+function width(ch: string): number {
+	return WIDE.test(ch) || (ch > '\x7f' && !/[\p{L}\p{M}\p{N}\p{P}]/u.test(ch)) ? 2 : 1;
+}
+
 /**
  * One line as the user must see it (review PP-1): no whitespace may push content off-screen.
  * Tabs show as →, any run of 8+ whitespace characters (incl. non-ASCII spaces) becomes a
@@ -50,7 +61,7 @@ function visibleLine(l: string): string {
 	let cur = '';
 	let w = 0;
 	for (const ch of s) {
-		const cw = WIDE.test(ch) ? 2 : 1;
+		const cw = width(ch);
 		if (w + cw > WRAP_COLUMNS) {
 			out.push(cur);
 			cur = '↪ ';
@@ -71,7 +82,7 @@ function readable(buf: Buffer): string {
 	} catch {
 		text = [...buf].map(b => (b >= 0x20 && b < 0x7f) || b === 0x0a || b === 0x09 ? String.fromCharCode(b) : `\\x${b.toString(16).padStart(2, '0')}`).join('');
 	}
-	return text.replace(/\0/g, '\\x00').replace(/\r/g, '\\r').split('\n').map(visibleLine).join('\n');
+	return text.replace(/\0/g, '\\x00').replace(/\r/g, '\\r').replace(ESCAPE, c => `\\u{${c.codePointAt(0)!.toString(16)}}`).split('\n').map(visibleLine).join('\n');
 }
 
 /** File content for display, and whether everything that would be applied is shown. */
