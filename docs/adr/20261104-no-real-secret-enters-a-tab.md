@@ -113,11 +113,13 @@ The broker enforces all of the following. Each item has a regression test.
   message-oriented protocols.
 
   Two kinds of stream are not reassembled at all:
-  - tokens split across structured deltas (JSON-wrapped chunks);
+  - tokens split across structured deltas (JSON-wrapped chunks), whether the
+    pieces are adjacent or spread more than the 8 KiB window apart;
   - tokens split across separate HTTP responses.
 
-  The positional controls above are what bound those cases
-  (`test_websocket_token_split_across_messages`).
+  The window is over raw bytes, while the consumer accumulates a field, so no
+  window size closes this. The positional controls above are what bound those
+  cases (`test_websocket_token_split_across_messages`).
 - A rogue extension can still **use** the credential through its binding
   while the tab lives. That is the accepted per-tab blast radius.
   Per-extension attribution is later work (ARCHITECTURE §8).
