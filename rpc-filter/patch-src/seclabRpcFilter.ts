@@ -13,7 +13,8 @@ import { setSeclabChannelGuard } from '../../../../base/parts/ipc/common/ipc.js'
 import { URI } from '../../../../base/common/uri.js';
 import {
 	SECLAB_CHANNELS, SECLAB_COMMANDS, SECLAB_DEFAULT_VERDICT, SECLAB_RPC,
-	SECLAB_SERVICE_DEFAULTS, SECLAB_URI_ARGS, type SeclabEntry, type SeclabVerdict,
+	SECLAB_COMMAND_DENY_PREFIXES, SECLAB_SERVICE_DEFAULTS, SECLAB_URI_ARGS,
+	type SeclabEntry, type SeclabVerdict,
 } from './seclabPolicyData.js';
 
 /** Authorities we filter. Anything else is either local-trusted or unknown. */
@@ -339,6 +340,17 @@ class SeclabFilter implements ISeclabFilter {
 	}
 
 	public commandVerdict(id: string): SeclabVerdict {
+		// Prefixes first, before the table. `commands.exact` is resolved ahead
+		// of rules when the table is generated, so a prefix rule there can be
+		// overridden by an exact entry; checking here means the guarantee does
+		// not depend on the table staying correct. The fork's own `seclab.*`
+		// commands exist to ask the user to approve what a tab may not do for
+		// itself, so a tab that could raise them would be supplying the prompt.
+		for (const prefix of SECLAB_COMMAND_DENY_PREFIXES) {
+			if (id.startsWith(prefix)) {
+				return 'deny';
+			}
+		}
 		return SECLAB_COMMANDS.get(id)?.verdict ?? SECLAB_DEFAULT_VERDICT;
 	}
 }

@@ -101,6 +101,17 @@ export const SECLAB_CHANNELS: ReadonlyMap<string, SeclabEntry> = new Map([
  * with no marker is revived by the consumer and invisible to a shape
  * search.
  */
+/**
+ * Command id prefixes denied before the table is consulted.
+ *
+ * `commands.exact` is resolved before rules, so a prefix rule alone can be
+ * overridden by an exact entry. Checking these first means the guarantee
+ * does not depend on the generated table staying correct.
+ */
+export const SECLAB_COMMAND_DENY_PREFIXES: readonly string[] = [
+	'seclab.',
+];
+
 export const SECLAB_URI_ARGS: ReadonlyMap<string, readonly number[]> = new Map([
 	['MainThreadAgentEditorComments.$createAgentEditorComments', [1]],
 	['MainThreadAuthentication.$sendDidChangeDynamicProviderInfo', [0]],
