@@ -14,6 +14,11 @@ tabd/src/main.ts:env:for (const k of Object.keys(process.env)) {
 tabd/src/main.ts:env:delete process.env[k];
 tabd/src/run.ts:process-spawn:import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 tabd/src/run.ts:env:export function cleanEnv(src: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-tabd/src/run.ts:env:export function resolveBinary(name: 'sbx' | 'docker', env: NodeJS.ProcessEnv = process.env): string | undefined {
+tabd/src/run.ts:env:export function resolveBinary(name: 'sbx' | 'docker' | 'git', env: NodeJS.ProcessEnv = process.env): string | undefined {
 tabd/src/run.ts:process-spawn:const child = spawn(bin, argv, { env, cwd, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
 tabd/src/run.ts:process-spawn:return spawn(bin, argv, { env, cwd, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
+# Write-back gate (review Z-1/AA-1, 2026-11-04): read-only `git check-ignore` on the host checkout;
+# fixed argv, shell:false, cleanEnv + git hardening vars (GIT_DIR pinned when the root has .git),
+# resolved git, `./`-prefixed stdin paths, results matched by position.
+tabd/src/gitignore.ts:process-spawn:import { spawnSync } from 'node:child_process';
+tabd/src/gitignore.ts:process-spawn:const r = spawnSync(git, argv, { env, input: paths.map(p => `./${p}\0`).join(''), timeout: 10_000, maxBuffer: 64 << 20, shell: false });

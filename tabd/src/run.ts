@@ -26,7 +26,7 @@ export function cleanEnv(src: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEn
  * the inherited PATH, which a workspace-influenced environment could poison).
  * Override with SECLAB_<NAME> (absolute path to an executable file).
  */
-export function resolveBinary(name: 'sbx' | 'docker', env: NodeJS.ProcessEnv = process.env): string | undefined {
+export function resolveBinary(name: 'sbx' | 'docker' | 'git', env: NodeJS.ProcessEnv = process.env): string | undefined {
 	const override = env[`SECLAB_${name.toUpperCase()}`];
 	if (override) {
 		return path.isAbsolute(override) && isExecutable(override) ? override : undefined;
