@@ -121,6 +121,10 @@ for (const p of series) {
 	for (const f of files) {
 		checked++;
 		const rel = path.relative(src, f);
+		if (!fs.existsSync(f)) {
+			console.log(`${p}: ${rel} deleted`);
+			continue;
+		}
 		const into = Object.keys(targets).filter(t => reached[t].has(f));
 		const shipped = into.filter(t => t !== 'web');
 		const need = required[p] ?? [];
@@ -133,23 +137,36 @@ for (const p of series) {
 		}
 	}
 }
-// patches/unreachable.json: { "<target>": ["src/...ts", ...] } that target must NOT reach (I8: no
-// agent-host process code in the desktop app). A listed file that no longer exists fails too, so
-// an upstream rename can't silently retire the rule.
+// patches/unreachable.json: { "<target>": { "deny": [...], "except": [...] } } (I8: no agent-host
+// process code in the desktop app). A `deny` entry ending in `/` covers every module under it
+// (review WW-6), so a new agent module is covered without anyone listing it; `except` names the
+// few under a denied prefix the target may reach. A listed file or directory that no longer
+// exists fails too, so an upstream rename can't silently retire the rule.
 const unreachFile = path.join(patchesDir, 'unreachable.json');
-const forbidden: Record<string, string[]> = fs.existsSync(unreachFile) ? JSON.parse(fs.readFileSync(unreachFile, 'utf8')) : {};
+const forbidden: Record<string, { deny: string[]; except?: string[] }> = fs.existsSync(unreachFile) ? JSON.parse(fs.readFileSync(unreachFile, 'utf8')) : {};
 let forbiddenChecked = 0;
-for (const [t, files] of Object.entries(forbidden)) {
-	if (!reached[t]) {
-		fail(`patches/unreachable.json names unknown target ${t}`);
+for (const [t, rule] of Object.entries(forbidden)) {
+	if (!reached[t] || !Array.isArray(rule?.deny)) {
+		fail(`patches/unreachable.json: bad entry for ${t} (want { "deny": [...], "except": [...] } for a known target)`);
 	}
-	for (const rel of files) {
+	const except = new Set((rule.except ?? []).map(rel => path.join(src, rel)));
+	for (const f of except) {
+		if (!fs.existsSync(f)) {
+			problems.push(`patches/unreachable.json: except ${path.relative(src, f)} does not exist in the patched tree`);
+		}
+	}
+	for (const rel of rule.deny) {
 		const f = path.join(src, rel);
 		forbiddenChecked++;
 		if (!fs.existsSync(f)) {
 			problems.push(`patches/unreachable.json: ${rel} does not exist in the patched tree (renamed upstream? update the list)`);
-		} else if (reached[t].has(f)) {
-			problems.push(`patches/unreachable.json: ${rel} must not be reachable from ${t}, but is`);
+			continue;
+		}
+		const hits = rel.endsWith('/')
+			? [...reached[t]].filter(m => m.startsWith(f) && !except.has(m))
+			: reached[t].has(f) ? [f] : [];
+		for (const h of hits) {
+			problems.push(`patches/unreachable.json: ${path.relative(src, h)} must not be reachable from ${t}, but is`);
 		}
 	}
 }

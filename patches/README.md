@@ -50,8 +50,8 @@ Current queue:
   agent-host code (same EDR).
   0015 onwards: the secure-agentic-experiences series.
 
-`reach.json` requires targets per patch. `unreachable.json` lists modules a target must not
-reach. Both are enforced by `build/check-patch-reach.ts` in the required `patch-build` check.
+`reach.json` requires targets per patch. `unreachable.json` lists modules, or `dir/` prefixes
+with explicit exceptions, that a target must not reach. Both are enforced by `build/check-patch-reach.ts` in the required `patch-build` check.
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
