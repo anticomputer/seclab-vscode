@@ -38,6 +38,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -216,6 +217,48 @@ def _residual(entry: dict) -> list:
     return entry.get("impact") or []
 
 
+def check_citations(policy: dict) -> list:
+    """Every in-repo path an invariant cites must resolve, and tests must exist.
+
+    An invariant now has to name what checks it, which creates a new way to be
+    wrong: naming a check that does not exist. A citation to a missing test
+    reads exactly like a citation to a passing one, which is the failure the
+    enforcement fields were added to prevent, so the citations are resolved
+    rather than trusted.
+
+    Paths are recognised by shape (``dir/file.ext`` with a known source
+    extension), so prose is not mistaken for a path. ``path::symbol`` also
+    requires the symbol to appear in the file, which is what catches a renamed
+    or never-written test.
+
+    A citation that is agreed but not yet landed belongs in
+    ``checked_by_pending``, where it is visibly unverified instead of quietly
+    wrong, and is exempt from this check.
+    """
+    errors = []
+    path_re = re.compile(r"\b([\w.-]+(?:/[\w.-]+)*\.(?:py|ts|js|sh|json|md))(?:::(\w+))?")
+    search_roots = (REPO_ROOT, os.path.join(REPO_ROOT, "rpc-filter", "tools"))
+    for entry in policy.get("invariants", []):
+        for field in ("enforced_by", "checked_by"):
+            text = entry.get(field) or ""
+            for rel, symbol in path_re.findall(text):
+                full = next((os.path.join(r, rel) for r in search_roots
+                             if os.path.isfile(os.path.join(r, rel))), None)
+                if full is None:
+                    errors.append(
+                        "invariant '%s' %s cites %s, which does not exist. If it is agreed "
+                        "but not yet landed, record it in checked_by_pending instead."
+                        % (entry.get("id", "<unnamed>"), field, rel))
+                    continue
+                if symbol:
+                    with open(full, "r", encoding="utf-8", errors="replace") as fh:
+                        if symbol not in fh.read():
+                            errors.append(
+                                "invariant '%s' %s cites %s::%s, but %s is not in that file."
+                                % (entry.get("id", "<unnamed>"), field, rel, symbol, symbol))
+    return errors
+
+
 def check_invariants(inv: dict, policy: dict) -> list:
     errors = []
     for sid, service in policy.get("rpc", {}).items():
@@ -254,6 +297,7 @@ def check_invariants(inv: dict, policy: dict) -> list:
                     "invariant '%s' has no %s. State what enforces it and what checks it; "
                     "if it is an agreement enforced elsewhere, say so explicitly."
                     % (entry.get("id", "<unnamed>"), field))
+    errors.extend(check_citations(policy))
 
     # Every surface that is actually reachable must have been reviewed as an
     # individual entry carrying an impact assessment. Checking only the entries
