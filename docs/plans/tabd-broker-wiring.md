@@ -1,6 +1,6 @@
 # Plan: wire tabs to their broker (M2, M3)
 
-- **Status:** proposed
+- **Status:** accepted (decisions below, 2026-11-05)
 - **Date:** 2026-11-05
 - **Owner:** fork-build session (tabd, drivers, Tab Manager). Broker: egress-and-credential-broker session.
 - **Inputs:** [broker protocol](../broker-protocol.md), [broker policy](../broker-policy.md),
@@ -46,12 +46,18 @@ the README's egress and credential screenshots, and the observability XFAIL (att
 B1 and B2 can merge into one landing if the client is the same. B5 depends on the RPC
 series' auth decisions and comes last.
 
-## Open questions (need a decision before the increment that needs it)
-1. **Policy source (B1).** Proposal: a built-in default (deny-all, prompt on) shipped with
-   tabd, plus an optional user policy in the host state directory. Never read policy from the
-   workspace, which is attacker-controlled.
-2. **Keychain access (B4).** Proposal: tabd reads keychain items only after a Tab Manager
-   prompt that names the item and the binding host. Items are created by the user through the
-   Tab Manager, never discovered by scanning the keychain.
-3. **Prompt fatigue (B3).** The broker rate-limits prompts per tab. Should the Tab Manager
-   also batch prompts per origin across tabs?
+## Decisions (coordinator, 2026-11-05)
+1. **Policy source (B1).**
+   - A built-in deny-all default, plus an optional user policy in the host state directory.
+   - Never read from the workspace or from any file a tab can write.
+   - Validate the user policy against the schema, and fail closed.
+2. **Keychain (B4).**
+   - Read an item only after a Tab Manager prompt that names the item and the binding host.
+   - Items are created only through the Tab Manager, never discovered by scanning.
+   - tabd reads with its own keychain access, scoped to its own items and service namespace.
+   - The real value goes straight to the broker over the control channel and is never logged.
+3. **Prompts (B3).**
+   - Visual grouping is fine, but each tab's decision stays separate: an approval in one tab
+     never grants another.
+   - Every prompt shows its originating tab, and the broker's per-tab rate limit stays.
+   - There is no "apply to all tabs".
