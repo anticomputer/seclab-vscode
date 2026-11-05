@@ -23,3 +23,4 @@ test/harness.ts:persistence
 # real auth resolution matches on (github-authentication declares that exact glob). Strings
 # only; the runner container has no network.
 test/agentic/ahp/runner.ts:non-test-host
+test/agentic/ahp/ahp_inventory.py:non-test-host
