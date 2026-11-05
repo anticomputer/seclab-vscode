@@ -387,7 +387,9 @@ Tabs report trusted, so a workspace `.vscode/settings.json` or the tab's remote 
 settings can make the trusted renderer connect to an attacker's agent host outside the
 broker, and that connection gets §12.1, §12.2 and §12.4. Its own description says
 "connected hosts receive your GitHub credentials". Found by the design review; reported
-to the RPC-lockdown session on 2026-11-05 as a v0 issue.
+to the RPC-lockdown session on 2026-11-05 as a v0 issue, and closed for v0 by its patches
+0010 (no agent-host client in tab windows) and 0011 (no remote agent-host dialing, with
+the settings re-registered at `APPLICATION` scope).
 
 ### 12.6 Customizations and configuration forwarded to the agent host
 
