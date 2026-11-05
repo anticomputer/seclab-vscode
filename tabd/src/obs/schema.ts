@@ -99,12 +99,56 @@ export interface ObsEvent {
 	cause?: number[];
 	sensorTime?: string;
 	redacted?: true;
+	/**
+	 * Field paths whose text a tab can influence (argv, paths, hostnames, messages): treat as
+	 * data, never as instructions (e.g. when an LLM reads the stream). Always present.
+	 */
+	untrusted: string[];
 }
 
-/** An event before tabd stamps v, seq, time and tabId. */
-export type EventDraft = Omit<ObsEvent, 'v' | 'seq' | 'time' | 'tabId'>;
+/** An event before tabd stamps v, seq, time and tabId (and before untrusted is computed). */
+export type EventDraft = Omit<ObsEvent, 'v' | 'seq' | 'time' | 'tabId' | 'untrusted'> & { untrusted?: string[] };
 
 export class EventError extends Error { }
+
+/**
+ * Detail keys whose values come from a fixed vocabulary we produce (enum-like). Their values
+ * count as trusted only when they also have vocabulary shape; anything else is tagged untrusted.
+ */
+const VOCAB_DETAIL_KEYS = new Set(['action', 'outcome', 'status', 'mode', 'sensor', 'stream', 'change', 'kind', 'decision', 'verdict', 'surface', 'call', 'request', 'signal', 'result', 'proxyType', 'userDecision']);
+const VOCAB_RE = /^[A-Za-z0-9_.:-]{1,32}$/;
+
+/** Which text fields of a normalised draft may carry tab-influenced content. */
+export function untrustedFields(d: Omit<EventDraft, 'untrusted'>): string[] {
+	const out = ['summary'];
+	if (d.proc?.exe !== undefined) {
+		out.push('proc.exe');
+	}
+	if (d.proc?.argv !== undefined) {
+		out.push('proc.argv');
+	}
+	if (d.proc?.lineage !== undefined) {
+		out.push('proc.lineage');
+	}
+	if (d.file) {
+		out.push('file.path');
+		if (d.file.op !== undefined && !VOCAB_RE.test(d.file.op)) {
+			out.push('file.op');
+		}
+	}
+	if (d.net) {
+		out.push('net.addr');
+		if (d.net.result !== undefined && !VOCAB_RE.test(d.net.result)) {
+			out.push('net.result');
+		}
+	}
+	for (const [k, v] of Object.entries(d.detail ?? {})) {
+		if (typeof v === 'string' && !(VOCAB_DETAIL_KEYS.has(k) && VOCAB_RE.test(v))) {
+			out.push(`detail.${k}`);
+		}
+	}
+	return out;
+}
 
 const DETAIL_KEY_RE = /^[a-zA-Z][a-zA-Z0-9_.]{0,31}$/;
 const RULE_RE = /^[a-z][a-z0-9.-]{0,63}$/;
@@ -233,6 +277,8 @@ export function normalizeDraft(input: unknown): EventDraft {
 	if (redacted) {
 		out.redacted = true;
 	}
+	// Computed from the normalised fields, never taken from the input.
+	out.untrusted = untrustedFields(out);
 	return out;
 }
 
@@ -304,7 +350,7 @@ export function toFalco(e: ObsEvent): Record<string, unknown> {
 		hostname: e.tabId,
 		tags: ['seclab', `integrity:${e.integrity}`, `class:${e.class}`, `ocsf:${CLASSES[e.class].ocsf}`],
 		output_fields: {
-			'seclab.seq': e.seq, 'seclab.tab': e.tabId, 'seclab.integrity': e.integrity,
+			'seclab.seq': e.seq, 'seclab.tab': e.tabId, 'seclab.integrity': e.integrity, 'seclab.untrusted': e.untrusted.join(','),
 			'proc.pid': e.proc?.pid ?? null, 'proc.ppid': e.proc?.ppid ?? null, 'proc.exepath': e.proc?.exe ?? null,
 			'proc.cmdline': e.proc?.argv?.join(' ') ?? null, 'fd.name': e.file?.path ?? null,
 			'fd.sip': e.net?.addr ?? null, 'fd.sport': e.net?.port ?? null,

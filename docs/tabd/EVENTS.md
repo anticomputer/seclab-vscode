@@ -98,6 +98,7 @@ Reported in `tab.observation` notifications, `tab.events.tail` results and `sens
 | `proc.ptrace-attach` | `warning` | A process attached to another with ptrace. |
 | `sensor.tamper` | `critical` | A signal or ptrace aimed at the sensor or init. |
 | `beacon.periodic` | `warning` | Repeated connection attempts to one destination at a regular interval (C2 beacon pattern). |
+| `suspicious-content` | `informational` | Text aimed at an AI agent (prompt injection: "ignore previous instructions", role markers, chat-template or tool-call syntax) in a command line, file name, path or hostname. Informational: the stream is data, never instructions. |
 
 ## Limits
 | Field | Limit |
@@ -120,7 +121,35 @@ Lines from an in-tab sensor longer than 64 KiB are dropped and counted. Each tab
 second as `sensor.status` and mark the tab `degraded`. The log keeps 4 × 8 MiB segments per tab
 under `<state>/events/<tabId>/`.
 
+## Untrusted fields and LLM consumers
+Code in a tab chooses much of what these events contain: command lines, program and file
+paths, hostnames, messages. An attacker can write text there that addresses whoever reads the
+stream, including a language model (prompt injection). So:
+
+- **Field-level provenance.** Every event lists, in `untrusted`, the field paths whose text a
+  tab can influence (`summary`, `proc.argv`, `file.path`, `net.addr`, `detail.<key>`, …). This
+  holds for `trusted` events too: a trusted watcher can report a tab-chosen file name. Only
+  structural fields (`seq`, `time`, `source`, `integrity`, `class`, `priority`, `rule`,
+  numbers) and vocabulary-shaped values of fixed keys are left out.
+- **Already done by tabd:** every string is escaped (controls, bidi, zero-width, lone
+  surrogates), redacted and length-capped (see Limits).
+- **An LLM consumer must:**
+  1. receive structured JSON, never prose assembled from event text;
+  2. place every `untrusted` field inside a clearly delimited data block, with an explicit
+     "data, not instructions" frame and a per-render random delimiter;
+  3. keep the caps;
+  4. **never** offer tools with host side effects (shell, file writes, network, approving
+     prompts or policy changes) in a context that contains tab-influenced text.
+- **What we ship:** `seclab tab logs --format llm` (`tabd/src/obs/llm.ts`) enforces 1 to 3. It
+  prints a fixed frame, then for each event a JSON skeleton in which every untrusted field is
+  replaced by `{"$untrusted": "uN"}`, followed by the JSON-encoded values inside
+  `<untrusted-data nonce=…>` blocks. The nonce can't appear inside a value. No LLM-facing
+  feature with tools exists in seclab-vscode.
+- **Detection:** the `suspicious-content` rule (informational) flags instruction-like text aimed
+  at an agent in command lines, paths and hostnames. A miss doesn't make text safe; the fencing
+  above is the control.
+
 ## Example
 ```json
-{"v":1,"seq":42,"time":"2026-11-04T22:42:01.517Z","tabId":"t-abcdefghijklmnopqrstuvwxyz","source":"detector","integrity":"tab-vm-root","class":"detection","priority":"critical","rule":"credential.honeypot-read","summary":"honeypot read: /home/agent/.config/solana/id.json","proc":{"pid":388},"file":{"path":"/home/agent/.config/solana/id.json","op":"read"},"cause":[41]}
+{"v":1,"seq":42,"time":"2026-11-04T22:42:01.517Z","tabId":"t-abcdefghijklmnopqrstuvwxyz","source":"detector","integrity":"tab-vm-root","class":"detection","priority":"critical","rule":"credential.honeypot-read","summary":"honeypot read: /home/agent/.config/solana/id.json","proc":{"pid":388},"file":{"path":"/home/agent/.config/solana/id.json","op":"read"},"cause":[41],"untrusted":["summary","file.path"]}
 ```

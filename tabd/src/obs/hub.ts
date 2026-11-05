@@ -6,7 +6,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Detector, type TabContext } from './detect.ts';
-import { EventError, isTabId, normalizeDraft, type EventDraft, type ObsEvent, type ObservationState } from './schema.ts';
+import { EventError, isTabId, normalizeDraft, untrustedFields, type EventDraft, type ObsEvent, type ObservationState } from './schema.ts';
 import { safeText } from './text.ts';
 
 export const RING_SIZE = 2000;
@@ -140,7 +140,7 @@ export class ObsHub {
 	}
 
 	private stamp(tabId: string, s: TabState, d: EventDraft): ObsEvent {
-		const e: ObsEvent = { v: 1, seq: ++s.seq, time: new Date(this.now()).toISOString(), tabId, ...d };
+		const e: ObsEvent = { v: 1, seq: ++s.seq, time: new Date(this.now()).toISOString(), tabId, ...d, untrusted: d.untrusted ?? untrustedFields(d) };
 		s.ring.push(e);
 		if (s.ring.length > RING_SIZE) {
 			s.ring.shift();
