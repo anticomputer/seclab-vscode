@@ -303,7 +303,12 @@ first draft assumed it was; the review showed it is not (review 2, 13):
 
 **Rule:** in `seclab+` windows, `IRemoteAgentHostService` and every other agent-host
 connection provider (`ICloudSandboxAgentHostService`, the Mission Control services, the
-connection-customization contribution) is a null service at build time. The fork does not
+connection-customization contribution) is a null service at build time. Mission Control's
+"connect to environment" dials through `ICloudSandboxAgentHostService`, not
+`RemoteAgentHostService._connectTo`, so patch 0011's dial lock does not cover it. The
+action is user-initiated and its setting (`chat.agentHost.githubEnvironments.enabled`)
+is `APPLICATION` scope, so a tab cannot trigger it, but the connection it makes is a
+host-network agent host outside the gate. The fork does not
 create the local agent-host starter in main, and drops the Agents window, Mission Control
 and cloud-sandbox contributions. Every `IAgentHostConnectionsService` provider gets a
 verdict in the class (f) inventory, so a new one fails the build.
