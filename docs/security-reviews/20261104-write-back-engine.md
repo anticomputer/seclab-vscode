@@ -103,3 +103,11 @@ JJ-1, JJ-4 and JJ-5 verified closed; JJ-2's filter verified, with one bypass:
 | KK-1 | **Medium** | Unguarded same-uid processes | sbx's own agent-uid boot processes (PID 1 `sh`, `sleep`, clipboard-bridge) carry no filter; with no Yama, tab code could write their memory (`/proc/<pid>/mem`) and run `unshare` there, undoing JJ-2. | Fixed | seclab-obs-guard puts the tab in a Landlock domain (ABI ≥ 6, fail closed): ptrace access, signals and abstract unix sockets are scoped to the domain; file and network access unchanged. Regression with an unguarded control. |
 | KK-2 | Low | Post-mount check | fd in flight, fork during the scan, a second mount of the share. | Fixed (in part) | Rescan until the pid set is stable; refuse a second mount of the lower device. In-flight `SCM_RIGHTS` remains theoretical (no tab code runs before the mount). |
 | KK-3 | Info | Exemption | Exempt fuse-overlayfs by owner of /proc/<pid>. | Fixed | All four uids 0 from `status`. |
+
+### Increment 2a, second re-review (5a13d35)
+KK-1, KK-2 and KK-3 verified closed; the Landlock scopes break nothing the REH, collector or relay
+uses (all pathname sockets; collector and strace are outside the domain). **Nothing medium or higher remains.**
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| LL-1 | Low | sbx kit | `clipboard-bridge` (agent uid, unguarded) is still reachable over the pathname socket `/run/user/1000/wayland-0`; a parser bug there would be execution outside the guard. | Accepted (follow-up) | Dependency on sbx code; follow-up: stop it from the collector before the REH if seclab never uses the sbx clipboard. |
