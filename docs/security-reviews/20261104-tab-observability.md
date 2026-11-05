@@ -82,6 +82,24 @@ No findings. Checked:
 
 Gitleaks over the diff: no leaks.
 
+## Round 6: loader fixture defang (a5135fb)
+Scope: the loader fixture moved to parts on the host, assembled in memory and written
+inside the tab (`test/observability/loader.ts`, `run.ts`, `demo.ts`, EDR
+observability-loader-in-tab). No vulnerabilities. Checked:
+- No assembled content reaches a host file. Under OCI, `$HOME` is a per-tab named
+  volume and only the workspace is bind-mounted. Under sbx, `ensureRunning` requires
+  the overlay, and held files are copied only on a user decision.
+- The piped bytes are never logged.
+- The arming contract matches the old checks one for one.
+- The parts charset blocks shell breakout.
+
+| ID | Sev | Area | Finding | Status | Fix |
+|---|---|---|---|---|---|
+| LD-1 | Info | EDR | Overstated the post-write `.vscode` check as the guard; the real guard is `ensureRunning`'s overlay requirement. | Fixed | EDR reworded. |
+| LD-2 | Info | EDR | Didn't mention that a run's event log records the loader's argv and honeypot paths (by design). | Fixed | EDR Consequences. |
+
+The endpoint protection's threat list before and after: no new detection.
+
 ## Accepted residuals (documented in the ADR)
 - `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.
 - Under OCI the privileged Falco sees every container on the Docker host. Only rules for the exact tab container ids are loaded, and its only output is stdout to tabd.
