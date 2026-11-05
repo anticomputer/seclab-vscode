@@ -165,6 +165,12 @@ if (driver === 'sbx') {
 	checks.push({ vector: 'write-back', name: 'an ordinary tab edit is synced to the host checkout', ok: fs.existsSync(ordinary) && fs.readFileSync(ordinary, 'utf8') === 'from the tab\n', detail: JSON.stringify(s1).slice(0, 200) });
 	const st = await client.request<{ gated: boolean; pending: Array<{ path: string }> }>('tab.writeback.status', { tabId: tabA });
 	checks.push({ vector: 'write-back', name: 'a code-running file (.vscode/tasks.json) is held, not written', ok: fs.readFileSync(heldFile, 'utf8') === heldBefore && st.gated && st.pending.some(p => p.path === '.vscode/tasks.json'), detail: JSON.stringify(st.pending.map(p => p.path)) });
+	// Increment 3: the review decision, bound to the shown signature. Reject restores the host's
+	// version into the tab; a decision with a stale signature is refused.
+	const held = (st as unknown as { pending: Array<{ path: string; sig: string }> }).pending.find(p => p.path === '.vscode/tasks.json');
+	const stale = await client.request('tab.writeback.decide', { tabId: tabA, path: '.vscode/tasks.json', decision: 'approve', sig: 'f'.repeat(64) }).then(() => 'accepted', (e: Error) => e.message);
+	const rej = held ? await client.request<{ result: string }>('tab.writeback.decide', { tabId: tabA, path: '.vscode/tasks.json', decision: 'reject', sig: held.sig }).catch((e: Error) => ({ result: e.message })) : { result: 'not pending' };
+	checks.push({ vector: 'write-back', name: 'reject restores the host version in the tab; a stale signature is refused', ok: /changed this entry/.test(stale) && readInTab(heldFile) === heldBefore && fs.readFileSync(heldFile, 'utf8') === heldBefore, detail: `${stale} | ${rej.result}` });
 	fs.writeFileSync(ordinary, 'edited on the host\n');
 	const s2 = await client.request<{ mirrored: string[] }>('tab.writeback.sync', { tabId: tabA });
 	checks.push({ vector: 'write-back', name: 'a host edit to a synced file is mirrored into the tab', ok: readInTab(ordinary) === 'edited on the host\n', detail: JSON.stringify(s2.mirrored) });

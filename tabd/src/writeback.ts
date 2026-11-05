@@ -463,6 +463,33 @@ export class WriteBackEngine {
 		this.save();
 	}
 
+	/** A held change the user rejected: the tab keeps its copy, the host keeps its own (not re-prompted). */
+	markDecided(rel: string, c: UpperChange): void {
+		checkRel(rel);
+		this.markSynced(rel, c, false);
+		this.save();
+	}
+
+	/** Host side of a pending change, for display only (bounded; links never followed). */
+	hostContent(rel: string, cap: number): { exists: boolean; content?: Buffer; size?: number; kind?: string } {
+		const f = this.resolveOrNull(checkRel(rel));
+		const st = f ? lstatOrNull(f) : null;
+		if (!f || !st) {
+			return { exists: false };
+		}
+		if (!st.isFile()) {
+			return { exists: true, kind: st.isDirectory() ? 'directory' : st.isSymbolicLink() ? 'symlink' : 'special', size: st.size };
+		}
+		const fd = fs.openSync(f, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+		try {
+			const buf = Buffer.alloc(Math.min(st.size, cap));
+			const n = fs.readSync(fd, buf, 0, buf.length, 0);
+			return { exists: true, kind: 'file', size: st.size, content: buf.subarray(0, n) };
+		} finally {
+			fs.closeSync(fd);
+		}
+	}
+
 	/** Reject: drop it from pending; returns the host's version for the driver to restore into the tab's view. */
 	reject(rel: string): { content: Buffer | null; mode: number } {
 		checkRel(rel);

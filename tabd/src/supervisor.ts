@@ -12,6 +12,16 @@ import { ObsGlue, ObsParamError } from './obs/glue.ts';
 import type { FalcoSensor } from './obs/falco.ts';
 import type { ObsHub } from './obs/hub.ts';
 import { WriteBackManager } from './writeback-manager.ts';
+import { checkRel } from './writeback.ts';
+
+/** A workspace-relative path parameter for the write-back methods (validated, never a host path). */
+function wbPath(v: unknown): string {
+	try {
+		return checkRel(v);
+	} catch {
+		throw new RpcError(-32602, 'path must be a workspace-relative path');
+	}
+}
 
 export const PROTOCOL_VERSION = 'seclab-tabd/0.2';
 export const SUPERVISOR_VERSION = '0.1.0';
@@ -101,6 +111,7 @@ export class Supervisor {
 					this.obs.hub.trusted(tabId, { ...ev, source: 'gate' });
 				},
 				audit: (event, outcome, detail) => this.audit(event, outcome, detail as Record<string, Json>),
+				onPending: (tabId, count) => this.notify('tab.writeback.pending', { tabId, count }),
 			});
 		}
 	}
@@ -245,6 +256,21 @@ export class Supervisor {
 			case 'tab.reset': return this.reset(this.record(p.tabId));
 			case 'tab.writeback.status': return this.writebackStatus(this.record(p.tabId));
 			case 'tab.writeback.sync': return this.writebackSync(this.record(p.tabId));
+			case 'tab.writeback.content': return this.writebackCall(this.record(p.tabId), wb => wb.content(String(p.tabId), wbPath(p.path)));
+			case 'tab.writeback.decide': {
+				const d = p.decision;
+				if (d !== 'approve' && d !== 'reject' && d !== 'always') {
+					throw new RpcError(-32602, 'decision must be approve, reject or always');
+				}
+				if (typeof p.sig !== 'string' || !/^[0-9a-f]{64}$/.test(p.sig)) {
+					throw new RpcError(-32602, 'sig (the signature shown) is required');
+				}
+				return this.writebackCall(this.record(p.tabId), wb => wb.decide(String(p.tabId), wbPath(p.path), d, p.sig as string));
+			}
+			case 'tab.writeback.confirmDeletes': return this.writebackCall(this.record(p.tabId), async wb => {
+				wb.confirmDeletes(String(p.tabId));
+				return {};
+			});
 			case 'stream.end': {
 				const ch = this.channels.get(this.channelId(p.channel));
 				ch?.child.stdin.end();
@@ -647,6 +673,18 @@ export class Supervisor {
 		const gated = !!this.driverFor(spec.template).upperReader;
 		const s = this.wb?.status(r.tabId) ?? { active: false, pending: [] };
 		return { gated, ...s } as unknown as Json;
+	}
+
+	/** Write-back gate: sync now (the loop also runs on its own). */
+	private async writebackCall(r: TabRecord, f: (wb: WriteBackManager) => Promise<unknown>) {
+		if (!this.wb || !this.driverFor(this.spec(r).template).upperReader) {
+			throw new RpcError(-32013, 'write-back is not gated for this tab');
+		}
+		try {
+			return await f(this.wb) as Json;
+		} catch (e) {
+			throw new RpcError(-32013, (e as Error).message.slice(0, 300));
+		}
 	}
 
 	/** Write-back gate: sync now (the loop also runs on its own). */
