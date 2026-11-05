@@ -1,3 +1,4 @@
 {
-	"0012-background-windows-env.patch": ["desktop"]
+	"0012-background-windows-env.patch": ["desktop"],
+	"0013-no-local-agent-host.patch": ["desktop"]
 }

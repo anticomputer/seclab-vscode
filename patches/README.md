@@ -39,6 +39,13 @@ Current queue:
   ([EDR](../docs/edr/20261105-background-windows.md)). It grants nothing; it only withholds
   focus, which is why it isn't a test hook in the sense below. (0005-0011 are reserved for
   the RPC filter series.)
+- `0013-no-local-agent-host.patch`: Electron main creates no agent-host starter or process
+  manager; every window's connection request gets a fatal refusal, so no agent runtime ever
+  runs on the host (invariant I8, [EDR](../docs/edr/20261105-no-agent-runtime-on-host.md)).
+- `0014-build-desktop-without-copilot-runtime.patch`: build only; the desktop app packages
+  no `@github/copilot-sdk` or platform runtime (`runtime.node`). The REH keeps it for tabs.
+  `build/check-release.sh --desktop` fails a desktop build that has one (same EDR).
+  0015 onwards: the secure-agentic-experiences series.
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
