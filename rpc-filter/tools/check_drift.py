@@ -299,6 +299,18 @@ def check_invariants(inv: dict, policy: dict) -> list:
                     % (entry.get("id", "<unnamed>"), field))
     errors.extend(check_citations(policy))
 
+    # commands.exact is resolved before rules, so the `seclab.` deny rule can be
+    # overridden by an exact entry. The rule states the intent; this is what
+    # makes it hold.
+    for cid, entry in ((policy.get("commands", {}) or {}).get("exact") or {}).items():
+        if cid.startswith("seclab.") and entry.get("verdict") in REACHABLE:
+            errors.append(
+                "invariant no-seclab-commands-from-tabs: command '%s' is reachable "
+                "('%s') through commands.exact, which is resolved before the deny "
+                "rule on the 'seclab.' prefix. The fork's own commands exist to ask "
+                "the user to approve what a tab may not do itself; a tab that can "
+                "raise them supplies the prompt." % (cid, entry.get("verdict")))
+
     # Every surface that is actually reachable must have been reviewed as an
     # individual entry carrying an impact assessment. Checking only the entries
     # someone chose to write misses exactly the dangerous case: a surface made
