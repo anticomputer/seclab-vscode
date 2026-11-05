@@ -143,21 +143,21 @@ over RPC. Reviewing only the `.protocol.ts` interfaces misses them.
 
 ## (b) Command registry reachable via `$executeCommand`
 
-3184 commands found. `$executeCommand` takes the id from the caller, so
+3199 commands found. `$executeCommand` takes the id from the caller, so
 the whole registry is reachable from a tab.
 
 | Category | Commands |
 |---|---:|
-| `editor-local` | 412 |
+| `editor-local` | 416 |
 | `extension-management` | 118 |
 | `external-and-uri` | 23 |
-| `host-filesystem` | 55 |
+| `host-filesystem` | 57 |
 | `host-process` | 288 |
 | `internal-underscore` | 108 |
 | `remote-and-tunnel` | 26 |
 | `secrets-and-auth` | 11 |
 | `settings-and-policy` | 44 |
-| `unclassified` | 2080 |
+| `unclassified` | 2089 |
 | `window-and-workspace` | 19 |
 
 Categories are a review aid only. They grant nothing: the policy
@@ -165,7 +165,7 @@ table still needs a verdict per command id.
 
 ### Command ids built from non-literal expressions
 
-168 registrations use a constant or computed id that this static scan
+172 registrations use a constant or computed id that this static scan
 cannot resolve. Default-deny means these are denied until classified,
 so the cost is compatibility, not containment.
 

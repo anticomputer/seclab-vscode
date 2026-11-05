@@ -44,7 +44,9 @@ def payload_files(repo):
     out = []
     root = os.path.join(repo, PAYLOAD_ROOT)
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in ("node_modules", "fixtures")]
+        # Sorted in place: os.walk reads this list back to pick its descent
+        # order, so without it the lint reports findings in filesystem order.
+        dirnames[:] = sorted(d for d in dirnames if d not in ("node_modules", "fixtures"))
         for name in sorted(filenames):
             if not name.endswith(PAYLOAD_SUFFIXES):
                 continue
