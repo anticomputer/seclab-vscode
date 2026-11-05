@@ -518,7 +518,7 @@ export function seclabAiDisabled(remoteAuthority: string | null | undefined): bo
  * argument is exactly the mistake being avoided.
  */
 export function seclabResolveTabId(authority: string): string | undefined {
-	const m = /^seclab\+([\w.-]+)$/.exec(authority);
+	const m = authority.match(/^seclab\+([\w.-]+)$/);
 	return m ? m[1] : undefined;
 }
 
