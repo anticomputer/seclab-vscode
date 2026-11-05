@@ -15,6 +15,7 @@ usage: ./seclab <command>
   image oci                     Build the OCI tab images (seclab-tab-oci:local, broker placeholder)
   test unit                     seclab-tabd unit tests (in a node container)
   test e2e [sbx|oci]            seclab-tabd end-to-end against a real runtime (local)
+  test e2e-broker [IMAGE]       OCI tab with a real broker: deny, no direct route, allow, 407 (B1)
   test containment [sbx|oci]    Containment suite: malicious-workspace vectors inside real tabs
   test canary [sbx|oci]         Canary acceptance test: no host secret observable from a tab
   test secrets [sbx|oci]        Pre-mount secret scan (gitleaks) gate, move-to-vault, restore
@@ -332,6 +333,8 @@ case "${1:-help}" in
 			# e2e drives sbx/docker on the host, so it runs on the host. It uses the editor's own
 			# Node when SECLAB_NODE points at it, else an already-present node (nothing is installed).
 			e2e) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/test/e2e.ts" "${1:-sbx}" ;;
+			# OCI tab with a real broker (plan tabd-broker-wiring B1): egress only through the broker.
+			e2e-broker) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/test/e2e-broker.ts" "${1:-seclab-broker:dev}" ;;
 			containment) shift; "${SECLAB_NODE:-node}" "$ROOT/test/containment/run.ts" "${1:-sbx}" ;;
 			# RPC-probe safety guards (pure; in the pinned node container, no network).
 			probe-safety) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/probe-safety.test.ts ;;
