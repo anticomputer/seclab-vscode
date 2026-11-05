@@ -34,6 +34,8 @@ jobs:
         run: build/apply-patches.sh --check
       - name: Shipped sources have no test hooks (env/spawn review, dynamic loading)
         run: ./seclab lint source
+      - name: Dependency register self-test (the register itself is checked in docs)
+        run: ./seclab lint deps --self-test
       # RPC capability filter (rpc-filter/AGENTS.md): policy drift, generated docs and
       # policy module in sync, probe payload lint, probe-safety guards.
       - name: RPC policy drift

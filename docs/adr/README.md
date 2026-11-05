@@ -69,6 +69,7 @@ Good, bad, and follow-ups this creates.
 | 2026-11-04 | [RPC capability filter is a required, default-deny boundary](20261104-rpc-capability-filter.md) | superseded-by [20261104-rpc-filter-enforcement-points](20261104-rpc-filter-enforcement-points.md) |
 | 2026-11-04 | [RPC capability filter: choke points, policy as data, and a build-time gate](20261104-rpc-filter-enforcement-points.md) | accepted |
 | 2026-11-04 | [One broker engine for every provider; sbx is only the outer fence](20261104-single-broker-sbx-fence.md) | accepted |
+| 2026-11-04 | [Supply-chain provenance: a register, a bar, and checks before use](20261104-supply-chain-provenance.md) | accepted |
 | 2026-11-04 | [Tab-originated commands carry the tab identity through a tainted command service](20261104-tab-command-taint.md) | accepted |
 | 2026-11-04 | [The workspace window ("tab") is the containment unit; Workspace Trust is UX only](20261104-tab-is-the-containment-unit.md) | accepted (partly superseded by [20261104-threat-model-rogue-extension](20261104-threat-model-rogue-extension.md)) |
 | 2026-11-04 | [Tab observability: a one-way, integrity-labelled event stream per tab](20261104-tab-observability.md) | accepted |
