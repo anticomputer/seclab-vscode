@@ -63,6 +63,7 @@ Same rules as ADRs:
 | 2026-11-04 | [Drift check: a digest gate over the surface-to-verdict mapping](20261104-rpc-drift-check.md) | accepted |
 | 2026-11-04 | [RPC escape probes: validity before coverage](20261104-rpc-escape-probes.md) | accepted |
 | 2026-11-04 | [RPC attack-surface inventory is generated, not hand-written](20261104-rpc-inventory-generator.md) | accepted |
+| 2026-11-04 | [Dependency provenance for the RPC filter tooling](20261104-rpc-tooling-dependencies.md) | accepted |
 | 2026-11-04 | [sbx per-tab egress fence and broker chaining (spike)](20261104-sbx-fence-spike.md) | accepted |
 | 2026-11-04 | [sbx upgraded to 0.51.0: findings](20261104-sbx-upgrade-0-51.md) | accepted |
 | 2026-11-04 | [Sentinel format, binding and detection](20261104-sentinel-format-and-binding.md) | accepted |
