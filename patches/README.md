@@ -9,6 +9,12 @@
   ([EDR](../docs/edr/20261104-patch-series.md)).
 - Test-only hooks never go here; they belong to the test harness.
 - `build/apply-patches.sh --check` validates the queue without a checkout (CI).
+- The required `patch-build` check applies the series to the pinned upstream, type-checks the
+  patched tree with upstream's `typecheck-client`, and requires every patched file to be
+  reachable from the desktop build or the REH ([EDR](../docs/edr/20261105-patch-build-gate.md)).
+  To see where a file lands: `node build/check-patch-reach.ts PATCHED_TREE --file src/...`.
+  To require targets for a security patch, add it to `reach.json`
+  (`{ "NNNN-name.patch": ["desktop", "server"] }`).
 
 Rules ([ADR](../docs/adr/20261104-vscodium-style-fork.md)):
 - One concern per patch, under about 50 lines.

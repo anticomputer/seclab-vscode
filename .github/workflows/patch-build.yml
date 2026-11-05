@@ -1,0 +1,68 @@
+name: patch-build
+
+# Required gate (EDR 20261105-patch-build-gate): the patched upstream tree must type-check, and
+# every source file a shipped patch touches must be reachable from what we ship (desktop build or
+# REH), not only from web. "Applies cleanly" proves nothing: a patch once applied and passed every
+# static gate while missing its imports and sitting in a web-only entry point. No path filter.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: patch-build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  PB_SRC: ${{ github.workspace }}/.work/patch-build/vscode
+
+jobs:
+  patch-build:
+    name: patch-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.1
+          package-manager-cache: false
+      - name: Fetch the pinned upstream (tag -> SHA verified)
+        run: build/fetch-upstream.sh "$PB_SRC"
+      - name: Node must equal upstream's .nvmrc
+        run: test "$(cat "$PB_SRC/.nvmrc")" = "$(node --version | sed s/^v//)"
+      - name: Apply patches/series (fails on any patch that doesn't apply)
+        run: build/apply-patches.sh "$PB_SRC"
+      # node_modules is keyed on the pinned SHA and upstream's lockfile, restored read-only on
+      # branches and PRs, saved only from main (a branch can't seed what main restores).
+      - name: Restore node_modules
+        id: nm
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .work/patch-build/vscode/node_modules
+          key: patch-build-nm-${{ hashFiles('upstream.lock', '.work/patch-build/vscode/package-lock.json') }}
+      - name: Install dependencies (no install scripts) and check their registry signatures
+        if: steps.nm.outputs.cache-hit != 'true'
+        working-directory: .work/patch-build/vscode
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          "$GITHUB_WORKSPACE/build/npm-audit-signatures.sh" .
+      - name: Save node_modules (main only)
+        if: steps.nm.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .work/patch-build/vscode/node_modules
+          key: patch-build-nm-${{ hashFiles('upstream.lock', '.work/patch-build/vscode/package-lock.json') }}
+      - name: Type-check the patched tree (upstream's typecheck-client)
+        working-directory: .work/patch-build/vscode
+        env:
+          NODE_OPTIONS: --max-old-space-size=12288
+        run: npm run typecheck-client
+      - name: Every patched file is reachable from the desktop build or the REH
+        run: node build/check-patch-reach.ts "$PB_SRC"

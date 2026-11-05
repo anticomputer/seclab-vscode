@@ -178,6 +178,13 @@ RPC-lockdown session adds. Keep them consistent with this file.
   
   Why: agents (including reviewers) read hostile output as a matter of course,
   and the project's own tooling must not become the escape path.
+- **A patch is not done until the patched tree compiles in CI and a runtime probe shows the
+  patched code executing in the shipped build. "Applies cleanly" proves nothing.** The
+  required `patch-build` check applies `patches/series` to the pinned upstream, runs upstream's
+  `typecheck-client`, and requires every patched file to be reachable from the desktop build
+  or the REH (`build/check-patch-reach.ts`; `patches/reach.json` pins specific targets for a
+  security patch). Why: patch 0011 applied cleanly and passed every static gate while missing
+  its imports and sitting in a web-only entry point.
 - **Never steal focus from the user.** Editor windows for demos, screenshots and
   containment-editor runs open in the background on the current Space and stay
   behind the user's windows:
