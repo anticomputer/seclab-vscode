@@ -45,6 +45,7 @@ CHECKED_DOCS = [
     "docs/adr/20261104-defeat-folder-open-loaders.md",
     "docs/adr/20261104-broker-output-is-data.md",
     "docs/adr/20261105-broker-model-access.md",
+    "docs/adr/20261105-cfs-package-feeds-in-tabs.md",
     "docs/edr/20261104-broker-engine-mitmproxy.md",
     "docs/edr/20261104-sentinel-format-and-binding.md",
     "docs/edr/20261104-broker-per-tab-ca.md",
