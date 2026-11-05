@@ -68,6 +68,9 @@ sbx exec -u root "$B" sh -euc '
 	# Write-back gate overlay (ADR write-back-gate): root mounts it with the mount syscall, so
 	# no fuse3 (setuid fusermount3) and no `mount` package; nothing setuid is added.
 	dpkg -i --ignore-depends=fuse3 /tmp/wb-debs/*.deb >/dev/null
+	# Keep apt from ever pulling fuse3 (setuid fusermount3) in to satisfy the ignored dependency;
+	# seclab-wb-mount also refuses at run time if a setuid fusermount appears (JJ-5).
+	apt-mark hold fuse-overlayfs libfuse3-4 >/dev/null
 	mkdir -p /var/lib/seclab/wb && chmod 0700 /var/lib/seclab /var/lib/seclab/wb
 	gcc -O2 -Wall -Werror -o /opt/seclab/bin/seclab-obs-guard /tmp/seclab-obs-guard.c
 	# Fixed ids: tabd runs the relay as exactly 990:990 (a bare uid would pick up gid 999 = docker).

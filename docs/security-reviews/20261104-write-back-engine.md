@@ -79,3 +79,18 @@ AA-1 to AA-3 and the workflow change's B-1 verified. **Nothing medium or higher 
 
 ## Workflow change: RPC filter CI jobs (commit 4306096)
 Reviewed under the workflow-review rule. Permissions are `contents: read` with `persist-credentials: false`; no `${{ }}` in `run:`; every tool container runs with `--network none`; pins are unchanged digests. B-1 (low: `git diff` misses untracked inventory files) is fixed with a `git status --porcelain` check. No medium or higher.
+
+## Increment 2a: sbx overlay (b9ba0e2 and fixes)
+Threat: tab code (agent uid in the VM, owns /dev/fuse) writes the host checkout around the overlay,
+or gains root in the VM (a gate bypass since 2a).
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| JJ-1 | **Critical** | Process cwd | `sbx exec` starts the collector with cwd = the workspace path, before the mount; the REH, extension host and ptyHost inherited it, so relative writes and `/proc/<pid>/cwd/…` reached the host checkout. Reproduced by the new regression (negative control on the 2a template). | Fixed | Collector launched with `-w /` and `chdir("/")`; REH spawned with cwd = the workspace resolved after the mount; `seclab-wb-mount` checks after mounting (and on every call) that no process but the overlay holds a cwd, root, fd, mapping or per-thread cwd/root on the host share's device, and fails closed. Containment regression writes through every agent process's cwd. |
+| JJ-2 | **Medium** | Namespaces | Tab code could create user and mount namespaces (the way into kernel LPEs; root in the VM now bypasses the gate). | Fixed | seclab-obs-guard: `unshare`/`clone` with `CLONE_NEWUSER`/`CLONE_NEWNS` → EPERM. Regression (with a control). |
+| JJ-3 | Low | Pre-mount scan | Non-dumpable processes, fds, per-thread cwds, TOCTOU. | Fixed | Replaced by JJ-1's post-mount device check. |
+| JJ-4 | Low | Fail-open | A missing helper skipped the mount; `writeBack` is static. | Fixed (helper); accepted (static capability) | Missing helper now fails closed, so a pre-2a template never starts a REH. |
+| JJ-5 | Low | dpkg | `--ignore-depends=fuse3` invites apt to pull setuid `fusermount3` later. | Fixed | `apt-mark hold`; runtime refusal if any setuid fusermount exists. |
+
+Note for 2b (from this round): read the upper layer directly (`/var/lib/seclab/wb/upper`, init mount
+namespace), never through the overlay or `/proc/<pid>/root`.

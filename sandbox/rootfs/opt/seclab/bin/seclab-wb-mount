@@ -7,7 +7,9 @@
 #   - argv is exactly one absolute, canonical path; anything else is refused;
 #   - idempotent: exit 0 if our overlay is already mounted there;
 #   - non-zero exit and one stderr line on failure (the caller then refuses to start the REH);
-#   - reads nothing tab-controlled before mounting (only /proc links of tab processes).
+#   - reads nothing tab-controlled before mounting (only /proc links of tab processes);
+#   - after mounting (and on every idempotent call) no process except the overlay itself may
+#     hold a cwd, root, fd or mapping on the host share underneath (review JJ-1).
 # Spike findings (EDR write-back-gate-spike addendum): timeout=0 so host-side changes show
 # through; the upper layer's directory structure is never changed while mounted.
 import os, pwd, stat, subprocess, sys
@@ -59,11 +61,63 @@ def private_dir(p):
         die("unsafe state directory " + p)
 
 
+def lower_device(path):
+    """st_dev of the non-overlay mount at path (the host share underneath), from mountinfo."""
+    dev = None
+    with open("/proc/self/mountinfo", "r", encoding="latin-1") as f:
+        for line in f:
+            pre, sep, post = line.partition(" - ")
+            a = pre.split(" ")
+            if not sep or len(a) < 5 or unescape(a[4]) != path:
+                continue
+            if post.split(" ")[0] != "fuse.fuse-overlayfs":
+                maj, _, mnr = a[2].partition(":")
+                dev = os.makedev(int(maj), int(mnr))
+    return dev
+
+
+def lower_references(lower_dev):
+    """Processes (other than root's fuse-overlayfs) holding anything on the lower device: cwd,
+    root, open fds, mapped files, per-thread cwd/root. Any such reference reaches the host
+    checkout around the overlay (review JJ-1/JJ-3), so it fails the mount closed."""
+    hits = []
+    me = os.getpid()
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit() or int(pid) == me:
+            continue
+        base = "/proc/" + pid
+        try:
+            if os.stat(base).st_uid == 0 and os.readlink(base + "/exe") == FUSE_OVERLAYFS:
+                continue  # the overlay itself must hold the lower layer
+        except OSError:
+            pass
+        links = [base + "/cwd", base + "/root"]
+        for sub in ("fd", "map_files"):
+            try:
+                links += [base + "/" + sub + "/" + e for e in os.listdir(base + "/" + sub)]
+            except OSError:
+                pass
+        try:
+            for t in os.listdir(base + "/task"):
+                links += [base + "/task/" + t + "/cwd", base + "/task/" + t + "/root"]
+        except OSError:
+            pass
+        for l in links:
+            try:
+                if os.stat(l).st_dev == lower_dev:
+                    hits.append(l)
+                    break
+            except OSError:
+                continue
+    return hits
+
+
 def main():
     if os.geteuid() != 0:
         die("must run as root")
     if len(sys.argv) != 2:
         die("usage: seclab-wb-mount <abs-workspace-path>")
+    os.chdir("/")
     ws = sys.argv[1]
     if (not ws.startswith("/") or ws == "/" or len(ws) > 4096 or "\0" in ws or "\n" in ws
             or "//" in ws or ws.endswith("/") or any(seg in (".", "..") for seg in ws.split("/")[1:])):
@@ -74,46 +128,44 @@ def main():
         die("workspace path is not canonical (links in it)")
     if not os.path.isdir(ws):
         die("workspace is not a directory")
-
-    fs = mounted_at(ws)
-    if fs == "fuse.fuse-overlayfs":
-        return 0  # already ours (idempotent)
-
-    # A process whose cwd or root is inside the workspace from before the mount would keep
-    # seeing the lower layer (the host checkout): the overlay must precede every tab process.
-    prefix = ws + "/"
-    for pid in os.listdir("/proc"):
-        if not pid.isdigit():
-            continue
+    # A setuid fusermount would let the tab user mount FUSE over directories it owns (JJ-5).
+    for fm in ("/usr/bin/fusermount3", "/usr/bin/fusermount", "/bin/fusermount3", "/bin/fusermount"):
         try:
-            if os.stat("/proc/" + pid).st_uid == 0:
-                continue
-            for link in ("cwd", "root"):
-                t = os.readlink("/proc/%s/%s" % (pid, link))
-                if t == ws or t.startswith(prefix):
-                    die("a non-root process (pid %s) already has its %s in the workspace" % (pid, link))
-        except OSError:
-            continue
+            if os.stat(fm).st_mode & (stat.S_ISUID | stat.S_ISGID):
+                die("setuid " + fm + " present (template drifted); refusing")
+        except FileNotFoundError:
+            pass
 
-    try:
-        tab = pwd.getpwnam(TAB_USER)
-    except KeyError:
-        die("tab user missing")
-    for p in ("/var/lib/seclab", STATE, UPPER, WORK):
-        private_dir(p)
-    if not os.access(FUSE_OVERLAYFS, os.X_OK):
-        die("fuse-overlayfs missing (rebuild the template: ./seclab template sbx)")
+    lower_dev = lower_device(ws)
+    if lower_dev is None:
+        die("no host share mounted at the workspace path")
 
-    opts = ",".join([
-        "lowerdir=" + ws,
-        "upperdir=" + UPPER, "workdir=" + WORK,
-        "allow_other", "squash_to_uid=%d" % tab.pw_uid, "squash_to_gid=%d" % tab.pw_gid,
-        "timeout=0", "nosuid", "nodev",
-    ])
-    r = subprocess.run([FUSE_OVERLAYFS, "-o", opts, ws], stdin=subprocess.DEVNULL, capture_output=True,
-                       timeout=30, cwd="/", env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
-    if r.returncode != 0 or mounted_at(ws) != "fuse.fuse-overlayfs":
-        die("mount failed: " + r.stderr.decode("latin-1", "replace").strip().replace("\n", " ")[:200])
+    if mounted_at(ws) != "fuse.fuse-overlayfs":
+        try:
+            tab = pwd.getpwnam(TAB_USER)
+        except KeyError:
+            die("tab user missing")
+        for p in ("/var/lib/seclab", STATE, UPPER, WORK):
+            private_dir(p)
+        if not os.access(FUSE_OVERLAYFS, os.X_OK):
+            die("fuse-overlayfs missing (rebuild the template: ./seclab template sbx)")
+        opts = ",".join([
+            "lowerdir=" + ws,
+            "upperdir=" + UPPER, "workdir=" + WORK,
+            "allow_other", "squash_to_uid=%d" % tab.pw_uid, "squash_to_gid=%d" % tab.pw_gid,
+            "timeout=0", "nosuid", "nodev",
+        ])
+        r = subprocess.run([FUSE_OVERLAYFS, "-o", opts, ws], stdin=subprocess.DEVNULL, capture_output=True,
+                           timeout=30, cwd="/", env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+        if r.returncode != 0 or mounted_at(ws) != "fuse.fuse-overlayfs":
+            die("mount failed: " + r.stderr.decode("latin-1", "replace").strip().replace("\n", " ")[:200])
+    if os.stat(ws).st_dev == lower_dev:
+        die("the workspace path still resolves to the host share")
+
+    # Post-mount (and on every idempotent call): nothing may still reach the lower layer.
+    hits = lower_references(lower_dev)
+    if hits:
+        die("%d process reference(s) still reach the host checkout under the overlay, e.g. %s" % (len(hits), hits[0]))
     return 0
 
 
