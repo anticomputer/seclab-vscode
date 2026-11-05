@@ -416,23 +416,66 @@ export function seclabTaintedCommandService(
 }
 
 /**
- * Authority -> tab id, registered by the Tab Manager when it resolves an
- * authority. The filter's identity comes from here and never from anything the
- * tab sends: `MainThreadSecretState.$getPassword` takes the extension identity
- * as an *argument*, which is exactly the mistake this avoids repeating.
+ * The origin token for a call arriving from a sandboxed tab, or `undefined`
+ * for a trusted caller. Passed into the command path so identity travels with
+ * the call rather than being inferred from ambient state.
  */
-const seclabTabs = new Map<string, string>();
-
-export function seclabRegisterTab(authority: string, tabId: string): void {
-	seclabTabs.set(authority, tabId);
+export function seclabOriginFor(remoteAuthority: string | null): unknown | undefined {
+	if (remoteAuthority === null || !SECLAB_AUTHORITY.test(remoteAuthority)) {
+		return undefined;
+	}
+	return seclabFilterFor(remoteAuthority);
 }
 
-export function seclabUnregisterTab(authority: string): void {
-	seclabTabs.delete(authority);
+/**
+ * Route a tab-originated `$executeCommand` into the tainted path.
+ *
+ * Fails closed if the taint is not present. `seclabExecuteFromTab` is added to
+ * `CommandService` by patch 0007; if that patch is missing or renamed
+ * upstream, falling back to a plain `executeCommand` would run the tab's
+ * command *untainted*, which is worse than refusing it -- the probes would
+ * pass while the mechanism they test was gone. The patch queue is applied as a
+ * series, so the only way to reach this branch is a change that silently broke
+ * the wiring, and that is precisely when it must not be silent.
+ */
+export function seclabExecuteCommandFromTab<T>(
+	commandService: unknown,
+	id: string,
+	args: unknown[],
+	origin: unknown,
+): Promise<T | undefined> {
+	const tainted = commandService as {
+		seclabExecuteFromTab?<R>(id: string, args: unknown[], origin: unknown): Promise<R>;
+	};
+	if (typeof tainted.seclabExecuteFromTab !== 'function') {
+		return Promise.reject(new Error('Unsupported operation'));
+	}
+	return tainted.seclabExecuteFromTab<T>(id, args, origin);
 }
 
+/**
+ * Tab id for an authority, derived from the authority itself.
+ *
+ * The authority a remote window connects to *is* `seclab+<tabId>`: the Tab
+ * Manager opens `vscode-remote://seclab+<tabId><path>`
+ * (docs/edr/20261104-tab-manager-routing.md), and the harness builds the same
+ * string. So the identity is already present in the connection, and a
+ * registry mapping authority to tab id would only restate it.
+ *
+ * An earlier version kept that registry, to be populated by the Tab Manager.
+ * Nothing populated it, so `seclabFilterFor` threw for every `seclab+` host --
+ * a mechanism that type-checked and had no caller, which is the failure this
+ * project keeps repeating. Deriving removes the mechanism rather than wiring
+ * it: there is nothing left to forget to call.
+ *
+ * What matters for identity is unchanged, and is the point worth keeping: the
+ * tab id comes from the *connection*, never from anything the tab sends.
+ * `MainThreadSecretState.$getPassword` taking the extension identity as an
+ * argument is exactly the mistake being avoided.
+ */
 export function seclabResolveTabId(authority: string): string | undefined {
-	return seclabTabs.get(authority);
+	const m = /^seclab\+([\w.-]+)$/.exec(authority);
+	return m ? m[1] : undefined;
 }
 
 /**
@@ -442,13 +485,13 @@ export function seclabResolveTabId(authority: string): string | undefined {
  * authority alone is fail-open by shape: an unexpected value would yield "no
  * filter" rather than "deny everything". Instead:
  *
- *   - a `seclab+*` authority with no tab id is fatal;
+ *   - a `seclab+*` authority whose tab id will not parse is fatal;
  *   - a trusted local host (no authority) is unfiltered, by design;
  *   - anything else gets a deny-all filter.
  */
 export function seclabFilterFor(
 	remoteAuthority: string | null,
-	resolveTabId: (authority: string) => string | undefined,
+	resolveTabId: (authority: string) => string | undefined = seclabResolveTabId,
 	onDenial?: (d: SeclabDenial) => void,
 ): ISeclabFilter | undefined {
 	if (remoteAuthority === null) {
@@ -459,7 +502,9 @@ export function seclabFilterFor(
 	}
 	const tabId = resolveTabId(remoteAuthority);
 	if (!tabId) {
-		throw new Error(`seclab: no tab registered for authority ${remoteAuthority}`);
+		// A `seclab+` authority we cannot name a tab for is not a tab we can
+		// key decisions or partitioned storage on. Refuse the host.
+		throw new Error(`seclab: cannot derive a tab id from authority ${remoteAuthority}`);
 	}
 	return new SeclabFilter(tabId, remoteAuthority, onDenial);
 }
@@ -477,7 +522,7 @@ setSeclabChannelGuard((ctx, channelName, method) => {
 	if (typeof authority !== 'string' || !SECLAB_AUTHORITY.test(authority)) {
 		return undefined;
 	}
-	const tabId = seclabResolveTabId(authority) ?? 'unregistered';
+	const tabId = seclabResolveTabId(authority) ?? 'unparsed';
 	const filter = new SeclabFilter(tabId, authority);
 	return filter.checkChannel(channelName, method);
 });
