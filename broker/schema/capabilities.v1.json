@@ -172,6 +172,7 @@
       },
       "tests": [
         "unit:test_binding_websocket_opt_in",
+        "unit:test_protocol_switch_on_credentialed_request_needs_approval",
         "it:test_websocket_credential_needs_binding_opt_in",
         "it:test_websocket_token_split_across_messages"
       ]

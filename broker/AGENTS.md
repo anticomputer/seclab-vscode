@@ -215,7 +215,10 @@ Each has a unit or integration test; grep for the phrase.
   `websocket: true`, and only for `Upgrade: websocket` (`Binding.matches(view,
   upgrade)`; `_upgrade_token`). Every binding lookup on the injection path
   must pass the upgrade token, and an unconfirmed import is never prompted for
-  an upgrade.
+  an upgrade. Any upgrade signal counts (`Upgrade`, `Sec-WebSocket-*`,
+  `Connection: upgrade`, CONNECT), because mitmproxy switches protocols on
+  the 101 response plus `Sec-WebSocket-Version`. The response hook refuses a
+  101 on an injected flow without `seclab.ws_ok`.
 - WebSocket server messages on scanned flows are scanned with the carried
   window (`WS_WINDOW`) as context. A match starting in already-delivered bytes
   silences the connection (`seclab.ws_dead`). Never decide on one message

@@ -84,11 +84,18 @@ def _textual(headers: http.Headers) -> bool:
 
 def _upgrade_token(r: http.Request) -> str | None:
     """The protocol a request upgrades to, lower-cased; None for a plain request. HTTP/2
-    extended CONNECT counts as an upgrade to an unknown protocol (never credentialed)."""
+    extended CONNECT counts as an upgrade to an unknown protocol (never credentialed).
+    Any upgrade signal counts, not just `Upgrade`: mitmproxy switches to WebSocket on a 101
+    response plus the request's `Sec-WebSocket-Version`, whatever else the request said."""
     if r.method == "CONNECT":
         return "connect"
-    u = r.headers.get("upgrade")
-    return None if u is None else u.strip().lower()
+    u = r.headers.get_all("upgrade")
+    if len(u) == 1:
+        return u[0].strip().lower()
+    if u or any(k.lower().startswith("sec-websocket-") for k in r.headers) or \
+            "upgrade" in r.headers.get("connection", "").lower():
+        return "malformed-upgrade"
+    return None
 
 
 def _path_representable(path: str) -> bool:
@@ -402,6 +409,8 @@ class SeclabAddon:
                              header=binding.inject.header, **view.summary())
             if injected:
                 flow.metadata["seclab.injected"] = injected
+                if upgrade == "websocket" and all(b.websocket for _c, b in planned.values()):
+                    flow.metadata["seclab.ws_ok"] = True
             origin = flow.metadata.get("seclab.origin")
             self.b.audit("request.allowed", rule=flow.metadata.get("seclab.rule"),
                          injected=injected, **({"origin": {"label": origin, "verified": False}}
@@ -483,6 +492,12 @@ class SeclabAddon:
             return
         view = flow.metadata.get("seclab.view")
         injected = bool(flow.metadata.get("seclab.injected"))
+        if resp.status_code == 101 and injected and not flow.metadata.get("seclab.ws_ok"):
+            # The upstream switched protocols on a credentialed request that was not approved
+            # as a WebSocket (mitmproxy decides on the response); never relay the stream.
+            flow.websocket = None
+            return self._block_response(flow, "protocol switch on a credentialed request without "
+                                              "a websocket: true binding")
         textual = _textual(resp.headers)
         # Any flow that carried a real value, and any response from a bound host,
         # is scanned for credentials the upstream may have minted.
