@@ -59,7 +59,7 @@ export function treeTexts(root: string, max = 4000): Map<string, string> {
 	const walk = (dir: string, rel: string): void => {
 		for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
 			if (out.size >= max) {
-				return;
+				throw new Error(`${root}: more than ${max} files; refusing to judge (or copy) it`);
 			}
 			const p = path.join(dir, e.name);
 			const r = rel ? `${rel}/${e.name}` : e.name;
@@ -74,10 +74,20 @@ export function treeTexts(root: string, max = 4000): Map<string, string> {
 	return out;
 }
 
+/** What materialiseFixture copies: exactly what treeTexts checked (SS-8). */
+function copyable(src: string): boolean {
+	const st = fs.lstatSync(src);
+	return st.isDirectory() ? !['node_modules', '.git'].includes(path.basename(src)) : st.isFile() && st.size < 2 << 20;
+}
+
+/** Marker in every materialised copy: clean-host deletes only provable harness copies (SS-1). */
+export const MATERIALISED_MARKER = '.seclab-materialised';
+
 /**
  * The only way a harness puts a fixture workspace on the host: refuses a source that carries an
  * AV loader shape (those are stored as *.parts.json and assembled inside the tab), records the
- * destination in run.json first, so teardown deletes it even if the run dies, then copies.
+ * destination in run.json first, so teardown deletes it even if the run dies, then copies
+ * exactly the files it checked (no symlinks, nothing skipped by the check) and marks the copy.
  */
 export function materialiseFixture(runDir: string, src: string, dst: string): void {
 	const findings = avFindings(treeTexts(src));
@@ -86,7 +96,8 @@ export function materialiseFixture(runDir: string, src: string, dst: string): vo
 	}
 	fs.mkdirSync(runDir, { recursive: true });
 	writeManifest(runDir, { workspaces: [path.resolve(dst)] });
-	fs.cpSync(src, dst, { recursive: true });
+	fs.cpSync(src, dst, { recursive: true, filter: copyable });
+	fs.writeFileSync(path.join(dst, MATERIALISED_MARKER), `${path.resolve(runDir)}\n`);
 }
 
 export function readManifest(runDir: string): RunManifest {

@@ -178,15 +178,21 @@ for (const p of procs) {
 
 // ---- sbx sandboxes -----------------------------------------------------------------------
 const sbx = run(SBX, ['ls', '--json']);
+// Workspace paths mounted by sandboxes that stay (a fixture copy they mount is in use).
+const keptMounts: string[] = [];
 if (!sbx.error && sbx.status === 0) {
 	for (const s of JSON.parse(sbx.stdout) as Array<{ name: string; status: string; workspaces?: string[] }>) {
 		if (!OURS.sandbox.test(s.name)) {
+			keptMounts.push(...(s.workspaces ?? []));
 			continue;
 		}
 		const running = s.status !== 'stopped';
 		const ws = s.workspaces ?? [];
 		const pol = tabPolicy(s.name, ws.length && ws.every(w => underTest(w)) ? 'test' : undefined);
 		const remove = pol.remove && (!running || args.has('--running'));
+		if (!remove) {
+			keptMounts.push(...ws);
+		}
 		items.push({
 			kind: 'sbx sandbox', name: `${s.name} (${pol.owner})`, state: s.status, remove,
 			why: !pol.remove ? pol.why : running && !args.has('--running') ? 'running (use --running)' : '', del: () => ok(SBX, ['rm', '--force', s.name]),
@@ -251,12 +257,16 @@ for (const dir of [path.join(home, '.seclab-test'), '/Users/Shared/seclab-demo']
 }
 
 // ---- stale fixture copies in every worktree's .work/ (EDR fixture-safety) ---------------------
-// Hostile fixtures materialised on the host are what endpoint protection flags. A workspace
-// root under .work/ is a fixture copy if it carries our `.seclab/` dir, or if its tree has an AV
-// loader shape (av-shape.ts). Bounded walk; build trees pruned; symlinks never followed.
-const PRUNE = new Set(['node_modules', '.git', 'out', 'out-build', '.build', 'vscode', 'vscode-reh', 'src', 'deps-verified', 'attestations']);
-const fixtureRoots = new Map<string, string>();
-const scanWork = (dir: string, depth: number): void => {
+// Hostile fixtures materialised on the host are what endpoint protection flags. Removed only
+// when provably a harness copy (SS-1): it carries materialiseFixture's marker, a run.json lists
+// it under `workspaces`, or it sits at an exact legacy harness path. Other `.seclab/` dirs and
+// AV-shaped trees are reported, never deleted. Never descends into a checkout (a `.git` entry:
+// e.g. a nested worktree's tracked fixtures) or follows symlinks; depth 0-1 is never a root.
+const PRUNE = new Set(['node_modules', 'out', 'out-build', '.build', 'vscode', 'vscode-reh', 'src', 'deps-verified', 'attestations']);
+const LEGACY = /^(containment\/(sbx|oci)\/tabs\/[^/]+|containment-editor\/ws-[^/]+|observability\/(sbx|oci)\/tabs\/[^/]+|obs-demo\/tabs\/[^/]+)$/;
+const fixtureRoots = new Map<string, { remove: boolean; why: string }>();
+const listed = new Set<string>();
+const scanWork = (work: string, dir: string, depth: number): void => {
 	if (depth > 8) {
 		return;
 	}
@@ -267,36 +277,54 @@ const scanWork = (dir: string, depth: number): void => {
 		return;
 	}
 	const names = new Set(ents.map(e => e.name));
+	if (depth > 0 && names.has('.git')) {
+		return; // a checkout: its fixtures are tracked files, not copies
+	}
+	if (names.has('run.json')) {
+		try {
+			for (const w of (JSON.parse(fs.readFileSync(path.join(dir, 'run.json'), 'utf8')) as { workspaces?: unknown }).workspaces as string[] ?? []) {
+				if (typeof w === 'string' && path.resolve(w).startsWith(dir + path.sep)) {
+					listed.add(path.resolve(w));
+				}
+			}
+		} catch { /* not a run manifest */ }
+	}
 	const hasDir = (n: string) => ents.some(e => e.name === n && e.isDirectory());
-	if (hasDir('.seclab')) {
-		fixtureRoots.set(dir, '');
+	if (depth >= 2 && (hasDir('.seclab') || names.has('.seclab-materialised'))) {
+		const rel = path.relative(work, dir).split(path.sep).join('/');
+		const ours = names.has('.seclab-materialised') || LEGACY.test(rel);
+		fixtureRoots.set(dir, { remove: ours, why: ours ? '' : 'has a .seclab/ dir but is not a recognised harness copy: review it' });
 		return;
 	}
-	if (hasDir('.vscode') && names.size < 400) {
+	if (depth >= 2 && hasDir('.vscode') && names.size < 400) {
 		let first: string | undefined;
 		try {
 			first = avFindings(treeTexts(dir, 400))[0];
 		} catch { /* unreadable: not ours to judge */ }
 		if (first) {
-			// Not one of our fixtures (e.g. an upstream source tree): report, never delete.
-			fixtureRoots.set(dir, first);
+			fixtureRoots.set(dir, { remove: false, why: `not a seclab fixture; has an AV loader shape, review it: ${first.slice(0, 140)}` });
 			return;
 		}
 	}
 	for (const e of ents) {
 		if (e.isDirectory() && !PRUNE.has(e.name)) {
-			scanWork(path.join(dir, e.name), depth + 1);
+			scanWork(work, path.join(dir, e.name), depth + 1);
 		}
 	}
 };
 for (const w of worktrees) {
-	scanWork(path.join(w, '.work'), 0);
+	const work = path.join(w, '.work');
+	scanWork(work, work, 0);
 }
-for (const [p, avShape] of fixtureRoots) {
-	const inUse = procs.some(x => x.args.includes(p));
-	const why = avShape ? `not a seclab fixture; has an AV loader shape, review it: ${avShape.slice(0, 140)}` : inUse ? 'a running process uses it' : '';
+for (const p of listed) {
+	if (fs.existsSync(p)) {
+		fixtureRoots.set(p, { remove: true, why: '' });
+	}
+}
+for (const [p, f] of fixtureRoots) {
+	const inUse = procs.some(x => x.args.includes(p)) || keptMounts.some(m => m === p || m.startsWith(p + path.sep) || p.startsWith(m + path.sep));
 	items.push({
-		kind: 'fixture copy', name: p, state: inUse ? 'in use' : '', remove: !inUse && !avShape, why,
+		kind: 'fixture copy', name: p, state: inUse ? 'in use' : '', remove: f.remove && !inUse, why: f.why || (inUse ? 'a running process or a kept sandbox uses it' : ''),
 		del: () => {
 			fs.rmSync(p, { recursive: true, force: true });
 			return !fs.existsSync(p);

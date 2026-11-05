@@ -25,20 +25,26 @@ no `Valid-Until`, so an attacker able to serve an older signed index could repla
 broker EDR had recorded that replay risk as a test-only exception.
 
 ## Decision
-Both are recorded exceptions. In `deps/registry.json` each affected entry carries
-`exception {record, approved, covers}`. `./seclab lint deps` requires the record to be an
-existing EDR and requires the approval and the scope to be filled in. `docs/DEPENDENCIES.md`
-lists them under "Recorded exceptions".
+Both are recorded exceptions. Register entries covered: `host-sbx`, `host-docker-desktop`,
+`host-gh` (host prerequisites); `apt-builder`, `apt-tab`, `apt-broker-tests` (apt). In
+`deps/registry.json` each carries `exception {record, approved, covers}`. `./seclab lint deps`
+requires the record to be an existing EDR that quotes the approval verbatim and lists the
+entry's id, and requires the scope to be filled in. `docs/DEPENDENCIES.md` lists them under
+"Recorded exceptions".
 
 **Host prerequisites: covered, with a check we can run.** `./seclab deps host` is read-only
 and installs nothing:
-- **gh:** it downloads cli/cli's release archive for the installed version and verifies
-  its attestation with `gh attestation verify --repo cli/cli --signer-workflow
-  cli/cli/.github/workflows/deployment.yml`. The installed binary must be byte-identical to
-  the one in that archive. Verified 2026-11-05: the Copilot app's gh 2.102.1 matches
-  `gh_2.102.1_macOS_arm64.zip` (sha256 `b547134b…`).
-- **Docker Desktop, the docker CLI and sbx:** each must pass `codesign --verify --strict`
-  with Docker, Inc.'s Developer ID team (`9BNSXJN65R`). Verified for Docker Desktop and sbx
+- **gh:** it fetches cli/cli's release archive for the installed version and the release's
+  checksums file with `curl`, not through the gh being checked, and the archive must match
+  the checksums. It also verifies the archive's attestation with `gh attestation verify
+  --repo cli/cli --signer-workflow cli/cli/.github/workflows/deployment.yml`. The installed
+  binary must be byte-identical to the one in that archive (`shasum`, not gh). Verified
+  2026-11-05: the Copilot app's gh 2.102.1 matches `gh_2.102.1_macOS_arm64.zip` (sha256
+  `b547134b…`).
+- **Docker Desktop, the docker CLI and sbx:** each must satisfy the designated requirement
+  `anchor apple generic and certificate leaf[subject.OU] = "9BNSXJN65R"` (`codesign --verify
+  --strict -R`): an Apple-anchored Developer ID chain whose leaf is Docker, Inc.'s team.
+  Verified for Docker Desktop and sbx
   0.51.0.
 
 **apt: covered for every apt set.** The builder, the OCI tab image and the broker test
@@ -47,11 +53,14 @@ checks stay on. Installed versions are recorded by the image build. This excepti
 supersedes the broker EDR's test-only apt-replay exception, which it subsumes.
 
 ## Consequences
-- What the gh check can't do: a malicious gh could lie about itself. GitHub signs cli/cli's
+- What the gh check can't do: the attestation step is gh verifying itself, so a malicious gh
+  could fake that one result. The byte comparison against the curl-fetched, checksum-matched
+  archive doesn't depend on gh, so a substituted binary is still caught; a compromised
+  release (archive and checksums both replaced at the source) is not. GitHub signs cli/cli's
   attestations with its own Sigstore instance (Fulcio "GitHub, Inc." intermediate, a TSA
   timestamp, no Rekor entry), so sigstore-python with the public-good root can't act as a
-  second verifier. The check catches a substituted or differently built binary. A Homebrew
-  build fails it, by design, and the failure is reported, not hidden.
+  second verifier. A Homebrew build fails the check, by design, and the failure is reported,
+  not hidden.
 - What the codesign check covers: it proves the binaries are Docker's signed builds as
   installed. It doesn't pin a version. The sbx kit image's own signature is still
   unconfirmed and stays recorded as part of the sbx entry.

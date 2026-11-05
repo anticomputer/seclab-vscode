@@ -109,7 +109,13 @@ deps_host() {
 	esac
 	dir="$ROOT/.work/deps-host/gh-$ver"
 	rm -rf "$dir" && mkdir -p "$dir/x"
-	gh release download "v$ver" -R cli/cli -p "$asset" -D "$dir" >/dev/null
+	# Fetched with curl, not through the gh being checked (SS-3), plus the release's checksums.
+	local rel="https://github.com/cli/cli/releases/download/v$ver"
+	curl -fsSL --proto '=https' -o "$dir/$asset" "$rel/$asset"
+	curl -fsSL --proto '=https' -o "$dir/checksums.txt" "$rel/gh_${ver}_checksums.txt"
+	want="$(awk -v a="$asset" '$2 == a { print $1 }' "$dir/checksums.txt")"
+	[[ "$want" =~ ^[0-9a-f]{64}$ && "$(shasum -a 256 "$dir/$asset" | cut -c1-64)" == "$want" ]] \
+		|| { echo "gh $ver: $asset does not match the release's checksums file" >&2; return 1; }
 	if gh attestation verify "$dir/$asset" --repo cli/cli --signer-workflow cli/cli/.github/workflows/deployment.yml >/dev/null 2>"$dir/verify.err"; then
 		case "$asset" in *.zip) (cd "$dir/x" && unzip -q "../$asset") ;; *) tar -C "$dir/x" -xzf "$dir/$asset" ;; esac
 		want="$(shasum -a 256 "$dir"/x/*/bin/gh | cut -c1-64)"
@@ -126,7 +132,8 @@ deps_host() {
 		for p in /Applications/Docker.app "$(command -v docker)" "$(command -v sbx)"; do
 			[[ -e "$p" ]] || { echo "$p: not found" >&2; bad=1; continue; }
 			real="$(realpath "$p")"
-			if codesign --verify --strict "$real" 2>/dev/null && [[ "$(codesign -dv "$real" 2>&1)" == *$'\n'"TeamIdentifier=$DOCKER_TEAM_ID"* ]]; then
+			# A designated requirement (SS-4): an Apple-anchored Developer ID chain whose leaf is Docker, Inc.'s team.
+			if codesign --verify --strict -R="anchor apple generic and certificate leaf[subject.OU] = \"$DOCKER_TEAM_ID\"" "$real" 2>/dev/null; then
 				echo "$p: valid Developer ID signature, Docker, Inc. ($DOCKER_TEAM_ID)"
 			else
 				echo "$p: signature invalid or not Docker, Inc.'s" >&2; bad=1

