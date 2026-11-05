@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/ipc.ts
---- a/src/vs/base/parts/ipc/common/ipc.ts	2026-11-04 17:43:28
-+++ b/src/vs/base/parts/ipc/common/ipc.ts	2026-11-04 17:43:28
+--- a/src/vs/base/parts/ipc/common/ipc.ts	2026-11-05 13:28:54
++++ b/src/vs/base/parts/ipc/common/ipc.ts	2026-11-05 13:28:54
 @@ -329,6 +329,30 @@
  	timeoutTimer: Timeout;
  }
@@ -32,28 +32,43 @@ diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/i
  export class ChannelServer<TContext = string> implements IChannelServer<TContext>, IDisposable {
  
  	private channels = new Map<string, IServerChannel<TContext>>();
-@@ -345,7 +369,23 @@
+@@ -345,7 +369,38 @@
  	}
  
  	registerChannel(channelName: string, channel: IServerChannel<TContext>): void {
 -		this.channels.set(channelName, channel);
-+		// seclab: wrap every channel served to a remote peer, so the guard sees
-+		// calls whatever path registered them.
-+		const guard = seclabChannelGuard;
++		// seclab: wrap unconditionally, and read the guard at *call* time.
++		//
++		// An earlier version captured `seclabChannelGuard` here and only wrapped
++		// when one was already installed. Registration order then decided
++		// enforcement: a channel registered before the workbench installed the
++		// guard was stored unwrapped and stayed unguarded for the life of the
++		// connection. Wrapping always, and looking the guard up per call,
++		// removes the ordering question entirely rather than relying on module
++		// load order to come out the right way.
 +		const ctx = this.ctx;
-+		this.channels.set(channelName, guard ? {
++		this.channels.set(channelName, {
 +			call(c: TContext, command: string, arg?: any, cancellationToken?: any): Promise<any> {
-+				const refused = guard(ctx, channelName, command);
++				const refused = seclabChannelGuard?.(ctx, channelName, command);
 +				return refused ? Promise.reject(refused) : channel.call(c, command, arg, cancellationToken);
 +			},
-+			listen(c: TContext, event: string, arg?: any) {
-+				const refused = guard(ctx, channelName, event);
++			listen(c: TContext, event: string, arg?: any): Event<any> {
++				const refused = seclabChannelGuard?.(ctx, channelName, event);
 +				if (refused) {
-+					throw refused;
++					// Return an event that never fires, rather than throwing.
++					// `onPromise` wraps `channel.call` in try/catch, so a throw
++					// there becomes a rejected promise; `onEventListen` has no
++					// try/catch, so a throw would escape into the message
++					// handler and break the connection instead of refusing one
++					// capability. The caller gets a valid disposable and no
++					// events, which is also what an unsupported event looks
++					// like -- the denial is recorded host-side, not signalled
++					// to the tab.
++					return Event.None;
 +				}
 +				return channel.listen(c, event, arg);
 +			},
-+		} as IServerChannel<TContext> : channel);
++		});
  
  		// https://github.com/microsoft/vscode/issues/72531
  		setTimeout(() => this.flushPendingRequests(channelName), 0);

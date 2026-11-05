@@ -7,7 +7,7 @@
   `0006-seclab-channel-guard.patch`, `0007-seclab-command-taint.patch`, and
   `rpc-filter/patch-src/seclabRpcFilter.ts`
 - **Upstream:** `microsoft/vscode@a717861c07586a53d83b80d742cd3f59b20a6273`
-- **Verdict: DO-NOT-LAND** at the time of the round. Findings 1-5 are now fixed; 6 (the channel guard binding at registration time) remains open and still blocks landing. The
+- **Verdict: DO-NOT-LAND** at the time of the round. All six findings are now fixed. The round's original verdict is kept for the record; the follow-up review of 0009-0011 is in 20261105-agent-host-patches.md. The
   patches branch stays off main until a re-review passes.
 
 ## Why this round mattered
@@ -28,7 +28,7 @@ enforcement.
 | 3 | **Critical** | Same mechanism, the write direction. | **Fixed** by the same change; `$writeFile` and both URI positions of `$copy`/`$rename` are covered, and the test asserts the destination argument is checked. |
 | 4 | **High** | **`seclabRegisterTab` has no caller.** The Tab Manager never registers an authority, so `seclabFilterFor` throws for every `seclab+` host. | **Fixed** by removing the mechanism rather than wiring it. The authority a remote window connects to *is* `seclab+<tabId>` (`docs/edr/20261104-tab-manager-routing.md`), so the registry only restated identity already present in the connection; `seclabResolveTabId` now derives it. There is no longer anything to forget to call, and the property that mattered is unchanged: the tab id comes from the connection, never from a call argument. |
 | 5 | **High** | **The entire taint in 0007 is dead code.** Nothing passes an `origin` into `_tryExecuteCommand`, because `MainThreadCommands.$executeCommand` was never routed to `seclabExecuteFromTab`. The `launder-*` probes would have reported green for a reason unrelated to the mechanism they test. | **Fixed.** Patch 0008 routes `$executeCommand` through `seclabExecuteCommandFromTab`, with the origin captured from `extHostContext.remoteAuthority` in the customer's constructor rather than from any call argument. It fails closed: if `seclabExecuteFromTab` is absent the call is refused, because falling back to a plain `executeCommand` would run the tab's command *untainted* while the probes passed. |
-| 6 | Medium | The channel guard binds the guard at **registration** time, so a channel registered before the filter module loads escapes it; and `listen` throwing synchronously may not match `ChannelServer`'s error handling. | **Open.** |
+| 6 | Medium | The channel guard binds the guard at **registration** time, so a channel registered before the filter module loads escapes it; and `listen` throwing synchronously may not match `ChannelServer`'s error handling. | **Fixed.** Both halves were real. The guard is now read at *call* time and every channel is wrapped unconditionally, so registration order no longer decides enforcement -- previously a channel registered first was stored unwrapped and stayed unguarded for the life of the connection. A refused `listen` now returns `Event.None` instead of throwing: `onPromise` wraps `channel.call` in try/catch so a throw there becomes a rejected promise, but **`onEventListen` has no try/catch**, so a throw escaped into the message handler and broke the connection rather than refusing one capability. `test/containment/channel-guard.test.ts` pins both, each paired with a control that runs the old implementation and asserts it exhibits the bug. |
 
 ### Confirmed sound, no change
 
