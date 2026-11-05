@@ -201,6 +201,9 @@ Each has a unit or integration test; grep for the phrase.
 - A sentinel anywhere else (other header, URL, body, trailer, WebSocket frame)
   is misplaced: blocked in `block` mode and never swapped.
 - The provider backstop is checked before any injection. It beats bindings.
+  The one exemption is a confirmed credential's exact `derive.from` route,
+  whose response must yield a structurally replaced token or is blocked. Never
+  add another exemption without an ADR.
 
 **Responses and approvals**
 - On injected flows and bound hosts:

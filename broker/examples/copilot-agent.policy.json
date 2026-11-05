@@ -30,7 +30,7 @@
       "id": "github",
       "inject": {
         "header": "Authorization",
-        "fmt": "token {value}"
+        "fmt": "Bearer {value}"
       },
       "bind": [
         {

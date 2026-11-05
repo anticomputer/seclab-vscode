@@ -160,3 +160,22 @@ def test_trusted_derivation_fails_closed(pod, ctl):
     assert r.code == 502 and "derivation" in r.body
     ctl.wait_note("audit.event", lambda e: e["type"] == "response.blocked" and "derivation" in e["reason"],
                   since=mark, timeout=10)
+
+
+def test_backstop_exempts_only_a_declared_derive_route(pod, ctl):
+    """A provider-backstopped mint endpoint (here /user/keys under provider github) is
+    reachable with the credential only on the exact route a derive rule declares, and its
+    response must then yield a structurally replaced token or be blocked. Other backstopped
+    routes stay denied (test_provider_backstop_beats_binding)."""
+    rule = {"id": "mint", "from": {"host": "api.example.test", "path": "/user/keys", "method": "POST"},
+            "field": "token", "inject": {"header": "Authorization", "fmt": "Bearer {value}"},
+            "bind": [{"host": "model.example.test", "path": "/v1/chat/completions", "methods": ["POST"]}]}
+    parent = dict(PARENT, provider="github", derive=[rule],
+                  bind=[{"host": "api.example.test", "path": "/user/keys", "methods": ["POST"]}])
+    s = pod.load({"allow": [{"host": "api.example.test"}, {"host": "model.example.test"}],
+                  "credentials": [parent], "models": {"providers": [FAKE]}, "prompt": {"enabled": False}})["gh"]
+    ctl.call("credential.provide", {"id": "gh", "value": pod.canaries["git"]})
+    mark = ctl.mark()
+    r = pod.curl("https://api.example.test/user/keys", "-X", "POST", "-H", f"Authorization: token {s}", "-d", "{}")
+    assert r.code == 502 and "derivation" in r.body  # reached upstream, response had no token: blocked
+    ctl.wait_note("audit.event", lambda e: e["type"] == "credential.backstop_exempt", since=mark, timeout=10)

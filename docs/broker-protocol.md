@@ -956,6 +956,7 @@ listed type is never emitted.
 | `credential.injected` | A real value was written into a request header. |
 | `credential.derived` | A minted token was re-sentinelised. |
 | `credential.backstop_denied` | A credentialed request hit the provider backstop. |
+| `credential.backstop_exempt` | A credentialed request on the exact route of a confirmed credential's `derive` rule passed the provider backstop; its response must yield a structurally replaced token or is blocked. |
 | `sentinel.misplaced` | A sentinel appeared outside its binding. |
 | `token.redacted` | A minted token was redacted (no parent credential, or a limit was reached). |
 | `session.stripped` | A session header was stripped from a credentialed response. |
@@ -1063,6 +1064,11 @@ as `version` and `policySchema.revision`, so a supervisor can detect it.
 ### Changelog (generated)
 
 <!-- BEGIN GENERATED: protocol-changelog (broker/tools/docs.py; do not edit) -->
+**0.3.1** (2026-11-05; policy schema revision 3)
+
+- The provider backstop exempts a confirmed credential's request on the exact `from` route of one of its own `derive` rules (audit `credential.backstop_exempt`); the response must yield a structurally replaced token or is blocked. Needed for D7: the Copilot token endpoint is backstopped. Every other backstopped route stays denied.
+- Derived children are also dropped on an identical re-import; a same-value `credential.provide` keeps them.
+
 **0.3.0** (2026-11-05; policy schema revision 3)
 
 - **Behaviour change:** model hosts get a fail-closed body policy (policy `models`). A request to a declared provider's host, or to any host on the broker's known model-host list, is denied with `403` unless the provider is declared, the method and path are one of its endpoints, it is not an upgrade, and its body is strict JSON (identity encoding, JSON media type, no duplicate or escaped keys) with only listed top-level fields and tool `type`s. Tier C exceptions are `models.grants`. Why: a model API with server-side tools can relay workspace data to a URL the tab chooses (secure-agentic plan 4.4).

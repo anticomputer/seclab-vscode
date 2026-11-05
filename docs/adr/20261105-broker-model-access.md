@@ -125,6 +125,24 @@ enforced here and nowhere else. An identical re-import also drops the child.
 Only a `credential.provide` of the same value, a just-in-time refresh, keeps
 it.
 
+**The provider backstop exempts only a declared derive route.** The GitHub
+backstop denies credentialed calls to `/copilot_internal/**`, because the tab
+must never mint its own Copilot token. D7 changes how that guarantee is kept:
+the broker makes the mint call, and the token comes back to the tab only as a
+sentinel.
+
+So a confirmed credential's request on the exact `from` route of one of its
+own `derive` rules passes the backstop, and is audited as
+`credential.backstop_exempt`. Its response must yield a structurally replaced
+token, or it is blocked. Every other backstopped route, including the rest of
+`/copilot_internal/**`, stays denied (`test_backstop_exempts_only_a_declared_derive_route`).
+
+**Measured traffic** (secure-agentic spike, 2026-11-05):
+- the Copilot runtime sends the GitHub credential as
+  `Authorization: Bearer <value>`, so the example policy uses that format;
+- its first call is `GET /copilot_internal/user`. That call is still behind
+  the backstop, pending a decision on exempting it.
+
 **The amended rule** (shared with the RPC filter's `$getSession` wording): *a
 token minted for the tab reaches it only as a sentinel, bound to no more than
 its parent's bindings, or to the bindings of a derivation rule the controller

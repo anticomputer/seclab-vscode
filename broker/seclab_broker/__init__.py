@@ -1,6 +1,6 @@
 """seclab-vscode per-tab egress and credential broker."""
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 PROTOCOL = "seclab-broker/1"
 POLICY_SCHEMA_VERSION = 1
 # Bumped for behaviour changes that keep the schema's major version (see the protocol
