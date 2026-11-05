@@ -460,7 +460,7 @@ Rules marked gitleaks are taken from https://github.com/gitleaks/gitleaks/blob/5
    "id": "github",
    "inject": {
     "header": "Authorization",
-    "fmt": "token {value}"
+    "fmt": "Bearer {value}"
    },
    "bind": [
     {

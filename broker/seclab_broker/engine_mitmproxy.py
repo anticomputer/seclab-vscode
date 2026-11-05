@@ -400,6 +400,13 @@ class SeclabAddon:
                 return
 
         for cred, _b in list(planned.values()) + [(c, None) for c, _h, _v in unbound]:
+            if cred.confirmed and any(r.matches(view) for r in cred.derive_rules):
+                # The one exemption (ADR broker-model-access): the controller declared this exact
+                # route as a mint, so its token is replaced structurally (fail closed) and never
+                # reaches the tab, which is what the backstop exists to guarantee.
+                self.b.audit("credential.backstop_exempt", credentialId=cred.id, reason="declared derive route",
+                             **view.summary())
+                continue
             entry = backstop_denies(view, cred.provider)
             if entry is not None:
                 self.b.audit("credential.backstop_denied", credentialId=cred.id,

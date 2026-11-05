@@ -218,6 +218,7 @@
       "tests": [
         "unit:test_derive_trusted_widens_only_to_the_rule_and_keeps_its_sentinel",
         "unit:test_r7_derived_children_never_outlive_their_parent",
+        "it:test_backstop_exempts_only_a_declared_derive_route",
         "it:test_trusted_derivation_binds_child_where_the_controller_said",
         "it:test_trusted_derivation_fails_closed"
       ]
