@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
+import re
 import sys
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
@@ -81,6 +83,106 @@ def _rebuild(section: list, source_rel: str) -> list:
     return head + hunk
 
 
+def _exported_symbols(rel: str) -> list:
+    """Exported `seclab*` function names declared in a patch-src file."""
+    with open(os.path.join(REPO, rel), "r", encoding="utf-8") as fh:
+        text = fh.read()
+    return re.findall(r"^export function (seclab\w+)", text, re.M)
+
+
+def _patch_added_text() -> str:
+    """Lines the patch queue adds to *upstream* files.
+
+    Sections that ship our own `patch-src` files are skipped. Including them
+    would make this check vacuous: patch 0005 carries the whole filter module
+    as a new-file hunk, so every exported symbol would find its own
+    declaration in the added text and appear to have a caller. The first
+    version of this check did exactly that and passed with the caller removed
+    -- which is the same failure it was written to catch, one level up.
+    """
+    chunks = []
+    for name in sorted(os.listdir(PATCH_DIR)):
+        if not name.endswith(".patch"):
+            continue
+        path = os.path.join(PATCH_DIR, name)
+        with open(path, "r", encoding="utf-8") as fh:
+            lines = fh.read().split("\n")
+        for section in _split_sections(lines):
+            target = _target_of(section)
+            if target and target in MAPPING:
+                continue
+            for line in section:
+                if line.startswith("+") and not line.startswith("+++"):
+                    chunks.append(line[1:] + "\n")
+    return "".join(chunks)
+
+
+# Entry points with no in-tree caller by design, with the reason they are kept.
+CALLER_EXEMPT = {
+    # Consumed by the Tab Manager and the observability adapter, which are not
+    # part of the patched upstream tree.
+    "seclabOnDecision": "consumed by the Tab Manager, outside the patched tree",
+    "seclabTaintEscapes": "read by the probe suite, not by shipped code",
+    "seclabRegisterRewrite": "called by a rewrite implementation; none ships yet, "
+                             "and the absence is what makes rewrites deny",
+}
+
+
+_IMPORT_BLOCK = re.compile(r"^\s*import\s[\s\S]*?from\s*['\"][^'\"]+['\"]\s*;?\s*$", re.M)
+
+
+def _without_imports(text: str) -> str:
+    """Drop import statements.
+
+    An import names a symbol without using it, and an entry point that is
+    imported but never invoked is precisely the dead mechanism this check is
+    looking for.
+    """
+    return _IMPORT_BLOCK.sub("", text)
+
+
+def check_callers() -> list:
+    """Every exported `seclab*` entry point must have a caller, or an exemption.
+
+    This project's recurring failure is a mechanism that type-checks, reviews
+    well and is never invoked: `seclabRegisterTab` left `seclabFilterFor`
+    throwing for every tab, and the whole command taint was dead because
+    nothing routed `$executeCommand` into it. Both passed every gate, because
+    no gate asked whether anything called them.
+
+    A symbol counts as called if it is referenced outside the file that
+    declares it -- in another patch-src file, or in a line the patch queue adds
+    to an upstream file. An entry point that genuinely has no in-tree caller
+    belongs in CALLER_EXEMPT with the reason, so the claim is visible rather
+    than assumed.
+    """
+    errors = []
+    added = _patch_added_text()
+    sources = sorted(set(MAPPING.values()))
+    texts = {}
+    for rel in sources:
+        with open(os.path.join(REPO, rel), "r", encoding="utf-8") as fh:
+            texts[rel] = fh.read()
+
+    for rel in sources:
+        for symbol in _exported_symbols(rel):
+            if symbol in CALLER_EXEMPT:
+                continue
+            elsewhere = "".join(t for r, t in texts.items() if r != rel)
+            haystack = _without_imports(elsewhere) + "\n" + _without_imports(added)
+            # A bare word, not `symbol(`: passing an entry point as a value --
+            # `seclabFilterFor(authority, seclabResolveTabId)` -- is a use, and
+            # requiring a call shape missed exactly that.
+            if re.search(r"\b%s\b" % re.escape(symbol), haystack):
+                continue
+            errors.append(
+                "%s exports %s, but nothing calls it. An entry point with no "
+                "caller is the failure this check exists for: it type-checks, "
+                "reviews well and never runs. Wire it, delete it, or add it to "
+                "CALLER_EXEMPT with the reason." % (rel, symbol))
+    return errors
+
+
 def process(write: bool) -> int:
     problems = []
     for name in sorted(os.listdir(PATCH_DIR)):
@@ -112,9 +214,19 @@ def process(write: bool) -> int:
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write(body + ("\n" if trailing_nl else ""))
 
-    if not problems:
-        print("patch sources in sync with rpc-filter/patch-src")
+    caller_errors = [] if write else check_callers()
+
+    if not problems and not caller_errors:
+        print("patch sources in sync with rpc-filter/patch-src; "
+              "every seclab entry point has a caller")
         return 0
+
+    if caller_errors and not write:
+        print("FAIL: dead entry points in the patch queue.")
+        for e in caller_errors:
+            print("  " + e)
+        if not problems:
+            return 1
 
     if write:
         for name, target, source in problems:
