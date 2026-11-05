@@ -310,6 +310,21 @@
       ]
     },
     {
+      "flag": "untrustedTextTagged",
+      "label": "Tab-controlled text in prompts and audit sanitized and tagged `untrusted`; no decision driven by content",
+      "cells": {
+        "sbx-native": {
+          "value": false
+        }
+      },
+      "tests": [
+        "unit:test_audit_events_are_sanitized_and_tagged",
+        "unit:test_approvals_are_sanitized_and_tagged",
+        "unit:test_suggested_binding_path_is_never_a_wildcard",
+        "it:test_content_never_drives_a_permissive_decision"
+      ]
+    },
+    {
       "label": "Isolation domain between broker (real secrets) and tab",
       "cells": {
         "mitmproxy-oci": {

@@ -143,7 +143,7 @@ Where and how the real value is written. Some headers are refused; the list is i
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `header` | `string` | yes | The only header the real value is ever written to. Chosen by the host, never by the caller. (pattern `^[A-Za-z0-9][A-Za-z0-9-]{0,63}$`) |
-| `fmt` | `string` | yes | Template. '{value}' is the real secret; '{base64:TEXT}' base64-encodes TEXT after substituting {value}. Example: 'Basic {base64:x-access-token:{value}}'. (max length `256`) |
+| `fmt` | `string` | yes | Template. '{value}' is the real secret; '{base64:TEXT}' base64-encodes TEXT after substituting {value}. Example: 'Basic {base64:x-access-token:{value}}'. Printable ASCII only. (pattern `^[ -~]*$`; max length `256`) |
 
 <a id="binding"></a>
 ### `binding`

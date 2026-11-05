@@ -31,6 +31,7 @@ from .policy import (METHOD_OVERRIDE_HEADERS, Binding, PolicyError, RequestView,
                      canonical_path, normalize_host, normalize_ip, query_has_method_override,
                      validate_fragment)
 from .scanner import find_minted
+from .untrusted import display_path
 
 log = logging.getLogger("seclab.engine")
 _METHOD = re.compile(r"^[A-Z]{1,16}$")
@@ -130,7 +131,7 @@ class SeclabAddon:
             return view.summary()
         r = flow.request
         return {"scheme": r.scheme, "host": r.pretty_host[:253], "port": r.port,
-                "method": r.method[:16], "path": r.path.split("?", 1)[0][:512]}
+                "method": r.method[:16], "path": display_path(r.path.split("?", 1)[0], 512)}
 
     def _deny(self, flow: http.HTTPFlow, status: int, reason: str, **extra: Any) -> None:
         self._respond(flow, status, reason)

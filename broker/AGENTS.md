@@ -222,6 +222,20 @@ Each has a unit or integration test; grep for the phrase.
   docs-check).
 - The origin label is display-only. Never use it for a decision.
 
+**Untrusted text and content ([ADR](../docs/adr/20261104-broker-output-is-data.md))**
+- Every string in an approval or audit event goes through
+  `untrusted.sanitize`, and every tab-controlled field is named in its
+  `untrusted` list. A new field carrying tab, upstream or workspace text must
+  be added to `UNTRUSTED_AUDIT_KEYS` or `Approval.public`, to the schema
+  descriptions, and to `test_untrusted.py`.
+- Paths in prompts and audit go through `display_path` (percent-encoded ASCII).
+- A suggested binding path is the request path as a literal. A path the binding
+  grammar can't express without globs is shown encoded, and gets only
+  `allow-once`/`deny`.
+- No decision may read request or response content, beyond sentinel placement
+  and the restrictive response scanner. Decisions come from policy, the
+  authenticated tab and the controller.
+
 **Proxy auth and upstream guard**
 - Proxy auth happens before everything. Unauthenticated requests are never
   held, prompted, resolved or connected.
