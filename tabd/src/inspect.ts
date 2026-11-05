@@ -16,31 +16,43 @@ const FETCH = ['cu' + 'rl', 'wg' + 'et', 'Invoke-WebRequest', 'iwr', 'irm', 'Inv
 const INTERP = ['s' + 'h', 'ba' + 'sh', 'zsh', 'no' + 'de', 'python3?', 'pwsh', 'iex', 'Invoke-Expression'].join('|');
 const FETCH_RUN = new RegExp(`\\b(${FETCH})\\b[^|\\n]*\\|\\s*(sudo\\s+)?(${INTERP})\\b`, 'i');
 
-/** Read a workspace file without following links; undefined if absent, a link, or too big. */
+/** Read a workspace file without following links; undefined if absent, a link, or too big.
+ *  The final open is O_NOFOLLOW|O_NONBLOCK and re-checked with fstat (no FIFO can block tabd). */
 function readText(root: string, rel: string): string | undefined {
-	let cur = root;
-	for (const seg of rel.split('/')) {
-		cur = path.join(cur, seg);
-		const st = (() => {
-			try {
-				return fs.lstatSync(cur);
-			} catch {
-				return undefined;
-			}
-		})();
-		if (!st || st.isSymbolicLink()) {
-			return undefined;
-		}
+	if (!noLinks(root, rel)) {
+		return undefined;
 	}
+	let fd: number | undefined;
 	try {
-		const st = fs.lstatSync(cur);
+		fd = fs.openSync(path.join(root, ...rel.split('/')), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+		const st = fs.fstatSync(fd);
 		if (!st.isFile() || st.size > MAX_FILE) {
 			return undefined;
 		}
-		return fs.readFileSync(cur, 'utf8');
+		return fs.readFileSync(fd, 'utf8').replace(/^\uFEFF/, '');
 	} catch {
 		return undefined;
+	} finally {
+		if (fd !== undefined) {
+			fs.closeSync(fd);
+		}
 	}
+}
+
+/** Every component of rel exists and none is a link. */
+function noLinks(root: string, rel: string): boolean {
+	let cur = root;
+	for (const seg of rel.split('/')) {
+		cur = path.join(cur, seg);
+		try {
+			if (fs.lstatSync(cur).isSymbolicLink()) {
+				return false;
+			}
+		} catch {
+			return false;
+		}
+	}
+	return true;
 }
 
 /** JSON with comments and trailing commas (string-aware); undefined if it still doesn't parse. */
@@ -72,20 +84,30 @@ export function parseJsonc(text: string): unknown {
 		} else if (ch === '/' && text[i + 1] === '*') {
 			const end = text.indexOf('*/', i + 2);
 			i = end < 0 ? text.length : end + 2;
+		} else if (ch === ',' && /^\s*[}\]]/.test(text.slice(i + 1, i + 200).replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, ''))) {
+			i++; // trailing comma outside strings (RR-1: never inside a string)
 		} else {
 			out += ch;
 			i++;
 		}
 	}
 	try {
-		return JSON.parse(out.replace(/,(\s*[}\]])/g, '$1'));
+		return JSON.parse(out);
 	} catch {
 		return undefined;
 	}
 }
 
 const str = (v: unknown, max = 200): string => {
-	const s = Array.isArray(v) ? v.map(x => String(x)).join(' ') : typeof v === 'string' ? v : v === undefined ? '' : JSON.stringify(v);
+	let s: string;
+	try {
+		// Never recurse on folder data: arrays are joined one level deep, anything else is
+		// serialised with a size budget (RR-1: deep nesting must not throw).
+		s = Array.isArray(v) ? v.slice(0, 50).map(x => typeof x === 'string' ? x : typeof x === 'number' || typeof x === 'boolean' ? String(x) : '[…]').join(' ')
+			: typeof v === 'string' ? v : v === undefined ? '' : (JSON.stringify(v) ?? '').slice(0, max);
+	} catch {
+		s = '[unreadable]';
+	}
 	return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 };
 const obj = (v: unknown): Record<string, unknown> | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : undefined);
@@ -97,75 +119,111 @@ export function inspectWorkspace(root: string): { items: InspectItem[]; truncate
 			items.push({ kind, path: p, detail });
 		}
 	};
+	// A target file that exists but doesn't parse here may still be run by VS Code's tolerant
+	// parser: say so rather than dropping it (RR-1).
+	const json = (rel: string): Record<string, unknown> | undefined => {
+		const text = readText(root, rel);
+		if (text === undefined) {
+			return undefined;
+		}
+		const v = obj(parseJsonc(text));
+		if (!v) {
+			add('unparsed config (may still be run)', rel, `${text.length} characters`);
+		}
+		return v;
+	};
+	// Each section is isolated: one hostile file can't suppress the rest (RR-1).
+	const section = (name: string, f: () => void) => {
+		try {
+			f();
+		} catch {
+			add('unreadable config', name, 'could not be summarised');
+		}
+	};
 
 	// Tasks: folder-open, hidden, and fetch-and-run shapes.
-	const tasks = obj(parseJsonc(readText(root, '.vscode/tasks.json') ?? ''));
-	for (const t of (Array.isArray(tasks?.tasks) ? tasks.tasks : []) as unknown[]) {
-		const task = obj(t);
-		if (!task) {
-			continue;
+	section('.vscode/tasks.json', () => {
+		const tasks = json('.vscode/tasks.json');
+		for (const t of (Array.isArray(tasks?.tasks) ? tasks.tasks : []) as unknown[]) {
+			const task = obj(t);
+			if (!task) {
+				continue;
+			}
+			const cmd = `${str(task.command, 400)} ${str(task.args, 400)}`.trim();
+			const label = str(task.label ?? task.command, 80);
+			const os = ['osx', 'linux', 'windows'].map(k => str(obj(task[k])?.command, 400)).filter(Boolean).join(' | ');
+			if (obj(task.runOptions)?.runOn === 'folderOpen') {
+				add('folder-open task', '.vscode/tasks.json', `${label}: ${cmd}`);
+			}
+			const pres = obj(task.presentation);
+			if (pres?.reveal === 'never' || pres?.echo === false || task.hide === true) {
+				add('hidden task', '.vscode/tasks.json', label);
+			}
+			if (FETCH_RUN.test(`${cmd} ${os}`)) {
+				add('downloads and runs code', '.vscode/tasks.json', label);
+			}
 		}
-		const cmd = `${str(task.command, 400)} ${str(task.args, 400)}`.trim();
-		const label = str(task.label ?? task.command, 80);
-		const os = ['osx', 'linux', 'windows'].map(k => str(obj(task[k])?.command, 400)).filter(Boolean).join(' | ');
-		if (obj(task.runOptions)?.runOn === 'folderOpen') {
-			add('folder-open task', '.vscode/tasks.json', `${label}: ${cmd}`);
-		}
-		const pres = obj(task.presentation);
-		if (pres?.reveal === 'never' || pres?.echo === false || task.hide === true) {
-			add('hidden task', '.vscode/tasks.json', label);
-		}
-		if (FETCH_RUN.test(`${cmd} ${os}`)) {
-			add('downloads and runs code', '.vscode/tasks.json', label);
-		}
-	}
+	});
 
 	// Dev container lifecycle commands (initializeCommand runs on the HOST in stock VS Code).
 	for (const f of ['.devcontainer/devcontainer.json', '.devcontainer.json']) {
-		const dc = obj(parseJsonc(readText(root, f) ?? ''));
-		for (const k of ['initializeCommand', 'onCreateCommand', 'updateContentCommand', 'postCreateCommand', 'postStartCommand', 'postAttachCommand']) {
-			if (dc?.[k] !== undefined) {
-				add(k === 'initializeCommand' ? 'dev container command (host side in stock VS Code)' : 'dev container command', f, `${k}: ${str(dc[k])}`);
+		section(f, () => {
+			const dc = json(f);
+			for (const k of ['initializeCommand', 'onCreateCommand', 'updateContentCommand', 'postCreateCommand', 'postStartCommand', 'postAttachCommand']) {
+				if (dc?.[k] !== undefined) {
+					add(k === 'initializeCommand' ? 'dev container command (host side in stock VS Code)' : 'dev container command', f, `${k}: ${str(dc[k])}`);
+				}
 			}
-		}
+		});
 	}
 
 	// MCP servers.
-	const mcp = obj(parseJsonc(readText(root, '.vscode/mcp.json') ?? ''));
-	for (const [name, s] of Object.entries(obj(mcp?.servers) ?? {})) {
-		add('MCP server', '.vscode/mcp.json', `${str(name, 60)}: ${str(obj(s)?.command ?? obj(s)?.url)} ${str(obj(s)?.args)}`.trim());
-	}
-	const mcp2 = obj(parseJsonc(readText(root, '.mcp.json') ?? ''));
-	for (const [name, s] of Object.entries(obj(mcp2?.mcpServers) ?? {})) {
-		add('MCP server', '.mcp.json', `${str(name, 60)}: ${str(obj(s)?.command ?? obj(s)?.url)} ${str(obj(s)?.args)}`.trim());
+	for (const [f, key] of [['.vscode/mcp.json', 'servers'], ['.mcp.json', 'mcpServers']] as const) {
+		section(f, () => {
+			for (const [name, s] of Object.entries(obj(json(f)?.[key]) ?? {}).slice(0, 100)) {
+				add('MCP server', f, `${str(name, 60)}: ${str(obj(s)?.command ?? obj(s)?.url)} ${str(obj(s)?.args)}`.trim());
+			}
+		});
 	}
 
 	// Instructions and config that steer AI agents.
-	for (const f of ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', '.github/copilot-instructions.md', '.cursorrules', '.windsurfrules', '.clinerules', '.goosehints']) {
-		const t = readText(root, f);
-		if (t !== undefined) {
-			add('agent instructions', f, `${t.length} characters`);
-		}
-	}
-	for (const d of ['.github/instructions', '.github/prompts', '.github/agents', '.github/chatmodes', '.github/hooks', '.github/skills']) {
-		try {
-			const st = fs.lstatSync(path.join(root, d));
-			if (st.isDirectory()) {
-				add(d.endsWith('hooks') ? 'agent hooks (commands)' : 'agent instructions', `${d}/`, `${fs.readdirSync(path.join(root, d)).length} entries`);
+	section('agent files', () => {
+		for (const f of ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', '.github/copilot-instructions.md', '.cursorrules', '.windsurfrules', '.clinerules', '.goosehints']) {
+			const t = readText(root, f);
+			if (t !== undefined) {
+				add('agent instructions', f, `${t.length} characters`);
 			}
-		} catch { /* absent */ }
-	}
-	const claude = obj(parseJsonc(readText(root, '.claude/settings.json') ?? ''));
-	if (claude?.hooks !== undefined) {
-		add('agent hooks (commands)', '.claude/settings.json', str(claude.hooks));
-	}
+		}
+		for (const d of ['.github/instructions', '.github/prompts', '.github/agents', '.github/chatmodes', '.github/hooks', '.github/skills']) {
+			if (!noLinks(root, d) || !fs.lstatSync(path.join(root, d)).isDirectory()) {
+				continue; // links never followed (RR-3)
+			}
+			let n = 0;
+			const it = fs.opendirSync(path.join(root, d));
+			try {
+				while (n < 1000 && it.readSync()) {
+					n++;
+				}
+			} finally {
+				it.closeSync();
+			}
+			add(d.endsWith('hooks') ? 'agent hooks (commands)' : 'agent instructions', `${d}/`, `${n >= 1000 ? '1000+' : n} entries`);
+		}
+	});
+	section('.claude/settings.json', () => {
+		const claude = json('.claude/settings.json');
+		if (claude?.hooks !== undefined) {
+			add('agent hooks (commands)', '.claude/settings.json', str(claude.hooks));
+		}
+	});
 
 	// Editor settings that auto-approve agent actions.
-	const settings = obj(parseJsonc(readText(root, '.vscode/settings.json') ?? ''));
-	for (const [k, v] of Object.entries(settings ?? {})) {
-		if (/^chat\./i.test(k) && /auto.?approve|yolo|autorun/i.test(k)) {
-			add('agent auto-approve setting', '.vscode/settings.json', `${str(k, 80)}: ${str(v, 120)}`);
+	section('.vscode/settings.json', () => {
+		for (const [k, v] of Object.entries(json('.vscode/settings.json') ?? {}).slice(0, 5000)) {
+			if (/^chat\./i.test(k) && /auto.?approve|yolo|autorun/i.test(k)) {
+				add('agent auto-approve setting', '.vscode/settings.json', `${str(k, 80)}: ${str(v, 120)}`);
+			}
 		}
-	}
+	});
 	return { items, truncated: items.length >= MAX_ITEMS };
 }

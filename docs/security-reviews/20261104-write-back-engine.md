@@ -164,3 +164,12 @@ PP-1 and PP-2 verified closed. **Nothing medium or higher remains.** Lows fixed:
 | QQ-1 | Low | Display | Format/bidi/zero-width characters in content relied on editor Unicode highlighting. | Fixed | Escaped as `\u{…}` in content (Cf, Zl, Zp, Co, Cn, Cs, tags, variation selectors). |
 | QQ-2 | Low | Display | Some glyphs wider than counted. | Fixed | Any non-ASCII that isn't a letter, mark, digit or punctuation counts as width 2. |
 | QQ-3 | Low | Display | Content could forge the renderer's markers. | Fixed | Marker characters in content are escaped. |
+
+## Pre-open workspace summary, `tab.inspect` (f7d115e and fixes)
+Nothing medium or higher. Lows fixed:
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| RR-1 | Low | Parsing | Strict JSON vs VS Code's tolerant parser hid items; deep nesting threw and suppressed the whole summary; trailing-comma fix touched strings. | Fixed | Unparsed target files are reported ("may still be run"); sections isolated; no recursion on folder data; string-aware trailing commas; BOM stripped; the UI reports an unavailable summary. |
+| RR-2 | Low | UI | Folder-derived text could render as a link or icon in a notification. | Fixed | `safeText`/`plainText` neutralise `[`, `]` and `$(`. |
+| RR-3 | Low | Reads | lstat-then-open by path; a FIFO could block tabd; `.github` link followed. | Fixed | `O_NOFOLLOW\|O_NONBLOCK` + `fstat`; per-component no-link checks; bounded directory counts. |
