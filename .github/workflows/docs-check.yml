@@ -21,6 +21,8 @@ concurrency:
 
 env:
   ALPINE: alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
+  # Attestation bundles: downloaded with a token in one step, verified offline in the docs gate.
+  SECLAB_ATTESTATION_DIR: ${{ github.workspace }}/.work/attestations
 
 jobs:
   docs:
@@ -50,15 +52,17 @@ jobs:
           if [ -f .work/lychee-cache/.lycheecache ]; then
             docker run --rm -v seclab-lychee-cache:/cache -v "$PWD/.work/lychee-cache:/in:ro" "$ALPINE" cp /in/.lycheecache /cache/
           fi
+      - name: Download attestation bundles (the only step with a token; gh on the runner)
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: broker/tools/verify-images.sh --download "$SECLAB_ATTESTATION_DIR"
       - name: Docs gate (records, links, commands, paired docs)
         env:
           # Exact range: the PR's base, or the push's previous head (all-zero for a new branch).
           DOCS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-          # The broker's ci:run block verifies its base image's signed provenance with
-          # `gh attestation verify` (gh on the runner, not a third-party container). Read-only
-          # job token, pushes only: PR-controlled code with network gets no token, so a PR run
-          # fails closed at that verification rather than skipping it.
-          GH_TOKEN: ${{ github.event_name == 'push' && github.token || '' }}
+        # No token (review HH-1): the broker's ci:run block verifies the base image's signed
+        # provenance offline from the bundles above (gh attestation verify --bundle).
         run: ./seclab docs check --run-commands --paired
       - name: External links resolve
         # No token: lychee is a third-party image, so it gets no credentials. GitHub rate
