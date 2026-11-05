@@ -39,16 +39,26 @@ a skipped line. It fails if:
   unpinned frontend image), `ADD`, `ONBUILD`, `COPY --from=` anything but an
   earlier stage, pip configuration (`PIP_*` other than the build arg
   `PIP_SOURCE`, `pip.conf`), or `RUN` flags outside the two forms below;
-- wheels are fetched other than by exactly `RUN
-  --mount=type=secret,id=cfs_feed_token,required=false
-  --mount=type=tmpfs,target=/run/cfs-auth python3 <pip-fetch.py> <path>`, alone,
-  in a named stage. `<pip-fetch.py>` must be a `COPY` of `tools/pip-fetch.py`,
-  and `<path>` a `COPY` of one checked requirements file;
+- wheels are fetched other than in a `wheels*` stage of exactly this shape:
+  - a pinned, registered `FROM … AS wheels*`;
+  - optionally `ARG PIP_SOURCE` and `USER root`;
+  - `COPY tools/pip-fetch.py /opt/pipfetch/pip-fetch.py` and the COPYs of
+    checked requirements files to `/opt/pipfetch/<same name>`;
+  - last, and as its only RUN: `RUN
+    --mount=type=secret,id=cfs_feed_token,required=false
+    --mount=type=tmpfs,target=/run/cfs-auth python3 -I
+    /opt/pipfetch/pip-fetch.py <path>`.
+
+  Nothing else can run beside or before the token. The keyword is tokenised as
+  BuildKit does (any whitespace). Unknown instructions, `SHELL`, heredocs and
+  control characters are rejected;
 - a Python install is anything but exactly `RUN
   --mount=type=bind,from=<stage>,source=/wheels,target=/opt/wheels pip install
   --no-cache-dir --no-deps --require-hashes --only-binary=:all: --no-index
   --find-links /opt/wheels -r <path>`. `<stage>` must be an earlier stage, on the
-  same base image, that fetched that same requirements file.
+  same base image, that fetched that same requirements file. The install must be
+  the first command of the RUN directly after the COPY of its requirements file,
+  and `PIP_*` must not appear in any shell-parsed token.
 
 So nothing can be added without a register entry. `pin_check.py --self-test`
 (also run by `docs-check.sh`) proves that every bypass form found in review is
