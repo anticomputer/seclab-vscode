@@ -143,17 +143,34 @@ path is reachable from workspace content alone:
   `authenticateProtectedResources`, server-to-client `resourceRead`/`Write`/
   `Delete`/`Move`/`Copy` on raw host URIs, and pre-approved tool execution.
 
-Patch 0011 closes it at the settings layer rather than the connection layer,
-because the connection is the attacker's and carries no marker we can key on:
+Patch 0011 refuses to **dial** in a tab window, and leaves the settings alone:
 
-- `chat.workspaceRemoteAgentHosts` is re-scoped to `APPLICATION`, so only the
-  user's own global settings can list a host — in every window, not just tabs,
-  since the workspace-content path threatens ordinary windows too;
-- `chat.agentHost.localFilePermissions` is **registered** in the editor window
-  at `APPLICATION` scope. Upstream registers it only in the Agents window while
-  reading it in every window, and an unregistered setting has no scope, so
-  nothing filtered it out of workspace or remote user settings;
-- `authenticateProtectedResources` refuses outright in a tab window.
+- `SeclabEditorWindowRemoteAgentHostService` overrides `_reconcileConnections`
+  to return early when `seclabAiDisabled`. Ordinary windows keep upstream's
+  per-workspace semantics exactly;
+- `authenticateProtectedResources` refuses outright in a tab window, as defence
+  in depth behind the dialling refusal.
+
+**The override point was chosen to avoid failing open.** The obvious one,
+`webSocketEntriesSettingId`, is read *inside the base constructor*, before any
+subclass field is assigned — a subclass deciding there would read `undefined`
+and dial anyway. `_reconcileConnections` runs from an autorun after
+construction and on every settings change, so a refusal there holds for the
+object's life and cannot be outrun by a setting arriving later. It is `private`
+upstream, so the patch widens it to `protected`: one word of core change, and
+the reason is recorded here so nobody narrows it back.
+
+An earlier revision re-scoped `chat.workspaceRemoteAgentHosts` to `APPLICATION`
+and registered `chat.agentHost.localFilePermissions` in the editor window.
+Both were withdrawn after review. The first **broke the setting's documented
+per-workspace purpose in every window**, silently, and also made it unreadable
+under a non-default profile, since `APPLICATION` keys are read only from the
+default profile. The second was a **double registration**: the Agents window
+imports the editor contribution, so the stub registered first and upstream's
+full schema was silently deleted. Neither was a containment hole, but a
+security change that quietly breaks a feature is how security work gets
+reverted wholesale later. The user's decision was to lock tab windows and leave
+ordinary windows alone.
 
 The generalisable lesson, and the reason the inventory rule changed: **scope is
 only enforced where a setting is registered.** `tab_writable` is now true when
