@@ -1,0 +1,9 @@
+# OCI observability sensor (ADR tab-observability), provenance pin. sandbox/oci/verify-falco.sh
+# pulls the image by digest and verifies its keyless cosign signature against exactly this
+# identity before any OCI tab can use it; tabd runs it only by this digest (tabd/src/obs/falco.ts,
+# kept equal by a unit test). Bump: new digest + the release's identity, re-verify, security review.
+image docker.io/falcosecurity/falco@sha256:1562a643953f938e02f47319b5214d93a235f11f646d60e9b8a516fd5a64698e
+issuer https://token.actions.githubusercontent.com
+identity https://github.com/falcosecurity/falco/.github/workflows/reusable_publish_docker.yaml@refs/tags/0.45.2
+# The verifier itself: sigstore's official cosign image, pinned by digest.
+cosign ghcr.io/sigstore/cosign/cosign@sha256:b03690aa52bfe94054187142fba24dc54137650682810633901767d8a3e15b31

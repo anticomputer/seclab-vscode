@@ -13,4 +13,7 @@ tar -xzf "$REH_TGZ" --strip-components=1 -C "$CTX/reh"
 cp -R "$ROOT/sandbox/rootfs/opt/seclab" "$CTX/seclab"
 docker build -q -t seclab-tab-oci:local -f "$ROOT/sandbox/oci/Dockerfile.tab" "$CTX"
 docker build -q -t seclab-broker-placeholder:local -f "$ROOT/sandbox/oci/Dockerfile.broker-placeholder" "$ROOT/sandbox/oci"
-echo "images: seclab-tab-oci:local seclab-broker-placeholder:local"
+# The observability sensor OCI tabs need (ADR tab-observability): signature-verified, by digest.
+mkdir -p "$ROOT/.work"
+"$ROOT/sandbox/oci/verify-falco.sh"
+echo "images: seclab-tab-oci:local seclab-broker-placeholder:local (+ verified Falco)"

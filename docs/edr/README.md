@@ -66,6 +66,7 @@ Same rules as ADRs:
 | 2026-11-04 | [sbx upgraded to 0.51.0: findings](20261104-sbx-upgrade-0-51.md) | accepted |
 | 2026-11-04 | [Sentinel format, binding and detection](20261104-sentinel-format-and-binding.md) | accepted |
 | 2026-11-04 | [Tab Manager routing (M1): extension-level redirect, fail closed](20261104-tab-manager-routing.md) | superseded-by [20261104-local-window-close-first](20261104-local-window-close-first.md) |
+| 2026-11-04 | [Tab observability dependencies and their provenance](20261104-tab-observability-dependencies.md) | accepted |
 | 2026-11-04 | [Tab observability: which runtime sensor can run where (spike)](20261104-tab-observability-sensor-spike.md) | accepted |
 | 2026-11-04 | [seclab-tabd is dependency-free TypeScript, run on the editor's own Node runtime](20261104-tabd-implementation-language.md) | accepted |
 | 2026-11-04 | [Unpatched proof run: which escapes are real](20261104-unpatched-proof-run.md) | accepted |
