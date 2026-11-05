@@ -23,23 +23,44 @@ holds the runtime, and the asar header lists `copilot-sdk`, `copilot-runtime` an
 
 ## Decision
 Two patches, one concern each:
-- **0013 `no-local-agent-host`** (`app.ts`). Main creates no starter or process manager. It
-  answers `vscode:createAgentHostMessageChannel` itself with the reply the starter already
-  sends on a fatal start error: `{ nonce, error, fatal: true }`, the shape of
+- **0013 `no-local-agent-host`** (`app.ts`, `sharedProcessMain.ts`). Nothing on the host starts
+  an agent host.
+  - **Main** creates no starter or process manager. It answers
+    `vscode:createAgentHostMessageChannel` itself with the reply the starter already sends on a
+    fatal start error: `{ nonce, error, fatal: true }`, the shape of
   [electronAgentHostStarter.ts#L378-L388](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/electron-main/electronAgentHostStarter.ts#L378-L388).
   The renderer turns that into a `NonReconnectableTransportError`, so it neither hangs nor
   retries. The compile-cache warm-up no longer starts the process.
-- **0014 `build-desktop-without-copilot-runtime`** (`build/gulpfile.vscode.ts`, desktop
-  only). It drops `ensureCopilotPlatformPackage` and the prebuild re-add, and filters
-  `@github/copilot-sdk`, `@github/copilot-sdk-*`, `@github/copilot` and `@github/copilot-*`
-  out of the packaged dependencies. The REH is packaged by `gulpfile.reh.ts` and keeps the
-  runtime, because tabs run it.
-- **`build/check-release.sh --desktop`** runs in `build/build-darwin.sh` and fails the build
-  on any of these, found on disk or listed in an asar header:
-  - the Copilot SDK or its platform package;
-  - `copilot-runtime*`, `runtime.node`;
+  - **The shared process** (review WW-1) registers no SSH, dev-container, WSL or tunnel
+    agent-host provider
+    ([sharedProcessMain.ts#L432-L442](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts#L432-L442),
+    [#L524-L539](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts#L524-L539)).
+    The dev-container provider ran `@devcontainers/cli up` on the host from the workspace's
+    own `devcontainer.json`, so its `initializeCommand` ran on the host. The SSH provider used
+    the user's keys and forwarded their agent. Callers now get the IPC server's
+    "Unknown channel" error after its timeout.
+- **0014 `build-desktop-without-copilot-runtime`** (`build/gulpfile.vscode.ts`,
+  `build/next/index.ts`, desktop only).
+  - It drops `ensureCopilotPlatformPackage` and the prebuild re-add, and filters
+    `@github/copilot-sdk`, `@github/copilot-sdk-*`, `@github/copilot` and `@github/copilot-*`
+    out of the packaged dependencies.
+  - It removes `agentHostMain` from `desktopEntryPoints`, so the desktop app ships no
+    agent-host process code at all.
+  - The REH keeps both, through `gulpfile.reh.ts` and `serverEntryPoints`, because tabs run
+    agents.
+- **`patches/unreachable.json`** lists agent-host modules desktop must not reach: the starter,
+  the process manager, `agentHostMain`, the four providers, the Copilot, Claude and Codex
+  agents, and the SDK downloader. `check-patch-reach.ts` enforces it in the required
+  `patch-build` check. A listed file that no longer exists also fails, so an upstream rename
+  can't retire the rule silently.
+- **`build/check-release.sh --desktop`** runs in `build/build-darwin.sh` over the whole
+  `.app`, and in the Linux editor build. It fails the build on any of these, found on disk or
+  listed in an asar header:
+  - the Copilot SDK or its platform package, `@github/copilot`, the copilot shim;
+  - `copilot-runtime*`, `runtime.node`, and any `*agent-sdk*` or `*agent-runtime*` name;
   - Codex (`@openai/codex*`, `codex`, `codex-*`);
-  - the Claude agent SDK or Claude Code;
+  - the Claude agent SDK or Claude Code. `@anthropic-ai/sdk`, a plain API client, is in the
+    desktop app and allowed;
   - `agentSdks` in `product.json`. Upstream's downloader takes the download path only when
     that key is set
     ([agentSdkDownloader.ts#L312](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/node/agentSdkDownloader.ts#L312)),
@@ -58,17 +79,27 @@ Two patches, one concern each:
 
 ## Consequences
 - **Verified 2026-11-05:**
-  - **0013 type-check.** Type-checked against its import closure (876 files): the error
-    set is identical with and without the patch (`.work/tsc13`); the patch-build gate
-    covers the whole tree.
-  - **0014 type-check.** `build/tsconfig.json` gives the same error set with and without it.
-  - **Positive control.** `check-release.sh --desktop` on the current main app fails on
-    `copilot-sdk-darwin-arm64/**`, `copilot-runtime`, `copilot-sdk` and `runtime.node`;
-    release mode on the same app is clean.
+  - **0013 type-check.** The `app.ts` part was type-checked against its import closure (876
+    files): the error set is identical with and without the patch (`.work/tsc13`). The
+    shared-process part relies on the required `patch-build` check (whole tree); the local
+    `node_modules` was lost to an npm outage.
+  - **0014 type-check.** `build/tsconfig.json` gives the same error set with and without the
+    gulpfile part.
+  - **Reach.** With the full set applied, desktop reaches 6509 modules (7048 before), and all
+    11 forbidden modules are unreachable from desktop and still reachable from the REH. On
+    the tree without the shared-process and entry-point changes, 9 of the 11 fail.
+  - **Release check.** `check-release.sh --desktop` on the whole current main `.app` fails
+    only on the runtime: `copilot-sdk-darwin-arm64/**`, `copilot-runtime`, `copilot-sdk` and
+    `runtime.node`. Release mode on the same app is clean.
 - **Still to come:**
   - A27, the runtime probe on a built app: no agent-host process, no runtime in the bundle,
     no `agentSdks`.
   - The REH-side runtime lock (hash-pinned at tab-template time) and the `rt-*` register
     entries.
+  - The Agents window and the agent-session links. They can no longer start anything on the
+    host, but the Agents window can still dial remote agent hosts configured in settings.
+    Plan §10 assigns their removal from the desktop app to this session.
+  - Each window whose AI features try a local connection shows upstream's fatal agent-host
+    toast once (WW-3). A renderer-side null service would silence it.
 - **Upstream drift.** A new runtime package name defeats the asar and path rule silently.
   Each upstream bump must re-check the agent-host dependencies, and the A27 probe backs this.

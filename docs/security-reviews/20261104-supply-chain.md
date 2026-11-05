@@ -104,3 +104,14 @@ own script, checksum from the pinned tree, no token). Two new lows:
 |---|---|---|---|---|---|
 | VV-7 | Low | patch-build | Import-like text inside string or template literals still counted as an edge; value imports used only as types count though the compiler elides them. Both overstate reach. | Fixed / accepted | One token pass consumes comments and literals whole (test added). The type-use elision is accepted and stated: reach is a proxy, the runtime-probe rule is the backstop. Module counts unchanged. |
 | VV-8 | Low | hook | The installed hook ran the pushing checkout's `./seclab` (the VV-4 residual). | Fixed | The hook is self-contained: image ID and binary hash baked in at install, the hash checked before each scan, the scan inlined. Own testing caught a fail-open in the first version (the hash check's `docker run -i` consumed the ref list, so nothing was scanned); fixed, and the hook prints the refs it checked. This also unblocked other sessions, whose checkouts lacked `lint secrets`. |
+
+## Round WW (2026-11-05): invariant I8, no agent runtime on the host
+Scope: `ec914ea..72bc035` (patches 0013 and 0014, `check-release --desktop`; EDR
+[no agent runtime on the host](../edr/20261105-no-agent-runtime-on-host.md)). No prompt
+injection found.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| WW-1 | **High** | shared process | The shared process still registered SSH, dev-container, WSL and tunnel agent-host providers. The dev-container one ran `@devcontainers/cli up` on the host from the workspace's own `devcontainer.json` (`initializeCommand` on the host), and SSH used the user's keys and agent. The Agents window, reachable from external links, could drive them. | Fixed | 0013 also drops the four services and channels from the shared process. 0014 removes `agentHostMain` from the desktop entry points. `patches/unreachable.json` (11 agent-host modules) is enforced by the required `patch-build` check, with a self-test; the unpatched control fails. |
+| WW-2 | Low | check-release | Patterns missed plain `@github/copilot` in an asar, the copilot shim, and anything outside `Resources/app` on macOS. Renamed packages evade name rules. | Fixed / accepted | Added `copilot`, `copilot-shim`, `*agent-sdk*`, `*agent-runtime*`; macOS scans the whole `.app` (no false positives on the current app). Renames: accepted, backed by `unreachable.json` and the A27 probe. |
+| WW-3 | Info | renderer | The refusal is correct (fatal, no retry, no hang), but shows upstream's fatal toast once per window that tries. | Open | Renderer null service, with the Agents-window removal. |

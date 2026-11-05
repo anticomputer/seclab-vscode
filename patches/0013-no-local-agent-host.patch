@@ -54,3 +54,69 @@ index 924824f..fff157c 100644
  			]);
  		}
  
+diff --git a/src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts b/src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts
+index d09d30c..c5d6213 100644
+--- a/src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts
++++ b/src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts
+@@ -91,15 +91,6 @@ import { InspectProfilingService as V8InspectProfilingService } from '../../../p
+ import { IV8InspectProfilingService } from '../../../platform/profiling/common/profiling.js';
+ import { IExtensionsScannerService } from '../../../platform/extensionManagement/common/extensionsScannerService.js';
+ import { ExtensionsScannerService } from '../../../platform/extensionManagement/node/extensionsScannerService.js';
+-import { ISSHRemoteAgentHostMainService, SSH_REMOTE_AGENT_HOST_CHANNEL } from '../../../platform/agentHost/common/sshRemoteAgentHost.js';
+-import { SSHRemoteAgentHostMainService } from '../../../platform/agentHost/node/sshRemoteAgentHostService.js';
+-import { DEV_CONTAINER_AGENT_HOST_CHANNEL, IDevContainerAgentHostMainService } from '../../../platform/agentHost/common/devContainerAgentHost.js';
+-import { createDevContainerAgentHostChannel } from '../../../platform/agentHost/common/devContainerAgentHostIpc.js';
+-import { DevContainerAgentHostMainService } from '../../../platform/agentHost/node/devContainerAgentHostService.js';
+-import { IWSLRemoteAgentHostMainService, WSL_REMOTE_AGENT_HOST_CHANNEL } from '../../../platform/agentHost/common/wslRemoteAgentHost.js';
+-import { WSLRemoteAgentHostMainService } from '../../../platform/agentHost/node/wslRemoteAgentHostService.js';
+-import { ITunnelAgentHostMainService, TUNNEL_AGENT_HOST_CHANNEL } from '../../../platform/agentHost/common/tunnelAgentHost.js';
+-import { TunnelAgentHostMainService } from '../../../platform/agentHost/node/tunnelAgentHostService.js';
+ import { IUserDataProfilesService } from '../../../platform/userDataProfile/common/userDataProfile.js';
+ import { IExtensionsProfileScannerService } from '../../../platform/extensionManagement/common/extensionsProfileScannerService.js';
+ import { PolicyChannelClient } from '../../../platform/policy/common/policyIpc.js';
+@@ -429,17 +420,10 @@ class SharedProcessMain extends Disposable implements IClientConnectionFilter {
+ 		// Local Git
+ 		services.set(ILocalGitService, new SyncDescriptor(LocalGitService, undefined, false /* proxied to other processes */));
+ 
+-		// SSH Remote Agent Host
+-		services.set(ISSHRemoteAgentHostMainService, new SyncDescriptor(SSHRemoteAgentHostMainService, undefined, true));
+-
+-		// Dev Container Agent Host
+-		services.set(IDevContainerAgentHostMainService, new SyncDescriptor(DevContainerAgentHostMainService, undefined, true));
+-
+-		// WSL Remote Agent Host
+-		services.set(IWSLRemoteAgentHostMainService, new SyncDescriptor(WSLRemoteAgentHostMainService, undefined, true));
+-
+-		// Tunnel Agent Host
+-		services.set(ITunnelAgentHostMainService, new SyncDescriptor(TunnelAgentHostMainService, undefined, true));
++		// seclab: no SSH, dev-container, WSL or tunnel agent-host providers. They start agent hosts
++		// from the host (a dev container from the workspace's own devcontainer.json, SSH with the
++		// user's keys and agent); agent runtimes run only inside tabs (invariant I8). Callers get
++		// the IPC server's "Unknown channel" error.
+ 
+ 		return new InstantiationService(services);
+ 	}
+@@ -521,23 +505,6 @@ class SharedProcessMain extends Disposable implements IClientConnectionFilter {
+ 		const localGitChannel = ProxyChannel.fromService(accessor.get(ILocalGitService), this._store);
+ 		this.server.registerChannel('localGit', localGitChannel);
+ 
+-		// SSH Remote Agent Host
+-		const sshRemoteAgentHostChannel = ProxyChannel.fromService(accessor.get(ISSHRemoteAgentHostMainService), this._store);
+-		this.server.registerChannel(SSH_REMOTE_AGENT_HOST_CHANNEL, sshRemoteAgentHostChannel);
+-
+-		// Dev Container Agent Host
+-		// Deliver inspection facts before a rejected connect RPC disposes its listeners.
+-		const devContainerAgentHostChannel = createDevContainerAgentHostChannel(accessor.get(IDevContainerAgentHostMainService), this._store);
+-		this.server.registerChannel(DEV_CONTAINER_AGENT_HOST_CHANNEL, devContainerAgentHostChannel);
+-
+-		// WSL Remote Agent Host
+-		const wslRemoteAgentHostChannel = ProxyChannel.fromService(accessor.get(IWSLRemoteAgentHostMainService), this._store);
+-		this.server.registerChannel(WSL_REMOTE_AGENT_HOST_CHANNEL, wslRemoteAgentHostChannel);
+-
+-		// Tunnel Agent Host
+-		const tunnelAgentHostChannel = ProxyChannel.fromService(accessor.get(ITunnelAgentHostMainService), this._store);
+-		this.server.registerChannel(TUNNEL_AGENT_HOST_CHANNEL, tunnelAgentHostChannel);
+-
+ 	}
+ 
+ 	private registerErrorHandler(logService: ILogService): void {

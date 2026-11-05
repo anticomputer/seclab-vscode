@@ -43,9 +43,9 @@ if [ "${1:-}" = "--inner" ]; then
 		scan "(require|import)\([[:space:]]*process\.env(\.[A-Za-z_]+|\[)[^)]{0,80}\)" "env-controlled module load"
 		if [ "$MODE" = desktop ]; then
 			set +e
-			out=$(find "$d" \( -path "*/@github/copilot*" -o -name runtime.node -o -name "copilot-runtime*" -o -path "*/@openai/codex*" -o -name codex -o -name "codex-*" -o -path "*claude-agent-sdk*" -o -path "*/@anthropic-ai/claude-code*" \) -print 2>&1)
+			out=$(find "$d" \( -path "*/@github/copilot*" -o -path "*copilot-shim*" -o -name copilot -o -name runtime.node -o -name "copilot-runtime*" -o -path "*/@openai/codex*" -o -name codex -o -name "codex-*" -o -path "*claude-agent-sdk*" -o -path "*/@anthropic-ai/claude-code*" -o -name "*agent-sdk*" -o -name "*agent-runtime*" -o -name "*agentsdk*" \) -print 2>&1)
 			rc=$?
-			hdr=$(find "$d" -type f -name "*.asar" -exec grep -HaoE '"(copilot-sdk[^"]*|copilot-runtime[^"]*|claude-agent-sdk[^"]*|claude-code|codex|codex-[^"]*|runtime\.node)":\{' {} + 2>&1)
+			hdr=$(find "$d" -type f -name "*.asar" -exec grep -HaoE '"(copilot|copilot-shim|copilot-sdk[^"]*|copilot-runtime[^"]*|claude-agent-sdk[^"]*|claude-code|codex|codex-[^"]*|runtime\.node|[^"]*agent-?(sdk|runtime)[^"]*)":\{' {} + 2>&1)
 			hrc=$?
 			prod=$(find "$d" -type f -name product.json -exec grep -lE '"agentSdks"[[:space:]]*:' {} + 2>&1)
 			prc=$?
