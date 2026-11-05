@@ -23,6 +23,10 @@ pull request, with no path filter:
    - `npm ci --ignore-scripts`: type-checking needs the packages' types and runs none of their
      install scripts.
    - Then `build/npm-audit-signatures.sh`.
+   - The one postinstall piece type-checking needs: upstream's `build/npm/electronTypes.ts`,
+     which fetches `electron.d.ts` (what `src/tsconfig` maps `electron` to) and checks it
+     against `build/checksums/electron.txt` in the pinned tree. Without it the first run
+     failed with 388 errors, all from missing Electron types.
    - `node_modules` is cached on the pinned SHA plus upstream's lockfile. The cache is saved
      only from main, so a branch can't seed what main restores.
 3. **Type-check.** Upstream's own `npm run typecheck-client` (`tsc -p src/tsconfig.json
