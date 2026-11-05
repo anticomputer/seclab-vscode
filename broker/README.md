@@ -87,16 +87,32 @@ same decisions ([EDR](../docs/edr/20261104-broker-engine-mitmproxy.md)).
 Decision records:
 - **ADRs:** [policy and protocol](../docs/adr/20261104-broker-policy-and-control-protocol.md),
   [no real secret enters a tab](../docs/adr/20261104-no-real-secret-enters-a-tab.md),
-  [defeat folder-open loaders](../docs/adr/20261104-defeat-folder-open-loaders.md).
+  [defeat folder-open loaders](../docs/adr/20261104-defeat-folder-open-loaders.md),
+  [broker output is data](../docs/adr/20261104-broker-output-is-data.md).
 - **EDRs:** [engine](../docs/edr/20261104-broker-engine-mitmproxy.md),
   [sentinels](../docs/edr/20261104-sentinel-format-and-binding.md),
   [CA](../docs/edr/20261104-broker-per-tab-ca.md),
   [DNS](../docs/edr/20261104-internal-network-dns-exfiltration.md),
   [sbx chaining](../docs/edr/20261104-broker-behind-sbx-fence.md),
-  [docs from sources and safe fixtures](../docs/edr/20261104-broker-docs-from-sources-and-safe-fixtures.md).
+  [docs from sources and safe fixtures](../docs/edr/20261104-broker-docs-from-sources-and-safe-fixtures.md),
+  [dependency provenance](../docs/edr/20261104-broker-dependency-provenance.md).
 - **Security reviews:** [20261104-broker-m2-m3](../docs/security-reviews/20261104-broker-m2-m3.md),
   [20261104-broker-docs-drift-and-fixtures](../docs/security-reviews/20261104-broker-docs-drift-and-fixtures.md),
-  [20261104-broker-folder-open-loaders](../docs/security-reviews/20261104-broker-folder-open-loaders.md).
+  [20261104-broker-folder-open-loaders](../docs/security-reviews/20261104-broker-folder-open-loaders.md),
+  [20261104-broker-dependency-provenance](../docs/security-reviews/20261104-broker-dependency-provenance.md),
+  [20261104-broker-prompt-injection](../docs/security-reviews/20261104-broker-prompt-injection.md).
+
+**Prompts and audit are data, not instructions.** Hosts, paths, methods,
+origin labels, header names and import-source names in approvals and audit
+events are chosen by the tab. They leave the broker:
+- stripped of control, bidi, zero-width and line-separator characters;
+- length-capped, with paths percent-encoded;
+- named in an `untrusted` list, so a UI or an LLM triaging them can quote them
+  as data.
+
+No broker decision reads request or response content, including model API
+output. A suggested binding is always a literal path, never a wildcard the tab
+chose. See the [ADR](../docs/adr/20261104-broker-output-is-data.md).
 
 ## Folder-open loaders, beacons and package registries
 
@@ -160,6 +176,7 @@ check fails if a flag has no row, or if a named test doesn't exist.
 | Prompt flood control: per-destination coalescing and cooldown, per-tab rate limit, `deny-new-destinations` | `promptFloodControl` | yes | yes | **no** | `test_five_second_beacon_yields_one_prompt`, `test_deny_new_destinations_after_repeated_denials`, `test_prompt_rate_limit` |
 | User-action gating: risky and raw-IP requests auto-denied before the first user action; early requests flagged | `userActionGating` | yes | yes | **no** | `test_risky_auto_denied_before_user_action`, `test_contagious_interview_loader_is_denied_without_a_prompt` |
 | Origin label in prompts and audit (claimed by the tab, unverified) | `originLabel` | yes | yes | **no** | `test_proxy_auth_origin_label`, `test_contagious_interview_loader_is_denied_without_a_prompt` |
+| Tab-controlled text in prompts and audit sanitized and tagged `untrusted`; no decision driven by content | `untrustedTextTagged` | yes | yes | **no** | `test_audit_events_are_sanitized_and_tagged`, `test_approvals_are_sanitized_and_tagged`, `test_suggested_binding_path_is_never_a_wildcard`, `test_content_never_drives_a_permissive_decision` |
 | Isolation domain between broker (real secrets) and tab |  | **weaker**: separate containers, **shared kernel** | **strong**: tab in a microVM, broker in Docker Desktop's VM | sbx host proxy | sbx: `other tab's broker port is not reachable`, `test_brokers_are_isolated_from_each_other` |
 <!-- END GENERATED: capability-matrix -->
 

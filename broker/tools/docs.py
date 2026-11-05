@@ -43,6 +43,7 @@ CHECKED_DOCS = [
     "docs/adr/20261104-broker-policy-and-control-protocol.md",
     "docs/adr/20261104-no-real-secret-enters-a-tab.md",
     "docs/adr/20261104-defeat-folder-open-loaders.md",
+    "docs/adr/20261104-broker-output-is-data.md",
     "docs/edr/20261104-broker-engine-mitmproxy.md",
     "docs/edr/20261104-sentinel-format-and-binding.md",
     "docs/edr/20261104-broker-per-tab-ca.md",

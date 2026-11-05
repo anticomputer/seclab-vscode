@@ -22,7 +22,8 @@ from typing import Any, Callable
 
 from . import PROTOCOL, VERSION, protocol
 from .credentials import Credential, CredentialStore
-from .policy import (Binding, Inject, Policy, PolicyError, RequestView, Rule, normalize_ip,
+from .untrusted import display_path, sanitize, untrusted_paths
+from .policy import (LITERAL_PATH_RE, Binding, Inject, Policy, PolicyError, RequestView, Rule, normalize_ip,
                      parse_bindings, pattern_overlaps_risky, risk_flags, validate_fragment)
 
 log = logging.getLogger("seclab.broker")
@@ -67,13 +68,18 @@ class Approval:
     def public(self) -> dict:
         out = {"approvalId": self.id, "kind": self.kind, "request": self.request,
                "createdAt": self.created, "expiresAt": self.deadline, "waiting": len(self.waiters),
-               "decisions": list(self.decisions), "risk": self.risk}
+               "decisions": list(self.decisions), "risk": self.risk,
+               "untrusted": ["request.host", "request.method", "request.path"]
+               + (["risk.origin.label"] if self.risk.get("origin", {}).get("label") else [])}
         if self.kind == "egress":
             out["suggestedRule"] = self.suggested
+            out["untrusted"].append("suggestedRule.host")
         else:
             out["credentialId"] = self.credential_id
             out["suggestedBinding"] = self.suggested
-        return out
+            out["untrusted"] += ["suggestedBinding.host", "suggestedBinding.path"] + (
+                ["suggestedBinding.inject.fmt"] if "inject" in self.suggested else [])
+        return sanitize(out)
 
 
 @dataclass
@@ -136,7 +142,10 @@ class Broker:
         if self.tab_id:
             event["tabId"] = self.tab_id
         event.update(fields)
-        event = self._scrub_obj(event)
+        event = sanitize(self._scrub_obj(event))
+        tagged = untrusted_paths(event)
+        if tagged:
+            event["untrusted"] = tagged
         self._audit_ring.append(event)
         print(json.dumps({"audit": event}, separators=(",", ":")), file=sys.stderr, flush=True)
         self.notify("audit.event", event)
@@ -204,12 +213,17 @@ class Broker:
                           origin: str | None = None) -> Decision:
         key = ("binding", cred.id, req.scheme, req.host, req.port, req.method, req.path,
                inject.header.lower() if inject else None, inject.fmt if inject else None)
-        suggested = {"host": req.host, "path": req.path, "methods": [req.method], "ports": [req.port]}
+        # The suggested path is the request path *as a literal*. Binding paths are globs, so
+        # a tab-chosen path like `/x/**` must never become a wildcard suggestion; a path the
+        # binding grammar cannot express literally is shown encoded and cannot be persisted.
+        literal = LITERAL_PATH_RE.fullmatch(req.path) is not None
+        suggested = {"host": req.host, "path": req.path if literal else display_path(req.path).replace("*", "%2A"),
+                     "methods": [req.method], "ports": [req.port]}
         if inject is not None:
             suggested["inject"] = inject.to_json()
         risk = self.risk(req, origin)
         hostile = _hostile(risk["flags"])
-        decisions = ("allow-once", "deny") if hostile else ("allow-once", "allow-tab", "deny")
+        decisions = ("allow-once", "deny") if hostile or not literal else ("allow-once", "allow-tab", "deny")
         return await self._ask(key, "credential-binding", req, suggested, cred.id, decisions, risk)
 
     def _deny_unprompted(self, reason: str, req: RequestView, risk: dict) -> Decision:
@@ -570,6 +584,7 @@ CAPABILITIES = {
     "promptFloodControl": True,
     "userActionGating": True,
     "originLabel": True,
+    "untrustedTextTagged": True,
 }
 
 

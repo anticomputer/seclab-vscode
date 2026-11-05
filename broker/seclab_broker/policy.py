@@ -184,6 +184,10 @@ def compile_glob(pattern: str, ignore_case: bool = False) -> re.Pattern:
     return re.compile("".join(out), re.IGNORECASE if ignore_case else 0)
 
 
+# A request path a binding can name literally: the schema's path alphabet without '*'.
+LITERAL_PATH_RE = re.compile(r"/[A-Za-z0-9._~!$&'()+,=:@/-]{0,1023}")
+
+
 # --------------------------------------------------------------------------
 # Request view (what an engine hands us)
 # --------------------------------------------------------------------------
@@ -202,8 +206,10 @@ class RequestView:
         return (self.scheme, self.host, self.port)
 
     def summary(self) -> dict:
-        return {"scheme": self.scheme, "host": self.host, "port": self.port,
-                "method": self.method, "path": self.path}
+        """For audit and prompts. Tab-controlled: host, method, path (percent-encoded ASCII)."""
+        from .untrusted import display_path
+        return {"scheme": self.scheme, "host": self.host[:253], "port": self.port,
+                "method": self.method, "path": display_path(self.path)}
 
 
 # --------------------------------------------------------------------------
@@ -289,8 +295,8 @@ class Inject:
         header, fmt = obj["header"], obj["fmt"]
         if header.lower() in FORBIDDEN_INJECT_HEADERS or header.lower().startswith("proxy-"):
             raise PolicyError(f"inject.header {header!r} is not allowed")
-        if any(c in fmt for c in "\r\n\0"):
-            raise PolicyError("inject.fmt contains control characters")
+        if not all(0x20 <= ord(c) < 0x7F for c in fmt):
+            raise PolicyError("inject.fmt must be printable ASCII")
         stripped = _B64_TOKEN.sub("", fmt).replace("{value}", "")
         if "{" in stripped or "}" in stripped:
             raise PolicyError("inject.fmt has an unknown placeholder")
