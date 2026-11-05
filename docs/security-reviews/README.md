@@ -73,9 +73,9 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-04 | [tab observability (one-way event stream, sbx collector, OCI Falco, Tab Activity view)](20261104-tab-observability.md) | - Round 1: origin/main..8b1df33 (pre-rebase), that is the whole layer: | see record |
 | 2026-11-04 | [seclab-tabd design (protocol and process model)](20261104-tabd-protocol-design.md) | design docs at 296594c plus the uncommitted drafts of docs/adr/20261104-tab-supervisor.md, | see record |
 | 2026-11-04 | [write-back gate, increment 1 (engine and policy)](20261104-write-back-engine.md) | - tabd/src/writeback.ts: the engine (classification, trusted host writer, conflicts, fail- | see record |
-| 2026-11-05 | [agents-in-the-tab spike harness and findings](20261105-agents-in-tab-spike.md) | f5a479a..44d11bc. That covers test/agentic/ahp/ (run.sh, bundle.mjs, runner.ts, rogue-agen | see record |
+| 2026-11-05 | [agents-in-the-tab spike harness and findings](20261105-agents-in-tab-spike.md) | 14fd657..b2ffe85 (rebased from f5a479a..44d11bc). That covers test/agentic/ahp/ (run.sh, b | see record |
 | 2026-11-05 | [backstop derive exemption and `GET /copilot_internal/user` exception](20261105-broker-backstop-exceptions.md) | round 8. | see record |
 | 2026-11-05 | [broker model access (body policy, budgets, trusted derivation)](20261105-broker-model-access.md) | - Round 7: dcda94b, which adds: | see record |
 | 2026-11-05 | [broker WebSocket credential opt-in](20261105-broker-websocket-opt-in.md) | - Round 6: b1558e9 and 83a00cf. | see record |
-| 2026-11-05 | [secure agentic experiences design (agents in the tab)](20261105-secure-agentic-experiences-design.md) | round 1: f62a485 (rebased from 9f4ded7; design as first written: [plan](../plans/secure-ag | see record |
+| 2026-11-05 | [secure agentic experiences design (agents in the tab)](20261105-secure-agentic-experiences-design.md) | round 1: 411e4f2 (rebased from 9f4ded7; design as first written: [plan](../plans/secure-ag | see record |
 <!-- index:end -->
