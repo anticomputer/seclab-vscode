@@ -40,7 +40,7 @@ const OURS = {
 	sandbox: new RegExp(`^seclab-(${TAB}|spike-[a-z0-9-]+|brkval-[0-9a-f]{6})$`),
 	// tab pod, harness helpers, broker integration pods and sbx validation
 	container: new RegExp(`^seclab-(${TAB}(-broker)?|containment-hostsvc-(sbx|oci)-[0-9a-f]{8}|spike-[a-z0-9-]+|it-[0-9a-f]{6}-[a-z0-9-]+|brkval-[0-9a-f]{6}-[a-z0-9]+)$`),
-	network: new RegExp(`^seclab-(${TAB}-net|it-[0-9a-f]{6}-[a-z0-9-]+|brkval-[0-9a-f]{6}-[a-z0-9]+|spike-[a-z0-9-]+)$`),
+	network: new RegExp(`^seclab-(${TAB}-(net|egress)|it-[0-9a-f]{6}-[a-z0-9-]+|brkval-[0-9a-f]{6}-[a-z0-9]+|spike-[a-z0-9-]+)$`),
 	volume: new RegExp(`^seclab-${TAB}-home$`),
 	image: /^seclab-(tab|tab-oci|builder|broker|broker-placeholder|broker-unit|broker-it-[a-z]+|template-builder):[A-Za-z0-9._-]+$/,
 };
@@ -48,7 +48,7 @@ if (args.has('--self-test')) {
 	// Names seen on a real host: ours must match, other projects' and the user's must not.
 	const yes: Array<[keyof typeof OURS, string]> = [['sandbox', 'seclab-t-dyhhlwazovvh3p7sk4el4vbjeq'], ['sandbox', 'seclab-spike-a'],
 		['container', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-broker'], ['container', 'seclab-spike-proxy'], ['container', 'seclab-containment-hostsvc-sbx-1a2b3c4d'],
-		['container', 'seclab-it-4af231-broker'], ['network', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-net'], ['volume', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-home'],
+		['container', 'seclab-it-4af231-broker'], ['network', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-net'], ['network', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-egress'], ['volume', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-home'],
 		['image', 'seclab-tab-oci:local'], ['image', 'seclab-broker-it-harness:test']];
 	const no: Array<[keyof typeof OURS, string]> = [['sandbox', 'copilot-bla'], ['sandbox', 'seclab-example-kit-base'], ['image', 'seclab-example-a:test-caching'],
 		['image', 'seclab-example-b:local'], ['image', 'seclab-example-kit-sast:latest'], ['image', 'seclab-example-kit-base:latest'], ['volume', 'seclab-vscode-work'],
@@ -235,6 +235,35 @@ for (const n of lines('docker', ['image', 'ls', '--format', '{{.Repository}}:{{.
 		kind: 'image', name: n, state: '', remove: args.has('--caches'), why: args.has('--caches') ? '' : 'build output (use --caches)',
 		del: () => ok('docker', ['image', 'rm', n]),
 	});
+}
+// Containers not named seclab-* but created from an image in the dependency register or one of
+// our own images: possibly an ad-hoc command's leftover (AGENTS.md naming rule). Reported only,
+// never removed: whoever created it must verify.
+const registerRepos = new Set<string>();
+try {
+	const reg = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'deps', 'registry.json'), 'utf8')) as { deps?: Array<{ kind?: string; pins?: string[] }> };
+	for (const e of reg.deps ?? []) {
+		for (const p of e.kind === 'oci-image' ? e.pins ?? [] : []) {
+			registerRepos.add(p.replace(/@.*$/, '').replace(/:[^/:]*$/, ''));
+		}
+	}
+} catch { /* no register: only our own images are matched */ }
+const repoOf = (img: string) => img.replace(/@.*$/, '').replace(/:[^/:]*$/, '');
+const imageNames = new Map<string, string[]>();
+for (const l of lines('docker', ['image', 'ls', '--no-trunc', '--format', '{{.ID}}\t{{.Repository}}:{{.Tag}}'])) {
+	const [id, name] = l.split('\t');
+	imageNames.set(id, [...imageNames.get(id) ?? [], name]);
+}
+for (const l of lines('docker', ['ps', '-a', '--no-trunc', '--format', '{{.Names}}\t{{.State}}\t{{.Image}}'])) {
+	const [n, st, img] = l.split('\t');
+	if (!n || n.startsWith('seclab-') || containers.has(n)) {
+		continue;
+	}
+	const names = img?.startsWith('sha256:') ? imageNames.get(img) ?? [] : [img ?? ''];
+	const hit = names.find(x => OURS.image.test(x) || registerRepos.has(repoOf(x)) || registerRepos.has(`docker.io/library/${repoOf(x)}`));
+	if (hit) {
+		items.push({ kind: 'container?', name: `${n} (image ${hit})`, state: st, remove: false, why: 'possibly ours, verify: not named seclab-*', del: () => false });
+	}
 }
 
 // ---- host directories --------------------------------------------------------------------

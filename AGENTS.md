@@ -90,6 +90,13 @@ RPC-lockdown session adds. Keep them consistent with this file.
   and profile, and fails the run on any survivor. Use `./seclab clean-host` to
   find strays from older runs. Why: an orphaned editor running the armed rogue
   extension was once left on the user's desktop.
+- **Every container, network and volume a session creates is named `seclab-*` or
+  uses `--rm`,** ad-hoc commands included (reviews, probes, one-off builds). Remove what
+  you created when you're done, and never remove resources you didn't create.
+  `./seclab clean-host` reports containers not named `seclab-*` that were created from a
+  register image or one of ours as "possibly ours, verify"; it never removes them. Why:
+  an unnamed `docker create` from a review command sat on the host for about 20 hours, and
+  nothing could tell whose it was.
 - **Base claims on code, with permalinks pinned to a SHA.** Why: upstream
   moves; unpinned claims rot.
 - **Keep core patches minimal: one concern per patch, under about 50 lines.**
