@@ -14,6 +14,7 @@
 0008-seclab-route-tab-commands.patch
 0009-seclab-no-builtin-chat-in-tabs.patch
 0010-seclab-no-agent-host-client-in-tabs.patch
+0011-seclab-no-remote-agent-host-dialing.patch
 0012-background-windows-env.patch
 0013-no-local-agent-host.patch
 0014-build-desktop-without-copilot-runtime.patch
