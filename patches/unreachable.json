@@ -1,15 +1,12 @@
 {
-	"desktop": [
-		"src/vs/platform/agentHost/electron-main/electronAgentHostStarter.ts",
-		"src/vs/platform/agentHost/node/agentHostService.ts",
-		"src/vs/platform/agentHost/node/agentHostMain.ts",
-		"src/vs/platform/agentHost/node/devContainerAgentHostService.ts",
-		"src/vs/platform/agentHost/node/sshRemoteAgentHostService.ts",
-		"src/vs/platform/agentHost/node/wslRemoteAgentHostService.ts",
-		"src/vs/platform/agentHost/node/tunnelAgentHostService.ts",
-		"src/vs/platform/agentHost/node/copilot/copilotAgent.ts",
-		"src/vs/platform/agentHost/node/claude/claudeAgentSdkService.ts",
-		"src/vs/platform/agentHost/node/codex/codexAgent.ts",
-		"src/vs/platform/agentHost/node/agentSdkDownloader.ts"
-	]
+	"desktop": {
+		"deny": [
+			"src/vs/platform/agentHost/node/",
+			"src/vs/platform/agentHost/electron-main/electronAgentHostStarter.ts",
+			"src/vs/server/"
+		],
+		"except": [
+			"src/vs/platform/agentHost/node/diffWorkerMain.ts"
+		]
+	}
 }

@@ -61,6 +61,16 @@ test('patch headers: git and diff -ruN styles, deletions, unreadable headers fai
 	assert.deepEqual(patchedFiles(header('git', 'src/vs/a.ts') + '@@ -1 +1,2 @@\n x\n+++ added line that looks like a header\n'), ['src/vs/a.ts']);
 	assert.throws(() => patchedFiles('--- vscode.orig/src/vs/a.ts\n+++ vscode/src/vs/a.ts\n'), /unreadable patch header/);
 	assert.throws(() => patchedFiles('--- a/x\n+++ b/src/../../etc/x.ts\n'), /unreadable patch header/);
+	// WW-5: renames and copies without ---/+++ headers, deletions, binary and unpaired headers.
+	assert.deepEqual(patchedFiles('diff --git a/src/vs/agent.ts b/src/vs/moved.ts\nsimilarity index 100%\nrename from src/vs/agent.ts\nrename to src/vs/moved.ts\n'), ['src/vs/moved.ts']);
+	assert.deepEqual(patchedFiles('diff --git a/src/vs/agent.ts b/src/vs/copy.ts\nsimilarity index 100%\ncopy from src/vs/agent.ts\ncopy to src/vs/copy.ts\n'), ['src/vs/copy.ts']);
+	assert.deepEqual(patchedFiles('diff --git a/src/vs/x.ts b/src/vs/x.ts\nold mode 100644\nnew mode 100755\n'), ['src/vs/x.ts']);
+	assert.deepEqual(patchedFiles('diff --git a/src/vs/x.ts b/src/vs/x.ts\ndeleted file mode 100644\nindex 1..0\n--- a/src/vs/x.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-x\n'), []);
+	assert.throws(() => patchedFiles('diff --git a/src/vs/x.ts b/src/vs/x.ts\nGIT binary patch\nliteral 1\n'), /unreadable patch header/);
+	assert.throws(() => patchedFiles('+++ b/src/vs/x.ts\n'), /unreadable patch header/);
+	assert.throws(() => patchedFiles('diff --git "a/src/vs/x y.ts" "b/src/vs/x y.ts"\n'), /unreadable patch header/);
+	// Hunk content that looks like headers is consumed by the hunk's line counts.
+	assert.deepEqual(patchedFiles(header('git', 'src/vs/a.ts') + '@@ -1,2 +1,2 @@\n--- a/src/vs/evil.ts\n+++ b/src/vs/evil.ts\n x\n'), ['src/vs/a.ts']);
 });
 
 // A minimal upstream tree: desktop, server and web entry points read from the same places the
@@ -115,8 +125,10 @@ test('check-patch-reach: a web-only file fails and a desktop file passes, in bot
 		const bad = runReach('--- vscode.orig/src/vs/shared.ts\n+++ vscode/src/vs/shared.ts\n' + hunk);
 		assert.equal(bad.status, 1);
 		assert.match(bad.stderr, /unreadable patch header/);
-		// unreachable.json: desktop reaching a forbidden module fails; a missing listed file fails.
-		write('tree/src/vs/agent.ts', 'export {};\n');
+		// unreachable.json: desktop reaching a forbidden module fails (file or `dir/` prefix, WW-6);
+		// `except` exempts one module; a missing listed path fails.
+		write('tree/src/vs/agent/a.ts', 'export {};\n');
+		write('tree/src/vs/agent/worker.ts', 'export {};\n');
 		const ok = header('git', 'src/vs/shared.ts') + hunk;
 		const pdir = path.join(scratch, 'patches');
 		const runWith = (forbid: object) => {
@@ -124,14 +136,20 @@ test('check-patch-reach: a web-only file fails and a desktop file passes, in bot
 			fs.writeFileSync(path.join(pdir, 'unreachable.json'), JSON.stringify(forbid));
 			return spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-patch-reach.ts'), path.join(scratch, 'tree'), '--patches', pdir], { encoding: 'utf8' });
 		};
-		assert.equal(runWith({ desktop: ['src/vs/agent.ts'] }).status, 0, 'an unreached forbidden module passes');
-		write('tree/src/vs/desk.ts', `import './shared.js';\nimport './agent.js';\n`);
-		const reachedForbidden = runWith({ desktop: ['src/vs/agent.ts'] });
-		assert.equal(reachedForbidden.status, 1);
-		assert.match(reachedForbidden.stderr, /agent\.ts must not be reachable from desktop/);
-		const missing = runWith({ desktop: ['src/vs/renamed.ts'] });
+		assert.equal(runWith({ desktop: { deny: ['src/vs/agent/a.ts', 'src/vs/agent/'] } }).status, 0, 'unreached forbidden modules pass');
+		write('tree/src/vs/desk.ts', `import './shared.js';\nimport './agent/worker.js';\n`);
+		const byPrefix = runWith({ desktop: { deny: ['src/vs/agent/'] } });
+		assert.equal(byPrefix.status, 1);
+		assert.match(byPrefix.stderr, /agent\/worker\.ts must not be reachable from desktop/);
+		assert.equal(runWith({ desktop: { deny: ['src/vs/agent/'], except: ['src/vs/agent/worker.ts'] } }).status, 0, 'except exempts one module');
+		write('tree/src/vs/desk.ts', `import './shared.js';\nimport './agent/worker.js';\nimport './agent/a.js';\n`);
+		const byFile = runWith({ desktop: { deny: ['src/vs/agent/a.ts'] } });
+		assert.equal(byFile.status, 1);
+		assert.match(byFile.stderr, /agent\/a\.ts must not be reachable from desktop/);
+		const missing = runWith({ desktop: { deny: ['src/vs/renamed/'] } });
 		assert.equal(missing.status, 1);
-		assert.match(missing.stderr, /renamed\.ts does not exist/);
+		assert.match(missing.stderr, /renamed\/ does not exist/);
+		assert.equal(runWith({ desktop: ['src/vs/agent/a.ts'] }).status, 1, 'the old array format is refused');
 	} finally {
 		fs.rmSync(scratch, { recursive: true, force: true });
 	}

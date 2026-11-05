@@ -48,10 +48,11 @@ Two patches, one concern each:
     agent-host process code at all.
   - The REH keeps both, through `gulpfile.reh.ts` and `serverEntryPoints`, because tabs run
     agents.
-- **`patches/unreachable.json`** lists agent-host modules desktop must not reach: the starter,
-  the process manager, `agentHostMain`, the four providers, the Copilot, Claude and Codex
-  agents, and the SDK downloader. `check-patch-reach.ts` enforces it in the required
-  `patch-build` check. A listed file that no longer exists also fails, so an upstream rename
+- **`patches/unreachable.json`** denies desktop every module under
+  `src/vs/platform/agentHost/node/` (except `diffWorkerMain`, a desktop worker), the agent-host
+  starter, and everything under `src/vs/server/`. A deny entry ending in `/` covers new modules
+  without anyone listing them (review WW-6). `check-patch-reach.ts` enforces it in the required
+  `patch-build` check. A listed path that no longer exists also fails, so an upstream rename
   can't retire the rule silently.
 - **`build/check-release.sh --desktop`** runs in `build/build-darwin.sh` over the whole
   `.app`, and in the Linux editor build. It fails the build on any of these, found on disk or
@@ -85,9 +86,10 @@ Two patches, one concern each:
     `node_modules` was lost to an npm outage.
   - **0014 type-check.** `build/tsconfig.json` gives the same error set with and without the
     gulpfile part.
-  - **Reach.** With the full set applied, desktop reaches 6509 modules (7048 before), and all
-    11 forbidden modules are unreachable from desktop and still reachable from the REH. On
-    the tree without the shared-process and entry-point changes, 9 of the 11 fail.
+  - **Reach.** With the full set applied, desktop reaches 6509 modules (7048 before). Nothing
+    under the denied prefixes is reachable from desktop except `diffWorkerMain`, and the REH
+    still reaches the agent host. On the tree without the shared-process and entry-point
+    changes, 9 of the 11 agent-host modules first listed were reachable from desktop.
   - **Release check.** `check-release.sh --desktop` on the whole current main `.app` fails
     only on the runtime: `copilot-sdk-darwin-arm64/**`, `copilot-runtime`, `copilot-sdk` and
     `runtime.node`. Release mode on the same app is clean.
@@ -99,6 +101,19 @@ Two patches, one concern each:
   - The Agents window and the agent-session links. They can no longer start anything on the
     host, but the Agents window can still dial remote agent hosts configured in settings.
     Plan §10 assigns their removal from the desktop app to this session.
+  - **Editor windows dialing tab-chosen agent hosts (WW-4, high).** A tab can write
+    `chat.workspaceRemoteAgentHosts` into the workspace settings; the host renderer would then
+    dial that address outside the fence, with the user's GitHub credentials. The RPC series'
+    patch 0011 refuses every dial from a tab window (undeclared means deny). WW-4 counts as
+    fixed only once 0011 is on main and a containment probe shows no connection reaching a
+    canary listener, on a build where an unpatched baseline does connect.
+  - **Mission Control** (`chat.agentHost.githubEnvironments.enabled`), traced by the
+    secure-agentic session:
+    - A tab can't set it (APPLICATION scope).
+    - Sharing this machine needs `IAgentHostService`, which RPC 0010 nulls in tab windows.
+    - A user-initiated `connect` from a tab window dials through `ICloudSandboxAgentHostService`,
+      outside 0011's funnel. Their §10 null-providers patch (0015+) nulls it in `seclab+`
+      windows, with a probe.
   - Each window whose AI features try a local connection shows upstream's fatal agent-host
     toast once (WW-3). A renderer-side null service would silence it.
 - **Upstream drift.** A new runtime package name defeats the asar and path rule silently.
