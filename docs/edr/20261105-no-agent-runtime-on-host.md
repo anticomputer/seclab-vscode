@@ -93,6 +93,14 @@ Two patches, one concern each:
   - **Release check.** `check-release.sh --desktop` on the whole current main `.app` fails
     only on the runtime: `copilot-sdk-darwin-arm64/**`, `copilot-runtime`, `copilot-sdk` and
     `runtime.node`. Release mode on the same app is clean.
+  - **A27, static half, on the shipped app.** Main's macOS build (`7d1c94d`, run 42107504062):
+    - `check-release --desktop` is clean over the whole `.app`;
+    - `product.json` has no `agentSdks`;
+    - `node_modules.asar.unpacked` has no `@github`;
+    - the only module under `out/vs/platform/agentHost/node/` is `diffWorkerMain.js`.
+
+    The runtime half (process table while a session runs) needs a launch of the downloaded
+    app, which the user approves.
 - **Still to come:**
   - A27, the runtime probe on a built app: no agent-host process, no runtime in the bundle,
     no `agentSdks`.
