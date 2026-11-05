@@ -13,7 +13,7 @@ export interface UpperReader {
 	feed(mode: 'list' | 'get' | 'mirror', input?: string): Promise<string>;
 }
 
-interface Entry { p: string; k: 'file' | 'dir' | 'symlink' | 'special' | 'wh' | 'opq'; m?: number; n?: number; s?: number; h?: string; t?: string }
+interface Entry { p: string; k: 'file' | 'dir' | 'symlink' | 'special' | 'wh' | 'opq' | 'err'; m?: number; n?: number; s?: number; h?: string; t?: string }
 export interface TickResult extends SyncResult { mirrored: string[]; truncated: boolean }
 
 const MAX_LINES = 300_001;
@@ -35,11 +35,11 @@ function parseList(out: string): { entries: Entry[]; truncated: boolean } {
 	}
 	const entries: Entry[] = [];
 	for (const r of recs.slice(0, -1) as Entry[]) {
-		if (!r || typeof r !== 'object' || !['file', 'dir', 'symlink', 'special', 'wh', 'opq'].includes(r.k)) {
+		if (!r || typeof r !== 'object' || !['file', 'dir', 'symlink', 'special', 'wh', 'opq', 'err'].includes(r.k)) {
 			throw new Error('bad feed record');
 		}
-		if (r.k === 'opq' && r.p === '') {
-			entries.push(r); // the workspace root itself is opaque
+		if ((r.k === 'opq' || r.k === 'err') && r.p === '') {
+			entries.push(r); // the workspace root itself
 			continue;
 		}
 		checkRel(r.p);
@@ -93,7 +93,7 @@ export async function syncTick(engine: WriteBackEngine, reader: UpperReader, roo
 	const refused: Array<{ path: string; reason: string }> = [];
 	const need: Entry[] = [];
 	const unchanged: Array<{ path: string; sha: string; mode: number; nlink: number }> = [];
-	const inUpper = new Set(entries.filter(e => e.k !== 'wh' && e.k !== 'opq').map(e => e.p));
+	let incomplete = false;
 	for (const e of entries) {
 		switch (e.k) {
 			case 'dir':
@@ -125,15 +125,26 @@ export async function syncTick(engine: WriteBackEngine, reader: UpperReader, roo
 				changes.push({ path: e.p, kind: 'deleted' });
 				break;
 			case 'opq':
-				// Every lower child of this directory is hidden: each host file there that the
-				// upper layer doesn't hold is a deletion (the engine's limits apply).
-				for (const f of hostFilesUnder(root, e.p, 100_000)) {
-					if (!inUpper.has(f)) {
-						present.add(f);
-						changes.push({ path: f, kind: 'deleted' });
-					}
+				// The tab replaced this directory: every lower child is hidden. One held "directory
+				// deletion" item, like a whiteout of the directory, never per-file auto deletions
+				// (review MM-1). The workspace root can't be replaced.
+				if (e.p !== '' && hostFilesUnder(root, e.p, 1).length) {
+					present.add(e.p);
+					changes.push({ path: e.p, kind: 'deleted' });
 				}
 				break;
+			case 'err':
+				incomplete = true;
+				break;
+		}
+	}
+	// A listing that is truncated or couldn't read a directory may omit files the tab still has:
+	// apply no deletions from it (review MM-2).
+	if (truncated || incomplete) {
+		for (let i = changes.length - 1; i >= 0; i--) {
+			if (changes[i].kind === 'deleted') {
+				changes.splice(i, 1);
+			}
 		}
 	}
 	if (need.length) {
@@ -164,7 +175,7 @@ export async function syncTick(engine: WriteBackEngine, reader: UpperReader, roo
 		}
 	}
 	const res = engine.sync(changes);
-	if (!truncated) {
+	if (!truncated && !incomplete) {
 		engine.forgetAbsent(present);
 	}
 	const mirrored: string[] = [];

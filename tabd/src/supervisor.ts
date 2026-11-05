@@ -667,8 +667,18 @@ export class Supervisor {
 			}
 		}
 		const spec = this.spec(r);
-		// Last write-back sync while the VM is up (best effort; held changes stay pending).
-		await this.wb?.sync(r.tabId).catch(() => { /* recorded */ });
+		// Last write-back sync while the VM is up: best effort, bounded (review MM-4). The upper
+		// layer survives stop, so anything missed syncs on the next start.
+		if (this.wb) {
+			let timer: NodeJS.Timeout | undefined;
+			await Promise.race([
+				this.wb.sync(r.tabId).catch(() => { /* recorded */ }),
+				new Promise<void>(res => {
+					timer = setTimeout(res, 15_000);
+				}),
+			]);
+			clearTimeout(timer);
+		}
 		this.wb?.stop(r.tabId);
 		this.obs.stopping(r.tabId);
 		await this.driverFor(spec.template).stop(spec);

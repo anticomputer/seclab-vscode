@@ -217,6 +217,12 @@ test('writeback: X-5 deletions are rate-limited across syncs; W-11 escaped dupli
 		applied += e.sync(Array.from({ length: 80 }, (_, i) => ({ path: `f${b * 80 + i}.txt`, kind: 'deleted' as const }))).applied.length;
 	}
 	assert.equal(applied, 200);
+	// MM-1: the brake is sticky and persisted: after the window drains, and across a restart,
+	// further deletions stay held until the user confirms.
+	const later = mk();
+	assert.equal(later.sync([{ path: 'f250.txt', kind: 'deleted' }]).held.length, 1, 'still held after a restart');
+	later.clearDeleteHold();
+	assert.equal(later.sync([{ path: 'f251.txt', kind: 'deleted' }]).applied.length, 1, 'released by confirmation');
 	assert.equal(e.sync([file('package.json', '{"name":"x","scripts":{"test":"node --test"},"dependencies":{},"scr\\u0069pts":{}}')]).held.length, 1);
 });
 

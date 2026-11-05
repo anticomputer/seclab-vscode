@@ -56,6 +56,12 @@ interface State {
 	always: string[];
 	/** Upper entries already synced (applied or decided), by path: their signature (2b). */
 	synced?: Record<string, string>;
+	/** Of those, the ones actually written to the host (only these are mirrored; review MM-3). */
+	appliedSigs?: Record<string, string>;
+	/** Sticky mass-deletion brake: once tripped, every deletion is held until confirmed (MM-1). */
+	deleteHold?: boolean;
+	/** Applied auto deletions in the rolling window (persisted across restarts; MM-1). */
+	deleteTimes?: number[];
 }
 
 export class WriteBackError extends Error {}
@@ -307,7 +313,6 @@ export class WriteBackEngine {
 	private readonly ignoredBy: (root: string, paths: readonly string[]) => Set<string> | null;
 	private state: State;
 	private syncTimes: number[] = [];
-	private deleteTimes: number[] = [];
 
 	constructor(o: EngineOptions) {
 		this.o = o;
@@ -394,18 +399,22 @@ export class WriteBackEngine {
 			}
 			if (c.kind === 'deleted') {
 				deletes++;
-				this.deleteTimes = this.deleteTimes.filter(x => t - x < this.policy.deleteWindowMs);
-				if (deletes > this.policy.maxAutoDeletesPerSync || this.deleteTimes.length >= this.policy.maxAutoDeletesPerWindow) {
-					extra.push('mass deletion (held beyond the deletion limit)');
+				const times = (this.state.deleteTimes ?? []).filter(x => t - x < this.policy.deleteWindowMs);
+				this.state.deleteTimes = times;
+				if (deletes > this.policy.maxAutoDeletesPerSync || times.length >= this.policy.maxAutoDeletesPerWindow) {
+					this.state.deleteHold = true; // sticky until the user confirms (MM-1)
+				}
+				if (this.state.deleteHold) {
+					extra.push('mass deletion (every deletion held until confirmed)');
 				}
 			}
 			try {
 				const out = this.one(rel, c, extra, batchNames);
 				if (out === 'applied') {
 					res.applied.push(rel);
-					this.markSynced(rel, c);
+					this.markSynced(rel, c, true);
 					if (c.kind === 'deleted') {
-						this.deleteTimes.push(t);
+						this.state.deleteTimes = [...(this.state.deleteTimes ?? []), t];
 					}
 				} else if (out) {
 					res.held.push(out);
@@ -443,7 +452,7 @@ export class WriteBackEngine {
 			throw new WriteBackError('the host file changed since it was shown; review the conflict');
 		}
 		this.apply(rel, c, true);
-		this.markSynced(rel, c);
+		this.markSynced(rel, c, true);
 		this.state.pending = this.state.pending.filter(x => x.path !== rel);
 		this.save();
 	}
@@ -521,7 +530,8 @@ export class WriteBackEngine {
 	mirrorPlan(entries: ReadonlyArray<{ path: string; sha: string; mode: number; nlink: number }>): Array<{ path: string; expect: string; content: Buffer }> {
 		const ops: Array<{ path: string; expect: string; content: Buffer }> = [];
 		for (const e of entries) {
-			if (!this.isSynced(e.path, metaSig({ kind: 'file', mode: e.mode, sha: e.sha, nlink: e.nlink }))) {
+			// Only files actually written to the host: tab-local and refused ones stay the tab's (MM-3).
+			if (this.state.appliedSigs?.[e.path] !== metaSig({ kind: 'file', mode: e.mode, sha: e.sha, nlink: e.nlink })) {
 				continue;
 			}
 			try {
@@ -542,21 +552,36 @@ export class WriteBackEngine {
 	/** A mirror landed: the upper entry now holds the host's content. */
 	noteMirrored(rel: string, upperSha: string, mode: number, nlink: number): void {
 		checkRel(rel);
-		this.state.synced = { ...this.state.synced, [rel]: metaSig({ kind: 'file', mode, sha: upperSha, nlink }) };
+		const s = metaSig({ kind: 'file', mode, sha: upperSha, nlink });
+		this.state.synced = { ...this.state.synced, [rel]: s };
+		this.state.appliedSigs = { ...this.state.appliedSigs, [rel]: s };
 		this.state.baseline[foldPath(rel)] = this.hostSig(rel);
 		this.save();
 	}
 
 	/** Entries no longer in the upper layer (the tab removed a never-applied file): forget them. */
 	forgetAbsent(present: ReadonlySet<string>): void {
-		const synced = this.state.synced ?? {};
-		this.state.synced = Object.fromEntries(Object.entries(synced).filter(([p]) => present.has(p)));
+		const keep = (m?: Record<string, string>) => Object.fromEntries(Object.entries(m ?? {}).filter(([p]) => present.has(p)));
+		this.state.synced = keep(this.state.synced);
+		this.state.appliedSigs = keep(this.state.appliedSigs);
 		this.state.pending = this.state.pending.filter(p => present.has(p.path));
 		this.save();
 	}
 
-	private markSynced(rel: string, c: UpperChange): void {
-		this.state.synced = { ...this.state.synced, [rel]: this.sig(c) };
+	/** The user confirmed the held deletions (increment 3's prompt): release the sticky brake. */
+	clearDeleteHold(): void {
+		this.state.deleteHold = false;
+		this.state.deleteTimes = [];
+		this.save();
+	}
+
+	/** Mark an entry decided; `applied` = written to the host (only those are mirrored, MM-3). */
+	private markSynced(rel: string, c: UpperChange, applied = false): void {
+		const s = this.sig(c);
+		this.state.synced = { ...this.state.synced, [rel]: s };
+		if (applied) {
+			this.state.appliedSigs = { ...this.state.appliedSigs, [rel]: s };
+		}
 	}
 
 	private holdReasons(rel: string, c: UpperChange, hostHash: string, batchNames: Set<string>): string[] {

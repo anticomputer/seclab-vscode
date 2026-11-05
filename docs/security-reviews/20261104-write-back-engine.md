@@ -111,3 +111,16 @@ uses (all pathname sockets; collector and strace are outside the domain). **Noth
 | # | Sev | Area | Finding | Disposition | Fix |
 |---|---|---|---|---|---|
 | LL-1 | Low | sbx kit | `clipboard-bridge` (agent uid, unguarded) is still reachable over the pathname socket `/run/user/1000/wayland-0`; a parser bug there would be execution outside the guard. | Accepted (follow-up) | Dependency on sbx code; follow-up: stop it from the collector before the REH if seclab never uses the sbx clipboard. |
+
+## Increment 2b: sync loop (9b60205 and fixes)
+Threat: everything the in-VM feed returns (names, content, modes, counts, timing) is tab-controlled.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| MM-1 | **Medium** | Deletions | The delete brake only slowed deletions (held ones were re-fed and drained through the window, which reset on restart), and an opaque directory expanded into per-file auto deletions, bypassing the directory-deletion hold. | Fixed | The brake is sticky and persisted: once tripped, every deletion is held until the user confirms (`clearDeleteHold`, increment 3); `deleteTimes` persisted; an opaque directory is one held "directory deletion". Regressions. |
+| MM-2 | Low | Opaque/incomplete listing | Truncated listings or unreadable directories could omit files the tab still has. | Fixed | The feed reports read errors; tabd applies no deletions and forgets nothing from an incomplete listing. |
+| MM-3 | Low | Mirror | Tab-local and refused entries were mirrored from the host. | Fixed | Only entries actually written to the host are mirrored (`appliedSigs`). |
+| MM-4 | Low | Stop | The final sync could delay stop by minutes on a hostile feed. | Fixed | 15 s deadline; anything missed syncs on the next start. |
+
+Also from this increment: the root `.git` auto set applies only into an existing host repository (a tab's
+`git init` had made a plain host folder a repo); a workspace that an enclosing repo ignores is outside it.

@@ -82,6 +82,7 @@ def cmd_list(root_fd):
             names = sorted(os.listdir(dfd))
         except OSError:
             os.close(dfd)
+            out({"p": prefix[:-1], "k": "err"})  # incomplete: tabd applies no deletions (MM-2)
             continue
         for n in names:
             if count >= MAX_ENTRIES:
@@ -119,7 +120,7 @@ def cmd_list(root_fd):
                 try:
                     stack.append((rel + "/", os.open(n, DIR_FLAGS, dir_fd=dfd)))
                 except OSError:
-                    pass
+                    out({"p": rel, "k": "err"})
             elif stat.S_ISLNK(st.st_mode):
                 rec["k"] = "symlink"
                 try:
