@@ -1,0 +1,41 @@
+{
+  "$comment": "Built-in model providers for the broker's model-host body policy (broker/seclab_broker/models.py). A policy names one by id in models.providers, or declares its own object. Paths, fields and tool types are from the providers' public API references; DRAFT until confirmed against the runtimes' real traffic (secure-agentic-experiences spike, plan section 11.1). The lists are allowlists: anything not listed is denied. Fields that name remote resources or server-side state (OpenAI web_search_options, Responses prompt/background/conversation, Anthropic mcp_servers/container) are deliberately absent.",
+  "providers": [
+    {
+      "id": "copilot",
+      "hosts": ["api.githubcopilot.com", "api.individual.githubcopilot.com", "api.business.githubcopilot.com", "api.enterprise.githubcopilot.com"],
+      "endpoints": [
+        {"path": "/chat/completions", "methods": ["POST"]},
+        {"path": "/responses", "methods": ["POST"]},
+        {"path": "/models", "methods": ["GET"]},
+        {"path": "/embeddings", "methods": ["POST"]}
+      ],
+      "fields": ["model", "messages", "input", "instructions", "include", "max_tokens", "max_completion_tokens", "max_output_tokens", "max_tool_calls", "metadata", "n", "parallel_tool_calls", "previous_response_id", "prompt_cache_key", "reasoning", "reasoning_effort", "response_format", "seed", "stop", "store", "stream", "stream_options", "temperature", "text", "tool_choice", "tools", "top_logprobs", "logprobs", "top_p", "truncation", "user", "dimensions", "encoding_format", "intent"],
+      "toolTypes": ["function"]
+    },
+    {
+      "id": "openai",
+      "hosts": ["api.openai.com"],
+      "endpoints": [
+        {"path": "/v1/chat/completions", "methods": ["POST"]},
+        {"path": "/v1/responses", "methods": ["POST"]},
+        {"path": "/v1/models", "methods": ["GET"]},
+        {"path": "/v1/embeddings", "methods": ["POST"]}
+      ],
+      "fields": ["model", "messages", "input", "instructions", "include", "audio", "modalities", "frequency_penalty", "presence_penalty", "logit_bias", "logprobs", "top_logprobs", "max_tokens", "max_completion_tokens", "max_output_tokens", "max_tool_calls", "metadata", "n", "parallel_tool_calls", "prediction", "previous_response_id", "prompt_cache_key", "reasoning", "reasoning_effort", "response_format", "safety_identifier", "seed", "service_tier", "stop", "store", "stream", "stream_options", "temperature", "text", "tool_choice", "tools", "top_p", "truncation", "user", "verbosity", "dimensions", "encoding_format"],
+      "toolTypes": ["function"]
+    },
+    {
+      "id": "anthropic",
+      "hosts": ["api.anthropic.com"],
+      "endpoints": [
+        {"path": "/v1/messages", "methods": ["POST"]},
+        {"path": "/v1/messages/count_tokens", "methods": ["POST"]},
+        {"path": "/v1/models", "methods": ["GET"]}
+      ],
+      "fields": ["model", "messages", "system", "max_tokens", "metadata", "stop_sequences", "stream", "temperature", "thinking", "tool_choice", "tools", "top_k", "top_p", "service_tier"],
+      "toolTypes": ["custom"],
+      "untypedTool": "custom"
+    }
+  ]
+}

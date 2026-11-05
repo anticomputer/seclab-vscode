@@ -72,6 +72,12 @@ Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, sc
 | `sentinelMismatch` | `"block"` \| `"log"` |  | What to do when a sentinel appears anywhere other than the header a matching binding names. It is never swapped either way. (default `"block"`) |
 | `allow` | [`rule`](broker-policy.md#rule)[] |  | Egress allow rules. Anything not matched is held for a prompt, or denied. (max items `1024`) |
 | `credentials` | [`credential`](broker-policy.md#credential)[] |  | Sentinel credentials. A binding does not imply egress: the request must also be allowed. (max items `256`) |
+| `models` | `object` |  | Model-host policy (revision 3). A request to a host of a declared provider, or to any host on the broker's known model-host list, is checked before forwarding: the provider must be declared, the method and path must be one of its endpoints, no upgrades, the body must be strict JSON with only listed top-level fields, and every tool must have an allowed `type`. Requests and bytes on model hosts count against a per-tab budget; over budget is denied, never prompted. All of this only denies. |
+| `models.providers` | `"copilot"` \| `"openai"` \| `"anthropic"` \| [`modelProvider`](broker-policy.md#modelprovider)[] |  | (max items `32`) |
+| `models.budget` | `object` |  | Per-tab totals over the broker's lifetime. |
+| `models.budget.requests` | `integer` |  | (min `0`; default `5000`) |
+| `models.budget.bytes` | `integer` |  | Request plus response body bytes. (min `0`; default `1073741824`) |
+| `models.grants` | `object`[] |  | Tier C exceptions: a server-side tool type the user granted for this tab. (max items `64`) |
 | `riskyDestinations` | `object`[] |  | Extra risky destinations for this tab, added to the broker's maintained list (see docs/broker-policy.md). Same treatment: no `allow-tab`, auto-deny before the first user action. (max items `1024`) |
 <!-- END GENERATED: policy-fields -->
 
@@ -84,6 +90,26 @@ Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, sc
 Identifier for rules, credentials and tabs.
 
 Type: `string` (pattern `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+<a id="tooltype"></a>
+### `toolType`
+
+Type: `string` (pattern `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+<a id="modelprovider"></a>
+### `modelProvider`
+
+A model API and what may be sent to it. Every list is an allowlist.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | [`id`](broker-policy.md#id) | yes |  |
+| `hosts` | [`host`](broker-policy.md#host)[] | yes | (min items `1`; max items `32`) |
+| `endpoints` | `object`[] | yes | (min items `1`; max items `64`) |
+| `fields` | `string`[] | yes | Top-level JSON body fields allowed. Any other field is denied. (max items `256`) |
+| `toolFields` | `string`[] |  | Top-level fields holding arrays of tool objects. (max items `8`; default `["tools"]`) |
+| `toolTypes` | [`toolType`](broker-policy.md#tooltype)[] |  | Tool `type` values allowed (client-side tools only, for example `function`). (max items `64`) |
+| `untypedTool` | [`toolType`](broker-policy.md#tooltype) |  | The type a tool object with no `type` counts as (Anthropic custom tools). |
 
 <a id="host"></a>
 ### `host`
@@ -171,6 +197,23 @@ A sentinel credential. The broker mints its sentinel (returned by `policy.load`)
 | `inject` | [`inject`](broker-policy.md#inject) |  | Default for bindings without their own `inject`. |
 | `provider` | `string` |  | Extra provider backstop deny-list to apply (by name). Providers are also applied automatically by host. (pattern `^[a-z0-9-]{1,32}$`) |
 | `sentinelPrefix` | `string` |  | Replaces `SECLAB_SNTL_` for clients that check a token format. (pattern `^[A-Za-z0-9_-]{0,16}$`) |
+| `derive` | [`derive`](broker-policy.md#derive)[] |  | Trusted derivation rules (revision 3). See `derive`. (max items `8`) |
+
+<a id="derive"></a>
+### `derive`
+
+A credential minted by one exact route, declared by the controller. When a request carrying this credential to `from` succeeds (2xx), the response must be a strict JSON object whose top-level string `field` is the minted token, or the response is blocked. The token reaches the tab only as a sentinel (stable across re-mints), bound to `bind`, which may name other hosts than the parent's. That widening comes from this trusted rule only, never from the response (for example a response's `endpoints` field is ignored). `bind` names exact hosts, explicit paths and methods.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | [`id`](broker-policy.md#id) | yes |  |
+| `from` | `object` | yes |  |
+| `from.host` | [`host`](broker-policy.md#host) | yes |  |
+| `from.path` | [`path`](broker-policy.md#path) | yes |  |
+| `from.method` | [`method`](broker-policy.md#method) | yes |  |
+| `field` | `string` | yes | (pattern `^[A-Za-z0-9_]{1,64}$`) |
+| `inject` | [`inject`](broker-policy.md#inject) |  | Default for `bind` entries without their own `inject`. |
+| `bind` | [`binding`](broker-policy.md#binding)[] | yes | (min items `1`; max items `32`) |
 <!-- END GENERATED: policy-definitions -->
 
 ## Forbidden headers (generated)
@@ -193,6 +236,36 @@ Built-in baseline merged into every policy unless it sets baseline:false. Read-o
 | `baseline-openvsx` | `open-vsx.org` | GET, HEAD | `/**` |
 | `baseline-openvsx-blob` | `openvsxorg.blob.core.windows.net` | GET, HEAD | `/**` |
 <!-- END GENERATED: policy-baseline -->
+
+## Model hosts (generated)
+
+The `models` section puts model APIs under a request body policy and a
+per-tab budget. Both only deny, and over budget is never a prompt. The policy
+names built-in providers by id, or declares its own. See the
+[ADR](adr/20261105-broker-model-access.md).
+
+<!-- BEGIN GENERATED: policy-models (broker/tools/docs.py; do not edit) -->
+Built-in providers (`seclab_broker/data/model-providers.v1.json`; a draft until confirmed against real runtime traffic):
+
+**`copilot`**: hosts `api.githubcopilot.com`, `api.individual.githubcopilot.com`, `api.business.githubcopilot.com`, `api.enterprise.githubcopilot.com`.
+- Endpoints: `POST /chat/completions`, `POST /responses`, `GET /models`, `POST /embeddings`.
+- Tool types: `function`.
+- Top-level fields: `model`, `messages`, `input`, `instructions`, `include`, `max_tokens`, `max_completion_tokens`, `max_output_tokens`, `max_tool_calls`, `metadata`, `n`, `parallel_tool_calls`, `previous_response_id`, `prompt_cache_key`, `reasoning`, `reasoning_effort`, `response_format`, `seed`, `stop`, `store`, `stream`, `stream_options`, `temperature`, `text`, `tool_choice`, `tools`, `top_logprobs`, `logprobs`, `top_p`, `truncation`, `user`, `dimensions`, `encoding_format`, `intent`.
+
+**`openai`**: hosts `api.openai.com`.
+- Endpoints: `POST /v1/chat/completions`, `POST /v1/responses`, `GET /v1/models`, `POST /v1/embeddings`.
+- Tool types: `function`.
+- Top-level fields: `model`, `messages`, `input`, `instructions`, `include`, `audio`, `modalities`, `frequency_penalty`, `presence_penalty`, `logit_bias`, `logprobs`, `top_logprobs`, `max_tokens`, `max_completion_tokens`, `max_output_tokens`, `max_tool_calls`, `metadata`, `n`, `parallel_tool_calls`, `prediction`, `previous_response_id`, `prompt_cache_key`, `reasoning`, `reasoning_effort`, `response_format`, `safety_identifier`, `seed`, `service_tier`, `stop`, `store`, `stream`, `stream_options`, `temperature`, `text`, `tool_choice`, `tools`, `top_p`, `truncation`, `user`, `verbosity`, `dimensions`, `encoding_format`.
+
+**`anthropic`**: hosts `api.anthropic.com`.
+- Endpoints: `POST /v1/messages`, `POST /v1/messages/count_tokens`, `GET /v1/models`.
+- Tool types: `custom`; untyped tools count as `custom`.
+- Top-level fields: `model`, `messages`, `system`, `max_tokens`, `metadata`, `stop_sequences`, `stream`, `temperature`, `thinking`, `tool_choice`, `tools`, `top_k`, `top_p`, `service_tier`.
+
+Known model hosts (`seclab_broker/data/model-hosts.v1.json`). A request to one of these is denied unless the policy declares a provider for its host:
+
+`api.openai.com`, `api.anthropic.com`, `api.githubcopilot.com`, `*.githubcopilot.com`, `generativelanguage.googleapis.com`, `aiplatform.googleapis.com`, `*.openai.azure.com`, `*.services.ai.azure.com`, `models.inference.ai.azure.com`, `models.github.ai`, `api.mistral.ai`, `api.cohere.com`, `api.cohere.ai`, `api.x.ai`, `api.groq.com`, `api.together.xyz`, `api.fireworks.ai`, `api.deepseek.com`, `api.perplexity.ai`, `openrouter.ai`.
+<!-- END GENERATED: policy-models -->
 
 ## Risky destinations (generated)
 
@@ -349,6 +422,112 @@ Rules marked gitleaks are taken from https://github.com/gitleaks/gitleaks/blob/5
 ## Examples (generated)
 
 <!-- BEGIN GENERATED: policy-examples (broker/tools/docs.py; do not edit) -->
+#### [`broker/examples/copilot-agent.policy.json`](../broker/examples/copilot-agent.policy.json)
+
+<!-- check: policy -->
+```json
+{
+ "version": 1,
+ "tabId": "example-copilot-agent",
+ "baseline": true,
+ "prompt": {
+  "enabled": true,
+  "timeoutSeconds": 60
+ },
+ "allow": [
+  {
+   "id": "copilot-token",
+   "host": "api.github.com",
+   "methods": [
+    "GET"
+   ],
+   "path": "/copilot_internal/v2/token"
+  },
+  {
+   "id": "copilot-api",
+   "host": "api.githubcopilot.com",
+   "methods": [
+    "GET",
+    "POST"
+   ],
+   "path": "/**"
+  }
+ ],
+ "credentials": [
+  {
+   "id": "github",
+   "inject": {
+    "header": "Authorization",
+    "fmt": "token {value}"
+   },
+   "bind": [
+    {
+     "host": "api.github.com",
+     "path": "/copilot_internal/v2/token",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "derive": [
+    {
+     "id": "copilot",
+     "from": {
+      "host": "api.github.com",
+      "path": "/copilot_internal/v2/token",
+      "method": "GET"
+     },
+     "field": "token",
+     "inject": {
+      "header": "Authorization",
+      "fmt": "Bearer {value}"
+     },
+     "bind": [
+      {
+       "host": "api.githubcopilot.com",
+       "path": "/chat/completions",
+       "methods": [
+        "POST"
+       ]
+      },
+      {
+       "host": "api.githubcopilot.com",
+       "path": "/responses",
+       "methods": [
+        "POST"
+       ]
+      },
+      {
+       "host": "api.githubcopilot.com",
+       "path": "/models",
+       "methods": [
+        "GET"
+       ]
+      },
+      {
+       "host": "api.githubcopilot.com",
+       "path": "/embeddings",
+       "methods": [
+        "POST"
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "models": {
+  "providers": [
+   "copilot"
+  ],
+  "budget": {
+   "requests": 2000,
+   "bytes": 536870912
+  }
+ }
+}
+```
+
 #### [`broker/examples/default-deny.policy.json`](../broker/examples/default-deny.policy.json)
 
 <!-- check: policy -->

@@ -320,3 +320,47 @@ def test_binding_from_import_proposed():
     inj = {"header": "X-Api-Key", "fmt": "{value}"}
     b = Binding.from_json({"host": "api.example.com", "path": "/v1/**", "methods": ["POST"], "inject": inj})
     assert b.inject.header == "X-Api-Key"
+
+
+DERIVE = {"id": "copilot", "from": {"host": "api.example.com", "path": "/copilot_internal/v2/token", "method": "GET"},
+          "field": "token", "inject": {"header": "Authorization", "fmt": "Bearer {value}"},
+          "bind": [{"host": "chat.example.com", "path": "/chat/completions", "methods": ["POST"]}]}
+
+
+def test_trusted_derivation_rules_are_exact_and_controller_bound():
+    from seclab_broker.policy import DeriveRule
+    r = DeriveRule.from_json(DERIVE)
+    assert r.matches(RequestView("https", "api.example.com", 443, "GET", "/copilot_internal/v2/token", ""))
+    assert not r.matches(RequestView("https", "api.example.com", 443, "POST", "/copilot_internal/v2/token", ""))
+    assert not r.matches(RequestView("https", "api.example.com", 443, "GET", "/copilot_internal/v2/tokenx", ""))
+    for bad in ({"from": dict(DERIVE["from"], host="*.example.com")},
+                {"from": dict(DERIVE["from"], path="/copilot_internal/**")},
+                {"bind": [dict(DERIVE["bind"][0], host="*.example.com")]},
+                {"field": "a.b"}):
+        with pytest.raises(PolicyError):
+            DeriveRule.from_json(dict(DERIVE, **bad))
+
+
+def test_derive_trusted_widens_only_to_the_rule_and_keeps_its_sentinel():
+    """The one exception to the parent-bound rule (ADR broker-model-access): the child is
+    bound to the controller's rule, one per parent and rule, stable sentinel on re-mint."""
+    from seclab_broker.policy import DeriveRule
+    s = store_with()
+    parent = s.get("c1")
+    rule = DeriveRule.from_json(DERIVE)
+    c1 = s.derive_trusted(parent, rule, "minted-copilot-value-0001")
+    assert c1.id == "c1.copilot" and [b.host.text for b in c1.bindings] == ["chat.example.com"]
+    c2 = s.derive_trusted(parent, rule, "minted-copilot-value-0002")
+    assert c2 is c1 and c2.sentinel == c1.sentinel and c2.value == "minted-copilot-value-0002"
+    assert not s.find_real(b"minted-copilot-value-0001")
+    with pytest.raises(PolicyError):
+        s.derive_trusted(parent, rule, CANARY)  # another credential's value
+    s.revoke("c1", rotate=False)
+    assert s.get("c1.copilot") is None
+
+
+def test_unconfirmed_import_cannot_derive():
+    s = CredentialStore()
+    from seclab_broker.policy import parse_derive
+    with pytest.raises(PolicyError):
+        s.import_credential("imp", CANARY, None, [], [], None, {"kind": "host"}, parse_derive([DERIVE]))

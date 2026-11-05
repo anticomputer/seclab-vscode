@@ -1,0 +1,25 @@
+{
+  "$comment": "Hosts the broker treats as model APIs even when a policy does not declare them. A request to one of these is denied unless the policy's models.providers covers its host, so a model host can never be reached without the body policy. Add hosts here; never remove one without review.",
+  "entries": [
+    {"host": "api.openai.com"},
+    {"host": "api.anthropic.com"},
+    {"host": "api.githubcopilot.com"},
+    {"host": "*.githubcopilot.com"},
+    {"host": "generativelanguage.googleapis.com"},
+    {"host": "aiplatform.googleapis.com"},
+    {"host": "*.openai.azure.com"},
+    {"host": "*.services.ai.azure.com"},
+    {"host": "models.inference.ai.azure.com"},
+    {"host": "models.github.ai"},
+    {"host": "api.mistral.ai"},
+    {"host": "api.cohere.com"},
+    {"host": "api.cohere.ai"},
+    {"host": "api.x.ai"},
+    {"host": "api.groq.com"},
+    {"host": "api.together.xyz"},
+    {"host": "api.fireworks.ai"},
+    {"host": "api.deepseek.com"},
+    {"host": "api.perplexity.ai"},
+    {"host": "openrouter.ai"}
+  ]
+}

@@ -4,6 +4,7 @@
 - **Date:** 2026-11-04
 - **Deciders:** anticomputer (user). Verbatim: "a core design stipulation is that we never allow a sandboxed environment to obtain a real secret" and "our threat model is that of someone installing a rogue extension". Also: secrets found in a workspace before mounting move into the broker.
 - **Related:** [ADR policy and protocol](20261104-broker-policy-and-control-protocol.md), [EDR sentinels](../edr/20261104-sentinel-format-and-binding.md), [security review](../security-reviews/20261104-broker-m2-m3.md)
+- **Amended by:** [ADR broker model access](20261105-broker-model-access.md) (a derived credential may be bound beyond its parent only by a controller-declared derivation rule)
 
 ## Context
 ARCHITECTURE.md §4.5 already swaps sentinels for real values on egress. A
