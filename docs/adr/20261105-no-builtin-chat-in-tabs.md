@@ -34,9 +34,8 @@ call: it writes a file, and a trusted component chooses to act. There is
 nothing for the filter to inspect. A tab does not need a confused deputy over
 RPC if it can write text that a trusted agent obeys.
 
-Upstream is not careless about injection, and several defences I expected to be
-broken are not. `chat.tools.global.autoApprove` is `APPLICATION_MACHINE`, so a
-workspace cannot set it. The fetch tool's "URL was in prompt" auto-approval
+Upstream is not careless about injection, and some defences I expected to be
+broken are not: the fetch tool's "URL was in prompt" auto-approval
 reads only the user's typed request text, and parses at token granularity
 specifically to defeat `?u=file:///…` smuggling. The gap is a **threat-model
 mismatch, not a missing check**: upstream assumes workspace content is
@@ -60,7 +59,24 @@ Enforced in code, at two choke points (patch 0009):
   this, the loop still runs with no tools and tab-authored instructions still
   reach the model along with whatever workspace content it gathers.
 
-All three call one predicate, `seclabAiDisabled(remoteAuthority)`.
+And in patch 0010, because disabling the callers was not enough:
+
+- `WorkbenchAgentHostService` takes the **local** branch in a tab window, the
+  same one an ordinary non-remote window takes.
+  `EditorRemoteAgentHostServiceClient` connects to the REH's own
+  `agentHostProxy` channel and then forwards a **real `accessToken`** for every
+  entry the remote advertises in `protectedResources`
+  ([agentHostAuth.ts#L736](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostAuth.ts#L736)).
+  A rogue REH advertising `api.github.com` is handed the user's token.
+
+  That one is a **client to server push**: the tab makes no call, so neither
+  the RPC choke point nor the channel guard sees it, and the connection is
+  established eagerly rather than on demand -- so removing chat's callers in
+  0009 left it open. It is a different shape of hole from everything the filter
+  was built for, and it is why surface (f) now enumerates the channels the
+  *client* calls on the REH.
+
+All of these call one predicate, `seclabAiDisabled(remoteAuthority)`.
 
 ### Why disable rather than filter
 
@@ -75,10 +91,27 @@ workspace* would have an empty allow set. There is no safe subset to keep.
 
 A default is a value, and values are overridden. `product.json`
 `configurationDefaults` is also global, so it would disable chat in ordinary
-local windows too. Worse, the override could come from a **workspace setting
-the tab itself writes**, letting the sandboxed side switch its own containment
-back on. The probe `ai-settings-reenable` exists to keep that true: it writes
-`.vscode/settings.json` turning the features back on, and must fail.
+local windows too. Worse, the override could come from a **setting the tab
+itself writes**, letting the sandboxed side switch its own containment back on.
+The probe `ai-settings-reenable` exists to keep that true: it writes settings
+turning the features back on, and must fail.
+
+**Correction (2026-11-05).** An earlier revision of this ADR said
+`chat.tools.global.autoApprove` could not be set from a tab because it is
+`APPLICATION_MACHINE`. That was wrong, and wrong in the unsafe direction. A
+*workspace* file cannot set it, but a tab does not need the workspace file: in
+a remote window the client reads **remote user settings** from
+`environment.settingsPath` -- a path the REH supplies, so a file inside the tab
+-- using `REMOTE_MACHINE_SCOPES`
+([configuration.ts#L32](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/configuration/common/configuration.ts#L32),
+[browser/configuration.ts#L401](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/configuration/browser/configuration.ts#L401)),
+which includes `MACHINE` **and** `APPLICATION_MACHINE`.
+
+So a tab can set every scope except `APPLICATION`: 55 of the 67 agent settings,
+not the 53 first reported. The inventory field is now `tab_writable`, computed
+as `scope != APPLICATION`. This strengthens the case for enforcing in code
+rather than weakening it -- had this been a `configurationDefaults` value, the
+tab could have overridden it.
 
 ## Consequences
 

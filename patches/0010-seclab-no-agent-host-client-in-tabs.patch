@@ -1,0 +1,29 @@
+diff -ruN a/src/vs/workbench/services/agentHost/electron-browser/agentHostService.ts b/src/vs/workbench/services/agentHost/electron-browser/agentHostService.ts
+--- a/src/vs/workbench/services/agentHost/electron-browser/agentHostService.ts	2026-11-05 11:51:26
++++ b/src/vs/workbench/services/agentHost/electron-browser/agentHostService.ts	2026-11-05 11:51:26
+@@ -17,6 +17,7 @@
+ import { IAgentHostOTelPolicyReadiness, IAgentHostService } from '../../../../platform/agentHost/common/agentService.js';
+ import { LocalAgentHostServiceClient } from '../../../../platform/agentHost/electron-browser/localAgentHostService.js';
+ import { IAgentHostEnablementService } from '../../../../platform/agentHost/common/agentHostEnablementService.js';
++import { seclabAiDisabled } from '../../extensions/common/seclabRpcFilter.js';
+ import { agentsWindowAgentHostClientInfo, editorWindowAgentHostClientInfo } from '../../../../platform/agentHost/common/agentHostClientInfo.js';
+ import { CopilotCliVSCodeAssignmentContextKey } from '../../../../platform/agentHost/common/copilotCliConfig.js';
+ import { ActionType } from '../../../../platform/agentHost/common/state/sessionActions.js';
+@@ -47,7 +48,16 @@
+ 		@IAccountPolicyGateService accountPolicyGateService: IAccountPolicyGateService,
+ 		@ILogService logService: ILogService,
+ 	) {
+-		const inner = environmentService.remoteAuthority
++		// seclab: a tab window takes the local branch, the same one an ordinary
++		// non-remote window takes. EditorRemoteAgentHostServiceClient connects to
++		// the REH's own agentHostProxy channel and then forwards a *real*
++		// accessToken for every entry the remote advertises in protectedResources
++		// (agentHostAuth.ts, forwardAuthenticationToken). That is a client->server
++		// push: the tab makes no call, so neither the RPC filter nor the channel
++		// guard sees it, and a rogue REH advertising api.github.com would be handed
++		// the user's token. Patch 0009 disables chat here, which removes the
++		// callers but not this connection, because it is established eagerly.
++		const inner = environmentService.remoteAuthority && !seclabAiDisabled(environmentService.remoteAuthority)
+ 			? instantiationService.createInstance(EditorRemoteAgentHostServiceClient)
+ 			: instantiationService.createInstance(
+ 				LocalAgentHostServiceClient,

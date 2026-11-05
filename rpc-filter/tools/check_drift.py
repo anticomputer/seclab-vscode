@@ -144,9 +144,15 @@ def build_mapping(inv: dict, policy: dict) -> dict:
         entry = (policy_ai.get("settings") or {}).get(setting["id"])
         verdict = entry["verdict"] if entry else policy_ai.get(
             "default_verdict", policy["default_verdict"])
-        # Scope is pinned: a setting becoming workspace-writable is a setting
-        # the tab can write, and that is the change worth stopping a build for.
-        record("ai-setting:%s|scope=%s" % (setting["id"], setting["scope"]),
+        # Both the scope and the conclusion drawn from it are pinned. Scope
+        # alone is not enough: when the rule for reading a scope was corrected
+        # -- APPLICATION_MACHINE turned out to be tab-writable, because a
+        # remote window reads remote user settings from a REH-supplied path
+        # with REMOTE_MACHINE_SCOPES -- every scope string stayed the same and
+        # the gate said nothing. A change in what we believe a surface can do
+        # has to surface in review, not only a change upstream made.
+        record("ai-setting:%s|scope=%s|tab_writable=%s"
+               % (setting["id"], setting["scope"], setting.get("tab_writable")),
                verdict, entry)
     return mapping
 

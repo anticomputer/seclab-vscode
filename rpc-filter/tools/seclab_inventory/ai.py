@@ -139,6 +139,21 @@ def _settings(tree: SourceTree) -> list:
     Both key forms are handled. A literal ``'chat.x': { ... }`` and a computed
     ``[ChatConfiguration.X]: { ... }``; the latter is most of them, and a scan
     that only reads literals sees about a third of the surface.
+
+    **Tab-writability is not workspace-writability.** In a remote window the
+    client reads *remote user settings* from ``environment.settingsPath`` -- a
+    path the REH supplies, so a file inside the tab -- and it reads them with
+    ``REMOTE_MACHINE_SCOPES``
+    (``src/vs/workbench/services/configuration/common/configuration.ts:32``),
+    which includes ``MACHINE`` **and** ``APPLICATION_MACHINE``. So in a
+    ``seclab+`` window a tab can set any scope except ``APPLICATION``.
+
+    An earlier version of this scan treated ``APPLICATION_MACHINE`` as out of
+    reach, on the reasoning that a *workspace* file cannot set it. That is true
+    and irrelevant: the tab does not need the workspace file, it supplies the
+    remote user settings. The mistake mattered -- it is why
+    ``chat.tools.global.autoApprove`` was reported as unreachable when a tab
+    can in fact set it.
     """
     enums = {}
     for rel, name in (
@@ -169,9 +184,9 @@ def _settings(tree: SourceTree) -> list:
                 seen[key] = {
                     "id": key,
                     "scope": scope,
-                    # APPLICATION* and MACHINE* are not writable from a
-                    # workspace, so a tab cannot set them.
-                    "workspace_writable": not scope.startswith(("APPLICATION", "MACHINE")),
+                    # Everything except APPLICATION is in REMOTE_MACHINE_SCOPES,
+                    # and the tab supplies the remote settings file.
+                    "tab_writable": scope != "APPLICATION",
                     "file": rel,
                     "permalink": tree.permalink(rel, _line_at(text, m.start())),
                 }
@@ -225,6 +240,6 @@ def build(tree: SourceTree) -> dict:
         "may_reach_host_undeclared_count": len(undeclared),
         "settings": settings,
         "setting_count": len(settings),
-        "workspace_writable_setting_count": sum(
-            1 for s in settings if s["workspace_writable"]),
+        "tab_writable_setting_count": sum(
+            1 for s in settings if s["tab_writable"]),
     }

@@ -163,6 +163,20 @@
 			"policyRef": "ai-setting:chat.agent.enabled",
 			"why": "the tab writes .vscode/settings.json to switch its own containment back on; the disable is in code precisely so a setting cannot reach it",
 			"hostEffect": "chat becomes usable in the tab window after the setting is written"
+		},
+		"ai-agent-host-token-push": {
+			"required": true,
+			"surface": "client-push",
+			"policyRef": "push:agentHostProxy",
+			"why": "a rogue REH serves agentHostProxy and advertises api.github.com in protectedResources; the client would resolve the user's auth session and forward the real accessToken. Client->server, so neither the RPC choke point nor the channel guard sees it",
+			"hostEffect": "a canary auth token reaches the tab"
+		},
+		"ai-disable-ai-features-reenable": {
+			"required": true,
+			"surface": "client-push",
+			"policyRef": "ai-setting:chat.disableAIFeatures",
+			"why": "chat.disableAIFeatures is WINDOW scope and the tab supplies remote user settings, so a tab-written false must not revive the agent host client",
+			"hostEffect": "the agent host client connects from a tab window"
 		}
 	},
 	"rehProbes": {
