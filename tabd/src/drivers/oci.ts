@@ -5,11 +5,22 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import * as fs from 'node:fs';
 import type { Runner } from '../run.ts';
 import { assertImageRef, SANDBOX_NAME_RE, CONNECTION_TOKEN_RE } from '../validate.ts';
-import { DriverError, type Driver, type DriverInfo, type FenceReport, type SensorHooks, type TabRuntimeSpec } from './types.ts';
+import { DriverError, type BrokerHooks, type Driver, type DriverInfo, type FenceReport, type SensorHooks, type TabRuntimeSpec } from './types.ts';
 
 const REH_START = '/opt/seclab/bin/seclab-reh-start';
 const REH_CONNECT = '/opt/seclab/bin/seclab-reh-connect';
 const IMAGE_UID = '1000:1000';
+/** Root-owned tmpfs in the workspace holding the broker's CA and proxy URL (seclab-tab-env reads it). */
+const BROKER_DIR = '/run/seclab-broker';
+/** The broker's proxy port on the pod network (docs/broker-protocol.md §7). */
+const BROKER_PROXY = 'broker:8080';
+const PEM_RE = /^-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----\r?\n?$/;
+// Written as root into BROKER_DIR from stdin: line 1 the proxy URL, then the CA PEM. A fixed
+// script; nothing tab- or broker-supplied is interpolated into it.
+const INSTALL_BROKER = `set -eu; umask 022; d=${BROKER_DIR}; IFS= read -r url; cat > "$d/ca.pem.new"
+cat /etc/ssl/certs/ca-certificates.crt "$d/ca.pem.new" > "$d/bundle.pem.new"
+printf '%s\\n' "$url" > "$d/proxy-url.new"
+mv "$d/ca.pem.new" "$d/ca.pem"; mv "$d/bundle.pem.new" "$d/bundle.pem"; mv "$d/proxy-url.new" "$d/proxy-url"`;
 
 /**
  * The tab's uid:gid. Docker Desktop (macOS) maps bind-mount ownership, so the image user
@@ -69,6 +80,7 @@ export class OciDriver implements Driver {
 			ws: spec.sandboxName,
 			broker: `${spec.sandboxName}-broker`,
 			net: `${spec.sandboxName}-net`,
+			egress: `${spec.sandboxName}-egress`,
 			home: `${spec.sandboxName}-home`,
 		};
 	}
@@ -78,16 +90,34 @@ export class OciDriver implements Driver {
 		return r.code === 0;
 	}
 
-	async ensureRunning(spec: TabRuntimeSpec, connectionToken: string, sensor?: SensorHooks): Promise<void> {
+	async ensureRunning(spec: TabRuntimeSpec, connectionToken: string, sensor?: SensorHooks, broker?: BrokerHooks): Promise<void> {
 		if (!CONNECTION_TOKEN_RE.test(connectionToken)) {
 			throw new DriverError(-32602, 'invalid connection token');
 		}
 		const n = this.names(spec);
 		const label = `seclab.tab=${spec.tabId}`;
+		const realBroker = spec.template.spec.broker === 'required';
+		if (realBroker && !broker) {
+			throw new DriverError(-32011, 'the template requires a broker, but no broker setup was supplied');
+		}
 		if (!await this.exists('network', n.net)) {
 			await this.must(['network', 'create', '--internal', '--label', label, '--', n.net], 'network create');
 		}
-		if (!await this.exists('container', n.broker)) {
+		if (realBroker) {
+			// docs/broker-protocol.md §6: the broker's own egress network (ICC off), plus the pod's
+			// --internal network under the alias `broker`, both attached before it starts (the
+			// upstream address guard reads the routing table once, at start).
+			if (!await this.exists('network', n.egress)) {
+				await this.must(['network', 'create', '-o', 'com.docker.network.bridge.enable_icc=false', '--label', label, '--', n.egress], 'egress network create');
+			}
+			if (!await this.exists('container', n.broker)) {
+				await this.must(['create', '--name', n.broker, '--label', label, '--network', n.egress,
+					'--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '256', '--memory', '512m',
+					'--tmpfs', '/run/seclab:rw,nosuid,nodev,noexec,size=16m,uid=1000,gid=1000,mode=0700',
+					'--env', `SECLAB_TAB_ID=${spec.tabId}`, '--', assertImageRef(this.opts.brokerImage)], 'broker create');
+				await this.must(['network', 'connect', '--alias', 'broker', '--', n.net, n.broker], 'broker network connect');
+			}
+		} else if (!await this.exists('container', n.broker)) {
 			await this.must(['run', '-d', '--name', n.broker, '--label', label, '--network', n.net,
 				'--network-alias', 'broker', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
 				'--read-only', '--pids-limit', '64', '--memory', '256m', '--', assertImageRef(this.opts.brokerImage)], 'broker run');
@@ -108,6 +138,7 @@ export class OciDriver implements Driver {
 				'--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
 				'--pids-limit', '2048', '--memory', t.resources?.memory && /^[1-9][0-9]{0,4}[mg]$/.test(t.resources.memory) ? t.resources.memory : '4g',
 				'--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev,size=1g', '--tmpfs', `/run/user/${uid}:rw,nosuid,nodev,uid=${uid},gid=${gid},mode=0700`,
+				'--tmpfs', `${BROKER_DIR}:rw,nosuid,nodev,noexec,size=1m,mode=0755`,
 				// hostPath is canonical and contains no ',' or ':' (validate.ts), so --mount parsing is unambiguous.
 				'--mount', `type=bind,src=${spec.hostPath},dst=${spec.hostPath}`,
 				'--mount', `type=volume,src=${n.home},dst=/home/agent`,
@@ -137,6 +168,24 @@ export class OciDriver implements Driver {
 				await sensor.beforeReh({ containerId });
 			} catch (e) {
 				throw new DriverError(-32012, `observability sensor failed: ${(e as Error).message}`);
+			}
+		}
+		if (realBroker) {
+			// Plan tabd-broker-wiring B1: the supervisor connects, authenticates and loads policy;
+			// the workspace gets the CA and the proxy URL before anything in it starts.
+			let setup;
+			try {
+				setup = await broker!.configure(() => this.runner.spawnStream(this.docker, ['exec', '-i', '--', n.broker, 'seclab-broker', 'control']));
+			} catch (e) {
+				throw new DriverError(-32013, `broker setup failed: ${(e as Error).message}`);
+			}
+			if (!PEM_RE.test(setup.caPem) || !/^[A-Za-z0-9_-]{1,64}$/.test(setup.proxyUser) || !/^[A-Za-z0-9_-]{16,128}$/.test(setup.proxyPassword)) {
+				throw new DriverError(-32013, 'broker setup returned an invalid CA or proxy credential');
+			}
+			const url = `http://${setup.proxyUser}:${setup.proxyPassword}@${BROKER_PROXY}`;
+			const w = await this.runner.run(this.docker, ['exec', '-i', '-u', '0:0', '--', n.ws, 'sh', '-c', INSTALL_BROKER], { input: `${url}\n${setup.caPem}`, timeoutMs: 30_000 });
+			if (w.code !== 0) {
+				throw new DriverError(-32013, `could not install the broker CA in the workspace (created before brokers? remove the tab): ${w.stderr.trim().slice(-300)}`);
 			}
 		}
 		const r = await this.runner.run(this.docker, ['exec', '-i', '-u', tabUser(spec), '--', n.ws, REH_START], { input: connectionToken + '\n', timeoutMs: 90_000 });
@@ -216,6 +265,9 @@ export class OciDriver implements Driver {
 		const n = this.names(spec);
 		await this.runner.run(this.docker, ['rm', '-f', '--', n.ws, n.broker], { timeoutMs: 60_000 });
 		await this.runner.run(this.docker, ['network', 'rm', '--', n.net], { timeoutMs: 30_000 });
+		if (await this.exists('network', n.egress)) {
+			await this.runner.run(this.docker, ['network', 'rm', '--', n.egress], { timeoutMs: 30_000 });
+		}
 		await this.runner.run(this.docker, ['volume', 'rm', '--', n.home], { timeoutMs: 30_000 });
 	}
 }

@@ -16,6 +16,7 @@ import { TabStore } from './state.ts';
 import { scanWorkspace } from './scan.ts';
 import { Supervisor } from './supervisor.ts';
 import { assertImageRef } from './validate.ts';
+import { tabPolicy } from './broker-policy.ts';
 
 // 1. Only the framer may write to stdout; everything else goes to stderr.
 const realStdoutWrite = process.stdout.write.bind(process.stdout);
@@ -38,6 +39,8 @@ const { values } = parseArgs({
 		'driver': { type: 'string', default: 'sbx' },
 		'image': { type: 'string' },
 		'broker-image': { type: 'string', default: 'seclab-broker-placeholder:local' },
+		// `required`: each tab gets a real broker (plan tabd-broker-wiring B1; OCI only until B2).
+		'broker': { type: 'string', default: 'none' },
 		'allowed-root': { type: 'string', multiple: true, default: [] },
 		'sensitive': { type: 'string', multiple: true, default: [] },
 		'cpus': { type: 'string' },
@@ -101,10 +104,17 @@ if (driverName === 'sbx') {
 
 const image = assertImageRef(values.image ?? (driverName === 'sbx' ? 'seclab-tab:local' : 'seclab-tab-oci:local'));
 const cpus = values.cpus !== undefined ? Number(values.cpus) : undefined;
+const brokerMode = values.broker;
+if (brokerMode !== 'none' && brokerMode !== 'required') {
+	die('--broker must be none or required');
+}
+if (brokerMode === 'required' && driverName !== 'oci') {
+	die('--broker required is OCI only for now (sbx: plan tabd-broker-wiring B2)');
+}
 const template: TabTemplate = {
 	kind: 'TabTemplate',
 	metadata: { name: 'default' },
-	spec: { driver: driverName, image, resources: { cpus, memory: values.memory }, envVarsInjectionPolicy: 'Disallowed', fence: 'required', broker: 'none' },
+	spec: { driver: driverName, image, resources: { cpus, memory: values.memory }, envVarsInjectionPolicy: 'Disallowed', fence: 'required', broker: brokerMode },
 };
 
 const supervisor = new Supervisor({
@@ -137,6 +147,8 @@ const supervisor = new Supervisor({
 	// Pre-mount secret scan (gitleaks in a network-less container). Without docker the
 	// scan is unavailable and opens fail closed unless the user records an exception.
 	scan: dockerPath ? (hostPath: string) => scanWorkspace(runner, dockerPath, hostPath) : undefined,
+	// The user's broker policy from this state dir, else deny-all (plan tabd-broker-wiring, decision 1).
+	brokerPolicy: tabId => tabPolicy(stateDir, tabId),
 });
 
 process.stdin.on('data', (d: Buffer) => supervisor.receive(d));
