@@ -114,3 +114,32 @@ Rule (user decision: "Defang on disk"):
 - **If a detection happens anyway:** stop, check `mdatp threat list`, tell the user so
   they can inform their security team, and never retry variants of the content to find
   what triggers the signature.
+
+## Addendum (2026-11-05): the loader shape across files, and host copies
+The user reported further Defender `tasks.json` detections on their corporate endpoint. The
+file-level rule missed a split shape: the observability fixture's hidden folder-open
+`tasks.json` ran `sh .seclab/loader.sh`, and the script held the loader traits (detach,
+fetch, inline `node -e` eval, browser and wallet paths). The harness also left host copies
+of fixture workspaces under every worktree's `.work/` after runs.
+
+Rule (coordinator decision, user-reported):
+- **`av-loader` is workspace-level** (`test/safety/av-shape.ts`). A folder-open or hidden
+  task fails if the task file, or any script its command or args name in the same
+  workspace, carries a fetch tool, inline `node -e`/eval, `nohup`/detach, or
+  browser/wallet/keychain data paths.
+- **`av-fetch-eval` applies to any host file.** A fetch command together with inline
+  node/eval or a pipe into an interpreter fails, whether in the walked roots or in the
+  `--av` pass over every tracked file. Test strings with that shape are assembled at run
+  time.
+- **Exempt:** only encoded `*.parts.json`. `malicious-workspace/.seclab/probe.sh` now reads
+  its HTTP client's name from `probe.parts.json`, so its folder-open task no longer sits
+  next to a literal fetch tool.
+- **Harness:** fixtures reach the host only through `materialiseFixture` (teardown.ts).
+  It refuses a source with an AV shape and records the copy in `run.json` before
+  copying. Teardown deletes it, and checks that it is gone.
+- **`./seclab clean-host`** lists stale fixture copies (roots with our `.seclab/` dir)
+  in every worktree's `.work/` and removes them with `--apply`. Trees that aren't ours
+  but have an AV shape, such as upstream source checkouts, are reported and never
+  deleted.
+- **Detections:** stop, run `mdatp threat list`, tell the coordinator, and never probe the
+  signature (AGENTS.md hard rule).

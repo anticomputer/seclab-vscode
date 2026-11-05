@@ -11,13 +11,17 @@
 // matched. Tabs are classified by the tabd state that owns them: only test tabs (state in
 // ~/.seclab-test or a worktree's .work/) are removed by default; the user's real editor tabs
 // hold their installed extensions. Processes are matched on option values: editors only
-// with a test --user-data-dir, tabd only when orphaned with a test --state-dir.
+// with a test --user-data-dir, tabd only when orphaned with a test --state-dir. Stale fixture
+// copies (workspaces with our .seclab/ dir, or an AV loader shape) under every worktree's .work/
+// are removed too: they are what endpoint protection flags (EDR fixture-safety).
 // Exit 0; with --apply, 1 if something could not be removed.
 
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { treeTexts } from './containment/teardown.ts';
+import { avFindings } from './safety/av-shape.ts';
 
 const args = new Set(process.argv.slice(2));
 for (const a of args) {
@@ -246,9 +250,63 @@ for (const dir of [path.join(home, '.seclab-test'), '/Users/Shared/seclab-demo']
 	}
 }
 
+// ---- stale fixture copies in every worktree's .work/ (EDR fixture-safety) ---------------------
+// Hostile fixtures materialised on the host are what endpoint protection flags. A workspace
+// root under .work/ is a fixture copy if it carries our `.seclab/` dir, or if its tree has an AV
+// loader shape (av-shape.ts). Bounded walk; build trees pruned; symlinks never followed.
+const PRUNE = new Set(['node_modules', '.git', 'out', 'out-build', '.build', 'vscode', 'vscode-reh', 'src', 'deps-verified', 'attestations']);
+const fixtureRoots = new Map<string, string>();
+const scanWork = (dir: string, depth: number): void => {
+	if (depth > 8) {
+		return;
+	}
+	let ents: fs.Dirent[] = [];
+	try {
+		ents = fs.readdirSync(dir, { withFileTypes: true });
+	} catch {
+		return;
+	}
+	const names = new Set(ents.map(e => e.name));
+	const hasDir = (n: string) => ents.some(e => e.name === n && e.isDirectory());
+	if (hasDir('.seclab')) {
+		fixtureRoots.set(dir, '');
+		return;
+	}
+	if (hasDir('.vscode') && names.size < 400) {
+		let first: string | undefined;
+		try {
+			first = avFindings(treeTexts(dir, 400))[0];
+		} catch { /* unreadable: not ours to judge */ }
+		if (first) {
+			// Not one of our fixtures (e.g. an upstream source tree): report, never delete.
+			fixtureRoots.set(dir, first);
+			return;
+		}
+	}
+	for (const e of ents) {
+		if (e.isDirectory() && !PRUNE.has(e.name)) {
+			scanWork(path.join(dir, e.name), depth + 1);
+		}
+	}
+};
+for (const w of worktrees) {
+	scanWork(path.join(w, '.work'), 0);
+}
+for (const [p, avShape] of fixtureRoots) {
+	const inUse = procs.some(x => x.args.includes(p));
+	const why = avShape ? `not a seclab fixture; has an AV loader shape, review it: ${avShape.slice(0, 140)}` : inUse ? 'a running process uses it' : '';
+	items.push({
+		kind: 'fixture copy', name: p, state: inUse ? 'in use' : '', remove: !inUse && !avShape, why,
+		del: () => {
+			fs.rmSync(p, { recursive: true, force: true });
+			return !fs.existsSync(p);
+		},
+	});
+}
+
 // ---- report / apply ------------------------------------------------------------------------
 // Processes first (they hold sandboxes and dirs), then sandboxes and containers, then the rest.
-const order = ['editor process', 'tabd process', 'sbx sandbox', 'container', 'network', 'volume', 'cache volume', 'image', 'directory'];
+const order = ['editor process', 'tabd process', 'sbx sandbox', 'container', 'network', 'volume', 'cache volume', 'image', 'directory', 'fixture copy'];
 items.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
 let failed = 0;
 for (const it of items) {

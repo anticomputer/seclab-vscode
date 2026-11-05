@@ -12,7 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import type { ObsEvent } from '../../tabd/src/obs/schema.ts';
-import { exitedOrTimeout, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
+import { exitedOrTimeout, materialiseFixture, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
 import { lockRun } from '../harness.ts';
 
 const driver = process.argv[2] ?? 'sbx';
@@ -31,7 +31,7 @@ fs.rmSync(work, { recursive: true, force: true });
 writeSnapshot(work);
 writeManifest(work, { driver, stateDirs: [path.join(work, 'state')] });
 const ws = path.join(work, 'tabs', 'loader');
-fs.cpSync(fixture, ws, { recursive: true });
+materialiseFixture(work, fixture, ws);
 const marker = path.join(ws, '.envrc');
 fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${ARM}\nrun=${work}\nuntil=${Math.floor(Date.now() / 1000) + 1800}\nmarker=${marker}\n`);
 

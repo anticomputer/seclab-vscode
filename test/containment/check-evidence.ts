@@ -16,7 +16,7 @@ import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
 import { beaconPort, checkUserDataDir, editorLaunchCommand, lockRun, NODE_IMAGE } from '../harness.ts';
 import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
-import { teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
+import { materialiseFixture, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
 const [mode, userDataArg, driverArg] = process.argv.slice(2);
 if ((mode !== 'prepare' && mode !== 'check') || !userDataArg) {
@@ -53,7 +53,7 @@ if (mode === 'prepare') {
 	fs.rmSync(base, { recursive: true, force: true });
 	fs.mkdirSync(path.dirname(canary), { recursive: true });
 	fs.writeFileSync(canary, 'HOST-SECRET-CANARY\n');
-	fs.cpSync(path.join(import.meta.dirname, 'fixtures', 'malicious-workspace'), ws, { recursive: true });
+	materialiseFixture(base, path.join(import.meta.dirname, 'fixtures', 'malicious-workspace'), ws);
 	const port = await beaconPort();
 	// Per-run arming nonce: the fixture is inert anywhere but inside this run dir.
 	const arm = randomBytes(16).toString('hex');

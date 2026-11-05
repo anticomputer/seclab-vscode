@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { Check } from './assert.ts';
+import { materialiseFixture } from './teardown.ts';
 
 const FIXTURE = path.join(import.meta.dirname, 'fixtures', 'contagious-interview');
 const V = 'contagious';
@@ -23,7 +24,7 @@ export interface Campaign { ws: string; canaries: Record<string, string>; arm: s
 /** Copy the fixture into the run, arm it, seed the credential-store canaries (run dir only). */
 export function setupCampaign(work: string, arm: string, loopback: number, marker: string): Campaign {
 	const ws = path.join(work, 'tabs', 'ws-campaign');
-	fs.cpSync(FIXTURE, ws, { recursive: true });
+	materialiseFixture(work, FIXTURE, ws);
 	// A real repo: the stage plants a git hook, which only matters if .git exists.
 	spawnSync('git', ['-C', ws, '-c', 'core.hooksPath=/dev/null', 'init', '-q'], { stdio: 'ignore' });
 	const dir = path.join(work, 'canary', 'campaign');
