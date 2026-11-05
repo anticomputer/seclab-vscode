@@ -43,6 +43,25 @@ Fixes for OR-5, OR-6, OR-L3 and OR-L4 are in this commit, with the regressions a
 `./seclab test unit` (48/48), `./seclab test obs sbx|oci`, `./seclab test e2e sbx` and the
 containment suites pass. **No high or critical findings are open.**
 
+## Round 4: prompt injection (events read by an LLM)
+- **Scope:** `cafe3ee` (field-level `untrusted` tags, `--format llm` renderer,
+  `suspicious-content` rule) and `e225714` (Tab Activity reveal-on-alert).
+- **Question (user):** "be on the lookout for any prompt injection gaps if there's outputs we
+  intend to manage/analyze with LLM".
+- **Result:** no high or critical findings.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression |
+|---|---|---|---|---|---|---|
+| PI-1 | Medium | LLM renderer | The renderer fenced only the paths the log line itself listed, so log lines written before the tags (or by any writer that omits them) rendered unfenced. | Fixed | Allowlist: only validated structural fields (`v`, `seq`, `time`, `tabId`, enums, `rule`, `cause`, `sensorTime`, `redacted`, `proc.pid/ppid/uid`, `net.port/family`) are inlined. Everything else is fenced, whatever `untrusted` says. | unit `obs prompt injection review` |
+| PI-L1 | Low | schema | Dotted detail keys made field paths ambiguous, so the renderer couldn't resolve them. Latent: no producer uses such keys. | Fixed | `.` removed from detail key names. | same |
+| PI-L2 | Low | schema | Vocabulary-shaped values such as `SYSTEM:approve_all` counted as trusted. Only reachable with root in the VM. | Fixed | The vocabulary shape now excludes `:` and uppercase words (except errno, signal and ptrace names). | same |
+| PI-L3 | Low | detection | Newlines (escaped as `\x0a`), zero-width splits, fullwidth letters, Cyrillic look-alikes and other languages slipped past the rule. | Fixed | Matching folds our escapes, NFKC-normalises, drops zero-width characters and maps common confusables; a few es/fr/de/pt/it phrasings are added. The rule now also scans parent commands, `detail.reason` and `claimedExtensionId`. Informational only: the fencing is the control. | same |
+| PI-R1 | — | protocol | `tab.observation` `reason` can carry sensor-derived text. | Fixed | The notification carries `untrusted: ["reason"]` (PROTOCOL.md). | — |
+
+Re-checked as sound: the delimiter can't be forged (96-bit nonce the tab never sees),
+JSON-encoded values can't break out, reveal-on-alert fires at most once per tab
+(application-scoped setting), and the CLI text format re-escapes `summary`.
+
 ## Accepted residuals (documented in the ADR)
 - `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.
 - Under OCI the privileged Falco sees every container on the Docker host. Only rules for the exact tab container ids are loaded, and its only output is stdout to tabd.

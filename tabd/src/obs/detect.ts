@@ -61,10 +61,30 @@ const PROMPT_INJECTION = [
 	/\byou are (?:now )?(?:an?|the) (?:ai|assistant|agent|llm|language model|chatbot)\b/i,
 	/\b(?:new|updated|real) (?:system )?instructions?\s*:/i,
 	/\b(?:as an ai|dear (?:ai|assistant|agent|llm)|note to (?:the )?(?:ai|assistant|agent|llm))\b/i,
+	// A few other languages (es, fr, de, pt, it).
+	/\bignor(?:a|e|ez|iere|ate)\b[\s\S]{0,40}\b(?:instrucciones|instructions|anweisungen|instruções|istruzioni)\b/i,
 ];
 
 export function looksLikePromptInjection(s: string): boolean {
-	return PROMPT_INJECTION.some(re => re.test(s));
+	const t = foldForMatching(s);
+	return PROMPT_INJECTION.some(re => re.test(t));
+}
+
+// A few Cyrillic/Greek letters that look Latin (review PI-L3). Not exhaustive: the rule is a hint.
+const CONFUSABLES: Readonly<Record<string, string>> = {
+	'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ѕ': 's', 'ј': 'j', 'ԁ': 'd', 'һ': 'h', 'ӏ': 'l',
+	'А': 'A', 'Е': 'E', 'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T', 'Х': 'X', 'М': 'M', 'Н': 'H', 'В': 'B', 'К': 'K', 'І': 'I', 'Ѕ': 'S',
+	'ο': 'o', 'α': 'a', 'ε': 'e', 'ι': 'i', 'Ο': 'O', 'Α': 'A', 'Ε': 'E', 'Ι': 'I', 'Τ': 'T',
+};
+
+/** Undo our own display escaping and common evasions before matching (never for display). */
+function foldForMatching(s: string): string {
+	return s
+		.replace(/\\u(?:200[b-f]|2060|feff)/gi, '') // escaped zero-width: join the word back
+		.replace(/\\x[0-9a-f]{2}|\\u[0-9a-f]{4}/gi, ' ') // escaped controls, newlines, bidi
+		.replace(/[\u200b-\u200f\u2060\ufeff]/g, '')
+		.normalize('NFKC') // fullwidth and compatibility forms
+		.replace(/[^\x00-\x7f]/g, c => CONFUSABLES[c] ?? c);
 }
 
 export function isCredentialPath(p: string): boolean {
@@ -196,7 +216,10 @@ export class Detector {
 		if (e.net?.addr) {
 			texts.push(['address', e.net.addr]);
 		}
-		for (const k of ['from', 'host', 'paths']) {
+		for (const l of e.proc?.lineage ?? []) {
+			texts.push(['parent command', l.exe]);
+		}
+		for (const k of ['from', 'host', 'paths', 'reason', 'claimedExtensionId']) {
 			const v = e.detail?.[k];
 			if (typeof v === 'string') {
 				texts.push([k, v]);
