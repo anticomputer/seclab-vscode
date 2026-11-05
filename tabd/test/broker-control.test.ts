@@ -78,4 +78,12 @@ test('connectBroker: retries while the socket is not up, then checks hello (fail
 	c.close();
 	await assert.rejects(connectBroker(() => fakeBroker(req => [ok(req.id, hello('other-tab'))]), 'tab-1', { delayMs: 1 }), /not tab-1/);
 	await assert.rejects(connectBroker(() => fakeBroker(req => [ok(req.id, { ...hello('tab-1'), policySchema: { version: 1, revision: 1 } })]), 'tab-1', { delayMs: 1 }), /policy schema/);
+	// XX-2: a broker that never comes up stops retrying at the deadline.
+	const t0 = Date.now();
+	await assert.rejects(connectBroker(() => fakeBroker(() => [JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32002, message: 'not up' } })]), 'tab-1', { delayMs: 10, deadline: Date.now() + 200 }), /not up/);
+	assert.ok(Date.now() - t0 < 2_000, 'gave up at the deadline');
+	// A broker that never answers is cut off at the deadline, not after 15 s.
+	const t1 = Date.now();
+	await assert.rejects(connectBroker(() => fakeBroker(() => []), 'tab-1', { deadline: Date.now() + 200 }), /no reply/);
+	assert.ok(Date.now() - t1 < 2_000);
 });

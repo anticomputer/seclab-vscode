@@ -81,6 +81,7 @@ Same rules as ADRs:
 | 2026-11-05 | [Secret scanning before push is mechanical: a pre-push hook and a required CI step](20261105-mechanical-secret-scan.md) | accepted |
 | 2026-11-05 | [No agent runtime on the host: no local agent host, no Copilot runtime in the desktop app](20261105-no-agent-runtime-on-host.md) | accepted |
 | 2026-11-05 | [Observability demo loader is assembled inside the tab](20261105-observability-loader-in-tab.md) | accepted |
+| 2026-11-05 | [OCI tabs get a real broker (plan increment B1)](20261105-oci-tab-broker.md) | accepted |
 | 2026-11-05 | [Patch-build gate: the patched tree must compile, and patches must land in what ships](20261105-patch-build-gate.md) | accepted |
 | 2026-11-05 | [Pinned tools: verified release binaries and source builds instead of third-party images](20261105-pinned-tools.md) | accepted |
 | 2026-11-05 | [Supply-chain exceptions: host prerequisites, and apt without version pins](20261105-supply-chain-exceptions.md) | accepted |

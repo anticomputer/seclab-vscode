@@ -104,10 +104,7 @@ if (driverName === 'sbx') {
 
 const image = assertImageRef(values.image ?? (driverName === 'sbx' ? 'seclab-tab:local' : 'seclab-tab-oci:local'));
 const cpus = values.cpus !== undefined ? Number(values.cpus) : undefined;
-const brokerMode = values.broker;
-if (brokerMode !== 'none' && brokerMode !== 'required') {
-	die('--broker must be none or required');
-}
+const brokerMode = values.broker === 'required' ? 'required' : values.broker === 'none' ? 'none' : die('--broker must be none or required');
 if (brokerMode === 'required' && driverName !== 'oci') {
 	die('--broker required is OCI only for now (sbx: plan tabd-broker-wiring B2)');
 }

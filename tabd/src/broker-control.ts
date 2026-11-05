@@ -162,15 +162,16 @@ export class BrokerControl {
 
 /**
  * Open the control channel and check `broker.hello` before anything else (fail closed on a
- * protocol, tab or policy-schema mismatch). Retries while the bridge reports the socket isn't up.
+ * protocol, tab or policy-schema mismatch). Retries while the bridge reports the socket isn't up,
+ * never past `deadline` (epoch ms; review XX-2: a stalling broker can't hold a start for long).
  */
-export async function connectBroker(openChannel: () => ChildProcessWithoutNullStreams, tabId: string, opts: { attempts?: number; delayMs?: number } = {}): Promise<BrokerControl> {
-	const attempts = opts.attempts ?? 60;
+export async function connectBroker(openChannel: () => ChildProcessWithoutNullStreams, tabId: string, opts: { deadline?: number; delayMs?: number } = {}): Promise<BrokerControl> {
+	const deadline = opts.deadline ?? Date.now() + 60_000;
 	let last: Error | undefined;
-	for (let i = 0; i < attempts; i++) {
+	while (Date.now() < deadline) {
 		const c = new BrokerControl(openChannel());
 		try {
-			checkBrokerHello(await c.request('broker.hello'), tabId);
+			checkBrokerHello(await c.request('broker.hello', undefined, Math.max(1, Math.min(15_000, deadline - Date.now()))), tabId);
 			return c;
 		} catch (e) {
 			c.close();
