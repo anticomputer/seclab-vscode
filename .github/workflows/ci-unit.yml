@@ -50,3 +50,5 @@ jobs:
         run: rpc-filter/tools/test.sh
       - name: RPC probe-safety guards
         run: ./seclab test probe-safety
+      - name: RPC URI-argument constraint (generated positions)
+        run: ./seclab test uri-constraint
