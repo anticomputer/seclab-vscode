@@ -120,9 +120,13 @@ RPC-lockdown session adds. Keep them consistent with this file.
   push, and deletion. There are no bypass actors. Never force-push `main`. When
   landing another session's branch, run `./seclab docs check` on it as well,
   not only its own suite.
-- **Fixture canaries must be obviously fake** (`seclabcanary_…`, no real token
-  prefixes), and staged changes are checked with gitleaks before a push. Why:
-  GitHub push protection, and no real-looking secrets in history.
+- **Fixtures use generated or obviously fake values** (`seclabcanary_…`, nothing that matches a
+  real token format, not even a public example value) **and no push goes out unscanned.**
+  Every session runs `./seclab hooks install` once per clone: the repo's pre-push hook
+  (`build/hooks/pre-push`) runs `./seclab lint secrets` (gitleaks built from pinned source)
+  over exactly what is being pushed, and a hit, or a scan that can't run, blocks the push.
+  The required `lint` check runs the same scan on every push and PR. Why: GitHub push
+  protection, no real-looking secrets in history, and a manual rule got skipped once.
 - **Every workflow change gets its own security-review round**
   ([EDR](docs/edr/20261104-ci-hardening.md)), recorded in `docs/security-reviews/`,
   iterated until no high or critical finding remains. `./seclab lint workflows`
@@ -244,8 +248,8 @@ node test/containment/teardown.test.ts   # teardown regression: orphaned editor 
 ./seclab lint deps              # every pin registered in deps/registry.json with provenance (--self-test too)
 ./seclab tool gitleaks          # pinned tools (build/tools/tools.json): verify + build locally; prints the image tag
 ./seclab deps host              # host prerequisites: gh = attested release bytes; Docker/sbx = Docker, Inc. Developer ID
-# Pre-push secret check of a diff (gitleaks built from pinned source):
-#   git diff origin/main HEAD | docker run --rm -i "$(./seclab tool gitleaks)" stdin --no-banner
+./seclab hooks install          # once per clone: the repo's pre-push hook (gitleaks over what you push)
+./seclab lint secrets [BASE [TIP]]  # the same scan by hand (default: merge base with origin/main..HEAD)
 ./seclab lint workflows         # actionlint + zizmor (digest-pinned; offline, no network, no token)
 
 # macOS app from Actions: main builds only; verifies SHA256SUMS and the build provenance

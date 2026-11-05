@@ -1,7 +1,8 @@
 name: workflow-lint
 
-# CI/CD hardening gate (EDR ci-hardening), on every push and PR: workflow static analysis
-# (actionlint, zizmor) and the digest/SHA pin check over the whole tree. Cheap and fast.
+# CI/CD hardening gate (EDR ci-hardening), on every push and PR: a gitleaks scan of what the push
+# adds (AGENTS.md: mechanical, also the pre-push hook), workflow static analysis (actionlint,
+# zizmor) and the digest/SHA pin check over the whole tree.
 on:
   push:
   pull_request:
@@ -17,13 +18,20 @@ jobs:
   lint:
     name: lint
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+      - name: No secret in what this push or PR adds (gitleaks built from pinned source)
+        env:
+          # The PR's base, or the push's previous head (all-zero for a new branch: the merge
+          # base with main is used, stricter, never looser).
+          SECRETS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: ./seclab lint secrets
       - name: Pin check self-test
         run: ./seclab lint pins --self-test
       - name: Every image and action is pinned by digest/SHA
