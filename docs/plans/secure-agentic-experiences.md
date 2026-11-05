@@ -1,6 +1,6 @@
 # Secure agentic experiences: chat and agents inside sandboxed tabs
 
-- **Status:** proposed, design for review. Nothing here is built. ADR:
+- **Status:** accepted 2026-11-05 (D1, D2, D4 to D9; D3 open). Nothing here is built; the first spike (§11.1) is in progress. ADR:
   [run agents inside the tab](../adr/20261105-agents-run-in-the-tab.md).
 - **Date:** 2026-11-05
 - **Owner:** secure-agentic-experiences session. Interfaces agreed with the RPC-lockdown,
@@ -144,6 +144,10 @@ agent behaving; in-tab defences are for W only and are called defence in depth.
    trusted code, names the tab from tabd, shows the effect from validated structured
    fields, binds the decision to a digest of that effect, and cannot be raised at will by
    the tab (§9).
+8. **I8. Agent runtimes run only inside tabs.** The opaque provider runtimes
+   (`copilot-runtime`, the Claude and Codex SDKs) never run in the trusted editor, tabd,
+   the broker or any host process, and are never downloaded at run time
+   ([EDR](../edr/20261105-agent-runtimes-exception.md)).
 
 ## 3. Placement
 
@@ -802,6 +806,7 @@ All of them run against our own builds, with inert fixtures and full teardown.
 | A24 | Markdown with a `seclab-vscode://` link and a remote image; URL input requests and pills for `http://127.0.0.1:<beacon>`, `seclab-vscode://…` and `file:///…/canary` | No URL handler runs; no fetch; no editor opens |
 | A25 | `authenticate` with a fixture that advertises an authentication-encryption key; Codex account sign-in requested through configuration | Only sentinels, never a sealed value; no sign-in flow; no real credential in the tab |
 | A26 | Inbound URIs with `vscode-userdata:`, `vscode-synced-customization:` and `vscode-agent-host://local/…` schemes | Rejected (extends A5) |
+| A27 | I8: while tabs run agent sessions, inspect the host process table and open files, the macOS app bundle, and the packaged `product.json` | No `copilot-runtime`, `runtime.node`, `codex` or Claude SDK runtime on the host or in the app; no `agentSdks` in product data; the sbx collector sees the runtimes only inside the tab |
 
 **Tier B:** B1, schema fuzzing of every safe-output type. B2, replaying a decision with a
 stale nonce or a changed effect fails. B3, the displayed effect matches the applied effect
@@ -823,7 +828,7 @@ UI.
 | R6 | Social engineering: agent text persuades the user to paste a command into a host terminal (clipboard write is allowed in v0) | Medium | Labels; no "run on host" affordances; accepted as in RPC-lockdown decision 3 |
 | R7 | Approval fatigue in Tier B and C | Medium | Inbox, limits, scoped decisions |
 | R8 | AHP churn: a large, fast-moving protocol | Medium | Generated inventory and drift check |
-| R9 | Opaque agent runtimes inside tabs: the prebuilt Copilot runtime, and Claude and Codex SDKs that upstream downloads at run time with only a completion marker as an integrity check | Low (contained) | Supply-chain exception or an alternative; hash-pin or vendor the downloads (§13, D3) |
+| R9 | Opaque agent runtimes inside tabs (the prebuilt Copilot runtime, the Claude and Codex SDKs). A compromised runtime holds the tab's sentinels and model access | Low (contained, not prevented) | Accepted as a recorded exception: hash-pinned, no run-time download, provenance checked where published, I8 and A27 ([EDR](../edr/20261105-agent-runtimes-exception.md)) |
 | R10 | A derived Copilot token used on hosts other than its parent's | Medium | Bound by path and method from trusted data, replaced structurally, fail closed (§4.2) |
 | R11 | In-tab labels and instruction policy are bypassed by R | n/a | By design; containment carries the argument |
 | R12 | Global chat cannot see host files | UX cost | Accepted; a mount into the empty tab is a Tier C grant |
@@ -833,27 +838,34 @@ UI.
 
 ## 13. Decisions for the user
 
-1. **D1. Vehicle:** the upstream agent host in the tab (recommended); extension-hosted
+**Decided 2026-11-05.** The user accepted the recommended option for D1, D2 and D4 to D9:
+"Accept the recommended options and start the first spike with a fake model endpoint and
+no real credentials". D3 was decided separately the same day: "Allow the prebuilt
+runtimes as a recorded exception, hash-pinned, since they only ever run inside tabs"
+([EDR](../edr/20261105-agent-runtimes-exception.md)).
+
+1. **D1. Vehicle: accepted.** The upstream agent host in the tab; extension-hosted
    chat participants only as a later compatibility tier.
-2. **D2. Model access:** in the tab, through the broker with sentinels (recommended); not
+2. **D2. Model access: accepted.** In the tab, through the broker with sentinels; not
    trusted-side mediated calls.
-3. **D3. Agent runtimes in tabs:** `@github/copilot-sdk` (MIT-labelled) ships a prebuilt
-   `copilot-runtime` binary, and upstream downloads the Claude and Codex SDKs at run time
-   from `product.agentSdks` URLs without a hash check. Options: an exception EDR (they
-   only ever run inside tabs) with hash-pinned downloads; only harnesses we can build from
-   source; or BYOK with an open-source harness.
-4. **D4. Workspace instructions:** data with a per-tab acceptance (recommended), ignored,
-   or authority as upstream.
-5. **D5. Default in-tab approval level:** auto-approve in-tab tools (recommended; the tab
-   is the blast radius), or upstream's default.
-6. **D6. Global chat:** the agent in an empty tab, with the local agent host and the
-   Agents window disabled (recommended).
-7. **D7. Derived Copilot token:** bound to the Copilot API hosts through the trusted
-   provider table. This is a broker policy change for the broker session.
-8. **D8. Agent writes to ordinary files:** sync as today (recommended for v1), or hold
-   agent-attributed writes for review.
-9. **D9. Forwarding the user's own trusted-profile instructions into tabs:** opt-in
-   (recommended), or on by default.
+3. **D3. Agent runtimes in tabs: accepted as a recorded exception.** The prebuilt
+   `copilot-runtime` and the Claude and Codex SDKs are hash-pinned, fetched at build or
+   tab-template time with the hash checked (never downloaded at run time), checked for
+   registry signatures and provenance where they exist, and run only inside tabs (I8,
+   probe A27). Residual: a bad runtime holds the tab's sentinels and model access, so it
+   is contained to the tab, not prevented.
+4. **D4. Workspace instructions: accepted.** Data, with a per-tab acceptance.
+5. **D5. Default in-tab approval level: accepted.** Auto-approve in-tab tools; the tab
+   is the blast radius.
+6. **D6. Global chat: accepted.** The agent in an empty tab, with the local agent host and
+   the Agents window disabled.
+7. **D7. Derived Copilot token: accepted.** Bound to the Copilot API hosts, by path and
+   method, through the trusted provider table. This is a broker policy change for the
+   broker session.
+8. **D8. Agent writes to ordinary files: accepted.** Sync as today for v1; agent-attributed
+   writes are not held.
+9. **D9. Forwarding the user's own trusted-profile instructions into tabs: accepted.**
+   Opt-in.
 
 ## 14. Coordination
 

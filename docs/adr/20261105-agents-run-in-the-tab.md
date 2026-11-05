@@ -1,8 +1,8 @@
 # Run agents inside the tab; the trusted editor only renders them
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** anticomputer (user; requests: "make a plan to move chat into sandboxed tabs", "agentic experiences are central to vscode, but we want to implement them securely with limited blast radius"); secure-agentic-experiences session (design). Pending the user's decisions D1 to D9 in the [plan](../plans/secure-agentic-experiences.md#13-decisions-for-the-user).
+- **Deciders:** anticomputer (user; requests: "make a plan to move chat into sandboxed tabs", "agentic experiences are central to vscode, but we want to implement them securely with limited blast radius"); secure-agentic-experiences session (design). Accepted 2026-11-05: "Accept the recommended options and start the first spike with a fake model endpoint and no real credentials" (D1, D2, D4 to D9), and for D3 "Allow the prebuilt runtimes as a recorded exception, hash-pinned, since they only ever run inside tabs" ([plan §13](../plans/secure-agentic-experiences.md#13-decisions-for-the-user)).
 - **Related:** [plan](../plans/secure-agentic-experiences.md), [agentic surfaces research](../research/agentic-surfaces.md), [prior art](../research/agentic-prior-art.md), [threat model](20261104-threat-model-rogue-extension.md), [no real secret enters a tab](20261104-no-real-secret-enters-a-tab.md), [broker output is data](20261104-broker-output-is-data.md), [RPC filter enforcement points](20261104-rpc-filter-enforcement-points.md), [write-back gate](20261104-write-back-gate.md), [tab observability](20261104-tab-observability.md), [security review](../security-reviews/20261105-secure-agentic-experiences-design.md)
 
 ## Context
@@ -86,7 +86,7 @@ it and carries the user's input and decisions, and nothing else.** Concretely:
   ([plan §10](../plans/secure-agentic-experiences.md#10-upstream-alignment)). Upstream's
   agent-host client is a wider, two-way channel than its name suggests, which is most of
   the patch cost. Upstream proposals U1 to U5 are drafted, not filed.
-- Opaque prebuilt agent runtimes would run inside tabs; they need a supply-chain decision.
+- Opaque prebuilt agent runtimes run inside tabs, as a recorded, hash-pinned exception that never runs trusted-side ([EDR](../edr/20261105-agent-runtimes-exception.md)). A bad runtime is contained to its tab, not prevented.
 - A rogue extension can spend the user's model quota up to the tab's budget.
 - Phases, probes and residual risks: [plan §11, §12](../plans/secure-agentic-experiences.md#11-phases-exit-criteria-and-probes).
 

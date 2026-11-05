@@ -611,6 +611,57 @@
       "record": "docs/adr/20261104-supply-chain-provenance.md",
       "bump": "The user (host tool).",
       "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "Approve: host prerequisites as recorded exceptions", "covers": "The gh version the user installs (not pinned by us). Self-verification: catches a substituted or different build, not a gh that lies about itself (GitHub's own Sigstore instance; no independent verifier)." }
+    },
+    {
+      "id": "rt-copilot-sdk",
+      "name": "@github/copilot-sdk 1.0.27-unstable.41379698026.g3219c66 (prebuilt copilot-runtime)",
+      "kind": "binary",
+      "publisher": "GitHub (@github npm scope)",
+      "official": true,
+      "purpose": "Copilot harness runtime for the agent host; runs only inside tabs (EDR invariant I8).",
+      "pins": [],
+      "used": ["build/linux/build.sh"],
+      "provenance": "npm tarballs locked by sha512 integrity in upstream remote/package-lock.json at the pinned SHA. Registry signatures and attestations not yet checked.",
+      "verify": "npm ci in the builder enforces the lockfile integrity. Planned (gap): npm audit signatures over the set; release check that the runtime is absent from the macOS app.",
+      "bar": "exception",
+      "record": "docs/edr/20261105-agent-runtimes-exception.md",
+      "bump": "Fork-build session, with code-oss: re-derive pins from the new lockfile and re-run the signature check.",
+      "gap": "Fork-build to land: signature/attestation check, release check for the macOS app, probe A27.",
+      "exception": { "record": "docs/edr/20261105-agent-runtimes-exception.md", "approved": "Allow the prebuilt runtimes as a recorded exception, hash-pinned, since they only ever run inside tabs", "covers": "An opaque prebuilt runtime that we neither build nor (yet) verify by signature; hash-pinned, run only inside tabs. Residual: a bad runtime holds the tab's sentinels and model access, contained to the tab." }
+    },
+    {
+      "id": "rt-claude-agent-sdk",
+      "name": "@anthropic-ai/claude-agent-sdk 0.3.304",
+      "kind": "binary",
+      "publisher": "Anthropic (@anthropic-ai npm scope)",
+      "official": true,
+      "purpose": "Claude harness runtime for the agent host; runs only inside tabs (EDR invariant I8).",
+      "pins": [],
+      "used": ["build/linux/build.sh"],
+      "provenance": "sha512 integrity for this version in upstream package-lock.json at the pinned SHA, to be carried into a fork-owned lock file. Registry signatures and attestations not yet checked.",
+      "verify": "Planned (gap): fetched by name and version at tab-template time, integrity checked before extraction, npm audit signatures; upstream's run-time download (product.agentSdks) patched out and checked absent.",
+      "bar": "exception",
+      "record": "docs/edr/20261105-agent-runtimes-exception.md",
+      "bump": "Fork-build session, with code-oss: re-derive pins from the new lockfile and re-run the signature check.",
+      "gap": "Not fetched or used by our build yet; fork-build to land the template-time fetch, the lock file, the download patch and probe A27 before any tab runs it.",
+      "exception": { "record": "docs/edr/20261105-agent-runtimes-exception.md", "approved": "Allow the prebuilt runtimes as a recorded exception, hash-pinned, since they only ever run inside tabs", "covers": "An opaque prebuilt runtime that we neither build nor (yet) verify by signature; hash-pinned, run only inside tabs, never downloaded at run time. Residual: a bad runtime holds the tab's sentinels and model access, contained to the tab." }
+    },
+    {
+      "id": "rt-codex",
+      "name": "@openai/codex 0.163.0",
+      "kind": "binary",
+      "publisher": "OpenAI (@openai npm scope)",
+      "official": true,
+      "purpose": "Codex harness runtime for the agent host; runs only inside tabs (EDR invariant I8).",
+      "pins": [],
+      "used": ["build/linux/build.sh"],
+      "provenance": "sha512 integrity for this version in upstream package-lock.json at the pinned SHA, to be carried into a fork-owned lock file. Registry signatures and attestations not yet checked.",
+      "verify": "Planned (gap): fetched by name and version at tab-template time, integrity checked before extraction, npm audit signatures; upstream's run-time download (product.agentSdks) patched out and checked absent.",
+      "bar": "exception",
+      "record": "docs/edr/20261105-agent-runtimes-exception.md",
+      "bump": "Fork-build session, with code-oss: re-derive pins from the new lockfile and re-run the signature check.",
+      "gap": "Not fetched or used by our build yet; fork-build to land the template-time fetch, the lock file, the download patch and probe A27 before any tab runs it.",
+      "exception": { "record": "docs/edr/20261105-agent-runtimes-exception.md", "approved": "Allow the prebuilt runtimes as a recorded exception, hash-pinned, since they only ever run inside tabs", "covers": "An opaque prebuilt runtime that we neither build nor (yet) verify by signature; hash-pinned, run only inside tabs, never downloaded at run time. Residual: a bad runtime holds the tab's sentinels and model access, contained to the tab." }
     }
   ]
 }
