@@ -48,7 +48,9 @@
 
 ## Demo screenshots
 README screenshots come from the real app, an isolated profile, demo workspaces
-and fake canaries only (`test/observability/demo.ts prepare|teardown`).
+and fake canaries only (`test/observability/demo.ts prepare|teardown`, sbx only:
+prepare writes the loader and its hidden folder-open task inside the tab, where
+the write-back gate holds them, so they never exist on the host).
 - **Never put a demo window over the user's work.**
   - Launch in the background with `open -g -n -a <app> --args …`. Don't use
     `bin/code`: it hands off to the main process, which calls

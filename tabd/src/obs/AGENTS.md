@@ -37,7 +37,7 @@ at the repo root) all apply. Every command here has been run. Design:
 | `glue.ts` | Protocol methods (`tab.events.*`, `tab.observe`), sensor hooks for drivers, policy-log poller |
 | `../../tools/gen-obs-docs.ts`, `../../tools/tab-logs.ts` | Doc generator; `seclab tab logs` |
 | `sandbox/sbx/seclab-obs-guard.c` | seccomp guard: no `CLONE_UNTRACED`, `clone3`, seccomp listeners or io_uring; closes fds > 2 |
-| `test/observability/` | e2e (`run.ts`), inert loader fixture, `guard-check.py` |
+| `test/observability/` | e2e (`run.ts`), `loader.ts` (assembles the inert loader from `fixtures/loader-workspace/.seclab/loader.parts.json` and writes it inside the tab only), `guard-check.py` |
 
 ## Commands (all run)
 ```sh
