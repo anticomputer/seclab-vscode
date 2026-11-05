@@ -38,9 +38,10 @@ const { values } = parseArgs({
 		'state-dir': { type: 'string' },
 		'driver': { type: 'string', default: 'sbx' },
 		'image': { type: 'string' },
-		'broker-image': { type: 'string', default: 'seclab-broker-placeholder:local' },
-		// `required`: each tab gets a real broker (plan tabd-broker-wiring B1; OCI only until B2).
-		'broker': { type: 'string', default: 'none' },
+		'broker-image': { type: 'string' },
+		// `required`: each tab gets a real broker (plan tabd-broker-wiring B1). Default: required
+		// for OCI; sbx refuses it until B2. `none` keeps the placeholder pod and blackhole egress.
+		'broker': { type: 'string' },
 		'allowed-root': { type: 'string', multiple: true, default: [] },
 		'sensitive': { type: 'string', multiple: true, default: [] },
 		'cpus': { type: 'string' },
@@ -81,7 +82,9 @@ if (driverName === 'sbx') {
 	if (!dockerPath) {
 		die('docker not found in system locations');
 	}
-	drivers.set('oci', new OciDriver(dockerPath, runner, { brokerImage: values['broker-image']! }));
+	// The real broker by default; the placeholder only for `--broker none`.
+	const brokerImage = values['broker-image'] ?? ((values.broker ?? 'required') === 'required' ? 'seclab-broker:dev' : 'seclab-broker-placeholder:local');
+	drivers.set('oci', new OciDriver(dockerPath, runner, { brokerImage }));
 	// Tab observability: Falco on the Docker host, only while OCI tabs run (ADR tab-observability).
 	const stateTag = createHash('sha256').update(stateDir).digest('hex').slice(0, 8);
 	hostSensor = hub => new FalcoSensor({
@@ -104,7 +107,8 @@ if (driverName === 'sbx') {
 
 const image = assertImageRef(values.image ?? (driverName === 'sbx' ? 'seclab-tab:local' : 'seclab-tab-oci:local'));
 const cpus = values.cpus !== undefined ? Number(values.cpus) : undefined;
-const brokerMode = values.broker === 'required' ? 'required' : values.broker === 'none' ? 'none' : die('--broker must be none or required');
+const brokerArg = values.broker ?? (driverName === 'oci' ? 'required' : 'none');
+const brokerMode = brokerArg === 'required' ? 'required' : brokerArg === 'none' ? 'none' : die('--broker must be none or required');
 if (brokerMode === 'required' && driverName !== 'oci') {
 	die('--broker required is OCI only for now (sbx: plan tabd-broker-wiring B2)');
 }

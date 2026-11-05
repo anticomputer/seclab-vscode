@@ -239,7 +239,7 @@ Verified commands (one entry point: `./seclab help`):
 ```sh
 ./seclab build linux            # REH (linux-<arch>) in the trixie builder container -> .work/out/  (~10 min warm)
 ./seclab template sbx           # sbx tab template seclab-tab:local (shell kit + REH + /opt/seclab), ~20 s
-./seclab image oci              # OCI images seclab-tab-oci:local + seclab-broker-placeholder:local
+./seclab image oci              # OCI images seclab-tab-oci:local, the tab broker seclab-broker:dev, seclab-broker-placeholder:local
 ./seclab test unit              # tabd unit + supervisor tests (node container)
 ./seclab test e2e sbx           # tabd end to end: claim -> fence -> REH 101 handshake over exec stdio (also: oci)
 ./seclab test containment sbx   # malicious-workspace vectors + Contagious-Interview loader in real tabs, then the teardown gate (sbx 108/111, oci 105/108; 3 known-gap XFAIL each)

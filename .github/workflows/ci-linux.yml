@@ -92,7 +92,9 @@ jobs:
         run: ./seclab build linux reh
       - name: Release check (no test hooks in the REH)
         run: build/check-release.sh .work/out/seclab-reh-linux-*.tar.gz
-      - name: Build OCI tab images
+      - name: Build OCI tab images and the broker (base provenance verified offline from the bundles)
+        env:
+          SECLAB_ATTESTATION_DIR: ${{ github.workspace }}/.work/attestations
         run: ./seclab image oci
       - name: tabd end-to-end (OCI)
         run: ./seclab test e2e oci
@@ -104,15 +106,9 @@ jobs:
         run: ./seclab test secrets oci
       - name: Tab observability (OCI; Falco, signature-verified by ./seclab image oci)
         run: ./seclab test obs oci
-      # Plan tabd-broker-wiring B1. The attestation bundles were downloaded first (above), before
-      # any fixture or privileged step; the build verifies offline and the e2e has no token.
-      - name: Build the broker image (base provenance verified offline)
-        if: github.event_name == 'push'
-        env:
-          SECLAB_ATTESTATION_DIR: ${{ github.workspace }}/.work/attestations
-        run: broker/build.sh seclab-broker:dev
+      # Plan tabd-broker-wiring B1: every OCI tab above already runs behind its broker; this one
+      # also checks the broker's verdicts from inside the tab. No token.
       - name: OCI tab with a real broker (deny, no direct route, allow, 407)
-        if: github.event_name == 'push'
         run: ./seclab test e2e-broker seclab-broker:dev
 
   # gitleaks gates a security control and its upstream publishes nothing signed, so we build it

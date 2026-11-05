@@ -64,7 +64,11 @@ export function checkEvidence(ev: Evidence | undefined, vector: string, opts: { 
 	const bridge = (ev.ui_bridge ?? '').trim();
 	out.push({ ...c('no tab-to-UI credential bridge in env (git askpass)', bridge === '', bridge),
 		knownGap: bridge ? 'M4 RPC capability filter (docs/adr/20261104-rpc-capability-filter.md)' : undefined });
-	out.push(c('runtime-injected proxy env never wins (both cases overridden)', ev.http_proxy === BLACKHOLE && ev.HTTPS_PROXY === BLACKHOLE, `http_proxy=${ev.http_proxy} HTTPS_PROXY=${ev.HTTPS_PROXY}`));
+	// Egress goes to the tab's own broker when it has one (plan tabd-broker-wiring B1), else to the
+	// blackhole; either way the runtime-injected value never wins and both cases agree.
+	const proxyOk = (v: string | undefined) => v === BLACKHOLE || /^http:\/\/seclab:[A-Za-z0-9_-]{32}@(broker:8080|host\.docker\.internal:[0-9]{1,5})$/.test(v ?? '');
+	out.push(c('runtime-injected proxy env never wins (both cases overridden)', proxyOk(ev.http_proxy) && ev.http_proxy === ev.HTTPS_PROXY,
+		`http_proxy=${(ev.http_proxy ?? '').replace(/:[^:@/]+@/, ':***@')} HTTPS_PROXY=${(ev.HTTPS_PROXY ?? '').replace(/:[^:@/]+@/, ':***@')}`));
 	for (const [k, v] of Object.entries(ev.egress)) {
 		if (k === 'dns_external') {
 			out.push(c('no external DNS', v === 'blocked', v));

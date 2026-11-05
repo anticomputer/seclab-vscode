@@ -90,7 +90,7 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | M0 | Fork build: pinned Code-OSS, product.json applied as data, a small patch queue, an unsigned macOS app built on GitHub Actions | ✅ |
 | M1 | Every folder opens as a sandboxed tab (sbx primary, OCI second), with no host ports; containment suite on both drivers | ✅ |
 | M1+ | Pre-mount secret scanning (gitleaks), reviewed until no medium-or-higher findings remained | ✅ |
-| M2–M3 | Broker: per-tab egress policy, credential sentinels, approval prompts | 🟡 Built and tested standalone ([broker/](broker/)); tab integration in progress |
+| M2–M3 | Broker: per-tab egress policy, credential sentinels, approval prompts | 🟡 Built and tested standalone ([broker/](broker/)). OCI tabs run behind their broker with default deny ([EDR](docs/edr/20261105-oci-tab-broker.md)); sbx, prompts and credentials are in progress ([plan](docs/plans/tabd-broker-wiring.md)) |
 | M4 | RPC capability filter between the UI and the tab | 🟡 In progress. **Known gaps until then:** an extension in a tab can read user settings and the clipboard through the extension API, and git's askpass can reach the UI's auth providers. The editor-driven test run marks these as known gaps (XFAIL). |
 
 Threat model: a **rogue extension** the user installs, with full control of its tab.
