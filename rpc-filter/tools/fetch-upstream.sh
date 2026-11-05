@@ -4,6 +4,15 @@
 # Read-only source, no build, no npm install. Lands in .work/ which is
 # gitignored and durable (never /tmp: sessions outlive /tmp pruning).
 #
+# Provenance: git, not a tarball. A commit SHA is a hash over the commit's
+# content and git verifies objects against it, so the result is
+# content-addressed from the project's own official source. An earlier version
+# downloaded codeload .../tar.gz/<sha> over HTTPS and checked nothing: a
+# .tar.gz is a *derived* archive, so naming a SHA in the URL does not verify
+# the bytes received. That matters more here than it looks, because the whole
+# policy table is derived from this source: unverified source would mean an
+# unverified policy that the drift gate would happily bless.
+#
 #   rpc-filter/tools/fetch-upstream.sh
 set -eu
 
@@ -19,17 +28,23 @@ else
 	echo "note: no upstream.lock; using fallback $SHA" >&2
 fi
 
-if [ -f "$DEST/vscode/.seclab-sha" ] && [ "$(cat "$DEST/vscode/.seclab-sha")" = "$SHA" ]; then
+if [ -d "$DEST/vscode/.git" ] && [ "$(git -C "$DEST/vscode" rev-parse HEAD 2>/dev/null)" = "$SHA" ]; then
 	echo "already at $SHA"
 	exit 0
 fi
 
 mkdir -p "$DEST"
-rm -rf "$DEST/vscode" "$DEST/vscode-$SHA"
+rm -rf "$DEST/vscode"
 echo "fetching microsoft/vscode@$SHA ..."
-curl -sSL -o "$DEST/src.tar.gz" "https://codeload.github.com/microsoft/vscode/tar.gz/$SHA"
-tar -xzf "$DEST/src.tar.gz" -C "$DEST"
-rm -f "$DEST/src.tar.gz"
-mv "$DEST/vscode-$SHA" "$DEST/vscode"
-printf '%s' "$SHA" > "$DEST/vscode/.seclab-sha"
-echo "upstream source at $DEST/vscode"
+# Blobless partial clone: enough to check out one commit without the whole
+# history's blobs, and git still verifies everything it receives.
+git clone --quiet --filter=blob:none --no-checkout \
+	https://github.com/microsoft/vscode.git "$DEST/vscode"
+git -C "$DEST/vscode" checkout --quiet --detach "$SHA"
+
+got=$(git -C "$DEST/vscode" rev-parse HEAD)
+if [ "$got" != "$SHA" ]; then
+	echo "fetch-upstream: HEAD is $got, expected $SHA" >&2
+	exit 1
+fi
+echo "upstream source at $DEST/vscode, verified at $SHA"
