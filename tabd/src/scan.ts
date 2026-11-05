@@ -338,31 +338,43 @@ function scanUser(hostPath: string): string {
 }
 
 // The image is trusted by name only as far as its scanner binary is the pinned one (TT-2): any
-// local `docker tag` or another worktree's build can produce the name. Checked once per tabd.
-let scannerCheck: Promise<string | undefined> | undefined;
-export function scannerProblem(runner: Runner, docker: string): Promise<string | undefined> {
-	scannerCheck ??= runner.run(docker, ['run', '--rm', '--pull', 'never', '--network', 'none', '--read-only', '--cap-drop', 'ALL',
-		'--security-opt', 'no-new-privileges', '--user', '65534:65534', '--entrypoint', 'sha256sum', GITLEAKS_IMAGE, '/usr/bin/gitleaks'], { timeoutMs: 60_000 })
-		.then(r => {
-			const got = /^([0-9a-f]{64})\s/.exec(r.stdout)?.[1];
-			if (r.code !== 0 || !got) {
-				return `secret scanner image ${GITLEAKS_IMAGE} unavailable (run ./seclab tool gitleaks)`;
-			}
-			return Object.values(GITLEAKS_BIN_SHA256).includes(got) ? undefined : `secret scanner image ${GITLEAKS_IMAGE} does not carry the pinned gitleaks binary (sha256 ${got.slice(0, 12)}…); rebuild with ./seclab tool gitleaks`;
-		}, (e: Error) => `secret scanner check failed: ${e.message}`)
-		.then(p => {
-			if (p) {
-				scannerCheck = undefined; // re-check after the user rebuilds
-			}
-			return p;
-		});
+// local `docker tag` or another worktree's build can produce the name. The name is resolved to
+// an image id once, the binary is checked in that exact image, and every scan runs by that id,
+// so a later retag of the name changes nothing (UU-4). Re-checked after a failure.
+let scannerCheck: Promise<{ problem?: string; image?: string }> | undefined;
+function checkScanner(runner: Runner, docker: string): Promise<{ problem?: string; image?: string }> {
+	scannerCheck ??= (async () => {
+		const unavailable = `secret scanner image ${GITLEAKS_IMAGE} unavailable (run ./seclab tool gitleaks)`;
+		const inspect = await runner.run(docker, ['image', 'inspect', '--format', '{{.Id}}', GITLEAKS_IMAGE], { timeoutMs: 30_000 });
+		const id = inspect.stdout.trim();
+		if (inspect.code !== 0 || !/^sha256:[0-9a-f]{64}$/.test(id)) {
+			return { problem: unavailable };
+		}
+		const r = await runner.run(docker, ['run', '--rm', '--pull', 'never', '--network', 'none', '--read-only', '--cap-drop', 'ALL',
+			'--security-opt', 'no-new-privileges', '--user', '65534:65534', '--entrypoint', 'sha256sum', id, '/usr/bin/gitleaks'], { timeoutMs: 60_000 });
+		const got = /^([0-9a-f]{64})\s/.exec(r.stdout)?.[1];
+		if (r.code !== 0 || !got) {
+			return { problem: unavailable };
+		}
+		return Object.values(GITLEAKS_BIN_SHA256).includes(got) ? { image: id }
+			: { problem: `secret scanner image ${GITLEAKS_IMAGE} does not carry the pinned gitleaks binary (sha256 ${got.slice(0, 12)}…); rebuild with ./seclab tool gitleaks` };
+	})().catch((e: Error) => ({ problem: `secret scanner check failed: ${e.message}` })).then(c => {
+		if (c.problem) {
+			scannerCheck = undefined;
+		}
+		return c;
+	});
 	return scannerCheck;
 }
 
+export async function scannerProblem(runner: Runner, docker: string): Promise<string | undefined> {
+	return (await checkScanner(runner, docker)).problem;
+}
+
 export async function scanWorkspace(runner: Runner, docker: string, hostPath: string): Promise<ScanResult> {
-	const bad = await scannerProblem(runner, docker);
-	if (bad) {
-		return { complete: false, error: bad, findings: [], secrets: new Map() };
+	const scanner = await checkScanner(runner, docker);
+	if (!scanner.image) {
+		return { complete: false, error: scanner.problem ?? 'secret scanner unavailable', findings: [], secrets: new Map() };
 	}
 	const env = GIT_OVERRIDES.flatMap(([k, v], i) => ['-e', `GIT_CONFIG_KEY_${i}=${k}`, '-e', `GIT_CONFIG_VALUE_${i}=${v}`]);
 	const user = scanUser(hostPath);
@@ -377,7 +389,7 @@ export async function scanWorkspace(runner: Runner, docker: string, hostPath: st
 		'--mount', `type=bind,src=${hostPath},dst=/scan/ws,readonly`,
 		// hostPath is canonical with no ',' (validate.ts), and lives under the user's allowed root.
 		'--mount', `type=bind,src=${hostPath},dst=${hostPath},readonly`,
-		'--entrypoint', 'bash', GITLEAKS_IMAGE, '-c', SCRIPT];
+		'--entrypoint', 'bash', scanner.image, '-c', SCRIPT];
 	const r = await runner.run(docker, args, { timeoutMs: 1_200_000, maxOutputBytes: MAX_REPORT_BYTES });
 	return parseFrames(r.stdoutBytes ?? Buffer.from(r.stdout), r.code, !!r.truncated);
 }

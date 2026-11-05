@@ -26,12 +26,11 @@ const RULES: Array<{ id: string; re: RegExp; reviewable: boolean }> = [
 
 const findings: string[] = [];
 const used = new Set<string>();
-function scan(file: string): void {
-	const rel = path.relative(repo, file);
-	fs.readFileSync(file, 'utf8').split('\n').forEach((raw, i) => {
+function scanLines(rel: string, lines: Array<[number, string]>): void {
+	for (const [n, raw] of lines) {
 		const line = raw.trim();
 		if (line.startsWith('//') || line.startsWith('*') || line.startsWith('/*')) {
-			return; // comments
+			continue; // comments
 		}
 		for (const r of RULES) {
 			if (!r.re.test(line)) {
@@ -42,9 +41,12 @@ function scan(file: string): void {
 				used.add(key);
 				continue;
 			}
-			findings.push(`${rel}:${i + 1}: ${r.id}${r.reviewable ? ' (not in build/source-allowlist.txt)' : ''}: ${line.slice(0, 140)}`);
+			findings.push(`${rel}:${n}: ${r.id}${r.reviewable ? ' (not in build/source-allowlist.txt)' : ''}: ${line.slice(0, 140)}`);
 		}
-	});
+	}
+}
+function scan(file: string): void {
+	scanLines(path.relative(repo, file), fs.readFileSync(file, 'utf8').split('\n').map((l, i) => [i + 1, l]));
 }
 function walk(p: string): void {
 	const st = fs.statSync(p); // follows the tabd-src symlink on purpose: it ships
@@ -59,6 +61,13 @@ function walk(p: string): void {
 for (const r of roots) {
 	walk(path.join(repo, r));
 }
+// Core patches ship too (review UU-3): the lines each patch in patches/series adds.
+const patches = fs.readFileSync(path.join(repo, 'patches', 'series'), 'utf8').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(Boolean);
+for (const p of patches) {
+	const rel = path.join('patches', p);
+	scanLines(rel, fs.readFileSync(path.join(repo, rel), 'utf8').split('\n')
+		.map((l, i): [number, string] => [i + 1, l]).filter(([, l]) => l.startsWith('+') && !l.startsWith('+++')).map(([n, l]) => [n, l.slice(1)]));
+}
 for (const k of allow) {
 	if (!used.has(k)) {
 		findings.push(`build/source-allowlist.txt: stale entry (no longer matches): ${k.slice(0, 160)}`);
@@ -67,5 +76,5 @@ for (const k of allow) {
 for (const f of findings) {
 	console.log(f);
 }
-console.log(findings.length ? `check-source: ${findings.length} finding(s)` : `check-source: clean (${roots.join(', ')})`);
+console.log(findings.length ? `check-source: ${findings.length} finding(s)` : `check-source: clean (${roots.join(', ')}, ${patches.length} patches)`);
 process.exit(findings.length ? 1 : 0);

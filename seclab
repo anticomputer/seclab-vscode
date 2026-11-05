@@ -9,6 +9,7 @@ usage() {
 	cat <<'EOF'
 usage: ./seclab <command>
   build linux [reh|editor ...]  Build Linux REH (default) and/or editor in containers -> .work/out/
+                                (SECLAB_BUILD_VOLUME=seclab-<name>: a separate builder volume for experiments)
                                 (editor needs >= 12 GB Docker memory: esbuild peaks ~5 GB RSS)
   template sbx                  Build the sbx tab template (shell kit + REH) -> seclab-tab:local
   image oci                     Build the OCI tab images (seclab-tab-oci:local, broker placeholder)
@@ -265,15 +266,18 @@ fetch_macos() {
 }
 
 build_linux() {
-	local targets="${*:-reh}"
+	local targets="${*:-reh}" vol="${SECLAB_BUILD_VOLUME:-seclab-vscode-work}"
+	# A separate volume keeps an experimental tree (e.g. a test-only REH) out of the one that
+	# builds what ships; the shared default is also CI's.
+	[[ "$vol" =~ ^seclab-[a-z0-9-]{1,48}$ ]] || { echo "SECLAB_BUILD_VOLUME must be seclab-<name>" >&2; exit 2; }
 	mkdir -p "$OUT"
 	docker build -q -t seclab-builder:local "$ROOT/build/linux" >/dev/null
 	# Durable named volume for the upstream checkout + node_modules (not /tmp, not the Mac FS).
-	docker volume create seclab-vscode-work >/dev/null
-	docker run --rm -u 0 -v seclab-vscode-work:/work seclab-builder:local chown builder:builder /work
+	docker volume create "$vol" >/dev/null
+	docker run --rm -u 0 -v "$vol:/work" seclab-builder:local chown builder:builder /work
 	docker run --rm \
 		-v "$ROOT:/repo:ro" \
-		-v seclab-vscode-work:/work \
+		-v "$vol:/work" \
 		-v "$OUT:/out" \
 		-e TARGETS="$targets" -e ARCH -e MAX_OLD_SPACE_SIZE -e GOGC \
 		seclab-builder:local bash /repo/build/linux/build.sh

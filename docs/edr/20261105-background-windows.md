@@ -18,15 +18,19 @@ prevent this:
   same.
 
 ## Decision
-Patch `0012-background-windows-env.patch` (28 lines, five files). If the main process was
+Patch `0012-background-windows-env.patch` (38 lines, five files). If the main process was
 launched with `SECLAB_BACKGROUND_WINDOWS=1`:
 - **Window creation:** windows are created with `show: false` (`defaultBrowserWindowOptions`,
   which main and auxiliary windows share) and then shown with `showInactive()`. That is
   right after creation for normal windows, after maximize/fullscreen is applied for those,
   and in `did-create-window` for auxiliary windows.
 - **Focus:** `BaseWindow.focus()` (every mode, so window restore and the open-time focus
-  logic too) is a no-op. So are the second instance's `app.focus({ steal: true })` and
-  `moveWindowTop`.
+  logic too) is a no-op. So are the second instance's `app.focus({ steal: true })`,
+  `moveWindowTop`, and always-on-top (a window above everything covers the user's work
+  without becoming frontmost; review UU-1).
+- **Utility windows that bypass `BaseWindow`:** the GPU-info, content-tracing and devtools
+  child windows (`openChildWindow`) are shown with `showInactive()`, and their
+  restore-and-focus is skipped (UU-1).
 
 The flag is `backgroundWindows`, exported from `windows.ts`. It is read once from
 `process.env`, at module load of the main process. It is not a setting, a CLI argument or
@@ -40,10 +44,16 @@ Only `test/harness.ts` sets it, through `open --env`.
 ## Consequences
 - It withholds focus and grants nothing, so it isn't a test hook in the sense of the patch
   queue rule ("test-only hooks never go in patches/"). It ships, inert unless set.
-- `test/window.ts launch` still checks the frontmost app after launch and fails if the editor
-  took focus. That is the regression guard if a future upstream adds another activation path.
-- Not covered: the dev-only "show after 10 s when sources failed to load" path. It runs only
-  in unbuilt trees (`!isBuilt`), never in our builds.
+  `./seclab lint source` now scans the lines every core patch adds, and this one environment
+  read is an allowlisted, reviewed site (UU-3).
+- `test/window.ts launch` checks the frontmost app at launch, then leaves a watcher that
+  polls it every second for the editor's whole life. Any steal is logged in the run's
+  profile, `window.ts shot` refuses to capture, and teardown fails the run (UU-2). That is
+  the regression guard if a future upstream adds another activation path.
+- Not covered:
+  - the dev-only "show after 10 s when sources failed to load" path, which runs only in
+    unbuilt trees (`!isBuilt`), never in our builds;
+  - `openDevTools`' own `activate` default (user command only).
 - Rebase cost: one exported constant and six guarded call sites in upstream's window code.
   The patch fails to apply loudly if they move.
 - 0005-0011 are reserved for the RPC filter series, so this is 0012.

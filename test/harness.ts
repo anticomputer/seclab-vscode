@@ -2,7 +2,7 @@
 //   SECLAB_BEACON_PORT  host-loopback beacon port (default: a free port picked per run)
 //   SECLAB_EVIDENCE_DIR level B fixture dir (default: <repo>/.work/containment-editor)
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash, createHmac } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
@@ -263,4 +263,26 @@ export async function launchEditorInBackground(userData: string, folderUri: stri
 export function captureWindow(windowId: number, out: string): void {
 	fs.mkdirSync(path.dirname(out), { recursive: true });
 	execFileSync('screencapture', ['-o', '-x', '-l', String(windowId), out], { stdio: 'inherit' });
+}
+
+/** Where the focus watcher records steals; teardown fails the run if it isn't empty (UU-2). */
+export function focusStealLog(userData: string): string {
+	return path.join(userData, 'seclab-focus-steals.log');
+}
+
+/** Watch the frontmost app for the editor's whole life, not only at launch (review UU-2). */
+export function startFocusWatch(userData: string): void {
+	spawn(process.execPath, [path.join(repoRoot, 'test', 'window.ts'), 'watch', userData, '-'], { detached: true, stdio: 'ignore' }).unref();
+}
+
+/** Poll once a second while the editor runs; append every second it is the frontmost app. */
+export async function watchFocus(userData: string): Promise<void> {
+	let pid = editorPid(userData);
+	while (pid) {
+		if (frontmostPid() === pid) {
+			fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${pid} is the frontmost app\n`);
+		}
+		await new Promise(r => setTimeout(r, 1000));
+		pid = editorPid(userData);
+	}
 }

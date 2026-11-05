@@ -47,3 +47,18 @@ the fixtures or the evidence.
 | SS-6 | Low | harness | `editorPid` matched `/x/run1` against `/x/run10`. | Fixed | The path must end the option value. |
 | SS-7 | Low | lint | `focus-steal` missed combined flags, a bare `.app`, and `-g` after `--args`. | Fixed | Leading flags tokenised; JS array form requires `-g` before `--args`; self-tests. |
 | SS-8 | Low | harness | The AV check skipped symlinks, big files and anything past 4,000 files, and the copy didn't. | Fixed | The copy filter matches the check (no symlinks, `node_modules`, `.git`, or files ≥2 MiB), and the walk refuses past its cap. |
+
+## Round UU (2026-11-05): patch 0012 background windows; TT fixes confirmed
+Scope: `922c34f` (patch 0012, harness, EDR [background windows](../edr/20261105-background-windows.md)),
+plus the round-TT fixes. Requirements 2 (host launch env only, read once, not a setting) and 3
+(only the harness sets it) hold; without the flag the patch is a no-op. TT-1..6 confirmed closed.
+No prompt injection found.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| UU-1 | Low | patch 0012 | Raise paths that bypass `BaseWindow`: `openChildWindow` (GPU info, tracing, devtools windows) show/restore/focus, and always-on-top. | Fixed | `showInactive()` and skipped restore/focus there; always-on-top is a no-op under the flag. |
+| UU-2 | Low | harness | Focus was checked once at launch. | Fixed | A watcher polls the frontmost app every second while the editor lives; steals are logged in the profile; `shot` refuses and teardown fails the run. |
+| UU-3 | Low | check-source | Core patches weren't scanned for shipped env/spawn sites. | Fixed | The lines each patch in `patches/series` adds are scanned; 0012's env read is allowlisted. |
+| UU-4 | Low | tabd scan | The scanner was checked by name once; a later retag or a doctored `bash`/`find` in a same-binary image would pass. | Fixed / accepted | The name is resolved to an image id once, the binary checked in that id, and every scan runs by id (a retag changes nothing). Accepted: the local Docker daemon is trusted; a process that can build images there can also doctor any of them. |
+| UU-5 | Low | npm | A lockfile without a `packages` map (v1) passed the registry-only check. | Fixed | Refused. |
+| UU-6 | Low | sbx collector | The clipboard bridge could come back after the start-time stop. | Fixed | The watchdog stops any that reappear and reports it. |
