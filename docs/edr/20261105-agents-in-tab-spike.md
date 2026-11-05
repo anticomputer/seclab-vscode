@@ -170,8 +170,9 @@ pass.
     schema validation.
   - The session-handler prototype reads a test global where the real patch reads
     `IWorkbenchEnvironmentService`.
-  - The patches go to the fork-build session, numbered from 0013, each with its EDR and
-    review round.
+  - The patches go to the fork-build session, numbered from 0015, each with its EDR and
+    review round. Fork-build owns 0013 (no local agent host) and 0014 (runtime kept out of
+    the desktop app).
 
 ## Consequences
 - The plan's first four findings (credential push, host files, client tools, settings
