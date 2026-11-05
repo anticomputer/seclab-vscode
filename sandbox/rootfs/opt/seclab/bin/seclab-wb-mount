@@ -87,9 +87,12 @@ def lower_references(lower_dev):
             continue
         base = "/proc/" + pid
         try:
-            if os.stat(base).st_uid == 0 and os.readlink(base + "/exe") == FUSE_OVERLAYFS:
+            # Exempt only a real root fuse-overlayfs: every uid (real/effective/saved/fs) 0 (KK-3).
+            with open(base + "/status", "r", encoding="latin-1") as f:
+                uids = next((l.split()[1:] for l in f if l.startswith("Uid:")), [])
+            if uids == ["0", "0", "0", "0"] and os.readlink(base + "/exe") == FUSE_OVERLAYFS:
                 continue  # the overlay itself must hold the lower layer
-        except OSError:
+        except (OSError, StopIteration):
             pass
         links = [base + "/cwd", base + "/root"]
         for sub in ("fd", "map_files"):
@@ -162,11 +165,23 @@ def main():
     if os.stat(ws).st_dev == lower_dev:
         die("the workspace path still resolves to the host share")
 
-    # Post-mount (and on every idempotent call): nothing may still reach the lower layer.
-    hits = lower_references(lower_dev)
-    if hits:
-        die("%d process reference(s) still reach the host checkout under the overlay, e.g. %s" % (len(hits), hits[0]))
-    return 0
+    # Post-mount (and on every idempotent call): nothing may still reach the lower layer, by
+    # process reference or by another mount of the same share (KK-2). Scan until two passes
+    # see the same pid set, so a fork during the scan can't slip a reference past it.
+    with open("/proc/self/mountinfo", "r", encoding="latin-1") as f:
+        same = [l.split(" ")[4] for l in f if l.split(" ")[2] == "%d:%d" % (os.major(lower_dev), os.minor(lower_dev))]
+    if len(same) != 1:
+        die("the host share is mounted at more than one place (%d); refusing" % len(same))
+    prev = None
+    for _ in range(10):
+        hits = lower_references(lower_dev)
+        if hits:
+            die("%d process reference(s) still reach the host checkout under the overlay, e.g. %s" % (len(hits), hits[0]))
+        pids = frozenset(p for p in os.listdir("/proc") if p.isdigit())
+        if pids == prev:
+            return 0
+        prev = pids
+    die("process set did not settle while checking the overlay; refusing")
 
 
 if __name__ == "__main__":

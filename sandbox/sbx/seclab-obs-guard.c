@@ -16,10 +16,15 @@
 //   - any foreign syscall ABI    -> kill (no 32-bit compat or x32 bypass)
 // It also sets no_new_privs and closes every fd above 2 before exec, so the tab never holds
 // the tracer's output pipe (review OR-2). See docs/adr/20261104-tab-observability.md §2.
+// Landlock (review KK-1): the tab runs in a Landlock domain, which denies ptrace access
+// (including /proc/<pid>/mem and process_vm_writev) to processes outside it, such as sbx's
+// own unguarded agent-uid boot processes, and scopes signals and abstract unix sockets to the
+// domain. File and network access are not restricted. No Landlock (ABI < 6): fail closed.
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/audit.h>
 #include <linux/filter.h>
+#include <linux/landlock.h>
 #include <linux/sched.h>
 #include <linux/seccomp.h>
 #include <stddef.h>
@@ -50,6 +55,33 @@
 #ifndef SECCOMP_FILTER_FLAG_NEW_LISTENER
 #define SECCOMP_FILTER_FLAG_NEW_LISTENER (1UL << 3)
 #endif
+#ifndef __NR_landlock_create_ruleset
+#define __NR_landlock_create_ruleset 444
+#define __NR_landlock_restrict_self 446
+#endif
+
+static int landlock_domain(void) {
+	long abi = syscall(__NR_landlock_create_ruleset, NULL, 0, LANDLOCK_CREATE_RULESET_VERSION);
+	if (abi < 6) {
+		fprintf(stderr, "seclab-obs-guard: Landlock ABI %ld < 6 (scoping unavailable)\n", abi);
+		return -1;
+	}
+	struct landlock_ruleset_attr attr = {
+		.scoped = LANDLOCK_SCOPE_SIGNAL | LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET,
+	};
+	int fd = (int)syscall(__NR_landlock_create_ruleset, &attr, sizeof(attr), 0);
+	if (fd < 0) {
+		perror("seclab-obs-guard: landlock_create_ruleset");
+		return -1;
+	}
+	if (syscall(__NR_landlock_restrict_self, fd, 0) != 0) {
+		perror("seclab-obs-guard: landlock_restrict_self");
+		close(fd);
+		return -1;
+	}
+	close(fd);
+	return 0;
+}
 
 int main(int argc, char **argv) {
 	if (argc < 2) {
@@ -95,6 +127,9 @@ int main(int argc, char **argv) {
 	struct sock_fprog prog = { .len = sizeof(f) / sizeof(f[0]), .filter = f };
 	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
 		perror("seclab-obs-guard: no_new_privs");
+		return 126;
+	}
+	if (landlock_domain() != 0) {
 		return 126;
 	}
 	if (syscall(__NR_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, &prog) != 0) {
