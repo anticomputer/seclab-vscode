@@ -184,6 +184,53 @@ to **146**. The earlier number was not a smaller surface; it was a scan that
 could not see the dangerous half, and it reported a clean sheet for the wrong
 reason.
 
+### Correction 3 (2026-11-05): 0011 was never built, and does not load
+
+An independent re-review
+([record](../security-reviews/20261105-rpc-filter-rereview.md)) found three
+things wrong with the patch this ADR describes. All three are now recorded
+here rather than quietly fixed, because the earlier text claimed a protection
+that did not exist.
+
+1. **Wrong entry point.** The registration change was made in
+   `workbench.web.main.ts`. The fork builds `vscode-darwin-*-min` and
+   `vscode-reh-linux-*-min`, and a `seclab+` tab is a **desktop** editor
+   window, which loads `workbench.desktop.main.ts` — a file that does not
+   import the web entry point. The unpatched service registers, so the lock
+   does not load and the outbound dial path remains open.
+2. **It does not compile.** `SeclabEditorWindowRemoteAgentHostService` uses
+   five DI decorators and the file imports none of them. That is independent
+   proof the code was never built or exercised — and it passed
+   `build/apply-patches.sh --check` and `sync_patch.py --check`, because
+   neither type-checks. A gate that verifies a patch *applies* says nothing
+   about whether it runs.
+3. **The construction-order reasoning above is wrong, in the direction it
+   claimed to avoid.** `autorun` runs **synchronously inside** the base
+   constructor, while TypeScript parameter properties are assigned after
+   `super()`. The first, dialling-relevant reconcile therefore sees
+   `_seclabEnvironmentService === undefined`, and the resulting `TypeError` is
+   swallowed by `onBugIndicatingError`. The guard is skipped by accident
+   rather than refusing by design, and a later tidy to `?.` would turn that
+   into a silent fail-open. The refusal is moving to `_connectTo` with a
+   non-injected authority source, so it cannot depend on construction order at
+   all.
+
+### Correction 4 (2026-11-05): the tool count was measured over the wrong set
+
+"54 tool definitions, and not one declares `runsInWorkspace: true`" is the
+measurement this decision rests on. The scan behind it matched only
+`const x: IToolData = {` and `getToolData(): IToolData`, so tools produced by
+a factory were never counted — including `run_in_terminal`
+(`createRunInTerminalToolData()`) and `fetch_webpage`, which are among the
+most dangerous members of the set. Six unresolved expressions were meanwhile
+pinned as if they were tools.
+
+The conclusion is unlikely to change, since the missing tools are host-side
+and do not declare `runsInWorkspace: true` either, but **the number will**, and
+a decision resting on a measurement deserves the measurement to be right. The
+scan is being rebuilt to enumerate registration call sites and to **fail the
+gate on an unresolved id** rather than pin it.
+
 ### Residual risks
 
 - **Extension-contributed chat.** This disables VS Code's built-in surface.
