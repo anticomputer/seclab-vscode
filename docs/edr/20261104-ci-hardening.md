@@ -64,8 +64,11 @@ cache would therefore reach the user's machine directly. Already in place:
    | Actions can approve PRs | off | off (unchanged) |
 4. **Static analysis.** actionlint 1.7.12 and zizmor 1.32.0 run as digest-pinned
    images: `./seclab lint workflows` locally, and the `workflow-lint` workflow on
-   every push and PR. zizmor's online audits use the read-only token on pushes
-   only. At adoption, zizmor reported no findings at either the `regular` or the
+   every push and PR. Both run offline, with `--network none` and no credentials,
+   because they are third-party images (superseded 2026-11-04 by the supply-chain
+   ADR; zizmor's online audits used to get the read-only token on pushes). Impostor
+   commits and ref confusion are covered by `sha_pinning_required` and the
+   GitHub-owned-actions allowlist. At adoption, zizmor reported no findings at either the `regular` or the
    `auditor` persona, apart from informational "unnamed job" notes, which are
    now fixed.
 5. **Token scope, triggers, caches.**
