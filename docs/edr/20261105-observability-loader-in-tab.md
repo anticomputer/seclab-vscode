@@ -31,9 +31,10 @@ rule that no host file may match an AV signature.
    `tasks.json`. It asserts that no loader exists in the host workspace.
 4. **The demo (sbx only) also writes the hidden `.vscode/tasks.json` inside the tab.**
    The write-back gate holds `.vscode/**` in the VM-private upper layer, so the editor
-   sees it but the host never does. `demo.ts` checks that the host checkout has no
-   `.vscode` and refuses to run if it does. OCI is refused, because an OCI tab's
-   workspace writes reach host disk.
+   sees it but the host never does. The guard is `tab.ensureRunning`: it fails unless the
+   collector has mounted the overlay (`seclab-obs-collect` refuses to start the REH
+   without it). After writing, `demo.ts` also fails the run if `.vscode` appears in the
+   host checkout. OCI is refused, because an OCI tab's workspace writes reach host disk.
 5. **Generated copies were removed** from every worktree's `.work/`. The tracked files
    leave each checkout as branches rebase onto `main`.
 
@@ -51,6 +52,12 @@ rule that no host file may match an AV signature.
   files, then stops it; the upper layer persists on the VM disk.
 - Detection rules and the collector's honeypot list still name credential paths. They
   are sensors, not payloads, and carry no loader shape.
+- A run's event log (`<state>/events/<tab>/*.jsonl`, 0600, under `.work/` or the test
+  profile) records what the loader did, by design: its argv (the detached shell with the
+  fetch tool and `-e`) and the honeypot paths, JSON-escaped one event per line. It holds
+  no task file and no fetch piped into an interpreter. No detection was raised with these
+  logs present. Teardown removes the profile; delete a run's `.work/` state if a
+  detection ever names one.
 
 ## Evidence
 - `mdatp threat list` before and after: the same two `Trojan:Script/MalTask.A` entries
