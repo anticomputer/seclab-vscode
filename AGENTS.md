@@ -49,9 +49,22 @@ RPC-lockdown session adds. Keep them consistent with this file.
    proposed).
 
 ## 3. Hard rules (non-negotiable)
-- **Never install tooling on the macOS host.** docker, gh and sbx are allowed;
-  anything else needs the user's approval. Why: host hygiene is the user's
-  explicit constraint. Builds run in containers or on Actions.
+- **Never install tooling on the macOS host.** docker, gh, sbx, and for CFS azure-cli and
+  the gh-cfs extension, are allowed; anything else needs the user's approval. Why: host
+  hygiene is the user's explicit constraint. Builds run in containers or on Actions.
+- **Local npm and pip go through GitHub CFS (`gh cfs`); never bypass it** by pointing at a
+  public registry, adding an extra index, or switching `replace-registry-host` to `always`.
+  The CFS token is a real secret:
+  - it reaches only a `docker build` BuildKit secret, for a fetch that runs no install
+    scripts (`--ignore-scripts`, or `pip download` of hashed wheels);
+  - scripts and installs run afterwards with no token, offline from that cache;
+  - never put it in build args, persisted env, argv, logs, `.work`, a volume, or anything a
+    tab can reach.
+
+  `./seclab build linux` does this for you
+  ([EDR](docs/edr/20261105-cfs-local-builds.md)). Hosted CI keeps the public registries,
+  with the same lockfile hashes. If `gh cfs doctor --auth` fails, ask the user to run
+  `az login`. Why: this Mac blocks public registries, and install scripts can read the token.
 - **Never use `/tmp` for anything that matters; commit early.** Why: sessions
   are long-lived and `/tmp` is pruned mid-session. Use `.work/` or named
   volumes.

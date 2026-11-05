@@ -42,7 +42,7 @@ const OURS = {
 	container: new RegExp(`^seclab-(${TAB}(-broker)?|containment-hostsvc-(sbx|oci)-[0-9a-f]{8}|spike-[a-z0-9-]+|it-[0-9a-f]{6}-[a-z0-9-]+|brkval-[0-9a-f]{6}-[a-z0-9]+)$`),
 	network: new RegExp(`^seclab-(${TAB}-(net|egress)|it-[0-9a-f]{6}-[a-z0-9-]+|brkval-[0-9a-f]{6}-[a-z0-9]+|spike-[a-z0-9-]+)$`),
 	volume: new RegExp(`^seclab-${TAB}-home$`),
-	image: /^seclab-(tab|tab-oci|builder|broker|broker-placeholder|broker-unit|broker-it-[a-z]+|template-builder):[A-Za-z0-9._-]+$/,
+	image: /^seclab-(tab|tab-oci|builder|broker|broker-placeholder|broker-unit|broker-it-[a-z]+|template-builder|npm-cache):[A-Za-z0-9._-]+$/,
 };
 if (args.has('--self-test')) {
 	// Names seen on a real host: ours must match, other projects' and the user's must not.

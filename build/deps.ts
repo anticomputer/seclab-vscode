@@ -17,7 +17,7 @@ const repo = path.resolve(import.meta.dirname, '..');
 const REGISTRY = 'deps/registry.json';
 const DOC = 'docs/DEPENDENCIES.md';
 
-export const KINDS = ['source', 'oci-image', 'github-action', 'pip-set', 'npm-tree', 'apt-set', 'binary', 'extension', 'host-tool'] as const;
+export const KINDS = ['source', 'oci-image', 'github-action', 'pip-set', 'npm-tree', 'apt-set', 'binary', 'extension', 'host-tool', 'transport'] as const;
 /** The provenance bar (ADR): one of these, or a recorded, user-approved exception. Host tools
  *  the user installs (not pinned by us) are `host-installed` and must state their gap (DD-8). */
 export const BARS = ['signed-verified', 'official-pinned', 'built-from-source', 'host-installed', 'exception'] as const;
@@ -249,8 +249,13 @@ export function validate(deps: Dep[], tree: TreePin[], exists: (p: string) => bo
 			}
 			registered.set(p, d.id);
 		}
-		if (d.pins.length === 0 && !['host-tool', 'npm-tree', 'binary', 'extension'].includes(d.kind)) {
+		if (d.pins.length === 0 && !['host-tool', 'npm-tree', 'binary', 'extension', 'transport'].includes(d.kind)) {
 			problems.push(`${at}: a ${d.kind} must list its pins`);
+		}
+		// A package transport carries what lockfiles already pin; it is never a new source, so it
+		// must be a recorded, user-approved exception (EDR cfs-local-builds).
+		if (d.kind === 'transport' && (d.bar !== 'exception' || !d.exception)) {
+			problems.push(`${at}: a transport must be a recorded exception`);
 		}
 	}
 	const seen = new Set<string>();

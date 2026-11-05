@@ -293,7 +293,7 @@ fetch_macos() {
 }
 
 build_linux() {
-	local targets="${*:-reh}" vol="${SECLAB_BUILD_VOLUME:-seclab-vscode-work}"
+	local targets="${*:-reh}" vol="${SECLAB_BUILD_VOLUME:-seclab-vscode-work}" offline=0
 	# A separate volume keeps an experimental tree (e.g. a test-only REH) out of the one that
 	# builds what ships; the shared default is also CI's.
 	[[ "$vol" =~ ^seclab-[a-z0-9-]{1,48}$ ]] || { echo "SECLAB_BUILD_VOLUME must be seclab-<name>" >&2; exit 2; }
@@ -302,12 +302,40 @@ build_linux() {
 	# Durable named volume for the upstream checkout + node_modules (not /tmp, not the Mac FS).
 	docker volume create "$vol" >/dev/null
 	docker run --rm -u 0 -v "$vol:/work" seclab-builder:local chown builder:builder /work
+	# Local builds fetch npm packages through GitHub CFS (EDR cfs-local-builds); hosted CI keeps
+	# the public registry. Same lockfiles, same integrity hashes, different transport.
+	if [[ -z "${CI:-}" ]]; then
+		npm_fetch_cfs "$vol"
+		offline=1
+	fi
 	docker run --rm \
 		-v "$ROOT:/repo:ro" \
 		-v "$vol:/work" \
 		-v "$OUT:/out" \
-		-e TARGETS="$targets" -e ARCH -e MAX_OLD_SPACE_SIZE -e GOGC \
+		-e TARGETS="$targets" -e ARCH -e MAX_OLD_SPACE_SIZE -e GOGC -e SECLAB_NPM_OFFLINE="$offline" \
 		seclab-builder:local bash /repo/build/linux/build.sh
+}
+
+# Fill the build volume's npm cache through CFS (EDR cfs-local-builds). The token goes only to
+# `gh cfs -- docker build` as a BuildKit secret, for a fetch that runs no install script; the
+# cache image (keyed by the lockfile set) holds only integrity-addressed tarballs. Then copied
+# into the volume, where build.sh installs offline with no token.
+npm_fetch_cfs() {
+	local vol="$1" locks="$ROOT/.work/npm-locks" key img
+	command -v gh >/dev/null && gh cfs version >/dev/null 2>&1 || { echo "build: local npm installs go through GitHub CFS; install gh-cfs (AGENTS.md)" >&2; exit 1; }
+	docker run --rm -v "$ROOT:/repo:ro" -v "$vol:/work" -e PHASE=prepare seclab-builder:local bash /repo/build/linux/build.sh >/dev/null
+	rm -rf "$locks" && mkdir -p "$locks"
+	docker run --rm --network none -v "$vol:/work:ro" -v "$locks:/out" -w /work/vscode "$(node_image)" sh -c \
+		'find . -name node_modules -prune -o -name .git -prune -o -type f \( -name package.json -o -name package-lock.json -o -name .npmrc \) -print | tar -cf - -T - | tar -xf - -C /out'
+	cp "$ROOT/build/linux/lock-fill.mjs" "$locks/.seclab-lock-fill.mjs"
+	key="$(cd "$locks" && find . -type f | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256 | cut -c1-16)"
+	img="seclab-npm-cache:$key"
+	if ! docker image inspect "$img" >/dev/null 2>&1; then
+		gh cfs doctor --auth >/dev/null 2>&1 || { echo "build: GitHub CFS authentication failed; run 'az login' (GitHubAzure tenant), then 'gh cfs doctor --auth'" >&2; exit 1; }
+		echo "build: fetching npm packages through GitHub CFS ($img)" >&2
+		gh cfs -- docker build -q -t "$img" -f "$ROOT/build/linux/Dockerfile.npm-fetch" "$locks" >/dev/null
+	fi
+	docker run --rm --network none -v "$vol:/work" "$img" sh -c 'rm -rf /work/.npm-cache /work/.npm-locks-filled && cp -a /npm-cache /work/.npm-cache && cp -a /locks-filled /work/.npm-locks-filled && chown -R 1001:1001 /work/.npm-cache /work/.npm-locks-filled'
 }
 
 case "${1:-help}" in

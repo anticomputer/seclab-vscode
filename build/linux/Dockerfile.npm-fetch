@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+# Local Code-OSS dependency fetch through GitHub CFS (EDR cfs-local-builds). Built only with
+#   gh cfs -- docker build -t seclab-npm-cache:<lockset hash> -f build/linux/Dockerfile.npm-fetch .work/npm-locks
+# The context holds only upstream's package.json, package-lock.json and .npmrc files (no
+# secrets). The CFS token exists only as the BuildKit secret and in a tmpfs npmrc for this one
+# RUN. No install script runs while it is present (--ignore-scripts), the RUN fails if the
+# token appears anywhere in what it keeps, and the image keeps only npm's content cache:
+# tarballs addressed by the lockfiles' own integrity hashes.
+FROM node:24.22.1-trixie@sha256:f1e034976f948cf212ef1f659c12e5dd58ac7eab947831813e81a62401ca38be AS fetch
+COPY . /src
+RUN --mount=type=secret,id=cfs_feed_token,required=true \
+    --mount=type=tmpfs,target=/run/cfs-auth \
+    set +x; set -eu; umask 077; \
+    token="$(cat /run/secrets/cfs_feed_token)"; test -n "$token"; \
+    registry=https://pkgs.dev.azure.com/github-cfs/GitHubCFS/_packaging/github-cfs-oss/npm/registry/; \
+    auth_path=//pkgs.dev.azure.com/github-cfs/GitHubCFS/_packaging/github-cfs-oss/npm; \
+    printf 'registry=%s\nreplace-registry-host=npmjs\n%s/registry/:_authToken=%s\n%s/:_authToken=%s\n' "$registry" "$auth_path" "$token" "$auth_path" "$token" > /run/cfs-auth/npmrc; \
+    : > /run/cfs-auth/global-npmrc; \
+    export NPM_CONFIG_USERCONFIG=/run/cfs-auth/npmrc NPM_CONFIG_GLOBALCONFIG=/run/cfs-auth/global-npmrc \
+      NPM_CONFIG_CACHE=/npm-cache NPM_CONFIG_LOGS_DIR=/run/cfs-auth/logs NPM_CONFIG_REGISTRY="$registry" \
+      NPM_CONFIG_REPLACE_REGISTRY_HOST=npmjs NPM_CONFIG_UPDATE_NOTIFIER=false NPM_CONFIG_IGNORE_SCRIPTS=true; \
+    n=0; mkdir -p /locks-filled; \
+    for lock in $(find /src -name package-lock.json -not -path '*/node_modules/*' | sort); do \
+      d="$(dirname "$lock")"; n=$((n + 1)); \
+      (cd "$d" && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error >/dev/null) || { echo "npm ci failed in ${d#/src/}" >&2; exit 1; }; \
+      if node -e 'const p=require(process.argv[1]).packages||{};process.exit(Object.entries(p).some(([k,v])=>k.includes("node_modules/")&&!v.link&&!v.inBundle&&!v.extraneous&&!v.integrity)?0:1)' "$lock"; then \
+        (cd /src && node /src/.seclab-lock-fill.mjs "${d#/src/}" /locks-filled) || exit 1; \
+      fi; \
+      find "$d" -name node_modules -type d -prune -exec rm -rf {} +; \
+    done; \
+    if grep -rqF -- "$token" /npm-cache /src /locks-filled; then echo "CFS token found in the fetched cache; refusing" >&2; exit 1; fi; \
+    unset token; echo "fetched $n lockfiles through CFS; no token persisted"
+
+FROM alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
+COPY --from=fetch /npm-cache /npm-cache
+COPY --from=fetch /locks-filled /locks-filled
