@@ -309,15 +309,19 @@ test('scan: rewrite is byte-exact both ways ($ patterns, non-UTF-8 bytes) (S4)',
 });
 
 test('broker.hello: policy schema revision, protocol and tab must match (fail closed)', () => {
-	// The documented example result (docs/broker-protocol.md) for broker 0.2.0.
+	// The latest changelog entry (docs/broker-protocol.md, kept equal to the broker's VERSION and
+	// POLICY_SCHEMA_REVISION by broker/docs-check.sh) is the revision tabd must pin; the
+	// broker.hello example supplies the rest of a valid result.
 	const doc = fs.readFileSync(path.resolve(import.meta.dirname, '../../docs/broker-protocol.md'), 'utf8');
+	const latest = /<!-- BEGIN GENERATED: protocol-changelog[^\n]*\n\*\*[0-9.]+\*\* \([^;]+; policy schema revision (\d+)\)/.exec(doc);
+	assert.ok(latest, 'changelog head present in the protocol doc');
+	assert.equal(BROKER_POLICY_SCHEMA.revision, Number(latest![1]), 'tabd pins the latest documented policy schema revision');
 	const ex = /<!-- check: method\.result broker\.hello -->\s*```json\n([\s\S]*?)```/.exec(doc);
 	assert.ok(ex, 'broker.hello example present in the protocol doc');
-	const hello = JSON.parse(ex![1]) as Record<string, unknown>;
-	assert.deepEqual(hello.policySchema, BROKER_POLICY_SCHEMA, 'tabd pins the revision the protocol doc documents');
+	const hello = { ...JSON.parse(ex![1]) as Record<string, unknown>, policySchema: { ...BROKER_POLICY_SCHEMA } };
 	checkBrokerHello(hello, String(hello.tabId));
-	assert.throws(() => checkBrokerHello({ ...hello, policySchema: { version: 1, revision: 1 } }, String(hello.tabId)), /policy schema/);
-	assert.throws(() => checkBrokerHello({ ...hello, policySchema: { version: 1, revision: 3 } }, String(hello.tabId)), /policy schema/);
+	assert.throws(() => checkBrokerHello({ ...hello, policySchema: { version: 1, revision: BROKER_POLICY_SCHEMA.revision - 1 } }, String(hello.tabId)), /policy schema/);
+	assert.throws(() => checkBrokerHello({ ...hello, policySchema: { version: 1, revision: BROKER_POLICY_SCHEMA.revision + 1 } }, String(hello.tabId)), /policy schema/);
 	assert.throws(() => checkBrokerHello({ ...hello, policySchema: undefined }, String(hello.tabId)), /policy schema/);
 	assert.throws(() => checkBrokerHello({ ...hello, protocol: 'seclab-broker/2' }, String(hello.tabId)), /protocol/);
 	assert.throws(() => checkBrokerHello(hello, 'another-tab'), /not another-tab/);
