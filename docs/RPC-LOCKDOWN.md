@@ -313,7 +313,7 @@ The invariants the table is checked against, from `policy.json`:
 2. **identity-never-from-arguments** — Caller identity (tab, extension) is bound to the connection and is never read from call arguments.
 3. **default-deny** — Any surface with no explicit verdict is denied.
 4. **key-on-wire-sid** — RPC policy is keyed on the createProxyIdentifier sid string, never the MainContext property name and never the numeric nid.
-5. **no-real-secret-in-tab.sentinel-derivation** — A token minted for the tab reaches it only as a sentinel, bound to no more than its parent's bindings.
+5. **no-real-secret-in-tab.sentinel-derivation** — A token minted for the tab reaches it only as a sentinel, bound to no more than its parent's bindings, or to the bindings of a derivation rule the controller declared for that exact route.
 6. **no-seclab-commands-from-tabs** — No command whose id begins 'seclab.' is reachable from a sandboxed host.
 <!-- seclab:end invariants -->
 
@@ -486,6 +486,30 @@ The policy table, the inventory and the checks are **not** patches. They live in
 `rpc-filter/` in this repo and are loaded as data, so upstream churn touches the
 table rather than the diff. That is the property that makes the bump cheap: a
 new upstream method is a JSON edit plus a review, not a rebase conflict.
+
+## 6a. Surface (e): trusted-side AI surfaces are **not** covered by this filter
+
+The chat agent runs in the **trusted workbench**, not in the tab. When it reads
+a tab's files and invokes a trusted-side tool, **no RPC crosses the sandbox
+boundary**, so the enforcement points in §2 never see it. A tab does not need a
+confused deputy over RPC if it can write text that a trusted agent obeys:
+`.github/instructions/` is located in workspace root folders, auto-attached
+when `applyTo` is `**`, and the generated system prompt tells the model to
+follow it.
+
+**This filter does not contain that class, and nothing here should be read as
+if it did.** For v0 the feature is **turned off** in `seclab+` windows
+(patches 0009–0011, [ADR](adr/20261105-no-builtin-chat-in-tabs.md)) — a
+withdrawal, not containment. The vulnerable architecture is unchanged; we have
+stopped using it in tab windows. Containing it is a separate workstream.
+
+The surface *is* enumerated and pinned by the drift gate, so a new tool or a
+setting whose scope becomes tab-writable fails the build. But its probes are
+**not implemented**: there is no runner, and **nothing has been proven against
+an unpatched baseline**. Until that changes, surface (e) has an inventory and a
+gate, and no evidence. Those are different things, and the probe registry says
+`"status": "not-implemented"` for each so the suite cannot report them as
+passes.
 
 ## 7. Residual risks
 
