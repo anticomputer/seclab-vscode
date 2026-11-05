@@ -745,6 +745,15 @@ gate hook when Tier A ships.
 
 ### 11.1 Recommended first spike: an agent host in a tab, rendered, with no credential
 
+**Status (2026-11-05):** run at protocol level ([EDR](../edr/20261105-agents-in-tab-spike.md)).
+- A1, A16, A18 and A19 (config) are vulnerable on unmodified upstream, with on-disk and
+  over-the-wire evidence, and contained by the gate and handler prototypes.
+- The shipped agent host runs offline, honours the tab's proxy and CA, and presents
+  credentials as `Bearer`.
+- The class (f) draft has been handed to RPC-lockdown.
+- Still to come: running it inside an sbx tab behind the real broker, once tab-broker
+  wiring lands.
+
 **Goal:** measure, not ship. Find out from evidence what the trusted client does with a
 hostile agent host.
 
