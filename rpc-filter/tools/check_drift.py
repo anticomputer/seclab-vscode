@@ -151,8 +151,14 @@ def build_mapping(inv: dict, policy: dict) -> dict:
         # with REMOTE_MACHINE_SCOPES -- every scope string stayed the same and
         # the gate said nothing. A change in what we believe a surface can do
         # has to surface in review, not only a change upstream made.
-        record("ai-setting:%s|scope=%s|tab_writable=%s"
-               % (setting["id"], setting["scope"], setting.get("tab_writable")),
+        # `unreg` is pinned separately from scope because it *overrides*
+        # scope: a setting registered only in the Agents window has no scope at
+        # all where editor windows read it, so an APPLICATION-scoped setting is
+        # still tab-writable there. A new one appearing has to fail the check.
+        record("ai-setting:%s|scope=%s|unreg=%s|tab_writable=%s"
+               % (setting["id"], setting["scope"],
+                  setting.get("unregistered_where_read"),
+                  setting.get("tab_writable")),
                verdict, entry)
     return mapping
 

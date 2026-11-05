@@ -133,6 +133,42 @@ def _enum_values(tree: SourceTree, rel: str, enum: str) -> dict:
     return {mm.group("name"): mm.group("val") for mm in _ENUM_MEMBER.finditer(body)}
 
 
+def _window_of(rel: str) -> str:
+    """Which window's entry point registers a setting.
+
+    ``src/vs/sessions/`` is the Agents window; ``src/vs/workbench/`` is the
+    editor window. They load different entry points, so a setting registered in
+    only one is **unregistered** in the other.
+    """
+    if rel.startswith("src/vs/sessions/"):
+        return "agents"
+    if rel.startswith("src/vs/workbench/"):
+        return "editor"
+    return "platform"
+
+
+def _read_sites(tree: SourceTree, setting_ids: set) -> dict:
+    """Which layers read each setting id.
+
+    A setting is scope-filtered only where it is *registered*. One registered
+    solely in the Agents window but read from ``platform/`` or ``workbench/``
+    -- which editor windows load -- therefore has **no scope** in an editor
+    window, so nothing filters it out of workspace or remote user settings.
+    That is how ``chat.agentHost.localFilePermissions`` became tab-writable
+    despite looking like an ordinary setting: it is read by
+    ``AgentHostResourceService`` in every window and registered in only one.
+    """
+    hits = {sid: set() for sid in setting_ids}
+    for rel in list(tree.walk("src/vs/platform")) + list(tree.walk("src/vs/workbench")):
+        raw = tree.text(rel)
+        if "chat." not in raw and "mcp." not in raw:
+            continue
+        for sid in setting_ids:
+            if "'%s'" % sid in raw or '"%s"' % sid in raw:
+                hits[sid].add(_window_of(rel))
+    return {sid: sorted(w) for sid, w in hits.items()}
+
+
 def _settings(tree: SourceTree) -> list:
     """Registered configuration properties for chat/agent/MCP, with their scope.
 
@@ -155,6 +191,8 @@ def _settings(tree: SourceTree) -> list:
     ``chat.tools.global.autoApprove`` was reported as unreachable when a tab
     can in fact set it.
     """
+    from .commands import _constant_index, _resolve_expr
+    constants = _constant_index(tree)
     enums = {}
     for rel, name in (
         ("src/vs/workbench/contrib/chat/common/constants.ts", "ChatConfiguration"),
@@ -162,8 +200,16 @@ def _settings(tree: SourceTree) -> list:
         enums.update(_enum_values(tree, rel, name))
 
     want = re.compile(r"^(chat|mcp|inlineChat|github\.copilot)\b")
+    # Any computed key, not just the two enums. Most of the agent-host
+    # settings are registered as `[SomeConstantId]: { ... }` with a bare
+    # constant, and an earlier version that resolved only
+    # ChatConfiguration/McpConfiguration members silently dropped them --
+    # including chat.workspaceRemoteAgentHosts and
+    # chat.agentHost.localFilePermissions, the two this surface most needs to
+    # see. A settings scan that cannot see the dangerous settings reports a
+    # clean sheet for the wrong reason.
     key_re = re.compile(
-        r"(?:\[\s*(?:ChatConfiguration|McpConfiguration)\.(?P<member>\w+)\s*\]"
+        r"(?:\[\s*(?P<expr>[A-Za-z_$][\w.$]*)\s*\]"
         r"|'(?P<literal>[\w.]+)'"
         r"|\"(?P<literal2>[\w.]+)\")\s*:\s*\{")
     seen = {}
@@ -174,8 +220,15 @@ def _settings(tree: SourceTree) -> list:
                 continue
             text = strip_block_comments(raw)
             for m in key_re.finditer(text):
-                key = (enums.get(m.group("member")) if m.group("member")
-                       else (m.group("literal") or m.group("literal2")))
+                expr = m.group("expr")
+                if expr:
+                    key = enums.get(expr.split(".")[-1]) if expr.startswith(
+                        ("ChatConfiguration.", "McpConfiguration.")) else None
+                    if key is None:
+                        value, _ = _resolve_expr(tree, constants, expr, rel)
+                        key = value
+                else:
+                    key = m.group("literal") or m.group("literal2")
                 if not key or not want.search(key) or key in seen:
                     continue
                 body = _balanced(text, m.end() - 1)
@@ -184,12 +237,25 @@ def _settings(tree: SourceTree) -> list:
                 seen[key] = {
                     "id": key,
                     "scope": scope,
+                    "registered_in": _window_of(rel),
                     # Everything except APPLICATION is in REMOTE_MACHINE_SCOPES,
                     # and the tab supplies the remote settings file.
                     "tab_writable": scope != "APPLICATION",
                     "file": rel,
                     "permalink": tree.permalink(rel, _line_at(text, m.start())),
                 }
+    reads = _read_sites(tree, set(seen))
+    for sid, entry in seen.items():
+        where = reads.get(sid, [])
+        entry["read_in"] = where
+        # Registered in one window, read where another runs: no scope applies
+        # in the reading window, so workspace and remote user settings are not
+        # filtered out of it.
+        entry["unregistered_where_read"] = bool(
+            entry["registered_in"] == "agents"
+            and [w for w in where if w in ("editor", "platform")])
+        if entry["unregistered_where_read"]:
+            entry["tab_writable"] = True
     return [seen[k] for k in sorted(seen)]
 
 
