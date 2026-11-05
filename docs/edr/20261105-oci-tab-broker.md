@@ -43,8 +43,13 @@ credentials yet.
   - `seclab-tab-env` validates the URL's characters, then sets the proxy variables (both cases)
     and `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE` and
     `GIT_SSL_CAINFO`.
-- **Opt-in for now:** `seclab-tabd --broker required` (OCI only; sbx refuses it until B2).
-  `./seclab test e2e-broker` and the CI `oci` job (on pushes) run it.
+- **The default for OCI** since 2026-11-05: `seclab-tabd --driver oci` uses
+  `--broker required` with `seclab-broker:dev`, which `./seclab image oci` builds through
+  `broker/build.sh` with its base provenance verified. `--broker none` keeps the placeholder
+  and blackhole egress. sbx refuses `required` until B2. Every OCI suite (containment,
+  canary, secret scan, observability, e2e) now runs behind a real broker. The containment
+  check "runtime-injected proxy env never wins" accepts the tab's own broker URL as well as
+  the blackhole, with both cases equal.
 
 ## Deviation from the protocol doc
 Protocol §7 asks for the CA in the tab's system store, installed as root at creation. The OCI
@@ -69,6 +74,5 @@ broker, which fails closed.
   notifications, reconnects at adoption.
 - **Accepted: the proxy credential is in the tab's environment** (XX-3). It is tab-scoped.
 - **Next:**
-  - make the broker the OCI default once CI has run it;
   - B2: sbx, with the broker on loopback and the fence allowing only its port;
   - B3: prompts through the Tab Manager.

@@ -145,7 +145,7 @@ must ignore unknown notification methods and unknown fields.
   `host-observed` (OCI); only supervisor-produced events are `trusted`.
 - Under sbx the REH relay (`tab.connect`) runs as `990:990` (`seclab-relay`),
   not as the tab user, so the tab can't ptrace it.
-- **Broker (OCI, `seclab-tabd --broker required`;**
+- **Broker (OCI: the default, `seclab-tabd --broker required`;**
   [EDR](../edr/20261105-oci-tab-broker.md)). `tab.ensureRunning` brings the tab's broker
   up before the REH starts, and fails with `-32013` if any step fails or takes longer
   than 60 s:
