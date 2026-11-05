@@ -112,7 +112,12 @@
           "shape": "MainThreadAgentEditorCommentsShape",
           "sid": "MainThreadAgentEditorComments",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$createAgentEditorComments": [
+              1
+            ]
+          }
         },
         {
           "customer_class": "MainThreadAiEmbeddingVector",
@@ -133,7 +138,8 @@
           "shape": "MainThreadAiEmbeddingVectorShape",
           "sid": "MainThreadAiEmbeddingVector",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadAiRelatedInformation",
@@ -156,7 +162,8 @@
           "shape": "MainThreadAiRelatedInformationShape",
           "sid": "MainThreadAiRelatedInformation",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadAiSettingsSearch",
@@ -179,7 +186,8 @@
           "shape": "MainThreadAiSettingsSearchShape",
           "sid": "MainThreadAiSettingsSearch",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadAuthentication",
@@ -226,7 +234,15 @@
           "shape": "MainThreadAuthenticationShape",
           "sid": "MainThreadAuthentication",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$sendDidChangeDynamicProviderInfo": [
+              0
+            ],
+            "$waitForUriHandler": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadBrowserTunnelProxy",
@@ -253,7 +269,8 @@
           "shape": "MainThreadBrowserTunnelProxyShape",
           "sid": "MainThreadBrowserTunnelProxy",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadBrowsers",
@@ -280,7 +297,8 @@
           "shape": "MainThreadBrowsersShape",
           "sid": "MainThreadBrowsers",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadBulkEdits",
@@ -299,7 +317,8 @@
           "shape": "MainThreadBulkEditsShape",
           "sid": "MainThreadBulkEdits",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadChatAgents2",
@@ -361,7 +380,12 @@
           "undeclared_methods": [
             "$handleProgressChunk",
             "$handleAnchorResolve"
-          ]
+          ],
+          "uri_arg_positions": {
+            "$transferActiveChatSession": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadChatArtifactIntegrations",
@@ -396,7 +420,8 @@
           "shape": "MainThreadChatArtifactIntegrationsShape",
           "sid": "MainThreadChatArtifactIntegrations",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadChatContext",
@@ -425,7 +450,8 @@
           "shape": "MainThreadChatContextShape",
           "sid": "MainThreadChatContext",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadChatDebug",
@@ -452,7 +478,8 @@
           "shape": "MainThreadChatDebugShape",
           "sid": "MainThreadChatDebug",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadChatInputNotification",
@@ -473,7 +500,8 @@
           "shape": "MainThreadChatInputNotificationShape",
           "sid": "MainThreadChatInputNotification",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadChatOutputRenderer",
@@ -494,7 +522,12 @@
           "shape": "MainThreadChatOutputRendererShape",
           "sid": "MainThreadChatOutputRenderer",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$registerChatOutputRenderer": [
+              2
+            ]
+          }
         },
         {
           "customer_class": "MainThreadChatQuota",
@@ -513,7 +546,8 @@
           "shape": "MainThreadChatQuotaShape",
           "sid": "MainThreadChatQuota",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadChatSessions",
@@ -558,7 +592,28 @@
           "shape": "MainThreadChatSessionsShape",
           "sid": "MainThreadChatSessions",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$handleAnchorResolve": [
+              1
+            ],
+            "$handleProgressChunk": [
+              1
+            ],
+            "$handleProgressComplete": [
+              1
+            ],
+            "$onDidChangeChatSessionOptions": [
+              1
+            ],
+            "$onDidCommitChatSessionItem": [
+              1,
+              2
+            ],
+            "$updateChatSessionInputState": [
+              1
+            ]
+          }
         },
         {
           "customer_class": "MainThreadChatStatus",
@@ -579,7 +634,8 @@
           "shape": "MainThreadChatStatusShape",
           "sid": "MainThreadChatStatus",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadClipboard",
@@ -600,7 +656,8 @@
           "shape": "MainThreadClipboardShape",
           "sid": "MainThreadClipboard",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadChatCodemapper",
@@ -623,7 +680,8 @@
           "shape": "MainThreadCodeMapperShape",
           "sid": "MainThreadCodeMapper",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadCommands",
@@ -650,7 +708,8 @@
           "shape": "MainThreadCommandsShape",
           "sid": "MainThreadCommands",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadComments",
@@ -685,7 +744,15 @@
           "shape": "MainThreadCommentsShape",
           "sid": "MainThreadComments",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$createCommentThread": [
+              3
+            ],
+            "$updateCommentThread": [
+              3
+            ]
+          }
         },
         {
           "customer_class": "MainThreadConfiguration",
@@ -706,7 +773,8 @@
           "shape": "MainThreadConfigurationShape",
           "sid": "MainThreadConfiguration",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadConsole",
@@ -725,7 +793,8 @@
           "shape": "MainThreadConsoleShape",
           "sid": "MainThreadConsole",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadCustomEditors",
@@ -754,7 +823,15 @@
           "shape": "MainThreadCustomEditorsShape",
           "sid": "MainThreadCustomEditors",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$onContentChange": [
+              0
+            ],
+            "$onDidEdit": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadDataChannels",
@@ -781,7 +858,12 @@
           "shape": "MainThreadDataChannelsShape",
           "sid": "MainThreadDataChannels",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$createLinkPresentationWatcher": [
+              3
+            ]
+          }
         },
         {
           "customer_class": "MainThreadDebugService",
@@ -840,7 +922,12 @@
           "shape": "MainThreadDebugServiceShape",
           "sid": "MainThreadDebugService",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$startDebugging": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadDecorations",
@@ -863,7 +950,12 @@
           "shape": "MainThreadDecorationsShape",
           "sid": "MainThreadDecorations",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$onDidChange": [
+              1
+            ]
+          }
         },
         {
           "customer_class": "MainThreadDiagnostics",
@@ -884,7 +976,8 @@
           "shape": "MainThreadDiagnosticsShape",
           "sid": "MainThreadDiagnostics",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadDialogs",
@@ -905,7 +998,8 @@
           "shape": "MainThreadDiaglogsShape",
           "sid": "MainThreadDiaglogs",
           "sid_differs_from_key": true,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadDocumentContentProviders",
@@ -928,7 +1022,12 @@
           "shape": "MainThreadDocumentContentProvidersShape",
           "sid": "MainThreadDocumentContentProviders",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$onVirtualDocumentChange": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadDocumentDiff",
@@ -947,7 +1046,13 @@
           "shape": "MainThreadDocumentDiffShape",
           "sid": "MainThreadDocumentDiff",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$computeDocumentDiff": [
+              0,
+              1
+            ]
+          }
         },
         {
           "customer_class": "MainThreadDocuments",
@@ -970,7 +1075,15 @@
           "shape": "MainThreadDocumentsShape",
           "sid": "MainThreadDocuments",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$tryOpenDocument": [
+              0
+            ],
+            "$trySaveDocument": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadDownloadService",
@@ -989,7 +1102,13 @@
           "shape": "MainThreadDownloadServiceShape",
           "sid": "MainThreadDownloadService",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$download": [
+              0,
+              1
+            ]
+          }
         },
         {
           "customer_class": "MainThreadEditorInsets",
@@ -1016,7 +1135,13 @@
           "shape": "MainThreadEditorInsetsShape",
           "sid": "MainThreadEditorInsets",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$createEditorInset": [
+              2,
+              7
+            ]
+          }
         },
         {
           "customer_class": "MainThreadEditorTabs",
@@ -1039,7 +1164,8 @@
           "shape": "MainThreadEditorTabsShape",
           "sid": "MainThreadEditorTabs",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadEmbeddings",
@@ -1062,7 +1188,8 @@
           "shape": "MainThreadEmbeddingsShape",
           "sid": "MainThreadEmbeddings",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadErrors",
@@ -1081,7 +1208,8 @@
           "shape": "MainThreadErrorsShape",
           "sid": "MainThreadErrors",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadExtensionService",
@@ -1114,7 +1242,12 @@
           "shape": "MainThreadExtensionServiceShape",
           "sid": "MainThreadExtensionService",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$asBrowserUri": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadFileSystem",
@@ -1155,7 +1288,35 @@
           "shape": "MainThreadFileSystemShape",
           "sid": "MainThreadFileSystem",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$copy": [
+              0,
+              1
+            ],
+            "$delete": [
+              0
+            ],
+            "$mkdir": [
+              0
+            ],
+            "$readFile": [
+              0
+            ],
+            "$readdir": [
+              0
+            ],
+            "$rename": [
+              0,
+              1
+            ],
+            "$stat": [
+              0
+            ],
+            "$writeFile": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadFileSystemEventService",
@@ -1176,7 +1337,12 @@
           "shape": "MainThreadFileSystemEventServiceShape",
           "sid": "MainThreadFileSystemEventService",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$watch": [
+              2
+            ]
+          }
         },
         {
           "customer_class": "MainThreadGitExtensionService",
@@ -1195,7 +1361,8 @@
           "shape": "MainThreadGitExtensionShape",
           "sid": "MainThreadGitExtension",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadGitHub",
@@ -1222,7 +1389,8 @@
           "shape": "MainThreadGitHubShape",
           "sid": "MainThreadGitHub",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadInteractive",
@@ -1237,7 +1405,8 @@
           "shape": "MainThreadInteractiveShape",
           "sid": "MainThreadInteractive",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadLabelService",
@@ -1258,7 +1427,8 @@
           "shape": "MainThreadLabelServiceShape",
           "sid": "MainThreadLabelService",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadLanguageFeatures",
@@ -1369,7 +1539,8 @@
           "shape": "MainThreadLanguageFeaturesShape",
           "sid": "MainThreadLanguageFeatures",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadLanguageModelTools",
@@ -1400,7 +1571,8 @@
           "shape": "MainThreadLanguageModelToolsShape",
           "sid": "MainThreadChatSkills",
           "sid_differs_from_key": true,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadLanguageModels",
@@ -1441,7 +1613,12 @@
           "shape": "MainThreadLanguageModelsShape",
           "sid": "MainThreadLanguageModels",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$fileIsIgnored": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadLanguages",
@@ -1468,7 +1645,15 @@
           "shape": "MainThreadLanguagesShape",
           "sid": "MainThreadLanguages",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$changeLanguage": [
+              0
+            ],
+            "$tokensAtPosition": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadLocalization",
@@ -1489,7 +1674,12 @@
           "shape": "MainThreadLocalizationShape",
           "sid": "MainThreadLocalizationShape",
           "sid_differs_from_key": true,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$fetchBundleContents": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadLoggerService",
@@ -1518,7 +1708,24 @@
           "shape": "MainThreadLoggerShape",
           "sid": "MainThreadLogger",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$createLogger": [
+              0
+            ],
+            "$deregisterLogger": [
+              0
+            ],
+            "$flush": [
+              0
+            ],
+            "$log": [
+              0
+            ],
+            "$setVisibility": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadManagedSockets",
@@ -1545,7 +1752,8 @@
           "shape": "MainThreadManagedSocketsShape",
           "sid": "MainThreadManagedSockets",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadMcp",
@@ -1584,7 +1792,12 @@
           "shape": "MainThreadMcpShape",
           "sid": "MainThreadMcpShape",
           "sid_differs_from_key": true,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$startMcpGateway": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadMessageService",
@@ -1603,7 +1816,8 @@
           "shape": "MainThreadMessageServiceShape",
           "sid": "MainThreadMessageService",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadMeteredConnection",
@@ -1618,7 +1832,8 @@
           "shape": "MainThreadMeteredConnectionShape",
           "sid": "MainThreadMeteredConnection",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadNotebooks",
@@ -1645,7 +1860,8 @@
           "shape": "MainThreadNotebookShape",
           "sid": "MainThreadNotebook",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadNotebookDocuments",
@@ -1668,7 +1884,15 @@
           "shape": "MainThreadNotebookDocumentsShape",
           "sid": "MainThreadNotebookDocumentsShape",
           "sid_differs_from_key": true,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$tryOpenNotebook": [
+              0
+            ],
+            "$trySaveNotebook": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadNotebookEditors",
@@ -1691,7 +1915,12 @@
           "shape": "MainThreadNotebookEditorsShape",
           "sid": "MainThreadNotebookEditorsShape",
           "sid_differs_from_key": true,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$tryShowNotebookDocument": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadNotebookKernels",
@@ -1744,7 +1973,21 @@
           "shape": "MainThreadNotebookKernelsShape",
           "sid": "MainThreadNotebookKernels",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$createExecution": [
+              2
+            ],
+            "$createNotebookExecution": [
+              2
+            ],
+            "$updateNotebookPriority": [
+              1
+            ],
+            "$variablesUpdated": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadNotebookRenderers",
@@ -1763,7 +2006,8 @@
           "shape": "MainThreadNotebookRenderersShape",
           "sid": "MainThreadNotebookRenderers",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadOutputService",
@@ -1790,7 +2034,12 @@
           "shape": "MainThreadOutputServiceShape",
           "sid": "MainThreadOutputService",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$register": [
+              1
+            ]
+          }
         },
         {
           "customer_class": "MainThreadPower",
@@ -1821,7 +2070,8 @@
           "shape": "MainThreadPowerShape",
           "sid": "MainThreadPower",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadProfileContentHandlers",
@@ -1842,7 +2092,8 @@
           "shape": "MainThreadProfileContentHandlersShape",
           "sid": "MainThreadProfileContentHandlers",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadProgress",
@@ -1865,7 +2116,8 @@
           "shape": "MainThreadProgressShape",
           "sid": "MainThreadProgress",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadQuickDiff",
@@ -1890,7 +2142,15 @@
           "shape": "MainThreadQuickDiffShape",
           "sid": "MainThreadQuickDiff",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$createSourceControlDiffInformation": [
+              1
+            ],
+            "$registerQuickDiffProvider": [
+              4
+            ]
+          }
         },
         {
           "customer_class": "MainThreadQuickOpen",
@@ -1919,7 +2179,8 @@
           "shape": "MainThreadQuickOpenShape",
           "sid": "MainThreadQuickOpen",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadSCM",
@@ -1970,7 +2231,13 @@
           "shape": "MainThreadSCMShape",
           "sid": "MainThreadSCM",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$registerSourceControl": [
+              4,
+              7
+            ]
+          }
         },
         {
           "customer_class": "MainThreadSearch",
@@ -2003,7 +2270,12 @@
           "shape": "MainThreadSearchShape",
           "sid": "MainThreadSearch",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$handleFileMatch": [
+              2
+            ]
+          }
         },
         {
           "customer_class": "MainThreadSecretState",
@@ -2028,7 +2300,8 @@
           "shape": "MainThreadSecretStateShape",
           "sid": "MainThreadSecretState",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadShare",
@@ -2049,7 +2322,8 @@
           "shape": "MainThreadShareShape",
           "sid": "MainThreadShare",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadSpeech",
@@ -2078,7 +2352,8 @@
           "shape": "MainThreadSpeechShape",
           "sid": "MainThreadSpeechProvider",
           "sid_differs_from_key": true,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadStatusBar",
@@ -2099,7 +2374,8 @@
           "shape": "MainThreadStatusBarShape",
           "sid": "MainThreadStatusBar",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadStorage",
@@ -2122,7 +2398,8 @@
           "shape": "MainThreadStorageShape",
           "sid": "MainThreadStorage",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadTask",
@@ -2159,7 +2436,8 @@
           "shape": "MainThreadTaskShape",
           "sid": "MainThreadTask",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadTelemetry",
@@ -2178,7 +2456,8 @@
           "shape": "MainThreadTelemetryShape",
           "sid": "MainThreadTelemetry",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadTerminalService",
@@ -2241,7 +2520,8 @@
           "shape": "MainThreadTerminalServiceShape",
           "sid": "MainThreadTerminalService",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadTerminalShellIntegration",
@@ -2260,7 +2540,8 @@
           "shape": "MainThreadTerminalShellIntegrationShape",
           "sid": "MainThreadTerminalShellIntegration",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadTesting",
@@ -2319,7 +2600,12 @@
           "shape": "MainThreadTestingShape",
           "sid": "MainThreadTesting",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$getCoverageDetails": [
+              2
+            ]
+          }
         },
         {
           "customer_class": "MainThreadTextEditors",
@@ -2362,7 +2648,12 @@
           "shape": "MainThreadTextEditorsShape",
           "sid": "MainThreadTextEditors",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$tryShowTextDocument": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadTheming",
@@ -2377,7 +2668,8 @@
           "shape": "MainThreadThemingShape",
           "sid": "MainThreadTheming",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadTimeline",
@@ -2406,7 +2698,12 @@
           "shape": "MainThreadTimelineShape",
           "sid": "MainThreadTimeline",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$emitTimelineChangeEvent": [
+              1
+            ]
+          }
         },
         {
           "customer_class": "MainThreadTreeViews",
@@ -2441,7 +2738,8 @@
           "shape": "MainThreadTreeViewsShape",
           "sid": "MainThreadTreeViews",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadTunnelService",
@@ -2480,7 +2778,8 @@
           "shape": "MainThreadTunnelServiceShape",
           "sid": "MainThreadTunnelService",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadUriOpeners",
@@ -2501,7 +2800,8 @@
           "shape": "MainThreadUriOpenersShape",
           "sid": "MainThreadUriOpeners",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadUrls",
@@ -2524,7 +2824,12 @@
           "shape": "MainThreadUrlsShape",
           "sid": "MainThreadUrls",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$createAppUri": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadWebviewPanels",
@@ -2555,7 +2860,8 @@
           "shape": "MainThreadWebviewPanelsShape",
           "sid": "MainThreadWebviewPanels",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": null,
@@ -2584,7 +2890,8 @@
           "shape": "MainThreadWebviewViewsShape",
           "sid": "MainThreadWebviewViews",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadWebviews",
@@ -2607,7 +2914,8 @@
           "shape": "MainThreadWebviewsShape",
           "sid": "MainThreadWebviews",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {}
         },
         {
           "customer_class": "MainThreadWindow",
@@ -2630,7 +2938,15 @@
           "shape": "MainThreadWindowShape",
           "sid": "MainThreadWindow",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$asExternalUri": [
+              0
+            ],
+            "$openUri": [
+              0
+            ]
+          }
         },
         {
           "customer_class": "MainThreadWorkspace",
@@ -2687,7 +3003,36 @@
           "shape": "MainThreadWorkspaceShape",
           "sid": "MainThreadWorkspace",
           "sid_differs_from_key": false,
-          "undeclared_methods": []
+          "undeclared_methods": [],
+          "uri_arg_positions": {
+            "$checkExists": [
+              0
+            ],
+            "$isResourceTrusted": [
+              0
+            ],
+            "$resolveDecoding": [
+              0
+            ],
+            "$resolveEncoding": [
+              0
+            ],
+            "$save": [
+              0
+            ],
+            "$startFileSearch": [
+              0
+            ],
+            "$startTextSearch": [
+              1
+            ],
+            "$updateWorkspaceFolders": [
+              3
+            ],
+            "$validateDetectedEncoding": [
+              0
+            ]
+          }
         }
       ],
       "unmapped_main_context_keys": []
