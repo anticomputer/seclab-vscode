@@ -54,6 +54,11 @@ jobs:
         env:
           # Exact range: the PR's base, or the push's previous head (all-zero for a new branch).
           DOCS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          # The broker's ci:run block verifies its base image's signed provenance with
+          # `gh attestation verify` (gh on the runner, not a third-party container). Read-only
+          # job token, pushes only: PR-controlled code with network gets no token, so a PR run
+          # fails closed at that verification rather than skipping it.
+          GH_TOKEN: ${{ github.event_name == 'push' && github.token || '' }}
         run: ./seclab docs check --run-commands --paired
       - name: External links resolve
         # No token: lychee is a third-party image, so it gets no credentials. GitHub rate
