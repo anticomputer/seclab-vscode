@@ -60,3 +60,12 @@ Nothing medium or higher.
 | GG-1 | Low | check-pins | Skipping all of `broker/tools/supplychain.py` would hide a future unpinned image it runs. | Fixed | Any process-execution or dynamic-import construct in it un-skips it. |
 | HH-1 | Low | docs-check | The read-only job token reaches every `ci: run` command (and anything with the docker socket), though only `gh` needs it. | Open (broker session) | Split: a token-only step downloads the attestation bundle; `verify-images.sh` verifies offline with `--bundle`; the docs gate runs tokenless. |
 | HH-2 | Low | docs-check | PR runs have no token, so `broker/build.sh` fails closed and `docs` is red on PRs. | Accepted | Changes land by branch push and fast-forward (AGENTS push flow); the `docs` check is push-only in practice until HH-1. |
+
+## Round 6: attestation download split (broker 21979ca, 45be740)
+HH-1 verified closed: only `gh` gets the token, in a download-only step on pushes; the docs gate is
+tokenless. A planted or replaced bundle can't weaken the check (digest-named, subject-checked,
+Sigstore-rooted, identity-pinned); deleting it forces a tokenless online check that fails closed.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| II-1 | Low | verify-images | Locally, a cached bundle never re-checks revocation. | Open (broker session) | Re-download outside CI when older than N days, or use `--bundle` only in CI. |
