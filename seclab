@@ -301,7 +301,9 @@ case "${1:-help}" in
 	deps)
 		shift
 		case "${1:-}" in
-			outdated) docker run --rm -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/deps-outdated.ts ;;
+			# Only the three files it needs: no repo content or run state in a networked container (EE-2).
+			outdated) docker run --rm -v "$ROOT/build/deps-outdated.ts:/d/build/deps-outdated.ts:ro" -v "$ROOT/build/registry.ts:/d/build/registry.ts:ro" \
+				-v "$ROOT/deps/registry.json:/d/deps/registry.json:ro" -w /d "$(node_image)" node build/deps-outdated.ts ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	# Host hygiene: runs on the host (it drives docker/sbx/ps); dry run unless --apply.

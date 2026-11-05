@@ -14,7 +14,7 @@ import { parseRef, Registry } from './registry.ts';
 interface Dep { id: string; name: string; kind: string; pins: string[]; track?: { github?: string; version?: string } }
 const repo = path.resolve(import.meta.dirname, '..');
 const deps = (JSON.parse(fs.readFileSync(path.join(repo, 'deps/registry.json'), 'utf8')) as { deps: Dep[] }).deps;
-const safe = (s: string) => s.replace(/[^A-Za-z0-9._:@/+-]/g, '?').slice(0, 120);
+const safe = (s: string) => s.replace(/[^A-Za-z0-9._:/+-]/g, '?').slice(0, 120); // no `@` (mentions), always in code spans (EE-3)
 
 const rows: string[] = [];
 const errors: string[] = [];
@@ -31,7 +31,7 @@ for (const d of deps) {
 					rows.push(`| ${d.id} | tag \`${safe(ref.tag)}\` moved | \`${ref.digest.slice(0, 19)}…\` | \`${safe(now).slice(0, 19)}…\` |`);
 				}
 			} catch (e) {
-				errors.push(`- ${d.id}: ${safe((e as Error).message)}`);
+				errors.push(`- ${d.id}: \`${safe((e as Error).message)}\``);
 			}
 		}
 	}
@@ -46,7 +46,7 @@ for (const d of deps) {
 				rows.push(`| ${d.id} | new release | \`${safe(d.track.version ?? '?')}\` | \`${safe(tag)}\` |`);
 			}
 		} catch (e) {
-			errors.push(`- ${d.id}: ${safe((e as Error).message)}`);
+			errors.push(`- ${d.id}: \`${safe((e as Error).message)}\``);
 		}
 	}
 }
@@ -54,6 +54,8 @@ console.log([
 	'Dependency updates the register tracks and Dependabot can\'t see (`node build/deps-outdated.ts`).',
 	'Each update is a normal change: new pin, register entry, publisher verification, review.',
 	'',
-	rows.length ? ['| Entry | Change | Pinned | Available |', '|---|---|---|---|', ...rows].join('\n') : 'Nothing outdated.',
+	// "Nothing outdated." only when every lookup succeeded: a failing registry must not
+	// silence the report (EE-1).
+	rows.length ? ['| Entry | Change | Pinned | Available |', '|---|---|---|---|', ...rows].join('\n') : errors.length ? 'No updates found among the lookups that succeeded.' : 'Nothing outdated.',
 	...(errors.length ? ['', 'Could not check:', ...errors] : []),
 ].join('\n'));

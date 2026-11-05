@@ -26,7 +26,7 @@ if [ -d "$SRC/src/vs" ]; then
 		-v "$REPO":/repo \
 		-v "$SRC_ABS":/src:ro \
 		-w /repo/rpc-filter/tools \
-		--platform linux/arm64 "$IMAGE" \
+		"$IMAGE" \
 		python3 test_generator.py
 fi
 
@@ -35,5 +35,5 @@ exec docker run --rm \
 	--network none \
 	-v "$REPO":/repo \
 	-w /repo/rpc-filter/tools \
-	--platform linux/arm64 "$IMAGE" \
+	"$IMAGE" \
 	python3 test_generator.py
