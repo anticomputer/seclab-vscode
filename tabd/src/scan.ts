@@ -1,5 +1,5 @@
-// Pre-mount secret scanning (ADR 20261104-pre-mount-secret-scan). Runs gitleaks from a
-// digest-pinned image in a throwaway, network-less, read-only container BEFORE a workspace
+// Pre-mount secret scanning (ADR 20261104-pre-mount-secret-scan). Runs gitleaks, built from
+// pinned source, in a throwaway, network-less, read-only container BEFORE a workspace
 // is mounted into a tab. Secret values are held only in supervisor memory (for "move to
 // broker"); clients and logs only ever see redacted findings.
 
@@ -8,7 +8,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Runner } from './run.ts';
 
-export const GITLEAKS_IMAGE = 'ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f'; // v8.30.1
+// Built from the pinned gitleaks source by `./seclab tool gitleaks` (build/tools/tools.json:
+// commit + reproducible binary sha256, attested in CI); never pulled. A missing image makes the
+// scan fail, and opens fail closed (EDR 20261105-pinned-tools).
+export const GITLEAKS_IMAGE = 'seclab-tool-gitleaks:8.30.1';
 
 // Default rules plus our test canary shape (test/canary/canary.ts).
 const CONFIG = `[extend]
@@ -333,7 +336,7 @@ export async function scanWorkspace(runner: Runner, docker: string, hostPath: st
 	const env = GIT_OVERRIDES.flatMap(([k, v], i) => ['-e', `GIT_CONFIG_KEY_${i}=${k}`, '-e', `GIT_CONFIG_VALUE_${i}=${v}`]);
 	const user = scanUser(hostPath);
 	const [uid, gid] = user.split(':');
-	const args = ['run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+	const args = ['run', '--rm', '--pull', 'never', '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
 		'--user', user, '--pids-limit', '256', '--memory', '2g',
 		// Nested zip/7z members are extracted to $TMPDIR; the root filesystem is read-only.
 		'--tmpfs', `/seclab:rw,noexec,nosuid,nodev,size=768m,mode=0700,uid=${uid},gid=${gid}`, '--workdir', '/',
@@ -417,11 +420,16 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 				}
 				continue;
 			case 'finderr':
-				// "find: <path>: <reason>" per line; the path may itself contain ': '.
+				// "find: <path>: <reason>" per line; the path may itself contain ': '. GNU find
+				// shell-quotes the path ('…', with '\'' for a quote); busybox prints it bare.
+				// Any other find: line still counts, against the workspace as a whole.
 				for (const lineText of body.toString('utf8').split('\n')) {
-					const fm = /^find: (\/scan\/ws\/.*): [^:]+$/.exec(lineText);
+					const fm = /^find: (?:'(\/scan\/ws\/.*)'|(\/scan\/ws\/.*)): [^:]+$/.exec(lineText);
 					if (fm) {
-						unscanned('worktree', workspaceRel(fm[1], '/scan/ws/') ?? '.', 'unscanned-unreadable');
+						const p = fm[1] !== undefined ? fm[1].replace(/'\\''/g, '\'') : fm[2];
+						unscanned('worktree', workspaceRel(p, '/scan/ws/') ?? '.', 'unscanned-unreadable');
+					} else if (lineText.startsWith('find: ')) {
+						unscanned('worktree', '.', 'unscanned-unreadable');
 					}
 				}
 				if (failed && !errors.includes('some paths could not be listed or read')) {

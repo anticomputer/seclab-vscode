@@ -24,6 +24,8 @@ export VSCODE_SKIP_NODE_VERSION_CHECK=1
 stamp="$(cat package-lock.json build/package-lock.json remote/package-lock.json 2>/dev/null | sha256sum | cut -c1-16)"
 if [[ ! -f node_modules/.seclab-stamp ]] || [[ "$(cat node_modules/.seclab-stamp)" != "$stamp" ]]; then
 	npm ci
+	# Registry signatures over every installed project; the stamp is written only after it passes.
+	/repo/build/npm-audit-signatures.sh "$SRC"
 	echo "$stamp" > node_modules/.seclab-stamp
 fi
 /repo/build/remove-extensions.sh "$SRC"

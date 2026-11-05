@@ -28,7 +28,7 @@ jobs:
   docs:
     name: docs
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
@@ -65,8 +65,8 @@ jobs:
         # provenance offline from the bundles above (gh attestation verify --bundle).
         run: ./seclab docs check --run-commands --paired
       - name: External links resolve
-        # No token: lychee is a third-party image, so it gets no credentials. GitHub rate
-        # limits are absorbed by the cache and by accepting 429.
+        # No token: lychee (built from pinned source by ./seclab tool lychee) gets no
+        # credentials. GitHub rate limits are absorbed by the cache and by accepting 429.
         run: ./seclab docs check --online
       - name: Export the lychee cache
         if: always() && github.event_name == 'push'

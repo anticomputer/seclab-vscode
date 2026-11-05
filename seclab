@@ -26,6 +26,8 @@ usage: ./seclab <command>
   lint source                   Shipped sources: no unreviewed env/spawn sites, no dynamic loading, no test markers
   lint deps [--self-test]       Dependency register: every pin in deps/registry.json, entries complete (ADR)
   deps outdated                 Report image tags that moved and tracked tools with newer releases
+  tool NAME                     Verify and build a pinned tool image (cosign, actionlint, gitleaks, lychee;
+                                build/tools/tools.json); prints its local tag
   deps host                     Check the host prerequisites (recorded exception, EDR supply-chain-exceptions):
                                 gh is byte-identical to cli/cli's attested release; Docker Desktop and sbx
                                 carry Docker, Inc.'s Developer ID signature (macOS). Read-only.
@@ -44,16 +46,20 @@ usage: ./seclab <command>
 EOF
 }
 
-LYCHEE_IMAGE="lycheeverse/lychee@sha256:eaff3e0a13603c9a701accfcc84f44158bb77bf36ecfa4622b626056c3463892" # 0.24.2
-ACTIONLINT_IMAGE="rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
 ZIZMOR_IMAGE="ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d"
+# Tools pinned in build/tools/tools.json, verified and built locally (EDR 20261105-pinned-tools):
+# cosign and actionlint are publisher-signed release artifacts, gitleaks and lychee are built
+# from pinned source. Prints the local image tag; fails closed.
+tool_image() { "$ROOT/build/tools/tool.sh" "$1"; }
 
 # Workflow static analysis (EDR ci-hardening): actionlint, then zizmor, both offline with no
 # network and no credentials: they are third-party images (ADR supply-chain provenance).
 # zizmor's online audits (impostor commits, ref confusion) are covered by the repo's
 # sha_pinning_required setting and the GitHub-owned-actions allowlist.
 lint_workflows() {
-	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ACTIONLINT_IMAGE" -no-color
+	local actionlint
+	actionlint="$(tool_image actionlint)"
+	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$actionlint" -no-color
 	verify_signed_image "$ZIZMOR_IMAGE" '^https://github\.com/docker/github-builder/\.github/workflows/build\.yml@' zizmorcore/zizmor refs/tags/v1.32.0
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ZIZMOR_IMAGE" --offline --no-progress --persona=regular .github/workflows
 }
@@ -63,14 +69,15 @@ lint_workflows() {
 # image in the pinned index must have an attestation naming it (build/verify-image.ts), and
 # each attestation must carry a cosign keyless signature from the expected builder identity,
 # calling repository and tag. Cached per index digest; needs network once (registry, TUF root).
-COSIGN_IMAGE="ghcr.io/sigstore/cosign/cosign:v3.0.3@sha256:774391ac9f0c137ee419ce56522df5fd3b1f52be90c5b77e97f7c053bdd67a67"
+# The verifier is cosign from build/tools (its own release signature verified by sigstore-python).
 verify_signed_image() {
-	local image="$1" identity="$2" wf_repo="$3" wf_ref="$4" digest marker repo line att key
+	local image="$1" identity="$2" wf_repo="$3" wf_ref="$4" digest marker repo line att key cosign
+	cosign="$(tool_image cosign)"
 	digest="${image##*@}"
 	repo="${image%%@*}"; repo="${repo%:*}"
 	# Keyed by digest AND the expected identity, so tightening the identity re-verifies (DD-5);
 	# CI always re-verifies (no cache there).
-	key="$(printf '%s\n' "$digest" "$identity" "$wf_repo" "$wf_ref" "$COSIGN_IMAGE" | shasum -a 256 | cut -c1-64)"
+	key="$(printf '%s\n' "$digest" "$identity" "$wf_repo" "$wf_ref" "$cosign" | shasum -a 256 | cut -c1-64)"
 	marker="$ROOT/.work/deps-verified/$key"
 	[[ -z "${CI:-}" && -f "$marker" ]] && return 0
 	local pairs
@@ -79,7 +86,7 @@ verify_signed_image() {
 		|| { echo "verify: $image: attestation chain incomplete (refusing to run it)" >&2; return 1; }
 	while read -r line; do
 		att="${line##* }"
-		docker run --rm "$COSIGN_IMAGE" verify --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+		docker run --rm "$cosign" verify --certificate-oidc-issuer https://token.actions.githubusercontent.com \
 			--certificate-identity-regexp "$identity" --certificate-github-workflow-repository "$wf_repo" \
 			--certificate-github-workflow-ref "$wf_ref" "$repo@$att" >/dev/null 2>&1 \
 			|| { echo "verify: $image: signature on $att (${line%% *}) does not verify as $wf_repo@$wf_ref (refusing to run it)" >&2; return 1; }
@@ -178,7 +185,7 @@ docs_check() {
 		# External links and permalinks must resolve; results are cached (named volume) so CI isn't flaky.
 		# No credentials ever enter this third-party container (EDR supply-chain): GitHub rate
 		# limits are absorbed by the cache and by accepting 429.
-		docker run --rm -v "$ROOT:/input:ro" -v seclab-lychee-cache:/cache -w /cache "$LYCHEE_IMAGE" \
+		docker run --rm -v "$ROOT:/input:ro" -v seclab-lychee-cache:/cache -w /cache "$(tool_image lychee)" \
 			--no-progress --cache --max-cache-age 3d --max-concurrency 8 --accept 200,206,429 \
 			--exclude-path /input/.work --exclude-path /input/vscode --exclude-path /input/node_modules \
 			--exclude '^https?://([^/]+\.)?(test|invalid|example|localhost)(/|:|$)' --exclude '^https?://(127\.|localhost|host\.docker\.internal)' \
@@ -358,6 +365,8 @@ case "${1:-help}" in
 			*) usage; exit 2 ;;
 		esac ;;
 	help|-h|--help) usage ;;
+	# Pinned tools (build/tools/tools.json): verify and build; prints the local image tag.
+	tool) shift; [[ $# -eq 1 ]] || { usage; exit 2; }; tool_image "$1" ;;
 	# Dependency updates Dependabot can't see (ADR supply-chain provenance): report only.
 	deps)
 		shift

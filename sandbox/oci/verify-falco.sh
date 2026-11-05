@@ -6,9 +6,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOCK="$ROOT/sandbox/oci/falco.lock"
 get() { awk -v k="$1" '$1==k{print $2}' "$LOCK"; }
-IMAGE="$(get image)"; ISSUER="$(get issuer)"; IDENTITY="$(get identity)"; COSIGN="$(get cosign)"
+IMAGE="$(get image)"; ISSUER="$(get issuer)"; IDENTITY="$(get identity)"
 [[ "$IMAGE" =~ ^docker\.io/falcosecurity/falco:[0-9.]+@sha256:[0-9a-f]{64}$ ]] || { echo "verify-falco: bad image pin" >&2; exit 2; }
-[[ "$COSIGN" =~ ^ghcr\.io/sigstore/cosign/cosign:v[0-9.]+@sha256:[0-9a-f]{64}$ ]] || { echo "verify-falco: bad cosign pin" >&2; exit 2; }
+COSIGN="$("$ROOT/build/tools/tool.sh" cosign)"
 [[ "${ISSUER#https://}" == token.actions.githubusercontent.com ]] || { echo "verify-falco: bad issuer" >&2; exit 2; }
 # Signature identities (not network targets): Falco's release workflow, at a release tag.
 ID_PATH="${IDENTITY#https://}"

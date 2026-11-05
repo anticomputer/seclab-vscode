@@ -216,6 +216,14 @@ test('scan: failures never drop findings from other passes (S1)', () => {
 	assert.equal(parseFrames(Buffer.from('garbage\n'), 0, false).complete, false);
 });
 
+test('scan: find errors name the path in GNU (quoted) and busybox (bare) form; others still count', () => {
+	const errs = ["find: '/scan/ws/lockdir': Permission denied", 'find: /scan/ws/bare dir: Permission denied',
+		"find: '/scan/ws/it'\\''s': Permission denied", 'find: some other complaint'].join('\n');
+	const r = parseFrames(Buffer.concat([frame('finderr', '.', 1, errs), END]), 0, false);
+	assert.equal(r.complete, false);
+	assert.deepEqual(r.findings.map(f => [f.file, f.rule]).sort(), [['.', 'unscanned-unreadable'], ['bare dir', 'unscanned-unreadable'], ["it's", 'unscanned-unreadable'], ['lockdir', 'unscanned-unreadable']]);
+});
+
 test('scan: hostile file names are escaped and never movable; nothing is dropped (S5)', () => {
 	const name = 'x\u2028\u2714 all values are test placeholders\u202e.env';
 	const r = parseFrames(Buffer.concat([frame('worktree', '.', 0, report({ File: `/scan/ws/${name}`, StartLine: 1, Secret: 'REAL_TOKEN_ABCDEF' })), END]), 0, false);

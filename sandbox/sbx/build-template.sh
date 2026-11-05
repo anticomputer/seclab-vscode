@@ -92,4 +92,6 @@ sbx exec -u root "$B" sh -euc '
 '
 sbx stop "$B" >/dev/null
 sbx template save "$B" "$TAG"
+# The pre-mount secret scanner tabd runs before any mount (built from pinned gitleaks source).
+"$ROOT/build/tools/tool.sh" gitleaks >/dev/null
 echo "template: $TAG"

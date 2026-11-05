@@ -75,5 +75,6 @@ Same rules as ADRs:
 | 2026-11-04 | [Unpatched proof run: which escapes are real](20261104-unpatched-proof-run.md) | accepted |
 | 2026-11-04 | [Write-back gate spike: keeping tab writes to code-running files off the host](20261104-write-back-gate-spike.md) | accepted |
 | 2026-11-05 | [Observability demo loader is assembled inside the tab](20261105-observability-loader-in-tab.md) | accepted |
+| 2026-11-05 | [Pinned tools: verified release binaries and source builds instead of third-party images](20261105-pinned-tools.md) | accepted |
 | 2026-11-05 | [Supply-chain exceptions: host prerequisites, and apt without version pins](20261105-supply-chain-exceptions.md) | accepted |
 <!-- index:end -->

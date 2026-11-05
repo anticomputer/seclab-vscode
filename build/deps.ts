@@ -130,6 +130,29 @@ export function pinsIn(f: string, text: string): TreePin[] {
 			out.push({ pin: `upstream:${m[1]}`, where: f });
 		}
 	}
+	// Pinned tools (EDR 20261105-pinned-tools): every release hash and source commit is a pin.
+	if (f === 'build/tools/tools.json') {
+		let tools: Record<string, { kind?: string; sha256?: Record<string, string>; git?: string; commit?: string }> = {};
+		try {
+			tools = JSON.parse(text);
+		} catch {
+			out.push({ pin: 'unparseable-tools-lock', where: f });
+		}
+		for (const [name, t] of Object.entries(tools)) {
+			if (name.startsWith('$')) {
+				continue;
+			}
+			if (t.kind === 'release') {
+				for (const [arch, h] of Object.entries(t.sha256 ?? {})) {
+					out.push({ pin: `tool:${name}:${arch}@sha256:${h}`, where: f });
+				}
+			} else if (t.kind === 'source') {
+				out.push({ pin: `git:${t.git}@${t.commit}`, where: f });
+			} else {
+				out.push({ pin: `unknown-tool-kind:${name}`, where: f });
+			}
+		}
+	}
 	if (/(^|\/)requirements[^/]*\.txt$/.test(f)) {
 		out.push({ pin: `pip:${f}`, where: f });
 	}
