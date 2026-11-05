@@ -239,6 +239,8 @@ case "${1:-help}" in
 			containment) shift; "${SECLAB_NODE:-node}" "$ROOT/test/containment/run.ts" "${1:-sbx}" ;;
 			# RPC-probe safety guards (pure; in the pinned node container, no network).
 			probe-safety) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/probe-safety.test.ts ;;
+			# RPC filter: generated UriComponents argument positions are constrained (pure; no network).
+			uri-constraint) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/uri-constraint.test.ts ;;
 			canary) shift; "${SECLAB_NODE:-node}" "$ROOT/test/canary/run.ts" "${1:-sbx}" ;;
 			secrets) shift; "${SECLAB_NODE:-node}" "$ROOT/test/secrets/run.ts" "${1:-sbx}" ;;
 			evidence) shift; "${SECLAB_NODE:-node}" "$ROOT/test/containment/check-evidence.ts" "$@" ;;
