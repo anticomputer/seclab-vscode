@@ -80,10 +80,24 @@ The broker enforces all of the following. Each item has a regression test.
 ## Consequences
 - Endpoints that legitimately return tokens work: the tab receives a sentinel,
   and the broker swaps it back on the same bindings.
-- The scanner is pattern based. An upstream that mints a credential in an
-  unrecognised format, in a header the scanner doesn't look at, would get
-  through. Bindings are therefore the first line of defence, and the backstop
-  and scanners are defence in depth.
+- The scanner is pattern based: it decides what a token is from its *shape*,
+  while the client in the tab reads tokens by *position* (whatever field its
+  API defines). So two things get through it:
+  - an upstream that mints a credential in an unrecognised format, or in a
+    header the scanner doesn't look at;
+  - an upstream that echoes the real value in an encoding the scanner doesn't
+    check (split, reversed, re-encrypted).
+
+  The second needs a malicious bound upstream, which already received the value
+  when it was injected. The positional controls are therefore the first line of
+  defence:
+  - **Injection is positional.** The broker writes its own rendering into the
+    binding's header, and only on a route the binding names. The sentinel is
+    only a trigger, and is never swapped in place.
+  - **Bindings and the backstop** decide by route which endpoints receive a
+    credential at all.
+
+  The scanners are defence in depth.
 - A rogue extension can still **use** the credential through its binding
   while the tab lives. That is the accepted per-tab blast radius.
   Per-extension attribution is later work (ARCHITECTURE §8).
