@@ -96,6 +96,23 @@ jobs:
         run: ./seclab test secrets oci
       - name: Tab observability (OCI; Falco, signature-verified by ./seclab image oci)
         run: ./seclab test obs oci
+      # Plan tabd-broker-wiring B1. Same split as docs-check (review HH-1): only gh gets the
+      # token, in a download-only step; the broker image build verifies its base image's signed
+      # provenance offline from those bundles, and the e2e runs with no token.
+      - name: Download attestation bundles (the only step with a token; gh on the runner)
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SECLAB_ATTESTATION_DIR: ${{ github.workspace }}/.work/attestations
+        run: broker/tools/verify-images.sh --download "$SECLAB_ATTESTATION_DIR"
+      - name: Build the broker image (base provenance verified offline)
+        if: github.event_name == 'push'
+        env:
+          SECLAB_ATTESTATION_DIR: ${{ github.workspace }}/.work/attestations
+        run: broker/build.sh seclab-broker:dev
+      - name: OCI tab with a real broker (deny, no direct route, allow, 407)
+        if: github.event_name == 'push'
+        run: ./seclab test e2e-broker seclab-broker:dev
 
   # gitleaks gates a security control and its upstream publishes nothing signed, so we build it
   # from the pinned commit (build/tools/tools.json). This job rebuilds both arches on a fresh
