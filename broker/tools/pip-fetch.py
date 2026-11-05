@@ -48,10 +48,14 @@ def main() -> None:
         fail("usage: pip-fetch.py REQUIREMENTS")
     req = sys.argv[1]
     source = os.environ.get("PIP_SOURCE", "")
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("PIP_", "UV_")) and k != "NETRC"}
+    # An allowlist, not "everything but PIP_*": nothing from the build can hook the child
+    # (PYTHONPATH, sitecustomize, NETRC, ...). The child also runs isolated (-I).
+    keep = ("PATH", "HOME", "LANG", "LC_ALL", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy",
+            "NO_PROXY", "no_proxy", "SSL_CERT_FILE")
+    env = {k: os.environ[k] for k in keep if k in os.environ}
     env.update(PIP_CONFIG_FILE="/dev/null", PIP_NO_INPUT="1", PIP_KEYRING_PROVIDER="disabled",
                PIP_DISABLE_PIP_VERSION_CHECK="1", PIP_NO_CACHE_DIR="1")
-    cmd = [sys.executable, "-m", "pip", "download", "--require-hashes", "--only-binary=:all:", "--no-deps",
+    cmd = [sys.executable, "-I", "-m", "pip", "download", "--require-hashes", "--only-binary=:all:", "--no-deps",
            "--dest", str(OUT), "-r", req]
     token = None
     netrc = AUTH_DIR / "netrc"

