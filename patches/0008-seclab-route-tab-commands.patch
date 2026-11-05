@@ -1,0 +1,44 @@
+diff -ruN a/src/vs/workbench/api/browser/mainThreadCommands.ts b/src/vs/workbench/api/browser/mainThreadCommands.ts
+--- a/src/vs/workbench/api/browser/mainThreadCommands.ts	2026-11-04 20:30:43
++++ b/src/vs/workbench/api/browser/mainThreadCommands.ts	2026-11-04 20:31:00
+@@ -8,6 +8,7 @@
+ import { CommandsRegistry, ICommandMetadata, ICommandService } from '../../../platform/commands/common/commands.js';
+ import { IExtHostContext, extHostNamedCustomer } from '../../services/extensions/common/extHostCustomers.js';
+ import { IExtensionService } from '../../services/extensions/common/extensions.js';
++import { seclabExecuteCommandFromTab, seclabOriginFor } from '../../services/extensions/common/seclabRpcFilter.js';
+ import { Dto, SerializableObjectWithBuffers } from '../../services/extensions/common/proxyIdentifier.js';
+ import { ExtHostCommandsShape, ExtHostContext, MainContext, MainThreadCommandsShape } from '../common/extHost.protocol.js';
+ import { isString } from '../../../base/common/types.js';
+@@ -19,6 +20,11 @@
+ 	private readonly _commandRegistrations = new DisposableMap<string>();
+ 	private readonly _generateCommandsDocumentationRegistration: IDisposable;
+ 	private readonly _proxy: ExtHostCommandsShape;
++	/**
++	 * seclab: set only when this customer serves a sandboxed tab. Captured
++	 * from the connection, never from a call argument.
++	 */
++	private readonly _seclabOrigin: unknown | undefined;
+ 
+ 	constructor(
+ 		extHostContext: IExtHostContext,
+@@ -26,6 +32,7 @@
+ 		@IExtensionService private readonly _extensionService: IExtensionService,
+ 	) {
+ 		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostCommands);
++		this._seclabOrigin = seclabOriginFor(extHostContext.remoteAuthority);
+ 
+ 		this._generateCommandsDocumentationRegistration = CommandsRegistry.registerCommand('_generateCommandsDocumentation', () => this._generateCommandsDocumentation());
+ 	}
+@@ -88,6 +95,12 @@
+ 		if (retry && args.length > 0 && !CommandsRegistry.getCommand(id)) {
+ 			await this._extensionService.activateByEvent(`onCommand:${id}`);
+ 			throw new Error('$executeCommand:retry');
++		}
++		if (this._seclabOrigin) {
++			// seclab: a tab asked for this command. Route it through the tainted
++			// path so the id is checked against the policy table and anything the
++			// handler executes in turn inherits the same origin.
++			return seclabExecuteCommandFromTab<T>(this._commandService, id, args, this._seclabOrigin);
+ 		}
+ 		return this._commandService.executeCommand<T>(id, ...args);
+ 	}

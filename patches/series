@@ -11,6 +11,7 @@
 0005-seclab-rpc-capability-filter.patch
 0006-seclab-channel-guard.patch
 0007-seclab-command-taint.patch
+0008-seclab-route-tab-commands.patch
 0012-background-windows-env.patch
 0013-no-local-agent-host.patch
 0014-build-desktop-without-copilot-runtime.patch
