@@ -40,6 +40,8 @@ node /repo/build/seed-ripgrep.mjs --verify-installed "$SRC"
 for t in $TARGETS; do
 	case "$t" in
 		editor) npm run gulp "vscode-linux-${ARCH}-min"
+			# The trusted app ships no agent runtime and no test hook (I8; check-release --desktop).
+			sh /repo/build/check-release.sh --inner /work/.check-release desktop "/work/VSCode-linux-${ARCH}/resources/app"
 			tar -C /work -czf "/out/seclab-vscode-linux-${ARCH}.tar.gz" "VSCode-linux-${ARCH}" ;;
 		reh) npm run gulp "vscode-reh-linux-${ARCH}-min"
 			tar -C /work -czf "/out/seclab-reh-linux-${ARCH}.tar.gz" "vscode-reh-linux-${ARCH}" ;;
