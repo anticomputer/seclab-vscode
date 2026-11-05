@@ -1,0 +1,56 @@
+diff --git a/src/vs/code/electron-main/app.ts b/src/vs/code/electron-main/app.ts
+index 924824f..fff157c 100644
+--- a/src/vs/code/electron-main/app.ts
++++ b/src/vs/code/electron-main/app.ts
+@@ -3,7 +3,7 @@
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
+ 
+-import { app, BrowserWindow, desktopCapturer, globalShortcut, powerMonitor, protocol, screen as electronScreen, session, Session, systemPreferences, WebFrameMain } from 'electron';
++import { app, BrowserWindow, desktopCapturer, globalShortcut, IpcMainEvent, powerMonitor, protocol, screen as electronScreen, session, Session, systemPreferences, WebFrameMain } from 'electron';
+ import { addUNCHostToAllowlist, disableUNCAccessRestrictions } from '../../base/node/unc.js';
+ import { validatedIpcMain } from '../../base/parts/ipc/electron-main/ipcMain.js';
+ import { hostname, release } from 'os';
+@@ -135,8 +135,6 @@ import { createLocalPtyChannel } from '../../platform/terminal/common/localPtyCh
+ import { ElectronPtyHostStarter } from '../../platform/terminal/electron-main/electronPtyHostStarter.js';
+ import { PtyHostService } from '../../platform/terminal/node/ptyHostService.js';
+ import { parseExternalOpenSessionLinkUri } from '../../platform/agentHost/common/openSessionLink.js';
+-import { ElectronAgentHostStarter } from '../../platform/agentHost/electron-main/electronAgentHostStarter.js';
+-import { AgentHostProcessManager } from '../../platform/agentHost/node/agentHostService.js';
+ import { NODE_REMOTE_RESOURCE_CHANNEL_NAME, NODE_REMOTE_RESOURCE_IPC_METHOD_NAME, NodeRemoteResourceResponse, NodeRemoteResourceRouter } from '../../platform/remote/common/electronRemoteResources.js';
+ import { Lazy } from '../../base/common/lazy.js';
+ import { IAuxiliaryWindowsMainService } from '../../platform/auxiliaryWindow/electron-main/auxiliaryWindows.js';
+@@ -758,15 +756,16 @@ export class CodeApplication extends Disposable {
+ 		appInstantiationService.invokeFunction(accessor => this._register(new ErrorTelemetry(accessor.get(ILogService), accessor.get(ITelemetryService))));
+ 
+ 		// Agent Host
+-		// Always instantiate the starter + manager. They are cheap (the
+-		// constructors only register an IPC listener and emitters) and the agent
+-		// host utility process is spawned lazily on the first window connection
+-		// request. The renderer only requests a connection when the runtime is
+-		// available and AI features are enabled there, which the main process
+-		// cannot fully observe.
+-		const agentHostStarter = appInstantiationService.createInstance(ElectronAgentHostStarter, { machineId, sqmId, devDeviceId });
+-		// This manager self-disposes after its lifecycle join; CodeApplication disposes before later shutdown listeners run.
+-		const agentHostProcessManager = appInstantiationService.createInstance(AgentHostProcessManager, agentHostStarter, process.platform);
++		// seclab: no local agent host. Agent runtimes run only inside tabs (invariant I8), and the
++		// desktop app ships no runtime. Every window's connection request gets a fatal refusal
++		// (the same reply the starter sends on a fatal start error); no utility process is spawned.
++		const refuseAgentHostConnection = (e: IpcMainEvent, nonce: string) => {
++			if (!e.sender.isDestroyed()) {
++				e.sender.send('vscode:createAgentHostMessageChannelResult', { nonce, error: 'The local agent host is disabled in this build; agents run inside sandboxed tabs.', fatal: true });
++			}
++		};
++		validatedIpcMain.on('vscode:createAgentHostMessageChannel', refuseAgentHostConnection);
++		this._register(toDisposable(() => validatedIpcMain.removeListener('vscode:createAgentHostMessageChannel', refuseAgentHostConnection)));
+ 
+ 		// Metered connection telemetry
+ 		appInstantiationService.invokeFunction(accessor => {
+@@ -810,7 +809,6 @@ export class CodeApplication extends Disposable {
+ 				...windows.map(window => window.ready()),
+ 				sharedProcessReady,
+ 				appInstantiationService.invokeFunction(accessor => accessor.get(ILocalPtyService).getLatency()),
+-				agentHostProcessManager.start()
+ 			]);
+ 		}
+ 
