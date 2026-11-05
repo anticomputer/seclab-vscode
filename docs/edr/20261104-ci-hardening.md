@@ -73,8 +73,9 @@ cache would therefore reach the user's machine directly. Already in place:
      build job.
    - Triggers are only `push`, `pull_request` and `workflow_dispatch`. There is
      no `pull_request_target` or `workflow_run`.
-   - `docs-check` passes `GITHUB_TOKEN` to lychee only on pushes. On a PR, the
-     PR's own scripts run with network access and get no token.
+   - `docs-check` never passes `GITHUB_TOKEN` to lychee, a third-party image
+     (superseded 2026-11-04 by the supply-chain ADR; it was previously passed on
+     pushes). GitHub rate limits are absorbed by the cache and by accepting 429.
    - The lychee cache is keyed per ref. It is restored with `cache/restore` and
      saved only on pushes, so a PR can never seed what `main` or a tag restores.
      `setup-node` runs with `package-manager-cache: false`.
