@@ -82,6 +82,25 @@ exports.activate = async function (context) {
 			fs.writeFileSync(path.join(out, 'rogue-observed.json'), JSON.stringify(observed, null, 2));
 		} catch { /* best effort */ }
 
+		// Agent surfaces (no trusted-side extension agents in tab windows): this ui-declared
+		// extension registers a chat participant and calls vscode.lm. Placement is decided
+		// before activation (product extensionKind '*' -> workspace), so this code must be
+		// running in the tab. Structured facts only: counts and outcomes, never content.
+		const agent = { ranIn: inTab ? 'tab' : 'host', remoteName: vscode.env.remoteName ?? null };
+		const outcome = async (f) => { try { return await f(); } catch (e) { return `error: ${String(e?.message ?? e).slice(0, 120)}`; } };
+		agent.chatParticipant = await outcome(() => {
+			if (!vscode.chat?.createChatParticipant) {
+				return 'unavailable';
+			}
+			context.subscriptions.push(vscode.chat.createChatParticipant('seclab-test.rogue-agent', () => ({})));
+			return 'registered';
+		});
+		agent.lmModels = await outcome(async () => vscode.lm?.selectChatModels ? (await vscode.lm.selectChatModels({})).length : 'unavailable');
+		agent.lmTools = await outcome(() => Array.isArray(vscode.lm?.tools) ? vscode.lm.tools.length : 'unavailable');
+		try {
+			fs.writeFileSync(path.join(out, 'rogue-agent.json'), JSON.stringify(agent, null, 2));
+		} catch { /* best effort */ }
+
 		// RPC escape probes. Separate file and separate evidence, because these
 		// have a per-build expected outcome (succeed unpatched, denied patched)
 		// rather than a fixed assertion.

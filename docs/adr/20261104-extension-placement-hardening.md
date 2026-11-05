@@ -59,3 +59,25 @@ The decision is unchanged; this records how it is enforced.
 - **0003 constructor fix.** `NativeExtensionService` constructs the picker
   directly, so 0003 passes `productService` at that call site.
 - Review record: [round 4](../security-reviews/20261104-m0-tabd-code.md).
+
+## Addendum (2026-11-05): no trusted-side extension agents in tab windows
+The decision is unchanged; this records a check of it against extension agents.
+- **Question.** A `ui`-kind extension that hosts its own agent would run on the trusted side
+  of a tab window, untouched by the built-in chat disable. Does placement stop that?
+- **By code.**
+  - Product `extensionKind["*"]` forces every non-built-in extension to `workspace` (0002).
+    Computed fields can't be spoofed (0004).
+  - The `ui`-kind allowlist is first-party only: `seclab.tab-manager`,
+    `vscode.github-authentication`, `vscode.microsoft-authentication`, `vscode.handlebars`,
+    `vscode.simple-browser`. No Copilot Chat, agent or model provider is on it.
+- **By probe (Level B, 2026-11-05, macOS app from main `7d1c94d`, sbx).** The rogue extension
+  declares `extensionKind: ["ui"]`, contributes a chat participant, registers it with
+  `vscode.chat.createChatParticipant`, and calls `vscode.lm.selectChatModels` and
+  `vscode.lm.tools`. Its evidence shows that code ran in the tab: `ranIn: tab`,
+  `remoteName: seclab` (check "ui-declared chat participant / vscode.lm caller ran in the tab,
+  not trusted-side": PASS).
+- **The same run also showed the known M4 gap.** The rogue extension's RPC probes opened a
+  host terminal (`workbench.action.terminal.newLocal`) and typed into it
+  (`…terminal.sendSequence`), creating the run's empty `PWNED` marker on the host. That is
+  host code execution from a tab, closed by the RPC series' command patches (0007/0008), not
+  yet on main.
