@@ -333,7 +333,14 @@ npm_fetch_cfs() {
 	if ! docker image inspect "$img" >/dev/null 2>&1; then
 		gh cfs doctor --auth >/dev/null 2>&1 || { echo "build: GitHub CFS authentication failed; run 'az login' (GitHubAzure tenant), then 'gh cfs doctor --auth'" >&2; exit 1; }
 		echo "build: fetching npm packages through GitHub CFS ($img)" >&2
-		gh cfs -- docker build -q -t "$img" -f "$ROOT/build/linux/Dockerfile.npm-fetch" "$locks" >/dev/null
+		mkdir -p "$ROOT/.work/logs"
+		# Plain progress to a log (the RUN's own messages never print the token); on failure,
+		# show only the step's output lines.
+		if ! gh cfs -- docker build --progress plain -t "$img" -f "$ROOT/build/linux/Dockerfile.npm-fetch" "$locks" > "$ROOT/.work/logs/npm-fetch.log" 2>&1; then
+			grep -E '^#[0-9]+ [0-9]+\.[0-9]+ ' "$ROOT/.work/logs/npm-fetch.log" | tail -15 >&2
+			echo "build: CFS fetch failed (full log: .work/logs/npm-fetch.log)" >&2
+			exit 1
+		fi
 	fi
 	docker run --rm --network none -v "$vol:/work" "$img" sh -c 'rm -rf /work/.npm-cache /work/.npm-locks-filled && cp -a /npm-cache /work/.npm-cache && cp -a /locks-filled /work/.npm-locks-filled && chown -R 1001:1001 /work/.npm-cache /work/.npm-locks-filled'
 }
@@ -357,7 +364,7 @@ case "${1:-help}" in
 			# Scratch dirs on a named volume: Docker Desktop's bind-mount inode numbers are not
 			# stable, which trips tabd's (dev, ino) workspace identity check.
 			unit) docker run --rm -v "$ROOT:/repo" -v seclab-test-scratch:/repo/.work/test-scratch -w /repo "$(node_image)" \
-				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts tabd/test/obs.test.ts tabd/test/writeback.test.ts tabd/test/writeback-feed.test.ts tabd/test/inspect.test.ts tabd/test/broker-control.test.ts tabd/test/broker-supervisor.test.ts build/patch-reach-imports.test.ts build/linux/nm-keep.test.ts' ;;
+				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts tabd/test/obs.test.ts tabd/test/writeback.test.ts tabd/test/writeback-feed.test.ts tabd/test/inspect.test.ts tabd/test/broker-control.test.ts tabd/test/broker-supervisor.test.ts build/patch-reach-imports.test.ts build/linux/nm-keep.test.ts build/linux/lock-fill.test.ts' ;;
 			# e2e drives sbx/docker on the host, so it runs on the host. It uses the editor's own
 			# Node when SECLAB_NODE points at it, else an already-present node (nothing is installed).
 			e2e) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/test/e2e.ts" "${1:-sbx}" ;;

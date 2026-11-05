@@ -31,18 +31,26 @@ export npm_config_cache=/work/.npm-cache
 # that cache: offline, with the same CFS registry rewrite so cache keys match, every tarball
 # checked against the lockfile's integrity. Nested installs from upstream's postinstall inherit
 # all of this. Registry signatures can't be audited through CFS, so the stamp says so.
-audit=/repo/build/npm-audit-signatures.sh
+audit=(/repo/build/npm-audit-signatures.sh)
 stamp_kind=sig1
 if [[ "${SECLAB_NPM_OFFLINE:-}" == 1 ]]; then
 	export npm_config_offline=true npm_config_replace_registry_host=npmjs \
 		npm_config_registry=https://pkgs.dev.azure.com/github-cfs/GitHubCFS/_packaging/github-cfs-oss/npm/registry/
-	audit=true
+	# Registry-origin check only: signatures can't be audited through CFS (review YY-1).
+	audit=(/repo/build/npm-audit-signatures.sh --origin-only)
 	stamp_kind=cfs1
-	# Lockfiles whose upstream entries lack `integrity` get it filled (only it; checked by
-	# lock-fill-check.mjs in the fetch) so the offline install finds them by hash. This tree is
-	# reset to pristine upstream by prepare.sh on every build; nothing is committed.
+	# Lockfiles whose upstream entries lack `integrity` get it filled in the fetch, so the offline
+	# install finds them by hash. Each filled file is checked against the pristine upstream
+	# lockfile at the same path first (lock-fill.mjs --verify; review YY-5): only `integrity` and
+	# canonical `resolved` added to entries that lacked them. This tree is reset to pristine
+	# upstream by prepare.sh on every build; nothing is committed.
 	if [[ -d /work/.npm-locks-filled ]]; then
-		cp -R /work/.npm-locks-filled/. "$SRC/"
+		while IFS= read -r -d '' f; do
+			rel="${f#/work/.npm-locks-filled/}"
+			[[ "$(basename "$rel")" == package-lock.json && -f "$SRC/$rel" && ! -L "$SRC/$rel" ]] || { echo "build: unexpected filled lockfile $rel" >&2; exit 1; }
+			node /repo/build/linux/lock-fill.mjs --verify "$SRC/$rel" "$f"
+			cp "$f" "$SRC/$rel"
+		done < <(find /work/.npm-locks-filled -type f -print0)
 	fi
 fi
 # Reinstall deps only when the lockfiles change (stamp keyed by their hash). The `sig1-` prefix
@@ -67,7 +75,7 @@ if [[ ! -f node_modules/.seclab-stamp ]] || [[ "$(cat node_modules/.seclab-stamp
 	# Registry signatures over every installed project; the stamp is written only after it passes.
 	if node /repo/build/seed-ripgrep.mjs "$SRC" && npm ci \
 		&& node /repo/build/seed-ripgrep.mjs --verify-installed "$SRC" \
-		&& "$audit" "$SRC"; then
+		&& "${audit[@]}" "$SRC"; then
 		echo "$stamp" > node_modules/.seclab-stamp
 		rm -rf "$KEEP"
 	else

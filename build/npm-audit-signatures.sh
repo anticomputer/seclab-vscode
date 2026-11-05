@@ -7,9 +7,13 @@
 # `npm ci`, so it detects rather than prevents a bad package's install script (upstream's
 # postinstall needs scripts); a failure leaves the build stamp unwritten. Fails closed on any
 # invalid or missing signature. ADR supply-chain provenance; EDR 20261105-pinned-tools.
-#   build/npm-audit-signatures.sh SRC
+#   build/npm-audit-signatures.sh [--origin-only] SRC
+# --origin-only (local builds through GitHub CFS, EDR cfs-local-builds; review YY-1): only the
+# registry-origin check; `npm audit signatures` can't run through CFS.
 set -euo pipefail
-SRC="${1:?usage: npm-audit-signatures.sh SRC}"
+origin_only=0
+if [[ "${1:-}" == --origin-only ]]; then origin_only=1; shift; fi
+SRC="${1:?usage: npm-audit-signatures.sh [--origin-only] SRC}"
 cd "$SRC"
 n=0
 while IFS= read -r -d '' lock; do
@@ -25,8 +29,15 @@ while IFS= read -r -d '' lock; do
 			if (k && !p.link && p.resolved && !p.resolved.startsWith("https://registry.npmjs.org/")) console.log(k + " " + p.resolved);
 		}' "$lock")"
 	[[ -z "$off" ]] || { echo "npm packages not from registry.npmjs.org in $lock (no registry signature to check):" >&2; printf '%s\n' "$off" | head -20 >&2; exit 1; }
+	if [[ $origin_only == 1 ]]; then
+		continue
+	fi
 	out="$(cd "$dir" && npm audit signatures 2>&1)" || { echo "npm audit signatures FAILED in $dir:" >&2; printf '%s\n' "$out" | tail -20 >&2; exit 1; }
 	printf '%s: %s\n' "$dir" "$(printf '%s\n' "$out" | grep -E 'verified (registry signature|attestation)' | tr '\n' ' ')"
 done < <(find . -name node_modules -prune -o -name package-lock.json -print0)
 [[ $n -gt 0 ]] || { echo "npm audit signatures: no installed project found under $SRC" >&2; exit 1; }
-echo "npm audit signatures: $n project(s) verified"
+if [[ $origin_only == 1 ]]; then
+	echo "npm packages: $n project(s) resolve only from registry.npmjs.org (signatures not audited: CFS)"
+else
+	echo "npm audit signatures: $n project(s) verified"
+fi

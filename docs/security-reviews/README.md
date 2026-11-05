@@ -77,6 +77,7 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-05 | [backstop derive exemption and `GET /copilot_internal/user` exception](20261105-broker-backstop-exceptions.md) | round 8. | see record |
 | 2026-11-05 | [broker model access (body policy, budgets, trusted derivation)](20261105-broker-model-access.md) | - Round 7: dcda94b, which adds: | see record |
 | 2026-11-05 | [broker WebSocket credential opt-in](20261105-broker-websocket-opt-in.md) | - Round 6: b1558e9 and 83a00cf. | see record |
+| 2026-11-05 | [local npm installs through GitHub CFS](20261105-cfs-local-builds.md) | - Round YY: 42f1b81..5dc6ee7 (EDR [cfs-local-builds](../edr/20261105-cfs-local-builds.md)) | see record |
 | 2026-11-05 | [secure agentic experiences design (agents in the tab)](20261105-secure-agentic-experiences-design.md) | round 1: 40fa71d (rebased from 9f4ded7; design as first written: [plan](../plans/secure-ag | see record |
 | 2026-11-05 | [tabs wired to their broker (plan tabd-broker-wiring)](20261105-tab-broker.md) | - Round XX (B1, OCI tabs get a real broker): 7d1c94d..325097f, plus 32c3289 (the naming ru | see record |
 <!-- index:end -->
