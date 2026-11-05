@@ -9,6 +9,8 @@ it="$here/tests/integration"
 
 echo "== docs-check"
 "$here/docs-check.sh"
+echo "== dependency provenance"
+"$here/provenance-check.sh"
 shared_lint="$here/../test/safety/fixture-lint.sh"
 if [ -x "$shared_lint" ]; then
   echo "== shared fixture-lint (broker/tests)"
