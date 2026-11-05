@@ -102,9 +102,9 @@ two parts:
 
 Every broker **runtime** dependency meets the bar.
 
-**Exception (test-only): apt versions float and the index can be replayed.**
-The workspace and harness test images run `apt-get install` from
-`http://deb.debian.org`. Signatures are verified, but:
+**Exception (test-only, user-approved 2026-11-05): apt versions float and the
+index can be replayed.** The upstream and workspace test images run
+`apt-get install` from `http://deb.debian.org`. Signatures are verified, but:
 - versions are not pinned;
 - trixie's main suite `InRelease` has no `Valid-Until`, so a mirror or network
   attacker can serve an older, still-signed index (freeze or rollback to
@@ -115,7 +115,9 @@ on `--internal` networks, against test-owned endpoints. A rolled-back package
 could at worst weaken a test, not a user's tab. Pinning through
 snapshot.debian.org was tried and rejected (see Alternatives). Revisit if a
 reliable snapshot mirror is available, or if any apt package enters a shipped
-image.
+image. Approved by the user via the coordinator on 2026-11-05 ("signed
+archive, versions not pinned"). It is registered as `apt-broker-tests` with
+bar `exception` in `deps/registry.json`.
 
 ## Alternatives considered
 - **Rebuild the broker on `python:slim` plus a hash-locked `pip install
