@@ -205,6 +205,18 @@ These are enforced three ways: `probe-safety.js` at runtime,
    `~/.aws` and `~/.config`, plus the run-scoped keychain key and any sandbox
    left running. It is not a guarantee; it is the thing that notices.
 
+8. **A run never takes the user's screen.** Launch the editor with
+   `open -g -n` (or a direct background exec), never activate or focus it, and
+   tear it down as soon as the run ends. `-g` keeps it out of the foreground;
+   `-n` forces a new instance so the run cannot attach to a window the user
+   already has open.
+
+   This is a safety rule, not a courtesy. A probe run drives a *hostile*
+   workspace, so a window that steals focus can take a keystroke meant for the
+   user's own work, and an orphaned one leaves an armed rogue extension sitting
+   on the desktop — which has already happened once, and the user found it
+   before teardown did.
+
 A safety refusal throws `SafetyError`, which is tagged so `classify()` records
 it as `ERROR`. It must never be scored as a denial: a mis-targeted probe would
 otherwise read as containment.

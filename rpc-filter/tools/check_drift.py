@@ -120,6 +120,34 @@ def build_mapping(inv: dict, policy: dict) -> dict:
         entry = (policy.get("tab_data") or {}).get(sink["surface"])
         record("data:%s" % sink["surface"],
                entry["verdict"] if entry else policy["default_verdict"], entry)
+
+    # (e) Trusted-side AI surfaces. These are not reachable *through* the
+    # filter -- the agent runs in the trusted workbench, so a tab steering it
+    # through instruction files produces a host effect with no RPC crossing the
+    # boundary. They are pinned here anyway so the gate notices upstream adding
+    # a tool, or a setting's scope changing to one a workspace can write. An
+    # inventory nothing checks is the failure this project keeps repeating.
+    ai = inv["surfaces"].get("e_trusted_ai_surfaces") or {}
+    policy_ai = policy.get("trusted_ai") or {}
+    for tool in ai.get("tools", []):
+        key = "ai-tool:%s" % (tool.get("id") or tool.get("id_expression"))
+        entry = (policy_ai.get("tools") or {}).get(key.split(":", 1)[1])
+        verdict = entry["verdict"] if entry else policy_ai.get(
+            "default_verdict", policy["default_verdict"])
+        # The reachability that matters for this surface is not the filter's
+        # verdict but whether the tool can touch the host, so it is part of the
+        # pinned value: a tool that stops declaring runsInWorkspace must
+        # resurface for review.
+        record("%s|host=%s" % (key, tool.get("may_reach_host_in_remote_window")),
+               verdict, entry)
+    for setting in ai.get("settings", []):
+        entry = (policy_ai.get("settings") or {}).get(setting["id"])
+        verdict = entry["verdict"] if entry else policy_ai.get(
+            "default_verdict", policy["default_verdict"])
+        # Scope is pinned: a setting becoming workspace-writable is a setting
+        # the tab can write, and that is the change worth stopping a build for.
+        record("ai-setting:%s|scope=%s" % (setting["id"], setting["scope"]),
+               verdict, entry)
     return mapping
 
 
