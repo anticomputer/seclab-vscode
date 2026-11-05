@@ -46,6 +46,11 @@ export interface Dep {
 	/** Open gap against the bar, if any (rendered as an audit finding). */
 	gap?: string;
 	/**
+	 * A user-approved exception covering what the bar leaves open (e.g. unpinned apt versions,
+	 * host prerequisites): its EDR, the user's approval verbatim, and exactly what it covers.
+	 */
+	exception?: { record: string; approved: string; covers: string };
+	/**
 	 * signed-verified entries: where the verification is implemented, as `<file>` plus a string
 	 * that file must contain (the verifier call). A claimed verification must exist (DD-3).
 	 */
@@ -185,8 +190,17 @@ export function validate(deps: Dep[], tree: TreePin[], exists: (p: string) => bo
 		if ((d.kind === 'host-tool') !== (d.bar === 'host-installed')) {
 			problems.push(`${at}: host tools (and only they) use the host-installed bar`);
 		}
-		if (d.bar === 'host-installed' && !d.gap) {
-			problems.push(`${at}: host-installed needs a gap (we neither pin nor verify it)`);
+		if (d.bar === 'host-installed' && !d.gap && !d.exception) {
+			problems.push(`${at}: host-installed needs a gap or a recorded exception (we neither pin it nor control it)`);
+		}
+		if (d.exception) {
+			const e = d.exception;
+			if (!/^docs\/edr\/[^/]+\.md$/.test(e.record ?? '') || !exists(e.record)) {
+				problems.push(`${at}: exception.record must be an existing EDR (docs/edr/…)`);
+			}
+			if (!e.approved?.trim() || !e.covers?.trim()) {
+				problems.push(`${at}: exception needs the user's approval (verbatim) and what it covers`);
+			}
 		}
 		// A claimed verification must be implemented in the tree (apt verifies by default) (DD-3).
 		if (d.bar === 'signed-verified' && d.kind !== 'apt-set') {
@@ -252,6 +266,15 @@ export function render(deps: Dep[]): string {
 		}
 		out.push('');
 	}
+	const excepted = deps.filter(d => d.exception);
+	if (excepted.length) {
+		out.push('## Recorded exceptions', '', '| Dependency | Covers | Approved | Record |', '|---|---|---|---|');
+		for (const d of excepted) {
+			const e = d.exception!;
+			out.push(`| ${cell(d.name)} | ${cell(e.covers)} | "${cell(e.approved)}" | [EDR](${path.posix.relative('docs', e.record)}) |`);
+		}
+		out.push('');
+	}
 	for (const k of KINDS) {
 		const list = by(k);
 		if (!list.length) {
@@ -289,6 +312,8 @@ function selfTest(): number {
 		// DD-3: a claimed verification must exist; DD-8: host tools state their gap.
 		['signed-verified needs its verifier', validate([{ ...base, bar: 'signed-verified', verifiedBy: { file: 'seclab', contains: 'verify_signed_image "$X"' } }], tree.slice(0, 1), () => true, () => 'nothing').some(p => /does not contain the verifier/.test(p))],
 		['host tool needs host-installed and a gap', validate([{ ...base, kind: 'host-tool', pins: [], bar: 'host-installed' }], [], () => true).some(p => /needs a gap/.test(p))],
+		['host tool with a recorded exception is clean', validate([{ ...base, kind: 'host-tool', pins: [], bar: 'host-installed', exception: { record: 'docs/edr/x.md', approved: 'yes', covers: 'c' } }], [], () => true).length === 0],
+		['exception must name an EDR and the approval', validate([{ ...base, exception: { record: 'docs/adr/x.md', approved: '', covers: 'c' } }], tree.slice(0, 1), () => true).length === 2],
 	];
 	const failed = cases.filter(([, ok]) => !ok).map(([n]) => n);
 	console.log(failed.length ? `deps self-test FAILED: ${failed.join(', ')}` : `deps self-test: ${cases.length} cases OK`);

@@ -26,6 +26,9 @@ usage: ./seclab <command>
   lint source                   Shipped sources: no unreviewed env/spawn sites, no dynamic loading, no test markers
   lint deps [--self-test]       Dependency register: every pin in deps/registry.json, entries complete (ADR)
   deps outdated                 Report image tags that moved and tracked tools with newer releases
+  deps host                     Check the host prerequisites (recorded exception, EDR supply-chain-exceptions):
+                                gh is byte-identical to cli/cli's attested release; Docker Desktop and sbx
+                                carry Docker, Inc.'s Developer ID signature (macOS). Read-only.
   docs write                    Regenerate the ADR/EDR/security-review indexes and docs/DEPENDENCIES.md
   docs check [--run-commands] [--online] [--paired]
                                 Docs drift gate: records, generated indexes, links, permalinks, ARCHITECTURE
@@ -84,6 +87,53 @@ verify_signed_image() {
 	mkdir -p "$(dirname "$marker")"
 	printf '%s\n' "$pairs" > "$marker"
 	echo "verify: $image: publisher signature verified ($wf_repo@$wf_ref)" >&2
+}
+
+# Host prerequisites (user-approved exception, docs/edr/20261105-supply-chain-exceptions.md).
+# gh: the installed binary must be byte-identical to the one in cli/cli's attested release
+# archive for its version (gh attestation verify, signer workflow pinned). This catches a
+# substituted or differently built gh; it can't catch a gh that lies about itself, and GitHub
+# signs these attestations with its own Sigstore instance, so no second verifier applies.
+# macOS: Docker Desktop, the docker CLI and sbx must carry a valid Developer ID signature from
+# Docker, Inc. (team 9BNSXJN65R). Read-only: downloads go to .work/deps-host, nothing installs.
+DOCKER_TEAM_ID=9BNSXJN65R
+deps_host() {
+	local gh real ver asset dir got want p bad=0
+	gh="$(command -v gh)" || { echo "deps host: gh not found" >&2; return 1; }
+	real="$(realpath "$gh")"
+	ver="$(gh --version | sed -n '1s/^gh version \([0-9][0-9.]*\).*/\1/p')"
+	case "$(uname -s)-$(uname -m)" in
+		Darwin-arm64) asset="gh_${ver}_macOS_arm64.zip" ;; Darwin-x86_64) asset="gh_${ver}_macOS_amd64.zip" ;;
+		Linux-aarch64) asset="gh_${ver}_linux_arm64.tar.gz" ;; Linux-x86_64) asset="gh_${ver}_linux_amd64.tar.gz" ;;
+		*) echo "deps host: unsupported platform" >&2; return 1 ;;
+	esac
+	dir="$ROOT/.work/deps-host/gh-$ver"
+	rm -rf "$dir" && mkdir -p "$dir/x"
+	gh release download "v$ver" -R cli/cli -p "$asset" -D "$dir" >/dev/null
+	if gh attestation verify "$dir/$asset" --repo cli/cli --signer-workflow cli/cli/.github/workflows/deployment.yml >/dev/null 2>"$dir/verify.err"; then
+		case "$asset" in *.zip) (cd "$dir/x" && unzip -q "../$asset") ;; *) tar -C "$dir/x" -xzf "$dir/$asset" ;; esac
+		want="$(shasum -a 256 "$dir"/x/*/bin/gh | cut -c1-64)"
+		got="$(shasum -a 256 "$real" | cut -c1-64)"
+		if [[ "$got" == "$want" ]]; then
+			echo "gh $ver ($real): byte-identical to cli/cli's attested release ($asset)"
+		else
+			echo "gh $ver ($real): NOT the attested release binary (sha256 $got, release $want; e.g. a Homebrew or distro build)" >&2; bad=1
+		fi
+	else
+		echo "gh $ver: the release archive's attestation did not verify ($(tail -1 "$dir/verify.err"))" >&2; bad=1
+	fi
+	if [[ "$(uname -s)" == Darwin ]]; then
+		for p in /Applications/Docker.app "$(command -v docker)" "$(command -v sbx)"; do
+			[[ -e "$p" ]] || { echo "$p: not found" >&2; bad=1; continue; }
+			real="$(realpath "$p")"
+			if codesign --verify --strict "$real" 2>/dev/null && [[ "$(codesign -dv "$real" 2>&1)" == *$'\n'"TeamIdentifier=$DOCKER_TEAM_ID"* ]]; then
+				echo "$p: valid Developer ID signature, Docker, Inc. ($DOCKER_TEAM_ID)"
+			else
+				echo "$p: signature invalid or not Docker, Inc.'s" >&2; bad=1
+			fi
+		done
+	fi
+	return "$bad"
 }
 
 docs_check() {
@@ -306,6 +356,7 @@ case "${1:-help}" in
 			# Only the three files it needs: no repo content or run state in a networked container (EE-2).
 			outdated) docker run --rm -v "$ROOT/build/deps-outdated.ts:/d/build/deps-outdated.ts:ro" -v "$ROOT/build/registry.ts:/d/build/registry.ts:ro" \
 				-v "$ROOT/deps/registry.json:/d/deps/registry.json:ro" -w /d "$(node_image)" node build/deps-outdated.ts ;;
+			host) deps_host ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	# Host hygiene: runs on the host (it drives docker/sbx/ps); dry run unless --apply.

@@ -365,7 +365,8 @@
       "verify": "apt's default signature verification (debian-archive-keyring in the base image). Versions not pinned (ADR: live security updates over byte reproducibility).",
       "bar": "signed-verified",
       "record": "docs/adr/20261104-supply-chain-provenance.md",
-      "bump": "Follows the base image and the archive."
+      "bump": "Follows the base image and the archive.",
+      "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "apt from Debian's signed archive without version pins", "covers": "Unpinned package versions from the live signed archive; replay of an older signed index (trixie InRelease has no Valid-Until)." }
     },
     {
       "id": "apt-tab",
@@ -380,7 +381,8 @@
       "verify": "apt's default signature verification. Versions not pinned (ADR).",
       "bar": "signed-verified",
       "record": "docs/adr/20261104-supply-chain-provenance.md",
-      "bump": "Follows the base image and the archive."
+      "bump": "Follows the base image and the archive.",
+      "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "apt from Debian's signed archive without version pins", "covers": "Unpinned package versions from the live signed archive; replay of an older signed index (trixie InRelease has no Valid-Until)." }
     },
     {
       "id": "apt-broker-tests",
@@ -392,11 +394,11 @@
       "pins": ["apt:broker/tests/integration/images/upstream/Dockerfile:git,openssl", "apt:broker/tests/integration/images/workspace/Dockerfile:ca-certificates,curl,dnsutils,git,python3,python3-aiohttp"],
       "used": ["broker/tests/integration/images/upstream/Dockerfile", "broker/tests/integration/images/workspace/Dockerfile"],
       "provenance": "GPG-signed InRelease; per-package SHA-256 via Packages.",
-      "verify": "apt's default signature verification (debian-archive-keyring in the digest-pinned base). Not met: versions are not pinned, and trixie's InRelease has no Valid-Until, so an older signed index can be replayed (freeze/rollback). Test-only images on --internal networks; never shipped.",
-      "bar": "exception",
+      "verify": "apt's default signature verification (debian-archive-keyring in the digest-pinned base). Versions are not pinned, and trixie's InRelease has no Valid-Until, so an older signed index can be replayed (freeze/rollback). Test-only images on --internal networks; never shipped.",
+      "bar": "signed-verified",
       "record": "docs/edr/20261104-broker-dependency-provenance.md",
       "bump": "Broker session.",
-      "gap": "Unpinned versions and replayable index; user-approved exception (2026-11-05). Revisit if a reliable snapshot mirror exists or an apt package enters a shipped image."
+      "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "apt from Debian's signed archive without version pins", "covers": "Unpinned package versions from the live signed archive; replay of an older signed index. Revisit if a reliable snapshot mirror exists or an apt package enters a shipped image." }
     },
     {
       "id": "img-falco",
@@ -477,11 +479,12 @@
       "pins": [],
       "used": ["tabd/src/drivers/sbx.ts", "sandbox/sbx/build-template.sh"],
       "provenance": "Installed by the user; the shell kit (docker.io/sbx/shell, built from DHI's Debian 13 template) is chosen by the sbx version. Whether the kit is signed is unconfirmed.",
-      "verify": "None by us beyond the sbx version; the template we save is rebuilt from it plus our pinned REH.",
+      "verify": "./seclab deps host: sbx carries a valid Developer ID signature from Docker, Inc. (team 9BNSXJN65R), codesign --verify --strict. The template we save is rebuilt from the kit plus our pinned REH.",
       "bar": "host-installed",
       "record": "docs/adr/20261104-supply-chain-provenance.md",
       "bump": "The user (host tool).",
-      "gap": "Neither pinned nor verified by us; the shell kit's own signature is unconfirmed (check sbx kit verify for Docker's kits)."
+      "gap": "The shell kit image's own signature is unconfirmed (check sbx kit verify for Docker's kits).",
+      "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "Approve: host prerequisites as recorded exceptions", "covers": "The sbx version the user installs (not pinned by us); verified as Docker's signed build." }
     },
     {
       "id": "host-docker-desktop",
@@ -493,11 +496,11 @@
       "pins": [],
       "used": ["seclab", "tabd/src/drivers/oci.ts"],
       "provenance": "Developer-ID signed, Apple-notarized app.",
-      "verify": "macOS Gatekeeper at install.",
+      "verify": "macOS Gatekeeper at install; ./seclab deps host: Docker.app and the docker CLI carry a valid Developer ID signature from Docker, Inc. (team 9BNSXJN65R).",
       "bar": "host-installed",
       "record": "docs/adr/20261104-supply-chain-provenance.md",
       "bump": "The user (host tool).",
-      "gap": "Not pinned by us; trust rests on Apple notarization of the user's install."
+      "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "Approve: host prerequisites as recorded exceptions", "covers": "The Docker Desktop version the user installs (not pinned by us); verified as Docker's signed build." }
     },
     {
       "id": "host-gh",
@@ -509,11 +512,11 @@
       "pins": [],
       "used": ["seclab"],
       "provenance": "Release binaries carry GitHub attestations; Homebrew bottle / signed apt repo / notarized pkg.",
-      "verify": "Installed by the user or preinstalled on Actions runners.",
+      "verify": "./seclab deps host: the installed gh must be byte-identical to the binary in cli/cli's release archive for its version, whose attestation verifies (gh attestation verify --repo cli/cli --signer-workflow cli/cli/.github/workflows/deployment.yml). Actions runners: preinstalled.",
       "bar": "host-installed",
       "record": "docs/adr/20261104-supply-chain-provenance.md",
       "bump": "The user (host tool).",
-      "gap": "Not pinned by us, yet gh is the trust root of fetch macos; a user can check their install with gh attestation verify against cli/cli."
+      "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "Approve: host prerequisites as recorded exceptions", "covers": "The gh version the user installs (not pinned by us). Self-verification: catches a substituted or different build, not a gh that lies about itself (GitHub's own Sigstore instance; no independent verifier)." }
     }
   ]
 }
