@@ -304,6 +304,24 @@
         "untypedTool": {
           "$ref": "#/definitions/toolType",
           "description": "The type a tool object with no `type` counts as (Anthropic custom tools)."
+        },
+        "authHeaders": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9-]{1,64}$"
+          },
+          "description": "Extra headers this provider takes a credential in. With the broker's built-in set (`Authorization`, `x-api-key`, `api-key`, `x-goog-api-key`, `Ocp-Apim-Subscription-Key`, `Cookie`, ...), every value must hold a sentinel of this tab."
+        },
+        "authQueryParams": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "description": "Extra query parameters this provider takes a credential in; same rule (built in: `key`, `api_key`, `subscription-key`, `access_token`, `token`, `sig`, ...)."
         }
       }
     },

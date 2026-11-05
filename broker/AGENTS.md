@@ -270,8 +270,17 @@ Each has a unit or integration test; grep for the phrase.
   model body: duplicate and escaped keys must be refused, not resolved.
 - Tab-chosen names (fields, tool types) go in the tagged `detail` audit key,
   never into `reason`.
-- Credential headers to model hosts must be this tab's sentinels. Sealed
-  agent-host tokens (`copilot-sealed.v1.`) are never forwarded anywhere.
+- Every credential location on a model request (`models.credential_values`:
+  built-in headers and query parameters plus the provider's `authHeaders` and
+  `authQueryParams`) must hold this tab's sentinel. Sealed agent-host tokens
+  (`copilot-sealed.v1.`) are never forwarded anywhere: not in headers, the URL
+  or the body.
+- The body walk (`_remote_content`) denies anything the provider would fetch.
+  When a provider adds a content part that takes a URL under a new key name,
+  add the key to `_URL_KEYS`. Never exempt a subtree other than tool
+  definitions and a client `tool_use.input`.
+- A derived child never outlives its grant. Every path that removes, replaces
+  or re-values a parent, or withdraws its rule, calls `_drop_children`.
 - A derived credential is bound beyond its parent only by a `derive` rule the
   controller declared, for one exact route. It is replaced structurally
   (`_derive`), fails closed, and never reads other response fields.

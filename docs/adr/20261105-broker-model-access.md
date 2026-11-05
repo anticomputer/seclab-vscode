@@ -55,11 +55,29 @@ broker denies it unless all of the following hold:
   `conversation`, and Anthropic `mcp_servers` and `container`.
 - **Tools.** Every element of a tool field has an allowed `type`: `function`
   for OpenAI and Copilot, custom (untyped) tools for Anthropic. A server-side
-  tool type passes only if a Tier C grant names it (`models.grants`).
-- **Credentials.** A credential header to a model host (`Authorization`,
-  `x-api-key`, `api-key`) must carry a sentinel of this tab. A tab-held key
-  never authenticates to a model host, so every model call is the user's,
-  budgeted and audited here.
+  tool type passes only if a Tier C grant names it (`models.grants`). A tool
+  object with a `type` key in another case (`Type`) is refused.
+- **No remote content** (security review round 7). Content parts are a relay
+  without any tool: OpenAI `image_url`, Responses `input_file.file_url`, and
+  Anthropic `source: {type: "url"}`. So the whole body is walked, apart from
+  tool definitions and the `input` of a client `tool_use`. Any URL-bearing key
+  (`url`, `image_url`, `file_url`, `server_url`, ..., matched case-insensitively
+  at any depth), and any part whose `type` is a URL source, must hold an
+  inline `data:` URI. A Tier C grant of `remote-content` lifts this for one
+  provider. URLs inside text are not fetched by the provider and pass.
+- **Strict JSON** also refuses keys that differ only in case, since
+  case-insensitive decoders would merge them.
+- **Credentials.** Every credential location on a model request must carry a
+  sentinel of this tab:
+  - built-in headers: `Authorization`, `x-api-key`, `api-key`,
+    `x-goog-api-key`, `Ocp-Apim-Subscription-Key`, `openai-api-key`,
+    `anthropic-api-key`, `x-auth-token`, `Cookie`;
+  - built-in query parameters: `key`, `api_key`, `subscription-key`,
+    `access_token`, `token`, `sig`, ...;
+  - the provider's own `authHeaders` and `authQueryParams`.
+
+  A tab-held key never authenticates to a model host, so every model call is
+  the user's, budgeted and audited here.
 
 Built-in providers (`copilot`, `openai`, `anthropic`) live in
 `data/model-providers.v1.json`. They are drafts from the public API references
@@ -75,8 +93,8 @@ and the declared tool types, never bodies. This is the single producer of
 model-call facts for observability. `health.models` reports usage.
 
 **3. Sealed agent-host tokens are never forwarded.** A request carrying a value
-with the `copilot-sealed.v1.` prefix, to any host, is denied and audited as
-`sentinel.misplaced`. Upstream seals tokens to a key the agent host
+with the `copilot-sealed.v1.` prefix, to any host, in a header, the URL or the
+body, is denied and audited as `sentinel.misplaced`. Upstream seals tokens to a key the agent host
 advertises. The AHP gate always replaces them, and this is the broker-side
 backstop (probe A25).
 
@@ -94,7 +112,12 @@ injected with that credential on exactly that route gets a 2xx response:
 - The child is bound to the rule's bindings, nothing else. The response's own
   fields (for example the Copilot `endpoints` map) are never read.
 
-An unconfirmed import can't derive. Revoking the parent drops the child.
+An unconfirmed import can't derive. A child never outlives its grant (security
+review round 7). It is dropped when:
+- the parent is revoked or removed from the policy;
+- the parent is re-imported, or given a different value (possibly another
+  account);
+- the parent's rule is withdrawn by a `policy.load`.
 
 **The amended rule** (shared with the RPC filter's `$getSession` wording): *a
 token minted for the tab reaches it only as a sentinel, bound to no more than

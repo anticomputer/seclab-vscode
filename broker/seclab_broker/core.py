@@ -30,7 +30,7 @@ from .policy import (LITERAL_PATH_RE, Binding, Inject, Policy, PolicyError, Requ
 log = logging.getLogger("seclab.broker")
 
 DECISIONS = ("allow-once", "allow-tab", "deny", "deny-new-destinations")
-REQUEST_KEYS = ("host", "method", "path", "rawAuthority")
+REQUEST_KEYS = ("host", "method", "path", "rawAuthority", "detail", "tools")
 _USER_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _PASS_RE = re.compile(r"^[A-Za-z0-9_-]{22,128}$")  # >= 128 bits as base64url
 _LABEL_RE = re.compile(r"^[A-Za-z0-9._:-]{1,96}$")
@@ -155,6 +155,8 @@ class Broker:
         # tab), so only host- and policy-supplied values and sentinels are scrubbed there;
         # upstream-derived values must not be able to erase them (review round 5 #1).
         event = {k: (self.creds.scrub(v, derived=False) if k in REQUEST_KEYS and isinstance(v, str)
+                     else [self.creds.scrub(x, derived=False) if isinstance(x, str) else x for x in v]
+                     if k in REQUEST_KEYS and isinstance(v, list)
                      else self._scrub_obj(v)) for k, v in event.items()}
         event = sanitize(event)
         tagged = untrusted_paths(event)

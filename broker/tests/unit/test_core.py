@@ -364,3 +364,34 @@ def test_unconfirmed_import_cannot_derive():
     from seclab_broker.policy import parse_derive
     with pytest.raises(PolicyError):
         s.import_credential("imp", CANARY, None, [], [], None, {"kind": "host"}, parse_derive([DERIVE]))
+
+
+def test_r7_derived_children_never_outlive_their_parent():
+    from seclab_broker.policy import DeriveRule, parse_derive
+    rule = DeriveRule.from_json(DERIVE)
+    spec = {"id": "c1", "bind": {"host": "api.example.com", "path": "/**", "methods": ["GET"]},
+            "inject": {"header": "Authorization", "fmt": "token {value}"}, "derive": [DERIVE]}
+    s = CredentialStore()
+    s.apply_policy(Policy.from_json({"version": 1, "credentials": [spec]}).credentials)
+    s.provide("c1", CANARY, None)
+    s.derive_trusted(s.get("c1"), rule, "minted-copilot-value-0001")
+    # The rule is withdrawn: the child goes; the parent stays.
+    s.apply_policy(Policy.from_json({"version": 1, "credentials": [dict(spec, derive=[])]}).credentials)
+    assert s.get("c1.copilot") is None and s.get("c1") is not None
+    # The parent is withdrawn.
+    s.apply_policy(Policy.from_json({"version": 1, "credentials": [spec]}).credentials)
+    s.provide("c1", CANARY, None)
+    s.derive_trusted(s.get("c1"), rule, "minted-copilot-value-0002")
+    s.apply_policy([])
+    assert s.get("c1.copilot") is None and not s.find_real(b"minted-copilot-value-0002")
+    # A re-import or a different value (another account) drops the child too.
+    bind = Policy.from_json({"version": 1, "credentials": [spec]}).credentials[0].bindings
+    for again in ("import", "provide"):
+        s.import_credential("imp", CANARY, None, list(bind), [], None, {"kind": "host"}, parse_derive([DERIVE]))
+        s.derive_trusted(s.get("imp"), rule, "minted-copilot-value-0003")
+        if again == "import":
+            s.import_credential("imp", "another-canary-value-123", None, list(bind), [], None, {"kind": "host"},
+                                parse_derive([DERIVE]))
+        else:
+            s.provide("imp", "another-canary-value-456", None)
+        assert s.get("imp.copilot") is None

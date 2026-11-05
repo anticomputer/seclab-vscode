@@ -110,6 +110,8 @@ A model API and what may be sent to it. Every list is an allowlist.
 | `toolFields` | `string`[] |  | Top-level fields holding arrays of tool objects. (max items `8`; default `["tools"]`) |
 | `toolTypes` | [`toolType`](broker-policy.md#tooltype)[] |  | Tool `type` values allowed (client-side tools only, for example `function`). (max items `64`) |
 | `untypedTool` | [`toolType`](broker-policy.md#tooltype) |  | The type a tool object with no `type` counts as (Anthropic custom tools). |
+| `authHeaders` | `string`[] |  | Extra headers this provider takes a credential in. With the broker's built-in set (`Authorization`, `x-api-key`, `api-key`, `x-goog-api-key`, `Ocp-Apim-Subscription-Key`, `Cookie`, ...), every value must hold a sentinel of this tab. (max items `16`) |
+| `authQueryParams` | `string`[] |  | Extra query parameters this provider takes a credential in; same rule (built in: `key`, `api_key`, `subscription-key`, `access_token`, `token`, `sig`, ...). (max items `16`) |
 
 <a id="host"></a>
 ### `host`

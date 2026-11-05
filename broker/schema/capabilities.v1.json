@@ -188,6 +188,8 @@
       "tests": [
         "unit:test_a22_smuggling_shapes_are_denied",
         "unit:test_body_policy_denials",
+        "unit:test_r7_remote_content_the_provider_would_fetch_is_denied",
+        "unit:test_r7_every_credential_location_is_found",
         "it:test_a22_relay_shapes_denied_before_upstream",
         "it:test_model_host_credentials_are_sentinels_only"
       ]
@@ -215,6 +217,7 @@
       },
       "tests": [
         "unit:test_derive_trusted_widens_only_to_the_rule_and_keeps_its_sentinel",
+        "unit:test_r7_derived_children_never_outlive_their_parent",
         "it:test_trusted_derivation_binds_child_where_the_controller_said",
         "it:test_trusted_derivation_fails_closed"
       ]

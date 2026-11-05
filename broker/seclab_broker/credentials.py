@@ -181,6 +181,7 @@ class CredentialStore:
                 existing.bindings = list(spec.bindings)
                 existing.provider = spec.provider
                 existing.derive_rules = spec.derive
+                self._drop_children(spec.id, keep_rules=frozenset(r.id for r in spec.derive))
         self._rebuild()
 
     def import_credential(self, cid: str, value: str, sentinel: str | None,
@@ -197,6 +198,9 @@ class CredentialStore:
         existing = self._by_id.get(cid)
         if existing is not None and existing.origin == "policy":
             raise PolicyError(f"credential id {cid!r} is defined by the policy")
+        if existing is not None:
+            # A re-import may be another account: nothing minted from the old value survives.
+            self._drop_children(cid)
         cred = Credential(
             id=cid, sentinel=sentinel or (existing.sentinel if existing else new_sentinel()),
             bindings=list(bindings), origin="import", confirmed=bool(bindings),
@@ -252,7 +256,10 @@ class CredentialStore:
         cred = self._by_id.get(cid)
         if cred is None:
             raise KeyError(cid)
-        cred.value = check_value(value)
+        value = check_value(value)
+        if cred.value is not None and cred.value != value:
+            self._drop_children(cid)  # a different value may be another account
+        cred.value = value
         cred.expires_at = expires_at
         self._rebuild()
         return cred
@@ -286,6 +293,17 @@ class CredentialStore:
         cred = self._by_id.pop(cid, None)
         if cred is not None:
             cred.value = None
+        self._drop_children(cid)
+
+    def _drop_children(self, cid: str, keep_rules: frozenset[str] | None = None) -> None:
+        """Drop credentials derived from `cid`. With `keep_rules`, keep only children of
+        trusted derivation rules still declared (`derive:<id>`); pattern-derived children
+        are kept then, since they are bound to the parent's own bindings."""
+        for child in [c for c in self._by_id.values() if c.parent_id == cid]:
+            rule = child.source.get("rule", "")
+            if keep_rules is not None and (not rule.startswith("derive:") or rule[7:] in keep_rules):
+                continue
+            self._drop(child.id)
 
     # ---- lookup ----------------------------------------------------------
     def get(self, cid: str) -> Credential | None:

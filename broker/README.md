@@ -102,7 +102,8 @@ Decision records:
   [20261104-broker-folder-open-loaders](../docs/security-reviews/20261104-broker-folder-open-loaders.md),
   [20261104-broker-dependency-provenance](../docs/security-reviews/20261104-broker-dependency-provenance.md),
   [20261104-broker-prompt-injection](../docs/security-reviews/20261104-broker-prompt-injection.md),
-  [20261105-broker-websocket-opt-in](../docs/security-reviews/20261105-broker-websocket-opt-in.md).
+  [20261105-broker-websocket-opt-in](../docs/security-reviews/20261105-broker-websocket-opt-in.md),
+  [20261105-broker-model-access](../docs/security-reviews/20261105-broker-model-access.md).
 
 **Prompts and audit are data, not instructions.** Hosts, paths, methods,
 origin labels, header names and import-source names in approvals and audit
@@ -169,9 +170,9 @@ check fails if a flag has no row, or if a named test doesn't exist.
 | HTTP/2 | `http2` | yes | yes: tested through sbx | yes: per sbx docs | `test_http2_end_to_end`, sbx: `HTTP/2 through broker` |
 | WebSocket (handshake injection, frame scanning) | `websocket` | yes | yes | yes: pass-through only, per sbx docs | `test_websocket_handshake_injection_and_message_scanning` |
 | Credentials into WebSocket upgrades only for bindings with `websocket: true` (default off); messages scanned as a stream | `websocketOptIn` | yes | yes | **no** | `test_binding_websocket_opt_in`, `test_protocol_switch_on_credentialed_request_needs_approval`, `test_websocket_credential_needs_binding_opt_in`, `test_websocket_token_split_across_messages` |
-| Model-host body policy: declared providers only, endpoint allowlist, no upgrades, strict JSON, field and tool-type allowlists, sentinel-only credentials (fails closed) | `modelBodyPolicy` | yes | yes | **no** | `test_a22_smuggling_shapes_are_denied`, `test_body_policy_denials`, `test_a22_relay_shapes_denied_before_upstream`, `test_model_host_credentials_are_sentinels_only` |
+| Model-host body policy: declared providers only, endpoint allowlist, no upgrades, strict JSON, field and tool-type allowlists, sentinel-only credentials (fails closed) | `modelBodyPolicy` | yes | yes | **no** | `test_a22_smuggling_shapes_are_denied`, `test_body_policy_denials`, `test_r7_remote_content_the_provider_would_fetch_is_denied`, `test_r7_every_credential_location_is_found`, `test_a22_relay_shapes_denied_before_upstream`, `test_model_host_credentials_are_sentinels_only` |
 | Per-tab model budget (requests, bytes); over budget denied, never prompted; `model.call` audit | `modelBudget` | yes | yes | **no** | `test_budget_and_policy_wiring`, `test_model_call_allowed_audited_and_budgeted` |
-| Controller-declared token derivation: exact route, structural JSON field, child bound to declared bindings, fails closed | `trustedDerivation` | yes | yes | **no** | `test_derive_trusted_widens_only_to_the_rule_and_keeps_its_sentinel`, `test_trusted_derivation_binds_child_where_the_controller_said`, `test_trusted_derivation_fails_closed` |
+| Controller-declared token derivation: exact route, structural JSON field, child bound to declared bindings, fails closed | `trustedDerivation` | yes | yes | **no** | `test_derive_trusted_widens_only_to_the_rule_and_keeps_its_sentinel`, `test_r7_derived_children_never_outlive_their_parent`, `test_trusted_derivation_binds_child_where_the_controller_said`, `test_trusted_derivation_fails_closed` |
 | DNS control |  | the tab has no resolver for external names: Docker's embedded DNS does not forward on `--internal` | sbx's DNS proxy blocks lookups its policy does not allow | sbx DNS proxy | `test_no_dns_exfiltration_via_embedded_resolver`, sbx: `tab cannot resolve broker-side names` |
 | Runtime-mutable policy | `runtimeMutablePolicy` | yes: `policy.update`, `allow-tab` | yes | yes: `sbx policy allow` | `test_prompt_allow_tab_persists_for_tab` |
 | Per-tab proxy auth | `proxyAuth` | yes | yes: required: the loopback port is reachable by any local process | **no**: n/a | `test_proxy_auth_required_and_never_prompts`, sbx: `wrong proxy password -> 407` |
