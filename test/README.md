@@ -45,3 +45,23 @@
   anywhere else.
 - **The clipboard canary is opt-in** (`SECLAB_CANARY_CLIPBOARD=1`), because it
   overwrites your clipboard.
+
+## Demo screenshots
+README screenshots come from the real app, an isolated profile, demo workspaces
+and fake canaries only (`test/observability/demo.ts prepare|teardown`).
+- **Never put a demo window over the user's work.**
+  - Launch in the background with `open -g -n -a <app> --args …`. Don't use
+    `bin/code`: it hands off to the main process, which calls
+    `app.focus({steal:true})`.
+  - Never `activate` the app or raise the window.
+  - If the window still comes to the front, stop and report it. Don't work
+    around it by raising the window.
+- **Capture the editor window only:** `screencapture -o -x -l <windowid>`. It
+  captures a covered or off-screen window's own contents. The calling app needs
+  macOS Screen Recording permission (otherwise: "could not create image from
+  window").
+- **Check the image** shows only demo content, then close the window and run the
+  teardown gate straight away.
+- **First-run UI:** the demo profile turns off the onboarding modal
+  (`workbench.welcomePage.experimentalOnboarding`), AI features and the
+  secondary side bar, so they don't cover the view.
