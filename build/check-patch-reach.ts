@@ -133,8 +133,28 @@ for (const p of series) {
 		}
 	}
 }
+// patches/unreachable.json: { "<target>": ["src/...ts", ...] } that target must NOT reach (I8: no
+// agent-host process code in the desktop app). A listed file that no longer exists fails too, so
+// an upstream rename can't silently retire the rule.
+const unreachFile = path.join(patchesDir, 'unreachable.json');
+const forbidden: Record<string, string[]> = fs.existsSync(unreachFile) ? JSON.parse(fs.readFileSync(unreachFile, 'utf8')) : {};
+let forbiddenChecked = 0;
+for (const [t, files] of Object.entries(forbidden)) {
+	if (!reached[t]) {
+		fail(`patches/unreachable.json names unknown target ${t}`);
+	}
+	for (const rel of files) {
+		const f = path.join(src, rel);
+		forbiddenChecked++;
+		if (!fs.existsSync(f)) {
+			problems.push(`patches/unreachable.json: ${rel} does not exist in the patched tree (renamed upstream? update the list)`);
+		} else if (reached[t].has(f)) {
+			problems.push(`patches/unreachable.json: ${rel} must not be reachable from ${t}, but is`);
+		}
+	}
+}
 for (const pr of problems) {
 	console.error(pr);
 }
-console.log(problems.length ? `check-patch-reach: ${problems.length} problem(s)` : `check-patch-reach: ok (${checked} patched files; ${reached.desktop.size} desktop, ${reached.server.size} server modules)`);
+console.log(problems.length ? `check-patch-reach: ${problems.length} problem(s)` : `check-patch-reach: ok (${checked} patched files, ${forbiddenChecked} forbidden; ${reached.desktop.size} desktop, ${reached.server.size} server modules)`);
 process.exit(problems.length ? 1 : 0);

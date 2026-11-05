@@ -27,3 +27,17 @@ index 0256e9e..6a3c4ae 100644
  			.pipe(filter(getCopilotExcludeFilter(platform, arch)))
  			.pipe(filter(getCopilotTgrepExcludeFilter(platform, arch)))
  			.pipe(filter(getRipgrepExcludeFilter(platform, arch)))
+diff --git a/build/next/index.ts b/build/next/index.ts
+index e2f5663..801a017 100644
+--- a/build/next/index.ts
++++ b/build/next/index.ts
+@@ -108,7 +108,8 @@ const desktopEntryPoints = [
+ 	'vs/platform/files/node/watcher/watcherMain',
+ 	'vs/platform/localTranscription/node/localTranscriptionMain',
+ 	'vs/platform/terminal/node/ptyHostMain',
+-	'vs/platform/agentHost/node/agentHostMain',
++	// seclab: no agent-host process in the desktop app (I8; patch 0013 never starts one). The
++	// REH keeps it through serverEntryPoints, because tabs run agents.
+ 	'vs/platform/agentHost/node/diffWorkerMain',
+ 	'vs/workbench/api/node/extensionHostProcess',
+ ];

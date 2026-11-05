@@ -115,6 +115,23 @@ test('check-patch-reach: a web-only file fails and a desktop file passes, in bot
 		const bad = runReach('--- vscode.orig/src/vs/shared.ts\n+++ vscode/src/vs/shared.ts\n' + hunk);
 		assert.equal(bad.status, 1);
 		assert.match(bad.stderr, /unreadable patch header/);
+		// unreachable.json: desktop reaching a forbidden module fails; a missing listed file fails.
+		write('tree/src/vs/agent.ts', 'export {};\n');
+		const ok = header('git', 'src/vs/shared.ts') + hunk;
+		const pdir = path.join(scratch, 'patches');
+		const runWith = (forbid: object) => {
+			runReach(ok);
+			fs.writeFileSync(path.join(pdir, 'unreachable.json'), JSON.stringify(forbid));
+			return spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-patch-reach.ts'), path.join(scratch, 'tree'), '--patches', pdir], { encoding: 'utf8' });
+		};
+		assert.equal(runWith({ desktop: ['src/vs/agent.ts'] }).status, 0, 'an unreached forbidden module passes');
+		write('tree/src/vs/desk.ts', `import './shared.js';\nimport './agent.js';\n`);
+		const reachedForbidden = runWith({ desktop: ['src/vs/agent.ts'] });
+		assert.equal(reachedForbidden.status, 1);
+		assert.match(reachedForbidden.stderr, /agent\.ts must not be reachable from desktop/);
+		const missing = runWith({ desktop: ['src/vs/renamed.ts'] });
+		assert.equal(missing.status, 1);
+		assert.match(missing.stderr, /renamed\.ts does not exist/);
 	} finally {
 		fs.rmSync(scratch, { recursive: true, force: true });
 	}

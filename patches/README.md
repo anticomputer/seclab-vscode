@@ -40,12 +40,18 @@ Current queue:
   focus, which is why it isn't a test hook in the sense below. (0005-0011 are reserved for
   the RPC filter series.)
 - `0013-no-local-agent-host.patch`: Electron main creates no agent-host starter or process
-  manager; every window's connection request gets a fatal refusal, so no agent runtime ever
+  manager, and every window's connection request gets a fatal refusal. The shared process
+  registers no SSH, dev-container, WSL or tunnel agent-host provider. So no agent runtime ever
   runs on the host (invariant I8, [EDR](../docs/edr/20261105-no-agent-runtime-on-host.md)).
-- `0014-build-desktop-without-copilot-runtime.patch`: build only; the desktop app packages
-  no `@github/copilot-sdk` or platform runtime (`runtime.node`). The REH keeps it for tabs.
-  `build/check-release.sh --desktop` fails a desktop build that has one (same EDR).
+- `0014-build-desktop-without-copilot-runtime.patch`: build only. The desktop app packages
+  no `@github/copilot-sdk` or platform runtime (`runtime.node`), and no `agentHostMain`
+  bundle. The REH keeps both for tabs. `build/check-release.sh --desktop` fails a desktop
+  build that contains a runtime, and `unreachable.json` (below) fails one that reaches
+  agent-host code (same EDR).
   0015 onwards: the secure-agentic-experiences series.
+
+`reach.json` requires targets per patch. `unreachable.json` lists modules a target must not
+reach. Both are enforced by `build/check-patch-reach.ts` in the required `patch-build` check.
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
