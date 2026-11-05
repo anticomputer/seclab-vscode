@@ -1,14 +1,16 @@
 // seclab tab logs: read a tab's observability log (ADR tab-observability §4). Reads the JSONL
 // segments the supervisor writes; it never talks to a running supervisor (no listener exists).
-//   node tabd/tools/tab-logs.ts [-f] [--format text|json|falco] [--min PRIORITY]
+//   node tabd/tools/tab-logs.ts [-f] [--format text|json|falco|llm] [--min PRIORITY]
 //                               [--state-dir DIR | --user-data-dir DIR] <tabId|all>
-// --format falco prints Falco-compatible JSON lines for a SIEM forwarder (file-sink exporter).
+// --format falco prints Falco-compatible JSON lines for a SIEM forwarder (file-sink exporter);
+// --format llm fences tab-influenced text as data for an LLM (tabd/src/obs/llm.ts).
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { parseArgs } from 'node:util';
 import { listSegments, segName } from '../src/obs/hub.ts';
+import { LlmRenderer } from '../src/obs/llm.ts';
 import { isTabId, PRIORITIES, priorityRank, toFalco, type ObsEvent, type Priority } from '../src/obs/schema.ts';
 import { safeText } from '../src/obs/text.ts';
 
@@ -28,10 +30,10 @@ function die(msg: string): never {
 }
 const target = positionals[0];
 if (!target || (target !== 'all' && !isTabId(target))) {
-	die('usage: seclab tab logs [-f] [--format text|json|falco] [--min PRIORITY] [--state-dir DIR | --user-data-dir DIR] <tabId|all>');
+	die('usage: seclab tab logs [-f] [--format text|json|falco|llm] [--min PRIORITY] [--state-dir DIR | --user-data-dir DIR] <tabId|all>');
 }
-if (!['text', 'json', 'falco'].includes(values.format!)) {
-	die('--format must be text, json or falco');
+if (!['text', 'json', 'falco', 'llm'].includes(values.format!)) {
+	die('--format must be text, json, falco or llm');
 }
 if (!(PRIORITIES as readonly string[]).includes(values.min!)) {
 	die(`--min must be one of ${PRIORITIES.join(', ')}`);
@@ -45,12 +47,20 @@ if (!fs.existsSync(eventsDir)) {
 }
 
 const BADGE: Record<string, string> = { 'trusted': 'TRUSTED', 'host-observed': 'HOST-OBS', 'tab-vm-root': 'TAB-ROOT' };
+// LLM-facing output: tab-influenced text fenced as data (tabd/src/obs/llm.ts).
+const llm = new LlmRenderer();
+if (values.format === 'llm') {
+	process.stdout.write(`${llm.header()}\n\n`);
+}
 function render(e: ObsEvent): string {
 	if (values.format === 'json') {
 		return JSON.stringify(e);
 	}
 	if (values.format === 'falco') {
 		return JSON.stringify(toFalco(e));
+	}
+	if (values.format === 'llm') {
+		return llm.render(e);
 	}
 	// The supervisor already escaped every field; escape again for the terminal anyway.
 	const who = e.proc?.pid !== undefined ? ` pid=${e.proc.pid}` : '';

@@ -34,6 +34,7 @@ export const RULES: readonly RuleInfo[] = [
 	{ id: 'proc.ptrace-attach', priority: 'warning', desc: 'A process attached to another with ptrace.' },
 	{ id: 'sensor.tamper', priority: 'critical', desc: 'A signal or ptrace aimed at the sensor or init.' },
 	{ id: 'beacon.periodic', priority: 'warning', desc: 'Repeated connection attempts to one destination at a regular interval (C2 beacon pattern).' },
+	{ id: 'suspicious-content', priority: 'informational', desc: 'Text aimed at an AI agent (prompt injection: "ignore previous instructions", role markers, chat-template or tool-call syntax) in a command line, file name, path or hostname. Informational: the stream is data, never instructions.' },
 ];
 const RULE = new Map(RULES.map(r => [r.id, r]));
 
@@ -48,6 +49,23 @@ const CRED_PATH = /\/(?:\.ssh\/|\.aws\/|\.git-credentials$|\.config\/gh\/|\.dock
 const HOST_EXEC = /(?:^|\/)(?:\.git\/hooks\/[^/]+|\.git\/config|\.gitmodules|\.envrc|\.env|\.vscode\/(?:tasks|settings|launch|extensions|mcp)\.json|[^/]+\.code-workspace|package\.json|\.npmrc|\.yarnrc(?:\.yml)?|Makefile|GNUmakefile|\.husky\/[^/]+|\.github\/workflows\/[^/]+|\.devcontainer\/[^/]+|\.pre-commit-config\.yaml|pyproject\.toml|setup\.py|setup\.cfg|build\.rs|Cargo\.toml|gradlew|gradle\/wrapper\/[^/]+|\.mvn\/[^/]+|\.tool-versions|\.nvmrc|\.python-version|eslint\.config\.[cm]?[jt]s|\.eslintrc(?:\.[cm]?js)?|prettier\.config\.[cm]?js|\.prettierrc\.[cm]?js|jest\.config\.[cm]?[jt]s|vite\.config\.[cm]?[jt]s|tsconfig\.json)$/;
 const LOOPBACK = /^(?:127\.|::1$|::ffff:127\.|localhost$)/;
 const RUNTIME_SOCKET = /(?:docker|containerd|podman|crio)[^/]*\.sock$/;
+// Instruction-like text aimed at an LLM reading the stream. Matched on already-escaped text, so
+// separators may appear as \x0a etc.; kept deliberately broad (the rule is informational).
+const PROMPT_INJECTION = [
+	/\b(?:ignore|disregard|forget|override)\b[\s\S]{0,40}\b(?:previous|prior|above|earlier|all|system|your)\b[\s\S]{0,40}\b(?:instructions?|prompts?|rules|guidelines|messages?)/i,
+	/(?:^|[\s"'\\(>:;,|])(?:system|assistant|developer)\s*:/i,
+	/<\|?\s*(?:im_start|im_end|system|endoftext|eot_id|start_header_id)\s*\|?>/i,
+	/\[\/?INST\]|<<\/?SYS>>/,
+	/<\/?\s*(?:tool_call|tool_use|function_calls?|invoke|system|instructions?)\b/i,
+	/"(?:function_call|tool_calls?)"\s*:/i,
+	/\byou are (?:now )?(?:an?|the) (?:ai|assistant|agent|llm|language model|chatbot)\b/i,
+	/\b(?:new|updated|real) (?:system )?instructions?\s*:/i,
+	/\b(?:as an ai|dear (?:ai|assistant|agent|llm)|note to (?:the )?(?:ai|assistant|agent|llm))\b/i,
+];
+
+export function looksLikePromptInjection(s: string): boolean {
+	return PROMPT_INJECTION.some(re => re.test(s));
+}
 
 export function isCredentialPath(p: string): boolean {
 	return CRED_PATH.test(p);
@@ -164,6 +182,30 @@ export class Detector {
 				break;
 		}
 		const integrity: Integrity = weakestIntegrity([e.integrity]);
+		// Prompt injection aimed at whoever (or whatever) reads this stream.
+		const texts: Array<[string, string]> = [];
+		if (e.proc?.argv?.length) {
+			texts.push(['command line', e.proc.argv.join(' ')]);
+		}
+		if (e.proc?.exe) {
+			texts.push(['program', e.proc.exe]);
+		}
+		if (e.file?.path) {
+			texts.push(['path', e.file.path]);
+		}
+		if (e.net?.addr) {
+			texts.push(['address', e.net.addr]);
+		}
+		for (const k of ['from', 'host', 'paths']) {
+			const v = e.detail?.[k];
+			if (typeof v === 'string') {
+				texts.push([k, v]);
+			}
+		}
+		const hit = texts.find(([, t]) => looksLikePromptInjection(t));
+		if (hit) {
+			hits.push({ id: 'suspicious-content', summary: `instruction-like text aimed at an AI agent in a ${hit[0]} (shown as data only)` });
+		}
 		return hits.map(h => ({
 			source: 'detector', integrity, class: 'detection', rule: h.id,
 			priority: h.priority ?? RULE.get(h.id)!.priority, summary: h.summary,
