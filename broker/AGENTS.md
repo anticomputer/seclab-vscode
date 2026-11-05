@@ -38,7 +38,8 @@ file has been run. Anything not yet built is marked **TODO**.
 | `schema/capabilities.v1.json` | Capability matrix notes, sbx-native column, and the tests behind each row |
 | `tools/docs.py`, `docs-check.sh` | Doc generator and drift checker (`--write`, `--run-commands`) |
 | `tools/fixture_lint.py` | Fixtures may only target test-owned endpoints; no token-shaped literals |
-| `tools/supplychain.py`, `tools/pin_check.py` | Strict requirements and Dockerfile parsers shared by both gates; every external base image pinned by digest; the one canonical hash-checked, binary-only pip command; every image and pin present in `deps.json`; `--self-test` covers known bypass forms (offline, run by docs-check) |
+| `tools/supplychain.py`, `tools/pin_check.py` | Strict requirements and Dockerfile parsers shared by both gates; every external base image pinned by digest; the one canonical wheels-fetch and hash-checked, binary-only, offline install form; every image and pin present in `deps.json`; `--self-test` covers known bypass forms (offline, run by docs-check) |
+| `tools/pip-fetch.py`, `tools/pybuild.sh` | Fetch hash-locked wheels in a token-holding build stage (CFS locally via `gh cfs`, public PyPI in CI; the build arg `PIP_SOURCE` picks, never the secret's presence); `pybuild` is the only way to build images with Python packages |
 | `deps.json` | Dependency register: tier, source, expected publisher for every image, Python pin, system package set and host tool |
 | `provenance-check.sh`, `tools/provenance.py`, `tools/verify-images.sh`, `tools/attest/` | Online provenance gate: PyPI-served hashes, PEP 740 publishers, sigstore verification bound to the pinned sha256 and the registered workflow (hash-locked verifier image), signed image provenance (`gh attestation verify`; `verify-images.sh --download` is the only token-using step, verification uses the downloaded `--bundle` tokenlessly) |
 | `examples/` | Example policies, validated by unit tests |
@@ -66,6 +67,15 @@ broker/docs-check.sh
   pytest for the integration suite.
 - The unit image `seclab-broker-unit:test` exists after `test.sh` has run;
   `docker run` it, as in the block above, to rerun only the unit tests.
+- **Every image with Python packages is built through `tools/pybuild.sh`**, with
+  `broker/` as the build context. Locally that runs `gh cfs -- docker build
+  --build-arg PIP_SOURCE=cfs` (public PyPI is blocked on managed endpoints), so
+  `gh` with the `cfs` extension and an authenticated `az` login are needed. CI
+  sets `CI`, which selects `public`. Override either way with
+  `SECLAB_PIP_SOURCE=cfs|public`. Never call `docker build` directly for these
+  images, and never fall back to public PyPI locally.
+- A pin younger than CFS's 7-day hold fails locally until the hold ends. That
+  is expected; see the provenance EDR.
 
 Regenerate generated doc sections after changing the protocol, schema, data,
 examples or capabilities:

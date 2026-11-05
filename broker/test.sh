@@ -6,6 +6,7 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 it="$here/tests/integration"
+. "$here/tools/pybuild.sh"
 
 echo "== docs-check"
 "$here/docs-check.sh"
@@ -18,14 +19,14 @@ if [ -x "$shared_lint" ]; then
 else
   echo "== shared fixture-lint: not in this tree yet; broker-scoped fixture_lint.py ran above"
 fi
-docker build -q --target broker -t seclab-broker:test "$here" >/dev/null
-docker build -q --target unit -t seclab-broker-unit:test "$here" >/dev/null
+pybuild -q --target broker -t seclab-broker:test "$here" >/dev/null
+pybuild -q --target unit -t seclab-broker-unit:test "$here" >/dev/null
 echo "== unit tests"
 docker run --rm --network none seclab-broker-unit:test
 
-docker build -q -t seclab-broker-it-upstream:test "$it/images/upstream" >/dev/null
+pybuild -q -t seclab-broker-it-upstream:test -f "$it/images/upstream/Dockerfile" "$here" >/dev/null
 docker build -q -t seclab-broker-it-workspace:test "$it/images/workspace" >/dev/null
-docker build -q -t seclab-broker-it-harness:test -f "$it/images/harness/Dockerfile" "$here" >/dev/null
+pybuild -q -t seclab-broker-it-harness:test -f "$it/images/harness/Dockerfile" "$here" >/dev/null
 echo "== integration tests"
 exec docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
