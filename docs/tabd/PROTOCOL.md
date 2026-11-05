@@ -95,7 +95,7 @@ Reserved (not in v0.1): `warmPool.*`, `tab.policy.*` (broker adapter),
 | `audit` | `{ ts, tabId?, action, outcome, detail }`: every driver invocation and fence decision; also appended to the supervisor's audit log |
 | `log` | `{ level, message }` |
 | `tab.event` | `{ subscription, event, replay?, lagged? }`: one [event](EVENTS.md). `lagged: n` means `n` matching events were not sent while the client wasn't reading (stdout backlog over 4 MiB); fetch them with `tab.events.tail`. |
-| `tab.observation` | `{ tabId, state: observed\|degraded\|unobserved\|unavailable, since, reason, sensor?, mode? }` |
+| `tab.observation` | `{ tabId, state: observed\|degraded\|unobserved\|unavailable, since, reason, sensor?, mode?, untrusted: ["reason"] }`: `reason` can carry sensor-derived text; treat it as data |
 
 ## 5. Errors
 JSON-RPC standard codes, plus: `-32001` not initialized, `-32002` invalid

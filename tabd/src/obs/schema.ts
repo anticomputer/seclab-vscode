@@ -116,7 +116,9 @@ export class EventError extends Error { }
  * count as trusted only when they also have vocabulary shape; anything else is tagged untrusted.
  */
 const VOCAB_DETAIL_KEYS = new Set(['action', 'outcome', 'status', 'mode', 'sensor', 'stream', 'change', 'kind', 'decision', 'verdict', 'surface', 'call', 'request', 'signal', 'result', 'proxyType', 'userDecision']);
-const VOCAB_RE = /^[A-Za-z0-9_.:-]{1,32}$/;
+// Our own vocabulary (lowercase words, dotted actions), errno, signal and ptrace names: no ':'
+// or spaces, so role markers like "system:" never pass (review PI-L2).
+const VOCAB_RE = /^(?:[a-z0-9][a-z0-9._-]{0,31}|E[A-Z0-9]{1,15}|SIG[A-Z0-9]{1,10}|PTRACE_[A-Z_]{1,20}|[0-9]{1,5})$/;
 
 /** Which text fields of a normalised draft may carry tab-influenced content. */
 export function untrustedFields(d: Omit<EventDraft, 'untrusted'>): string[] {
@@ -150,7 +152,8 @@ export function untrustedFields(d: Omit<EventDraft, 'untrusted'>): string[] {
 	return out;
 }
 
-const DETAIL_KEY_RE = /^[a-zA-Z][a-zA-Z0-9_.]{0,31}$/;
+// No '.' in detail keys: field paths ("detail.<key>") must stay unambiguous (review PI-L1).
+const DETAIL_KEY_RE = /^[a-zA-Z][a-zA-Z0-9_]{0,31}$/;
 const RULE_RE = /^[a-z][a-z0-9.-]{0,63}$/;
 const REF_RE = /^(?:rpc|cmd|chan):[\x21-\x7e]{1,1024}$/;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;

@@ -57,7 +57,8 @@ export class ObsGlue {
 			dir: o.eventsDir,
 			persist: tabId => o.owns(tabId),
 			onEvent: e => this.fanout(e),
-			onObservation: (tabId, ob) => o.notify('tab.observation', { tabId, ...ob } as unknown as Json),
+			// `reason` can carry sensor-derived text: tagged like event fields.
+			onObservation: (tabId, ob) => o.notify('tab.observation', { tabId, ...ob, untrusted: ['reason'] } as unknown as Json),
 		});
 		this.falco = o.hostSensor?.(this.hub);
 	}
