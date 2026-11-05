@@ -56,6 +56,7 @@ Same rules as ADRs:
 | 2026-11-04 | [OCI tabs on a native Linux engine run as the workspace owner](20261104-oci-tab-user-on-linux.md) | accepted |
 | 2026-11-04 | [Ship exactly the reviewed patch series; check release artifacts for test hooks](20261104-patch-series.md) | accepted |
 | 2026-11-04 | [Probe payloads must be inert against the host](20261104-probe-safety.md) | accepted |
+| 2026-11-04 | [Prompt-injection hygiene for agents that read hostile output](20261104-prompt-injection-hygiene.md) | accepted |
 | 2026-11-04 | [REH transport over `sbx exec -i` stdio works end to end](20261104-reh-transport-e2e.md) | accepted |
 | 2026-11-04 | [REH transport over `exec -i` stdio (viability spike)](20261104-reh-transport-exec-stdio.md) | superseded-by [20261104-reh-transport-e2e](20261104-reh-transport-e2e.md) |
 | 2026-11-04 | [Remove the built-in Copilot extension from our build (one build patch)](20261104-remove-builtin-copilot.md) | accepted |
