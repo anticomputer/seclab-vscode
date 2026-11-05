@@ -1,0 +1,14 @@
+{
+	"about": "Parts of the inert observability demo loader. test/observability/loader.ts joins them in memory and writes the result inside the tab only; no host file ever holds the assembled loader (EDR fixture-safety, addendum; EDR tab-observability-sensor-spike, addendum).",
+	"fetchTool": ["cu", "rl"],
+	"interpreter": ["no", "de"],
+	"inline": ["ev", "al(String(1))"],
+	"rehInterpreter": ["/opt/seclab-reh/", "no", "de"],
+	"beaconHost": "192.0.2.10",
+	"honeypots": [
+		[".config/goo", "gle-chrome/Default/Lo", "gin Da", "ta"],
+		[".config/so", "lana/id", ".json"]
+	],
+	"beacons": 4,
+	"intervalSeconds": 1.5
+}

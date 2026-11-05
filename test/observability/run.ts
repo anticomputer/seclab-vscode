@@ -12,15 +12,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import type { ObsEvent } from '../../tabd/src/obs/schema.ts';
-import { exitedOrTimeout, materialiseFixture, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
+import { exitedOrTimeout, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
 import { lockRun } from '../harness.ts';
+import { honeypots, LOADER_IN_TAB, loaderScript, TASK_COMMAND, writeStdinTo } from './loader.ts';
 
 const driver = process.argv[2] ?? 'sbx';
 if (driver !== 'sbx' && driver !== 'oci') {
 	throw new Error('usage: run.ts [sbx|oci]');
 }
 const repo = path.resolve(import.meta.dirname, '../..');
-const fixture = path.join(import.meta.dirname, 'fixtures', 'loader-workspace');
 const work = path.join(repo, '.work', 'observability', driver);
 const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
 lockRun(path.join(repo, '.work', 'observability-lock', driver));
@@ -31,7 +31,9 @@ fs.rmSync(work, { recursive: true, force: true });
 writeSnapshot(work);
 writeManifest(work, { driver, stateDirs: [path.join(work, 'state')] });
 const ws = path.join(work, 'tabs', 'loader');
-materialiseFixture(work, fixture, ws);
+// Host side: only the arming file. The loader itself is written inside the tab (loader.ts).
+writeManifest(work, { workspaces: [ws] }); // teardown deletes it
+fs.mkdirSync(path.join(ws, '.seclab'), { recursive: true });
 const marker = path.join(ws, '.envrc');
 fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${ARM}\nrun=${work}\nuntil=${Math.floor(Date.now() / 1000) + 1800}\nmarker=${marker}\n`);
 
@@ -91,14 +93,18 @@ await client.request('tab.events.subscribe', { tabId });
 await client.request('tab.ensureRunning', { tabId });
 console.log(`tab ${tabId} running`);
 
-const inTab = (cmd: string, user = driver === 'sbx' ? ['-u', 'agent'] : []) => spawnSync(runtime, ['exec', ...user, '-w', ws, sandbox, '/opt/seclab/bin/seclab-tab-env', 'sh', '-c', cmd], { encoding: 'utf8', timeout: 120_000 });
+const inTab = (cmd: string, user = driver === 'sbx' ? ['-u', 'agent'] : [], input?: string) => spawnSync(runtime, ['exec', ...(input === undefined ? [] : ['-i']), ...user, '-w', ws, sandbox, '/opt/seclab/bin/seclab-tab-env', 'sh', '-c', cmd], { encoding: 'utf8', timeout: 120_000, input });
 if (driver === 'oci') {
-	// No collector-seeded honeypots under OCI: seed the two the loader reads (fake values).
-	inTab('mkdir -p "$HOME/.config/solana" "$HOME/.config/google-chrome/Default" && echo seclabcanary_wallet > "$HOME/.config/solana/id.json" && echo seclabcanary_browser > "$HOME/.config/google-chrome/Default/Login Data"');
+	// No collector-seeded honeypots under OCI: seed the ones the loader reads (fake values).
+	for (const h of honeypots()) {
+		inTab(writeStdinTo(`"$HOME/${h}"`), undefined, 'seclabcanary_obs_honeypot\n');
+	}
 }
+const installed = inTab(writeStdinTo(`"$HOME/${LOADER_IN_TAB}"`), undefined, loaderScript());
+check('loader written inside the tab (never a host file)', installed.status === 0 && !fs.existsSync(path.join(ws, '.seclab', 'loader.sh')), installed.stderr);
 
-// 1. The folder-open task, exactly as tasks.json declares it.
-const task = JSON.parse(fs.readFileSync(path.join(ws, '.vscode', 'tasks.json'), 'utf8')).tasks[0].command as string;
+// 1. The folder-open task's command, as the demo's in-tab tasks.json declares it.
+const task = TASK_COMMAND;
 console.log(`trigger: ${task}`);
 inTab(`sleep 1; ${task}`);
 const rules = () => new Set(events.filter(e => e.class === 'detection').map(e => e.rule));
@@ -114,7 +120,7 @@ for (const r of want) {
 	}
 }
 const execs = events.filter(e => e.class === 'process.exec').map(e => (e.proc?.argv ?? []).join(' '));
-check('exec lineage: the task shell runs the loader', execs.some(a => a.includes('.seclab/loader.sh')), execs.slice(0, 8).join(' | '));
+check('exec lineage: the task shell runs the loader', execs.some(a => a.includes(LOADER_IN_TAB)), execs.slice(0, 8).join(' | '));
 const execNames = new Set(events.filter(ev => ev.class === 'process.exec').map(ev => path.basename(ev.proc?.exe ?? '')));
 check('exec: nohup, curl and node seen', ['nohup', 'curl', 'node'].every(n => execNames.has(n)), [...execNames].join(' '));
 const dropped = events.find(e => e.class === 'workspace.change' && e.file?.path === marker);
