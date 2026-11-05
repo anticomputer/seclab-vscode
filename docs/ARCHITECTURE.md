@@ -19,6 +19,7 @@
 - **RPC capability filter.** Default-deny on the RPC channel from a sandboxed host back into the trusted workbench, keyed on the wire `sid`, with a guard on the channels the client serves to the server and a capability taint so anything a tab command triggers is filtered too ([ADR](adr/20261104-rpc-filter-enforcement-points.md), [taint](adr/20261104-tab-command-taint.md), [design](RPC-LOCKDOWN.md)). The patches land after their security-review round; the policy table, inventory and gates are in `rpc-filter/`.
 - **Folder-open loaders.** Config files that are executable code are defused before a folder is opened ([ADR](adr/20261104-defeat-folder-open-loaders.md)).
 - **Open items.**
+  - Agents in tabs: the design is accepted ([ADR](adr/20261105-agents-run-in-the-tab.md), [plan](plans/secure-agentic-experiences.md)). Each tab's own agent host runs the agent, and the trusted editor only renders it through a gated connection. Agent runtimes are a hash-pinned exception that runs only inside tabs ([EDR](edr/20261105-agent-runtimes-exception.md)). Until Tier A ships, built-in chat, agent tools and agent-host connections are off in tab windows. The first spike is in progress.
   - Main-process routing is proposed ([ADR](adr/20261104-route-folder-opens-in-main.md)); a high-severity residual remains.
   - The REH server→client IPC filter (`download` channel, pty commands) is a critical item owned by M4 ([review](security-reviews/20261104-tabd-protocol-design.md)).
   - Under sbx, the broker runs as a separate Docker Desktop container, not a pod sidecar.

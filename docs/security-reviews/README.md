@@ -76,5 +76,5 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-05 | [backstop derive exemption and `GET /copilot_internal/user` exception](20261105-broker-backstop-exceptions.md) | round 8. | see record |
 | 2026-11-05 | [broker model access (body policy, budgets, trusted derivation)](20261105-broker-model-access.md) | - Round 7: dcda94b, which adds: | see record |
 | 2026-11-05 | [broker WebSocket credential opt-in](20261105-broker-websocket-opt-in.md) | - Round 6: b1558e9 and 83a00cf. | see record |
-| 2026-11-05 | [secure agentic experiences design (agents in the tab)](20261105-secure-agentic-experiences-design.md) | round 1: 9f4ded7 (design as first written: [plan](../plans/secure-agentic-experiences.md), | see record |
+| 2026-11-05 | [secure agentic experiences design (agents in the tab)](20261105-secure-agentic-experiences-design.md) | round 1: f62a485 (rebased from 9f4ded7; design as first written: [plan](../plans/secure-ag | see record |
 <!-- index:end -->
