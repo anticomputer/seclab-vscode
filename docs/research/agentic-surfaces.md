@@ -366,9 +366,11 @@ the envelope **[inference]**.
 
 ### 12.4 Host files through `resource*` requests
 
-The agent host can ask the client to read, write, delete, move, copy, list and watch
-files, and the client serves the raw URI from the host
+The agent host can ask the client to read, write, delete, move, copy and list files, and
+the client serves the raw URI from the host
 ([agentHostProtocolClient.ts#L3335-L3365](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts#L3335-L3365)).
+`createResourceWatch` is declared as a server-to-client request but the client has no
+handler for it and answers "Unknown method" (found by the class (f) inventory draft).
 Access is decided by grants in `chat.agentHost.localFilePermissions`, read with
 `getGlobalConfigurationValue`
 ([agentHostResourceService.ts#L542](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/agentHost/common/agentHostResourceService.ts#L542)),
