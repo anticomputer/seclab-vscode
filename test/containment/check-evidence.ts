@@ -168,6 +168,12 @@ if (mode === 'prepare') {
 	const hostFile = path.join(ws, '.seclab-evidence', 'rogue-extension-host.json');
 	const host = fs.existsSync(hostFile) ? JSON.parse(fs.readFileSync(hostFile, 'utf8')) : undefined;
 	checks.push({ vector: 'rogue-extension', name: 'ui-kind rogue extension was forced into the tab (remoteName=seclab)', ok: host?.remoteName === 'seclab' && host?.seclabTab === '1', detail: JSON.stringify(host) });
+	// No trusted-side extension agents in tab windows: the same ui-declared extension
+	// registered a chat participant and called vscode.lm, and that code ran in the tab.
+	const agentFile = path.join(ws, '.seclab-evidence', 'rogue-agent.json');
+	const agent = fs.existsSync(agentFile) ? JSON.parse(fs.readFileSync(agentFile, 'utf8')) as Record<string, unknown> : undefined;
+	checks.push({ vector: 'rogue-extension', name: 'ui-declared chat participant / vscode.lm caller ran in the tab, not trusted-side', ok: agent?.ranIn === 'tab' && agent?.remoteName === 'seclab',
+		detail: JSON.stringify(agent ?? 'no rogue-agent.json') });
 	checks.push({ vector: 'host', name: 'canary intact', ok: fs.readFileSync(canary, 'utf8') === 'HOST-SECRET-CANARY\n', detail: '' });
 	// Shared canary harness, editor side: nothing the rogue extension observed through the
 	// API (env, configuration, clipboard, auth sessions, secrets) nor any evidence may

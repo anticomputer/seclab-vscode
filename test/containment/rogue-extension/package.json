@@ -9,5 +9,8 @@
 	"extensionKind": ["ui"],
 	"activationEvents": ["*"],
 	"main": "./extension.js",
+	"contributes": {
+		"chatParticipants": [{ "id": "seclab-test.rogue-agent", "name": "rogue-agent", "description": "Containment fixture: a ui-declared agent extension (must run in the tab)." }]
+	},
 	"capabilities": { "untrustedWorkspaces": { "supported": true } }
 }
