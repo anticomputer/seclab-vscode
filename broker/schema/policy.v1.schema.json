@@ -2,6 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/anticomputer/seclab-vscode/broker/schema/policy.v1.schema.json",
   "title": "seclab-vscode broker policy, version 1",
+  "x-revision": 2,
   "description": "Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, schemes, methods and paths, never engine internals. Default is deny.",
   "type": "object",
   "additionalProperties": false,
@@ -11,7 +12,7 @@
   "properties": {
     "version": {
       "const": 1,
-      "description": "Schema major version. Additive optional fields keep 1."
+      "description": "Schema major version. Additive optional fields keep 1. Behaviour changes within a major version bump the schema's `x-revision`, reported by `broker.hello` as `policySchema.revision` and listed in the protocol changelog."
     },
     "tabId": {
       "$ref": "#/definitions/id",
@@ -292,6 +293,11 @@
         "inject": {
           "$ref": "#/definitions/inject",
           "description": "Overrides the credential's `inject`."
+        },
+        "websocket": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also inject into a WebSocket upgrade matching this binding. Off by default: without it, a request carrying an `Upgrade` header (or an HTTP/2 extended CONNECT) never gets this credential and is refused with 403. Token scanning of WebSocket server messages is per message plus a window of earlier ones, so a token an upstream streams across structured messages can reach the tab whole; opt in only for upstreams you trust not to mint tokens on that connection. Revision 2."
         }
       }
     },

@@ -20,7 +20,7 @@ API_CRED = {
         {"host": "api.example.test", "path": "/mint-form", "methods": ["POST"]},
         {"host": "api.example.test", "path": "/user/keys", "methods": ["POST"]},
         {"host": "api.example.test", "path": "/session", "methods": ["GET"]},
-        {"host": "ws.example.test", "path": "/ws", "methods": ["GET"]},
+        {"host": "ws.example.test", "path": "/ws", "methods": ["GET"], "websocket": True},
     ],
 }
 GIT_CRED = {
@@ -277,6 +277,33 @@ def test_websocket_token_split_across_messages(pod, ctl):
     assert len(got) == 1 and canary in got[0]
     ctl.wait_note("audit.event", lambda e: e["type"] == "response.blocked"
                   and "split across" in e["reason"], since=mark, timeout=10)
+
+
+def test_websocket_credential_needs_binding_opt_in(pod, ctl):
+    """Revision 2: a binding without `websocket: true` never injects into an upgrade, and an
+    unconfirmed import is never offered for one by prompt. Both fail closed with 403."""
+    no_ws = dict(API_CRED, bind=[dict(b, websocket=False) for b in API_CRED["bind"]])
+    s = setup(pod, ctl, creds=(no_ws,))["api"]
+    mark = ctl.mark()
+    p = pod.ws("python3 /usr/local/bin/wsclient.py wss://ws.example.test/ws hello",
+               env={"WS_AUTH": "Bearer " + s})
+    assert p.returncode != 0 and b"403" in p.stderr
+    denied = ctl.wait_note("audit.event", lambda e: e["type"] == "request.denied"
+                           and "websocket: true" in e["reason"], since=mark, timeout=10)
+    assert denied["host"] == "ws.example.test"
+    assert not [e for e in ctl.notes_since(mark, "audit.event") if e["type"] == "credential.injected"]
+    # The same binding still injects into a plain (non-upgrade) request.
+    r = pod.curl("https://api.example.test/echo/repos/o/r", "-H", f"Authorization: Bearer {s}")
+    assert r.code == 200 and r.json()["auth_sha256"] == sha("Bearer " + pod.canaries["api"])
+    # Unconfirmed import: no prompt for an upgrade.
+    pod.load({"allow": ALLOW, "prompt": {"timeoutSeconds": 5}})
+    ctl.call("tab.event", {"kind": "userAction"})
+    imp = ctl.call("credential.import", {"id": "wsimp", "value": pod.canaries["api"]})
+    mark = ctl.mark()
+    p = pod.ws("python3 /usr/local/bin/wsclient.py wss://ws.example.test/ws hello",
+               env={"WS_AUTH": "Bearer " + imp["sentinel"]})
+    assert p.returncode != 0 and b"403" in p.stderr
+    assert ctl.notes_since(mark, "approval.requested") == []
 
 
 def test_websocket_handshake_injection_and_message_scanning(pod, ctl):

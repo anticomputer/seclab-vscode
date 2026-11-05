@@ -267,7 +267,16 @@ def gen_risky() -> str:
             + "| Host | Category | Note |\n|---|---|---|\n" + "\n".join(rows) + "\n")
 
 
+def gen_changelog() -> str:
+    out = []
+    for e in protocol.definition()["changelog"]:
+        out.append(f"**{e['version']}** ({e['date']}; policy schema revision {e['policySchemaRevision']})\n\n"
+                   + "".join(f"- {c}\n" for c in e["changes"]))
+    return "\n".join(out)
+
+
 GENERATORS = {
+    "protocol-changelog": gen_changelog,
     "protocol-errors": gen_errors, "protocol-methods": gen_methods,
     "protocol-notifications": gen_notifications, "protocol-types": gen_types,
     "protocol-audit-types": gen_audit_types, "capability-matrix": gen_capability_matrix,
@@ -368,6 +377,14 @@ def cross_checks(errors: list[str]) -> None:
         errors.append(f"error codes differ: code {sorted(codes)} vs protocol {sorted(protocol.error_codes())}")
     if d["protocol"] != seclab_broker.PROTOCOL:
         errors.append("protocol.v1.json 'protocol' differs from seclab_broker.PROTOCOL")
+    latest = (d.get("changelog") or [{}])[0]
+    if latest.get("version") != seclab_broker.VERSION:
+        errors.append(f"protocol changelog's latest version {latest.get('version')!r} != seclab_broker.VERSION "
+                      f"{seclab_broker.VERSION!r} (add a changelog entry)")
+    revisions = {latest.get("policySchemaRevision"), seclab_broker.POLICY_SCHEMA_REVISION,
+                 policy_schema().get("x-revision")}
+    if len(revisions) != 1:
+        errors.append(f"policy schema revision differs: changelog, POLICY_SCHEMA_REVISION and x-revision are {revisions}")
     for name, m in d["methods"].items():
         for ex in m.get("examples", []):
             for kind in ("params", "result"):

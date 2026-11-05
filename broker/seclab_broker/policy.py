@@ -323,6 +323,8 @@ class Binding:
     methods: tuple[str, ...]
     ports: tuple[int, ...] = (443,)
     inject: Inject | None = None
+    # Injection into upgraded connections (WebSocket) only when the binding opts in.
+    websocket: bool = False
     # "approval": its host, path, methods and inject came from a request the tab made.
     source: str = field(default="policy", compare=False)
 
@@ -336,16 +338,23 @@ class Binding:
         if inject is None:
             raise PolicyError("binding has no inject and the credential has no default inject")
         return cls(host=_parse_host_pattern(obj["host"]), path=obj["path"], methods=methods,
-                   ports=tuple(obj.get("ports", [443])), inject=inject)
+                   ports=tuple(obj.get("ports", [443])), inject=inject,
+                   websocket=obj.get("websocket", False) is True)
 
     def to_json(self) -> dict:
         out = {"host": self.host.text, "path": self.path, "methods": list(self.methods),
                "ports": list(self.ports)}
         if self.inject:
             out["inject"] = self.inject.to_json()
+        if self.websocket:
+            out["websocket"] = True
         return out
 
-    def matches(self, req: RequestView) -> bool:
+    def matches(self, req: RequestView, upgrade: str | None = None) -> bool:
+        """`upgrade`: the request's `Upgrade` token, if any. An upgraded connection gets a
+        credential only from a binding with `websocket: true`, and only for WebSocket."""
+        if upgrade is not None and not (self.websocket and upgrade == "websocket"):
+            return False
         # Credentials are never injected over cleartext.
         return (req.scheme == "https" and req.port in self.ports
                 and self.host.matches(req.host) and req.method in self.methods

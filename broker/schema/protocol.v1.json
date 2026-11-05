@@ -1,6 +1,26 @@
 {
   "$comment": "Single source of truth for the broker control protocol. The broker validates every request's params against it (core.dispatch); unit tests validate every result, and the integration harness validates all live traffic. docs/broker-protocol.md sections 'Errors', 'Methods' and 'Notifications' are generated from this file by broker/tools/docs.py. Definitions from policy.v1.schema.json are merged in at load time, so '#/definitions/rule', '#/definitions/binding' and '#/definitions/policy' resolve.",
   "protocol": "seclab-broker/1",
+  "changelog": [
+    {
+      "version": "0.2.0",
+      "policySchemaRevision": 2,
+      "date": "2026-11-05",
+      "changes": [
+        "**Behaviour change:** credentials are injected into a WebSocket upgrade only when the matching binding has `websocket: true` (new optional binding field, default `false`). A credentialed upgrade without the opt-in is refused with `403`, and an unconfirmed imported credential is never offered for an upgrade by prompt. Why: a minted token streamed across structured WebSocket messages can't be reliably recognised, so it could reach the tab whole. Supervisors that relied on credentialed WebSockets must add `websocket: true` to those bindings.",
+        "`broker.hello` returns `policySchema` (`version`, `revision`).",
+        "Capability `websocketOptIn`."
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "policySchemaRevision": 1,
+      "date": "2026-11-04",
+      "changes": [
+        "Initial protocol."
+      ]
+    }
+  ],
   "errors": [
     {
       "code": -32700,
@@ -55,6 +75,7 @@
           "tabId",
           "engine",
           "engineVersion",
+          "policySchema",
           "capabilities"
         ],
         "properties": {
@@ -80,6 +101,23 @@
           "engineVersion": {
             "type": "string"
           },
+          "policySchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "revision"
+            ],
+            "properties": {
+              "version": {
+                "type": "integer"
+              },
+              "revision": {
+                "type": "integer"
+              }
+            },
+            "description": "Policy schema major version and revision this broker enforces. A revision changes behaviour within a major version; see the changelog."
+          },
           "capabilities": {
             "type": "object",
             "additionalProperties": {
@@ -94,10 +132,14 @@
           "params": {},
           "result": {
             "protocol": "seclab-broker/1",
-            "version": "0.1.0",
+            "version": "0.2.0",
             "tabId": "tab-1",
             "engine": "mitmproxy",
             "engineVersion": "12.3.1",
+            "policySchema": {
+              "version": 1,
+              "revision": 2
+            },
             "capabilities": {
               "holdAndResume": true
             }

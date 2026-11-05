@@ -103,6 +103,25 @@ def test_binding_never_matches_cleartext_and_needs_explicit_methods():
         Binding.from_json({"host": "api.example.com", "path": "/**", "methods": ["*"], "inject": inj})
 
 
+def test_binding_websocket_opt_in():
+    """Revision 2: upgrades get a credential only from a binding with websocket: true, and
+    only for the WebSocket protocol."""
+    inj = {"header": "Authorization", "fmt": "Bearer {value}"}
+    plain = Binding.from_json({"host": "api.example.com", "path": "/ws", "methods": ["GET"], "inject": inj})
+    ws = Binding.from_json({"host": "api.example.com", "path": "/ws", "methods": ["GET"], "inject": inj,
+                            "websocket": True})
+    r = req(path="/ws")
+    assert plain.matches(r) and ws.matches(r)
+    assert not plain.matches(r, "websocket") and ws.matches(r, "websocket")
+    for other in ("h2c", "connect", "websocket, h2c", ""):
+        assert not ws.matches(r, other)
+    assert "websocket" not in plain.to_json() and ws.to_json()["websocket"] is True
+    assert Binding.from_json(ws.to_json()).websocket
+    with pytest.raises(PolicyError):
+        Binding.from_json({"host": "api.example.com", "path": "/ws", "methods": ["GET"], "inject": inj,
+                           "websocket": "yes"})
+
+
 @pytest.mark.parametrize("header", ["Host", "content-length", "Proxy-Authorization", "Proxy-Foo", "Transfer-Encoding"])
 def test_inject_forbidden_headers(header):
     with pytest.raises(PolicyError):

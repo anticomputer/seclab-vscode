@@ -166,6 +166,7 @@ check fails if a flag has no row, or if a named test doesn't exist.
 | Per-tab CA, private key only in the broker | `perTabCA` | yes | yes | **no**: sbx's own CA | `test_broker_process_custody` |
 | HTTP/2 | `http2` | yes | yes: tested through sbx | yes: per sbx docs | `test_http2_end_to_end`, sbx: `HTTP/2 through broker` |
 | WebSocket (handshake injection, frame scanning) | `websocket` | yes | yes | yes: pass-through only, per sbx docs | `test_websocket_handshake_injection_and_message_scanning` |
+| Credentials into WebSocket upgrades only for bindings with `websocket: true` (default off); messages scanned as a stream | `websocketOptIn` | yes | yes | **no** | `test_binding_websocket_opt_in`, `test_websocket_credential_needs_binding_opt_in`, `test_websocket_token_split_across_messages` |
 | DNS control |  | the tab has no resolver for external names: Docker's embedded DNS does not forward on `--internal` | sbx's DNS proxy blocks lookups its policy does not allow | sbx DNS proxy | `test_no_dns_exfiltration_via_embedded_resolver`, sbx: `tab cannot resolve broker-side names` |
 | Runtime-mutable policy | `runtimeMutablePolicy` | yes: `policy.update`, `allow-tab` | yes | yes: `sbx policy allow` | `test_prompt_allow_tab_persists_for_tab` |
 | Per-tab proxy auth | `proxyAuth` | yes | yes: required: the loopback port is reachable by any local process | **no**: n/a | `test_proxy_auth_required_and_never_prompts`, sbx: `wrong proxy password -> 407` |
@@ -229,9 +230,11 @@ check fails if a flag has no row, or if a named test doesn't exist.
 - **Endpoints outside the backstop.** Out of scope: a tab with repo write
   access pushing a workflow that exfiltrates repository secrets via Actions.
   This needs server-side controls (token scopes).
-- **Tokens split across WebSocket messages.** Server messages are scanned
-  with an 8 KiB window of what the tab already received. A token recognisable
-  only after its last byte went out (a terminator in the next message) is
-  detected and the connection silenced, but not prevented. Structured deltas
-  are not reassembled. A per-binding WebSocket opt-in would bound this by
-  route; that is proposed, not built (see the ADR no real secret enters a tab).
+- **Tokens split across WebSocket messages (opt-in bindings only).**
+  Credentials go into WebSocket upgrades only for bindings with
+  `websocket: true` (policy schema revision 2). On those connections, server
+  messages are scanned with an 8 KiB window of what the tab already received.
+  A token recognisable only after its last byte went out (a terminator in the
+  next message) is detected and the connection silenced, but not prevented.
+  Structured deltas are not reassembled. See the ADR no real secret enters a
+  tab.
