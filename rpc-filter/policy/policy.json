@@ -827,5 +827,13 @@
 				"credential-access"
 			]
 		}
+	},
+	"trusted_ai": {
+		"note": "Surface (e). Not reachable through the RPC filter: the chat agent runs in the trusted workbench, so when it reads a tab's files and invokes a trusted-side tool, no RPC crosses the sandbox boundary. The enforcement point is a separate patch that refuses the built-in chat and agent tools in a window whose remote authority is seclab+*, in code, so no user, workspace or remote setting can re-enable them. Entries here exist so the drift gate pins the surface: a new tool, or a setting whose scope becomes workspace-writable, has to be looked at.",
+		"default_verdict": "deny",
+		"decision": "v0 disables VS Code's built-in chat and agent tools in sandboxed windows. The measured reason, not a precaution: of 54 tool definitions upstream at this SHA, not one statically declares runsInWorkspace: true, so an 'allow only tools that run in the workspace' policy would have an empty allow set. There is no safe subset to keep in v0. Moving chat into the tab is the real answer and is planned separately (docs/plans/chat-in-tabs.md).",
+		"why_the_filter_cannot_help": "The tab's contribution is data, not a call. .github/copilot-instructions.md and .github/instructions/ are located in workspace root folders and auto-attached when applyTo is '**', and the generated system prompt instructs the model to follow them. The tab writes a file; the trusted-side agent obeys it; the host effect follows from a tool the agent chose. No RPC method was invoked by the tab at any point.",
+		"tools": {},
+		"settings": {}
 	}
 }

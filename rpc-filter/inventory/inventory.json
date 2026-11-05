@@ -40811,6 +40811,1018 @@
         }
       ],
       "upstream_site_count": 474
+    },
+    "e_trusted_ai_surfaces": {
+      "may_reach_host_count": 54,
+      "may_reach_host_undeclared_count": 38,
+      "note": "Tools a trusted-side agent can invoke, and the agent settings a workspace might influence. The RPC filter does not cover this surface: the agent runs in the trusted workbench, so a tab that steers it through instruction files causes a host effect without any RPC crossing the sandbox boundary. 'may_reach_host' is conservative -- only an explicit runsInWorkspace: true clears a tool -- because assuming the other way loses containment.",
+      "setting_count": 67,
+      "settings": [
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.agent.collapseCompletedResponses",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L686",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.agent.maxRequests",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L1181",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts",
+          "id": "chat.agentHost.forwardSSHAgent",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts#L43",
+          "scope": "APPLICATION",
+          "workspace_writable": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.agentSessionProjection.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L494",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
+          "id": "chat.agentSessions.autoDeleteMarkedAsDoneMergedSessionsAfterDays",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L127",
+          "scope": "APPLICATION",
+          "workspace_writable": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
+          "id": "chat.agentSessions.autoMarkAsDoneMergedSessionsAfterDays",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L118",
+          "scope": "APPLICATION",
+          "workspace_writable": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.agentSessions.migrateLegacyCopilotCli",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L500",
+          "scope": "APPLICATION",
+          "workspace_writable": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.agentSessions.openInEditor",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L529",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.agentSessions.showExternal",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L513",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.agentsControl.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L476",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
+          "id": "chat.agentsHandoffTip.delaySeconds",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L77",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
+          "id": "chat.agentsParallelWorkBanner.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L49",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
+          "id": "chat.agentsWindowBanner.developerMode",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L27",
+          "scope": "APPLICATION",
+          "workspace_writable": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
+          "id": "chat.agentsWindowBanner.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L19",
+          "scope": "APPLICATION",
+          "workspace_writable": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
+          "id": "chat.agentsWindowBanner.revealCurrentSession",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L34",
+          "scope": "APPLICATION",
+          "workspace_writable": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.artifacts.rules.byMemoryFilePath",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L906",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.autoReply",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L738",
+          "scope": "APPLICATION_MACHINE",
+          "workspace_writable": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.autopilot.advanced.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L746",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
+          "id": "chat.copilotHarnessIntroduction.mode",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L57",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.defaultConfiguration",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L770",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.defaultModel",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L819",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostEnablementService.ts",
+          "id": "chat.defaultToCopilotHarness",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostEnablementService.ts#L78",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.detectParticipant.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L691",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.editing.autoAcceptDelay",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L575",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.editing.confirmEditRequestRemoval",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L582",
+          "scope": "APPLICATION",
+          "workspace_writable": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.editing.confirmEditRequestRetry",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L588",
+          "scope": "APPLICATION",
+          "workspace_writable": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.editing.explainChanges.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L594",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.editing.openChangedFileInDiffEditor",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L608",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.editing.revealNextChangeOnResolve",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L603",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.editor.fontFamily",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L455",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.editor.fontSize",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L450",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.editor.fontWeight",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L460",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.editor.lineHeight",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L471",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostEnablementService.ts",
+          "id": "chat.editor.localAgent.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostEnablementService.ts#L85",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/platform/agentHost/common/agentHostEnablementService.ts",
+          "id": "chat.editor.preferCopilotHarness",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostEnablementService.ts#L60",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.editor.wordWrap",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L465",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.editor.workingSet.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L613",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.editorAssociations",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L718",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.experimental.detectParticipant.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L639",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.experimental.incrementalRendering.animationStyle",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L658",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.experimental.incrementalRendering.buffering",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L674",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.experimental.incrementalRendering.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L645",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
+          "id": "chat.experimental.openInAgentsWindow.transferDraft",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L42",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.experimental.richLinks.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L651",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.experimental.stickyScroll.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L696",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.experimentalModePermissionsPicker",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L336",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.experimentalSessionsWindowOverride",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L329",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.fontFamily",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L349",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.fontSize",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L342",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
+          "id": "chat.harnessSwitchFeedbackSurvey.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L70",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.implicitContext.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L540",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.implicitContext.includeActiveEditor",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L568",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.implicitContext.suggestedContext",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L562",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.inlineAttachments.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L712",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.inlineReferences.style",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L702",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.newSession.defaultMode",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L1215",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.notifyWindowOnConfirmation",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L727",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.permissions.default",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L752",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.saveBeforeSend",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L535",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.sessionSync.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L867",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.sessionSync.excludeRepositories",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L888",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts",
+          "id": "chat.sshRemoteAgentHostCommand",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts#L29",
+          "scope": "APPLICATION",
+          "workspace_writable": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.tips.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L620",
+          "scope": "APPLICATION",
+          "workspace_writable": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.tools.global.autoApprove",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L844",
+          "scope": "APPLICATION_MACHINE",
+          "workspace_writable": false
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.unifiedAgentsBar.enabled",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L488",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
+          "id": "chat.upvoteAnimation",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L626",
+          "scope": "WINDOW",
+          "workspace_writable": true
+        },
+        {
+          "file": "src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts",
+          "id": "chat.wslRemoteAgentHostCommand",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/remoteAgentHost/browser/remoteAgentHost.contribution.ts#L36",
+          "scope": "APPLICATION",
+          "workspace_writable": false
+        }
+      ],
+      "tool_count": 54,
+      "tools": [
+        {
+          "declared_in_layer": "electron-browser",
+          "file": "src/vs/workbench/contrib/browserView/electron-browser/tools/clickBrowserTool.ts",
+          "id": "click_element",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/electron-browser/tools/clickBrowserTool.ts#L13",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/task/createAndRunTaskTool.ts",
+          "id": "create_and_run_task",
+          "id_expression": "TerminalToolId.CreateAndRunTask",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/task/createAndRunTaskTool.ts#L268",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/workbench/api/browser/mainThreadLanguageModelTools.ts",
+          "id": null,
+          "id_expression": "definition.id",
+          "id_unresolved_reason": "undefined",
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadLanguageModelTools.ts#L128",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "electron-browser",
+          "file": "src/vs/workbench/contrib/browserView/electron-browser/tools/dragElementTool.ts",
+          "id": "drag_element",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/electron-browser/tools/dragElementTool.ts#L13",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostMcpAppToolsService.ts",
+          "id": null,
+          "id_expression": "entry?.data.id ?? `mcpApp.tool.${generateUuid()}`",
+          "id_unresolved_reason": "undefined",
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostMcpAppToolsService.ts#L254",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/task/getTaskOutputTool.ts",
+          "id": "get_task_output",
+          "id_expression": "TerminalToolId.GetTaskOutput",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/task/getTaskOutputTool.ts#L19",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/getTerminalOutputTool.ts",
+          "id": "get_terminal_output",
+          "id_expression": "TerminalToolId.GetTerminalOutput",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/getTerminalOutputTool.ts#L15",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "electron-browser",
+          "file": "src/vs/workbench/contrib/browserView/electron-browser/tools/handleDialogBrowserTool.ts",
+          "id": "handle_dialog",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/electron-browser/tools/handleDialogBrowserTool.ts#L13",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "electron-browser",
+          "file": "src/vs/workbench/contrib/browserView/electron-browser/tools/hoverElementTool.ts",
+          "id": "hover_element",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/electron-browser/tools/hoverElementTool.ts#L13",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/killTerminalTool.ts",
+          "id": "kill_terminal",
+          "id_expression": "TerminalToolId.KillTerminal",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/killTerminalTool.ts#L11",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "electron-browser",
+          "file": "src/vs/workbench/contrib/browserView/electron-browser/tools/listBrowserPagesTool.ts",
+          "id": "list_browser_pages",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/electron-browser/tools/listBrowserPagesTool.ts#L11",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "electron-browser",
+          "file": "src/vs/workbench/contrib/browserView/electron-browser/tools/navigateBrowserTool.ts",
+          "id": "navigate_page",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/electron-browser/tools/navigateBrowserTool.ts#L16",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "electron-browser",
+          "file": "src/vs/workbench/contrib/browserView/electron-browser/tools/openBrowserTool.ts",
+          "id": "open_browser_page",
+          "id_expression": "OpenPageToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/electron-browser/tools/openBrowserTool.ts#L33",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/chat/common/model/chatModel.ts",
+          "id": null,
+          "id_expression": "progress.toolName",
+          "id_unresolved_reason": "undefined",
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/common/model/chatModel.ts#L1271",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/chat/common/tools/languageModelToolsContribution.ts",
+          "id": null,
+          "id_expression": "rawTool.name",
+          "id_unresolved_reason": "undefined",
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/common/tools/languageModelToolsContribution.ts#L317",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "electron-browser",
+          "file": "src/vs/workbench/contrib/browserView/electron-browser/tools/readBrowserTool.ts",
+          "id": "read_page",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/electron-browser/tools/readBrowserTool.ts#L13",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/chat/common/tools/builtinTools/runSubagentTool.ts",
+          "id": "runSubagent",
+          "id_expression": "RunSubagentTool.Id",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/common/tools/builtinTools/runSubagentTool.ts#L136",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "electron-browser",
+          "file": "src/vs/workbench/contrib/browserView/electron-browser/tools/runPlaywrightCodeTool.ts",
+          "id": "run_playwright_code",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/electron-browser/tools/runPlaywrightCodeTool.ts#L13",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/task/runTaskTool.ts",
+          "id": "run_task",
+          "id_expression": "TerminalToolId.RunTask",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/task/runTaskTool.ts#L164",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "electron-browser",
+          "file": "src/vs/workbench/contrib/browserView/electron-browser/tools/screenshotBrowserTool.ts",
+          "id": "screenshot_page",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/electron-browser/tools/screenshotBrowserTool.ts#L27",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/sendToTerminalTool.ts",
+          "id": "send_to_terminal",
+          "id_expression": "TerminalToolId.SendToTerminal",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/sendToTerminalTool.ts#L23",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/chat/common/tools/builtinTools/setArtifactRulesTool.ts",
+          "id": "setArtifactRules",
+          "id_expression": "SetArtifactRulesToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/common/tools/builtinTools/setArtifactRulesTool.ts#L52",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/chat/common/tools/builtinTools/setArtifactsTool.ts",
+          "id": "setArtifacts",
+          "id_expression": "SetArtifactsToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/common/tools/builtinTools/setArtifactsTool.ts#L54",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/chat/common/tools/builtinTools/taskCompleteTool.ts",
+          "id": "task_complete",
+          "id_expression": "TaskCompleteToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/common/tools/builtinTools/taskCompleteTool.ts#L23",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/stateToProgressAdapter.ts",
+          "id": null,
+          "id_expression": "tc.toolName",
+          "id_unresolved_reason": "undefined",
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/stateToProgressAdapter.ts#L2483",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/getTerminalLastCommandTool.ts",
+          "id": "terminal_last_command",
+          "id_expression": "TerminalToolId.TerminalLastCommand",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/getTerminalLastCommandTool.ts#L12",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/getTerminalSelectionTool.ts",
+          "id": "terminal_selection",
+          "id_expression": "TerminalToolId.TerminalSelection",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/getTerminalSelectionTool.ts#L11",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/mcp/common/mcpLanguageModelToolContribution.ts",
+          "id": null,
+          "id_expression": "tool.id",
+          "id_unresolved_reason": "undefined",
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/common/mcpLanguageModelToolContribution.ts#L138",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "electron-browser",
+          "file": "src/vs/workbench/contrib/browserView/electron-browser/tools/typeBrowserTool.ts",
+          "id": "type_in_page",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/electron-browser/tools/typeBrowserTool.ts#L16",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/sessionComparison/browser/sessionComparisonTool.ts",
+          "id": "vscode_completeAttemptComparison",
+          "id_expression": "CompleteSessionComparisonToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/sessionComparison/browser/sessionComparisonTool.ts#L181",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/automations/browser/automationTools.ts",
+          "id": "vscode_configureAutomation",
+          "id_expression": "ConfigureAutomationToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/automations/browser/automationTools.ts#L488",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/remoteSessions/browser/remoteSessionTools.ts",
+          "id": "vscode_create_remote_session",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/remoteSessions/browser/remoteSessionTools.ts#L54",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/automations/browser/automationTools.ts",
+          "id": "vscode_deleteAutomation",
+          "id_expression": "DeleteAutomationToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/automations/browser/automationTools.ts#L360",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/chat/common/tools/builtinTools/editFileTool.ts",
+          "id": "vscode_editFile_internal",
+          "id_expression": "InternalEditToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/common/tools/builtinTools/editFileTool.ts#L18",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "electron-browser",
+          "file": "src/vs/workbench/contrib/chat/electron-browser/builtInTools/fetchPageTool.ts",
+          "id": "vscode_fetchWebPage_internal",
+          "id_expression": "InternalFetchWebPageToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/electron-browser/builtInTools/fetchPageTool.ts#L26",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/chat/browser/getThemeColorsTool.ts",
+          "id": "vscode_getThemeColors",
+          "id_expression": "GetThemeColorsToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/getThemeColorsTool.ts#L58",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/chat/common/tools/builtinTools/confirmationTool.ts",
+          "id": "vscode_get_confirmation",
+          "id_expression": "ConfirmationToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/common/tools/builtinTools/confirmationTool.ts#L14",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/chat/common/tools/builtinTools/confirmationTool.ts",
+          "id": "vscode_get_confirmation_with_options",
+          "id_expression": "ConfirmationToolWithOptionsId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/common/tools/builtinTools/confirmationTool.ts#L45",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/chat/common/tools/builtinTools/confirmationTool.ts",
+          "id": "vscode_get_modified_files_confirmation",
+          "id_expression": "ModifiedFilesConfirmationToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/common/tools/builtinTools/confirmationTool.ts#L72",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/remoteSessions/browser/getRemoteSessionTool.ts",
+          "id": "vscode_get_remote_session",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/remoteSessions/browser/getRemoteSessionTool.ts#L23",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/runInTerminalConfirmationTool.ts",
+          "id": "vscode_get_terminal_confirmation",
+          "id_expression": "TerminalToolId.ConfirmTerminalCommand",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/runInTerminalConfirmationTool.ts#L11",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/extensions/common/installExtensionsTool.ts",
+          "id": "vscode_installExtensions",
+          "id_expression": "InstallExtensionsToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/extensions/common/installExtensionsTool.ts#L12",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/automations/browser/automationTools.ts",
+          "id": "vscode_listAutomations",
+          "id_expression": "ListAutomationsToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/automations/browser/automationTools.ts#L125",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/remoteSessions/browser/remoteSessionTools.ts",
+          "id": "vscode_list_agent_hosts",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/remoteSessions/browser/remoteSessionTools.ts#L17",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/sessions/browser/sessionsListTools.ts",
+          "id": "vscode_organizeSessionsList",
+          "id_expression": "OrganizeSessionsListToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/sessions/browser/sessionsListTools.ts#L198",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/sessionComparison/browser/sessionComparisonTool.ts",
+          "id": "vscode_readAttemptComparison",
+          "id_expression": "ReadSessionComparisonToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/sessionComparison/browser/sessionComparisonTool.ts#L54",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/sessions/browser/sessionsListTools.ts",
+          "id": "vscode_readSessionsList",
+          "id_expression": "ReadSessionsListToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/sessions/browser/sessionsListTools.ts#L111",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMigrationResultTool.ts",
+          "id": "vscode_reportCustomizationMigration",
+          "id_expression": "CustomizationMigrationResultToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMigrationResultTool.ts#L70",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/chat/common/tools/builtinTools/resolveDebugEventDetailsTool.ts",
+          "id": "vscode_resolveDebugEventDetails_internal",
+          "id_expression": "ResolveDebugEventDetailsToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/common/tools/builtinTools/resolveDebugEventDetailsTool.ts#L10",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/automations/browser/automationTools.ts",
+          "id": "vscode_runAutomation",
+          "id_expression": "RunAutomationToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/automations/browser/automationTools.ts#L236",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/chat/browser/screenshotWindowTool.ts",
+          "id": "vscode_screenshotWindow",
+          "id_expression": "ScreenshotWindowToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/screenshotWindowTool.ts#L39",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "common",
+          "file": "src/vs/workbench/contrib/extensions/common/searchExtensionsTool.ts",
+          "id": "vscode_searchExtensions_internal",
+          "id_expression": "SearchExtensionsToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/extensions/common/searchExtensionsTool.ts#L14",
+          "runs_in_workspace_declared": null
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/remoteSessions/browser/sendRemoteMessageTool.ts",
+          "id": "vscode_send_remote_message",
+          "id_expression": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/remoteSessions/browser/sendRemoteMessageTool.ts#L24",
+          "runs_in_workspace_declared": false
+        },
+        {
+          "declared_in_layer": "browser",
+          "file": "src/vs/sessions/contrib/chat/browser/chatBackgroundTool.ts",
+          "id": "vscode_setChatBackground",
+          "id_expression": "SetChatBackgroundToolId",
+          "id_unresolved_reason": null,
+          "may_reach_host_in_remote_window": true,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/chat/browser/chatBackgroundTool.ts#L76",
+          "runs_in_workspace_declared": false
+        }
+      ],
+      "tools_by_declared_layer": {
+        "browser": 28,
+        "common": 14,
+        "electron-browser": 12
+      },
+      "workspace_writable_setting_count": 53
     }
   },
   "upstream_sha": "a717861c07586a53d83b80d742cd3f59b20a6273",
