@@ -66,9 +66,9 @@ const banner = [
 ].join('\n');
 
 const r = await esbuild.build({
-	entryPoints: ['/harness/runner.ts'],
+	entryPoints: [process.env.ENTRY ?? '/harness/runner.ts'],
 	bundle: true, platform: 'node', format: 'esm', target: 'node22',
-	outfile: `/run/bundle-${MODE}.mjs`, logLevel: 'error', metafile: true,
+	outfile: process.env.OUT ?? `/run/bundle-${MODE}.mjs`, logLevel: 'error', metafile: true,
 	alias: { vs: SRC },
 	resolveExtensions: ['.ts', '.js', '.mjs'],
 	tsconfigRaw: { compilerOptions: { experimentalDecorators: true, useDefineForClassFields: false } },
