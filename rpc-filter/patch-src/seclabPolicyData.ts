@@ -23,7 +23,7 @@ export const SECLAB_DEFAULT_VERDICT: SeclabVerdict = 'deny';
 
 /** Keyed `<wire sid>.<method>`. The sid is the string passed to createProxyIdentifier, never the MainContext property name. */
 export const SECLAB_RPC: ReadonlyMap<string, SeclabEntry> = new Map([
-	['MainThreadAuthentication.$getSession', { verdict: 'rewrite', ref: 'rpc:MainThreadAuthentication.$getSession', constraint: 'return a session whose accessToken is a tab-scoped sentinel; the broker swaps it on egress that matches the credential binding. The extensionId argument is replaced with the connection-bound identity before any consent or trustedExtensionAuthAccess decision.' }],
+	['MainThreadAuthentication.$getSession', { verdict: 'rewrite', ref: 'rpc:MainThreadAuthentication.$getSession', constraint: 'return a session whose accessToken is a tab-scoped sentinel; the broker swaps it on egress that matches the credential binding. The extensionId argument is replaced with the connection-bound identity before any consent or trustedExtensionAuthAccess decision. Shared rule with the broker, stated identically in both places so they read as one mechanism: a token minted for the tab reaches it only as a sentinel, bound to no more than its parent\'s bindings. Applied here and by CredentialStore.derive in the broker; see docs/adr/20261104-broker-output-is-data.md.' }],
 	['MainThreadChatAgents2.$handleAnchorResolve', { verdict: 'deny', ref: 'rpc:MainThreadChatAgents2.$handleAnchorResolve' }],
 	['MainThreadChatAgents2.$handleProgressChunk', { verdict: 'deny', ref: 'rpc:MainThreadChatAgents2.$handleProgressChunk' }],
 	['MainThreadClipboard.$readText', { verdict: 'deny', ref: 'rpc:MainThreadClipboard.$readText' }],

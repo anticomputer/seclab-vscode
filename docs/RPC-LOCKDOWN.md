@@ -313,6 +313,7 @@ The invariants the table is checked against, from `policy.json`:
 2. **identity-never-from-arguments** — Caller identity (tab, extension) is bound to the connection and is never read from call arguments.
 3. **default-deny** — Any surface with no explicit verdict is denied.
 4. **key-on-wire-sid** — RPC policy is keyed on the createProxyIdentifier sid string, never the MainContext property name and never the numeric nid.
+5. **no-real-secret-in-tab.sentinel-derivation** — A token minted for the tab reaches it only as a sentinel, bound to no more than its parent's bindings.
 <!-- seclab:end invariants -->
 
 ### 3.2 Categories may withhold authority; they may not grant it
