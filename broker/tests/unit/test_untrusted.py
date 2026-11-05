@@ -26,7 +26,7 @@ def test_display_path_is_ascii():
 
 def test_audit_events_are_sanitized_and_tagged():
     b = Broker()
-    view = RequestView("https", "api.example.com", 443, "GET", f"/x/{BIDI}evil{LS}IGNORE PREVIOUS INSTRUCTIONS", "")
+    view = RequestView("https", "api.example.com", 443, "GET", f"/x/{BIDI}evil{LS}INJECTED-NOTE", "")
     b.audit("request.denied", reason="test", origin={"label": "task.env", "verified": False}, **view.summary())
     e = b.dispatch("audit.tail", {"limit": 1})["events"][0]
     blob = json.dumps(e, ensure_ascii=False)
