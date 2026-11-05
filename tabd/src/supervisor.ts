@@ -6,7 +6,10 @@ import { encodeData, encodeJson, FrameDecoder, FrameError } from './frames.ts';
 import type { TabStore, TabRecord } from './state.ts';
 import { fileIdentity } from './state.ts';
 import { mintSentinel, rewriteSecret, type ScanResult, type VaultEntry } from './scan.ts';
-import { DriverError, type Driver, type DriverInfo, type FenceReport, type TabRuntimeSpec, type TabTemplate } from './drivers/types.ts';
+import { DriverError, type BrokerHooks, type Driver, type DriverInfo, type FenceReport, type TabRuntimeSpec, type TabTemplate } from './drivers/types.ts';
+import { BrokerControl, connectBroker } from './broker-control.ts';
+import { defaultPolicy } from './broker-policy.ts';
+import { createHash, randomBytes } from 'node:crypto';
 import { assertTabId, canonicalWorkspacePath, sandboxNameFor, TEMPLATE_NAME_RE, ValidationError, type PathPolicy } from './validate.ts';
 import { ObsGlue, ObsParamError } from './obs/glue.ts';
 import type { FalcoSensor } from './obs/falco.ts';
@@ -55,6 +58,11 @@ export interface SupervisorOptions {
 	readonly writebackDir?: string;
 	/** Write-back sync interval (ms). */
 	readonly writebackIntervalMs?: number;
+	/**
+	 * The policy a tab's broker loads (broker-policy.ts: the user's policy from the state
+	 * directory, else deny-all). Throws on an invalid user policy, which fails the start.
+	 */
+	readonly brokerPolicy?: (tabId: string) => Record<string, unknown>;
 }
 
 interface Channel { tabId: string; child: ChildProcessWithoutNullStreams }
@@ -76,6 +84,8 @@ export class Supervisor {
 	private nextChannel = 1;
 	private readonly channels = new Map<number, Channel>();
 	private readonly fenceTimers = new Map<string, NodeJS.Timeout>();
+	/** One long-lived control connection per running tab's broker (docs/broker-protocol.md §1). */
+	private readonly brokers = new Map<string, BrokerControl>();
 	private readonly phases = new Map<string, string>();
 	private readonly owned = new Set<string>();
 	private dead = false;
@@ -488,7 +498,8 @@ export class Supervisor {
 			}
 			// No real secret enters a tab: scan before every (re)mount.
 			await this.gateSecrets(r, acceptFindings);
-			await this.driverFor(spec.template).ensureRunning(spec, r.connectionToken, this.obs.sensorHooks(r.tabId, r.hostPath));
+			const broker = spec.template.spec.broker === 'required' ? this.brokerHooks(r) : undefined;
+			await this.driverFor(spec.template).ensureRunning(spec, r.connectionToken, this.obs.sensorHooks(r.tabId, r.hostPath), broker);
 		} catch (e) {
 			this.setPhase(r.tabId, 'Failed', [{ type: 'Ready', status: 'False', reason: 'StartFailed', message: (e as Error).message }]);
 			this.audit('tab.ensureRunning', 'fail', { tabId: r.tabId, error: (e as Error).message });
@@ -500,6 +511,66 @@ export class Supervisor {
 		this.obs.started(r.tabId, r.hostPath, drv.policyLog ? () => drv.policyLog!(spec) : undefined);
 		this.audit('tab.ensureRunning', 'ok', { tabId: r.tabId });
 		return { tab: this.view(r), connectionToken: r.connectionToken };
+	}
+
+	/**
+	 * Broker bring-up (plan tabd-broker-wiring B1, docs/broker-protocol.md §2): hello (checked),
+	 * health, a fresh proxy password, the tab's policy, the CA. The real proxy password goes only
+	 * to the broker and to the driver, which writes it into the workspace; it is never audited.
+	 */
+	private brokerHooks(r: TabRecord): BrokerHooks {
+		return {
+			configure: async openControl => {
+				this.closeBroker(r.tabId).catch(() => undefined);
+				const c = await connectBroker(openControl, r.tabId);
+				try {
+					for (let i = 0; ; i++) {
+						const h = await c.request('health') as { status?: unknown };
+						if (h?.status === 'ok') {
+							break;
+						}
+						if (i >= 60) {
+							throw new Error('broker did not become healthy');
+						}
+						await new Promise(res => setTimeout(res, 500));
+					}
+					const proxyPassword = randomBytes(24).toString('base64url');
+					await c.request('proxy.auth.set', { username: 'seclab', password: proxyPassword });
+					const policy = this.o.brokerPolicy ? this.o.brokerPolicy(r.tabId) : defaultPolicy(r.tabId);
+					const loaded = await c.request('policy.load', { policy }) as { revision?: unknown };
+					const ca = await c.request('ca.get') as { certPem?: unknown; pemSha256?: unknown };
+					if (typeof ca?.certPem !== 'string' || createHash('sha256').update(ca.certPem).digest('hex') !== ca.pemSha256) {
+						throw new Error('ca.get: certificate does not match its sha256');
+					}
+					c.onClose(e => {
+						if (this.brokers.get(r.tabId) === c) {
+							this.brokers.delete(r.tabId);
+							this.audit('broker.control', 'closed', { tabId: r.tabId, reason: e.message });
+						}
+					});
+					this.brokers.set(r.tabId, c);
+					this.audit('broker.configure', 'ok', { tabId: r.tabId, policyRevision: loaded?.revision, caSha256: ca.pemSha256 });
+					return { caPem: ca.certPem, proxyUser: 'seclab', proxyPassword };
+				} catch (e) {
+					c.close();
+					this.audit('broker.configure', 'fail', { tabId: r.tabId, error: (e as Error).message });
+					throw e;
+				}
+			},
+		};
+	}
+
+	/** Drop the tab's broker connection; with `shutdown`, first tell the broker to drop every credential and exit. */
+	private async closeBroker(tabId: string, shutdown?: string): Promise<void> {
+		const c = this.brokers.get(tabId);
+		if (!c) {
+			return;
+		}
+		this.brokers.delete(tabId);
+		if (shutdown) {
+			await c.request('broker.shutdown', { reason: shutdown.slice(0, 64) }, 5_000).catch(() => undefined);
+		}
+		c.close();
 	}
 
 	private async verify(r: TabRecord): Promise<FenceReport> {
@@ -653,6 +724,7 @@ export class Supervisor {
 			const spec = this.spec(r);
 			this.obs.stopping(r.tabId);
 			this.wb?.stop(r.tabId);
+			await this.closeBroker(r.tabId, 'tab quarantined');
 			await this.driverFor(spec.template).quarantine(spec);
 			this.audit('tab.quarantine', 'ok', { tabId: r.tabId });
 		} catch (e) {
@@ -724,6 +796,7 @@ export class Supervisor {
 		}
 		this.wb?.stop(r.tabId);
 		this.obs.stopping(r.tabId);
+		await this.closeBroker(r.tabId, 'tab stopped');
 		await this.driverFor(spec.template).stop(spec);
 		this.setPhase(r.tabId, 'Stopped');
 		this.audit('tab.stop', 'ok', { tabId: r.tabId });

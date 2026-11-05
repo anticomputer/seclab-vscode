@@ -71,11 +71,30 @@ export interface SensorHooks {
 	beforeReh?(info: { containerId: string }): Promise<void>;
 }
 
+/** What the workspace needs from its configured broker (docs/broker-protocol.md §7). */
+export interface BrokerSetup {
+	/** The tab CA's public certificate (`ca.get`). */
+	readonly caPem: string;
+	/** Proxy credentials the tab presents to its own broker (`proxy.auth.set`). */
+	readonly proxyUser: string;
+	readonly proxyPassword: string;
+}
+
+/**
+ * Broker bring-up the supervisor performs between broker start and REH start (plan
+ * tabd-broker-wiring, B1). The driver only knows how to reach the broker's control bridge; the
+ * supervisor owns the protocol, the policy and the connection's lifetime.
+ */
+export interface BrokerHooks {
+	/** The broker is running: connect, check, authenticate, load policy, return what the tab needs. */
+	configure(openControl: () => ChildProcessWithoutNullStreams): Promise<BrokerSetup>;
+}
+
 export interface Driver {
 	readonly name: string;
 	probe(): Promise<DriverInfo>;
 	/** Create if missing (with fence applied atomically where possible), start, install token, start REH. */
-	ensureRunning(spec: TabRuntimeSpec, connectionToken: string, sensor?: SensorHooks): Promise<void>;
+	ensureRunning(spec: TabRuntimeSpec, connectionToken: string, sensor?: SensorHooks, broker?: BrokerHooks): Promise<void>;
 	/** Re-read the effective network policy and check it against the fence invariant. Must fail closed. */
 	verifyFence(spec: TabRuntimeSpec): Promise<FenceReport>;
 	/** On fence failure: re-apply whatever fence rules are missing, then stop the sandbox. */
