@@ -122,6 +122,22 @@ def test_derived_credentials_are_capped():
         s.derive(parent, "minted-token-value-9999", "r")
 
 
+def test_derived_credential_is_never_wider_than_its_parent():
+    """Shared invariant (ADR broker-output-is-data §4; RPC filter `$getSession`): a token
+    minted for the tab reaches it only as a sentinel, bound to no more than its parent's
+    bindings."""
+    s = store_with()
+    parent = s.get("c1")
+    d = s.derive(parent, "minted-token-value-wide", "r")
+    assert d.sentinel != parent.sentinel and d.sentinel != d.value
+    assert [b.to_json() for b in d.bindings] == [b.to_json() for b in parent.bindings]
+    s.confirm_binding("c1", Binding.from_json({"host": "other.example.com", "path": "/**", "methods": ["GET"],
+                                               "inject": {"header": "Authorization", "fmt": "Bearer {value}"}}))
+    assert [b.to_json() for b in d.bindings] == [b.to_json() for b in parent.bindings[:1]]
+    other = RequestView("https", "other.example.com", 443, "GET", "/x", "")
+    assert not any(b.matches(other) for b in d.bindings)
+
+
 @pytest.mark.parametrize("ip", [
     "127.0.0.1", "10.1.2.3", "172.17.0.1", "192.168.65.254", "169.254.169.254", "100.64.0.1",
     "0.0.0.0", "::1", "::ffff:127.0.0.1", "::ffff:10.0.0.1", "::127.0.0.1", "64:ff9b::a00:1",

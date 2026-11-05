@@ -17,7 +17,7 @@ import sys
 import time
 import uuid
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
 from . import PROTOCOL, VERSION, protocol
@@ -29,6 +29,7 @@ from .policy import (LITERAL_PATH_RE, Binding, Inject, Policy, PolicyError, Requ
 log = logging.getLogger("seclab.broker")
 
 DECISIONS = ("allow-once", "allow-tab", "deny", "deny-new-destinations")
+REQUEST_KEYS = ("host", "method", "path", "rawAuthority")
 _USER_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _PASS_RE = re.compile(r"^[A-Za-z0-9_-]{22,128}$")  # >= 128 bits as base64url
 _LABEL_RE = re.compile(r"^[A-Za-z0-9._:-]{1,96}$")
@@ -63,6 +64,7 @@ class Approval:
     decisions: tuple[str, ...]
     risk: dict
     credential_id: str | None = None
+    view: RequestView | None = None  # the real held request; `request` is its display form
     waiters: list[asyncio.Future] = field(default_factory=list)
 
     def public(self) -> dict:
@@ -77,9 +79,13 @@ class Approval:
         else:
             out["credentialId"] = self.credential_id
             out["suggestedBinding"] = self.suggested
-            out["untrusted"] += ["suggestedBinding.host", "suggestedBinding.path"] + (
-                ["suggestedBinding.inject.fmt"] if "inject" in self.suggested else [])
+            out["untrusted"] += ["suggestedBinding.host", "suggestedBinding.path", "suggestedBinding.methods"] + (
+                ["suggestedBinding.inject.header", "suggestedBinding.inject.fmt"] if "inject" in self.suggested else [])
         return sanitize(out)
+
+
+def binding_untrusted(prefix: str) -> list[str]:
+    return [f"{prefix}.{k}" for k in ("host", "path", "methods", "inject.header", "inject.fmt")]
 
 
 @dataclass
@@ -142,7 +148,12 @@ class Broker:
         if self.tab_id:
             event["tabId"] = self.tab_id
         event.update(fields)
-        event = sanitize(self._scrub_obj(event))
+        # The tab's own request fields can never hold a real value (none ever enters the
+        # tab), so only host- and policy-supplied values and sentinels are scrubbed there;
+        # upstream-derived values must not be able to erase them (review round 5 #1).
+        event = {k: (self.creds.scrub(v, derived=False) if k in REQUEST_KEYS and isinstance(v, str)
+                     else self._scrub_obj(v)) for k, v in event.items()}
+        event = sanitize(event)
         tagged = untrusted_paths(event)
         if tagged:
             event["untrusted"] = tagged
@@ -255,7 +266,7 @@ class Broker:
                 self.audit("approval.rate_limited", limit=cfg.max_per_minute, risk=risk, **req.summary())
                 return Decision(False, "prompt-rate-limited")
             self._prompt_times.append(now)
-            approval = Approval(id=uuid.uuid4().hex, kind=kind, key=key, request=req.summary(),
+            approval = Approval(id=uuid.uuid4().hex, kind=kind, key=key, request=req.summary(), view=req,
                                 created=now, deadline=now + cfg.timeout_seconds,
                                 suggested=suggested, decisions=decisions, risk=risk,
                                 credential_id=cred_id)
@@ -388,7 +399,11 @@ class Broker:
                 "sentinels": {c.id: c.sentinel for c in self.creds.all() if c.origin == "policy"}}
 
     def rpc_policy_get(self, params: dict) -> dict:
-        return {"revision": self.revision, "policy": self.policy.to_json()}
+        out = {"revision": self.revision, "policy": self.policy.to_json()}
+        tagged = [f"policy.allow.{i}.host" for i, r in enumerate(self.policy.rules) if r.source == "approval"]
+        if tagged:
+            out["untrusted"] = tagged
+        return out  # rules are schema-restricted ASCII; capping would corrupt what is persisted
 
     def rpc_policy_update(self, params: dict) -> dict:
         add = params.get("addAllow", [])
@@ -457,7 +472,13 @@ class Broker:
         return {"id": cred.id, "sentinel": cred.sentinel, "confirmed": cred.confirmed}
 
     def rpc_credential_list(self, params: dict) -> dict:
-        return {"credentials": [c.public() for c in self.creds.all()]}
+        creds = self.creds.all()
+        out = {"credentials": [c.public() for c in creds]}
+        tagged = [p for i, c in enumerate(creds) for j, b in enumerate(c.bindings) if b.source == "approval"
+                  for p in binding_untrusted(f"credentials.{i}.bind.{j}")]
+        if tagged:
+            out["untrusted"] = tagged
+        return out  # bindings are schema-restricted ASCII; capping would corrupt what is persisted
 
     def rpc_approval_list(self, params: dict) -> dict:
         return {"approvals": [a.public() for a in self.approvals.values()]}
@@ -479,10 +500,11 @@ class Broker:
                 self._resolve(other, "deny", by="controller")
             return {}
         if decision == "allow-tab":
-            r = approval.request
-            held = RequestView(r["scheme"], r["host"], r["port"], r["method"], r["path"], "")
+            held = approval.view
+            if held is None:
+                raise invalid("approval has no held request")
             if approval.kind == "egress":
-                rule = Rule.from_json(params.get("rule") or approval.suggested)
+                rule = replace(Rule.from_json(params.get("rule") or approval.suggested), source="approval")
                 # Broker-enforced, not just client-enforced: an approval can only widen
                 # policy around the request it was asked about, never onto risky hosts.
                 if not rule.matches(held):
@@ -492,20 +514,22 @@ class Broker:
                     raise invalid("an approval cannot add a rule for a raw IP or a risky destination")
                 self.policy.rules.append(rule)
                 self.revision += 1
-                self.notify("policy.changed", {"revision": self.revision, "added": [rule.to_json()],
-                                               "removed": [], "by": "approval", "approvalId": aid})
+                self.notify("policy.changed", {
+                    "revision": self.revision, "added": [rule.to_json()], "removed": [], "by": "approval",
+                    "approvalId": aid, "untrusted": ["added.0.host"]})
             else:
                 cred = self.creds.get(approval.credential_id or "")
                 if cred is None:
                     raise invalid("credential no longer exists")
-                binding = Binding.from_json(params.get("binding") or approval.suggested)
+                binding = replace(Binding.from_json(params.get("binding") or approval.suggested), source="approval")
                 if not binding.matches(held):
                     raise invalid("binding does not cover the held request")
                 if pattern_overlaps_risky(binding.host.text, self.policy.risky):
                     raise invalid("an approval cannot bind a credential to a risky destination")
                 self.creds.confirm_binding(cred.id, binding)
                 self.notify("credential.bindingConfirmed",
-                            {"id": cred.id, "binding": binding.to_json(), "approvalId": aid})
+                            {"id": cred.id, "binding": binding.to_json(), "approvalId": aid,
+                             "untrusted": binding_untrusted("binding")})
         self._resolve(aid, decision, by="controller")
         return {}
 

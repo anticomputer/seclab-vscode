@@ -30,22 +30,45 @@ a request or response body.
 (`seclab_broker/untrusted.py`).
 
 - **Stripping.** Every string in an audit event or approval drops Unicode
-  categories Cc, Cf, Cs, Co, Cn, Zl and Zp. That removes controls, bidi
-  overrides and isolates, zero-width characters, and line and paragraph
-  separators.
+  categories Cc, Cf, Cs, Co, Cn, Zl and Zp, plus the remaining invisible
+  default-ignorable characters: Hangul fillers, variation selectors and the
+  combining grapheme joiner. That removes controls, bidi overrides and isolates,
+  zero-width characters, and line and paragraph separators.
 - **Length cap.** Each string is capped at 512 characters, with a `…[+N]` marker.
 - **Paths.** Request paths are shown as percent-encoded ASCII (`display_path`),
-  so nothing can hide or reorder.
-- **Hosts.** Hosts are already canonical ASCII (LDH or IP literal).
+  so nothing can hide or reorder. A long path keeps its beginning and end
+  around a `...[N elided]...` marker. The tab can't forge that marker, because
+  brackets in a path are always encoded. Approvals keep the real request
+  internally, so `allow-tab` is decided on the request itself, not its display
+  form.
+- **Hosts.** Validated hosts are canonical ASCII (LDH or IP literal). When
+  validation fails, the raw authority is still audited, but percent-encoded to
+  ASCII (`display_host`).
 - **Inject formats.** `inject.fmt` must be printable ASCII, including formats
   inferred from where the tab put a sentinel.
 - **Origin labels.** Labels are already restricted to `[A-Za-z0-9._:-]{1,64}`.
-- **`untrusted` list.** Every approval, and every audit event that carries such
-  text, has an `untrusted` list of dotted paths naming the tab-controlled fields:
+- **Upstream header names** go in the tagged `header` field, never into
+  `reason`.
+- **`untrusted` list.** These carry an `untrusted` list of dotted paths naming
+  the tab-controlled fields:
   - approvals: `request.host|method|path`, `risk.origin.label`,
-    `suggestedRule.host`, `suggestedBinding.host|path|inject.fmt`;
+    `suggestedRule.host`,
+    `suggestedBinding.host|path|methods|inject.header|inject.fmt`;
   - audit events: `host`, `path`, `method`, `location`, `header`, `server`,
-    `origin`, `risk.origin.label`, `source.path|label|rule`.
+    `origin`, `risk.origin.label`, `source.path|label|rule`;
+  - for rules and bindings created by `allow-tab`, the notifications
+    `policy.changed` and `credential.bindingConfirmed`, and the results of
+    `policy.get` and `credential.list`. The broker records each rule's and
+    binding's provenance.
+
+  Rules and bindings are schema-restricted ASCII and are never truncated, so
+  the controller can persist them as-is.
+- **Audit scrubbing cannot be steered.** Real values are scrubbed from audit
+  events. The tab's own request fields (`host`, `method`, `path`) can never hold
+  a real value, because none ever enters the tab. So they are scrubbed only for
+  host- or policy-supplied values and sentinels, never for values an upstream
+  minted. Otherwise an upstream could return `{"token": "<exfil host>"}` and
+  choose what disappears from the log.
 
 Consumers show these fields as quoted data. When they hand them to an LLM, they put
 them in a data-only section and never follow them as instructions. The protocol
@@ -91,10 +114,25 @@ each one can only restrict:
 **4. Model API traffic is ordinary egress.** Model hosts are reached only through
 allow rules. Their credentials are bindings like any other: a sentinel in the tab,
 the real value supplied just in time by the host, and injection by placement only.
-How trusted-side `vscode.lm` requests relate to the broker is being agreed with
-the RPC-lockdown session, and our proposal is not to route trusted-side calls
-through a tab's broker. The broker treats everything on its proxy port as the tab,
-so mixing trusted traffic in would share policy and credentials with the tab.
+
+**`vscode.lm` never touches the broker** (agreed with the RPC-lockdown session,
+2026-11-04):
+- In v0 a tab's `vscode.lm` calls are denied by the RPC filter. Upstream,
+  `$tryStartChatRequest` runs the model call trusted-side with the user's
+  credentials
+  ([mainThreadLanguageModels.ts#L219-L231](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadLanguageModels.ts#L219-L231)),
+  so the tab holds no token and there is nothing to bind.
+- If that is ever relaxed, it stays a trusted-side call and never becomes a
+  broker binding. The broker treats everything on its proxy port as the tab, so
+  trusted traffic there would share policy and credentials with the tab.
+- The inverse direction is also denied: `$registerLanguageModelProvider` would
+  let a tab act as the model for a trusted-side agent
+  ([#L118-L135](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadLanguageModels.ts#L118-L135)).
+  It involves no egress, so the broker cannot see it; the RPC filter owns it.
+- Token rewriting is one rule in both places: **a token minted for the tab
+  reaches it only as a sentinel, bound to no more than its parent's bindings.**
+  The broker applies it to tokens in credentialed responses
+  (`CredentialStore.derive`); the RPC filter applies it to `$getSession`.
 
 ## Alternatives considered
 - **Strip or escape instruction-like phrases** ("ignore previous instructions"):
@@ -129,4 +167,14 @@ so mixing trusted traffic in would share policy and credentials with the tab.
   An upstream echoes a well-formed `approval.decide` for a real pending approval,
   plus an injection header. The held request still times out to deny, and the
   policy revision and deny-new state are unchanged.
+- `broker/tests/unit/test_core.py::test_derived_credential_is_never_wider_than_its_parent`:
+  the broker half of the shared token rule. A derived credential gets a fresh
+  sentinel and exactly its parent's bindings at mint time, and a binding the
+  parent gains later does not widen it.
 - Capability row `untrustedTextTagged` in the README matrix.
+- Security review round 5 regressions in `test_untrusted.py`:
+  - `test_upstream_derived_values_cannot_erase_request_fields_from_audit`;
+  - `test_approval_and_policy_surfaces_tag_tab_chosen_fields`;
+  - `test_ignorables_and_raw_authorities_are_neutralised`;
+  - `test_long_paths_are_elided_in_the_middle_and_marker_is_unforgeable`;
+  - `test_long_literal_path_binding_can_be_confirmed`.
