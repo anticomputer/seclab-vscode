@@ -20,18 +20,38 @@ have_node="$(node --version | sed s/^v//)"
 
 export NODE_OPTIONS="--max-old-space-size=${MAX_OLD_SPACE_SIZE:-6144}"
 export VSCODE_SKIP_NODE_VERSION_CHECK=1
+# npm's content-addressed cache on the volume (EDR local-install-cache): entries are checked
+# against the lockfile's integrity on extraction, and a reinstall needs fewer registry fetches.
+export npm_config_cache=/work/.npm-cache
 # Reinstall deps only when the lockfiles change (stamp keyed by their hash). The `sig1-` prefix
 # makes trees installed before the signature check get audited once (TT-6).
+# A failed install must not destroy a working one (EDR local-install-cache): every existing
+# node_modules is kept aside in /work/.nm-prev (same volume, outside the tree fetch-upstream
+# cleans) and moved back if the install, the ripgrep check or the signature audit fails.
+KEEP=/work/.nm-prev
+. /repo/build/linux/nm-keep.sh
+# A previous run that died mid-install left the old install aside: put it back first.
+if [[ -d "$KEEP" ]]; then
+	echo "build: restoring the install kept aside by an interrupted run" >&2
+	nm_restore "$SRC" "$KEEP"
+fi
 stamp="sig1-$(cat package-lock.json build/package-lock.json remote/package-lock.json 2>/dev/null | sha256sum | cut -c1-16)"
 if [[ ! -f node_modules/.seclab-stamp ]] || [[ "$(cat node_modules/.seclab-stamp)" != "$stamp" ]]; then
+	nm_keep_aside "$SRC" "$KEEP"
 	# Pinned prebuilt ripgrep in the postinstall's cache (a fresh private TMPDIR): no GitHub API
 	# call, no unverified binary; the installed rg is checked against its pin afterwards (VV-5).
 	TMPDIR="$(mktemp -d)"; export TMPDIR
-	node /repo/build/seed-ripgrep.mjs "$SRC"
-	npm ci
 	# Registry signatures over every installed project; the stamp is written only after it passes.
-	/repo/build/npm-audit-signatures.sh "$SRC"
-	echo "$stamp" > node_modules/.seclab-stamp
+	if node /repo/build/seed-ripgrep.mjs "$SRC" && npm ci \
+		&& node /repo/build/seed-ripgrep.mjs --verify-installed "$SRC" \
+		&& /repo/build/npm-audit-signatures.sh "$SRC"; then
+		echo "$stamp" > node_modules/.seclab-stamp
+		rm -rf "$KEEP"
+	else
+		echo "build: install failed; the previous install is restored unchanged" >&2
+		nm_restore "$SRC" "$KEEP"
+		exit 1
+	fi
 fi
 # Every build, cached tree or not: the installed rg is the pinned binary.
 node /repo/build/seed-ripgrep.mjs --verify-installed "$SRC"

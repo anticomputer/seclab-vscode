@@ -77,6 +77,7 @@ Same rules as ADRs:
 | 2026-11-05 | [Agent runtimes in tabs: a recorded, hash-pinned exception](20261105-agent-runtimes-exception.md) | accepted |
 | 2026-11-05 | [Agents-in-the-tab spike: real client, rogue and real agent hosts, measured](20261105-agents-in-tab-spike.md) | accepted |
 | 2026-11-05 | [Background windows: an env-gated patch so harness windows never take focus](20261105-background-windows.md) | accepted |
+| 2026-11-05 | [A failed local install never destroys the working one](20261105-local-install-cache.md) | accepted |
 | 2026-11-05 | [Secret scanning before push is mechanical: a pre-push hook and a required CI step](20261105-mechanical-secret-scan.md) | accepted |
 | 2026-11-05 | [No agent runtime on the host: no local agent host, no Copilot runtime in the desktop app](20261105-no-agent-runtime-on-host.md) | accepted |
 | 2026-11-05 | [Observability demo loader is assembled inside the tab](20261105-observability-loader-in-tab.md) | accepted |
