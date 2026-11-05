@@ -103,6 +103,7 @@ def cmd_list(root_fd):
             try:
                 st = os.lstat(n, dir_fd=dfd)
             except OSError:
+                out({"p": rel, "k": "err"})  # omitted: the listing is incomplete (NN-2)
                 continue
             count += 1
             if n == OPQ:

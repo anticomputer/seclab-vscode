@@ -124,3 +124,12 @@ Threat: everything the in-VM feed returns (names, content, modes, counts, timing
 
 Also from this increment: the root `.git` auto set applies only into an existing host repository (a tab's
 `git init` had made a plain host folder a repo); a workspace that an enclosing repo ignores is outside it.
+
+### Increment 2b, re-review (ccd0464)
+MM-1 to MM-4 verified closed. **Nothing medium or higher remains.**
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| NN-1 | Low (design) | Delete brake | A patient tab stays under the window; and it can overwrite ordinary files anyway. | Accepted, documented | ADR: the brake guards against accidents; the gate's protection is that nothing code-running is written unasked. |
+| NN-2 | Low | Feed | A child whose lstat failed was omitted silently. | Fixed | `err` record (no deletions or forgetting from that listing). |
+| NN-3 | Low | Stop | A tick abandoned by the 15 s stop deadline could save stale state later. | Fixed | Engines are closed on stop/discard; a closed engine never saves or applies. |

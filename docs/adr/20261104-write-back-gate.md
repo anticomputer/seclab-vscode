@@ -195,3 +195,8 @@ and is not implemented as protection.
 > - A workspace that an enclosing repo ignores is treated as outside that repo.
 > - Protocol: `tab.writeback.status` and `tab.writeback.sync`. Decisions on held changes
 >   come with increment 3.
+> - The mass-deletion brake guards against accidents (an `rm -rf`, a bad script), not
+>   against deliberate destruction. A hostile tab can already overwrite every ordinary
+>   file it may modify, and the brake can't stop that. What protects the user from such
+>   a tab is everything else here: code-running files are held, and nothing the tab
+>   writes runs on the host unasked. Git history protects tracked content.

@@ -313,6 +313,12 @@ export class WriteBackEngine {
 	private readonly ignoredBy: (root: string, paths: readonly string[]) => Set<string> | null;
 	private state: State;
 	private syncTimes: number[] = [];
+	private closed = false;
+
+	/** Stop using this engine (tab stopped, reset or removed): a late tick can't save or write (NN-3). */
+	close(): void {
+		this.closed = true;
+	}
 
 	constructor(o: EngineOptions) {
 		this.o = o;
@@ -929,6 +935,9 @@ export class WriteBackEngine {
 	}
 
 	private apply(rel: string, c: UpperChange, approved: boolean): void {
+		if (this.closed) {
+			throw new WriteBackError('write-back engine closed');
+		}
 		const r = this.resolve(rel, c.kind === 'file' || c.kind === 'symlink')!;
 		const final = r.file;
 		const existing = lstatOrNull(final);
@@ -1036,6 +1045,9 @@ export class WriteBackEngine {
 	}
 
 	private save(): void {
+		if (this.closed) {
+			return;
+		}
 		const tmp = `${this.o.statePath}.${process.pid}.tmp`;
 		fs.writeFileSync(tmp, JSON.stringify(this.state), { mode: 0o600 });
 		fs.renameSync(tmp, this.o.statePath);
