@@ -419,9 +419,9 @@
       "kind": "oci-image",
       "publisher": "Docker Official Images (debuerreotype)",
       "official": true,
-      "purpose": "Runs apt (signature-verified) to fetch strace debs for the sbx template; fetch tooling only.",
+      "purpose": "Runs apt (signature-verified) to fetch the debs for the sbx template (strace for observability, fuse-overlayfs for the write-back gate); fetch tooling only.",
       "pins": ["debian:trixie@sha256:2dc419c6d7fe3dad0a2f9fd469c34cc90b0f9ba642d8fde837fe3d7d34a0e7f1"],
-      "used": ["sandbox/sbx/obs-debs.lock"],
+      "used": ["sandbox/sbx/obs-debs.lock", "sandbox/sbx/wb-debs.lock"],
       "provenance": "Unsigned BuildKit provenance; ships debian-archive-keyring.",
       "verify": "Digest pin.",
       "bar": "official-pinned",
@@ -444,6 +444,27 @@
       "verifiedBy": { "file": "sandbox/sbx/build-template.sh", "contains": "| shasum -a 256 -c - >/dev/null || { echo \"checksum mismatch: $STRACE_DEB\"" },
       "record": "docs/edr/20261104-tab-observability-dependencies.md",
       "bump": "Tab observability session (version + sha256 in obs-debs.lock, review)."
+    },
+    {
+      "id": "deb-fuse-overlayfs",
+      "name": "fuse-overlayfs 1.14 and libfuse3-4 3.17.2 (Debian debs in the sbx template)",
+      "kind": "binary",
+      "publisher": "Debian (trixie archive)",
+      "official": true,
+      "purpose": "The write-back gate's overlay: the tab writes a VM-local upper layer that tabd reviews (ADR write-back-gate).",
+      "pins": [
+        "deb:fuse-overlayfs_1.14-1+b1_arm64.deb@sha256:177d4f0c6493e8240983757b7b9b7a48fb76ec3797c286a1080d02e59c0f3daf",
+        "deb:fuse-overlayfs_1.14-1+b1_amd64.deb@sha256:e796f6f3c6b7dbef0df283f0a7c277d60a97db0e50665199dafbd2e3733ccae0",
+        "deb:libfuse3-4_3.17.2-3_arm64.deb@sha256:66793b6b9a559e95a5ff853cbbff337076ef900c4b0d927f57fd986b3b1bea09",
+        "deb:libfuse3-4_3.17.2-3_amd64.deb@sha256:92e2d521ff872755a13aa69dba7b24025a7dc0f0f5aa708c9a86cd3565f570da"
+      ],
+      "used": ["sandbox/sbx/wb-debs.lock", "sandbox/sbx/build-template.sh", "sandbox/rootfs/opt/seclab/bin/seclab-wb-mount"],
+      "provenance": "Debian signed archive; per-arch sha256 recorded in wb-debs.lock. fuse3 (setuid fusermount3) is deliberately not installed.",
+      "verify": "apt signature check at fetch (pinned debian image), then sha256 against wb-debs.lock in build-template.sh before copy-in.",
+      "bar": "signed-verified",
+      "verifiedBy": { "file": "sandbox/sbx/build-template.sh", "contains": "echo \"$sha  $WB_DEBS/$deb\" | shasum -a 256 -c -" },
+      "record": "docs/adr/20261104-write-back-gate.md",
+      "bump": "Fork-build session (versions + sha256 in wb-debs.lock, review)."
     },
     {
       "id": "host-sbx",

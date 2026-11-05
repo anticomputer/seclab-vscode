@@ -10,6 +10,12 @@ export interface DriverCapabilities {
 	readonly holdAndResume: boolean;
 	readonly fileWatch: 'native' | 'virtiofs' | 'polling';
 	readonly sameAbsolutePathMount: boolean;
+	/**
+	 * Whether tab writes reach the host checkout only through the write-back gate (ADR
+	 * write-back-gate). `ungated`: the tab writes the host directly (OCI on Docker Desktop);
+	 * the editor must say "write-back not gated" for such tabs.
+	 */
+	readonly writeBack: 'gated' | 'ungated';
 }
 
 export interface DriverInfo {

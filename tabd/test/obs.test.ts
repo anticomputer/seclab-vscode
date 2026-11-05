@@ -335,7 +335,7 @@ class CollectorDriver implements Driver {
 	running = new Set<string>();
 	collectors: Array<ReturnType<typeof fakeChild>> = [];
 	async probe() {
-		return { name: 'fake', available: true, capabilities: { isolationClass: 'microvm', networkFence: 'none', liveMounts: false, holdAndResume: false, fileWatch: 'native', sameAbsolutePathMount: true } as const };
+		return { name: 'fake', available: true, capabilities: { isolationClass: 'microvm', networkFence: 'none', liveMounts: false, holdAndResume: false, fileWatch: 'native', sameAbsolutePathMount: true, writeBack: 'ungated' } as const };
 	}
 	async ensureRunning(spec: TabRuntimeSpec, token: string, sensor?: SensorHooks) {
 		this.running.add(spec.sandboxName);

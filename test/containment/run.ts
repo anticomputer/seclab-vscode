@@ -141,10 +141,21 @@ const vectors: Array<[string, string[]]> = [
 	['mcp-stdio', [mcp.command, ...mcp.args]], // .vscode/mcp.json stdio server
 ];
 const checks: Check[] = [];
+// Read workspace files as the tab sees them (sbx: through the write-back overlay).
+const readInTab = (p: string): string | undefined => {
+	const user = driver === 'sbx' ? ['-u', 'agent'] : [];
+	const r = spawnSync(runtime, ['exec', ...user, containerA, 'cat', p], { encoding: 'utf8', timeout: 30_000 });
+	return r.status === 0 ? r.stdout : undefined;
+};
 for (const [vector, argv] of vectors) {
 	console.log(`trigger ${vector}`);
 	inTab(argv);
-	checks.push(...checkEvidence(readEvidence(wsA, vector), vector, { marker, expectHostname }));
+	checks.push(...checkEvidence(readEvidence(wsA, vector, readInTab), vector, { marker, expectHostname }));
+	if (driver === 'sbx') {
+		// Write-back gate (ADR write-back-gate): the tab's write stays in its overlay; nothing
+		// reaches the host checkout until tabd reviews it (sync lands in increment 2b).
+		checks.push({ vector, name: 'write-back gate: the tab\'s evidence file is not in the host checkout', ok: readEvidence(wsA, vector) === undefined, detail: '' });
+	}
 }
 
 // Fence-level checks via the runtime's own policy evaluator (sbx only).
@@ -182,6 +193,8 @@ checks.push(...await runCampaign(campaign, {
 		await client.request('tab.ensureRunning', { tabId: tabs.c });
 	},
 	expectHostname: driver === 'sbx' ? containerC : 'tab',
+	// sbx tabs write through the write-back overlay; OCI on Docker Desktop is ungated (ADR).
+	gated: driver === 'sbx',
 }, marker));
 
 await cleanup();
