@@ -141,6 +141,12 @@
 					"scope": "application",
 					"description": "If set, folders may only be opened as tabs under these absolute paths."
 				},
+				"seclab.activity.revealOnAlert": {
+					"type": "boolean",
+					"default": true,
+					"scope": "application",
+					"description": "Show the Tab Activity panel once per tab on its first critical detection, or when the tab becomes unobserved."
+				},
 				"seclab.tabs.gcDays": {
 					"type": "integer",
 					"default": 30,

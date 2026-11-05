@@ -42,6 +42,7 @@ export class TabActivity implements vscode.TreeDataProvider<Item>, vscode.Dispos
 	private minPriority: Priority = 'informational';
 	private detectionsOnly = false;
 	private lagged = 0;
+	private revealed = false;
 	private refreshTimer?: NodeJS.Timeout;
 
 	constructor(context: vscode.ExtensionContext) {
@@ -92,6 +93,7 @@ export class TabActivity implements vscode.TreeDataProvider<Item>, vscode.Dispos
 			}
 			if (e.class === 'detection' && (e.priority === 'critical' || e.priority === 'alert' || e.priority === 'emergency')) {
 				this.view.badge = { value: this.events.filter(x => x.class === 'detection').length, tooltip: 'Detections in this tab' };
+				this.revealOnce();
 			}
 			this.scheduleRefresh();
 		} else if (method === 'tab.observation' && p.tabId === this.tabId) {
@@ -106,6 +108,9 @@ export class TabActivity implements vscode.TreeDataProvider<Item>, vscode.Dispos
 
 	private setObservation(o: Observation): void {
 		this.observation = o;
+		if (o.state === 'unobserved') {
+			this.revealOnce();
+		}
 		const label: Record<string, string> = { observed: '$(eye) Observed', degraded: '$(eye) Degraded', unobserved: '$(eye-closed) Unobserved', unavailable: '$(circle-slash) No sensor' };
 		this.status.text = label[o.state] ?? '$(question) ?';
 		this.status.tooltip = `Tab activity: ${o.state}. ${plain(o.reason, 200)}`;
@@ -113,6 +118,15 @@ export class TabActivity implements vscode.TreeDataProvider<Item>, vscode.Dispos
 		this.status.show();
 		this.view.message = o.state === 'unobserved' ? `⚠ This tab is UNOBSERVED: ${plain(o.reason, 200)}. Activity inside the tab is not being recorded.` : undefined;
 		this.refresh();
+	}
+
+	/** Bring the panel up once per tab for the first critical detection or a sensor gap. */
+	private revealOnce(): void {
+		if (this.revealed || !this.tabId || !vscode.workspace.getConfiguration('seclab.activity').get<boolean>('revealOnAlert', true)) {
+			return;
+		}
+		this.revealed = true;
+		void vscode.commands.executeCommand('seclab.tabActivity.focus');
 	}
 
 	private scheduleRefresh(): void {
