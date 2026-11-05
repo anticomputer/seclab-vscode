@@ -179,3 +179,30 @@ def test_backstop_exempts_only_a_declared_derive_route(pod, ctl):
     r = pod.curl("https://api.example.test/user/keys", "-X", "POST", "-H", f"Authorization: token {s}", "-d", "{}")
     assert r.code == 502 and "derivation" in r.body  # reached upstream, response had no token: blocked
     ctl.wait_note("audit.event", lambda e: e["type"] == "credential.backstop_exempt", since=mark, timeout=10)
+
+
+def test_backstop_exception_copilot_user_is_narrow_and_its_response_is_checked(pod, ctl):
+    """Coordinator-approved exception (ADR broker-model-access): exactly GET
+    /copilot_internal/user, no body, no query, under provider github. A normal response
+    passes; a rogue upstream returning a credential-named field, a token-shaped value, or
+    non-JSON is blocked and audited as a finding, so no real minted value reaches the tab.
+    Measured shape is from fake responses (the spike ran with no real credential)."""
+    gh = {"id": "gh", "provider": "github", "inject": {"header": "Authorization", "fmt": "Bearer {value}"},
+          "bind": [{"host": "api.example.test", "path": "/copilot_internal/**", "methods": ["GET", "POST"]}]}
+    s = pod.load({"allow": [{"host": "api.example.test"}], "credentials": [gh], "prompt": {"enabled": False}})["gh"]
+    ctl.call("credential.provide", {"id": "gh", "value": pod.canaries["git"]})
+    auth = ["-H", f"Authorization: Bearer {s}"]
+    r = pod.curl("https://api.example.test/copilot_internal/user", *auth)
+    assert r.code == 200 and r.json()["login"] == "octo-test"
+    mark = ctl.mark()
+    for mode in ("token-field", "token-value", "not-json"):
+        r = pod.curl("https://api.example.test/copilot_internal/user", *auth, "-H", f"X-Fixture: {mode}")
+        assert r.code == 502 and "ghu_" not in r.body, (mode, r.body)
+    found = [e for e in ctl.notes_since(mark, "audit.event") if e["type"] == "credential.backstop_exception_blocked"]
+    assert len(found) == 3
+    # Everything else on /copilot_internal stays behind the backstop.
+    for args in ([], ["-X", "POST", "-d", "{}"]):
+        assert pod.curl("https://api.example.test/copilot_internal/user?x=1", *auth, *args).code == 403
+    assert pod.curl("https://api.example.test/copilot_internal/user", *auth, "-X", "POST", "-d", "{}").code == 403
+    assert pod.curl("https://api.example.test/copilot_internal/User", *auth).code == 403
+    assert pod.curl("https://api.example.test/copilot_internal/v2/token", *auth).code == 403

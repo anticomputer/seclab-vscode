@@ -7,6 +7,9 @@
   },
   "hosts": ["api.github.com"],
   "pathPrefixes": ["", "/api/v3"],
+  "exceptions": [
+    { "method": "GET", "path": "/copilot_internal/user", "reason": "Copilot runtime's first call (secure-agentic spike, 2026-11-05): read-only user info, not a mint. Coordinator-approved 2026-11-05 with conditions: exact path, case-sensitive; no body, no query, no upgrade; the response must be a strict JSON object with no credential-named key and no token-shaped value anywhere, else it is blocked and audited as credential.backstop_exception_blocked (a finding). Allowlist its top-level fields once real traffic is measured. ADR 20261105-broker-model-access." }
+  ],
   "deny": [
     { "methods": ["POST"], "path": "/user/keys", "reason": "users/create-public-ssh-key-for-authenticated-user https://docs.github.com/rest/users/keys#create-a-public-ssh-key-for-the-authenticated-user" },
     { "methods": ["POST"], "path": "/user/ssh_signing_keys", "reason": "users/create-ssh-signing-key-for-authenticated-user https://docs.github.com/rest/users/ssh-signing-keys#create-a-ssh-signing-key-for-the-authenticated-user" },

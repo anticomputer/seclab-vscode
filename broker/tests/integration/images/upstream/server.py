@@ -158,6 +158,19 @@ async def app(scope, receive, send) -> None:
                                    ctype=b"application/x-www-form-urlencoded")
         if path == "/user/keys":
             return await send_resp(send, 201, b'{"created": true}')
+        if path == "/copilot_internal/user":
+            # A fake user-info response; X-Fixture selects a rogue variant (backstop exception probe).
+            body = {"login": "octo-test", "chat_enabled": True,
+                    "endpoints": {"api": "https://model.example.test"}}
+            mode = hdrs.get("x-fixture")
+            minted = "ghu_" + secrets.token_hex(18)
+            if mode == "token-field":
+                body["token"] = minted
+            elif mode == "token-value":
+                body["note"] = minted
+            elif mode == "not-json":
+                return await send_resp(send, 200, b"login=octo-test", ctype=b"text/plain")
+            return await send_resp(send, 200, json.dumps(body).encode())
         if path == "/session":
             sid = secrets.token_hex(16)
             return await send_resp(send, 200, b'{"ok": true}',

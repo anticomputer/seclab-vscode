@@ -165,7 +165,7 @@ check fails if a flag has no row, or if a named test doesn't exist.
 | Injection only into the named header | `placementOnlyInjection` | yes | yes | **no**: not documented | `test_sentinel_to_unbound_allowed_host_not_swapped`, `test_sentinel_in_other_header_of_bound_request` |
 | Response scanning for echoed real values | `responseScanning` | yes | yes | **no** | `test_reflection_in_other_encodings_blocked` |
 | Minted tokens re-sentinelised; session headers stripped | `mintedTokenResentinelize` | yes | yes | **no** | `test_minted_token_is_resentinelised`, `test_session_cookies_from_credentialed_requests_are_stripped` |
-| Provider backstop deny-list | `providerBackstop` | yes | yes | **no** | `test_provider_backstop_beats_binding`, `test_github_backstop` |
+| Provider backstop deny-list | `providerBackstop` | yes | yes | **no** | `test_provider_backstop_beats_binding`, `test_github_backstop`, `test_backstop_exception_is_exact`, `test_backstop_exception_copilot_user_is_narrow_and_its_response_is_checked` |
 | Per-tab CA, private key only in the broker | `perTabCA` | yes | yes | **no**: sbx's own CA | `test_broker_process_custody` |
 | HTTP/2 | `http2` | yes | yes: tested through sbx | yes: per sbx docs | `test_http2_end_to_end`, sbx: `HTTP/2 through broker` |
 | WebSocket (handshake injection, frame scanning) | `websocket` | yes | yes | yes: pass-through only, per sbx docs | `test_websocket_handshake_injection_and_message_scanning` |

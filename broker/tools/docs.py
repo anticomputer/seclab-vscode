@@ -239,10 +239,13 @@ def gen_backstop() -> str:
     for f in sorted((DATA_DIR / "providers").glob("*.json")):
         d = json.loads(f.read_text())
         rows = [f"| {', '.join(e['methods'])} | `{e['path']}` | {esc(e['reason'])} |" for e in d["deny"]]
+        exc = "".join(f"- `{e['method']} {e['path']}`: {esc(e['reason'])}\n" for e in d.get("exceptions", []))
         prefixes = ", ".join("`" + (p or "/") + "`" for p in d.get("pathPrefixes", [""]))
         out.append(f"#### `{d['provider']}`\n\nHosts: {', '.join('`' + h + '`' for h in d['hosts'])}. "
                    f"Path prefixes: {prefixes}. Source: {d['source']['openapi']}\n\n"
-                   "| Methods | Path | Why |\n|---|---|---|\n" + "\n".join(rows) + "\n")
+                   + (f"Approved exceptions (exact method and path, no body, query or upgrade; the response "
+                      f"is checked):\n\n{exc}\n" if exc else "")
+                   + "| Methods | Path | Why |\n|---|---|---|\n" + "\n".join(rows) + "\n")
     return "\n".join(out)
 
 

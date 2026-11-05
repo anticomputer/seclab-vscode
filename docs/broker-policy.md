@@ -368,6 +368,10 @@ a tab mint or register its own durable credential.
 
 Hosts: `api.github.com`. Path prefixes: `/`, `/api/v3`. Source: https://github.com/github/rest-api-description/blob/99b1432b55b9a71d0881fd792a87f1807cf4c8f2/descriptions/api.github.com/api.github.com.json
 
+Approved exceptions (exact method and path, no body, query or upgrade; the response is checked):
+
+- `GET /copilot_internal/user`: Copilot runtime's first call (secure-agentic spike, 2026-11-05): read-only user info, not a mint. Coordinator-approved 2026-11-05 with conditions: exact path, case-sensitive; no body, no query, no upgrade; the response must be a strict JSON object with no credential-named key and no token-shaped value anywhere, else it is blocked and audited as credential.backstop_exception_blocked (a finding). Allowlist its top-level fields once real traffic is measured. ADR 20261105-broker-model-access.
+
 | Methods | Path | Why |
 |---|---|---|
 | POST | `/user/keys` | users/create-public-ssh-key-for-authenticated-user https://docs.github.com/rest/users/keys#create-a-public-ssh-key-for-the-authenticated-user |

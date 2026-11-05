@@ -605,11 +605,26 @@ class BackstopEntry:
 
 
 @dataclass(frozen=True)
+class BackstopException:
+    """A coordinator-approved, data-level hole in a provider's backstop: one method on one
+    exact path (case-sensitive, no trailing-slash variant), with no body, query or upgrade.
+    Its response is held to the no-credential-fields check in the engine."""
+    provider: str
+    method: str
+    path: str
+    reason: str
+
+    def matches(self, req: RequestView, prefixes: tuple[str, ...]) -> bool:
+        return req.method == self.method and not req.query and any(req.path == p + self.path for p in prefixes)
+
+
+@dataclass(frozen=True)
 class Provider:
     name: str
     hosts: tuple[HostPattern, ...]
     path_prefixes: tuple[str, ...]
     deny: tuple[BackstopEntry, ...]
+    exceptions: tuple[BackstopException, ...] = ()
 
 
 @lru_cache(maxsize=1)
@@ -623,8 +638,22 @@ def providers() -> dict[str, Provider]:
             path_prefixes=tuple(d.get("pathPrefixes", [""])),
             deny=tuple(BackstopEntry(d["provider"], tuple(e["methods"]), e["path"], e["reason"])
                        for e in d["deny"]),
+            exceptions=tuple(BackstopException(d["provider"], e["method"], e["path"], e["reason"])
+                             for e in d.get("exceptions", [])),
         )
     return out
+
+
+def backstop_exception(req: RequestView, extra_provider: str | None = None) -> BackstopException | None:
+    """The approved exception covering this request, if any (callers also require no body
+    and no upgrade, which a RequestView doesn't carry)."""
+    for prov in providers().values():
+        applies = any(h.matches(req.host) for h in prov.hosts) or prov.name == extra_provider
+        if applies:
+            for e in prov.exceptions:
+                if e.matches(req, prov.path_prefixes):
+                    return e
+    return None
 
 
 def backstop_denies(req: RequestView, extra_provider: str | None = None) -> BackstopEntry | None:
