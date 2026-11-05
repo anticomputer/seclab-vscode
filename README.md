@@ -40,8 +40,8 @@ exist there, and direct internet access fails.</sub>
 
 | Watching a tab |
 |---|
-| ![The Tab Activity panel during a folder-open loader in the "demo-app" tab. Events include a honeypot read of /home/agent/.config/solana/id.json, a detached nohup process, an inline "node -e" loader, curl beacons to 192.0.2.10 flagged as periodic and as bypassing the proxy, and a host-executable .envrc write. Each event is labelled with its severity and source ("tab VM root"), and the status bar shows "Observed".](docs/media/tab-activity.png) |
-| An inert folder-open loader runs in a real sbx tab. Detections and their integrity labels appear live. The beacon address is a documentation IP (RFC 5737) and the credential file is a seeded honeypot. |
+| ![The Tab Activity panel during a folder-open loader in the "demo-app" tab. Events include curl beacons to 192.0.2.10 flagged as periodic, as bypassing the proxy and as a network tool run right after open; an inline loader; and a host-executable .envrc write. Trusted events show sbx blocking 192.0.2.10 and the write-back gate holding .vscode/tasks.json and .envrc. A notification says 2 files that can run code are held for review, and the status bar shows "2 held" and "Observed".](docs/media/tab-activity.png) |
+| An inert folder-open loader runs in a real sbx tab. Detections appear live, each labelled with its integrity: "tab VM root" for the in-tab sensor, "trusted" for sbx and the write-back gate. The beacon address is a documentation IP (RFC 5737). |
 
 ## How it works
 
