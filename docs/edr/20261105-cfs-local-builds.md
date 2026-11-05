@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-11-05
 - **Deciders:** anticomputer (user). Decision: "Install gh cfs: brew install azure-cli and gh extension install gh-cfs, then I'll run az login". Coordinator: the requirements below. Fork-build session: implementation.
-- **Related:** [local install cache](20261105-local-install-cache.md), [pinned tools](20261105-pinned-tools.md), [supply-chain exceptions](20261105-supply-chain-exceptions.md), example-org/internal-feed-docs `docs/package-feeds.md` and `docs/local-feed-access.md`, gh-cfs `docs/reference/docker.md` and `npm.md`
+- **Related:** [review](../security-reviews/20261105-cfs-local-builds.md), [local install cache](20261105-local-install-cache.md), [pinned tools](20261105-pinned-tools.md), [supply-chain exceptions](20261105-supply-chain-exceptions.md), example-org/internal-feed-docs `docs/package-feeds.md` and `docs/local-feed-access.md`, gh-cfs `docs/reference/docker.md` and `npm.md`
 
 ## Context
 Since 2026-11-04 public npm, Yarn and PyPI downloads have been unavailable locally. That was the
@@ -53,8 +53,12 @@ token. Code-OSS's `npm ci` runs many install scripts.
   use different transports for the same lockfile hashes.
 - **No registry-signature audit locally.** `npm audit signatures` doesn't work through CFS: it
   finds "no dependencies to audit that were installed from a supported registry" (measured
-  2026-11-05). Local installs are stamped `cfs1-` (integrity only), not `sig1-`. CI still
-  audits signatures (`build/npm-audit-signatures.sh`).
+  2026-11-05). Local installs are stamped `cfs1-` (integrity only), not `sig1-`. The
+  registry-origin check still runs (`npm-audit-signatures.sh --origin-only`: every `resolved`
+  is `registry.npmjs.org`; review YY-1). CI still audits signatures.
+- **Other local npm users.** The Level B harness packages the rogue extension with `vsce` from
+  a local image (`build/vsce`) built the same way: fetched through CFS with no scripts, then
+  run with no token and no network.
 - **pip follows the same split:**
   - download hashed wheels with the token (`pip download --require-hashes`, CFS
     `example-pypi-feed` as the only index);
