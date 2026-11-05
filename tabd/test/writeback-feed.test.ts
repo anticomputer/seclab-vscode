@@ -150,3 +150,52 @@ test('feed: tab-local files are never mirrored from the host (MM-3)', async () =
 	assert.deepEqual(r2.mirrored, []);
 	assert.equal(up.files.get('node_modules/x/i.js')?.content.toString(), 'tab copy\n');
 });
+
+test('decide: approve is bound to the shown signature; reject restores the host version in the tab; always is refused for agent config', async () => {
+	const { WriteBackManager } = await import('../src/writeback-manager.ts');
+	const dir = path.join(SCRATCH, 'decide');
+	fs.rmSync(dir, { recursive: true, force: true });
+	const root = path.join(dir, 'ws');
+	fs.mkdirSync(path.join(root, '.git'), { recursive: true });
+	fs.writeFileSync(path.join(root, 'Makefile'), 'all:\n\techo host\n');
+	const tabId = 't-' + 'a'.repeat(26);
+	const pendingSeen: number[] = [];
+	const m = new WriteBackManager({ dir: path.join(dir, 'state'), intervalMs: 3_600_000, onPending: (_t, n) => pendingSeen.push(n) });
+	const up = new FakeUpper();
+	m.start(tabId, root, fileIdentity(root), up);
+	try {
+		up.files.set('Makefile', { content: Buffer.from('all:\n\techo tab\n'), mode: 0o644 });
+		up.files.set('.envrc', { content: Buffer.from('export X=1\n'), mode: 0o644 });
+		up.files.set('AGENTS.md', { content: Buffer.from('be nice\n'), mode: 0o644 });
+		await m.sync(tabId);
+		const pend = m.status(tabId).pending;
+		assert.deepEqual(pend.map(p => p.path).sort(), ['.envrc', 'AGENTS.md', 'Makefile']);
+		assert.equal(pendingSeen.at(-1), 3);
+		const mk = pend.find(p => p.path === 'Makefile')!;
+		const c = await m.content(tabId, 'Makefile') as { host: { b64: string }; tab: { b64: string } };
+		assert.equal(Buffer.from(c.host.b64, 'base64').toString(), 'all:\n\techo host\n');
+		assert.equal(Buffer.from(c.tab.b64, 'base64').toString(), 'all:\n\techo tab\n');
+		await assert.rejects(m.decide(tabId, 'Makefile', 'approve', 'f'.repeat(64)), /changed this entry since it was shown/);
+		// The tab changes the file after it was shown: approval must refuse.
+		up.files.set('Makefile', { content: Buffer.from('all:\n\tcurl x\n'), mode: 0o644 });
+		await assert.rejects(m.decide(tabId, 'Makefile', 'approve', mk.sig), /changed/);
+		assert.equal(fs.readFileSync(path.join(root, 'Makefile'), 'utf8'), 'all:\n\techo host\n');
+		// Reject restores the host's version into the tab.
+		await m.sync(tabId);
+		const mk2 = m.status(tabId).pending.find(p => p.path === 'Makefile')!;
+		assert.match((await m.decide(tabId, 'Makefile', 'reject', mk2.sig)).result, /restored in the tab/);
+		assert.equal(up.files.get('Makefile')?.content.toString(), 'all:\n\techo host\n');
+		await m.sync(tabId);
+		assert.ok(!m.status(tabId).pending.some(p => p.path === 'Makefile'), 'not re-prompted');
+		// Approve applies exactly what was shown.
+		const env = m.status(tabId).pending.find(p => p.path === '.envrc')!;
+		assert.equal((await m.decide(tabId, '.envrc', 'approve', env.sig)).result, 'applied');
+		assert.equal(fs.readFileSync(path.join(root, '.envrc'), 'utf8'), 'export X=1\n');
+		// "Always" is never available for agent configuration.
+		const ag = m.status(tabId).pending.find(p => p.path === 'AGENTS.md')!;
+		await assert.rejects(m.decide(tabId, 'AGENTS.md', 'always', ag.sig), /not available/);
+		assert.ok(!fs.existsSync(path.join(root, 'AGENTS.md')));
+	} finally {
+		m.stop(tabId);
+	}
+});

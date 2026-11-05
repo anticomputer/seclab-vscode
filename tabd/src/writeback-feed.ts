@@ -193,3 +193,44 @@ export async function syncTick(engine: WriteBackEngine, reader: UpperReader, roo
 	}
 	return { ...res, refused: [...refused, ...res.refused], mirrored, truncated };
 }
+
+/**
+ * The tab's current version of one entry, re-read for a decision (increment 3): the engine
+ * binds approval to what was shown, so this must be read fresh, never from a cache.
+ * Returns undefined if the tab no longer has a change at that path.
+ */
+export async function readEntry(reader: UpperReader, rel: string, maxFileBytes: number): Promise<UpperChange | undefined> {
+	checkRel(rel);
+	const { entries } = parseList(await reader.feed('list'));
+	const e = entries.find(x => x.p === rel && x.k !== 'dir' && x.k !== 'err');
+	if (!e) {
+		return undefined;
+	}
+	switch (e.k) {
+		case 'wh':
+		case 'opq':
+			return { path: rel, kind: 'deleted' };
+		case 'symlink':
+			return { path: rel, kind: 'symlink', mode: e.m, nlink: e.n, target: e.t ?? '' };
+		case 'special':
+			return { path: rel, kind: 'special', mode: e.m, nlink: e.n };
+		case 'file': {
+			const got = lines(await reader.feed('get', JSON.stringify({ p: rel }) + '\n')) as Array<{ p?: string; b64?: string; m?: number; n?: number; err?: string }>;
+			const g = got[0];
+			if (got.length !== 1 || g?.p !== rel || typeof g.b64 !== 'string') {
+				return undefined;
+			}
+			const content = Buffer.from(g.b64, 'base64');
+			return content.length > maxFileBytes ? undefined : { path: rel, kind: 'file', mode: g.m, nlink: g.n, content };
+		}
+		default:
+			return undefined;
+	}
+}
+
+/** Write host content back over the tab's copy of a file (reject), compare-and-swap on `expectSha`. */
+export async function mirrorOne(reader: UpperReader, rel: string, expectSha: string, content: Buffer): Promise<string | undefined> {
+	const out = lines(await reader.feed('mirror', JSON.stringify({ p: rel, expect: expectSha, b64: content.toString('base64') }) + '\n')) as Array<{ p?: string; ok?: boolean; h?: string }>;
+	const r = out[0];
+	return r?.p === rel && r.ok === true && typeof r.h === 'string' && HEX64.test(r.h) ? r.h : undefined;
+}

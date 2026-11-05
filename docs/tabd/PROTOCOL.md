@@ -83,6 +83,9 @@ never derived from paths or other input. The editor uses the authority
 | `tab.reset` | `{ tabId }` | `{ tab }` | Rebuilds the tab from its template: stops it and removes the sandbox and its home (installed extensions, anything dropped there). Keeps the tab ID, workspace mapping, vault and exceptions; the next `ensureRunning` starts it fresh. Discards the tab's write-back state (its upper layer is gone). |
 | `tab.writeback.status` | `{ tabId }` | `{ gated, active, pending: [{ path, kind, reasons, sig, hostHash, size?, mode?, target? }], lastSync?, lastError? }` | Write-back gate ([ADR](../adr/20261104-write-back-gate.md)). `pending` are held changes, listed again after a restart and never auto-applied. `path` and `target` are tab-controlled: escape them for display. |
 | `tab.writeback.sync` | `{ tabId }` | `{ applied, held: [{ path, kind, reasons }], refused: [{ path, reason }], mirrored }` | Syncs now (tabd also syncs every 3 s and before stopping). Error `-32013` if the tab isn't gated or the in-VM feed fails (nothing is applied then). |
+| `tab.writeback.content` | `{ tabId, path }` | `{ path, kind, reasons, sig, host: { exists, kind, size, b64?, truncated }, tab: { kind, size?, b64?, truncated?, target?, mode? } }` | Both sides of a held change, for display only (each capped at 64 KiB). Tab-controlled: render as plain text. The tab must be running. |
+| `tab.writeback.decide` | `{ tabId, path, decision: approve\|reject\|always, sig }` | `{ result }` | `sig` is the signature the user was shown; tabd re-reads the tab's entry and refuses (`-32013`) if it changed. `approve` copies exactly that version; `reject` keeps the host's version and restores it into the tab when it is a file the host has; `always` also waives the path reason for this tab (never for git, hook, agent, IDE or host-executable paths). |
+| `tab.writeback.confirmDeletes` | `{ tabId }` | `{}` | Releases the sticky mass-deletion hold; deletions of code-running files stay held. |
 | `stream.end` | `{ channel }` | — (notification) | Client half-close (client → REH EOF). |
 | `stream.close` | `{ channel }` | — (notification) | Client abort; the supervisor kills the exec child. |
 | `shutdown` | `{ stopTabs?: boolean }` | `{}` | Graceful: ends channels; leaves tabs running unless `stopTabs`. |
@@ -105,13 +108,14 @@ Reserved (not in v0.1): `warmPool.*`, `tab.policy.*` (broker adapter),
 | `log` | `{ level, message }` |
 | `tab.event` | `{ subscription, event, replay?, lagged? }`: one [event](EVENTS.md). `lagged: n` means `n` matching events were not sent while the client wasn't reading (stdout backlog over 4 MiB); fetch them with `tab.events.tail`. |
 | `tab.observation` | `{ tabId, state: observed\|degraded\|unobserved\|unavailable, since, reason, sensor?, mode?, untrusted: ["reason"] }`: `reason` can carry sensor-derived text; treat it as data |
+| `tab.writeback.pending` | `{ tabId, count }`: the number of held write-back changes changed; the editor prompts for review |
 
 ## 5. Errors
 JSON-RPC standard codes, plus: `-32001` not initialized, `-32002` invalid
 path, `-32003` driver unavailable, `-32004` unknown tab, `-32010` fence
 verification failed, `-32011` sandbox failed to start, `-32012` REH not
-ready, `-32020` secrets found in the workspace, `-32021` secret scan
-incomplete.
+ready, `-32013` write-back not gated or failed, `-32020` secrets found in the
+workspace, `-32021` secret scan incomplete.
 
 ## 6. Versioning
 `protocolVersion` is `seclab-tabd/<major>.<minor>`. A minor bump only adds

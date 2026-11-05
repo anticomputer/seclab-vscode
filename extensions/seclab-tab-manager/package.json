@@ -63,6 +63,18 @@
 				"enablement": "remoteName == seclab"
 			},
 			{
+				"command": "seclab.reviewChanges",
+				"title": "Review Held Changes…",
+				"category": "seclab",
+				"enablement": "remoteName == seclab"
+			},
+			{
+				"command": "seclab.confirmDeletes",
+				"title": "Confirm Held Deletions…",
+				"category": "seclab",
+				"enablement": "remoteName == seclab"
+			},
+			{
 				"command": "seclab.activity.focus",
 				"title": "Show Tab Activity",
 				"category": "seclab"

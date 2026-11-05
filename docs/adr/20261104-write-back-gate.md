@@ -176,8 +176,21 @@ and is not implemented as protection.
 - Increments:
   1. engine and policy (unit-tested against a hostile upper layer);
   2. sbx overlay (2a, built: tab writes stay in the VM) and sync (2b, built);
-  3. Tab Manager prompt;
+  3. Tab Manager prompt (built);
   4. OCI on native Linux.
+
+> **As built (increment 3):** when tabd holds changes, the Tab Manager warns once
+> ("This tab changed N file(s) that can run code on your machine…") and shows a status
+> bar count. "seclab: Review Held Changes…" lists them as plain text: escaped paths and
+> reasons, with codicon syntax neutralised. For the selected change it opens a read-only
+> diff (your machine ↔ tab) in virtual documents, never a webview, then a modal with
+> **Approve**, **Reject (keep the original)** and **Always allow for this tab and path**.
+> - The decision carries the signature of what was shown, and tabd re-reads the tab's
+>   entry and refuses if it changed.
+> - Reject restores the host's version into the tab when the host has the file; otherwise
+>   the tab keeps its own copy, marked decided.
+> - "seclab: Confirm Held Deletions…" releases the sticky mass-deletion hold.
+> - Tabs whose runtime can't gate writes show "Write-back not gated" in the status bar.
 
 > **As built (increment 2b):** tabd syncs each running gated tab every 3 s, and again
 > before it stops. A root helper in the VM, `seclab-wb-feed`, reads the upper layer

@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { TabdClient, type TabdChannel } from '../tabd-src/client.ts';
 import { TabActivity } from './activity.ts';
+import { WriteBackReview } from './writeback.ts';
 
 const AUTHORITY_PREFIX = 'seclab';
 const TAB_ID_RE = /^t-[a-z2-7]{26}$/;
@@ -27,6 +28,7 @@ let client: TabdClient | undefined;
 let clientReady: Promise<TabdClient> | undefined;
 let extensionContext: vscode.ExtensionContext;
 let activity: TabActivity | undefined;
+let writeBack: WriteBackReview | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
 	extensionContext = context;
@@ -47,6 +49,8 @@ export function activate(context: vscode.ExtensionContext): void {
 	showStatus();
 	// Tab activity (observability) for this window's tab; filled in by resolve().
 	activity = new TabActivity(context);
+	// Write-back review (ADR write-back-gate): held changes, decisions, "not gated" notice.
+	writeBack = new WriteBackReview(context, getClient, currentTabId(), log);
 
 	// Route local folder windows into tabs (no core patch; see docs/edr/20261104-tab-manager-routing.md).
 	if (vscode.env.remoteName === undefined) {
@@ -126,6 +130,10 @@ function getClient(): Promise<TabdClient> {
 function onNotification(method: string, params: Record<string, unknown>): void {
 	if (method === 'tab.event' || method === 'tab.observation') {
 		activity?.onNotification(method, params);
+		return;
+	}
+	if (method === 'tab.writeback.pending') {
+		writeBack?.onPending(params);
 		return;
 	}
 	if (method === 'tab.status') {
