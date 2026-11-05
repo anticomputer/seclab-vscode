@@ -18,3 +18,8 @@ test/observability/run.ts:agent-injection
 # Background editor windows: one read-only CGWindowList query (JXA) for the window id that
 # screencapture -l needs. No activate/frontmost; focus-steal still applies.
 test/harness.ts:persistence
+
+# Agents-in-the-tab spike: the GitHub resource and authorization-server identifiers the
+# real auth resolution matches on (github-authentication declares that exact glob). Strings
+# only; the runner container has no network.
+test/agentic/ahp/runner.ts:non-test-host

@@ -313,17 +313,26 @@ applies a policy only to settings whose registration declares one, and none of t
 (round 2, finding 4). The RPC-lockdown session's patch 0011 already re-registers
 `chat.workspaceRemoteAgentHosts` and `chat.agentHost.localFilePermissions` at
 `APPLICATION` scope in every window. The same treatment, registration at `APPLICATION` in
-every window or a forced value for `seclab+`, applies to the rest of the class (e)
-settings that are registered only in the Agents window but read elsewhere:
-`chat.remoteAgentHosts`, `chat.remoteAgentHostsAutoConnect`, `chat.remoteAgentTunnels`,
-`chat.sshRemoteAgentHostCommand` and `chat.wslRemoteAgentHostCommand` (strings the host
-runs to launch an agent host), `chat.agentHost.forwardSSHAgent`,
-`chat.agentHost.wsl.autoStart`, `chat.automations.enabled` and
-`chat.automations.cloud.enabled`. It also applies to `chat.remoteAgentHostsEnabled`,
-`chat.agentHost.githubEnvironments.enabled`, `chat.agentHost.cloudSandbox.enabled`, and
-`workbench.browser.enableRemoteProxy`, which is `WINDOW` scope and defaults to on in
-non-stable builds such as ours. Source: the class (e) settings inventory (146 settings,
-89 tab-writable) on the RPC-lockdown branch.
+every window or a forced value for `seclab+`, applies to every other setting that is
+read in an editor window, is policy-bearing for agent hosts, and is tab-writable there.
+
+Confirmed so far (RPC-lockdown inventory at `5104309`, which records the weakest scope of
+a setting registered twice):
+- `workbench.browser.enableRemoteProxy`. It has two registrations, and the weaker one is
+  `WINDOW` scope with a default of on in non-stable builds such as ours, so the tab gets
+  the weaker one.
+- `chat.automations.enabled` and `chat.automations.cloud.enabled`: unregistered where an
+  editor window reads them.
+- `chat.agentHost.localFilePermissions`, already covered by patch 0011.
+
+Ambiguous, not forced: `chat.remoteAgentHosts`, `chat.remoteAgentHostsAutoConnect`,
+`chat.remoteAgentTunnels`, `chat.sshRemoteAgentHostCommand`,
+`chat.wslRemoteAgentHostCommand`, `chat.agentHost.forwardSSHAgent` and
+`chat.agentHost.wsl.autoStart`. Their only readers are in `platform/`, which the Agents
+window also instantiates, and no editor-window reader has been shown. An earlier
+inventory listed some of them because of a detector false positive. They are forced
+only if a probe shows an editor-window read; the null `IRemoteAgentHostService` (§3.5
+rule) covers the dialing path either way.
 
 ## 4. Model and credential access
 
