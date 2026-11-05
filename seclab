@@ -25,6 +25,7 @@ usage: ./seclab <command>
   lint fixtures [PATH...]       Fixture-safety lint (no real secrets/hosts/persistence in test payloads)
   lint source                   Shipped sources: no unreviewed env/spawn sites, no dynamic loading, no test markers
   lint deps [--self-test]       Dependency register: every pin in deps/registry.json, entries complete (ADR)
+  deps outdated                 Report image tags that moved and tracked tools with newer releases
   docs write                    Regenerate the ADR/EDR/security-review indexes and docs/DEPENDENCIES.md
   docs check [--run-commands] [--online] [--paired]
                                 Docs drift gate: records, generated indexes, links, permalinks, ARCHITECTURE
@@ -292,6 +293,13 @@ case "${1:-help}" in
 			*) usage; exit 2 ;;
 		esac ;;
 	help|-h|--help) usage ;;
+	# Dependency updates Dependabot can't see (ADR supply-chain provenance): report only.
+	deps)
+		shift
+		case "${1:-}" in
+			outdated) docker run --rm -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/deps-outdated.ts ;;
+			*) usage; exit 2 ;;
+		esac ;;
 	# Host hygiene: runs on the host (it drives docker/sbx/ps); dry run unless --apply.
 	clean-host) shift
 		if [[ "${1:-}" == --self-test ]]; then

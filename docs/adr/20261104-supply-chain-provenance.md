@@ -90,10 +90,15 @@ Research (2026-11-04, primary sources) on what publishers actually provide:
    - Upstream is fetched by exact SHA through git (`build/fetch-upstream.sh` verifies tag
      → SHA). The build image's Node version must equal upstream's `.nvmrc`, which
      `build/prepare.sh` asserts.
-5. **Updates.** Dependabot covers Dockerfiles, workflows and pip. A scheduled job covers
-   what Dependabot can't see (image pins in shell and TS). Every update, bot or human,
-   goes through the same verification and review. A Node major bump on the build image
-   is refused until upstream's `.nvmrc` moves.
+5. **Updates.** Dependabot covers Dockerfiles, workflows and pip. For what it can't see
+   (image pins in shell and TS, tracked tools' releases), the weekly `deps-updates`
+   workflow runs `./seclab deps outdated` and files or updates **one tracking issue**.
+   It reports image tags that moved and newer releases; it never changes a pin. It's an
+   issue rather than a PR on purpose: a PR opened with `GITHUB_TOKEN` triggers no CI, so
+   it could never pass the ruleset, and opening one would need `contents: write` on a
+   scheduled job, where an issue needs only `issues: write`. Every update, bot or human,
+   goes through the same verification and review. A Node bump on the build image is
+   refused until upstream's `.nvmrc` moves.
 
 ## Consequences
 - Dependencies that meet only the digest bar today, where something stronger exists, are

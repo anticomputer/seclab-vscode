@@ -148,7 +148,7 @@ if (process.argv[2] === '--self-test') {
 // blocks CI executes (CI-2a). Fixture workspaces are hostile payloads (fixture-lint's job).
 const files = (process.argv[2] ? fs.readFileSync(process.argv[2] === '-' ? 0 : process.argv[2], 'utf8') : execFileSync('git', ['-C', repo, 'ls-files', '-z'], { encoding: 'utf8' }))
 	.split('\0').filter(Boolean)
-	.filter(f => !/\.(png|jpe?g|gif|svg|lock|patch)$/.test(f) && !f.includes('/fixtures/') && f !== 'build/check-pins.ts'); // the rules and their samples
+	.filter(f => !/\.(png|jpe?g|gif|svg|lock|patch)$/.test(f) && !f.includes('/fixtures/') && !['build/check-pins.ts', 'build/deps.ts', 'deps/registry.json'].includes(f)); // rules, their samples, and the register's names (its pins are checked by build/deps.ts)
 const findings: string[] = [];
 for (const f of files) {
 	let text: string;
