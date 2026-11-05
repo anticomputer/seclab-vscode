@@ -16,6 +16,7 @@ class FakeUpper implements UpperReader {
 	files = new Map<string, { content: Buffer; mode: number }>();
 	wh = new Set<string>();
 	opq = new Set<string>();
+	err = false;
 	extraGet?: string;
 	async feed(mode: 'list' | 'get' | 'mirror', input = ''): Promise<string> {
 		const out: string[] = [];
@@ -25,6 +26,9 @@ class FakeUpper implements UpperReader {
 			}
 			this.wh.forEach(p => out.push(JSON.stringify({ p, k: 'wh' })));
 			this.opq.forEach(p => out.push(JSON.stringify({ p, k: 'opq' })));
+			if (this.err) {
+				out.push(JSON.stringify({ p: 'unreadable', k: 'err' }));
+			}
 			out.push(JSON.stringify({ done: true, count: out.length, truncated: false }));
 		} else {
 			for (const l of input.split('\n').filter(Boolean)) {
@@ -89,15 +93,22 @@ test('feed: host edits to a synced file are mirrored into the upper copy (CAS)',
 	assert.equal(read(root, 'a.txt'), 'tab again\n');
 });
 
-test('feed: whiteouts and opaque directories are deletions; held entries the tab removes are forgotten', async () => {
+test('feed: whiteouts are deletions; an opaque directory is one held directory deletion (MM-1); held entries the tab removes are forgotten', async () => {
 	const { root, e, up } = setup('delete');
 	up.wh.add('a.txt');
 	up.opq.add('d');
 	up.files.set('d/kept.txt', { content: Buffer.from('k\n'), mode: 0o644 });
 	const r = await syncTick(e, up, root, 64);
 	assert.ok(!fs.existsSync(path.join(root, 'a.txt')));
-	assert.ok(!fs.existsSync(path.join(root, 'd', 'b.txt')) && !fs.existsSync(path.join(root, 'd', 'sub', 'c.txt')), JSON.stringify(r));
+	assert.ok(fs.existsSync(path.join(root, 'd', 'b.txt')) && fs.existsSync(path.join(root, 'd', 'sub', 'c.txt')), 'replaced directory: host files kept');
+	assert.ok(r.held.some(h => h.path === 'd' && h.reasons.includes('directory deletion')), JSON.stringify(r.held));
 	assert.equal(read(root, 'd/kept.txt'), 'k\n');
+	// MM-2: an incomplete listing applies no deletions.
+	const { root: ir, e: ie, up: iu } = setup('incomplete');
+	iu.wh.add('a.txt');
+	iu.err = true;
+	await syncTick(ie, iu, ir, 64);
+	assert.ok(fs.existsSync(path.join(ir, 'a.txt')), 'no deletion from an incomplete listing');
 	const { root: r2root, e: e2, up: up2 } = setup('forget');
 	up2.files.set('.envrc', { content: Buffer.from('x\n'), mode: 0o644 });
 	assert.equal((await syncTick(e2, up2, r2root, 64)).held.length, 1);
@@ -126,4 +137,16 @@ test('feed: a tab cannot create a git repository in a host folder that has none'
 	assert.equal(r.applied.length, 0, JSON.stringify(r.applied));
 	assert.ok(!fs.existsSync(path.join(root, '.git')));
 	assert.equal(r.held.length, 2);
+});
+
+test('feed: tab-local files are never mirrored from the host (MM-3)', async () => {
+	const { root, e, up } = setup('tablocal');
+	fs.mkdirSync(path.join(root, 'node_modules', 'x'), { recursive: true });
+	fs.writeFileSync(path.join(root, 'node_modules', 'x', 'i.js'), 'host copy\n');
+	up.files.set('node_modules/x/i.js', { content: Buffer.from('tab copy\n'), mode: 0o644 });
+	const r1 = await syncTick(e, up, root, 64);
+	assert.match(r1.refused.map(x => x.reason).join(), /tab-local/);
+	const r2 = await syncTick(e, up, root, 64);
+	assert.deepEqual(r2.mirrored, []);
+	assert.equal(up.files.get('node_modules/x/i.js')?.content.toString(), 'tab copy\n');
 });
