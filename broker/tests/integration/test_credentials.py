@@ -298,12 +298,13 @@ def test_websocket_credential_needs_binding_opt_in(pod, ctl):
     # Unconfirmed import: no prompt for an upgrade.
     pod.load({"allow": ALLOW, "prompt": {"timeoutSeconds": 5}})
     ctl.call("tab.event", {"kind": "userAction"})
-    imp = ctl.call("credential.import", {"id": "wsimp", "value": pod.canaries["api"]})
+    imp = ctl.call("credential.import", {"id": "wsimp", "value": pod.canaries["imported"]})
     mark = ctl.mark()
     p = pod.ws("python3 /usr/local/bin/wsclient.py wss://ws.example.test/ws hello",
                env={"WS_AUTH": "Bearer " + imp["sentinel"]})
     assert p.returncode != 0 and b"403" in p.stderr
     assert ctl.notes_since(mark, "approval.requested") == []
+    ctl.call("credential.revoke", {"id": "wsimp"})
 
 
 def test_websocket_handshake_injection_and_message_scanning(pod, ctl):
