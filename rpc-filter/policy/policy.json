@@ -1,513 +1,801 @@
 {
-  "schema": 1,
-  "upstream_sha": "a717861c07586a53d83b80d742cd3f59b20a6273",
-  "applies_to": "extension hosts whose remote authority matches seclab+*",
-  "default_verdict": "deny",
-  "verdicts": {
-    "allow": "forwarded unchanged",
-    "allow_with_constraint": "forwarded only if every named argument constraint holds",
-    "prompt": "held, surfaced to the user as a tab-labelled scope-expansion prompt, then forwarded or rejected",
-    "rewrite": "forwarded, but the trusted side substitutes a tab-scoped value (sentinel credential, partitioned key)",
-    "deny": "rejected with an error the extension host sees as an unsupported operation"
-  },
-  "invariants": [
-    {
-      "id": "no-real-secret-in-tab",
-      "statement": "No real secret may enter a tab, in any form, through any surface.",
-      "enforced_by": "every entry below whose capability includes credential-access must have verdict deny or rewrite; never allow, allow_with_constraint or prompt",
-      "checked_by": "check_drift.py::check_invariants"
-    },
-    {
-      "id": "identity-never-from-arguments",
-      "statement": "Caller identity (tab, extension) is bound to the connection and is never read from call arguments.",
-      "enforced_by": "entries flagged identity_from_argument must have verdict deny or rewrite",
-      "checked_by": "check_drift.py::check_invariants"
-    },
-    {
-      "id": "default-deny",
-      "statement": "Any surface with no explicit verdict is denied.",
-      "enforced_by": "resolution falls through to default_verdict",
-      "checked_by": "check_drift.py::check_coverage"
-    },
-    {
-      "id": "key-on-wire-sid",
-      "statement": "RPC policy is keyed on the createProxyIdentifier sid string, never the MainContext property name and never the numeric nid.",
-      "enforced_by": "rpc entries are keyed by sid; the drift check rejects a key that is not a known sid",
-      "checked_by": "check_drift.py::check_keys"
-    }
-  ],
-  "rpc": {
-    "MainThreadChatAgents2": {
-      "service_default": "deny",
-      "review": "classified",
-      "methods": {
-        "$handleProgressChunk": {
-          "verdict": "deny",
-          "capability": "push a progress chunk into a chat session on the trusted side",
-          "impact": ["ui-spoofing"],
-          "undeclared": true,
-          "rationale": "Callable over RPC despite not appearing in MainThreadChatAgentsShape2, because the dispatcher resolves actor[methodName] without consulting the interface. Chat rendering is a trusted-side surface that can present attacker-chosen content as assistant output, so a sandboxed host does not get it in v0.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/common/rpcProtocol.ts#L449-L461"
-          ]
-        },
-        "$handleAnchorResolve": {
-          "verdict": "deny",
-          "capability": "resolve an anchor in rendered chat output",
-          "impact": ["ui-spoofing"],
-          "undeclared": true,
-          "rationale": "Same undeclared-but-callable path as $handleProgressChunk.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/common/rpcProtocol.ts#L449-L461"
-          ]
-        }
-      }
-    },
-    "MainThreadSecretState": {
-      "service_default": "deny",
-      "review": "classified",
-      "methods": {
-        "$getPassword": {
-          "verdict": "rewrite",
-          "capability": "read a stored secret for an extension id the caller names",
-          "impact": ["credential-access", "cross-tab-access"],
-          "identity_from_argument": true,
-          "constraint": "extensionId is discarded and replaced with the identity bound to the connection; the storage key becomes {tabId, boundExtensionId, key}",
-          "rationale": "extensionId is an RPC argument, so a hostile host can name any extension, including vscode.github-authentication, and read its stored sessions. The stored value is also global across windows, so without partitioning one tab reads another tab's secrets.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L38-L48",
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L90-L92"
-          ]
-        },
-        "$setPassword": {
-          "verdict": "rewrite",
-          "capability": "write a stored secret under an extension id the caller names",
-          "impact": ["cross-tab-access"],
-          "identity_from_argument": true,
-          "constraint": "same rebinding as $getPassword",
-          "rationale": "Poisoning: a tab can overwrite another extension's stored session, including an auth provider's.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L50-L59"
-          ]
-        },
-        "$deletePassword": {
-          "verdict": "rewrite",
-          "capability": "delete a stored secret under a caller-named extension id",
-          "impact": ["cross-tab-access", "dos"],
-          "identity_from_argument": true,
-          "constraint": "same rebinding as $getPassword",
-          "rationale": "Same spoofable identity; worst case is destroying another extension's credentials.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L61-L70"
-          ]
-        },
-        "$getKeys": {
-          "verdict": "rewrite",
-          "capability": "enumerate every stored secret key for a caller-named extension id",
-          "impact": ["credential-access", "cross-tab-access"],
-          "identity_from_argument": true,
-          "constraint": "same rebinding as $getPassword",
-          "rationale": "Enumeration is strictly worse than a single read: it gives the attacker the key names to then fetch.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L72-L80"
-          ]
-        }
-      }
-    },
-    "MainThreadAuthentication": {
-      "service_default": "deny",
-      "review": "classified",
-      "methods": {
-        "$getSession": {
-          "verdict": "rewrite",
-          "capability": "obtain an authentication session, including its access token",
-          "impact": ["credential-access", "exfiltration"],
-          "identity_from_argument": true,
-          "constraint": "return a session whose accessToken is a tab-scoped sentinel; the broker swaps it on egress that matches the credential binding. The extensionId argument is replaced with the connection-bound identity before any consent or trustedExtensionAuthAccess decision.",
-          "rationale": "Returns a real reusable token into the sandbox, which violates no-real-secret-in-tab. The extensionId argument also drives the consent decision, so a hostile host can impersonate an already-trusted extension to skip the prompt.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadAuthentication.ts#L553-L566"
-          ]
-        }
-      }
-    },
-    "MainThreadWorkspace": {
-      "service_default": "deny",
-      "review": "classified",
-      "methods": {
-        "$lookupAuthorization": {
-          "verdict": "deny",
-          "capability": "retrieve the host's configured proxy credentials",
-          "impact": ["credential-access", "exfiltration"],
-          "rationale": "Hands host proxy credentials to the caller. There is no sentinel form that a tab needs, because the tab's only egress is its own broker.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWorkspace.ts#L231-L237"
-          ]
-        },
-        "$lookupKerberosAuthorization": {
-          "verdict": "deny",
-          "capability": "obtain a Kerberos ticket for a caller-chosen service principal",
-          "impact": ["credential-access", "exfiltration"],
-          "rationale": "A Kerberos token for an attacker-chosen SPN is a reusable host credential.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWorkspace.ts#L231-L237"
-          ]
-        }
-      }
-    },
-    "MainThreadClipboard": {
-      "service_default": "deny",
-      "review": "classified",
-      "methods": {
-        "$readText": {
-          "verdict": "deny",
-          "capability": "read the host clipboard",
-          "impact": ["credential-access", "exfiltration"],
-          "rationale": "The clipboard routinely holds tokens and passwords the user has just copied. A tab can poll it. There is no argument constraint that makes this safe, and a prompt on every read is unusable, so it is denied outright in v0.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadClipboard.ts#L24-L28"
-          ]
-        },
-        "$writeText": {
-          "verdict": "allow",
-          "capability": "write the host clipboard",
-          "impact": ["ui-spoofing"],
-          "rationale": "Write-only. The residual risk is clipboard poisoning leading to the user pasting attacker text into a host terminal; that is accepted in v0 and recorded as a residual risk.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadClipboard.ts#L30-L33"
-          ]
-        }
-      }
-    },
-    "MainThreadCommands": {
-      "service_default": "deny",
-      "review": "classified",
-      "methods": {
-        "$executeCommand": {
-          "verdict": "allow_with_constraint",
-          "capability": "run any command in the trusted-side registry, with caller-chosen arguments",
-          "impact": ["code-execution", "host-fs-read", "host-fs-write", "exfiltration", "ui-spoofing"],
-          "constraint": "the id argument must resolve to an allow or prompt verdict in the commands table; arguments are additionally validated by the per-command argument validators",
-          "rationale": "The id comes from the caller and is not checked against the caller's location, so the whole registry is reachable. This is the single widest surface and the reason the commands table exists.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCommands.ts#L81-L93"
-          ]
-        },
-        "$registerCommand": {
-          "verdict": "allow_with_constraint",
-          "capability": "register a command id the trusted side will route back to this host",
-          "impact": ["ui-spoofing"],
-          "constraint": "the id must not collide with an existing registry entry; registrations from a tab are namespaced and are only routed back to that same tab",
-          "rationale": "Without a collision check a tab can shadow a trusted command id and then be invoked by the UI, by another extension, or by a command: link.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCommands.ts#L48-L62"
-          ]
-        },
-        "$unregisterCommand": {
-          "verdict": "allow_with_constraint",
-          "capability": "remove a command registration",
-          "impact": ["dos"],
-          "constraint": "only ids this tab registered",
-          "rationale": "Otherwise a tab can unregister trusted commands.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCommands.ts#L81-L93"
-          ]
-        },
-        "$getCommands": {
-          "verdict": "allow_with_constraint",
-          "capability": "enumerate the command registry",
-          "impact": ["reconnaissance"],
-          "constraint": "the returned list is filtered to the ids this tab is allowed to execute",
-          "rationale": "Returning the full registry tells an attacker exactly which host commands exist to try. Filtering also keeps extension UX honest about what is available.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCommands.ts#L95-L104"
-          ]
-        }
-      }
-    },
-    "MainThreadFileSystem": {
-      "service_default": "deny",
-      "review": "classified",
-      "methods": {
-        "$readFile": {
-          "verdict": "allow_with_constraint",
-          "capability": "read any URI the IFileService can resolve",
-          "impact": ["host-fs-read", "credential-access"],
-          "residual_impact": [],
-          "constraint": "scheme and authority must be vscode-remote://seclab+<this tab>, or untitled:, or an extension-owned read-only resource of an extension running in this tab",
-          "rationale": "Any scheme is accepted, so file: and vscode-userdata: reach host files, including user settings which can hold tokens. The scheme and authority constraint is what removes the credential reach: a tab can only name paths inside its own sandbox.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadFileSystem.ts#L104-L119"
-          ]
-        },
-        "$writeFile": {
-          "verdict": "allow_with_constraint",
-          "capability": "write any URI the IFileService can resolve",
-          "impact": ["host-fs-write", "code-execution"],
-          "constraint": "same as $readFile",
-          "rationale": "A host write is a code-execution primitive: shell rc files, LaunchAgents, git hooks outside the workspace.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadFileSystem.ts#L104-L119"
-          ]
-        }
-      }
-    },
-    "MainThreadWindow": {
-      "service_default": "deny",
-      "review": "classified",
-      "methods": {
-        "$openUri": {
-          "verdict": "prompt",
-          "capability": "hand a caller-chosen URI to the host OS opener",
-          "impact": ["exfiltration", "code-execution"],
-          "constraint": "the prompt names the tab and shows the full target; allowTunneling and allowContributedOpeners are forced to false",
-          "rationale": "openExternal is a silent exfiltration channel that bypasses the tab broker entirely, and on some platforms a URI is a code-execution primitive.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWindow.ts#L58-L73"
-          ]
-        },
-        "$asExternalUri": {
-          "verdict": "prompt",
-          "capability": "resolve a URI to a host-reachable form, creating a tunnel if needed",
-          "impact": ["exfiltration", "cross-tab-access"],
-          "constraint": "tunnel creation is prompted and the resulting tunnel is bound to this tab",
-          "rationale": "Resolving can mint a tunnel, which is a route out of the tab that the broker does not see.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWindow.ts#L75-L78"
-          ]
-        }
-      }
-    },
-    "MainThreadTunnelService": {
-      "service_default": "deny",
-      "review": "classified",
-      "methods": {
-        "$openTunnel": {
-          "verdict": "prompt",
-          "capability": "forward a port between the host and the tab",
-          "impact": ["exfiltration", "cross-tab-access"],
-          "constraint": "prompt naming the tab, the port and the direction; the tunnel is torn down with the tab",
-          "rationale": "A forwarded port is a route that bypasses the broker and can reach host-local services.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadTunnelService.ts#L103-L151"
-          ]
-        },
-        "$setRemoteTunnelService": {
-          "verdict": "deny",
-          "capability": "point the tunnel service at a process id the caller chooses",
-          "impact": ["code-execution", "cross-tab-access"],
-          "rationale": "A caller-chosen process id on the trusted side is not something a contained tab needs.",
-          "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadTunnelService.ts#L51-L70"
-          ]
-        }
-      }
-    }
-  },
-  "commands": {
-    "note": "Resolution is ordered: exact id first, then rules in order, then default_verdict. Categories are a GROUPING HINT and may only carry the verdict 'deny'. A command becomes reachable only through an explicit entry in 'exact', individually reviewed against its implementation. This is deliberate: the category is a substring heuristic over the command id, and the 2026-11-04 design review demonstrated it mis-grouped host-authority commands as editor-local (e.g. editor.action.accessibilityHelpOpenHelpLink opens an external link, and _workbench.editor.configureDefaultEditor matched 'editor.' before the underscore rule). A heuristic may withhold authority; it may not grant it.",
-    "reachable_allowlist_status": "empty by design until Phase 3. The allow set is built from measured need: run a popular extension against the filter, observe the denial, review the command's implementation, then add an entry here with evidence. Nothing is allowed because it looked harmless in bulk.",
-    "exact": {
-      "_remoteCLI.openExternal": {
-        "verdict": "deny",
-        "capability": "open a caller-chosen URI externally, with tunnelling allowed",
-        "impact": ["exfiltration", "code-execution"],
-        "rationale": "Reachable both from $executeCommand and from the remote terminal channel's onExecuteCommand allowlist. It passes allowTunneling: true, so it both exfiltrates and can mint a tunnel.",
-        "evidence": [
-          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L29-L32",
-          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L102-L121"
-        ]
-      },
-      "_remoteCLI.windowOpen": {
-        "verdict": "deny",
-        "capability": "open a window on a caller-chosen folder or file",
-        "impact": ["code-execution", "host-fs-read"],
-        "rationale": "Opening a host folder in a new window starts an extension host over it, outside this tab's mount.",
-        "evidence": [
-          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L34-L40"
-        ]
-      },
-      "_remoteCLI.manageExtensions": {
-        "verdict": "deny",
-        "capability": "install or uninstall extensions",
-        "impact": ["code-execution"],
-        "rationale": "Installing an extension is arbitrary code execution with whatever kind that extension declares.",
-        "evidence": [
-          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L54-L58"
-        ]
-      },
-      "_remoteCLI.getSystemStatus": {
-        "verdict": "deny",
-        "capability": "read host system status",
-        "impact": ["reconnaissance"],
-        "rationale": "Host inventory, process and path disclosure.",
-        "evidence": [
-          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L42-L45"
-        ]
-      },
-      "workbench.action.terminal.newLocal": {
-        "verdict": "deny",
-        "capability": "create a terminal on the host rather than in the tab",
-        "impact": ["code-execution"],
-        "rationale": "In a remote window this explicitly creates a local, host-side terminal. Combined with sendSequence it is a direct host code-execution chain.",
-        "evidence": [
-          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/electron-browser/terminalRemote.ts#L16-L42"
-        ]
-      },
-      "workbench.action.terminal.sendSequence": {
-        "verdict": "deny",
-        "capability": "write arbitrary bytes into the active terminal",
-        "impact": ["code-execution"],
-        "rationale": "Types into whichever terminal is active, which may be a host terminal. This is the second half of the newLocal chain and is dangerous on its own.",
-        "evidence": [
-          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/electron-browser/terminalRemote.ts#L16-L42"
-        ]
-      }
-    },
-    "rules": [
-      {
-        "match": {"category": "host-process"},
-        "verdict": "deny",
-        "impact": ["code-execution"],
-        "rationale": "Terminals, tasks and debug sessions must start inside the tab. A host-side one defeats the whole containment."
-      },
-      {
-        "match": {"category": "extension-management"},
-        "verdict": "deny",
-        "impact": ["code-execution"],
-        "rationale": "Installing, enabling or updating an extension from inside a tab is arbitrary code execution and can escalate kind to ui."
-      },
-      {
-        "match": {"category": "host-filesystem"},
-        "verdict": "deny",
-        "impact": ["host-fs-read", "host-fs-write"],
-        "rationale": "Reveal-in-OS, open-folder and friends act on host paths outside the tab mount."
-      },
-      {
-        "match": {"category": "window-and-workspace"},
-        "verdict": "deny",
-        "impact": ["code-execution", "ui-spoofing"],
-        "rationale": "Opening or replacing windows moves work outside this tab's sandbox."
-      },
-      {
-        "match": {"category": "settings-and-policy"},
-        "verdict": "deny",
-        "impact": ["code-execution"],
-        "rationale": "Settings are a code-execution vector through interpreter and tool path settings, and they persist beyond the tab."
-      },
-      {
-        "match": {"category": "secrets-and-auth"},
-        "verdict": "deny",
-        "impact": ["credential-access"],
-        "rationale": "Required by the no-real-secret-in-tab invariant."
-      },
-      {
-        "match": {"category": "external-and-uri"},
-        "verdict": "deny",
-        "impact": ["exfiltration"],
-        "rationale": "Legitimately used by extensions to open docs and auth pages, and also an egress path around the broker. It is denied in bulk; individual ids are promoted to prompt in 'exact' once reviewed, because the category match is too coarse to tell vscode.open of a workspace file from one of an arbitrary external URI."
-      },
-      {
-        "match": {"category": "remote-and-tunnel"},
-        "verdict": "deny",
-        "impact": ["exfiltration", "cross-tab-access"],
-        "rationale": "Port forwarding is a normal remote-development need and a route around the broker. Promoted to prompt per id in 'exact' once reviewed."
-      },
-      {
-        "match": {"category": "internal-underscore"},
-        "verdict": "deny",
-        "impact": ["code-execution"],
-        "rationale": "Underscore-prefixed ids are internal plumbing with no API contract and no argument validation expectations."
-      },
-      {
-        "match": {"category": "editor-local"},
-        "verdict": "deny",
-        "impact": [],
-        "rationale": "Mostly cursor, selection and navigation inside documents this tab already owns, but the category is a substring match on the id and demonstrably captures commands with host authority. Denied in bulk; the genuinely local ones are promoted individually in 'exact'."
-      },
-      {
-        "match": {"category": "unclassified"},
-        "verdict": "deny",
-        "impact": [],
-        "rationale": "Default-deny. An unclassified command is denied until someone classifies it."
-      }
-    ]
-  },
-  "channels": {
-    "note": "Channels the workbench registers on the remote connection. The REH server runs inside the tab and calls these directly; they never pass through RPCProtocol, so the MainThread* filter does not see them.",
-    "download": {
-      "verdict": "deny",
-      "capability": "the server names both the source and the destination URI of a download performed by the trusted side",
-      "impact": ["host-fs-read", "host-fs-write", "exfiltration"],
-      "rationale": "DownloadServiceChannel revives both URIs from server-supplied arguments. The trusted side will fetch a URL the tab chooses, bypassing the broker, and write it to a host path the tab chooses. Our REH is launched over exec stdio and never needs the client to download for it.",
-      "evidence": [
-        "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L77-L81",
-        "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/download/common/downloadIpc.ts#L18-L26"
-      ]
-    },
-    "mcpGatewayToolBroker": {
-      "verdict": "deny",
-      "capability": "the server lists and invokes MCP tools and reads MCP resources registered on the trusted side",
-      "impact": ["code-execution", "host-fs-read", "credential-access", "exfiltration"],
-      "rationale": "callToolForServer invokes a tool hosted on the trusted side with arguments the tab chooses. Host-side MCP servers run as host processes with host credentials, so this is a direct confused-deputy path to host code execution. readResourceForServer is a host read. Not covered by the forwarded review; found by the inventory scan.",
-      "evidence": [
-        "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts#L13-L21",
-        "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/common/mcpGatewayToolBrokerChannel.ts#L167-L195"
-      ]
-    },
-    "server_initiated": {
-      "remoteTerminal.onExecuteCommand": {
-        "verdict": "deny",
-        "capability": "the server asks the client to run one of four _remoteCLI commands",
-        "impact": ["code-execution", "exfiltration"],
-        "rationale": "An allowlist exists, but every entry on it is dangerous: openExternal with tunnelling, windowOpen, manageExtensions, getSystemStatus. The allowlist is a stability measure, not a security boundary.",
-        "evidence": [
-          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L102-L121"
-        ]
-      }
-    }
-  },
-  "tab_data": {
-    "note": "Values that originate in a tab and are interpreted with authority by the trusted side. Verdicts here are implemented by the named mechanism rather than by the RPC choke point.",
-    "command-uri-in-markdown": {
-      "verdict": "deny",
-      "mechanism": "markdown and hover strings that arrived from a sandboxed host are forced isTrusted=false, so embedded command: links do not execute",
-      "impact": ["code-execution"]
-    },
-    "webview-content": {
-      "verdict": "allow_with_constraint",
-      "mechanism": "webview sessions for a sandboxed tab are routed through that tab's broker and given a CSP whose connect-src, img-src and script-src resolve only through it",
-      "impact": ["exfiltration"],
-      "rationale": "Webviews render in the local trusted renderer, so by default they have the host's network position and bypass the broker entirely."
-    },
-    "terminal-osc-sequence": {
-      "verdict": "allow_with_constraint",
-      "mechanism": "shell-integration OSC sequences from a tab may not set trusted-side state such as the cwd used by host openers",
-      "impact": ["ui-spoofing", "code-execution"]
-    },
-    "workspace-configuration": {
-      "verdict": "allow_with_constraint",
-      "mechanism": "configuration delivered to a sandboxed host is filtered to workspace scope; machine and application scoped values, http.proxy userinfo, http.proxyAuthorization and extension token settings are withheld",
-      "impact": ["credential-access", "code-execution"],
-      "rationale": "IConfigurationInitData is sent to the host at startup and user-scope settings can carry secrets."
-    },
-    "quick-input-password": {
-      "verdict": "rewrite",
-      "mechanism": "the trusted side keeps the typed value, registers it with the broker as a user-supplied credential, and returns a tab-scoped sentinel to the extension",
-      "impact": ["credential-access"],
-      "rationale": "Required by no-real-secret-in-tab: a password box is a direct way to put a real secret into a tab."
-    },
-    "uri-handler": {
-      "verdict": "prompt",
-      "mechanism": "vscode:// callbacks destined for a sandboxed extension are shown to the user and stripped of credential-bearing parameters unless bound by the broker",
-      "impact": ["credential-access"],
-      "rationale": "OAuth redirect callbacks carry codes and tokens."
-    },
-    "mcp-server-definition": {
-      "verdict": "rewrite",
-      "mechanism": "secret inputs and env values in MCP server definitions are replaced with tab-scoped sentinels before the server is launched in the tab",
-      "impact": ["credential-access"]
-    }
-  }
+	"schema": 1,
+	"upstream_sha": "a717861c07586a53d83b80d742cd3f59b20a6273",
+	"applies_to": "extension hosts whose remote authority matches seclab+*",
+	"default_verdict": "deny",
+	"verdicts": {
+		"allow": "forwarded unchanged",
+		"allow_with_constraint": "forwarded only if every named argument constraint holds",
+		"prompt": "held, surfaced to the user as a tab-labelled scope-expansion prompt, then forwarded or rejected",
+		"rewrite": "forwarded, but the trusted side substitutes a tab-scoped value (sentinel credential, partitioned key)",
+		"deny": "rejected with an error the extension host sees as an unsupported operation"
+	},
+	"invariants": [
+		{
+			"id": "no-real-secret-in-tab",
+			"statement": "No real secret may enter a tab, in any form, through any surface.",
+			"enforced_by": "every entry below whose capability includes credential-access must have verdict deny or rewrite; never allow, allow_with_constraint or prompt",
+			"checked_by": "check_drift.py::check_invariants"
+		},
+		{
+			"id": "identity-never-from-arguments",
+			"statement": "Caller identity (tab, extension) is bound to the connection and is never read from call arguments.",
+			"enforced_by": "entries flagged identity_from_argument must have verdict deny or rewrite",
+			"checked_by": "check_drift.py::check_invariants"
+		},
+		{
+			"id": "default-deny",
+			"statement": "Any surface with no explicit verdict is denied.",
+			"enforced_by": "resolution falls through to default_verdict",
+			"checked_by": "check_drift.py::check_coverage"
+		},
+		{
+			"id": "key-on-wire-sid",
+			"statement": "RPC policy is keyed on the createProxyIdentifier sid string, never the MainContext property name and never the numeric nid.",
+			"enforced_by": "rpc entries are keyed by sid; the drift check rejects a key that is not a known sid",
+			"checked_by": "check_drift.py::check_keys"
+		}
+	],
+	"rpc": {
+		"MainThreadChatAgents2": {
+			"service_default": "deny",
+			"review": "classified",
+			"methods": {
+				"$handleProgressChunk": {
+					"verdict": "deny",
+					"capability": "push a progress chunk into a chat session on the trusted side",
+					"impact": [
+						"ui-spoofing"
+					],
+					"undeclared": true,
+					"rationale": "Callable over RPC despite not appearing in MainThreadChatAgentsShape2, because the dispatcher resolves actor[methodName] without consulting the interface. Chat rendering is a trusted-side surface that can present attacker-chosen content as assistant output, so a sandboxed host does not get it in v0.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/common/rpcProtocol.ts#L449-L461"
+					]
+				},
+				"$handleAnchorResolve": {
+					"verdict": "deny",
+					"capability": "resolve an anchor in rendered chat output",
+					"impact": [
+						"ui-spoofing"
+					],
+					"undeclared": true,
+					"rationale": "Same undeclared-but-callable path as $handleProgressChunk.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/common/rpcProtocol.ts#L449-L461"
+					]
+				}
+			}
+		},
+		"MainThreadSecretState": {
+			"service_default": "deny",
+			"review": "classified",
+			"methods": {
+				"$getPassword": {
+					"verdict": "rewrite",
+					"capability": "read a stored secret for an extension id the caller names",
+					"impact": [
+						"credential-access",
+						"cross-tab-access"
+					],
+					"identity_from_argument": true,
+					"constraint": "extensionId is discarded and replaced with the identity bound to the connection; the storage key becomes {tabId, boundExtensionId, key}",
+					"rationale": "extensionId is an RPC argument, so a hostile host can name any extension, including vscode.github-authentication, and read its stored sessions. The stored value is also global across windows, so without partitioning one tab reads another tab's secrets.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L38-L48",
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L90-L92"
+					]
+				},
+				"$setPassword": {
+					"verdict": "rewrite",
+					"capability": "write a stored secret under an extension id the caller names",
+					"impact": [
+						"cross-tab-access"
+					],
+					"identity_from_argument": true,
+					"constraint": "same rebinding as $getPassword",
+					"rationale": "Poisoning: a tab can overwrite another extension's stored session, including an auth provider's.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L50-L59"
+					]
+				},
+				"$deletePassword": {
+					"verdict": "rewrite",
+					"capability": "delete a stored secret under a caller-named extension id",
+					"impact": [
+						"cross-tab-access",
+						"dos"
+					],
+					"identity_from_argument": true,
+					"constraint": "same rebinding as $getPassword",
+					"rationale": "Same spoofable identity; worst case is destroying another extension's credentials.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L61-L70"
+					]
+				},
+				"$getKeys": {
+					"verdict": "rewrite",
+					"capability": "enumerate every stored secret key for a caller-named extension id",
+					"impact": [
+						"credential-access",
+						"cross-tab-access"
+					],
+					"identity_from_argument": true,
+					"constraint": "same rebinding as $getPassword",
+					"rationale": "Enumeration is strictly worse than a single read: it gives the attacker the key names to then fetch.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L72-L80"
+					]
+				}
+			}
+		},
+		"MainThreadAuthentication": {
+			"service_default": "deny",
+			"review": "classified",
+			"methods": {
+				"$getSession": {
+					"verdict": "rewrite",
+					"capability": "obtain an authentication session, including its access token",
+					"impact": [
+						"credential-access",
+						"exfiltration"
+					],
+					"identity_from_argument": true,
+					"constraint": "return a session whose accessToken is a tab-scoped sentinel; the broker swaps it on egress that matches the credential binding. The extensionId argument is replaced with the connection-bound identity before any consent or trustedExtensionAuthAccess decision.",
+					"rationale": "Returns a real reusable token into the sandbox, which violates no-real-secret-in-tab. The extensionId argument also drives the consent decision, so a hostile host can impersonate an already-trusted extension to skip the prompt.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadAuthentication.ts#L553-L566"
+					]
+				}
+			}
+		},
+		"MainThreadWorkspace": {
+			"service_default": "deny",
+			"review": "classified",
+			"methods": {
+				"$lookupAuthorization": {
+					"verdict": "deny",
+					"capability": "retrieve the host's configured proxy credentials",
+					"impact": [
+						"credential-access",
+						"exfiltration"
+					],
+					"rationale": "Hands host proxy credentials to the caller. There is no sentinel form that a tab needs, because the tab's only egress is its own broker.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWorkspace.ts#L231-L237"
+					]
+				},
+				"$lookupKerberosAuthorization": {
+					"verdict": "deny",
+					"capability": "obtain a Kerberos ticket for a caller-chosen service principal",
+					"impact": [
+						"credential-access",
+						"exfiltration"
+					],
+					"rationale": "A Kerberos token for an attacker-chosen SPN is a reusable host credential.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWorkspace.ts#L231-L237"
+					]
+				}
+			}
+		},
+		"MainThreadClipboard": {
+			"service_default": "deny",
+			"review": "classified",
+			"methods": {
+				"$readText": {
+					"verdict": "deny",
+					"capability": "read the host clipboard",
+					"impact": [
+						"credential-access",
+						"exfiltration"
+					],
+					"rationale": "The clipboard routinely holds tokens and passwords the user has just copied. A tab can poll it. There is no argument constraint that makes this safe, and a prompt on every read is unusable, so it is denied outright in v0.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadClipboard.ts#L24-L28"
+					]
+				},
+				"$writeText": {
+					"verdict": "allow",
+					"capability": "write the host clipboard",
+					"impact": [
+						"ui-spoofing"
+					],
+					"rationale": "Write-only. The residual risk is clipboard poisoning leading to the user pasting attacker text into a host terminal; that is accepted in v0 and recorded as a residual risk.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadClipboard.ts#L30-L33"
+					]
+				}
+			}
+		},
+		"MainThreadCommands": {
+			"service_default": "deny",
+			"review": "classified",
+			"methods": {
+				"$executeCommand": {
+					"verdict": "allow_with_constraint",
+					"capability": "run any command in the trusted-side registry, with caller-chosen arguments",
+					"impact": [
+						"code-execution",
+						"host-fs-read",
+						"host-fs-write",
+						"exfiltration",
+						"ui-spoofing"
+					],
+					"constraint": "the id argument must resolve to an allow or prompt verdict in the commands table; arguments are additionally validated by the per-command argument validators",
+					"rationale": "The id comes from the caller and is not checked against the caller's location, so the whole registry is reachable. This is the single widest surface and the reason the commands table exists.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCommands.ts#L81-L93"
+					]
+				},
+				"$registerCommand": {
+					"verdict": "allow_with_constraint",
+					"capability": "register a command id the trusted side will route back to this host",
+					"impact": [
+						"ui-spoofing"
+					],
+					"constraint": "the id must not collide with an existing registry entry; registrations from a tab are namespaced and are only routed back to that same tab",
+					"rationale": "Without a collision check a tab can shadow a trusted command id and then be invoked by the UI, by another extension, or by a command: link.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCommands.ts#L48-L62"
+					]
+				},
+				"$unregisterCommand": {
+					"verdict": "allow_with_constraint",
+					"capability": "remove a command registration",
+					"impact": [
+						"dos"
+					],
+					"constraint": "only ids this tab registered",
+					"rationale": "Otherwise a tab can unregister trusted commands.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCommands.ts#L81-L93"
+					]
+				},
+				"$getCommands": {
+					"verdict": "allow_with_constraint",
+					"capability": "enumerate the command registry",
+					"impact": [
+						"reconnaissance"
+					],
+					"constraint": "the returned list is filtered to the ids this tab is allowed to execute",
+					"rationale": "Returning the full registry tells an attacker exactly which host commands exist to try. Filtering also keeps extension UX honest about what is available.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCommands.ts#L95-L104"
+					]
+				}
+			}
+		},
+		"MainThreadFileSystem": {
+			"service_default": "deny",
+			"review": "classified",
+			"methods": {
+				"$readFile": {
+					"verdict": "allow_with_constraint",
+					"capability": "read any URI the IFileService can resolve",
+					"impact": [
+						"host-fs-read",
+						"credential-access"
+					],
+					"residual_impact": [],
+					"constraint": "scheme and authority must be vscode-remote://seclab+<this tab>, or untitled:, or an extension-owned read-only resource of an extension running in this tab",
+					"rationale": "Any scheme is accepted, so file: and vscode-userdata: reach host files, including user settings which can hold tokens. The scheme and authority constraint is what removes the credential reach: a tab can only name paths inside its own sandbox.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadFileSystem.ts#L104-L119"
+					]
+				},
+				"$writeFile": {
+					"verdict": "allow_with_constraint",
+					"capability": "write any URI the IFileService can resolve",
+					"impact": [
+						"host-fs-write",
+						"code-execution"
+					],
+					"constraint": "same as $readFile",
+					"rationale": "A host write is a code-execution primitive: shell rc files, LaunchAgents, git hooks outside the workspace.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadFileSystem.ts#L104-L119"
+					]
+				}
+			}
+		},
+		"MainThreadWindow": {
+			"service_default": "deny",
+			"review": "classified",
+			"methods": {
+				"$openUri": {
+					"verdict": "prompt",
+					"capability": "hand a caller-chosen URI to the host OS opener",
+					"impact": [
+						"exfiltration",
+						"code-execution"
+					],
+					"constraint": "the prompt names the tab and shows the full target; allowTunneling and allowContributedOpeners are forced to false",
+					"rationale": "openExternal is a silent exfiltration channel that bypasses the tab broker entirely, and on some platforms a URI is a code-execution primitive.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWindow.ts#L58-L73"
+					]
+				},
+				"$asExternalUri": {
+					"verdict": "prompt",
+					"capability": "resolve a URI to a host-reachable form, creating a tunnel if needed",
+					"impact": [
+						"exfiltration",
+						"cross-tab-access"
+					],
+					"constraint": "tunnel creation is prompted and the resulting tunnel is bound to this tab",
+					"rationale": "Resolving can mint a tunnel, which is a route out of the tab that the broker does not see.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWindow.ts#L75-L78"
+					]
+				}
+			}
+		},
+		"MainThreadTunnelService": {
+			"service_default": "deny",
+			"review": "classified",
+			"methods": {
+				"$openTunnel": {
+					"verdict": "prompt",
+					"capability": "forward a port between the host and the tab",
+					"impact": [
+						"exfiltration",
+						"cross-tab-access"
+					],
+					"constraint": "prompt naming the tab, the port and the direction; the tunnel is torn down with the tab",
+					"rationale": "A forwarded port is a route that bypasses the broker and can reach host-local services.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadTunnelService.ts#L103-L151"
+					]
+				},
+				"$setRemoteTunnelService": {
+					"verdict": "deny",
+					"capability": "point the tunnel service at a process id the caller chooses",
+					"impact": [
+						"code-execution",
+						"cross-tab-access"
+					],
+					"rationale": "A caller-chosen process id on the trusted side is not something a contained tab needs.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadTunnelService.ts#L51-L70"
+					]
+				}
+			}
+		},
+		"MainThreadLanguageModels": {
+			"service_default": "deny",
+			"review": "classified",
+			"methods": {
+				"$tryStartChatRequest": {
+					"verdict": "deny",
+					"capability": "run a language-model chat request that the trusted side executes with the user's model credentials and quota",
+					"impact": [
+						"credential-access",
+						"exfiltration",
+						"dos"
+					],
+					"rationale": "The call is served on the trusted side: $tryStartChatRequest forwards to ILanguageModelsService.sendChatRequest in the workbench, so the model call, its credentials and its quota are the user's, not the tab's. Allowing it would give a tab a credentialed egress channel that does not pass through its broker, with the prompt as an unbounded exfiltration field. Denied in v0; if it is ever allowed it stays a trusted-side call (never a broker binding) and needs the prompt treated as data plus a per-tab rate limit.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadLanguageModels.ts#L219-L231",
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L1490"
+					]
+				},
+				"$registerLanguageModelProvider": {
+					"verdict": "deny",
+					"capability": "register the tab as a language-model provider for the trusted side",
+					"impact": [
+						"credential-access",
+						"exfiltration",
+						"code-execution",
+						"ui-spoofing"
+					],
+					"rationale": "This is the dangerous direction, and it inverts the usual threat. A registered provider's sendChatRequest proxies $startChatRequest into the *registering* extension host, so a tab that registers a provider receives the trusted-side agent's full message array -- which may carry content the agent gathered from outside the tab -- and returns response parts the trusted agent consumes, including tool calls it will then execute with host privileges. The tab stops being a consumer of the model and becomes the model.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadLanguageModels.ts#L118-L135",
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L1487"
+					]
+				},
+				"$onLMProviderChange": {
+					"verdict": "deny",
+					"capability": "signal a provider change for a vendor",
+					"impact": [
+						"exfiltration"
+					],
+					"rationale": "Part of the language-model surface, which is denied wholesale in v0. These are the supporting methods for $tryStartChatRequest and $registerLanguageModelProvider and have no meaning without them.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L1486-L1499"
+					]
+				},
+				"$unregisterProvider": {
+					"verdict": "deny",
+					"capability": "unregister a language-model provider",
+					"impact": [
+						"exfiltration"
+					],
+					"rationale": "Part of the language-model surface, which is denied wholesale in v0. These are the supporting methods for $tryStartChatRequest and $registerLanguageModelProvider and have no meaning without them.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L1486-L1499"
+					]
+				},
+				"$reportResponsePart": {
+					"verdict": "deny",
+					"capability": "push a response part for a pending request",
+					"impact": [
+						"exfiltration"
+					],
+					"rationale": "Part of the language-model surface, which is denied wholesale in v0. These are the supporting methods for $tryStartChatRequest and $registerLanguageModelProvider and have no meaning without them.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L1486-L1499"
+					]
+				},
+				"$reportResponseDone": {
+					"verdict": "deny",
+					"capability": "complete a pending request",
+					"impact": [
+						"exfiltration"
+					],
+					"rationale": "Part of the language-model surface, which is denied wholesale in v0. These are the supporting methods for $tryStartChatRequest and $registerLanguageModelProvider and have no meaning without them.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L1486-L1499"
+					]
+				},
+				"$selectChatModels": {
+					"verdict": "deny",
+					"capability": "enumerate the models available to the user",
+					"impact": [
+						"exfiltration"
+					],
+					"rationale": "Part of the language-model surface, which is denied wholesale in v0. These are the supporting methods for $tryStartChatRequest and $registerLanguageModelProvider and have no meaning without them.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L1486-L1499"
+					]
+				},
+				"$countTokens": {
+					"verdict": "deny",
+					"capability": "count tokens for a string or message",
+					"impact": [
+						"exfiltration"
+					],
+					"rationale": "Part of the language-model surface, which is denied wholesale in v0. These are the supporting methods for $tryStartChatRequest and $registerLanguageModelProvider and have no meaning without them.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L1486-L1499"
+					]
+				},
+				"$cancelLanguageModelChatRequest": {
+					"verdict": "deny",
+					"capability": "cancel a pending language-model request",
+					"impact": [
+						"exfiltration"
+					],
+					"rationale": "Part of the language-model surface, which is denied wholesale in v0. These are the supporting methods for $tryStartChatRequest and $registerLanguageModelProvider and have no meaning without them.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L1486-L1499"
+					]
+				},
+				"$fileIsIgnored": {
+					"verdict": "deny",
+					"capability": "ask whether a URI is ignored by content exclusion",
+					"impact": [
+						"exfiltration"
+					],
+					"rationale": "Part of the language-model surface, which is denied wholesale in v0. These are the supporting methods for $tryStartChatRequest and $registerLanguageModelProvider and have no meaning without them.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L1486-L1499"
+					]
+				},
+				"$registerFileIgnoreProvider": {
+					"verdict": "deny",
+					"capability": "register a content-exclusion provider",
+					"impact": [
+						"exfiltration"
+					],
+					"rationale": "Part of the language-model surface, which is denied wholesale in v0. These are the supporting methods for $tryStartChatRequest and $registerLanguageModelProvider and have no meaning without them.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L1486-L1499"
+					]
+				},
+				"$unregisterFileIgnoreProvider": {
+					"verdict": "deny",
+					"capability": "unregister a content-exclusion provider",
+					"impact": [
+						"exfiltration"
+					],
+					"rationale": "Part of the language-model surface, which is denied wholesale in v0. These are the supporting methods for $tryStartChatRequest and $registerLanguageModelProvider and have no meaning without them.",
+					"evidence": [
+						"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L1486-L1499"
+					]
+				}
+			}
+		}
+	},
+	"commands": {
+		"note": "Resolution is ordered: exact id first, then rules in order, then default_verdict. Categories are a GROUPING HINT and may only carry the verdict 'deny'. A command becomes reachable only through an explicit entry in 'exact', individually reviewed against its implementation. This is deliberate: the category is a substring heuristic over the command id, and the 2026-11-04 design review demonstrated it mis-grouped host-authority commands as editor-local (e.g. editor.action.accessibilityHelpOpenHelpLink opens an external link, and _workbench.editor.configureDefaultEditor matched 'editor.' before the underscore rule). A heuristic may withhold authority; it may not grant it.",
+		"reachable_allowlist_status": "empty by design until Phase 3. The allow set is built from measured need: run a popular extension against the filter, observe the denial, review the command's implementation, then add an entry here with evidence. Nothing is allowed because it looked harmless in bulk.",
+		"exact": {
+			"_remoteCLI.openExternal": {
+				"verdict": "deny",
+				"capability": "open a caller-chosen URI externally, with tunnelling allowed",
+				"impact": [
+					"exfiltration",
+					"code-execution"
+				],
+				"rationale": "Reachable both from $executeCommand and from the remote terminal channel's onExecuteCommand allowlist. It passes allowTunneling: true, so it both exfiltrates and can mint a tunnel.",
+				"evidence": [
+					"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L29-L32",
+					"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L102-L121"
+				]
+			},
+			"_remoteCLI.windowOpen": {
+				"verdict": "deny",
+				"capability": "open a window on a caller-chosen folder or file",
+				"impact": [
+					"code-execution",
+					"host-fs-read"
+				],
+				"rationale": "Opening a host folder in a new window starts an extension host over it, outside this tab's mount.",
+				"evidence": [
+					"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L34-L40"
+				]
+			},
+			"_remoteCLI.manageExtensions": {
+				"verdict": "deny",
+				"capability": "install or uninstall extensions",
+				"impact": [
+					"code-execution"
+				],
+				"rationale": "Installing an extension is arbitrary code execution with whatever kind that extension declares.",
+				"evidence": [
+					"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L54-L58"
+				]
+			},
+			"_remoteCLI.getSystemStatus": {
+				"verdict": "deny",
+				"capability": "read host system status",
+				"impact": [
+					"reconnaissance"
+				],
+				"rationale": "Host inventory, process and path disclosure.",
+				"evidence": [
+					"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L42-L45"
+				]
+			},
+			"workbench.action.terminal.newLocal": {
+				"verdict": "deny",
+				"capability": "create a terminal on the host rather than in the tab",
+				"impact": [
+					"code-execution"
+				],
+				"rationale": "In a remote window this explicitly creates a local, host-side terminal. Combined with sendSequence it is a direct host code-execution chain.",
+				"evidence": [
+					"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/electron-browser/terminalRemote.ts#L16-L42"
+				]
+			},
+			"workbench.action.terminal.sendSequence": {
+				"verdict": "deny",
+				"capability": "write arbitrary bytes into the active terminal",
+				"impact": [
+					"code-execution"
+				],
+				"rationale": "Types into whichever terminal is active, which may be a host terminal. This is the second half of the newLocal chain and is dangerous on its own.",
+				"evidence": [
+					"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/electron-browser/terminalRemote.ts#L16-L42"
+				]
+			}
+		},
+		"rules": [
+			{
+				"match": {
+					"category": "host-process"
+				},
+				"verdict": "deny",
+				"impact": [
+					"code-execution"
+				],
+				"rationale": "Terminals, tasks and debug sessions must start inside the tab. A host-side one defeats the whole containment."
+			},
+			{
+				"match": {
+					"category": "extension-management"
+				},
+				"verdict": "deny",
+				"impact": [
+					"code-execution"
+				],
+				"rationale": "Installing, enabling or updating an extension from inside a tab is arbitrary code execution and can escalate kind to ui."
+			},
+			{
+				"match": {
+					"category": "host-filesystem"
+				},
+				"verdict": "deny",
+				"impact": [
+					"host-fs-read",
+					"host-fs-write"
+				],
+				"rationale": "Reveal-in-OS, open-folder and friends act on host paths outside the tab mount."
+			},
+			{
+				"match": {
+					"category": "window-and-workspace"
+				},
+				"verdict": "deny",
+				"impact": [
+					"code-execution",
+					"ui-spoofing"
+				],
+				"rationale": "Opening or replacing windows moves work outside this tab's sandbox."
+			},
+			{
+				"match": {
+					"category": "settings-and-policy"
+				},
+				"verdict": "deny",
+				"impact": [
+					"code-execution"
+				],
+				"rationale": "Settings are a code-execution vector through interpreter and tool path settings, and they persist beyond the tab."
+			},
+			{
+				"match": {
+					"category": "secrets-and-auth"
+				},
+				"verdict": "deny",
+				"impact": [
+					"credential-access"
+				],
+				"rationale": "Required by the no-real-secret-in-tab invariant."
+			},
+			{
+				"match": {
+					"category": "external-and-uri"
+				},
+				"verdict": "deny",
+				"impact": [
+					"exfiltration"
+				],
+				"rationale": "Legitimately used by extensions to open docs and auth pages, and also an egress path around the broker. It is denied in bulk; individual ids are promoted to prompt in 'exact' once reviewed, because the category match is too coarse to tell vscode.open of a workspace file from one of an arbitrary external URI."
+			},
+			{
+				"match": {
+					"category": "remote-and-tunnel"
+				},
+				"verdict": "deny",
+				"impact": [
+					"exfiltration",
+					"cross-tab-access"
+				],
+				"rationale": "Port forwarding is a normal remote-development need and a route around the broker. Promoted to prompt per id in 'exact' once reviewed."
+			},
+			{
+				"match": {
+					"category": "internal-underscore"
+				},
+				"verdict": "deny",
+				"impact": [
+					"code-execution"
+				],
+				"rationale": "Underscore-prefixed ids are internal plumbing with no API contract and no argument validation expectations."
+			},
+			{
+				"match": {
+					"category": "editor-local"
+				},
+				"verdict": "deny",
+				"impact": [],
+				"rationale": "Mostly cursor, selection and navigation inside documents this tab already owns, but the category is a substring match on the id and demonstrably captures commands with host authority. Denied in bulk; the genuinely local ones are promoted individually in 'exact'."
+			},
+			{
+				"match": {
+					"category": "unclassified"
+				},
+				"verdict": "deny",
+				"impact": [],
+				"rationale": "Default-deny. An unclassified command is denied until someone classifies it."
+			}
+		]
+	},
+	"channels": {
+		"note": "Channels the workbench registers on the remote connection. The REH server runs inside the tab and calls these directly; they never pass through RPCProtocol, so the MainThread* filter does not see them.",
+		"download": {
+			"verdict": "deny",
+			"capability": "the server names both the source and the destination URI of a download performed by the trusted side",
+			"impact": [
+				"host-fs-read",
+				"host-fs-write",
+				"exfiltration"
+			],
+			"rationale": "DownloadServiceChannel revives both URIs from server-supplied arguments. The trusted side will fetch a URL the tab chooses, bypassing the broker, and write it to a host path the tab chooses. Our REH is launched over exec stdio and never needs the client to download for it.",
+			"evidence": [
+				"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L77-L81",
+				"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/download/common/downloadIpc.ts#L18-L26"
+			]
+		},
+		"mcpGatewayToolBroker": {
+			"verdict": "deny",
+			"capability": "the server lists and invokes MCP tools and reads MCP resources registered on the trusted side",
+			"impact": [
+				"code-execution",
+				"host-fs-read",
+				"credential-access",
+				"exfiltration"
+			],
+			"rationale": "callToolForServer invokes a tool hosted on the trusted side with arguments the tab chooses. Host-side MCP servers run as host processes with host credentials, so this is a direct confused-deputy path to host code execution. readResourceForServer is a host read. Not covered by the forwarded review; found by the inventory scan.",
+			"evidence": [
+				"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts#L13-L21",
+				"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/common/mcpGatewayToolBrokerChannel.ts#L167-L195"
+			]
+		},
+		"server_initiated": {
+			"remoteTerminal.onExecuteCommand": {
+				"verdict": "deny",
+				"capability": "the server asks the client to run one of four _remoteCLI commands",
+				"impact": [
+					"code-execution",
+					"exfiltration"
+				],
+				"rationale": "An allowlist exists, but every entry on it is dangerous: openExternal with tunnelling, windowOpen, manageExtensions, getSystemStatus. The allowlist is a stability measure, not a security boundary.",
+				"evidence": [
+					"https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L102-L121"
+				]
+			}
+		}
+	},
+	"tab_data": {
+		"note": "Values that originate in a tab and are interpreted with authority by the trusted side. Verdicts here are implemented by the named mechanism rather than by the RPC choke point.",
+		"command-uri-in-markdown": {
+			"verdict": "deny",
+			"mechanism": "markdown and hover strings that arrived from a sandboxed host are forced isTrusted=false, so embedded command: links do not execute",
+			"impact": [
+				"code-execution"
+			]
+		},
+		"webview-content": {
+			"verdict": "allow_with_constraint",
+			"mechanism": "webview sessions for a sandboxed tab are routed through that tab's broker and given a CSP whose connect-src, img-src and script-src resolve only through it",
+			"impact": [
+				"exfiltration"
+			],
+			"rationale": "Webviews render in the local trusted renderer, so by default they have the host's network position and bypass the broker entirely."
+		},
+		"terminal-osc-sequence": {
+			"verdict": "allow_with_constraint",
+			"mechanism": "shell-integration OSC sequences from a tab may not set trusted-side state such as the cwd used by host openers",
+			"impact": [
+				"ui-spoofing",
+				"code-execution"
+			]
+		},
+		"workspace-configuration": {
+			"verdict": "allow_with_constraint",
+			"mechanism": "configuration delivered to a sandboxed host is filtered to workspace scope; machine and application scoped values, http.proxy userinfo, http.proxyAuthorization and extension token settings are withheld",
+			"impact": [
+				"credential-access",
+				"code-execution"
+			],
+			"rationale": "IConfigurationInitData is sent to the host at startup and user-scope settings can carry secrets."
+		},
+		"quick-input-password": {
+			"verdict": "rewrite",
+			"mechanism": "the trusted side keeps the typed value, registers it with the broker as a user-supplied credential, and returns a tab-scoped sentinel to the extension",
+			"impact": [
+				"credential-access"
+			],
+			"rationale": "Required by no-real-secret-in-tab: a password box is a direct way to put a real secret into a tab."
+		},
+		"uri-handler": {
+			"verdict": "prompt",
+			"mechanism": "vscode:// callbacks destined for a sandboxed extension are shown to the user and stripped of credential-bearing parameters unless bound by the broker",
+			"impact": [
+				"credential-access"
+			],
+			"rationale": "OAuth redirect callbacks carry codes and tokens."
+		},
+		"mcp-server-definition": {
+			"verdict": "rewrite",
+			"mechanism": "secret inputs and env values in MCP server definitions are replaced with tab-scoped sentinels before the server is launched in the tab",
+			"impact": [
+				"credential-access"
+			]
+		}
+	}
 }
-
