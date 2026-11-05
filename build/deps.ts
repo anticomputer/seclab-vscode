@@ -128,6 +128,15 @@ export function pinsIn(f: string, text: string): TreePin[] {
 	if (/(^|\/)requirements[^/]*\.txt$/.test(f)) {
 		out.push({ pin: `pip:${f}`, where: f });
 	}
+	// Hash-locked downloads in lock files: `deb <file> <sha256>` (EE-4).
+	if (f.endsWith('.lock')) {
+		text.split('\n').forEach((line, i) => {
+			const d = /^deb\s+(\S+)\s+([0-9a-f]{64})\s*$/.exec(line);
+			if (d) {
+				out.push({ pin: `deb:${d[1]}@sha256:${d[2]}`, where: `${f}:${i + 1}` });
+			}
+		});
+	}
 	if (/(^|\/)Dockerfile[^/]*$/.test(f)) {
 		const pk = aptPackages(text);
 		if (pk.length) {
@@ -135,6 +144,11 @@ export function pinsIn(f: string, text: string): TreePin[] {
 		}
 	}
 	return out;
+}
+
+/** A file without its comment lines (`#`, `//`): a verifier call must be code, not prose (EE-4). */
+function codeLines(text: string): string {
+	return text.split('\n').filter(l => !/^\s*(#|\/\/)/.test(l)).join('\n');
 }
 
 export function validate(deps: Dep[], tree: TreePin[], exists: (p: string) => boolean, read: (p: string) => string | undefined = () => undefined): string[] {
@@ -179,7 +193,7 @@ export function validate(deps: Dep[], tree: TreePin[], exists: (p: string) => bo
 			const v = d.verifiedBy;
 			if (!v?.file || !v.contains) {
 				problems.push(`${at}: signed-verified needs verifiedBy {file, contains} naming the verifier call`);
-			} else if (!(read(v.file) ?? '').includes(v.contains)) {
+			} else if (!codeLines(read(v.file) ?? '').includes(v.contains)) {
 				problems.push(`${at}: verifiedBy ${v.file} does not contain the verifier call ${JSON.stringify(v.contains).slice(0, 80)}`);
 			}
 		}
