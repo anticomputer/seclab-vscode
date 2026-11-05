@@ -83,3 +83,16 @@ in-build sha256 recheck closes TOCTOU) hold.
 | TT-4 | Low | CI | `GH_TOKEN` reached PR code in workflow-lint (for actionlint's `gh attestation verify`). | Fixed | actionlint is verified by sigstore-python against a committed attestation bundle: no API, no token anywhere (also fixes the tokenless docs gate). |
 | TT-5 | Low | tool.sh | The cache key didn't cover the verifier. | Fixed | `tool.sh`, the verifier's lockfile and any committed bundle are in the key. |
 | TT-6 | Low | npm | Off-registry packages are skipped silently by `npm audit signatures`; an old stamp skipped the audit; it runs after install scripts. | Fixed / accepted | Off-registry `resolved` entries fail; the stamp is versioned (`sig1-`). Running after install scripts is accepted (upstream's postinstall needs them) and stated in the EDR. |
+
+## Round VV (2026-11-05): ripgrep seeding, patch-build gate, mechanical secret scan
+Scope: `0ae1eeb..ba65194` (EDRs [patch-build gate](../edr/20261105-patch-build-gate.md),
+[mechanical secret scan](../edr/20261105-mechanical-secret-scan.md)). No prompt injection found.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| VV-1 | **Medium** | lint secrets | `git diff BASE..TIP` scans the snapshot, so a secret added in one commit and removed in a later one (still in history, still pushed) passes. | Fixed | `git log -p -m --text --no-ext-diff --no-textconv` over the range: every commit, merges included. Reproduced with a generated token: old form exit 0, new form exit 1. |
+| VV-2 | **Medium** | CI | Scanning only from the push's previous head lets a secret pushed earlier on a branch (hook bypassed) reach `main` in a later clean push. | Fixed | Pushes to `main` scan from the previous head; every other push and PR scans every commit since the merge base with `main`. |
+| VV-3 | **Medium** | lint secrets | A `binary` or `-diff` attribute makes git print "Binary files differ", hiding the content. | Fixed | `--text` (covered by the VV-1 reproduction, `*.bin -diff`). |
+| VV-4 | Low | hook | `core.hooksPath=build/hooks` resolves per worktree, so a branch could edit or delete its own hook. | Fixed / accepted | The hook is copied to the clone's common git dir and `core.hooksPath` is absolute. It still runs the pushing checkout's `./seclab` (refusing if it has none); a branch that weakens `lint_secrets` is caught by the required CI step and by review, since main only fast-forwards. |
+| VV-5 | Low | ripgrep | The seed verified the archive but not the installed binary; the postinstall could take another path; the cache was in shared `/tmp`. | Fixed | `ripgrep.lock` pins each `rg` binary; `--verify-installed` runs after `npm ci` (and on every Linux build); seed and install use a fresh private `TMPDIR`. Negative control: a substituted `rg` fails. |
+| VV-6 | Low | patch-build | The reach graph counted commented-out and type-only imports as edges, and a `reach.json` patch touching no `.ts` file passed with nothing checked. | Fixed | Comments stripped, type-only imports/exports skipped (`build/patch-reach-imports.ts`, unit tests), and a `reach.json` patch with zero checked files fails. Patch 0012 still reaches desktop; `workbench.web.main.ts` still reaches only web. |

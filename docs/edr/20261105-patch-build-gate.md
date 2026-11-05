@@ -33,10 +33,13 @@ pull request, with no path filter:
    - `build/lib/esbuild.ts`: bootstrap entries.
    
    So the entry points follow upstream, and a list it can't parse fails closed. It builds the
-   static import graph, following static and literal dynamic imports. Every `src/**/*.ts` file
+   import graph from runtime edges only: static and literal dynamic imports, with comments
+   stripped and type-only imports and exports skipped, since those are erased at compile time
+   (review VV-6). Every `src/**/*.ts` file
    a patch in the series touches must then be reachable from the desktop build or the REH,
    never only from web. `patches/reach.json` can require specific targets for a security
-   patch, for example a channel filter that must sit in both `desktop` and `server`.
+   patch, for example a channel filter that must sit in both `desktop` and `server`; a patch
+   named there that touches no `src/**/*.ts` file fails, rather than passing with nothing checked.
    `--file PATH...` reports targets for patch authors.
 
 `patch-build` joins `unit`, `lint` and `docs` as a required status check in the `main`
