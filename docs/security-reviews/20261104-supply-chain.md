@@ -51,3 +51,12 @@ every step is already root, and the job holds only a read-only, job-lifetime tok
 | # | Sev | Area | Finding | Disposition | Fix |
 |---|---|---|---|---|---|
 | FF-1 | Info | register | `act-cache.used` listed ci-linux, which has no cache step. | Fixed | Dropped. |
+
+## Round 5: uri-constraint step, check-pins skip, docs-check token (5a6ca41, a2087a6, 02a9f31)
+Nothing medium or higher.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| GG-1 | Low | check-pins | Skipping all of `broker/tools/supplychain.py` would hide a future unpinned image it runs. | Fixed | Any process-execution or dynamic-import construct in it un-skips it. |
+| HH-1 | Low | docs-check | The read-only job token reaches every `ci: run` command (and anything with the docker socket), though only `gh` needs it. | Open (broker session) | Split: a token-only step downloads the attestation bundle; `verify-images.sh` verifies offline with `--bundle`; the docs gate runs tokenless. |
+| HH-2 | Low | docs-check | PR runs have no token, so `broker/build.sh` fails closed and `docs` is red on PRs. | Accepted | Changes land by branch push and fast-forward (AGENTS push flow); the `docs` check is push-only in practice until HH-1. |

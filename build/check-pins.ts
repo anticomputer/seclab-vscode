@@ -153,7 +153,7 @@ const findings: string[] = [];
 // The broker's supply-chain checker is skipped as samples; it must stay a pure parser (GG-1):
 // if it ever executes anything, its image references need this check again.
 try {
-	if (/\bsubprocess\b|os\.(system|exec\w*|popen|spawn\w*)\b/.test(fs.readFileSync(path.join(repo, 'broker/tools/supplychain.py'), 'utf8'))) {
+	if (/subprocess|\bos\.(system|exec\w*|popen|spawn\w*)\b|\bfrom\s+os\s+import\b|__import__|\bimportlib\b|\bpty\b|\bctypes\b/.test(fs.readFileSync(path.join(repo, 'broker/tools/supplychain.py'), 'utf8'))) {
 		findings.push('broker/tools/supplychain.py: executes processes, so it can no longer be skipped as samples (narrow the skip)');
 	}
 } catch { /* absent */ }
