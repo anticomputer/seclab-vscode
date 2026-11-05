@@ -56,6 +56,7 @@ export class WriteBackManager {
 		if (t?.timer) {
 			clearInterval(t.timer);
 		}
+		t?.engine.close(); // a tick still running can no longer save or write (NN-3)
 		this.tabs.delete(tabId);
 	}
 
