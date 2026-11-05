@@ -1,7 +1,7 @@
 # Security review: secure agentic experiences design (agents in the tab)
 
 - **Date:** 2026-11-05
-- **Scope:** round 1: 411e4f2 (rebased from 9f4ded7; design as first written: [plan](../plans/secure-agentic-experiences.md), [ADR](../adr/20261105-agents-run-in-the-tab.md), [agentic surfaces](../research/agentic-surfaces.md), [prior art](../research/agentic-prior-art.md)), verified against `microsoft/vscode@a717861c07586a53d83b80d742cd3f59b20a6273`. Round 2 covers the follow-up commit that folds the findings in.
+- **Scope:** round 1: 40fa71d (rebased from 9f4ded7; design as first written: [plan](../plans/secure-agentic-experiences.md), [ADR](../adr/20261105-agents-run-in-the-tab.md), [agentic surfaces](../research/agentic-surfaces.md), [prior art](../research/agentic-prior-art.md)), verified against `microsoft/vscode@a717861c07586a53d83b80d742cd3f59b20a6273`. Round 2 covers the follow-up commit that folds the findings in.
 - **Reviewer:** security-review agent (default model), triage by the secure-agentic-experiences session
 - **Related:** [ADR agents run in the tab](../adr/20261105-agents-run-in-the-tab.md), [RPC-LOCKDOWN](../RPC-LOCKDOWN.md)
 
@@ -51,7 +51,7 @@ with a proposed v0 fix and probe.
 
 ## Re-review
 
-**Round 2** (security-review agent, default model): `411e4f2..1824c5e` (rebased from `9f4ded7..6d71734`; content unchanged). **No high or
+**Round 2** (security-review agent, default model): `40fa71d..7370dc1` (rebased from `9f4ded7..6d71734`; content unchanged). **No high or
 critical finding open.** Round-1 findings 1, 3, 5, 6, 8, 9, 11, 13 and 16 were closed as
 written. Findings 2, 4, 7, 10, 12, 14, 15 and 17 needed the follow-ups below. All
 round-2 findings were fixed in the design in the commit that adds this section.
