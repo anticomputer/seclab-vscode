@@ -72,7 +72,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/rpcProtocol.ts b/src/vs/
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/src/vs/workbench/services/extensions/common/seclabPolicyData.ts
 --- a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabPolicyData.ts	2026-11-04 18:55:50
-@@ -0,0 +1,177 @@
+@@ -0,0 +1,188 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: generated RPC capability policy. DO NOT EDIT.
 + *
@@ -176,6 +176,17 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 + * with no marker is revived by the consumer and invisible to a shape
 + * search.
 + */
++/**
++ * Command id prefixes denied before the table is consulted.
++ *
++ * `commands.exact` is resolved before rules, so a prefix rule alone can be
++ * overridden by an exact entry. Checking these first means the guarantee
++ * does not depend on the generated table staying correct.
++ */
++export const SECLAB_COMMAND_DENY_PREFIXES: readonly string[] = [
++	'seclab.',
++];
++
 +export const SECLAB_URI_ARGS: ReadonlyMap<string, readonly number[]> = new Map([
 +	['MainThreadAgentEditorComments.$createAgentEditorComments', [1]],
 +	['MainThreadAuthentication.$sendDidChangeDynamicProviderInfo', [0]],
@@ -253,7 +264,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-04 18:55:50
-@@ -0,0 +1,528 @@
+@@ -0,0 +1,540 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -269,7 +280,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +import { URI } from '../../../../base/common/uri.js';
 +import {
 +	SECLAB_CHANNELS, SECLAB_COMMANDS, SECLAB_DEFAULT_VERDICT, SECLAB_RPC,
-+	SECLAB_SERVICE_DEFAULTS, SECLAB_URI_ARGS, type SeclabEntry, type SeclabVerdict,
++	SECLAB_COMMAND_DENY_PREFIXES, SECLAB_SERVICE_DEFAULTS, SECLAB_URI_ARGS,
++	type SeclabEntry, type SeclabVerdict,
 +} from './seclabPolicyData.js';
 +
 +/** Authorities we filter. Anything else is either local-trusted or unknown. */
@@ -595,6 +607,17 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +	}
 +
 +	public commandVerdict(id: string): SeclabVerdict {
++		// Prefixes first, before the table. `commands.exact` is resolved ahead
++		// of rules when the table is generated, so a prefix rule there can be
++		// overridden by an exact entry; checking here means the guarantee does
++		// not depend on the table staying correct. The fork's own `seclab.*`
++		// commands exist to ask the user to approve what a tab may not do for
++		// itself, so a tab that could raise them would be supplying the prompt.
++		for (const prefix of SECLAB_COMMAND_DENY_PREFIXES) {
++			if (id.startsWith(prefix)) {
++				return 'deny';
++			}
++		}
 +		return SECLAB_COMMANDS.get(id)?.verdict ?? SECLAB_DEFAULT_VERDICT;
 +	}
 +}
