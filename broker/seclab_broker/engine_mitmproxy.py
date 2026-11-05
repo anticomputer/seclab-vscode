@@ -28,8 +28,8 @@ from .core import Broker
 from .credentials import Credential, header_has_sentinel, infer_inject
 from .netguard import deny_reason
 from .policy import (METHOD_OVERRIDE_HEADERS, Binding, PolicyError, RequestView, backstop_denies,
-                     canonical_path, normalize_host, normalize_ip, query_has_method_override,
-                     validate_fragment)
+                     backstop_exception, canonical_path, normalize_host, normalize_ip,
+                     query_has_method_override, validate_fragment)
 from .scanner import find_minted
 from .models import StrictJSONError, check_request, credential_values, is_model_host, parse_strict
 from .untrusted import display_host, display_path
@@ -46,6 +46,9 @@ WS_WINDOW = 8192
 REDACTED_MARK = "[seclab-redacted:"
 # Agent-host tokens sealed to an advertised key (upstream agentHostAuth); never forwarded.
 SEALED_PREFIX = "copilot-sealed.v1."
+# Keys that name a credential, in a backstop exception's response.
+CREDENTIAL_KEY = re.compile(r"token|secret|passw|credential|api[_-]?key|private[_-]?key|session|cookie|bearer|jwt",
+                            re.I)
 
 
 def fail_closed(fn):
@@ -409,6 +412,12 @@ class SeclabAddon:
                 continue
             entry = backstop_denies(view, cred.provider)
             if entry is not None:
+                exc = backstop_exception(view, cred.provider)
+                if exc is not None and not (flow.request.raw_content or b"") and upgrade is None:
+                    flow.metadata["seclab.backstop_exception"] = exc
+                    self.b.audit("credential.backstop_exempt", credentialId=cred.id,
+                                 reason="approved backstop exception", **view.summary())
+                    continue
                 self.b.audit("credential.backstop_denied", credentialId=cred.id,
                              provider=entry.provider, rule=entry.path, **view.summary())
                 self._deny(flow, 403, "endpoint can mint durable credentials; blocked by provider backstop")
@@ -564,6 +573,12 @@ class SeclabAddon:
             return self._block_response(flow, "protocol switch on a credentialed request without "
                                               "a websocket: true binding")
         textual = _textual(resp.headers)
+        if flow.metadata.get("seclab.backstop_exception") is not None:
+            why, detail = self._exception_response_check(resp)
+            if why:
+                self.b.audit("credential.backstop_exception_blocked", reason=why,
+                             **({"detail": detail} if detail else {}), **self._summary(flow))
+                return self._block_response(flow, f"backstop exception response: {why}")
         # Any flow that carried a real value, and any response from a bound host,
         # is scanned for credentials the upstream may have minted.
         scan_minted = injected or self._bound_host(view)
@@ -616,6 +631,33 @@ class SeclabAddon:
                 return self._block_response(flow, "token-like material in a non-text credentialed response")
         if body2 != orig:
             resp.content = body2
+
+    def _exception_response_check(self, resp: http.Response) -> tuple[str | None, str | None]:
+        """An approved backstop exception's response (ADR broker-model-access): a strict JSON
+        object with no credential-named key and no token-shaped value, in the body or headers.
+        Anything else is blocked and surfaced as a finding, until its fields are allowlisted."""
+        for name, value in resp.headers.fields:
+            if find_minted(value.decode("latin-1")):
+                return "token-shaped value in a response header", name.decode("latin-1").lower()
+        try:
+            doc = parse_strict(resp.get_content(strict=True) or b"")
+        except (ValueError, StrictJSONError):
+            return "response is not strict JSON", None
+        if not isinstance(doc, dict):
+            return "response is not a JSON object", None
+        stack: list = [("$", doc)]
+        while stack:
+            path, node = stack.pop()
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    if CREDENTIAL_KEY.search(k):
+                        return "credential-named field", f"{path}.{k}"
+                    stack.append((f"{path}.{k}", v))
+            elif isinstance(node, list):
+                stack += [(f"{path}[{i}]", v) for i, v in enumerate(node)]
+            elif isinstance(node, str) and find_minted(node):
+                return "token-shaped value", path
+        return None, None
 
     def _derivations(self, flow: http.HTTPFlow, view: RequestView | None) -> list:
         if view is None:

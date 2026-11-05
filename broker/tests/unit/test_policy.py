@@ -184,3 +184,18 @@ def test_github_backstop_negative(method, path, host):
 
 def test_backstop_by_provider_name_for_other_hosts():
     assert backstop_denies(req(host="ghe.corp.example", method="POST", path="/api/v3/user/keys"), "github")
+
+
+def test_backstop_exception_is_exact():
+    """Coordinator-approved: only GET /copilot_internal/user (and its /api/v3 form), exact
+    case, no query. The deny still matches it; the exception is checked separately."""
+    from seclab_broker.policy import backstop_exception
+    ok = req(host="api.github.com", method="GET", path="/copilot_internal/user")
+    assert backstop_denies(ok) is not None and backstop_exception(ok) is not None
+    assert backstop_exception(req(host="api.github.com", method="GET", path="/api/v3/copilot_internal/user"))
+    for bad in (dict(method="POST"), dict(path="/copilot_internal/User"), dict(path="/copilot_internal/user/x"),
+                dict(path="/copilot_internal/v2/token"), dict(host="api.example.com")):
+        assert backstop_exception(req(**{"host": "api.github.com", "method": "GET",
+                                         "path": "/copilot_internal/user", **bad})) is None
+    from seclab_broker.policy import RequestView
+    assert backstop_exception(RequestView("https", "api.github.com", 443, "GET", "/copilot_internal/user", "x=1")) is None

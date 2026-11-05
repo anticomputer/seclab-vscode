@@ -116,7 +116,9 @@
       },
       "tests": [
         "it:test_provider_backstop_beats_binding",
-        "unit:test_github_backstop"
+        "unit:test_github_backstop",
+        "unit:test_backstop_exception_is_exact",
+        "it:test_backstop_exception_copilot_user_is_narrow_and_its_response_is_checked"
       ]
     },
     {

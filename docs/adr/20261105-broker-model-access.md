@@ -138,10 +138,36 @@ token, or it is blocked. Every other backstopped route, including the rest of
 `/copilot_internal/**`, stays denied (`test_backstop_exempts_only_a_declared_derive_route`).
 
 **Measured traffic** (secure-agentic spike, 2026-11-05):
-- the Copilot runtime sends the GitHub credential as
-  `Authorization: Bearer <value>`, so the example policy uses that format;
-- its first call is `GET /copilot_internal/user`. That call is still behind
-  the backstop, pending a decision on exempting it.
+- the parent credential's inject format is `Authorization: Bearer <value>`,
+  and the example policy uses it;
+- its first call is `GET /copilot_internal/user`.
+
+**Approved backstop exception: `GET /copilot_internal/user`** (coordinator
+decision, 2026-11-05). It is data in `providers/github.json` (`exceptions`).
+
+Why: it is read-only user information, not a mint as far as public client
+code shows. Without it the Copilot harness fails at its first request. The rest
+of `/copilot_internal/**` stays denied.
+
+Conditions, all enforced:
+- **Exact request.** Exact method and path, case-sensitive with no
+  trailing-slash variant (plus the GHES `/api/v3` prefix); no query, no body,
+  no upgrade. Anything else on that path is backstopped.
+- **Checked response.** The response must be a strict JSON object with no
+  credential-named key (`token`, `secret`, `passw…`, `credential`, `api_key`,
+  `session`, `cookie`, `bearer`, `jwt`) and no token-shaped value anywhere,
+  including in headers. Otherwise it is blocked and audited as
+  `credential.backstop_exception_blocked`. That is a finding: the route's
+  response shape needs review.
+- **Field allowlist, later.** Its top-level fields will be allowlisted once
+  real traffic is measured.
+
+The secure-agentic spike ran with no real credential, so the response shape
+used here is a fixture's, not measured. Probe:
+`test_backstop_exception_copilot_user_is_narrow_and_its_response_is_checked`.
+A rogue upstream on that route returns a credential-named field, a
+token-shaped value, or non-JSON; every case is blocked, and no real value
+reaches the tab.
 
 **The amended rule** (shared with the RPC filter's `$getSession` wording): *a
 token minted for the tab reaches it only as a sentinel, bound to no more than

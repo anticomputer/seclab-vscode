@@ -202,8 +202,11 @@ Each has a unit or integration test; grep for the phrase.
   is misplaced: blocked in `block` mode and never swapped.
 - The provider backstop is checked before any injection. It beats bindings.
   The one exemption is a confirmed credential's exact `derive.from` route,
-  whose response must yield a structurally replaced token or is blocked. Never
-  add another exemption without an ADR.
+  whose response must yield a structurally replaced token or is blocked. The
+  only other hole is data: a provider file's `exceptions`
+  (`GET /copilot_internal/user`), exact and case-sensitive, with no body, query
+  or upgrade, and a response held to `_exception_response_check`. Never add
+  another exemption or exception without an ADR and a review entry.
 
 **Responses and approvals**
 - On injected flows and bound hosts:

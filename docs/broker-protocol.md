@@ -957,6 +957,7 @@ listed type is never emitted.
 | `credential.derived` | A minted token was re-sentinelised. |
 | `credential.backstop_denied` | A credentialed request hit the provider backstop. |
 | `credential.backstop_exempt` | A credentialed request on the exact route of a confirmed credential's `derive` rule passed the provider backstop; its response must yield a structurally replaced token or is blocked. |
+| `credential.backstop_exception_blocked` | A response on an approved backstop exception route (provider data `exceptions`) was not a strict JSON object, or carried a credential-named field or a token-shaped value; it was blocked. A finding: the route's response shape needs review (`detail` is the JSON path or header, tab- or upstream-chosen). |
 | `sentinel.misplaced` | A sentinel appeared outside its binding. |
 | `token.redacted` | A minted token was redacted (no parent credential, or a limit was reached). |
 | `session.stripped` | A session header was stripped from a credentialed response. |
@@ -1068,6 +1069,7 @@ as `version` and `policySchema.revision`, so a supervisor can detect it.
 
 - The provider backstop exempts a confirmed credential's request on the exact `from` route of one of its own `derive` rules (audit `credential.backstop_exempt`); the response must yield a structurally replaced token or is blocked. Needed for D7: the Copilot token endpoint is backstopped. Every other backstopped route stays denied.
 - Derived children are also dropped on an identical re-import; a same-value `credential.provide` keeps them.
+- Coordinator-approved backstop exception (provider data `exceptions`): exactly `GET /copilot_internal/user` on GitHub, no body, query or upgrade; its response must be a strict JSON object with no credential-named key or token-shaped value, else it is blocked (audit `credential.backstop_exception_blocked`).
 
 **0.3.0** (2026-11-05; policy schema revision 3)
 
