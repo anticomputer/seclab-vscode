@@ -26,6 +26,9 @@ usage: ./seclab <command>
   lint fixtures [PATH...]       Fixture-safety lint (no real secrets/hosts/persistence in test payloads)
   lint source                   Shipped sources: no unreviewed env/spawn sites, no dynamic loading, no test markers
   lint deps [--self-test]       Dependency register: every pin in deps/registry.json, entries complete (ADR)
+  lint secrets [BASE]           gitleaks (built from pinned source) over git diff BASE..HEAD (default: merge base
+                                with origin/main); also run by CI (lint) and the pre-push hook
+  hooks install                 Use the repo's git hooks (build/hooks: pre-push runs lint secrets) in this clone
   deps outdated                 Report image tags that moved and tracked tools with newer releases
   tool NAME                     Verify and build a pinned tool image (cosign, actionlint, gitleaks, lychee;
                                 build/tools/tools.json); prints its local tag
@@ -149,6 +152,26 @@ deps_host() {
 		done
 	fi
 	return "$bad"
+}
+
+# Secret scan of what a push adds (AGENTS.md; mechanical, not a reminder): gitleaks built from
+# pinned source, over `git diff BASE..HEAD`, network-less, no credentials, findings redacted.
+# BASE: the argument, else SECRETS_BASE (CI: the push's previous head or the PR base), else the
+# merge base with origin/main. A base that isn't available falls back to that merge base
+# (stricter, never looser). Fails closed if docker or the scanner is unavailable.
+lint_secrets() {
+	local base="${1:-${SECRETS_BASE:-}}" tip="${2:-HEAD}" gl
+	git -C "$ROOT" cat-file -e "$tip^{commit}" 2>/dev/null || { echo "lint secrets: no such commit $tip" >&2; return 1; }
+	if [[ -z "$base" || "$base" =~ ^0+$ ]] || ! git -C "$ROOT" cat-file -e "$base^{commit}" 2>/dev/null; then
+		base="$(git -C "$ROOT" merge-base origin/main "$tip")"
+	fi
+	gl="$(tool_image gitleaks)" || { echo "lint secrets: no scanner (./seclab tool gitleaks)" >&2; return 1; }
+	if ! git -C "$ROOT" diff --no-ext-diff --no-textconv "$base".."$tip" | docker run --rm -i --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+		--user 65534:65534 --pull never "$gl" stdin --no-banner --redact --verbose --exit-code 1 --log-level warn; then
+		echo "lint secrets: gitleaks found something in $base..$tip (redacted above). Remove it; fixtures use generated or obviously fake values that match no real token format." >&2
+		return 1
+	fi
+	echo "lint secrets: clean ($(git -C "$ROOT" rev-parse --short "$base")..$(git -C "$ROOT" rev-parse --short "$tip"))"
 }
 
 docs_check() {
@@ -351,6 +374,7 @@ case "${1:-help}" in
 					git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-pins.ts -
 				fi ;;
 			workflows) lint_workflows ;;
+			secrets) shift; lint_secrets "${1:-}" "${2:-HEAD}" ;;
 			# Dependency register (ADR supply-chain provenance): every pin registered, entries complete.
 			deps) shift
 				if [[ "${1:-}" == --self-test ]]; then
@@ -371,6 +395,11 @@ case "${1:-help}" in
 	help|-h|--help) usage ;;
 	# Pinned tools (build/tools/tools.json): verify and build; prints the local image tag.
 	tool) shift; [[ $# -eq 1 ]] || { usage; exit 2; }; tool_image "$1" ;;
+	# Repo-provided git hooks (AGENTS.md): core.hooksPath is shared by every worktree of this clone
+	# and resolves per worktree, so each session's own checkout supplies build/hooks/pre-push.
+	hooks) shift; [[ "${1:-}" == install ]] || { usage; exit 2; }
+		git -C "$ROOT" config core.hooksPath build/hooks
+		echo "hooks: core.hooksPath=build/hooks (pre-push runs ./seclab lint secrets on what you push)" ;;
 	# Dependency updates Dependabot can't see (ADR supply-chain provenance): report only.
 	deps)
 		shift

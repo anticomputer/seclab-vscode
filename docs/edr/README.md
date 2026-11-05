@@ -75,6 +75,7 @@ Same rules as ADRs:
 | 2026-11-04 | [Unpatched proof run: which escapes are real](20261104-unpatched-proof-run.md) | accepted |
 | 2026-11-04 | [Write-back gate spike: keeping tab writes to code-running files off the host](20261104-write-back-gate-spike.md) | accepted |
 | 2026-11-05 | [Background windows: an env-gated patch so harness windows never take focus](20261105-background-windows.md) | accepted |
+| 2026-11-05 | [Secret scanning before push is mechanical: a pre-push hook and a required CI step](20261105-mechanical-secret-scan.md) | accepted |
 | 2026-11-05 | [Observability demo loader is assembled inside the tab](20261105-observability-loader-in-tab.md) | accepted |
 | 2026-11-05 | [Patch-build gate: the patched tree must compile, and patches must land in what ships](20261105-patch-build-gate.md) | accepted |
 | 2026-11-05 | [Pinned tools: verified release binaries and source builds instead of third-party images](20261105-pinned-tools.md) | accepted |
