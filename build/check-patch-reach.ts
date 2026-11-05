@@ -8,9 +8,12 @@
 //   { "0012-background-windows-env.patch": ["desktop"] }  (every touched file must reach these).
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { runtimeSpecs } from './patch-reach-imports.ts';
+import { patchedFiles, runtimeSpecs } from './patch-reach-imports.ts';
 
 const repo = path.resolve(import.meta.dirname, '..');
+// `--patches DIR` (self-test only) reads series, reach.json and the patches from DIR.
+const pi = process.argv.indexOf('--patches');
+const patchesDir = pi > 0 ? path.resolve(process.argv.splice(pi, 2)[1] ?? '') : path.join(repo, 'patches');
 const src = path.resolve(process.argv[2] ?? '');
 if (!process.argv[2] || !fs.existsSync(path.join(src, 'src', 'vs'))) {
 	console.error('usage: check-patch-reach.ts PATCHED_UPSTREAM_TREE');
@@ -93,8 +96,8 @@ if (process.argv[3] === '--file') {
 	}
 	process.exit(0);
 }
-const series = fs.readFileSync(path.join(repo, 'patches', 'series'), 'utf8').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(Boolean);
-const reachFile = path.join(repo, 'patches', 'reach.json');
+const series = fs.readFileSync(path.join(patchesDir, 'series'), 'utf8').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(Boolean);
+const reachFile = path.join(patchesDir, 'reach.json');
 const required: Record<string, string[]> = fs.existsSync(reachFile) ? JSON.parse(fs.readFileSync(reachFile, 'utf8')) : {};
 for (const p of Object.keys(required)) {
 	if (!series.includes(p)) {
@@ -104,7 +107,14 @@ for (const p of Object.keys(required)) {
 const problems: string[] = [];
 let checked = 0;
 for (const p of series) {
-	const files = [...fs.readFileSync(path.join(repo, 'patches', p), 'utf8').matchAll(/^\+\+\+ b\/(src\/\S+\.ts)$/gm)].map(m => path.join(src, m[1]));
+	let touched: string[];
+	try {
+		touched = patchedFiles(fs.readFileSync(path.join(patchesDir, p), 'utf8'));
+	} catch (e) {
+		fail(`${p}: ${(e as Error).message}`);
+	}
+	const files = touched!.filter(f => /^src\/.+\.ts$/.test(f)).map(f => path.join(src, f));
+	console.log(`${p}: ${touched!.length} file(s), ${files.length} under src/**/*.ts`);
 	if (required[p] && !files.length) {
 		problems.push(`${p}: named in patches/reach.json but touches no src/**/*.ts file, so nothing was checked`);
 	}
