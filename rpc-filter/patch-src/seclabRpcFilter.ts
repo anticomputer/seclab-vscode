@@ -13,14 +13,11 @@ import { setSeclabChannelGuard } from '../../../../base/parts/ipc/common/ipc.js'
 import { URI } from '../../../../base/common/uri.js';
 import {
 	SECLAB_CHANNELS, SECLAB_COMMANDS, SECLAB_DEFAULT_VERDICT, SECLAB_RPC,
-	SECLAB_SERVICE_DEFAULTS, type SeclabEntry, type SeclabVerdict,
+	SECLAB_SERVICE_DEFAULTS, SECLAB_URI_ARGS, type SeclabEntry, type SeclabVerdict,
 } from './seclabPolicyData.js';
 
 /** Authorities we filter. Anything else is either local-trusted or unknown. */
 const SECLAB_AUTHORITY = /^seclab\+/;
-
-/** Upper bound on argument graph depth, matching `marshalling.revive`. */
-const REVIVE_DEPTH_CAP = 200;
 
 export interface SeclabDenial {
 	readonly ref: string;
@@ -127,34 +124,61 @@ function denied(): Error {
 	return new Error('Unsupported operation');
 }
 
-/** Walk an argument graph the same way `revive` does, and reject what it cannot. */
-function eachUri(value: unknown, depth: number, visit: (uri: URI) => string | undefined): string | undefined {
-	if (depth > REVIVE_DEPTH_CAP) {
-		// `revive` stops reviving past the cap, so a validator cannot agree with
-		// the consumer beyond it. Refuse rather than guess.
-		return 'argument graph deeper than the revive cap';
+/**
+ * The components a consumer will hand to `URI.revive` for this call.
+ *
+ * Positional, because the consumer is positional. `URI.revive` does not look
+ * for a `$mid` marker: given any truthy non-URI object it returns
+ * `new Uri(data)` built from whatever `scheme`/`authority`/`path` fields are
+ * present, and `MainThreadFileSystem.$readFile` calls it on argument 0 no
+ * matter what arrived on the wire.
+ *
+ * The previous implementation searched the whole argument graph for
+ * URI-*shaped* values, keyed on `$mid` being a number. That disagreed with the
+ * consumer in both directions, and the dangerous direction was a miss: plain
+ * `{ scheme: 'file', path: '/Users/victim/.ssh/id_rsa' }` carries no marker, so
+ * the search found no URI, the call was permitted, and the consumer then
+ * revived exactly the `file:` URI the constraint exists to refuse. Mirroring
+ * the consumer positionally removes the class rather than the instance: there
+ * is no shape to get wrong, only a position to read.
+ *
+ * Positions come from the `UriComponents` parameters declared in
+ * extHost.protocol.ts, extracted into SECLAB_URI_ARGS, so they follow upstream
+ * instead of being restated here.
+ */
+function uriArgsOf(sid: string, method: string, args: readonly unknown[]): {
+	readonly components: readonly unknown[];
+	readonly reason?: string;
+} {
+	const positions = SECLAB_URI_ARGS.get(`${sid}.${method}`);
+	if (!positions || positions.length === 0) {
+		return { components: [] };
 	}
-	if (!value || typeof value !== 'object') {
-		return undefined;
-	}
-	if (URI.isUri(value)) {
-		return visit(value);
-	}
-	const obj = value as Record<string, unknown>;
-	if (Object.prototype.hasOwnProperty.call(obj, '__proto__')) {
-		return 'argument carries an own __proto__ property';
-	}
-	if (typeof obj['$mid'] === 'number' && typeof obj['scheme'] === 'string') {
-		// A marshalled URI the consumer will revive.
-		return visit(URI.revive(obj as never));
-	}
-	for (const key of Object.keys(obj)) {
-		const reason = eachUri(obj[key], depth + 1, visit);
-		if (reason) {
-			return reason;
+	const components: unknown[] = [];
+	for (const i of positions) {
+		const value = args[i];
+		if (value === undefined || value === null) {
+			// `URI.revive` passes these straight back, so no URI reaches the
+			// consumer from this position and there is nothing to constrain.
+			continue;
 		}
+		if (typeof value !== 'object') {
+			// A declared UriComponents position holding a non-object is not a
+			// call any legitimate caller makes. Refuse rather than reason about
+			// what `new Uri()` would do with it.
+			return { components, reason: `argument ${i} is not URI components` };
+		}
+		if (Array.isArray(value)) {
+			for (const item of value) {
+				if (item !== undefined && item !== null) {
+					components.push(item);
+				}
+			}
+			continue;
+		}
+		components.push(value);
 	}
-	return undefined;
+	return { components };
 }
 
 class SeclabFilter implements ISeclabFilter {
@@ -263,9 +287,23 @@ class SeclabFilter implements ISeclabFilter {
 			return undefined;
 		}
 
-		if (sid === 'MainThreadFileSystem') {
-			const reason = eachUri(args, 0, uri => this._checkUri(uri));
-			return reason ? this._deny(ref, reason) : undefined;
+		// Any method declaring UriComponents parameters is constrained to this
+		// tab's own filesystem, whichever service it belongs to. Keyed on the
+		// declared positions rather than on the service, so a URI-taking method
+		// cannot be reachable without being checked.
+		const { components, reason: shapeReason } = uriArgsOf(sid, method, args);
+		if (shapeReason) {
+			return this._deny(ref, shapeReason);
+		}
+		for (const raw of components) {
+			// Revive exactly as the consumer will, then judge the result.
+			const reason = this._checkUri(URI.revive(raw as never));
+			if (reason) {
+				return this._deny(ref, reason);
+			}
+		}
+		if (components.length > 0) {
+			return undefined;
 		}
 
 		// A constraint named in the table but not implemented here must not be
