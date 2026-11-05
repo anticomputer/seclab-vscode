@@ -4,18 +4,17 @@
 - **Date:** 2026-11-05
 - **Deciders:** anticomputer (user), via the secure-agentic design: D2 (model calls stay
   in the tab, through the broker) and D7 (derived Copilot token bound by path and
-  method through a trusted provider table), both accepted 2026-11-05 (plan
-  `docs/plans/secure-agentic-experiences.md` §13 and ADR
-  `docs/adr/20261105-agents-run-in-the-tab.md`, on branch
-  `anticomputer-secure-agentic-experiences` @ `f5a479a`; link them here when that
-  branch lands). Broker session (design and implementation).
+  method through a trusted provider table), both accepted 2026-11-05
+  ([plan §13](../plans/secure-agentic-experiences.md#13-decisions-for-the-user),
+  [ADR agents run in the tab](20261105-agents-run-in-the-tab.md)). Broker session
+  (design and implementation).
 - **Amends:**
   - [ADR broker output is data](20261104-broker-output-is-data.md), decision 2:
     content is now consulted in a fourth way, which is also deny-only.
   - [ADR no real secret enters a tab](20261104-no-real-secret-enters-a-tab.md):
     a derived credential can be bound beyond its parent, but only by a
     controller-declared rule.
-- **Related:** [security review](../security-reviews/20261105-broker-model-access.md)
+- **Related:** [plan §4](../plans/secure-agentic-experiences.md#4-model-and-credential-access), [EDR agents-in-tab spike](../edr/20261105-agents-in-tab-spike.md), [security review](../security-reviews/20261105-broker-model-access.md), [security review: backstop exceptions](../security-reviews/20261105-broker-backstop-exceptions.md)
 
 ## Context
 Agents run inside the tab. Their model calls go out through the tab's broker,
@@ -141,7 +140,7 @@ upstream returns
 other backstopped route, including the rest of `/copilot_internal/**`, stays
 denied (`test_backstop_exempts_only_a_declared_derive_route`).
 
-**Measured traffic** (secure-agentic spike, 2026-11-05):
+**Measured traffic** ([spike EDR](../edr/20261105-agents-in-tab-spike.md), 2026-11-05):
 - the parent credential's inject format is `Authorization: Bearer <value>`,
   and the example policy uses it;
 - its first call is `GET /copilot_internal/user`.

@@ -16,6 +16,14 @@
       "path": "/copilot_internal/v2/token"
     },
     {
+      "id": "copilot-user",
+      "host": "api.github.com",
+      "methods": [
+        "GET"
+      ],
+      "path": "/copilot_internal/user"
+    },
+    {
       "id": "copilot-api",
       "host": "api.githubcopilot.com",
       "methods": [
@@ -33,6 +41,13 @@
         "fmt": "Bearer {value}"
       },
       "bind": [
+        {
+          "host": "api.github.com",
+          "path": "/copilot_internal/user",
+          "methods": [
+            "GET"
+          ]
+        },
         {
           "host": "api.github.com",
           "path": "/copilot_internal/v2/token",
