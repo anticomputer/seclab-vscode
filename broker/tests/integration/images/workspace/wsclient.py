@@ -12,16 +12,32 @@ import aiohttp
 async def main(url: str, auth: str | None, send: list[str]) -> None:
     proxy = os.environ["HTTPS_PROXY"]
     headers = {"Authorization": auth} if auth else {}
+    collect = os.environ.get("WS_COLLECT") == "1"
     async with aiohttp.ClientSession(trust_env=False) as s:
         async with s.ws_connect(url, proxy=proxy, headers=headers, timeout=10) as ws:
             out = [json.loads((await ws.receive(timeout=10)).data)]
             for m in send:
                 await ws.send_str(m)
+                if collect:
+                    continue
                 try:
                     msg = await ws.receive(timeout=2)
                     out.append(msg.data)
                 except asyncio.TimeoutError:
                     out.append(None)
+            if collect:
+                # Every message until the server goes quiet or the connection closes.
+                received, closed = [], False
+                while True:
+                    try:
+                        msg = await ws.receive(timeout=2)
+                    except asyncio.TimeoutError:
+                        break
+                    if msg.type != aiohttp.WSMsgType.TEXT:
+                        closed = True
+                        break
+                    received.append(msg.data)
+                out.append({"messages": received, "closed": closed})
             print(json.dumps(out))
 
 

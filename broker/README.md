@@ -229,3 +229,9 @@ check fails if a flag has no row, or if a named test doesn't exist.
 - **Endpoints outside the backstop.** Out of scope: a tab with repo write
   access pushing a workflow that exfiltrates repository secrets via Actions.
   This needs server-side controls (token scopes).
+- **Tokens split across WebSocket messages.** Server messages are scanned
+  with an 8 KiB window of what the tab already received. A token recognisable
+  only after its last byte went out (a terminator in the next message) is
+  detected and the connection silenced, but not prevented. Structured deltas
+  are not reassembled. A per-binding WebSocket opt-in would bound this by
+  route; that is proposed, not built (see the ADR no real secret enters a tab).

@@ -206,6 +206,10 @@ Each has a unit or integration test; grep for the phrase.
 - Binding approvals are keyed by credential, origin, method, path and inject
   spec, and a decision never releases a request that the approved binding does
   not cover.
+- WebSocket server messages on scanned flows are scanned with the carried
+  window (`WS_WINDOW`) as context. A match starting in already-delivered bytes
+  silences the connection (`seclab.ws_dead`). Never decide on one message
+  alone.
 
 **Prompts (folder-open loaders, beacons)**
 - `allow-tab` is never offered for a raw IP, an IP-in-hostname name or a

@@ -96,7 +96,20 @@ async def websocket(scope, receive, send) -> None:
         msg = await receive()
         if msg["type"] == "websocket.disconnect":
             return
-        await send({"type": "websocket.send", "text": "echo:" + (msg.get("text") or "")})
+        text = msg.get("text") or ""
+        if text.startswith("split:"):
+            # A minted token (generic JSON token field, canary value) split across two
+            # messages, as a streaming API might by accident: after the key, mid-token, or
+            # just before the closing quote.
+            _, where, tag = text.split(":", 2)
+            secret = f"seclab-minted-canary-{tag}-" + "Q" * 24 + "-value"
+            body = json.dumps({"token": secret})
+            at = {"key": body.index(secret), "mid": body.index(secret) + len(secret) // 2,
+                  "end": body.index(secret) + len(secret)}[where]
+            await send({"type": "websocket.send", "text": body[:at]})
+            await send({"type": "websocket.send", "text": body[at:]})
+            continue
+        await send({"type": "websocket.send", "text": "echo:" + text})
 
 
 async def app(scope, receive, send) -> None:

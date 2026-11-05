@@ -38,6 +38,11 @@ _METHOD = re.compile(r"^[A-Z]{1,16}$")
 _TEXTUAL = re.compile(r"^(text/|application/(.*json|.*xml|javascript|x-www-form-urlencoded))|json")
 DNS_TIMEOUT = 10.0
 SESSION_HEADERS = {"set-cookie", "set-cookie2", "authentication-info", "proxy-authentication-info"}
+# WebSocket server messages are scanned together with this much of what the tab already
+# received on the connection, so a token is found even when it spans messages. It must
+# exceed the longest token rule (json-token-field: 4096 plus its key).
+WS_WINDOW = 8192
+REDACTED_MARK = "[seclab-redacted:"
 
 
 def fail_closed(fn):
@@ -407,10 +412,17 @@ class SeclabAddon:
         out.append(data[pos:])
         return b"".join(out), None
 
-    def _scrub_minted(self, text: str, flow: http.HTTPFlow, where: str) -> str:
+    def _minted_hits(self, text: str) -> list[tuple[str, str, int, int]]:
+        return [h for h in find_minted(text)
+                if self.b.creds.by_sentinel(h[1]) is None and not h[1].startswith(REDACTED_MARK)]
+
+    def _scrub_minted(self, text: str, flow: http.HTTPFlow, where: str, context: str = "") -> str:
+        """Re-sentinelise or redact minted tokens in `text`. `context` is text the tab
+        already received just before it (WebSocket); it is matched against, never rewritten."""
         view = flow.metadata.get("seclab.view")
         injected = flow.metadata.get("seclab.injected") or []
-        hits = [h for h in find_minted(text) if self.b.creds.by_sentinel(h[1]) is None]
+        n = len(context)
+        hits = [(r, sec, s - n, e - n) for r, sec, s, e in self._minted_hits(context + text) if s >= n]
         if not hits:
             return text
         out, pos = [], 0
@@ -505,6 +517,11 @@ class SeclabAddon:
         assert flow.websocket is not None
         msg = flow.websocket.messages[-1]
         view = flow.metadata.get("seclab.view")
+        if flow.metadata.get("seclab.ws_dead"):
+            # mitmproxy cannot close a WebSocket from this hook (flow.kill() is not applied
+            # in transit, mitmproxy#4711), so a killed connection relays nothing more.
+            msg.drop()
+            return
         if msg.from_client:
             hits = self.b.creds.find_sentinels(msg.content)
             if hits:
@@ -521,14 +538,30 @@ class SeclabAddon:
             msg.drop()
             return
         if flow.metadata.get("seclab.injected") or self._bound_host(view):
+            # Decide on what the tab sees (the concatenated stream), not on one message.
+            carry: bytes = flow.metadata.get("seclab.ws_carry", b"")
+            enc = "utf-8" if msg.is_text else "latin-1"
+            context = carry.decode(enc, "surrogateescape")
+            text = content.decode(enc, "surrogateescape")
+            n = len(context)
+            # Any match starting in bytes the tab already has (split across messages, or only
+            # recognisable once its terminator arrived) cannot be recalled: deliver no more.
+            spans = [h for h in self.b.creds.find_real(carry + content) if h[2] < len(carry) < h[3]]
+            spans += [h for h in self._minted_hits(context + text) if h[2] < n]
+            if spans:
+                self.b.audit("response.blocked", reason="websocket token split across messages",
+                             **(view.summary() if view else {}))
+                msg.drop()
+                flow.metadata["seclab.ws_dead"] = True
+                return
             if msg.is_text:
-                content = self._scrub_minted(content.decode("utf-8", "surrogateescape"), flow,
-                                             "websocket").encode("utf-8", "surrogateescape")
-            elif find_minted(content.decode("latin-1")):
+                content = self._scrub_minted(text, flow, "websocket", context).encode("utf-8", "surrogateescape")
+            elif [h for h in self._minted_hits(context + text) if h[2] >= n]:
                 self.b.audit("response.blocked", reason="websocket token-like binary frame",
                              **(view.summary() if view else {}))
                 msg.drop()
                 return
+            flow.metadata["seclab.ws_carry"] = (carry + content)[-WS_WINDOW:]
         if content != msg.content:
             msg.content = content
 
