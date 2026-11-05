@@ -41,6 +41,7 @@ Same rules as ADRs:
 |---|---|---|
 | 2026-11-04 | [Automatic tasks stay off (upstream default, asserted at build)](20261104-automatic-tasks-off.md) | accepted |
 | 2026-11-04 | [Broker behind the sbx 0.51 fence: chaining, proxy auth and isolation validated](20261104-broker-behind-sbx-fence.md) | accepted |
+| 2026-11-04 | [Broker dependency provenance: every dependency registered, pinned, and verified at use time](20261104-broker-dependency-provenance.md) | accepted |
 | 2026-11-04 | [Broker docs are generated from, and checked against, the code's sources of truth; fixtures are test-owned only](20261104-broker-docs-from-sources-and-safe-fixtures.md) | accepted |
 | 2026-11-04 | [Broker engine: mitmproxy 12.3.1 with our addon (over smokescreen and Envoy)](20261104-broker-engine-mitmproxy.md) | accepted |
 | 2026-11-04 | [Per-tab CA: generated at broker start, private key only on the broker's tmpfs](20261104-broker-per-tab-ca.md) | accepted |

@@ -38,9 +38,9 @@ file has been run. Anything not yet built is marked **TODO**.
 | `schema/capabilities.v1.json` | Capability matrix notes, sbx-native column, and the tests behind each row |
 | `tools/docs.py`, `docs-check.sh` | Doc generator and drift checker (`--write`, `--run-commands`) |
 | `tools/fixture_lint.py` | Fixtures may only target test-owned endpoints; no token-shaped literals |
-| `tools/pin_check.py` | Every external base image pinned by digest; every pip install hash-pinned; every image and pin present in `deps.json` (offline, run by docs-check) |
+| `tools/supplychain.py`, `tools/pin_check.py` | Strict requirements and Dockerfile parsers shared by both gates; every external base image pinned by digest; the one canonical hash-checked, binary-only pip command; every image and pin present in `deps.json`; `--self-test` covers known bypass forms (offline, run by docs-check) |
 | `deps.json` | Dependency register: tier, source, expected publisher for every image, Python pin, system package set and host tool |
-| `provenance-check.sh`, `tools/provenance.py`, `tools/verify-images.sh`, `tools/attest/` | Online provenance gate: PyPI-served hashes, PEP 740 publishers and sigstore verification (hash-locked verifier image), signed image provenance (`gh attestation verify`) |
+| `provenance-check.sh`, `tools/provenance.py`, `tools/verify-images.sh`, `tools/attest/` | Online provenance gate: PyPI-served hashes, PEP 740 publishers, sigstore verification bound to the pinned sha256 and the registered workflow (hash-locked verifier image), signed image provenance (`gh attestation verify`) |
 | `examples/` | Example policies, validated by unit tests |
 | `tests/unit/` | pytest, run inside the broker image with `--network none` |
 | `tests/integration/` | Pod-shaped suite: harness container + docker.sock |
@@ -242,7 +242,12 @@ Each has a unit or integration test; grep for the phrase.
   4. Run `broker/provenance-check.sh`.
 
   Never set a publisher from the provenance you are checking: confirm the
-  repository is the project's real one.
+  repository is the project's real one. Lockfiles installed into the mitmproxy
+  image may pin only pure `py3-none-any` wheels.
+- **Requirements files and Dockerfiles have one accepted shape**
+  (`tools/supplychain.py`). Do not add extras, URLs, markers, pip options,
+  `# syntax=`, `ADD` or other installers. Extend the parser, its `self_test()`
+  vectors and the EDR together if a new form is truly needed.
 - **Never relax the provenance gate to skip on network errors.** It must fail
   closed.
 - **Fixtures must only target test-owned endpoints.** That means

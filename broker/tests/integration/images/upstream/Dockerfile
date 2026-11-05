@@ -6,7 +6,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends git openssl \
  && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt /opt/upstream/requirements.txt
-RUN pip install --no-cache-dir --no-deps --require-hashes -r /opt/upstream/requirements.txt
+RUN pip install --no-cache-dir --no-deps --require-hashes --only-binary=:all: -r /opt/upstream/requirements.txt
 COPY server.py dns.py entrypoint.sh /opt/upstream/
 RUN chmod 0755 /opt/upstream/entrypoint.sh
 ENTRYPOINT ["/opt/upstream/entrypoint.sh"]
