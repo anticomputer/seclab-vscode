@@ -94,3 +94,12 @@ or gains root in the VM (a gate bypass since 2a).
 
 Note for 2b (from this round): read the upper layer directly (`/var/lib/seclab/wb/upper`, init mount
 namespace), never through the overlay or `/proc/<pid>/root`.
+
+### Increment 2a, re-review (6e5886e)
+JJ-1, JJ-4 and JJ-5 verified closed; JJ-2's filter verified, with one bypass:
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| KK-1 | **Medium** | Unguarded same-uid processes | sbx's own agent-uid boot processes (PID 1 `sh`, `sleep`, clipboard-bridge) carry no filter; with no Yama, tab code could write their memory (`/proc/<pid>/mem`) and run `unshare` there, undoing JJ-2. | Fixed | seclab-obs-guard puts the tab in a Landlock domain (ABI ≥ 6, fail closed): ptrace access, signals and abstract unix sockets are scoped to the domain; file and network access unchanged. Regression with an unguarded control. |
+| KK-2 | Low | Post-mount check | fd in flight, fork during the scan, a second mount of the share. | Fixed (in part) | Rescan until the pid set is stable; refuse a second mount of the lower device. In-flight `SCM_RIGHTS` remains theoretical (no tab code runs before the mount). |
+| KK-3 | Info | Exemption | Exempt fuse-overlayfs by owner of /proc/<pid>. | Fixed | All four uids 0 from `status`. |

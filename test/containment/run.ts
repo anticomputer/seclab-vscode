@@ -172,6 +172,12 @@ if (driver === 'sbx') {
 	const us = spawnSync(runtime, ['exec', '-u', 'agent', '-w', '/', containerA, '/opt/seclab/bin/seclab-obs-guard', '/usr/bin/unshare', '-Urm', 'true'], { encoding: 'utf8', timeout: 30_000 });
 	const usCtl = spawnSync(runtime, ['exec', '-u', 'agent', '-w', '/', containerA, '/opt/seclab/bin/seclab-obs-guard', '/usr/bin/true'], { encoding: 'utf8', timeout: 30_000 });
 	checks.push({ vector: 'write-back', name: 'tab code cannot create a user or mount namespace (JJ-2)', ok: us.status !== 0 && usCtl.status === 0, detail: `unshare exit ${us.status}, control exit ${usCtl.status}` });
+	// Review KK-1: tab code can't write the memory of, or signal, sbx's own unguarded agent-uid
+	// processes (PID 1, sleep, clipboard-bridge): a Landlock domain scopes ptrace and signals.
+	const kk = (inner: string) => spawnSync(runtime, ['exec', '-u', 'agent', '-w', '/', containerA, '/opt/seclab/bin/seclab-obs-guard', '/bin/sh', '-c', inner], { encoding: 'utf8', timeout: 30_000 }).status;
+	const memOutside = spawnSync(runtime, ['exec', '-u', 'agent', '-w', '/', containerA, '/bin/sh', '-c', 'exec 3<>/proc/1/mem'], { encoding: 'utf8', timeout: 30_000 }).status;
+	checks.push({ vector: 'write-back', name: 'tab code cannot write /proc/1/mem or signal PID 1 (KK-1)', ok: memOutside === 0 && kk('exec 3<>/proc/1/mem') !== 0 && kk('kill -0 1') !== 0 && kk('kill -0 $$') === 0,
+		detail: `control (unguarded) mem open exit ${memOutside}` });
 }
 
 // Fence-level checks via the runtime's own policy evaluator (sbx only).
