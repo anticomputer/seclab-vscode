@@ -392,10 +392,11 @@
       "pins": ["apt:broker/tests/integration/images/upstream/Dockerfile:git,openssl", "apt:broker/tests/integration/images/workspace/Dockerfile:ca-certificates,curl,dnsutils,git,python3,python3-aiohttp"],
       "used": ["broker/tests/integration/images/upstream/Dockerfile", "broker/tests/integration/images/workspace/Dockerfile"],
       "provenance": "GPG-signed InRelease; per-package SHA-256 via Packages.",
-      "verify": "apt's default signature verification. Versions not pinned, and trixie's InRelease has no Valid-Until (replay of an older signed index is possible): a recorded test-only exception in the broker EDR.",
-      "bar": "signed-verified",
+      "verify": "apt's default signature verification (debian-archive-keyring in the digest-pinned base). Not met: versions are not pinned, and trixie's InRelease has no Valid-Until, so an older signed index can be replayed (freeze/rollback). Test-only images on --internal networks; never shipped.",
+      "bar": "exception",
       "record": "docs/edr/20261104-broker-dependency-provenance.md",
-      "bump": "Broker session."
+      "bump": "Broker session.",
+      "gap": "Unpinned versions and replayable index; user-approved exception (2026-11-05). Revisit if a reliable snapshot mirror exists or an apt package enters a shipped image."
     },
     {
       "id": "img-falco",
