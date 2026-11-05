@@ -37,6 +37,16 @@ Rejected:
 - The cosign and debian images are trusted by digest only; they are verifier and fetch tooling and never run at tab time.
 - These entries go into the project's dependency register (`deps/registry.json`, owned by fork-build) once it lands.
 
+## Addendum (2026-11-04): one cosign verifier, tagged pins
+- The verifier is now the project's single cosign pin,
+  `ghcr.io/sigstore/cosign/cosign:v3.0.3@sha256:774391ac9f0c137ee419ce56522df5fd3b1f52be90c5b77e97f7c053bdd67a67`
+  (fork-build's `verify_signed_image` uses the same one). It verifies the Falco digest against the
+  same exact identity. The v2.4.1 pin above is retired.
+- Pins carry their tag as well as the digest so the dependency register
+  ([ADR supply-chain provenance](../adr/20261104-supply-chain-provenance.md), `deps/registry.json`)
+  can match them exactly: `falcosecurity/falco:0.45.2@sha256:1562a643…` and
+  `debian:trixie@sha256:2dc419c6…`. Docker resolves by digest; the tag is informational.
+
 ## Evidence
 ```
 $ sandbox/oci/verify-falco.sh
