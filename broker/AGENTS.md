@@ -40,7 +40,7 @@ file has been run. Anything not yet built is marked **TODO**.
 | `tools/fixture_lint.py` | Fixtures may only target test-owned endpoints; no token-shaped literals |
 | `tools/supplychain.py`, `tools/pin_check.py` | Strict requirements and Dockerfile parsers shared by both gates; every external base image pinned by digest; the one canonical hash-checked, binary-only pip command; every image and pin present in `deps.json`; `--self-test` covers known bypass forms (offline, run by docs-check) |
 | `deps.json` | Dependency register: tier, source, expected publisher for every image, Python pin, system package set and host tool |
-| `provenance-check.sh`, `tools/provenance.py`, `tools/verify-images.sh`, `tools/attest/` | Online provenance gate: PyPI-served hashes, PEP 740 publishers, sigstore verification bound to the pinned sha256 and the registered workflow (hash-locked verifier image), signed image provenance (`gh attestation verify`) |
+| `provenance-check.sh`, `tools/provenance.py`, `tools/verify-images.sh`, `tools/attest/` | Online provenance gate: PyPI-served hashes, PEP 740 publishers, sigstore verification bound to the pinned sha256 and the registered workflow (hash-locked verifier image), signed image provenance (`gh attestation verify`; `verify-images.sh --download` is the only token-using step, verification uses the downloaded `--bundle` tokenlessly) |
 | `examples/` | Example policies, validated by unit tests |
 | `tests/unit/` | pytest, run inside the broker image with `--network none` |
 | `tests/integration/` | Pod-shaped suite: harness container + docker.sock |
