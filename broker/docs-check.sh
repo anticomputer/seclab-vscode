@@ -25,8 +25,8 @@ docker run --rm --network none -u "$(id -u):$(id -g)" -v "$repo:/repo:ro" \
   -e PYTHONPATH=/repo/broker -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python \
   seclab-broker-unit:docs /repo/broker/tools/fixture_lint.py
 docker run --rm --network none -u "$(id -u):$(id -g)" -v "$repo:/repo:ro" \
-  -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python \
-  seclab-broker-unit:docs /repo/broker/tools/pin_check.py
+  -e PYTHONDONTWRITEBYTECODE=1 --entrypoint sh \
+  seclab-broker-unit:docs -c 'python /repo/broker/tools/pin_check.py --self-test && python /repo/broker/tools/pin_check.py'
 if [ "${1:-}" = "--run-commands" ]; then
   script=$(dock commands)
   cd "$repo"
