@@ -42,3 +42,12 @@ DD-1 to DD-8 verified closed. **No medium or higher remains.**
 | EE-4 | Low | register | `verifiedBy` matched a comment; strace hashes weren't pins. | Fixed | Comment lines ignored; `deb:` pins from lock files. |
 | info | — | rpc-filter/tools/test.sh | `--platform linux/arm64` on x86 runners. | Fixed | Removed (multi-arch digest). |
 | — | Residual | rpc-filter | A local `.work/upstream` tree could be modified by containers that mount the repo read-write. | Accepted | Local only; CI clones fresh. |
+
+## Round 4: observability suite in ci-linux (c0fb442)
+Nothing medium or higher. The privileged Falco container runs `--network none`, with no secrets
+or `docker.sock` and read-only host mounts, from the cosign-verified digest. On a hosted runner
+every step is already root, and the job holds only a read-only, job-lifetime token.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| FF-1 | Info | register | `act-cache.used` listed ci-linux, which has no cache step. | Fixed | Dropped. |

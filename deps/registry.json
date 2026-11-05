@@ -285,7 +285,7 @@
       "official": true,
       "purpose": "Lychee and build caches (restore-only on PRs).",
       "pins": ["actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"],
-      "used": [".github/workflows/docs-check.yml", ".github/workflows/ci-linux.yml"],
+      "used": [".github/workflows/docs-check.yml"],
       "provenance": "Commit SHA in GitHub's own repo; not an immutable release.",
       "verify": "Full-SHA pin; sha_pinning_required.",
       "bar": "official-pinned",
