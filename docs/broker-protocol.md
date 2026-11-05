@@ -102,6 +102,9 @@ none
 | `tabId` | `string` \| `null` | yes | `SECLAB_TAB_ID` the broker was started with. |
 | `engine` | `string` | yes | Enforcement engine, for example `mitmproxy`. |
 | `engineVersion` | `string` | yes |  |
+| `policySchema` | `object` | yes | Policy schema major version and revision this broker enforces. A revision changes behaviour within a major version; see the changelog. |
+| `policySchema.version` | `integer` | yes |  |
+| `policySchema.revision` | `integer` | yes |  |
 | `capabilities` | map of `boolean` | yes | Feature flags; see the capability matrix. |
 
 
@@ -115,10 +118,14 @@ Example:
 ```json
 {
  "protocol": "seclab-broker/1",
- "version": "0.1.0",
+ "version": "0.2.0",
  "tabId": "tab-1",
  "engine": "mitmproxy",
  "engineVersion": "12.3.1",
+ "policySchema": {
+  "version": 1,
+  "revision": 2
+ },
  "capabilities": {
   "holdAndResume": true
  }
@@ -1025,8 +1032,29 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"health"}' \
 `protocol` is `seclab-broker/<major>`.
 - **Minor change, keeps the major:** adding methods, notification types,
   optional params or result fields.
-- **Major bump:** removing anything or changing what it means. The supervisor
-  must check `broker.hello` first.
+- **Major bump:** removing anything, or changing what it means in a way that
+  grants more or breaks a valid message. The supervisor must check
+  `broker.hello` first.
 
 The policy schema is versioned separately (`version: 1`); see
 [`broker/AGENTS.md`](../broker/AGENTS.md#changing-the-schema-or-protocol-safely).
+A change that only **restricts** (fails closed) and keeps every valid policy
+valid keeps the major version. It bumps the schema's `x-revision` and the
+broker's minor version, and must be listed below. `broker.hello` reports both
+as `version` and `policySchema.revision`, so a supervisor can detect it.
+`broker/docs-check.sh` fails if the latest entry, `seclab_broker.VERSION`,
+`POLICY_SCHEMA_REVISION` and the schema's `x-revision` disagree.
+
+### Changelog (generated)
+
+<!-- BEGIN GENERATED: protocol-changelog (broker/tools/docs.py; do not edit) -->
+**0.2.0** (2026-11-05; policy schema revision 2)
+
+- **Behaviour change:** credentials are injected into a WebSocket upgrade only when the matching binding has `websocket: true` (new optional binding field, default `false`). A credentialed upgrade without the opt-in is refused with `403`, and an unconfirmed imported credential is never offered for an upgrade by prompt. Why: a minted token streamed across structured WebSocket messages can't be reliably recognised, so it could reach the tab whole. Supervisors that relied on credentialed WebSockets must add `websocket: true` to those bindings.
+- `broker.hello` returns `policySchema` (`version`, `revision`).
+- Capability `websocketOptIn`.
+
+**0.1.0** (2026-11-04; policy schema revision 1)
+
+- Initial protocol.
+<!-- END GENERATED: protocol-changelog -->

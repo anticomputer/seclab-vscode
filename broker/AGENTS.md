@@ -126,7 +126,12 @@ and run `--write`.
 - **Schema `version` is an integer.**
   - Additive, optional fields with a default that keeps today's behaviour stay
     `version: 1`.
-  - Anything that changes meaning, removes a field, or makes an old policy
+  - A change that only restricts (fails closed) and keeps every valid policy
+    valid also stays `version: 1`. It bumps `x-revision` in the schema,
+    `POLICY_SCHEMA_REVISION` and the minor `VERSION` together, and adds a
+    `changelog` entry to `protocol.v1.json`; docs-check enforces that they
+    agree. Example: revision 2, the `websocket` binding opt-in.
+  - Anything that grants more, removes a field, or makes an old policy
     validate differently needs `version: 2`, a new schema file, and a parser
     that keeps accepting v1.
 - **The schema is also enforced by Python checks** (canonical hosts,
@@ -206,6 +211,11 @@ Each has a unit or integration test; grep for the phrase.
 - Binding approvals are keyed by credential, origin, method, path and inject
   spec, and a decision never releases a request that the approved binding does
   not cover.
+- Upgraded connections get a credential only from a binding with
+  `websocket: true`, and only for `Upgrade: websocket` (`Binding.matches(view,
+  upgrade)`; `_upgrade_token`). Every binding lookup on the injection path
+  must pass the upgrade token, and an unconfirmed import is never prompted for
+  an upgrade.
 - WebSocket server messages on scanned flows are scanned with the carried
   window (`WS_WINDOW`) as context. A match starting in already-delivered bytes
   silences the connection (`seclab.ws_dead`). Never decide on one message

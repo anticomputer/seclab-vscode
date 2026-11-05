@@ -163,6 +163,20 @@
       ]
     },
     {
+      "flag": "websocketOptIn",
+      "label": "Credentials into WebSocket upgrades only for bindings with `websocket: true` (default off); messages scanned as a stream",
+      "cells": {
+        "sbx-native": {
+          "value": false
+        }
+      },
+      "tests": [
+        "unit:test_binding_websocket_opt_in",
+        "it:test_websocket_credential_needs_binding_opt_in",
+        "it:test_websocket_token_split_across_messages"
+      ]
+    },
+    {
       "label": "DNS control",
       "cells": {
         "mitmproxy-oci": {

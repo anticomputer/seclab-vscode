@@ -55,7 +55,7 @@ Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, sc
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `version` | `1` | yes | Schema major version. Additive optional fields keep 1. |
+| `version` | `1` | yes | Schema major version. Additive optional fields keep 1. Behaviour changes within a major version bump the schema's `x-revision`, reported by `broker.hello` as `policySchema.revision` and listed in the protocol changelog. |
 | `tabId` | [`id`](broker-policy.md#id) |  | If set, must equal the broker's `SECLAB_TAB_ID`. |
 | `baseline` | `boolean` |  | Merge the broker's built-in baseline allow rules (extension gallery). (default `true`) |
 | `prompt` | `object` |  | Hold-and-prompt behaviour for requests no rule allows. |
@@ -157,6 +157,7 @@ Where a credential may be injected. Matches HTTPS only. Methods must be explicit
 | `methods` | [`methods`](broker-policy.md#methods) | yes |  |
 | `ports` | [`ports`](broker-policy.md#ports) |  | (default `[443]`) |
 | `inject` | [`inject`](broker-policy.md#inject) |  | Overrides the credential's `inject`. |
+| `websocket` | `boolean` |  | Also inject into a WebSocket upgrade matching this binding. Off by default: without it, a request carrying an `Upgrade` header (or an HTTP/2 extended CONNECT) never gets this credential and is refused with 403. Token scanning of WebSocket server messages is per message plus a window of earlier ones, so a token an upstream streams across structured messages can reach the tab whole; opt in only for upstreams you trust not to mint tokens on that connection. Revision 2. (default `false`) |
 
 <a id="credential"></a>
 ### `credential`

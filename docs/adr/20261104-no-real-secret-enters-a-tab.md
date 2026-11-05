@@ -98,19 +98,29 @@ The broker enforces all of the following. Each item has a regression test.
     credential at all.
 
   The scanners are defence in depth.
-- **WebSocket streams are scanned as a stream.** Each server message is scanned
+- **Credentials go into WebSocket upgrades only by opt-in** (policy schema
+  revision 2, decided by the coordinator on 2026-11-05). A binding injects into
+  an upgraded connection only if it has `websocket: true`, and only for the
+  WebSocket protocol. Without it, a credentialed upgrade is refused with 403.
+  An unconfirmed imported credential is never offered for an upgrade through
+  a first-use prompt, because the suggestion cannot carry the opt-in. This is
+  a route decision, made before any byte flows, so by default the scanner
+  below is not what stands between a minted token and the tab
+  (`test_websocket_credential_needs_binding_opt_in`).
+- **For opt-in bindings, WebSocket streams are scanned as a stream**, as
+  defence in depth. Each server message is scanned
   together with the last 8 KiB the tab already received on that connection, so
   a token whose key and value arrive in separate messages is still
   re-sentinelised. HTTP bodies are buffered whole, so the response scanner
   always sees complete content.
 
-  A match that starts in bytes the tab already has cannot be recalled. The
-  broker drops that message and every later one on the connection, and audits
-  `response.blocked`. If the match only became recognisable once its
-  terminator arrived (for example the JSON token field's closing quote), the
-  tab already holds the whole token. That case is detected, not prevented.
-  Preventing it would mean holding and reframing messages, which breaks
-  message-oriented protocols.
+  **Residual, opt-in bindings only.** A match that starts in bytes the tab
+  already has cannot be recalled. The broker drops that message and every
+  later one on the connection, and audits `response.blocked`. If the match
+  only became recognisable once its terminator arrived (for example the JSON
+  token field's closing quote), the tab already holds the whole token. That
+  case is detected, not prevented. Preventing it would mean holding and
+  reframing messages, which breaks message-oriented protocols.
 
   Two kinds of stream are not reassembled at all:
   - tokens split across structured deltas (JSON-wrapped chunks), whether the
@@ -118,8 +128,8 @@ The broker enforces all of the following. Each item has a regression test.
   - tokens split across separate HTTP responses.
 
   The window is over raw bytes, while the consumer accumulates a field, so no
-  window size closes this. The positional controls above are what bound those
-  cases (`test_websocket_token_split_across_messages`).
+  window size closes this. Opt in only for an upstream you trust not to mint
+  tokens on that connection (`test_websocket_token_split_across_messages`).
 - A rogue extension can still **use** the credential through its binding
   while the tab lives. That is the accepted per-tab blast radius.
   Per-extension attribution is later work (ARCHITECTURE §8).

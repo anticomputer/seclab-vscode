@@ -20,7 +20,7 @@ from collections import deque
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
-from . import PROTOCOL, VERSION, protocol
+from . import POLICY_SCHEMA_REVISION, POLICY_SCHEMA_VERSION, PROTOCOL, VERSION, protocol
 from .credentials import Credential, CredentialStore
 from .untrusted import display_path, sanitize, untrusted_paths
 from .policy import (LITERAL_PATH_RE, Binding, Inject, Policy, PolicyError, RequestView, Rule, normalize_ip,
@@ -337,6 +337,7 @@ class Broker:
     def rpc_broker_hello(self, params: dict) -> dict:
         return {"protocol": PROTOCOL, "version": VERSION, "tabId": self.tab_id,
                 "engine": self.engine, "engineVersion": self.engine_version,
+                "policySchema": {"version": POLICY_SCHEMA_VERSION, "revision": POLICY_SCHEMA_REVISION},
                 "capabilities": CAPABILITIES}
 
     def rpc_health(self, params: dict) -> dict:
@@ -609,6 +610,7 @@ CAPABILITIES = {
     "userActionGating": True,
     "originLabel": True,
     "untrustedTextTagged": True,
+    "websocketOptIn": True,
 }
 
 

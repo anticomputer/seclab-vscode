@@ -82,6 +82,15 @@ def _textual(headers: http.Headers) -> bool:
     return not ctype or bool(_TEXTUAL.search(ctype))
 
 
+def _upgrade_token(r: http.Request) -> str | None:
+    """The protocol a request upgrades to, lower-cased; None for a plain request. HTTP/2
+    extended CONNECT counts as an upgrade to an unknown protocol (never credentialed)."""
+    if r.method == "CONNECT":
+        return "connect"
+    u = r.headers.get("upgrade")
+    return None if u is None else u.strip().lower()
+
+
 def _path_representable(path: str) -> bool:
     try:
         validate_fragment("path", path)
@@ -294,15 +303,21 @@ class SeclabAddon:
         planned: dict[str, tuple[Credential, Binding]] = {}
         unbound: list[tuple[Credential, str, str]] = []
         misplaced: list[tuple[str, str]] = []
+        upgrade = _upgrade_token(flow.request)
+        ws_refused = False
         for cid, where, hname, hvalue in self._sentinel_locations(flow):
             cred = self.b.creds.get(cid)
             if cred is None:
                 continue
             binding = None
             if hname is not None and header_has_sentinel(hvalue or "", cred.sentinel):
-                binding = next((b for b in cred.bindings if b.matches(view)
+                binding = next((b for b in cred.bindings if b.matches(view, upgrade)
                                 and b.inject and b.inject.header.lower() == hname.lower()), None)
-                if binding is None and not cred.confirmed and view.scheme == "https":
+                if binding is None and upgrade is not None:
+                    # Never into an upgraded connection unless a binding opts in, and never
+                    # through a first-use prompt (the suggestion can't carry the opt-in).
+                    ws_refused = ws_refused or any(b.matches(view) for b in cred.bindings) or not cred.confirmed
+                elif binding is None and not cred.confirmed and view.scheme == "https":
                     unbound.append((cred, hname, hvalue or ""))
                     continue
             if binding is not None:
@@ -312,6 +327,11 @@ class SeclabAddon:
                     planned[cid] = (cred, binding)
             else:
                 misplaced.append((cid, where))
+
+        if ws_refused:
+            self._deny(flow, 403, "credential injection into an upgraded connection needs a binding "
+                                  "with websocket: true")
+            return
 
         if misplaced:
             for cid, where in misplaced:
@@ -349,7 +369,7 @@ class SeclabAddon:
                 if not decision.allow:
                     self._deny(flow, 403, f"credential binding denied ({decision.reason})")
                     return
-                binding = next((b for b in cred.bindings if b.matches(view) and b.inject
+                binding = next((b for b in cred.bindings if b.matches(view, upgrade) and b.inject
                                 and b.inject.header.lower() == inject.header.lower()), None)
                 if binding is None:
                     if not decision.once:
