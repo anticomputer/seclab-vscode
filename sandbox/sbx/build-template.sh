@@ -48,7 +48,16 @@ done < "$WB_LOCK"
 [[ "$(ls "$WB_DEBS"/*.deb.ok 2>/dev/null | wc -l)" -eq 2 ]] || { echo "expected 2 write-back debs for $ARCH in $WB_LOCK" >&2; exit 2; }
 
 sbx rm --force "$B" >/dev/null 2>&1 || true
-sbx create --name "$B" --no-progress shell
+# sbx's shell kit, pinned by digest: sbx otherwise resolves docker.io/sbx/shell:latest, which
+# changed under us (2026-11: no gcc). Unsigned and without provenance (sbx kit verify /
+# provenance), so official-pinned with a recorded gap (deps/registry.json).
+SHELL_KIT="docker.io/sbx/shell@sha256:897303c25b0eef2a4464a99efccb1d65bb3083d7180041c045aadeaa5022f0b2"
+# The guard is compiled in our pinned image, not with the kit's (unpinned, now absent) gcc.
+GUARD_OUT="$ROOT/.work/obs-guard-$ARCH"
+rm -rf "$GUARD_OUT"
+docker build -q -f "$ROOT/sandbox/sbx/Dockerfile.guard" --output "type=local,dest=$GUARD_OUT" "$ROOT/sandbox/sbx" >/dev/null
+[[ -x "$GUARD_OUT/seclab-obs-guard" ]] || { echo "guard build produced no binary" >&2; exit 1; }
+sbx create --name "$B" --no-progress "$SHELL_KIT"
 trap 'sbx rm --force "$B" >/dev/null 2>&1 || true' EXIT
 
 sbx cp "$REH_TGZ" "$B:/tmp/seclab-reh.tgz"
@@ -57,7 +66,7 @@ sbx cp "$DEBS/$STRACE_DEB" "$B:/tmp/strace.deb"
 mkdir -p "$ROOT/.work/wb-debs/stage-$ARCH" && rm -f "$ROOT/.work/wb-debs/stage-$ARCH"/*.deb
 for f in "$WB_DEBS"/*.deb.ok; do cp "${f%.ok}" "$ROOT/.work/wb-debs/stage-$ARCH/"; done
 sbx cp "$ROOT/.work/wb-debs/stage-$ARCH" "$B:/tmp/wb-debs"
-sbx cp "$ROOT/sandbox/sbx/seclab-obs-guard.c" "$B:/tmp/seclab-obs-guard.c"
+sbx cp "$GUARD_OUT/seclab-obs-guard" "$B:/tmp/seclab-obs-guard"
 sbx exec -u root "$B" sh -euc '
 	rm -rf /opt/seclab-reh /opt/seclab
 	mkdir -p /opt/seclab-reh
@@ -72,14 +81,14 @@ sbx exec -u root "$B" sh -euc '
 	# seclab-wb-mount also refuses at run time if a setuid fusermount appears (JJ-5).
 	apt-mark hold fuse-overlayfs libfuse3-4 >/dev/null
 	mkdir -p /var/lib/seclab/wb && chmod 0700 /var/lib/seclab /var/lib/seclab/wb
-	gcc -O2 -Wall -Werror -o /opt/seclab/bin/seclab-obs-guard /tmp/seclab-obs-guard.c
+	install -m 0755 /tmp/seclab-obs-guard /opt/seclab/bin/seclab-obs-guard
 	# Fixed ids: tabd runs the relay as exactly 990:990 (a bare uid would pick up gid 999 = docker).
 	getent group 990 >/dev/null || groupadd --system -g 990 seclab-relay
 	id seclab-relay >/dev/null 2>&1 || useradd --system -u 990 -g 990 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin seclab-relay
 	[ "$(id -u seclab-relay):$(id -g seclab-relay):$(id -G seclab-relay)" = "990:990:990" ]
 	chown -R root:root /opt/seclab-reh /opt/seclab
 	chmod 0755 /opt/seclab/bin/*
-	rm -rf /tmp/seclab-reh.tgz /tmp/strace.deb /tmp/seclab-obs-guard.c /tmp/wb-debs
+	rm -rf /tmp/seclab-reh.tgz /tmp/strace.deb /tmp/seclab-obs-guard /tmp/wb-debs
 	# Defence in depth inside the VM: the tab user gets no sudo and no inner docker.
 	gpasswd -d agent sudo >/dev/null 2>&1 || true
 	gpasswd -d agent docker >/dev/null 2>&1 || true

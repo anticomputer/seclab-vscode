@@ -1,0 +1,13 @@
+# The tab's seccomp/Landlock guard (sandbox/sbx/seclab-obs-guard.c), compiled here in our pinned
+# Debian image rather than with whatever compiler the sbx kit happens to ship (sbx resolves its
+# shell kit as :latest, and the 2026-11 kit has no gcc). Static, so it doesn't depend on the kit's
+# libc. Built for the host's docker architecture, which is the tab VM's.
+#   docker build -f sandbox/sbx/Dockerfile.guard --output type=local,dest=DIR sandbox/sbx
+# apt: Debian's signed archive without version pins (EDR 20261105-supply-chain-exceptions).
+FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS build
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev && rm -rf /var/lib/apt/lists/*
+COPY seclab-obs-guard.c /src/seclab-obs-guard.c
+RUN mkdir /out && gcc -O2 -Wall -Werror -static -o /out/seclab-obs-guard /src/seclab-obs-guard.c
+
+FROM scratch
+COPY --from=build /out/seclab-obs-guard /seclab-obs-guard

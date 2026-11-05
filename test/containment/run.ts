@@ -197,6 +197,13 @@ if (driver === 'sbx') {
 	const memOutside = spawnSync(runtime, ['exec', '-u', 'agent', '-w', '/', containerA, '/bin/sh', '-c', 'exec 3<>/proc/1/mem'], { encoding: 'utf8', timeout: 30_000 }).status;
 	checks.push({ vector: 'write-back', name: 'tab code cannot write /proc/1/mem or signal PID 1 (KK-1)', ok: memOutside === 0 && kk('exec 3<>/proc/1/mem') !== 0 && kk('kill -0 1') !== 0 && kk('kill -0 $$') === 0,
 		detail: `control (unguarded) mem open exit ${memOutside}` });
+	// Review LL-1: sbx's clipboard-bridge (agent uid, unguarded, serving wayland-0 to the tab) is
+	// stopped by the collector before the REH starts, and its socket removed.
+	const ll = spawnSync(runtime, ['exec', '-u', 'root', '-w', '/', containerA, 'sh', '-c',
+		'for d in /proc/[0-9]*; do [ "$(readlink $d/exe 2>/dev/null)" = /usr/local/bin/clipboard-bridge ] && echo "pid ${d#/proc/}"; done; '
+		+ 'for s in /run/user/*/wayland-0; do [ -S "$s" ] && echo "socket $s"; done; true'], { encoding: 'utf8', timeout: 30_000 });
+	checks.push({ vector: 'write-back', name: 'sbx clipboard-bridge is not running in the tab and its socket is gone (LL-1)', ok: ll.status === 0 && ll.stdout.trim() === '',
+		detail: ll.stdout.trim() || ll.stderr.trim() });
 }
 
 // Fence-level checks via the runtime's own policy evaluator (sbx only).

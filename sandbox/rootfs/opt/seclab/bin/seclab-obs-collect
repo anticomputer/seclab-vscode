@@ -5,7 +5,7 @@
 #   stdout: JSON lines, one record per line, each with a contiguous sequence number "n"
 # It starts the REH itself, under strace and the seccomp guard, so every process the tab
 # creates is traced from birth. It never reads anything from the tab user except /proc.
-import ctypes, json, os, pwd, grp, re, select, secrets, signal, socket, subprocess, sys, threading, time
+import ctypes, json, os, pwd, grp, re, select, secrets, signal, socket, stat, subprocess, sys, threading, time
 
 TRACE_DEFAULT = ("execve,execveat,clone,clone3,fork,vfork,chdir,connect,unlinkat,?unlink,?rmdir,"
                  "renameat,renameat2,?rename,linkat,?link,symlinkat,?symlink,fchmodat,?fchmodat2,?chmod,"
@@ -17,6 +17,7 @@ STRACE = "/usr/bin/strace"
 GUARD = "/opt/seclab/bin/seclab-obs-guard"
 REH_START = "/opt/seclab/bin/seclab-reh-start"
 WB_MOUNT = "/opt/seclab/bin/seclab-wb-mount"
+CLIPBOARD_BRIDGE = "/usr/local/bin/clipboard-bridge"
 RELAY_DIR = "/run/seclab/reh"
 MAX_LINE = 64 * 1024
 MAX_EXTRA_STRACERS = 32
@@ -300,6 +301,42 @@ class Stracer:
             emit({"k": "strace-err", "i": self.idx, "msg": raw.decode("latin-1", "replace").strip()[:300]})
 
 
+def stop_clipboard_bridge():
+    # sbx's kit starts clipboard-bridge as the tab user, with no seccomp filter or Landlock
+    # domain, serving /run/user/<uid>/wayland-0 to the tab. seclab never uses the sbx clipboard,
+    # so a parser bug there would only be execution outside the guard (review LL-1). Stop it
+    # before the REH starts (nothing respawns it) and fail closed if it survives.
+    def bridges():
+        out = []
+        for d in os.listdir("/proc"):
+            if d.isdigit():
+                try:
+                    if os.readlink("/proc/" + d + "/exe") == CLIPBOARD_BRIDGE:
+                        out.append(int(d))
+                except OSError:
+                    pass
+        return out
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in bridges():
+            try:
+                os.kill(pid, sig)
+            except ProcessLookupError:
+                pass
+        for _ in range(30):
+            if not bridges():
+                break
+            time.sleep(0.1)
+    if bridges():
+        fail("sbx clipboard-bridge survived SIGKILL; refusing to start the REH")
+    for d in os.listdir("/run/user") if os.path.isdir("/run/user") else []:
+        sock = os.path.join("/run/user", d, "wayland-0")
+        try:
+            if stat.S_ISSOCK(os.lstat(sock).st_mode):
+                os.unlink(sock)
+        except OSError:
+            pass
+
+
 def main():
     # sbx exec starts us with cwd = the workspace path, before the overlay exists. Leave it
     # at once: a cwd under the mount point would keep the host checkout reachable (JJ-1).
@@ -317,6 +354,7 @@ def main():
     emit({"k": "hello", "v": 1, "pid": os.getpid(), "mode": cfg["mode"], "kernel": os.uname().release,
           "strace": version.decode("latin-1")[:64], "brokerAddrs": broker_addrs()})
     harden()
+    stop_clipboard_bridge()
     if not wb_mount(cfg["workspace"]):
         fail("workspace overlay not mounted; refusing to start the REH")
 
