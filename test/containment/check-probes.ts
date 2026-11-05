@@ -54,6 +54,7 @@ interface Result { id: string; policyRef: string; outcome: string; detail: strin
 interface Spec {
 	required?: boolean; policyRef: string; why: string; beacon?: string;
 	patchedOutcome?: string; needsTestContribution?: boolean;
+	status?: string; blocked_on?: string;
 	hostEffect?: string; hostEffectAbsolute?: string;
 }
 
@@ -69,8 +70,22 @@ function hostEffectPath(effect: string): string | null {
 	if (effect.startsWith('marker.')) {
 		return path.join(runDir, `PWNED${effect.slice('marker'.length)}`);
 	}
+	if (!HOST_EFFECT_FILENAME.test(effect)) {
+		// Not a filename. The previous version joined whatever it was onto the
+		// run directory, so an English description of an effect -- "beacon hit
+		// from the host, or a marker written outside the tab" -- became a path
+		// that could never exist, and the absence of that file was reported as
+		// the host being unchanged. A probe that cannot fail is worse than no
+		// probe, so an unresolvable effect is an error rather than a pass.
+		throw new Error(
+			`hostEffect ${JSON.stringify(effect)} is not a filename. Use "marker", `
+			+ `"marker.<suffix>", a run-relative path, or hostEffectAbsolute.`);
+	}
 	return path.join(runDir, effect);
 }
+
+/** A plausible run-relative filename: no spaces, no prose. */
+const HOST_EFFECT_FILENAME = /^[A-Za-z0-9._\/-]+$/;
 
 const checks: Check[] = [];
 const c = (vector: string, ok: boolean, name: string, detail = ''): void => {
@@ -179,9 +194,19 @@ const predicates: Record<string, (r: Result) => string | null> = {
 
 // ---------------------------------------------------------------- checks
 for (const [id, spec] of Object.entries(specs)) {
-	const known = spec.policyRef in (coverage.mapping as Record<string, string>)
+	const mapping = coverage.mapping as Record<string, string>;
+	// Surface (e) keys carry pinned attributes after the id --
+	// `ai-tool:<id>|host=…`, `ai-setting:<id>|scope=…|unreg=…|tab_writable=…` --
+	// so an exact lookup never matches. Match on the id prefix instead: the
+	// attributes are what the gate pins, not part of the surface's identity.
+	const composite = (ref: string): boolean =>
+		(ref.startsWith('ai-tool:') || ref.startsWith('ai-setting:'))
+		&& Object.keys(mapping).some(k => k === ref || k.startsWith(`${ref}|`));
+	const known = spec.policyRef in mapping
+		|| composite(spec.policyRef)
 		|| spec.policyRef.startsWith('data:')
 		|| spec.policyRef.startsWith('chan:server_initiated')
+		|| spec.policyRef.startsWith('push:')
 		|| spec.needsTestContribution
 		|| spec.policyRef === 'rpc:raw';
 	c('probe-policy-link', known, `${id} references a real policy entry (${spec.policyRef})`,
@@ -189,6 +214,14 @@ for (const [id, spec] of Object.entries(specs)) {
 }
 
 for (const [id, spec] of Object.entries(specs)) {
+	if (spec.status === 'not-implemented') {
+		// Reported, never silently skipped. These are registered surfaces with
+		// no runner yet; counting them as passes would turn an absence of
+		// evidence into evidence of containment.
+		c('probes-pending', true, `${id} is registered but NOT IMPLEMENTED`,
+			spec.blocked_on ?? '');
+		continue;
+	}
 	const r = results.get(id);
 	if (!r) {
 		c('probes', !spec.required, `${id} ran`, 'no result recorded');

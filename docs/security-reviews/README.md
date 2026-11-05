@@ -74,6 +74,7 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-04 | [tab observability (one-way event stream, sbx collector, OCI Falco, Tab Activity view)](20261104-tab-observability.md) | - Round 1: origin/main..8b1df33 (pre-rebase), that is the whole layer: | see record |
 | 2026-11-04 | [seclab-tabd design (protocol and process model)](20261104-tabd-protocol-design.md) | design docs at 296594c plus the uncommitted drafts of docs/adr/20261104-tab-supervisor.md, | see record |
 | 2026-11-04 | [write-back gate, increment 1 (engine and policy)](20261104-write-back-engine.md) | - tabd/src/writeback.ts: the engine (classification, trusted host writer, conflicts, fail- | see record |
+| 2026-11-05 | [the agent-host patches 0009–0011 (Phase 3, increment 4)](20261105-agent-host-patches.md) | see record | see record |
 | 2026-11-05 | [agents-in-the-tab spike harness and findings](20261105-agents-in-tab-spike.md) | c6dfbf2..f2b9471 (rebased from f5a479a..44d11bc). That covers test/agentic/ahp/ (run.sh, b | see record |
 | 2026-11-05 | [backstop derive exemption and `GET /copilot_internal/user` exception](20261105-broker-backstop-exceptions.md) | round 8. | see record |
 | 2026-11-05 | [broker local builds through CFS](20261105-broker-cfs-builds.md) | - 440d80f: CFS local builds. | see record |
