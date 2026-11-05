@@ -28,6 +28,11 @@ Current queue:
   remote run only `ui`-kind (built-in) extensions.
 - `0004-extension-description-computed-fields-win.patch`: a `package.json`
   can't override computed description fields such as `isBuiltin`.
+- `0012-background-windows-env.patch`: with `SECLAB_BACKGROUND_WINDOWS=1` in the main
+  process's launch environment, windows open inactive and nothing focuses or activates the app
+  ([EDR](../docs/edr/20261105-background-windows.md)). It grants nothing; it only withholds
+  focus, which is why it isn't a test hook in the sense below. (0005-0011 are reserved for
+  the RPC filter series.)
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release

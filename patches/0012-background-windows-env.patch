@@ -1,0 +1,139 @@
+diff --git a/src/vs/platform/auxiliaryWindow/electron-main/auxiliaryWindowsMainService.ts b/src/vs/platform/auxiliaryWindow/electron-main/auxiliaryWindowsMainService.ts
+index 8b56d65..19fc8e6 100644
+--- a/src/vs/platform/auxiliaryWindow/electron-main/auxiliaryWindowsMainService.ts
++++ b/src/vs/platform/auxiliaryWindow/electron-main/auxiliaryWindowsMainService.ts
+@@ -13,7 +13,7 @@ import { IAuxiliaryWindowsMainService } from './auxiliaryWindows.js';
+ import { IInstantiationService } from '../../instantiation/common/instantiation.js';
+ import { ILogService } from '../../log/common/log.js';
+ import { IWindowState, WindowMode, defaultAuxWindowState } from '../../window/electron-main/window.js';
+-import { IDefaultBrowserWindowOptionsOverrides, WindowStateValidator, defaultBrowserWindowOptions, getLastFocused } from '../../windows/electron-main/windows.js';
++import { backgroundWindows, IDefaultBrowserWindowOptionsOverrides, WindowStateValidator, defaultBrowserWindowOptions, getLastFocused } from '../../windows/electron-main/windows.js';
+ 
+ export class AuxiliaryWindowsMainService extends Disposable implements IAuxiliaryWindowsMainService {
+ 
+@@ -69,6 +69,9 @@ export class AuxiliaryWindowsMainService extends Disposable implements IAuxiliar
+ 			else {
+ 				const disposables = new DisposableStore();
+ 				disposables.add(Event.fromNodeEventEmitter(browserWindow.webContents, 'did-create-window', (browserWindow, details) => ({ browserWindow, details }))(({ browserWindow, details }) => {
++					if (backgroundWindows) {
++						browserWindow.showInactive(); // created hidden (show: false)
++					}
+ 					const auxiliaryWindow = this.getWindowByWebContents(browserWindow.webContents);
+ 					if (auxiliaryWindow) {
+ 						this.logService.trace('[aux window] window.on("did-create-window"): Trying to claim auxiliary window');
+diff --git a/src/vs/platform/launch/electron-main/launchMainService.ts b/src/vs/platform/launch/electron-main/launchMainService.ts
+index 1984c46..b0fa5a8 100644
+--- a/src/vs/platform/launch/electron-main/launchMainService.ts
++++ b/src/vs/platform/launch/electron-main/launchMainService.ts
+@@ -16,7 +16,7 @@ import { ILogService } from '../../log/common/log.js';
+ import { IURLService } from '../../url/common/url.js';
+ import { ICodeWindow } from '../../window/electron-main/window.js';
+ import { IWindowSettings } from '../../window/common/window.js';
+-import { IOpenConfiguration, IWindowsMainService, OpenContext } from '../../windows/electron-main/windows.js';
++import { backgroundWindows, IOpenConfiguration, IWindowsMainService, OpenContext } from '../../windows/electron-main/windows.js';
+ import { IProtocolUrl } from '../../url/electron-main/url.js';
+ 
+ export const ID = 'launchMainService';
+@@ -59,7 +59,7 @@ export class LaunchMainService implements ILaunchMainService {
+ 		// is not in the foreground and since we got instructed
+ 		// to open a new window from another instance, we ensure
+ 		// that the app has focus.
+-		if (isMacintosh) {
++		if (isMacintosh && !backgroundWindows) {
+ 			app.focus({ steal: true });
+ 		}
+ 
+diff --git a/src/vs/platform/native/electron-main/nativeHostMainService.ts b/src/vs/platform/native/electron-main/nativeHostMainService.ts
+index c22bfe8..127aa68 100644
+--- a/src/vs/platform/native/electron-main/nativeHostMainService.ts
++++ b/src/vs/platform/native/electron-main/nativeHostMainService.ts
+@@ -35,7 +35,7 @@ import { IPartsSplash } from '../../theme/common/themeService.js';
+ import { IThemeMainService } from '../../theme/electron-main/themeMainService.js';
+ import { defaultWindowState, ICodeWindow, LoadReason } from '../../window/electron-main/window.js';
+ import { IColorScheme, IOpenedAuxiliaryWindow, IOpenedMainWindow, IOpenEmptyWindowOptions, IOpenWindowOptions, IPoint, IRectangle, IWindowOpenable } from '../../window/common/window.js';
+-import { defaultBrowserWindowOptions, IWindowsMainService, OpenContext } from '../../windows/electron-main/windows.js';
++import { backgroundWindows, defaultBrowserWindowOptions, IWindowsMainService, OpenContext } from '../../windows/electron-main/windows.js';
+ import { isWorkspaceIdentifier, toWorkspaceIdentifier } from '../../workspace/common/workspace.js';
+ import { IWorkspacesManagementMainService } from '../../workspaces/electron-main/workspacesManagementMainService.js';
+ import { VSBuffer } from '../../../base/common/buffer.js';
+@@ -429,6 +429,9 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
+ 	}
+ 
+ 	async moveWindowTop(windowId: number | undefined, options?: INativeHostOptions): Promise<void> {
++		if (backgroundWindows) {
++			return; // seclab: never raise a window over other apps
++		}
+ 		const window = this.windowById(options?.targetWindowId, windowId);
+ 		window?.win?.moveTop();
+ 	}
+diff --git a/src/vs/platform/windows/electron-main/windowImpl.ts b/src/vs/platform/windows/electron-main/windowImpl.ts
+index 484851f..91a16dd 100644
+--- a/src/vs/platform/windows/electron-main/windowImpl.ts
++++ b/src/vs/platform/windows/electron-main/windowImpl.ts
+@@ -34,7 +34,7 @@ import { ITelemetryService } from '../../telemetry/common/telemetry.js';
+ import { ThemeIcon } from '../../../base/common/themables.js';
+ import { IThemeMainService } from '../../theme/electron-main/themeMainService.js';
+ import { getMenuBarVisibility, IFolderToOpen, INativeWindowConfiguration, IWindowSettings, IWorkspaceToOpen, MenuBarVisibility, hasNativeTitlebar, useNativeFullScreen, DEFAULT_CUSTOM_TITLEBAR_HEIGHT, TitlebarStyle, MenuSettings, getMacOSWindowControlsPosition } from '../../window/common/window.js';
+-import { defaultBrowserWindowOptions, getAllWindowsExcludingOffscreen, IWindowsMainService, OpenContext, WindowStateValidator } from './windows.js';
++import { backgroundWindows, defaultBrowserWindowOptions, getAllWindowsExcludingOffscreen, IWindowsMainService, OpenContext, WindowStateValidator } from './windows.js';
+ import { ISingleFolderWorkspaceIdentifier, IWorkspaceIdentifier, isSingleFolderWorkspaceIdentifier, isWorkspaceIdentifier, toWorkspaceIdentifier } from '../../workspace/common/workspace.js';
+ import { IWorkspacesManagementMainService } from '../../workspaces/electron-main/workspacesManagementMainService.js';
+ import { IWindowState, ICodeWindow, ILoadEvent, WindowMode, WindowError, LoadReason, defaultWindowState, IBaseWindow } from '../../window/electron-main/window.js';
+@@ -349,7 +349,11 @@ export abstract class BaseWindow extends Disposable implements IBaseWindow {
+ 
+ 			// to reduce flicker from the default window size
+ 			// to maximize or fullscreen, we only show after
+-			this._win?.show();
++			if (backgroundWindows) {
++				this._win?.showInactive();
++			} else {
++				this._win?.show();
++			}
+ 		}
+ 	}
+ 
+@@ -412,6 +416,9 @@ export abstract class BaseWindow extends Disposable implements IBaseWindow {
+ 	}
+ 
+ 	focus(options?: { mode: FocusMode }): void {
++		if (backgroundWindows) {
++			return; // seclab: never focus a window or activate the app
++		}
+ 		switch (options?.mode ?? FocusMode.Transfer) {
+ 			case FocusMode.Transfer:
+ 				this.doFocusWindow();
+@@ -804,6 +811,9 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
+ 			mark('code/willCreateCodeBrowserWindow');
+ 			this._win = new electron.BrowserWindow(options);
+ 			mark('code/didCreateCodeBrowserWindow');
++			if (backgroundWindows && this.windowState.mode !== WindowMode.Maximized && this.windowState.mode !== WindowMode.Fullscreen) {
++				this._win.showInactive(); // created hidden (show: false); maximized/fullscreen show later
++			}
+ 
+ 			this._id = this._win.id;
+ 			this.setWin(this._win, options);
+diff --git a/src/vs/platform/windows/electron-main/windows.ts b/src/vs/platform/windows/electron-main/windows.ts
+index fed0318..1977da8 100644
+--- a/src/vs/platform/windows/electron-main/windows.ts
++++ b/src/vs/platform/windows/electron-main/windows.ts
+@@ -120,6 +120,11 @@ export interface IOpenConfiguration extends IBaseOpenConfiguration {
+ 
+ export interface IOpenEmptyConfiguration extends IBaseOpenConfiguration { }
+ 
++// seclab: windows open and stay in the background (shown inactive, never focused or activating
++// the app) when the main process was launched with SECLAB_BACKGROUND_WINDOWS=1. Read once from
++// the main process environment at startup; not a setting (EDR 20261105-background-windows).
++export const backgroundWindows = process.env['SECLAB_BACKGROUND_WINDOWS'] === '1';
++
+ export interface IDefaultBrowserWindowOptionsOverrides {
+ 	forceNativeTitlebar?: boolean;
+ 	disableFullscreen?: boolean;
+@@ -144,7 +149,7 @@ export function defaultBrowserWindowOptions(accessor: ServicesAccessor, windowSt
+ 		minWidth: WindowMinimumSize.WIDTH,
+ 		minHeight: WindowMinimumSize.HEIGHT,
+ 		title: productService.nameLong,
+-		show: windowState.mode !== WindowMode.Maximized && windowState.mode !== WindowMode.Fullscreen, // reduce flicker by showing later
++		show: !backgroundWindows && windowState.mode !== WindowMode.Maximized && windowState.mode !== WindowMode.Fullscreen, // reduce flicker by showing later
+ 		x: windowState.x,
+ 		y: windowState.y,
+ 		width: windowState.width,
