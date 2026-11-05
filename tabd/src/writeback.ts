@@ -559,6 +559,12 @@ export class WriteBackEngine {
 		return this.state.pending.filter(p => p.reasons.some(r => r.startsWith('mass deletion'))).length;
 	}
 
+	/** Digest of exactly which deletions are held under the brake (binds a confirmation; PP-2). */
+	massDeletionDigest(): string {
+		const paths = this.state.pending.filter(p => p.reasons.some(r => r.startsWith('mass deletion'))).map(p => p.path).sort();
+		return sha(Buffer.from(JSON.stringify(paths)));
+	}
+
 	// ---- incremental feed (increment 2b) ------------------------------------------------------
 
 	/** True if this entry is exactly what was last synced (applied or decided): skip it. */

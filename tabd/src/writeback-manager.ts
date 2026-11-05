@@ -162,14 +162,15 @@ export class WriteBackManager {
 		return { result };
 	}
 
-	/** The user confirmed held mass deletions: release the sticky brake. Bound to the count the user saw (OO-6). */
-	confirmDeletes(tabId: string, shownCount: number): void {
+	/** The user confirmed held mass deletions: release the sticky brake. Bound to exactly the set shown (OO-6, PP-2). */
+	confirmDeletes(tabId: string, shownDigest: string): void {
 		const t = this.active(tabId);
-		if (t.engine.heldMassDeletions() !== shownCount) {
+		if (t.engine.massDeletionDigest() !== shownDigest) {
 			throw new Error('the held deletions changed since they were shown; review again');
 		}
+		const n = t.engine.heldMassDeletions();
 		t.engine.clearDeleteHold();
-		this.o.emit?.(tabId, { class: 'workspace.gate', priority: 'informational', summary: `mass-deletion hold released by the user (${shownCount} held)`, detail: { decision: 'confirm-deletes', decidedBy: 'user' } });
+		this.o.emit?.(tabId, { class: 'workspace.gate', priority: 'informational', summary: `mass-deletion hold released by the user (${n} held)`, detail: { decision: 'confirm-deletes', decidedBy: 'user' } });
 	}
 
 	private active(tabId: string): TabState {
@@ -189,10 +190,10 @@ export class WriteBackManager {
 		}
 	}
 
-	status(tabId: string): { active: boolean; pending: PendingChange[]; lastSync?: number; lastError?: string } {
+	status(tabId: string): { active: boolean; pending: PendingChange[]; lastSync?: number; lastError?: string; massDeleteDigest?: string } {
 		const t = this.tabs.get(tabId);
 		if (t) {
-			return { active: true, pending: t.engine.pending(), lastSync: t.lastSync, lastError: t.lastError };
+			return { active: true, pending: t.engine.pending(), lastSync: t.lastSync, lastError: t.lastError, massDeleteDigest: t.engine.massDeletionDigest() };
 		}
 		// Not running: pending changes recorded on disk are still listed (fail closed, ADR §5).
 		try {

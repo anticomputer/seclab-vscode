@@ -35,7 +35,33 @@ export function plainPath(p: string, max = 120): string {
 	return tail.length + 2 >= max ? `…${tail.slice(-(max - 1))}` : `${esc.slice(0, keep)}…/${tail}`;
 }
 
-const WRAP = 160;
+const WRAP_COLUMNS = 80;
+/** East Asian wide/fullwidth ranges: two display columns each. */
+const WIDE = /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6\u{1F300}-\u{1FAFF}\u{20000}-\u{3FFFD}]/u;
+
+/**
+ * One line as the user must see it (review PP-1): no whitespace may push content off-screen.
+ * Tabs show as →, any run of 8+ whitespace characters (incl. non-ASCII spaces) becomes a
+ * visible ⟨N blanks⟩ marker, and lines wrap at a display width that fits a diff pane.
+ */
+function visibleLine(l: string): string {
+	const s = l.replace(/[\t \p{Zs}]{8,}/gu, m => `⟨${m.length} blanks⟩`).replace(/\t/g, '→').replace(/[\p{Zs}]/gu, c => c === ' ' ? ' ' : '·');
+	const out: string[] = [];
+	let cur = '';
+	let w = 0;
+	for (const ch of s) {
+		const cw = WIDE.test(ch) ? 2 : 1;
+		if (w + cw > WRAP_COLUMNS) {
+			out.push(cur);
+			cur = '↪ ';
+			w = 2;
+		}
+		cur += ch;
+		w += cw;
+	}
+	out.push(cur);
+	return out.join('\n');
+}
 
 /** Bytes as text the user can read completely: UTF-8 if valid (NULs escaped), else \xNN escapes. */
 function readable(buf: Buffer): string {
@@ -45,8 +71,7 @@ function readable(buf: Buffer): string {
 	} catch {
 		text = [...buf].map(b => (b >= 0x20 && b < 0x7f) || b === 0x0a || b === 0x09 ? String.fromCharCode(b) : `\\x${b.toString(16).padStart(2, '0')}`).join('');
 	}
-	// No line may hide content off-screen: hard-wrap with a visible continuation marker (OO-2).
-	return text.replace(/\0/g, '\\x00').split('\n').map(l => l.length <= WRAP ? l : l.match(new RegExp(`.{1,${WRAP}}`, 'gu'))!.join('\n↪ ')).join('\n');
+	return text.replace(/\0/g, '\\x00').replace(/\r/g, '\\r').split('\n').map(visibleLine).join('\n');
 }
 
 /** File content for display, and whether everything that would be applied is shown. */
@@ -227,7 +252,7 @@ export class WriteBackReview implements vscode.TextDocumentContentProvider {
 			return;
 		}
 		const c = await this.getClient();
-		const s = await c.request<{ pending: Pending[] }>('tab.writeback.status', { tabId: this.tabId });
+		const s = await c.request<{ pending: Pending[]; massDeleteDigest?: string }>('tab.writeback.status', { tabId: this.tabId });
 		const held = s.pending.filter(p => p.reasons.some(r => r.startsWith('mass deletion')));
 		if (!held.length) {
 			void vscode.window.showInformationMessage('No deletions from this tab are held.');
@@ -242,8 +267,8 @@ export class WriteBackReview implements vscode.TextDocumentContentProvider {
 			return;
 		}
 		try {
-			// Bound to the count shown: refused if the tab changed the set meanwhile (OO-6).
-			await c.request('tab.writeback.confirmDeletes', { tabId: this.tabId, count: held.length });
+			// Bound to exactly the set of held deletions this status listed (OO-6, PP-2).
+			await c.request('tab.writeback.confirmDeletes', { tabId: this.tabId, digest: s.massDeleteDigest });
 		} catch (e) {
 			void vscode.window.showErrorMessage(`Not released: ${plainText((e as Error).message)}`);
 		}

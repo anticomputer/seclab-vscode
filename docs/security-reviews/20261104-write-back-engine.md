@@ -147,3 +147,11 @@ something other than what the user saw.
 | OO-5 | Low | Language features | Virtual docs named after the tab's file ran language features on tab content. | Fixed | Neutral `review.txt` names (plain text). |
 | OO-6 | Low | confirmDeletes | Release not bound to what was shown. | Fixed | Modal shows count and sample; tabd refuses unless the held count matches. Toasts rate-limited (one a minute). |
 | note | Info | RPC filter (M4) | Until the filter enforces, a rogue extension could invoke `seclab.reviewChanges`/`seclab.confirmDeletes` to pop dialogs (a click is still needed). | Tracked | `seclab.*` must stay outside the filter's allowed set (raised with the RPC session). |
+
+### Increment 3, re-review (80db076)
+OO-1 and OO-3..OO-6 verified closed; OO-2 closed for truncation and binary, not for long lines:
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| PP-1 | **Medium** | Display | Wrapping counted characters, not display columns: tabs, wide blanks, or 90 spaces under 160 characters still pushed a payload off-screen. | Fixed | Runs of 8+ blanks (any Unicode space or tab) become a visible `⟨N blanks⟩`, tabs `→`, other non-ASCII spaces `·`, `\r` escaped; lines wrap at 80 display columns with wide characters counted as 2. |
+| PP-2 | Low | confirmDeletes | Bound to the count, not the set. | Fixed | Bound to a digest of the sorted held-deletion paths (`massDeleteDigest`). |

@@ -222,7 +222,7 @@ test('decide: the diff shows exactly the held bytes; a tab showing other content
 		const shown = await m.content(tabId, '.vscode/tasks.json') as { sig: string; tab: { b64: string } };
 		assert.equal(Buffer.from(shown.tab.b64, 'base64').toString(), '{"tasks":[{"command":"evil"}]}', 'what is shown is what is held');
 		assert.equal(shown.sig, p.sig);
-		assert.throws(() => m.confirmDeletes(tabId, 5), /changed since they were shown/, 'confirmation bound to the count shown (OO-6)');
+		assert.throws(() => m.confirmDeletes(tabId, 'e'.repeat(64)), /changed since they were shown/, 'confirmation bound to the set shown (OO-6, PP-2)');
 	} finally {
 		m.stop(tabId);
 	}
