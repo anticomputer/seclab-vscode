@@ -114,7 +114,7 @@ xattr -dr com.apple.quarantine .work/app/seclab-vscode.app
 # build from source (all in containers)
 ./seclab build linux        # VS Code server (REH) for the tab, from pinned upstream
 ./seclab template sbx       # sbx tab template
-./seclab image oci          # OCI tab images
+./seclab image oci          # OCI tab images and the tab broker (both drivers need it)
 
 # tests
 ./seclab test containment sbx   # malicious-workspace vectors inside real tabs (also: oci)

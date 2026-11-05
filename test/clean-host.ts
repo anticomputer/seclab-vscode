@@ -44,6 +44,7 @@ const OURS = {
 	volume: new RegExp(`^seclab-${TAB}-home$`),
 	image: /^seclab-(tab|tab-oci|builder|broker|broker-placeholder|broker-unit|broker-it-[a-z]+|template-builder|npm-cache|vsce):[A-Za-z0-9._-]+$/,
 };
+const tabIdOf = (name: string) => new RegExp(`^seclab-(${TAB})(-broker|-net|-egress|-home)?$`).exec(name)?.[1];
 if (args.has('--self-test')) {
 	// Names seen on a real host: ours must match, other projects' and the user's must not.
 	const yes: Array<[keyof typeof OURS, string]> = [['sandbox', 'seclab-t-dyhhlwazovvh3p7sk4el4vbjeq'], ['sandbox', 'seclab-spike-a'],
@@ -54,7 +55,9 @@ if (args.has('--self-test')) {
 		['image', 'seclab-cleanroom:local'], ['image', 'seclab-shell-sast:latest'], ['image', 'seclab-shell-base:latest'], ['volume', 'seclab-vscode-work'],
 		['container', 'seclab-audit-runner'], ['network', 'seclab-cleanroom-net']];
 	const bad = [...yes.filter(([k, n]) => !OURS[k].test(n)).map(([k, n]) => `should match ${k} ${n}`),
-		...no.filter(([k, n]) => OURS[k].test(n)).map(([k, n]) => `must not match ${k} ${n}`)];
+		...no.filter(([k, n]) => OURS[k].test(n)).map(([k, n]) => `must not match ${k} ${n}`),
+		// Every per-tab resource maps to its tab, so a real tab's is never removed as a test's.
+		...yes.filter(([, n]) => n.startsWith('seclab-t-') && tabIdOf(n) !== n.slice('seclab-'.length, 'seclab-t-'.length + 26)).map(([k, n]) => `${k} ${n} does not map to its tab`)];
 	console.log(bad.length ? bad.join('\n') : `clean-host patterns: ${yes.length + no.length} cases OK`);
 	process.exit(bad.length ? 1 : 0);
 }
@@ -126,7 +129,6 @@ for (const root of testRoots) {
 	};
 	walk(root, 0);
 }
-const tabIdOf = (name: string) => new RegExp(`^seclab-(${TAB})(-broker|-net|-home)?$`).exec(name)?.[1];
 /** Removal policy for a project resource: test resources go; real or unknown tabs stay unless --all-tabs. */
 const tabPolicy = (name: string, hint?: 'test'): { remove: boolean; why: string; owner: string } => {
 	const id = tabIdOf(name);

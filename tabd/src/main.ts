@@ -39,8 +39,8 @@ const { values } = parseArgs({
 		'driver': { type: 'string', default: 'sbx' },
 		'image': { type: 'string' },
 		'broker-image': { type: 'string' },
-		// `required`: each tab gets a real broker (plan tabd-broker-wiring B1). Default: required
-		// for OCI; sbx refuses it until B2. `none` keeps the placeholder pod and blackhole egress.
+		// `required` (the default): each tab gets a real broker (plan tabd-broker-wiring B1 OCI,
+		// B2 sbx). `none` keeps the placeholder (OCI) and blackhole egress.
 		'broker': { type: 'string' },
 		'allowed-root': { type: 'string', multiple: true, default: [] },
 		'sensitive': { type: 'string', multiple: true, default: [] },
@@ -77,7 +77,9 @@ if (driverName === 'sbx') {
 	if (!sbxPath) {
 		die('sbx not found in system locations');
 	}
-	drivers.set('sbx', new SbxDriver(sbxPath, runner));
+	// Plan tabd-broker-wiring B2: the broker runs on Docker Desktop beside the sbx VM.
+	const brokerImage = values['broker-image'] ?? 'seclab-broker:dev';
+	drivers.set('sbx', new SbxDriver(sbxPath, runner, { docker: dockerPath, brokerImage }));
 } else if (driverName === 'oci') {
 	if (!dockerPath) {
 		die('docker not found in system locations');
@@ -107,10 +109,10 @@ if (driverName === 'sbx') {
 
 const image = assertImageRef(values.image ?? (driverName === 'sbx' ? 'seclab-tab:local' : 'seclab-tab-oci:local'));
 const cpus = values.cpus !== undefined ? Number(values.cpus) : undefined;
-const brokerArg = values.broker ?? (driverName === 'oci' ? 'required' : 'none');
+const brokerArg = values.broker ?? 'required';
 const brokerMode = brokerArg === 'required' ? 'required' : brokerArg === 'none' ? 'none' : die('--broker must be none or required');
-if (brokerMode === 'required' && driverName !== 'oci') {
-	die('--broker required is OCI only for now (sbx: plan tabd-broker-wiring B2)');
+if (brokerMode === 'required' && driverName === 'sbx' && !dockerPath) {
+	die('--broker required on sbx needs docker (the broker runs on Docker Desktop)');
 }
 const template: TabTemplate = {
 	kind: 'TabTemplate',

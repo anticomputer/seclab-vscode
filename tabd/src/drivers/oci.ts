@@ -5,22 +5,14 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import * as fs from 'node:fs';
 import type { Runner } from '../run.ts';
 import { assertImageRef, SANDBOX_NAME_RE, CONNECTION_TOKEN_RE } from '../validate.ts';
+import { BROKER_DIR, brokerInstallInput, INSTALL_BROKER } from './broker-install.ts';
 import { DriverError, type BrokerHooks, type BrokerSetup, type Driver, type DriverInfo, type FenceReport, type SensorHooks, type TabRuntimeSpec } from './types.ts';
 
 const REH_START = '/opt/seclab/bin/seclab-reh-start';
 const REH_CONNECT = '/opt/seclab/bin/seclab-reh-connect';
 const IMAGE_UID = '1000:1000';
-/** Root-owned tmpfs in the workspace holding the broker's CA and proxy URL (seclab-tab-env reads it). */
-const BROKER_DIR = '/run/seclab-broker';
 /** The broker's proxy port on the pod network (docs/broker-protocol.md §7). */
 const BROKER_PROXY = 'broker:8080';
-const PEM_RE = /^-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----\r?\n?$/;
-// Written as root into BROKER_DIR from stdin: line 1 the proxy URL, then the CA PEM. A fixed
-// script; nothing tab- or broker-supplied is interpolated into it.
-const INSTALL_BROKER = `set -eu; umask 022; d=${BROKER_DIR}; IFS= read -r url; cat > "$d/ca.pem.new"
-cat /etc/ssl/certs/ca-certificates.crt "$d/ca.pem.new" > "$d/bundle.pem.new"
-printf '%s\\n' "$url" > "$d/proxy-url.new"
-mv "$d/ca.pem.new" "$d/ca.pem"; mv "$d/bundle.pem.new" "$d/bundle.pem"; mv "$d/proxy-url.new" "$d/proxy-url"`;
 
 /**
  * The tab's uid:gid. Docker Desktop (macOS) maps bind-mount ownership, so the image user
@@ -178,11 +170,7 @@ export class OciDriver implements Driver {
 				.catch((e: unknown) => {
 					throw new DriverError(-32013, `broker setup failed: ${(e as Error).message}`);
 				});
-			if (!PEM_RE.test(setup.caPem) || !/^[A-Za-z0-9_-]{1,64}$/.test(setup.proxyUser) || !/^[A-Za-z0-9_-]{16,128}$/.test(setup.proxyPassword)) {
-				throw new DriverError(-32013, 'broker setup returned an invalid CA or proxy credential');
-			}
-			const url = `http://${setup.proxyUser}:${setup.proxyPassword}@${BROKER_PROXY}`;
-			const w = await this.runner.run(this.docker, ['exec', '-i', '-u', '0:0', '--', n.ws, 'sh', '-c', INSTALL_BROKER], { input: `${url}\n${setup.caPem}`, timeoutMs: 30_000 });
+			const w = await this.runner.run(this.docker, ['exec', '-i', '-u', '0:0', '--', n.ws, 'sh', '-c', INSTALL_BROKER], { input: brokerInstallInput(setup, BROKER_PROXY), timeoutMs: 30_000 });
 			if (w.code !== 0) {
 				throw new DriverError(-32013, `could not install the broker CA in the workspace (created before brokers? remove the tab): ${w.stderr.trim().slice(-300)}`);
 			}
