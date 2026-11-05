@@ -150,7 +150,7 @@ const readInTab = (p: string): string | undefined => {
 for (const [vector, argv] of vectors) {
 	console.log(`trigger ${vector}`);
 	inTab(argv);
-	checks.push(...checkEvidence(readEvidence(wsA, vector, readInTab), vector, { marker, expectHostname }));
+	checks.push(...checkEvidence(readEvidence(wsA, vector, readInTab), vector, { marker, expectHostname, proxy: driver === 'oci' ? 'broker' : 'blackhole' }));
 }
 if (driver === 'sbx') {
 	// Write-back gate 2b, end to end through tabd: an ordinary edit syncs to the host, a

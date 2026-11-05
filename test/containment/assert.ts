@@ -29,7 +29,6 @@ export interface Evidence {
 export interface Check { vector: string; name: string; ok: boolean; detail: string; knownGap?: string }
 
 const BLOCKED = new Set(['000', '403', '']);
-const BLACKHOLE = 'http://127.0.0.1:9';
 
 /** Evidence for one vector. `read` reads a workspace file through the tab (the write-back
  *  gate keeps tab writes out of the host checkout until reviewed); default: the host file. */
@@ -43,8 +42,10 @@ export function readEvidence(ws: string, vector: string, read?: (p: string) => s
 	}
 }
 
-/** Assertions for one vector. `expectHostname` is the tab's hostname when known. */
-export function checkEvidence(ev: Evidence | undefined, vector: string, opts: { marker: string; expectHostname?: string }): Check[] {
+/** Assertions for one vector. `expectHostname` is the tab's hostname when known. `proxy`: what
+ *  the tab's egress must point at: its own broker (OCI, the default since B1) or the blackhole
+ *  (sbx until B2, or `--broker none`); exactly that, never either (review XX-4). */
+export function checkEvidence(ev: Evidence | undefined, vector: string, opts: { marker: string; expectHostname?: string; proxy: 'broker' | 'blackhole' }): Check[] {
 	const c = (name: string, ok: boolean, detail = ''): Check => ({ vector, name, ok, detail });
 	if (!ev) {
 		return [c('ran (evidence written into the workspace)', false, 'no evidence file')];
@@ -64,10 +65,10 @@ export function checkEvidence(ev: Evidence | undefined, vector: string, opts: { 
 	const bridge = (ev.ui_bridge ?? '').trim();
 	out.push({ ...c('no tab-to-UI credential bridge in env (git askpass)', bridge === '', bridge),
 		knownGap: bridge ? 'M4 RPC capability filter (docs/adr/20261104-rpc-capability-filter.md)' : undefined });
-	// Egress goes to the tab's own broker when it has one (plan tabd-broker-wiring B1), else to the
-	// blackhole; either way the runtime-injected value never wins and both cases agree.
-	const proxyOk = (v: string | undefined) => v === BLACKHOLE || /^http:\/\/seclab:[A-Za-z0-9_-]{32}@(broker:8080|host\.docker\.internal:[0-9]{1,5})$/.test(v ?? '');
-	out.push(c('runtime-injected proxy env never wins (both cases overridden)', proxyOk(ev.http_proxy) && ev.http_proxy === ev.HTTPS_PROXY,
+	// Egress points at exactly what this tab must use: its own broker (OCI) or the blackhole (sbx
+	// until B2). The runtime-injected value never wins, and both cases agree.
+	const want = opts.proxy === 'broker' ? /^http:\/\/seclab:[A-Za-z0-9_-]{32}@broker:8080$/ : /^http:\/\/127\.0\.0\.1:9$/;
+	out.push(c(`runtime-injected proxy env never wins (both cases point at the ${opts.proxy})`, want.test(ev.http_proxy ?? '') && ev.http_proxy === ev.HTTPS_PROXY,
 		`http_proxy=${(ev.http_proxy ?? '').replace(/:[^:@/]+@/, ':***@')} HTTPS_PROXY=${(ev.HTTPS_PROXY ?? '').replace(/:[^:@/]+@/, ':***@')}`));
 	for (const [k, v] of Object.entries(ev.egress)) {
 		if (k === 'dns_external') {

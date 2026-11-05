@@ -157,7 +157,7 @@ if (mode === 'prepare') {
 } else {
 	const checks: Check[] = [];
 	for (const vector of ['task', 'fsmonitor', 'rogue-extension']) {
-		checks.push(...checkEvidence(readEvidence(ws, vector), vector, { marker }));
+		checks.push(...checkEvidence(readEvidence(ws, vector), vector, { marker, proxy: driver === 'oci' ? 'broker' : 'blackhole' }));
 	}
 	const hostFile = path.join(ws, '.seclab-evidence', 'rogue-extension-host.json');
 	const host = fs.existsSync(hostFile) ? JSON.parse(fs.readFileSync(hostFile, 'utf8')) : undefined;
