@@ -1,9 +1,10 @@
-# Keep digest/SHA pins from rotting (EDR ci-hardening). Updates are grouped per ecosystem
-# and land as PRs, so they go through the same CI, workflow-lint and review as any change.
-# Not covered here (Dependabot can't see them): image digests in shell/TS (`seclab`
-# node_image, test/harness.ts, the lychee/actionlint/zizmor/gitleaks pins) and the
-# Code-OSS pin (upstream.lock); those are bumped by hand, and `./seclab lint pins` keeps
-# them pinned. npm: our extensions declare no dependencies.
+# Keep digest/SHA pins from rotting (EDR ci-hardening, ADR supply-chain provenance). Updates
+# are grouped per ecosystem and land as PRs, so they go through the same CI, workflow-lint,
+# deps register check and review as any change. Not covered here (Dependabot can't see them):
+# image digests in shell/TS (`seclab` node_image, test/harness.ts, the lychee/actionlint/
+# zizmor/gitleaks pins) and the Code-OSS pin (upstream.lock); a scheduled job reports those,
+# and `./seclab lint pins` + `./seclab lint deps` keep them pinned and registered.
+# npm: our extensions declare no dependencies.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -25,6 +26,11 @@ updates:
       - /broker/tests/integration/images/workspace
     schedule:
       interval: weekly
+    ignore:
+      # The builder's Node must equal upstream's .nvmrc (build/prepare.sh asserts it; ADR
+      # supply-chain provenance): only digest refreshes of the same tag, never a version bump.
+      - dependency-name: node
+        update-types: ['version-update:semver-major', 'version-update:semver-minor', 'version-update:semver-patch']
     groups:
       images:
         patterns: ['*']

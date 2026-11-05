@@ -24,7 +24,8 @@ usage: ./seclab <command>
                                 Editor-driven run (rogue extension, editor-side canaries)
   lint fixtures [PATH...]       Fixture-safety lint (no real secrets/hosts/persistence in test payloads)
   lint source                   Shipped sources: no unreviewed env/spawn sites, no dynamic loading, no test markers
-  docs write                    Regenerate the ADR/EDR/security-review indexes from the records
+  lint deps [--self-test]       Dependency register: every pin in deps/registry.json, entries complete (ADR)
+  docs write                    Regenerate the ADR/EDR/security-review indexes and docs/DEPENDENCIES.md
   docs check [--run-commands] [--online] [--paired]
                                 Docs drift gate: records, generated indexes, links, permalinks, ARCHITECTURE
                                 consistency; --run-commands runs <!-- ci: run --> blocks (and the broker's);
@@ -49,7 +50,35 @@ ZIZMOR_IMAGE="ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0
 # sha_pinning_required setting and the GitHub-owned-actions allowlist.
 lint_workflows() {
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ACTIONLINT_IMAGE" -no-color
+	verify_signed_image "$ZIZMOR_IMAGE" '^https://github\.com/docker/github-builder/\.github/workflows/build\.yml@' zizmorcore/zizmor refs/tags/v1.32.0
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ZIZMOR_IMAGE" --offline --no-progress --persona=regular .github/workflows
+}
+
+# Publisher-signature check before use (ADR supply-chain provenance), for images whose
+# publisher signs each platform's BuildKit attestation (docker/github-builder). Every platform
+# image in the pinned index must have an attestation naming it (build/verify-image.ts), and
+# each attestation must carry a cosign keyless signature from the expected builder identity,
+# calling repository and tag. Cached per index digest; needs network once (registry, TUF root).
+COSIGN_IMAGE="ghcr.io/sigstore/cosign/cosign:v3.0.3@sha256:774391ac9f0c137ee419ce56522df5fd3b1f52be90c5b77e97f7c053bdd67a67"
+verify_signed_image() {
+	local image="$1" identity="$2" wf_repo="$3" wf_ref="$4" digest marker repo line att
+	digest="${image##*@}"
+	repo="${image%%@*}"; repo="${repo%:*}"
+	marker="$ROOT/.work/deps-verified/${digest#sha256:}"
+	[[ -f "$marker" ]] && return 0
+	local pairs
+	pairs="$(docker run --rm -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/verify-image.ts "$repo@$digest")" \
+		|| { echo "verify: $image: attestation chain incomplete (refusing to run it)" >&2; return 1; }
+	while read -r line; do
+		att="${line##* }"
+		docker run --rm "$COSIGN_IMAGE" verify --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+			--certificate-identity-regexp "$identity" --certificate-github-workflow-repository "$wf_repo" \
+			--certificate-github-workflow-ref "$wf_ref" "$repo@$att" >/dev/null 2>&1 \
+			|| { echo "verify: $image: signature on $att (${line%% *}) does not verify as $wf_repo@$wf_ref (refusing to run it)" >&2; return 1; }
+	done <<<"$pairs"
+	mkdir -p "$(dirname "$marker")"
+	printf '%s\n' "$pairs" > "$marker"
+	echo "verify: $image: publisher signature verified ($wf_repo@$wf_ref)" >&2
 }
 
 docs_check() {
@@ -62,6 +91,7 @@ docs_check() {
 	done
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/docs-check.ts check
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node tabd/tools/gen-obs-docs.ts check
+	git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/deps.ts check -
 	if [[ -d "$ROOT/broker" ]]; then
 		[[ -f "$ROOT/broker/docs-check.sh" ]] || { echo "docs-check: broker/ exists but broker/docs-check.sh is missing" >&2; exit 1; }
 		if [[ $run = 1 ]]; then bash "$ROOT/broker/docs-check.sh" --run-commands; else bash "$ROOT/broker/docs-check.sh"; fi
@@ -244,13 +274,20 @@ case "${1:-help}" in
 					git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-pins.ts -
 				fi ;;
 			workflows) lint_workflows ;;
+			# Dependency register (ADR supply-chain provenance): every pin registered, entries complete.
+			deps) shift
+				if [[ "${1:-}" == --self-test ]]; then
+					docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/deps.ts --self-test
+				else
+					git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/deps.ts check -
+				fi ;;
 			source) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-source.ts ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	docs)
 		shift
 		case "${1:-}" in
-			write) docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" sh -c 'node tabd/tools/gen-obs-docs.ts write && node build/docs/docs-check.ts write' ;;
+			write) docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" sh -c 'node tabd/tools/gen-obs-docs.ts write && node build/docs/docs-check.ts write && node build/deps.ts write' ;;
 			check) shift; docs_check "$@" ;;
 			*) usage; exit 2 ;;
 		esac ;;

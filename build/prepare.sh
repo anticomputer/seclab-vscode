@@ -58,4 +58,13 @@ if ! awk '/\[TaskSettingId.AllowAutomaticTasks\]: \{/{f=1} f&&/^\t\t\}/{exit} f'
 	echo "prepare: upstream task.allowAutomaticTasks is no longer default 'off' at application scope (refusing to build)" >&2
 	exit 1
 fi
+
+# 6. The builder image's Node is exactly upstream's .nvmrc (ADR supply-chain provenance): a
+#    bot bump of the build image must not silently change the toolchain Code-OSS expects.
+want="$(tr -d ' \t\r\nv' < "$DEST/.nvmrc")"
+pinned="$(sed -n 's/^FROM node:\([0-9.]*\)-.*/\1/p' "$ROOT/build/linux/Dockerfile")"
+if [ "$want" != "$pinned" ]; then
+	echo "prepare: build/linux/Dockerfile pins node $pinned but upstream .nvmrc wants $want (refusing to build)" >&2
+	exit 1
+fi
 echo "prepare: done ($DEST)"
