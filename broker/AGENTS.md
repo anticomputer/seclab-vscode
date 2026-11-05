@@ -306,6 +306,21 @@ Each has a unit or integration test; grep for the phrase.
   or a server error, and never passes the flow through unchanged.
 
 ## Known pitfalls
+- **Docker and scratch hygiene (every ad-hoc command, reviews included).**
+  Ad-hoc docker commands outside the harness are invisible to its teardown and
+  to `clean-host`.
+  - Every container is `--rm`, or named `seclab-*`.
+  - An extraction container (`docker create` then `docker cp`) is removed in a
+    trap, so it goes even on failure:
+    `cid=$(docker create --name seclab-extract-$$ IMG) && trap 'docker rm -f "$cid" >/dev/null' EXIT`.
+  - Never leave an unnamed container behind.
+  - Scratch goes in this worktree's `.work/`, never `~/.cache`, `/tmp` or
+    another path outside the repo, and is deleted when done.
+  - Before reporting a task done, `docker ps -a` must show nothing of yours.
+
+  Why: a review step once left an unnamed, never-started container
+  (`cranky_wright`) on the user's machine for about 20 hours, and its
+  extracted source sat in `~/.cache`.
 - **Adding or bumping a dependency:**
   1. Update the lock with hashes. For a closure, use `pip-compile
      --generate-hashes` in a container.
