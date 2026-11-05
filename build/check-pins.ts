@@ -150,6 +150,13 @@ const files = (process.argv[2] ? fs.readFileSync(process.argv[2] === '-' ? 0 : p
 	.split('\0').filter(Boolean)
 	.filter(f => !/\.(png|jpe?g|gif|svg|lock|patch)$/.test(f) && !f.includes('/fixtures/') && !['build/check-pins.ts', 'build/deps.ts', 'deps/registry.json', 'broker/tools/supplychain.py'].includes(f)); // rules and their samples (incl. the broker's supply-chain self-test), and the register's names (its pins are checked by build/deps.ts)
 const findings: string[] = [];
+// The broker's supply-chain checker is skipped as samples; it must stay a pure parser (GG-1):
+// if it ever executes anything, its image references need this check again.
+try {
+	if (/\bsubprocess\b|os\.(system|exec\w*|popen|spawn\w*)\b/.test(fs.readFileSync(path.join(repo, 'broker/tools/supplychain.py'), 'utf8'))) {
+		findings.push('broker/tools/supplychain.py: executes processes, so it can no longer be skipped as samples (narrow the skip)');
+	}
+} catch { /* absent */ }
 for (const f of files) {
 	let text: string;
 	try {
