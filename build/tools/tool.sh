@@ -3,18 +3,28 @@
 # local image tag on stdout. ADR supply-chain provenance; EDR 20261105-pinned-tools.
 #   build/tools/tool.sh NAME              (./seclab tool NAME)
 #   build/tools/tool.sh --bins gitleaks DIR   export the reproducible gitleaks binaries (CI attests them)
-# release: download (curl, https only), sha256 against the pin, then the publisher's provenance:
-#   sigstoreBundle -> sigstore-python (hash-locked, broker/tools/attest) against identity + issuer;
-#   ghAttestation  -> gh attestation verify, signer workflow + source ref + source digest pinned.
-# source: built from the pinned commit; gitleaks' binaries must match binarySha256 for both arches.
-# A cached image is reused only if its tag (a hash of the pin and the Dockerfile) matches. Fails closed.
+# release: download (curl, https only), sha256 against the pin, then the publisher's provenance,
+#   always with sigstore-python (hash-locked, broker/tools/attest), never with the tool itself:
+#   sigstoreBundle      -> the release's own bundle, against identity + issuer (cosign);
+#   sigstoreAttestation -> a committed, pinned attestation bundle (build/tools/attestations),
+#                          against the signer workflow, repository, ref, commit and trigger, and
+#                          a GitHub-hosted runner. Offline from GitHub's API: no token anywhere.
+# source: built from the pinned commit; gitleaks' binaries must match binarySha256 for both arches,
+# and the image build re-checks the one it ships.
+# A cached image is reused only if its tag (a hash of the pin, the Dockerfile, this script, the
+# verifier's lockfile and any committed bundle) matches. Fails closed.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOCK="$ROOT/build/tools/tools.json"
 DOCKERFILE="$ROOT/build/tools/Dockerfile"
+ATTEST_REQ="$ROOT/broker/tools/attest/requirements.txt"
 log() { echo "tool: $*" >&2; }
 die() { log "$*"; exit 1; }
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -c1-64; else shasum -a 256 "$1" | cut -c1-64; fi; }
+verifier() {
+	docker build -q -t seclab-attest:local "$ROOT/broker/tools/attest" >/dev/null
+	docker run --rm -v "$ctx:/w:ro" -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python seclab-attest:local -m sigstore "$@"
+}
 
 bins_dir=""
 if [[ "${1:-}" == --bins ]]; then
@@ -28,9 +38,16 @@ kind="$(pin .kind)"; ver="$(pin .version)"
 case "$(docker info --format '{{.Architecture}}')" in
 	aarch64|arm64) arch=arm64 ;; x86_64|amd64) arch=amd64 ;; *) die "unsupported docker architecture" ;;
 esac
-key="$( { jq -c --arg n "$NAME" '.[$n]' "$LOCK"; cat "$DOCKERFILE"; echo "$arch"; } | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-12)"
+bundle_file=""
+if jq -e --arg n "$NAME" '.[$n].sigstoreAttestation' "$LOCK" >/dev/null; then
+	bundle_file="$ROOT/$(pin .sigstoreAttestation.bundle)"
+	[[ -f "$bundle_file" ]] || die "$NAME: missing $bundle_file"
+fi
+key="$( { jq -c --arg n "$NAME" '.[$n]' "$LOCK"; cat "$DOCKERFILE" "${BASH_SOURCE[0]}" "$ATTEST_REQ" ${bundle_file:+"$bundle_file"}; echo "$arch"; } | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-12)"
 tag="seclab-tool-$NAME:$ver-$key"
 if [[ -z "$bins_dir" ]] && docker image inspect "$tag" >/dev/null 2>&1; then
+	# The stable name always points at the image built from these pins (TT-2).
+	docker tag "$tag" "seclab-tool-$NAME:$ver"
 	echo "$tag"; exit 0
 fi
 ctx="$ROOT/.work/tools/$NAME-$ver-$arch"
@@ -46,19 +63,23 @@ release)
 	if jq -e --arg n "$NAME" '.[$n].sigstoreBundle' "$LOCK" >/dev/null; then
 		burl="$(pin .sigstoreBundle.url)"; burl="${burl//\{arch\}/$arch}"
 		curl -fsSL --proto '=https' -o "$ctx/bundle.json" "$burl"
-		docker build -q -t seclab-attest:local "$ROOT/broker/tools/attest" >/dev/null
 		# An independent verifier (not the tool vouching for itself); TUF root fetched over the network.
-		docker run --rm -v "$ctx:/w:ro" -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python seclab-attest:local -m sigstore verify identity \
-			--bundle /w/bundle.json --cert-identity "$(pin .sigstoreBundle.identity)" --cert-oidc-issuer "$(pin .sigstoreBundle.issuer)" /w/artifact >/dev/null 2>"$ctx/verify.err" \
+		verifier verify identity --bundle /w/bundle.json --cert-identity "$(pin .sigstoreBundle.identity)" \
+			--cert-oidc-issuer "$(pin .sigstoreBundle.issuer)" /w/artifact >/dev/null 2>"$ctx/verify.err" \
 			|| { tail -3 "$ctx/verify.err" >&2; die "$NAME: sigstore bundle does not verify"; }
 		log "$NAME $ver: sha256 pinned, sigstore signature verified ($(pin .sigstoreBundle.identity))"
-	elif jq -e --arg n "$NAME" '.[$n].ghAttestation' "$LOCK" >/dev/null; then
-		gh attestation verify "$ctx/artifact" --repo "$(pin .ghAttestation.repo)" --signer-workflow "$(pin .ghAttestation.signerWorkflow)" \
-			--source-ref "$(pin .ghAttestation.sourceRef)" --source-digest "$(pin .ghAttestation.sourceDigest)" --deny-self-hosted-runners >/dev/null 2>"$ctx/verify.err" \
-			|| { tail -3 "$ctx/verify.err" >&2; die "$NAME: GitHub attestation does not verify"; }
-		log "$NAME $ver: sha256 pinned, attestation verified ($(pin .ghAttestation.signerWorkflow)@$(pin .ghAttestation.sourceRef))"
+	elif [[ -n "$bundle_file" ]]; then
+		cp "$bundle_file" "$ctx/bundle.json"
+		# GitHub artifact attestation (public-good Sigstore), from the committed bundle: the signer
+		# workflow at the ref, repository, source commit, trigger, and the artifact as a subject.
+		verifier verify github --bundle /w/bundle.json --cert-identity "$(pin .sigstoreAttestation.identity)" \
+			--repository "$(pin .sigstoreAttestation.repository)" --ref "$(pin .sigstoreAttestation.ref)" \
+			--sha "$(pin .sigstoreAttestation.sha)" --trigger "$(pin .sigstoreAttestation.trigger)" /w/artifact >"$ctx/statement" 2>"$ctx/verify.err" \
+			|| { tail -3 "$ctx/verify.err" >&2; die "$NAME: attestation does not verify"; }
+		grep -q '"runner_environment":"github-hosted"' "$ctx/statement" || die "$NAME: attestation is not from a GitHub-hosted runner"
+		log "$NAME $ver: sha256 pinned, attestation verified ($(pin .sigstoreAttestation.identity))"
 	else
-		die "$NAME: a release needs sigstoreBundle or ghAttestation"
+		die "$NAME: a release needs sigstoreBundle or sigstoreAttestation"
 	fi
 	docker build -q --target "$NAME" -f "$DOCKERFILE" --build-arg SHA256="$want" -t "$tag" "$ctx" >/dev/null
 	;;
@@ -76,6 +97,7 @@ source)
 		done
 		log "gitleaks $ver: built from $commit; both binaries match their pinned sha256"
 		[[ -n "$bins_dir" ]] && exit 0
+		args+=(--build-arg BIN_SHA256="$(jq -r --arg a "$arch" '.gitleaks.binarySha256[$a]' "$LOCK")")
 	fi
 	docker build -q --target "$NAME" -f "$DOCKERFILE" "${args[@]}" -t "$tag" "$ctx" >/dev/null
 	log "$NAME $ver: built from ${git_url%.git}@$commit"

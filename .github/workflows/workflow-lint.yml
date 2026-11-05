@@ -28,9 +28,7 @@ jobs:
         run: ./seclab lint pins --self-test
       - name: Every image and action is pinned by digest/SHA
         run: ./seclab lint pins
-      - name: actionlint + zizmor (offline containers, no token inside them)
-        # gh on the runner verifies actionlint's release attestation (build/tools/tool.sh); the
-        # token never enters a container. zizmor's signature is checked with our pinned cosign.
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: actionlint + zizmor (offline, no token)
+        # Both verified before use without a token: actionlint against its committed attestation
+        # bundle, zizmor's image signature with our pinned cosign (build/tools/tool.sh).
         run: ./seclab lint workflows

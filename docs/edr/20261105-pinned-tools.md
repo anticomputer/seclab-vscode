@@ -24,18 +24,26 @@ Dockerfile, and prints that tag. Images are never pulled under these names.
   verified by sigstore-python in the broker's hash-locked verifier image. That is an
   independent implementation, so cosign never vouches for itself. This replaces the
   `ghcr.io/sigstore/cosign` 3.0.3 image for zizmor and Falco, and it is the one cosign pin.
-- **actionlint 1.7.12, release archive.** sha256 pinned per arch, plus `gh attestation
-  verify` with the signer workflow (`release.yaml`), source ref, source digest and
-  `--deny-self-hosted-runners`. It runs with Debian's `shellcheck`.
+- **actionlint 1.7.12, release archive.** sha256 pinned per arch. Its GitHub artifact
+  attestation (public-good Sigstore) is committed next to the pins
+  (`build/tools/attestations/`). It is verified by sigstore-python `verify github` against the
+  signer workflow at the tag, the repository, the ref, the source commit and the push
+  trigger, with the archive as a subject. The statement must also name a GitHub-hosted runner.
+  This needs no GitHub API and no token anywhere (review TT-4). It runs with Debian's
+  `shellcheck`.
 - **gitleaks 8.30.1, built from source.** Tag `v8.30.1` is cloned and HEAD must equal the
   pinned commit. Go modules are checked against `go.sum`. The build is CGO-free with
   `-trimpath` and an empty build id in the pinned Go image, and both arches come from one
   build. Their sha256 are pinned (`binarySha256`), and every build, local or CI, must
-  reproduce them. CI's `tools` job rebuilds on an amd64 runner and, on main, attests both
-  binaries (`actions/attest-build-provenance`). tabd runs it as `seclab-tool-gitleaks:8.30.1`
-  with `--pull never`. A missing image fails the scan, and opens fail closed. The runtime is
-  Debian, not upstream's Alpine: the approved apt exception covers Debian only. The scan
-  script needs `bzip2` and `xz-utils` for GNU tar.
+  reproduce them; the image build re-checks the binary it ships. CI's `tools` job rebuilds on
+  an amd64 runner with read-only permissions. On main, a separate `attest-tools` job with no
+  checkout and no repository code attests both binaries (`actions/attest-build-provenance`,
+  review TT-1). tabd runs it as `seclab-tool-gitleaks:8.30.1` with `--pull never`, and before
+  its first scan checks that the image's `/usr/bin/gitleaks` has a pinned hash. Any local
+  `docker tag` can produce the name, so a mismatch fails the scan (TT-2). A missing image
+  fails the scan too, and opens fail closed. The runtime is Debian, not upstream's Alpine: the
+  approved apt exception covers Debian only. The scan script needs `bzip2` and `xz-utils` for
+  GNU tar, and parses GNU find's C-quoted error paths (TT-3).
 - **lychee 0.24.2, built from source.** Tag `lychee-v0.24.2`, commit pinned,
   `cargo build --locked` in the pinned Rust image, with crates checked against Cargo.lock.
   It is not a security control (an external link check with a read-only mount), so there
@@ -45,9 +53,18 @@ Every hash and commit in `tools.json` is a register pin (`tool:NAME:ARCH@sha256:
 `git:URL@COMMIT`), so `./seclab lint deps` fails on an unregistered or stale one.
 
 **Code-OSS npm tree.** `npm ci` pins bytes (lockfile integrity), not origin. After it,
-`build/npm-audit-signatures.sh` runs `npm audit signatures` in every installed project (the
-root and each nested package upstream's postinstall installs). It fails on any invalid or
-missing registry signature, and the Linux build writes its install stamp only after it passes.
+`build/npm-audit-signatures.sh` checks every installed project (the root and each nested
+package upstream's postinstall installs). Every lockfile entry must resolve from
+`registry.npmjs.org`, because `npm audit signatures` silently skips anything else. Then
+`npm audit signatures` must pass, failing on any invalid or missing signature. The Linux
+build writes its (versioned) install stamp only after both pass. It runs after `npm ci`,
+because upstream's postinstall needs install scripts, so it detects a tampered package
+rather than preventing its install script (TT-6).
+
+**The tab's seccomp guard.** sbx now resolves its shell kit as `:latest`, and the 2026-11 kit
+ships no `gcc`. So `sandbox/sbx/seclab-obs-guard.c` is compiled statically in our pinned
+Debian image (`sandbox/sbx/Dockerfile.guard`), not with whatever compiler the kit carries,
+and copied into the template.
 
 ## Consequences
 - More build work: the first `./seclab tool lychee` compiles Rust for several minutes, and
@@ -57,8 +74,8 @@ missing registry signature, and the Linux build writes its install stamp only af
   refuses a hash or attestation mismatch. For gitleaks the new binary hashes come from the
   build and are confirmed by CI's cross-host rebuild. Dependabot watches the toolchain
   images in `build/tools/`. The weekly deps report tracks the tool releases.
-- `gh attestation verify` for actionlint needs a token on the runner (`workflow-lint`).
-  It goes to gh on the runner, never into a container.
+- `gh attestation verify` is no longer needed for any tool: both release verifications run
+  sigstore-python in a container, offline from GitHub's API.
 - Verified 2026-11-05 (arm64):
   - cosign: sigstore bundle verified for both arches;
   - actionlint: attestation verified;
