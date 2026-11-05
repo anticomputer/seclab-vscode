@@ -156,12 +156,12 @@ export function pinsIn(f: string, text: string): TreePin[] {
 	if (/(^|\/)requirements[^/]*\.txt$/.test(f)) {
 		out.push({ pin: `pip:${f}`, where: f });
 	}
-	// Hash-locked downloads in lock files: `deb <file> <sha256>` (EE-4).
+	// Hash-locked downloads in lock files: `deb <file> <sha256>` (EE-4), `asset <file> <sha256>`.
 	if (f.endsWith('.lock')) {
 		text.split('\n').forEach((line, i) => {
-			const d = /^deb\s+(\S+)\s+([0-9a-f]{64})\s*$/.exec(line);
+			const d = /^(deb|asset)\s+(\S+)\s+([0-9a-f]{64})\s*$/.exec(line);
 			if (d) {
-				out.push({ pin: `deb:${d[1]}@sha256:${d[2]}`, where: `${f}:${i + 1}` });
+				out.push({ pin: `${d[1]}:${d[2]}@sha256:${d[3]}`, where: `${f}:${i + 1}` });
 			}
 		});
 	}

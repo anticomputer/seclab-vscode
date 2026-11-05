@@ -13,6 +13,8 @@ OUT_DIR="${OUT_DIR:-$ROOT/.work/out}"
 "$ROOT/build/prepare.sh" "$SRC"
 cd "$SRC"
 export NODE_OPTIONS="--max-old-space-size=${MAX_OLD_SPACE_SIZE:-6144}"
+# Pinned prebuilt ripgrep in the postinstall's cache: no GitHub API call, no unverified binary.
+node "$ROOT/build/seed-ripgrep.mjs" "$SRC"
 npm ci
 "$ROOT/build/npm-audit-signatures.sh" "$SRC"
 "$ROOT/build/remove-extensions.sh" "$SRC"

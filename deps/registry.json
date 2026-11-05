@@ -33,6 +33,26 @@
       "bump": "Moves with code-oss."
     },
     {
+      "id": "bin-ripgrep-prebuilt",
+      "name": "ripgrep prebuilt v15.0.1 (@vscode/ripgrep 1.17.1)",
+      "kind": "binary",
+      "publisher": "Microsoft (microsoft/ripgrep-prebuilt)",
+      "official": true,
+      "purpose": "The ripgrep binary Code-OSS's @vscode/ripgrep postinstall installs (search in the editor and REH).",
+      "pins": [
+        "asset:ripgrep-v15.0.1-aarch64-apple-darwin.tar.gz@sha256:2fa16464fd8638588a67c7fc172d3c4b57fbdc65dff366e10b0b0e90734628a6",
+        "asset:ripgrep-v15.0.1-x86_64-apple-darwin.tar.gz@sha256:591c693e80bb444ef1907b2a906feb9c77bcafe1cdf509107cc75dcf0e875bd2",
+        "asset:ripgrep-v15.0.1-aarch64-unknown-linux-musl.tar.gz@sha256:dd3738a4b6e8df0fb3bc3edc5af352c4c39e0d97ad118a23e5176bdc5d48ba08",
+        "asset:ripgrep-v15.0.1-x86_64-unknown-linux-musl.tar.gz@sha256:4499958bfd5252df3d9e7504127fd448e4a14fbf2805ef4f14baaa1bcf775188"
+      ],
+      "used": ["build/ripgrep.lock", "build/seed-ripgrep.mjs", "build/build-darwin.sh", "build/linux/build.sh"],
+      "provenance": "Release assets in Microsoft's own repo; not attested (gh attestation verify: none, 2026-11-05). The postinstall itself verifies no hash.",
+      "verify": "build/seed-ripgrep.mjs before npm ci: the upstream lockfile's @vscode/ripgrep version must equal the lock's; the asset is fetched from the release-download URL (no API) and must match its sha256 pin, then placed in the postinstall's cache, which it uses instead of downloading.",
+      "bar": "official-pinned",
+      "record": "docs/edr/20261105-pinned-tools.md",
+      "bump": "With code-oss: when upstream's @vscode/ripgrep version changes, seed-ripgrep fails until build/ripgrep.lock is re-pinned."
+    },
+    {
       "id": "code-oss-npm",
       "name": "Code-OSS npm dependency tree",
       "kind": "npm-tree",
