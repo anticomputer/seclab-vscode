@@ -61,6 +61,14 @@ build writes its (versioned) install stamp only after both pass. It runs after `
 because upstream's postinstall needs install scripts, so it detects a tampered package
 rather than preventing its install script (TT-6).
 
+**ripgrep.** `@vscode/ripgrep`'s postinstall asks the GitHub API for its prebuilt binary,
+which returns 403 on shared runners once their IP is rate-limited (the macOS build failed this
+way). It also installs the binary without checking any hash. `build/seed-ripgrep.mjs` runs
+before `npm ci`. It fetches the pinned asset from the release-download URL (not the API),
+checks its sha256 against `build/ripgrep.lock`, and places it in the postinstall's cache,
+which the postinstall then uses. It refuses if upstream's lockfile moves to another
+`@vscode/ripgrep` version. No token is involved.
+
 **The tab's seccomp guard.** sbx now resolves its shell kit as `:latest`, and the 2026-11 kit
 ships no `gcc`. So `sandbox/sbx/seclab-obs-guard.c` is compiled statically in our pinned
 Debian image (`sandbox/sbx/Dockerfile.guard`), not with whatever compiler the kit carries,

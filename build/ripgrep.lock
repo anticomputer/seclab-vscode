@@ -1,0 +1,11 @@
+# The prebuilt ripgrep that @vscode/ripgrep's postinstall downloads (microsoft/ripgrep-prebuilt),
+# pinned by sha256 and placed in its cache before `npm ci` (build/seed-ripgrep.mjs). The
+# postinstall then uses the cache: it never calls the GitHub API (which rate-limits shared
+# runners: 403) and never installs an unverified binary. Not attested upstream (2026-11-05).
+# Bump: when the @vscode/ripgrep version in upstream's package-lock.json changes.
+package 1.17.1
+release v15.0.1
+asset ripgrep-v15.0.1-aarch64-apple-darwin.tar.gz 2fa16464fd8638588a67c7fc172d3c4b57fbdc65dff366e10b0b0e90734628a6
+asset ripgrep-v15.0.1-x86_64-apple-darwin.tar.gz 591c693e80bb444ef1907b2a906feb9c77bcafe1cdf509107cc75dcf0e875bd2
+asset ripgrep-v15.0.1-aarch64-unknown-linux-musl.tar.gz dd3738a4b6e8df0fb3bc3edc5af352c4c39e0d97ad118a23e5176bdc5d48ba08
+asset ripgrep-v15.0.1-x86_64-unknown-linux-musl.tar.gz 4499958bfd5252df3d9e7504127fd448e4a14fbf2805ef4f14baaa1bcf775188

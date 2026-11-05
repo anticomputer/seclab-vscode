@@ -24,6 +24,8 @@ export VSCODE_SKIP_NODE_VERSION_CHECK=1
 # makes trees installed before the signature check get audited once (TT-6).
 stamp="sig1-$(cat package-lock.json build/package-lock.json remote/package-lock.json 2>/dev/null | sha256sum | cut -c1-16)"
 if [[ ! -f node_modules/.seclab-stamp ]] || [[ "$(cat node_modules/.seclab-stamp)" != "$stamp" ]]; then
+	# Pinned prebuilt ripgrep in the postinstall's cache: no GitHub API call, no unverified binary.
+	node /repo/build/seed-ripgrep.mjs "$SRC"
 	npm ci
 	# Registry signatures over every installed project; the stamp is written only after it passes.
 	/repo/build/npm-audit-signatures.sh "$SRC"
