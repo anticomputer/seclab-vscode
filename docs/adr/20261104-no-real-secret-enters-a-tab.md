@@ -98,6 +98,26 @@ The broker enforces all of the following. Each item has a regression test.
     credential at all.
 
   The scanners are defence in depth.
+- **WebSocket streams are scanned as a stream.** Each server message is scanned
+  together with the last 8 KiB the tab already received on that connection, so
+  a token whose key and value arrive in separate messages is still
+  re-sentinelised. HTTP bodies are buffered whole, so the response scanner
+  always sees complete content.
+
+  A match that starts in bytes the tab already has cannot be recalled. The
+  broker drops that message and every later one on the connection, and audits
+  `response.blocked`. If the match only became recognisable once its
+  terminator arrived (for example the JSON token field's closing quote), the
+  tab already holds the whole token. That case is detected, not prevented.
+  Preventing it would mean holding and reframing messages, which breaks
+  message-oriented protocols.
+
+  Two kinds of stream are not reassembled at all:
+  - tokens split across structured deltas (JSON-wrapped chunks);
+  - tokens split across separate HTTP responses.
+
+  The positional controls above are what bound those cases
+  (`test_websocket_token_split_across_messages`).
 - A rogue extension can still **use** the credential through its binding
   while the tab lives. That is the accepted per-tab blast radius.
   Per-extension attribution is later work (ARCHITECTURE §8).

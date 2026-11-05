@@ -246,6 +246,39 @@ def test_unbound_credential_never_offers_a_wildcard_binding(pod, ctl):
     assert ctl.notes_since(mark, "approval.requested") == []
 
 
+def _ws_split(pod, s, where):
+    p = pod.ws(f"python3 /usr/local/bin/wsclient.py wss://ws.example.test/ws split:{where}:{where} after",
+               env={"WS_AUTH": "Bearer " + s, "WS_COLLECT": "1"})
+    assert p.returncode == 0, p.stderr.decode()
+    return json.loads(p.stdout)[-1]["messages"], f"seclab-minted-canary-{where}-" + "Q" * 24 + "-value"
+
+
+def test_websocket_token_split_across_messages(pod, ctl):
+    """A minted token split across WebSocket messages matches no single message. Each
+    server message is scanned with a window of what the tab already received on the
+    connection (decide on what the tab sees, not on one message)."""
+    s = setup(pod, ctl)["api"]
+    # Key in one message, token in the next: re-sentinelised, connection unaffected.
+    got, canary = _ws_split(pod, s, "key")
+    joined = "".join(got[:-1])
+    assert canary not in joined and json.loads(joined)["token"].startswith("SECLAB_SNTL_")
+    assert got[-1] == "echo:after"
+    # Token split mid-way: the second half never goes out, and the connection is dead.
+    mark = ctl.mark()
+    got, canary = _ws_split(pod, s, "mid")
+    assert len(got) == 1 and canary not in got[0] and canary[:16] in got[0]
+    ctl.wait_note("audit.event", lambda e: e["type"] == "response.blocked"
+                  and "split across" in e["reason"], since=mark, timeout=10)
+    # Residual (ADR no-real-secret, Consequences): a token whose match completes only on
+    # its terminator was delivered before it could be recognised. It is detected and the
+    # connection killed, but not prevented.
+    mark = ctl.mark()
+    got, canary = _ws_split(pod, s, "end")
+    assert len(got) == 1 and canary in got[0]
+    ctl.wait_note("audit.event", lambda e: e["type"] == "response.blocked"
+                  and "split across" in e["reason"], since=mark, timeout=10)
+
+
 def test_websocket_handshake_injection_and_message_scanning(pod, ctl):
     s = setup(pod, ctl)["api"]
     p = pod.ws(f"python3 /usr/local/bin/wsclient.py wss://ws.example.test/ws hello {s}",
