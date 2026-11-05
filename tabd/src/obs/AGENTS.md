@@ -1,10 +1,11 @@
 # AGENTS.md: tab observability (`tabd/src/obs/`)
 
-Instructions for an agent picking up the observability layer cold. Root rules
-([../../../AGENTS.md](../../../AGENTS.md)) all apply. Every command here has been
-run. Design: [ADR](../../../docs/adr/20261104-tab-observability.md); spike:
-[EDR](../../../docs/edr/20261104-tab-observability-sensor-spike.md); event reference
-(generated): [EVENTS.md](../../../docs/tabd/EVENTS.md).
+Instructions for an agent picking up the observability layer cold. Root rules (`AGENTS.md`
+at the repo root) all apply. Every command here has been run. Design:
+`docs/adr/20261104-tab-observability.md`; spike:
+`docs/edr/20261104-tab-observability-sensor-spike.md`; event reference (generated):
+`docs/tabd/EVENTS.md`. (Paths, not links: this directory is also reachable through the
+`extensions/seclab-tab-manager/tabd-src` symlink, where relative links break.)
 
 ## What it is, and its trust boundary
 - **What:** one ordered event stream per tab. Every event carries `integrity`,
