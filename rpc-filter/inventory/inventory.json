@@ -2694,19 +2694,19 @@
     },
     "b_command_registry": {
       "by_category": {
-        "editor-local": 412,
+        "editor-local": 416,
         "extension-management": 118,
         "external-and-uri": 23,
-        "host-filesystem": 55,
+        "host-filesystem": 57,
         "host-process": 288,
         "internal-underscore": 108,
         "remote-and-tunnel": 26,
         "secrets-and-auth": 11,
         "settings-and-policy": 44,
-        "unclassified": 2080,
+        "unclassified": 2089,
         "window-and-workspace": 19
       },
-      "command_count": 3184,
+      "command_count": 3199,
       "commands": [
         {
           "category": "unclassified",
@@ -3646,6 +3646,17 @@
         {
           "category": "internal-underscore",
           "files": [
+            "extensions/markdown-language-features/src/languageFeatures/diagnostics.ts"
+          ],
+          "id": "_markdown.toggleValidation",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/markdown-language-features/src/languageFeatures/diagnostics.ts",
+          "sources": [
+            "constant:commandId"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
             "extensions/mermaid-markdown-features/package.json"
           ],
           "id": "_mermaid-markdown.copySource",
@@ -4098,19 +4109,6 @@
         {
           "category": "internal-underscore",
           "files": [
-            "extensions/markdown-language-features/src/languageFeatures/diagnostics.ts",
-            "src/vs/workbench/services/authentication/browser/authenticationExtensionsService.ts",
-            "src/vs/workbench/services/authentication/browser/authenticationMcpService.ts"
-          ],
-          "id": "_workbench.openWorkspaceSettingsEditor",
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/markdown-language-features/src/languageFeatures/diagnostics.ts",
-          "sources": [
-            "constant:commandId"
-          ]
-        },
-        {
-          "category": "internal-underscore",
-          "files": [
             "src/vs/workbench/browser/actions/workspaceCommands.ts"
           ],
           "id": "_workbench.pickWorkspaceFolder",
@@ -4232,8 +4230,7 @@
         {
           "category": "unclassified",
           "files": [
-            "src/vs/sessions/contrib/providers/agentHost/browser/exportDebugLogsAction.ts",
-            "src/vs/workbench/contrib/chat/browser/actions/exportAgentHostDebugLogsAction.ts"
+            "src/vs/sessions/contrib/providers/agentHost/browser/exportDebugLogsAction.ts"
           ],
           "id": "agentHost.exportDebugLogs",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/agentHost/browser/exportDebugLogsAction.ts",
@@ -4244,8 +4241,7 @@
         {
           "category": "unclassified",
           "files": [
-            "src/vs/sessions/contrib/providers/agentHost/browser/openAgentHostStateFileAction.ts",
-            "src/vs/workbench/contrib/chat/browser/actions/openAgentHostStateFileAction.ts"
+            "src/vs/sessions/contrib/providers/agentHost/browser/openAgentHostStateFileAction.ts"
           ],
           "id": "agentHost.openSessionEventsFile",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/providers/agentHost/browser/openAgentHostStateFileAction.ts",
@@ -4738,8 +4734,7 @@
         {
           "category": "unclassified",
           "files": [
-            "src/vs/workbench/contrib/agentsVoice/browser/transcriptsView/voiceEventStream.contribution.ts",
-            "src/vs/workbench/contrib/agentsVoice/browser/transcriptsView/voiceTranscripts.contribution.ts"
+            "src/vs/workbench/contrib/agentsVoice/browser/transcriptsView/voiceEventStream.contribution.ts"
           ],
           "id": "agentsVoice.showEventStream",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/agentsVoice/browser/transcriptsView/voiceEventStream.contribution.ts",
@@ -4756,6 +4751,17 @@
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/agentsVoice/browser/agentsVoice.contribution.ts",
           "sources": [
             "constant:SHOW_VOICE_MODE_ONBOARDING_COMMAND"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/workbench/contrib/agentsVoice/browser/transcriptsView/voiceTranscripts.contribution.ts"
+          ],
+          "id": "agentsVoice.showTranscripts",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/agentsVoice/browser/transcriptsView/voiceTranscripts.contribution.ts",
+          "sources": [
+            "constant:SHOW_VIEW_COMMAND_ID"
           ]
         },
         {
@@ -4796,8 +4802,7 @@
         {
           "category": "unclassified",
           "files": [
-            "src/vs/sessions/contrib/aiCustomizationTreeView/browser/aiCustomizationTreeView.contribution.ts",
-            "src/vs/workbench/contrib/chat/browser/aiCustomization/aiCustomizationManagement.contribution.ts"
+            "src/vs/sessions/contrib/aiCustomizationTreeView/browser/aiCustomizationTreeView.contribution.ts"
           ],
           "id": "aiCustomization.copyPath",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/aiCustomizationTreeView/browser/aiCustomizationTreeView.contribution.ts",
@@ -4869,6 +4874,17 @@
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/aiCustomizationTreeView/browser/aiCustomizationTreeView.contribution.ts",
           "sources": [
             "constant:RUN_PROMPT_FROM_VIEW_ID"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/workbench/contrib/chat/browser/aiCustomization/aiCustomizationManagement.contribution.ts"
+          ],
+          "id": "aiCustomizationManagement.copyPath",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/aiCustomizationManagement.contribution.ts",
+          "sources": [
+            "constant:COPY_AI_CUSTOMIZATION_PATH_ID"
           ]
         },
         {
@@ -5415,17 +5431,6 @@
           "sources": [
             "Action2",
             "EditorCommand"
-          ]
-        },
-        {
-          "category": "unclassified",
-          "files": [
-            "src/vs/workbench/contrib/chat/browser/chatEditing/chatEditingActions.ts"
-          ],
-          "id": "chat.openFileUpdatedBySnapshot",
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chatEditing/chatEditingActions.ts",
-          "sources": [
-            "constant:OpenWorkingSetHistoryAction.id"
           ]
         },
         {
@@ -7837,6 +7842,28 @@
         {
           "category": "editor-local",
           "files": [
+            "src/vs/editor/standalone/browser/quickAccess/standaloneGotoLineQuickAccess.ts"
+          ],
+          "id": "editor.action.gotoLine",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/standalone/browser/quickAccess/standaloneGotoLineQuickAccess.ts",
+          "sources": [
+            "constant:GotoLineAction.ID"
+          ]
+        },
+        {
+          "category": "editor-local",
+          "files": [
+            "src/vs/editor/standalone/browser/quickAccess/standaloneGotoLineQuickAccess.ts"
+          ],
+          "id": "editor.action.gotoOffset",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/standalone/browser/quickAccess/standaloneGotoLineQuickAccess.ts",
+          "sources": [
+            "constant:GotoOffsetAction.ID"
+          ]
+        },
+        {
+          "category": "editor-local",
+          "files": [
             "src/vs/editor/contrib/colorPicker/browser/standaloneColorPicker/standaloneColorPickerActions.ts"
           ],
           "id": "editor.action.hideColorPicker",
@@ -8423,6 +8450,28 @@
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/comments/browser/commentsEditorContribution.ts",
           "sources": [
             "constant:CommentCommandId.PreviousRange"
+          ]
+        },
+        {
+          "category": "editor-local",
+          "files": [
+            "src/vs/editor/standalone/browser/quickAccess/standaloneCommandsQuickAccess.ts"
+          ],
+          "id": "editor.action.quickCommand",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/standalone/browser/quickAccess/standaloneCommandsQuickAccess.ts",
+          "sources": [
+            "constant:GotoLineAction.ID"
+          ]
+        },
+        {
+          "category": "editor-local",
+          "files": [
+            "src/vs/editor/standalone/browser/quickAccess/standaloneGotoSymbolQuickAccess.ts"
+          ],
+          "id": "editor.action.quickOutline",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/standalone/browser/quickAccess/standaloneGotoSymbolQuickAccess.ts",
+          "sources": [
+            "constant:GotoSymbolAction.ID"
           ]
         },
         {
@@ -10258,8 +10307,7 @@
         {
           "category": "unclassified",
           "files": [
-            "src/vs/workbench/contrib/files/browser/fileActions.ts",
-            "src/vs/workbench/contrib/files/browser/fileCommands.ts"
+            "src/vs/workbench/contrib/files/browser/fileActions.ts"
           ],
           "id": "explorer.newFile",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/files/browser/fileActions.ts",
@@ -21236,6 +21284,17 @@
           "files": [
             "src/vs/sessions/contrib/sessions/browser/sessionsActions.ts"
           ],
+          "id": "sessions.chatCompositeBar.close",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/sessions/browser/sessionsActions.ts",
+          "sources": [
+            "constant:CLOSE_SESSION_COMMAND_ID"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/sessions/contrib/sessions/browser/sessionsActions.ts"
+          ],
           "id": "sessions.chatCompositeBar.closeAllChats",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/sessions/browser/sessionsActions.ts",
           "sources": [
@@ -22597,11 +22656,10 @@
         {
           "category": "unclassified",
           "files": [
-            "src/vs/sessions/contrib/sessions/browser/sessionsActions.ts",
             "src/vs/sessions/contrib/sessions/browser/views/sessionsViewActions.ts"
           ],
           "id": "sessionsViewPane.closeSession",
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/sessions/browser/sessionsActions.ts",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/sessions/browser/views/sessionsViewActions.ts",
           "sources": [
             "constant:CLOSE_SESSION_COMMAND_ID"
           ]
@@ -24943,17 +25001,6 @@
         {
           "category": "unclassified",
           "files": [
-            "src/vs/workbench/contrib/terminal/browser/agentHostTerminalService.ts"
-          ],
-          "id": "vscode.customizationDiscovery",
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/agentHostTerminalService.ts",
-          "sources": [
-            "constant:key"
-          ]
-        },
-        {
-          "category": "unclassified",
-          "files": [
             "src/vs/workbench/browser/parts/editor/editorCommands.ts",
             "src/vs/workbench/contrib/editSessions/browser/editSessionsViews.ts"
           ],
@@ -25538,8 +25585,7 @@
         {
           "category": "unclassified",
           "files": [
-            "src/vs/sessions/contrib/changes/browser/changesViewActions.ts",
-            "src/vs/workbench/browser/actions/workspaceActions.ts"
+            "src/vs/sessions/contrib/changes/browser/changesViewActions.ts"
           ],
           "id": "workbench.action.agentSessions.openFile",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/contrib/changes/browser/changesViewActions.ts",
@@ -25761,8 +25807,7 @@
         {
           "category": "unclassified",
           "files": [
-            "src/vs/sessions/browser/layoutActions.ts",
-            "src/vs/workbench/browser/actions/layoutActions.ts"
+            "src/vs/sessions/browser/layoutActions.ts"
           ],
           "id": "workbench.action.agentToggleSidebarVisibility",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/sessions/browser/layoutActions.ts",
@@ -26682,6 +26727,17 @@
         {
           "category": "unclassified",
           "files": [
+            "src/vs/workbench/contrib/chat/browser/actions/exportAgentHostDebugLogsAction.ts"
+          ],
+          "id": "workbench.action.chat.exportAgentHostDebugLogs",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/actions/exportAgentHostDebugLogsAction.ts",
+          "sources": [
+            "constant:ExportAgentHostDebugLogsAction.ID"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
             "src/vs/workbench/contrib/chat/electron-browser/actions/chatExportZip.ts"
           ],
           "id": "workbench.action.chat.exportAsZip",
@@ -27459,6 +27515,17 @@
           "sources": [
             "Action2",
             "EditorCommand"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/workbench/contrib/chat/browser/actions/openAgentHostStateFileAction.ts"
+          ],
+          "id": "workbench.action.chat.openCopilotCliStateFile",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/actions/openAgentHostStateFileAction.ts",
+          "sources": [
+            "constant:OpenAgentHostStateFileAction.ID"
           ]
         },
         {
@@ -29997,6 +30064,17 @@
         {
           "category": "host-filesystem",
           "files": [
+            "src/vs/workbench/contrib/files/browser/fileCommands.ts"
+          ],
+          "id": "workbench.action.files.newFile",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/files/browser/fileCommands.ts",
+          "sources": [
+            "constant:NEW_FILE_COMMAND_ID"
+          ]
+        },
+        {
+          "category": "host-filesystem",
+          "files": [
             "src/vs/sessions/contrib/editor/browser/emptyFileEditor.contribution.ts",
             "src/vs/workbench/contrib/files/browser/fileCommands.ts",
             "src/vs/workbench/contrib/welcomeViews/common/newFile.contribution.ts"
@@ -30006,6 +30084,17 @@
           "sources": [
             "EditorCommand",
             "constant:NEW_UNTITLED_FILE_COMMAND_ID"
+          ]
+        },
+        {
+          "category": "host-filesystem",
+          "files": [
+            "src/vs/workbench/browser/actions/workspaceActions.ts"
+          ],
+          "id": "workbench.action.files.openFile",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/browser/actions/workspaceActions.ts",
+          "sources": [
+            "constant:OpenFileAction.ID"
           ]
         },
         {
@@ -30569,13 +30658,11 @@
         {
           "category": "unclassified",
           "files": [
-            "src/vs/editor/standalone/browser/quickAccess/standaloneCommandsQuickAccess.ts",
-            "src/vs/editor/standalone/browser/quickAccess/standaloneGotoLineQuickAccess.ts",
             "src/vs/workbench/contrib/codeEditor/browser/quickaccess/gotoLineQuickAccess.ts",
             "src/vs/workbench/contrib/quickaccess/browser/quickAccess.contribution.ts"
           ],
           "id": "workbench.action.gotoLine",
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/standalone/browser/quickAccess/standaloneCommandsQuickAccess.ts",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/codeEditor/browser/quickaccess/gotoLineQuickAccess.ts",
           "sources": [
             "EditorCommand",
             "constant:GotoLineAction.ID"
@@ -30584,11 +30671,10 @@
         {
           "category": "unclassified",
           "files": [
-            "src/vs/editor/standalone/browser/quickAccess/standaloneGotoLineQuickAccess.ts",
             "src/vs/workbench/contrib/codeEditor/browser/quickaccess/gotoLineQuickAccess.ts"
           ],
           "id": "workbench.action.gotoOffset",
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/standalone/browser/quickAccess/standaloneGotoLineQuickAccess.ts",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/codeEditor/browser/quickaccess/gotoLineQuickAccess.ts",
           "sources": [
             "constant:GotoOffsetAction.ID"
           ]
@@ -30596,11 +30682,10 @@
         {
           "category": "unclassified",
           "files": [
-            "src/vs/editor/standalone/browser/quickAccess/standaloneGotoSymbolQuickAccess.ts",
             "src/vs/workbench/contrib/codeEditor/browser/quickaccess/gotoSymbolQuickAccess.ts"
           ],
           "id": "workbench.action.gotoSymbol",
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/standalone/browser/quickAccess/standaloneGotoSymbolQuickAccess.ts",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/codeEditor/browser/quickaccess/gotoSymbolQuickAccess.ts",
           "sources": [
             "constant:GotoSymbolAction.ID"
           ]
@@ -31756,18 +31841,6 @@
           "sources": [
             "Action2",
             "EditorCommand"
-          ]
-        },
-        {
-          "category": "unclassified",
-          "files": [
-            "src/vs/editor/browser/coreCommands.ts",
-            "src/vs/workbench/contrib/externalTerminal/browser/externalTerminal.contribution.ts"
-          ],
-          "id": "workbench.action.openGlobalKeybindings",
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/browser/coreCommands.ts",
-          "sources": [
-            "constant:id"
           ]
         },
         {
@@ -35780,6 +35853,17 @@
         {
           "category": "unclassified",
           "files": [
+            "src/vs/workbench/browser/actions/layoutActions.ts"
+          ],
+          "id": "workbench.action.toggleSidebarVisibility",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/browser/actions/layoutActions.ts",
+          "sources": [
+            "constant:ToggleSidebarVisibilityAction.ID"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
             "src/vs/workbench/browser/parts/editor/editorCommands.ts"
           ],
           "id": "workbench.action.toggleSplitEditorInGroup",
@@ -38825,12 +38909,34 @@
         {
           "category": "unclassified",
           "files": [
+            "src/vs/workbench/contrib/debug/browser/debug.contribution.ts"
+          ],
+          "id": "workbench.view.debug",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/debug.contribution.ts",
+          "sources": [
+            "constant:VIEWLET_ID"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
             "src/vs/workbench/contrib/editSessions/browser/editSessions.contribution.ts"
           ],
           "id": "workbench.view.editSessions",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/editSessions/browser/editSessions.contribution.ts",
           "sources": [
             "constant:EDIT_SESSIONS_CONTAINER_ID"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/workbench/contrib/files/browser/explorerViewlet.ts"
+          ],
+          "id": "workbench.view.explorer",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/files/browser/explorerViewlet.ts",
+          "sources": [
+            "constant:VIEWLET_ID"
           ]
         },
         {
@@ -38847,13 +38953,43 @@
         {
           "category": "extension-management",
           "files": [
-            "src/vs/workbench/contrib/debug/browser/debug.contribution.ts",
-            "src/vs/workbench/contrib/extensions/browser/extensions.contribution.ts",
-            "src/vs/workbench/contrib/files/browser/explorerViewlet.ts",
-            "src/vs/workbench/contrib/remote/browser/remote.ts"
+            "src/vs/workbench/contrib/extensions/browser/extensions.contribution.ts"
           ],
           "id": "workbench.view.extensions",
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/debug.contribution.ts",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/extensions/browser/extensions.contribution.ts",
+          "sources": [
+            "constant:VIEWLET_ID"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/workbench/contrib/remote/browser/remote.ts"
+          ],
+          "id": "workbench.view.remote",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remote/browser/remote.ts",
+          "sources": [
+            "constant:VIEWLET_ID"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/workbench/contrib/scm/browser/scm.contribution.ts"
+          ],
+          "id": "workbench.view.scm",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/scm/browser/scm.contribution.ts",
+          "sources": [
+            "constant:VIEWLET_ID"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/workbench/contrib/search/browser/search.contribution.ts"
+          ],
+          "id": "workbench.view.search",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/search/browser/search.contribution.ts",
           "sources": [
             "constant:VIEWLET_ID"
           ]
@@ -38872,11 +39008,21 @@
         {
           "category": "unclassified",
           "files": [
-            "src/vs/workbench/contrib/agentsVoice/browser/transcriptsView/voiceEventStream.contribution.ts",
-            "src/vs/workbench/contrib/agentsVoice/browser/transcriptsView/voiceTranscripts.contribution.ts"
+            "src/vs/workbench/contrib/agentsVoice/browser/transcriptsView/voiceEventStream.contribution.ts"
           ],
           "id": "workbench.view.voiceEventStreamContainer",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/agentsVoice/browser/transcriptsView/voiceEventStream.contribution.ts",
+          "sources": [
+            "constant:CONTAINER_ID"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/workbench/contrib/agentsVoice/browser/transcriptsView/voiceTranscripts.contribution.ts"
+          ],
+          "id": "workbench.view.voiceTranscriptsContainer",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/agentsVoice/browser/transcriptsView/voiceTranscripts.contribution.ts",
           "sources": [
             "constant:CONTAINER_ID"
           ]
@@ -38937,8 +39083,8 @@
           ]
         }
       ],
-      "resolved_from_constants": 1249,
-      "unresolved_count": 168,
+      "resolved_from_constants": 1264,
+      "unresolved_count": 172,
       "unresolved_id_expressions": [
         "ACTION_ID_NEW_CHAT",
         "ACTION_ID_NEW_EDIT_SESSION",
@@ -39052,6 +39198,7 @@
         "OpenIssueAction.ID",
         "OpenPullRequestChangesAction.ID",
         "OpenVSCodeWindowAction.ID",
+        "OpenWorkingSetHistoryAction.id",
         "ReloadAction.ID",
         "RemoteAgentHostCommandIds.addNewSSHHost",
         "RemoteAgentHostCommandIds.addRemoteAgentHost",
@@ -39096,8 +39243,11 @@
         "channelId",
         "collectionId",
         "command.id",
+        "commandId",
         "details.id",
+        "id",
         "idOrCommand",
+        "key",
         "langId",
         "plugin.configNamespace",
         "provider.id",
@@ -39108,7 +39258,181 @@
         "this.id",
         "this.openOpenConfigCommandId",
         "undefined"
-      ]
+      ],
+      "unresolved_reasons": {
+        "ACTION_ID_NEW_CHAT": "undefined",
+        "ACTION_ID_NEW_EDIT_SESSION": "undefined",
+        "AICustomizationManagementCommands.CreateCanvas": "undefined",
+        "AICustomizationManagementCommands.DismissMigrationHint": "undefined",
+        "AICustomizationManagementCommands.GenerateDebugReport": "undefined",
+        "AICustomizationManagementCommands.OpenEditor": "undefined",
+        "AICustomizationManagementCommands.OpenMarketplace": "undefined",
+        "AICustomizationManagementSection.Canvases": "undefined",
+        "AICustomizationManagementSection.Extensions": "undefined",
+        "AICustomizationManagementSection.HarnessSettings": "undefined",
+        "AbstractTaskService.OutputChannelId": "undefined",
+        "AddAreaScreenshotToChatAction.ID": "undefined",
+        "AddConsoleLogsToChatAction.ID": "undefined",
+        "AddElementCommentToChatAction.ID": "undefined",
+        "AddElementToChatAction.ID": "undefined",
+        "AddFullPageScreenshotToChatAction.ID": "undefined",
+        "AddScreenshotToChatAction.ID": "undefined",
+        "BranchChatSessionAction.ID": "undefined",
+        "BrowserFindNextAction.ID": "undefined",
+        "BrowserFindPreviousAction.ID": "undefined",
+        "BrowserViewCommandId.CloseAll": "undefined",
+        "BrowserViewCommandId.CloseAllInGroup": "undefined",
+        "BrowserViewCommandId.NewTab": "undefined",
+        "BrowserViewCommandId.Open": "undefined",
+        "BrowserViewCommandId.OpenFile": "undefined",
+        "BrowserViewCommandId.OpenOrList": "undefined",
+        "BrowserViewCommandId.QuickOpen": "undefined",
+        "BuiltinDynamicCompletions.addReferenceCommand": "undefined",
+        "CUSTOMIZATION_OVERVIEW_ITEM.id": "undefined",
+        "CancelAction.ID": "undefined",
+        "CancelEdit.ID": "undefined",
+        "CancelSnoozeInlineCompletion.ID": "undefined",
+        "ChangeChatModelAction.ID": "undefined",
+        "ChatSetupSignInTitleBarAction.ID": "undefined",
+        "ClearAgentBrowserStorageAction.ID": "undefined",
+        "ClearEphemeralBrowserStorageAction.ID": "undefined",
+        "ClearGlobalBrowserStorageAction.ID": "undefined",
+        "ClearWorkspaceBrowserStorageAction.ID": "undefined",
+        "Constants.SearchCommandIds.AddCursorsAtSearchResults": "undefined",
+        "Constants.SearchCommandIds.CancelSearchActionId": "undefined",
+        "Constants.SearchCommandIds.ClearSearchHistoryCommandId": "undefined",
+        "Constants.SearchCommandIds.ClearSearchResultsActionId": "undefined",
+        "Constants.SearchCommandIds.CloseReplaceWidgetActionId": "undefined",
+        "Constants.SearchCommandIds.CollapseSearchResultsActionId": "undefined",
+        "Constants.SearchCommandIds.CopyAllCommandId": "undefined",
+        "Constants.SearchCommandIds.CopyMatchCommandId": "undefined",
+        "Constants.SearchCommandIds.CopyPathCommandId": "undefined",
+        "Constants.SearchCommandIds.ExcludeFileTypeFromSearchId": "undefined",
+        "Constants.SearchCommandIds.ExcludeFolderFromSearchId": "undefined",
+        "Constants.SearchCommandIds.ExpandRecursivelyCommandId": "undefined",
+        "Constants.SearchCommandIds.ExpandSearchResultsActionId": "undefined",
+        "Constants.SearchCommandIds.FindInFilesActionId": "undefined",
+        "Constants.SearchCommandIds.FindInFolderId": "undefined",
+        "Constants.SearchCommandIds.FindInWorkspaceId": "undefined",
+        "Constants.SearchCommandIds.FocusNextInputActionId": "undefined",
+        "Constants.SearchCommandIds.FocusNextSearchResultActionId": "undefined",
+        "Constants.SearchCommandIds.FocusPreviousInputActionId": "undefined",
+        "Constants.SearchCommandIds.FocusPreviousSearchResultActionId": "undefined",
+        "Constants.SearchCommandIds.FocusSearchFromResults": "undefined",
+        "Constants.SearchCommandIds.FocusSearchListCommandID": "undefined",
+        "Constants.SearchCommandIds.GetSearchResultsActionId": "undefined",
+        "Constants.SearchCommandIds.IncludeFileTypeInSearchId": "undefined",
+        "Constants.SearchCommandIds.OpenMatch": "undefined",
+        "Constants.SearchCommandIds.OpenMatchToSide": "undefined",
+        "Constants.SearchCommandIds.QuickTextSearchActionId": "undefined",
+        "Constants.SearchCommandIds.RefreshSearchResultsActionId": "undefined",
+        "Constants.SearchCommandIds.RemoveActionId": "undefined",
+        "Constants.SearchCommandIds.ReplaceActionId": "undefined",
+        "Constants.SearchCommandIds.ReplaceAllInFileActionId": "undefined",
+        "Constants.SearchCommandIds.ReplaceAllInFolderActionId": "undefined",
+        "Constants.SearchCommandIds.ReplaceInFilesActionId": "undefined",
+        "Constants.SearchCommandIds.RestrictSearchToFolderId": "undefined",
+        "Constants.SearchCommandIds.RevealInSideBarForSearchResults": "undefined",
+        "Constants.SearchCommandIds.SearchWithAIActionId": "undefined",
+        "Constants.SearchCommandIds.ShowAllSymbolsActionId": "undefined",
+        "Constants.SearchCommandIds.ToggleCaseSensitiveCommandId": "undefined",
+        "Constants.SearchCommandIds.TogglePreserveCaseId": "undefined",
+        "Constants.SearchCommandIds.ToggleQueryDetailsActionId": "undefined",
+        "Constants.SearchCommandIds.ToggleRegexCommandId": "undefined",
+        "Constants.SearchCommandIds.ToggleSearchOnTypeActionId": "undefined",
+        "Constants.SearchCommandIds.ToggleWholeWordCommandId": "undefined",
+        "Constants.SearchCommandIds.ViewAsListActionId": "undefined",
+        "Constants.SearchCommandIds.ViewAsTreeActionId": "undefined",
+        "ExecuteHandoffAction.ID": "undefined",
+        "FIND_IDS.GoToMatchFindAction": "undefined",
+        "FIND_IDS.NextSelectionMatchFindAction": "undefined",
+        "FIND_IDS.PreviousSelectionMatchFindAction": "undefined",
+        "FIND_IDS.StartFindWithArgs": "undefined",
+        "FIND_IDS.StartFindWithSelection": "undefined",
+        "FixCIChecksAction.ID": "undefined",
+        "FocusUrlInputAction.ID": "undefined",
+        "GetHandoffsAction.ID": "undefined",
+        "GoBackAction.ID": "undefined",
+        "GoForwardAction.ID": "undefined",
+        "HardReloadAction.ID": "undefined",
+        "HideBrowserFindAction.ID": "undefined",
+        "HideInlineCompletion.ID": "undefined",
+        "MARK_SESSION_READ_COMMAND_ID": "undefined",
+        "MARK_SESSION_UNREAD_COMMAND_ID": "undefined",
+        "ManageBrowserPermissionsAction.ID": "undefined",
+        "ManagePluginMarketplacesAction.ID": "undefined",
+        "Menus.SessionActivityBarCanvas.id": "undefined",
+        "NAVIGATE_VIEW_COMMANDS.down": "undefined",
+        "NAVIGATE_VIEW_COMMANDS.left": "undefined",
+        "NAVIGATE_VIEW_COMMANDS.right": "undefined",
+        "NAVIGATE_VIEW_COMMANDS.up": "undefined",
+        "NEW_SESSION_ACTION_ID": "undefined",
+        "OpenBrowserSettingsAction.ID": "undefined",
+        "OpenInExternalBrowserAction.ID": "undefined",
+        "OpenIssueAction.ID": "undefined",
+        "OpenPullRequestChangesAction.ID": "undefined",
+        "OpenVSCodeWindowAction.ID": "undefined",
+        "OpenWorkingSetHistoryAction.id": "ambiguous:2-values",
+        "ReloadAction.ID": "undefined",
+        "RemoteAgentHostCommandIds.addNewSSHHost": "undefined",
+        "RemoteAgentHostCommandIds.addRemoteAgentHost": "undefined",
+        "RemoteAgentHostCommandIds.configureSSHHosts": "undefined",
+        "RemoteAgentHostCommandIds.connectViaMissionControl": "undefined",
+        "RemoteAgentHostCommandIds.connectViaSSH": "undefined",
+        "RemoteAgentHostCommandIds.connectViaTunnel": "undefined",
+        "RemoteAgentHostCommandIds.connectViaWSL": "undefined",
+        "RemoteAgentHostCommandIds.manageRemoteAgentHosts": "undefined",
+        "RemoteAgentHostCommandIds.updateRemoteAgentHost": "undefined",
+        "RemoteTunnelCommandIds.configure": "undefined",
+        "RemoteTunnelCommandIds.connecting": "undefined",
+        "RemoteTunnelCommandIds.copyToClipboard": "undefined",
+        "RemoteTunnelCommandIds.learnMore": "undefined",
+        "RemoteTunnelCommandIds.manage": "undefined",
+        "RemoteTunnelCommandIds.rename": "undefined",
+        "RemoteTunnelCommandIds.showLog": "undefined",
+        "RemoteTunnelCommandIds.turnOff": "undefined",
+        "RemoteTunnelCommandIds.turnOn": "undefined",
+        "RevealCIChecksAction.ID": "undefined",
+        "SHOW_PLUGIN_AI_CUSTOMIZATION_ID": "undefined",
+        "SearchEditorConstants.OpenEditorCommandId": "undefined",
+        "SearchEditorConstants.OpenNewEditorCommandId": "undefined",
+        "SearchEditorConstants.ToggleSearchEditorContextLinesCommandId": "undefined",
+        "ShowBrowserFindAction.ID": "undefined",
+        "ShowBrowserHistoryAction.ID": "undefined",
+        "ShowChatSpeechToTextIntroductionAction.ID": "undefined",
+        "ShowNextInlineSuggestionAction.ID": "undefined",
+        "ShowPreviousInlineSuggestionAction.ID": "undefined",
+        "ShowUnifiedQuickAccessAction.ID": "undefined",
+        "SnoozeInlineCompletion.ID": "undefined",
+        "SplitEditorAction.ID": "undefined",
+        "SubmitActiveSessionFeedbackAction.ID": "undefined",
+        "TerminalContribCommandId.ContinueInBackground": "undefined",
+        "TerminalContribCommandId.FocusChatInstanceAction": "undefined",
+        "TerminalContribCommandId.ToggleChatTerminalOutput": "undefined",
+        "ToggleChatModeAction.ID": "undefined",
+        "ToggleDevToolsAction.ID": "undefined",
+        "ToggleFavoriteAction.ID": "undefined",
+        "ToggleInlineCompletionShowCollapsed.ID": "undefined",
+        "ViewAllChangesAction.ID": "undefined",
+        "channelId": "undefined",
+        "collectionId": "undefined",
+        "command.id": "undefined",
+        "commandId": "ambiguous:5-values",
+        "details.id": "undefined",
+        "id": "ambiguous:5-values",
+        "idOrCommand": "undefined",
+        "key": "ambiguous:5-values",
+        "langId": "undefined",
+        "plugin.configNamespace": "undefined",
+        "provider.id": "undefined",
+        "sessionType": "undefined",
+        "this._channelId": "undefined",
+        "this._id": "undefined",
+        "this.createOrOpenConfigCommandId": "undefined",
+        "this.id": "undefined",
+        "this.openOpenConfigCommandId": "undefined",
+        "undefined": "undefined"
+      }
     },
     "c_client_served_channels": {
       "client_served_channel_count": 2,
@@ -39347,6 +39671,51 @@
           "site_count": 18,
           "sites": [
             {
+              "file": "src/vs/workbench/api/browser/mainThreadClipboard.ts",
+              "line": 21,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadClipboard.ts#L21"
+            },
+            {
+              "file": "src/vs/workbench/api/browser/mainThreadEditor.ts",
+              "line": 516,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadEditor.ts#L516"
+            },
+            {
+              "file": "src/vs/workbench/api/common/extHost.protocol.ts",
+              "line": 129,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L129"
+            },
+            {
+              "file": "src/vs/workbench/api/common/extHostClipboard.ts",
+              "line": 14,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostClipboard.ts#L14"
+            },
+            {
+              "file": "src/vs/workbench/browser/actions/textInputActions.ts",
+              "line": 41,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/browser/actions/textInputActions.ts#L41"
+            },
+            {
+              "file": "src/vs/workbench/contrib/codeEditor/electron-browser/selectionClipboard.ts",
+              "line": 125,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/codeEditor/electron-browser/selectionClipboard.ts#L125"
+            },
+            {
+              "file": "src/vs/workbench/contrib/debug/browser/repl.ts",
+              "line": 1134,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/repl.ts#L1134"
+            },
+            {
+              "file": "src/vs/workbench/contrib/files/browser/fileActions.ts",
+              "line": 847,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/files/browser/fileActions.ts#L847"
+            },
+            {
+              "file": "src/vs/workbench/contrib/mergeEditor/electron-browser/devCommands.ts",
+              "line": 51,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mergeEditor/electron-browser/devCommands.ts#L51"
+            },
+            {
               "file": "src/vs/workbench/contrib/snippets/browser/tabCompletion.ts",
               "line": 166,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/snippets/browser/tabCompletion.ts#L166"
@@ -39360,51 +39729,6 @@
               "file": "src/vs/workbench/contrib/snippets/browser/commands/surroundWithSnippet.ts",
               "line": 67,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/snippets/browser/commands/surroundWithSnippet.ts#L67"
-            },
-            {
-              "file": "src/vs/workbench/contrib/codeEditor/electron-browser/selectionClipboard.ts",
-              "line": 125,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/codeEditor/electron-browser/selectionClipboard.ts#L125"
-            },
-            {
-              "file": "src/vs/workbench/contrib/mergeEditor/electron-browser/devCommands.ts",
-              "line": 51,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mergeEditor/electron-browser/devCommands.ts#L51"
-            },
-            {
-              "file": "src/vs/workbench/contrib/terminal/browser/xterm/xtermTerminal.ts",
-              "line": 326,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/xterm/xtermTerminal.ts#L326"
-            },
-            {
-              "file": "src/vs/workbench/contrib/terminalContrib/sendSequence/browser/terminal.sendSequence.contribution.ts",
-              "line": 140,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/sendSequence/browser/terminal.sendSequence.contribution.ts#L140"
-            },
-            {
-              "file": "src/vs/workbench/contrib/terminalContrib/clipboard/browser/terminal.clipboard.contribution.ts",
-              "line": 79,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/clipboard/browser/terminal.clipboard.contribution.ts#L79"
-            },
-            {
-              "file": "src/vs/workbench/contrib/files/browser/fileActions.ts",
-              "line": 847,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/files/browser/fileActions.ts#L847"
-            },
-            {
-              "file": "src/vs/workbench/contrib/debug/browser/repl.ts",
-              "line": 1134,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/repl.ts#L1134"
-            },
-            {
-              "file": "src/vs/workbench/browser/actions/textInputActions.ts",
-              "line": 41,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/browser/actions/textInputActions.ts#L41"
-            },
-            {
-              "file": "src/vs/workbench/api/browser/mainThreadClipboard.ts",
-              "line": 21,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadClipboard.ts#L21"
             }
           ],
           "surface": "clipboard"
@@ -39414,64 +39738,64 @@
           "site_count": 132,
           "sites": [
             {
-              "file": "src/vs/workbench/contrib/languageStatus/browser/languageStatus.ts",
-              "line": 414,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/languageStatus/browser/languageStatus.ts#L414"
+              "file": "src/vs/workbench/api/browser/mainThreadChatSessions.ts",
+              "line": 188,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadChatSessions.ts#L188"
             },
             {
-              "file": "src/vs/workbench/contrib/preferences/browser/settingsEditorSettingIndicators.ts",
-              "line": 448,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/preferences/browser/settingsEditorSettingIndicators.ts#L448"
+              "file": "src/vs/workbench/api/browser/mainThreadTerminalShellIntegration.ts",
+              "line": 56,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadTerminalShellIntegration.ts#L56"
             },
             {
-              "file": "src/vs/workbench/contrib/preferences/browser/settingsTree.ts",
-              "line": 1084,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/preferences/browser/settingsTree.ts#L1084"
+              "file": "src/vs/workbench/api/browser/mainThreadWebviews.ts",
+              "line": 106,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWebviews.ts#L106"
             },
             {
-              "file": "src/vs/workbench/contrib/tasks/browser/abstractTaskService.ts",
-              "line": 3980,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/tasks/browser/abstractTaskService.ts#L3980"
+              "file": "src/vs/workbench/api/common/extHost.api.impl.ts",
+              "line": 1463,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.api.impl.ts#L1463"
             },
             {
-              "file": "src/vs/workbench/contrib/update/browser/postUpdateWidget.ts",
-              "line": 197,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/update/browser/postUpdateWidget.ts#L197"
+              "file": "src/vs/workbench/api/common/extHost.protocol.ts",
+              "line": 3258,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L3258"
             },
             {
-              "file": "src/vs/workbench/contrib/update/browser/releaseNotesEditor.ts",
-              "line": 350,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/update/browser/releaseNotesEditor.ts#L350"
+              "file": "src/vs/workbench/api/common/extHostExtensionService.ts",
+              "line": 924,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostExtensionService.ts#L924"
             },
             {
-              "file": "src/vs/workbench/contrib/update/browser/releaseNotesTryouts.ts",
-              "line": 43,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/update/browser/releaseNotesTryouts.ts#L43"
+              "file": "src/vs/workbench/api/common/extHostFileSystem.ts",
+              "line": 164,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostFileSystem.ts#L164"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/chatSlashCommands.ts",
-              "line": 425,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chatSlashCommands.ts#L425"
+              "file": "src/vs/workbench/api/common/extHostTerminalShellIntegration.ts",
+              "line": 102,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTerminalShellIntegration.ts#L102"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/chatTipService.ts",
-              "line": 886,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chatTipService.ts#L886"
+              "file": "src/vs/workbench/api/common/extHostTimeline.ts",
+              "line": 266,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTimeline.ts#L266"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/enablementStatusWidget.ts",
-              "line": 47,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/enablementStatusWidget.ts#L47"
+              "file": "src/vs/workbench/api/common/extHostTypeConverters.ts",
+              "line": 389,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTypeConverters.ts#L389"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/tools/languageModelToolsService.ts",
-              "line": 1035,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/tools/languageModelToolsService.ts#L1035"
+              "file": "src/vs/workbench/api/common/extHostTypes.ts",
+              "line": 3025,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTypes.ts#L3025"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/widgetHosts/chatQuick.ts",
-              "line": 277,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/widgetHosts/chatQuick.ts#L277"
+              "file": "src/vs/workbench/api/common/extHostWindow.ts",
+              "line": 96,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostWindow.ts#L96"
             }
           ],
           "surface": "command-uri-in-markdown"
@@ -39513,64 +39837,64 @@
           "site_count": 90,
           "sites": [
             {
-              "file": "src/vs/workbench/contrib/languageStatus/browser/languageStatus.ts",
-              "line": 414,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/languageStatus/browser/languageStatus.ts#L414"
+              "file": "src/vs/workbench/api/browser/mainThreadChatSessions.ts",
+              "line": 188,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadChatSessions.ts#L188"
             },
             {
-              "file": "src/vs/workbench/contrib/preferences/browser/settingsEditorSettingIndicators.ts",
-              "line": 448,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/preferences/browser/settingsEditorSettingIndicators.ts#L448"
+              "file": "src/vs/workbench/api/common/extHost.protocol.ts",
+              "line": 3258,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L3258"
             },
             {
-              "file": "src/vs/workbench/contrib/preferences/browser/settingsTree.ts",
-              "line": 1084,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/preferences/browser/settingsTree.ts#L1084"
+              "file": "src/vs/workbench/api/common/extHostExtensionService.ts",
+              "line": 924,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostExtensionService.ts#L924"
             },
             {
-              "file": "src/vs/workbench/contrib/tasks/browser/abstractTaskService.ts",
-              "line": 3980,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/tasks/browser/abstractTaskService.ts#L3980"
+              "file": "src/vs/workbench/api/common/extHostFileSystem.ts",
+              "line": 164,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostFileSystem.ts#L164"
             },
             {
-              "file": "src/vs/workbench/contrib/update/browser/postUpdateWidget.ts",
-              "line": 197,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/update/browser/postUpdateWidget.ts#L197"
+              "file": "src/vs/workbench/api/common/extHostTerminalShellIntegration.ts",
+              "line": 102,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTerminalShellIntegration.ts#L102"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/chatSlashCommands.ts",
-              "line": 425,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chatSlashCommands.ts#L425"
+              "file": "src/vs/workbench/api/common/extHostTimeline.ts",
+              "line": 266,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTimeline.ts#L266"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/chatTipService.ts",
-              "line": 886,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chatTipService.ts#L886"
+              "file": "src/vs/workbench/api/common/extHostTypeConverters.ts",
+              "line": 389,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTypeConverters.ts#L389"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/enablementStatusWidget.ts",
-              "line": 47,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/enablementStatusWidget.ts#L47"
+              "file": "src/vs/workbench/api/common/extHostTypes.ts",
+              "line": 3025,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTypes.ts#L3025"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/tools/languageModelToolsService.ts",
-              "line": 1035,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/tools/languageModelToolsService.ts#L1035"
+              "file": "src/vs/workbench/api/common/extHostTypes/markdownString.ts",
+              "line": 38,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTypes/markdownString.ts#L38"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/widgetHosts/chatQuick.ts",
-              "line": 277,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/widgetHosts/chatQuick.ts#L277"
+              "file": "src/vs/workbench/browser/parts/editor/editorTabsControl.ts",
+              "line": 600,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/browser/parts/editor/editorTabsControl.ts#L600"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/chatStatus/chatStatusDashboard.ts",
-              "line": 468,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chatStatus/chatStatusDashboard.ts#L468"
+              "file": "src/vs/workbench/browser/parts/views/treeView.ts",
+              "line": 931,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/browser/parts/views/treeView.ts#L931"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/widget/chatWidget.ts",
-              "line": 1634,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/widget/chatWidget.ts#L1634"
+              "file": "src/vs/workbench/contrib/accessibility/browser/accessibleViewKeybindingResolver.ts",
+              "line": 36,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/accessibility/browser/accessibleViewKeybindingResolver.ts#L36"
             }
           ],
           "surface": "markdown-string-trust"
@@ -39580,34 +39904,39 @@
           "site_count": 59,
           "sites": [
             {
-              "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/aiCustomizationManagementEditor.ts",
-              "line": 2889,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/aiCustomizationManagementEditor.ts#L2889"
+              "file": "src/vs/workbench/api/browser/mainThreadAuthentication.ts",
+              "line": 716,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadAuthentication.ts#L716"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMigrationAccessibility.ts",
-              "line": 41,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMigrationAccessibility.ts#L41"
+              "file": "src/vs/workbench/api/browser/mainThreadMcp.ts",
+              "line": 24,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadMcp.ts#L24"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMigrationCategories.ts",
-              "line": 398,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMigrationCategories.ts#L398"
+              "file": "src/vs/workbench/api/common/extHost.api.impl.ts",
+              "line": 1937,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.api.impl.ts#L1937"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/embeddedMcpServerDetail.ts",
-              "line": 64,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/embeddedMcpServerDetail.ts#L64"
+              "file": "src/vs/workbench/api/common/extHost.protocol.ts",
+              "line": 72,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L72"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/mcpListWidget.ts",
-              "line": 28,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/mcpListWidget.ts#L28"
+              "file": "src/vs/workbench/api/common/extHostMcp.ts",
+              "line": 21,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostMcp.ts#L21"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/mcpServerCustomizationMigration.ts",
-              "line": 111,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/mcpServerCustomizationMigration.ts#L111"
+              "file": "src/vs/workbench/api/common/extHostTypeConverters.ts",
+              "line": 55,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTypeConverters.ts#L55"
+            },
+            {
+              "file": "src/vs/workbench/contrib/chat/browser/actions/createPluginAction.ts",
+              "line": 26,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/actions/createPluginAction.ts#L26"
             },
             {
               "file": "src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostMcpServerMigrationProvider.ts",
@@ -39630,14 +39959,9 @@
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/syncedCustomizationBundler.ts#L312"
             },
             {
-              "file": "src/vs/workbench/contrib/chat/browser/actions/createPluginAction.ts",
-              "line": 26,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/actions/createPluginAction.ts#L26"
-            },
-            {
-              "file": "src/vs/workbench/contrib/chat/common/plugins/agentPluginService.ts",
-              "line": 9,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/common/plugins/agentPluginService.ts#L9"
+              "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/aiCustomizationManagementEditor.ts",
+              "line": 2889,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/aiCustomizationManagementEditor.ts#L2889"
             }
           ],
           "surface": "mcp-server-definition"
@@ -39646,6 +39970,21 @@
           "authority": "a URI chosen by the tab is handed to the host OS opener",
           "site_count": 17,
           "sites": [
+            {
+              "file": "src/vs/workbench/api/common/extHost.api.impl.ts",
+              "line": 457,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.api.impl.ts#L457"
+            },
+            {
+              "file": "src/vs/workbench/api/node/extHostCLIServer.ts",
+              "line": 102,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/node/extHostCLIServer.ts#L102"
+            },
+            {
+              "file": "src/vs/workbench/browser/web.api.ts",
+              "line": 242,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/browser/web.api.ts#L242"
+            },
             {
               "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/aiCustomizationDiscoveryPage.ts",
               "line": 1105,
@@ -39667,21 +40006,6 @@
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/issue/electron-browser/nativeRecordingService.ts#L65"
             },
             {
-              "file": "src/vs/workbench/browser/web.api.ts",
-              "line": 242,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/browser/web.api.ts#L242"
-            },
-            {
-              "file": "src/vs/workbench/api/common/extHost.api.impl.ts",
-              "line": 457,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.api.impl.ts#L457"
-            },
-            {
-              "file": "src/vs/workbench/api/node/extHostCLIServer.ts",
-              "line": 102,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/node/extHostCLIServer.ts#L102"
-            },
-            {
               "file": "src/vs/workbench/electron-browser/window.ts",
               "line": 816,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/electron-browser/window.ts#L816"
@@ -39692,6 +40016,11 @@
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/electron-main/browserViewMainService.ts#L606"
             },
             {
+              "file": "src/vs/platform/menubar/electron-main/menubar.ts",
+              "line": 828,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/menubar/electron-main/menubar.ts#L828"
+            },
+            {
               "file": "src/vs/platform/native/common/native.ts",
               "line": 308,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/native/common/native.ts#L308"
@@ -39700,11 +40029,6 @@
               "file": "src/vs/platform/native/electron-main/nativeHostMainService.ts",
               "line": 703,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/native/electron-main/nativeHostMainService.ts#L703"
-            },
-            {
-              "file": "src/vs/platform/menubar/electron-main/menubar.ts",
-              "line": 828,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/menubar/electron-main/menubar.ts#L828"
             }
           ],
           "surface": "open-external"
@@ -39763,6 +40087,21 @@
           "site_count": 8,
           "sites": [
             {
+              "file": "src/vs/workbench/api/browser/mainThreadTerminalService.ts",
+              "line": 258,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadTerminalService.ts#L258"
+            },
+            {
+              "file": "src/vs/workbench/api/common/extHost.api.impl.ts",
+              "line": 969,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.api.impl.ts#L969"
+            },
+            {
+              "file": "src/vs/workbench/api/common/extHostTerminalService.ts",
+              "line": 54,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTerminalService.ts#L54"
+            },
+            {
               "file": "src/vs/workbench/contrib/terminalContrib/links/browser/links.ts",
               "line": 25,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/links/browser/links.ts#L25"
@@ -39781,21 +40120,6 @@
               "file": "src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkProviderService.ts",
               "line": 19,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkProviderService.ts#L19"
-            },
-            {
-              "file": "src/vs/workbench/api/browser/mainThreadTerminalService.ts",
-              "line": 258,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadTerminalService.ts#L258"
-            },
-            {
-              "file": "src/vs/workbench/api/common/extHost.api.impl.ts",
-              "line": 969,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.api.impl.ts#L969"
-            },
-            {
-              "file": "src/vs/workbench/api/common/extHostTerminalService.ts",
-              "line": 54,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTerminalService.ts#L54"
             },
             {
               "file": "src/vs/editor/standalone/browser/standaloneLanguages.ts",
@@ -39835,6 +40159,26 @@
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/xterm/markNavigationAddon.ts#L7"
             },
             {
+              "file": "src/vs/workbench/contrib/terminalContrib/accessibility/browser/textAreaSyncAddon.ts",
+              "line": 3,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/accessibility/browser/textAreaSyncAddon.ts#L3"
+            },
+            {
+              "file": "src/vs/workbench/contrib/terminalContrib/inlineHint/browser/terminal.initialHint.contribution.ts",
+              "line": 2,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/inlineHint/browser/terminal.initialHint.contribution.ts#L2"
+            },
+            {
+              "file": "src/vs/workbench/contrib/terminalContrib/notification/browser/terminal.notification.contribution.ts",
+              "line": 40,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/notification/browser/terminal.notification.contribution.ts#L40"
+            },
+            {
+              "file": "src/vs/workbench/contrib/terminalContrib/quickFix/browser/quickFixAddon.ts",
+              "line": 3,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/quickFix/browser/quickFixAddon.ts#L3"
+            },
+            {
               "file": "src/vs/workbench/contrib/terminalContrib/suggest/browser/lspCompletionProviderAddon.ts",
               "line": 3,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/suggest/browser/lspCompletionProviderAddon.ts#L3"
@@ -39848,26 +40192,6 @@
               "file": "src/vs/workbench/contrib/terminalContrib/typeAhead/browser/terminalTypeAheadAddon.ts",
               "line": 13,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/typeAhead/browser/terminalTypeAheadAddon.ts#L13"
-            },
-            {
-              "file": "src/vs/workbench/contrib/terminalContrib/notification/browser/terminal.notification.contribution.ts",
-              "line": 40,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/notification/browser/terminal.notification.contribution.ts#L40"
-            },
-            {
-              "file": "src/vs/workbench/contrib/terminalContrib/quickFix/browser/quickFixAddon.ts",
-              "line": 3,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/quickFix/browser/quickFixAddon.ts#L3"
-            },
-            {
-              "file": "src/vs/workbench/contrib/terminalContrib/accessibility/browser/textAreaSyncAddon.ts",
-              "line": 3,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/accessibility/browser/textAreaSyncAddon.ts#L3"
-            },
-            {
-              "file": "src/vs/workbench/contrib/terminalContrib/inlineHint/browser/terminal.initialHint.contribution.ts",
-              "line": 2,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/inlineHint/browser/terminal.initialHint.contribution.ts#L2"
             }
           ],
           "surface": "terminal-osc-sequence"
@@ -39877,29 +40201,29 @@
           "site_count": 22,
           "sites": [
             {
+              "file": "src/vs/workbench/api/browser/mainThreadTunnelService.ts",
+              "line": 8,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadTunnelService.ts#L8"
+            },
+            {
+              "file": "src/vs/workbench/api/common/extHost.protocol.ts",
+              "line": 2336,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L2336"
+            },
+            {
+              "file": "src/vs/workbench/api/common/extHostTunnelService.ts",
+              "line": 10,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTunnelService.ts#L10"
+            },
+            {
+              "file": "src/vs/workbench/api/node/extHostTunnelService.ts",
+              "line": 19,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/node/extHostTunnelService.ts#L19"
+            },
+            {
               "file": "src/vs/workbench/contrib/chat/electron-browser/toggleRemoteConnectionsActionViewItem.ts",
               "line": 25,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/electron-browser/toggleRemoteConnectionsActionViewItem.ts#L25"
-            },
-            {
-              "file": "src/vs/workbench/contrib/webview/browser/webviewElement.ts",
-              "line": 30,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/webview/browser/webviewElement.ts#L30"
-            },
-            {
-              "file": "src/vs/workbench/contrib/webview/electron-browser/webviewElement.ts",
-              "line": 18,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/webview/electron-browser/webviewElement.ts#L18"
-            },
-            {
-              "file": "src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts",
-              "line": 11,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts#L11"
-            },
-            {
-              "file": "src/vs/workbench/contrib/remoteTunnel/electron-browser/remoteTunnel.contribution.ts",
-              "line": 90,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remoteTunnel/electron-browser/remoteTunnel.contribution.ts#L90"
             },
             {
               "file": "src/vs/workbench/contrib/debug/browser/linkDetector.ts",
@@ -39922,19 +40246,19 @@
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remote/browser/tunnelView.ts#L34"
             },
             {
-              "file": "src/vs/workbench/api/browser/mainThreadTunnelService.ts",
-              "line": 8,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadTunnelService.ts#L8"
+              "file": "src/vs/workbench/contrib/remoteTunnel/electron-browser/remoteTunnel.contribution.ts",
+              "line": 90,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remoteTunnel/electron-browser/remoteTunnel.contribution.ts#L90"
             },
             {
-              "file": "src/vs/workbench/api/common/extHost.protocol.ts",
-              "line": 2336,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L2336"
+              "file": "src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts",
+              "line": 11,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts#L11"
             },
             {
-              "file": "src/vs/workbench/api/common/extHostTunnelService.ts",
-              "line": 10,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTunnelService.ts#L10"
+              "file": "src/vs/workbench/contrib/webview/browser/webviewElement.ts",
+              "line": 30,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/webview/browser/webviewElement.ts#L30"
             }
           ],
           "surface": "tunnel-and-port-forward"
@@ -39943,46 +40267,6 @@
           "authority": "vscode:// callbacks are routed into extensions and can carry OAuth codes",
           "site_count": 18,
           "sites": [
-            {
-              "file": "src/vs/workbench/contrib/chat/browser/pluginUrlHandler.ts",
-              "line": 17,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/pluginUrlHandler.ts#L17"
-            },
-            {
-              "file": "src/vs/workbench/contrib/chat/browser/promptSyntax/promptUrlHandler.ts",
-              "line": 12,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/promptSyntax/promptUrlHandler.ts#L12"
-            },
-            {
-              "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/aiCustomizationUrlHandler.ts",
-              "line": 7,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/aiCustomizationUrlHandler.ts#L7"
-            },
-            {
-              "file": "src/vs/workbench/contrib/chat/browser/chatSetup/chatSetupContributions.ts",
-              "line": 727,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chatSetup/chatSetupContributions.ts#L727"
-            },
-            {
-              "file": "src/vs/workbench/contrib/mcp/browser/mcpWorkbenchService.ts",
-              "line": 936,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/browser/mcpWorkbenchService.ts#L936"
-            },
-            {
-              "file": "src/vs/workbench/contrib/extensions/browser/extensionsWorkbenchService.ts",
-              "line": 36,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/extensions/browser/extensionsWorkbenchService.ts#L36"
-            },
-            {
-              "file": "src/vs/workbench/contrib/userDataProfile/browser/userDataProfile.ts",
-              "line": 86,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/userDataProfile/browser/userDataProfile.ts#L86"
-            },
-            {
-              "file": "src/vs/workbench/contrib/onboarding/browser/onboardingTryoutUrlHandler.ts",
-              "line": 13,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/onboarding/browser/onboardingTryoutUrlHandler.ts#L13"
-            },
             {
               "file": "src/vs/workbench/api/browser/mainThreadUrls.ts",
               "line": 21,
@@ -40002,6 +40286,46 @@
               "file": "src/vs/workbench/api/common/extHostUrls.ts",
               "line": 28,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostUrls.ts#L28"
+            },
+            {
+              "file": "src/vs/workbench/contrib/chat/browser/pluginUrlHandler.ts",
+              "line": 17,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/pluginUrlHandler.ts#L17"
+            },
+            {
+              "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/aiCustomizationUrlHandler.ts",
+              "line": 7,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/aiCustomizationUrlHandler.ts#L7"
+            },
+            {
+              "file": "src/vs/workbench/contrib/chat/browser/chatSetup/chatSetupContributions.ts",
+              "line": 727,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chatSetup/chatSetupContributions.ts#L727"
+            },
+            {
+              "file": "src/vs/workbench/contrib/chat/browser/promptSyntax/promptUrlHandler.ts",
+              "line": 12,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/promptSyntax/promptUrlHandler.ts#L12"
+            },
+            {
+              "file": "src/vs/workbench/contrib/extensions/browser/extensionsWorkbenchService.ts",
+              "line": 36,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/extensions/browser/extensionsWorkbenchService.ts#L36"
+            },
+            {
+              "file": "src/vs/workbench/contrib/mcp/browser/mcpWorkbenchService.ts",
+              "line": 936,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/browser/mcpWorkbenchService.ts#L936"
+            },
+            {
+              "file": "src/vs/workbench/contrib/onboarding/browser/onboardingTryoutUrlHandler.ts",
+              "line": 13,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/onboarding/browser/onboardingTryoutUrlHandler.ts#L13"
+            },
+            {
+              "file": "src/vs/workbench/contrib/userDataProfile/browser/userDataProfile.ts",
+              "line": 86,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/userDataProfile/browser/userDataProfile.ts#L86"
             }
           ],
           "surface": "uri-handler"
@@ -40011,14 +40335,54 @@
           "site_count": 28,
           "sites": [
             {
-              "file": "src/vs/workbench/contrib/mediaPreview/browser/mediaPlayerEditorInput.ts",
-              "line": 52,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mediaPreview/browser/mediaPlayerEditorInput.ts#L52"
+              "file": "src/vs/workbench/api/browser/mainThreadCodeInsets.ts",
+              "line": 10,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCodeInsets.ts#L10"
             },
             {
-              "file": "src/vs/workbench/contrib/update/browser/releaseNotesEditor.ts",
-              "line": 178,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/update/browser/releaseNotesEditor.ts#L178"
+              "file": "src/vs/workbench/api/browser/mainThreadCustomEditors.ts",
+              "line": 60,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCustomEditors.ts#L60"
+            },
+            {
+              "file": "src/vs/workbench/api/browser/mainThreadWebviewPanels.ts",
+              "line": 22,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWebviewPanels.ts#L22"
+            },
+            {
+              "file": "src/vs/workbench/api/browser/mainThreadWebviewViews.ts",
+              "line": 116,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWebviewViews.ts#L116"
+            },
+            {
+              "file": "src/vs/workbench/api/browser/mainThreadWebviews.ts",
+              "line": 13,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWebviews.ts#L13"
+            },
+            {
+              "file": "src/vs/workbench/api/common/extHost.protocol.ts",
+              "line": 861,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L861"
+            },
+            {
+              "file": "src/vs/workbench/api/common/extHostCodeInsets.ts",
+              "line": 81,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostCodeInsets.ts#L81"
+            },
+            {
+              "file": "src/vs/workbench/api/common/extHostCustomEditors.ts",
+              "line": 279,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostCustomEditors.ts#L279"
+            },
+            {
+              "file": "src/vs/workbench/api/common/extHostWebview.ts",
+              "line": 107,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostWebview.ts#L107"
+            },
+            {
+              "file": "src/vs/workbench/api/common/extHostWebviewPanels.ts",
+              "line": 294,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostWebviewPanels.ts#L294"
             },
             {
               "file": "src/vs/workbench/contrib/chat/browser/agentPluginEditor/agentPluginEditor.ts",
@@ -40029,46 +40393,6 @@
               "file": "src/vs/workbench/contrib/chat/browser/widget/chatContentParts/toolInvocationParts/chatMcpAppModel.ts",
               "line": 353,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/widget/chatContentParts/toolInvocationParts/chatMcpAppModel.ts#L353"
-            },
-            {
-              "file": "src/vs/workbench/contrib/webview/browser/overlayWebview.ts",
-              "line": 15,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/webview/browser/overlayWebview.ts#L15"
-            },
-            {
-              "file": "src/vs/workbench/contrib/webview/browser/webview.ts",
-              "line": 56,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/webview/browser/webview.ts#L56"
-            },
-            {
-              "file": "src/vs/workbench/contrib/webview/browser/webviewElement.ts",
-              "line": 37,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/webview/browser/webviewElement.ts#L37"
-            },
-            {
-              "file": "src/vs/workbench/contrib/mcp/browser/mcpServerEditor.ts",
-              "line": 498,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/browser/mcpServerEditor.ts#L498"
-            },
-            {
-              "file": "src/vs/workbench/contrib/imageCarousel/browser/imageCarouselEditor.ts",
-              "line": 393,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/imageCarousel/browser/imageCarouselEditor.ts#L393"
-            },
-            {
-              "file": "src/vs/workbench/contrib/extensions/browser/extensionEditor.ts",
-              "line": 703,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/extensions/browser/extensionEditor.ts#L703"
-            },
-            {
-              "file": "src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.ts",
-              "line": 604,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/welcomeGettingStarted/browser/gettingStarted.ts#L604"
-            },
-            {
-              "file": "src/vs/workbench/contrib/webviewPanel/browser/webviewEditorInputSerializer.ts",
-              "line": 7,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/webviewPanel/browser/webviewEditorInputSerializer.ts#L7"
             }
           ],
           "surface": "webview-content"
@@ -40078,24 +40402,44 @@
           "site_count": 53,
           "sites": [
             {
+              "file": "src/vs/workbench/api/browser/mainThreadConfiguration.ts",
+              "line": 8,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadConfiguration.ts#L8"
+            },
+            {
+              "file": "src/vs/workbench/api/common/configurationExtensionPoint.ts",
+              "line": 211,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/configurationExtensionPoint.ts#L211"
+            },
+            {
+              "file": "src/vs/workbench/api/common/extHost.protocol.ts",
+              "line": 116,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHost.protocol.ts#L116"
+            },
+            {
+              "file": "src/vs/workbench/api/common/extHostConfiguration.ts",
+              "line": 7,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostConfiguration.ts#L7"
+            },
+            {
+              "file": "src/vs/workbench/browser/workbench.contribution.ts",
+              "line": 834,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/browser/workbench.contribution.ts#L834"
+            },
+            {
+              "file": "src/vs/workbench/common/configuration.ts",
+              "line": 34,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/common/configuration.ts#L34"
+            },
+            {
+              "file": "src/vs/workbench/contrib/accessibility/browser/accessibilityConfiguration.ts",
+              "line": 1003,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/accessibility/browser/accessibilityConfiguration.ts#L1003"
+            },
+            {
               "file": "src/vs/workbench/contrib/agentsVoice/browser/agentsVoice.contribution.ts",
               "line": 610,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/agentsVoice/browser/agentsVoice.contribution.ts#L610"
-            },
-            {
-              "file": "src/vs/workbench/contrib/preferences/browser/preferencesRenderers.ts",
-              "line": 646,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/preferences/browser/preferencesRenderers.ts#L646"
-            },
-            {
-              "file": "src/vs/workbench/contrib/preferences/browser/settingsTreeModels.ts",
-              "line": 277,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/preferences/browser/settingsTreeModels.ts#L277"
-            },
-            {
-              "file": "src/vs/workbench/contrib/tasks/browser/task.contribution.ts",
-              "line": 536,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/tasks/browser/task.contribution.ts#L536"
             },
             {
               "file": "src/vs/workbench/contrib/browserView/electron-browser/features/browserEditorZoomFeature.ts",
@@ -40116,26 +40460,6 @@
               "file": "src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts",
               "line": 22,
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessionsConfiguration.ts#L22"
-            },
-            {
-              "file": "src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts",
-              "line": 507,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L507"
-            },
-            {
-              "file": "src/vs/workbench/contrib/chat/browser/chatNetworkConfiguration.ts",
-              "line": 21,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chatNetworkConfiguration.ts#L21"
-            },
-            {
-              "file": "src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMarketplaceConfiguration.ts",
-              "line": 37,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/aiCustomization/customizationMarketplaceConfiguration.ts#L37"
-            },
-            {
-              "file": "src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts",
-              "line": 60,
-              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts#L60"
             }
           ],
           "surface": "workspace-configuration"

@@ -70,27 +70,52 @@ _UNRESOLVED = (
 
 
 def _constant_index(tree: SourceTree) -> dict:
-    """Resolve the string constants that command registrations refer to.
+    """Index the string constants that command registrations refer to.
 
     Upstream registers most command ids through a constant or an enum member
     rather than a literal. Without this, over a thousand real commands would be
     reported as "unresolved" and would never get a policy verdict.
+
+    Returns ``{name: {value: [files]}}`` -- *every* definition of a name, not
+    just the first one seen.
+
+    An earlier version collapsed this to ``{name: value}`` with ``setdefault``,
+    so the first file to define a name won. That was wrong in two ways. It was
+    order-dependent, because ``os.walk`` order decided the winner. Worse, it
+    was wrong even once deterministic: these are bare identifiers in a flat
+    namespace spanning the whole tree, and 451 of them have more than one
+    distinct value upstream (``ID`` alone has 15). Picking one silently gave a
+    command the wrong identity, and the category is derived from the id, so a
+    surface moved into ``secrets-and-auth`` purely because of directory
+    iteration order. Resolution is now scoped to the use site and refuses to
+    guess; see ``_resolve_expr``.
 
     Three forms are indexed:
       ``const NAME = 'id'``            -> ``NAME``
       ``enum E { Member = 'id' }``     -> ``E.Member``
       ``class C { static ... ID = 'id' }`` -> ``C.ID``
     """
-    consts = {}
-    members = {}
+    defs = {}
+
+    def record(name, value, rel):
+        files = defs.setdefault(name, {}).setdefault(value, [])
+        if rel not in files:
+            files.append(rel)
+
     const_re = re.compile(
         r"(?:export\s+)?const\s+(?P<name>[A-Za-z_$][\w$]*)"
-        r"(?:\s*:\s*[\w<>.\[\]|'\" ]+)?\s*=\s*'(?P<val>[^']+)'\s*;")
+        r"(?:\s*:\s*[\w<>.\[\]|'\" ]+)?\s*=\s*'(?P<val>[^'\n]*)'\s*;")
     container_re = re.compile(
         r"(?:export\s+)?(?:declare\s+)?(?:const\s+)?(?:enum|namespace|class)\s+(?P<name>[A-Za-z_$][\w$]*)\b[^{]*\{")
+    # Anchored to the start of a line, and no newline inside the value. The
+    # previous pattern scanned the whole class body, so assignments inside
+    # *method bodies* were indexed as if they were field declarations -- which
+    # is how `AbstractUpdateService.state` ended up holding a page of source.
     member_re = re.compile(
-        r"(?:public\s+|static\s+|readonly\s+)*(?P<name>[A-Za-z_$][\w$]*)"
-        r"(?:\s*:\s*[\w<>.\[\]|'\" ]+)?\s*=\s*'(?P<val>[^']+)'")
+        r"(?m)^[ \t]*(?:export\s+|declare\s+|public\s+|private\s+|protected\s+|static\s+"
+        r"|readonly\s+|abstract\s+|override\s+|const\s+|let\s+|var\s+)*"
+        r"(?P<name>[A-Za-z_$][\w$]*)"
+        r"(?:\s*:\s*[\w<>.\[\]|'\" ]+)?\s*=\s*'(?P<val>[^'\n]*)'\s*[;,]?[ \t]*(?://.*)?$")
 
     for subdir in SCAN_DIRS:
         for rel in tree.walk(subdir):
@@ -99,7 +124,7 @@ def _constant_index(tree: SourceTree) -> dict:
                 continue
             text = strip_block_comments(raw)
             for m in const_re.finditer(text):
-                consts.setdefault(m.group("name"), m.group("val"))
+                record(m.group("name"), m.group("val"), rel)
             for cm in container_re.finditer(text):
                 depth, body = 0, None
                 for j in range(cm.end() - 1, len(text)):
@@ -113,10 +138,74 @@ def _constant_index(tree: SourceTree) -> dict:
                 if not body:
                     continue
                 for mm in member_re.finditer(body):
-                    key = "%s.%s" % (cm.group("name"), mm.group("name"))
-                    members.setdefault(key, mm.group("val"))
-    consts.update(members)
-    return consts
+                    record("%s.%s" % (cm.group("name"), mm.group("name")),
+                           mm.group("val"), rel)
+    return defs
+
+
+_IMPORT_RE = re.compile(r"""^\s*import\s[^;'"]*from\s*['"](?P<spec>[^'"]+)['"]""", re.M)
+
+
+def _imported_files(tree: SourceTree, rel: str) -> set:
+    """Repo-relative paths of the in-tree modules ``rel`` imports.
+
+    Upstream imports in-tree modules by relative path and writes the specifier
+    with a ``.js`` extension, which maps back to the ``.ts`` source.
+    """
+    out = set()
+    base = os.path.dirname(rel)
+    for m in _IMPORT_RE.finditer(tree.text(rel)):
+        spec = m.group("spec")
+        if not spec.startswith("."):
+            continue
+        target = os.path.normpath(os.path.join(base, spec))
+        for cand in (re.sub(r"\.js$", ".ts", target), target + ".ts",
+                     os.path.join(target, "index.ts")):
+            if tree.exists(cand):
+                out.add(cand)
+                break
+    return out
+
+
+def _resolve_expr(tree: SourceTree, defs: dict, expr: str, use_file: str) -> tuple:
+    """Resolve a constant expression *as used in one file*, or say why it cannot be.
+
+    Returns ``(value, None)`` or ``(None, reason)``. Scoped narrowest-first, so
+    the answer cannot depend on which file the walk reached first:
+
+    1. a definition in the using file itself;
+    2. a definition in a module that file imports;
+    3. a tree-wide definition, but only when it is unambiguous.
+
+    Resolution is per *use site*, not per expression. ``GotoSymbolAction.ID``
+    means one thing in the editor and another in the workbench; pooling the use
+    sites of a name and unioning their scopes would make both ambiguous and
+    throw away two ids that are each perfectly well defined locally.
+
+    When several distinct values remain in scope the expression is reported as
+    unresolved rather than resolved to an arbitrary one. An unresolved id is
+    visible work that ``check.sh`` surfaces; a wrongly resolved id is a fake
+    certainty that lands in the policy table under a category derived from a
+    name it never had. The filter is default-deny, so an id missing from the
+    inventory costs compatibility, never containment -- which makes refusing to
+    guess the safe direction to fail in.
+    """
+    by_value = defs.get(expr)
+    if not by_value:
+        return None, "undefined"
+
+    scopes = ({use_file}, {use_file} | _imported_files(tree, use_file), None)
+    for scope in scopes:
+        if scope is None:
+            hits = sorted(by_value)
+        else:
+            hits = sorted(v for v, files in by_value.items()
+                          if scope.intersection(files))
+        if len(hits) == 1:
+            return hits[0], None
+        if len(hits) > 1:
+            return None, "ambiguous:%d-values" % len(hits)
+    return None, "undefined"
 
 
 def _scan_typescript(tree: SourceTree) -> tuple:
@@ -212,19 +301,23 @@ def build(tree: SourceTree) -> dict:
     constants = _constant_index(tree)
 
     # Resolve constant-valued ids so they get a verdict like any other command.
+    # Per use site: the same identifier in two files is two different
+    # constants, and each may resolve even when the name is ambiguous overall.
     still_unresolved = {}
-    for expr, files in unresolved.items():
-        value = constants.get(expr)
-        if value is None:
-            still_unresolved[expr] = files
-            continue
-        entry = ts_found.setdefault(value, {"id": value, "sources": [], "files": []})
-        tag = "constant:%s" % expr
-        if tag not in entry["sources"]:
-            entry["sources"].append(tag)
-        for f in files:
-            if f not in entry["files"]:
-                entry["files"].append(f)
+    for expr in sorted(unresolved):
+        for rel in sorted(set(unresolved[expr])):
+            value, reason = _resolve_expr(tree, constants, expr, rel)
+            if value is None:
+                prev = still_unresolved.get(expr)
+                if prev is None or reason.startswith("ambiguous"):
+                    still_unresolved[expr] = reason
+                continue
+            entry = ts_found.setdefault(value, {"id": value, "sources": [], "files": []})
+            tag = "constant:%s" % expr
+            if tag not in entry["sources"]:
+                entry["sources"].append(tag)
+            if rel not in entry["files"]:
+                entry["files"].append(rel)
 
     merged = dict(ts_found)
     for cid, entry in manifest_found.items():
@@ -261,6 +354,10 @@ def build(tree: SourceTree) -> dict:
         "by_category": dict(sorted(by_category.items())),
         "unresolved_id_expressions": sorted(still_unresolved.keys()),
         "unresolved_count": len(still_unresolved),
+        # Why each one stayed unresolved. "ambiguous:*" means the generator
+        # found several distinct values in scope and declined to pick one;
+        # those are the entries worth reviewing by hand.
+        "unresolved_reasons": dict(sorted(still_unresolved.items())),
         "resolved_from_constants": sum(
             1 for c in commands if any(s.startswith("constant:") for s in c["sources"])),
     }

@@ -46,11 +46,17 @@ class SourceTree:
 
         Test files and declaration files are skipped: they are not part of the
         shipped attack surface.
+
+        Both ``dirnames`` and ``filenames`` are sorted. ``os.walk`` otherwise
+        yields directories in filesystem order, which differs between macOS
+        (APFS) and CI (ext4), so the generator would not be reproducible.
+        ``dirnames`` is sorted *in place* because ``os.walk`` reads the same
+        list back to decide what to descend into.
         """
         base = self.path(subdir)
         for dirpath, dirnames, filenames in os.walk(base):
-            dirnames[:] = [d for d in dirnames if d not in (
-                "node_modules", ".git", "test", "__snapshots__")]
+            dirnames[:] = sorted(d for d in dirnames if d not in (
+                "node_modules", ".git", "test", "__snapshots__"))
             for name in sorted(filenames):
                 if not name.endswith(suffixes):
                     continue
