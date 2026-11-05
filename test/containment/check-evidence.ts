@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
 import { beaconPort, checkUserDataDir, editorLaunchCommand, lockRun } from '../harness.ts';
-import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
+import { brokerProxy, checkEvidence, readEvidence, report, type Check } from './assert.ts';
 import { materialiseFixture, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
 const [mode, userDataArg, driverArg] = process.argv.slice(2);
@@ -163,7 +163,7 @@ if (mode === 'prepare') {
 } else {
 	const checks: Check[] = [];
 	for (const vector of ['task', 'fsmonitor', 'rogue-extension']) {
-		checks.push(...checkEvidence(readEvidence(ws, vector), vector, { marker, proxy: driver === 'oci' ? 'broker' : 'blackhole' }));
+		checks.push(...checkEvidence(readEvidence(ws, vector), vector, { marker, proxy: brokerProxy(driver) }));
 	}
 	const hostFile = path.join(ws, '.seclab-evidence', 'rogue-extension-host.json');
 	const host = fs.existsSync(hostFile) ? JSON.parse(fs.readFileSync(hostFile, 'utf8')) : undefined;

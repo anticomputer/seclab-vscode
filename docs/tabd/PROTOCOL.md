@@ -145,16 +145,19 @@ must ignore unknown notification methods and unknown fields.
   `host-observed` (OCI); only supervisor-produced events are `trusted`.
 - Under sbx the REH relay (`tab.connect`) runs as `990:990` (`seclab-relay`),
   not as the tab user, so the tab can't ptrace it.
-- **Broker (OCI: the default, `seclab-tabd --broker required`;**
-  [EDR](../edr/20261105-oci-tab-broker.md)). `tab.ensureRunning` brings the tab's broker
-  up before the REH starts, and fails with `-32013` if any step fails or takes longer
-  than 60 s:
+- **Broker (the default for both drivers, `seclab-tabd --broker required`;**
+  EDRs [OCI](../edr/20261105-oci-tab-broker.md), [sbx](../edr/20261105-sbx-tab-broker.md)).
+  `tab.ensureRunning` brings the tab's broker up before the REH starts, and fails with
+  `-32013` if any step fails or takes longer than 60 s:
   1. `broker.hello` is checked: protocol, tab, policy schema revision.
   2. A fresh proxy password.
   3. The policy: the user's `broker-policy.json` from the state directory, else deny-all.
      Never from the workspace.
   4. The CA.
 
-  The workspace gets the proxy URL and CA through a root-owned tmpfs. The password is
-  never in argv, audit records or notifications. Stop and quarantine send
-  `broker.shutdown`.
+  The tab gets the proxy URL and CA through a root-owned directory, `/run/seclab-broker`
+  (OCI: a tmpfs; sbx: in the VM). The password is never in argv, audit records or
+  notifications. Stop and quarantine send `broker.shutdown`.
+  Under sbx the broker is a container on Docker Desktop, published on `127.0.0.1:<P>`; the
+  fence's only allow is `localhost:<P>`, read live at every check, and the tab's proxy is
+  `host.docker.internal:<P>`.

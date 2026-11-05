@@ -11,7 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { beaconPort, lockRun, NGINX_IMAGE, worktreeId } from '../harness.ts';
-import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
+import { brokerProxy, checkEvidence, readEvidence, report, type Check } from './assert.ts';
 import { armCampaignTab, disarmCampaign, runCampaign, setupCampaign } from './campaign.ts';
 import { exitedOrTimeout, materialiseFixture, teardownGate, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
 
@@ -150,7 +150,7 @@ const readInTab = (p: string): string | undefined => {
 for (const [vector, argv] of vectors) {
 	console.log(`trigger ${vector}`);
 	inTab(argv);
-	checks.push(...checkEvidence(readEvidence(wsA, vector, readInTab), vector, { marker, expectHostname, proxy: driver === 'oci' ? 'broker' : 'blackhole' }));
+	checks.push(...checkEvidence(readEvidence(wsA, vector, readInTab), vector, { marker, expectHostname, proxy: brokerProxy(driver) }));
 }
 if (driver === 'sbx') {
 	// Write-back gate 2b, end to end through tabd: an ordinary edit syncs to the host, a
