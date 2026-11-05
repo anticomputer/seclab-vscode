@@ -233,8 +233,10 @@ fetch_macos() {
 			|| { echo "provenance verification failed for $f; not extracting" >&2; exit 1; }
 	done
 	echo "provenance verified: $repo build-macos.yml @ main $head_sha"
-	# shellcheck source=/dev/null
-	. "$ROOT/upstream.lock"
+	# Parse, don't source: `.` would fire the RETURN trap above and delete the staging dir.
+	local UPSTREAM_SHA
+	UPSTREAM_SHA="$(sed -n 's/^UPSTREAM_SHA=\([0-9a-f]\{40\}\)$/\1/p' "$ROOT/upstream.lock")"
+	[[ "$UPSTREAM_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "upstream.lock: no valid UPSTREAM_SHA" >&2; exit 1; }
 	jq -e --arg u "$UPSTREAM_SHA" --arg h "$head_sha" '.upstreamSha == $u and .repoSha == $h' "$stage/dl/build-info.json" >/dev/null \
 		|| { echo "build-info.json does not match upstream.lock / run head SHA" >&2; exit 1; }
 	(cd "$stage/dl" && shasum -a 256 -c SHA256SUMS >/dev/null) || { echo "artifact changed after verification" >&2; exit 1; }
