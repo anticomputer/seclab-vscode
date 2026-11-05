@@ -395,3 +395,13 @@ def test_r7_derived_children_never_outlive_their_parent():
         else:
             s.provide("imp", "another-canary-value-456", None)
         assert s.get("imp.copilot") is None
+    # An identical re-import is not a no-op: the child goes too. Only the controller can
+    # re-import; a tab cannot reach the control channel.
+    s.import_credential("imp", CANARY, None, list(bind), [], None, {"kind": "host"}, parse_derive([DERIVE]))
+    s.derive_trusted(s.get("imp"), rule, "minted-copilot-value-0004")
+    s.import_credential("imp", CANARY, None, list(bind), [], None, {"kind": "host"}, parse_derive([DERIVE]))
+    assert s.get("imp.copilot") is None and not s.find_real(b"minted-copilot-value-0004")
+    # A just-in-time provide of the same value (a refresh of the same secret) keeps it.
+    s.derive_trusted(s.get("imp"), rule, "minted-copilot-value-0005")
+    s.provide("imp", CANARY, None)
+    assert s.get("imp.copilot") is not None

@@ -119,6 +119,12 @@ review round 7). It is dropped when:
   account);
 - the parent's rule is withdrawn by a `policy.load`.
 
+Credential lifetime is a broker property only. The RPC filter hands out a
+sentinel and never revisits it, so withdrawal, re-import and revocation are
+enforced here and nowhere else. An identical re-import also drops the child.
+Only a `credential.provide` of the same value, a just-in-time refresh, keeps
+it.
+
 **The amended rule** (shared with the RPC filter's `$getSession` wording): *a
 token minted for the tab reaches it only as a sentinel, bound to no more than
 its parent's bindings, or to the bindings of a derivation rule the controller
