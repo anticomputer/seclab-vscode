@@ -47,7 +47,8 @@ pull request, with no path filter:
    `--file PATH...` reports targets for patch authors.
 
 `patch-build` joins `unit`, `lint` and `docs` as a required status check in the `main`
-ruleset. AGENTS.md has the hard rule: a patch is not done until the patched tree compiles in
+ruleset. It was added on 2026-11-05, after its first green run (`ec914ea`, the SHA `main` was
+fast-forwarded to); the ruleset's required checks are now `unit,lint,docs,patch-build`. AGENTS.md has the hard rule: a patch is not done until the patched tree compiles in
 CI and a runtime probe shows the patched code executing in the shipped build.
 
 ## Consequences

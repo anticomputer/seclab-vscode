@@ -110,8 +110,8 @@ RPC-lockdown session adds. Keep them consistent with this file.
 - **How a change reaches `main`.** A ruleset enforces this
   ([EDR](docs/edr/20261104-ci-hardening.md)):
   1. Push your branch.
-  2. Wait for the required checks `unit` (ci-unit), `lint` (workflow-lint) and
-     `docs` (docs-check) to go green on that exact SHA. If your change touches
+  2. Wait for the required checks `unit` (ci-unit), `lint` (workflow-lint),
+     `docs` (docs-check) and `patch-build` to go green on that exact SHA. If your change touches
      code that ci-linux covers, wait for ci-linux `oci` too.
   3. Fast-forward: `git push origin <sha>:refs/heads/main`.
   
