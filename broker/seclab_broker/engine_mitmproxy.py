@@ -573,7 +573,10 @@ class SeclabAddon:
             return self._block_response(flow, "protocol switch on a credentialed request without "
                                               "a websocket: true binding")
         textual = _textual(resp.headers)
-        if flow.metadata.get("seclab.backstop_exception") is not None:
+        derive_route = bool(self._derivations(flow, view)) and not 200 <= resp.status_code < 300
+        if flow.metadata.get("seclab.backstop_exception") is not None or derive_route:
+            # Exception routes always, and derive routes when not 2xx (so "derived or blocked"
+            # holds whatever the status): no credential-named field, no token-shaped value.
             why, detail = self._exception_response_check(resp)
             if why:
                 self.b.audit("credential.backstop_exception_blocked", reason=why,
@@ -637,8 +640,9 @@ class SeclabAddon:
         object with no credential-named key and no token-shaped value, in the body or headers.
         Anything else is blocked and surfaced as a finding, until its fields are allowlisted."""
         for name, value in resp.headers.fields:
-            if find_minted(value.decode("latin-1")):
-                return "token-shaped value in a response header", name.decode("latin-1").lower()
+            hname = name.decode("latin-1").lower()
+            if CREDENTIAL_KEY.search(hname) or find_minted(value.decode("latin-1")):
+                return "credential-named header or token-shaped value", hname
         try:
             doc = parse_strict(resp.get_content(strict=True) or b"")
         except (ValueError, StrictJSONError):

@@ -398,7 +398,7 @@ class DeriveRule:
 
     def matches(self, req: RequestView) -> bool:
         return (req.scheme == "https" and req.host == self.host and req.path == self.path
-                and req.method == self.method)
+                and req.method == self.method and not req.query)
 
     @classmethod
     def from_json(cls, obj: dict) -> "DeriveRule":
