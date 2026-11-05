@@ -94,3 +94,5 @@ jobs:
         run: ./seclab test canary oci
       - name: Pre-mount secret scan (OCI)
         run: ./seclab test secrets oci
+      - name: Tab observability (OCI; Falco, signature-verified by ./seclab image oci)
+        run: ./seclab test obs oci
