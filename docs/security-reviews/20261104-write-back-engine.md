@@ -133,3 +133,17 @@ MM-1 to MM-4 verified closed. **Nothing medium or higher remains.**
 | NN-1 | Low (design) | Delete brake | A patient tab stays under the window; and it can overwrite ordinary files anyway. | Accepted, documented | ADR: the brake guards against accidents; the gate's protection is that nothing code-running is written unasked. |
 | NN-2 | Low | Feed | A child whose lstat failed was omitted silently. | Fixed | `err` record (no deletions or forgetting from that listing). |
 | NN-3 | Low | Stop | A tick abandoned by the 15 s stop deadline could save stale state later. | Fixed | Engines are closed on stop/discard; a closed engine never saves or applies. |
+
+## Increment 3: review prompt (432e08b and fixes)
+Threat: the tab controls every path, byte, link target and timing shown, and wants an approval of
+something other than what the user saw.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| OO-1 | **High** | Binding | `content()` returned the held signature next to a fresh read, so a tab could show harmless bytes to the diff and the held payload to the decision. | Fixed | `content()` returns the signature of the bytes it read and refuses unless it equals the held one; `decide` binds to it and re-reads. Regression (swap during review). |
+| OO-2 | **Medium** | Display | Truncated, non-UTF-8 or very long-line content could be approved unseen. | Fixed | Non-UTF-8 shown escaped (`\xNN`), lines hard-wrapped with a marker; when the tab's version can't be shown whole, the modal says so and offers only "Approve without seeing all of it" (no Always). |
+| OO-3 | Low | Paths | Long paths hid their tail. | Fixed | Middle elision keeps the last two segments. |
+| OO-4 | Low | Modal | Enter approved. | Fixed | Reject is the first (default) button. |
+| OO-5 | Low | Language features | Virtual docs named after the tab's file ran language features on tab content. | Fixed | Neutral `review.txt` names (plain text). |
+| OO-6 | Low | confirmDeletes | Release not bound to what was shown. | Fixed | Modal shows count and sample; tabd refuses unless the held count matches. Toasts rate-limited (one a minute). |
+| note | Info | RPC filter (M4) | Until the filter enforces, a rogue extension could invoke `seclab.reviewChanges`/`seclab.confirmDeletes` to pop dialogs (a click is still needed). | Tracked | `seclab.*` must stay outside the filter's allowed set (raised with the RPC session). |

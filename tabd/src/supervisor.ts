@@ -268,7 +268,10 @@ export class Supervisor {
 				return this.writebackCall(this.record(p.tabId), wb => wb.decide(String(p.tabId), wbPath(p.path), d, p.sig as string));
 			}
 			case 'tab.writeback.confirmDeletes': return this.writebackCall(this.record(p.tabId), async wb => {
-				wb.confirmDeletes(String(p.tabId));
+				if (!Number.isInteger(p.count) || (p.count as number) < 0) {
+					throw new RpcError(-32602, 'count (the number of held deletions shown) is required');
+				}
+				wb.confirmDeletes(String(p.tabId), p.count as number);
 				return {};
 			});
 			case 'stream.end': {

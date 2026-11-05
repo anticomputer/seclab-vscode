@@ -105,10 +105,16 @@ export class WriteBackManager {
 		const cap = WRITEBACK_POLICY.caps.maxDiffBytes;
 		const host = t.engine.hostContent(rel, cap);
 		const c = await readEntry(t.reader, rel, WRITEBACK_POLICY.caps.maxFileBytes);
+		// The displayed bytes must be the held bytes: the signature returned is that of this
+		// read, and it must equal the held one, or a tab could show one version to the diff and
+		// another to the decision (review OO-1). decide() binds to it and re-reads again.
+		if (!c || t.engine.sigOf(c) !== p.sig) {
+			throw new Error('the tab changed this entry since it was held; it will be listed again for review');
+		}
 		return {
-			path: rel, kind: p.kind, reasons: p.reasons, sig: p.sig,
+			path: rel, kind: p.kind, reasons: p.reasons, sig: t.engine.sigOf(c),
 			host: { exists: host.exists, kind: host.kind, size: host.size, b64: host.content?.toString('base64'), truncated: (host.size ?? 0) > cap },
-			tab: c ? { kind: c.kind, size: c.content?.length, b64: c.content?.subarray(0, cap).toString('base64'), truncated: (c.content?.length ?? 0) > cap, target: c.target, mode: c.mode } : { kind: 'absent' },
+			tab: { kind: c.kind, size: c.content?.length, b64: c.content?.subarray(0, cap).toString('base64'), truncated: (c.content?.length ?? 0) > cap, target: c.target, mode: c.mode },
 		};
 	}
 
@@ -156,10 +162,14 @@ export class WriteBackManager {
 		return { result };
 	}
 
-	/** The user confirmed held mass deletions: release the sticky brake (they're reviewed individually). */
-	confirmDeletes(tabId: string): void {
-		this.active(tabId).engine.clearDeleteHold();
-		this.o.emit?.(tabId, { class: 'workspace.gate', priority: 'informational', summary: 'mass-deletion hold released by the user', detail: { decision: 'confirm-deletes', decidedBy: 'user' } });
+	/** The user confirmed held mass deletions: release the sticky brake. Bound to the count the user saw (OO-6). */
+	confirmDeletes(tabId: string, shownCount: number): void {
+		const t = this.active(tabId);
+		if (t.engine.heldMassDeletions() !== shownCount) {
+			throw new Error('the held deletions changed since they were shown; review again');
+		}
+		t.engine.clearDeleteHold();
+		this.o.emit?.(tabId, { class: 'workspace.gate', priority: 'informational', summary: `mass-deletion hold released by the user (${shownCount} held)`, detail: { decision: 'confirm-deletes', decidedBy: 'user' } });
 	}
 
 	private active(tabId: string): TabState {
