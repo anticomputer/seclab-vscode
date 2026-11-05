@@ -13,6 +13,9 @@ SRC=/work/vscode
 
 /repo/build/prepare.sh "$SRC"
 cd "$SRC"
+# `./seclab build` runs this once with PHASE=prepare locally, to export the lockfiles for the
+# CFS fetch (EDR cfs-local-builds), then again to build.
+[[ "${PHASE:-}" == prepare ]] && exit 0
 
 want_node="$(cat .nvmrc)"
 have_node="$(node --version | sed s/^v//)"
@@ -23,8 +26,28 @@ export VSCODE_SKIP_NODE_VERSION_CHECK=1
 # npm's content-addressed cache on the volume (EDR local-install-cache): entries are checked
 # against the lockfile's integrity on extraction, and a reinstall needs fewer registry fetches.
 export npm_config_cache=/work/.npm-cache
+# Local builds (EDR cfs-local-builds): the cache was filled through GitHub CFS by a separate,
+# token-holding fetch with no install scripts. Here, with no token, npm installs strictly from
+# that cache: offline, with the same CFS registry rewrite so cache keys match, every tarball
+# checked against the lockfile's integrity. Nested installs from upstream's postinstall inherit
+# all of this. Registry signatures can't be audited through CFS, so the stamp says so.
+audit=/repo/build/npm-audit-signatures.sh
+stamp_kind=sig1
+if [[ "${SECLAB_NPM_OFFLINE:-}" == 1 ]]; then
+	export npm_config_offline=true npm_config_replace_registry_host=npmjs \
+		npm_config_registry=https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/
+	audit=true
+	stamp_kind=cfs1
+	# Lockfiles whose upstream entries lack `integrity` get it filled (only it; checked by
+	# lock-fill-check.mjs in the fetch) so the offline install finds them by hash. This tree is
+	# reset to pristine upstream by prepare.sh on every build; nothing is committed.
+	if [[ -d /work/.npm-locks-filled ]]; then
+		cp -R /work/.npm-locks-filled/. "$SRC/"
+	fi
+fi
 # Reinstall deps only when the lockfiles change (stamp keyed by their hash). The `sig1-` prefix
-# makes trees installed before the signature check get audited once (TT-6).
+# makes trees installed before the signature check get audited once (TT-6); `cfs1-` marks a
+# local install verified by lockfile integrity only.
 # A failed install must not destroy a working one (EDR local-install-cache): every existing
 # node_modules is kept aside in /work/.nm-prev (same volume, outside the tree fetch-upstream
 # cleans) and moved back if the install, the ripgrep check or the signature audit fails.
@@ -35,7 +58,7 @@ if [[ -d "$KEEP" ]]; then
 	echo "build: restoring the install kept aside by an interrupted run" >&2
 	nm_restore "$SRC" "$KEEP"
 fi
-stamp="sig1-$(cat package-lock.json build/package-lock.json remote/package-lock.json 2>/dev/null | sha256sum | cut -c1-16)"
+stamp="${stamp_kind}-$(cat package-lock.json build/package-lock.json remote/package-lock.json 2>/dev/null | sha256sum | cut -c1-16)"
 if [[ ! -f node_modules/.seclab-stamp ]] || [[ "$(cat node_modules/.seclab-stamp)" != "$stamp" ]]; then
 	nm_keep_aside "$SRC" "$KEEP"
 	# Pinned prebuilt ripgrep in the postinstall's cache (a fresh private TMPDIR): no GitHub API
@@ -44,7 +67,7 @@ if [[ ! -f node_modules/.seclab-stamp ]] || [[ "$(cat node_modules/.seclab-stamp
 	# Registry signatures over every installed project; the stamp is written only after it passes.
 	if node /repo/build/seed-ripgrep.mjs "$SRC" && npm ci \
 		&& node /repo/build/seed-ripgrep.mjs --verify-installed "$SRC" \
-		&& /repo/build/npm-audit-signatures.sh "$SRC"; then
+		&& "$audit" "$SRC"; then
 		echo "$stamp" > node_modules/.seclab-stamp
 		rm -rf "$KEEP"
 	else
