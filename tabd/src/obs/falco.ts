@@ -17,7 +17,7 @@ import type { ObsHub } from './hub.ts';
 import { LineSplitter } from './sbx-collector.ts';
 import { summarizeArgv } from './strace.ts';
 
-export const FALCO_IMAGE = 'falcosecurity/falco@sha256:1562a643953f938e02f47319b5214d93a235f11f646d60e9b8a516fd5a64698e'; // 0.45.2
+export const FALCO_IMAGE = 'falcosecurity/falco:0.45.2@sha256:1562a643953f938e02f47319b5214d93a235f11f646d60e9b8a516fd5a64698e';
 const SOURCE = { source: 'falco', integrity: 'host-observed' } as const;
 const CID_RE = /^[0-9a-f]{64}$/;
 const SHORT_RE = /^[0-9a-f]{12}$/;

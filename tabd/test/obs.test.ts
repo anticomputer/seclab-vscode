@@ -593,8 +593,8 @@ test('obs provenance: tabd runs exactly the Falco digest whose signature verify-
 	const { FALCO_IMAGE } = await import('../src/obs/falco.ts');
 	const lock = fs.readFileSync(path.resolve(import.meta.dirname, '../../sandbox/oci/falco.lock'), 'utf8');
 	const image = /^image (\S+)$/m.exec(lock)?.[1];
-	assert.match(FALCO_IMAGE, /^falcosecurity\/falco@sha256:[0-9a-f]{64}( |$)/);
-	assert.equal(image, `docker.io/${FALCO_IMAGE.split(' ')[0]}`);
+	assert.match(FALCO_IMAGE, /^falcosecurity\/falco:[0-9.]+@sha256:[0-9a-f]{64}$/);
+	assert.equal(image, `docker.io/${FALCO_IMAGE}`);
 	assert.match(lock, /^identity https:\/\/github\.com\/falcosecurity\/falco\/\.github\/workflows\/reusable_publish_docker\.yaml@refs\/tags\/0\.45\.2$/m);
 });
 
