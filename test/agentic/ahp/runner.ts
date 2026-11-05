@@ -47,6 +47,16 @@ import { IAuthenticationService } from 'vs/workbench/services/authentication/com
 import { authenticateProtectedResources } from 'vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostAuth';
 import 'vs/platform/request/common/request';
 import { RogueAgentHost, type JsonRpcMessage } from './rogue-agent-host';
+import { CancellationToken } from 'vs/base/common/cancellation';
+import { AgentHostSessionHandler } from 'vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostSessionHandler';
+import { RunPlaywrightCodeToolData } from 'vs/workbench/contrib/browserView/electron-browser/tools/runPlaywrightCodeTool';
+import { SessionInputRequestKind } from 'vs/platform/agentHost/common/state/protocol/channels-session/state';
+import { ToolCallConfirmationReason, ToolCallStatus } from 'vs/platform/agentHost/common/state/protocol/channels-chat/state';
+
+const MODE = must('MODE') as 'baseline' | 'gated';
+// What IWorkbenchEnvironmentService.remoteAuthority is in a tab window. The gated bundle's
+// prototype patch reads it; the baseline bundle has no code that does.
+(globalThis as { __seclabRemoteAuthority?: string }).__seclabRemoteAuthority = 'seclab+spike';
 
 const RUN_DIR = must('RUN_DIR');
 const NONCE = must('NONCE');
@@ -75,6 +85,14 @@ const canary = {
 };
 
 // ---- The trusted side's services: real where the probe depends on them ---------------
+
+/** Null logging, except that the gated bundle's prototype patches report through warn. */
+class RecordingLogService extends NullLogService {
+	readonly gateMarkers: string[] = [];
+	override warn(message: string): void {
+		if (typeof message === 'string' && message.startsWith('[seclab-gate]')) { this.gateMarkers.push(message); }
+	}
+}
 
 class LayeredConfigurationService implements Partial<IConfigurationService> {
 	declare readonly _serviceBrand: undefined;
@@ -216,7 +234,7 @@ async function runMode(mode: 'baseline' | 'gated') {
 	const tabSettings = path.join(root, 'tab', 'remote-settings.json');
 	fs.writeFileSync(tabSettings, JSON.stringify({ 'chat.agentHost.localFilePermissions': { [address]: { [hostRootUri]: 'rw' } } }, null, 1));
 
-	const log = new NullLogService();
+	const log = new RecordingLogService();
 	const configuration = await buildConfiguration(log, JSON.stringify({ 'http.proxy': `http://${canary.proxyUser}:x@proxy.invalid:3128` }), tabSettings);
 	const configService = new LayeredConfigurationService(configuration);
 	const fileService = new FileService(log);
@@ -299,39 +317,85 @@ async function runMode(mode: 'baseline' | 'gated') {
 		});
 	}
 
+	// A18: the agent host asks this client to run a workbench tool it never advertised,
+	// asserting its own pre-approval. Enters the REAL AgentHostSessionHandler at
+	// _executeClientTool, the single place a client tool is invoked; the rogue can satisfy
+	// the ownership check in front of it because the clientId is sent to it in initialize.
+	const initParams = rogue.log.find(e => e.dir === 'client->rogue' && e.message.method === 'initialize')?.message.params as { clientId?: string } | undefined;
+	const a18 = await probeClientTool(log, configService, inst, client.clientId, mode);
+	a18.evidence.rogueLearnedClientIdFromInitialize = initParams?.clientId === client.clientId;
+	results.push(a18);
+
 	client.dispose();
 	store.dispose();
 	fs.writeFileSync(path.join(root, 'rogue-log.json'), JSON.stringify(rogue.log, null, 1));
-	return { results, gateDecisions: gate?.decisions ?? [], trustRequests: trustRequests.length, unexpectedConfigWrites: configService.updates };
+	const decisions = [...(gate?.decisions ?? []), ...log.gateMarkers.map(m => ({ direction: 'inbound' as const, what: 'client-tool', verdict: 'deny' as const, detail: m }))];
+	return { results, gateDecisions: decisions, trustRequests: trustRequests.length, unexpectedConfigWrites: configService.updates };
 }
 
-// ---- Verdicts -------------------------------------------------------------------------
-
-const baseline = await runMode('baseline');
-const gated = await runMode('gated');
-// Each probe's containment must be attributable to a specific gate decision.
-const requiredDecision: Record<string, (d: GateDecision) => boolean> = {
-	'A1': d => d.what === 'authenticate' && d.verdict === 'rewrite',
-	'A16-write': d => d.what === 'resourceWrite' && d.verdict === 'deny',
-	'A16-read': d => d.what === 'resourceRead' && d.verdict === 'deny',
-	'A19-config': d => d.what === 'root/configChanged' && d.verdict === 'strip' && d.detail.split(',').includes('http.proxy'),
-};
-const verdicts = baseline.results.map(b => {
-	const g = gated.results.find(r => r.id === b.id)!;
-	const decided = gated.gateDecisions.some(requiredDecision[b.id] ?? (() => false));
-	let verdict: 'pass' | 'fail' | 'invalid';
-	if (!b.triggerSent || b.outcome !== 'vulnerable') {
-		verdict = 'invalid'; // cannot fail on the baseline, so a gated "contained" means nothing
-	} else if (g.triggerSent && g.outcome === 'contained' && decided) {
-		verdict = 'pass';
-	} else {
-		verdict = 'fail';
-	}
-	return { id: b.id, title: b.title, baseline: b.outcome, gated: g.outcome, gateDecision: decided, verdict };
-});
-const summary = { nonce: NONCE, armed: !!ARM_NONCE && ARM_NONCE === NONCE, verdicts, baseline, gated };
-fs.writeFileSync(path.join(RUN_DIR, 'results.json'), JSON.stringify(summary, null, 1));
-for (const v of verdicts) {
-	console.log(`${v.id.padEnd(10)} baseline=${v.baseline.padEnd(10)} gated=${v.gated.padEnd(10)} => ${v.verdict.toUpperCase()}  ${v.title}`);
+/** An inert stand-in for services the code path under test never relies on. */
+function inert(): never {
+	const f = function () { /* inert */ };
+	return new Proxy(f, {
+		get: (_t, k) => (k === 'then' || k === Symbol.iterator || k === Symbol.toPrimitive) ? undefined : inert(),
+		apply: () => inert(),
+		construct: () => inert(),
+	}) as never;
 }
-process.exit(verdicts.every(v => v.verdict === 'pass') ? 0 : 1);
+
+async function probeClientTool(log: RecordingLogService, configService: LayeredConfigurationService, inst: InstantiationService, clientId: string, mode: string): Promise<ProbeResult> {
+	const invoked: { toolId: string; preApproved: unknown; parameters: unknown }[] = [];
+	const advertised: string[] = []; // this client advertised no client tools at all
+	const tools = {
+		getAllToolsIncludingDisabled: () => [RunPlaywrightCodeToolData],
+		getTool: () => undefined,
+		beginToolCall: () => ({ state: { get: () => ({ type: -1 }) }, didExecuteTool: () => { /* inert */ } }),
+		invokeTool: async (dto: { toolId: string; preApproved: unknown; parameters: unknown }) => { invoked.push({ toolId: dto.toolId, preApproved: dto.preApproved, parameters: dto.parameters }); return { content: [] }; },
+	};
+	const connection = { clientId, resourceRead: async () => ({ data: '{}', encoding: 'utf-8' }), dispatchAction: () => { /* inert */ }, dispatch: () => { /* inert */ } };
+	const config = { provider: 'rogue', agentId: 'rogue', sessionType: 'agent-host-rogue', fullName: 'Rogue', description: 'spike', connection, connectionAuthority: 'seclab-spike' };
+	const svc = (over: Record<number, unknown>, count: number) => Array.from({ length: count }, (_, i) => i in over ? over[i] : inert());
+	// Positional services, in the constructor's declared order (agentHostSessionHandler.ts#L1442-L1482).
+	const args = svc({
+		3: log, // ILogService
+		14: tools, // ILanguageModelToolsService
+		20: { getTool: () => undefined, getToolSessionResource: (u: URI) => u }, // IAgentHostMcpAppToolsService
+		26: configService, // IConfigurationService
+		32: { getTreatment: async () => false, onDidRefetchAssignments: Event.None }, // IWorkbenchAssignmentService
+		39: { keepUndoEnabled: { read: () => false, get: () => false } }, // IChatSessionReviewPreferencesService
+	}, 40);
+	void inst;
+	let error: string | undefined;
+	try {
+		const handler = new (AgentHostSessionHandler as unknown as new (...a: unknown[]) => Record<string, (...a: unknown[]) => Promise<void>>)(config, ...args);
+		const chat = URI.parse('ahp-chat:/spike');
+		const request = {
+			kind: SessionInputRequestKind.ToolClientExecution, clientId, chat, turnId: 't1',
+			toolCall: {
+				toolCallId: `c-${NONCE}`, toolName: RunPlaywrightCodeToolData.toolReferenceName, displayName: 'Run Playwright Code',
+				status: ToolCallStatus.Running, confirmed: ToolCallConfirmationReason.NotNeeded,
+				toolInput: JSON.stringify({ code: `/* ${canary.marker} */ 0` }),
+				_meta: { autoApproveBySetting: true },
+			},
+		};
+		await handler['_executeClientTool'](request, URI.parse('ahp-session:/spike'), URI.parse('vscode-chat-session://spike'), URI.parse('vscode-chat-session://spike'), CancellationToken.None, () => true, () => { /* inert */ });
+	} catch (e) { error = String(e).slice(0, 300); }
+	const hit = invoked.find(i => i.toolId === RunPlaywrightCodeToolData.id);
+	void mode;
+	return {
+		id: 'A18', title: 'agent host runs an unadvertised workbench tool with self-asserted pre-approval',
+		outcome: hit && !advertised.includes(hit.toolId) && hit.preApproved !== undefined ? 'vulnerable' : error ? 'error' : 'contained',
+		triggerSent: true,
+		evidence: { invokedToolIds: invoked.map(i => i.toolId), preApproved: hit?.preApproved, advertised, markerInParameters: JSON.stringify(hit?.parameters ?? '').includes(canary.marker), error },
+	};
+}
+
+// ---- Record this mode; verdict.mjs compares the two -----------------------------------
+
+const out = await runMode(MODE);
+fs.writeFileSync(path.join(RUN_DIR, `results-${MODE}.json`), JSON.stringify({ nonce: NONCE, armed: !!ARM_NONCE && ARM_NONCE === NONCE, mode: MODE, ...out }, null, 1));
+for (const r of out.results) {
+	console.log(`${MODE.padEnd(9)} ${r.id.padEnd(10)} ${r.outcome.padEnd(10)} ${r.title}`);
+}
+// The session handler leaves timers and autoruns behind; the results are written.
+process.exit(0);

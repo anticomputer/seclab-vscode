@@ -30,7 +30,7 @@ docker run --rm --network none -u "$(id -u):$(id -g)" \
 	-v "$ROOT/test/agentic/ahp":/harness:ro \
 	-v "$RUN":/run \
 	-e RUN_DIR=/run -e NONCE="$NONCE" -e ARM_NONCE="$ARM" \
-	"$IMG" sh -c 'node /harness/bundle.mjs && node /run/bundle.mjs' || status=$?
-rm -f "$RUN/bundle.mjs"
+	"$IMG" sh -c 'MODE=baseline node /harness/bundle.mjs && MODE=gated node /harness/bundle.mjs && MODE=baseline node /run/bundle-baseline.mjs && MODE=gated node /run/bundle-gated.mjs && node /harness/verdict.mjs' || status=$?
+rm -f "$RUN"/bundle-*.mjs
 echo "run: $RUN (exit $status)"
 exit $status
