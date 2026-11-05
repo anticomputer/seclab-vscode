@@ -44,7 +44,7 @@ index 1984c46..b0fa5a8 100644
  		}
  
 diff --git a/src/vs/platform/native/electron-main/nativeHostMainService.ts b/src/vs/platform/native/electron-main/nativeHostMainService.ts
-index c22bfe8..127aa68 100644
+index c22bfe8..ce49674 100644
 --- a/src/vs/platform/native/electron-main/nativeHostMainService.ts
 +++ b/src/vs/platform/native/electron-main/nativeHostMainService.ts
 @@ -35,7 +35,7 @@ import { IPartsSplash } from '../../theme/common/themeService.js';
@@ -66,6 +66,58 @@ index c22bfe8..127aa68 100644
  		const window = this.windowById(options?.targetWindowId, windowId);
  		window?.win?.moveTop();
  	}
+@@ -439,11 +442,17 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
+ 	}
+ 
+ 	async toggleWindowAlwaysOnTop(windowId: number | undefined, options?: INativeHostOptions): Promise<void> {
++		if (backgroundWindows) {
++			return; // seclab: an always-on-top window would cover the user's work
++		}
+ 		const window = this.windowById(options?.targetWindowId, windowId);
+ 		window?.win?.setAlwaysOnTop(!window.win.isAlwaysOnTop());
+ 	}
+ 
+ 	async setWindowAlwaysOnTop(windowId: number | undefined, alwaysOnTop: boolean, options?: INativeHostOptions): Promise<void> {
++		if (backgroundWindows) {
++			return;
++		}
+ 		const window = this.windowById(options?.targetWindowId, windowId);
+ 		window?.win?.setAlwaysOnTop(alwaysOnTop);
+ 	}
+@@ -1315,7 +1324,7 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
+ 		window.setMenuBarVisibility(false);
+ 		window.loadURL(url);
+ 
+-		window.once('ready-to-show', () => window.show());
++		window.once('ready-to-show', () => backgroundWindows ? window.showInactive() : window.show());
+ 
+ 		return window;
+ 	}
+@@ -1333,7 +1342,7 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
+ 			this.gpuInfoWindowId = gpuInfoWindow.id;
+ 		}
+ 
+-		if (typeof this.gpuInfoWindowId === 'number') {
++		if (typeof this.gpuInfoWindowId === 'number' && !backgroundWindows) {
+ 			const window = BrowserWindow.fromId(this.gpuInfoWindowId);
+ 			if (window?.isMinimized()) {
+ 				window?.restore();
+@@ -1361,13 +1370,13 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
+ 					window.prompt = () => '';
+ 					null
+ 				`);
+-				contentTracingWindow.show();
++				backgroundWindows ? contentTracingWindow.showInactive() : contentTracingWindow.show();
+ 			});
+ 			contentTracingWindow.once('close', () => this.contentTracingWindowId = undefined);
+ 			this.contentTracingWindowId = contentTracingWindow.id;
+ 		}
+ 
+-		if (typeof this.contentTracingWindowId === 'number') {
++		if (typeof this.contentTracingWindowId === 'number' && !backgroundWindows) {
+ 			const window = BrowserWindow.fromId(this.contentTracingWindowId);
+ 			if (window?.isMinimized()) {
+ 				window?.restore();
 diff --git a/src/vs/platform/windows/electron-main/windowImpl.ts b/src/vs/platform/windows/electron-main/windowImpl.ts
 index 484851f..91a16dd 100644
 --- a/src/vs/platform/windows/electron-main/windowImpl.ts

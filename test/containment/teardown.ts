@@ -427,6 +427,12 @@ export function verifyTeardown(runDir: string, opts: { snapshot?: boolean } = {}
 	add(left.length === 0, 'no sandbox, container, network or volume from this run remains', left.join(', '));
 	add(unknown.length === 0, 'runtimes could be listed (leftovers otherwise unknown)', unknown.length ? `could not list: ${unknown.join(', ')}` : '');
 
+	if (m.userDataDir) {
+		// The focus watcher (test/window.ts) logs any second the editor was the frontmost app (UU-2).
+		const steals = path.join(m.userDataDir, 'seclab-focus-steals.log');
+		const log = fs.existsSync(steals) ? fs.readFileSync(steals, 'utf8').trim() : '';
+		add(log === '', 'the editor never took focus from the user during the run', log.split('\n').slice(0, 3).join(' | '));
+	}
 	if (m.userDataDir && fs.existsSync(m.userDataDir)) {
 		fs.rmSync(m.userDataDir, { recursive: true, force: true });
 	}

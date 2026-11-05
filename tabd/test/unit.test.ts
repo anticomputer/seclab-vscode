@@ -330,17 +330,22 @@ test('scan: the scanner binary pins equal build/tools/tools.json (TT-2)', () => 
 	assert.equal(GITLEAKS_IMAGE, `seclab-tool-gitleaks:${tools.gitleaks.version}`);
 });
 
-test('scan: a scanner image without the pinned binary is refused, and re-checked after a rebuild (TT-2)', async () => {
+test('scan: a scanner image without the pinned binary is refused, and re-checked after a rebuild (TT-2, UU-4)', async () => {
 	let out = 'deadbeef'.repeat(8) + '  /usr/bin/gitleaks\n';
-	let calls = 0;
-	const runner = { run: async () => { calls++; return { code: 0, stdout: out, stderr: '' }; } } as unknown as Parameters<typeof scannerProblem>[0];
+	const id = `sha256:${'a'.repeat(64)}`;
+	const seen: string[][] = [];
+	const runner = { run: async (_b: string, args: string[]) => {
+		seen.push(args);
+		return args[0] === 'image' ? { code: 0, stdout: `${id}\n`, stderr: '' } : { code: 0, stdout: out, stderr: '' };
+	} } as unknown as Parameters<typeof scannerProblem>[0];
 	assert.match((await scannerProblem(runner, 'docker')) ?? '', /does not carry the pinned gitleaks binary/);
 	const r = await scanWorkspace(runner, 'docker', '/nonexistent');
 	assert.equal(r.complete, false);
 	assert.match(r.error ?? '', /pinned gitleaks binary/);
 	out = `${GITLEAKS_BIN_SHA256.arm64}  /usr/bin/gitleaks\n`;
 	assert.equal(await scannerProblem(runner, 'docker'), undefined);
-	const n = calls;
+	assert.ok(seen.some(a => a[0] === 'run' && a.includes(id)), 'the binary is checked in the resolved image id, not the name');
+	const n = seen.length;
 	assert.equal(await scannerProblem(runner, 'docker'), undefined);
-	assert.equal(calls, n, 'a passing check is cached');
+	assert.equal(seen.length, n, 'a passing check is cached');
 });

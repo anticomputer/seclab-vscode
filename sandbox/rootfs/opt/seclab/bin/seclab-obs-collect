@@ -301,32 +301,39 @@ class Stracer:
             emit({"k": "strace-err", "i": self.idx, "msg": raw.decode("latin-1", "replace").strip()[:300]})
 
 
-def stop_clipboard_bridge():
-    # sbx's kit starts clipboard-bridge as the tab user, with no seccomp filter or Landlock
-    # domain, serving /run/user/<uid>/wayland-0 to the tab. seclab never uses the sbx clipboard,
-    # so a parser bug there would only be execution outside the guard (review LL-1). Stop it
-    # before the REH starts (nothing respawns it) and fail closed if it survives.
-    def bridges():
-        out = []
-        for d in os.listdir("/proc"):
-            if d.isdigit():
-                try:
-                    if os.readlink("/proc/" + d + "/exe") == CLIPBOARD_BRIDGE:
-                        out.append(int(d))
-                except OSError:
-                    pass
-        return out
+def clipboard_bridges():
+    out = []
+    for d in os.listdir("/proc"):
+        if d.isdigit():
+            try:
+                if os.readlink("/proc/" + d + "/exe") == CLIPBOARD_BRIDGE:
+                    out.append(int(d))
+            except OSError:
+                pass
+    return out
+
+
+def kill_clipboard_bridges():
     for sig in (signal.SIGTERM, signal.SIGKILL):
-        for pid in bridges():
+        for pid in clipboard_bridges():
             try:
                 os.kill(pid, sig)
             except ProcessLookupError:
                 pass
         for _ in range(30):
-            if not bridges():
+            if not clipboard_bridges():
                 break
             time.sleep(0.1)
-    if bridges():
+    return not clipboard_bridges()
+
+
+def stop_clipboard_bridge():
+    # sbx's kit starts clipboard-bridge as the tab user, with no seccomp filter or Landlock
+    # domain, serving /run/user/<uid>/wayland-0 to the tab. seclab never uses the sbx clipboard,
+    # so a parser bug there would only be execution outside the guard (review LL-1). Stop it
+    # before the REH starts and fail closed if it survives; the watchdog stops any that come
+    # back later (UU-6).
+    if not kill_clipboard_bridges():
         fail("sbx clipboard-bridge survived SIGKILL; refusing to start the REH")
     for d in os.listdir("/run/user") if os.path.isdir("/run/user") else []:
         sock = os.path.join("/run/user", d, "wayland-0")
@@ -393,6 +400,9 @@ def main():
         reported = set()
         while not stop.is_set():
             time.sleep(WATCHDOG_S)
+            if clipboard_bridges():
+                gone = kill_clipboard_bridges()
+                emit({"k": "err", "msg": "sbx clipboard-bridge reappeared; " + ("stopped" if gone else "could NOT be stopped")})
             if stracers[0].cmd_pid is None:
                 continue  # primary strace still starting: its tracee isn't attached yet
             for pid, st in pids_of(tab.pw_uid):

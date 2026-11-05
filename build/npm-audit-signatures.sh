@@ -20,7 +20,8 @@ while IFS= read -r -d '' lock; do
 	# other registries), so anything resolved elsewhere fails here (TT-6). Links are local.
 	off="$(node -e '
 		const l = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-		for (const [k, p] of Object.entries(l.packages ?? {})) {
+		if (!(l.lockfileVersion >= 2) || typeof l.packages !== "object") { console.log("(lockfile v1 or no packages map: refusing)"); process.exit(0); }
+		for (const [k, p] of Object.entries(l.packages)) {
 			if (k && !p.link && p.resolved && !p.resolved.startsWith("https://registry.npmjs.org/")) console.log(k + " " + p.resolved);
 		}' "$lock")"
 	[[ -z "$off" ]] || { echo "npm packages not from registry.npmjs.org in $lock (no registry signature to check):" >&2; printf '%s\n' "$off" | head -20 >&2; exit 1; }

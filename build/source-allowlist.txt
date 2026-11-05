@@ -22,3 +22,6 @@ tabd/src/run.ts:process-spawn:return spawn(bin, argv, { env, cwd, shell: false, 
 # resolved git, `./`-prefixed stdin paths, results matched by position.
 tabd/src/gitignore.ts:process-spawn:import { spawnSync } from 'node:child_process';
 tabd/src/gitignore.ts:process-spawn:const r = spawnSync(git, argv, { env, input: all.map(p => `./${p}\0`).join(''), timeout: 10_000, maxBuffer: 64 << 20, shell: false });
+# Core patches (lines they add; review UU-3). Patch 0012 (2026-11-05, review UU): the main process
+# reads one launch-env flag at startup that only withholds focus (EDR background-windows).
+patches/0012-background-windows-env.patch:env:export const backgroundWindows = process.env['SECLAB_BACKGROUND_WINDOWS'] === '1';
