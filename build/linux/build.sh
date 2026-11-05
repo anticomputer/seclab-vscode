@@ -20,8 +20,9 @@ have_node="$(node --version | sed s/^v//)"
 
 export NODE_OPTIONS="--max-old-space-size=${MAX_OLD_SPACE_SIZE:-6144}"
 export VSCODE_SKIP_NODE_VERSION_CHECK=1
-# Reinstall deps only when the lockfiles change (stamp keyed by their hash).
-stamp="$(cat package-lock.json build/package-lock.json remote/package-lock.json 2>/dev/null | sha256sum | cut -c1-16)"
+# Reinstall deps only when the lockfiles change (stamp keyed by their hash). The `sig1-` prefix
+# makes trees installed before the signature check get audited once (TT-6).
+stamp="sig1-$(cat package-lock.json build/package-lock.json remote/package-lock.json 2>/dev/null | sha256sum | cut -c1-16)"
 if [[ ! -f node_modules/.seclab-stamp ]] || [[ "$(cat node_modules/.seclab-stamp)" != "$stamp" ]]; then
 	npm ci
 	# Registry signatures over every installed project; the stamp is written only after it passes.

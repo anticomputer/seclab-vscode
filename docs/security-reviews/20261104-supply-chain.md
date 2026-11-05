@@ -69,3 +69,17 @@ Sigstore-rooted, identity-pinned); deleting it forces a tokenless online check t
 | # | Sev | Area | Finding | Disposition | Fix |
 |---|---|---|---|---|---|
 | II-1 | Low | verify-images | Locally, a cached bundle never re-checks revocation. | Open (broker session) | Re-download outside CI when older than N days, or use `--bundle` only in CI. |
+
+## Round TT (2026-11-05): pinned tools, sbx fence kit allows, broker.hello gate
+Scope: `ca20ca0..3f97fb8` (EDR [pinned tools](../edr/20261105-pinned-tools.md)). No prompt
+injection found. The fence change, the broker gate and the download/verify/build flow (the
+in-build sha256 recheck closes TOCTOU) hold.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| TT-1 | **Medium** | CI | The `tools` job held `id-token`/`attestations: write` while running branch code (any push, same-repo PR), so a branch could mint a provenance attestation from this repo for any binary. | Fixed | `tools` builds and checks with `contents: read` and uploads the binaries; `attest-tools` (needs it; push to main only) holds the permissions, checks out nothing and runs no repository code. |
+| TT-2 | Low | tabd scan | tabd trusted the scanner image by name; a cache hit didn't retag; the shipped binary wasn't rechecked. | Fixed | The image build rechecks the pinned binary sha256. `tool.sh` retags the stable name on cache hits. tabd checks `/usr/bin/gitleaks` against the pinned hashes before its first scan and refuses on a mismatch. Unit tests (constants equal tools.json; refusal; re-check). |
+| TT-3 | Low | tabd scan | GNU find quotes paths C-style; the decoder assumed shell quoting. | Fixed | `unquoteFindPath` decodes C escapes and octal bytes; test vectors captured from the image's own find. |
+| TT-4 | Low | CI | `GH_TOKEN` reached PR code in workflow-lint (for actionlint's `gh attestation verify`). | Fixed | actionlint is verified by sigstore-python against a committed attestation bundle: no API, no token anywhere (also fixes the tokenless docs gate). |
+| TT-5 | Low | tool.sh | The cache key didn't cover the verifier. | Fixed | `tool.sh`, the verifier's lockfile and any committed bundle are in the key. |
+| TT-6 | Low | npm | Off-registry packages are skipped silently by `npm audit signatures`; an old stamp skipped the audit; it runs after install scripts. | Fixed / accepted | Off-registry `resolved` entries fail; the stamp is versioned (`sig1-`). Running after install scripts is accepted (upstream's postinstall needs them) and stated in the EDR. |

@@ -6,7 +6,7 @@ import { encodeData, encodeFrame, encodeJson, FrameDecoder, FrameError, MAX_FRAM
 import { BROKER_POLICY_SCHEMA, checkBrokerHello } from '../src/broker.ts';
 import { checkFence, parsePolicyJson, resourcesToMirror } from '../src/fence.ts';
 import { TabStore } from '../src/state.ts';
-import { displayPath, goUnquote, parseFrames, rewriteSecret } from '../src/scan.ts';
+import { displayPath, GITLEAKS_BIN_SHA256, GITLEAKS_IMAGE, goUnquote, parseFrames, rewriteSecret, scannerProblem, scanWorkspace } from '../src/scan.ts';
 import { assertPolicyResource, canonicalWorkspacePath, mintTabId, sandboxNameFor, TAB_ID_RE, ValidationError } from '../src/validate.ts';
 
 // Durable scratch under the repo (never /tmp); a named volume when run via ./seclab test unit.
@@ -216,12 +216,16 @@ test('scan: failures never drop findings from other passes (S1)', () => {
 	assert.equal(parseFrames(Buffer.from('garbage\n'), 0, false).complete, false);
 });
 
-test('scan: find errors name the path in GNU (quoted) and busybox (bare) form; others still count', () => {
-	const errs = ["find: '/scan/ws/lockdir': Permission denied", 'find: /scan/ws/bare dir: Permission denied',
-		"find: '/scan/ws/it'\\''s': Permission denied", 'find: some other complaint'].join('\n');
+test('scan: find errors name the path in GNU (C-quoted) and busybox (bare) form; others still count (TT-3)', () => {
+	// Captured from GNU find 4.10 in seclab-tool-gitleaks (unreadable dirs with these names).
+	const gnu = ["find: '/scan/ws/nl\\nx': Permission denied", "find: '/scan/ws/a:b': Permission denied",
+		"find: '/scan/ws/caf\\303\\251': Permission denied", "find: '/scan/ws/sp ace': Permission denied",
+		"find: '/scan/ws/it\\'s': Permission denied", "find: '/scan/ws/a\\\\b': Permission denied"];
+	const errs = [...gnu, 'find: /scan/ws/bare dir: Permission denied', 'find: some other complaint'].join('\n');
 	const r = parseFrames(Buffer.concat([frame('finderr', '.', 1, errs), END]), 0, false);
 	assert.equal(r.complete, false);
-	assert.deepEqual(r.findings.map(f => [f.file, f.rule]).sort(), [['.', 'unscanned-unreadable'], ['bare dir', 'unscanned-unreadable'], ["it's", 'unscanned-unreadable'], ['lockdir', 'unscanned-unreadable']]);
+	assert.deepEqual(r.findings.map(f => f.file).sort(), ['.', 'a:b', 'a\\\\b', 'bare dir', 'café', "it's", 'nl\\u{a}x', 'sp ace'].sort());
+	assert.ok(r.findings.every(f => f.rule === 'unscanned-unreadable'));
 });
 
 test('scan: hostile file names are escaped and never movable; nothing is dropped (S5)', () => {
@@ -318,4 +322,25 @@ test('broker.hello: policy schema revision, protocol and tab must match (fail cl
 	assert.throws(() => checkBrokerHello({ ...hello, protocol: 'seclab-broker/2' }, String(hello.tabId)), /protocol/);
 	assert.throws(() => checkBrokerHello(hello, 'another-tab'), /not another-tab/);
 	assert.throws(() => checkBrokerHello(null, 'x'), /no result/);
+});
+
+test('scan: the scanner binary pins equal build/tools/tools.json (TT-2)', () => {
+	const tools = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../build/tools/tools.json'), 'utf8')) as { gitleaks: { version: string; binarySha256: Record<string, string> } };
+	assert.deepEqual({ ...GITLEAKS_BIN_SHA256 }, tools.gitleaks.binarySha256);
+	assert.equal(GITLEAKS_IMAGE, `seclab-tool-gitleaks:${tools.gitleaks.version}`);
+});
+
+test('scan: a scanner image without the pinned binary is refused, and re-checked after a rebuild (TT-2)', async () => {
+	let out = 'deadbeef'.repeat(8) + '  /usr/bin/gitleaks\n';
+	let calls = 0;
+	const runner = { run: async () => { calls++; return { code: 0, stdout: out, stderr: '' }; } } as unknown as Parameters<typeof scannerProblem>[0];
+	assert.match((await scannerProblem(runner, 'docker')) ?? '', /does not carry the pinned gitleaks binary/);
+	const r = await scanWorkspace(runner, 'docker', '/nonexistent');
+	assert.equal(r.complete, false);
+	assert.match(r.error ?? '', /pinned gitleaks binary/);
+	out = `${GITLEAKS_BIN_SHA256.arm64}  /usr/bin/gitleaks\n`;
+	assert.equal(await scannerProblem(runner, 'docker'), undefined);
+	const n = calls;
+	assert.equal(await scannerProblem(runner, 'docker'), undefined);
+	assert.equal(calls, n, 'a passing check is cached');
 });

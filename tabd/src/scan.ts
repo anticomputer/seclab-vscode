@@ -12,6 +12,11 @@ import type { Runner } from './run.ts';
 // commit + reproducible binary sha256, attested in CI); never pulled. A missing image makes the
 // scan fail, and opens fail closed (EDR 20261105-pinned-tools).
 export const GITLEAKS_IMAGE = 'seclab-tool-gitleaks:8.30.1';
+/** The reproducible binaries' sha256 (build/tools/tools.json binarySha256; a unit test keeps them equal). */
+export const GITLEAKS_BIN_SHA256: Readonly<Record<string, string>> = {
+	arm64: '862cec60152e8b0e5d332322af03eebd68046ea71428e9f952100721535596d5',
+	amd64: '4e4bcd807c6fbddc1b763ced93b521ee048d1f07d64197553d71dc384182d74d',
+};
 
 // Default rules plus our test canary shape (test/canary/canary.ts).
 const CONFIG = `[extend]
@@ -332,7 +337,33 @@ function scanUser(hostPath: string): string {
 	return st.uid === 0 || st.gid === 0 ? '65534:65534' : `${st.uid}:${st.gid}`;
 }
 
+// The image is trusted by name only as far as its scanner binary is the pinned one (TT-2): any
+// local `docker tag` or another worktree's build can produce the name. Checked once per tabd.
+let scannerCheck: Promise<string | undefined> | undefined;
+export function scannerProblem(runner: Runner, docker: string): Promise<string | undefined> {
+	scannerCheck ??= runner.run(docker, ['run', '--rm', '--pull', 'never', '--network', 'none', '--read-only', '--cap-drop', 'ALL',
+		'--security-opt', 'no-new-privileges', '--user', '65534:65534', '--entrypoint', 'sha256sum', GITLEAKS_IMAGE, '/usr/bin/gitleaks'], { timeoutMs: 60_000 })
+		.then(r => {
+			const got = /^([0-9a-f]{64})\s/.exec(r.stdout)?.[1];
+			if (r.code !== 0 || !got) {
+				return `secret scanner image ${GITLEAKS_IMAGE} unavailable (run ./seclab tool gitleaks)`;
+			}
+			return Object.values(GITLEAKS_BIN_SHA256).includes(got) ? undefined : `secret scanner image ${GITLEAKS_IMAGE} does not carry the pinned gitleaks binary (sha256 ${got.slice(0, 12)}…); rebuild with ./seclab tool gitleaks`;
+		}, (e: Error) => `secret scanner check failed: ${e.message}`)
+		.then(p => {
+			if (p) {
+				scannerCheck = undefined; // re-check after the user rebuilds
+			}
+			return p;
+		});
+	return scannerCheck;
+}
+
 export async function scanWorkspace(runner: Runner, docker: string, hostPath: string): Promise<ScanResult> {
+	const bad = await scannerProblem(runner, docker);
+	if (bad) {
+		return { complete: false, error: bad, findings: [], secrets: new Map() };
+	}
 	const env = GIT_OVERRIDES.flatMap(([k, v], i) => ['-e', `GIT_CONFIG_KEY_${i}=${k}`, '-e', `GIT_CONFIG_VALUE_${i}=${v}`]);
 	const user = scanUser(hostPath);
 	const [uid, gid] = user.split(':');
@@ -421,12 +452,12 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 				continue;
 			case 'finderr':
 				// "find: <path>: <reason>" per line; the path may itself contain ': '. GNU find
-				// shell-quotes the path ('…', with '\'' for a quote); busybox prints it bare.
-				// Any other find: line still counts, against the workspace as a whole.
+				// quotes the path C-style inside '…' (\\ \' \n \t, \ooo octal bytes; TT-3); busybox
+				// prints it bare. Any other find: line still counts, against the workspace as a whole.
 				for (const lineText of body.toString('utf8').split('\n')) {
-					const fm = /^find: (?:'(\/scan\/ws\/.*)'|(\/scan\/ws\/.*)): [^:]+$/.exec(lineText);
+					const fm = /^find: (?:'(\/scan\/ws\/(?:[^'\\]|\\.)*)'|(\/scan\/ws\/.*)): [^:]+$/.exec(lineText);
 					if (fm) {
-						const p = fm[1] !== undefined ? fm[1].replace(/'\\''/g, '\'') : fm[2];
+						const p = fm[1] !== undefined ? unquoteFindPath(fm[1]) : fm[2];
 						unscanned('worktree', workspaceRel(p, '/scan/ws/') ?? '.', 'unscanned-unreadable');
 					} else if (lineText.startsWith('find: ')) {
 						unscanned('worktree', '.', 'unscanned-unreadable');
@@ -586,6 +617,29 @@ export function parseFrames(buf: Buffer, exitCode: number | null, truncated: boo
 }
 
 const ID_KEY = randomBytes(32);
+
+/** GNU find's C-style quoting inside '…' (gnulib quotearg, c_maybe style), back to the raw path. */
+export function unquoteFindPath(s: string): string {
+	const bytes: number[] = [];
+	const C: Record<string, number> = { a: 7, b: 8, f: 12, n: 10, r: 13, t: 9, v: 11, '\\': 92, '\'': 39, '"': 34, '?': 63 };
+	for (let i = 0; i < s.length; i++) {
+		if (s[i] !== '\\' || i + 1 >= s.length) {
+			bytes.push(...Buffer.from(s[i], 'utf8'));
+			continue;
+		}
+		const oct = /^[0-7]{1,3}/.exec(s.slice(i + 1))?.[0];
+		if (oct) {
+			bytes.push(parseInt(oct, 8) & 0xff);
+			i += oct.length;
+		} else if (C[s[i + 1]] !== undefined) {
+			bytes.push(C[s[i + 1]]);
+			i++;
+		} else {
+			bytes.push(92);
+		}
+	}
+	return Buffer.from(bytes).toString('utf8');
+}
 
 const cmp = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
 

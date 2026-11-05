@@ -41,9 +41,12 @@ COPY --from=gitleaks-build /out/ /
 
 FROM base AS gitleaks
 ARG TARGETARCH
+ARG BIN_SHA256
 # The pre-mount scan script (tabd/src/scan.ts) needs bash, git, and tar with bzip2/xz.
 RUN apt-get update && apt-get install -y --no-install-recommends git bzip2 xz-utils && rm -rf /var/lib/apt/lists/*
 COPY --from=gitleaks-build /out/gitleaks-linux-${TARGETARCH} /usr/bin/gitleaks
+# The binary shipped is the pinned one (TT-2), whatever the build cache held.
+RUN echo "$BIN_SHA256  /usr/bin/gitleaks" | sha256sum -c -
 ENTRYPOINT ["gitleaks"]
 
 # ---- lychee (built from source; Cargo.lock --locked, crates checksum-verified) ---------------------
