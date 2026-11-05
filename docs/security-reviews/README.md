@@ -77,4 +77,5 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-05 | [the agent-host patches 0009–0011 (Phase 3, increment 4)](20261105-agent-host-patches.md) | see record | see record |
 | 2026-11-05 | [broker model access (body policy, budgets, trusted derivation)](20261105-broker-model-access.md) | - Round 7: dcda94b, which adds: | see record |
 | 2026-11-05 | [broker WebSocket credential opt-in](20261105-broker-websocket-opt-in.md) | - Round 6: b1558e9 and 83a00cf. | see record |
+| 2026-11-05 | [Security re-review: patches 0006 and 0009–0011, and the surface-(e) tooling](20261105-rpc-filter-rereview.md) | see record | see record |
 <!-- index:end -->
