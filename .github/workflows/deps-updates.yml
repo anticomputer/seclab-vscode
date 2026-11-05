@@ -1,0 +1,47 @@
+name: deps-updates
+
+# Weekly report of dependency updates Dependabot can't see (ADR supply-chain provenance):
+# image pins in shell/TS whose tag moved, and tracked tools with a newer release. It files or
+# updates one issue; it never changes a pin. Each update is a normal change (register entry,
+# publisher verification, review). Runs main's code only (schedule), or a dispatch by a writer.
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deps-updates
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: report
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write # file/update the one tracking issue; no contents or PR write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the report (anonymous registry and API reads; no token in the container)
+        run: ./seclab deps outdated > "$RUNNER_TEMP/deps-report.md"
+      - name: File or update the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          title='Dependency updates (scheduled report)'
+          n="$(gh issue list --state open --search "\"$title\" in:title" --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -1)"
+          if grep -q '^Nothing outdated\.$' "$RUNNER_TEMP/deps-report.md"; then
+            echo "nothing outdated"
+            [ -z "$n" ] || gh issue comment "$n" --body 'Nothing outdated as of this run.'
+          elif [ -n "$n" ]; then
+            gh issue edit "$n" --body-file "$RUNNER_TEMP/deps-report.md"
+          else
+            gh issue create --title "$title" --body-file "$RUNNER_TEMP/deps-report.md"
+          fi
