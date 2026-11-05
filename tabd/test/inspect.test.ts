@@ -1,5 +1,6 @@
 // Pre-open workspace summary (tab.inspect): parsed as data, links never followed.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test } from 'node:test';
@@ -34,4 +35,19 @@ test('inspect: folder-open, hidden and fetch-and-run tasks, dev container, MCP, 
 		assert.ok(kinds.includes(k), `${k} in ${JSON.stringify(kinds)}`);
 	}
 	assert.equal(inspectWorkspace(root).items.filter(i => i.path === 'CLAUDE.md').length, 0, 'links are never followed');
+});
+
+test('inspect: unparsed config is reported, deep nesting cannot suppress the summary, FIFOs never block (RR-1, RR-3)', () => {
+	const root = path.join(SCRATCH, 'hostile');
+	fs.rmSync(root, { recursive: true, force: true });
+	fs.mkdirSync(path.join(root, '.vscode'), { recursive: true });
+	fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+	fs.writeFileSync(path.join(root, '.vscode', 'tasks.json'), '{ "tasks": [ { "label": "x" "runOptions": {} } ] }'); // missing comma
+	fs.writeFileSync(path.join(root, '.claude', 'settings.json'), `{"hooks": ${'['.repeat(50_000)}${']'.repeat(50_000)}}`);
+	fs.writeFileSync(path.join(root, 'AGENTS.md'), 'x');
+	execFileSync('mkfifo', [path.join(root, '.vscode', 'mcp.json')]);
+	const r = inspectWorkspace(root);
+	const kinds = r.items.map(i => `${i.kind}:${i.path}`);
+	assert.ok(kinds.includes('unparsed config (may still be run):.vscode/tasks.json'), JSON.stringify(kinds));
+	assert.ok(kinds.includes('agent instructions:AGENTS.md'), 'other sections still reported');
 });

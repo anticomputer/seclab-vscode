@@ -263,7 +263,8 @@ async function showWorkspaceSummary(c: TabdClient, tabId: string, hostPath: stri
 			await vscode.window.showTextDocument(doc, { preview: true });
 		}
 	} catch (e) {
-		log.debug(`workspace summary unavailable: ${safeText((e as Error).message)}`);
+		log.warn(`workspace summary unavailable: ${safeText((e as Error).message)}`);
+		void vscode.window.showWarningMessage('Could not summarise what this folder runs automatically (it runs inside the tab regardless).');
 	}
 }
 
@@ -274,7 +275,10 @@ interface ScanStatus { findings?: SecretFinding[]; incomplete?: boolean; overflo
 
 /** Text from the user's folder (file names) is data: escape anything that could fake layout. */
 function safeText(s: unknown, max = 200): string {
-	const esc = String(s).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/gu, c => `\\u{${c.codePointAt(0)!.toString(16)}}`);
+	// Controls/format escaped; markdown link and codicon syntax neutralised, so folder-derived
+	// text can't render as a link (incl. command: links) or an icon in a notification (RR-2).
+	const esc = String(s).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/gu, c => `\\u{${c.codePointAt(0)!.toString(16)}}`)
+		.replace(/\[/g, '［').replace(/\]/g, '］').replace(/\$\(/g, '$\u200a(');
 	return esc.length > max ? `${esc.slice(0, max - 1)}…` : esc;
 }
 

@@ -18,7 +18,7 @@ interface Content { path: string; kind: string; reasons: string[]; sig: string; 
 
 /** Tab-controlled text as plain text: controls escaped, codicon syntax ($(…)) never rendered. */
 export function plainText(s: unknown, max = 300): string {
-	const esc = String(s).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/gu, c => `\\u{${c.codePointAt(0)!.toString(16)}}`).replace(/\$\(/g, '$\u200a(');
+	const esc = String(s).replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/gu, c => `\\u{${c.codePointAt(0)!.toString(16)}}`).replace(/\$\(/g, '$\u200a(').replace(/\[/g, '［').replace(/\]/g, '］');
 	return esc.length > max ? `${esc.slice(0, max - 1)}…` : esc;
 }
 
