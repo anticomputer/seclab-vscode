@@ -52,9 +52,9 @@ and fake canaries only (`test/observability/demo.ts prepare|teardown`, sbx only:
 prepare writes the loader and its hidden folder-open task inside the tab, where
 the write-back gate holds them, so they never exist on the host).
 - **Never put a demo window over the user's work.**
-  - Launch in the background with `open -g -n -a <app> --args …`. Don't use
-    `bin/code`: it hands off to the main process, which calls
-    `app.focus({steal:true})`.
+  - Launch in the background with `node test/window.ts launch …` (`open -g -n`).
+    Don't use `bin/code`: it hands off to the main process, which forces focus
+    (Electron's focus-stealing mode).
   - Never `activate` the app or raise the window.
   - If the window still comes to the front, stop and report it. Don't work
     around it by raising the window.
