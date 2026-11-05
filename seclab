@@ -43,18 +43,13 @@ LYCHEE_IMAGE="lycheeverse/lychee@sha256:eaff3e0a13603c9a701accfcc84f44158bb77bf3
 ACTIONLINT_IMAGE="rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
 ZIZMOR_IMAGE="ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d"
 
-# Workflow static analysis (EDR ci-hardening): actionlint, then zizmor. zizmor's online
-# audits (impostor commits, ref confusion, known-vulnerable actions) need GH_TOKEN; without
-# it they are skipped (CI passes the read-only token on pushes).
+# Workflow static analysis (EDR ci-hardening): actionlint, then zizmor, both offline with no
+# network and no credentials: they are third-party images (ADR supply-chain provenance).
+# zizmor's online audits (impostor commits, ref confusion) are covered by the repo's
+# sha_pinning_required setting and the GitHub-owned-actions allowlist.
 lint_workflows() {
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ACTIONLINT_IMAGE" -no-color
-	local online=(--offline)
-	[[ -n "${GH_TOKEN:-}" ]] && online=(-e GH_TOKEN)
-	if [[ "${online[0]}" == --offline ]]; then
-		docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ZIZMOR_IMAGE" --offline --no-progress --persona=regular .github/workflows
-	else
-		docker run --rm -e GH_TOKEN -v "$ROOT:/repo:ro" -w /repo "$ZIZMOR_IMAGE" --no-progress --persona=regular .github/workflows
-	fi
+	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ZIZMOR_IMAGE" --offline --no-progress --persona=regular .github/workflows
 }
 
 docs_check() {

@@ -170,7 +170,7 @@ build/check-release.sh .work/out/seclab-reh-linux-arm64.tar.gz   # no test hooks
 node test/containment/teardown.test.ts   # teardown regression: orphaned editor tree + leftover tab pod are stopped/removed
 ./seclab clean-host [--apply] [--running] [--caches] [--all-tabs]   # list (dry run) / remove seclab-vscode resources; test tabs only unless --all-tabs; never copilot-* or other projects
 ./seclab lint pins              # every third-party image and action pinned by digest/SHA (--self-test too)
-./seclab lint workflows         # actionlint + zizmor (digest-pinned; online audits with GH_TOKEN)
+./seclab lint workflows         # actionlint + zizmor (digest-pinned; offline, no network, no token)
 
 # macOS app from Actions: main builds only; verifies SHA256SUMS and the build provenance
 # attestation (gh attestation verify) before extracting. Then quarantine (user approval).

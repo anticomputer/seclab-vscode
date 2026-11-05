@@ -28,9 +28,5 @@ jobs:
         run: ./seclab lint pins --self-test
       - name: Every image and action is pinned by digest/SHA
         run: ./seclab lint pins
-      - name: actionlint + zizmor
-        env:
-          # zizmor's online audits (impostor commits, ref confusion, vulnerable actions) on
-          # pushes only; a PR's scripts never see a token.
-          GH_TOKEN: ${{ github.event_name == 'push' && github.token || '' }}
+      - name: actionlint + zizmor (offline, no network, no token)
         run: ./seclab lint workflows
