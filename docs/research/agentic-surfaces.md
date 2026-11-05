@@ -48,6 +48,11 @@ The two findings that shape the design most:
    matching session and sends its access token (§12.1). The same happens for MCP OAuth
    (§12.2). A `seclab+` tab would receive the user's GitHub token. This was raised to
    the RPC-lockdown session as an interim finding on 2026-11-05.
+3. **The agent-host client is a two-way capability channel, and not the only one.** The
+   agent host can ask the client to read and write host files, run any workbench tool
+   with pre-approval it asserts itself, and receive the user's MCP configurations, and a
+   workspace setting can point the editor at an attacker's agent host from the host
+   network (§4.3, §12.4 to §12.6). These were found by the design review.
 
 ## 2. Two agent architectures
 
@@ -80,9 +85,19 @@ tab therefore runs but cannot show anything.
 
 The agent host is a separate Node process that owns the loop, providers (Copilot,
 Claude, Codex harnesses), terminals, MCP, customization discovery and persistence. Its
-protocol is state and action based, with root, session, chat, terminal, changeset,
-resource-watch, automation and TCP channels
-([commands.ts#L10-L17](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/state/protocol/commands.ts#L10-L17)).
+protocol is state and action based. The generated protocol has root, session, chat,
+terminal, changeset, resource-watch, automation, automation-run, annotations, canvas,
+OTLP, TCP and `mcp:/` channels
+([commands.ts#L10-L17](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/state/protocol/commands.ts#L10-L17)
+re-exports the per-channel commands). The method maps in both directions are in
+[messages.ts](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/state/protocol/common/messages.ts#L120-L145)
+and the version registry in `protocol/version/registry.ts`. On top of that, the client
+handles 36 vendor extension methods defined in
+[agentHostExtensionProtocol.ts](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostExtensionProtocol.ts),
+outside the generated protocol. Some requests go from the agent host **to the client**,
+and the client serves them on the host: `resource*` file operations, workspace trust,
+client certificates, proxy resolution and Kerberos, and MCP authentication
+([agentHostProtocolClient.ts#L3291-L3365](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts#L3291-L3365)).
 Upstream's own design notes: [AGENTS.md](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/AGENTS.md).
 
 ## 3. Where the agent host runs
@@ -173,8 +188,15 @@ workbench tool** in the session's tool sets
 The agent host then requests execution with a `ToolClientExecution` input request, and
 the workbench runs the tool trusted-side
 ([agentHostSessionHandler.ts#L3090-L3170](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostSessionHandler.ts#L3090-L3170)).
-With the agent host in a tab, the client tool set is exactly the "trusted-side tools a
-tab can invoke" surface. It must be empty, or a reviewed list of safe outputs.
+The advertised set is **not** a limit. The requested tool is resolved by name over all
+tools, including disabled ones
+([#L3330-L3350](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostSessionHandler.ts#L3330-L3350)),
+and pre-approval asserted by the agent host (`_meta.autoApproveBySetting`, or status
+`Running` with `confirmed: NotNeeded`) is honoured
+([#L584-L608](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostSessionHandler.ts#L584-L608)).
+With the agent host in a tab, every workbench tool is therefore reachable and can run
+without a confirmation. Execution must be refused in the handler, not only in the
+advertisement (found by the design review).
 
 ## 5. Context: instructions, prompt files, agents, skills
 
@@ -291,13 +313,17 @@ and remote user settings"
 ([configurationRegistry.ts#L202-L205](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/configuration/common/configurationRegistry.ts#L202-L205)).
 
 So in a `seclab+` window the tab can set `chat.tools.global.autoApprove`
-(`APPLICATION_MACHINE`), `chat.permissions.default`, `chat.disableAIFeatures`, and the
-terminal auto-approve rules and agent-sandbox allowlists, which declare no scope and so
+(`APPLICATION_MACHINE`), `chat.permissions.default`, `chat.disableAIFeatures`, and the terminal auto-approve rules and agent-sandbox allowlists, which declare no scope and so
 default to `WINDOW`
 ([terminalChatAgentToolsConfiguration.ts#L104-L130](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/chatAgentTools/common/terminalChatAgentToolsConfiguration.ts#L104-L130),
-**[inference: some consumers may read only selected layers]**). **Only
-`APPLICATION`-scope settings, and code, are trusted inputs.** Reported to the RPC-lockdown
-session on 2026-11-05; the inventory field becomes `tab_writable = scope != APPLICATION`.
+**[inference: some consumers may read only selected layers]**).
+
+A setting that is **not registered in the window that reads it** is not filtered by scope
+at all. `chat.agentHost.localFilePermissions`, which grants an agent host access to host
+files (§12.4), is registered only in the Agents window, so in an editor window the tab
+can set it (found by the design review). The rule is therefore: **only settings that are
+registered in that window at `APPLICATION` scope, and code, are trusted inputs.**
+Reported to the RPC-lockdown session on 2026-11-05.
 
 ## 12. Credentials
 
@@ -338,11 +364,51 @@ token re-sentinelised as a derived credential (broker already detects a Copilot 
 pattern, [ADR](../adr/20261104-no-real-secret-enters-a-tab.md)). Endpoint hosts come from
 the envelope **[inference]**.
 
+### 12.4 Host files through `resource*` requests
+
+The agent host can ask the client to read, write, delete, move, copy, list and watch
+files, and the client serves the raw URI from the host
+([agentHostProtocolClient.ts#L3335-L3365](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts#L3335-L3365)).
+Access is decided by grants in `chat.agentHost.localFilePermissions`, read with
+`getGlobalConfigurationValue`
+([agentHostResourceService.ts#L542](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/agentHost/common/agentHostResourceService.ts#L542)),
+or by an "Allow / Always Allow" prompt. Because the setting is tab-writable in an editor
+window (§11), a tab-side agent host can grant itself `file:///` and write host files.
+Found by the design review.
+
+### 12.5 Workspace-listed remote agent hosts
+
+`chat.workspaceRemoteAgentHosts` is `WINDOW` scope and `restricted`
+([remoteAgentHost.contribution.ts#L76-L90](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts#L76-L90)),
+and `EditorWindowRemoteAgentHostService` dials those addresses from the host network
+([remoteAgentHostServiceImpl.ts#L1251-L1256](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/remoteAgentHostServiceImpl.ts#L1251-L1256),
+auto-connect at [#L1077-L1081](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/remoteAgentHostServiceImpl.ts#L1077-L1081)).
+Tabs report trusted, so a workspace `.vscode/settings.json` or the tab's remote user
+settings can make the trusted renderer connect to an attacker's agent host outside the
+broker, and that connection gets §12.1, §12.2 and §12.4. Its own description says
+"connected hosts receive your GitHub credentials". Found by the design review; reported
+to the RPC-lockdown session on 2026-11-05 as a v0 issue.
+
+### 12.6 Customizations and configuration forwarded to the agent host
+
+The client sends the user's host-side prompts, skills, plugins and user-level `mcp.json`
+servers to the agent host. `${env:…}` variables are resolved on the host, and literal
+`env` and `headers` values are included
+([agentHostMcpServerSupport.ts#L296-L333](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostMcpServerSupport.ts#L296-L333)).
+It also mirrors every setting registered for agent-host sync, including `http.proxy`.
+With the agent host in a tab, those values would enter the tab. Found by the design
+review.
+
 ## 13. Trusted-side agents that remain
 
 - The **local agent host** (utility process, user's environment, §3.1), used by
   folder-less windows and the Agents window. It can be pointed at any host path,
   including the host checkout a tab is backed by, and reads its instructions there.
+  Electron main always creates its starter and process manager
+  ([app.ts#L760-L769](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/code/electron-main/app.ts#L760-L769)),
+  so a renderer-side null service does not remove it.
+- **Other agent-host connections** from the editor: workspace-listed hosts (§12.5), SSH,
+  WSL, dev tunnels, dev containers, the cloud sandbox and Mission Control.
 - **Built-in chat** in folder-less windows, with workbench tools on the host.
 - `src/vs/sessions` tools that reach other agent hosts, sessions and automations.
 
@@ -356,7 +422,10 @@ prebuilt `copilot-runtime` and `runtime.node` binaries, and on `@vscode/copilot-
 ([remote/package.json](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/remote/package.json#L5-L12),
 [build/lib/copilot.ts#L216-L250](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/build/lib/copilot.ts#L216-L250)). Neither is in
 `deps/registry.json`. Running the Copilot harness in a tab means running an opaque
-prebuilt binary there: contained by the tab, but it needs a provenance bar (plan §11).
+prebuilt binary there: contained by the tab, but it needs a provenance bar (plan §13,
+D3). Upstream also downloads the Claude and Codex SDKs at run time from
+`product.agentSdks` URL templates, and the only integrity check is a completion marker
+([agentSdkDownloader.ts#L414-L528](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/node/agentSdkDownloader.ts#L414-L528)).
 
 ## 15. Prior art
 

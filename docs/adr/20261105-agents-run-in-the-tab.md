@@ -35,19 +35,28 @@ it and carries the user's input and decisions, and nothing else.** Concretely:
   rendered by the workbench's remote agent-host client. The local (host) agent host is
   disabled in the fork.
 - **AHP gate:** a choke point on the agent-host transport for `seclab+` windows, with
-  policy as data and a drift check, like the RPC filter. Inbound messages are
-  schema-validated against the generated protocol; outbound `authenticate` carries only
-  broker sentinels for resources in a trusted provider table; the client offers no tools
-  except reviewed safe outputs; client proxy, certificates and TCP are off.
+  policy as data and a drift check generated from every protocol definition and client
+  handler, like the RPC filter. Inbound messages are schema-validated and allowlisted;
+  every server-to-client request (host file operations, workspace trust, certificates,
+  proxy, MCP auth) is refused; outbound messages are an allowlist, and `authenticate`
+  carries only broker sentinels for resources in a trusted provider table, matched before
+  any resolution or fetch. The client offers and executes no tools except reviewed safe
+  outputs, and ignores pre-approval asserted by the agent host.
+- **One connection:** in a tab window the gated connection is the only agent-host
+  connection. Workspace-listed and other remote agent hosts, cloud sandboxes and Mission
+  Control are null services, the local agent host is not created in main, and the
+  settings that would enable them are pinned.
 - **Models:** called from inside the tab through the tab's broker with sentinels, never
-  trusted-side on the tab's behalf.
+  trusted-side on the tab's behalf. Model bindings reject server-side tools that would
+  turn the provider into a relay, unless granted.
 - **Tiers:** A (default) acts only inside the tab; B turns host-affecting actions into
   schema-validated safe outputs that trusted code applies after the user approves the
   exact effect; C is opt-in, scoped, time-boxed grants. Some capabilities are never
   grantable (host shell, host writes outside the write-back gate, other tabs, real
   secrets).
-- **Trust inputs:** only trusted UI input, `APPLICATION` settings, the trusted profile,
-  product data and code set policy. Workspace instructions are data.
+- **Trust inputs:** only trusted UI input, settings registered in that window at
+  `APPLICATION` scope, the trusted profile, product data and code set policy. Workspace
+  instructions are data.
 - **One agent, one tab.** Global chat runs in the empty tab a folder-less window already
   gets; cross-tab questions are answered by trusted code over structured data, with at
   most a quarantined, tool-less model call.
@@ -70,10 +79,13 @@ it and carries the user's input and decisions, and nothing else.** Concretely:
   can do; the existing containment carries the argument. In-tab defences (labels,
   instruction policy) are defence in depth against honest-agent steering only.
 - New work: the AHP gate and its inventory (class (f)), the `authenticate` rewrite and a
-  trusted provider table, a broker derivation rule for the Copilot token, safe outputs and
-  a host-action inbox, a `tab-reported` event label, and rendering hardening.
-- About four small patches, each one concern, plus policy data. Upstream proposals U1 to
-  U5 are drafted, not filed.
+  trusted provider table, a broker derivation rule for the Copilot token and a body
+  policy for model hosts, safe outputs and a host-action inbox, a `tab-reported` event
+  label, and rendering hardening.
+- About eight small patches, each one concern, plus policy data and pinned settings
+  ([plan §10](../plans/secure-agentic-experiences.md#10-upstream-alignment)). Upstream's
+  agent-host client is a wider, two-way channel than its name suggests, which is most of
+  the patch cost. Upstream proposals U1 to U5 are drafted, not filed.
 - Opaque prebuilt agent runtimes would run inside tabs; they need a supply-chain decision.
 - A rogue extension can spend the user's model quota up to the tab's budget.
 - Phases, probes and residual risks: [plan §11, §12](../plans/secure-agentic-experiences.md#11-phases-exit-criteria-and-probes).
