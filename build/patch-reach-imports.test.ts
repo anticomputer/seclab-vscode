@@ -32,3 +32,14 @@ test('type-only imports and exports are not edges', () => {
 		`import type * as F from './f.js';`,
 	].join('\n')), []);
 });
+
+test('import-like text inside string and template literals is not an edge (VV-7)', () => {
+	assert.deepEqual(runtimeSpecs([
+		`const a = "import './a.js'";`,
+		`const b = ' import("./b.js") ';`,
+		'const c = `',
+		`import { C } from './c.js';`,
+		'${x}`;',
+		`import { D } from './d.js';`,
+	].join('\n')), ['./d.js']);
+});

@@ -403,10 +403,18 @@ case "${1:-help}" in
 	# re-run after build/hooks changes. Shared by every worktree of this clone.
 	hooks) shift; [[ "${1:-}" == install ]] || { usage; exit 2; }
 		hookdir="$(cd "$(git -C "$ROOT" rev-parse --git-common-dir)" && pwd -P)/seclab-hooks"
+		gl="$(tool_image gitleaks)" || { echo "hooks: no scanner (./seclab tool gitleaks)" >&2; exit 1; }
+		gl_id="$(docker image inspect -f '{{.Id}}' "$gl")"
+		gl_arch="$(docker image inspect -f '{{.Architecture}}' "$gl")"
+		gl_sha="$(awk -v a="\"$gl_arch\":" '/"gitleaks":/{g=1} g && $1==a {gsub(/[",]/,"",$2); print $2; exit}' "$ROOT/build/tools/tools.json")"
+		[[ "$gl_id" == sha256:* && "$gl_sha" =~ ^[0-9a-f]{64}$ ]] || { echo "hooks: can't resolve the pinned scanner ($gl_arch)" >&2; exit 1; }
+		hook="$(<"$ROOT/build/hooks/pre-push")"
+		hook="${hook//@GITLEAKS_IMAGE@/$gl_id}"
+		hook="${hook//@GITLEAKS_SHA256@/$gl_sha}"
 		mkdir -p "$hookdir"
-		install -m 0755 "$ROOT/build/hooks/pre-push" "$hookdir/pre-push"
+		printf '%s\n' "$hook" > "$hookdir/pre-push.tmp" && chmod 0755 "$hookdir/pre-push.tmp" && mv "$hookdir/pre-push.tmp" "$hookdir/pre-push"
 		git -C "$ROOT" config core.hooksPath "$hookdir"
-		echo "hooks: core.hooksPath=$hookdir (pre-push runs ./seclab lint secrets on what you push)" ;;
+		echo "hooks: core.hooksPath=$hookdir (self-contained pre-push scan, gitleaks ${gl_id:7:12})" ;;
 	# Dependency updates Dependabot can't see (ADR supply-chain provenance): report only.
 	deps)
 		shift

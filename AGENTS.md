@@ -123,9 +123,12 @@ RPC-lockdown session adds. Keep them consistent with this file.
 - **Fixtures use generated or obviously fake values** (`seclabcanary_…`, nothing that matches a
   real token format, not even a public example value) **and no push goes out unscanned.**
   Every session runs `./seclab hooks install` once per clone (and again when `build/hooks`
-  changes): the repo's pre-push hook, copied into the clone's git dir, runs
-  `./seclab lint secrets` (gitleaks built from pinned source) over every commit being pushed,
-  and a hit, or a scan that can't run, blocks the push.
+  or the gitleaks pin changes): the install writes a self-contained pre-push hook into the
+  clone's git dir, which scans every commit being pushed with gitleaks built from pinned
+  source, and a hit, or a scan that can't run, blocks the push.
+  **Never install a shared hook that depends on code that isn't on main yet:** every worktree
+  of the clone runs it at once, and a hook calling a branch-only command blocked every other
+  session's pushes.
   The required `lint` check scans every commit main doesn't have yet on every push and PR. Why: GitHub push
   protection, no real-looking secrets in history, and a manual rule got skipped once.
 - **Every workflow change gets its own security-review round**

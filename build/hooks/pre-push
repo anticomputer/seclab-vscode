@@ -1,21 +1,42 @@
 #!/usr/bin/env bash
-# pre-push (installed with `./seclab hooks install`; AGENTS.md): every commit range being pushed
-# is scanned with the gitleaks built from pinned source before anything leaves the machine.
-# A hit, or a scan that can't run (no docker, no scanner), blocks the push.
+# pre-push (installed with `./seclab hooks install`; AGENTS.md): every commit being pushed is
+# scanned with the gitleaks built from pinned source before anything leaves the machine.
+# Self-contained (review VV-8): it runs no code from the pushing checkout, so it works from any
+# worktree, whatever its branch. The install bakes in the scanner's image ID and the pinned
+# binary sha256; a missing image or a mismatched binary blocks the push (re-run the install).
+# A hit, or a scan that can't run, blocks the push.
 # git passes "<local ref> <local sha> <remote ref> <remote sha>" lines on stdin.
 set -euo pipefail
-ROOT="$(git rev-parse --show-toplevel)"
-# The scanner comes from the pushing checkout; one that predates it can't push (fail closed).
-grep -q '^lint_secrets()' "$ROOT/seclab" 2>/dev/null || { echo "pre-push: $ROOT has no ./seclab lint secrets; push from an up-to-date checkout" >&2; exit 1; }
+IMAGE='@GITLEAKS_IMAGE@'
+BIN_SHA256='@GITLEAKS_SHA256@'
+fail() { echo "pre-push: $*" >&2; exit 1; }
+[[ "$IMAGE" == sha256:* && "$BIN_SHA256" =~ ^[0-9a-f]{64}$ ]] || fail "hook not installed with ./seclab hooks install"
+command -v docker >/dev/null || fail "no docker; the secret scan can't run"
+run() { docker run --rm -i --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user 65534:65534 --pull never "$@"; }
+got="$(run --entrypoint sha256sum "$IMAGE" /usr/bin/gitleaks </dev/null 2>/dev/null | cut -d' ' -f1)" \
+	|| fail "scanner image $IMAGE missing; run ./seclab hooks install from an up-to-date checkout"
+[[ "$got" == "$BIN_SHA256" ]] || fail "scanner binary sha256 $got != pinned $BIN_SHA256"
 zero='^0+$'
 status=0
+refs=0
 while read -r _lref lsha _rref rsha; do
+	refs=$((refs + 1))
 	[[ "$lsha" =~ $zero ]] && continue # a delete pushes no content
 	# A new remote ref (or one we don't have) scans from the merge base with origin/main.
 	base="$rsha"
 	if [[ "$base" =~ $zero ]] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-		base="$(git merge-base origin/main "$lsha")"
+		base="$(git merge-base origin/main "$lsha")" || fail "no merge base with origin/main for $lsha"
 	fi
-	"$ROOT/seclab" lint secrets "$base" "$lsha" || status=1
+	# Every commit the remote doesn't have yet, merges included, binary-marked files as text
+	# (VV-1, VV-3). Commits already on any origin ref (e.g. main's, after a rebase) are public
+	# already, so scanning them again only blocks the push.
+	if git -c color.ui=never -c core.quotePath=false log -p -m --text --no-ext-diff --no-textconv --no-color "$lsha" --not "$base" --remotes=origin \
+		| run "$IMAGE" stdin --no-banner --redact --verbose --exit-code 1 --log-level warn; then
+		echo "pre-push: secrets clean (${base:0:7}..${lsha:0:7})"
+	else
+		echo "pre-push: gitleaks found a secret, or the scan failed, in ${base:0:7}..${lsha:0:7}; push blocked" >&2
+		status=1
+	fi
 done
+echo "pre-push: $refs ref(s) checked"
 exit "$status"
