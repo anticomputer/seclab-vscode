@@ -75,4 +75,5 @@ Good, bad, and follow-ups this creates.
 | 2026-11-04 | [Introduce a tab supervisor (`seclab-tabd`) with a versioned stdio protocol between the editor and sandbox runtimes](20261104-tab-supervisor.md) | accepted |
 | 2026-11-04 | [Threat model: the primary attacker is a rogue extension the user installs](20261104-threat-model-rogue-extension.md) | accepted |
 | 2026-11-04 | [Fork VSCodium-style: pinned upstream, jq product.json, small patch queue](20261104-vscodium-style-fork.md) | accepted |
+| 2026-11-04 | [Write-back gate: tab writes reach the host checkout only through tabd, code-running files only with approval](20261104-write-back-gate.md) | accepted |
 <!-- index:end -->
