@@ -90,6 +90,11 @@ def build(policy: dict, inventory: dict | None = None) -> dict:
             "ref": "chan:%s" % name,
             "constraint": entry.get("constraint"),
         }
+    deny_prefixes = [
+        (r.get("match") or {}).get("prefix")
+        for r in (policy.get("commands", {}) or {}).get("rules") or []
+        if (r.get("match") or {}).get("prefix") and r.get("verdict") == "deny"
+    ]
     uri_args = {}
     for service in ((inventory or {}).get("surfaces", {})
                     .get("a_mainthread_rpc", {}).get("services", [])):
@@ -102,6 +107,7 @@ def build(policy: dict, inventory: dict | None = None) -> dict:
         "commands": commands,
         "channels": channels,
         "uriArgs": uri_args,
+        "commandDenyPrefixes": sorted(p for p in deny_prefixes if p),
     }
 
 
@@ -149,6 +155,18 @@ def render(policy: dict, sha: str, inventory: dict | None = None) -> str:
         " * with no marker is revived by the consumer and invisible to a shape\n"
         " * search.\n"
         " */\n")
+    out.append(
+        "/**\n"
+        " * Command id prefixes denied before the table is consulted.\n"
+        " *\n"
+        " * `commands.exact` is resolved before rules, so a prefix rule alone can be\n"
+        " * overridden by an exact entry. Checking these first means the guarantee\n"
+        " * does not depend on the generated table staying correct.\n"
+        " */\n")
+    out.append("export const SECLAB_COMMAND_DENY_PREFIXES: readonly string[] = [\n")
+    for pfx in data["commandDenyPrefixes"]:
+        out.append("\t'%s',\n" % pfx)
+    out.append("];\n\n")
     out.append("export const SECLAB_URI_ARGS: ReadonlyMap<string, readonly number[]> = new Map([\n")
     for key in sorted(data["uriArgs"]):
         out.append("\t['%s', [%s]],\n" % (key, ", ".join(str(i) for i in data["uriArgs"][key])))

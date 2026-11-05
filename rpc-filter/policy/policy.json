@@ -47,6 +47,12 @@
 			"enforced_by": "on this side, $getSession and $getPassword carry credential-access impact and identity_from_argument, so the no-real-secret-in-tab and identity-never-from-arguments checks already force them to deny or rewrite. The derivation bound itself -- that a derived token inherits no more than its parent's bindings -- is enforced by CredentialStore.derive in the broker, not here.",
 			"checked_by": "check_drift.py::check_invariants for the filter side. The broker side is checked by a unit test in the broker's own suite; it is named in checked_by_pending until it lands, because this repo cannot resolve it yet.",
 			"checked_by_pending": "broker/tests/unit/test_core.py::test_derived_credential_is_never_wider_than_its_parent is agreed with the broker session but not yet on origin/anticomputer-egress-credential-broker. Recorded as pending rather than as a resolved citation, because a citation to a test that does not exist is the same false assurance this invariant's enforcement fields were added to prevent. Clear this key once it lands; check_citations enforces that a non-pending path exists."
+		},
+		{
+			"id": "no-seclab-commands-from-tabs",
+			"statement": "No command whose id begins 'seclab.' is reachable from a sandboxed host.",
+			"enforced_by": "a deny rule on the prefix, and -- because commands.exact is resolved before rules -- a check that no exact entry with that prefix carries a reachable verdict. The filter also refuses the prefix at run time before consulting its table, so the guarantee does not depend on the table staying correct.",
+			"checked_by": "check_drift.py::check_invariants"
 		}
 	],
 	"rpc": {
@@ -596,6 +602,17 @@
 			}
 		},
 		"rules": [
+			{
+				"match": {
+					"prefix": "seclab."
+				},
+				"verdict": "deny",
+				"impact": [
+					"ui-spoofing",
+					"code-execution"
+				],
+				"rationale": "The fork's own commands, which exist to let the *user* approve things the tab cannot do for itself. seclab.reviewChanges and seclab.confirmDeletes open modal approval dialogs in the Tab Manager. A tab that can raise those at will gets an unlimited supply of genuine-looking approval prompts; the click is still the user's, but the prompt is the attacker's, and a user who is asked often enough eventually says yes. The same reasoning covers the observability path: if a decision report were reachable as a command, a tab could forge events the UI labels 'trusted'. First rule in the list so the grouping is unambiguous, and backed by an invariant because a prefix rule alone would be overridden by an entry in commands.exact."
+			},
 			{
 				"match": {
 					"category": "host-process"
