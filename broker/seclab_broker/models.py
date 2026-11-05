@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.parse
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
@@ -48,6 +49,8 @@ class Provider:
     tool_fields: tuple[str, ...]
     tool_types: frozenset[str]
     untyped_tool: str | None
+    auth_headers: frozenset[str] = frozenset()
+    auth_query: frozenset[str] = frozenset()
 
     @classmethod
     def from_json(cls, obj: dict) -> "Provider":
@@ -59,7 +62,28 @@ class Provider:
             tool_fields=tuple(obj.get("toolFields", ["tools"])),
             tool_types=frozenset(obj.get("toolTypes", [])),
             untyped_tool=obj.get("untypedTool"),
+            auth_headers=frozenset(h.lower() for h in obj.get("authHeaders", [])),
+            auth_query=frozenset(q.lower() for q in obj.get("authQueryParams", [])),
         )
+
+
+# Where a model API might take a credential. Every value found in one of these, plus a
+# provider's own `authHeaders`/`authQueryParams`, must hold a sentinel of this tab.
+CREDENTIAL_HEADERS = frozenset({"authorization", "x-api-key", "api-key", "x-goog-api-key",
+                                "ocp-apim-subscription-key", "openai-api-key", "anthropic-api-key",
+                                "x-auth-token", "cookie"})
+CREDENTIAL_QUERY = frozenset({"key", "api-key", "api_key", "apikey", "subscription-key", "access_token",
+                              "token", "auth", "sig", "signature", "code"})
+
+
+def credential_values(p: Provider | None, headers: dict[str, list[str]], query: str) -> list[tuple[str, str]]:
+    """(location, value) for every place a credential could ride on a model request."""
+    names = CREDENTIAL_HEADERS | (p.auth_headers if p else frozenset())
+    out = [(f"header:{n}", v) for n, vs in headers.items() if n in names for v in vs]
+    qnames = CREDENTIAL_QUERY | (p.auth_query if p else frozenset())
+    out += [(f"query:{k.lower()}", v) for k, v in urllib.parse.parse_qsl(query, keep_blank_values=True)
+            if k.lower() in qnames]
+    return out
 
 
 @dataclass(frozen=True)
@@ -165,6 +189,7 @@ class _Parser:
     def _object(self, depth: int) -> dict:
         self.i += 1
         out: dict = {}
+        folds: set[str] = set()
         self._ws()
         if self.s.startswith("}", self.i):
             self.i += 1
@@ -176,6 +201,11 @@ class _Parser:
             k = self._string(key=True)
             if k in out:
                 raise StrictJSONError("duplicate key")
+            folded = k.casefold()
+            if folded in folds:
+                # Case-insensitive decoders (Go encoding/json) would merge these.
+                raise StrictJSONError("keys differ only in case")
+            folds.add(folded)
             self._ws()
             if not self.s.startswith(":", self.i):
                 raise StrictJSONError("expected ':'")
@@ -298,10 +328,65 @@ def check_request(policy: ModelPolicy, host: str, method: str, path: str, header
             if not isinstance(t, dict):
                 return BodyVerdict(False, f"{f} element must be an object", p.id)
             ttype = t.get("type", p.untyped_tool)
+            if any(k != "type" and k.casefold() == "type" for k in t):
+                return BodyVerdict(False, "tool type key in another case", p.id)
             if not isinstance(ttype, str) or ttype not in allowed:
                 return BodyVerdict(False, "tool type not allowed", p.id, detail=str(ttype))
             seen.append(ttype)
+    if REMOTE_CONTENT_GRANT not in allowed:
+        content = {k: v for k, v in doc.items() if k not in p.tool_fields}
+        where = _remote_content(content)
+        if where is not None:
+            return BodyVerdict(False, "remote content the provider would fetch", p.id, detail=where)
     return BodyVerdict(True, provider=p.id, tools=seen)
+
+
+# A grant `toolType` that lets the provider fetch URLs named in message content.
+REMOTE_CONTENT_GRANT = "remote-content"
+# Keys whose value the providers treat as a resource to fetch (image_url, file_url, Anthropic
+# `source.url`, MCP `server_url`, ...). Matched case-insensitively, at any depth. Inline
+# `data:` URIs are content, not a fetch, and pass.
+_URL_KEYS = frozenset({"url", "uri", "href", "image_url", "file_url", "server_url", "audio_url",
+                       "video_url", "document_url", "source_url", "link"})
+_FETCHED_SOURCE_TYPES = frozenset({"url", "uri", "image_url", "file_url"})
+
+
+def _remote_content(node: Any, path: str = "$") -> str | None:
+    """JSON path of the first value a provider would fetch, else None."""
+    if isinstance(node, list):
+        for i, v in enumerate(node):
+            hit = _remote_content(v, f"{path}[{i}]")
+            if hit:
+                return hit
+        return None
+    if not isinstance(node, dict):
+        return None
+    t = node.get("type")
+    if isinstance(t, str) and t.casefold() in _FETCHED_SOURCE_TYPES and "data" not in node:
+        target = node.get("url", node.get(t))
+        if not _inline(target.get("url") if isinstance(target, dict) else target):
+            return f"{path}.type"
+    for k, v in node.items():
+        if k == "input" and t == "tool_use":
+            continue  # a client tool call the model made: run in the tab, never fetched by the provider
+        if k.casefold() in _URL_KEYS:
+            target = v.get("url") if isinstance(v, dict) else v
+            if isinstance(v, dict) and "url" not in v:
+                hit = _remote_content(v, f"{path}.{k}")
+                if hit:
+                    return hit
+                continue
+            if not _inline(target):
+                return f"{path}.{k}"
+            continue
+        hit = _remote_content(v, f"{path}.{k}")
+        if hit:
+            return hit
+    return None
+
+
+def _inline(v: Any) -> bool:
+    return isinstance(v, str) and v[:5].casefold() == "data:"
 
 
 @dataclass

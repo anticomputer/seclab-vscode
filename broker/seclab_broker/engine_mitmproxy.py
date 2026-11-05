@@ -31,7 +31,7 @@ from .policy import (METHOD_OVERRIDE_HEADERS, Binding, PolicyError, RequestView,
                      canonical_path, normalize_host, normalize_ip, query_has_method_override,
                      validate_fragment)
 from .scanner import find_minted
-from .models import StrictJSONError, check_request, is_model_host, parse_strict
+from .models import StrictJSONError, check_request, credential_values, is_model_host, parse_strict
 from .untrusted import display_host, display_path
 
 log = logging.getLogger("seclab.engine")
@@ -46,8 +46,6 @@ WS_WINDOW = 8192
 REDACTED_MARK = "[seclab-redacted:"
 # Agent-host tokens sealed to an advertised key (upstream agentHostAuth); never forwarded.
 SEALED_PREFIX = "copilot-sealed.v1."
-# Headers that carry an API credential to a model host; only a sentinel of this tab may.
-MODEL_AUTH_HEADERS = ("authorization", "x-api-key", "api-key")
 
 
 def fail_closed(fn):
@@ -317,15 +315,15 @@ class SeclabAddon:
                          **({"detail": verdict.detail} if verdict.detail is not None else {}), **view.summary())
             self._deny(flow, 403, f"model request denied: {verdict.reason}")
             return False
-        for name in MODEL_AUTH_HEADERS:
-            for value in headers.get(name, []):
-                if not self.b.creds.find_sentinels(value.encode("latin-1")):
-                    # Only this tab's sentinels authenticate to a model host: no tab-held key,
-                    # so every model call is the user's, budgeted and audited here.
-                    self.b.audit("sentinel.misplaced", credentialId="none", location=f"header:{name}",
-                                 action="block", **view.summary())
-                    self._deny(flow, 403, f"model host credential must be a sentinel of this tab ({name})")
-                    return False
+        query = r.path.split("?", 1)[1] if "?" in r.path else ""
+        for where, value in credential_values(models.provider_for(view.host), headers, query):
+            if not self.b.creds.find_sentinels(value.encode("utf-8", "surrogateescape")):
+                # Only this tab's sentinels authenticate to a model host: no tab-held key,
+                # so every model call is the user's, budgeted and audited here.
+                self.b.audit("sentinel.misplaced", credentialId="none", location=where,
+                             action="block", **view.summary())
+                self._deny(flow, 403, "model host credential must be a sentinel of this tab")
+                return False
         why = self.b.model_usage.exhausted(models)
         if why:
             self.b.audit("model.budget_exceeded", reason=why, provider=verdict.provider,
@@ -347,14 +345,18 @@ class SeclabAddon:
             self._deny(flow, 403, "request was not classified")
             return
         upgrade = _upgrade_token(flow.request)
-        for name, value in flow.request.headers.fields:
-            if SEALED_PREFIX.encode() in value.lower():
-                # A token sealed for the agent host is never forwarded, wherever it goes.
-                self.b.audit("sentinel.misplaced", credentialId="sealed-token",
-                             location=f"header:{name.decode('latin-1').lower()}", action="block",
-                             **view.summary())
-                self._deny(flow, 403, "sealed token in a request")
-                return
+        sealed = SEALED_PREFIX.encode()
+        hits = [f"header:{n.decode('latin-1').lower()}" for n, v in flow.request.headers.fields if sealed in v.lower()]
+        if sealed in flow.request.path.encode("utf-8", "surrogateescape").lower():
+            hits.append("url")
+        if sealed in (flow.request.raw_content or b"").lower():
+            hits.append("body")
+        if hits:
+            # A token sealed for the agent host is never forwarded, wherever it goes.
+            self.b.audit("sentinel.misplaced", credentialId="sealed-token", location=hits[0],
+                         action="block", **view.summary())
+            self._deny(flow, 403, "sealed token in a request")
+            return
         if is_model_host(view.host, self.b.policy.models) and not self._model_gate(flow, view, upgrade):
             return
         planned: dict[str, tuple[Credential, Binding]] = {}

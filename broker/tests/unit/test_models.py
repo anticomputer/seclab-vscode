@@ -109,3 +109,57 @@ def test_budget_and_policy_wiring():
     assert "byte" in b.exhausted(p.models)
     with pytest.raises(PolicyError):
         Policy.from_json({"version": 1, "models": {"providers": ["nope"]}})
+
+
+# ---- security review round 7 regressions ------------------------------------------------
+
+@pytest.mark.parametrize("host,path,body", [
+    ("api.openai.com", "/v1/chat/completions", {"model": "m", "messages": [{"role": "user", "content": [
+        {"type": "image_url", "image_url": {"url": "https://exfil.example.test/c.png?d=x"}}]}]}),
+    ("api.openai.com", "/v1/responses", {"model": "m", "input": [{"role": "user", "content": [
+        {"type": "input_file", "file_url": "https://exfil.example.test/f.pdf"}]}]}),
+    ("api.openai.com", "/v1/responses", {"model": "m", "input": [{"role": "user", "content": [
+        {"type": "input_image", "image_url": "https://exfil.example.test/i.png"}]}]}),
+    ("api.anthropic.com", "/v1/messages", {"model": "m", "max_tokens": 1, "messages": [{"role": "user", "content": [
+        {"type": "image", "source": {"type": "url", "url": "https://exfil.example.test/c.png?d=x"}}]}]}),
+    ("api.anthropic.com", "/v1/messages", {"model": "m", "max_tokens": 1, "messages": [{"role": "user", "content": [
+        {"type": "document", "source": {"type": "url", "url": "https://exfil.example.test/d.pdf"}}]}]}),
+    ("api.anthropic.com", "/v1/messages", {"model": "m", "max_tokens": 1, "messages": [{"role": "user", "content": [
+        {"type": "image", "source": {"type": "URL", "URL": "https://exfil.example.test/c.png"}}]}]}),
+])
+def test_r7_remote_content_the_provider_would_fetch_is_denied(host, path, body):
+    v = check(host, path, body)
+    assert not v.ok and "remote content" in v.reason and v.detail.startswith("$.")
+
+
+def test_r7_inline_content_and_client_tool_calls_pass():
+    assert check("api.openai.com", "/v1/chat/completions", {"model": "m", "messages": [{"role": "user", "content": [
+        {"type": "text", "text": "see https://docs.example.test/page"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}]}]}).ok
+    assert check("api.anthropic.com", "/v1/messages", {"model": "m", "max_tokens": 1, "messages": [
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "fetch",
+                                           "input": {"url": "https://docs.example.test/"}}]},
+        {"role": "user", "content": [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AAAA"}}]}],
+        "tools": [{"name": "fetch", "input_schema": {"type": "object", "properties": {"url": {"type": "string"}}}}]}).ok
+    granted = ModelPolicy.from_json({"providers": ["anthropic"],
+                                     "grants": [{"provider": "anthropic", "toolType": "remote-content"}]})
+    assert check("api.anthropic.com", "/v1/messages", {"model": "m", "max_tokens": 1, "messages": [{"role": "user", "content": [
+        {"type": "image", "source": {"type": "url", "url": "https://img.example.test/c.png"}}]}]}, policy=granted).ok
+
+
+def test_r7_case_variant_keys_are_refused():
+    with pytest.raises(StrictJSONError):
+        parse_strict(b'{"tools":[{"type":"function","Type":"mcp"}]}')
+    v = check("api.openai.com", "/v1/chat/completions", {"model": "m", "messages": [], "tools": [{"TYPE": "mcp"}]})
+    assert not v.ok
+
+
+def test_r7_every_credential_location_is_found():
+    from seclab_broker.models import Provider, credential_values
+    gemini = Provider.from_json({"id": "g", "hosts": ["gen.example.test"], "endpoints": [{"path": "/**", "methods": ["POST"]}],
+                                 "fields": ["contents"], "authHeaders": ["X-Custom-Key"], "authQueryParams": ["k2"]})
+    hdrs = {"x-goog-api-key": ["a"], "ocp-apim-subscription-key": ["b"], "x-custom-key": ["c"], "cookie": ["d"],
+            "user-agent": ["not-a-credential"]}
+    found = dict(credential_values(gemini, hdrs, "key=e&KEY=f&subscription-key=g&k2=h&alt=sse"))
+    assert set(found) == {"header:x-goog-api-key", "header:ocp-apim-subscription-key", "header:x-custom-key",
+                          "header:cookie", "query:key", "query:subscription-key", "query:k2"}

