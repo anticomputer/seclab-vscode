@@ -87,3 +87,53 @@ diff -ruN a/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentH
  	const authenticationService = accessor.get(IAuthenticationService);
  	const defaultAccountService = accessor.get(IDefaultAccountService);
  	const logService = accessor.get(ILogService);
+diff -ruN a/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts b/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts
+--- a/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts	2026-11-05 14:43:29
++++ b/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts	2026-11-05 14:43:29
+@@ -11,6 +11,9 @@
+ import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
+ import { Registry } from '../../../../../platform/registry/common/platform.js';
+ import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../../common/contributions.js';
++import { setSeclabDialPolicy } from '../../../../../platform/agentHost/browser/remoteAgentHostServiceImpl.js';
++import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
++import { seclabAiDisabled } from '../../../../services/extensions/common/seclabRpcFilter.js';
+ import { CloudSandboxAgentHostService } from './cloudSandboxAgentHostService.js';
+ import { CloudSandboxApiService } from './cloudSandboxApiService.js';
+ import { CloudSandboxDraftPreparationService } from './cloudSandboxDraftPreparationService.js';
+@@ -27,6 +30,28 @@
+ import { RemoteAgentHostAuthenticationResolver } from './remoteAgentHostAuthenticationResolver.js';
+ import { MissionControlAvailabilityService } from './missionControlAvailabilityService.js';
+ 
++/**
++ * seclab: declares whether this window may dial a remote agent host.
++ *
++ * `_connectTo` refuses until this runs, so the declaration is the thing that
++ * *enables* dialling in an ordinary window rather than the thing that disables
++ * it in a tab. That direction is deliberate: an undeclared window cannot dial,
++ * so a missing or late declaration over-refuses instead of leaving the host
++ * dialling an address a tab chose.
++ *
++ * Registered before RemoteAgentHostContribution at the same phase, and
++ * contributions within a phase run in registration order, so the declaration
++ * precedes anything that drives a dial.
++ */
++class SeclabDialPolicyContribution {
++	static readonly ID = 'workbench.contrib.seclabDialPolicy';
++	constructor(
++		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
++	) {
++		setSeclabDialPolicy(seclabAiDisabled(environmentService.remoteAuthority) ? 'deny' : 'allow');
++	}
++}
++
+ class MissionControlContribution {
+ 	static readonly ID = 'workbench.contrib.missionControl';
+ 	constructor(
+@@ -45,6 +70,7 @@
+ registerSingleton(IRemoteAgentHostConnectionCustomizationService, RemoteAgentHostConnectionCustomizationService, InstantiationType.Delayed);
+ registerSingleton(IAgentHostAdvertisedAuthenticationResolver, RemoteAgentHostAuthenticationResolver, InstantiationType.Delayed);
+ 
++registerWorkbenchContribution2(SeclabDialPolicyContribution.ID, SeclabDialPolicyContribution, WorkbenchPhase.AfterRestored);
+ registerWorkbenchContribution2(RemoteAgentHostContribution.ID, RemoteAgentHostContribution, WorkbenchPhase.AfterRestored);
+ registerWorkbenchContribution2(EditorCloudSandboxContribution.ID, EditorCloudSandboxContribution, WorkbenchPhase.AfterRestored);
+ registerWorkbenchContribution2(MissionControlContribution.ID, MissionControlContribution, WorkbenchPhase.AfterRestored);
