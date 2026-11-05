@@ -171,9 +171,12 @@ export class SbxDriver implements Driver {
 				throw new DriverError(-32011, `broker allow failed: ${tail(a.stderr)}`);
 			}
 		}
+		// sbx attaches sandbox-scoped kit allows at create time; deny those too before the
+		// sandbox ever starts (the fence check would otherwise refuse every new tab).
+		await this.syncDenies(spec);
 	}
 
-	/** Add a per-sandbox deny for every global allow not yet denied for this sandbox. Needs no consent. */
+	/** Add a per-sandbox deny for every allow (global or scoped to it) not yet denied for this sandbox. Needs no consent. */
 	private async syncDenies(spec: TabRuntimeSpec): Promise<void> {
 		const rules = await this.policyRules();
 		const scoped = `sandbox:${spec.sandboxName}`;
@@ -185,7 +188,7 @@ export class SbxDriver implements Driver {
 				}
 			}
 		}
-		for (const res of resourcesToMirror(rules)) {
+		for (const res of resourcesToMirror(rules, spec.sandboxName, spec.brokerPort)) {
 			if (!denied.has(res)) {
 				const d = await this.runner.run(this.sbx, ['policy', 'deny', 'network', '--sandbox', spec.sandboxName, '--', assertPolicyResource(res)]);
 				if (d.code !== 0) {
@@ -213,7 +216,7 @@ export class SbxDriver implements Driver {
 			problems.push(...await this.secretProblems(spec));
 			const probes: Array<[string, boolean]> = CANARY_TARGETS.map(t => [t, false]);
 			// Plus a few concrete (non-glob) global allows: these must be denied for the tab.
-			for (const res of resourcesToMirror(rules).filter(r => !/[*?[\]]/.test(r)).slice(0, 3)) {
+			for (const res of resourcesToMirror(rules, spec.sandboxName, spec.brokerPort).filter(r => !/[*?[\]]/.test(r)).slice(0, 3)) {
 				probes.push([res, false]);
 			}
 			if (spec.brokerPort !== undefined) {

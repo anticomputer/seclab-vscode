@@ -129,6 +129,17 @@ test('fence: only our own broker allow is exempt', () => {
 	assert.equal(checkFence(parsePolicyJson(RULES([deny(['api.anthropic.com:443', '**.openai.com:443']), globalBroker])), S, 18080).length, 1);
 });
 
+test('fence: sandbox-scoped kit allows (sbx 0.51) are mirrored too; only our broker allow and other sandboxes are not', () => {
+	const kit = { id: '684767c9', applies_to: `sandbox:${S}`, scope: `sandbox:${S}`, decision: 'allow', resource_type: 'network', resources: ['deb.debian.org:80', 'dhi.io:80'], actions: ['net:connect:tcp'], status: 'active' };
+	const brokerAllow = { ...kit, id: 'b', resources: ['localhost:18080'] };
+	const rules = parsePolicyJson(RULES([kit, brokerAllow]));
+	assert.deepEqual(resourcesToMirror(rules, S, 18080), ['**.openai.com:443', 'api.anthropic.com:443', 'deb.debian.org:80', 'dhi.io:80']);
+	assert.ok(resourcesToMirror(rules, S).includes('localhost:18080'), 'no broker: its allow is mirrored like any other');
+	assert.match(checkFence(rules, S, 18080).join(), /deb\.debian\.org:80/, 'unmirrored kit allow fails the fence');
+	const mirrored = parsePolicyJson(RULES([kit, brokerAllow, deny(resourcesToMirror(rules, S, 18080))]));
+	assert.deepEqual(checkFence(mirrored, S, 18080), [], 'mirroring what resourcesToMirror returns satisfies the fence');
+});
+
 test('fence: fails closed on unknown shapes', () => {
 	assert.throws(() => parsePolicyJson('not json'));
 	assert.throws(() => parsePolicyJson('{"rules":[{"id":1}]}'));
