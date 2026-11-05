@@ -75,4 +75,5 @@ try {
 fs.writeFileSync(path.join(OUT, 'in-tab-report.json'), JSON.stringify(report, null, 1));
 console.log(JSON.stringify(report, null, 1).slice(0, 4000));
 void URI;
-process.exit(0);
+const agents = (report.agents as unknown[] | undefined) ?? [];
+process.exit(report.error || agents.length === 0 ? 1 : 0);

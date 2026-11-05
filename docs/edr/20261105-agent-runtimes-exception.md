@@ -71,6 +71,15 @@ The three runtimes are a recorded exception, on these conditions:
 `bar: exception` with this record, and carries a `gap` until the fork-build session lands
 the build-time fetch, the check and the patch.
 
+**Test use.** The agents-in-the-tab spike (`test/agentic/ahp/in-tab.sh`,
+[EDR](20261105-agents-in-tab-spike.md)) runs the REH build's `copilot-runtime` in a plain
+Docker container, not an sbx tab, as a stand-in for the fenced tab. The container has
+`--network none`, read-only access to the builder volume, and one writable directory
+under `.work/agentic/runs/`. It holds only a sentinel and a per-run test CA. A
+compromised runtime there could write into that run directory and nothing else; it has
+no network, no real credential and no host path. That use is covered by this exception
+until the spike moves into a real tab.
+
 ## Verification status (2026-11-05)
 - The integrity values and versions above were read from the lockfiles at the pinned SHA.
 - The npm registry could not be reached from this host when this record was written
