@@ -70,3 +70,16 @@ changed it (otherwise it is a conflict); entries identical to the host are prune
 upper layer only at tab start, before the mount (overlay mounts don't survive stop/start). A
 process with a working directory inside the workspace from before the mount would see the
 lower layer, so the mount must precede every tab process (the collector mounts first).
+
+### Upper-layer format (2026-11-05, for increment 2b)
+Observed with fuse-overlayfs 1.14 as root:
+- a deleted lower file becomes an empty root-owned `.wh.<name>` file in the upper layer;
+- a deleted and re-created directory gets `.wh..wh..opq`, meaning every lower child is hidden;
+- a rename is a copy-up of the new name plus a whiteout of the old one;
+- symlinks and modes are stored as-is.
+
+A tab can't forge either marker: creating `.wh.x` or `.wh..wh..opq` through the overlay fails
+with EINVAL. The feed can therefore treat them as the tab's deletions. Applied entries stay in
+the upper layer (removal under a live mount is unsafe), so 2b mirrors later host edits into the
+upper copy in place while the tab hasn't changed it; host-side deletions of such files are not
+reflected until the next tab start.

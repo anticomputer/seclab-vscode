@@ -151,17 +151,30 @@ for (const [vector, argv] of vectors) {
 	console.log(`trigger ${vector}`);
 	inTab(argv);
 	checks.push(...checkEvidence(readEvidence(wsA, vector, readInTab), vector, { marker, expectHostname }));
-	if (driver === 'sbx') {
-		// Write-back gate (ADR write-back-gate): the tab's write stays in its overlay; nothing
-		// reaches the host checkout until tabd reviews it (sync lands in increment 2b).
-		checks.push({ vector, name: 'write-back gate: the tab\'s evidence file is not in the host checkout', ok: readEvidence(wsA, vector) === undefined, detail: '' });
-	}
+}
+if (driver === 'sbx') {
+	// Write-back gate 2b, end to end through tabd: an ordinary edit syncs to the host, a
+	// code-running file is held and never reaches it, and a host edit to a synced file is
+	// mirrored back into the tab's view.
+	const ordinary = path.join(wsA, 'wb-ordinary.txt');
+	const heldFile = path.join(wsA, '.vscode', 'tasks.json');
+	const heldBefore = fs.readFileSync(heldFile, 'utf8');
+	spawnSync(runtime, ['exec', '-u', 'agent', '-w', '/', containerA, 'sh', '-c',
+		`printf 'from the tab\\n' > ${JSON.stringify(ordinary)}; printf '{"version":"2.0.0","tasks":[]}\\n' > ${JSON.stringify(heldFile)}`], { encoding: 'utf8', timeout: 60_000 });
+	const s1 = await client.request<{ applied: string[]; held: Array<{ path: string }> }>('tab.writeback.sync', { tabId: tabA });
+	checks.push({ vector: 'write-back', name: 'an ordinary tab edit is synced to the host checkout', ok: fs.existsSync(ordinary) && fs.readFileSync(ordinary, 'utf8') === 'from the tab\n', detail: JSON.stringify(s1).slice(0, 200) });
+	const st = await client.request<{ gated: boolean; pending: Array<{ path: string }> }>('tab.writeback.status', { tabId: tabA });
+	checks.push({ vector: 'write-back', name: 'a code-running file (.vscode/tasks.json) is held, not written', ok: fs.readFileSync(heldFile, 'utf8') === heldBefore && st.gated && st.pending.some(p => p.path === '.vscode/tasks.json'), detail: JSON.stringify(st.pending.map(p => p.path)) });
+	fs.writeFileSync(ordinary, 'edited on the host\n');
+	const s2 = await client.request<{ mirrored: string[] }>('tab.writeback.sync', { tabId: tabA });
+	checks.push({ vector: 'write-back', name: 'a host edit to a synced file is mirrored into the tab', ok: readInTab(ordinary) === 'edited on the host\n', detail: JSON.stringify(s2.mirrored) });
 }
 if (driver === 'sbx') {
 	// Review JJ-1: no tab process may keep a reference to the host share under the overlay.
 	// Write through every agent process's /proc/<pid>/cwd (the REH, its extension host…) and
-	// via a relative path from a child of the REH's own cwd; none may land on the host.
-	const probe = '.seclab-jj1-probe';
+	// via a relative path from a child of the REH's own cwd; none may land on the host. The
+	// probe name is a held path (.env.*), so the 2b sync never writes it back legitimately.
+	const probe = '.env.seclab-jj1-probe';
 	const script = `for p in /proc/[0-9]*; do [ -O "$p" ] || continue; printf x > "$p/cwd/${probe}" 2>/dev/null; `
 		+ `(cd "$p/cwd" 2>/dev/null && printf x > ${probe}-rel) 2>/dev/null; done; true`;
 	spawnSync(runtime, ['exec', '-u', 'agent', '-w', '/', containerA, 'sh', '-c', script], { encoding: 'utf8', timeout: 60_000 });

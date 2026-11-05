@@ -6,11 +6,13 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { checkFence, parsePolicyJson, resourcesToMirror } from '../fence.ts';
 import type { Runner } from '../run.ts';
 import { assertImageRef, assertPolicyResource, SANDBOX_NAME_RE, CONNECTION_TOKEN_RE } from '../validate.ts';
+import type { UpperReader } from '../writeback-feed.ts';
 import { DriverError, type Driver, type DriverInfo, type FenceReport, type PolicyLogEntry, type SensorHooks, type TabRuntimeSpec } from './types.ts';
 
 const MIN_VERSION = [0, 51, 0];
 const REH_CONNECT = '/opt/seclab/bin/seclab-reh-connect';
 const OBS_COLLECT = '/opt/seclab/bin/seclab-obs-collect';
+const WB_FEED = '/opt/seclab/bin/seclab-wb-feed';
 // The REH relay runs as its own fixed uid:gid (template), so the tab user cannot ptrace it.
 // Always both ids: a bare uid would take the passwd lookup's gid, and gid 999 is docker.
 const RELAY_USER = '990:990';
@@ -244,6 +246,20 @@ export class SbxDriver implements Driver {
 	}
 
 	/** `sbx policy log <tab> --json`: untrusted CLI output, validated field by field. */
+	/** Write-back gate: `seclab-wb-feed` as root in the VM (fixed argv; stdin carries requests). */
+	upperReader(spec: TabRuntimeSpec): UpperReader {
+		return {
+			feed: async (mode, input) => {
+				const r = await this.runner.run(this.sbx, ['exec', '-i', '-u', 'root', '-w', '/', spec.sandboxName, WB_FEED, mode],
+					{ input: input ?? '', timeoutMs: 120_000, maxOutputBytes: 96 << 20 });
+				if (r.code !== 0 || r.truncated) {
+					throw new DriverError(-32013, `write-back feed ${mode} failed${r.truncated ? ' (output over the cap)' : ''}: ${r.stderr.trim().slice(-200)}`);
+				}
+				return r.stdout;
+			},
+		};
+	}
+
 	async policyLog(spec: TabRuntimeSpec): Promise<PolicyLogEntry[]> {
 		checkSpec(spec);
 		const r = await this.runner.run(this.sbx, ['policy', 'log', spec.sandboxName, '--json', '--limit', '500'], { timeoutMs: 30_000, maxOutputBytes: 2 << 20 });

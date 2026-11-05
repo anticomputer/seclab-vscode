@@ -1,0 +1,247 @@
+#!/usr/bin/python3 -I
+# seclab-wb-feed: the write-back gate's view of a tab's upper layer (ADR write-back-gate, 2b).
+# Runs as root inside the tab's microVM, called by seclab-tabd over `sbx exec -u root -w /`.
+# Reads /var/lib/seclab/wb/upper directly in the init mount namespace, never through the
+# overlay or /proc (review JJ round, note for 2b). Every path is opened component by component
+# from a pinned directory fd with O_NOFOLLOW: the tab controls every name, link and file here.
+#   list            -> JSON lines, one per upper entry, then {"done": ...}
+#   get             <- JSON lines {"p"}            -> {"p","b64","h","m","n"} | {"p","err"}
+#   mirror          <- JSON lines {"p","expect","b64"} -> {"p","ok"} | {"p","err"}
+#                      (writes host content into an upper file in place, only if the file is
+#                       still exactly what tabd last synced: compare-and-swap on its sha256)
+# Kinds in `list`: file, dir, symlink, special, wh (the tab deleted p), opq (dir p is opaque:
+# every lower child is hidden).
+import base64, hashlib, json, os, stat, sys
+
+UPPER = "/var/lib/seclab/wb/upper"
+WH = ".wh."
+OPQ = ".wh..wh..opq"
+MAX_FILE = 16 << 20
+MAX_ENTRIES = 300000
+MAX_LINE = (MAX_FILE * 4) // 3 + 4096
+DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+
+
+def out(rec):
+    sys.stdout.write(json.dumps(rec, separators=(",", ":")) + "\n")
+
+
+def die(msg):
+    sys.stderr.write("seclab-wb-feed: " + msg + "\n")
+    sys.exit(1)
+
+
+def name_ok(n):
+    return n not in ("", ".", "..") and "/" not in n and "\0" not in n and len(n.encode("utf-8", "surrogateescape")) <= 255
+
+
+def rel_ok(rel):
+    if not isinstance(rel, str) or not rel or len(rel) > 4096 or rel.startswith("/"):
+        return False
+    try:
+        rel.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return all(name_ok(s) and not s.startswith(WH) for s in rel.split("/"))
+
+
+def open_parent(root_fd, rel):
+    """fd of rel's parent directory (O_NOFOLLOW at every component) and the last name."""
+    segs = rel.split("/")
+    fd = os.dup(root_fd)
+    try:
+        for s in segs[:-1]:
+            nfd = os.open(s, DIR_FLAGS, dir_fd=fd)
+            os.close(fd)
+            fd = nfd
+    except OSError:
+        os.close(fd)
+        raise
+    return fd, segs[-1]
+
+
+def sha_fd(fd, size):
+    h = hashlib.sha256()
+    left = size
+    while left > 0:
+        b = os.read(fd, min(left, 1 << 20))
+        if not b:
+            break
+        h.update(b)
+        left -= len(b)
+    return h.hexdigest()
+
+
+def cmd_list(root_fd):
+    count = 0
+    skipped = 0
+    stack = [("", os.dup(root_fd))]
+    while stack:
+        prefix, dfd = stack.pop()
+        try:
+            names = sorted(os.listdir(dfd))
+        except OSError:
+            os.close(dfd)
+            continue
+        for n in names:
+            if count >= MAX_ENTRIES:
+                os.close(dfd)
+                for _, f in stack:
+                    os.close(f)
+                out({"done": True, "count": count, "skipped": skipped, "truncated": True})
+                return
+            if not name_ok(n):
+                skipped += 1
+                continue
+            try:
+                n.encode("utf-8")
+            except UnicodeEncodeError:
+                skipped += 1  # not representable: never written back
+                continue
+            rel = prefix + n
+            try:
+                st = os.lstat(n, dir_fd=dfd)
+            except OSError:
+                continue
+            count += 1
+            if n == OPQ:
+                out({"p": prefix[:-1], "k": "opq"})
+                continue
+            if n.startswith(WH):
+                hidden = n[len(WH):]
+                if name_ok(hidden):
+                    out({"p": prefix + hidden, "k": "wh"})
+                continue
+            rec = {"p": rel, "m": stat.S_IMODE(st.st_mode), "n": st.st_nlink, "s": st.st_size}
+            if stat.S_ISDIR(st.st_mode):
+                rec["k"] = "dir"
+                out(rec)
+                try:
+                    stack.append((rel + "/", os.open(n, DIR_FLAGS, dir_fd=dfd)))
+                except OSError:
+                    pass
+            elif stat.S_ISLNK(st.st_mode):
+                rec["k"] = "symlink"
+                try:
+                    rec["t"] = os.readlink(n, dir_fd=dfd)[:4096]
+                except OSError:
+                    rec["t"] = ""
+                out(rec)
+            elif stat.S_ISREG(st.st_mode):
+                rec["k"] = "file"
+                if st.st_size <= MAX_FILE:
+                    try:
+                        fd = os.open(n, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=dfd)
+                        try:
+                            if stat.S_ISREG(os.fstat(fd).st_mode):
+                                rec["h"] = sha_fd(fd, st.st_size)
+                        finally:
+                            os.close(fd)
+                    except OSError:
+                        pass
+                out(rec)
+            else:
+                rec["k"] = "special"
+                out(rec)
+        os.close(dfd)
+    out({"done": True, "count": count, "skipped": skipped, "truncated": False})
+
+
+def requests():
+    for line in sys.stdin.buffer:
+        if len(line) > MAX_LINE:
+            die("request line too long")
+        try:
+            r = json.loads(line)
+        except ValueError:
+            die("bad request")
+        if not isinstance(r, dict) or not rel_ok(r.get("p")):
+            die("bad request path")
+        yield r
+
+
+def cmd_get(root_fd):
+    for r in requests():
+        rel = r["p"]
+        try:
+            pfd, name = open_parent(root_fd, rel)
+            try:
+                fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=pfd)
+            finally:
+                os.close(pfd)
+            try:
+                st = os.fstat(fd)
+                if not stat.S_ISREG(st.st_mode):
+                    out({"p": rel, "err": "not a regular file"})
+                    continue
+                if st.st_size > MAX_FILE:
+                    out({"p": rel, "err": "larger than the per-file cap"})
+                    continue
+                data = os.read(fd, MAX_FILE + 1)
+                if len(data) > MAX_FILE:
+                    out({"p": rel, "err": "larger than the per-file cap"})
+                    continue
+                out({"p": rel, "b64": base64.b64encode(data).decode(), "h": hashlib.sha256(data).hexdigest(),
+                     "m": stat.S_IMODE(st.st_mode), "n": st.st_nlink})
+            finally:
+                os.close(fd)
+        except OSError as e:
+            out({"p": rel, "err": e.strerror or "error"})
+
+
+def cmd_mirror(root_fd):
+    for r in requests():
+        rel, expect = r["p"], r.get("expect")
+        try:
+            data = base64.b64decode(r.get("b64", ""), validate=True)
+        except ValueError:
+            die("bad content")
+        if not (isinstance(expect, str) and len(expect) == 64) or len(data) > MAX_FILE:
+            die("bad mirror request")
+        try:
+            pfd, name = open_parent(root_fd, rel)
+            try:
+                fd = os.open(name, os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, dir_fd=pfd)
+            finally:
+                os.close(pfd)
+            try:
+                st = os.fstat(fd)
+                if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1:
+                    out({"p": rel, "err": "not a single-link regular file"})
+                    continue
+                if sha_fd(fd, st.st_size) != expect:
+                    out({"p": rel, "err": "changed by the tab"})
+                    continue
+                # In place (never replace the directory entry under a live mount: spike).
+                os.lseek(fd, 0, os.SEEK_SET)
+                os.ftruncate(fd, 0)
+                view = memoryview(data)
+                while view:
+                    view = view[os.write(fd, view):]
+                os.fsync(fd)
+                out({"p": rel, "ok": True, "h": hashlib.sha256(data).hexdigest()})
+            finally:
+                os.close(fd)
+        except OSError as e:
+            out({"p": rel, "err": e.strerror or "error"})
+
+
+def main():
+    if os.geteuid() != 0:
+        die("must run as root")
+    if len(sys.argv) != 2 or sys.argv[1] not in ("list", "get", "mirror"):
+        die("usage: seclab-wb-feed list|get|mirror")
+    os.chdir("/")
+    try:
+        root_fd = os.open(UPPER, DIR_FLAGS)
+    except OSError:
+        die("no upper layer (overlay not mounted?)")
+    st = os.fstat(root_fd)
+    if st.st_uid != 0 or (st.st_mode & 0o077):
+        die("unsafe upper layer")
+    {"list": cmd_list, "get": cmd_get, "mirror": cmd_mirror}[sys.argv[1]](root_fd)
+    sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    main()

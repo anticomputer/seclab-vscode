@@ -2,6 +2,7 @@
 // See docs/adr/20261104-tab-supervisor.md.
 
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import type { UpperReader } from '../writeback-feed.ts';
 
 export interface DriverCapabilities {
 	readonly isolationClass: 'microvm' | 'namespaces' | 'vm' | 'remote';
@@ -87,6 +88,8 @@ export interface Driver {
 	remove(spec: TabRuntimeSpec): Promise<void>;
 	/** Trusted egress decisions the runtime itself made for this tab (sbx: `sbx policy log`). */
 	policyLog?(spec: TabRuntimeSpec): Promise<PolicyLogEntry[]>;
+	/** Write-back gate (capability writeBack: gated): read the tab's upper layer, as root, directly. */
+	upperReader?(spec: TabRuntimeSpec): UpperReader;
 }
 
 export interface PolicyLogEntry {
