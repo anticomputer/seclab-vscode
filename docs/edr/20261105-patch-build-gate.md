@@ -41,7 +41,12 @@ pull request, with no path filter:
    stripped and type-only imports and exports skipped, since those are erased at compile time
    (review VV-6). Every `src/**/*.ts` file
    a patch in the series touches must then be reachable from the desktop build or the REH,
-   never only from web. `patches/reach.json` can require specific targets for a security
+   never only from web. Touched files come from the `+++` headers in either style, `git diff`
+   or `diff -ruN` (path, tab, timestamp); a header it can't read fails the gate. The first
+   version anchored the path at end of line, so it silently skipped every `diff -ruN` header:
+   on the RPC branch it reported `ok` having checked 0 of 12 files (found by the RPC session).
+   A self-test now runs the real script on a synthetic tree in both header styles and asserts
+   that a web-only file fails. `patches/reach.json` can require specific targets for a security
    patch, for example a channel filter that must sit in both `desktop` and `server`; a patch
    named there that touches no `src/**/*.ts` file fails, rather than passing with nothing checked.
    `--file PATH...` reports targets for patch authors.

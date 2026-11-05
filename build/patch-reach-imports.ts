@@ -27,3 +27,29 @@ export const runtimeSpecs = (text: string): string[] => {
 	}
 	return out;
 };
+
+/**
+ * Every file a unified diff creates or modifies, from its `+++ ` headers, in any header style:
+ * `git diff` (`+++ b/PATH`) and `diff -ruN` (`+++ b/PATH<TAB>timestamp`). Deletions
+ * (`+++ /dev/null`) are skipped. A `+++ ` header this can't read throws: a header the check
+ * doesn't understand must fail the gate, never shrink what it checks (RPC session report: an
+ * end-anchored regex skipped every `diff -ruN` header and passed with nothing checked).
+ */
+export const patchedFiles = (patch: string): string[] => {
+	const out: string[] = [];
+	const lines = patch.split('\n');
+	for (const [i, line] of lines.entries()) {
+		if (!line.startsWith('+++ ') || !lines[i - 1]?.startsWith('--- ')) {
+			continue;
+		}
+		const p = line.slice(4).split('\t')[0].trimEnd();
+		if (p === '/dev/null') {
+			continue;
+		}
+		if (!/^b\/[^\s]+$/.test(p) || p.split('/').some(s => s === '..' || s === '.')) {
+			throw new Error(`unreadable patch header: ${JSON.stringify(line.slice(0, 200))}`);
+		}
+		out.push(p.slice(2));
+	}
+	return out;
+};
