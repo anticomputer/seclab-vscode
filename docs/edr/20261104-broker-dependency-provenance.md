@@ -75,6 +75,17 @@ two parts:
   `--deny-self-hosted-runners`. The image list is produced and validated before
   any check runs. An empty or malformed register fails, and "ok" is printed
   only if every attested image verified.
+  - Fetching and verifying are separate steps.
+    `verify-images.sh --download [DIR]` is the only step that calls the GitHub
+    API, so it is the only one that may need a token; it writes
+    `DIR/<digest>.jsonl`.
+  - Verification then uses `--bundle` when a bundle exists and needs no token,
+    which CI uses to keep the docs gate tokenless. DIR defaults to
+    `$SECLAB_ATTESTATION_DIR`, else `.work/attestations`.
+  - With no bundle, gh fetches the attestation online, so local use is
+    unchanged.
+  - A downloaded bundle is not trusted: it is verified cryptographically, and a
+    tampered bundle fails.
 
 **Findings** (2026-11-04):
 
@@ -157,6 +168,10 @@ image.
     metadata check and sigstore verification.
   - A wrong source digest for the mitmproxy image fails
     `gh attestation verify`.
+  - gh 2.102.1, with no token and an empty `GH_CONFIG_DIR`:
+    - `--bundle` verification of the correct identity passes;
+    - a wrong `--source-digest` fails;
+    - a tampered bundle fails.
 - `cosign tree` (cosign v2.6.1 pinned by digest) on each pinned image digest:
   no sigstore artifacts.
 - mitmproxy release workflow at `v12.3.1`: `.github/workflows/main.yml` uses
