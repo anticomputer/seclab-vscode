@@ -171,17 +171,19 @@ export function snapshotDiff(before: Snapshot, after: Snapshot): string[] {
 // ---- Editor windows never take focus (AGENTS.md hard rule; user: "you keep popping up on top
 // of my ongoing work"). Launch in the background with LaunchServices (`open -g -n`), never
 // activate, and capture the window by id while it stays covered on the current Space
-// (`screencapture -o -l`, which reads the window's own backing store). Electron's macOS
-// show() still *requests* activation; macOS's cooperative activation refuses that for an app
-// launched in the background, and launchEditorInBackground checks it: if the editor became
-// the frontmost app, the run fails loudly rather than leaving the user to notice.
+// (`screencapture -o -l`, which reads the window's own backing store). `open -g` alone is not
+// enough: Electron's macOS show() activates the app itself (a real launch stole
+// focus). So the launch sets SECLAB_BACKGROUND_WINDOWS=1, and patch 0012 makes the app show
+// windows inactive and never focus or activate. launchEditorInBackground still checks the
+// frontmost app: if the editor took focus anyway, the run fails loudly.
 
 /** The locally fetched/built macOS app (./seclab fetch macos). */
 export const EDITOR_APP = path.join(repoRoot, '.work', 'app', 'seclab-vscode.app');
 
-/** argv that opens an isolated-profile editor window without activating it. */
+/** argv that opens an isolated-profile editor window without activating it. SECLAB_BACKGROUND_WINDOWS
+ *  (patch 0012) makes the app itself show windows inactive and never focus or activate. */
 export function editorLaunchArgv(userData: string, folderUri: string, env: Record<string, string> = {}, app = EDITOR_APP): string[] {
-	const envArgs = Object.entries(env).flatMap(([k, v]) => ['--env', `${k}=${v}`]);
+	const envArgs = Object.entries({ ...env, SECLAB_BACKGROUND_WINDOWS: '1' }).flatMap(([k, v]) => ['--env', `${k}=${v}`]);
 	return ['open', '-g', '-n', ...envArgs, '-a', app, '--args', '--user-data-dir', userData, '--folder-uri', folderUri];
 }
 

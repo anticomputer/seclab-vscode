@@ -6,3 +6,5 @@
 0002-extensionkind-product-default.patch
 0003-no-workspace-extensions-in-local-windows.patch
 0004-extension-description-computed-fields-win.patch
+# 0005-0011 are reserved for the RPC capability-filter series (anticomputer-rpc-filter-patches).
+0012-background-windows-env.patch

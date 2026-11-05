@@ -181,9 +181,10 @@ RPC-lockdown session adds. Keep them consistent with this file.
 - **Never steal focus from the user.** Editor windows for demos, screenshots and
   containment-editor runs open in the background on the current Space and stay
   behind the user's windows:
-  - launch with `node test/window.ts launch …` (`open -g -n`, isolated profile);
-    it exits 1 if the editor became the frontmost app. Report that; never work
-    around it;
+  - launch with `node test/window.ts launch …` (`open -g -n`, isolated profile,
+    `SECLAB_BACKGROUND_WINDOWS=1`, so the app shows windows inactive and never focuses
+    or activates: patch 0012); it exits 1 if the editor became the frontmost app.
+    Report that; never work around it;
   - capture with `node test/window.ts shot …` (`screencapture -o -l <windowid>`,
     which reads the covered window directly);
   - never call activate/frontmost APIs, `open` without `-g`, or the app's
