@@ -718,8 +718,16 @@ doubled the first draft's four:
 | Client capabilities | `agentHostActiveClientService.ts` `_getClientTools` | Advertise no client tools for `seclab+` |
 | Customizations and config sync | `agentHostProtocolClient.ts` config forwarding, `agentHostMcpServerSupport.ts` | No host MCP definitions, URI grants or non-allowlisted settings to `seclab+` |
 | No other agent-host connections | `remoteAgentHostService.ts` (electron-browser) registration, cloud-sandbox and Mission Control contributions | Null services in `seclab+` windows |
-| No local agent host | `code/electron-main/app.ts` | Do not create the starter or process manager |
 | MCP App UI | `stateToProgressAdapter.ts` `getMcpAppData` | No MCP App webviews for `seclab+` |
+
+The table lists patches from this design. They are numbered from 0015, each with its own
+EDR and review round. Two patches are owned by the fork-build session:
+- **0013, "no local agent host" (`code/electron-main/app.ts`).** Main refuses every
+  window's agent-host connection request and never spawns the utility process.
+- **0014, a build patch.** It keeps the Copilot SDK runtime out of the desktop app; the
+  REH keeps it. This is invariant I8.
+
+The RPC series holds 0005–0011.
 
 Settings forced in code for `seclab+` (registered at `APPLICATION` scope in every window,
 or given a fixed value): the list in §3.5. Policy alone cannot pin them.
