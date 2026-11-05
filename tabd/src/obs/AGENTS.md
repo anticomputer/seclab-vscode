@@ -50,7 +50,12 @@ at the repo root) all apply. Every command here has been run. Design:
 ./seclab test obs oci              # same through Falco; killing Falco -> unobserved
 ./seclab tab logs --state-dir "$PWD/.work/observability/sbx/state" --format falco all
 ./seclab lint fixtures test/observability
+node test/observability/demo.ts prepare ~/.seclab-test/obs sbx   # README screenshot run; prints the background launch
+node test/observability/demo.ts teardown ~/.seclab-test/obs      # teardown gate: editor tree, tab, profile, host diff
 ```
+Demo windows must never come to the front over the user's work. Launch with `open -g`,
+never activate the app, and capture by window id. See "Demo screenshots" in
+`test/README.md`.
 
 ## Gotchas (learned the hard way)
 - **sbx guest kernel:** no BTF, no ftrace, no modules, no Yama. Falco,

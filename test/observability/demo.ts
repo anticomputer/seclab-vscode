@@ -3,6 +3,9 @@
 //   node test/observability/demo.ts prepare ~/.seclab-test/obs [sbx|oci]   # prints the launch command
 //   node test/observability/demo.ts teardown ~/.seclab-test/obs            # kills the editor tree, removes the tab, verifies
 // Fixture safety: same arming as the e2e (nonce, run dir, expiry); demo values are fake.
+// Never bring a demo window over the user's work: launch with `open -g -n -a` (not `bin/code`,
+// whose hand-off to the main process calls app.focus({steal:true})), never activate it, and
+// capture by window id (`screencapture -o -l`), which works while the window is covered.
 
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
@@ -51,6 +54,10 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 	'seclab.activity.revealOnAlert': true,
 	'workbench.startupEditor': 'none',
 	'workbench.tips.enabled': false,
+	'workbench.welcomePage.experimentalOnboarding': false,
+	'chat.disableAIFeatures': true,
+	'workbench.secondarySideBar.defaultVisibility': 'hidden',
+	'workbench.panel.opensMaximized': 'always',
 	'window.newWindowDimensions': 'default',
 }, null, '\t'));
 
