@@ -7,9 +7,9 @@
   - The coordinator proposed the design and the default (off, per-tab prompt).
   - The broker session drafted it.
 - **Related:** [ADR no real secret enters a tab](20261104-no-real-secret-enters-a-tab.md), [ADR broker model access](20261105-broker-model-access.md), [policy reference](../broker-policy.md)
-- **Sources** (`github/cfs-at-github` at `8dcb42b`):
-  - [package-feeds.md](https://github.com/github/cfs-at-github/blob/8dcb42bcb7d27eb7eeb931b8ca1c2e3c64bb15a0/docs/package-feeds.md): feed names and URLs, tenant, resource, roles;
-  - [local-feed-access.md](https://github.com/github/cfs-at-github/blob/8dcb42bcb7d27eb7eeb931b8ca1c2e3c64bb15a0/docs/local-feed-access.md): how a laptop obtains the token, the npm and pip auth shapes, redirects, and the install-script warning.
+- **Sources** (`github/cfs-at-github` at `8dcb42bcb7d27eb7eeb931b8ca1c2e3c64bb15a0`; a private repository, so cited as paths rather than links):
+  - `docs/package-feeds.md`: feed names and URLs, tenant, resource, roles;
+  - `docs/local-feed-access.md`: how a laptop obtains the token, the npm and pip auth shapes, redirects, and the install-script warning.
 
 ## Context
 Under the managed-endpoint policy, public npm and PyPI are blocked. Packages
