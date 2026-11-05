@@ -103,3 +103,12 @@ sbx exec seclab-spike-a env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_
   'curl -sk -x http://host.docker.internal:18081 -o /dev/null -w "%{http_code}\n" https://example.com/'
 sbx policy log seclab-spike-a
 ```
+
+## Addendum (2026-11-05): sandbox-scoped kit allows
+sbx 0.51 attaches a sandbox-scoped allow for its kit (`deb.debian.org:80`, `dhi.io:80`, a rule
+id per sandbox) at create time. The mirror covered only `applies_to: all` allows, so the fence
+check rightly refused every new tab. `resourcesToMirror(rules, sandbox, brokerPort)` now also
+mirrors allows scoped to the sandbox, except the broker's own `localhost:<port>`. The driver
+runs the mirror right after create and on every start, before the fence check. Unit test with
+the 0.51 rule shape; `./seclab test containment sbx` 119/120 (the XFAIL is the known
+attribution gap).

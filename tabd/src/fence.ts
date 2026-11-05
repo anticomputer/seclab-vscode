@@ -82,12 +82,21 @@ function applicable(rules: readonly PolicyRule[], sandboxName: string): PolicyRu
 // rules show up as sandbox-scoped). Any other scope form is unknown and fails closed.
 const KNOWN_APPLIES_TO = /^(?:all|sandbox:[A-Za-z0-9][A-Za-z0-9.-]{0,127})$/;
 
-/** Resources to deny per-sandbox at create time: every allow that applies globally. */
-export function resourcesToMirror(rules: readonly PolicyRule[]): string[] {
+/**
+ * Resources to deny per sandbox: every allow that applies globally and, given a sandbox,
+ * every allow scoped to it except the broker's own `localhost:<brokerPort>` (sbx 0.51 attaches
+ * sandbox-scoped kit allows, e.g. deb.debian.org:80, at create time).
+ */
+export function resourcesToMirror(rules: readonly PolicyRule[], sandboxName?: string, brokerPort?: number): string[] {
 	const set = new Set<string>();
+	const scoped = sandboxName === undefined ? undefined : `sandbox:${sandboxName}`;
+	const broker = brokerPort === undefined ? undefined : `localhost:${brokerPort}`;
 	for (const r of rules) {
-		if (r.resource_type === 'network' && r.status === 'active' && r.decision === 'allow' && r.applies_to === 'all') {
+		if (r.resource_type === 'network' && r.status === 'active' && r.decision === 'allow' && (r.applies_to === 'all' || r.applies_to === scoped)) {
 			for (const res of r.resources) {
+				if (r.applies_to === scoped && res === broker) {
+					continue;
+				}
 				set.add(assertPolicyResource(res));
 			}
 		}
