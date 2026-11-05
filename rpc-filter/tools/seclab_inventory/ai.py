@@ -133,6 +133,16 @@ def _enum_values(tree: SourceTree, rel: str, enum: str) -> dict:
     return {mm.group("name"): mm.group("val") for mm in _ENUM_MEMBER.finditer(body)}
 
 
+# Lower rank = harder for a tab to reach. Only APPLICATION is out of reach,
+# because every other scope is in REMOTE_MACHINE_SCOPES and the tab supplies
+# the remote settings file.
+_SCOPE_RANK = {"APPLICATION": 0}
+
+
+def _scope_rank(scope: str) -> int:
+    return _SCOPE_RANK.get(scope, 1)
+
+
 def _window_of(rel: str) -> str:
     """Which window's entry point registers a setting.
 
@@ -199,7 +209,15 @@ def _settings(tree: SourceTree) -> list:
     ):
         enums.update(_enum_values(tree, rel, name))
 
+    # An id prefix *or* a registering file that belongs to the agent surface.
+    # The prefix list alone missed workbench.browser.enableRemoteProxy, which is
+    # registered in browserView and gates whether browser requests and remote
+    # agent sessions are proxied -- an agent setting by behaviour, not by name.
+    # Matching the file too catches that class without dragging in the whole
+    # workbench.* namespace.
     want = re.compile(r"^(chat|mcp|inlineChat|github\.copilot)\b")
+    want_file = re.compile(
+        r"(/chat/|/agentHost/|/mcp/|/browserView/|/remoteAgentHost/|/sessions/)")
     # Any computed key, not just the two enums. Most of the agent-host
     # settings are registered as `[SomeConstantId]: { ... }` with a bare
     # constant, and an earlier version that resolved only
@@ -229,11 +247,25 @@ def _settings(tree: SourceTree) -> list:
                         key = value
                 else:
                     key = m.group("literal") or m.group("literal2")
-                if not key or not want.search(key) or key in seen:
+                if not key or not (want.search(key) or want_file.search("/" + rel)):
                     continue
                 body = _balanced(text, m.end() - 1)
                 sm = _CONFIG_SCOPE.search(body)
                 scope = sm.group(1) if sm else "WINDOW"
+                prev = seen.get(key)
+                if prev is not None and _scope_rank(prev["scope"]) >= _scope_rank(scope):
+                    # Keep the weakest registration. A setting registered twice
+                    # with different scopes is reachable at the weaker one, and
+                    # first-wins would have filed
+                    # workbench.browser.enableRemoteProxy as APPLICATION
+                    # (platform/agentHost) while browserView also registers it at
+                    # WINDOW -- recording the safe-looking half of a surface that
+                    # is in fact tab-writable.
+                    prev.setdefault("also_registered", []).append(
+                        {"scope": scope, "file": rel})
+                    continue
+                if prev is not None:
+                    prev_note = {"scope": prev["scope"], "file": prev["file"]}
                 seen[key] = {
                     "id": key,
                     "scope": scope,
@@ -244,6 +276,9 @@ def _settings(tree: SourceTree) -> list:
                     "file": rel,
                     "permalink": tree.permalink(rel, _line_at(text, m.start())),
                 }
+                if prev is not None:
+                    seen[key]["also_registered"] = (
+                        prev.get("also_registered", []) + [prev_note])
     reads = _read_sites(tree, set(seen))
     for sid, entry in seen.items():
         where = reads.get(sid, [])
@@ -251,9 +286,19 @@ def _settings(tree: SourceTree) -> list:
         # Registered in one window, read where another runs: no scope applies
         # in the reading window, so workspace and remote user settings are not
         # filtered out of it.
+        # Only a `workbench/` reader proves an editor-window read. `platform/`
+        # code is shared: the Agents window instantiates it too, and the SSH and
+        # WSL agent-host services live there but are registered solely by
+        # sessions.desktop.main.ts, whose configuration service has no
+        # remote-user layer. Counting platform/ as proof flagged four settings a
+        # tab can write but nothing in its window reads -- false positives
+        # another session nearly wrote code against. Platform reads are reported
+        # separately as ambiguous rather than asserted either way.
         entry["unregistered_where_read"] = bool(
+            entry["registered_in"] == "agents" and "editor" in where)
+        entry["ambiguous_platform_read"] = bool(
             entry["registered_in"] == "agents"
-            and [w for w in where if w in ("editor", "platform")])
+            and "editor" not in where and "platform" in where)
         if entry["unregistered_where_read"]:
             entry["tab_writable"] = True
     return [seen[k] for k in sorted(seen)]
