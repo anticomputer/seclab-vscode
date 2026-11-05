@@ -157,6 +157,22 @@ for (const [vector, argv] of vectors) {
 		checks.push({ vector, name: 'write-back gate: the tab\'s evidence file is not in the host checkout', ok: readEvidence(wsA, vector) === undefined, detail: '' });
 	}
 }
+if (driver === 'sbx') {
+	// Review JJ-1: no tab process may keep a reference to the host share under the overlay.
+	// Write through every agent process's /proc/<pid>/cwd (the REH, its extension host…) and
+	// via a relative path from a child of the REH's own cwd; none may land on the host.
+	const probe = '.seclab-jj1-probe';
+	const script = `for p in /proc/[0-9]*; do [ -O "$p" ] || continue; printf x > "$p/cwd/${probe}" 2>/dev/null; `
+		+ `(cd "$p/cwd" 2>/dev/null && printf x > ${probe}-rel) 2>/dev/null; done; true`;
+	spawnSync(runtime, ['exec', '-u', 'agent', '-w', '/', containerA, 'sh', '-c', script], { encoding: 'utf8', timeout: 60_000 });
+	const leaked = [probe, `${probe}-rel`].filter(f => fs.existsSync(path.join(wsA, f)));
+	checks.push({ vector: 'write-back', name: 'no tab process reaches the host checkout through an inherited cwd (JJ-1)', ok: leaked.length === 0, detail: leaked.join(', ') });
+	// Review JJ-2: tab code (every REH descendant runs under seclab-obs-guard) can't create user
+	// or mount namespaces. Harness exec sessions aren't REH descendants, so run the guard itself.
+	const us = spawnSync(runtime, ['exec', '-u', 'agent', '-w', '/', containerA, '/opt/seclab/bin/seclab-obs-guard', '/usr/bin/unshare', '-Urm', 'true'], { encoding: 'utf8', timeout: 30_000 });
+	const usCtl = spawnSync(runtime, ['exec', '-u', 'agent', '-w', '/', containerA, '/opt/seclab/bin/seclab-obs-guard', '/usr/bin/true'], { encoding: 'utf8', timeout: 30_000 });
+	checks.push({ vector: 'write-back', name: 'tab code cannot create a user or mount namespace (JJ-2)', ok: us.status !== 0 && usCtl.status === 0, detail: `unshare exit ${us.status}, control exit ${usCtl.status}` });
+}
 
 // Fence-level checks via the runtime's own policy evaluator (sbx only).
 if (driver === 'sbx') {

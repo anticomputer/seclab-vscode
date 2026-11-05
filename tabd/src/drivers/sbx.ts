@@ -126,7 +126,7 @@ export class SbxDriver implements Driver {
 			throw new DriverError(-32012, 'sbx tabs require the observability collector');
 		}
 		try {
-			await sensor.startCollector(() => this.runner.spawnStream(this.sbx, ['exec', '-i', '-u', 'root', spec.sandboxName, OBS_COLLECT]), connectionToken);
+			await sensor.startCollector(() => this.runner.spawnStream(this.sbx, ['exec', '-i', '-u', 'root', '-w', '/', spec.sandboxName, OBS_COLLECT]), connectionToken);
 		} catch (e) {
 			throw new DriverError(-32012, `REH failed to start: ${(e as Error).message}`);
 		}

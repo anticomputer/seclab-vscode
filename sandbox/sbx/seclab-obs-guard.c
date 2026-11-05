@@ -5,6 +5,8 @@
 // skips the tracer's fork event (kernel/fork.c kernel_clone). That would let a tab escape the
 // sbx observability collector. This filter, inherited by every descendant and irremovable:
 //   - clone with CLONE_UNTRACED  -> EPERM
+//   - clone/unshare with CLONE_NEWUSER or CLONE_NEWNS -> EPERM (no user or mount namespaces:
+//                                   root in the VM would bypass the write-back gate; JJ-2)
 //   - clone3                     -> ENOSYS (its flags live in memory seccomp cannot read;
 //                                   libc falls back to clone)
 //   - seccomp(..NEW_LISTENER..)  -> EPERM: a user-notification filter outranks strace's
@@ -76,10 +78,17 @@ int main(int argc, char **argv) {
 		BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, SECCOMP_FILTER_FLAG_NEW_LISTENER, 0, 1),
 		BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
 		BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
-		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_clone, 0, 3),
-		// clone flags are args[0]; CLONE_UNTRACED is in the low 32 bits (little-endian).
+		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_unshare, 0, 4),
+		// unshare(flags): no new user or mount namespace (review JJ-2: since the write-back
+		// gate, root in the VM is a gate bypass; userns is the usual way into kernel LPEs).
 		BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0])),
-		BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, CLONE_UNTRACED, 0, 1),
+		BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, CLONE_NEWUSER | CLONE_NEWNS, 0, 1),
+		BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+		BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_clone, 0, 3),
+		// clone flags are args[0]; CLONE_UNTRACED/NEWUSER/NEWNS are in the low 32 bits.
+		BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0])),
+		BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, CLONE_UNTRACED | CLONE_NEWUSER | CLONE_NEWNS, 0, 1),
 		BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
 		BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
 	};

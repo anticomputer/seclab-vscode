@@ -75,9 +75,11 @@ def read_config():
 
 def wb_mount(ws):
     # Write-back gate (fork-build ADR write-back-gate): the overlay must be in place before
-    # any REH starts. Idempotent helper; non-zero = fail closed. Absent until it ships.
+    # any REH starts. The helper mounts it and checks no process can reach the lower layer;
+    # non-zero = fail closed. A template without the helper is refused (review JJ-4).
     if not os.path.exists(WB_MOUNT):
-        return True
+        emit({"k": "err", "msg": "write-back helper missing (rebuild the template: ./seclab template sbx)"})
+        return False
     r = subprocess.run([WB_MOUNT, ws], stdin=subprocess.DEVNULL, capture_output=True, timeout=60,
                        env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
     if r.returncode != 0:
@@ -243,12 +245,14 @@ def watch_honeypots(paths):
 
 
 class Stracer:
-    def __init__(self, idx, argv, stdin=None):
+    def __init__(self, idx, argv, stdin=None, cwd="/"):
         self.idx = idx
         r, w = os.pipe()
+        # cwd is resolved now, i.e. after the write-back overlay is mounted (review JJ-1): a cwd
+        # taken before the mount would keep pointing at the lower layer (the host checkout).
         self.proc = subprocess.Popen(argv[:1] + ["-o", "/dev/fd/%d" % w] + argv[1:], stdin=stdin,
                                      stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, pass_fds=(w,), close_fds=True,
-                                     env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+                                     cwd=cwd, env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
         os.close(w)
         self.out = os.fdopen(r, "rb")
         self.cmd_pid = None
@@ -297,6 +301,9 @@ class Stracer:
 
 
 def main():
+    # sbx exec starts us with cwd = the workspace path, before the overlay exists. Leave it
+    # at once: a cwd under the mount point would keep the host checkout reachable (JJ-1).
+    os.chdir("/")
     cfg = read_config()
     try:
         tab = pwd.getpwnam(cfg["user"])
@@ -332,7 +339,7 @@ def main():
     attach = sum((["-p", str(p)] for p in existing), [])
     cmd = ["--seccomp-bpf"] + attach + ["--", GUARD, "/usr/bin/setpriv", "--reuid=" + str(tab.pw_uid), "--regid=" + str(tab.pw_gid),
                                         "--init-groups", "--reset-env", REH_START]
-    stracers = [Stracer(0, base + cmd, stdin=subprocess.PIPE)]
+    stracers = [Stracer(0, base + cmd, stdin=subprocess.PIPE, cwd=cfg["workspace"])]
     stracers[0].proc.stdin.write((cfg["token"] + "\n").encode())
     stracers[0].proc.stdin.close()
     tracer_pids = {stracers[0].proc.pid}
@@ -394,7 +401,7 @@ def main():
         if len(stracers) > MAX_EXTRA_STRACERS or not wb_mount(cfg["workspace"]):
             emit({"k": "reh", "id": c["id"], "code": -2})
             continue
-        s = Stracer(len(stracers), base + reh_cmd, stdin=subprocess.PIPE)
+        s = Stracer(len(stracers), base + reh_cmd, stdin=subprocess.PIPE, cwd=cfg["workspace"])
         stracers.append(s)
         tracer_pids.add(s.proc.pid)
         s.proc.stdin.write((c["token"] + "\n").encode())
