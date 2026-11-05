@@ -8,7 +8,8 @@
 - **Upstream:** every permalink is pinned to `microsoft/vscode@a717861c07586a53d83b80d742cd3f59b20a6273`.
 - **Evidence:** [agentic surfaces](../research/agentic-surfaces.md) (where everything runs
   today, with permalinks) and [prior art](../research/agentic-prior-art.md).
-- **Review:** [security review](../security-reviews/20261105-secure-agentic-experiences-design.md).
+- **Review:** [security review](../security-reviews/20261105-secure-agentic-experiences-design.md),
+  two rounds; no high or critical finding open in the design.
 
 The user's requests: "make a plan to move chat into sandboxed tabs", and "agentic
 experiences are central to vscode, but we want to implement them securely with limited
@@ -170,11 +171,11 @@ Everything below travels over the REH's `agentHostProxy` channel and passes the 
 | Item | Rule |
 |---|---|
 | User prompt, follow-ups, cancel, model and agent selection | As typed or chosen in trusted UI |
-| Attachments | Tab resources only (`vscode-remote://seclab+<self>/…`); a host file is never attached to a tab agent |
+| Attachments | Tab resources only (`vscode-remote://seclab+<self>/…`); a host file is never attached to a tab agent. Filtered **at the source, before conversion**: upstream embeds the live text of an unsaved or untitled active editor as an `EmbeddedResource` with no URI, and implicit context accepts almost any scheme, so a transport filter on URIs cannot judge it (round 2, finding 1). For `seclab+`: implicit context only from the tab's own authority; embedded resources only from explicit user pastes or tab URIs; the same rule for `ChatTurnStarted`, `ChatPendingMessageSet`, and saved-chat import and continuation |
 | Decisions on in-tab permission requests | UX inside the tab, not a security gate (the tab can approve itself); sent as the user chose |
 | Configuration (`RootConfigChanged` and the initial sync) | An allowlist of `APPLICATION`-scope settings the agent host consumes (for example edit auto-approve patterns, [chat.shared.contribution.ts#L900-L913](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/chat.shared.contribution.ts#L900-L913)). Upstream mirrors every setting registered for agent-host sync, including `http.proxy`, which can hold `user:pass@`; for `seclab+` nothing outside the allowlist is sent (review 9) |
 | Customizations (`SessionActiveClientSet`) | Upstream bundles the user's host prompts, skills, plugins and user-level `mcp.json` servers, with `${env:…}` resolved on the host and literal `env` and `headers` values included, and grants the agent host reads on every customization root (review 4). For `seclab+`: no host MCP definitions, no URI grants; trusted-profile instructions only as inline text after the D9 opt-in |
-| `authenticate` | **Sentinel only**, for a resource in the trusted provider table, never for what the tab named. Rewritten at the transport, so no caller can bypass it (§4.2) |
+| `authenticate` | **Sentinel only**, for a resource in the trusted provider table, never for what the tab named. Rewritten at the transport, so no caller can bypass it (§4.2). The rewrite is unconditional: upstream seals tokens to an encryption key the agent host advertises before the transport, so the gate always replaces `token` and never forwards a sealed value, and strips the advertised key inbound (round 2, finding 5) |
 | MCP authentication | Same rule; grants keyed by tab (§4.5) |
 | Environment for the agent-host process | Only the resolver's `extensionHostEnv`, which the Tab Manager controls ([serverServices.ts#L378-L388](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/server/node/serverServices.ts#L378-L388)); the client's `debugEnv` is dropped |
 | Client proxy, Kerberos, client certificates | Off. Upstream gates them to WSL and container remotes ([#L141](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts#L141)); the gate pins them off for `seclab+` |
@@ -191,7 +192,8 @@ Everything below travels over the REH's `agentHostProxy` channel and passes the 
 | Protected-resource requests | Handled by the auth rewrite (§4.2); never a prompt by default |
 | `ToolClientExecution` requests | Refused, except the safe-output allowlist (§5.2) |
 | Safe-output proposals (Tier B/C) | Sent to the host-action inbox, never executed inline (§5) |
-| Resource-watch and annotation URIs | Tab authority only |
+| Resource-watch and annotation URIs | The agent host's own namespace only: `file:` (which maps into the tab) and the tab's own `vscode-remote` authority; every other scheme is rejected, because upstream passes non-`file` URIs through unmapped (round 2, finding 7) |
+| URL input requests and session pills | Stripped, or turned into an `openExternal` safe output in the inbox (§5.2). Upstream renders a URL-bearing input request as a trusted "Authorization Required, Open …" card that opens any scheme, and pills open agent-host URLs externally (round 2, finding 2) |
 | OTLP and telemetry channels | Dropped |
 | Tool-call `_meta.ui` (MCP App UI) | Stripped. Upstream mounts a webview whose CSP `connect-src`, `img-src`, `script-src` and `frame-src` come from the server ([chatMcpAppModel.ts#L420-L433](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/widget/chatContentParts/toolInvocationParts/chatMcpAppModel.ts#L420-L433)): tab JavaScript in trusted chrome with host-network egress (review 6) |
 
@@ -285,8 +287,9 @@ first draft assumed it was; the review showed it is not (review 2, 13):
   ([remoteAgentHostServiceImpl.ts#L1251-L1256](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/remoteAgentHostServiceImpl.ts#L1251-L1256)),
   bypassing the broker, and the connected host gets the user's credentials, the
   `resource*` requests and client tools. Upstream's own setting text says "connected
-  hosts receive your GitHub credentials". This is live in v0 and was reported to the
-  RPC-lockdown session on 2026-11-05.
+  hosts receive your GitHub credentials". This was live in v0. It was reported to the
+  RPC-lockdown session on 2026-11-05 and closed for v0 by its patch 0011 (`ae47e66` on
+  `anticomputer-rpc-filter-patches`).
 - **Other connection providers:** SSH, WSL, dev-tunnel and dev-container agent hosts, the
   cloud sandbox and Mission Control (GitHub environments, on by default).
 - **The local agent host.** Electron main always creates the starter and process manager
@@ -295,11 +298,28 @@ first draft assumed it was; the review showed it is not (review 2, 13):
   A renderer-side null service is not enough.
 
 **Rule:** in `seclab+` windows, `IRemoteAgentHostService` and every other agent-host
-connection provider is a null service at build time. The fork does not create the local
-agent-host starter in main, and drops the Agents window, Mission Control and cloud-sandbox
-contributions. The settings that would turn them on are pinned by policy. Every
-`IAgentHostConnectionsService` provider gets a verdict in the class (f) inventory, so a
-new one fails the build.
+connection provider (`ICloudSandboxAgentHostService`, the Mission Control services, the
+connection-customization contribution) is a null service at build time. The fork does not
+create the local agent-host starter in main, and drops the Agents window, Mission Control
+and cloud-sandbox contributions. Every `IAgentHostConnectionsService` provider gets a
+verdict in the class (f) inventory, so a new one fails the build.
+
+**Settings that would turn them back on are forced in code, not by policy.** VS Code
+applies a policy only to settings whose registration declares one, and none of these does
+(round 2, finding 4). The RPC-lockdown session's patch 0011 already re-registers
+`chat.workspaceRemoteAgentHosts` and `chat.agentHost.localFilePermissions` at
+`APPLICATION` scope in every window. The same treatment, registration at `APPLICATION` in
+every window or a forced value for `seclab+`, applies to the rest of the class (e)
+settings that are registered only in the Agents window but read elsewhere:
+`chat.remoteAgentHosts`, `chat.remoteAgentHostsAutoConnect`, `chat.remoteAgentTunnels`,
+`chat.sshRemoteAgentHostCommand` and `chat.wslRemoteAgentHostCommand` (strings the host
+runs to launch an agent host), `chat.agentHost.forwardSSHAgent`,
+`chat.agentHost.wsl.autoStart`, `chat.automations.enabled` and
+`chat.automations.cloud.enabled`. It also applies to `chat.remoteAgentHostsEnabled`,
+`chat.agentHost.githubEnvironments.enabled`, `chat.agentHost.cloudSandbox.enabled`, and
+`workbench.browser.enableRemoteProxy`, which is `WINDOW` scope and defaults to on in
+non-stable builds such as ours. Source: the class (e) settings inventory (146 settings,
+89 tab-writable) on the RPC-lockdown branch.
 
 ## 4. Model and credential access
 
@@ -358,7 +378,10 @@ In a `seclab+` window the gate replaces that with:
 - whether the Copilot runtime honours the tab's proxy and CA is unmeasured (spike §11.1).
 
 BYOK keys follow the same path: imported to the broker, bound to the provider's host and
-path, a sentinel in the tab.
+path, a sentinel in the tab. **Harness sign-ins are denied.** Upstream's Codex account
+sign-in is a configuration key that makes the agent host mint a real ChatGPT credential
+inside the tab (round 2, finding 6); a non-Copilot harness gets credentials only as a
+BYOK import.
 
 ### 4.3 Quota, rate and audit **[interface: broker, observability]**
 
@@ -375,10 +398,14 @@ Host, path and method bindings do not look at request bodies, and model APIs acc
 server-side tools that fetch URLs the caller chooses: remote MCP servers, web fetch and
 search, code execution, connectors. A tab could therefore have the provider deliver
 workspace data to an attacker's endpoint over an allowed model host (review 7). Model
-bindings get a **body policy**: requests that declare server-side or remote tools are
-rejected with a `trusted` audit event unless a Tier C grant names that tool. This is the
-one place the broker inspects request content, and it can only deny, which keeps the
-broker ADR's rule that content never grants.
+bindings get a **body policy**, and it is an allowlist that fails closed (round 2,
+finding 3): per-provider allowed paths and methods; no WebSocket upgrades on model hosts;
+strict JSON only (duplicate keys, escaped keys, non-identity content encodings and
+non-JSON content types are refused); only listed tool `type`s (for example `function`);
+anything unparseable is denied. A server-side tool is allowed only when a Tier C grant
+names it. The broker ADR says content is consulted in exactly three ways, all
+restrictive; this is a fourth, also deny-only, so it needs a broker-session ADR that
+amends that rule rather than an edit to the accepted record.
 
 ### 4.5 MCP
 
@@ -681,10 +708,8 @@ doubled the first draft's four:
 | No local agent host | `code/electron-main/app.ts` | Do not create the starter or process manager |
 | MCP App UI | `stateToProgressAdapter.ts` `getMcpAppData` | No MCP App webviews for `seclab+` |
 
-Settings pinned by policy or re-registered at `APPLICATION` scope (product data, not
-patches): `chat.workspaceRemoteAgentHosts`, `chat.remoteAgentHosts.enabled`,
-`chat.agentHost.localFilePermissions`, `workbench.browser.enableRemoteProxy`, the GitHub
-environments setting, and `chat.disableAIFeatures` where the fork wants it off.
+Settings forced in code for `seclab+` (registered at `APPLICATION` scope in every window,
+or given a fixed value): the list in §3.5. Policy alone cannot pin them.
 
 The v0 null agent-host service in tab windows (RPC-lockdown session) is replaced by the
 gate hook when Tier A ships.
@@ -736,7 +761,7 @@ pass).
 
 | Phase | Scope | Exit criteria |
 |---|---|---|
-| 0 (now) | v0: built-in chat and tools off in tab windows (0009); null agent-host service and null remote agent-host service in tab windows, with the settings that enable them pinned (RPC-lockdown) | A1, A6, A12, A17 and A18 pass against v0 |
+| 0 (now) | v0: built-in chat and tools off in tab windows (0009); no agent-host token push and no outbound agent-host dialing in tab windows (RPC-lockdown 0010, 0011); the remaining §3.5 settings forced | A1, A6, A12, A17, A18 and A23 pass against v0 |
 | 1 | Spike §11.1 | EDR, inventory, policy draft |
 | 2 | Tier A: AHP gate, auth rewrite with broker sentinels, local agent host off, rendering hardening, agent events | Every Tier A probe passes on sbx and OCI; security review with no open high or critical |
 | 3 | Tier B: safe outputs and the inbox | Tier B probes; review |
@@ -769,12 +794,14 @@ All of them run against our own builds, with inert fixtures and full teardown.
 | A16 | Rogue agent host plus a tab-written `chat.agentHost.localFilePermissions` grant, then `resourceRead` of a host canary and `resourceWrite` to a host marker path | Denied; no marker on the host; a `trusted` gate event |
 | A17 | The tab or workspace sets `chat.workspaceRemoteAgentHosts` to a beacon fixture | No host-side connection to the fixture; no `authenticate` frame |
 | A18 | `ToolConfirmation` with a client contributor and `_meta.autoApproveBySetting: true`, for each of the 54 tools | Zero `invokeTool` calls |
-| A19 | Canary in a user-level `mcp.json` header, in `${env:CANARY}`, in `http.proxy` credentials, and a canary prompt file in the user profile | None appears in the tab's memory, disk, frames or broker traffic |
+| A19 | Canary in a user-level `mcp.json` header, in `${env:CANARY}`, in `http.proxy` credentials, a canary prompt file in the user profile, and canaries in an unsaved host `settings.json` as the active editor and in an untitled buffer, sent with a turn and a queued message | None appears in the tab's memory, disk, frames or broker traffic |
 | A20 | Agent host advertises an MCP resource at a beacon fixture URL | No request reaches the fixture from the host |
 | A21 | A tool call with MCP App `ui://` content that fetches a beacon | No webview; no request |
-| A22 | A model request (BYOK fixture) declaring a remote-MCP or web-fetch server-side tool | Rejected by the broker with a `trusted` event |
-| A23 | Unregistered and non-`APPLICATION` settings written by the tab: `chat.workspaceRemoteAgentHosts`, `chat.agentHost.localFilePermissions`, `workbench.browser.enableRemoteProxy` | No effect (extends A6) |
-| A24 | Markdown with a `seclab-vscode://` link and a remote image | No URL handler runs; no network fetch |
+| A22 | A model request (BYOK fixture) declaring a remote-MCP or web-fetch server-side tool, including with a duplicate `tools` key, an escaped key, a gzip-encoded body, and over a WebSocket upgrade | Rejected by the broker with a `trusted` event |
+| A23 | Settings written by the tab that are unregistered or not `APPLICATION` in the reading window: the §3.5 list, run against the fork build at its real product quality | No effect (extends A6) |
+| A24 | Markdown with a `seclab-vscode://` link and a remote image; URL input requests and pills for `http://127.0.0.1:<beacon>`, `seclab-vscode://…` and `file:///…/canary` | No URL handler runs; no fetch; no editor opens |
+| A25 | `authenticate` with a fixture that advertises an authentication-encryption key; Codex account sign-in requested through configuration | Only sentinels, never a sealed value; no sign-in flow; no real credential in the tab |
+| A26 | Inbound URIs with `vscode-userdata:`, `vscode-synced-customization:` and `vscode-agent-host://local/…` schemes | Rejected (extends A5) |
 
 **Tier B:** B1, schema fuzzing of every safe-output type. B2, replaying a decision with a
 stale nonce or a changed effect fails. B3, the displayed effect matches the applied effect

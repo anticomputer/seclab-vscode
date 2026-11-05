@@ -1,7 +1,7 @@
 # Security review: secure agentic experiences design (agents in the tab)
 
 - **Date:** 2026-11-05
-- **Scope:** 9f4ded7 (design as first written: [plan](../plans/secure-agentic-experiences.md), [ADR](../adr/20261105-agents-run-in-the-tab.md), [agentic surfaces](../research/agentic-surfaces.md), [prior art](../research/agentic-prior-art.md)), verified against `microsoft/vscode@a717861c07586a53d83b80d742cd3f59b20a6273`. Round 2 covers the follow-up commit that folds the findings in.
+- **Scope:** round 1: 9f4ded7 (design as first written: [plan](../plans/secure-agentic-experiences.md), [ADR](../adr/20261105-agents-run-in-the-tab.md), [agentic surfaces](../research/agentic-surfaces.md), [prior art](../research/agentic-prior-art.md)), verified against `microsoft/vscode@a717861c07586a53d83b80d742cd3f59b20a6273`. Round 2 covers the follow-up commit that folds the findings in.
 - **Reviewer:** security-review agent (default model), triage by the secure-agentic-experiences session
 - **Related:** [ADR agents run in the tab](../adr/20261105-agents-run-in-the-tab.md), [RPC-LOCKDOWN](../RPC-LOCKDOWN.md)
 
@@ -50,4 +50,28 @@ with a proposed v0 fix and probe.
 - The reviewer could not verify the `learn.chatgpt.com` citation. The triaging session fetched it on 2026-11-05: it is OpenAI's Codex security page and supports the cited claims.
 
 ## Re-review
-Round 2: pending.
+
+**Round 2** (security-review agent, default model): `9f4ded7..6d71734`. **No high or
+critical finding open.** Round-1 findings 1, 3, 5, 6, 8, 9, 11, 13 and 16 were closed as
+written. Findings 2, 4, 7, 10, 12, 14, 15 and 17 needed the follow-ups below. All
+round-2 findings were fixed in the design in the commit that adds this section.
+
+| # | Severity | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| 2.1 | medium | Outbound data | The live text of an unsaved or untitled active editor is embedded as a URI-less attachment, and implicit context accepts host schemes, so a transport URI filter cannot see host content | fixed (design) | Plan §3.2: filter at the source; same rule for queued messages and chat import | A19 |
+| 2.2 | medium | Prompts and URLs | A URL-bearing input request renders as a trusted "Authorization Required, Open …" card that opens any scheme; pills open agent-host URLs externally | fixed (design) | Plan §3.2: stripped, or an `openExternal` safe output with the §5.2 rules | A24 |
+| 2.3 | medium | Broker body policy | A deny-list over request bodies fails open (duplicate keys, escapes, compression, WebSockets) and contradicts the broker ADR's closed list of content uses | fixed (design) | Plan §4.4: fail-closed allowlist; a broker-session ADR to amend the rule | A22 |
+| 2.4 | medium | Settings | Pinning "by policy" cannot be done (no policy on these registrations); a key was misnamed; `workbench.browser.enableRemoteProxy` defaults to on in non-stable builds | fixed (design) | Plan §3.5 and §10: forced in code; exact keys from the class (e) inventory, including the ten settings the RPC-lockdown session found registered only in the Agents window | A23 |
+| 2.5 | low | Auth | Tokens are sealed to an agent-host-advertised key before the transport | fixed (design) | Plan §3.2: unconditional rewrite; key stripped | A25 |
+| 2.6 | low | Credentials | Codex account sign-in mints a real credential in the tab | fixed (design) | Plan §4.2: harness sign-ins denied; BYOK import only | A25 |
+| 2.7 | low | URIs | Non-`file` URIs pass through unmapped; "tab authority only" was ambiguous | fixed (design) | Plan §3.2: accept only `file:` and the tab's own authority | A26 |
+
+Round 2 also confirmed from source:
+- denying every server-to-client request is viable, because a tab-side agent host reads
+  its own files;
+- with `IRemoteAgentHostService` null, the §3.5 list of connection providers is complete
+  for editor windows;
+- `_executeClientTool` is the only path to `invokeTool`.
+
+No prompt injection was found in either round. A further review round is required on the
+implementation of each tier (plan §11.2).
