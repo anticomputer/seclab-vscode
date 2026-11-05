@@ -200,6 +200,12 @@ export function validate(deps: Dep[], tree: TreePin[], exists: (p: string) => bo
 			}
 			if (!e.approved?.trim() || !e.covers?.trim()) {
 				problems.push(`${at}: exception needs the user's approval (verbatim) and what it covers`);
+			} else {
+				// SS-5: the reviewed EDR must quote the approval verbatim and name this entry.
+				const edr = read(e.record) ?? '';
+				if (!edr.includes(e.approved) || !new RegExp(`\`${d.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\``).test(edr)) {
+					problems.push(`${at}: exception.record ${e.record} must quote the approval verbatim and list \`${d.id}\``);
+				}
 			}
 		}
 		// A claimed verification must be implemented in the tree (apt verifies by default) (DD-3).
@@ -312,8 +318,9 @@ function selfTest(): number {
 		// DD-3: a claimed verification must exist; DD-8: host tools state their gap.
 		['signed-verified needs its verifier', validate([{ ...base, bar: 'signed-verified', verifiedBy: { file: 'seclab', contains: 'verify_signed_image "$X"' } }], tree.slice(0, 1), () => true, () => 'nothing').some(p => /does not contain the verifier/.test(p))],
 		['host tool needs host-installed and a gap', validate([{ ...base, kind: 'host-tool', pins: [], bar: 'host-installed' }], [], () => true).some(p => /needs a gap/.test(p))],
-		['host tool with a recorded exception is clean', validate([{ ...base, kind: 'host-tool', pins: [], bar: 'host-installed', exception: { record: 'docs/edr/x.md', approved: 'yes', covers: 'c' } }], [], () => true).length === 0],
+		['host tool with a recorded exception is clean', validate([{ ...base, kind: 'host-tool', pins: [], bar: 'host-installed', exception: { record: 'docs/edr/x.md', approved: 'yes do it', covers: 'c' } }], [], () => true, () => 'User: "yes do it". Entries: `alpine`.').length === 0],
 		['exception must name an EDR and the approval', validate([{ ...base, exception: { record: 'docs/adr/x.md', approved: '', covers: 'c' } }], tree.slice(0, 1), () => true).length === 2],
+		['exception approval must be quoted in the EDR, which lists the entry', validate([{ ...base, exception: { record: 'docs/edr/x.md', approved: 'yes do it', covers: 'c' } }], tree.slice(0, 1), () => true, () => 'User: "something else". Entries: `other`.').some(p => /quote the approval verbatim/.test(p))],
 	];
 	const failed = cases.filter(([, ok]) => !ok).map(([n]) => n);
 	console.log(failed.length ? `deps self-test FAILED: ${failed.join(', ')}` : `deps self-test: ${cases.length} cases OK`);

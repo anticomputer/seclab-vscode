@@ -205,10 +205,11 @@ export function frontmostPid(): number {
 /** Main process of the editor using this profile (not a helper: those carry --type=). */
 export function editorPid(userData: string): number {
 	const ps = execFileSync('ps', ['-axww', '-o', 'pid=,args='], { encoding: 'utf8' });
+	// The path must end the option value (SS-6: /x/run1 must not match /x/run10).
+	const re = new RegExp(`\\s--user-data-dir(=|\\s+)${userData.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`);
 	for (const line of ps.split('\n')) {
 		const m = /^\s*(\d+)\s+(.*)$/.exec(line);
-		if (m && m[2].includes('/Contents/MacOS/') && !m[2].includes('--type=')
-			&& (m[2].includes(` --user-data-dir ${userData}`) || m[2].includes(` --user-data-dir=${userData}`))) {
+		if (m && m[2].includes('/Contents/MacOS/') && !m[2].includes('--type=') && re.test(m[2])) {
 			return Number(m[1]);
 		}
 	}

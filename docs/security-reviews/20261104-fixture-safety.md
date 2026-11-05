@@ -30,3 +30,20 @@ Result: one medium finding (FS-1), fixed. Re-review: see round 2.
   - the snapshot drops the two paths that change in normal use (`~/.docker/config.json`, `~/.seclab-vscode`) and reports when a depth or size cap is hit.
 
 **No medium-or-higher findings remain.**
+
+## Round SS (2026-11-05): focus rule, supply-chain exceptions, Defender fixture safety
+Scope: `feb5331` (background editor launch, `focus-steal` lint), `0c89f88` (recorded
+exceptions, `./seclab deps host`), `388ec4d` (workspace-level AV-shape lint,
+`materialiseFixture`, clean-host fixture sweep). No prompt injection was found in the diff,
+the fixtures or the evidence.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| SS-1 | **Medium** | clean-host | The sweep treated any directory with `.seclab/` under `.work/` as a stale copy, so `--apply` would delete tracked fixtures inside a checkout nested in `.work/` (e.g. `.work/main-wt`). | Fixed | `materialiseFixture` marks copies (`.seclab-materialised`). clean-host deletes only marked roots, roots a `run.json` lists under `workspaces`, or exact legacy harness paths. It never descends into a directory with a `.git` entry, never treats depth 0-1 as a root, and counts kept sandboxes' mounts as in use. Anything else is reported, not deleted. |
+| SS-2 | **Medium** | AV lint | Split-file detection resolved script references and missed `options.cwd`, extensionless or renamed stages, `npm run`, `node .`, `${workspaceRoot}`, JSON escapes and `*.code-workspace` tasks. JS fetch/eval forms were not traits. | Fixed | No reference resolution. If a workspace has a folder-open or hidden task (`tasks.json` or `*.code-workspace`), any file in it with loader traits fails. Every `fixtures/` tree is walked whole. JS traits added (fetch of an http URL, axios, http(s) request calls, the Function constructor, vm.runIn*). Self-tests cover the reported forms. |
+| SS-3 | Low | deps host | gh downloaded and attested its own release archive. | Fixed | The archive and the release checksums file are fetched with `curl`. The archive must match the checksums, and the byte comparison uses `shasum`. EDR states what is still not covered. |
+| SS-4 | Low | deps host | `codesign --verify` without a requirement plus a text match on the team ID. | Fixed | `-R='anchor apple generic and certificate leaf[subject.OU] = "9BNSXJN65R"'`; a wrong team ID fails (checked). |
+| SS-5 | Low | deps.ts | Any non-empty approval and any EDR satisfied an exception. | Fixed | The EDR must quote the approval verbatim and list the entry id; self-test. |
+| SS-6 | Low | harness | `editorPid` matched `/x/run1` against `/x/run10`. | Fixed | The path must end the option value. |
+| SS-7 | Low | lint | `focus-steal` missed combined flags, a bare `.app`, and `-g` after `--args`. | Fixed | Leading flags tokenised; JS array form requires `-g` before `--args`; self-tests. |
+| SS-8 | Low | harness | The AV check skipped symlinks, big files and anything past 4,000 files, and the copy didn't. | Fixed | The copy filter matches the check (no symlinks, `node_modules`, `.git`, or files ≥2 MiB), and the walk refuses past its cap. |
