@@ -5,8 +5,8 @@
 //   check   <user-data-dir>            assert the evidence the editor-run vectors left behind,
 //                                      then tear the run down (teardown.ts): stops the editor,
 //                                      removes the tab and the profile; fails on leftovers
-// In between, open the workspace with the fork, e.g.
-//   .work/app/seclab-vscode.app/Contents/Resources/app/bin/code --user-data-dir <dir> --folder-uri <printed>  (the build keeps upstream's CLI name)
+// In between, open the tab with the fork in the background (never activated; AGENTS.md):
+//   node test/window.ts launch --env ... <dir> <printed folder uri>   (prepare prints the exact line)
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -14,8 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
-import { beaconPort, checkUserDataDir, lockRun, NODE_IMAGE } from '../harness.ts';
-import { randomBytes } from 'node:crypto';
+import { beaconPort, checkUserDataDir, editorLaunchCommand, lockRun, NODE_IMAGE } from '../harness.ts';
 import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
 import { teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
@@ -152,12 +151,9 @@ if (mode === 'prepare') {
 	console.log(`\nprepared tab ${tab.metadata.name} for ${ws}`);
 	console.log(`\nnow open the TAB directly (never the local path: a local window must not open this hostile workspace).`);
 	console.log(`Keep --user-data-dir SHORT: macOS caps unix socket paths at 104 bytes and a deep path silently fails to open a window.\n`);
-	console.log(`  env SECLAB_EDITOR_CANARY=${canaries[3].value} \\\n`
-		+ `      SECLAB_PROBE_NONCE=${arm} \\\n`
-		+ `      SECLAB_PROBE_RUNDIR=${base} \\\n`
-		+ `      SECLAB_PROBE_BEACON_PORT=${port} \\\n`
-		+ `      <app>/Contents/Resources/app/bin/code --user-data-dir ${userData} \\\n`
-		+ `      --folder-uri vscode-remote://seclab+${tab.metadata.name}${ws}`);
+	console.log(`  ${editorLaunchCommand(userData, `vscode-remote://seclab+${tab.metadata.name}${ws}`, {
+		SECLAB_EDITOR_CANARY: canaries[3].value, SECLAB_PROBE_NONCE: arm, SECLAB_PROBE_RUNDIR: base, SECLAB_PROBE_BEACON_PORT: String(port),
+	})}`);
 } else {
 	const checks: Check[] = [];
 	for (const vector of ['task', 'fsmonitor', 'rogue-extension']) {

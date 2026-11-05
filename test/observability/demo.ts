@@ -9,7 +9,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { printChecks, removeRunResources, stopRunProcesses, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
-import { checkUserDataDir } from '../harness.ts';
+import { checkUserDataDir, editorLaunchCommand } from '../harness.ts';
 
 const [mode, userDataArg, driverArg] = process.argv.slice(2);
 if ((mode !== 'prepare' && mode !== 'teardown') || !userDataArg) {
@@ -64,5 +64,6 @@ const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('t
 writeManifest(base, { tabs: [tab.metadata.name] });
 client.dispose();
 console.log(`prepared tab ${tab.metadata.name} for ${ws}`);
-console.log(`\n  <app>/Contents/Resources/app/bin/code --user-data-dir ${userData} --folder-uri vscode-remote://seclab+${tab.metadata.name}${ws}\n`);
+console.log(`\n  ${editorLaunchCommand(userData, `vscode-remote://seclab+${tab.metadata.name}${ws}`)}\n`);
+console.log(`screenshot (window stays behind yours): node test/window.ts shot ${userData} .work/shots/obs-demo.png`);
 console.log(`then: node test/observability/demo.ts teardown ${userData}`);

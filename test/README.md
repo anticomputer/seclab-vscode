@@ -3,7 +3,7 @@
 | Suite | Command | What it proves |
 |---|---|---|
 | Containment, level A | `./seclab test containment sbx` (or `oci`) | Malicious-workspace vectors run inside real tabs and reach nothing on the host. Includes the Contagious-Interview loader (`campaign.ts`, own tab): every TTP mapped in the [threat-model ADR](../docs/adr/20261104-threat-model-rogue-extension.md). |
-| Containment, level B | `./seclab test evidence prepare ~/.seclab-test/ud sbx`, then open the printed URI in the app, then `… check …` | The same, driven by the real editor, plus a rogue extension and editor-side canaries. |
+| Containment, level B | `./seclab test evidence prepare ~/.seclab-test/ud sbx`, then the printed `node test/window.ts launch …`, then `… check …` | The same, driven by the real editor, plus a rogue extension and editor-side canaries. |
 | Canary | `./seclab test canary sbx` | No host secret is observable from a tab, in any encoding. |
 | Secrets | `./seclab test secrets sbx` | The pre-mount gitleaks gate: block, move to the vault, restore. |
 | Fixture lint | `./seclab lint fixtures` | The payloads themselves are host-safe ([EDR](../docs/edr/20261104-fixture-safety.md)). |
@@ -11,6 +11,11 @@
 | Host sweep | `./seclab clean-host` (dry run), `--apply` | Lists or removes every seclab-vscode resource on this machine ([EDR](../docs/edr/20261104-harness-teardown.md)). |
 
 ## Rules that bite
+- **Editor windows never take focus** (AGENTS.md hard rule). `test/window.ts launch`
+  opens the editor in the background (`open -g -n`) and fails if it became frontmost;
+  `test/window.ts shot` captures the covered window by id (`screencapture -o -l`).
+  The `focus-steal` fixture-lint rule rejects activate calls, a foreground `open` and
+  direct `bin/code` launches in test code.
 - **Every run tears itself down, and fails if it can't** ([EDR](../docs/edr/20261104-harness-teardown.md)).
   A run records what it owns in `<run-dir>/run.json` before it starts anything:
   its user-data-dir, tabd state dirs, tab ids and helper containers.

@@ -14,3 +14,7 @@ test/containment/probe-safety.test.ts:host-secret-path
 # Observability prompt-injection test: a deliberate injection payload written inside the tab,
 # asserted to arrive escaped, tagged untrusted and flagged as suspicious-content.
 test/observability/run.ts:agent-injection
+
+# Background editor windows: one read-only CGWindowList query (JXA) for the window id that
+# screencapture -l needs. No activate/frontmost; focus-steal still applies.
+test/harness.ts:persistence
