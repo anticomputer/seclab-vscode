@@ -110,7 +110,7 @@ uses (all pathname sockets; collector and strace are outside the domain). **Noth
 
 | # | Sev | Area | Finding | Disposition | Fix |
 |---|---|---|---|---|---|
-| LL-1 | Low | sbx kit | `clipboard-bridge` (agent uid, unguarded) is still reachable over the pathname socket `/run/user/1000/wayland-0`; a parser bug there would be execution outside the guard. | Accepted (follow-up) | Dependency on sbx code; follow-up: stop it from the collector before the REH if seclab never uses the sbx clipboard. |
+| LL-1 | Low | sbx kit | `clipboard-bridge` (agent uid, unguarded) is still reachable over the pathname socket `/run/user/1000/wayland-0`; a parser bug there would be execution outside the guard. | Fixed (2026-11-05) | seclab never uses the sbx clipboard: the collector stops it (TERM, then KILL, matched by exe path) and removes its socket before the REH starts, failing closed if it survives; nothing respawns it. Containment regression (`LL-1`), negative-controlled on the old template. |
 
 ## Increment 2b: sync loop (9b60205 and fixes)
 Threat: everything the in-VM feed returns (names, content, modes, counts, timing) is tab-controlled.
