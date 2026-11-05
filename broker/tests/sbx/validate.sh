@@ -68,9 +68,11 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-docker build -q --target broker -t seclab-broker:test "$broker_dir" >/dev/null
-docker build -q -t seclab-broker-it-upstream:test "$broker_dir/tests/integration/images/upstream" >/dev/null
-docker build -q -t seclab-broker-it-harness:test -f "$broker_dir/tests/integration/images/harness/Dockerfile" \
+. "$broker_dir/tools/pybuild.sh"
+pybuild -q --target broker -t seclab-broker:test "$broker_dir" >/dev/null
+pybuild -q -t seclab-broker-it-upstream:test -f "$broker_dir/tests/integration/images/upstream/Dockerfile" \
+  "$broker_dir" >/dev/null
+pybuild -q -t seclab-broker-it-harness:test -f "$broker_dir/tests/integration/images/harness/Dockerfile" \
   "$broker_dir" >/dev/null
 snapshot > "$out/global-before.json"
 

@@ -7,7 +7,8 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/.." && pwd)
-docker build -q --target unit -t seclab-broker-unit:docs "$here" >/dev/null
+. "$here/tools/pybuild.sh"
+pybuild -q --target unit -t seclab-broker-unit:docs "$here" >/dev/null
 mode=check
 mount=ro
 case "${1:-}" in

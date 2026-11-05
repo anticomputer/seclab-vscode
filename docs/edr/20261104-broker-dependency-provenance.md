@@ -36,11 +36,19 @@ a skipped line. It fails if:
   Dockerfile (its target interpreter would be unknown);
 - a Dockerfile `FROM` is not digest-pinned, or not in the register;
 - a Dockerfile has a parser directive (`# syntax=` makes BuildKit run an
-  unpinned frontend image), `ADD`, `ONBUILD`, `RUN` flags, `COPY --from=`
-  anything but an earlier stage, or pip configuration (`PIP_*`, `pip.conf`);
-- a Python install is anything but exactly `pip install --no-cache-dir
-  --no-deps --require-hashes --only-binary=:all: -r <path>`, where `<path>` is
-  the destination of a `COPY` of one checked requirements file.
+  unpinned frontend image), `ADD`, `ONBUILD`, `COPY --from=` anything but an
+  earlier stage, pip configuration (`PIP_*` other than the build arg
+  `PIP_SOURCE`, `pip.conf`), or `RUN` flags outside the two forms below;
+- wheels are fetched other than by exactly `RUN
+  --mount=type=secret,id=cfs_feed_token,required=false
+  --mount=type=tmpfs,target=/run/cfs-auth python3 <pip-fetch.py> <path>`, alone,
+  in a named stage. `<pip-fetch.py>` must be a `COPY` of `tools/pip-fetch.py`,
+  and `<path>` a `COPY` of one checked requirements file;
+- a Python install is anything but exactly `RUN
+  --mount=type=bind,from=<stage>,source=/wheels,target=/opt/wheels pip install
+  --no-cache-dir --no-deps --require-hashes --only-binary=:all: --no-index
+  --find-links /opt/wheels -r <path>`. `<stage>` must be an earlier stage, on the
+  same base image, that fetched that same requirements file.
 
 So nothing can be added without a register entry. `pin_check.py --self-test`
 (also run by `docs-check.sh`) proves that every bypass form found in review is
@@ -118,6 +126,33 @@ reliable snapshot mirror is available, or if any apt package enters a shipped
 image. Approved by the user via the coordinator on 2026-11-05 ("signed
 archive, versions not pinned"). It is registered as `apt-broker-tests` with
 bar `exception` in `deps/registry.json`.
+
+**Where the files come from: CFS locally, PyPI in CI (2026-11-05).**
+- **Local builds.** Public PyPI is unavailable locally, so a local build
+  fetches through GitHub's CFS feed, the same exact files by hash.
+- **Two stages per image.** A token-holding `wheels` stage runs
+  `tools/pip-fetch.py`: `pip download --require-hashes --only-binary=:all:
+  --no-deps`. The final stage installs from a read-only bind of those wheels
+  with `--no-index`, so neither the token nor an index reaches the image.
+- **The token.** It comes only as the BuildKit secret `cfs_feed_token`, which
+  `gh cfs -- docker build` supplies. It is written to a 0600 netrc on a tmpfs
+  and never appears in argv, a layer or a log, and the build fails if it
+  shows up in a downloaded file.
+- **Choosing the index.** The index is the explicit build arg `PIP_SOURCE`
+  (`cfs` or `public`), never inferred from whether a secret is present.
+  `tools/pybuild.sh` sets it from `SECLAB_PIP_SOURCE`, which defaults to `cfs`,
+  or to `public` when `CI` is set (hosted runners can't use CFS). A local
+  build therefore never silently falls back to public PyPI. With `cfs` and no
+  secret, or with no `PIP_SOURCE` at all, the build fails.
+- **The CFS hold.** CFS holds new package versions for 7 days. A pin younger
+  than that fails locally until the hold ends; CI is unaffected. On
+  2026-11-05 that applied to 7 pins (`fastjsonschema` 2.22.3, `dnspython`
+  2.9.2, `platformdirs` 4.14.5, `pydantic` 2.14.2 and `pydantic-core` 2.50.2,
+  `pypi-attestations` 0.0.31, `typing-inspection` 0.4.5). This is expected, so
+  the pins stay. Pinning only versions past the hold would trade security
+  fixes for local convenience.
+- **Source.** The design is based on the Fork-build session's CFS local-build
+  recipe and `gh cfs generate docker-helper` (gh-cfs v0.3.1).
 
 ## Alternatives considered
 - **Rebuild the broker on `python:slim` plus a hash-locked `pip install
