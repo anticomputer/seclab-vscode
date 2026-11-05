@@ -132,10 +132,14 @@ the broker makes the mint call, and the token comes back to the tab only as a
 sentinel.
 
 So a confirmed credential's request on the exact `from` route of one of its
-own `derive` rules passes the backstop, and is audited as
-`credential.backstop_exempt`. Its response must yield a structurally replaced
-token, or it is blocked. Every other backstopped route, including the rest of
-`/copilot_internal/**`, stays denied (`test_backstop_exempts_only_a_declared_derive_route`).
+own `derive` rules (empty query) passes the backstop, and is audited as
+`credential.backstop_exempt`. A 2xx response must yield a structurally
+replaced token, or it is blocked. Any other status gets the same response
+check as the exception below, so "derived or blocked" holds whatever the
+upstream returns
+([review](../security-reviews/20261105-broker-backstop-exceptions.md)). Every
+other backstopped route, including the rest of `/copilot_internal/**`, stays
+denied (`test_backstop_exempts_only_a_declared_derive_route`).
 
 **Measured traffic** (secure-agentic spike, 2026-11-05):
 - the parent credential's inject format is `Authorization: Bearer <value>`,
@@ -155,8 +159,8 @@ Conditions, all enforced:
   no upgrade. Anything else on that path is backstopped.
 - **Checked response.** The response must be a strict JSON object with no
   credential-named key (`token`, `secret`, `passw…`, `credential`, `api_key`,
-  `session`, `cookie`, `bearer`, `jwt`) and no token-shaped value anywhere,
-  including in headers. Otherwise it is blocked and audited as
+  `session`, `cookie`, `bearer`, `jwt`) or header name, and no token-shaped
+  value anywhere, including in headers. Otherwise it is blocked and audited as
   `credential.backstop_exception_blocked`. That is a finding: the route's
   response shape needs review.
 - **Field allowlist, later.** Its top-level fields will be allowlisted once

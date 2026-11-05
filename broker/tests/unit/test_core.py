@@ -333,6 +333,7 @@ def test_trusted_derivation_rules_are_exact_and_controller_bound():
     assert r.matches(RequestView("https", "api.example.com", 443, "GET", "/copilot_internal/v2/token", ""))
     assert not r.matches(RequestView("https", "api.example.com", 443, "POST", "/copilot_internal/v2/token", ""))
     assert not r.matches(RequestView("https", "api.example.com", 443, "GET", "/copilot_internal/v2/tokenx", ""))
+    assert not r.matches(RequestView("https", "api.example.com", 443, "GET", "/copilot_internal/v2/token", "callback=x"))
     for bad in ({"from": dict(DERIVE["from"], host="*.example.com")},
                 {"from": dict(DERIVE["from"], path="/copilot_internal/**")},
                 {"bind": [dict(DERIVE["bind"][0], host="*.example.com")]},
