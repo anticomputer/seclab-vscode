@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/contrib/chat/browser/tools/languageModelToolsService.ts b/src/vs/workbench/contrib/chat/browser/tools/languageModelToolsService.ts
---- a/src/vs/workbench/contrib/chat/browser/tools/languageModelToolsService.ts	2026-11-05 11:39:24
-+++ b/src/vs/workbench/contrib/chat/browser/tools/languageModelToolsService.ts	2026-11-05 11:39:40
+--- a/src/vs/workbench/contrib/chat/browser/tools/languageModelToolsService.ts	2026-11-05 12:52:32
++++ b/src/vs/workbench/contrib/chat/browser/tools/languageModelToolsService.ts	2026-11-05 12:52:32
 @@ -43,6 +43,8 @@
  import { ChatRequestToolReferenceEntry, toToolSetVariableEntry, toToolVariableEntry } from '../../common/attachments/chatVariableEntries.js';
  import { IVariableReference } from '../../common/chatModes.js';
@@ -18,33 +18,52 @@ diff -ruN a/src/vs/workbench/contrib/chat/browser/tools/languageModelToolsServic
  	) {
  		super();
  
-@@ -367,6 +370,11 @@
+@@ -308,6 +311,17 @@
  	}
  
- 	registerTool(toolData: IToolData, tool: IToolImpl): IDisposable {
+ 	registerToolData(toolData: IToolData): IDisposable {
 +		if (seclabAiDisabled(this._seclabEnvironmentService.remoteAuthority)) {
 +			// seclab: a tab window registers no tools, so the agent has none to
 +			// choose and tab-authored instructions cannot name one.
++			//
++			// Guarded on registerToolData and registerToolImplementation rather
++			// than on registerTool. registerTool is only a wrapper around these
++			// two, and both are public and called directly -- by the terminal
++			// tools contribution and by every extension-contributed tool through
++			// mainThreadLanguageModelTools. A guard on the wrapper let those past.
 +			return Disposable.None;
 +		}
- 		return combinedDisposable(
- 			this.registerToolData(toolData),
- 			this.registerToolImplementation(toolData.id, tool)
-@@ -498,6 +506,11 @@
+ 		if (this._tools.has(toolData.id)) {
+ 			throw new Error(`Tool "${toolData.id}" is already registered.`);
+ 		}
+@@ -351,6 +365,12 @@
+ 	}
+ 
+ 	registerToolImplementation(id: string, tool: IToolImpl): IDisposable {
++		if (seclabAiDisabled(this._seclabEnvironmentService.remoteAuthority)) {
++			// seclab: return before the lookup. registerToolData registered
++			// nothing, so the lookup below would throw 'was not contributed' and
++			// turn a disabled feature into an exception for every caller.
++			return Disposable.None;
++		}
+ 		const entry = this._tools.get(id);
+ 		if (!entry) {
+ 			throw new Error(`Tool "${id}" was not contributed.`);
+@@ -498,6 +518,11 @@
  	}
  
  	async invokeTool(dto: IToolInvocation, countTokens: CountTokensCallback, token: CancellationToken): Promise<IToolResult> {
 +		if (seclabAiDisabled(this._seclabEnvironmentService.remoteAuthority)) {
-+			// seclab: refused at invocation as well as registration. Registration
-+			// alone would depend on every future caller going through it.
++			// seclab: refused at invocation as well as registration, so a tool
++			// reaching the map by any path still cannot run.
 +			throw new Error('Unsupported operation');
 +		}
  		const toolData = this._tools.get(dto.toolId)?.data;
  		this._validateToolSession(toolData, dto.toolSessionResource);
  		this._logService.trace(`[LanguageModelToolsService#invokeTool] Invoking tool ${dto.toolId} with parameters ${JSON.stringify(dto.parameters)}`);
 diff -ruN a/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts b/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts
---- a/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts	2026-11-05 11:39:24
-+++ b/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts	2026-11-05 11:40:05
+--- a/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts	2026-11-05 12:52:32
++++ b/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts	2026-11-05 12:52:32
 @@ -35,6 +35,8 @@
  import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
  import { isVirtualWorkspace } from '../../../../../platform/workspace/common/virtualWorkspace.js';

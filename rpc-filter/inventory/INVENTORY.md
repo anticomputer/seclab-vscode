@@ -184,46 +184,46 @@ see them.
 
 ### `download` → `DownloadServiceChannel`
 
-- Registered: [`src/vs/workbench/contrib/remote/common/remote.contribution.ts:77`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L77)
-- Implementation: [`DownloadServiceChannel`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/download/common/downloadIpc.ts#L9)
+- Registered: [`src/vs/workbench/contrib/remote/common/remote.contribution.ts:80`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L80)
+- Implementation: [`DownloadServiceChannel`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/download/common/downloadIpc.ts#L12)
 - Methods: `download`
 - **Revives a caller-supplied URI**: the server chooses the URI, so this reads and writes wherever the trusted side can.
 
 ### `mcpGatewayToolBroker` → `McpGatewayToolBrokerChannel`
 
-- Registered: [`src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts:16`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts#L16)
-- Implementation: [`McpGatewayToolBrokerChannel`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/common/mcpGatewayToolBrokerChannel.ts#L32)
+- Registered: [`src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts:19`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/browser/mcpGatewayToolBrokerContribution.ts#L19)
+- Implementation: [`McpGatewayToolBrokerChannel`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/common/mcpGatewayToolBrokerChannel.ts#L35)
 - Methods: `callToolForServer`, `listResourceTemplatesForServer`, `listResourcesForServer`, `listServers`, `listToolsForServer`, `onDidChangeResources`, `onDidChangeServers`, `onDidChangeTools`, `readResourceForServer`
 
 ### Server-initiated callbacks the client acts on
 
 | Effect | Site |
 |---|---|
-| opens an external URI for the server | [`src/vs/platform/browserView/common/browserView.ts:533`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/common/browserView.ts#L533) |
-| opens an external URI for the server | [`src/vs/platform/browserView/electron-main/browserView.ts:109`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/electron-main/browserView.ts#L109) |
-| opens an external URI for the server | [`src/vs/platform/browserView/electron-main/browserViewMainService.ts:524`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/electron-main/browserViewMainService.ts#L524) |
-| opens an external URI for the server | [`src/vs/workbench/api/browser/mainThreadCLICommands.ts:25`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L25) |
-| opens a window or folder for the server | [`src/vs/workbench/api/browser/mainThreadCLICommands.ts:30`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L30) |
-| reports host status to the server | [`src/vs/workbench/api/browser/mainThreadCLICommands.ts:38`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L38) |
-| installs or manages extensions for the server | [`src/vs/workbench/api/browser/mainThreadCLICommands.ts:50`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L50) |
-| opens a window or folder for the server | [`src/vs/workbench/api/node/extHostCLIServer.ts:151`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/node/extHostCLIServer.ts#L151) |
-| opens an external URI for the server | [`src/vs/workbench/api/node/extHostCLIServer.ts:161`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/node/extHostCLIServer.ts#L161) |
-| installs or manages extensions for the server | [`src/vs/workbench/api/node/extHostCLIServer.ts:173`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/node/extHostCLIServer.ts#L173) |
-| reports host status to the server | [`src/vs/workbench/api/node/extHostCLIServer.ts:177`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/node/extHostCLIServer.ts#L177) |
-| opens an external URI for the server | [`src/vs/workbench/contrib/browserView/common/browserView.ts:409`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/common/browserView.ts#L409) |
-| opens an external URI for the server | [`src/vs/workbench/contrib/canvases/electron-browser/canvasView.ts:350`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/canvases/electron-browser/canvasView.ts#L350) |
-| opens a window or folder for the server | [`src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts:99`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L99) |
-| opens an external URI for the server | [`src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts:99`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L99) |
-| installs or manages extensions for the server | [`src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts:99`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L99) |
-| reports host status to the server | [`src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts:99`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L99) |
-| executes a command chosen by the server | [`src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts:100`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L100) |
-| executes a command chosen by the server | [`src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts:91`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L91) |
-| executes a command chosen by the server | [`src/vs/workbench/contrib/terminal/common/remote/terminal.ts:52`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/terminal.ts#L52) |
+| opens an external URI for the server | [`src/vs/platform/browserView/common/browserView.ts:601`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/common/browserView.ts#L601) |
+| opens an external URI for the server | [`src/vs/platform/browserView/electron-main/browserView.ts:123`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/electron-main/browserView.ts#L123) |
+| opens an external URI for the server | [`src/vs/platform/browserView/electron-main/browserViewMainService.ts:538`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/electron-main/browserViewMainService.ts#L538) |
+| opens an external URI for the server | [`src/vs/workbench/api/browser/mainThreadCLICommands.ts:30`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L30) |
+| opens a window or folder for the server | [`src/vs/workbench/api/browser/mainThreadCLICommands.ts:35`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L35) |
+| reports host status to the server | [`src/vs/workbench/api/browser/mainThreadCLICommands.ts:43`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L43) |
+| installs or manages extensions for the server | [`src/vs/workbench/api/browser/mainThreadCLICommands.ts:55`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L55) |
+| opens a window or folder for the server | [`src/vs/workbench/api/node/extHostCLIServer.ts:154`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/node/extHostCLIServer.ts#L154) |
+| opens an external URI for the server | [`src/vs/workbench/api/node/extHostCLIServer.ts:164`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/node/extHostCLIServer.ts#L164) |
+| installs or manages extensions for the server | [`src/vs/workbench/api/node/extHostCLIServer.ts:176`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/node/extHostCLIServer.ts#L176) |
+| reports host status to the server | [`src/vs/workbench/api/node/extHostCLIServer.ts:180`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/node/extHostCLIServer.ts#L180) |
+| opens an external URI for the server | [`src/vs/workbench/contrib/browserView/common/browserView.ts:549`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/common/browserView.ts#L549) |
+| opens an external URI for the server | [`src/vs/workbench/contrib/canvases/electron-browser/canvasView.ts:371`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/canvases/electron-browser/canvasView.ts#L371) |
+| opens a window or folder for the server | [`src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts:102`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L102) |
+| opens an external URI for the server | [`src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts:102`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L102) |
+| installs or manages extensions for the server | [`src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts:102`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L102) |
+| reports host status to the server | [`src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts:102`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L102) |
+| executes a command chosen by the server | [`src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts:103`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L103) |
+| executes a command chosen by the server | [`src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts:94`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L94) |
+| executes a command chosen by the server | [`src/vs/workbench/contrib/terminal/common/remote/terminal.ts:55`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/terminal.ts#L55) |
 
 ## (d) Tab-supplied data the trusted side interprets with authority
 
 Not calls: values that start in a tab and are parsed and acted on by the
-trusted side. 15 sink classes over 474 sites.
+trusted side. 15 sink classes over 475 sites.
 
 | Surface | Authority it confers | Sites |
 |---|---|---:|
@@ -232,7 +232,7 @@ trusted side. 15 sink classes over 474 sites.
 | `command-uri-in-markdown` | a `command:` URI in tab-authored markdown runs a command on the trusted side | 132 |
 | `extension-identity-argument` | an extension identity supplied as an RPC argument drives a trust decision | 5 |
 | `markdown-string-trust` | MarkdownString.isTrusted decides whether embedded command links execute | 90 |
-| `mcp-server-definition` | MCP server definitions from config carry secret inputs and env | 59 |
+| `mcp-server-definition` | MCP server definitions from config carry secret inputs and env | 60 |
 | `open-external` | a URI chosen by the tab is handed to the host OS opener | 17 |
 | `proxy-and-kerberos-auth` | proxy and Kerberos credentials are returned to the caller | 3 |
 | `quick-input-password` | a password QuickInput captures a real user secret on the trusted side | 4 |
