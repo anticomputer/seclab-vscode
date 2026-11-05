@@ -8,6 +8,7 @@
 //   { "0012-background-windows-env.patch": ["desktop"] }  (every touched file must reach these).
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { runtimeSpecs } from './patch-reach-imports.ts';
 
 const repo = path.resolve(import.meta.dirname, '..');
 const src = path.resolve(process.argv[2] ?? '');
@@ -43,7 +44,7 @@ for (const [t, eps] of Object.entries(targets)) {
 }
 
 // ---- import graph ------------------------------------------------------------------------------
-const IMPORT = /(?:^|[\s;])(?:import|export)\s[^'"`;]*?from\s*['"]([^'"]+)['"]|(?:^|[\s;])import\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
+// Runtime edges only: see patch-reach-imports.ts.
 const resolveFrom = (file: string, spec: string): string | undefined => {
 	if (!spec.startsWith('.')) {
 		return undefined; // packages and node: builtins
@@ -60,8 +61,7 @@ const edges = new Map<string, string[]>();
 const importsOf = (file: string): string[] => {
 	let e = edges.get(file);
 	if (!e) {
-		const text = fs.readFileSync(file, 'utf8');
-		e = [...text.matchAll(IMPORT)].map(m => resolveFrom(file, m[1] ?? m[2] ?? m[3])).filter((x): x is string => !!x);
+		e = runtimeSpecs(fs.readFileSync(file, 'utf8')).map(s => resolveFrom(file, s)).filter((x): x is string => !!x);
 		edges.set(file, e);
 	}
 	return e;
@@ -105,6 +105,9 @@ const problems: string[] = [];
 let checked = 0;
 for (const p of series) {
 	const files = [...fs.readFileSync(path.join(repo, 'patches', p), 'utf8').matchAll(/^\+\+\+ b\/(src\/\S+\.ts)$/gm)].map(m => path.join(src, m[1]));
+	if (required[p] && !files.length) {
+		problems.push(`${p}: named in patches/reach.json but touches no src/**/*.ts file, so nothing was checked`);
+	}
 	for (const f of files) {
 		checked++;
 		const rel = path.relative(src, f);

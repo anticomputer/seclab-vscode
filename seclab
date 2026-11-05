@@ -155,10 +155,12 @@ deps_host() {
 }
 
 # Secret scan of what a push adds (AGENTS.md; mechanical, not a reminder): gitleaks built from
-# pinned source, over `git diff BASE..HEAD`, network-less, no credentials, findings redacted.
-# BASE: the argument, else SECRETS_BASE (CI: the push's previous head or the PR base), else the
-# merge base with origin/main. A base that isn't available falls back to that merge base
-# (stricter, never looser). Fails closed if docker or the scanner is unavailable.
+# pinned source over every commit in BASE..TIP (`git log -p -m --text`: intermediate commits and
+# merges included, binary-marked files shown as text; VV-1, VV-3), network-less, no credentials,
+# findings redacted. BASE: the argument, else SECRETS_BASE (CI sets it only for pushes to main),
+# else the merge base with origin/main, i.e. everything main doesn't have yet (VV-2). A base that
+# isn't available falls back to that merge base (stricter, never looser). Fails closed if docker
+# or the scanner is unavailable.
 lint_secrets() {
 	local base="${1:-${SECRETS_BASE:-}}" tip="${2:-HEAD}" gl
 	git -C "$ROOT" cat-file -e "$tip^{commit}" 2>/dev/null || { echo "lint secrets: no such commit $tip" >&2; return 1; }
@@ -166,7 +168,8 @@ lint_secrets() {
 		base="$(git -C "$ROOT" merge-base origin/main "$tip")"
 	fi
 	gl="$(tool_image gitleaks)" || { echo "lint secrets: no scanner (./seclab tool gitleaks)" >&2; return 1; }
-	if ! git -C "$ROOT" diff --no-ext-diff --no-textconv "$base".."$tip" | docker run --rm -i --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+	if ! git -C "$ROOT" -c color.ui=never -c core.quotePath=false log -p -m --text --no-ext-diff --no-textconv --no-color "$base".."$tip" \
+		| docker run --rm -i --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
 		--user 65534:65534 --pull never "$gl" stdin --no-banner --redact --verbose --exit-code 1 --log-level warn; then
 		echo "lint secrets: gitleaks found something in $base..$tip (redacted above). Remove it; fixtures use generated or obviously fake values that match no real token format." >&2
 		return 1
@@ -325,7 +328,7 @@ case "${1:-help}" in
 			# Scratch dirs on a named volume: Docker Desktop's bind-mount inode numbers are not
 			# stable, which trips tabd's (dev, ino) workspace identity check.
 			unit) docker run --rm -v "$ROOT:/repo" -v seclab-test-scratch:/repo/.work/test-scratch -w /repo "$(node_image)" \
-				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts tabd/test/obs.test.ts tabd/test/writeback.test.ts tabd/test/writeback-feed.test.ts tabd/test/inspect.test.ts' ;;
+				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts tabd/test/obs.test.ts tabd/test/writeback.test.ts tabd/test/writeback-feed.test.ts tabd/test/inspect.test.ts build/patch-reach-imports.test.ts' ;;
 			# e2e drives sbx/docker on the host, so it runs on the host. It uses the editor's own
 			# Node when SECLAB_NODE points at it, else an already-present node (nothing is installed).
 			e2e) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/test/e2e.ts" "${1:-sbx}" ;;
@@ -395,11 +398,15 @@ case "${1:-help}" in
 	help|-h|--help) usage ;;
 	# Pinned tools (build/tools/tools.json): verify and build; prints the local image tag.
 	tool) shift; [[ $# -eq 1 ]] || { usage; exit 2; }; tool_image "$1" ;;
-	# Repo-provided git hooks (AGENTS.md): core.hooksPath is shared by every worktree of this clone
-	# and resolves per worktree, so each session's own checkout supplies build/hooks/pre-push.
+	# Repo-provided git hooks (AGENTS.md). Installed into the clone's common git dir, outside every
+	# worktree, so a branch can't weaken or drop the hook by editing build/hooks (review VV-4);
+	# re-run after build/hooks changes. Shared by every worktree of this clone.
 	hooks) shift; [[ "${1:-}" == install ]] || { usage; exit 2; }
-		git -C "$ROOT" config core.hooksPath build/hooks
-		echo "hooks: core.hooksPath=build/hooks (pre-push runs ./seclab lint secrets on what you push)" ;;
+		hookdir="$(cd "$(git -C "$ROOT" rev-parse --git-common-dir)" && pwd -P)/seclab-hooks"
+		mkdir -p "$hookdir"
+		install -m 0755 "$ROOT/build/hooks/pre-push" "$hookdir/pre-push"
+		git -C "$ROOT" config core.hooksPath "$hookdir"
+		echo "hooks: core.hooksPath=$hookdir (pre-push runs ./seclab lint secrets on what you push)" ;;
 	# Dependency updates Dependabot can't see (ADR supply-chain provenance): report only.
 	deps)
 		shift

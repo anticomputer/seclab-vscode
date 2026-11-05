@@ -12,19 +12,25 @@ example data, not a secret, but the rule had been skipped, and nothing would hav
 real one.
 
 ## Decision
-- **`./seclab lint secrets [BASE [TIP]]`** pipes `git diff BASE..TIP` (no external diff
-  drivers or textconv) through the gitleaks built from pinned source. It runs
+- **`./seclab lint secrets [BASE [TIP]]`** pipes every commit in `BASE..TIP` through the
+  gitleaks built from pinned source: `git log -p -m --text` with no external diff drivers or
+  textconv, so a secret added and removed in an intermediate commit, one in a merge, and one
+  in a file marked binary or `-diff` are all scanned (review VV-1, VV-3). It runs
   `--network none`, read-only, with no capabilities, as nobody, `--pull never`, and redacts
   findings. The base defaults to the merge base with `origin/main`; an unavailable base falls
   back to that, which is stricter, never looser. It fails closed if docker or the scanner is
   missing.
-- **Pre-push hook:** `build/hooks/pre-push`, installed per clone by `./seclab hooks install`
-  (`core.hooksPath=build/hooks`). That setting is shared by every worktree of the clone and
-  resolves per worktree. It scans each pushed range, remote head to pushed commit, or from
-  the merge base with main for a new ref. A hit or an unrunnable scan blocks the push before
-  anything reaches GitHub.
-- **CI:** the required `lint` check (`workflow-lint`) runs the same command over the push's
-  range (the previous head, or the PR base).
+- **Pre-push hook:** `build/hooks/pre-push`, installed per clone by `./seclab hooks install`.
+  The install copies it into the clone's common git dir (`.git/seclab-hooks`) and points
+  `core.hooksPath` at that absolute path, so a branch can't weaken or drop the hook by editing
+  its own `build/hooks` (review VV-4); re-run the install after the hook changes. It scans each
+  pushed range, remote head to pushed commit, or from the merge base with main for a new ref,
+  using the pushing checkout's `./seclab`, and refuses if that checkout has no scanner. A hit
+  or an unrunnable scan blocks the push before anything reaches GitHub.
+- **CI:** the required `lint` check (`workflow-lint`) runs the same command. A push to `main`
+  scans from the previous head; every other push and PR scans every commit since the merge
+  base with `main`, so a secret pushed earlier on a branch can't ride a later clean push onto
+  `main` (review VV-2).
 - **Fixtures:** the existing rule stands. Values are generated or obviously fake
   (`seclabcanary_…`), match no real token format, and are not public example values either.
 
@@ -32,7 +38,9 @@ real one.
 - Verified 2026-11-05:
   - the branch range scans clean;
   - a generated GitHub-token-shaped value piped through the same invocation is reported as
-    `github-pat` with the secret redacted, and exits 1.
+    `github-pat` with the secret redacted, and exits 1;
+  - a generated token added in one commit and removed in the next, then repeated in a
+    `-diff` file: the old `git diff` scan exits 0, the commit-by-commit scan exits 1.
 - The hook can be bypassed with `git push --no-verify`. That is what the required CI step
   is for: nothing reaches `main` without it.
 - A false positive in a legitimate change needs a reviewed fix. Either replace the value with

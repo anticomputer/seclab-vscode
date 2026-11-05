@@ -67,7 +67,10 @@ way). It also installs the binary without checking any hash. `build/seed-ripgrep
 before `npm ci`. It fetches the pinned asset from the release-download URL (not the API),
 checks its sha256 against `build/ripgrep.lock`, and places it in the postinstall's cache,
 which the postinstall then uses. It refuses if upstream's lockfile moves to another
-`@vscode/ripgrep` version. No token is involved.
+`@vscode/ripgrep` version. No token is involved. The cache sits in a fresh private `TMPDIR`, and
+after `npm ci` (and on every Linux build, cached tree or not) `--verify-installed` checks the
+installed `rg` against the binary's own pinned sha256, whatever path the postinstall took
+(review VV-5).
 
 **The tab's seccomp guard.** sbx now resolves its shell kit as `:latest`, and the 2026-11 kit
 ships no `gcc`. So `sandbox/sbx/seclab-obs-guard.c` is compiled statically in our pinned

@@ -26,11 +26,12 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: No secret in what this push or PR adds (gitleaks built from pinned source)
+      - name: No secret in any commit main doesn't have yet (gitleaks built from pinned source)
         env:
-          # The PR's base, or the push's previous head (all-zero for a new branch: the merge
-          # base with main is used, stricter, never looser).
-          SECRETS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          # Pushes to main scan from the previous head; everything else scans every commit since
+          # the merge base with main, so a secret pushed earlier on a branch can't ride a later,
+          # clean push onto main (review VV-2).
+          SECRETS_BASE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.before || '' }}
         run: ./seclab lint secrets
       - name: Pin check self-test
         run: ./seclab lint pins --self-test

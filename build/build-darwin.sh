@@ -13,9 +13,12 @@ OUT_DIR="${OUT_DIR:-$ROOT/.work/out}"
 "$ROOT/build/prepare.sh" "$SRC"
 cd "$SRC"
 export NODE_OPTIONS="--max-old-space-size=${MAX_OLD_SPACE_SIZE:-6144}"
-# Pinned prebuilt ripgrep in the postinstall's cache: no GitHub API call, no unverified binary.
+# Pinned prebuilt ripgrep in the postinstall's cache (a fresh private TMPDIR): no GitHub API call,
+# no unverified binary; the installed rg is checked against its pin afterwards (VV-5).
+TMPDIR="$(mktemp -d)"; export TMPDIR
 node "$ROOT/build/seed-ripgrep.mjs" "$SRC"
 npm ci
+node "$ROOT/build/seed-ripgrep.mjs" --verify-installed "$SRC"
 "$ROOT/build/npm-audit-signatures.sh" "$SRC"
 "$ROOT/build/remove-extensions.sh" "$SRC"
 npm run gulp "vscode-darwin-${ARCH}-min"

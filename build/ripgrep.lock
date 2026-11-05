@@ -9,3 +9,9 @@ asset ripgrep-v15.0.1-aarch64-apple-darwin.tar.gz 2fa16464fd8638588a67c7fc172d3c
 asset ripgrep-v15.0.1-x86_64-apple-darwin.tar.gz 591c693e80bb444ef1907b2a906feb9c77bcafe1cdf509107cc75dcf0e875bd2
 asset ripgrep-v15.0.1-aarch64-unknown-linux-musl.tar.gz dd3738a4b6e8df0fb3bc3edc5af352c4c39e0d97ad118a23e5176bdc5d48ba08
 asset ripgrep-v15.0.1-x86_64-unknown-linux-musl.tar.gz 4499958bfd5252df3d9e7504127fd448e4a14fbf2805ef4f14baaa1bcf775188
+# The `rg` binary inside each verified archive. After `npm ci`, node_modules/@vscode/ripgrep/bin/rg
+# must equal it (seed-ripgrep.mjs --verify-installed), whatever path the postinstall took (VV-5).
+bin aarch64-apple-darwin 6ef40346bf31fcce79d9614c7745c198542925a0c7d4911e1ffe794c53392ac1
+bin x86_64-apple-darwin f999495980a5e6f1e7d26461ef5768b4013a62df610ed7d77a8b2de247a5b228
+bin aarch64-unknown-linux-musl e152ea689d6e8420357e592f0d8253b96476c164118ca3e6e13074fa1705ddda
+bin x86_64-unknown-linux-musl 193906679498de4d939345b937fa24e0e69a03c244bd70c859f5e41232713f21
