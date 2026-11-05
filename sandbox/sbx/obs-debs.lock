@@ -1,6 +1,6 @@
 # Pinned debs installed into the sbx tab template (sandbox/sbx/build-template.sh).
 # Fetched with apt (signature-verified) in the pinned debian image below, then checked here.
 # Bump: change the version, run the fetch, and record the new sha256 (security review).
-image debian@sha256:2dc419c6d7fe3dad0a2f9fd469c34cc90b0f9ba642d8fde837fe3d7d34a0e7f1
+image debian:trixie@sha256:2dc419c6d7fe3dad0a2f9fd469c34cc90b0f9ba642d8fde837fe3d7d34a0e7f1
 deb strace_6.13+ds-1_arm64.deb d793af70a104eb0bd5be466c3043b512f549e7cb27971320a7c9b8f4c6165e55
 deb strace_6.13+ds-1_amd64.deb cae290b67cf835350a2cde58ca332256fba475784b3e02a9a8677d73eaf47511
