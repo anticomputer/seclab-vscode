@@ -8,7 +8,7 @@ import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
-import { printChecks, removeRunResources, stopRunProcesses, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
+import { materialiseFixture, printChecks, removeRunResources, stopRunProcesses, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
 import { checkUserDataDir, editorLaunchCommand } from '../harness.ts';
 
 const [mode, userDataArg, driverArg] = process.argv.slice(2);
@@ -37,7 +37,7 @@ fs.rmSync(stateDir, { recursive: true, force: true });
 fs.mkdirSync(base, { recursive: true });
 writeSnapshot(base);
 writeManifest(base, { driver, userDataDir: userData, stateDirs: [stateDir] });
-fs.cpSync(path.join(import.meta.dirname, 'fixtures', 'loader-workspace'), ws, { recursive: true });
+materialiseFixture(base, path.join(import.meta.dirname, 'fixtures', 'loader-workspace'), ws);
 const arm = randomBytes(16).toString('hex');
 fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\nuntil=${Math.floor(Date.now() / 1000) + 3600}\nmarker=${path.join(ws, '.envrc')}\n`);
 fs.writeFileSync(path.join(ws, 'README.md'), '# demo-app\n\nAn inert demo workspace: its folder-open task imitates a loader (seclab-vscode tab observability demo).\n');

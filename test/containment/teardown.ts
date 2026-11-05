@@ -24,6 +24,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { checkIsolatedProfile, hostSnapshot, snapshotDiff, type Snapshot } from '../harness.ts';
+import { avFindings } from '../safety/av-shape.ts';
 
 export interface RunManifest {
 	userDataDir?: string;
@@ -36,6 +37,8 @@ export interface RunManifest {
 	driver?: 'sbx' | 'oci';
 	/** Extra process command-line fragments owned by the run (each must name the run dir), e.g. `beacon.ts start <run-dir>`. */
 	commandMarks?: string[];
+	/** Fixture workspaces the run materialised (strictly inside the run dir); deleted by teardown. */
+	workspaces?: string[];
 	startedAt?: string;
 }
 
@@ -49,6 +52,42 @@ const manifestFile = (runDir: string) => path.join(runDir, 'run.json');
 const snapshotFile = (runDir: string) => path.join(runDir, 'host-snapshot.json');
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const within = (p: string, dir: string) => path.resolve(p) === path.resolve(dir) || path.resolve(p).startsWith(path.resolve(dir) + path.sep);
+
+/** Text files of a tree, keyed by posix path relative to `root` (for the AV-shape check). */
+export function treeTexts(root: string, max = 4000): Map<string, string> {
+	const out = new Map<string, string>();
+	const walk = (dir: string, rel: string): void => {
+		for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+			if (out.size >= max) {
+				return;
+			}
+			const p = path.join(dir, e.name);
+			const r = rel ? `${rel}/${e.name}` : e.name;
+			if (e.isDirectory() && e.name !== 'node_modules' && e.name !== '.git') {
+				walk(p, r);
+			} else if (e.isFile() && fs.statSync(p).size < 2 << 20) {
+				out.set(r, fs.readFileSync(p, 'utf8'));
+			}
+		}
+	};
+	walk(root, '');
+	return out;
+}
+
+/**
+ * The only way a harness puts a fixture workspace on the host: refuses a source that carries an
+ * AV loader shape (those are stored as *.parts.json and assembled inside the tab), records the
+ * destination in run.json first, so teardown deletes it even if the run dies, then copies.
+ */
+export function materialiseFixture(runDir: string, src: string, dst: string): void {
+	const findings = avFindings(treeTexts(src));
+	if (findings.length) {
+		throw new Error(`refusing to copy ${src} onto the host (AV loader shape; EDR fixture-safety):\n  ${findings.join('\n  ')}`);
+	}
+	fs.mkdirSync(runDir, { recursive: true });
+	writeManifest(runDir, { workspaces: [path.resolve(dst)] });
+	fs.cpSync(src, dst, { recursive: true });
+}
 
 export function readManifest(runDir: string): RunManifest {
 	try {
@@ -69,6 +108,7 @@ export function writeManifest(runDir: string, add: RunManifest): RunManifest {
 		containers: uniq(m.containers, add.containers),
 		driver: add.driver ?? m.driver,
 		commandMarks: uniq(m.commandMarks, add.commandMarks),
+		workspaces: uniq(m.workspaces, add.workspaces),
 		startedAt: m.startedAt ?? new Date().toISOString(),
 	};
 	fs.mkdirSync(runDir, { recursive: true });
@@ -109,6 +149,11 @@ export function manifestProblems(runDir: string, m: RunManifest): string[] {
 		// A program token plus arguments naming the run dir; never the bare run dir (R-1).
 		if (k === runDir || !/^\S+\s+\S/.test(k) || (!k.includes(runDir + path.sep) && !k.endsWith(` ${runDir}`))) {
 			out.push(`command mark must be "<program> … <run-dir>…": ${k}`);
+		}
+	}
+	for (const w of m.workspaces ?? []) {
+		if (!path.isAbsolute(w) || path.resolve(w) === runDir || !within(w, runDir)) {
+			out.push(`workspace outside the run: ${w}`);
 		}
 	}
 	return out;
@@ -376,6 +421,15 @@ export function verifyTeardown(runDir: string, opts: { snapshot?: boolean } = {}
 	}
 	if (m.userDataDir) {
 		add(!fs.existsSync(m.userDataDir), 'run user-data-dir removed (it holds the armed rogue extension)', m.userDataDir);
+	}
+	// Generated fixture workspaces never outlive the run: copies on the host are what endpoint
+	// protection scans (EDR fixture-safety). Only after every process and tab is gone.
+	for (const w of m.workspaces ?? []) {
+		fs.rmSync(w, { recursive: true, force: true });
+	}
+	if (m.workspaces?.length) {
+		const left = m.workspaces.filter(w => fs.existsSync(w));
+		add(left.length === 0, 'generated fixture workspaces removed from the host', left.join(', '));
 	}
 
 	let nonce = '';

@@ -13,7 +13,7 @@ import { TabdClient } from '../../tabd/src/client.ts';
 import { beaconPort, lockRun, NGINX_IMAGE, worktreeId } from '../harness.ts';
 import { checkEvidence, readEvidence, report, type Check } from './assert.ts';
 import { armCampaignTab, disarmCampaign, runCampaign, setupCampaign } from './campaign.ts';
-import { exitedOrTimeout, teardownGate, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
+import { exitedOrTimeout, materialiseFixture, teardownGate, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
 
 const driver = process.argv[2] ?? 'sbx';
 if (driver !== 'sbx' && driver !== 'oci') {
@@ -40,7 +40,7 @@ const marker = path.join(work, 'PWNED');
 
 function makeWorkspace(name: string, othertab: string): string {
 	const ws = path.join(work, 'tabs', name);
-	fs.cpSync(fixture, ws, { recursive: true });
+	materialiseFixture(work, fixture, ws);
 	fs.chmodSync(path.join(ws, '.seclab', 'probe.sh'), 0o755);
 	fs.chmodSync(path.join(ws, '.seclab', 'fake-python'), 0o755);
 	fs.writeFileSync(path.join(ws, '.seclab', 'targets'),

