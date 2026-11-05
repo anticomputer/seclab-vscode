@@ -174,6 +174,20 @@ RPC-lockdown session adds. Keep them consistent with this file.
   
   Why: agents (including reviewers) read hostile output as a matter of course,
   and the project's own tooling must not become the escape path.
+- **Never steal focus from the user.** Editor windows for demos, screenshots and
+  containment-editor runs open in the background on the current Space and stay
+  behind the user's windows:
+  - launch with `node test/window.ts launch …` (`open -g -n`, isolated profile);
+    it exits 1 if the editor became the frontmost app. Report that; never work
+    around it;
+  - capture with `node test/window.ts shot …` (`screencapture -o -l <windowid>`,
+    which reads the covered window directly);
+  - never call activate/frontmost APIs, `open` without `-g`, or the app's
+    `bin/code` CLI directly. `./seclab lint fixtures` (rule `focus-steal`)
+    rejects these in harness and test code.
+
+  Why: the user, verbatim: "you keep popping up on top of my ongoing work".
+  Covered-window capture was confirmed fine by the user.
 
 ## 4. Common tasks
 CI runs these on every push and PR (`./seclab docs check --run-commands`); they must
@@ -223,7 +237,7 @@ node test/containment/teardown.test.ts   # teardown regression: orphaned editor 
 xattr -dr com.apple.quarantine .work/app/seclab-vscode.app
 
 # Level B (editor-driven). The profile dir must be short (macOS 104-byte socket path) and isolated.
-./seclab test evidence prepare ~/.seclab-test/ud sbx    # then run the printed `.../bin/code --user-data-dir ... --folder-uri ...`
+./seclab test evidence prepare ~/.seclab-test/ud sbx    # then run the printed `node test/window.ts launch ...` (background, never activated)
 ./seclab test evidence check ~/.seclab-test/ud sbx      # known M4 gaps (settings/clipboard canaries, git askpass) report as XFAIL
 
 # sbx inspection

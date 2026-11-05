@@ -2,6 +2,7 @@
 //   SECLAB_BEACON_PORT  host-loopback beacon port (default: a free port picked per run)
 //   SECLAB_EVIDENCE_DIR level B fixture dir (default: <repo>/.work/containment-editor)
 
+import { execFileSync } from 'node:child_process';
 import { createHash, createHmac } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
@@ -166,3 +167,97 @@ export function snapshotDiff(before: Snapshot, after: Snapshot): string[] {
 	return [...changed];
 }
 
+
+// ---- Editor windows never take focus (AGENTS.md hard rule; user: "you keep popping up on top
+// of my ongoing work"). Launch in the background with LaunchServices (`open -g -n`), never
+// activate, and capture the window by id while it stays covered on the current Space
+// (`screencapture -o -l`, which reads the window's own backing store). Electron's macOS
+// show() still *requests* activation; macOS's cooperative activation refuses that for an app
+// launched in the background, and launchEditorInBackground checks it: if the editor became
+// the frontmost app, the run fails loudly rather than leaving the user to notice.
+
+/** The locally fetched/built macOS app (./seclab fetch macos). */
+export const EDITOR_APP = path.join(repoRoot, '.work', 'app', 'seclab-vscode.app');
+
+/** argv that opens an isolated-profile editor window without activating it. */
+export function editorLaunchArgv(userData: string, folderUri: string, env: Record<string, string> = {}, app = EDITOR_APP): string[] {
+	const envArgs = Object.entries(env).flatMap(([k, v]) => ['--env', `${k}=${v}`]);
+	return ['open', '-g', '-n', ...envArgs, '-a', app, '--args', '--user-data-dir', userData, '--folder-uri', folderUri];
+}
+
+/** The same, as one copy-pasteable shell line (for "prepare" steps that print the command). */
+export function editorLaunchCommand(userData: string, folderUri: string, env: Record<string, string> = {}): string {
+	const envArgs = Object.entries(env).map(([k, v]) => ` --env ${shq(`${k}=${v}`)}`).join('');
+	return `node test/window.ts launch${envArgs} ${shq(userData)} ${shq(folderUri)}`;
+}
+
+function shq(s: string): string {
+	return /^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+/** pid of the frontmost app, read-only (lsappinfo never changes focus). */
+export function frontmostPid(): number {
+	const asn = execFileSync('lsappinfo', ['front'], { encoding: 'utf8' }).trim();
+	const m = /"pid"=(\d+)/.exec(execFileSync('lsappinfo', ['info', '-only', 'pid', asn], { encoding: 'utf8' }));
+	return m ? Number(m[1]) : 0;
+}
+
+/** Main process of the editor using this profile (not a helper: those carry --type=). */
+export function editorPid(userData: string): number {
+	const ps = execFileSync('ps', ['-axww', '-o', 'pid=,args='], { encoding: 'utf8' });
+	for (const line of ps.split('\n')) {
+		const m = /^\s*(\d+)\s+(.*)$/.exec(line);
+		if (m && m[2].includes('/Contents/MacOS/') && !m[2].includes('--type=')
+			&& (m[2].includes(` --user-data-dir ${userData}`) || m[2].includes(` --user-data-dir=${userData}`))) {
+			return Number(m[1]);
+		}
+	}
+	return 0;
+}
+
+// Read-only window list (CGWindowListCopyWindowInfo): ids, owners, bounds. No activate, no focus.
+const WINDOW_LIST_JXA = `ObjC.import('CoreGraphics');
+function run(argv) {
+	const all = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionAll, 0)));
+	return JSON.stringify(all.filter(w => w.kCGWindowOwnerPID === Number(argv[0]) && w.kCGWindowLayer === 0)
+		.map(w => ({ id: w.kCGWindowNumber, w: w.kCGWindowBounds.Width, h: w.kCGWindowBounds.Height })));
+}`;
+
+/** The editor's largest normal-layer window, or 0. */
+export function editorWindowId(pid: number): number {
+	const out = execFileSync('osascript', ['-l', 'JavaScript', '-e', WINDOW_LIST_JXA, String(pid)], { encoding: 'utf8' }); // fixture-lint: allow persistence -- read-only CGWindowList query (window ids for screencapture -l); no activation
+	const wins = JSON.parse(out) as Array<{ id: number; w: number; h: number }>;
+	wins.sort((a, b) => b.w * b.h - a.w * a.h);
+	return wins.length && wins[0].w > 200 ? wins[0].id : 0;
+}
+
+export interface BackgroundLaunch { pid: number; windowId: number; stoleFocus: boolean }
+
+/** Launch without activating; wait for the window; report whether the editor took focus. */
+export async function launchEditorInBackground(userData: string, folderUri: string, env: Record<string, string> = {}, timeoutMs = 90_000): Promise<BackgroundLaunch> {
+	if (editorPid(userData)) {
+		throw new Error(`an editor already runs with ${userData}; tear it down first`);
+	}
+	const argv = editorLaunchArgv(userData, folderUri, env);
+	execFileSync(argv[0], argv.slice(1), { stdio: 'ignore' });
+	const deadline = Date.now() + timeoutMs;
+	let pid = 0;
+	let windowId = 0;
+	while (Date.now() < deadline && !windowId) {
+		await new Promise(r => setTimeout(r, 1000));
+		pid ||= editorPid(userData);
+		windowId = pid ? editorWindowId(pid) : 0;
+	}
+	if (!windowId) {
+		throw new Error(`no editor window for ${userData} within ${timeoutMs / 1000}s`);
+	}
+	// Activation happens as the window is shown; give it a moment to settle, then check.
+	await new Promise(r => setTimeout(r, 1500));
+	return { pid, windowId, stoleFocus: frontmostPid() === pid };
+}
+
+/** Capture one window by id, covered or not, without touching focus or z-order. */
+export function captureWindow(windowId: number, out: string): void {
+	fs.mkdirSync(path.dirname(out), { recursive: true });
+	execFileSync('screencapture', ['-o', '-x', '-l', String(windowId), out], { stdio: 'inherit' });
+}
