@@ -31,9 +31,16 @@ export interface Check { vector: string; name: string; ok: boolean; detail: stri
 const BLOCKED = new Set(['000', '403', '']);
 const BLACKHOLE = 'http://127.0.0.1:9';
 
-export function readEvidence(ws: string, vector: string): Evidence | undefined {
+/** Evidence for one vector. `read` reads a workspace file through the tab (the write-back
+ *  gate keeps tab writes out of the host checkout until reviewed); default: the host file. */
+export function readEvidence(ws: string, vector: string, read?: (p: string) => string | undefined): Evidence | undefined {
 	const f = path.join(ws, '.seclab-evidence', `${vector}.json`);
-	return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) as Evidence : undefined;
+	const text = read ? read(f) : (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : undefined);
+	try {
+		return text ? JSON.parse(text) as Evidence : undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 /** Assertions for one vector. `expectHostname` is the tab's hostname when known. */

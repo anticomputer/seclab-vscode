@@ -1,0 +1,121 @@
+#!/usr/bin/python3 -I
+# seclab-wb-mount <abs-workspace-path>: the write-back gate overlay (ADR write-back-gate).
+# Runs as root inside the tab's microVM, called by seclab-obs-collect before the REH starts.
+# Mounts fuse-overlayfs over the workspace path with that same path as its lower layer, so the
+# tab writes only to a VM-local upper layer that tabd reviews before anything reaches the host.
+# Contract (agreed with the observability session):
+#   - argv is exactly one absolute, canonical path; anything else is refused;
+#   - idempotent: exit 0 if our overlay is already mounted there;
+#   - non-zero exit and one stderr line on failure (the caller then refuses to start the REH);
+#   - reads nothing tab-controlled before mounting (only /proc links of tab processes).
+# Spike findings (EDR write-back-gate-spike addendum): timeout=0 so host-side changes show
+# through; the upper layer's directory structure is never changed while mounted.
+import os, pwd, stat, subprocess, sys
+
+FUSE_OVERLAYFS = "/usr/bin/fuse-overlayfs"
+STATE = "/var/lib/seclab/wb"
+UPPER = STATE + "/upper"
+WORK = STATE + "/work"
+TAB_USER = "agent"
+
+
+def die(msg):
+    sys.stderr.write("seclab-wb-mount: " + msg + "\n")
+    sys.exit(1)
+
+
+def unescape(s):
+    # /proc/mounts octal-escapes space, tab, newline and backslash.
+    out, i = [], 0
+    while i < len(s):
+        if s[i] == "\\" and i + 3 < len(s) and s[i + 1:i + 4].isdigit():
+            out.append(chr(int(s[i + 1:i + 4], 8)))
+            i += 4
+        else:
+            out.append(s[i])
+            i += 1
+    return "".join(out)
+
+
+def mounted_at(path):
+    """fs type of the top-most mount exactly at path, or None."""
+    top = None
+    with open("/proc/self/mounts", "r", encoding="latin-1") as f:
+        for line in f:
+            parts = line.split(" ")
+            if len(parts) >= 3 and unescape(parts[1]) == path:
+                top = parts[2]
+    return top
+
+
+def private_dir(p):
+    """Create (or check) a root-owned 0700 directory that is not a link."""
+    try:
+        os.mkdir(p, 0o700)
+    except FileExistsError:
+        pass
+    st = os.lstat(p)
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != 0 or (st.st_mode & 0o077):
+        die("unsafe state directory " + p)
+
+
+def main():
+    if os.geteuid() != 0:
+        die("must run as root")
+    if len(sys.argv) != 2:
+        die("usage: seclab-wb-mount <abs-workspace-path>")
+    ws = sys.argv[1]
+    if (not ws.startswith("/") or ws == "/" or len(ws) > 4096 or "\0" in ws or "\n" in ws
+            or "//" in ws or ws.endswith("/") or any(seg in (".", "..") for seg in ws.split("/")[1:])):
+        die("refusing non-canonical workspace path")
+    if any(c in ws for c in ",:\\="):
+        die("workspace path contains a mount-option separator (, : \\ =); refusing")
+    if os.path.realpath(ws) != ws:
+        die("workspace path is not canonical (links in it)")
+    if not os.path.isdir(ws):
+        die("workspace is not a directory")
+
+    fs = mounted_at(ws)
+    if fs == "fuse.fuse-overlayfs":
+        return 0  # already ours (idempotent)
+
+    # A process whose cwd or root is inside the workspace from before the mount would keep
+    # seeing the lower layer (the host checkout): the overlay must precede every tab process.
+    prefix = ws + "/"
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            if os.stat("/proc/" + pid).st_uid == 0:
+                continue
+            for link in ("cwd", "root"):
+                t = os.readlink("/proc/%s/%s" % (pid, link))
+                if t == ws or t.startswith(prefix):
+                    die("a non-root process (pid %s) already has its %s in the workspace" % (pid, link))
+        except OSError:
+            continue
+
+    try:
+        tab = pwd.getpwnam(TAB_USER)
+    except KeyError:
+        die("tab user missing")
+    for p in ("/var/lib/seclab", STATE, UPPER, WORK):
+        private_dir(p)
+    if not os.access(FUSE_OVERLAYFS, os.X_OK):
+        die("fuse-overlayfs missing (rebuild the template: ./seclab template sbx)")
+
+    opts = ",".join([
+        "lowerdir=" + ws,
+        "upperdir=" + UPPER, "workdir=" + WORK,
+        "allow_other", "squash_to_uid=%d" % tab.pw_uid, "squash_to_gid=%d" % tab.pw_gid,
+        "timeout=0", "nosuid", "nodev",
+    ])
+    r = subprocess.run([FUSE_OVERLAYFS, "-o", opts, ws], stdin=subprocess.DEVNULL, capture_output=True,
+                       timeout=30, cwd="/", env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+    if r.returncode != 0 or mounted_at(ws) != "fuse.fuse-overlayfs":
+        die("mount failed: " + r.stderr.decode("latin-1", "replace").strip().replace("\n", " ")[:200])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

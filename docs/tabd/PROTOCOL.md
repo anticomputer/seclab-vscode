@@ -51,8 +51,15 @@ Objects use `apiVersion: tabd.seclab.dev/v1alpha1`.
   "capabilities": { "isolationClass": "microvm|namespaces|vm|remote",
                     "networkFence": "sbx-policy|internal-network|none",
                     "liveMounts": false, "holdAndResume": false,
-                    "fileWatch": "native|virtiofs|polling", "sameAbsolutePathMount": true } }
+                    "fileWatch": "native|virtiofs|polling", "sameAbsolutePathMount": true,
+                    "writeBack": "gated|ungated" } }
 ```
+
+`writeBack` is `gated` when tab writes reach the host checkout only through the
+write-back gate (sbx: a fuse-overlayfs upper layer in the tab's VM, mounted by
+`seclab-wb-mount` before the REH starts), and `ungated` when the tab writes the
+host directly (OCI on Docker Desktop). The editor shows "write-back not gated"
+for ungated tabs ([ADR](../adr/20261104-write-back-gate.md)).
 
 **Tab IDs** (`metadata.name`) are minted by the supervisor from 128 random
 bits: `t-` followed by 26 lowercase base32 characters. They are opaque and

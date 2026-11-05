@@ -118,7 +118,13 @@ check('exec lineage: the task shell runs the loader', execs.some(a => a.includes
 const execNames = new Set(events.filter(ev => ev.class === 'process.exec').map(ev => path.basename(ev.proc?.exe ?? '')));
 check('exec: nohup, curl and node seen', ['nohup', 'curl', 'node'].every(n => execNames.has(n)), [...execNames].join(' '));
 const dropped = events.find(e => e.class === 'workspace.change' && e.file?.path === marker);
-check('dropped .envrc reported by the trusted workspace watcher', dropped?.integrity === 'trusted' && dropped.source === 'workspace-watch', JSON.stringify(dropped));
+if (driver === 'sbx') {
+	// Write-back gate (ADR write-back-gate): the tab's write stays in its overlay, so the host
+	// watcher sees nothing; the trusted signal is the gate's own event once tabd syncs (2b).
+	check('dropped .envrc held by the write-back gate (not in the host checkout)', !fs.existsSync(marker) && !dropped, JSON.stringify(dropped));
+} else {
+	check('dropped .envrc reported by the trusted workspace watcher', dropped?.integrity === 'trusted' && dropped.source === 'workspace-watch', JSON.stringify(dropped));
+}
 const connect = events.find(e => e.class === 'net.connect' && e.net?.addr === '192.0.2.10');
 check('connect to 192.0.2.10 carries process lineage', !!connect?.proc?.lineage?.length, JSON.stringify(connect?.proc));
 check('trusted lifecycle events present', events.some(e => e.class === 'tab.lifecycle' && e.integrity === 'trusted'));

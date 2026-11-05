@@ -22,7 +22,7 @@ class FakeDriver implements Driver {
 	running = new Set<string>();
 	calls: string[] = [];
 	async probe() {
-		return { name: 'fake', available: true, capabilities: { isolationClass: 'namespaces', networkFence: 'none', liveMounts: false, holdAndResume: false, fileWatch: 'native', sameAbsolutePathMount: true } as const };
+		return { name: 'fake', available: true, capabilities: { isolationClass: 'namespaces', networkFence: 'none', liveMounts: false, holdAndResume: false, fileWatch: 'native', sameAbsolutePathMount: true, writeBack: 'ungated' } as const };
 	}
 	async ensureRunning(spec: TabRuntimeSpec) { this.calls.push(`start ${spec.tabId}`); this.running.add(spec.sandboxName); }
 	async verifyFence(): Promise<FenceReport> { return { ok: this.fenceOk, problems: this.fenceOk ? [] : ['drift'], checkedAt: '' }; }

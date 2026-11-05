@@ -15,7 +15,7 @@ import type { Check } from './assert.ts';
 
 const FIXTURE = path.join(import.meta.dirname, 'fixtures', 'contagious-interview');
 const V = 'contagious';
-const GATE_GAP = 'write-back gate (docs/edr/20261104-write-back-gate-spike.md; ADR pending)';
+const UNGATED = 'OCI on Docker Desktop: write-back not gated (docs/adr/20261104-write-back-gate.md)';
 const ATTRIBUTION_GAP = 'tab-broker integration (M2/M3) and tab observability: per-task attribution of denials';
 
 export interface Campaign { ws: string; canaries: Record<string, string>; arm: string }
@@ -73,6 +73,8 @@ export interface CampaignTab {
 	/** tab.reset + start: rebuild from the template. */
 	reset(): Promise<void>;
 	expectHostname: string;
+	/** Tab writes go through the write-back gate (sbx); false: ungated (OCI on Docker Desktop). */
+	gated: boolean;
 }
 
 /** Run the loader in the tab and assert every TTP is stopped. */
@@ -87,7 +89,8 @@ export async function runCampaign(c: Campaign, tab: CampaignTab, marker: string)
 	let ev: Ev | undefined;
 	for (let i = 0; i < 60; i++) {
 		try {
-			ev = JSON.parse(fs.readFileSync(evFile, 'utf8')) as Ev;
+			// Read through the tab: with the write-back gate its writes never reach the host.
+			ev = JSON.parse(tab.exec(['cat', evFile]).stdout) as Ev;
 			if (ev.beacons.length >= 2) {
 				break;
 			}
@@ -98,6 +101,9 @@ export async function runCampaign(c: Campaign, tab: CampaignTab, marker: string)
 		add('stage ran and recorded evidence', false, 'no evidence file');
 		return checks;
 	}
+	// Control for T7: the stage did plant the hook, in the tab's own view (so a clean host
+	// checkout below means the gate held it, not that the plant failed).
+	const plantedInTab = tab.exec(['sh', '-c', `grep -q "seclab-ci planted ${c.arm}" ${JSON.stringify(hostHooks)}`]).status === 0;
 	const hostMacs = new Set(Object.values(os.networkInterfaces()).flat().map(n => n?.mac).filter(Boolean));
 
 	// T1: the folder-open task runs, but only inside the tab.
@@ -143,8 +149,10 @@ export async function runCampaign(c: Campaign, tab: CampaignTab, marker: string)
 			return false;
 		}
 	};
-	add('planted .git/hooks/pre-commit never live in the host checkout', !planted(hostHooks), ev.planted.join(', '), GATE_GAP);
-	add('planted .envrc never live in the host checkout', !planted(hostEnvrc), '', GATE_GAP);
+	const gap = tab.gated ? undefined : UNGATED;
+	add('the stage planted the hook in the tab\'s own view (control)', plantedInTab, ev.planted.join(', '));
+	add('planted .git/hooks/pre-commit never live in the host checkout', !planted(hostHooks), ev.planted.join(', '), gap);
+	add('planted .envrc never live in the host checkout', !planted(hostEnvrc), '', gap);
 	return checks;
 }
 

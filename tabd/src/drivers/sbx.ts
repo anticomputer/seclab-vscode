@@ -32,7 +32,7 @@ export class SbxDriver implements Driver {
 	async probe(): Promise<DriverInfo> {
 		const capabilities = {
 			isolationClass: 'microvm', networkFence: 'sbx-policy', liveMounts: false, holdAndResume: false,
-			fileWatch: 'virtiofs', sameAbsolutePathMount: true,
+			fileWatch: 'virtiofs', sameAbsolutePathMount: true, writeBack: 'gated',
 		} as const;
 		const r = await this.runner.run(this.sbx, ['version'], { timeoutMs: 15_000 });
 		const m = /v(\d+)\.(\d+)\.(\d+)/.exec(r.stdout);

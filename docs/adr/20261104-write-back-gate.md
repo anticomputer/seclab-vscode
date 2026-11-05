@@ -34,6 +34,19 @@ a documented fallback.
   capability descriptor says `writeBack: "ungated"`, and the editor shows
   "write-back not gated" for such tabs.
 
+> **As built (increment 2a, 2026-11-05;** [spike addendum](../edr/20261104-write-back-gate-spike.md)**):**
+> the overlay sits over the primary (read-write) workspace path itself, with that
+> same path as its lower layer. No second `:ro` mount or scratch primary is needed:
+> fuse-overlayfs opens the lower layer before mounting over it, and the tab can no
+> longer reach the path underneath. Ownership uses `squash_to_uid`/`squash_to_gid`
+> (the tab user), and `timeout=0` makes host-side changes show through. The root-only
+> helper `/opt/seclab/bin/seclab-wb-mount` mounts it; `seclab-obs-collect` calls it
+> before it starts the REH, and fails closed. The helper refuses if any non-root
+> process already has its cwd or root inside the workspace. Only `fuse-overlayfs`
+> and `libfuse3-4` are installed: no `fuse3`, so there is no setuid `fusermount3`.
+> Never change the upper layer's directory structure while it is mounted; that is
+> unsafe (spike).
+
 ### 2. tabd's write-back engine is the only writer of tab changes to the host
 It reads the tab's upper layer (through the driver, as root in the tab) and
 classifies each change:
@@ -162,6 +175,8 @@ and is not implemented as protection.
   `.git/hooks/pre-commit` and `.envrc` must never appear in the host checkout.
 - Increments:
   1. engine and policy (unit-tested against a hostile upper layer);
-  2. sbx overlay and sync;
+  2. sbx overlay (2a, built: tab writes stay in the VM) and sync (2b);
   3. Tab Manager prompt;
   4. OCI on native Linux.
+- Until 2b lands, nothing a sbx tab writes reaches the host checkout, ordinary
+  edits included. The containment harness reads tab output through the tab.

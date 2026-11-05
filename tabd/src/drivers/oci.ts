@@ -53,7 +53,7 @@ export class OciDriver implements Driver {
 	async probe(): Promise<DriverInfo> {
 		const capabilities = {
 			isolationClass: 'namespaces', networkFence: 'internal-network', liveMounts: false, holdAndResume: false,
-			fileWatch: 'native', sameAbsolutePathMount: true,
+			fileWatch: 'native', sameAbsolutePathMount: true, writeBack: 'ungated',
 		} as const;
 		const r = await this.runner.run(this.docker, ['version', '--format', '{{.Server.Version}}'], { timeoutMs: 15_000 });
 		return r.code === 0
