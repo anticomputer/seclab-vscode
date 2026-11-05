@@ -450,6 +450,14 @@ Rules marked gitleaks are taken from https://github.com/gitleaks/gitleaks/blob/5
    "path": "/copilot_internal/v2/token"
   },
   {
+   "id": "copilot-user",
+   "host": "api.github.com",
+   "methods": [
+    "GET"
+   ],
+   "path": "/copilot_internal/user"
+  },
+  {
    "id": "copilot-api",
    "host": "api.githubcopilot.com",
    "methods": [
@@ -467,6 +475,13 @@ Rules marked gitleaks are taken from https://github.com/gitleaks/gitleaks/blob/5
     "fmt": "Bearer {value}"
    },
    "bind": [
+    {
+     "host": "api.github.com",
+     "path": "/copilot_internal/user",
+     "methods": [
+      "GET"
+     ]
+    },
     {
      "host": "api.github.com",
      "path": "/copilot_internal/v2/token",
