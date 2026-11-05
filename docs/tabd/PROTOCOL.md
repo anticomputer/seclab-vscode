@@ -115,8 +115,8 @@ Reserved (not in v0.1): `warmPool.*`, `tab.policy.*` (broker adapter),
 JSON-RPC standard codes, plus: `-32001` not initialized, `-32002` invalid
 path, `-32003` driver unavailable, `-32004` unknown tab, `-32010` fence
 verification failed, `-32011` sandbox failed to start, `-32012` REH not
-ready, `-32013` write-back not gated or failed, `-32020` secrets found in the
-workspace, `-32021` secret scan incomplete.
+ready, `-32013` write-back not gated or failed, or (from `tab.ensureRunning`) broker
+setup failed, `-32020` secrets found in the workspace, `-32021` secret scan incomplete.
 
 ## 6. Versioning
 `protocolVersion` is `seclab-tabd/<major>.<minor>`. A minor bump only adds
@@ -145,3 +145,16 @@ must ignore unknown notification methods and unknown fields.
   `host-observed` (OCI); only supervisor-produced events are `trusted`.
 - Under sbx the REH relay (`tab.connect`) runs as `990:990` (`seclab-relay`),
   not as the tab user, so the tab can't ptrace it.
+- **Broker (OCI, `seclab-tabd --broker required`;**
+  [EDR](../edr/20261105-oci-tab-broker.md)). `tab.ensureRunning` brings the tab's broker
+  up before the REH starts, and fails with `-32013` if any step fails or takes longer
+  than 60 s:
+  1. `broker.hello` is checked: protocol, tab, policy schema revision.
+  2. A fresh proxy password.
+  3. The policy: the user's `broker-policy.json` from the state directory, else deny-all.
+     Never from the workspace.
+  4. The CA.
+
+  The workspace gets the proxy URL and CA through a root-owned tmpfs. The password is
+  never in argv, audit records or notifications. Stop and quarantine send
+  `broker.shutdown`.
