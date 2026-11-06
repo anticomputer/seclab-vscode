@@ -199,3 +199,29 @@ def test_backstop_exception_is_exact():
                                          "path": "/copilot_internal/user", **bad})) is None
     from seclab_broker.policy import RequestView
     assert backstop_exception(RequestView("https", "api.github.com", 443, "GET", "/copilot_internal/user", "x=1")) is None
+
+
+@pytest.mark.parametrize("name", ["managed_settings", "team_customizations", "content_exclusion"])
+def test_org_policy_backstop_exceptions_are_exact(name):
+    """User-approved 2026-11-05 ('Allow exactly those three GETs, with the same strict checks
+    as /user'): GET only, exact case, no query, both path forms, any GitHub host by provider;
+    every other /copilot_internal path stays denied."""
+    from seclab_broker.policy import backstop_exception
+    path = f"/copilot_internal/{name}"
+    for host, p in (("api.github.com", path), ("ghe.corp.example", "/api/v3" + path), ("api.acme.ghe.example", path)):
+        exc = backstop_exception(req(host=host, method="GET", path=p), "github")
+        assert exc is not None and exc.response_fields is None and not exc.benign_keys
+    for bad in (dict(method="POST"), dict(method="PUT"), dict(path=path.upper()), dict(path=path + "/x"),
+                dict(path=path + "s"), dict(query="org=x")):
+        assert backstop_exception(req(**{"host": "api.github.com", "method": "GET", "path": path, **bad})) is None
+    for other in ("/copilot_internal/v2/token", "/copilot_internal/settings", "/copilot_internal/mcp_registry"):
+        assert backstop_denies(req(host="api.github.com", method="GET", path=other)) is not None
+        assert backstop_exception(req(host="api.github.com", method="GET", path=other)) is None
+
+
+def test_copilot_user_exception_has_the_measured_field_allowlist():
+    from seclab_broker.policy import backstop_exception
+    exc = backstop_exception(req(host="api.github.com", method="GET", path="/copilot_internal/user"))
+    assert {"login", "endpoints", "copilotignore_enabled", "quota_snapshots"} <= exc.response_fields
+    assert "token" not in exc.response_fields
+    assert exc.benign_keys == {"token_based_billing", "cloud_session_storage_enabled"}

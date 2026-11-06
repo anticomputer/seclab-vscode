@@ -118,7 +118,10 @@
         "it:test_provider_backstop_beats_binding",
         "unit:test_github_backstop",
         "unit:test_backstop_exception_is_exact",
-        "it:test_backstop_exception_copilot_user_is_narrow_and_its_response_is_checked"
+        "it:test_backstop_exception_copilot_user_is_narrow_and_its_response_is_checked",
+        "unit:test_org_policy_backstop_exceptions_are_exact",
+        "it:test_org_policy_gets_are_narrow_and_their_responses_checked",
+        "it:test_copilot_user_benign_keys_pass_and_unlisted_fields_are_dropped"
       ]
     },
     {
@@ -181,7 +184,7 @@
     },
     {
       "flag": "modelBodyPolicy",
-      "label": "Model-host body policy: declared providers only, endpoint allowlist, no upgrades, strict JSON, field and tool-type allowlists, sentinel-only credentials (fails closed)",
+      "label": "Model-host body policy: declared providers only, endpoint allowlist (per-endpoint fields and tool types; grant-only endpoints), no upgrades, strict JSON, field and tool-type allowlists, sentinel-only credentials (fails closed)",
       "cells": {
         "sbx-native": {
           "value": false
@@ -192,8 +195,12 @@
         "unit:test_body_policy_denials",
         "unit:test_r7_remote_content_the_provider_would_fetch_is_denied",
         "unit:test_r7_every_credential_location_is_found",
+        "unit:test_measured_copilot_denials",
+        "unit:test_github_remote_mcp_needs_a_per_tab_endpoint_grant",
         "it:test_a22_relay_shapes_denied_before_upstream",
-        "it:test_model_host_credentials_are_sentinels_only"
+        "it:test_model_host_credentials_are_sentinels_only",
+        "it:test_d7_amended_github_token_reaches_the_measured_capi_routes_only",
+        "it:test_github_remote_mcp_is_denied_until_a_tab_grant"
       ]
     },
     {

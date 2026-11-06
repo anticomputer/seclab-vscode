@@ -242,7 +242,15 @@ def gen_backstop() -> str:
     for f in sorted((DATA_DIR / "providers").glob("*.json")):
         d = json.loads(f.read_text())
         rows = [f"| {', '.join(e['methods'])} | `{e['path']}` | {esc(e['reason'])} |" for e in d["deny"]]
-        exc = "".join(f"- `{e['method']} {e['path']}`: {esc(e['reason'])}\n" for e in d.get("exceptions", []))
+        def _exc(e: dict) -> str:
+            line = f"- `{e['method']} {e['path']}`: {esc(e['reason'])}\n"
+            if "responseFields" in e:
+                line += ("  - Response fields allowed (others dropped): "
+                         + ", ".join(f"`{x}`" for x in e["responseFields"]) + "\n")
+            if e.get("benignKeys"):
+                line += "  - Benign key names: " + ", ".join(f"`{x}`" for x in e["benignKeys"]) + "\n"
+            return line
+        exc = "".join(_exc(e) for e in d.get("exceptions", []))
         prefixes = ", ".join("`" + (p or "/") + "`" for p in d.get("pathPrefixes", [""]))
         out.append(f"#### `{d['provider']}`\n\nHosts: {', '.join('`' + h + '`' for h in d['hosts'])}. "
                    f"Path prefixes: {prefixes}. Source: {d['source']['openapi']}\n\n"
@@ -286,17 +294,34 @@ def gen_changelog() -> str:
 
 def gen_models() -> str:
     from seclab_broker.models import builtin_providers
+
+    def codes(xs) -> str:
+        return ", ".join(f"`{x}`" for x in xs) or "none"
+
     out = []
     for p in builtin_providers().values():
-        eps = ", ".join(f"`{' '.join(e['methods'])} {e['path']}`" for e in p["endpoints"])
         untyped = f"; untyped tools count as `{p['untypedTool']}`" if p.get("untypedTool") else ""
-        out.append(f"**`{p['id']}`**: hosts {', '.join(f'`{h}`' for h in p['hosts'])}.\n"
-                   f"- Endpoints: {eps}.\n"
-                   f"- Tool types: {', '.join(f'`{t}`' for t in p.get('toolTypes', [])) or 'none'}{untyped}.\n"
-                   f"- Top-level fields: {', '.join(f'`{f}`' for f in p['fields'])}.\n")
+        text = f"**`{p['id']}`**: hosts {codes(p['hosts'])}.\n"
+        if any(k in e for e in p["endpoints"] for k in ("fields", "toolTypes", "requiresGrant")):
+            for e in p["endpoints"]:
+                text += f"- `{' '.join(e['methods'])} {e['path']}`"
+                if e.get("requiresGrant"):
+                    text += f" (denied unless a grant names `{e['id']}`)"
+                if "fields" in e or "toolTypes" in e:
+                    eu = f"; untyped tools count as `{e['untypedTool']}`" if e.get("untypedTool") else ""
+                    text += (f": fields {codes(e.get('fields', p['fields']))}; tool types "
+                             f"{codes(e.get('toolTypes', p.get('toolTypes', [])))}{eu}")
+                text += ".\n"
+        else:
+            eps = ", ".join(f"`{' '.join(e['methods'])} {e['path']}`" for e in p["endpoints"])
+            text += (f"- Endpoints: {eps}.\n"
+                     f"- Tool types: {codes(p.get('toolTypes', []))}{untyped}.\n"
+                     f"- Top-level fields: {codes(p['fields'])}.\n")
+        out.append(text)
     hosts = json.loads((DATA_DIR / "model-hosts.v1.json").read_text())
-    return ("Built-in providers (`seclab_broker/data/model-providers.v1.json`; "
-            "a draft until confirmed against real runtime traffic):\n\n" + "\n".join(out)
+    return ("Built-in providers (`seclab_broker/data/model-providers.v1.json`; `copilot` is "
+            "measured from real runtime traffic, the others are drafts from public API references):\n\n"
+            + "\n".join(out)
             + "\nKnown model hosts (`seclab_broker/data/model-hosts.v1.json`). A request to one of these "
             "is denied unless the policy declares a provider for its host:\n\n"
             + ", ".join(f"`{e['host']}`" for e in hosts["entries"]) + ".\n")

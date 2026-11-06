@@ -577,11 +577,19 @@ class SeclabAddon:
         if flow.metadata.get("seclab.backstop_exception") is not None or derive_route:
             # Exception routes always, and derive routes when not 2xx (so "derived or blocked"
             # holds whatever the status): no credential-named field, no token-shaped value.
-            why, detail = self._exception_response_check(resp)
+            exc = flow.metadata.get("seclab.backstop_exception")
+            why, detail, kept = self._exception_response_check(resp, exc)
             if why:
                 self.b.audit("credential.backstop_exception_blocked", reason=why,
                              **({"detail": detail} if detail else {}), **self._summary(flow))
                 return self._block_response(flow, f"backstop exception response: {why}")
+            if kept is not None:
+                # The whole document passed; fields outside the exception's measured allowlist
+                # never reach the tab. Their names are the upstream's choice: `detail` only.
+                doc, dropped = kept
+                resp.content = json.dumps(doc, separators=(",", ":")).encode()
+                self.b.audit("credential.backstop_exception_filtered", reason="field outside the allowlist",
+                             detail=",".join(dropped)[:512], **self._summary(flow))
         # Any flow that carried a real value, and any response from a bound host,
         # is scanned for credentials the upstream may have minted.
         scan_minted = injected or self._bound_host(view)
@@ -635,33 +643,41 @@ class SeclabAddon:
         if body2 != orig:
             resp.content = body2
 
-    def _exception_response_check(self, resp: http.Response) -> tuple[str | None, str | None]:
+    def _exception_response_check(self, resp: http.Response, exc=None):
         """An approved backstop exception's response (ADR broker-model-access): a strict JSON
-        object with no credential-named key and no token-shaped value, in the body or headers.
-        Anything else is blocked and surfaced as a finding, until its fields are allowlisted."""
+        object with no credential-named key (bar the exception's exact `benign_keys`) and no
+        token-shaped value, in the body or headers; anything else is blocked and surfaced as
+        a finding. Returns (why, detail, kept): `kept` is (filtered document, dropped names)
+        when the exception has a field allowlist and the document carried other fields."""
+        benign = exc.benign_keys if exc is not None else frozenset()
         for name, value in resp.headers.fields:
             hname = name.decode("latin-1").lower()
             if CREDENTIAL_KEY.search(hname) or find_minted(value.decode("latin-1")):
-                return "credential-named header or token-shaped value", hname
+                return "credential-named header or token-shaped value", hname, None
         try:
             doc = parse_strict(resp.get_content(strict=True) or b"")
         except (ValueError, StrictJSONError):
-            return "response is not strict JSON", None
+            return "response is not strict JSON", None, None
         if not isinstance(doc, dict):
-            return "response is not a JSON object", None
+            return "response is not a JSON object", None, None
         stack: list = [("$", doc)]
         while stack:
             path, node = stack.pop()
             if isinstance(node, dict):
                 for k, v in node.items():
-                    if CREDENTIAL_KEY.search(k):
-                        return "credential-named field", f"{path}.{k}"
+                    if CREDENTIAL_KEY.search(k) and k not in benign:
+                        return "credential-named field", f"{path}.{k}", None
                     stack.append((f"{path}.{k}", v))
             elif isinstance(node, list):
                 stack += [(f"{path}[{i}]", v) for i, v in enumerate(node)]
             elif isinstance(node, str) and find_minted(node):
-                return "token-shaped value", path
-        return None, None
+                return "token-shaped value", path, None
+        if exc is None or exc.response_fields is None:
+            return None, None, None
+        dropped = sorted(k for k in doc if k not in exc.response_fields)
+        if not dropped:
+            return None, None, None
+        return None, None, ({k: v for k, v in doc.items() if k in exc.response_fields}, dropped)
 
     def _derivations(self, flow: http.HTTPFlow, view: RequestView | None) -> list:
         if view is None:
