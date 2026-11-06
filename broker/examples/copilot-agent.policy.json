@@ -7,109 +7,46 @@
     "timeoutSeconds": 60
   },
   "allow": [
-    {
-      "id": "copilot-token",
-      "host": "api.github.com",
-      "methods": [
-        "GET"
-      ],
-      "path": "/copilot_internal/v2/token"
-    },
-    {
-      "id": "copilot-user",
-      "host": "api.github.com",
-      "methods": [
-        "GET"
-      ],
-      "path": "/copilot_internal/user"
-    },
-    {
-      "id": "copilot-api",
-      "host": "api.githubcopilot.com",
-      "methods": [
-        "GET",
-        "POST"
-      ],
-      "path": "/**"
-    }
+    {"id": "copilot-user", "host": "api.github.com", "methods": ["GET"], "path": "/copilot_internal/user"},
+    {"id": "copilot-org-managed-settings", "host": "api.github.com", "methods": ["GET"], "path": "/copilot_internal/managed_settings"},
+    {"id": "copilot-org-team-customizations", "host": "api.github.com", "methods": ["GET"], "path": "/copilot_internal/team_customizations"},
+    {"id": "copilot-org-content-exclusion", "host": "api.github.com", "methods": ["GET"], "path": "/copilot_internal/content_exclusion"},
+    {"id": "capi-models", "host": "*.githubcopilot.com", "methods": ["GET"], "path": "/models"},
+    {"id": "capi-responses", "host": "*.githubcopilot.com", "methods": ["POST"], "path": "/responses"},
+    {"id": "capi-chat", "host": "*.githubcopilot.com", "methods": ["POST"], "path": "/chat/completions"},
+    {"id": "capi-messages", "host": "*.githubcopilot.com", "methods": ["POST"], "path": "/v1/messages"}
   ],
   "credentials": [
     {
       "id": "github",
-      "inject": {
-        "header": "Authorization",
-        "fmt": "Bearer {value}"
-      },
+      "provider": "github",
+      "inject": {"header": "Authorization", "fmt": "Bearer {value}"},
       "bind": [
-        {
-          "host": "api.github.com",
-          "path": "/copilot_internal/user",
-          "methods": [
-            "GET"
-          ]
-        },
-        {
-          "host": "api.github.com",
-          "path": "/copilot_internal/v2/token",
-          "methods": [
-            "GET"
-          ]
-        }
-      ],
-      "derive": [
-        {
-          "id": "copilot",
-          "from": {
-            "host": "api.github.com",
-            "path": "/copilot_internal/v2/token",
-            "method": "GET"
-          },
-          "field": "token",
-          "inject": {
-            "header": "Authorization",
-            "fmt": "Bearer {value}"
-          },
-          "bind": [
-            {
-              "host": "api.githubcopilot.com",
-              "path": "/chat/completions",
-              "methods": [
-                "POST"
-              ]
-            },
-            {
-              "host": "api.githubcopilot.com",
-              "path": "/responses",
-              "methods": [
-                "POST"
-              ]
-            },
-            {
-              "host": "api.githubcopilot.com",
-              "path": "/models",
-              "methods": [
-                "GET"
-              ]
-            },
-            {
-              "host": "api.githubcopilot.com",
-              "path": "/embeddings",
-              "methods": [
-                "POST"
-              ]
-            }
-          ]
-        }
+        {"host": "api.github.com", "path": "/copilot_internal/user", "methods": ["GET"]},
+        {"host": "api.github.com", "path": "/copilot_internal/managed_settings", "methods": ["GET"]},
+        {"host": "api.github.com", "path": "/copilot_internal/team_customizations", "methods": ["GET"]},
+        {"host": "api.github.com", "path": "/copilot_internal/content_exclusion", "methods": ["GET"]},
+        {"host": "api.githubcopilot.com", "path": "/models", "methods": ["GET"]},
+        {"host": "api.githubcopilot.com", "path": "/responses", "methods": ["POST"]},
+        {"host": "api.githubcopilot.com", "path": "/chat/completions", "methods": ["POST"]},
+        {"host": "api.githubcopilot.com", "path": "/v1/messages", "methods": ["POST"]},
+        {"host": "api.individual.githubcopilot.com", "path": "/models", "methods": ["GET"]},
+        {"host": "api.individual.githubcopilot.com", "path": "/responses", "methods": ["POST"]},
+        {"host": "api.individual.githubcopilot.com", "path": "/chat/completions", "methods": ["POST"]},
+        {"host": "api.individual.githubcopilot.com", "path": "/v1/messages", "methods": ["POST"]},
+        {"host": "api.business.githubcopilot.com", "path": "/models", "methods": ["GET"]},
+        {"host": "api.business.githubcopilot.com", "path": "/responses", "methods": ["POST"]},
+        {"host": "api.business.githubcopilot.com", "path": "/chat/completions", "methods": ["POST"]},
+        {"host": "api.business.githubcopilot.com", "path": "/v1/messages", "methods": ["POST"]},
+        {"host": "api.enterprise.githubcopilot.com", "path": "/models", "methods": ["GET"]},
+        {"host": "api.enterprise.githubcopilot.com", "path": "/responses", "methods": ["POST"]},
+        {"host": "api.enterprise.githubcopilot.com", "path": "/chat/completions", "methods": ["POST"]},
+        {"host": "api.enterprise.githubcopilot.com", "path": "/v1/messages", "methods": ["POST"]}
       ]
     }
   ],
   "models": {
-    "providers": [
-      "copilot"
-    ],
-    "budget": {
-      "requests": 2000,
-      "bytes": 536870912
-    }
+    "providers": ["copilot"],
+    "budget": {"requests": 2000, "bytes": 536870912}
   }
 }

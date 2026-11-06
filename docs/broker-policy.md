@@ -72,12 +72,12 @@ Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, sc
 | `sentinelMismatch` | `"block"` \| `"log"` |  | What to do when a sentinel appears anywhere other than the header a matching binding names. It is never swapped either way. (default `"block"`) |
 | `allow` | [`rule`](broker-policy.md#rule)[] |  | Egress allow rules. Anything not matched is held for a prompt, or denied. (max items `1024`) |
 | `credentials` | [`credential`](broker-policy.md#credential)[] |  | Sentinel credentials. A binding does not imply egress: the request must also be allowed. (max items `256`) |
-| `models` | `object` |  | Model-host policy (revision 3). A request to a host of a declared provider, or to any host on the broker's known model-host list, is checked before forwarding: the provider must be declared, the method and path must be one of its endpoints, no upgrades, the body must be strict JSON with only listed top-level fields, and every tool must have an allowed `type`. Requests and bytes on model hosts count against a per-tab budget; over budget is denied, never prompted. All of this only denies. |
+| `models` | `object` |  | Model-host policy (revision 3; per-endpoint allowlists and endpoint grants in revision 4). A request to a host of a declared provider, or to any host on the broker's known model-host list, is checked before forwarding: the provider must be declared, the method and path must be one of its endpoints (an endpoint marked `requiresGrant` also needs a grant), no upgrades, the body must be strict JSON with only listed top-level fields, and every tool must have an allowed `type`. Requests and bytes on model hosts count against a per-tab budget; over budget is denied, never prompted. All of this only denies. |
 | `models.providers` | `"copilot"` \| `"openai"` \| `"anthropic"` \| [`modelProvider`](broker-policy.md#modelprovider)[] |  | (max items `32`) |
 | `models.budget` | `object` |  | Per-tab totals over the broker's lifetime. |
 | `models.budget.requests` | `integer` |  | (min `0`; default `5000`) |
 | `models.budget.bytes` | `integer` |  | Request plus response body bytes. (min `0`; default `1073741824`) |
-| `models.grants` | `object`[] |  | Tier C exceptions: a server-side tool type the user granted for this tab. (max items `64`) |
+| `models.grants` | `object` \| `object`[] |  | Tier C exceptions the user granted for this tab: a server-side tool type (`toolType`), or (revision 4) an endpoint the provider marks `requiresGrant` (`endpoint`, its `id`; for example the built-in copilot provider's `github-mcp-readonly`). (max items `64`) |
 | `riskyDestinations` | `object`[] |  | Extra risky destinations for this tab, added to the broker's maintained list (see docs/broker-policy.md). Same treatment: no `allow-tab`, auto-deny before the first user action. (max items `1024`) |
 <!-- END GENERATED: policy-fields -->
 
@@ -247,12 +247,14 @@ names built-in providers by id, or declares its own. See the
 [ADR](adr/20261105-broker-model-access.md).
 
 <!-- BEGIN GENERATED: policy-models (broker/tools/docs.py; do not edit) -->
-Built-in providers (`seclab_broker/data/model-providers.v1.json`; a draft until confirmed against real runtime traffic):
+Built-in providers (`seclab_broker/data/model-providers.v1.json`; `copilot` is measured from real runtime traffic, the others are drafts from public API references):
 
 **`copilot`**: hosts `api.githubcopilot.com`, `api.individual.githubcopilot.com`, `api.business.githubcopilot.com`, `api.enterprise.githubcopilot.com`.
-- Endpoints: `POST /chat/completions`, `POST /responses`, `GET /models`, `POST /embeddings`.
-- Tool types: `function`.
-- Top-level fields: `model`, `messages`, `input`, `instructions`, `include`, `max_tokens`, `max_completion_tokens`, `max_output_tokens`, `max_tool_calls`, `metadata`, `n`, `parallel_tool_calls`, `previous_response_id`, `prompt_cache_key`, `reasoning`, `reasoning_effort`, `response_format`, `seed`, `stop`, `store`, `stream`, `stream_options`, `temperature`, `text`, `tool_choice`, `tools`, `top_logprobs`, `logprobs`, `top_p`, `truncation`, `user`, `dimensions`, `encoding_format`, `intent`.
+- `GET /models`.
+- `POST /responses`: fields `include`, `input`, `instructions`, `model`, `parallel_tool_calls`, `reasoning`, `store`, `stream`, `text`, `tools`; tool types `function`, `custom`.
+- `POST /chat/completions`: fields `messages`, `model`, `reasoning_effort`, `snippy`, `stream`, `stream_options`, `temperature`, `tools`; tool types `function`, `custom`.
+- `POST /v1/messages`: fields `max_tokens`, `messages`, `model`, `stream`, `system`, `temperature`, `thinking`, `tools`; tool types `custom`; untyped tools count as `custom`.
+- `POST /mcp/readonly` (denied unless a grant names `github-mcp-readonly`): fields `id`, `jsonrpc`, `method`, `params`; tool types none.
 
 **`openai`**: hosts `api.openai.com`.
 - Endpoints: `POST /v1/chat/completions`, `POST /v1/responses`, `GET /v1/models`, `POST /v1/embeddings`.
@@ -370,7 +372,12 @@ Hosts: `api.github.com`. Path prefixes: `/`, `/api/v3`. Source: https://github.c
 
 Approved exceptions (exact method and path, no body, query or upgrade; the response is checked):
 
-- `GET /copilot_internal/user`: Copilot runtime's first call (secure-agentic spike, 2026-11-05): read-only user info, not a mint. Coordinator-approved 2026-11-05 with conditions: exact path, case-sensitive; no body, no query, no upgrade; the response must be a strict JSON object with no credential-named key and no token-shaped value anywhere, else it is blocked and audited as credential.backstop_exception_blocked (a finding). Allowlist its top-level fields once real traffic is measured. ADR 20261105-broker-model-access.
+- `GET /copilot_internal/user`: Copilot runtime's and agent host's first call (secure-agentic spike, 2026-11-05; measured in a tab behind its broker, B2 run at secure-agentic c759e5c): read-only user info, not a mint. Coordinator-approved 2026-11-05 with conditions: exact path, case-sensitive; no body, no query, no upgrade; the response must be a strict JSON object with no credential-named key (bar benignKeys) and no token-shaped value anywhere, else it is blocked and audited as credential.backstop_exception_blocked (a finding). Top-level fields outside responseFields are then dropped and audited as credential.backstop_exception_filtered. responseFields is the union of what the agent host reads (src/vs/platform/agentHost/node/shared/copilotApiService.ts L84-98 @ microsoft/vscode a717861c) and upstream's own stub (test/node/e2e/harness/capiStubs.ts); STUB-DERIVED, the real response is unmeasured (no real credential, by rule). ADR 20261105-broker-model-access.
+  - Response fields allowed (others dropped): `access_type_sku`, `analytics_tracking_id`, `chat_enabled`, `cli_enabled`, `cloud_session_storage_enabled`, `codex_agent_enabled`, `copilot_plan`, `copilotignore_enabled`, `editor_preview_features_enabled`, `endpoints`, `is_mcp_enabled`, `is_staff`, `login`, `organization_list`, `organization_login_list`, `quota_snapshots`, `restricted_telemetry`, `token_based_billing`
+  - Benign key names: `cloud_session_storage_enabled`, `token_based_billing`
+- `GET /copilot_internal/managed_settings`: Org policy the runtime enforces on the agent (measured in the B2 run; denied then, turns completed). User-approved 2026-11-05: 'Allow exactly those three GETs, with the same strict checks as /user'. Fields unmeasured: no responseFields yet, so every key and value is checked and nothing is dropped. ADR 20261105-broker-model-access.
+- `GET /copilot_internal/team_customizations`: As managed_settings (one of the three user-approved org-policy GETs, 2026-11-05).
+- `GET /copilot_internal/content_exclusion`: As managed_settings: an enterprise's Copilot content exclusions; denying it would silently drop them (one of the three user-approved org-policy GETs, 2026-11-05).
 
 | Methods | Path | Why |
 |---|---|---|
@@ -442,14 +449,6 @@ Rules marked gitleaks are taken from https://github.com/gitleaks/gitleaks/blob/5
  },
  "allow": [
   {
-   "id": "copilot-token",
-   "host": "api.github.com",
-   "methods": [
-    "GET"
-   ],
-   "path": "/copilot_internal/v2/token"
-  },
-  {
    "id": "copilot-user",
    "host": "api.github.com",
    "methods": [
@@ -458,18 +457,66 @@ Rules marked gitleaks are taken from https://github.com/gitleaks/gitleaks/blob/5
    "path": "/copilot_internal/user"
   },
   {
-   "id": "copilot-api",
-   "host": "api.githubcopilot.com",
+   "id": "copilot-org-managed-settings",
+   "host": "api.github.com",
    "methods": [
-    "GET",
+    "GET"
+   ],
+   "path": "/copilot_internal/managed_settings"
+  },
+  {
+   "id": "copilot-org-team-customizations",
+   "host": "api.github.com",
+   "methods": [
+    "GET"
+   ],
+   "path": "/copilot_internal/team_customizations"
+  },
+  {
+   "id": "copilot-org-content-exclusion",
+   "host": "api.github.com",
+   "methods": [
+    "GET"
+   ],
+   "path": "/copilot_internal/content_exclusion"
+  },
+  {
+   "id": "capi-models",
+   "host": "*.githubcopilot.com",
+   "methods": [
+    "GET"
+   ],
+   "path": "/models"
+  },
+  {
+   "id": "capi-responses",
+   "host": "*.githubcopilot.com",
+   "methods": [
     "POST"
    ],
-   "path": "/**"
+   "path": "/responses"
+  },
+  {
+   "id": "capi-chat",
+   "host": "*.githubcopilot.com",
+   "methods": [
+    "POST"
+   ],
+   "path": "/chat/completions"
+  },
+  {
+   "id": "capi-messages",
+   "host": "*.githubcopilot.com",
+   "methods": [
+    "POST"
+   ],
+   "path": "/v1/messages"
   }
  ],
  "credentials": [
   {
    "id": "github",
+   "provider": "github",
    "inject": {
     "header": "Authorization",
     "fmt": "Bearer {value}"
@@ -484,54 +531,135 @@ Rules marked gitleaks are taken from https://github.com/gitleaks/gitleaks/blob/5
     },
     {
      "host": "api.github.com",
-     "path": "/copilot_internal/v2/token",
+     "path": "/copilot_internal/managed_settings",
      "methods": [
       "GET"
      ]
-    }
-   ],
-   "derive": [
+    },
     {
-     "id": "copilot",
-     "from": {
-      "host": "api.github.com",
-      "path": "/copilot_internal/v2/token",
-      "method": "GET"
-     },
-     "field": "token",
-     "inject": {
-      "header": "Authorization",
-      "fmt": "Bearer {value}"
-     },
-     "bind": [
-      {
-       "host": "api.githubcopilot.com",
-       "path": "/chat/completions",
-       "methods": [
-        "POST"
-       ]
-      },
-      {
-       "host": "api.githubcopilot.com",
-       "path": "/responses",
-       "methods": [
-        "POST"
-       ]
-      },
-      {
-       "host": "api.githubcopilot.com",
-       "path": "/models",
-       "methods": [
-        "GET"
-       ]
-      },
-      {
-       "host": "api.githubcopilot.com",
-       "path": "/embeddings",
-       "methods": [
-        "POST"
-       ]
-      }
+     "host": "api.github.com",
+     "path": "/copilot_internal/team_customizations",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "host": "api.github.com",
+     "path": "/copilot_internal/content_exclusion",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "host": "api.githubcopilot.com",
+     "path": "/models",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "host": "api.githubcopilot.com",
+     "path": "/responses",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "host": "api.githubcopilot.com",
+     "path": "/chat/completions",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "host": "api.githubcopilot.com",
+     "path": "/v1/messages",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "host": "api.individual.githubcopilot.com",
+     "path": "/models",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "host": "api.individual.githubcopilot.com",
+     "path": "/responses",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "host": "api.individual.githubcopilot.com",
+     "path": "/chat/completions",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "host": "api.individual.githubcopilot.com",
+     "path": "/v1/messages",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "host": "api.business.githubcopilot.com",
+     "path": "/models",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "host": "api.business.githubcopilot.com",
+     "path": "/responses",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "host": "api.business.githubcopilot.com",
+     "path": "/chat/completions",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "host": "api.business.githubcopilot.com",
+     "path": "/v1/messages",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "host": "api.enterprise.githubcopilot.com",
+     "path": "/models",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "host": "api.enterprise.githubcopilot.com",
+     "path": "/responses",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "host": "api.enterprise.githubcopilot.com",
+     "path": "/chat/completions",
+     "methods": [
+      "POST"
+     ]
+    },
+    {
+     "host": "api.enterprise.githubcopilot.com",
+     "path": "/v1/messages",
+     "methods": [
+      "POST"
      ]
     }
    ]

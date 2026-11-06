@@ -232,8 +232,10 @@ Each has a unit or integration test; grep for the phrase.
   The one exemption is a confirmed credential's exact `derive.from` route,
   whose response must yield a structurally replaced token or is blocked. The
   only other hole is data: a provider file's `exceptions`
-  (`GET /copilot_internal/user`), exact and case-sensitive, with no body, query
-  or upgrade, and a response held to `_exception_response_check`. Never add
+  (`GET /copilot_internal/user`, `managed_settings`, `team_customizations`,
+  `content_exclusion`), exact and case-sensitive, with no body, query or
+  upgrade, and a response held to `_exception_response_check` (with a field
+  allowlist where `responseFields` is set). Never add
   another exemption or exception without an ADR and a review entry.
 
 **Responses and approvals**

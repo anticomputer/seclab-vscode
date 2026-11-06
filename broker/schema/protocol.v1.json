@@ -3,6 +3,17 @@
   "protocol": "seclab-broker/1",
   "changelog": [
     {
+      "version": "0.4.0",
+      "policySchemaRevision": 4,
+      "date": "2026-11-05",
+      "changes": [
+        "**Behaviour change:** the built-in `copilot` model provider is now measured, not drafted (secure-agentic B2 run in a real tab). Endpoints: `GET /models`, `POST /responses`, `POST /chat/completions`, `POST /v1/messages`; each POST has its own top-level field list and tool types (`function` and `custom` on `/responses` and `/chat/completions`; untyped tools count as `custom` on `/v1/messages`). `/embeddings` and the never-sent draft fields are gone. `POST /mcp/readonly` (GitHub's remote MCP server) is denied unless a grant names it.",
+        "Model provider endpoints may carry `id`, `fields`, `toolTypes`, `untypedTool` and `requiresGrant`; a model grant may name an `endpoint` instead of a `toolType` (Tier C).",
+        "User-approved backstop exceptions: exactly `GET /copilot_internal/managed_settings`, `/team_customizations` and `/content_exclusion` on GitHub, with the same checks as `/user` (no body, query or upgrade; strict JSON object; no credential-named key or token-shaped value, else blocked).",
+        "The `/copilot_internal/user` exception has a field allowlist: once the whole response has passed the check, top-level fields outside it are dropped (audit `credential.backstop_exception_filtered`, the names in `detail`). Two measured benign key names (`token_based_billing`, `cloud_session_storage_enabled`) no longer trip the credential-name check; token-shaped values are still refused everywhere."
+      ]
+    },
+    {
       "version": "0.3.1",
       "policySchemaRevision": 3,
       "date": "2026-11-05",
@@ -1229,6 +1240,7 @@
     "credential.backstop_denied": "A credentialed request hit the provider backstop.",
     "credential.backstop_exempt": "A credentialed request on the exact route of a confirmed credential's `derive` rule passed the provider backstop; its response must yield a structurally replaced token or is blocked.",
     "credential.backstop_exception_blocked": "A response on an approved backstop exception route (provider data `exceptions`) was not a strict JSON object, or carried a credential-named field or a token-shaped value; it was blocked. A finding: the route's response shape needs review (`detail` is the JSON path or header, tab- or upstream-chosen).",
+    "credential.backstop_exception_filtered": "A response on an approved backstop exception route with a field allowlist passed the check but carried top-level fields outside the allowlist; they were dropped before the tab saw the response. A finding: the measured allowlist may need review (`detail` is the comma-joined field names, upstream-chosen).",
     "sentinel.misplaced": "A sentinel appeared outside its binding.",
     "token.redacted": "A minted token was redacted (no parent credential, or a limit was reached).",
     "session.stripped": "A session header was stripped from a credentialed response.",

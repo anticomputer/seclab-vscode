@@ -1,6 +1,7 @@
 # Broker model access: budgets, a fail-closed body policy, and trusted derivation
 
-- **Status:** accepted
+- **Status:** accepted; amended 2026-11-05 (Amendment 1: measured Copilot traffic, D7
+  amended by the user)
 - **Date:** 2026-11-05
 - **Deciders:** anticomputer (user), via the secure-agentic design: D2 (model calls stay
   in the tab, through the broker) and D7 (derived Copilot token bound by path and
@@ -162,8 +163,8 @@ Conditions, all enforced:
   value anywhere, including in headers. Otherwise it is blocked and audited as
   `credential.backstop_exception_blocked`. That is a finding: the route's
   response shape needs review.
-- **Field allowlist, later.** Its top-level fields will be allowlisted once
-  real traffic is measured.
+- **Field allowlist.** Its top-level fields are allowlisted since Amendment
+  1 (stub-derived); fields outside it are dropped after the check.
 
 The secure-agentic spike ran with no real credential, so the response shape
 used here is a fixture's, not measured. Probe:
@@ -187,6 +188,143 @@ withhold a real value from the tab; the widening of where the child may be
 used comes from the controller's rule, not from content. No broker decision
 grants access because of content.
 
+## Amendment 1 (2026-11-05): measured Copilot traffic and the user's decisions
+**Source.** The secure-agentic session ran the shipped agent host and Copilot
+runtime in a real sbx tab, behind its real broker. It used fake GitHub and
+CAPI upstreams and a fake GitHub credential imported with `bind` and
+`derive`. That is the B2 run: `test/agentic/ahp/tab-spike.ts` at `c759e5c` on
+the secure-agentic branch. It took the GHES route (`githubEnterpriseUri`).
+What it measured:
+- **No mint.** The runtime never calls `/copilot_internal/v2/token`. Every
+  CAPI request (`GET /models`, `POST /responses`, `/chat/completions`,
+  `/v1/messages`, `/mcp/readonly`) carries the GitHub token itself, as
+  `Bearer`. Decision 4's derive rule never fired.
+- **More org-policy reads.** The runtime also reads
+  `/copilot_internal/managed_settings`, `/team_customizations` and
+  `/content_exclusion`. The backstop denied them; the turns still completed.
+- **Request shapes.** The body fields and tool types per endpoint are in the
+  decisions below.
+
+**D7 amended** (user decision: "Accept: bind the GitHub token to the Copilot
+API model endpoints by exact path and method").
+- The controller binds the GitHub credential to exactly `GET /models`,
+  `POST /responses`, `POST /chat/completions` and `POST /v1/messages` on the
+  CAPI hosts its provider table lists. Those hosts never come from a
+  response's `endpoints` field.
+- The tab still holds only the sentinel.
+- The real token now reaches CAPI, as it does from any Copilot client. The
+  GitHub backstop still applies there, because it follows the credential's
+  provider, not the host.
+- Decision 4's derive mechanism is unchanged and stays for a runtime that
+  does mint. The example policy no longer declares a derive rule, because
+  this runtime never mints.
+- The code agrees with the measurement:
+  [`copilotApiService.ts` L384-397](https://github.com/microsoft/vscode/blob/a717861c/src/vs/platform/agentHost/node/shared/copilotApiService.ts#L384-L397)
+  says "The GitHub user token IS the credential. There is no Copilot
+  session-token mint", and that this mirrors the `@github/copilot` CLI.
+
+**Org-policy GETs** (user decision: "Allow exactly those three GETs, with the
+same strict checks as /user").
+- They are `exceptions` in `providers/github.json`: exact method and path, no
+  query, body or upgrade.
+- The response must be a strict JSON object with no credential-named key and
+  no token-shaped value.
+- Their fields are unmeasured: the fixture saw no real response. So they have
+  no field allowlist: every key and value is checked, and nothing is dropped.
+- Denying them silently dropped an enterprise's Copilot content exclusions,
+  which is a policy regression, not a leak.
+
+**The `/user` response has a field allowlist** (`responseFields`). It is the
+union of two lists:
+- what the agent host reads
+  ([`copilotApiService.ts` L80-98](https://github.com/microsoft/vscode/blob/a717861c/src/vs/platform/agentHost/node/shared/copilotApiService.ts#L80-L98));
+- what upstream's own stub serves (`test/node/e2e/harness/capiStubs.ts`).
+
+It is stub-derived, not measured: the run used no real credential, by rule.
+The order matters:
+1. **The whole document is checked first,** unknown fields included. A
+   token-shaped value, or a credential-named key, blocks it as before.
+2. **Then unlisted top-level fields are dropped** and audited as
+   `credential.backstop_exception_filtered`, a finding.
+
+So a rogue upstream still fails loudly, and a benign new field degrades the
+tab gracefully instead of breaking Copilot. Two measured false positives,
+`token_based_billing` and `cloud_session_storage_enabled` (`benignKeys`),
+pass the credential-name check by exact name only. Token-shaped values are
+refused everywhere.
+
+**GitHub's remote MCP server is denied by default** (coordinator decision).
+- `POST <capi>/mcp/readonly` is JSON-RPC to an MCP server that acts on the
+  user's GitHub.
+- The `copilot` provider marks it `requiresGrant`. It opens only with a
+  per-tab Tier C grant (`models.grants: [{provider, endpoint}]`) and a
+  binding; both are controller policy.
+- The grant opens that endpoint with its own field list (`id`, `jsonrpc`,
+  `method`, `params`) and no tools. The remote-content check still applies.
+
+**The body policy is measured and per endpoint** (schema revision 4; this
+reverses "Per-endpoint field lists: deferred" below).
+- `POST /responses`: `include`, `input`, `instructions`, `model`,
+  `parallel_tool_calls`, `reasoning`, `store`, `stream`, `text`, `tools`.
+- `POST /chat/completions`: `messages`, `model`, `reasoning_effort`,
+  `snippy`, `stream`, `stream_options`, `temperature`, `tools`.
+- `POST /v1/messages`: `max_tokens`, `messages`, `model`, `stream`, `system`,
+  `temperature`, `thinking`, `tools`.
+- `/embeddings` and the draft fields the runtime never sent are gone.
+- **Tool types:** `function` and `custom` on `/responses` and
+  `/chat/completions`; on `/v1/messages`, untyped Anthropic tools count as
+  `custom`.
+- **Why `custom` is allowed.** A `custom` tool (`apply_patch`, with a
+  `grammar` format) is executed by the client, like `function`: the model
+  emits free-form text that the agent in the tab runs. Its grammar only
+  constrains the model's output. It names no URL and runs nothing on the
+  provider, so it can't make the provider a relay. Server-side types (web
+  search, file search, code interpreter, MCP, computer use, image generation,
+  versioned Anthropic server tools) stay denied.
+
+**The github.com route** (the coordinator asked for this to be confirmed
+before calling it verified).
+- **Agent host: verified by code.**
+  [`deriveGitHubEndpoints`](https://github.com/microsoft/vscode/blob/a717861c/src/vs/platform/github/common/githubEndpoints.ts#L42-L72)
+  gives `https://api.github.com` for github.com, `https://api.<tenant>` for
+  `*.ghe.com`, and `https://<host>/api/v3` for GHES. That is the same code
+  path the run took, with only the base differing.
+  - The CAPI base is discovered from `/copilot_internal/user`'s
+    `endpoints.api`
+    ([L1121-L1199](https://github.com/microsoft/vscode/blob/a717861c/src/vs/platform/agentHost/node/shared/copilotApiService.ts#L1121-L1199)).
+  - Its default is `https://api.githubcopilot.com`
+    ([L27](https://github.com/microsoft/vscode/blob/a717861c/src/vs/platform/github/common/githubEndpoints.ts#L27)).
+  - The backstop exceptions cover both path forms (`""` and `/api/v3`), and
+    any host whose credential has provider `github`.
+- **Copilot runtime: inferred, not verified.** It is closed source. In the run
+  it used the ghe.com form (`api.<host>`) while the agent host used the GHES
+  form. That github.com maps to `api.github.com` for it too is an inference
+  from the shared shape, until a github.com run or its source confirms it.
+
+**Open: GHE.com data-residency CAPI hosts.**
+- A GHE.com tenant's CAPI host is outside the built-in `copilot` provider's
+  hosts and the known model-host list (patterns have no inner wildcard).
+- A policy that binds the GitHub token to such a host must also declare a
+  provider for it, for example a copy of `copilot` with that host. Otherwise
+  the body policy does not apply there.
+- The secure-agentic provider table must do this until the broker can match
+  those hosts.
+
+**Probes:**
+- `broker/tests/unit/test_models.py`: `test_measured_copilot_requests_pass`,
+  `test_measured_copilot_denials`,
+  `test_github_remote_mcp_needs_a_per_tab_endpoint_grant`,
+  `test_endpoint_grants_are_validated`,
+  `test_revision4_policy_shapes_validate`.
+- `broker/tests/unit/test_policy.py`:
+  `test_org_policy_backstop_exceptions_are_exact`,
+  `test_copilot_user_exception_has_the_measured_field_allowlist`.
+- `broker/tests/integration/test_models.py`:
+  `test_d7_amended_github_token_reaches_the_measured_capi_routes_only`,
+  `test_github_remote_mcp_is_denied_until_a_tab_grant`,
+  `test_org_policy_gets_are_narrow_and_their_responses_checked`,
+  `test_copilot_user_benign_keys_pass_and_unlisted_fields_are_dropped`.
+
 ## Alternatives considered
 - **A denylist of server-side tool types and fields:** rejected. Providers add
   tools faster than a denylist can follow, so it fails open.
@@ -196,13 +334,13 @@ grants access because of content.
 - **Pattern-scan for the Copilot token (`json-token-field`) and bind it to the
   parent:** rejected. It is unusable, and pattern-based. A structural rule on
   one route fails closed instead.
-- **Per-endpoint field lists:** deferred. Per-provider lists are simpler, and
-  every field is still allowlisted. Split them if a provider needs it.
+- **Per-endpoint field lists:** deferred at first, then adopted in Amendment
+  1, when the measured shapes differed by endpoint.
 
 ## Consequences
-- **Built-in field and tool lists are drafts.** A provider adding a field
-  breaks calls (fail closed) until the list is updated. The spike confirms the
-  lists against real traffic.
+- **Built-in field and tool lists:** `copilot` is measured (Amendment 1);
+  `openai` and `anthropic` are still drafts. A provider adding a field breaks
+  calls (fail closed) until the list is updated.
 - **A policy that allows a known model host must also declare its provider.**
 - **Tier C grants are controller policy** (`policy.load`). The broker never
   infers one.

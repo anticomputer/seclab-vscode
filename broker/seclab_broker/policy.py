@@ -608,11 +608,18 @@ class BackstopEntry:
 class BackstopException:
     """A coordinator-approved, data-level hole in a provider's backstop: one method on one
     exact path (case-sensitive, no trailing-slash variant), with no body, query or upgrade.
-    Its response is held to the no-credential-fields check in the engine."""
+    Its response is held to the no-credential-fields check in the engine.
+
+    `response_fields`: when set, the response's top-level fields allowed through; others are
+    dropped (and audited) after the whole document has passed the check. `benign_keys`:
+    exact key names the credential-name check accepts (measured false positives such as
+    `token_based_billing`); token-shaped values are refused everywhere regardless."""
     provider: str
     method: str
     path: str
     reason: str
+    response_fields: frozenset[str] | None = None
+    benign_keys: frozenset[str] = frozenset()
 
     def matches(self, req: RequestView, prefixes: tuple[str, ...]) -> bool:
         return req.method == self.method and not req.query and any(req.path == p + self.path for p in prefixes)
@@ -638,8 +645,10 @@ def providers() -> dict[str, Provider]:
             path_prefixes=tuple(d.get("pathPrefixes", [""])),
             deny=tuple(BackstopEntry(d["provider"], tuple(e["methods"]), e["path"], e["reason"])
                        for e in d["deny"]),
-            exceptions=tuple(BackstopException(d["provider"], e["method"], e["path"], e["reason"])
-                             for e in d.get("exceptions", [])),
+            exceptions=tuple(BackstopException(
+                d["provider"], e["method"], e["path"], e["reason"],
+                frozenset(e["responseFields"]) if "responseFields" in e else None,
+                frozenset(e.get("benignKeys", []))) for e in d.get("exceptions", [])),
         )
     return out
 
