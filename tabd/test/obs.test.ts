@@ -497,6 +497,9 @@ test('obs falco: events map to drafts; other containers and non-JSON are ignored
 	const { createHash } = await import('node:crypto');
 	const ex = falcoToDraft('seclab.connect', { 'proc.pid': 9, 'proc.exepath': '/usr/bin/curl', 'fd.typechar': '4', 'evt.args': 'res=-115(EINPROGRESS) tuple=NULL fd=4(<4>) addr=192.0.2.10:80' })!;
 	assert.deepEqual(ex.net, { addr: '192.0.2.10', port: 80, family: 'inet', result: 'pending' });
+	assert.equal(falcoToDraft('seclab.connect', { 'proc.pid': 9, 'fd.typechar': '4', 'fd.l4proto': 'tcp', 'fd.cport': 60270, 'evt.args': 'res=0 tuple=10.89.0.3:60270->10.89.0.2:8080 fd=4 addr=10.89.0.2:8080' })!.net?.localPort, 60270, 'fd.cport is the tab-side source port');
+	assert.equal(falcoToDraft('seclab.connect', { 'proc.pid': 9, 'fd.typechar': '4', 'evt.args': 'res=0 tuple=10.89.0.3:60271->10.89.0.2:8080 fd=4 addr=10.89.0.2:8080' })!.net?.localPort, 60271, 'else the client side of the tuple');
+	assert.equal(falcoToDraft('seclab.connect', { 'proc.pid': 9, 'fd.typechar': '4', 'fd.cport': 99999, 'evt.args': 'res=0 tuple=NULL addr=10.89.0.2:8080' })!.net?.localPort, undefined, 'an out-of-range port is dropped');
 	assert.equal(falcoToDraft('seclab.priv', { 'proc.pid': 9, 'evt.type': 'setresuid', 'evt.args': 'res=0 ruid=0 euid=0 suid=0' })!.priority, 'critical');
 	assert.equal(falcoToDraft('seclab.priv', { 'proc.pid': 9, 'evt.type': 'kill', 'evt.args': 'res=0 pid=9 sig=15' }), undefined);
 	assert.equal(falcoToDraft('Unknown rule', {}), undefined);
@@ -791,6 +794,22 @@ test('broker audit review BA-1: floods are aggregated on broker-determined keys 
 	hub.close();
 });
 
+test('broker audit: deny rules (schema revision 5) carry ruleId; clientPort is copied and tagged untrusted', async () => {
+	const { mapAudit } = await import('../src/obs/broker-audit.ts');
+	const tab = 't-abcdefghijklmnopqrstuvwxyz';
+	const m = mapAudit({ seq: 1, ts: 1, type: 'request.denied', host: 'held.test', port: 80, method: 'GET', path: '/', status: 403, reason: 'denied by rule user-block-0123456789abcdef', ruleId: 'user-block-0123456789abcdef', clientPort: 60270 }, tab);
+	assert.ok(typeof m !== 'string');
+	assert.equal(m.detail.ruleId, 'user-block-0123456789abcdef');
+	assert.equal(m.detail.clientPort, 60270);
+	const d = normalizeDraft({ source: 'broker', integrity: 'trusted', class: m.class, priority: m.priority, summary: m.summary, net: m.net, detail: m.detail });
+	assert.ok(d.untrusted!.includes('detail.clientPort'), 'the tab chooses its source port');
+	assert.equal(mapAudit({ seq: 2, ts: 1, type: 'request.denied', host: 'h.test', port: 80, clientPort: 70000 }, tab).detail?.clientPort, undefined, 'an out-of-range port is dropped');
+	const up = mapAudit({ seq: 3, ts: 1, type: 'upstream.denied', host: 'held.test', port: 443, ruleId: 'r1' }, tab);
+	assert.ok(typeof up !== 'string' && up.class === 'egress.request' && up.priority === 'warning');
+	const bf = mapAudit({ seq: 4, ts: 1, type: 'credential.backstop_exception_filtered', credentialId: 'gh', host: 'api.github.com', port: 443 }, tab);
+	assert.ok(typeof bf !== 'string' && bf.class === 'credential.use');
+});
+
 test('broker audit review BA-2 and restart: a rule name is tab-influenced; restart detected by seq; stale replay ignored', async () => {
 	const { BrokerAuditFeed, mapAudit } = await import('../src/obs/broker-audit.ts');
 	const tab = 't-abcdefghijklmnopqrstuvwxyz';
@@ -895,6 +914,43 @@ test('lineage: broker requests joined to the connect closest in time; honest con
 	c.observe({ v: 1, seq: ++seq, time: new Date(t0 + 100).toISOString(), tabId: tab, source: 'sbx-collector', integrity: 'tab-vm-root', class: 'net.connect', priority: 'informational', summary: 'c', proc: { pid: 46 }, net: { addr: '169.254.1.1', port: 49364, family: 'inet', result: 'ok', proto: 'udp' }, untrusted: [] }, ctx);
 	assert.equal(c.attribute(tab, t0 + 200).candidates, 1, 'a UDP probe to the broker address is not a candidate');
 	assert.equal(chainOf({ pid: 5 }), '5');
+});
+
+test('lineage: the broker\'s clientPort joins exactly to the connect with that source port (OCI)', async () => {
+	const { LineageCorrelator } = await import('../src/obs/lineage.ts');
+	const tab = 't-abcdefghijklmnopqrstuvwxyz';
+	const c = new LineageCorrelator();
+	const ctx = { brokerPort: 8080, brokerAddrs: new Set(['10.89.0.2']) };
+	let seq = 0;
+	const connect = (t: number, pid: number, localPort?: number) => c.observe({
+		v: 1, seq: ++seq, time: new Date(t).toISOString(), tabId: tab, source: 'falco', integrity: 'host-observed', class: 'net.connect', priority: 'informational', summary: 'c',
+		proc: { pid, exe: `/usr/bin/p${pid}` }, net: { addr: '10.89.0.2', port: 8080, family: 'inet', result: 'ok', ...(localPort ? { localPort } : {}) }, untrusted: [],
+	}, ctx);
+	const t0 = 1_793_800_000_000;
+	connect(t0 - 3 * 60_000, 50, 41000); // a kept-alive connection, outside the time window
+	connect(t0 - 400, 51, 41001);
+	connect(t0 - 100, 52, 41002); // nearest in time
+	const exact = c.attribute(tab, t0, true, 'host-observed', 41001);
+	assert.equal(exact.confidence, 'exact');
+	assert.equal(exact.proc?.pid, 51, 'the port match beats the nearest-in-time connect');
+	assert.equal(exact.integrity, 'host-observed', 'integrity stays the sensor\'s');
+	assert.equal(exact.candidates, 1);
+	assert.equal(c.attribute(tab, t0, false, 'host-observed', 41000).proc?.pid, 50, 'a kept-alive connection still joins exactly');
+	const miss = c.attribute(tab, t0, false, 'host-observed', 42999);
+	assert.equal(miss.confidence, 'single', 'an unknown port falls back to the time join');
+	assert.equal(miss.proc?.pid, 52, 'and the exactly-joined connect was used up');
+	assert.equal(c.attribute(tab, t0 + 11 * 60_000, false, 'host-observed', 41000).confidence, 'none', 'an exact match is bounded in time (port reuse)');
+	// Review round 11: a source port from the in-VM collector (sbx; root can forge it) never joins exactly.
+	c.observe({ v: 1, seq: ++seq, time: new Date(t0).toISOString(), tabId: tab, source: 'sbx-collector', integrity: 'tab-vm-root', class: 'net.connect', priority: 'informational', summary: 'c',
+		proc: { pid: 60 }, net: { addr: '10.89.0.2', port: 8080, family: 'inet', result: 'ok', localPort: 43000 }, untrusted: [] }, ctx);
+	assert.notEqual(c.attribute(tab, t0 + 10, false, 'tab-vm-root', 43000).confidence, 'exact');
+});
+
+test('notify review round 11: the destination a Block acts on is shown in full', async () => {
+	const { buildItem } = await import('../src/obs/notify.ts');
+	const host = `api.github.com.${'a'.repeat(200)}.test`;
+	const it = buildItem({ v: 1, seq: 1, time: new Date().toISOString(), tabId: 't-abcdefghijklmnopqrstuvwxyz', source: 'broker', integrity: 'trusted', class: 'egress.request', priority: 'warning', summary: 's', net: { addr: host, port: 443 }, detail: { auditType: 'upstream.denied' }, untrusted: ['net.addr'] }, 'broker.finding', { tabName: 'acme', heldChanges: false, canBlock: true });
+	assert.ok(it.message.includes(`${host}:443`), it.message);
 });
 
 test('lineage: a thread\'s connect before its clone line waits and carries the process', () => {

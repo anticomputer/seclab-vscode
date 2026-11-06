@@ -16,10 +16,13 @@ export const WINDOW_BEFORE_MS = 5_000;
 export const WINDOW_AFTER_MS = 500;
 const MAX_CONNECTS = 256;
 
-interface Connect { t: number; seq: number; integrity: Integrity; proc: ProcInfo; used?: boolean }
+interface Connect { t: number; seq: number; integrity: Integrity; proc: ProcInfo; used?: boolean; localPort?: number }
+
+/** How far back an exact clientPort match may reach (a kept-alive proxy connection). */
+export const EXACT_WINDOW_MS = 10 * 60_000;
 
 export interface Attribution {
-	confidence: 'single' | 'ambiguous' | 'none';
+	confidence: 'exact' | 'single' | 'ambiguous' | 'none';
 	candidates: number;
 	/** The nearest candidate (closest in time); absent when there is none. */
 	proc?: ProcInfo;
@@ -72,7 +75,9 @@ export class LineageCorrelator {
 			list = [];
 			this.connects.set(e.tabId, list);
 		}
-		list.push({ t: Date.parse(e.time), seq: e.seq, integrity: e.integrity, proc: e.proc });
+		// Only Falco (OCI, outside the tab) reports a source port that matches the broker's view.
+		const localPort = e.source === 'falco' ? n.localPort : undefined;
+		list.push({ t: Date.parse(e.time), seq: e.seq, integrity: e.integrity, proc: e.proc, ...(localPort ? { localPort } : {}) });
 		if (list.length > MAX_CONNECTS) {
 			list.splice(0, list.length - MAX_CONNECTS);
 		}
@@ -83,8 +88,23 @@ export class LineageCorrelator {
 	 * connect is used up: one connection is normally one request, so it isn't counted again for
 	 * a later event (a second request on a kept-alive connection then reads as "none").
 	 */
-	attribute(tabId: string, atMs: number, consume = false, sensorIntegrity: Integrity = 'tab-vm-root'): Attribution {
+	attribute(tabId: string, atMs: number, consume = false, sensorIntegrity: Integrity = 'tab-vm-root', clientPort?: number): Attribution {
 		const list = this.connects.get(tabId) ?? [];
+		// Exact: the broker's client port is the source port of a connect the sensor saw (OCI:
+		// Falco's fd.cport; the tab reaches the broker without NAT). The most recent such connect
+		// before the request owns the connection, kept-alive or not. The port is tab-chosen (bind),
+		// but both ends of the join observe the same TCP connection; integrity stays the sensor's.
+		if (clientPort !== undefined) {
+			for (let i = list.length - 1; i >= 0; i--) {
+				const c = list[i];
+				if (c.localPort === clientPort && c.t <= atMs + WINDOW_AFTER_MS && c.t >= atMs - EXACT_WINDOW_MS) {
+					if (consume) {
+						c.used = true;
+					}
+					return { confidence: 'exact', candidates: 1, proc: c.proc, integrity: c.integrity, chain: chainOf(c.proc), cause: [c.seq] };
+				}
+			}
+		}
 		const inWindow = list.filter(c => !c.used && c.t >= atMs - WINDOW_BEFORE_MS && c.t <= atMs + WINDOW_AFTER_MS);
 		// One process may open several connections (happy eyeballs, retries): count processes.
 		const byPid = new Map<number, Connect>();

@@ -6,7 +6,7 @@
 // REH's clean environment). Under sbx that exec starts outside the traced tree, so the
 // collector reports it as untraced and attaches; the trigger waits 1 s first.
 
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -36,6 +36,10 @@ writeManifest(work, { workspaces: [ws] }); // teardown deletes it
 fs.mkdirSync(path.join(ws, '.seclab'), { recursive: true });
 const marker = path.join(ws, '.envrc');
 fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${ARM}\nrun=${work}\nuntil=${Math.floor(Date.now() / 1000) + 1800}\nmarker=${marker}\n`);
+// This run's user broker policy (tabd's state dir, never the workspace): the default deny-all
+// with prompts on, so a new destination is held for a prompt (the Block Destination check).
+fs.mkdirSync(path.join(work, 'state'), { recursive: true, mode: 0o700 });
+fs.writeFileSync(path.join(work, 'state', 'broker-policy.json'), JSON.stringify({ version: 1, baseline: true, prompt: { enabled: true }, allow: [] }), { mode: 0o600 });
 
 const client = new TabdClient({
 	command: process.execPath,
@@ -158,8 +162,35 @@ check('lineage: the broker request is attributed to the client program, with the
 const attrs = events.filter(e => e.class === 'egress.attribution' && e.net?.addr === '192.0.2.11');
 // Repeat denials to one destination are aggregated (counted, not emitted), so only emitted
 // broker events are attributed; each must name one process, never a UDP resolver probe.
-check('lineage: every attribution is a single candidate with a known program (no UDP probes, a used connect not counted again)', attrs.length >= 1 && attrs.every(e => e.detail?.confidence === 'single' && CLIENT_EXE.test(e.proc?.exe ?? '')), attrs.map(e => `${e.proc?.pid}:${e.detail?.confidence}:${e.proc?.exe ?? '?'}`).join(' '));
+check('lineage: every attribution is a single candidate with a known program (no UDP probes, a used connect not counted again)', attrs.length >= 1 && attrs.every(e => e.detail?.confidence === (driver === 'oci' ? 'exact' : 'single') && CLIENT_EXE.test(e.proc?.exe ?? '')), attrs.map(e => `${e.proc?.pid}:${e.detail?.confidence}:${e.proc?.exe ?? '?'}`).join(' '));
+if (driver === 'oci') {
+	// The broker's clientPort is the source port Falco saw (no NAT on the pod network).
+	check('lineage (OCI): joined exactly by the connection\'s client port, integrity still host-observed', attrs.every(e => e.detail?.joinedBy === 'client-port' && e.integrity === 'host-observed' && /matched by connection/.test(e.summary)), attrs.map(e => e.summary).join(' | '));
+}
 check('lineage: attribution cites the broker event and the connect', !!attr && (attr.cause ?? []).length >= 2 && events.some(e => e.seq === attr.cause![0] && e.source === 'broker'));
+
+// Block Destination (ADR detection-notifications; broker deny rules, schema revision 5): a
+// request to a new destination is held as a prompt (prompts are on in this run's user policy);
+// blocking that destination resolves the prompt as deny and denies the next request at once.
+const HELD = 'held-destination.test';
+// In the background: the first request blocks on the prompt while this harness clicks Block.
+const heldClient = spawn(runtime, ['exec', ...(driver === 'sbx' ? ['-u', 'agent'] : []), '-w', ws, sandbox, '/opt/seclab/bin/seclab-tab-env', 'sh', '-c',
+	`curl -s -m 40 -o /dev/null http://${HELD}/first; sleep 1; curl -s -m 10 -o /dev/null http://${HELD}/second; true`], { stdio: 'ignore' });
+const heldDone = new Promise(res => heldClient.once('exit', res));
+const brokerEv = (type: string, f: (e: ObsEvent) => boolean = () => true) => events.find(e => e.source === 'broker' && e.detail?.auditType === type && e.net?.addr === HELD && f(e));
+await until(() => !!brokerEv('approval.requested'), 20_000);
+check('block: the new destination is held for a prompt', !!brokerEv('approval.requested'), events.filter(e => e.source === 'broker' && e.net?.addr === HELD).map(e => e.summary).join(' | '));
+const blocked = await client.request<{ rule: string }>('tab.egress.block', { tabId, host: HELD, port: 80 }).catch((e: Error) => ({ rule: `error: ${e.message}` }));
+check('block: tab.egress.block adds a broker deny rule', /^user-block-[0-9a-f]{16}$/.test(blocked.rule), blocked.rule);
+const heldId = brokerEv('approval.requested')?.detail?.approvalId;
+const resolvedEv = () => events.find(e => e.source === 'broker' && e.detail?.auditType === 'approval.resolved' && e.detail?.approvalId === heldId);
+await until(() => !!resolvedEv() && events.filter(e => e.source === 'broker' && e.net?.addr === HELD && /^request\.denied/.test(String(e.detail?.auditType))).length >= 1, 20_000);
+const resolved = resolvedEv();
+check('block: the pending prompt resolves as deny by the rule', !!heldId && resolved?.detail?.by === 'deny-rule' && resolved.detail?.decision === 'deny', JSON.stringify(events.filter(e => e.source === 'broker' && e.detail?.auditType === 'approval.resolved').map(e => e.detail)));
+await Promise.race([heldDone, sleep(30_000)]);
+await sleep(1500);
+const byRule = events.filter(e => e.source === 'broker' && e.net?.addr === HELD && /^request\.denied/.test(String(e.detail?.auditType)));
+check('block: requests to the destination are denied by the rule, never prompted again', byRule.length >= 1 && byRule.every(e => e.detail?.ruleId === blocked.rule && /denied by rule/.test(String(e.detail?.reason))) && events.filter(e => e.source === 'broker' && e.detail?.auditType === 'approval.requested' && e.net?.addr === HELD).length === 1, byRule.map(e => `${e.detail?.auditType}:${e.detail?.reason}`).join(' | '));
 
 // 2. The log: per-tab JSONL, private, contiguous.
 const logDir = path.join(work, 'state', 'events', tabId);

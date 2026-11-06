@@ -48,7 +48,7 @@ export function falcoRules(tabs: ReadonlyArray<{ shortId: string; deep: boolean 
 - rule: seclab.connect
   desc: connect from a tab
   condition: evt.type=connect and fd.typechar in (4, 6, u) and seclab_tab
-  output: connect %proc.pid %proc.ppid %proc.exepath %proc.pcmdline %fd.typechar %fd.l4proto %evt.args %container.id
+  output: connect %proc.pid %proc.ppid %proc.exepath %proc.pcmdline %fd.typechar %fd.l4proto %fd.cport %evt.args %container.id
   priority: INFORMATIONAL
 - rule: seclab.open
   desc: credential-like path opened in a tab (all opens in deep tabs)
@@ -338,7 +338,12 @@ export function falcoToDraft(rule: string, f: Record<string, unknown>): Record<s
 			const res = result(args);
 			const l4 = s(f['fd.l4proto'], 8);
 			const proto = family === 'unix' ? undefined : l4 === 'tcp' ? 'tcp' : l4 === 'udp' ? 'udp' : undefined;
-			return { class: 'net.connect', priority: family === 'unix' ? 'debug' : 'informational', proc, net: { addr: host, port, family, result: res, ...(proto ? { proto } : {}) }, summary: `connect ${family === 'unix' ? host : `${host}:${port ?? '?'}`} ${res} by ${base}` };
+			// The tab-side source port (for the exact join to the broker's clientPort): Falco's
+			// fd.cport (the client end; fd.lport is the server's), else the client side of the tuple.
+			const lp = Number(f['fd.cport']);
+			const tupleCport = /tuple=[^ ]*?:(\d{1,5})->/.exec(args ?? '')?.[1];
+			const localPort = family === 'unix' ? undefined : Number.isInteger(lp) && lp > 0 && lp <= 65535 ? lp : tupleCport && Number(tupleCport) > 0 && Number(tupleCport) <= 65535 ? Number(tupleCport) : undefined;
+			return { class: 'net.connect', priority: family === 'unix' ? 'debug' : 'informational', proc, net: { addr: host, port, family, result: res, ...(proto ? { proto } : {}), ...(localPort ? { localPort } : {}) }, summary: `connect ${family === 'unix' ? host : `${host}:${port ?? '?'}`} ${res} by ${base}` };
 		}
 		case 'seclab.open': {
 			const p = s(f['fd.name']) ?? '?';

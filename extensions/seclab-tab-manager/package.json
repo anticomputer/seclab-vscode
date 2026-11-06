@@ -120,6 +120,12 @@
 				"title": "Open Tab",
 				"category": "seclab",
 				"icon": "$(window)"
+			},
+			{
+				"command": "seclab.detections.blockDestination",
+				"title": "Block Destination",
+				"category": "seclab",
+				"icon": "$(circle-slash)"
 			}
 		],
 		"viewsContainers": {
@@ -153,12 +159,14 @@
 				{ "command": "seclab.detections.refresh", "when": "view == seclab.detections", "group": "navigation@2" }
 			],
 			"view/item/context": [
-				{ "command": "seclab.detections.stopTab", "when": "view == seclab.detections && viewItem =~ /Running$/", "group": "inline@1" },
-				{ "command": "seclab.detections.openTab", "when": "view == seclab.detections && viewItem =~ /^seclab(Tab|Detection)/", "group": "inline@2" }
+				{ "command": "seclab.detections.stopTab", "when": "view == seclab.detections && viewItem =~ /Running/", "group": "inline@1" },
+				{ "command": "seclab.detections.openTab", "when": "view == seclab.detections && viewItem =~ /^seclab(Tab|Detection)/", "group": "inline@2" },
+				{ "command": "seclab.detections.blockDestination", "when": "view == seclab.detections && viewItem == seclabDetectionRunningBlockable", "group": "inline@3" }
 			],
 			"commandPalette": [
 				{ "command": "seclab.detections.stopTab", "when": "false" },
-				{ "command": "seclab.detections.openTab", "when": "false" }
+				{ "command": "seclab.detections.openTab", "when": "false" },
+				{ "command": "seclab.detections.blockDestination", "when": "false" }
 			]
 		},
 		"keybindings": [
