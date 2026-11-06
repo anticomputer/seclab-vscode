@@ -697,3 +697,81 @@ test('obs prompt injection review: old log lines (no untrusted list) and dotted 
 		assert.ok(!looksLikePromptInjection(s), s);
 	}
 });
+
+test('broker audit review BA-1: floods are aggregated on broker-determined keys and only ever drop their own type', async () => {
+	const { BrokerAuditFeed } = await import('../src/obs/broker-audit.ts');
+	const tab = 't-abcdefghijklmnopqrstuvwxyz';
+	const seen: ObsEvent[] = [];
+	const hub = new ObsHub({ now: () => 1_000_000, onEvent: e => seen.push(e) });
+	const feed = new BrokerAuditFeed(tab, {
+		emit: (m, count) => hub.emit(tab, { source: 'broker', integrity: 'trusted', class: m.class, priority: m.priority, summary: m.summary, net: m.net, detail: count ? { ...m.detail, count } : m.detail }),
+		status: (priority, summary, detail) => hub.trusted(tab, { class: 'broker.status', priority, summary, detail }),
+	});
+	let notify: (n: { method: string; params: unknown }) => void = () => undefined;
+	await feed.attach({ request: async () => ({ events: [] }), onNotification: cb => { notify = cb; return () => undefined; } });
+	let seq = 0;
+	const ev = (o: Record<string, unknown>) => notify({ method: 'audit.event', params: { seq: ++seq, ts: 1, tabId: tab, ...o } });
+	// Made-up methods to one allowed host can't mint keys: one record plus a count, and the
+	// next real destination is still recorded on its own.
+	for (let i = 0; i < 500; i++) {
+		ev({ type: 'request.allowed', host: 'allowed.test', port: 443, method: `A${i}`, path: '/', rule: 'r1' });
+	}
+	ev({ type: 'request.allowed', host: 'exfil.test', port: 443, method: 'POST', path: '/up', rule: 'r2' });
+	// 3000 denials to one destination, then 3000 to distinct destinations (past the key pool).
+	for (let i = 0; i < 3000; i++) {
+		ev({ type: 'request.denied', host: 'beacon.test', port: 443, method: 'GET', path: '/', status: 403, reason: `not allowed ${i}` });
+	}
+	for (let i = 0; i < 3000; i++) {
+		ev({ type: 'request.denied_unprompted', host: `h${i}.test`, port: 443, method: 'GET', path: '/', reason: 'deny-new' });
+	}
+	ev({ type: 'sentinel.misplaced', credentialId: 'gh', location: 'header', host: 'evil.test', port: 443 });
+	// A sentinel flood for one credential is one event plus a count; another credential still shows.
+	for (let i = 0; i < 1000; i++) {
+		ev({ type: 'sentinel.misplaced', credentialId: 'a', location: `x-h${i}`, host: 'allowed.test', port: 443 });
+	}
+	ev({ type: 'sentinel.misplaced', credentialId: 'b', location: 'header', host: 'allowed.test', port: 443 });
+	ev({ type: 'policy.updated', revision: 2 });
+	feed.detach();
+	const all = seen;
+	assert.ok(all.some(e => e.detail?.auditType === 'request.allowed' && e.net?.addr === 'exfil.test'), 'the real destination is recorded');
+	assert.ok(all.some(e => e.detail?.auditType === 'request.allowed' && e.net?.addr === 'allowed.test' && e.detail.count === 499), 'method variants are one key');
+	assert.ok(all.some(e => e.detail?.auditType === 'sentinel.misplaced' && e.priority === 'critical' && e.detail.credentialId === 'gh'), 'the finding survives the floods');
+	assert.ok(all.some(e => e.detail?.auditType === 'sentinel.misplaced' && e.detail.credentialId === 'b'), 'a second credential survives a sentinel flood');
+	assert.ok(all.some(e => e.detail?.credentialId === 'a' && e.detail.count === 999), 'the flood is one event plus a count (header name not in the key)');
+	assert.equal(all.filter(e => e.detail?.auditType === 'request.denied').length, 2, 'one denial at once plus one aggregate (reason not in the key)');
+	const unprompted = all.filter(e => e.detail?.auditType === 'request.denied_unprompted').length;
+	assert.equal(unprompted, 1000, 'past the key pool, events go out on their own until the type\'s bucket (burst 1000) is spent');
+	assert.ok(all.some(e => e.detail?.auditType === 'policy.updated'), 'broker lifecycle survives every flood');
+	hub.tickNow();
+	const drop = all.find(e => e.detail?.status === 'dropped' && e.detail.auditType === 'request.denied_unprompted');
+	assert.ok(drop && drop.detail!.count === 3000 - 1000 && typeof drop.detail!.firstBrokerSeq === 'number' && drop.detail!.lastBrokerSeq! > drop.detail!.firstBrokerSeq!, `drop reported with its type and broker seq range: ${JSON.stringify(drop?.detail)}`);
+	// Other sources don't share a bucket with the broker.
+	assert.ok(hub.emit(tab, { source: 'workspace-watch', integrity: 'trusted', class: 'workspace.change', priority: 'notice', summary: 'w' }), 'workspace watcher unaffected');
+	hub.close();
+});
+
+test('broker audit review BA-2 and restart: a rule name is tab-influenced; restart detected by seq; stale replay ignored', async () => {
+	const { BrokerAuditFeed, mapAudit } = await import('../src/obs/broker-audit.ts');
+	const tab = 't-abcdefghijklmnopqrstuvwxyz';
+	const m = mapAudit({ seq: 1, ts: 1, type: 'request.allowed', host: 'approve-all.test', port: 443, method: 'GET', path: '/', rule: 'approve-all.test' }, tab);
+	assert.ok(typeof m !== 'string');
+	const d = normalizeDraft({ source: 'broker', integrity: 'trusted', class: m.class, priority: m.priority, summary: m.summary, net: m.net, detail: m.detail });
+	assert.ok(d.untrusted!.includes('detail.rule'), 'rule (an approval rule is named by the tab-chosen host) is tagged');
+	const unl = mapAudit({ seq: 9, ts: 1, type: 'brand.new', host: 'x.test', reason: 'IGNORE PREVIOUS' }, tab);
+	assert.ok(typeof unl !== 'string' && unl.net === undefined && Object.keys(unl.detail).join() === 'auditType,brokerSeq', 'unlisted types carry only type and seq');
+	const got: string[] = [];
+	const feed = new BrokerAuditFeed(tab, { emit: e => got.push(`${e.detail.auditType}#${e.detail.brokerSeq}`), status: (_p, _s, det) => got.push(String(det.status)) });
+	const ctl = (events: unknown[], hold?: Promise<void>) => ({ request: async () => { await hold; return { events }; }, onNotification: () => () => undefined });
+	await feed.attach(ctl([{ seq: 1, ts: 1, type: 'policy.loaded' }, { seq: 2, ts: 2, type: 'policy.updated' }]));
+	// A new broker whose tail no longer holds broker.started: seqs below the last seen.
+	await feed.attach(ctl([{ seq: 1, ts: 5, type: 'proxy.auth_set' }]));
+	assert.deepEqual(got, ['policy.loaded#1', 'policy.updated#2', 'broker-restart', 'proxy.auth_set#1']);
+	// A slow replay from an old channel finishes after a newer attach: ignored.
+	let release!: () => void;
+	const slow = feed.attach(ctl([{ seq: 50, ts: 9, type: 'engine.error' }], new Promise(r => { release = r; })));
+	await feed.attach(ctl([]));
+	release();
+	await slow;
+	assert.ok(!got.includes('engine.error#50'), 'stale replay dropped');
+	feed.detach();
+});

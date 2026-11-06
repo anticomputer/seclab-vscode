@@ -136,6 +136,15 @@ check('connect to 192.0.2.10 carries process lineage', !!connect?.proc?.lineage?
 check('trusted lifecycle events present', events.some(e => e.class === 'tab.lifecycle' && e.integrity === 'trusted'));
 check('no event claims trusted from a sensor', events.every(e => !['sbx-collector', 'falco'].includes(e.source) || e.integrity !== 'trusted'));
 
+// Broker audit (EDR broker-audit-in-tab-events): a request through the tab's proxy to a raw
+// RFC 5737 address is refused by the broker without a prompt; its audit event arrives trusted.
+inTab('sleep 1; curl -s -m 5 -o /dev/null http://192.0.2.11/via-broker; true');
+await until(() => events.some(e => e.source === 'broker' && e.class === 'egress.request' && e.net?.addr === '192.0.2.11'), 20_000);
+const viaBroker = events.find(e => e.source === 'broker' && e.class === 'egress.request' && e.net?.addr === '192.0.2.11');
+check('broker: proxied raw-IP request denied, reported as a trusted egress.request', viaBroker?.integrity === 'trusted' && /^request\.denied/.test(String(viaBroker.detail?.auditType)), JSON.stringify(viaBroker ?? events.filter(e => e.source === 'broker').map(e => e.summary)));
+check('broker: tab-controlled request text is tagged untrusted', !!viaBroker && ['net.addr', 'detail.path', 'detail.method'].every(f => viaBroker.untrusted.includes(f)), JSON.stringify(viaBroker?.untrusted));
+check('broker: lifecycle events replayed (broker.started)', events.some(e => e.source === 'broker' && e.detail?.auditType === 'broker.started'));
+
 // 2. The log: per-tab JSONL, private, contiguous.
 const logDir = path.join(work, 'state', 'events', tabId);
 await sleep(1500);

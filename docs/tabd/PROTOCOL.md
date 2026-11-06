@@ -107,7 +107,7 @@ Reserved (not in v0.1): `warmPool.*`, `tab.policy.*` (broker adapter),
 | `stream.close` | `{ channel, error? }`: the exec child exited or failed; channel ID retired |
 | `audit` | `{ ts, tabId?, action, outcome, detail }`: every driver invocation and fence decision; also appended to the supervisor's audit log |
 | `log` | `{ level, message }` |
-| `tab.event` | `{ subscription, event, replay?, lagged? }`: one [event](EVENTS.md). `lagged: n` means `n` matching events were not sent while the client wasn't reading (stdout backlog over 4 MiB); fetch them with `tab.events.tail`. |
+| `tab.event` | `{ subscription, event, replay?, lagged? }`: one [event](EVENTS.md). `lagged: n` means `n` matching events were not sent while the client wasn't reading (stdout backlog over 4 MiB); fetch them with `tab.events.tail`. Broker-backed tabs also carry the broker's audit events (source `broker`, `trusted`; tab-chosen text tagged `untrusted`), read by tabd from the control channel it owns ([EDR](../edr/20261105-broker-audit-in-tab-events.md)). |
 | `tab.observation` | `{ tabId, state: observed\|degraded\|unobserved\|unavailable, since, reason, sensor?, mode?, untrusted: ["reason"] }`: `reason` can carry sensor-derived text; treat it as data |
 | `tab.writeback.pending` | `{ tabId, count }`: the number of held write-back changes changed; the editor prompts for review |
 

@@ -4,6 +4,7 @@
 
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { PolicyLogEntry, SensorHooks } from '../drivers/types.ts';
+import { BrokerAuditFeed, type AuditControl } from './broker-audit.ts';
 import type { FalcoSensor } from './falco.ts';
 import { ObsHub, type Observation } from './hub.ts';
 import { CollectorSession } from './sbx-collector.ts';
@@ -50,6 +51,7 @@ export class ObsGlue {
 	private readonly falco?: FalcoSensor;
 	private readonly watchers = new Map<string, WorkspaceWatcher>();
 	private readonly pollers = new Map<string, NodeJS.Timeout>();
+	private readonly brokerFeeds = new Map<string, { feed: BrokerAuditFeed; control?: AuditControl }>();
 
 	constructor(o: ObsGlueOptions) {
 		this.o = o;
@@ -307,6 +309,46 @@ export class ObsGlue {
 
 	observation(tabId: string): Observation {
 		return this.hub.observation(tabId);
+	}
+
+	/**
+	 * The tab's broker control channel is up (tabd owns it): stream its audit events as trusted
+	 * events, replaying what the broker still holds. Never throws; failures are status events.
+	 */
+	brokerAttached(tabId: string, control: AuditControl): Promise<void> {
+		let entry = this.brokerFeeds.get(tabId);
+		if (!entry) {
+			const feed = new BrokerAuditFeed(tabId, {
+				emit: (m, count) => {
+					this.hub.emit(tabId, {
+						source: 'broker', integrity: 'trusted', class: m.class, priority: m.priority, summary: m.summary,
+						...(m.net ? { net: m.net } : {}), detail: count ? { ...m.detail, count } : m.detail,
+					});
+				},
+				status: (priority, summary, detail) => {
+					this.hub.trusted(tabId, { class: 'broker.status', priority, summary, detail });
+				},
+			});
+			entry = { feed };
+			this.brokerFeeds.set(tabId, entry);
+		}
+		entry.control = control;
+		return entry.feed.attach(control).catch(() => undefined);
+	}
+
+	/** That control channel closed (only acts if it is still the current one). */
+	brokerDetached(tabId: string, control: AuditControl): void {
+		const entry = this.brokerFeeds.get(tabId);
+		if (entry?.control === control) {
+			entry.feed.detach();
+			entry.control = undefined;
+		}
+	}
+
+	/** The tab is gone: drop its feed (pending aggregates are flushed). */
+	brokerForget(tabId: string): void {
+		this.brokerFeeds.get(tabId)?.feed.detach();
+		this.brokerFeeds.delete(tabId);
 	}
 
 	shutdown(): Promise<void> {

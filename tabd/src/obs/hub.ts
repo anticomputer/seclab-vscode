@@ -6,7 +6,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Detector, type TabContext } from './detect.ts';
-import { EventError, isTabId, normalizeDraft, untrustedFields, type EventDraft, type ObsEvent, type ObservationState } from './schema.ts';
+import { EventError, isTabId, normalizeDraft, priorityRank, untrustedFields, type EventDraft, type ObsEvent, type ObservationState } from './schema.ts';
 import { safeText } from './text.ts';
 
 export const RING_SIZE = 2000;
@@ -15,7 +15,7 @@ export const SEGMENTS_KEPT = 4;
 export const MAX_TAB_LOG_DIRS = 64;
 export const HEARTBEAT_TIMEOUT_MS = 6000;
 
-interface Bucket { tokens: number; last: number; readonly rate: number; readonly burst: number; dropped: number }
+interface Bucket { tokens: number; last: number; readonly rate: number; readonly burst: number; dropped: number; firstSeq?: number; lastSeq?: number }
 
 export interface Observation { state: ObservationState; since: string; reason: string; sensor?: string; mode?: string }
 
@@ -23,6 +23,8 @@ interface TabState {
 	seq: number;
 	ring: ObsEvent[];
 	buckets: Record<BucketName, Bucket>;
+	/** Broker events, one bucket per audit type (review BA-1). */
+	findings: Map<string, Bucket>;
 	observation: Observation;
 	lastHeartbeat?: number;
 	expectEnd: boolean;
@@ -47,11 +49,18 @@ export interface HubOptions {
 /**
  * Rate-limit groups (security review OR-3): volume a tab can drive never shares a bucket with
  * events it must not be able to push out. Supervisor events (`tabd`) are never limited.
+ * Broker events get their own buckets, one per audit type (review BA-1): a flood of one type
+ * (cheap denials, model denials, one finding) can only drop events of that same type, and
+ * the drop is reported with its type. Findings (error or worse) get a lower rate.
  */
 type BucketName = 'sensor' | 'tabDriven' | 'client';
+const BUCKETS: readonly BucketName[] = ['sensor', 'tabDriven', 'client'];
+const FINDING_RATE = { rate: 20, burst: 200 };
+const BROKER_TYPE_RATE = { rate: 100, burst: 1000 };
+const MAX_BROKER_BUCKETS = 64;
 const BUCKET_OF: Readonly<Record<string, BucketName | undefined>> = {
 	'sbx-collector': 'sensor', 'falco': 'sensor', 'detector': 'sensor',
-	'workspace-watch': 'tabDriven', 'sbx-policy': 'tabDriven', 'broker': 'tabDriven', 'scan': 'tabDriven',
+	'workspace-watch': 'tabDriven', 'sbx-policy': 'tabDriven', 'scan': 'tabDriven',
 	'rpc-filter': 'client', 'gate': 'client',
 };
 
@@ -89,6 +98,7 @@ export class ObsHub {
 					tabDriven: { tokens: tr.burst, last: t, rate: tr.rate, burst: tr.burst, dropped: 0 },
 					client: { tokens: tr.burst, last: t, rate: tr.rate, burst: tr.burst, dropped: 0 },
 				},
+				findings: new Map(),
 				observation: { state: 'unavailable', since: new Date(t).toISOString(), reason: 'no sensor attached' },
 			};
 			if (this.o.dir && (this.o.persist?.(tabId) ?? true)) {
@@ -126,10 +136,32 @@ export class ObsHub {
 			s.invalid++;
 			return undefined;
 		}
-		const group = BUCKET_OF[draft.source];
-		const bucket = group ? s.buckets[group] : undefined;
+		let bucket: Bucket | undefined;
+		if (draft.source === 'broker') {
+			// The audit type was validated by the broker feed; past the cap, one shared bucket.
+			let key = typeof draft.detail?.auditType === 'string' ? draft.detail.auditType.slice(0, 64) : 'other';
+			if (!s.findings.has(key) && s.findings.size >= MAX_BROKER_BUCKETS) {
+				key = 'other';
+			}
+			bucket = s.findings.get(key);
+			if (!bucket) {
+				const r = priorityRank(draft.priority) <= priorityRank('error') ? FINDING_RATE : BROKER_TYPE_RATE;
+				bucket = { tokens: r.burst, last: this.now(), rate: r.rate, burst: r.burst, dropped: 0 };
+				s.findings.set(key, bucket);
+			}
+		} else {
+			const group = BUCKET_OF[draft.source];
+			bucket = group ? s.buckets[group] : undefined;
+		}
 		if (bucket && !take(bucket, this.now())) {
 			bucket.dropped++;
+			// Broker events: remember which broker seqs were dropped, so the records can be
+			// found in the broker's own audit log (stderr, audit.tail).
+			const bs = draft.detail?.brokerSeq;
+			if (draft.source === 'broker' && typeof bs === 'number') {
+				bucket.firstSeq ??= bs;
+				bucket.lastSeq = bs;
+			}
 			return undefined;
 		}
 		const e = this.stamp(tabId, s, draft);
@@ -219,7 +251,7 @@ export class ObsHub {
 	private tick(): void {
 		const t = this.now();
 		for (const [tabId, s] of this.tabs) {
-			for (const what of ['sensor', 'tabDriven', 'client'] as const) {
+			for (const what of BUCKETS) {
 				const b = s.buckets[what];
 				if (b.dropped > 0) {
 					const n = b.dropped;
@@ -230,6 +262,16 @@ export class ObsHub {
 					}
 				} else if (what === 'sensor' && s.observation.state === 'degraded' && s.observation.reason === 'events dropped by rate limit') {
 					this.setObservation(tabId, 'observed', 'rate back to normal', { sensor: s.observation.sensor, mode: s.observation.mode });
+				}
+			}
+			for (const [type, b] of s.findings) {
+				if (b.dropped > 0) {
+					const n = b.dropped;
+					b.dropped = 0;
+					const finding = b.rate === FINDING_RATE.rate;
+					const seqs = b.firstSeq !== undefined ? { firstBrokerSeq: b.firstSeq, lastBrokerSeq: b.lastSeq ?? b.firstSeq } : {};
+					b.firstSeq = b.lastSeq = undefined;
+					this.stamp(tabId, s, normalizeDraft({ source: 'tabd', integrity: 'trusted', class: 'sensor.status', priority: finding ? 'critical' : 'warning', summary: `${n} broker ${type} event(s) dropped (rate limit)`, detail: { status: 'dropped', count: n, stream: 'broker', auditType: type, ...seqs } }));
 				}
 			}
 			if (s.invalid > 0) {
