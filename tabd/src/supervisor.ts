@@ -10,6 +10,7 @@ import { DriverError, type BrokerHooks, type Driver, type DriverInfo, type Fence
 import { BrokerControl, connectBroker } from './broker-control.ts';
 import { defaultPolicy } from './broker-policy.ts';
 import { Approvals, asJson, sanitizeApproval } from './approvals.ts';
+import { CFS_CREDENTIAL_ID, cfsAllowRules, cfsImportParams, isCfsSentinel, newCfsSentinel, type AzToken } from './cfs.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { assertTabId, canonicalWorkspacePath, sandboxNameFor, TEMPLATE_NAME_RE, ValidationError, type PathPolicy } from './validate.ts';
 import { ObsGlue, ObsParamError } from './obs/glue.ts';
@@ -70,6 +71,8 @@ export interface SupervisorOptions {
 	 * directory, else deny-all). Throws on an invalid user policy, which fails the start.
 	 */
 	readonly brokerPolicy?: (tabId: string, opts: { prompts: boolean }) => Record<string, unknown>;
+	/** CFS package feeds (B4): the host's az token source; absent = feeds unavailable. */
+	readonly cfs?: { token(): Promise<AzToken> };
 }
 
 interface Channel { tabId: string; child: ChildProcessWithoutNullStreams }
@@ -285,6 +288,8 @@ export class Supervisor {
 			case 'tab.remove': return this.remove(this.record(p.tabId));
 			case 'tab.reset': return this.reset(this.record(p.tabId));
 			case 'tab.egress.block': return this.blockDestination(this.record(p.tabId), p.host, p.port);
+			case 'tab.packages.get': return { cfs: this.cfsSentinel(this.record(p.tabId).tabId) !== undefined };
+			case 'tab.packages.set': return this.setPackages(this.record(p.tabId), p.cfs);
 			case 'tab.approval.list': return { approvals: this.approvals.list(this.record(p.tabId).tabId).map(asJson) };
 			case 'tab.approval.decide': return this.decideApproval(this.record(p.tabId), p.approvalId, p.decision);
 			case 'tab.userAction': return this.userAction(this.record(p.tabId));
@@ -592,8 +597,15 @@ export class Supervisor {
 					// Observability: the broker's audit stream (trusted) into the tab's event log.
 					void this.obs.brokerAttached(r.tabId, c);
 					this.attachApprovals(r.tabId, c);
+					// CFS package feeds (B4), when the user enabled them for this tab: the tab's npm/pip
+					// config carries its persisted sentinel; the credential is imported in the background
+					// (az may take a while, or fail: the tab still starts, without feeds).
+					const feedSentinel = this.cfsSentinel(r.tabId);
+					if (feedSentinel) {
+						this.attachCfs(r.tabId, c, feedSentinel);
+					}
 					this.audit('broker.configure', 'ok', { tabId: r.tabId, policyRevision: typeof loaded?.revision === 'number' ? loaded.revision : null, caSha256: pemSha256 });
-					return { caPem: certPem, proxyUser: 'seclab', proxyPassword };
+					return { caPem: certPem, proxyUser: 'seclab', proxyPassword, ...(feedSentinel ? { feedSentinel } : {}) };
 				} catch (e) {
 					c.close();
 					this.audit('broker.configure', 'fail', { tabId: r.tabId, error: (e as Error).message });
@@ -677,6 +689,88 @@ export class Supervisor {
 	 * broker deny rule, which precedes every allow, baseline rule and prompt. Refused, and never
 	 * recorded as applied, unless the tab's broker can enforce it (`capabilities.denyRules`).
 	 */
+	/** The tab's CFS sentinel when the user enabled package feeds for it (`tab.packages.set`). */
+	private cfsSentinel(tabId: string): string | undefined {
+		const s = this.o.store.readSide<{ feed?: unknown; sentinel?: unknown }>(tabId, 'packages').find(e => e.feed === CFS_CREDENTIAL_ID)?.sentinel;
+		return isCfsSentinel(s) ? s : undefined;
+	}
+
+	/**
+	 * Put the CFS credential into a connected broker: mint the host's token (az, never written
+	 * anywhere), import it under the tab's sentinel with GET-only bindings and the budget, allow
+	 * the two feed paths, and answer `credential.needed` with a fresh token from then on.
+	 */
+	private async importCfs(tabId: string, c: BrokerControl, sentinel: string): Promise<void> {
+		if (!this.o.cfs) {
+			throw new RpcError(-32013, 'package feeds are unavailable (no az token source)');
+		}
+		const token = await this.o.cfs.token();
+		await c.request('credential.import', cfsImportParams(sentinel, token), 30_000);
+		await c.request('policy.update', { removeAllow: ['cfs-npm', 'cfs-pypi'] }).catch(() => undefined);
+		await c.request('policy.update', { addAllow: cfsAllowRules() });
+		this.audit('tab.packages', 'imported', { tabId, feed: CFS_CREDENTIAL_ID, expiresAt: token.expiresAt });
+	}
+
+	private attachCfs(tabId: string, c: BrokerControl, sentinel: string): void {
+		c.onNotification(n => {
+			const p = n.params as { id?: unknown } | null;
+			if (n.method !== 'credential.needed' || p?.id !== CFS_CREDENTIAL_ID || !this.o.cfs || this.cfsSentinel(tabId) !== sentinel) {
+				return;
+			}
+			void this.o.cfs.token()
+				.then(t => c.request('credential.provide', { id: CFS_CREDENTIAL_ID, value: t.value, expiresAt: t.expiresAt }))
+				.then(() => this.audit('tab.packages', 'refreshed', { tabId, feed: CFS_CREDENTIAL_ID }))
+				.catch((e: Error) => this.cfsProblem(tabId, e));
+		});
+		void this.importCfs(tabId, c, sentinel).catch((e: Error) => this.cfsProblem(tabId, e));
+	}
+
+	private cfsProblem(tabId: string, e: Error): void {
+		// az's message names the fix (az login); it never contains the token.
+		const message = e.message.slice(0, 300);
+		this.audit('tab.packages', 'fail', { tabId, feed: CFS_CREDENTIAL_ID, error: message });
+		this.notify('tab.packages.problem', { tabId, feed: CFS_CREDENTIAL_ID, message });
+	}
+
+	/**
+	 * The user turned CFS package feeds on or off for this tab (ADR cfs-package-feeds-in-tabs:
+	 * off by default, per tab). Persisted with the tab; applied at once to a running tab (import
+	 * and allow, or revoke and remove, and the tab's npm/pip config), and on every start.
+	 */
+	private async setPackages(r: TabRecord, cfsIn: unknown) {
+		if (typeof cfsIn !== 'boolean') {
+			throw new RpcError(-32602, 'cfs must be true or false');
+		}
+		const spec = this.spec(r);
+		const driver = this.driverFor(spec.template);
+		const c = this.brokers.get(r.tabId);
+		const before = this.cfsSentinel(r.tabId);
+		if (cfsIn) {
+			if (!this.o.cfs) {
+				throw new RpcError(-32013, 'package feeds are unavailable (no az token source)');
+			}
+			const sentinel = before ?? newCfsSentinel(randomBytes);
+			this.o.store.writeSide(r.tabId, 'packages', [{ feed: CFS_CREDENTIAL_ID, sentinel }]);
+			if (c) {
+				if (!before) {
+					this.attachCfs(r.tabId, c, sentinel);
+				} else {
+					await this.importCfs(r.tabId, c, sentinel);
+				}
+				await driver.installFeed?.(spec, sentinel);
+			}
+		} else {
+			this.o.store.writeSide(r.tabId, 'packages', []);
+			if (c) {
+				await c.request('policy.update', { removeAllow: ['cfs-npm', 'cfs-pypi'] }).catch(() => undefined);
+				await c.request('credential.revoke', { id: CFS_CREDENTIAL_ID, rotateSentinel: true }).catch(() => undefined);
+				await driver.installFeed?.(spec, undefined);
+			}
+		}
+		this.audit('tab.packages', cfsIn ? 'enabled' : 'disabled', { tabId: r.tabId, feed: CFS_CREDENTIAL_ID, running: !!c });
+		return { cfs: cfsIn, applied: !!c };
+	}
+
 	private async blockDestination(r: TabRecord, hostIn: unknown, portIn: unknown) {
 		if (typeof hostIn !== 'string' || hostIn.length > 253 || !BLOCK_HOST_RE.test(hostIn)) {
 			throw new RpcError(-32602, 'host must be an exact host name or IP address');

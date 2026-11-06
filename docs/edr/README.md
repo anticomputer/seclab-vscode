@@ -93,6 +93,7 @@ Same rules as ADRs:
 | 2026-11-06 | [Agentic probe runner: taking over the tab's agent-host socket, and evidence for the AHP gate](20261106-agentic-probe-runner.md) | accepted |
 | 2026-11-06 | [Agents-in-the-tab spike, step 3: the shipped agent host in a real sbx tab behind its broker](20261106-agents-in-real-tab-spike.md) | accepted |
 | 2026-11-06 | [Branch test builds of the macOS app](20261106-branch-test-builds.md) | accepted |
+| 2026-11-06 | [CFS package feeds in tabs: the tabd side (plan increment B4)](20261106-cfs-feeds-tabd.md) | accepted |
 | 2026-11-06 | [Egress prompts through the Tab Manager (plan increment B3)](20261106-egress-prompts.md) | accepted |
 | 2026-11-06 | [Exact request lineage on OCI via the broker's client port](20261106-exact-lineage-client-port.md) | accepted |
 | 2026-11-06 | [The 7-day rule: no pin newer than CFS's hold](20261106-pin-age-cooldown.md) | accepted |

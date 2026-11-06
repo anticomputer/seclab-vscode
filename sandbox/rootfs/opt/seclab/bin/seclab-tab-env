@@ -21,6 +21,22 @@ U="$(id -un 2>/dev/null || echo agent)" # OCI on native Linux runs as the worksp
 if [ -n "$CA" ]; then
 	set -- env NODE_EXTRA_CA_CERTS="$B/ca.pem" SSL_CERT_FILE="$B/bundle.pem" REQUESTS_CA_BUNDLE="$B/bundle.pem" \
 		CURL_CA_BUNDLE="$B/bundle.pem" GIT_SSL_CAINFO="$B/bundle.pem" "$@"
+	# CFS package feeds (ADR cfs-package-feeds-in-tabs), when the user enabled them for this tab:
+	# tabd writes npm's config and pip's index URL here with the broker's sentinel (never the
+	# token). The registry in env outranks a workspace .npmrc. Anything unexpected: no feeds.
+	if [ -r "$B/npmrc" ] && [ -r "$B/pip-index-url" ]; then
+		pip="$(head -c 600 "$B/pip-index-url" | head -n 1)"
+		case "$pip" in
+			*[!A-Za-z0-9_.~:/@-]*) pip="" ;;
+			https://cfs:*@pkgs.dev.azure.com/github-cfs/GitHubCFS/_packaging/github-cfs-pypi/pypi/simple/) ;;
+			*) pip="" ;;
+		esac
+		if [ -n "$pip" ]; then
+			set -- env NPM_CONFIG_GLOBALCONFIG="$B/npmrc" \
+				NPM_CONFIG_REGISTRY=https://pkgs.dev.azure.com/github-cfs/GitHubCFS/_packaging/github-cfs-oss/npm/registry/ \
+				PIP_INDEX_URL="$pip" "$@"
+		fi
+	fi
 fi
 exec env -i \
 	HOME="${HOME:-/home/$U}" USER="$U" LOGNAME="$U" SHELL=/bin/bash LANG=C.UTF-8 \

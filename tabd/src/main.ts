@@ -18,6 +18,7 @@ import { scanWorkspace } from './scan.ts';
 import { Supervisor } from './supervisor.ts';
 import { assertImageRef } from './validate.ts';
 import { tabPolicy } from './broker-policy.ts';
+import { CfsTokenSource } from './cfs.ts';
 import { BrokerImagePin } from './broker-image.ts';
 
 // 1. Only the framer may write to stdout; everything else goes to stderr.
@@ -159,6 +160,8 @@ const supervisor = new Supervisor({
 	scan: dockerPath ? (hostPath: string) => scanWorkspace(runner, dockerPath, hostPath) : undefined,
 	// The user's broker policy from this state dir, else deny-all (plan tabd-broker-wiring, decision 1).
 	brokerPolicy: (tabId, o) => tabPolicy(stateDir, tabId, o.prompts),
+	// CFS package feeds (B4): the host's az mints the token, in memory only; off per tab until the user enables it.
+	cfs: new CfsTokenSource(),
 });
 
 process.stdin.on('data', (d: Buffer) => supervisor.receive(d));

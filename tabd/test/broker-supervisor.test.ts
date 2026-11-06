@@ -17,6 +17,9 @@ import { BROKER_POLICY_SCHEMA, BROKER_PROTOCOL } from '../src/broker.ts';
 import type { BrokerHooks, BrokerSetup, Driver, FenceReport, SensorHooks, TabRuntimeSpec, TabTemplate } from '../src/drivers/types.ts';
 import { defaultPolicy, tabPolicy, USER_POLICY_FILE } from '../src/broker-policy.ts';
 import { approvalPromptText, DECISION_LABELS, sanitizeApproval } from '../src/approvals.ts';
+import { CFS_TENANT, feedInstallLine, parseAzToken, type AzToken } from '../src/cfs.ts';
+import { INSTALL_FEED } from '../src/drivers/broker-install.ts';
+import { spawnSync } from 'node:child_process';
 
 const SCRATCH = path.resolve(import.meta.dirname, '../../.work/test-scratch/broker-supervisor');
 const PEM = '-----BEGIN CERTIFICATE-----\nZXhhbXBsZSBvbmx5\n-----END CERTIFICATE-----\n';
@@ -62,6 +65,8 @@ class BrokerDriver implements Driver {
 	brokerLog: Array<{ method: string; params?: Record<string, unknown> }> = [];
 	opts: { badCa?: boolean; rejectPolicy?: boolean; tail?: unknown[]; denyRules?: boolean } = {};
 	brokerOut: PassThrough | undefined;
+	feeds: Array<string | undefined> = [];
+	async installFeed(_spec: TabRuntimeSpec, sentinel: string | undefined) { this.feeds.push(sentinel); }
 	async probe() {
 		return { name: 'fake', available: true, capabilities: { isolationClass: 'namespaces', networkFence: 'internal-network', liveMounts: false, holdAndResume: false, fileWatch: 'native', sameAbsolutePathMount: true, writeBack: 'ungated' } as const };
 	}
@@ -80,7 +85,7 @@ class BrokerDriver implements Driver {
 	async remove() { /* */ }
 }
 
-function setup(name: string, policy?: (tabId: string) => Record<string, unknown>) {
+function setup(name: string, policy?: (tabId: string) => Record<string, unknown>, cfs?: { token(): Promise<AzToken> }) {
 	const dir = path.join(SCRATCH, name);
 	fs.rmSync(dir, { recursive: true, force: true });
 	const ws = path.join(dir, 'home', 'src', 'proj');
@@ -95,7 +100,7 @@ function setup(name: string, policy?: (tabId: string) => Record<string, unknown>
 		store: new TabStore(path.join(dir, 'state')), write: b => out.push(...dec.push(b)), onFatal: () => { /* */ },
 		audit: e => audit.push(JSON.stringify(e)), fenceReverifyMs: 60_000,
 		pathPolicy: { home: path.join(dir, 'home'), allowedRoots: [path.join(dir, 'home', 'src')] },
-		scan: async () => ({ complete: true, findings: [], secrets: new Map() }), brokerPolicy: policy,
+		scan: async () => ({ complete: true, findings: [], secrets: new Map() }), brokerPolicy: policy, cfs,
 	});
 	let id = 1;
 	const call = async (method: string, params: unknown = {}) => {
@@ -356,4 +361,120 @@ test('B3 prompt text: tab named first, tab text quoted (no links, icons, bidi), 
 	const longText = approvalPromptText('t', sanitizeApproval({ ...raw, waiting: 3, request: { ...raw.request, host: long } })!, undefined);
 	assert.ok(longText.includes(`“${long}”`), 'the whole host, right end included');
 	assert.match(longText, /3 requests waiting\)\. Your answer covers every request held for this destination\./);
+});
+
+test('B4 CFS feeds: off by default; enabling imports the sentinel credential GET-only with a budget, on a running tab and every start; refresh on credential.needed; disabling revokes', async () => {
+	let mints = 0;
+	const cfs = { token: async (): Promise<AzToken> => ({ value: `tok-${++mints}-0123456789abcdef`, expiresAt: Math.floor(Date.now() / 1000) + 3600 }) };
+	const { sup, driver, call, ws, audit } = setup('cfs', undefined, cfs);
+	await call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	const tabId = (await call('tab.claim', { workspace: { hostPath: ws } })).tab.metadata.name;
+	await call('tab.ensureRunning', { tabId });
+	assert.equal(driver.setup!.feedSentinel, undefined, 'off by default: no feed config');
+	assert.ok(!driver.brokerLog.some(l => l.method === 'credential.import'));
+	assert.deepEqual(await call('tab.packages.get', { tabId }), { cfs: false });
+	await assert.rejects(call('tab.packages.set', { tabId, cfs: 'yes' }), /true or false/);
+
+	const wait = async (pred: () => boolean) => {
+		for (let i = 0; i < 200 && !pred(); i++) {
+			await new Promise(r => setTimeout(r, 5));
+		}
+		assert.ok(pred());
+	};
+	// Enable on the running tab: import, allow the two feed paths, write the tab's config.
+	assert.deepEqual(await call('tab.packages.set', { tabId, cfs: true }), { cfs: true, applied: true });
+	await wait(() => driver.brokerLog.some(l => l.method === 'policy.update' && Array.isArray(l.params?.addAllow)));
+	const imp = driver.brokerLog.find(l => l.method === 'credential.import')!.params!;
+	const sentinel = imp.sentinel as string;
+	assert.match(sentinel, /^seclab_cfs_[A-Za-z0-9_-]{43}$/);
+	assert.equal(imp.id, 'cfs');
+	assert.equal(imp.value, 'tok-1-0123456789abcdef');
+	assert.equal(imp.provider, 'azure-devops');
+	assert.deepEqual(imp.inject, { header: 'Authorization', fmt: 'Basic {base64:cfs:{value}}' });
+	assert.deepEqual(imp.budget, { requests: 5000, bytes: 2147483648 });
+	for (const b of imp.bind as Array<{ host: string; path: string; methods: string[] }>) {
+		assert.equal(b.host, 'pkgs.dev.azure.com');
+		assert.deepEqual(b.methods, ['GET'], 'GET only');
+		assert.match(b.path, /^\/github-cfs\/GitHubCFS\/_packaging\/github-cfs-(oss\/npm\/registry|pypi\/pypi)\/\*\*$/);
+	}
+	assert.deepEqual((driver.brokerLog.find(l => Array.isArray(l.params?.addAllow))!.params!.addAllow as Array<{ id: string }>).map(r => r.id), ['cfs-npm', 'cfs-pypi']);
+	await wait(() => driver.feeds.length === 1);
+	assert.deepEqual(driver.feeds, [sentinel], 'the running tab gets its npm/pip config with the sentinel');
+	assert.deepEqual(await call('tab.packages.get', { tabId }), { cfs: true });
+
+	// credential.needed for cfs: a fresh token, provided just in time; another id is ignored.
+	driver.brokerOut!.write(JSON.stringify({ jsonrpc: '2.0', method: 'credential.needed', params: { id: 'other' } }) + '\n');
+	driver.brokerOut!.write(JSON.stringify({ jsonrpc: '2.0', method: 'credential.needed', params: { id: 'cfs' } }) + '\n');
+	await wait(() => driver.brokerLog.some(l => l.method === 'credential.provide'));
+	const prov = driver.brokerLog.filter(l => l.method === 'credential.provide');
+	assert.equal(prov.length, 1);
+	assert.deepEqual(Object.keys(prov[0].params!).sort(), ['expiresAt', 'id', 'value']);
+	assert.equal(prov[0].params!.id, 'cfs');
+
+	// Every start: the same sentinel in the tab's config, and the credential imported again.
+	await call('tab.stop', { tabId });
+	driver.brokerLog.length = 0;
+	await call('tab.ensureRunning', { tabId });
+	assert.equal(driver.setup!.feedSentinel, sentinel, 'the persisted sentinel: the tab config stays valid');
+	await wait(() => driver.brokerLog.some(l => l.method === 'credential.import'));
+	assert.equal(driver.brokerLog.find(l => l.method === 'credential.import')!.params!.sentinel, sentinel);
+
+	// Disable: allow rules removed, the credential revoked (sentinel rotated), the config removed.
+	assert.deepEqual(await call('tab.packages.set', { tabId, cfs: false }), { cfs: false, applied: true });
+	assert.ok(driver.brokerLog.some(l => l.method === 'policy.update' && JSON.stringify(l.params?.removeAllow) === '["cfs-npm","cfs-pypi"]'));
+	assert.deepEqual(driver.brokerLog.find(l => l.method === 'credential.revoke')!.params, { id: 'cfs', rotateSentinel: true });
+	assert.equal(driver.feeds.at(-1), undefined);
+	await call('tab.stop', { tabId });
+	await call('tab.ensureRunning', { tabId });
+	assert.equal(driver.setup!.feedSentinel, undefined);
+	// No token ever reaches the audit log.
+	assert.ok(!/tok-\d/.test(audit.join('\n')), 'tokens are never audited');
+	sup.shutdown();
+
+	// Without a token source, enabling is refused.
+	const none = setup('cfs-none');
+	await none.call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	const t2 = (await none.call('tab.claim', { workspace: { hostPath: none.ws } })).tab.metadata.name;
+	await assert.rejects(none.call('tab.packages.set', { tabId: t2, cfs: true }), /unavailable/);
+	none.sup.shutdown();
+});
+
+test('B4 CFS token: tenant checked, expiry required; feed line validated; the install script and seclab-tab-env wire npm and pip to the sentinel only', () => {
+	const ok = { tenant: CFS_TENANT, accessToken: 'fake-token-for-tests-only', expires_on: 1793900000 };
+	assert.deepEqual(parseAzToken(JSON.stringify(ok), 1793800000), { value: ok.accessToken, expiresAt: 1793900000 });
+	assert.throws(() => parseAzToken(JSON.stringify({ ...ok, tenant: 'other' }), 1793800000), /another tenant/);
+	assert.throws(() => parseAzToken(JSON.stringify(ok), 1793900001), /expired/);
+	assert.throws(() => parseAzToken(JSON.stringify({ ...ok, accessToken: '' }), 1793800000), /no usable/);
+	assert.throws(() => parseAzToken('not json'), /not JSON/);
+	assert.equal(parseAzToken(JSON.stringify({ tenant: CFS_TENANT, accessToken: ok.accessToken, expiresOn: '2026-11-06 20:00:00.000000' }), 0).value, ok.accessToken);
+	assert.equal(feedInstallLine(undefined), 'feed -');
+	assert.throws(() => feedInstallLine('short'), /format/);
+	assert.throws(() => feedInstallLine(`seclab_cfs_${'a'.repeat(40)} rm -rf`), /format/);
+
+	// The shell side, where we can: as root, in the test container (./seclab test unit).
+	if (process.getuid?.() !== 0 || !fs.existsSync('/etc/ssl/certs/ca-certificates.crt')) {
+		return;
+	}
+	const s = `seclab_cfs_${'A'.repeat(43)}`;
+	const run = (input: string) => spawnSync('sh', ['-c', INSTALL_FEED], { input, encoding: 'utf8' });
+	fs.rmSync('/run/seclab-broker', { recursive: true, force: true });
+	assert.equal(run(`${feedInstallLine(s)}\n`).status, 0);
+	const npmrc = fs.readFileSync('/run/seclab-broker/npmrc', 'utf8');
+	assert.match(npmrc, /^registry=https:\/\/pkgs\.dev\.azure\.com\/github-cfs\/GitHubCFS\/_packaging\/github-cfs-oss\/npm\/registry\/$/m);
+	assert.ok(npmrc.includes(`:_password=${Buffer.from(s).toString('base64')}\n`));
+	assert.equal(fs.readFileSync('/run/seclab-broker/pip-index-url', 'utf8'), `https://cfs:${s}@pkgs.dev.azure.com/github-cfs/GitHubCFS/_packaging/github-cfs-pypi/pypi/simple/\n`);
+	assert.notEqual(run('feed bad;sentinel x\n').status, 0, 'unexpected characters are refused');
+	assert.notEqual(run('nope -\n').status, 0);
+	// seclab-tab-env exports them only with a configured broker, and only the expected URL.
+	fs.writeFileSync('/run/seclab-broker/proxy-url', 'http://seclab:pw@broker:8080\n');
+	fs.writeFileSync('/run/seclab-broker/ca.pem', PEM);
+	fs.writeFileSync('/run/seclab-broker/bundle.pem', PEM);
+	const env = () => spawnSync('sh', [path.resolve(import.meta.dirname, '../../sandbox/rootfs/opt/seclab/bin/seclab-tab-env'), 'env'], { encoding: 'utf8' }).stdout;
+	assert.match(env(), /^NPM_CONFIG_GLOBALCONFIG=\/run\/seclab-broker\/npmrc$/m);
+	assert.match(env(), new RegExp(`^PIP_INDEX_URL=https://cfs:${s}@pkgs\\.dev\\.azure\\.com/`, 'm'));
+	fs.writeFileSync('/run/seclab-broker/pip-index-url', 'https://cfs:x@evil.example/simple/\n');
+	assert.doesNotMatch(env(), /PIP_INDEX_URL|NPM_CONFIG_GLOBALCONFIG/, 'an unexpected index URL: no feeds');
+	assert.equal(run('feed -\n').status, 0);
+	assert.ok(!fs.existsSync('/run/seclab-broker/npmrc') && !fs.existsSync('/run/seclab-broker/pip-index-url'), 'disabled: config removed');
+	fs.rmSync('/run/seclab-broker', { recursive: true, force: true });
 });

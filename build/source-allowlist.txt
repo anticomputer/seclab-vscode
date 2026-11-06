@@ -30,3 +30,5 @@ patches/0012-background-windows-env.patch:env:export const backgroundWindows = p
 # It is the only enablement source a tab cannot write: the user, remote and workspace settings
 # layers are all reachable from inside a tab via $updateConfigurationOption (A23).
 patches/0015-seclab-ahp-gate.patch:env:export const seclabAgentsEnabled = process.env['SECLAB_AGENTS_ENABLED'] === '1';
+tabd/src/cfs.ts:process-spawn:import { spawn } from 'node:child_process';
+tabd/src/cfs.ts:process-spawn:const p = spawn(this.az, ['account', 'get-access-token', '--tenant', CFS_TENANT, '--resource', CFS_RESOURCE, '--output', 'json'], { stdio: ['ignore', 'pipe', 'pipe'] });

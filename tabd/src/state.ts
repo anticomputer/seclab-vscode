@@ -7,7 +7,7 @@ import * as path from 'node:path';
 import { assertTabId, CONNECTION_TOKEN_RE, foldPath, mintConnectionToken, mintTabId, TEMPLATE_NAME_RE, ValidationError } from './validate.ts';
 
 /** Per-tab side files: moved secrets, accepted secret findings, the user's blocked destinations. */
-export type SideKind = 'vault' | 'exceptions' | 'blocks';
+export type SideKind = 'vault' | 'exceptions' | 'blocks' | 'packages';
 
 export interface TabRecord {
 	readonly tabId: string;
@@ -129,6 +129,7 @@ export class TabStore {
 		fs.rmSync(this.recordFile(tabId), { force: true });
 		fs.rmSync(path.join(this.tabsDir, `${tabId}.used`), { force: true });
 		fs.rmSync(this.sideFile(tabId, 'blocks'), { force: true });
+		fs.rmSync(this.sideFile(tabId, 'packages'), { force: true });
 		this.clearLease(tabId);
 	}
 
