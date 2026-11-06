@@ -32,6 +32,11 @@ lockRun(path.join(base, '..', `${path.basename(base)}.lock.d`));
 const ws = path.join(base, 'ws-editor');
 const canary = path.join(base, 'canary', 'secret.txt');
 const marker = path.join(base, 'PWNED');
+// The newLocal + sendSequence chain writes its own marker, so the proof that
+// patches 0007/0008 closed it does not rest on the shared one. The shared
+// marker is written by several vectors, so its absence after a patch cannot
+// distinguish "this chain was denied" from "some other vector did not run".
+const newLocalMarker = path.join(base, 'PWNED-newlocal');
 const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
 
 if (mode === 'prepare') {
@@ -175,6 +180,12 @@ if (mode === 'prepare') {
 	checks.push({ vector: 'rogue-extension', name: 'ui-declared chat participant / vscode.lm caller ran in the tab, not trusted-side', ok: agent?.ranIn === 'tab' && agent?.remoteName === 'seclab',
 		detail: JSON.stringify(agent ?? 'no rogue-agent.json') });
 	checks.push({ vector: 'host', name: 'canary intact', ok: fs.readFileSync(canary, 'utf8') === 'HOST-SECRET-CANARY\n', detail: '' });
+	checks.push({
+		vector: 'rpc-probes',
+		name: 'workbench.action.terminal.newLocal + sendSequence did not reach the host',
+		ok: !fs.existsSync(newLocalMarker),
+		detail: fs.existsSync(newLocalMarker) ? `host marker written: ${newLocalMarker}` : '',
+	});
 	// Shared canary harness, editor side: nothing the rogue extension observed through the
 	// API (env, configuration, clipboard, auth sessions, secrets) nor any evidence may
 	// contain an editor-side canary in any encoding.
