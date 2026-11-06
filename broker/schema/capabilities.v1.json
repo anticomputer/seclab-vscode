@@ -277,7 +277,9 @@
         "it:test_cfs_download_redirect_is_followed_by_the_broker",
         "it:test_cfs_redirect_refusals_never_reach_the_tab",
         "it:test_tab_cannot_trigger_the_follow_itself",
-        "it:test_followed_redirect_is_bounded_by_the_byte_budget"
+        "it:test_followed_redirect_is_bounded_by_the_byte_budget",
+        "it:test_concurrent_followed_redirects_cannot_overspend_the_byte_budget",
+        "unit:test_r15_follow_refused_for_a_dropped_credential_or_a_credential_in_location"
       ]
     },
     {
