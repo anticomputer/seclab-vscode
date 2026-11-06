@@ -182,6 +182,52 @@ Derived from the pinned source, for patch 0015:
   reported to the coordinator.
 - Clearing quarantine on the fetched apps needs the user's approval (AGENTS.md).
 
+## The in-tab takeover, as built and measured (2026-11-06)
+The takeover is an **extension** (`test/agentic/runner/mitm-extension/`), not a host-injected
+process. That is what made it work across the tab restart the run needs: `prepare` claims the
+tab and then releases it so the editor's own tabd can claim it, and stopping a tab kills
+everything inside. Every host-side way of restarting the takeover was worse (findings 4 and 5
+above). The REH restarts an extension by itself, so there is no host polling, no liveness
+signal and no `sbx exec` in the loop.
+
+**It works.** On the release build U, in one run:
+
+```
+armed
+watching            sock=/run/user/1000/vscode-ipc-535fd040-….sock
+takeover  attempt 1 real=…sock.real-…
+listening
+forcing-reconnect   attempt 1, killed 1
+takeover  attempt 1 (the replacement socket)
+listening
+client-connected    url=/?tkn=…
+upstream-ready
+from-client         method=reconnect
+from-client         method=initialize
+probe-sent × 12
+```
+
+Two things this settles:
+7. **The bridge opens one upstream WebSocket per renderer client**, so taking the socket while
+   a client is already attached wins the path but sees no traffic. Killing the real agent host
+   once makes `ServerAgentHostManager` restart it, the starter unlinks the path, the
+   replacement binds it, and the takeover lands again **before** the bridge reconnects. The
+   measured attempt count is **1**, and the renderer does reconnect (it sends `reconnect`, then
+   `initialize`). That answers the "Not done yet" question below.
+8. **The whole chain is real.** A hostile agent host inside the tab reached the trusted
+   renderer of the shipped, attested macOS build, which then spoke AHP to it and stayed
+   connected (steady `ping`s). The takeover needed no product hook and no test-only build.
+
+**Still open: the probes produce no host effect on U.** The renderer answers each injected
+probe with a short frame and no marker, beacon hit or canary appears. That is not yet a
+containment result: the probes have to be shown landing on U before absence means anything on
+G (plan §1, "every probe fails first"). The runner now records a clipped copy of the renderer's
+reply for exactly this, which the next run reads to tell "the renderer refused this for a
+protocol reason" from "the probe is wrong". The likely causes, in order: the probes are sent on
+a `channel` the client never subscribed to, and the request-form probes (`resourceRead`,
+`resourceWrite`, `createTcpConnection`) may need a capability the client negotiated away in
+`initialize`.
+
 ## Measured, 2026-11-06 (increment 0, first runs)
 Seven runs of `test/agentic/runner/` against the attested release build U
 (`.work/app`, main `f19cf49`) on the sbx driver. What they established, with the evidence:
