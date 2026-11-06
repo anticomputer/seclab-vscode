@@ -56,6 +56,96 @@ async function probe(results, id, policyRef, fn) {
 }
 
 
+
+/**
+ * Ask the trusted side to resolve ${env:...} and hand us the values.
+ *
+ * onPtyHostRequestResolveVariables is a reverse request with argument
+ * authority: the pty host names the strings, the workbench resolves them, and
+ * the answers come back over acceptPtyHostResolvedVariables. On desktop the
+ * resolver is constructed over shellEnvironmentService.getShellEnv(), so
+ * `${env:X}` returns the host user's shell environment.
+ *
+ * Upstream's only guard is `e.workspaceId !== workspace.id`, and the REH is
+ * told the workspaceId on every createProcess call, so it is a routing check
+ * rather than a boundary. Unlike $onExecuteCommand this needs no live pty.
+ *
+ * The canary is SECLAB_EDITOR_CANARY, which the harness sets only in the
+ * editor's launch environment. Getting it back is proof we read the host
+ * process environment, not our own: the REH runs in the tab and never has it.
+ */
+async function runResolveVariablesProbe(results, ctx, socketServer) {
+	const ref = 'push:remoteterminal:$onPtyHostRequestResolveVariablesEvent';
+	const channel = terminalChannel(socketServer);
+	const svc = channel && (channel._ptyHostService || channel.ptyHostService);
+	const emitter = svc && (svc._onPtyHostRequestResolveVariables
+		|| svc.onPtyHostRequestResolveVariablesEmitter);
+
+	const fail = (detail) => results.push({
+		id: 'reh-resolve-variables-host-env', policyRef: ref, outcome: ERROR, detail,
+	});
+
+	if (!emitter || typeof emitter.fire !== 'function') {
+		// Never DENIED: an absent fixture must not read as containment.
+		return fail('no onPtyHostRequestResolveVariables emitter on the pty service');
+	}
+	const workspaceId = knownWorkspaceId(svc);
+	if (!workspaceId) {
+		return fail('no workspaceId seen yet; upstream drops the request when it '
+			+ 'does not match the window workspace, so this is inconclusive');
+	}
+
+	await probe(results, 'reh-resolve-variables-host-env', ref, async () => {
+		const requestId = 0x5EC1AB10;
+		const marker = safety.runPath(ctx, 'PWNED-resolvevars', 'resolve-variables marker');
+		safety.note(ctx, marker);
+		const answer = new Promise((resolve) => {
+			const accept = svc.acceptPtyHostResolvedVariables
+				|| svc._acceptPtyHostResolvedVariables;
+			if (typeof accept === 'function') {
+				const original = accept.bind(svc);
+				svc.acceptPtyHostResolvedVariables = (id, resolved) => {
+					if (id === requestId) { resolve(resolved); }
+					try { return original(id, resolved); } catch { /* fixture only */ }
+				};
+			}
+			setTimeout(() => resolve(null), 8000);
+		});
+		emitter.fire({
+			requestId,
+			workspaceId,
+			// Asking only for the canary and a harmless path. ${command:} is not
+			// reachable through resolveAsync, so this is read-only by construction.
+			originalText: ['${env:SECLAB_EDITOR_CANARY}', '${userHome}'],
+		});
+		const resolved = await answer;
+		if (!resolved) {
+			throw new Error('no reply within 8s');
+		}
+		// Writing the canary into evidence is the point: the shared canary scan
+		// fails the run if an editor-side canary appears anywhere in tab output.
+		if (String(resolved[0] || '').startsWith('seclabcanary_')) {
+			fs.writeFileSync(marker, String(resolved[0]));
+		}
+		return { resolved, marker };
+	});
+}
+
+/** A workspaceId the REH has already been told, which the window will accept. */
+function knownWorkspaceId(svc) {
+	if (!svc) { return undefined; }
+	if (typeof svc._workspaceId === 'string') { return svc._workspaceId; }
+	const ptys = svc._ptys || svc.ptys;
+	if (ptys && typeof ptys.values === 'function') {
+		for (const p of ptys.values()) {
+			const id = p && (p.workspaceId || p._workspaceId
+				|| (p._persistentProcess && p._persistentProcess.workspaceId));
+			if (typeof id === 'string' && id) { return id; }
+		}
+	}
+	return undefined;
+}
+
 /** The server's own handle on the terminal channel it registered. */
 function terminalChannel(socketServer) {
 	// ChannelServer keeps its registrations in a private `channels` map, which
@@ -264,6 +354,9 @@ async function runRehProbes(socketServer, router) {
 	// stub for so long. We satisfy it the way a real attacker would: the REH is
 	// the thing that creates ptys, so it already knows their ids.
 	await runExecuteCommandProbes(results, ctx, socketServer);
+
+	// --- server-initiated variable resolution --------------------------------
+	await runResolveVariablesProbe(results, ctx, socketServer);
 
 	return results;
 }

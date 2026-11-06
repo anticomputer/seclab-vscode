@@ -435,11 +435,40 @@ def check_enforcement(mapping: dict, policy: dict, repo_root: str) -> list:
     prefixes = sorted((k for k in enforcement if k != "note"),
                       key=len, reverse=True)
 
+    # Classes whose enforcement is inherently per-surface. A prefix entry can
+    # never stand in for these, and `whole_class` must not be able to buy the
+    # exemption: when this rule lived in a flag, injecting the review's own
+    # finding back into the policy passed, because the injection simply set the
+    # flag. A control the policy file can switch off is not a control.
+    PER_KEY_CLASSES = ("push:",)
+    for prefix in PER_KEY_CLASSES:
+        entry = enforcement.get(prefix)
+        if isinstance(entry, dict) and entry.get("whole_class"):
+            errors.append(
+                "enforcement['%s'] claims whole_class, but this class is "
+                "refused one subscription at a time, so a single entry cannot "
+                "vouch for its keys. Give each denied key its own entry."
+                % prefix)
+
     denied_prefixes = set()
     for key, value in mapping.items():
         if _verdict_of(value) != "deny":
             continue
-        match = next((p for p in prefixes if key.startswith(p)), None)
+        # An exact entry always wins. A prefix entry stands in for its keys
+        # only when it is a genuine whole-class control -- one mechanism that
+        # covers everything under it. Server-initiated pushes are not like
+        # that: each denied push is refused by not registering its own
+        # subscription, so a single `push:` entry naming one patch vouched for
+        # 18 keys of which exactly one was enforced. That is the finding this
+        # gate was written to prevent, reproduced by the gate itself.
+        if key in enforcement:
+            match = key
+        else:
+            match = next((p for p in prefixes
+                          if key.startswith(p)
+                          and enforcement[p].get("whole_class")
+                          and not any(key.startswith(c)
+                                      for c in PER_KEY_CLASSES)), None)
         if match is None:
             errors.append(
                 "no enforcement point for denied surface '%s': add the prefix to "
@@ -456,6 +485,13 @@ def check_enforcement(mapping: dict, policy: dict, repo_root: str) -> list:
 
     for prefix in sorted(denied_prefixes):
         entry = enforcement[prefix]
+        if entry.get("unenforced_accepted"):
+            # Explicitly accepted as unenforced. Not a pass for the surface --
+            # it is a denied capability with nothing refusing it -- but it is
+            # recorded and counted rather than hidden, which is the whole
+            # difference between a known gap and the silent one this gate
+            # exists to catch.
+            continue
         patch, symbol = entry.get("patch"), entry.get("symbol")
         if not patch or not symbol:
             errors.append("enforcement['%s'] must name both a patch and a symbol."
@@ -525,6 +561,14 @@ def main(argv=None) -> int:
         errors = check()
         if errors:
             failures.append((name, errors))
+
+    accepted = sorted(k for k, v in (policy.get("enforcement") or {}).items()
+                      if isinstance(v, dict) and v.get("unenforced_accepted"))
+    if accepted:
+        print("WARNING: %d denied surfaces are accepted-unenforced (no code "
+              "refuses them):" % len(accepted))
+        for k in accepted:
+            print("  %s" % k)
 
     if not failures:
         reachable = sum(1 for v in mapping.values() if _verdict_of(v) in REACHABLE)

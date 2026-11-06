@@ -1225,37 +1225,116 @@
     "rpc:": {
       "mechanism": "the RPC choke point, keyed on (proxy id, method) for seclab+ hosts",
       "patch": "0005-seclab-rpc-capability-filter.patch",
-      "symbol": "checkRpc"
+      "symbol": "checkRpc",
+      "whole_class": true
     },
     "cmd:": {
       "mechanism": "the command validator and taint, refusing tab-originated commands",
       "patch": "0007-seclab-command-taint.patch",
-      "symbol": "seclabExecuteFromTab"
+      "symbol": "seclabExecuteFromTab",
+      "whole_class": true
     },
     "chan:": {
       "mechanism": "the channel guard on channels the client serves to the server",
       "patch": "0006-seclab-channel-guard.patch",
-      "symbol": "setSeclabChannelGuard"
+      "symbol": "setSeclabChannelGuard",
+      "whole_class": true
     },
     "push:": {
-      "mechanism": "server-initiated pushes: the subscription is not registered in a seclab+ window, so the denied event has no handler to reach",
-      "patch": "0015-seclab-no-remote-cli-push-in-tabs.patch",
-      "symbol": "seclabIsTabAuthority"
+      "mechanism": "NOT a whole-class control. Each denied push is refused by not registering its own subscription, so every denied push key needs its own entry below. The prefix entry exists only to say so.",
+      "whole_class": false
     },
     "data:": {
       "mechanism": "tab-supplied data is constrained at its sink, chiefly the URI authority check",
       "patch": "0005-seclab-rpc-capability-filter.patch",
-      "symbol": "uriArgsOf"
+      "symbol": "uriArgsOf",
+      "whole_class": true
     },
     "ai-tool:": {
       "mechanism": "built-in chat and agent tools are disabled in seclab+ windows",
       "patch": "0009-seclab-no-builtin-chat-in-tabs.patch",
-      "symbol": "seclabAiDisabled"
+      "symbol": "seclabAiDisabled",
+      "whole_class": true
     },
     "ai-setting:": {
       "mechanism": "built-in chat and agent tools are refused in seclab+ windows, so a tab-written agent setting has no agent in that window to steer. The settings are additionally pinned to fixed values by patch 0017 on the agent-host branch; that is defence in depth, and naming it here would credit this branch with enforcement it does not ship.",
       "patch": "0009-seclab-no-builtin-chat-in-tabs.patch",
-      "symbol": "seclabAiDisabled"
+      "symbol": "seclabAiDisabled",
+      "whole_class": true
+    },
+    "push:remoteterminal:$onExecuteCommand": {
+      "mechanism": "the onExecuteCommand subscription is not registered in a seclab+ window",
+      "patch": "0015-seclab-no-remote-cli-push-in-tabs.patch",
+      "symbol": "seclabIsTabAuthority"
+    },
+    "push:remoteterminal:$onPtyHostRequestResolveVariablesEvent": {
+      "mechanism": "the onPtyHostRequestResolveVariables subscription is not registered when the pty host is a tab's",
+      "patch": "0016-seclab-no-variable-resolution-for-tab-pty-hosts.patch",
+      "symbol": "seclabIsTabAuthority"
+    },
+    "push:agentHostLogger:onDidChangeLoggers": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:agentHostLogger:onDidChangeVisibility": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:agentHostProxy:close": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:agentHostProxy:frame": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:extensionhostdebugservice:attach": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:extensionhostdebugservice:close": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:extensionhostdebugservice:reload": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:extensionhostdebugservice:terminate": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:mcpGateway:onDidChangeGatewayServers": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:mcpManagement:onDidInstallMcpServers": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:mcpManagement:onDidUninstallMcpServer": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:mcpManagement:onDidUpdateMcpServers": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:mcpManagement:onInstallMcpServer": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:mcpManagement:onUninstallMcpServer": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:userDataProfiles:onDidChangeProfiles": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:userDataProfiles:onDidResetWorkspaces": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
     }
   }
 }

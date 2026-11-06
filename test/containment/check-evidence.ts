@@ -195,6 +195,17 @@ if (mode === 'prepare') {
 		ok: !fs.existsSync(newLocalMarker),
 		detail: fs.existsSync(newLocalMarker) ? `host marker written: ${newLocalMarker}` : '',
 	});
+	// The host shell environment must not be readable through the pty host's
+	// variable-resolution reverse request. The marker holds the editor-env
+	// canary, which the REH can only have obtained from the trusted side.
+	const resolveVarsMarker = path.join(base, 'PWNED-resolvevars');
+	checks.push({
+		vector: 'reh-probes',
+		name: 'pty host variable resolution did not return the host environment',
+		ok: !fs.existsSync(resolveVarsMarker),
+		detail: fs.existsSync(resolveVarsMarker)
+			? `host env canary returned to the tab: ${resolveVarsMarker}` : '',
+	});
 	for (const [command, m] of execCommandMarkers) {
 		checks.push({
 			vector: 'reh-probes',
