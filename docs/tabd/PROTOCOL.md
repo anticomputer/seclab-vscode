@@ -97,9 +97,11 @@ never derived from paths or other input. The editor uses the authority
 | `tab.observe` | `{ tabId, mode: default\|deep }` | `{ mode, appliesOnRestart, observation }` | `deep` also traces file opens under sbx (about 45 µs per open). Takes effect when the collector next starts. |
 | `tab.detections.query` | `{ minPriority? (default warning), tabIds? (≤ 64), limit? (1–500, default 200) }` | `{ events, tabs: [{ tabId, hostPath, phase }] }` | For the Tab Manager's cross-tab summary. Detections, plus trusted fence, lifecycle and "unobserved" events, across every tab in the state directory, running or stopped. They are read from the persisted per-tab logs (whichever supervisor wrote them; at most 16 MiB per tab) and this supervisor's unflushed ring. `phase` is `Running` for a tab leased by a live supervisor. Event text is tab-influenced: render it as data ([ADR](../adr/20261106-detection-notifications.md)). |
 | `tab.egress.block` | `{ tabId, host, port? }` | `{ rule }` | The user blocked a destination for this tab (exact host name or IP address, optional port). tabd adds a broker deny rule (`policy.update addDeny`), which precedes every allow rule, the baseline and prompts. It persists the block with the tab and applies it again on every start. Fails with `-32013` unless the tab's broker reports `capabilities.denyRules` (`tab.get` → `status.brokerCapabilities`). Idempotent. |
+| `tab.approval.list` | `{ tabId }` | `{ approvals: Approval[] }` | This tab's pending broker prompts (plan tabd-broker-wiring B3), for a client that (re)connects. `Approval` is `{ approvalId, kind: egress\|credential-binding, request: { scheme, host, port, method, path }, decisions, expiresAt, waiting, risk: { flags, origin, originVerified, userActionSeen }, credentialId? }`, sanitised and capped by tabd. Every string in it is tab-influenced: render as plain text. |
+| `tab.approval.decide` | `{ tabId, approvalId, decision }` | `{}` | The user's answer. Only a decision that this tab's approval offered is relayed (`approval.decide`); anything else, another tab's approval, or an unknown one is `-32602`. One decision answers one approval of one tab: there is no "apply to all". |
+| `tab.userAction` | `{ tabId }` | `{}` | The user did ordinary work in this tab (editor input, a command they chose). Never send it for consent interactions (Workspace Trust, task permission, the broker's own prompts). tabd relays it as the broker's `tab.event userAction`, at most once a second per tab; it opens the broker's user-action gate. tabd itself sends `tab.event opened` whenever it (re)connects to the tab's broker. |
 
-Reserved (not in v0.1): `warmPool.*`, `tab.policy.*` (broker adapter),
-`prompt.respond`.
+Reserved (not in v0.1): `warmPool.*`, `tab.policy.*` (broker adapter).
 
 ## 4. Notifications (supervisor → client)
 | Method | Params |
@@ -109,6 +111,8 @@ Reserved (not in v0.1): `warmPool.*`, `tab.policy.*` (broker adapter),
 | `stream.close` | `{ channel, error? }`: the exec child exited or failed; channel ID retired |
 | `audit` | `{ ts, tabId?, action, outcome, detail }`: every driver invocation and fence decision; also appended to the supervisor's audit log |
 | `log` | `{ level, message }` |
+| `tab.approval` | `{ tabId, approval: Approval, lineage }`: the tab's broker holds a request and asks the user (see `tab.approval.list`). `lineage` is the process attribution for the request (`confidence`, chain, `integrity`; never `trusted`): show it as quoted data, never use it to decide. Show which tab asks on every prompt; default to deny; never pre-select `allow-tab`. |
+| `tab.approval.resolved` | `{ tabId, approvalId, decision, by }`: dismiss the prompt (answered, timed out, or matched a deny rule). |
 | `tab.event` | `{ subscription, event, replay?, lagged? }`: one [event](EVENTS.md). `lagged: n` means `n` matching events were not sent while the client wasn't reading (stdout backlog over 4 MiB); fetch them with `tab.events.tail`. Broker-backed tabs also carry the broker's audit events (source `broker`, `trusted`; tab-chosen text tagged `untrusted`), read by tabd from the control channel it owns ([EDR](../edr/20261105-broker-audit-in-tab-events.md)). |
 | `tab.observation` | `{ tabId, state: observed\|degraded\|unobserved\|unavailable, since, reason, sensor?, mode?, untrusted: ["reason"] }`: `reason` can carry sensor-derived text; treat it as data |
 | `tab.writeback.pending` | `{ tabId, count }`: the number of held write-back changes changed; the editor prompts for review |

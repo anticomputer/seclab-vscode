@@ -120,7 +120,8 @@ test('broker bring-up: hello, health, proxy auth, policy, CA; password never aud
 	await call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
 	const tabId = (await call('tab.claim', { workspace: { hostPath: ws } })).tab.metadata.name;
 	await call('tab.ensureRunning', { tabId });
-	assert.deepEqual(driver.brokerLog.map(l => l.method).filter(m => m !== 'audit.tail'), ['broker.hello', 'health', 'proxy.auth.set', 'policy.load', 'ca.get']);
+	assert.deepEqual(driver.brokerLog.map(l => l.method).filter(m => m !== 'audit.tail'), ['broker.hello', 'health', 'proxy.auth.set', 'policy.load', 'ca.get', 'tab.event', 'approval.list']);
+	assert.deepEqual(driver.brokerLog.find(l => l.method === 'tab.event')!.params, { kind: 'opened' }, 'the broker learns the tab was just opened');
 	const pw = driver.setup!.proxyPassword;
 	assert.match(pw, /^[A-Za-z0-9_-]{32}$/);
 	assert.equal(driver.brokerLog[2].params!.password, pw);
@@ -253,4 +254,61 @@ test('tabPolicy: default deny-all; the user policy is a private regular file, ve
 	fs.symlinkSync('/etc/hosts', f);
 	assert.throws(() => tabPolicy(dir, 't-1'), /not a regular file/);
 	fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('B3 prompts: approvals reach the client sanitised; only offered decisions, for this tab, are relayed; userAction is rate-limited', async () => {
+	const { sup, driver, call, ws, audit } = setup('approvals');
+	const notes: Array<{ method: string; params: Record<string, unknown> }> = [];
+	const origNotify = (sup as unknown as { notify: (m: string, p: unknown) => void }).notify.bind(sup);
+	(sup as unknown as { notify: (m: string, p: unknown) => void }).notify = (m, p) => {
+		notes.push({ method: m, params: p as Record<string, unknown> });
+		origNotify(m, p);
+	};
+	await call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	const tabId = (await call('tab.claim', { workspace: { hostPath: ws } })).tab.metadata.name;
+	await call('tab.ensureRunning', { tabId });
+	const send = (method: string, params: unknown) => driver.brokerOut!.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+	const approval = {
+		approvalId: 'a1b2c3', kind: 'egress', request: { scheme: 'https', host: 'evil.example', port: 443, method: 'GET', path: '/' + 'x'.repeat(400) },
+		createdAt: 1, expiresAt: Date.now() / 1000 + 60, waiting: 1, decisions: ['allow-once', 'deny', 'bogus'],
+		risk: { flags: ['early-after-open'], origin: { label: 'task.env\u001b[31m', verified: false }, userActionSeen: false }, untrusted: {},
+	};
+	send('approval.requested', approval);
+	send('approval.requested', { ...approval, approvalId: 'bad id!' });
+	for (let i = 0; i < 100 && !notes.some(n => n.method === 'tab.approval'); i++) {
+		await new Promise(r => setTimeout(r, 5));
+	}
+	const shown = notes.filter(n => n.method === 'tab.approval');
+	assert.equal(shown.length, 1, 'malformed approvals are dropped');
+	const a = shown[0].params.approval as { decisions: string[]; request: { path: string } };
+	assert.equal(shown[0].params.tabId, tabId);
+	assert.deepEqual(a.decisions, ['allow-once', 'deny'], 'only known decisions');
+	assert.equal(a.request.path.length, 256, 'tab-influenced text is capped');
+	assert.ok('lineage' in shown[0].params);
+	assert.deepEqual((await call('tab.approval.list', { tabId })).approvals.map((x: { approvalId: string }) => x.approvalId), ['a1b2c3']);
+	await assert.rejects(call('tab.approval.decide', { tabId, approvalId: 'a1b2c3', decision: 'allow-tab' }), /one of allow-once, deny/, 'a decision the approval did not offer is refused');
+	await assert.rejects(call('tab.approval.decide', { tabId, approvalId: 'nope', decision: 'deny' }), /no such pending approval/);
+	// Another tab can't answer this one (decision 3: an approval never grants another tab).
+	const ws2 = path.join(path.dirname(ws), 'other');
+	fs.mkdirSync(ws2);
+	const tab2 = (await call('tab.claim', { workspace: { hostPath: ws2 } })).tab.metadata.name;
+	await assert.rejects(call('tab.approval.decide', { tabId: tab2, approvalId: 'a1b2c3', decision: 'deny' }), /no such pending approval/);
+	await call('tab.approval.decide', { tabId, approvalId: 'a1b2c3', decision: 'deny' });
+	assert.deepEqual(driver.brokerLog.filter(l => l.method === 'approval.decide').map(l => l.params), [{ approvalId: 'a1b2c3', decision: 'deny' }]);
+	assert.deepEqual((await call('tab.approval.list', { tabId })).approvals, []);
+	// A broker-side resolution (timeout) dismisses the client's prompt.
+	send('approval.requested', { ...approval, approvalId: 'd4e5f6' });
+	for (let i = 0; i < 100 && (await call('tab.approval.list', { tabId })).approvals.length === 0; i++) {
+		await new Promise(r => setTimeout(r, 5));
+	}
+	send('approval.resolved', { approvalId: 'd4e5f6', decision: 'deny', by: 'timeout' });
+	for (let i = 0; i < 100 && !notes.some(n => n.method === 'tab.approval.resolved'); i++) {
+		await new Promise(r => setTimeout(r, 5));
+	}
+	assert.deepEqual(notes.find(n => n.method === 'tab.approval.resolved')!.params, { tabId, approvalId: 'd4e5f6', decision: 'deny', by: 'timeout' });
+	// userAction: relayed, at most once a second.
+	await call('tab.userAction', { tabId });
+	await call('tab.userAction', { tabId });
+	assert.deepEqual(driver.brokerLog.filter(l => l.method === 'tab.event').map(l => l.params), [{ kind: 'opened' }, { kind: 'userAction' }]);
+	assert.ok(audit.some(e => e.includes('"decided"')) && !audit.some(e => e.includes('\u001b')));
 });
