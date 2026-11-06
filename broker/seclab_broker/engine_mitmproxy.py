@@ -203,6 +203,14 @@ class SeclabAddon:
         if host is None:
             self._deny(flow, 400, "invalid CONNECT target")
             return
+        # A tunnel to a blocked host is refused at CONNECT (review 12-7), audited like a request.
+        peer = flow.client_conn.peername
+        view = RequestView("https", host, flow.request.port, "CONNECT", "/",
+                           client_port=peer[1] if peer and isinstance(peer[1], int) else None)
+        if self.b.policy.deny_match(view) is not None:
+            flow.metadata["seclab.view"] = view
+            self._blocked(flow, view)
+            return
         self.authed[flow.client_conn] = (self.b.auth_epoch, flow.metadata.get("seclab.origin"))
         self.tunnels[flow.client_conn] = (host, flow.request.port)
 
@@ -274,9 +282,7 @@ class SeclabAddon:
         flow.metadata["seclab.view"] = view
         # A user's block beats every allow rule, the baseline, allow-tab grants, prompts and
         # credential bindings (revision 5); nothing is forwarded or asked.
-        blocked = self.b.policy.deny_match(view)
-        if blocked is not None:
-            self._deny(flow, 403, f"denied by rule {blocked.id}", ruleId=blocked.id)
+        if self._blocked(flow, view):
             return
         rule = self.b.allowed(view)
         if rule is not None:
@@ -285,12 +291,24 @@ class SeclabAddon:
         flow.intercept()
         try:
             decision = await self.b.ask_egress(view, flow.metadata.get("seclab.origin"))
+            if self._blocked(flow, view):  # blocked while the prompt was open (review 12-5)
+                return
             if decision.allow:
                 flow.metadata["seclab.rule"] = f"approval:{decision.reason}"
             else:
                 self._deny(flow, 403, f"egress denied ({decision.reason})")
         finally:
             flow.resume()
+
+    def _blocked(self, flow: http.HTTPFlow, view: RequestView) -> bool:
+        """Deny with the canonical audit if a deny rule matches (revision 5). Called before
+        anything else and again after every point where the flow was suspended, because a
+        user can block a destination while its request waits (review 12-1)."""
+        blocked = self.b.policy.deny_match(view)
+        if blocked is None:
+            return False
+        self._deny(flow, 403, f"denied by rule {blocked.id}", ruleId=blocked.id)
+        return True
 
     # ------------------------------------------------------------ credentials
     def _sentinel_locations(self, flow: http.HTTPFlow) -> list[tuple[str, str, str | None, str | None]]:
@@ -364,9 +382,7 @@ class SeclabAddon:
         if view is None:
             self._deny(flow, 403, "request was not classified")
             return
-        blocked = self.b.policy.deny_match(view)  # a block added since requestheaders
-        if blocked is not None:
-            self._deny(flow, 403, f"denied by rule {blocked.id}", ruleId=blocked.id)
+        if self._blocked(flow, view):  # a block added since requestheaders
             return
         upgrade = _upgrade_token(flow.request)
         sealed = SEALED_PREFIX.encode()
@@ -461,6 +477,8 @@ class SeclabAddon:
                     self._deny(flow, 403, "cannot infer how to inject an unbound credential")
                     return
                 decision = await self.b.ask_binding(view, cred, inject, flow.metadata.get("seclab.origin"))
+                if self._blocked(flow, view):
+                    return
                 if not decision.allow:
                     self._deny(flow, 403, f"credential binding denied ({decision.reason})")
                     return
@@ -488,6 +506,10 @@ class SeclabAddon:
                     self._deny(flow, 503, "credential unavailable")
                     return
 
+            # Last check after every suspension, immediately before any real value is written
+            # (review 12-1: a block added during a JIT credential hold).
+            if self._blocked(flow, view):
+                return
             injected = []
             for cred, binding in planned.values():
                 assert binding.inject is not None and cred.value is not None
@@ -844,6 +866,17 @@ class SeclabAddon:
             server.error = "seclab: no upstream address"
             return
         host, port = server.address[0], server.address[1]
+        # Defence in depth for deny rules (review 12-1): never open a connection to a blocked
+        # destination, whatever path led here. Checked on the name, before any DNS lookup.
+        name = normalize_host(host)
+        if name is not None:
+            scheme = "https" if server.tls else "http"
+            blocked = self.b.policy.deny_match(RequestView(scheme, name, port, "CONNECT", "/"))
+            if blocked is not None:
+                server.error = f"seclab: denied by rule {blocked.id}"
+                self.b.audit("upstream.denied", host=name, port=port, reason=f"denied by rule {blocked.id}",
+                             ruleId=blocked.id)
+                return
         ip = normalize_ip(host)
         ips = [ip] if ip is not None else []
         if not ips:

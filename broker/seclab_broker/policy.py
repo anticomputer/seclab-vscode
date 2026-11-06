@@ -60,7 +60,7 @@ def _validator():
     return fastjsonschema.compile(_schema(), handlers=_HANDLERS)
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=None)
 def _sub_validator(name: str):
     schema = _schema()
     sub = {"$schema": schema["$schema"], "definitions": schema["definitions"],
@@ -333,8 +333,10 @@ class DenyRule:
         return out
 
     def matches(self, req: RequestView) -> bool:
-        return (req.scheme in self.schemes and (self.ports is None or req.port in self.ports)
-                and self.host.matches(req.host))
+        # `*.x` on a deny rule also blocks the apex `x` (review 12-2): a block must not be
+        # sidestepped by the bare domain, unlike an allow rule's strict-subdomain wildcard.
+        host_ok = self.host.matches(req.host) or (self.host.text.startswith("*.") and req.host == self.host.text[2:])
+        return req.scheme in self.schemes and (self.ports is None or req.port in self.ports) and host_ok
 
 
 _B64_TOKEN = re.compile(r"\{base64:((?:[^{}]|\{value\})*)\}")

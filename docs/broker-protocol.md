@@ -971,6 +971,7 @@ listed type is never emitted.
 | `response.blocked` | A response or WebSocket frame was blocked by the scanner. |
 | `upstream.blocked` | The upstream address guard refused a connection. |
 | `upstream.dns_failed` | The broker could not resolve an upstream name. |
+| `upstream.denied` | Defence in depth for deny rules (revision 5): an upstream connection to a blocked destination was refused before any DNS lookup. Requests are denied earlier; seeing this means a path reached connect time. |
 | `tcp.blocked` | A non-HTTP TCP stream was killed. |
 | `udp.blocked` | A UDP flow was killed. |
 | `engine.error` | A hook failed and the flow was failed closed. |
@@ -1074,7 +1075,7 @@ as `version` and `policySchema.revision`, so a supervisor can detect it.
 <!-- BEGIN GENERATED: protocol-changelog (broker/tools/docs.py; do not edit) -->
 **0.5.0** (2026-11-06; policy schema revision 5)
 
-- Deny rules (policy `deny`, `policy.update` `addDeny`/`removeDeny`; capability `denyRules`). A deny rule (`id`, `host`, optional `ports` and `schemes`) takes precedence over every allow rule, the baseline, `allow-tab` grants, prompts and credential bindings. A matching request is denied with `403` and audited as `request.denied` (reason `denied by rule <id>`, key `ruleId`), never prompted. Omitted `ports` means every port and omitted `schemes` means http and https. Adding one resolves a pending prompt it matches as `deny` (`approval.resolved` `by: deny-rule`), denies new requests on open connections, and stops relaying on an open WebSocket. `policy.changed` carries `addedDeny`/`removedDeny`. Requested by tab observability for its user-approved Block destination action.
+- Deny rules (policy `deny`, `policy.update` `addDeny`/`removeDeny`; capability `denyRules`). A deny rule (`id`, `host`, optional `ports` and `schemes`) takes precedence over every allow rule, the baseline, `allow-tab` grants, prompts and credential bindings. A matching request is denied with `403` and audited as `request.denied` (reason `denied by rule <id>`, key `ruleId`), never prompted; a CONNECT to it is refused the same way. It is re-checked after every wait (prompt, just-in-time credential) immediately before injection, and at upstream connect (audit `upstream.denied`). Omitted `ports` means every port, omitted `schemes` means http and https, and `*.x` also blocks `x`. Adding one resolves a pending prompt it matches as `deny` (`approval.resolved` `by: deny-rule`, with no prompt cooldown and not counted toward `deny-new-destinations`), denies new requests on open connections, and stops relaying on an open WebSocket. `policy.changed` carries `addedDeny`/`removedDeny`. `policy.update` refuses to grow `allow` or `deny` past the schema's 1024-entry caps. Requested by tab observability for its user-approved Block destination action.
 - Request summaries (audit events, approvals) carry `clientPort`, the tab-side TCP source port of the proxy connection, for exact process attribution on OCI tabs. It is tagged untrusted: a process in the tab can choose its source port.
 
 **0.4.0** (2026-11-05; policy schema revision 4)

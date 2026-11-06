@@ -474,7 +474,7 @@
         "id",
         "host"
       ],
-      "description": "A blocked destination (revision 5). It takes precedence over every allow rule, the baseline, `allow-tab` grants, prompts and credential bindings: a matching request is denied (`request.denied`, reason `denied by rule <id>`) and never prompted. Unlike an allow rule, omitted `ports` means every port and omitted `schemes` means http and https. It matches the request's host name; a destination reached by IP literal needs its own rule.",
+      "description": "A blocked destination (revision 5). It takes precedence over every allow rule, the baseline, `allow-tab` grants, prompts and credential bindings: a matching request is denied (`request.denied`, reason `denied by rule <id>`) and never prompted, and a CONNECT to it is refused. Unlike an allow rule, omitted `ports` means every port, omitted `schemes` means http and https, and `*.example.com` also blocks `example.com` itself. It matches the request's host name; a destination reached by IP literal needs its own rule.",
       "properties": {
         "id": {
           "$ref": "#/definitions/id",

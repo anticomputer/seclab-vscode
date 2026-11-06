@@ -159,6 +159,28 @@ def test_jit_credential_from_host(pod, ctl):
     assert r.code == 200 and r.json()["auth_sha256"] == sha("Bearer " + value)
 
 
+def test_r12_block_during_a_jit_credential_hold_is_never_injected(pod, ctl):
+    """Review 12-1: a destination blocked while its request waits for a just-in-time value
+    gets 403, never the real credential, even if the controller then provides it."""
+    jit = dict(API_CRED, id="jit-r12")
+    s = pod.load({"allow": ALLOW, "credentials": [jit], "prompt": {"timeoutSeconds": 10}})["jit-r12"]
+    value = "seclab-canary-jit-" + secrets.token_hex(16)
+    pod.canaries["jit-r12"] = value
+
+    def block_then_provide(p):
+        ctl.call("policy.update", {"addDeny": [{"id": "blk", "host": "api.example.test"}]})
+        ctl.call("credential.provide", {"id": p["id"], "value": value})
+
+    ctl.handlers["credential.needed"] = block_then_provide
+    mark = ctl.mark()
+    before = len(pod.seen())
+    r = pod.curl("https://api.example.test/echo/repos/o/r", "-H", f"Authorization: Bearer {s}")
+    assert r.code == 403 and "denied by rule blk" in r.body
+    assert len(pod.seen()) == before
+    assert not [e for e in ctl.notes_since(mark, "audit.event") if e["type"] == "credential.injected"]
+    pod.assert_no_canary(r.body)
+
+
 def test_revoked_credential_is_not_injected(pod, ctl):
     s = setup(pod, ctl)["api"]
     pod.load({"allow": ALLOW, "credentials": [API_CRED], "prompt": {"timeoutSeconds": 1}})

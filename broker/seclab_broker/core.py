@@ -30,6 +30,9 @@ from .policy import (LITERAL_PATH_RE, Binding, DenyRule, Inject, Policy, PolicyE
 log = logging.getLogger("seclab.broker")
 
 DECISIONS = ("allow-once", "allow-tab", "deny", "deny-new-destinations")
+# The policy schema's caps on `allow` and `deny` (policy.v1.schema.json maxItems).
+MAX_ALLOW_RULES = 1024
+MAX_DENY_RULES = 1024
 REQUEST_KEYS = ("host", "method", "path", "rawAuthority", "detail", "tools", "queryKeys")
 _USER_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _PASS_RE = re.compile(r"^[A-Za-z0-9_-]{22,128}$")  # >= 128 bits as base64url
@@ -301,7 +304,9 @@ class Broker:
         approval = self.approvals.pop(aid)
         self._approval_by_key.pop(approval.key, None)
         allow = decision in ("allow-once", "allow-tab")
-        if not allow:
+        if not allow and by != "deny-rule":
+            # A user's block isn't a prompt refusal: no cooldown that would outlive an unblock,
+            # and no step toward offering deny-new-destinations (review 12-3/12-4).
             self.session_denials += 1
             self._cooldown[approval.key] = time.time() + self.policy.prompt.deny_cooldown_seconds
         result = Decision(allow, f"{decision}:{by}", once=decision == "allow-once")
@@ -449,6 +454,12 @@ class Broker:
         added_ids = [d.id for d in new_deny]
         if len(set(added_ids)) != len(added_ids) or any(d in deny_ids and d not in remove_deny for d in added_ids):
             raise invalid("duplicate deny rule id")
+        # Stay within the schema caps, so what policy.get returns can always be reloaded
+        # (review 12-6): a controller that persists and replays must never lose its blocks.
+        n_rules = len([r for r in self.policy.rules if r.id not in remove]) + len(new_rules)
+        n_deny = len([d for d in self.policy.deny if d.id not in remove_deny]) + len(new_deny)
+        if n_rules > MAX_ALLOW_RULES or n_deny > MAX_DENY_RULES:
+            raise invalid(f"policy would exceed {MAX_ALLOW_RULES} allow or {MAX_DENY_RULES} deny rules")
         self.policy.rules = [r for r in self.policy.rules if r.id not in remove] + new_rules
         self.policy.deny = [d for d in self.policy.deny if d.id not in remove_deny] + new_deny
         self.revision += 1

@@ -244,7 +244,8 @@
       "tests": [
         "unit:test_deny_rules_are_every_port_and_scheme_and_validated",
         "it:test_deny_rule_beats_allow_baseline_and_bindings",
-        "it:test_adding_a_deny_rule_resolves_pending_prompts"
+        "it:test_adding_a_deny_rule_resolves_pending_prompts",
+        "it:test_r12_block_during_a_jit_credential_hold_is_never_injected"
       ]
     },
     {
