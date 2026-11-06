@@ -20,7 +20,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from seclab_inventory import ai, channels, commands, rpc, tabdata  # noqa: E402
+from seclab_inventory import ai, channels, commands, pushes, rpc, tabdata  # noqa: E402
 from seclab_inventory.render import render_markdown  # noqa: E402
 from seclab_inventory.sources import SourceTree, read_pinned_sha  # noqa: E402
 
@@ -59,6 +59,7 @@ def main(argv=None) -> int:
             "a_mainthread_rpc": rpc.build(tree),
             "b_command_registry": commands.build(tree),
             "c_client_served_channels": channels.build(tree),
+            "c2_server_initiated_pushes": pushes.build(tree),
             "d_tab_supplied_data": tabdata.build(tree, REPO_ROOT),
             "e_trusted_ai_surfaces": ai.build(tree),
         },
@@ -85,6 +86,10 @@ def main(argv=None) -> int:
              sum(len(s["undeclared_methods"]) for s in a["services"])))
     print("  (b) %d commands, %d unresolved id expressions"
           % (b["command_count"], b["unresolved_count"]))
+    c2 = inventory["surfaces"]["c2_server_initiated_pushes"]
+    print("  (c2) %d server-initiated pushes (%d act), %d unresolved channels"
+          % (c2["server_initiated_push_count"], c2["acting_push_count"],
+             c2["unresolved_channel_count"]))
     print("  (c) %d client-served channels, %d server-initiated callbacks"
           % (c["client_served_channel_count"], c["server_initiated_callback_count"]))
     print("  (d) %d tab-data sink classes over %d sites"
