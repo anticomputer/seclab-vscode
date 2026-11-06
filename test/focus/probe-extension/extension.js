@@ -40,6 +40,11 @@ const steps = [
 		await vscode.commands.executeCommand('workbench.action.toggleFullScreen');
 	}],
 	['modal-dialog', async () => { vscode.window.showWarningMessage('seclab focus probe: modal', { modal: true }, 'OK'); }],
+	['devtools', async () => {
+		await vscode.commands.executeCommand('workbench.action.toggleDevTools');
+		await sleep(2000);
+		await vscode.commands.executeCommand('workbench.action.toggleDevTools');
+	}],
 	['new-window', async () => { await vscode.commands.executeCommand('workbench.action.newWindow'); }],
 	['reload-window', async () => { await vscode.commands.executeCommand('workbench.action.reloadWindow'); }],
 	// The extension host's parent is the server: killing it drops the connection, so the window

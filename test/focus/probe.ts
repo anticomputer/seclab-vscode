@@ -86,7 +86,9 @@ if (mode === 'prepare') {
 } else if (mode === 'check') {
 	const m = readManifest(base);
 	const tabId = (m.tabs ?? [])[0];
-	const marks = tabId ? spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId}`, 'cat', path.join(ws, '.seclab-focus', 'marks.log')], { encoding: 'utf8' }).stdout ?? '' : '';
+	const raw = tabId ? spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId}`, 'cat', path.join(ws, '.seclab-focus', 'marks.log')], { encoding: 'utf8' }).stdout ?? '' : '';
+	// Tab-written text: no terminal control sequences reach the operator's terminal (AAA-6).
+	const marks = raw.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, '?');
 	const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';
 	console.log(`marks (in the tab):\n${marks.trim() || '(none)'}\n`);
 	if (steals) {
