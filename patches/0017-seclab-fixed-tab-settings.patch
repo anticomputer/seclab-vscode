@@ -2,11 +2,10 @@ diff --git a/src/vs/workbench/services/configuration/browser/configurationServic
 index 55e2c0ce..3c2c1aab 100644
 --- a/src/vs/workbench/services/configuration/browser/configurationService.ts
 +++ b/src/vs/workbench/services/configuration/browser/configurationService.ts
-@@ -44,6 +44,8 @@ import { IPolicyService, NullPolicyService } from '../../../../platform/policy/c
+@@ -44,6 +44,7 @@ import { IPolicyService, NullPolicyService } from '../../../../platform/policy/c
  import { IUserDataProfile, IUserDataProfilesService } from '../../../../platform/userDataProfile/common/userDataProfile.js';
  import { IJSONEditingService } from '../common/jsonEditing.js';
  import { IBrowserWorkbenchEnvironmentService } from '../../environment/browser/environmentService.js';
-+import { seclabFixedSetting, seclabScrubFixedSettings } from '../common/seclabFixedSettings.js';
 +import { seclabFixedSetting, seclabScrubFixedSettings } from '../common/seclabFixedSettings.js';
  import { workbenchConfigurationNodeBase } from '../../../common/configuration.js';
  import { mainWindow } from '../../../../base/browser/window.js';
