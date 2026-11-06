@@ -83,6 +83,11 @@ try {
 	const env = inTab('printf "%s\\n%s\\n" "$HTTPS_PROXY" "$NODE_EXTRA_CA_CERTS"');
 	const [proxyUrl, caPath] = env.stdout.trim().split('\n');
 	const proxyHost = driver === 'sbx' ? /@(host\.docker\.internal:[0-9]{1,5})$/.exec(proxyUrl ?? '')?.[1] : 'broker:8080';
+	check('the broker runs the checked image, by ID (XX-6)', () => {
+		const want = execFileSync('docker', ['image', 'inspect', '--format', '{{.Id}}', '--', brokerImage], { encoding: 'utf8' }).trim();
+		const got = execFileSync('docker', ['container', 'inspect', '--format', '{{.Image}}|{{.Config.Image}}', '--', `${ctr}-broker`], { encoding: 'utf8' }).trim();
+		assert.equal(got, `${want}|${want}`);
+	});
 	check('tab environment points at its broker, with the broker CA', () => {
 		assert.match(proxyUrl, driver === 'sbx' ? /^http:\/\/seclab:[A-Za-z0-9_-]{32}@host\.docker\.internal:[1-9][0-9]{0,4}$/ : /^http:\/\/seclab:[A-Za-z0-9_-]{32}@broker:8080$/);
 		assert.equal(caPath, '/run/seclab-broker/ca.pem');

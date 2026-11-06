@@ -1,7 +1,7 @@
 // The broker image's identity (review XX-6). broker/build.sh stamps provenance labels on the
 // image and prints its ID. tabd resolves the configured reference to that content-addressed ID
-// once, checks the labels, and creates every broker by ID, so a later retag of the name changes
-// nothing. Labels are self-asserted: they tell a build.sh build of a compatible broker apart
+// at every tab start, checks the labels, and creates the broker by ID, so a retag between check
+// and use changes nothing. Labels are self-asserted: they tell a build.sh build of a compatible broker apart
 // from anything else (a stale or unlabelled build, another tool's image), not an attacker with
 // docker access, who already controls the VM.
 
@@ -57,15 +57,15 @@ export function brokerImageProblems(id: string, labels: Record<string, string> |
 }
 
 /**
- * Resolves and checks the configured broker image once; the result is cached on success and
- * re-checked after a failure (an image built later is picked up without restarting tabd).
+ * Resolves and checks the configured broker image. Resolved at every tab start, not cached:
+ * a rebuilt broker reaches new tabs without restarting tabd, and a pruned old ID can't strand
+ * it (ZZ-10). Creating by the returned ID leaves no window for a retag to swap the image.
  */
 export class BrokerImagePin {
 	private readonly runner: Runner;
 	private readonly docker: string;
 	private readonly ref: string;
 	private readonly allowDirty: boolean;
-	private pending: Promise<BrokerImage> | undefined;
 
 	constructor(runner: Runner, docker: string, ref: string, opts: { allowDirty?: boolean } = {}) {
 		this.runner = runner;
@@ -75,11 +75,7 @@ export class BrokerImagePin {
 	}
 
 	get(): Promise<BrokerImage> {
-		this.pending ??= this.resolve().catch((e: Error) => {
-			this.pending = undefined;
-			throw e;
-		});
-		return this.pending;
+		return this.resolve();
 	}
 
 	private async resolve(): Promise<BrokerImage> {

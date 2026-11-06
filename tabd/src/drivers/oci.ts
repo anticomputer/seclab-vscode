@@ -6,7 +6,7 @@ import * as fs from 'node:fs';
 import type { Runner } from '../run.ts';
 import { assertImageRef, SANDBOX_NAME_RE, CONNECTION_TOKEN_RE } from '../validate.ts';
 import type { BrokerImagePin } from '../broker-image.ts';
-import { BROKER_DIR, brokerInstallInput, dropBrokerFromOtherImage, INSTALL_BROKER, pinnedBrokerImage } from './broker-install.ts';
+import { BROKER_DIR, brokerImageProblem, brokerInstallInput, dropBrokerFromOtherImage, INSTALL_BROKER, pinnedBrokerImage, resolveImageId } from './broker-install.ts';
 import { DriverError, type BrokerHooks, type BrokerSetup, type Driver, type DriverInfo, type FenceReport, type SensorHooks, type TabRuntimeSpec } from './types.ts';
 
 const REH_START = '/opt/seclab/bin/seclab-reh-start';
@@ -85,6 +85,12 @@ export class OciDriver implements Driver {
 		return r.code === 0;
 	}
 
+	private async labelled(kind: 'container' | 'network', name: string, tabId: string): Promise<boolean> {
+		const format = kind === 'container' ? '{{index .Config.Labels "seclab.tab"}}' : '{{index .Labels "seclab.tab"}}';
+		const r = await this.runner.run(this.docker, [kind, 'inspect', '--format', format, '--', name], { timeoutMs: 15_000 });
+		return r.code === 0 && r.stdout.trim() === tabId;
+	}
+
 	async ensureRunning(spec: TabRuntimeSpec, connectionToken: string, sensor?: SensorHooks, broker?: BrokerHooks): Promise<void> {
 		if (!CONNECTION_TOKEN_RE.test(connectionToken)) {
 			throw new DriverError(-32602, 'invalid connection token');
@@ -106,7 +112,7 @@ export class OciDriver implements Driver {
 			if (!await this.exists('network', n.egress)) {
 				await this.must(['network', 'create', '-o', 'com.docker.network.bridge.enable_icc=false', '--label', label, '--', n.egress], 'egress network create');
 			}
-			await dropBrokerFromOtherImage(this.runner, this.docker, n.broker, image!.id);
+			await dropBrokerFromOtherImage(this.runner, this.docker, n.broker, spec.tabId, image!.id);
 			if (!await this.exists('container', n.broker)) {
 				await this.must(['create', '--pull', 'never', '--name', n.broker, '--label', label, '--network', n.egress,
 					'--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '256', '--memory', '512m',
@@ -115,10 +121,23 @@ export class OciDriver implements Driver {
 				await this.must(['network', 'connect', '--alias', 'broker', '--', n.net, n.broker], 'broker network connect');
 			}
 			await this.must(['start', '--', n.broker], 'broker start');
-		} else if (!await this.exists('container', n.broker)) {
-			await this.must(['run', '-d', '--pull', 'never', '--name', n.broker, '--label', label, '--network', n.net,
-				'--network-alias', 'broker', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-				'--read-only', '--pids-limit', '64', '--memory', '256m', '--', assertImageRef(this.opts.brokerImage)], 'broker run');
+			const bad = await brokerImageProblem(this.runner, this.docker, n.broker, spec.tabId, image!.id);
+			if (bad) {
+				throw new DriverError(-32011, bad);
+			}
+		} else {
+			// `--broker none`: the placeholder, by ID. A real broker left from an earlier
+			// `required` run is replaced, and its egress network removed (ZZ-9).
+			const placeholder = await resolveImageId(this.runner, this.docker, assertImageRef(this.opts.brokerImage));
+			await dropBrokerFromOtherImage(this.runner, this.docker, n.broker, spec.tabId, placeholder);
+			if (await this.labelled('network', n.egress, spec.tabId)) {
+				await this.must(['network', 'rm', '--', n.egress], 'egress network remove');
+			}
+			if (!await this.exists('container', n.broker)) {
+				await this.must(['run', '-d', '--pull', 'never', '--name', n.broker, '--label', label, '--network', n.net,
+					'--network-alias', 'broker', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+					'--read-only', '--pids-limit', '64', '--memory', '256m', '--', placeholder], 'broker run');
+			}
 		}
 		if (!await this.exists('container', n.ws)) {
 			const t = spec.template.spec;
@@ -240,6 +259,19 @@ export class OciDriver implements Driver {
 				problems.push(`workspace user is ${user}`);
 			}
 		}
+		// The running broker is the checked image (ZZ-7): an adopted tab, or one started by an
+		// earlier tabd, is quarantined if its broker isn't.
+		if (spec.template.spec.broker === 'required') {
+			try {
+				const image = await pinnedBrokerImage(this.opts.brokerPin);
+				const bad = await brokerImageProblem(this.runner, this.docker, n.broker, spec.tabId, image.id);
+				if (bad) {
+					problems.push(bad);
+				}
+			} catch (e) {
+				problems.push((e as Error).message);
+			}
+		}
 		return { ok: problems.length === 0, problems, checkedAt };
 	}
 
@@ -268,7 +300,7 @@ export class OciDriver implements Driver {
 
 	async remove(spec: TabRuntimeSpec): Promise<void> {
 		const n = this.names(spec);
-		await this.runner.run(this.docker, ['rm', '-f', '--', n.ws, n.broker], { timeoutMs: 60_000 });
+		await this.runner.run(this.docker, ['rm', '-f', '-v', '--', n.ws, n.broker], { timeoutMs: 60_000 });
 		await this.runner.run(this.docker, ['network', 'rm', '--', n.net], { timeoutMs: 30_000 });
 		if (await this.exists('network', n.egress)) {
 			await this.runner.run(this.docker, ['network', 'rm', '--', n.egress], { timeoutMs: 30_000 });
