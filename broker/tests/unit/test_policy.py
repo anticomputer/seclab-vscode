@@ -314,14 +314,17 @@ def test_r8_redirect_follow_data_and_target_checks():
     from seclab_broker.core import Broker
     from seclab_broker.engine_mitmproxy import SeclabAddon
     from seclab_broker.policy import _check_backstop_file, providers, redirect_follow
-    ok = "vsblobprodcus123.blob.core.windows.net"
+    ok = "aaavsblobprodcus101.blob.core.windows.net"
     H = "https:" + "//"  # built, so the fixture lint reads these as data, not as live URLs
     rf = providers()["azure-devops"].redirects
-    assert rf.statuses == {302, 303, 307} and rf.matches_host(ok)
-    for bad in ("vsblobprodcus.blob.core.windows.net", "vsblobprodcus12345.blob.core.windows.net",
-                "xvsblobprodcus1.blob.core.windows.net", "vsblobprodcusa1.blob.core.windows.net",
-                "vsblobprodcus1.blob.core.windows.net.example.test", "attacker.blob.core.windows.net",
-                "vsblobprodcus1xblobxcorexwindowsxnet"):
+    assert rf.statuses == {302, 303, 307}
+    for good in (ok, "bbbvsblobprodcus102.blob.core.windows.net", "cccvsblobprodcus103.blob.core.windows.net"):
+        assert rf.matches_host(good), good  # measured through a real tab
+    for bad in ("vsblobprodcus101.blob.core.windows.net", "aaavsblobprodcus.blob.core.windows.net",
+                "aaavsblobprodcus12345.blob.core.windows.net", "xaaavsblobprodcus1.blob.core.windows.net",
+                "aa-vsblobprodcus1x.blob.core.windows.net", "aaavsblobprodcusa1.blob.core.windows.net",
+                "aaavsblobprodcus1.blob.core.windows.net.example.test", "attacker.blob.core.windows.net",
+                "aaavsblobprodcus1xblobxcorexwindowsxnet"):
         assert not rf.matches_host(bad), bad
     feed = RequestView("https", "pkgs.dev.azure.com", 443, "GET", "/example-org/x", "")
     other = RequestView("https", "api.example.test", 443, "GET", "/x", "")
@@ -374,7 +377,7 @@ def test_r15_follow_refused_for_a_dropped_credential_or_a_credential_in_location
     from mitmproxy.test import tflow
     from seclab_broker.core import Broker
     from seclab_broker.engine_mitmproxy import SeclabAddon
-    ok = "vsblobprodcus123.blob.core.windows.net"
+    ok = "aaavsblobprodcus101.blob.core.windows.net"
     H = "https:" + "//"
     secret = "seclab-test-canary-" + "R" * 24 + "-value"
     b = Broker()

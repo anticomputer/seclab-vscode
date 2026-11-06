@@ -9,8 +9,8 @@
   "pathPrefixes": [""],
   "redirects": {
     "statuses": [302, 303, 307],
-    "hosts": ["^vsblobprodcus[0-9]{1,4}\\.blob\\.core\\.windows\\.net$"],
-    "reason": "Package downloads from a CFS feed answer 303 with a read-only, ~1 hour SAS URL on a vsblobprodcus<NNN> Azure Storage account (measured 2026-11-06 through a real tab, EDR 20261106-cfs-feeds-tabd). The broker follows it itself so the tab never needs, or gets, any reach to Azure Storage, where anyone can create an account: the target comes from the credentialed feed response, never from the tab."
+    "hosts": ["^[a-z0-9]{3}vsblobprodcus[0-9]{1,4}\\.blob\\.core\\.windows\\.net$"],
+    "reason": "Package downloads from a CFS feed answer 303 with a read-only, ~1 hour SAS URL on an Azure Storage account named <3 alphanumerics>vsblobprodcus<digits>, for example aaavsblobprodcus101, bbbvsblobprodcus102 and cccvsblobprodcus103 (measured 2026-11-06 through a real tab, EDR 20261106-cfs-feeds-tabd). The broker follows it itself so the tab never needs, or gets, any reach to Azure Storage, where anyone can create an account: the target comes from the credentialed feed response, never from the tab."
   },
   "deny": [
     { "methods": ["*"], "path": "**/_apis", "reason": "Azure DevOps REST API, at any depth (organisation, project or team scope, or none on organisation-in-hostname and service hosts): PAT lifecycle, token sessions, identities https://learn.microsoft.com/en-us/rest/api/azure/devops/tokens/pats" },
