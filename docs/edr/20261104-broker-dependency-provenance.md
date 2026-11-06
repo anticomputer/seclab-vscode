@@ -254,6 +254,19 @@ local image it runs.
     - email-validator imports it only for deliverability checks, which
       pydantic's `EmailStr` doesn't enable;
     - DNS answers are wire format, and the advisory is about parsing text.
+  - **The harness's `docker` CLI image** moved from `docker:29-cli` (Docker
+    29.9.3, built 2026-11-03) to `docker:29.9.2-cli@sha256:5e6baf67…`
+    (2026-10-22). This follows the shared 7-day pin-age rule; image pulls
+    don't go through CFS.
+    - 29.9.2 lacks the 29.9.3 security fixes
+      ([release notes](https://github.com/moby/moby/releases/tag/docker-v29.9.3)).
+    - The CLI-side fixes are CPU exhaustion on crafted RSA keys
+      (GHSA-mgcc-cww5-fp2q) and a panic on crafted zstd data
+      (GHSA-fpmh-frq8-7rj8); the rest are engine, Swarm and BuildKit fixes.
+    - It's accepted until 29.9.3 is 7 days old (about 2026-11-10). The
+      harness is a test-only image that copies just the CLI binary and drives
+      the local daemon over its socket, so no crafted keys or zstd data reach
+      it.
 - **Source.** The design is based on the Fork-build session's CFS local-build
   recipe and `gh cfs generate docker-helper` (gh-cfs v0.3.1).
 
