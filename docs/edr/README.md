@@ -96,4 +96,5 @@ Same rules as ADRs:
 | 2026-11-06 | [Egress prompts through the Tab Manager (plan increment B3)](20261106-egress-prompts.md) | accepted |
 | 2026-11-06 | [Exact request lineage on OCI via the broker's client port](20261106-exact-lineage-client-port.md) | accepted |
 | 2026-11-06 | [The 7-day rule: no pin newer than CFS's hold](20261106-pin-age-cooldown.md) | accepted |
+| 2026-11-06 | [RPC core increment: state, and what runs next](20261106-rpc-core-handoff.md) | accepted |
 <!-- index:end -->
