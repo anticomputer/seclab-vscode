@@ -48,10 +48,12 @@ REDACTED_MARK = "[seclab-redacted:"
 CREDENTIAL_KEY = re.compile(r"token|secret|passw|credential|api[_-]?key|private[_-]?key|session|cookie|bearer|jwt",
                             re.I)
 # A URL carrying a credential in its userinfo (`scheme://user:secret@host`, an encoded colon,
-# a token as the user as in `https://<token>@host`, or the scheme-relative `//user:pw@host`);
-# a plain short user such as `ssh://git@host` is not one.
-URL_USERINFO = re.compile(r"(?:[A-Za-z][A-Za-z0-9+.-]*:)?//(?:(?:[^/?#\s@:%]|%(?![3][aA])[0-9A-Fa-f]{2})*"
-                          r"(?::|%3[aA])[^/?#\s@]*|[^/?#\s@:]{16,})@")
+# a token as the user as in `https://<token>@host`, or the scheme-relative `//user:pw@host`
+# at a word boundary); a plain short user such as `ssh://git@host` is not one, and the
+# authority after `@` must look like a host (review 11c-3).
+URL_USERINFO = re.compile(r"(?:[A-Za-z][A-Za-z0-9+.-]*:|(?<![^\s\"'<(,=]))//"
+                          r"(?:(?:[^/?#\s@:%]|%(?![3][aA])[0-9A-Fa-f]{2})*(?::|%3[aA])[^/?#\s@]*|[^/?#\s@:]{16,})"
+                          r"@(?=[A-Za-z0-9\[])")
 
 
 def fail_closed(fn):
@@ -678,6 +680,11 @@ class SeclabAddon:
             return "response is not strict JSON", None, None
         if not isinstance(doc, dict):
             return "response is not a JSON object", None, None
+        # Fields that are always dropped never reach the tab, so they are removed before the
+        # scan: a credential inside them (an OTLP header) must not block the rest (review 11c-1).
+        drop = exc.drop_fields if exc is not None else frozenset()
+        dropped = sorted(k for k in doc if k in drop)
+        doc = {k: v for k, v in doc.items() if k not in drop}
         stack: list = [("$", doc)]
         while stack:
             path, node = stack.pop()
@@ -693,12 +700,10 @@ class SeclabAddon:
                 stack += [(f"{path}[{i}]", v) for i, v in enumerate(node)]
             elif isinstance(node, str) and (find_minted(node) or URL_USERINFO.search(node)):
                 return "token-shaped value", path, None
-        if exc is None or (exc.response_fields is None and not exc.drop_fields):
+        if exc is None or (exc.response_fields is None and not dropped):
             return None, None, None
         # Every status (review 11b-1): the upstream chooses the status, so an error body is
         # held to the same allowlist; error shapes that should pass are listed in it.
-        dropped = sorted(k for k in doc if k in exc.drop_fields)
-        doc = {k: v for k, v in doc.items() if k not in exc.drop_fields}
         if exc.response_fields is not None:
             unlisted = sorted(k for k in doc if k not in exc.response_fields)
             if unlisted and exc.strict_fields:

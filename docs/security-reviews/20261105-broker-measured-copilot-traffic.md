@@ -12,7 +12,7 @@
     - `/mcp/readonly` behind a per-tab grant (coordinator decision).
     - The measured, per-endpoint `copilot` provider.
   - The round 10c fixes (re-checked).
-  - Fixes: the round 11 commit and the round 11b commit. The round 11 commit
+  - Fixes: the round 11, 11b and 11c commits. The round 11 commit
     also adopts the secure-agentic review's two asks:
     - strict allowlists for the org-policy responses;
     - a server-side justification for each body-policy widening.
@@ -45,13 +45,18 @@
 | 11b-5 | Low | Shipped data | Backstop files were checked at first request, not at load. | fixed (round 11b commit) | `Policy.from_json` loads them first, so malformed data rejects every policy. | `test_r11b_backstop_data_is_checked_when_a_policy_loads` |
 | 11b-6 | Low | Approvals | `request.queryKeys` reached approval prompts without being listed in `untrusted`. | fixed (round 11b commit) | Listed whenever present. | Code review; the protocol's `requestSummary` marks it tab-controlled |
 | 11b-7 | Info | Request summary | Query key truncation could split a `%XX` escape, and a sealed agent-host token in a key name was exported verbatim. | fixed (round 11b commit) | Truncation never splits an escape; a key containing `copilot-sealed.v1.` becomes `[sealed]`. The prefix now has one definition, in `policy.py`. | `test_r11_request_summary_carries_query_key_names_only` |
+| 11c-1 | Low | Exception responses | A `dropFields` field was scanned before it was dropped. A realistic OTLP header (a token-shaped bearer) in `telemetry` blocked the whole `managed_settings` response, so the org lost its restrictions, and raised a false finding. | fixed (round 11c commit) | `dropFields` are removed before the whole-document scan: they never reach the tab, so their contents can't block the rest. | `test_org_policy_gets_are_narrow_and_their_responses_checked` (`telemetry-token`) |
+| 11c-2 | Low | Exception responses | With the allowlist on every status, a routine GitHub 403, 404 or 429 on an org route became a 502 plus a security finding. | fixed (round 11c commit) | All three org lists include GitHub's REST error envelope (`message`, `documentation_url`, `status`). Its values get every other check. | `test_org_policy_backstop_exceptions_are_exact` |
+| 11c-3 | Low | Exception responses | With the scheme optional, any text containing `//`, `:` and `@` matched as URL userinfo (`a//b:c@d`). | fixed (round 11c commit) | The scheme-less form must start at a boundary (start, whitespace, quote, `(`, `,`, `=`), and a host-like character must follow the `@`. | `test_r11_url_userinfo_pattern` |
+| 11c-4 | Info | Request summary | Query keys kept raw `[` and `]`, so a tab could forge the `[sealed]` marker. | fixed (round 11c commit) | Keys are fully percent-encoded; the marker is inserted after encoding. | `test_r11_request_summary_carries_query_key_names_only` |
+| 11c-5 | Info | Request summary | A sealed token in the path was exported verbatim, despite the docstring. | fixed (round 11c commit) | The summary's path replaces it with `[sealed]`, after encoding. | Same test |
 
 **Adopted from the secure-agentic review** (same commit):
 - **Strict org-policy allowlists.**
   - `managed_settings` follows the public `IManagedSettingsResponse`; its
     whole `telemetry` field (OTLP credentials) is always dropped (since 11b).
-  - `team_customizations` and `content_exclusion` pass only `{}` until their
-    shapes are known.
+  - `team_customizations` and `content_exclusion` pass only `{}` (or GitHub's
+    error envelope, since 11c) until their shapes are known.
   - Any unlisted top-level key blocks the response as a finding.
 - **`queryKeys` in request summaries** (names only), so the next spike run
   measures the query names the runtime sends to `managed_settings?` and
