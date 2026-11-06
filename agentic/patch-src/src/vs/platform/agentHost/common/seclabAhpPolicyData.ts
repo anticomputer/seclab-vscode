@@ -229,7 +229,10 @@ const serverActions = {
 	'chat/toolCallComplete': 'allow',
 	'chat/toolCallResultConfirmed': 'allow',
 	'chat/toolCallContentChanged': 'allow',
-	'chat/toolCallAuthRequired': 'allow',
+	// The agent host does not get to ask the trusted window for MCP authorization: its
+	// `auth.resource` reaches `_autoAuthenticateMcpServer` with no user interaction, which
+	// fetches an agent-host-chosen URL on the host network (review round 1, HIGH).
+	'chat/toolCallAuthRequired': 'deny',
 	'chat/toolCallAuthResolved': 'allow',
 	'chat/turnComplete': 'allow',
 	'chat/turnCancelled': 'allow',
