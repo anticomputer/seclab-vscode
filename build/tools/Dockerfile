@@ -24,7 +24,7 @@ RUN echo "$SHA256  /tmp/actionlint.tar.gz" | sha256sum -c - && tar -xzf /tmp/act
 ENTRYPOINT ["actionlint"]
 
 # ---- gitleaks (built from source; reproducible, binary sha256 pinned and attested in CI) -----------
-FROM golang:1.27.3-trixie@sha256:2336eda24930976591abea806d9b7d99eeae38238f19755c5deec02facdc1594 AS gitleaks-build
+FROM golang:1.27.2-trixie@sha256:47667934874913a449b96faa7ef4777fa285d9ec29126ee80ed61c45b7cccf0e AS gitleaks-build
 ARG GIT
 ARG TAG
 ARG COMMIT
@@ -50,7 +50,7 @@ RUN echo "$BIN_SHA256  /usr/bin/gitleaks" | sha256sum -c -
 ENTRYPOINT ["gitleaks"]
 
 # ---- lychee (built from source; Cargo.lock --locked, crates checksum-verified) ---------------------
-FROM rust:1.99.1-slim-trixie@sha256:7eab7ce19273ce785e0ca7578bdf7bc1fcbae621775a8197379a04c9f6e03cd5 AS lychee-build
+FROM rust:1.99.0-slim-trixie@sha256:2752b332db73fdbb7dc576f06c82ed1f312005784ef913d7e04a28f5f55dc581 AS lychee-build
 ARG GIT
 ARG TAG
 ARG COMMIT

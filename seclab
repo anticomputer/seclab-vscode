@@ -28,6 +28,8 @@ usage: ./seclab <command>
   lint fixtures [PATH...]       Fixture-safety lint (no real secrets/hosts/persistence in test payloads)
   lint source                   Shipped sources: no unreviewed env/spawn sites, no dynamic loading, no test markers
   lint deps [--self-test]       Dependency register: every pin in deps/registry.json, entries complete (ADR)
+  lint pin-age [--days N] [--verbose]
+                                No register pin younger than 7 days (the feed's hold; EDR pin-age-cooldown). Network
   lint secrets [BASE]           gitleaks (built from pinned source) over git diff BASE..HEAD (default: merge base
                                 with origin/main); also run by CI (lint) and the pre-push hook
   hooks install                 Use the repo's git hooks (build/hooks: pre-push runs lint secrets) in this clone
@@ -54,7 +56,7 @@ usage: ./seclab <command>
 EOF
 }
 
-ZIZMOR_IMAGE="ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d"
+ZIZMOR_IMAGE="ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9"
 # Tools pinned in build/tools/tools.json, verified and built locally (EDR 20261105-pinned-tools):
 # cosign and actionlint are publisher-signed release artifacts, gitleaks and lychee are built
 # from pinned source. Prints the local image tag; fails closed.
@@ -68,7 +70,7 @@ lint_workflows() {
 	local actionlint
 	actionlint="$(tool_image actionlint)"
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$actionlint" -no-color
-	verify_signed_image "$ZIZMOR_IMAGE" '^https://github\.com/docker/github-builder/\.github/workflows/build\.yml@' zizmorcore/zizmor refs/tags/v1.32.0
+	verify_signed_image "$ZIZMOR_IMAGE" '^https://github\.com/docker/github-builder/\.github/workflows/build\.yml@' zizmorcore/zizmor refs/tags/v1.31.1
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ZIZMOR_IMAGE" --offline --no-progress --persona=regular .github/workflows
 }
 
@@ -439,6 +441,10 @@ case "${1:-help}" in
 					git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/deps.ts check -
 				fi ;;
 			source) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-source.ts ;;
+			# The 7-day rule (EDR pin-age-cooldown): no register pin younger than the feed's hold. Network;
+			# GITHUB_TOKEN (CI) only raises the GitHub API rate limit.
+			pin-age) shift
+				git -C "$ROOT" ls-files -z | docker run -i --rm -e GITHUB_TOKEN -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/pin-age.ts "$@" - ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	docs)
