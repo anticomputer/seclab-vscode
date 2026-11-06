@@ -934,6 +934,90 @@
         "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/debugService.ts#L155"
       ]
     },
+    "push:extensions:onDidInstallExtensions": {
+      "verdict": "deny",
+      "capability": "the server announces extension installs, uninstalls and metadata changes to the trusted side",
+      "impact": [
+        "code-execution",
+        "host-fs-write"
+      ],
+      "rationale": "Consumed by abstractExtensionService's delta handling, which calls toExtensionDescription on REH-supplied data and then _doHandleExtensionPoints, registering contributes.menus, keybindings and commands from an attacker-chosen manifest into trusted-side registries -- with no user install action anywhere. A tab's extensions belong to the tab.",
+      "evidence": [
+        "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/extensionManagement/common/extensionManagementIpc.ts#L216"
+      ]
+    },
+    "push:extensions:onDidUninstallExtension": {
+      "verdict": "deny",
+      "capability": "the server announces extension installs, uninstalls and metadata changes to the trusted side",
+      "impact": [
+        "code-execution",
+        "host-fs-write"
+      ],
+      "rationale": "Consumed by abstractExtensionService's delta handling, which calls toExtensionDescription on REH-supplied data and then _doHandleExtensionPoints, registering contributes.menus, keybindings and commands from an attacker-chosen manifest into trusted-side registries -- with no user install action anywhere. A tab's extensions belong to the tab.",
+      "evidence": [
+        "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/extensionManagement/common/extensionManagementIpc.ts#L218"
+      ]
+    },
+    "push:extensions:onDidUpdateExtensionMetadata": {
+      "verdict": "deny",
+      "capability": "the server announces extension installs, uninstalls and metadata changes to the trusted side",
+      "impact": [
+        "code-execution",
+        "host-fs-write"
+      ],
+      "rationale": "Consumed by abstractExtensionService's delta handling, which calls toExtensionDescription on REH-supplied data and then _doHandleExtensionPoints, registering contributes.menus, keybindings and commands from an attacker-chosen manifest into trusted-side registries -- with no user install action anywhere. A tab's extensions belong to the tab.",
+      "evidence": [
+        "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/extensionManagement/common/extensionManagementIpc.ts#L219"
+      ]
+    },
+    "push:extensions:onInstallExtension": {
+      "verdict": "deny",
+      "capability": "the server announces extension installs, uninstalls and metadata changes to the trusted side",
+      "impact": [
+        "code-execution",
+        "host-fs-write"
+      ],
+      "rationale": "Consumed by abstractExtensionService's delta handling, which calls toExtensionDescription on REH-supplied data and then _doHandleExtensionPoints, registering contributes.menus, keybindings and commands from an attacker-chosen manifest into trusted-side registries -- with no user install action anywhere. A tab's extensions belong to the tab.",
+      "evidence": [
+        "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/extensionManagement/common/extensionManagementIpc.ts#L215"
+      ]
+    },
+    "push:extensions:onUninstallExtension": {
+      "verdict": "deny",
+      "capability": "the server announces extension installs, uninstalls and metadata changes to the trusted side",
+      "impact": [
+        "code-execution",
+        "host-fs-write"
+      ],
+      "rationale": "Consumed by abstractExtensionService's delta handling, which calls toExtensionDescription on REH-supplied data and then _doHandleExtensionPoints, registering contributes.menus, keybindings and commands from an attacker-chosen manifest into trusted-side registries -- with no user install action anywhere. A tab's extensions belong to the tab.",
+      "evidence": [
+        "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/extensionManagement/common/extensionManagementIpc.ts#L217"
+      ]
+    },
+    "push:logger:onDidChangeLoggers": {
+      "verdict": "deny",
+      "capability": "the server changes trusted-side logger registration and visibility",
+      "impact": [
+        "ui-spoofing",
+        "exfiltration"
+      ],
+      "rationale": "RemoteLoggerChannelClient feeds server-chosen ILoggerResource.resource URIs into loggerService.registerLogger, so the server names host paths the trusted side then opens and surfaces. A tab has no need to alter the host's logging configuration.",
+      "evidence": [
+        "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/log/common/logIpc.ts#L166"
+      ]
+    },
+    "push:logger:onDidChangeVisibility": {
+      "verdict": "deny",
+      "capability": "the server changes trusted-side logger registration and visibility",
+      "impact": [
+        "ui-spoofing",
+        "exfiltration"
+      ],
+      "rationale": "RemoteLoggerChannelClient feeds server-chosen ILoggerResource.resource URIs into loggerService.registerLogger, so the server names host paths the trusted side then opens and surfaces. A tab has no need to alter the host's logging configuration.",
+      "evidence": [
+        "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/log/common/logIpc.ts#L164"
+      ]
+    },
     "push:mcpGateway:onDidChangeGatewayServers": {
       "verdict": "deny",
       "capability": "the server changes the set of MCP gateway servers the trusted side believes in",
@@ -1334,6 +1418,34 @@
     },
     "push:userDataProfiles:onDidResetWorkspaces": {
       "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",
+      "unenforced_accepted": true
+    },
+    "push:extensions:onDidInstallExtensions": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with nothing refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. Found only after the sweep's extends/alias and lookbehind defects were fixed, which is why it is open work rather than a regression.",
+      "unenforced_accepted": true
+    },
+    "push:extensions:onDidUninstallExtension": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with nothing refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. Found only after the sweep's extends/alias and lookbehind defects were fixed, which is why it is open work rather than a regression.",
+      "unenforced_accepted": true
+    },
+    "push:extensions:onDidUpdateExtensionMetadata": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with nothing refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. Found only after the sweep's extends/alias and lookbehind defects were fixed, which is why it is open work rather than a regression.",
+      "unenforced_accepted": true
+    },
+    "push:extensions:onInstallExtension": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with nothing refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. Found only after the sweep's extends/alias and lookbehind defects were fixed, which is why it is open work rather than a regression.",
+      "unenforced_accepted": true
+    },
+    "push:extensions:onUninstallExtension": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with nothing refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. Found only after the sweep's extends/alias and lookbehind defects were fixed, which is why it is open work rather than a regression.",
+      "unenforced_accepted": true
+    },
+    "push:logger:onDidChangeLoggers": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with nothing refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. Found only after the sweep's extends/alias and lookbehind defects were fixed, which is why it is open work rather than a regression.",
+      "unenforced_accepted": true
+    },
+    "push:logger:onDidChangeVisibility": {
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with nothing refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. Found only after the sweep's extends/alias and lookbehind defects were fixed, which is why it is open work rather than a regression.",
       "unenforced_accepted": true
     }
   }

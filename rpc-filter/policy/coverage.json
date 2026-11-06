@@ -1,5 +1,5 @@
 {
-  "digest": "c6ff27db9fa77720f7ebc0f4ff9bb9a5330394740cbc4c3ab39a739823d5d161",
+  "digest": "b898e46a95a23bcae9565eea762e0db2e50eaaba3b71077e0596866fbeacc311",
   "mapping": {
     "ai-setting:allowManagedHooksOnly|scope=WINDOW|unreg=False|tab_writable=True": "deny",
     "ai-setting:allowManagedMcpServersOnly|scope=WINDOW|unreg=False|tab_writable=True": "deny",
@@ -3637,6 +3637,13 @@
     "push:extensionhostdebugservice:close": "deny",
     "push:extensionhostdebugservice:reload": "deny",
     "push:extensionhostdebugservice:terminate": "deny",
+    "push:extensions:onDidInstallExtensions": "deny",
+    "push:extensions:onDidUninstallExtension": "deny",
+    "push:extensions:onDidUpdateExtensionMetadata": "deny",
+    "push:extensions:onInstallExtension": "deny",
+    "push:extensions:onUninstallExtension": "deny",
+    "push:logger:onDidChangeLoggers": "deny",
+    "push:logger:onDidChangeVisibility": "deny",
     "push:mcpGateway:onDidChangeGatewayServers": "deny",
     "push:mcpManagement:onDidInstallMcpServers": "deny",
     "push:mcpManagement:onDidUninstallMcpServer": "deny",
@@ -4207,6 +4214,6 @@
     "rpc:MainThreadWorkspace.$updateWorkspaceFolders": "deny",
     "rpc:MainThreadWorkspace.$validateDetectedEncoding": "deny"
   },
-  "surface_count": 4205,
+  "surface_count": 4212,
   "upstream_sha": "a717861c07586a53d83b80d742cd3f59b20a6273"
 }

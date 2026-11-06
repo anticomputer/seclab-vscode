@@ -328,6 +328,81 @@ export class XBackend {
         self.assertFalse(any(h in source for h in hints),
                          "the hint list finds nothing here, which is the point")
 
+    def test_extends_resolves_through_an_import_alias(self):
+        # Upstream's real shape: the base is imported under another name, so
+        # `extends` names a local binding and not the class. Searching the tree
+        # for the binding finds nothing, which silently lost the five
+        # `extensions` pushes including onDidInstallExtensions.
+        _write(self.root, "src/vs/platform/e/base.ts", """
+export class RealBaseClient {
+	constructor(private readonly _channel: IChannel) { }
+	get onDidInstall(): Event<void> {
+		return this._channel.listen<void>('onDidInstall');
+	}
+}
+""")
+        _write(self.root, "src/vs/workbench/contrib/e/derived.ts", """
+import { RealBaseClient as AliasedBase } from '../../../platform/e/base.ts';
+
+export class DerivedClient extends AliasedBase { }
+""")
+        _write(self.root, "src/vs/workbench/contrib/e/use.ts", """
+export class User {
+	constructor(connection: IRemoteAgentConnection) {
+		instantiationService.createInstance(DerivedClient,
+			connection.getChannel('echannel'));
+	}
+}
+""")
+        built = self.build()
+        self.assertIn("push:echannel:onDidInstall", self.keys(built))
+        self.assertEqual(built["unresolved_channel_count"], 0)
+
+    def test_an_unresolvable_base_is_reported_not_called_silent(self):
+        # The base is named but does not exist. Reporting "this channel pushes
+        # nothing" on the strength of a failed lookup is the confidently wrong
+        # answer the module exists to avoid.
+        _write(self.root, "src/vs/workbench/contrib/f/derived.ts", """
+export class FClient extends SomeBaseThatIsNotInTheTree { }
+""")
+        _write(self.root, "src/vs/workbench/contrib/f/use.ts", """
+export class FUser {
+	constructor(connection: IRemoteAgentConnection) {
+		instantiationService.createInstance(FClient,
+			connection.getChannel('fchannel'));
+		other.listen('keep-the-module-listening');
+	}
+}
+""")
+        built = self.build()
+        self.assertEqual(built["unresolved_channel_count"], 1)
+        self.assertIn("could not be resolved",
+                      built["unresolved_channels"][0]["problem"])
+
+    def test_a_new_on_the_previous_statement_is_not_the_sink(self):
+        # The 300-char lookbehind used to take the last `new X(` it saw, which
+        # was the *preceding* statement. That is how the logger channel
+        # resolved to DownloadServiceChannel and reported no pushes.
+        _write(self.root, "src/vs/platform/g/client.ts", """
+export class GLoggerClient {
+	constructor(private readonly _channel: IChannel) { }
+	get onDidChangeLoggers(): Event<void> {
+		return this._channel.listen<void>('onDidChangeLoggers');
+	}
+}
+""")
+        _write(self.root, "src/vs/workbench/contrib/g/use.ts", """
+export class GUser {
+	constructor(connection: IRemoteAgentConnection) {
+		connection.registerChannel('download', new UnrelatedChannel(service));
+		connection.withChannel('glogger', async channel =>
+			this._register(new GLoggerClient(channel)));
+	}
+}
+""")
+        built = self.build()
+        self.assertIn("push:glogger:onDidChangeLoggers", self.keys(built))
+
     def test_an_acting_subscription_is_flagged(self):
         self._client()
         self._backend(handler="this._commandService.executeCommand(e.commandId);")
