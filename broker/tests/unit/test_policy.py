@@ -313,8 +313,16 @@ def test_deny_rules_are_every_port_and_scheme_and_validated():
     for r in (req(host="evil.example.test"), req(host="a.evil.example.test", port=8443),
               req(host="x.y.evil.example.test", scheme="http", port=8080)):
         assert p.deny_match(r) is not None, r
-    assert p.deny_match(req(host="evil.example.test", port=8443)) is None  # narrowed rule
-    assert p.allow_match(req(host="evil.example.test")) is not None and p.deny_match(req(host="evil.example.test")).id == "c"
+    # `*.x` on a deny rule also blocks the apex (review 12-2).
+    apex = Policy.from_json({"version": 1, "allow": [{"host": "evil.example.test"}],
+                             "deny": [{"id": "b", "host": "*.evil.example.test"}]})
+    assert apex.deny_match(req(host="evil.example.test")) is not None
+    assert apex.deny_match(req(host="notevil.example.test")) is None
+    assert p.deny_match(req(host="evil.example.test", port=8443)).id == "b"  # apex covered by `*.`
+    narrow = Policy.from_json({"version": 1, "allow": [{"host": "evil.example.test"}],
+                               "deny": [{"id": "c", "host": "evil.example.test", "ports": [443], "schemes": ["https"]}]})
+    assert narrow.deny_match(req(host="evil.example.test", port=8443)) is None
+    assert narrow.allow_match(req(host="evil.example.test")) is not None and narrow.deny_match(req(host="evil.example.test")).id == "c"
     assert p.to_json()["deny"][0] == {"id": "b", "host": "*.evil.example.test", "schemes": ["http", "https"]}
     for bad in ([{"host": "x.example.test"}], [{"id": "d", "host": "x.example.test", "path": "/x"}],
                 [{"id": "d", "host": "x.example.test"}, {"id": "d", "host": "y.example.test"}],

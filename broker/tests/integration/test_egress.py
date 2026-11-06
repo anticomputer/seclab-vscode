@@ -153,10 +153,15 @@ def test_deny_rule_beats_allow_baseline_and_bindings(pod, ctl):
     ctl.call("credential.provide", {"id": "api", "value": pod.canaries["api"]})
     mark = ctl.mark()
     before = len(pod.seen())
+
+    def refused(r):  # an https block is refused at CONNECT (curl reports the proxy's 403)
+        return r.code == 403 or r.headers.startswith("HTTP/1.1 403")
+
     r = pod.curl("https://gist.example.test/echo/blocked")
-    assert r.code == 403 and "denied by rule blk-gist" in r.body
+    assert refused(r), r
     denied = ctl.wait_note("audit.event", lambda e: e["type"] == "request.denied" and e.get("ruleId") == "blk-gist",
                            since=mark, timeout=10)
+    assert denied["reason"] == "denied by rule blk-gist"
     assert isinstance(denied["clientPort"], int) and "clientPort" in denied["untrusted"]
     # Runtime block on an allowed, credential-bound host; then unblock.
     assert pod.curl("https://api.example.test/echo/x", "-H", f"Authorization: Bearer {s}").code == 200
@@ -165,13 +170,13 @@ def test_deny_rule_beats_allow_baseline_and_bindings(pod, ctl):
     assert changed["addedDeny"][0] == {"id": "blk-api", "host": "*.example.test", "schemes": ["http", "https"]}
     seen = len(pod.seen())
     for url in ("https://api.example.test/echo/x", "http://api.example.test/echo/x"):
-        assert pod.curl(url, "-H", f"Authorization: Bearer {s}").code == 403, url
+        assert pod.curl(url, "-H", f"Authorization: Bearer {s}").code in (0, 403), url  # https: refused at CONNECT; http: 403
     assert len(pod.seen()) == seen
     assert ctl.notes_since(mark, "approval.requested") == []
     assert ctl.call("policy.get")["policy"]["deny"][1]["id"] == "blk-api"
     ctl.call("policy.update", {"removeDeny": ["blk-api"]})
     assert pod.curl("https://api.example.test/echo/x", "-H", f"Authorization: Bearer {s}").code == 200
-    assert pod.curl("https://gist.example.test/echo/still").code == 403
+    assert refused(pod.curl("https://gist.example.test/echo/still"))
     assert len([x for x in pod.seen()[before:] if x["host"] == "gist.example.test"]) == 0
     for bad in ({"addDeny": [{"host": "x.example.test"}]}, {"removeDeny": ["nope"]},
                 {"addDeny": [{"id": "blk-gist", "host": "x.example.test"}]}):
@@ -185,7 +190,7 @@ def test_deny_rule_beats_allow_baseline_and_bindings(pod, ctl):
 def test_adding_a_deny_rule_resolves_pending_prompts(pod, ctl):
     """A prompt waiting on a destination the user then blocks resolves as deny (by
     deny-rule), and the held request gets 403; it can't be allowed later."""
-    pod.load({"allow": [], "prompt": {"timeoutSeconds": 20, "denyCooldownSeconds": 0}})
+    pod.load({"allow": [], "prompt": {"timeoutSeconds": 20, "denyCooldownSeconds": 0, "maxPerMinute": 60}})
     mark = ctl.mark()
     pod.ws("(curl -s -o /dev/null -w '%{http_code}' https://blocked.example.test/echo/held-deny > /tmp/held-deny.code &)")
     pending = ctl.wait_note("approval.requested", since=mark, timeout=10)

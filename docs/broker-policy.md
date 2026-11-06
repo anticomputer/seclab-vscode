@@ -46,14 +46,19 @@ are pinned by its unit tests (see the matcher invariants in
 - It is checked before everything else: allow rules, the baseline,
   `allow-tab` grants, prompts and credential bindings. A matching request
   gets `403` and the audit event `request.denied` (reason
-  `denied by rule <id>`), and is never prompted.
-- Omitted `ports` means every port, and omitted `schemes` means http and
-  https. This is the opposite of an allow rule's defaults, so a block can't be
-  sidestepped by a non-default port or scheme.
+  `denied by rule <id>`), and is never prompted. A CONNECT to the host is
+  refused the same way.
+- It is checked again after every point where a request waits (a prompt, a
+  just-in-time credential), immediately before any real value is written,
+  and once more when the upstream connection is opened.
+- Omitted `ports` means every port, omitted `schemes` means http and https,
+  and `*.example.com` also blocks `example.com`. This is the opposite of an
+  allow rule's defaults, so a block can't be sidestepped by a non-default
+  port, a scheme or the bare domain.
 - At runtime, `policy.update` takes `addDeny` and `removeDeny`. A new deny
-  rule resolves any pending prompt it matches as `deny`. It applies to every
-  new request on an open connection, and an open WebSocket relays nothing
-  more.
+  rule resolves any pending prompt it matches as `deny`, without the prompt
+  cooldown, so unblocking takes effect at once. It applies to every new
+  request on an open connection, and an open WebSocket relays nothing more.
 - It matches the request's host name. A destination reached by IP literal
   needs its own rule; IP literals are denied anyway unless allowed.
 
@@ -184,7 +189,7 @@ An egress allow rule. A request matches if every field matches.
 <a id="denyrule"></a>
 ### `denyRule`
 
-A blocked destination (revision 5). It takes precedence over every allow rule, the baseline, `allow-tab` grants, prompts and credential bindings: a matching request is denied (`request.denied`, reason `denied by rule <id>`) and never prompted. Unlike an allow rule, omitted `ports` means every port and omitted `schemes` means http and https. It matches the request's host name; a destination reached by IP literal needs its own rule.
+A blocked destination (revision 5). It takes precedence over every allow rule, the baseline, `allow-tab` grants, prompts and credential bindings: a matching request is denied (`request.denied`, reason `denied by rule <id>`) and never prompted, and a CONNECT to it is refused. Unlike an allow rule, omitted `ports` means every port, omitted `schemes` means http and https, and `*.example.com` also blocks `example.com` itself. It matches the request's host name; a destination reached by IP literal needs its own rule.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
