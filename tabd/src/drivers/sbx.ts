@@ -183,14 +183,14 @@ export class SbxDriver implements Driver {
 	 * changes the port, so any other single-resource `localhost:<n>` allow scoped to this
 	 * sandbox is removed, including one a user added: the fence forbids it anyway (ZZ-5).
 	 */
-	private async syncBrokerAllow(spec: TabRuntimeSpec, port: number): Promise<void> {
+	private async syncBrokerAllow(spec: TabRuntimeSpec, port: number | undefined): Promise<void> {
 		const scoped = `sandbox:${spec.sandboxName}`;
 		let have = false;
 		for (const r of await this.policyRules()) {
 			if (r.resource_type !== 'network' || r.decision !== 'allow' || r.applies_to !== scoped || r.resources.length !== 1 || !/^localhost:\d{1,5}$/.test(r.resources[0])) {
 				continue;
 			}
-			if (r.resources[0] === `localhost:${port}` && r.status === 'active') {
+			if (port !== undefined && r.resources[0] === `localhost:${port}` && r.status === 'active') {
 				have = true;
 			} else if (/^[0-9a-f-]{36}$/.test(r.id)) {
 				const d = await this.runner.run(this.sbx, ['policy', 'rm', 'network', '--force', '--sandbox', spec.sandboxName, '--id', r.id]);
@@ -199,7 +199,7 @@ export class SbxDriver implements Driver {
 				}
 			}
 		}
-		if (!have) {
+		if (port !== undefined && !have) {
 			const a = await this.runner.run(this.sbx, ['policy', 'allow', 'network', '--sandbox', spec.sandboxName, `localhost:${port}`]);
 			if (a.code !== 0) {
 				throw new DriverError(-32011, `broker allow failed: ${tail(a.stderr)}`);
@@ -349,6 +349,12 @@ export class SbxDriver implements Driver {
 	async quarantine(spec: TabRuntimeSpec): Promise<void> {
 		checkSpec(spec);
 		try {
+			// Drop the broker's own allow first (its port is stale or the broker is gone; the next
+			// start re-adds the live one). Mirroring it as a deny instead is rejected by sbx as a
+			// conflict, which left quarantine failing (focus probe, 2026-11-06).
+			if (spec.template.spec.broker === 'required') {
+				await this.syncBrokerAllow(spec, undefined);
+			}
 			await this.syncDenies(spec);
 		} finally {
 			await this.runner.run(this.sbx, ['stop', spec.sandboxName], { timeoutMs: 60_000 });
