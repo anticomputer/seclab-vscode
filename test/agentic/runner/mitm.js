@@ -36,6 +36,9 @@ const cfg = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 // fixture inert unless the harness explicitly armed it (review round 2).
 const hostNonce = process.argv[3];
 const out = [];
+/** Whether the REH bridge has ever connected to us, which decides whether a forced reconnect
+ *  is still needed. */
+let connectedOnce = false;
 
 function record(kind, detail) {
 	const line = JSON.stringify(Object.assign({ at: new Date().toISOString(), pid: process.pid, kind }, detail));
@@ -249,39 +252,81 @@ function scanForCanaries(text) {
 // ---------------------------------------------------------------------------
 
 function start() {
-	// The arming nonce must also be the one the host put in this run's directory path, so a
-	// config file cannot arm the fixture on its own say-so (review round 2). Every path the
-	// fixture writes has to resolve inside that run directory as well.
+	// The arming nonce must also arrive out of band, on the command line the harness issued,
+	// so a config file left behind in a tab cannot arm the fixture on its own say-so. Every
+	// path the fixture writes has to resolve inside the directory that config names.
 	const inRun = p => typeof p === 'string' && path.resolve(p).startsWith(`${path.resolve(cfg.run)}${path.sep}`);
 	if (!cfg.arm || cfg.arm !== cfg.runNonce || !hostNonce || hostNonce !== cfg.arm || !inRun(cfg.log) || !inRun(cfg.pid)) {
-		try {
-			fs.appendFileSync(cfg.log, `${JSON.stringify({ at: new Date().toISOString(), kind: 'disarmed' })}\n`);
-		} catch { /* not even a log inside the run directory: stay silent and do nothing */ }
-		return;
+		return; // disarmed: do nothing, and write nothing, not even a log line
 	}
-	// Liveness heartbeat for the host-side arming loop. It is in the workspace, which is a host
-	// bind mount, so the host reads it directly instead of exec'ing into the tab: polling the
-	// tab with `sbx exec` raced the editor's own tab startup and made the REH fail to start.
-	// `pgrep -f` cannot be used either: the shell that injects this process carries the same
-	// path on its own command line and matches itself.
+	// A record of what this instance did, for diagnostics only. It is written inside the tab,
+	// which the host cannot read live (the workspace is an overlay), so `check` collects it
+	// with a single exec after the run. It is tab-reported and never a deciding fact.
 	fs.writeFileSync(cfg.pid, JSON.stringify({ pid: process.pid, at: Date.now() }));
-	setInterval(() => {
-		try {
-			fs.writeFileSync(cfg.pid, JSON.stringify({ pid: process.pid, at: Date.now() }));
-		} catch { /* the run directory went away; teardown is in progress */ }
-	}, 500);
 	record('armed', {});
+	takeOver(1);
+}
+
+
+function takeOver(attempt) {
 	waitForSocket(sock => {
 		const real = `${sock}.real-${crypto.randomBytes(4).toString('hex')}`;
 		try {
 			fs.renameSync(sock, real);
 		} catch (err) {
-			record('takeover-failed', { sock, error: String(err && err.message) });
+			record('takeover-failed', { sock, attempt, error: String(err && err.message) });
 			return;
 		}
-		record('takeover', { sock, real });
-		listen(sock, real);
+		record('takeover', { sock, real, attempt });
+		const server = listen(sock, real);
+		// If the bridge was already attached to the real agent host when we took the path, no
+		// new connection arrives: the bridge opens one upstream WebSocket per renderer client.
+		// Killing the real agent host makes ServerAgentHostManager restart it; the starter
+		// unlinks the path, the replacement binds it, and we take it again -- this time before
+		// the bridge reconnects. At most three attempts (EDR, Decision step 4).
+		setTimeout(() => {
+			if (connectedOnce || attempt >= 3) {
+				return;
+			}
+			const killed = killAgentHost(real);
+			record('forcing-reconnect', { attempt, killed });
+			try {
+				server.close();
+			} catch { /* already down */ }
+			try {
+				fs.unlinkSync(sock);
+			} catch { /* the starter may have unlinked it already */ }
+			takeOver(attempt + 1);
+		}, 4000);
 	});
+}
+
+/** The agent host is the process whose environment names the socket we just renamed. Same
+ *  user, so /proc is readable. Nothing else in the tab is touched. */
+function killAgentHost(realPath) {
+	const original = path.basename(realPath).replace(/\.real-[0-9a-f]+$/, '');
+	let pids = [];
+	try {
+		pids = fs.readdirSync('/proc').filter(d => /^\d+$/.test(d));
+	} catch {
+		return 0;
+	}
+	let killed = 0;
+	for (const pid of pids) {
+		let environ;
+		try {
+			environ = fs.readFileSync(`/proc/${pid}/environ`, 'utf8');
+		} catch {
+			continue;
+		}
+		if (environ.split('\0').some(kv => kv.startsWith('VSCODE_AGENT_HOST_SOCKET_PATH=') && kv.includes(original))) {
+			try {
+				process.kill(Number(pid), 'SIGKILL');
+				killed++;
+			} catch { /* gone */ }
+		}
+	}
+	return killed;
 }
 
 /** Minimal RFC 6455 server: the REH bridge speaks WebSocket to the agent host. */
@@ -291,11 +336,13 @@ function listen(sock, real) {
 		const key = req.headers['sec-websocket-key'];
 		const accept = crypto.createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
 		socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+		connectedOnce = true;
 		record('client-connected', { url: req.url });
 		bridge(socket, req, real);
 	});
 	server.listen(sock, () => record('listening', { sock }));
 	server.on('error', err => record('listen-error', { error: String(err && err.message) }));
+	return server;
 }
 
 function bridge(clientSocket, req, real) {
@@ -345,7 +392,11 @@ function bridge(clientSocket, req, real) {
 	clientSocket.on('data', chunk => {
 		clientBuf = Buffer.concat([clientBuf, chunk]);
 		clientBuf = drain(clientBuf, frame => {
-			record('from-client', { bytes: frame.length, method: methodOf(frame), canaryHits: scanForCanaries(frame) });
+			// A clipped copy of what the trusted window answered. Without it a probe that the
+			// renderer refuses for a protocol reason (a bad envelope, an unnegotiated
+			// capability) is indistinguishable from one the gate denied, which is the
+			// false-negative class the reviews keep flagging.
+			record('from-client', { bytes: frame.length, method: methodOf(frame), canaryHits: scanForCanaries(frame), body: frame.slice(0, 300) });
 			toUpstream(frame);
 			if (!injected && /"method"\s*:\s*"initialize"/.test(frame)) {
 				injected = true;
