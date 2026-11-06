@@ -497,6 +497,21 @@ case "${1:-help}" in
 			builds) docker run --rm --network none -v "$ROOT:/repo:ro" -v seclab-test-scratch:/scratch -e SECLAB_SCRATCH=/scratch -w /repo "$(node_image)" node test/builds/require-hooks.ts --self-test ;;
 			# RPC filter: generated UriComponents argument positions are constrained (pure; no network).
 			uri-constraint) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/uri-constraint.test.ts ;;
+			# RPC filter: the channel guard refuses what the policy denies (pure; no network).
+			channel-guard) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/channel-guard.test.ts ;;
+			# RPC filter: policy invariants hold over the generated mapping (pure; no network).
+			policy-invariants) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/policy-invariants.test.ts ;;
+			# RPC filter: tab-originated commands cannot launder through a global
+			# ICommandService. These three had no runner at all: they were written,
+			# committed, and never executed by any workflow or subcommand, which is
+			# the same "cannot fail" shape as a probe with no assertion.
+			command-taint) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/command-taint.test.ts ;;
+			# Every pure RPC-filter suite, so adding one to CI is a single edit.
+			rpc-filter)
+				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint; do
+					printf '\n=== %s\n' "$t"
+					"$0" test "$t" || exit 1
+				done ;;
 			canary) shift; "${SECLAB_NODE:-node}" "$ROOT/test/canary/run.ts" "${1:-sbx}" ;;
 			secrets) shift; "${SECLAB_NODE:-node}" "$ROOT/test/secrets/run.ts" "${1:-sbx}" ;;
 			evidence) shift; "${SECLAB_NODE:-node}" "$ROOT/test/containment/check-evidence.ts" "$@" ;;
