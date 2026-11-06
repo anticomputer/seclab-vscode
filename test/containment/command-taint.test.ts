@@ -26,6 +26,8 @@
  */
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 
 type Verdict = 'allow' | 'allow_with_constraint' | 'prompt' | 'rewrite' | 'deny';
 
@@ -137,6 +139,34 @@ test('an allowed inner command still runs through the accessor', async () => {
 	svc.handlers.set('inner.allowed', () => { ran = true; return 'ok'; });
 	await svc.executeFromTab('outer.allowed', [], { tab: 't-abc' });
 	assert.equal(ran, true, 'the taint must not break legitimate nesting');
+});
+
+// The model above documents the semantics; on its own it would stay green if
+// the shipped counting were deleted, because it is a transliteration rather
+// than an import. These assertions tie it to the patch that actually ships, so
+// removing the fix fails here even though the model cannot notice.
+const repoRoot = path.resolve(import.meta.dirname, '..', '..');
+const patch = (name: string) =>
+	fs.readFileSync(path.join(repoRoot, 'patches', name), 'utf8');
+
+test('the shipped entry point counts the command as in flight', () => {
+	const p = patch('0007-seclab-command-taint.patch');
+	const body = p.split('\n').filter(l => l.startsWith('+')).join('\n');
+	assert.match(body, /seclabExecuteFromTab/,
+		'0007 must still define the tab entry point');
+	assert.match(body, /seclabEnterTabCommand\(\)/,
+		'seclabExecuteFromTab must increment the in-flight counter: without it a '
+		+ 'handler one level down escapes both the taint and the backstop');
+	assert.match(body, /seclabExitTabCommand\(\)/,
+		'the counter must unwind, or every later trusted command is refused');
+});
+
+test('the tainted service does not double-count the nested call', () => {
+	const filter = fs.readFileSync(path.join(
+		repoRoot, 'rpc-filter', 'patch-src', 'seclabRpcFilter.ts'), 'utf8');
+	// Exactly one increment and one decrement, both in the exported helpers.
+	assert.equal((filter.match(/seclabInFlight\+\+/g) ?? []).length, 1);
+	assert.equal((filter.match(/seclabInFlight--/g) ?? []).length, 1);
 });
 
 let failed = 0;
