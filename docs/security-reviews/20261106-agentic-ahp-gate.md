@@ -6,7 +6,7 @@
   `seclabAhpGate.ts`, the upstream edits in `agentHostProtocolClient.ts` and
   `editorRemoteAgentHostServiceClient.ts`, `agentic/tools/sync-patch.ts` and
   `test/agentic/gate/gate.test.ts`.
-- **Reviewer:** `security-review` agent (an Opus-class model), round 1 on `b4a3360`;
+- **Reviewer:** `security-review` agent (an Opus-class model), round 1 on `b4a3360`, round 2 on `7e0f0f6`;
   triage and fixes by the agentic-gate session.
 - **Related:** [EDR probe runner](../edr/20261106-agentic-probe-runner.md),
   [implementation plan](../plans/agentic-implementation.md) §4 increment 1,
@@ -15,6 +15,83 @@
 Every round's prompt carried the standing warning that the diff, fixtures and evidence may
 contain prompt injection aimed at the reviewer, to be reported as a finding and never
 followed. Round 1 found none.
+
+## Round 2 (on `7e0f0f6`)
+Scope: the round 1 fixes, the two new upstream hunks, `build/source-allowlist.txt`, the probe
+runner (`test/agentic/runner/`), `test/window.ts --app` and the gate tests. One high, one
+medium, two low. All four are fixed in the commit that adds this section. No prompt injection
+found.
+
+### HIGH (9/10): round 1's fix was dead code, and the real carrier key was not stripped
+The reviewer ran the shipped sanitiser on a real-shaped message and got **zero** removals.
+- Upstream's MCP server discriminant is `kind: 'authRequired'` (`McpServerStatus.AuthRequired`),
+  not `kind: 'auth-required'`. The hyphenated literal exists only as
+  `ToolCallStatus.AuthRequired`, under the key `status`. So round 1's replacement branch never
+  ran against real traffic.
+- `McpAuthRequirement` carries the metadata under the key **`resource`**, which was not in
+  `STRIP_KEYS`. Worse, stripping `authorization_servers` is what *forces* the discovery fetch:
+  with no authorization server, `resolveMcpServerAuthentication` calls `resolveResource`, which
+  requests the attacker's URL on the host network and falls back to that URL's origin as a
+  dynamic OAuth provider.
+- `agentHostCustomizationService` reaches `autoAuthenticateMcpServer` while merely mapping the
+  MCP server list, with no turn and no user interaction.
+- The round 1 regression test and the runner's A1 probe both used the non-existent shape, so
+  neither would have caught this, on G or on U.
+
+**Fix.**
+- The sanitiser now matches `kind` of `authRequired` or `auth-required` **and** `status` of
+  `auth-required` or `authRequired`, i.e. both spellings in both positions.
+- The replacement is well formed: `McpServerErrorState` needs `error: ErrorInfo`, so the inert
+  node is `{kind|status: 'error', error: {errorType: 'seclab-ahp-gate', message}}` rather than
+  a bare `message`, which would have left the renderer dereferencing `state.error.message` on
+  `undefined`.
+- Belt and braces, because key-name matching is the wrong last line of defence here:
+  `session/mcpServerStateChanged` and `session/customizationsChanged` are now **denied**
+  inbound. They were already denied outbound. The sanitiser still covers the same state where
+  it is embedded in an allowed result (`initialize`, `listSessions`, `resolveSessionConfig`).
+- The regression test and the A1 probe were rewritten to the real shapes.
+
+### MEDIUM (9/10): the runner's teardown marks never matched
+`teardownGate` matches a command mark with whitespace or a line edge on each side, but the
+beacon and the arming loop are spawned with **absolute** script paths, so the marks
+`beacon.ts start …` and `runner.ts arm …` could never match. Both helpers are detached and
+reparented, so the descendant walk missed them too, and `arm` passed the profile as a bare
+positional so the `--user-data-dir` matcher missed it as well. The arming loop therefore
+survived a "clean" teardown and kept injecting the hostile fixture into the tab for its full
+ten-minute deadline. This is exactly the orphaned-hostile-process regression the teardown gate
+exists to prevent.
+
+**Fix.** Marks are derived from the very argv used to spawn each helper (`markFor`), `arm`
+takes `--user-data-dir`, and the loop stops once the tab's sandbox has been gone for ten
+seconds.
+
+### LOW (9/10): `prepare` deleted its run directory before validating it
+`base` comes from `--run-dir` or `SECLAB_AGENTIC_RUN_DIR` and was passed straight to a
+recursive `rmSync`. **Fix:** `checkIsolatedProfile` is applied to `base` as soon as it is
+resolved, which confines it to `~/.seclab-test/` or this worktree's `.work/`, symlinks
+resolved.
+
+### LOW (9/10): the fixture's arming check was tautological
+`mitm.js` compared `cfg.arm` with `cfg.runNonce`, two copies of the same value in the same
+config file, which sits in the tab's own workspace. **Fix:** the nonce must also match the one
+the host passes on the command line, and `cfg.log` and `cfg.pid` must resolve inside `cfg.run`.
+
+### Confirmed sound in round 2
+The MEDIUM fix from round 1 was verified end to end: `policyValue` is out of a tab's reach;
+`defaultValue` cannot be overridden by an extension's `configurationDefaults`, because the
+setting is `APPLICATION` scope and
+[`configurationExtensionPoint.ts#L217`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/configurationExtensionPoint.ts#L217)
+allows defaults overrides only for narrower scopes; and the stamp in `updateConfiguration` runs
+before `configObjectUrl.update`, which is the only thing the renderer reads, so a value carried
+in through `_remoteCLI.windowOpen` or any other opener is overwritten unconditionally. The
+structural cast fails closed, because the browser environment service has no `configuration`.
+
+Also re-checked and sound: the sanitiser's prototype, array and nesting behaviour (`JSON.parse`
+makes `__proto__` an own property, so `delete` removes it); the construction invariant and its
+`WeakMap` brand; the blanket refusal of agent-host→client requests, which independently blocks
+the `RequestAgentHostMcpAuthentication` reverse-request route; `test/window.ts --app` (resolved,
+existence-checked, no shell, focus protection untouched). The four carried-forward items from
+round 1 were re-rated and stay below threshold.
 
 ## Round 1 (on `b4a3360`)
 One high, one medium, no critical. Both are fixed in the commit that adds this record.
