@@ -599,7 +599,7 @@
         "budget": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Per-tab cap on this credential's use (revision 6), over the tab's lifetime: requests it is injected into, and bytes sent and received on them. Over budget is `429`, never a prompt (audit `credential.budget_exceeded`). Use of credentials derived from it counts against it too. For example, it bounds package ingestion under the user's identity through CFS.",
+          "description": "Per-tab cap on this credential's use (revision 6), over the tab's lifetime: requests it is injected into, and bytes sent and received on them. Over budget is `429`, never a prompt (audit `credential.budget_exceeded`). Use of credentials derived from it, at any depth, counts against it too. The request cap is exact. The byte cap is best-effort: response bytes are charged when a response completes, so one request can overshoot it, and a flow that fails after injection counts its request but not its response. It can't be combined with a `websocket: true` binding. Usage is reported by `health` (`credentialBudgets`) and keyed by credential id. For example, it bounds package ingestion under the user's identity through CFS.",
           "properties": {
             "requests": {
               "type": "integer",

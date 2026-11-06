@@ -53,6 +53,8 @@ export const AUDIT_KINDS: Readonly<Record<string, Kind>> = {
 	'credential.needed': K('credential.use', 'notice', 'request waiting for a credential value', true),
 	'credential.unavailable': K('credential.use', 'warning', 'no credential value before the hold timeout'),
 	'credential.injected': K('credential.use', 'informational', 'credential injected', true),
+	'credential.used': K('credential.use', 'informational', 'credentialed response', true),
+	'credential.budget_exceeded': K('credential.use', 'warning', 'credential budget spent; denied', true),
 	'credential.derived': K('credential.use', 'notice', 'minted token re-sentinelised'),
 	'credential.backstop_denied': K('credential.use', 'critical', 'credentialed request hit the provider backstop', true),
 	'credential.backstop_exempt': K('credential.use', 'notice', 'credentialed request passed the backstop on a declared derive route'),

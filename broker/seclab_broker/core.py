@@ -136,12 +136,17 @@ class Broker:
 
     # --------------------------------------------------------- credential budgets
     def _budget_chain(self, cred: Credential) -> list[Credential]:
-        """The credential and the one it was derived from: a derived token's use counts
-        against its parent's budget too."""
-        out = [cred]
-        parent = self.creds.get(cred.parent_id) if cred.parent_id else None
-        if parent is not None:
+        """The credential and every credential it was derived from, up to the root: a derived
+        token's use counts against each ancestor's budget (review 13-2)."""
+        out, seen = [cred], {cred.id}
+        c = cred
+        while c.parent_id and c.parent_id not in seen:
+            parent = self.creds.get(c.parent_id)
+            if parent is None:
+                break
             out.append(parent)
+            seen.add(parent.id)
+            c = parent
         return out
 
     def credential_budget_exceeded(self, cred: Credential) -> tuple[str, str] | None:
@@ -400,6 +405,13 @@ class Broker:
                        "userActionSeen": self.user_action_at is not None},
             "models": {"requests": self.model_usage.requests, "bytes": self.model_usage.bytes,
                        "maxRequests": self.policy.models.max_requests, "maxBytes": self.policy.models.max_bytes},
+            # Revision 6: usage of every budgeted credential (review 13-7).
+            "credentialBudgets": [
+                {"id": c.id, "requests": self.credential_usage.get(c.id, Budget()).requests,
+                 "bytes": self.credential_usage.get(c.id, Budget()).bytes,
+                 **({"maxRequests": c.budget[0]} if c.budget[0] is not None else {}),
+                 **({"maxBytes": c.budget[1]} if c.budget[1] is not None else {})}
+                for c in self.creds.all() if c.budget is not None],
         }
 
     def rpc_tab_event(self, params: dict) -> dict:

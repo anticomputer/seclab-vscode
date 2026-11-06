@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import { test } from 'node:test';
 import { BROKER_BASE_DIGEST, BROKER_LABELS, BrokerImagePin, brokerImageProblems } from '../src/broker-image.ts';
 import { BROKER_POLICY_SCHEMA, BROKER_PROTOCOL, checkBrokerHello } from '../src/broker.ts';
+import { AUDIT_KINDS } from '../src/obs/broker-audit.ts';
 import type { Runner } from '../src/run.ts';
 
 const repo = path.resolve(import.meta.dirname, '../..');
@@ -28,6 +29,13 @@ test('broker-image: pinned base digest and protocol equal broker/deps.json and p
 	const proto = JSON.parse(fs.readFileSync(path.join(repo, 'broker/schema/protocol.v1.json'), 'utf8')) as { protocol: string; changelog: Array<{ policySchemaRevision: number }> };
 	assert.equal(proto.protocol, BROKER_PROTOCOL);
 	assert.equal(proto.changelog[0].policySchemaRevision, BROKER_POLICY_SCHEMA.revision);
+});
+
+test('broker audit: observability classifies exactly the broker protocol\'s audit types', () => {
+	// An unlisted type is demoted to a bare notice with its fields dropped (review 13-5), so a
+	// new broker audit type must be classified here in the same change.
+	const proto = JSON.parse(fs.readFileSync(path.join(repo, 'broker/schema/protocol.v1.json'), 'utf8')) as { auditTypes: Record<string, string> };
+	assert.deepEqual(Object.keys(AUDIT_KINDS).sort(), Object.keys(proto.auditTypes).sort());
 });
 
 test('broker-image: a clean build.sh build is accepted; dirty only with --broker-dev', () => {
