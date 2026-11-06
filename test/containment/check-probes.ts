@@ -133,10 +133,25 @@ function load(file: string, label: string, required: boolean): void {
 	c('probes', true, `${label} evidence present (${file})`, `${run.results.length} results`);
 }
 load('rpc-probes.json', 'rogue extension', true);
-// The REH fixture reaches surfaces the extension host cannot. Skipping it
-// silently would leave chan:download, chan:mcpGatewayToolBroker and the raw-RPC
-// identity spoof with no baseline, which reads as containment.
-load('reh-probes.json', 'rogue REH', !noReh);
+// The REH fixture reaches surfaces the extension host cannot: chan:download,
+// chan:mcpGatewayToolBroker, the raw-RPC identity spoof and the terminal
+// pushes. Missing evidence is a failure unless the run says, in as many words,
+// that it is not testing them.
+//
+// Waiving it used to print `PASS  rogue REH evidence present`, which is a
+// false sentence: nothing was loaded and nothing was present. A green line
+// asserting the opposite of what happened is worse than no line, because it is
+// what gets quoted afterwards. The waiver is now reported as a waiver, names
+// the probes it drops, and is counted so the run summary cannot be read as
+// covering them.
+if (noReh) {
+	const dropped = Object.keys(expectations.rehProbes as Record<string, unknown>)
+		.filter(k => k !== 'note');
+	c('probes-waived', true, 'rogue REH evidence WAIVED by --no-reh',
+		`not tested: ${dropped.length} probes (${dropped.join(', ')})`);
+} else {
+	load('reh-probes.json', 'rogue REH', true);
+}
 
 const specs: Record<string, Spec> = {
 	...(expectations.probes as Record<string, Spec>),

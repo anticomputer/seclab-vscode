@@ -82,8 +82,25 @@ It is deliberately **not** in `patches/`. `build/prepare.sh` globs
 `patches/NNNN-*.patch` unconditionally, so a fixture placed there ships in every
 release build: an env-gated `require()` of an unvalidated path, handed the
 `socketServer` and a renderer-targeted router. That is a greppable RCE primitive
-in an isolation product, so the containment harness applies this patch itself
-for a dedicated probe build ([review](../security-reviews/20261104-rpc-probes-increment.md)).
+in an isolation product, so the patch is kept out of `patches/series` and was
+intended to be applied by the containment harness for a dedicated probe build
+([review](../security-reviews/20261104-rpc-probes-increment.md)).
+
+> **Correction, 2026-11-06.** That build was never created. Nothing applies
+> this patch and nothing sets `SECLAB_ROGUE_REH`, so none of the rogue-REH
+> probes has ever run: not `channel-download-host-read`/`-write`,
+> `channel-mcp-*`, `rpc-secret-identity-spoof` or `rpc-proxy-auth`, nor the
+> `onExecuteCommand` and resolve-variables probes added later. They are
+> specifications, not results, and must not be cited as evidence that a
+> surface was demonstrated. The sentence above described a mechanism as
+> existing because it had been designed, which is the failure this project
+> keeps repeating in a new place: the fixture, its safety review and its
+> documentation were all complete, and the thing that runs it was not.
+>
+> `check-probes.ts` made this invisible by skipping the bucket when the
+> evidence file is missing; it now fails unless `--no-reh` is passed
+> explicitly and is recorded in the run output. A dedicated, attested
+> containment build variant is being added by the fork-build work.
 
 Carrying a fixture at all is a real cost and was weighed: the alternative is
 reimplementing enough of the remote protocol to speak as a server, which would
