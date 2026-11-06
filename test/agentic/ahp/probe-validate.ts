@@ -55,6 +55,7 @@ import { AgentHostMcpOAuthMetadataService } from 'vs/platform/agentHost/common/a
 import { AgentHostResourceService } from 'vs/workbench/services/agentHost/common/agentHostResourceService';
 import { IAuthenticationService } from 'vs/workbench/services/authentication/common/authentication';
 import { autoAuthenticateMcpServer } from 'vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostAuth';
+import { AGENT_HOST_SCHEME } from 'vs/platform/agentHost/common/agentHostUri';
 import { IAuthenticationMcpAccessService } from 'vs/workbench/services/authentication/browser/authenticationMcpAccessService';
 import { IAuthenticationMcpService } from 'vs/workbench/services/authentication/browser/authenticationMcpService';
 import { IAuthenticationMcpUsageService } from 'vs/workbench/services/authentication/browser/authenticationMcpUsageService';
@@ -74,7 +75,21 @@ function must(name: string): string {
 
 // ---- What each probe must reach -------------------------------------------------------
 
-type Kind = 'lands' | 'surface';
+// `host-effect` is the only kind the probe runner's verdict can read: its evidence rule is
+// a host marker, a host beacon hit or the host canary. `renderer` reaches an
+// attacker-controlled effect inside the trusted renderer, which is real but invisible to
+// that rule, and `surface` exercises the gate's surface and can never show a host effect.
+// The distinction is the point: a run must not read a `surface` or `renderer` probe's
+// silence as containment, and at least one named `host-effect` probe must be present and
+// landing or the whole suite proves nothing.
+type Kind = 'host-effect' | 'renderer' | 'surface';
+
+/**
+ * The probes whose evidence the runner's verdict actually reads. Named, not counted: a
+ * count is satisfied by any probe that happens to be typed `host-effect`, and the suite has
+ * to fail if the one probe that can produce a beacon hit is removed or retyped.
+ */
+const REQUIRED_HOST_EFFECT = ['A20-mcp-auth'];
 
 interface Expectation {
 	readonly kind: Kind;
@@ -86,11 +101,11 @@ const EXPECTED: Record<string, Expectation> = {
 	// The only probe that turns a hostile agent host into a host-side effect with no user
 	// action: the client fetches the agent-host-chosen URL through IRequestService, which in
 	// the real app runs in the shared process, outside the tab's broker.
-	'A20-mcp-auth': { kind: 'lands', reaches: 'IRequestService fetches the agent-host-chosen resource URL' },
+	'A20-mcp-auth': { kind: 'host-effect', reaches: 'IRequestService fetches the agent-host-chosen resource URL' },
 	// Reaches the root reducer, so the agent list the window trusts is attacker-controlled.
 	// It cannot push a token here because the run profile is signed out, which is why it is
 	// checked at the reducer rather than at the wire.
-	'A1-protected': { kind: 'lands', reaches: 'the root reducer applies the envelope and rootState carries the agent' },
+	'A1-protected': { kind: 'renderer', reaches: 'the root reducer applies the envelope and rootState carries the agent' },
 	// Well formed, reaches the client's reverse-request dispatch, and is then refused by
 	// upstream's own resource permission gate because a seclab+ identity holds no grant.
 	'A16-read': { kind: 'surface', reaches: "the resource service's permission gate" },
@@ -263,8 +278,17 @@ async function main(): Promise<number> {
 	await client.connect();
 	await settle();
 
-	// Exactly what remoteAgentHostChatContribution registers when a connection comes up.
-	// Exactly what remoteAgentHostChatContribution registers when a connection comes up.
+	// As close to what remoteAgentHostChatContribution registers as a harness can be: the
+	// same `{ authenticate }` shape and the same agent-host identity it passes
+	// (`{ scheme: AGENT_HOST_SCHEME, authority: '' }`), so the stub differs from the
+	// workbench in as few places as possible.
+	//
+	// PRECONDITION, and the limit of what this file proves: the real contribution registers
+	// this handler only for a connection it has adopted, after root state. So this proves
+	// the CLIENT-SIDE half -- given a registered handler, the probe reaches the host-side
+	// discovery fetch. Whether a `seclab+` window registers one at all is the window-side
+	// half, and only the pending U run can show that. `mitm.js` re-sends the probe on a
+	// timer for exactly this reason.
 	// Counted, because a handler that is never invoked and one that runs and declines both
 	// answer the agent host `{ authenticated: false }`, and only the count tells them apart.
 	const handlerCalls: { serverName: string; error?: string }[] = [];
@@ -274,7 +298,8 @@ async function main(): Promise<number> {
 		try {
 			return await inst.invokeFunction(
 				autoAuthenticateMcpServer as never,
-				client as never, { scheme: 'vscode-remote', authority: 'seclab+spike' } as never,
+				{ authenticate: (r: unknown) => (client as unknown as { authenticate(r: unknown): Promise<unknown> }).authenticate(r) } as never,
+		{ scheme: AGENT_HOST_SCHEME, authority: '' } as never,
 				(request as { serverName: string }).serverName as never,
 				(request as { auth: unknown }).auth as never, undefined as never,
 			) as never;
@@ -284,6 +309,13 @@ async function main(): Promise<number> {
 		}
 	}) as never);
 
+	// The positive observable for every notification probe: the client parsed the envelope
+	// and dispatched it. Without this, "nothing was fetched" was the only assertion, and a
+	// probe that the client dropped on the floor passed exactly like one it dispatched.
+	const dispatched: { channel?: string; type?: string }[] = [];
+	store.add((client as unknown as { onDidAction: (cb: (e: { channel?: string; action?: { type?: string } }) => void) => { dispose(): void } })
+		.onDidAction(e => dispatched.push({ channel: e.channel, type: e.action?.type })));
+
 	const checks: Check[] = [];
 	for (const probe of probes(cfg) as { id: string; msg: JsonRpcMessage }[]) {
 		const expect = EXPECTED[probe.id];
@@ -291,7 +323,7 @@ async function main(): Promise<number> {
 			checks.push({ probe: probe.id, kind: 'surface', reaches: 'UNDECLARED', ok: false, evidence: { error: 'probe has no declared expectation' } });
 			continue;
 		}
-		checks.push(await drive(probe, expect, rogue, client, requests, log, handlerCalls, beaconPort));
+		checks.push(await drive(probe, expect, rogue, client, requests, log, handlerCalls, beaconPort, dispatched));
 	}
 
 	// Every declared expectation must have a probe: a probe removed from the table without
@@ -305,14 +337,20 @@ async function main(): Promise<number> {
 	client.dispose();
 	store.dispose();
 
-	const landed = checks.filter(c => c.kind === 'lands');
-	const ok = checks.every(c => c.ok) && landed.length > 0 && landed.every(c => c.ok);
+	const landed = checks.filter(c => c.kind === 'host-effect');
+	// Every required host-effect probe must be present AND passing. Without this the suite
+	// goes green when the only probe whose evidence a run can read has been removed.
+	const missingRequired = REQUIRED_HOST_EFFECT.filter(id => !checks.some(c => c.probe === id && c.kind === 'host-effect' && c.ok));
+	for (const id of missingRequired) {
+		checks.push({ probe: id, kind: 'host-effect', reaches: 'REQUIRED', ok: false, evidence: { error: 'a required host-effect probe is missing, retyped or failing' } });
+	}
+	const ok = checks.every(c => c.ok) && missingRequired.length === 0;
 	fs.writeFileSync(path.join(RUN_DIR, 'probe-validate.json'), JSON.stringify({ nonce: NONCE, ok, checks }, null, 1));
 	for (const c of checks) {
 		console.log(`${c.ok ? 'OK  ' : 'FAIL'}  ${c.kind.padEnd(7)} ${c.probe.padEnd(19)} ${c.reaches}${c.ok ? '' : `  -> ${JSON.stringify(c.evidence)}`}`);
 	}
 	console.log(ok
-		? `probe-validate: ${checks.length} probe(s) reach what they claim (${landed.length} can decide vulnerable)`
+		? `probe-validate: ${checks.length} probe(s) reach what they claim (${landed.length} produce host-observable evidence a run can read)`
 		: 'probe-validate: a probe does not reach what it claims');
 	return ok ? 0 : 1;
 }
@@ -326,10 +364,12 @@ async function drive(
 	log: RecordingLogService,
 	handlerCalls: { serverName: string; error?: string }[],
 	beaconPort: number,
+	dispatched: { channel?: string; type?: string }[],
 ): Promise<Check> {
 	const before = requests.urls.length;
 	const warnBefore = log.warnings.length;
 	const callsBefore = handlerCalls.length;
+	const dispatchedBefore = dispatched.length;
 	const isRequest = probe.msg.id !== undefined;
 	let reply: unknown;
 	if (isRequest) {
@@ -343,7 +383,8 @@ async function drive(
 		? String(((reply as { error?: { message?: string } }).error?.message) ?? '')
 		: String(reply ?? '');
 
-	const evidence: Record<string, unknown> = { rawReply: clip(JSON.stringify(reply ?? null)), reply: clip(errorMessage), fetched: newUrls, warnings: log.warnings.slice(warnBefore).map(clip), mcpHandlerCalls: handlerCalls.slice(callsBefore) };
+	const seen = dispatched.slice(dispatchedBefore);
+	const evidence: Record<string, unknown> = { dispatched: seen, rawReply: clip(JSON.stringify(reply ?? null)), reply: clip(errorMessage), fetched: newUrls, warnings: log.warnings.slice(warnBefore).map(clip), mcpHandlerCalls: handlerCalls.slice(callsBefore) };
 	let ok: boolean;
 	switch (probe.id) {
 		case 'A20-mcp-auth':
@@ -364,10 +405,22 @@ async function drive(
 		case 'A14-method': case 'A7-tcp':
 			ok = /unknown method/i.test(errorMessage);
 			break;
+		// Notification-form probes. The positive observable is that the client parsed the
+		// envelope and dispatched it, which `onDidAction` reports; "nothing was fetched"
+		// alone is satisfied by a frame the client silently dropped, and that is how a
+		// reverted channel fix would have passed.
+		case 'A14-action': case 'A21-ui': case 'A1-mcp-state':
+		case 'A1-customizations': case 'A1-toolcall-auth': {
+			const wanted = (probe.msg.params as { channel?: string; action?: { type?: string } } | undefined);
+			ok = seen.some(d => d.channel === wanted?.channel && d.type === wanted?.action?.type) && newUrls.length === 0;
+			break;
+		}
 		default:
-			// Notification-form probes: the client must accept and dispatch the frame rather
-			// than fail on it, and must not fetch anything for it.
-			ok = newUrls.length === 0;
+			// No silent catch-all: a probe added to the table without a check here would
+			// otherwise pass on an assertion about nothing, and count toward the "probes
+			// land" guarantee.
+			evidence.error = 'probe has no check in the validator';
+			ok = false;
 			break;
 	}
 	return { probe: probe.id, kind: expect.kind, reaches: expect.reaches, ok, evidence };

@@ -83,10 +83,18 @@ export class RogueAgentHost {
 		}
 	}
 
-	/** A server-to-client notification, as a tab-side agent host would send it. */
+	/**
+	 * A server-to-client notification, as a tab-side agent host would send it. Throws
+	 * rather than returning quietly when it cannot send: a silent no-op here is
+	 * indistinguishable from a frame the client received and dropped, which is how a
+	 * disarmed fixture passed a check that only asserted nothing happened.
+	 */
 	notify(method: string, params: unknown): void {
-		if (!this.armed || !this._toClient) {
-			return;
+		if (!this.armed) {
+			throw new Error('notify: the rogue agent host is not armed');
+		}
+		if (!this._toClient) {
+			throw new Error('notify: no client is attached');
 		}
 		this._send({ jsonrpc: '2.0', method, params });
 	}
