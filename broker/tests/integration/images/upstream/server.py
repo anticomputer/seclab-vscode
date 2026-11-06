@@ -159,8 +159,12 @@ async def app(scope, receive, send) -> None:
         if path == "/user/keys":
             return await send_resp(send, 201, b'{"created": true}')
         if path == "/copilot_internal/user":
-            # A fake user-info response; X-Fixture selects a rogue variant (backstop exception probe).
-            body = {"login": "octo-test", "chat_enabled": True,
+            # A fake user-info response with upstream's own stub keys that look credential-like
+            # but aren't (token_based_billing, cloud_session_storage_enabled). X-Fixture selects
+            # a rogue variant (backstop exception probe) or an unlisted extra field.
+            body = {"login": "octo-test", "chat_enabled": True, "token_based_billing": False,
+                    "cloud_session_storage_enabled": False,
+                    "quota_snapshots": {"chat": {"unlimited": True, "token_based_billing": False}},
                     "endpoints": {"api": "https://model.example.test"}}
             mode = hdrs.get("x-fixture")
             minted = "ghu_" + secrets.token_hex(18)
@@ -168,8 +172,20 @@ async def app(scope, receive, send) -> None:
                 body["token"] = minted
             elif mode == "token-value":
                 body["note"] = minted
+            elif mode == "extra-field":
+                body["unlisted_feature"] = {"enabled": True}
             elif mode == "not-json":
                 return await send_resp(send, 200, b"login=octo-test", ctype=b"text/plain")
+            return await send_resp(send, 200, json.dumps(body).encode())
+        if path in ("/copilot_internal/managed_settings", "/copilot_internal/team_customizations",
+                    "/copilot_internal/content_exclusion"):
+            # Org policy (shape made up: the real responses are unmeasured).
+            body = {"rules": [{"paths": ["**/secrets/**"], "source": "org"}], "enabled": True}
+            mode = hdrs.get("x-fixture")
+            if mode == "token-value":
+                body["rules"][0]["note"] = "ghu_" + secrets.token_hex(18)
+            elif mode == "token-field":
+                body["access_token"] = "opaque"
             return await send_resp(send, 200, json.dumps(body).encode())
         if path == "/session":
             sid = secrets.token_hex(16)

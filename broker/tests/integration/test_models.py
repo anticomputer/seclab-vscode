@@ -3,8 +3,14 @@ and A22 (body policy), and sealed agent-host tokens never forwarded (A25, broker
 The fake model API is the test upstream at model.example.test; credentials are canaries."""
 
 import base64
+import hashlib
 import json
 import os
+
+
+def sha(s: str) -> str:
+    return hashlib.sha256(s.encode()).hexdigest()
+
 
 FAKE = {"id": "fake", "hosts": ["model.example.test"],
         "endpoints": [{"path": "/v1/chat/completions", "methods": ["POST"]}, {"path": "/v1/models", "methods": ["GET"]}],
@@ -206,3 +212,126 @@ def test_backstop_exception_copilot_user_is_narrow_and_its_response_is_checked(p
     assert pod.curl("https://api.example.test/copilot_internal/user", *auth, "-X", "POST", "-d", "{}").code == 403
     assert pod.curl("https://api.example.test/copilot_internal/User", *auth).code == 403
     assert pod.curl("https://api.example.test/copilot_internal/v2/token", *auth).code == 403
+
+
+# ---- user decisions on the measured traffic (2026-11-05; policy schema revision 4) --------
+
+# The built-in copilot provider's measured endpoints, re-hosted onto the fixture (the unit
+# tests check the built-in data itself).
+CAPI = {"id": "copilot-fixture", "hosts": ["model.example.test"], "fields": [], "toolTypes": [], "endpoints": [
+    {"path": "/models", "methods": ["GET"]},
+    {"path": "/responses", "methods": ["POST"], "toolTypes": ["function", "custom"],
+     "fields": ["include", "input", "instructions", "model", "parallel_tool_calls", "reasoning", "store", "stream", "text", "tools"]},
+    {"path": "/chat/completions", "methods": ["POST"], "toolTypes": ["function", "custom"],
+     "fields": ["messages", "model", "reasoning_effort", "snippy", "stream", "stream_options", "temperature", "tools"]},
+    {"path": "/v1/messages", "methods": ["POST"], "toolTypes": ["custom"], "untypedTool": "custom",
+     "fields": ["max_tokens", "messages", "model", "stream", "system", "temperature", "thinking", "tools"]},
+    {"id": "github-mcp-readonly", "path": "/mcp/readonly", "methods": ["POST"], "requiresGrant": True,
+     "fields": ["id", "jsonrpc", "method", "params"], "toolTypes": []}]}
+ORG = ("managed_settings", "team_customizations", "content_exclusion")
+
+
+def gh_parent(extra_bind=()):
+    """The GitHub token as the agent host uses it (amended D7): Bearer, bound to the four
+    /copilot_internal GETs and the measured CAPI model routes by exact path and method."""
+    bind = [{"host": "api.example.test", "path": f"/copilot_internal/{p}", "methods": ["GET"]} for p in ("user",) + ORG]
+    bind += [{"host": "model.example.test", "path": "/models", "methods": ["GET"]}]
+    bind += [{"host": "model.example.test", "path": p, "methods": ["POST"]}
+             for p in ("/responses", "/chat/completions", "/v1/messages")]
+    return {"id": "gh", "provider": "github", "inject": {"header": "Authorization", "fmt": "Bearer {value}"},
+            "bind": bind + list(extra_bind)}
+
+
+def load_gh(pod, ctl, grants=(), extra_bind=()):
+    s = pod.load({"allow": [{"host": "api.example.test"}, {"host": "model.example.test"}],
+                  "credentials": [gh_parent(extra_bind)], "prompt": {"enabled": False},
+                  "models": {"providers": [CAPI], "grants": list(grants)}})["gh"]
+    ctl.call("credential.provide", {"id": "gh", "value": pod.canaries["git"]})
+    return s
+
+
+def capi(pod, s, path, body):
+    return pod.curl(f"https://model.example.test{path}", "-X", "POST", "-H", f"Authorization: Bearer {s}",
+                    "-H", "Content-Type: application/json", "--data-binary", json.dumps(body))
+
+
+def test_d7_amended_github_token_reaches_the_measured_capi_routes_only(pod, ctl):
+    """Amended D7 (user-accepted): the GitHub token itself is injected on the CAPI model
+    routes, by exact path and method, with the measured body shapes; the tab only ever holds
+    the sentinel. Anything else on the model host is denied before the upstream."""
+    s = load_gh(pod, ctl)
+    fn = {"type": "function", "name": "view", "parameters": {"type": "object"}}
+    custom = {"type": "custom", "name": "apply_patch", "format": {"type": "grammar", "syntax": "lark", "definition": "start: /.+/"}}
+    ok = [("/responses", {"model": "m", "input": "hi", "stream": True, "tools": [fn, custom]}),
+          ("/chat/completions", {"model": "m", "messages": [], "snippy": {"enabled": True}, "tools": [fn]}),
+          ("/v1/messages", {"model": "m", "messages": [], "max_tokens": 1, "system": "s",
+                            "thinking": {"type": "enabled", "budget_tokens": 1024}, "tools": [{"name": "view", "input_schema": {}}]})]
+    for path, body in ok:
+        r = capi(pod, s, path, body)
+        assert r.code == 200 and r.json()["path"] == path, (path, r.code, r.body)
+        pod.assert_no_canary(r.body)
+    r = pod.curl("https://model.example.test/models", "-H", f"Authorization: Bearer {s}")
+    assert r.code == 200
+    got = [x for x in pod.seen() if x["host"] == "model.example.test" and x["path"] in ("/models",) + tuple(p for p, _ in ok)]
+    assert len(got) == 4 and {x["auth_sha256"] for x in got} == {sha("Bearer " + pod.canaries["git"])}
+    before = len(pod.seen())
+    for path, body in [("/embeddings", {"model": "m", "input": "x"}),
+                       ("/responses", {"model": "m", "input": "x", "snippy": {"enabled": True}}),
+                       ("/responses", {"model": "m", "input": "x", "tools": [{"type": "web_search"}]}),
+                       ("/mcp/readonly", {"id": 1, "jsonrpc": "2.0", "method": "tools/list", "params": {}})]:
+        assert capi(pod, s, path, body).code == 403, path
+    assert len(pod.seen()) == before
+
+
+def test_github_remote_mcp_is_denied_until_a_tab_grant(pod, ctl):
+    """Coordinator decision: POST <capi>/mcp/readonly (GitHub's remote MCP server acting on
+    the user's GitHub) is denied by default; a per-tab Tier C grant plus a binding opens it."""
+    rpc = {"id": 1, "jsonrpc": "2.0", "method": "tools/list", "params": {}}
+    s = load_gh(pod, ctl)
+    mark = ctl.mark()
+    assert capi(pod, s, "/mcp/readonly", rpc).code == 403
+    denied = ctl.wait_note("audit.event", lambda e: e["type"] == "model.denied", since=mark, timeout=10)
+    assert "grant" in denied["reason"] and denied["detail"] == "github-mcp-readonly"
+    mcp = {"host": "model.example.test", "path": "/mcp/readonly", "methods": ["POST"]}
+    s = load_gh(pod, ctl, grants=[{"provider": "copilot-fixture", "endpoint": "github-mcp-readonly"}], extra_bind=[mcp])
+    r = capi(pod, s, "/mcp/readonly", rpc)
+    assert r.code == 200 and r.json()["auth_sha256"] == sha("Bearer " + pod.canaries["git"])
+
+
+def test_org_policy_gets_are_narrow_and_their_responses_checked(pod, ctl):
+    """User decision: exactly GET /copilot_internal/{managed_settings,team_customizations,
+    content_exclusion}, with the same checks as /user. A rogue upstream's token-shaped value
+    or credential-named key is blocked and audited; the tab never sees it."""
+    s = load_gh(pod, ctl)
+    auth = ["-H", f"Authorization: Bearer {s}"]
+    for name in ORG:
+        url = f"https://api.example.test/copilot_internal/{name}"
+        r = pod.curl(url, *auth)
+        assert r.code == 200 and r.json()["rules"][0]["source"] == "org", (name, r.body)
+        mark = ctl.mark()
+        for mode in ("token-value", "token-field"):
+            r = pod.curl(url, *auth, "-H", f"X-Fixture: {mode}")
+            assert r.code == 502 and "ghu_" not in r.body and "opaque" not in r.body, (name, mode)
+        found = [e for e in ctl.notes_since(mark, "audit.event") if e["type"] == "credential.backstop_exception_blocked"]
+        assert len(found) == 2
+        assert pod.curl(url + "?org=x", *auth).code == 403
+        assert pod.curl(url, *auth, "-X", "POST", "-d", "{}").code == 403
+    assert pod.curl("https://api.example.test/copilot_internal/v2/token", *auth).code == 403
+
+
+def test_copilot_user_benign_keys_pass_and_unlisted_fields_are_dropped(pod, ctl):
+    """The /user response's measured field allowlist: upstream's own stub keys that look like
+    credentials (token_based_billing, cloud_session_storage_enabled) pass; a field outside
+    the allowlist is dropped and audited as a finding; a token-shaped value still blocks."""
+    s = load_gh(pod, ctl)
+    auth = ["-H", f"Authorization: Bearer {s}"]
+    r = pod.curl("https://api.example.test/copilot_internal/user", *auth)
+    doc = r.json()
+    assert r.code == 200 and doc["token_based_billing"] is False and doc["quota_snapshots"]["chat"]["unlimited"]
+    mark = ctl.mark()
+    r = pod.curl("https://api.example.test/copilot_internal/user", *auth, "-H", "X-Fixture: extra-field")
+    assert r.code == 200 and "unlisted_feature" not in r.json() and r.json()["login"] == "octo-test"
+    e = ctl.wait_note("audit.event", lambda e: e["type"] == "credential.backstop_exception_filtered", since=mark, timeout=10)
+    assert e["detail"] == "unlisted_feature"
+    r = pod.curl("https://api.example.test/copilot_internal/user", *auth, "-H", "X-Fixture: token-value")
+    assert r.code == 502 and "ghu_" not in r.body

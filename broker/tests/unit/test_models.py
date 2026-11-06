@@ -163,3 +163,91 @@ def test_r7_every_credential_location_is_found():
     found = dict(credential_values(gemini, hdrs, "key=e&KEY=f&subscription-key=g&k2=h&alt=sse"))
     assert set(found) == {"header:x-goog-api-key", "header:ocp-apim-subscription-key", "header:x-custom-key",
                           "header:cookie", "query:key", "query:subscription-key", "query:k2"}
+
+
+# ---- measured copilot provider (policy schema revision 4) ---------------------------------
+# Shapes are the top-level fields and tool types the shipped agent host and Copilot runtime
+# sent from a real tab (secure-agentic B2 run, 2026-11-05); content is made up.
+
+COP = ModelPolicy.from_json({"providers": ["copilot"]})
+GRANTED = ModelPolicy.from_json({"providers": ["copilot"],
+                                 "grants": [{"provider": "copilot", "endpoint": "github-mcp-readonly"}]})
+CAPI = "api.individual.githubcopilot.com"
+FN = {"type": "function", "name": "view", "parameters": {"type": "object"}}
+CUSTOM = {"type": "custom", "name": "apply_patch", "format": {"type": "grammar", "syntax": "lark", "definition": "start: /.+/"}}
+
+
+def test_measured_copilot_requests_pass():
+    responses = {"include": [], "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]},
+                                          {"type": "function_call", "call_id": "c", "name": "view", "arguments": "{}"},
+                                          {"type": "function_call_output", "call_id": "c", "output": "ok"}],
+                 "instructions": "x", "model": "m", "parallel_tool_calls": True, "reasoning": {"effort": "low", "summary": "auto"},
+                 "store": False, "stream": True, "text": {"verbosity": "low"}, "tools": [FN, CUSTOM]}
+    v = check(CAPI, "/responses", responses, policy=COP)
+    assert v.ok and v.tools == ["function", "custom"]
+    chat = {"messages": [{"role": "user", "content": "hi"}], "model": "m", "reasoning_effort": "low",
+            "snippy": {"enabled": True}, "stream": True, "stream_options": {"include_usage": True}, "temperature": 0,
+            "tools": [{"type": "function", "function": {"name": "view"}}, {"type": "custom", "custom": {"name": "apply_patch", "format": {"type": "grammar"}}}]}
+    assert check(CAPI, "/chat/completions", chat, policy=COP).ok
+    messages = {"max_tokens": 1, "messages": [{"role": "user", "content": [{"type": "text", "text": "hi", "cache_control": {"type": "ephemeral"}}]}],
+                "model": "m", "stream": True, "system": [{"type": "text", "text": "s"}], "temperature": 0,
+                "thinking": {"type": "enabled", "budget_tokens": 1024, "display": "summarized"},
+                "tools": [{"name": "view", "input_schema": {"type": "object"}}]}
+    v = check(CAPI, "/v1/messages", messages, policy=COP)
+    assert v.ok and v.tools == ["custom"]
+    assert check("api.githubcopilot.com", "/models", b"", method="GET", headers={}, policy=COP).ok
+
+
+@pytest.mark.parametrize("path,body,why", [
+    ("/responses", {"model": "m", "input": "x", "snippy": {"enabled": True}}, "field"),      # chat-only field
+    ("/chat/completions", {"model": "m", "messages": [], "system": "s"}, "field"),          # messages-only field
+    ("/v1/messages", {"model": "m", "messages": [], "max_tokens": 1, "reasoning_effort": "low"}, "field"),
+    ("/responses", {"model": "m", "input": "x", "previous_response_id": "r"}, "field"),       # draft field, never sent
+    ("/responses", {"model": "m", "input": "x", "tools": [{"name": "untyped"}]}, "tool type"),  # untyped only on /v1/messages
+    ("/responses", {"model": "m", "input": "x", "tools": [{"type": "web_search"}]}, "tool type"),
+    ("/responses", {"model": "m", "input": "x", "tools": [{"type": "mcp", "server_url": "https://x.example.test"}]}, "tool type"),
+    ("/v1/messages", {"model": "m", "messages": [], "max_tokens": 1, "tools": [{"type": "function", "name": "f"}]}, "tool type"),
+    ("/v1/messages", {"model": "m", "messages": [], "max_tokens": 1, "tools": [{"type": "web_fetch_20250910", "name": "w"}]}, "tool type"),
+    ("/embeddings", {"model": "m", "input": "x"}, "endpoint"),                                # draft endpoint, never called
+    ("/mcp/readonly", {"id": 1, "jsonrpc": "2.0", "method": "tools/list", "params": {}}, "needs a grant"),
+])
+def test_measured_copilot_denials(path, body, why):
+    v = check(CAPI, path, body, policy=COP)
+    assert not v.ok and why in v.reason, v
+
+
+def test_github_remote_mcp_needs_a_per_tab_endpoint_grant():
+    rpc = {"id": 1, "jsonrpc": "2.0", "method": "tools/call", "params": {"name": "get_me", "arguments": {}}}
+    assert check(CAPI, "/mcp/readonly", rpc, policy=COP).detail == "github-mcp-readonly"
+    assert check(CAPI, "/mcp/readonly", rpc, policy=GRANTED).ok
+    # The grant opens that endpoint only, with its own field list and no tools.
+    assert "field" in check(CAPI, "/mcp/readonly", dict(rpc, tools=[FN]), policy=GRANTED).reason
+    assert "endpoint" in check(CAPI, "/mcp", rpc, policy=GRANTED).reason
+    # A tool-type grant is not an endpoint grant, and the reverse.
+    assert not check(CAPI, "/mcp/readonly", rpc, policy=ModelPolicy.from_json(
+        {"providers": ["copilot"], "grants": [{"provider": "copilot", "toolType": "github-mcp-readonly"}]})).ok
+    assert "tool type" in check(CAPI, "/responses", {"model": "m", "tools": [{"type": "mcp"}]}, policy=GRANTED).reason
+
+
+def test_endpoint_grants_are_validated():
+    for bad in ({"provider": "copilot", "endpoint": "nope"}, {"provider": "openai", "endpoint": "github-mcp-readonly"},
+                {"provider": "missing", "endpoint": "github-mcp-readonly"}):
+        with pytest.raises(PolicyError):
+            ModelPolicy.from_json({"providers": ["copilot", "openai"], "grants": [bad]})
+    with pytest.raises(PolicyError):  # requiresGrant needs an id to be grantable at all
+        ModelPolicy.from_json({"providers": [{"id": "p", "hosts": ["p.example.test"], "fields": [],
+                                              "endpoints": [{"path": "/x", "methods": ["POST"], "requiresGrant": True}]}]})
+    # A plain (non-grantable) endpoint can't be opened by naming its id.
+    with pytest.raises(PolicyError):
+        ModelPolicy.from_json({"providers": [{"id": "p", "hosts": ["p.example.test"], "fields": [],
+                                              "endpoints": [{"id": "e", "path": "/x", "methods": ["POST"]}]}],
+                               "grants": [{"provider": "p", "endpoint": "e"}]})
+
+
+def test_revision4_policy_shapes_validate():
+    ok = Policy.from_json({"version": 1, "models": {"providers": ["copilot"], "grants": [
+        {"provider": "copilot", "endpoint": "github-mcp-readonly"}, {"provider": "copilot", "toolType": "remote-content"}]}})
+    assert ok.models.endpoint_grants == {("copilot", "github-mcp-readonly")}
+    for bad in ({"provider": "copilot", "endpoint": "github-mcp-readonly", "toolType": "x"}, {"provider": "copilot"}):
+        with pytest.raises(PolicyError):
+            Policy.from_json({"version": 1, "models": {"providers": ["copilot"], "grants": [bad]}})

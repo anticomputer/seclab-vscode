@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/anticomputer/seclab-vscode/broker/schema/policy.v1.schema.json",
   "title": "seclab-vscode broker policy, version 1",
-  "x-revision": 3,
+  "x-revision": 4,
   "description": "Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, schemes, methods and paths, never engine internals. Default is deny.",
   "type": "object",
   "additionalProperties": false,
@@ -124,7 +124,7 @@
     "models": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Model-host policy (revision 3). A request to a host of a declared provider, or to any host on the broker's known model-host list, is checked before forwarding: the provider must be declared, the method and path must be one of its endpoints, no upgrades, the body must be strict JSON with only listed top-level fields, and every tool must have an allowed `type`. Requests and bytes on model hosts count against a per-tab budget; over budget is denied, never prompted. All of this only denies.",
+      "description": "Model-host policy (revision 3; per-endpoint allowlists and endpoint grants in revision 4). A request to a host of a declared provider, or to any host on the broker's known model-host list, is checked before forwarding: the provider must be declared, the method and path must be one of its endpoints (an endpoint marked `requiresGrant` also needs a grant), no upgrades, the body must be strict JSON with only listed top-level fields, and every tool must have an allowed `type`. Requests and bytes on model hosts count against a per-tab budget; over budget is denied, never prompted. All of this only denies.",
       "properties": {
         "providers": {
           "type": "array",
@@ -167,22 +167,42 @@
         "grants": {
           "type": "array",
           "maxItems": 64,
-          "description": "Tier C exceptions: a server-side tool type the user granted for this tab.",
+          "description": "Tier C exceptions the user granted for this tab: a server-side tool type (`toolType`), or (revision 4) an endpoint the provider marks `requiresGrant` (`endpoint`, its `id`; for example the built-in copilot provider's `github-mcp-readonly`).",
           "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "provider",
-              "toolType"
-            ],
-            "properties": {
-              "provider": {
-                "$ref": "#/definitions/id"
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "provider",
+                  "toolType"
+                ],
+                "properties": {
+                  "provider": {
+                    "$ref": "#/definitions/id"
+                  },
+                  "toolType": {
+                    "$ref": "#/definitions/toolType"
+                  }
+                }
               },
-              "toolType": {
-                "$ref": "#/definitions/toolType"
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "provider",
+                  "endpoint"
+                ],
+                "properties": {
+                  "provider": {
+                    "$ref": "#/definitions/id"
+                  },
+                  "endpoint": {
+                    "$ref": "#/definitions/id"
+                  }
+                }
               }
-            }
+            ]
           }
         }
       }
@@ -268,6 +288,36 @@
               },
               "methods": {
                 "$ref": "#/definitions/methods"
+              },
+              "id": {
+                "$ref": "#/definitions/id",
+                "description": "Names the endpoint for a grant (revision 4)."
+              },
+              "fields": {
+                "type": "array",
+                "maxItems": 256,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+                },
+                "description": "Top-level body fields allowed on this endpoint; replaces the provider's `fields` here (revision 4)."
+              },
+              "toolTypes": {
+                "type": "array",
+                "maxItems": 64,
+                "items": {
+                  "$ref": "#/definitions/toolType"
+                },
+                "description": "Tool types allowed on this endpoint; replaces the provider's `toolTypes` (and, unless `untypedTool` is given here, its `untypedTool`) here (revision 4)."
+              },
+              "untypedTool": {
+                "$ref": "#/definitions/toolType",
+                "description": "The type an untyped tool counts as on this endpoint (revision 4)."
+              },
+              "requiresGrant": {
+                "type": "boolean",
+                "default": false,
+                "description": "Denied unless `models.grants` names this endpoint's `id` (Tier C; revision 4). Needs `id`."
               }
             }
           }

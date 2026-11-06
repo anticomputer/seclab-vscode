@@ -33,8 +33,25 @@ _JSON_TYPE = re.compile(r"^application/(?:[a-z0-9.+-]*\+)?json\s*(?:;\s*charset\
 
 @dataclass(frozen=True)
 class Endpoint:
+    """One method set on one path. `fields`, `tool_types` and `untyped_tool`, when given,
+    replace the provider's for this endpoint (measured per-endpoint allowlists). An endpoint
+    with `requires_grant` is denied unless a grant names its `id` (Tier C)."""
     path: str
     methods: tuple[str, ...]
+    id: str | None = None
+    fields: frozenset[str] | None = None
+    tool_types: frozenset[str] | None = None
+    untyped_tool: str | None = None
+    requires_grant: bool = False
+
+    @classmethod
+    def from_json(cls, e: dict) -> "Endpoint":
+        if e.get("requiresGrant") and not e.get("id"):
+            raise PolicyError(f"model endpoint {e['path']!r} requires a grant but has no id")
+        return cls(e["path"], tuple(e["methods"]), e.get("id"),
+                   frozenset(e["fields"]) if "fields" in e else None,
+                   frozenset(e["toolTypes"]) if "toolTypes" in e else None,
+                   e.get("untypedTool"), bool(e.get("requiresGrant", False)))
 
     def matches(self, method: str, path: str) -> bool:
         return method in self.methods and compile_glob(self.path).fullmatch(path) is not None
@@ -57,7 +74,7 @@ class Provider:
         return cls(
             id=obj["id"],
             hosts=tuple(_parse_host_pattern(h) for h in obj["hosts"]),
-            endpoints=tuple(Endpoint(e["path"], tuple(e["methods"])) for e in obj["endpoints"]),
+            endpoints=tuple(Endpoint.from_json(e) for e in obj["endpoints"]),
             fields=frozenset(obj["fields"]),
             tool_fields=tuple(obj.get("toolFields", ["tools"])),
             tool_types=frozenset(obj.get("toolTypes", [])),
@@ -92,6 +109,7 @@ class ModelPolicy:
     max_requests: int = 5000
     max_bytes: int = 1 << 30
     grants: frozenset[tuple[str, str]] = frozenset()
+    endpoint_grants: frozenset[tuple[str, str]] = frozenset()
 
     @classmethod
     def from_json(cls, obj: dict | None) -> "ModelPolicy":
@@ -108,13 +126,20 @@ class ModelPolicy:
         ids = [p.id for p in providers]
         if len(ids) != len(set(ids)):
             raise PolicyError("duplicate model provider id")
-        grants = frozenset((g["provider"], g["toolType"]) for g in obj.get("grants", []))
-        unknown = {p for p, _ in grants} - set(ids)
+        raw = obj.get("grants", [])
+        grants = frozenset((g["provider"], g["toolType"]) for g in raw if "toolType" in g)
+        endpoint_grants = frozenset((g["provider"], g["endpoint"]) for g in raw if "endpoint" in g)
+        unknown = {p for p, _ in grants | endpoint_grants} - set(ids)
         if unknown:
             raise PolicyError(f"model grant names an unknown provider: {sorted(unknown)}")
+        by_id = {p.id: p for p in providers}
+        for prov, eid in endpoint_grants:
+            if not any(e.id == eid and e.requires_grant for e in by_id[prov].endpoints):
+                raise PolicyError(f"model grant names no grantable endpoint {eid!r} of provider {prov!r}")
         budget = obj.get("budget", {})
         return cls(providers=providers, max_requests=int(budget.get("requests", 5000)),
-                   max_bytes=int(budget.get("bytes", 1 << 30)), grants=grants)
+                   max_bytes=int(budget.get("bytes", 1 << 30)), grants=grants,
+                   endpoint_grants=endpoint_grants)
 
     def provider_for(self, host: str) -> Provider | None:
         return next((p for p in self.providers if any(h.matches(host) for h in p.hosts)), None)
@@ -297,8 +322,14 @@ def check_request(policy: ModelPolicy, host: str, method: str, path: str, header
         return BodyVerdict(False, "model host has no declared provider")
     if upgrade is not None:
         return BodyVerdict(False, "no upgrades on model hosts", p.id)
-    if not any(e.matches(method, path) for e in p.endpoints):
+    ep = next((e for e in p.endpoints if e.matches(method, path)), None)
+    if ep is None:
         return BodyVerdict(False, "endpoint not allowed for this provider", p.id)
+    if ep.requires_grant and (p.id, ep.id) not in policy.endpoint_grants:
+        return BodyVerdict(False, "endpoint needs a grant", p.id, detail=ep.id)
+    fields = p.fields if ep.fields is None else ep.fields
+    tool_types = p.tool_types if ep.tool_types is None else ep.tool_types
+    untyped = ep.untyped_tool if ep.untyped_tool is not None else (p.untyped_tool if ep.tool_types is None else None)
     enc = [v.strip().lower() for v in headers.get("content-encoding", [])]
     if any(e not in ("", "identity") for e in enc):
         return BodyVerdict(False, "content encoding must be identity", p.id)
@@ -313,10 +344,10 @@ def check_request(policy: ModelPolicy, host: str, method: str, path: str, header
         return BodyVerdict(False, f"body is not strict JSON ({e})", p.id)
     if not isinstance(doc, dict):
         return BodyVerdict(False, "body must be a JSON object", p.id)
-    extra = sorted(set(doc) - p.fields)
+    extra = sorted(set(doc) - fields)
     if extra:
         return BodyVerdict(False, "field not allowed for this provider", p.id, detail=extra[0])
-    allowed = p.tool_types | {t for prov, t in policy.grants if prov == p.id}
+    allowed = tool_types | {t for prov, t in policy.grants if prov == p.id}
     seen: list[str] = []
     for f in p.tool_fields:
         if f not in doc:
@@ -327,7 +358,7 @@ def check_request(policy: ModelPolicy, host: str, method: str, path: str, header
         for t in tools:
             if not isinstance(t, dict):
                 return BodyVerdict(False, f"{f} element must be an object", p.id)
-            ttype = t.get("type", p.untyped_tool)
+            ttype = t.get("type", untyped)
             if any(k != "type" and k.casefold() == "type" for k in t):
                 return BodyVerdict(False, "tool type key in another case", p.id)
             if not isinstance(ttype, str) or ttype not in allowed:
