@@ -49,7 +49,7 @@ rpc_expect() { # $1 = patches dir, $2 = scratch file; prints absent|<sha256>, or
 if [ "${1:-}" = "--self-test" ]; then
 	# The RPC stamp both ways (prepare.sh step 7), on fixture roots and fake patch queues.
 	SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
-	T="$(cd "$(dirname "$SELF")/.." && pwd)/.work/check-release-self-test"
+	T="${SECLAB_SCRATCH:-$(cd "$(dirname "$SELF")/.." && pwd)/.work}/check-release-self-test"
 	rm -rf "$T"; mkdir -p "$T/root" "$T/no5" "$T/with5" "$T/two" "$T/nonl"
 	trap 'rm -rf "$T"' EXIT
 	echo 'var x=1;' > "$T/root/a.js"
