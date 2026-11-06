@@ -30,6 +30,8 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 
 # Target path inside the patch -> editable source in the repo.
 MAPPING = {
+    "src/vs/workbench/services/extensions/common/seclabArgValidators.ts":
+        "rpc-filter/patch-src/seclabArgValidators.ts",
     "src/vs/workbench/services/extensions/common/seclabPolicyData.ts":
         "rpc-filter/patch-src/seclabPolicyData.ts",
     "src/vs/workbench/services/extensions/common/seclabRpcFilter.ts":

@@ -62,8 +62,8 @@
     },
     {
       "id": "no-allowed-command-while-laundering-is-deferred",
-      "statement": "No command may be given a verdict other than deny until the deferred-laundering residual is fixed.",
-      "enforced_by": "residuals['deferred-laundering'].fixed is false, so the gate refuses any cmd: verdict that is not deny",
+      "statement": "No command may be given a verdict other than deny until the deferred-laundering residual is fixed, except the residual's recorded leaf exceptions, each validated.",
+      "enforced_by": "residuals['deferred-laundering'].fixed is false, so the gate refuses any cmd: verdict that is not deny unless the id is in leaf_exceptions and its entry is allow_with_constraint with leaf: true, leaf_evidence and a validator",
       "checked_by": "check_drift.py::check_residuals"
     },
     {
@@ -116,8 +116,9 @@
             "cross-tab-access"
           ],
           "identity_from_argument": true,
-          "constraint": "extensionId is discarded and replaced with the identity bound to the connection; the storage key becomes {tabId, boundExtensionId, key}",
-          "rationale": "extensionId is an RPC argument, so a hostile host can name any extension, including vscode.github-authentication, and read its stored sessions. The stored value is also global across windows, so without partitioning one tab reads another tab's secrets.",
+          "constraint": "the storage key is partitioned by the tab bound to the connection: {seclabTab, extensionId, key} (patch 0011). extensionId remains a claim, but only within this tab's partition, where every extension shares the one extension host a rogue extension already controls; nothing outside the partition, including UI-side extensions' secrets and other tabs', is addressable",
+          "validator": "secretByKey",
+          "rationale": "extensionId is an RPC argument, so a hostile host can name any extension, including vscode.github-authentication, and read its stored sessions. The stored value is also global across windows, so without partitioning one tab reads another tab's secrets. The partition makes the tab, not the claimed extension, the unit of isolation: the filter permits this rewrite only once patch 0011 has registered it, and the validator holds the arguments to an extension id and a bounded key.",
           "evidence": [
             "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L38-L48",
             "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L90-L92"
@@ -130,7 +131,8 @@
             "cross-tab-access"
           ],
           "identity_from_argument": true,
-          "constraint": "same rebinding as $getPassword",
+          "constraint": "same partition as $getPassword",
+          "validator": "secretSet",
           "rationale": "Poisoning: a tab can overwrite another extension's stored session, including an auth provider's.",
           "evidence": [
             "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L50-L59"
@@ -144,7 +146,8 @@
             "dos"
           ],
           "identity_from_argument": true,
-          "constraint": "same rebinding as $getPassword",
+          "constraint": "same partition as $getPassword",
+          "validator": "secretByKey",
           "rationale": "Same spoofable identity; worst case is destroying another extension's credentials.",
           "evidence": [
             "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L61-L70"
@@ -158,10 +161,63 @@
             "cross-tab-access"
           ],
           "identity_from_argument": true,
-          "constraint": "same rebinding as $getPassword",
+          "constraint": "same partition as $getPassword; only keys in this tab's partition are listed",
+          "validator": "secretKeys",
           "rationale": "Enumeration is strictly worse than a single read: it gives the attacker the key names to then fetch.",
           "evidence": [
             "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L72-L80"
+          ]
+        }
+      }
+    },
+    "MainThreadStorage": {
+      "service_default": "deny",
+      "review": "classified",
+      "methods": {
+        "$initializeExtensionStorage": {
+          "verdict": "rewrite",
+          "capability": "read an extension's global (shared: true, profile-wide) or workspace state, by a caller-named id",
+          "impact": [
+            "cross-tab-access",
+            "credential-access"
+          ],
+          "identity_from_argument": true,
+          "constraint": "the storage key is partitioned by the tab bound to the connection, seclab-tab:<tabId>/<id>, in both scopes; storage migration is skipped for tab hosts; the id must be an extension id (patch 0011)",
+          "validator": "extensionStorageInit",
+          "rationale": "Every activation awaits BOTH mementos (extHostExtensionService.ts L504-L517), so denying either scope stops every extension activating. Unpartitioned, the caller-named id is used verbatim as a storage KEY in the profile or workspace store, so a tab could read any key there, not only extension state: other tabs' state for the same extension, UI-side extensions' state (the Tab Manager keeps pending routes in globalState), and workbench keys. Migration copies state from a source id into the target, which would import unpartitioned state into the partition, so tab hosts skip it.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadStorage.ts#L46-L54",
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/extensionManagement/common/extensionStorage.ts#L159-L168",
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostExtensionService.ts#L504-L517"
+          ]
+        },
+        "$setValue": {
+          "verdict": "rewrite",
+          "capability": "write an extension's global or workspace state, by a caller-named id",
+          "impact": [
+            "cross-tab-access",
+            "ui-spoofing"
+          ],
+          "identity_from_argument": true,
+          "constraint": "same partition as $initializeExtensionStorage; the value must be a state object",
+          "validator": "extensionStorageSet",
+          "rationale": "Unpartitioned, a write under any key of the profile or workspace store: poisoning another tab's state, a UI-side extension's (the Tab Manager's pending routes), or a workbench key. Every Memento.update reaches this.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadStorage.ts#L56-L58",
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/extensionManagement/common/extensionStorage.ts#L170-L177"
+          ]
+        },
+        "$registerExtensionStorageKeysToSync": {
+          "verdict": "deny",
+          "capability": "mark an extension's state keys for Settings Sync",
+          "impact": [
+            "exfiltration",
+            "cross-tab-access"
+          ],
+          "rationale": "Settings Sync would carry tab state off the box and into the user's other machines. Not on the activation path: setKeysForSync is void and the proxy call is not awaited, so a denial surfaces only as an unhandled rejection in the extension host.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadStorage.ts#L60-L62",
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostStorage.ts#L35-L37"
           ]
         }
       }
@@ -271,10 +327,12 @@
           "impact": [
             "ui-spoofing"
           ],
-          "constraint": "the id must not collide with an existing registry entry; registrations from a tab are namespaced and are only routed back to that same tab",
-          "rationale": "Without a collision check a tab can shadow a trusted command id and then be invoked by the UI, by another extension, or by a command: link.",
+          "constraint": "the id is a command id, outside the fork's reserved prefixes, not one the trusted side owns (the workbench's ids from the inventory and the UI-side extensions' ids, SECLAB_TRUSTED_COMMAND_IDS), and not registered by anyone at the time of the call. The registration routes back only to this extension host: MainThreadCommands is per host and its handler calls this host's $executeContributedCommand",
+          "validator": "tabCommandRegistration",
+          "rationale": "The registry is last-writer-wins (CommandsRegistry.registerCommand unshifts), so without a collision check a tab can shadow a trusted command id and receive its invocations, with the arguments trusted callers pass, from the UI, another extension, or a command: link. Refusing ids the trusted side owns covers ids it registers lazily, after the tab connected; refusing any registered id covers the rest. Residual: the 172 command ids the inventory could not resolve statically are not in the trusted set, so a lazily registered one of those can be pre-empted until the trusted registration replaces it. Not on the activation path (ExtHostCommands.registerCommand does not await it), but every extension command invoked from a menu, keybinding or the palette needs it.",
           "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCommands.ts#L48-L62"
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCommands.ts#L57-L66",
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/commands/common/commands.ts#L109-L114"
           ]
         },
         "$unregisterCommand": {
@@ -621,15 +679,20 @@
           ]
         },
         "$onExtensionActivationError": {
-          "verdict": "deny",
+          "verdict": "allow_with_constraint",
           "capability": "report an activation failure, with an optional missing dependency",
           "impact": [
             "ui-spoofing",
             "supply-chain"
           ],
-          "rationale": "DENIED, deliberately, while its siblings are allowed. Unlike the rest of the lifecycle this one has a host effect a tab chooses: with a non-null missingExtensionDependency it reaches _handleMissingNotInstalledDependency, which prompts the user to INSTALL an extension the tab named, and in a development window it raises notificationService.error. It is on the failure path, not the success path, so denying it does not stop an extension activating -- the positive control (test/containment/benign-extension) is what holds that claim. Allowing it needs an argument constraint pinning missingExtensionDependency to null, which the constraint machinery cannot express yet, and an unimplemented constraint fails closed.",
+          "residual_impact": [
+            "log-noise"
+          ],
+          "constraint": "missingExtensionDependency (argument 2) is null or undefined; argument 0 is an extension identifier object and argument 1 a serialized error",
+          "validator": "activationErrorNoInstallPrompt",
+          "rationale": "With a truthy missingExtensionDependency it reaches _handleMissingNotInstalledDependency, which prompts the user to INSTALL an extension the tab named, and _handleMissingInstalledDependency, which offers to reload or enable one. The validator admits only the null case, which notifies the internal service (the running-extensions view and an activation-error telemetry event) and console.errors the message; the development-window notification depends on trusted environment flags our builds do not set. Denying it entirely left an activation failure in a tab undiagnosable.",
           "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadExtensionService.ts#L82-L110"
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadExtensionService.ts#L82-L109"
           ]
         }
       }
@@ -637,7 +700,7 @@
   },
   "commands": {
     "note": "Resolution is ordered: exact id first, then rules in order, then default_verdict. Categories are a GROUPING HINT and may only carry the verdict 'deny'. A command becomes reachable only through an explicit entry in 'exact', individually reviewed against its implementation. This is deliberate: the category is a substring heuristic over the command id, and the 2026-11-04 design review demonstrated it mis-grouped host-authority commands as editor-local (e.g. editor.action.accessibilityHelpOpenHelpLink opens an external link, and _workbench.editor.configureDefaultEditor matched 'editor.' before the underscore rule). A heuristic may withhold authority; it may not grant it.",
-    "reachable_allowlist_status": "empty by design until Phase 3. The allow set is built from measured need: run a popular extension against the filter, observe the denial, review the command's implementation, then add an entry here with evidence. Nothing is allowed because it looked harmless in bulk.",
+    "reachable_allowlist_status": "Built from measured need: the ordinary-session trace (rpc-filter/probes/traces/20261106-ordinary-session.json) showed which commands every extension calls; each reachable id is reviewed against its implementation, carries an argument validator and a probe, and while the deferred-laundering residual is open must be one of its recorded leaf_exceptions. Nothing is allowed because it looked harmless in bulk.",
     "exact": {
       "_remoteCLI.openExternal": {
         "verdict": "deny",
@@ -707,7 +770,83 @@
         "evidence": [
           "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/electron-browser/terminalRemote.ts#L16-L42"
         ]
+      },
+      "_setContext": {
+        "verdict": "allow_with_constraint",
+        "capability": "set a context key in the window's global context (vscode.commands.executeCommand('setContext', ...))",
+        "impact": [
+          "ui-spoofing"
+        ],
+        "residual_impact": [
+          "ui-spoofing"
+        ],
+        "constraint": "the key is not declared by the workbench (RawContextKey.all()), not under seclab. / seclab: / config., matches a plain key shape of at most 256 characters, and has no value that this tab did not set; the value is a primitive, a URI, or a flat list or map of them, bounded in size",
+        "validator": "setContextKey",
+        "leaf": true,
+        "leaf_evidence": [
+          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/contextkey/browser/contextKeyService.ts#L644-L661"
+        ],
+        "rationale": "Measured: 129 calls on an ordinary session (rpc-filter/probes/traces/20261106-ordinary-session.json), from every built-in that has menus or keybindings; denied, every extension's when-clauses stay false. The handler writes the window's global context with any key, so a tab could flip core or Tab Manager when-clauses and surface trusted menus and keybindings for host actions the user then triggers. Leaf: the handler only calls IContextKeyService.createKey, so nothing it does can reach ICommandService and launder. Residual: a hidden RawContextKey (declared with hide: true, absent from all()) or a dynamically built key the trusted side has not yet written can still be set first by a tab.",
+        "evidence": [
+          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/contextkey/browser/contextKeyService.ts#L644-L661",
+          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/contextkey/common/contextkey.ts#L1987-L2007"
+        ]
+      },
+      "_executeHoverProvider": {
+        "verdict": "allow_with_constraint",
+        "capability": "run every registered hover provider (the tab's and UI-side ones) on a model the caller names",
+        "impact": [
+          "host-fs-read",
+          "exfiltration"
+        ],
+        "residual_impact": [],
+        "constraint": "argument 0 is a marshalled URI that revives, canonically, to vscode-remote://seclab+<this tab> (or untitled:); argument 1 is a position",
+        "validator": "tabModelPosition",
+        "leaf": true,
+        "leaf_evidence": [
+          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/browser/editorExtensions.ts#L498-L525",
+          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/hover/browser/getHover.ts#L51-L54"
+        ],
+        "rationale": "What vscode.executeHoverProvider calls; the benign control's hover step and any extension composing hovers need it. registerModelAndPositionCommand hands the caller's URI to ITextModelService.createModelReference, and in a remote window file: is the HOST disk, so an unconstrained URI reads host files back through UI-side hover providers. The URI rule keeps it to this tab's own resources, and rejects a URI whose cached string or fsPath disagrees with its components. Leaf: the handler resolves a model and calls providers; it does not reach ICommandService.",
+        "evidence": [
+          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/browser/editorExtensions.ts#L498-L525",
+          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/hover/browser/getHover.ts#L51-L54"
+        ]
+      },
+      "_executeCompletionItemProvider": {
+        "verdict": "allow_with_constraint",
+        "capability": "run every registered completion provider (the tab's and UI-side ones, including word-based completion) on a model the caller names",
+        "impact": [
+          "host-fs-read",
+          "exfiltration"
+        ],
+        "residual_impact": [],
+        "constraint": "argument 0 is a marshalled URI that revives, canonically, to vscode-remote://seclab+<this tab> (or untitled:); argument 1 is a position; argument 2 at most a short trigger string; argument 3 an item count of at most 1000",
+        "validator": "tabModelPosition",
+        "leaf": true,
+        "leaf_evidence": [
+          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/suggest/browser/suggest.ts#L390-L425"
+        ],
+        "rationale": "What vscode.executeCompletionItemProvider calls. The handler calls ITextModelService.createModelReference(uri) on the caller's URI; with file: that is a host file, whose words come back through word-based completion. Same URI rule as _executeHoverProvider. Leaf: it resolves a model, calls providers and resolves items; a returned item's command is data for the caller, not executed here.",
+        "evidence": [
+          "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/suggest/browser/suggest.ts#L390-L425"
+        ]
       }
+    },
+    "trusted_registration_ids": {
+      "note": "Command ids registered by trusted UI-side extensions in a tab window, which a tab may not register (validator tabCommandRegistration). The workbench's own ids come from the inventory (registered only under src/). The Tab Manager's ids are all under the reserved seclab. prefix. These are the built-in extensions whose manifest makes them UI-side (extensionKind starts with ui) and that contribute commands.",
+      "ids": [
+        "simpleBrowser.show",
+        "vscode-testresolver.currentWindow",
+        "vscode-testresolver.currentWindowManaged",
+        "vscode-testresolver.killServerAndTriggerHandledError",
+        "vscode-testresolver.newWindow",
+        "vscode-testresolver.openTunnel",
+        "vscode-testresolver.showLog",
+        "vscode-testresolver.startRemoteServer",
+        "vscode-testresolver.toggleConnectionPause",
+        "vscode-testresolver.toggleConnectionSlowdown"
+      ]
     },
     "rules": [
       {
@@ -1556,8 +1695,14 @@
       "why": "The origin is threaded by rebinding ICommandService for the handler, and the backstop covers handlers that reach a global service instead. Both are scoped to the synchronous and awaited call tree: seclabInFlight is incremented at seclabExecuteFromTab and unwound when that promise settles. Work deferred past that point runs with no origin and a zero counter.",
       "fixed": false,
       "candidate_fix": "Carry the origin in the invoker's disposable scope rather than a window-wide counter, so it follows the handler's lifetime instead of the call's duration.",
-      "safe_while": "every command verdict is deny: with nothing allowed, a laundered call is refused for being denied rather than for being laundered, so the gap has no reachable consequence",
-      "gate": "check_drift.py::check_residuals fails if any cmd: surface is given a verdict other than deny while fixed is false"
+      "safe_while": "no reachable command can launder: every command is deny except the recorded leaf_exceptions, whose handlers are shown (leaf_evidence) never to reach ICommandService, so a laundered call has nothing to launder through",
+      "leaf_exceptions": [
+        "_executeCompletionItemProvider",
+        "_executeHoverProvider",
+        "_setContext"
+      ],
+      "leaf_exceptions_why": "The ordinary-session trace (rpc-filter/probes/traces/20261106-ordinary-session.json) shows every extension needs these three; the user approved them as the only leaf exceptions while the residual stays open, each with an argument validator because a leaf can still leak or spoof host state. Fixing the residual properly (candidate_fix) is a follow-up after this landing.",
+      "gate": "check_drift.py::check_residuals fails if any cmd: surface is given a verdict other than deny while fixed is false, unless it is a recorded leaf exception whose entry is allow_with_constraint with leaf: true, leaf_evidence and a validator; and fails on a leaf exception that is not reachable"
     }
   }
 }

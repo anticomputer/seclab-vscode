@@ -28,6 +28,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { readHits } from './beacon.ts';
+import { partitionFindings, stateItems } from './state-db.ts';
 import { report, type Check } from './assert.ts';
 
 const argv = process.argv.slice(2);
@@ -39,7 +40,7 @@ const opt = (name: string): string | undefined => {
 };
 const noReh = argv.includes('--no-reh');
 if ((mode !== 'unpatched' && mode !== 'patched') || !evidenceArg) {
-	console.error('usage: check-probes.ts unpatched|patched <evidence-dir> [--beacon F] [--denials F] [--no-reh]');
+	console.error('usage: check-probes.ts unpatched|patched <evidence-dir> [--beacon F] [--denials F] [--user-data DIR --tab ID] [--no-reh]');
 	process.exit(2);
 }
 
@@ -205,6 +206,47 @@ const predicates: Record<string, (r: Result) => string | null> = {
 	},
 	'webview-egress': () =>
 		beaconPaths.has('/webview') ? 'webview still reached the host network' : null,
+	'state-claim-tab-manager-read': r =>
+		r.detail.includes('seclabcanary_') ? 'the Tab Manager\'s seeded globalState canary reached the tab' : null,
+	'state-claim-tab-manager-write': () => partitionReason(0, 1),
+	'secret-claim-tab-manager-write': () => partitionReason(2, 3),
+};
+
+/**
+ * The partition checks read the profile's state database (test/containment/state-db.ts), so they
+ * need the run's --user-data dir and --tab id. `escaped` is the finding that fails on an escape,
+ * `ran` the one that shows the write landed in the partition.
+ */
+function partitionReason(escaped: number, ran: number): string | null {
+	const userData = opt('--user-data');
+	const tab = opt('--tab');
+	if (!userData || !tab) {
+		return 'needs --user-data and --tab to read where the write landed';
+	}
+	const f = partitionFindings(stateItems(path.resolve(userData)), tab);
+	return !f[escaped].ok ? f[escaped].name.replace('did not', 'DID') : !f[ran].ok ? `${f[ran].name}: ${f[ran].detail}` : null;
+}
+
+// An unpatched run must show the escape itself, not just a return value: these probes
+// "succeed" on both builds, so the outcome alone proves nothing.
+const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
+	'state-claim-tab-manager-read': r =>
+		r.detail.includes('seclabcanary_') ? null : 'the read did not return the seeded canary, so the probe proves nothing',
+	'provider-completion-host-file': r => {
+		try { return JSON.parse(r.detail).sawHostContent === true ? null : 'no host file content came back'; } catch { return `unparseable detail: ${r.detail}`; }
+	},
+	'state-claim-tab-manager-write': () => {
+		const userData = opt('--user-data');
+		if (!userData) { return 'needs --user-data'; }
+		const f = partitionFindings(stateItems(path.resolve(userData)), opt('--tab') ?? '');
+		return f[0].ok ? 'the write did not reach the Tab Manager\'s globalState' : null;
+	},
+	'secret-claim-tab-manager-write': () => {
+		const userData = opt('--user-data');
+		if (!userData) { return 'needs --user-data'; }
+		const f = partitionFindings(stateItems(path.resolve(userData)), opt('--tab') ?? '');
+		return f[2].ok ? 'the secret did not land under the Tab Manager\'s id' : null;
+	},
 };
 
 // ---------------------------------------------------------------- checks
@@ -251,6 +293,11 @@ for (const [id, spec] of Object.entries(specs)) {
 		c('probes', r.outcome === 'succeeded' || !spec.required,
 			`${id} succeeds on the unpatched build (${spec.why})`,
 			`${r.outcome}: ${String(r.detail).slice(0, 200)}`);
+		const unpatchedPred = unpatchedPredicates[id];
+		if (unpatchedPred && spec.required) {
+			const reason = unpatchedPred(r);
+			c('predicate', reason === null, `${id} shows the escape itself on the unpatched build`, reason ?? '');
+		}
 		if (spec.beacon && spec.required) {
 			c('beacon', beaconPaths.has(spec.beacon),
 				`${id} actually reached the host network (${spec.beacon})`,

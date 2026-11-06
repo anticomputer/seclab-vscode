@@ -54,6 +54,12 @@ _PATTERNS = (
      re.compile(r"registerCommandAlias\(\s*'(?P<id>[^']+)'")),
     ("registerCommandAlias",
      re.compile(r"registerCommandAlias\(\s*'[^']+'\s*,\s*'(?P<id>[^']+)'")),
+    # registerModelAndPositionCommand('_executeHoverProvider', ...) and
+    # registerModelCommand: editor wrappers over CommandsRegistry taking a
+    # string id first. Missed until the ordinary-session trace showed
+    # _executeHoverProvider being called with no inventory entry.
+    ("registerModelCommand",
+     re.compile(r"\bregisterModel(?:AndPosition)?Command\(\s*'(?P<id>[^']+)'")),
 )
 
 # Same registration forms, but with a non-literal id. Captured so that a

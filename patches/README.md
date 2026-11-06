@@ -73,6 +73,13 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
 - `0007-seclab-command-taint.patch`: `commandService.ts` only. Tab-originated
   commands carry the tab identity into everything they trigger
   ([ADR](../docs/adr/20261104-tab-command-taint.md)).
+- `0011-seclab-partition-tab-extension-state.patch`: `mainThreadStorage.ts` and
+  `mainThreadSecretState.ts`. A tab's `globalState`, `workspaceState` and `SecretStorage` live
+  in a partition keyed on the tab's stable id from the connection (`seclab-tab:<tabId>/<id>`,
+  `{seclabTab, extensionId, key}`), storage migration is off for tab hosts, and each customer
+  registers its rewrite with the filter, which permits those methods only once registered.
+  Whatever extension id a tab claims, it addresses only its own partition
+  ([ADR addendum](../docs/adr/20261106-tab-state-partition.md)).
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release

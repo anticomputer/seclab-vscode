@@ -65,17 +65,26 @@ test('the default verdict is deny', () => {
 	assert.match(MODULE, /SECLAB_DEFAULT_VERDICT: SeclabVerdict = 'deny'/);
 });
 
-test('nothing in the exact table is reachable yet', () => {
-	// The allow set is built from measured need in Phase 3. Until then every
-	// exact entry should be deny or rewrite; an allow appearing here without a
-	// probe run behind it is the thing to notice.
+test('only the recorded leaf exceptions are reachable, each validated and probed', () => {
+	// While the deferred-laundering residual is open, a reachable command is allowed only as a
+	// recorded leaf exception (check_drift.py::check_residuals): its handler never reaches
+	// ICommandService, its arguments are validated, and a probe drives its dangerous shape.
+	// An id appearing here that is not one of those is the thing to notice.
+	const policy = JSON.parse(readFileSync(join(REPO, 'rpc-filter', 'policy', 'policy.json'), 'utf8'));
+	const probes = JSON.parse(readFileSync(join(REPO, 'rpc-filter', 'probes', 'expectations.json'), 'utf8')).probes;
+	const leaves: string[] = policy.residuals['deferred-laundering'].leaf_exceptions;
 	const block = MODULE.split('SECLAB_COMMANDS')[1] ?? '';
 	const end = block.indexOf(']);');
-	const verdicts = [...block.slice(0, end).matchAll(/verdict: '(\w+)'/g)].map(x => x[1]);
-	const reachable = verdicts.filter(v => v === 'allow' || v === 'allow_with_constraint');
-	assert.deepEqual(reachable, [],
-		'a command became reachable; that needs a reviewed entry and a probe, '
-		+ 'see rpc-filter/policy/policy.json commands.reachable_allowlist_status');
+	const entries = [...block.slice(0, end).matchAll(/\['([^']+)', \{ verdict: '(\w+)'([^\n]*)\}\]/g)];
+	const reachable = entries.filter(m => m[2] === 'allow' || m[2] === 'allow_with_constraint');
+	assert.deepEqual(reachable.map(m => m[1]).sort(), [...leaves].sort(),
+		'the reachable commands differ from residuals[deferred-laundering].leaf_exceptions');
+	for (const m of reachable) {
+		assert.equal(m[2], 'allow_with_constraint', `${m[1]} is reachable without a constraint`);
+		assert.match(m[3], /validator: '\w+'/, `${m[1]} names no validator in the shipped table`);
+		assert.ok(Object.values(probes).some((p: unknown) => (p as { policyRef?: string }).policyRef === `cmd:${m[1]}`),
+			`${m[1]} has no probe in rpc-filter/probes/expectations.json`);
+	}
 });
 
 let failed = 0;

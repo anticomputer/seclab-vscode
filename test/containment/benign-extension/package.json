@@ -9,7 +9,10 @@
 	"activationEvents": ["*"],
 	"main": "./extension.js",
 	"contributes": {
-		"commands": [{ "command": "seclab-test.benign.ping", "title": "seclab positive control: ping" }]
+		"commands": [
+			{ "command": "seclab-test.benign.ping", "title": "seclab positive control: ping" },
+			{ "command": "seclab-test.benign.contributed", "title": "seclab positive control: contributed command" }
+		]
 	},
 	"capabilities": { "untrustedWorkspaces": { "supported": true } }
 }

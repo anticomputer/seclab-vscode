@@ -39,7 +39,7 @@ So the surface is four things, not one:
 | | Surface | Size at this pin |
 |---|---|---|
 | (a) | `MainThread*` RPC the extension host calls | 89 services, 546 methods |
-| (b) | The command registry reachable via `$executeCommand` | 3210 ids |
+| (b) | The command registry reachable via `$executeCommand` | 3226 ids |
 | (c) | Channels the client serves to the server, and server-initiated callbacks | 2 channels, 20 callback sites |
 | (d) | Tab-supplied data the trusted side interprets with authority | 15 sink classes over 475 sites |
 <!-- seclab:end surface-counts -->
@@ -316,7 +316,7 @@ The invariants the table is checked against, from `policy.json`:
 5. **no-real-secret-in-tab.sentinel-derivation** — A token minted for the tab reaches it only as a sentinel, bound to no more than its parent's bindings, or to the bindings of a derivation rule the controller declared for that exact route.
 6. **no-seclab-commands-from-tabs** — No command whose id begins 'seclab.' is reachable from a sandboxed host.
 7. **every-deny-has-an-enforcement-point** — Every surface class carrying a deny verdict must name the code that refuses it, and that code must exist in the patch series.
-8. **no-allowed-command-while-laundering-is-deferred** — No command may be given a verdict other than deny until the deferred-laundering residual is fixed.
+8. **no-allowed-command-while-laundering-is-deferred** — No command may be given a verdict other than deny until the deferred-laundering residual is fixed, except the residual's recorded leaf exceptions, each validated.
 9. **rpc-filter-log-is-trustworthy** — The filter's decision log may only be treated as trusted evidence while a tab can neither forge lines in it nor write the file.
 <!-- seclab:end invariants -->
 
@@ -418,7 +418,7 @@ Two properties of the digest matter:
   build over a stale surface. **Open work**, noted in §7.
 
 <!-- seclab:begin baseline -->
-Current baseline at `a717861c0758`: **4223 surfaces, 4183 denied, 40 not denied** (20 allow, 9 allow_with_constraint, 4 prompt, 7 rewrite).
+Current baseline at `a717861c0758`: **4239 surfaces, 4193 denied, 46 not denied** (20 allow, 13 allow_with_constraint, 4 prompt, 9 rewrite).
 <!-- seclab:end baseline -->
 
 ### 4.1 What is reachable right now
@@ -430,6 +430,9 @@ any becomes reachable without one.
 
 | Surface | Verdict |
 |---|---|
+| `cmd:_executeCompletionItemProvider` | allow_with_constraint |
+| `cmd:_executeHoverProvider` | allow_with_constraint |
+| `cmd:_setContext` | allow_with_constraint |
 | `data:mcp-server-definition` | rewrite |
 | `data:quick-input-password` | rewrite |
 | `data:terminal-osc-sequence` | allow_with_constraint |
@@ -458,6 +461,7 @@ any becomes reachable without one.
 | `rpc:MainThreadConsole.$logExtensionHostMessage` | allow |
 | `rpc:MainThreadErrors.$onUnexpectedError` | allow |
 | `rpc:MainThreadExtensionService.$onDidActivateExtension` | allow |
+| `rpc:MainThreadExtensionService.$onExtensionActivationError` | allow_with_constraint |
 | `rpc:MainThreadExtensionService.$onExtensionRuntimeError` | allow |
 | `rpc:MainThreadExtensionService.$onWillActivateExtension` | allow |
 | `rpc:MainThreadExtensionService.$setPerformanceMarks` | allow |
@@ -467,6 +471,8 @@ any becomes reachable without one.
 | `rpc:MainThreadSecretState.$getKeys` | rewrite |
 | `rpc:MainThreadSecretState.$getPassword` | rewrite |
 | `rpc:MainThreadSecretState.$setPassword` | rewrite |
+| `rpc:MainThreadStorage.$initializeExtensionStorage` | rewrite |
+| `rpc:MainThreadStorage.$setValue` | rewrite |
 | `rpc:MainThreadTunnelService.$openTunnel` | prompt |
 | `rpc:MainThreadWindow.$asExternalUri` | prompt |
 | `rpc:MainThreadWindow.$openUri` | prompt |

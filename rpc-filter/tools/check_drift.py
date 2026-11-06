@@ -46,6 +46,15 @@ REPO_ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 INVENTORY = os.path.join(REPO_ROOT, "rpc-filter", "inventory", "inventory.json")
 POLICY = os.path.join(REPO_ROOT, "rpc-filter", "policy", "policy.json")
 COVERAGE = os.path.join(REPO_ROOT, "rpc-filter", "policy", "coverage.json")
+VALIDATORS_SRC = os.path.join(REPO_ROOT, "rpc-filter", "patch-src", "seclabArgValidators.ts")
+
+
+def _read(path: str) -> str:
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read()
+    except OSError:
+        return ""
 
 REACHABLE = ("allow", "allow_with_constraint", "prompt")
 CREDENTIAL_IMPACTS = ("credential-access",)
@@ -557,37 +566,106 @@ def check_log_trust(mapping: dict) -> list:
     return errors
 
 
+def _leaf_problem(cid: str, entry: dict, exceptions: set) -> str | None:
+    """Why a reachable command is not an acceptable leaf exception, or None."""
+    if cid not in exceptions:
+        return "it is not one of the residual's recorded leaf_exceptions"
+    if entry.get("verdict") != "allow_with_constraint":
+        return "a leaf exception must be allow_with_constraint, with its arguments validated"
+    if entry.get("leaf") is not True:
+        return "its entry does not claim leaf: true"
+    if not entry.get("leaf_evidence"):
+        return "its entry gives no leaf_evidence that the handler never reaches ICommandService"
+    if not entry.get("validator"):
+        return "its entry names no argument validator"
+    return None
+
+
 def check_residuals(mapping: dict, policy: dict) -> list:
     """Hold the conditions a recorded residual says it depends on.
 
     A residual risk written only in prose is forgotten exactly when it stops
-    being true. ``deferred-laundering`` is safe only while every command
-    verdict is ``deny``: with nothing allowed, a laundered call is refused for
+    being true. ``deferred-laundering`` is safe only while no reachable command
+    can launder: with every command denied, a laundered call is refused for
     being denied rather than for being laundered. The moment someone allows a
     command -- a reasonable thing to want, and the obvious next compatibility
     fix -- the gap becomes reachable, and nothing in review would connect that
     change to a paragraph in section 7.
 
-    So the dependency is checked rather than described. Granting a command any
-    verdict but ``deny`` fails the build until the residual is marked fixed.
+    So the dependency is checked rather than described. While the residual is
+    open, a command may be reachable only as a recorded **leaf exception**: its
+    handler is shown (``leaf_evidence``) never to reach ICommandService, so there
+    is nothing to launder, and its arguments are validated (``validator``),
+    because a leaf can still leak or spoof host state on its own. Any other
+    reachable command fails the build until the residual is marked fixed.
     """
     errors = []
     residuals = policy.get("residuals") or {}
     entry = residuals.get("deferred-laundering")
     if isinstance(entry, dict) and not entry.get("fixed"):
-        offenders = sorted(
+        exceptions = set(entry.get("leaf_exceptions") or [])
+        exact = (policy.get("commands", {}) or {}).get("exact") or {}
+        reachable = sorted(
             key for key, value in mapping.items()
             if key.startswith("cmd:") and _verdict_of(value) != "deny")
-        for key in offenders[:20]:
+        offenders = []
+        for key in reachable:
+            why = _leaf_problem(key[4:], exact.get(key[4:]) or {}, exceptions)
+            if why:
+                offenders.append((key, why))
+        for key, why in offenders[:20]:
             errors.append(
                 "%s is not denied, but the deferred-laundering residual is "
                 "unfixed: a handler that defers a global executeCommand "
-                "escapes both the taint and the backstop. Fix the residual and "
-                "set residuals['deferred-laundering'].fixed, or keep the "
-                "verdict at deny." % key)
+                "escapes both the taint and the backstop, and %s. Fix the "
+                "residual and set residuals['deferred-laundering'].fixed, or "
+                "keep the verdict at deny." % (key, why))
         if len(offenders) > 20:
             errors.append("... and %d more non-denied commands."
                           % (len(offenders) - 20))
+        for cid in sorted(exceptions - {k[4:] for k in reachable}):
+            errors.append(
+                "residuals['deferred-laundering'].leaf_exceptions names %s, "
+                "which is not reachable. A stale exception is a pre-approved "
+                "allow waiting for someone to flip the verdict; remove it." % cid)
+    return errors
+
+
+def check_validators(policy: dict, source: str) -> list:
+    """Every named validator exists, is used, and sits on a verdict that runs it.
+
+    A validator name the filter cannot find denies at run time, which is the
+    safe direction but breaks the surface silently; a validator nothing names is
+    dead code that reads as protection. Both fail here.
+    """
+    errors = []
+    m = re.search(r"SECLAB_VALIDATORS[^=]*=\s*new Map\(\[(.*?)\]\);", source, re.S)
+    defined = set(re.findall(r"\[\s*'(\w+)'\s*,", m.group(1))) if m else set()
+    if not defined:
+        return ["seclabArgValidators.ts defines no SECLAB_VALIDATORS map"]
+    used = set()
+    entries = []
+    for sid, service in (policy.get("rpc") or {}).items():
+        for method, e in (service.get("methods") or {}).items():
+            entries.append(("rpc:%s.%s" % (sid, method), e))
+    for cid, e in ((policy.get("commands", {}) or {}).get("exact") or {}).items():
+        entries.append(("cmd:%s" % cid, e))
+    for ref, e in entries:
+        name = e.get("validator")
+        if name is None:
+            if ref.startswith("cmd:") and e.get("verdict") == "allow_with_constraint":
+                errors.append("%s is allow_with_constraint but names no validator; "
+                              "its constraint would deny every call" % ref)
+            continue
+        used.add(name)
+        if name not in defined:
+            errors.append("%s names validator '%s', which seclabArgValidators.ts "
+                          "does not define" % (ref, name))
+        if e.get("verdict") not in ("allow_with_constraint", "rewrite"):
+            errors.append("%s names validator '%s' but its verdict '%s' never runs it"
+                          % (ref, name, e.get("verdict")))
+    for name in sorted(defined - used):
+        errors.append("validator '%s' is defined but no policy entry names it" % name)
     return errors
 
 
@@ -633,6 +711,7 @@ def main(argv=None) -> int:
                          lambda: check_enforcement(mapping, policy, REPO_ROOT)),
                         ("residuals",
                          lambda: check_residuals(mapping, policy)),
+                        ("validators", lambda: check_validators(policy, _read(VALIDATORS_SRC))),
                         ("log-trust", lambda: check_log_trust(mapping))):
         errors = check()
         if errors:

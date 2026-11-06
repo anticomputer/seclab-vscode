@@ -84,4 +84,5 @@ Good, bad, and follow-ups this creates.
 | 2026-11-05 | [Package feeds through CFS: the tab holds a sentinel, the broker injects the Azure DevOps token](20261105-cfs-package-feeds-in-tabs.md) | accepted |
 | 2026-11-05 | [Disable the built-in chat and agent tools in sandboxed tab windows](20261105-no-builtin-chat-in-tabs.md) | accepted |
 | 2026-11-06 | [Detection notifications and a cross-tab detections summary](20261106-detection-notifications.md) | accepted |
+| 2026-11-06 | [A tab's extension state is partitioned by the tab](20261106-tab-state-partition.md) | accepted |
 <!-- index:end -->

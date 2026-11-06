@@ -1,0 +1,113 @@
+diff -ruN a/src/vs/workbench/api/browser/mainThreadSecretState.ts b/src/vs/workbench/api/browser/mainThreadSecretState.ts
+--- a/src/vs/workbench/api/browser/mainThreadSecretState.ts	2026-11-06 17:58:17
++++ b/src/vs/workbench/api/browser/mainThreadSecretState.ts	2026-11-06 17:58:49
+@@ -10,12 +10,20 @@
+ import { SequencerByKey } from '../../../base/common/async.js';
+ import { ISecretStorageService } from '../../../platform/secrets/common/secrets.js';
+ import { IBrowserWorkbenchEnvironmentService } from '../../services/environment/browser/environmentService.js';
++import { seclabPartitionOf, seclabRegisterRewrite } from '../../services/extensions/common/seclabRpcFilter.js';
+ 
++// seclab: a tab's secrets are keyed {seclabTab, extensionId, key}; a trusted host's keep
++// upstream's shape and never see a tab's.
++for (const m of ['$getPassword', '$setPassword', '$deletePassword', '$getKeys']) {
++	seclabRegisterRewrite('MainThreadSecretState', m);
++}
++
+ @extHostNamedCustomer(MainContext.MainThreadSecretState)
+ export class MainThreadSecretState extends Disposable implements MainThreadSecretStateShape {
+ 	private readonly _proxy: ExtHostSecretStateShape;
+ 
+ 	private readonly _sequencer = new SequencerByKey<string>();
++	private readonly _seclabTab: string | undefined;
+ 
+ 	constructor(
+ 		extHostContext: IExtHostContext,
+@@ -26,6 +34,7 @@
+ 		super();
+ 
+ 		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostSecretState);
++		this._seclabTab = seclabPartitionOf(extHostContext.remoteAuthority);
+ 
+ 		this._register(this.secretStorageService.onDidChangeSecret((e: string) => {
+ 			const parsedKey = this.parseKey(e);
+@@ -88,12 +97,13 @@
+ 	}
+ 
+ 	private getKey(extensionId: string, key: string): string {
+-		return JSON.stringify({ extensionId, key });
++		return this._seclabTab ? JSON.stringify({ seclabTab: this._seclabTab, extensionId, key }) : JSON.stringify({ extensionId, key });
+ 	}
+ 
+ 	private parseKey(key: string): { extensionId: string; key: string } | undefined {
+ 		try {
+-			return JSON.parse(key);
++			const parsed = JSON.parse(key);
++			return parsed?.seclabTab === this._seclabTab ? { extensionId: parsed.extensionId, key: parsed.key } : undefined;
+ 		} catch {
+ 			return undefined;
+ 		}
+diff -ruN a/src/vs/workbench/api/browser/mainThreadStorage.ts b/src/vs/workbench/api/browser/mainThreadStorage.ts
+--- a/src/vs/workbench/api/browser/mainThreadStorage.ts	2026-11-06 17:58:17
++++ b/src/vs/workbench/api/browser/mainThreadStorage.ts	2026-11-06 17:58:32
+@@ -12,13 +12,21 @@
+ import { migrateExtensionStorage } from '../../services/extensions/common/extensionStorageMigration.js';
+ import { IInstantiationService } from '../../../platform/instantiation/common/instantiation.js';
+ import { ILogService } from '../../../platform/log/common/log.js';
++import { seclabPartitionOf, seclabRegisterRewrite } from '../../services/extensions/common/seclabRpcFilter.js';
+ 
++// seclab: a tab's extension state lives under its own key prefix (both scopes), so
++// a caller-named id addresses only the tab's partition. The filter permits these
++// rewrites only once this module has registered them.
++seclabRegisterRewrite('MainThreadStorage', '$initializeExtensionStorage');
++seclabRegisterRewrite('MainThreadStorage', '$setValue');
++
+ @extHostNamedCustomer(MainContext.MainThreadStorage)
+ export class MainThreadStorage implements MainThreadStorageShape {
+ 
+ 	private readonly _proxy: ExtHostStorageShape;
+ 	private readonly _storageListener = new DisposableStore();
+ 	private readonly _sharedStorageKeysToWatch: Map<string, boolean> = new Map<string, boolean>();
++	private readonly _seclabPrefix: string;
+ 
+ 	constructor(
+ 		extHostContext: IExtHostContext,
+@@ -28,12 +36,14 @@
+ 		@ILogService private readonly _logService: ILogService,
+ 	) {
+ 		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostStorage);
++		const seclabTab = seclabPartitionOf(extHostContext.remoteAuthority);
++		this._seclabPrefix = seclabTab ? `seclab-tab:${seclabTab}/` : '';
+ 
+ 		this._storageListener.add(this._storageService.onDidChangeValue(StorageScope.PROFILE, undefined, this._storageListener)(e => {
+ 			if (this._sharedStorageKeysToWatch.has(e.key)) {
+ 				const rawState = this._extensionStorageService.getExtensionStateRaw(e.key, true);
+ 				if (typeof rawState === 'string') {
+-					this._proxy.$acceptValue(true, e.key, rawState);
++					this._proxy.$acceptValue(true, e.key.slice(this._seclabPrefix.length), rawState);
+ 				}
+ 			}
+ 		}));
+@@ -45,16 +55,19 @@
+ 
+ 	async $initializeExtensionStorage(shared: boolean, extensionId: string): Promise<string | undefined> {
+ 
+-		await this.checkAndMigrateExtensionStorage(extensionId, shared);
++		if (!this._seclabPrefix) {
++			await this.checkAndMigrateExtensionStorage(extensionId, shared);
++		}
++		const key = this._seclabPrefix + extensionId;
+ 
+ 		if (shared) {
+-			this._sharedStorageKeysToWatch.set(extensionId, true);
++			this._sharedStorageKeysToWatch.set(key, true);
+ 		}
+-		return this._extensionStorageService.getExtensionStateRaw(extensionId, shared);
++		return this._extensionStorageService.getExtensionStateRaw(key, shared);
+ 	}
+ 
+ 	async $setValue(shared: boolean, key: string, value: object): Promise<void> {
+-		this._extensionStorageService.setExtensionState(key, value, shared);
++		this._extensionStorageService.setExtensionState(this._seclabPrefix + key, value, shared);
+ 	}
+ 
+ 	$registerExtensionStorageKeysToSync(extension: IExtensionIdWithVersion, keys: string[]): void {

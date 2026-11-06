@@ -143,7 +143,7 @@ over RPC. Reviewing only the `.protocol.ts` interfaces misses them.
 
 ## (b) Command registry reachable via `$executeCommand`
 
-3210 commands found. `$executeCommand` takes the id from the caller, so
+3226 commands found. `$executeCommand` takes the id from the caller, so
 the whole registry is reachable from a tab.
 
 | Category | Commands |
@@ -153,7 +153,7 @@ the whole registry is reachable from a tab.
 | `external-and-uri` | 23 |
 | `host-filesystem` | 57 |
 | `host-process` | 288 |
-| `internal-underscore` | 111 |
+| `internal-underscore` | 127 |
 | `remote-and-tunnel` | 26 |
 | `secrets-and-auth` | 11 |
 | `settings-and-policy` | 44 |

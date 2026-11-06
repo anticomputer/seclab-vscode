@@ -52,9 +52,32 @@ export interface SeclabEntry {
 	readonly ref: string;
 	/** Named argument constraint, applied by the filter's validators. */
 	readonly constraint?: string;
+	/** The validator in seclabArgValidators.ts that enforces the constraint. */
+	readonly validator?: string;
 }
 
 """
+
+
+def _entry(verdict: str, ref: str, entry: dict) -> dict:
+    return {"verdict": verdict, "ref": ref, "constraint": entry.get("constraint"),
+            "validator": entry.get("validator")}
+
+
+def trusted_command_ids(policy: dict, inventory: dict | None) -> list:
+    """Command ids a tab may never register: the workbench's own and the trusted UI side's.
+
+    The workbench's are the inventory's ids registered only under `src/` (built-in
+    extensions' ids are registered by those extensions, which run in the tab). The UI-side
+    extensions' ids are listed in the policy with their reason.
+    """
+    ids = set(policy.get("commands", {}).get("trusted_registration_ids", {}).get("ids") or [])
+    for c in ((inventory or {}).get("surfaces", {}).get("b_command_registry", {})
+              .get("commands") or []):
+        files = c.get("files") or []
+        if files and all(f.startswith("src/") for f in files):
+            ids.add(c["id"])
+    return sorted(ids)
 
 
 def _load(path):
@@ -67,22 +90,15 @@ def build(policy: dict, inventory: dict | None = None) -> dict:
     rpc = {}
     for sid, service in policy.get("rpc", {}).items():
         for method, entry in (service.get("methods") or {}).items():
-            rpc["%s.%s" % (sid, method)] = {
-                "verdict": entry["verdict"],
-                "ref": "rpc:%s.%s" % (sid, method),
-                "constraint": entry.get("constraint"),
-            }
+            rpc["%s.%s" % (sid, method)] = _entry(
+                entry["verdict"], "rpc:%s.%s" % (sid, method), entry)
     service_defaults = {
         sid: service.get("service_default", policy["default_verdict"])
         for sid, service in policy.get("rpc", {}).items()
     }
     commands = {}
     for cid, entry in (policy.get("commands", {}).get("exact") or {}).items():
-        commands[cid] = {
-            "verdict": entry["verdict"],
-            "ref": "cmd:%s" % cid,
-            "constraint": entry.get("constraint"),
-        }
+        commands[cid] = _entry(entry["verdict"], "cmd:%s" % cid, entry)
     channels = {}
     for name, entry in (policy.get("channels") or {}).items():
         if name in ("note", "server_initiated") or not isinstance(entry, dict):
@@ -110,6 +126,7 @@ def build(policy: dict, inventory: dict | None = None) -> dict:
         "channels": channels,
         "uriArgs": uri_args,
         "commandDenyPrefixes": sorted(p for p in deny_prefixes if p),
+        "trustedCommandIds": trusted_command_ids(policy, inventory),
     }
 
 
@@ -125,6 +142,8 @@ def render(policy: dict, sha: str, inventory: dict | None = None) -> str:
             fields = "verdict: '%s', ref: '%s'" % (e["verdict"], e["ref"])
             if e.get("constraint"):
                 fields += ", constraint: '%s'" % e["constraint"].replace("'", "\\'")
+            if e.get("validator"):
+                fields += ", validator: '%s'" % e["validator"]
             out.append("\t['%s', { %s }],\n" % (key, fields))
         out.append("]);\n\n")
 
@@ -173,6 +192,16 @@ def render(policy: dict, sha: str, inventory: dict | None = None) -> str:
     for key in sorted(data["uriArgs"]):
         out.append("\t['%s', [%s]],\n" % (key, ", ".join(str(i) for i in data["uriArgs"][key])))
     out.append("]);\n\n")
+    out.append(
+        "/**\n"
+        " * Command ids the trusted side owns, which a tab may not register. The command\n"
+        " * registry is last-writer-wins, so a tab registering one of these before (or\n"
+        " * between) the trusted registrations would receive its invocations.\n"
+        " */\n")
+    out.append("export const SECLAB_TRUSTED_COMMAND_IDS: ReadonlySet<string> = new Set([\n")
+    for cid in data["trustedCommandIds"]:
+        out.append("\t'%s',\n" % cid.replace("\\", "\\\\").replace("'", "\\'"))
+    out.append("]);\n")
     return "".join(out)
 
 

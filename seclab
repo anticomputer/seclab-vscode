@@ -514,9 +514,11 @@ case "${1:-help}" in
 			# Containment harness: hostile evidence fails a check, and never throws out of
 			# the run before its own teardown.
 			evidence-shape) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/evidence-shape.test.ts ;;
+			# RPC filter: the named argument validators, imported from the shipped module.
+			arg-validators) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/arg-validators.test.ts ;;
 			# Every pure RPC-filter suite, so adding one to CI is a single edit.
 			rpc-filter)
-				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape; do
+				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators; do
 					printf '\n=== %s\n' "$t"
 					"$0" test "$t" || exit 1
 				done ;;

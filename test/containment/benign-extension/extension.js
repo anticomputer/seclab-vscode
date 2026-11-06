@@ -102,6 +102,69 @@ async function activate(context) {
 		return Array.isArray(hovers);
 	});
 
+	// 9. Global state: every activation already initialises it (the extension host
+	// awaits both mementos before activate() runs), and most real extensions write it.
+	await step(results, 'globalState', async () => {
+		await context.globalState.update('seclab-benign', 'g1');
+		context.globalState.setKeysForSync(['seclab-benign']);
+		return context.globalState.get('seclab-benign') === 'g1';
+	});
+
+	// 10. A command declared in contributes.commands, run the way a menu or the
+	// palette runs it.
+	await step(results, 'contributedCommand', async () => {
+		context.subscriptions.push(vscode.commands.registerCommand(
+			'seclab-test.benign.contributed', () => 'contributed'));
+		return await vscode.commands.executeCommand('seclab-test.benign.contributed') === 'contributed';
+	});
+
+	// 11. A second language feature with a different registration and invocation
+	// path: completion items.
+	await step(results, 'completionProvider', async () => {
+		context.subscriptions.push(vscode.languages.registerCompletionItemProvider(
+			{ scheme: 'vscode-remote' }, { provideCompletionItems: () => [new vscode.CompletionItem('seclab')] }));
+		const doc = await vscode.workspace.openTextDocument(scratch);
+		const list = await vscode.commands.executeCommand(
+			'vscode.executeCompletionItemProvider', doc.uri, new vscode.Position(0, 0));
+		return !!list && Array.isArray(list.items);
+	});
+
+	// 12. A status bar item, the commonest piece of extension UI.
+	await step(results, 'statusBarItem', async () => {
+		const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
+		context.subscriptions.push(item);
+		item.text = 'seclab';
+		item.show();
+		return true;
+	});
+
+	// 13. The extension's own secret storage, with a fake value.
+	await step(results, 'ownSecret', async () => {
+		await context.secrets.store('seclab-benign', 'seclabcanary_benign_not_a_secret');
+		return await context.secrets.get('seclab-benign') === 'seclabcanary_benign_not_a_secret';
+	});
+
+	// Measurement only (test/containment/rpc-trace.ts): when the workspace carries the
+	// trace marker, also open ordinary files so the built-in language extensions activate
+	// the way they do for a user, and reload once so a warm start is traced too. Never
+	// present in a proof run's workspace.
+	if (await exists(vscode.Uri.joinPath(root, '.seclab-trace-passes'))) {
+		await step(results, 'tracePasses', async () => {
+			const opened = [];
+			for (const f of ['src/index.ts', 'README.md', 'data.json']) {
+				const doc = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(root, f));
+				await vscode.window.showTextDocument(doc, { preview: false, preserveFocus: true });
+				opened.push(doc.languageId);
+			}
+			await new Promise(r => setTimeout(r, 20000));
+			if (!context.workspaceState.get('seclab-trace-reloaded')) {
+				await context.workspaceState.update('seclab-trace-reloaded', true);
+				await vscode.commands.executeCommand('workbench.action.reloadWindow');
+			}
+			return opened;
+		});
+	}
+
 	const out = vscode.Uri.joinPath(root, '.seclab-evidence', 'benign.json');
 	const failed = Object.entries(results)
 		.filter(([k, v]) => k !== 'where' && !v.ok).map(([k]) => k);
@@ -113,6 +176,15 @@ async function activate(context) {
 	} catch {
 		// If even this cannot be written, the harness reads an absent file as
 		// "the benign extension could not run", which is the correct verdict.
+	}
+}
+
+async function exists(uri) {
+	try {
+		await vscode.workspace.fs.stat(uri);
+		return true;
+	} catch {
+		return false;
 	}
 }
 

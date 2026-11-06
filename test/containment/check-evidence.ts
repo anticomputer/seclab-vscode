@@ -17,6 +17,7 @@ import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
 import { beaconPort, checkUserDataDir, editorLaunchCommand, lockRun } from '../harness.ts';
 import { brokerProxy, checkEvidence, readEvidence, report, rpcDecisions, type Check } from './assert.ts';
 import { materialiseFixture, readManifest, runTabs, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
+import { partitionFindings, seedTabManagerState, stateItems } from './state-db.ts';
 
 const [mode, userDataArg, driverArg] = process.argv.slice(2);
 if ((mode !== 'prepare' && mode !== 'check') || !userDataArg) {
@@ -115,9 +116,12 @@ if (mode === 'prepare') {
 	// (seeding it overwrites the user's real clipboard: SECLAB_CANARY_CLIPBOARD=1).
 	// The RPC escape probes are armed by the same arm=/run=/until= fields this
 	// harness already writes into .seclab/targets. One arming mechanism, not two.
-	const canaries = [mintCanary('user-settings'), mintCanary('user-settings-proxy-auth'), mintCanary('clipboard'), mintCanary('editor-env')];
+	const canaries = [mintCanary('user-settings'), mintCanary('user-settings-proxy-auth'), mintCanary('clipboard'), mintCanary('editor-env'), mintCanary('tab-manager-state')];
 	fs.writeFileSync(path.join(base, 'canaries.json'), serialize(canaries));
 	fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
+	// The Tab Manager's real globalState holds a canary, so a tab that can name its id
+	// (probe state-claim-tab-manager-read) shows up in the canary scan of its evidence.
+	seedTabManagerState(userData, { seclabProbeCanary: canaries[4].value });
 	fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 		'security.workspace.trust.enabled': false,
 		'task.allowAutomaticTasks': 'on',
@@ -373,6 +377,12 @@ if (mode === 'prepare') {
 			ok: !fs.existsSync(m),
 			detail: fs.existsSync(m) ? `host marker written: ${m}` : '',
 		});
+	}
+	// Per-tab state partition (patch 0011): the rogue probes wrote state and a secret under
+	// the Tab Manager's id. Read where they landed from the profile's own database,
+	// host-side; the tab cannot write this file.
+	for (const f of partitionFindings(stateItems(userData), tabId ?? '')) {
+		checks.push({ vector: 'state-partition', name: f.name, ok: f.ok, detail: f.detail });
 	}
 	// Shared canary harness, editor side: nothing the rogue extension observed through the
 	// API (env, configuration, clipboard, auth sessions, secrets) nor any evidence may

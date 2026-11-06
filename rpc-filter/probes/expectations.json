@@ -218,6 +218,45 @@
       "policyRef": "rpc:MainThreadSecretState.$setPassword",
       "why": "seeds the cross-tab read; after patching this is a rewrite, not a denial"
     },
+    "state-claim-tab-manager-read": {
+      "required": true,
+      "surface": "cross-tab-access",
+      "policyRef": "rpc:MainThreadStorage.$initializeExtensionStorage",
+      "why": "the storage id is an argument, so a tab reads the Tab Manager's globalState (seeded with a canary by the harness) by naming its id",
+      "patchedOutcome": "succeeded"
+    },
+    "state-claim-tab-manager-write": {
+      "required": true,
+      "surface": "cross-tab-access",
+      "policyRef": "rpc:MainThreadStorage.$setValue",
+      "why": "the same id argument lets a tab overwrite the Tab Manager's globalState (its pending routes); the harness reads the profile's state database for where the write landed",
+      "patchedOutcome": "succeeded"
+    },
+    "secret-claim-tab-manager-write": {
+      "required": true,
+      "surface": "cross-tab-access",
+      "policyRef": "rpc:MainThreadSecretState.$setPassword",
+      "why": "a tab writes a secret under the Tab Manager's id; the harness reads the profile's state database for the key it landed under",
+      "patchedOutcome": "succeeded"
+    },
+    "provider-completion-host-file": {
+      "required": true,
+      "surface": "host-fs-read",
+      "policyRef": "cmd:_executeCompletionItemProvider",
+      "why": "the handler opens a model on the caller's URI; file: is the host disk, and word-based completion returns its words"
+    },
+    "provider-hover-host-file": {
+      "required": true,
+      "surface": "host-fs-read",
+      "policyRef": "cmd:_executeHoverProvider",
+      "why": "the same model-reference read through registerModelAndPositionCommand"
+    },
+    "setcontext-core-key": {
+      "required": true,
+      "surface": "ui-spoofing",
+      "policyRef": "cmd:_setContext",
+      "why": "setContext writes the window's global context, so a tab can flip a core when-clause (remoteName)"
+    },
     "webview-egress": {
       "required": true,
       "surface": "exfiltration",

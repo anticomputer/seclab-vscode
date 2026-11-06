@@ -3044,14 +3044,14 @@
         "external-and-uri": 23,
         "host-filesystem": 57,
         "host-process": 288,
-        "internal-underscore": 111,
+        "internal-underscore": 127,
         "remote-and-tunnel": 26,
         "secrets-and-auth": 11,
         "settings-and-policy": 44,
         "unclassified": 2097,
         "window-and-workspace": 19
       },
-      "command_count": 3210,
+      "command_count": 3226,
       "commands": [
         {
           "category": "unclassified",
@@ -3537,12 +3537,78 @@
         {
           "category": "internal-underscore",
           "files": [
+            "src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts"
+          ],
+          "id": "_executeDeclarationProvider",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts",
+          "sources": [
+            "registerModelCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts"
+          ],
+          "id": "_executeDeclarationProvider_recursive",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts",
+          "sources": [
+            "registerModelCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts"
+          ],
+          "id": "_executeDefinitionProvider",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts",
+          "sources": [
+            "registerModelCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts"
+          ],
+          "id": "_executeDefinitionProvider_recursive",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts",
+          "sources": [
+            "registerModelCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
             "src/vs/editor/contrib/colorPicker/browser/colorPickerContribution.ts"
           ],
           "id": "_executeDocumentColorProvider",
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/colorPicker/browser/colorPickerContribution.ts",
           "sources": [
             "CommandsRegistry.registerCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "src/vs/editor/contrib/wordHighlighter/browser/wordHighlighter.ts"
+          ],
+          "id": "_executeDocumentHighlights",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/wordHighlighter/browser/wordHighlighter.ts",
+          "sources": [
+            "registerModelCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "src/vs/editor/contrib/rename/browser/rename.ts"
+          ],
+          "id": "_executeDocumentRenameProvider",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/rename/browser/rename.ts",
+          "sources": [
+            "registerModelCommand"
           ]
         },
         {
@@ -3603,6 +3669,50 @@
         {
           "category": "internal-underscore",
           "files": [
+            "src/vs/editor/contrib/hover/browser/getHover.ts"
+          ],
+          "id": "_executeHoverProvider",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/hover/browser/getHover.ts",
+          "sources": [
+            "registerModelCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "src/vs/editor/contrib/hover/browser/getHover.ts"
+          ],
+          "id": "_executeHoverProvider_recursive",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/hover/browser/getHover.ts",
+          "sources": [
+            "registerModelCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts"
+          ],
+          "id": "_executeImplementationProvider",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts",
+          "sources": [
+            "registerModelCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts"
+          ],
+          "id": "_executeImplementationProvider_recursive",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts",
+          "sources": [
+            "registerModelCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
             "src/vs/editor/contrib/inlayHints/browser/inlayHintsController.ts"
           ],
           "id": "_executeInlayHintProvider",
@@ -3636,6 +3746,17 @@
         {
           "category": "internal-underscore",
           "files": [
+            "src/vs/editor/contrib/linkedEditing/browser/linkedEditing.ts"
+          ],
+          "id": "_executeLinkedEditingProvider",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/linkedEditing/browser/linkedEditing.ts",
+          "sources": [
+            "registerModelCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
             "src/vs/workbench/api/browser/mainThreadNotebook.ts"
           ],
           "id": "_executeNotebookToData",
@@ -3664,6 +3785,17 @@
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/callHierarchy/common/callHierarchy.ts",
           "sources": [
             "CommandsRegistry.registerCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "src/vs/editor/contrib/rename/browser/rename.ts"
+          ],
+          "id": "_executePrepareRename",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/rename/browser/rename.ts",
+          "sources": [
+            "registerModelCommand"
           ]
         },
         {
@@ -3724,6 +3856,28 @@
         {
           "category": "internal-underscore",
           "files": [
+            "src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts"
+          ],
+          "id": "_executeReferenceProvider",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts",
+          "sources": [
+            "registerModelCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts"
+          ],
+          "id": "_executeReferenceProvider_recursive",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts",
+          "sources": [
+            "registerModelCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
             "src/vs/editor/contrib/smartSelect/browser/smartSelect.ts"
           ],
           "id": "_executeSelectionRangeProvider",
@@ -3741,6 +3895,28 @@
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/parameterHints/browser/provideSignatureHelp.ts",
           "sources": [
             "CommandsRegistry.registerCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts"
+          ],
+          "id": "_executeTypeDefinitionProvider",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts",
+          "sources": [
+            "registerModelCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts"
+          ],
+          "id": "_executeTypeDefinitionProvider_recursive",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/contrib/gotoSymbol/browser/goToSymbol.ts",
+          "sources": [
+            "registerModelCommand"
           ]
         },
         {

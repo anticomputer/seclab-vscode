@@ -211,7 +211,103 @@ async function runProbes(vscode, context, targets) {
 				'workbench.action.terminal.newLocal'));
 	}
 
+	// --- per-tab state partition (patch 0011) ----------------------------------
+	// The storage and secret methods take the extension id as an ARGUMENT, so a
+	// tab can name any extension's state. These claim the Tab Manager's id, the
+	// trusted UI-side extension whose globalState holds pending routes. The
+	// harness seeds a canary under its real key before launch and reads the
+	// profile's state database afterwards: a canary in this evidence, or the
+	// probe's write under the unpartitioned key, is an escape.
+	const TAB_MANAGER = 'seclab.tab-manager';
+	await probe(results, 'state-claim-tab-manager-read', 'rpc:MainThreadStorage.$initializeExtensionStorage',
+		async () => {
+			const storage = findExtHostStorage(context);
+			return {
+				global: await storage.initializeExtensionStorage(true, TAB_MANAGER) ?? null,
+				workspace: await storage.initializeExtensionStorage(false, TAB_MANAGER) ?? null,
+			};
+		});
+	await probe(results, 'state-claim-tab-manager-write', 'rpc:MainThreadStorage.$setValue',
+		async () => {
+			await findExtHostStorage(context).setValue(true, TAB_MANAGER, { seclabProbeWrite: 'written-by-a-tab' });
+			return 'written';
+		});
+	// SecretState is reached only through a #private field, so the probe does what
+	// a rogue extension host can always do: rewrite its own outgoing arguments.
+	await probe(results, 'secret-claim-tab-manager-write', 'rpc:MainThreadSecretState.$setPassword',
+		async () => {
+			const own = String(context.extension.id).toLowerCase();
+			await withRewrittenRequest(
+				a => a.length === 3 && a[0] === own && a[1] === 'seclab-probe-claim',
+				a => [TAB_MANAGER, a[1], a[2]],
+				() => context.secrets.store('seclab-probe-claim', 'seclabcanary_probe_write_not_a_secret'));
+			return 'written';
+		});
+
+	// --- provider commands over a host file -----------------------------------
+	// _executeCompletionItemProvider / _executeHoverProvider hand the caller's URI
+	// to ITextModelService.createModelReference, and in a remote window file: is
+	// the HOST disk. Word-based completion then returns the file's words.
+	const hostModel = Uri.file(safety.safePath(ctx, ctx.canary, 'host model read'));
+	await probe(results, 'provider-completion-host-file', 'cmd:_executeCompletionItemProvider',
+		async () => {
+			const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider',
+				hostModel, new vscode.Position(0, 0));
+			const labels = (list?.items ?? []).map(i => typeof i.label === 'string' ? i.label : i.label?.label);
+			return { items: labels.length, sawHostContent: labels.some(l => /CANARY/.test(String(l))) };
+		});
+	await probe(results, 'provider-hover-host-file', 'cmd:_executeHoverProvider',
+		async () => {
+			const hovers = await vscode.commands.executeCommand('vscode.executeHoverProvider',
+				hostModel, new vscode.Position(0, 0));
+			return { hovers: Array.isArray(hovers) ? hovers.length : null };
+		});
+
+	// --- window context keys --------------------------------------------------
+	// _setContext writes the window's global context, so a tab could flip a core
+	// when-clause and surface trusted menus for host actions.
+	await probe(results, 'setcontext-core-key', 'cmd:_setContext',
+		() => vscode.commands.executeCommand('setContext', 'remoteName', 'seclab-probe-spoofed'));
+
 	return results;
+}
+
+/**
+ * The extension host's storage service, reached through the memento's own fields
+ * (private, so mangled in a built host, but still own properties). Its public
+ * initializeExtensionStorage/setValue take any id.
+ */
+function findExtHostStorage(context) {
+	const seen = new Set();
+	let level = [context.globalState];
+	for (let depth = 0; depth < 3 && level.length; depth++) {
+		const next = [];
+		for (const o of level) {
+			if (!o || typeof o !== 'object' || seen.has(o)) {
+				continue;
+			}
+			seen.add(o);
+			if (typeof o.initializeExtensionStorage === 'function' && typeof o.setValue === 'function') {
+				return o;
+			}
+			next.push(...Object.values(o));
+		}
+		level = next;
+	}
+	throw new Error('no extension host storage service reachable from globalState');
+}
+
+/** Rewrite the arguments of one outgoing RPC request (serialized with JSON.stringify). */
+async function withRewrittenRequest(match, rewrite, fn) {
+	const original = JSON.stringify;
+	JSON.stringify = function (value, ...rest) {
+		return original.call(this, Array.isArray(value) && match(value) ? rewrite(value) : value, ...rest);
+	};
+	try {
+		return await fn();
+	} finally {
+		JSON.stringify = original;
+	}
 }
 
 module.exports = { runProbes, SUCCEEDED, DENIED, ERROR };

@@ -248,5 +248,83 @@ class ResidualGateTest(unittest.TestCase):
         self.assertEqual(CD.check_residuals(mapping, policy), [])
 
 
+class LeafExceptionTest(unittest.TestCase):
+    """While laundering is deferred, a reachable command must be a validated, evidenced leaf."""
+
+    LEAF = {"verdict": "allow_with_constraint", "leaf": True, "validator": "setContextKey",
+            "leaf_evidence": ["https://github.com/microsoft/vscode/blob/x/a.ts#L1-L2"]}
+
+    def policy(self, entry=None, exceptions=("_setContext",)):
+        return {"residuals": {"deferred-laundering": {
+                    "fixed": False, "leaf_exceptions": list(exceptions)}},
+                "commands": {"exact": {"_setContext": dict(entry or self.LEAF)}}}
+
+    def test_control_a_complete_leaf_exception_passes(self):
+        self.assertEqual(CD.check_residuals(
+            {"cmd:_setContext": "allow_with_constraint#abc"}, self.policy()), [])
+
+    def test_each_missing_leaf_field_fails(self):
+        for field, value in (("leaf", False), ("leaf_evidence", []), ("validator", None),
+                             ("verdict", "allow")):
+            with self.subTest(field=field):
+                entry = dict(self.LEAF)
+                entry[field] = value
+                errors = CD.check_residuals(
+                    {"cmd:_setContext": "allow_with_constraint#abc"}, self.policy(entry))
+                self.assertTrue(errors, field)
+                self.assertIn("cmd:_setContext", errors[0])
+
+    def test_a_complete_leaf_not_listed_as_an_exception_fails(self):
+        errors = CD.check_residuals({"cmd:_setContext": "allow_with_constraint#abc"},
+                                    self.policy(exceptions=()))
+        self.assertTrue(errors)
+        self.assertIn("leaf_exceptions", errors[0])
+
+    def test_a_stale_exception_fails(self):
+        errors = CD.check_residuals({"cmd:_setContext": "deny"}, self.policy())
+        self.assertTrue(errors)
+        self.assertIn("not reachable", errors[0])
+
+
+class ValidatorGateTest(unittest.TestCase):
+    SRC = ("export const SECLAB_VALIDATORS: ReadonlyMap<string, SeclabValidator> = new Map([\n"
+           "\t['used', used],\n\t['other', other],\n]);\n")
+
+    def policy(self, **entries):
+        methods = {"$m": {"verdict": "allow_with_constraint", "validator": "used"},
+                   "$n": {"verdict": "rewrite", "validator": "other"}}
+        methods.update(entries)
+        return {"rpc": {"S": {"methods": methods}}, "commands": {"exact": {}}}
+
+    def test_control_every_validator_defined_and_used_passes(self):
+        self.assertEqual(CD.check_validators(self.policy(), self.SRC), [])
+
+    def test_an_undefined_validator_fails(self):
+        errors = CD.check_validators(self.policy(**{"$x": {
+            "verdict": "allow_with_constraint", "validator": "missing"}}), self.SRC)
+        self.assertTrue(any("missing" in e for e in errors))
+
+    def test_a_validator_nothing_names_fails(self):
+        p = self.policy()
+        del p["rpc"]["S"]["methods"]["$n"]
+        self.assertTrue(any("'other'" in e for e in CD.check_validators(p, self.SRC)))
+
+    def test_a_validator_on_a_verdict_that_never_runs_it_fails(self):
+        errors = CD.check_validators(self.policy(**{"$n": {
+            "verdict": "allow", "validator": "other"}}), self.SRC)
+        self.assertTrue(any("never runs it" in e for e in errors))
+
+    def test_a_constrained_command_without_a_validator_fails(self):
+        p = self.policy()
+        p["commands"]["exact"]["c"] = {"verdict": "allow_with_constraint"}
+        self.assertTrue(any("cmd:c" in e for e in CD.check_validators(p, self.SRC)))
+
+    def test_the_shipped_policy_satisfies_the_validator_gate(self):
+        import json
+        with open(CD.POLICY, encoding="utf-8") as fh:
+            policy = json.load(fh)
+        self.assertEqual(CD.check_validators(policy, CD._read(CD.VALIDATORS_SRC)), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

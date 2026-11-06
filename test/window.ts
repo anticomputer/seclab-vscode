@@ -1,6 +1,6 @@
 // Editor windows for demos, screenshots and containment-editor runs, without ever taking focus
 // from the user (AGENTS.md hard rule). macOS only.
-//   node test/window.ts launch [--app PATH.app] [--env K=V]... USER_DATA_DIR FOLDER_URI   # background launch; exit 1 if it took focus
+//   node test/window.ts launch [--app PATH.app] [--rpc-trace .work/LOG] [--env K=V]... USER_DATA_DIR FOLDER_URI   # background launch; exit 1 if it took focus
 //   node test/window.ts shot USER_DATA_DIR OUT.png                       # capture the (covered) window by id
 //   (every background launch starts `window.ts watch USER_DATA_DIR -` first: it samples the
 //    frontmost app every 200 ms for the editor's whole life, and on the first sample in which the
@@ -22,6 +22,11 @@ if (argv[0] === '--app' && argv[1]) {
 		process.exit(2);
 	}
 }
+let rpcTrace: string | undefined;
+if (argv[0] === '--rpc-trace' && argv[1]) {
+	// Measurement only: validated by rpcTraceArgs (a plain path under this checkout's .work/).
+	rpcTrace = path.resolve(argv.splice(0, 2)[1]);
+}
 const env: Record<string, string> = {};
 while (argv[0] === '--env' && /^[A-Z_][A-Z0-9_]*=/.test(argv[1] ?? '')) {
 	const kv = argv.splice(0, 2)[1];
@@ -38,7 +43,7 @@ checkUserDataDir(userData);
 if (mode === 'watch') {
 	await watchFocus(userData);
 } else if (mode === 'launch') {
-	const r = await launchEditorInBackground(userData, arg, env, undefined, app);
+	const r = await launchEditorInBackground(userData, arg, env, undefined, app, rpcTrace);
 	console.log(`editor pid ${r.pid}, window ${r.windowId}, launched in the background`);
 	if (r.stoleFocus) {
 		if (!fs.existsSync(focusStealLog(userData)) || !fs.readFileSync(focusStealLog(userData), 'utf8').trim()) {
