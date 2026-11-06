@@ -189,3 +189,130 @@ index fed0318..1977da8 100644
  		x: windowState.x,
  		y: windowState.y,
  		width: windowState.width,
+diff --git a/src/vs/code/electron-main/main.ts b/src/vs/code/electron-main/main.ts
+index 93527ec..9d1504c 100644
+--- a/src/vs/code/electron-main/main.ts
++++ b/src/vs/code/electron-main/main.ts
+@@ -26,6 +26,7 @@ import { ProxyChannel } from '../../base/parts/ipc/common/ipc.js';
+ import { Client as NodeIPCClient } from '../../base/parts/ipc/common/ipc.net.js';
+ import { connect as nodeIPCConnect, serve as nodeIPCServe, Server as NodeIPCServer, XDG_RUNTIME_DIR } from '../../base/parts/ipc/node/ipc.net.js';
+ import { CodeApplication } from './app.js';
++import { installBackgroundWindowsGuard } from '../../platform/windows/electron-main/backgroundWindowsGuard.js';
+ import { localize } from '../../nls.js';
+ import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
+ import { ConfigurationService } from '../../platform/configuration/common/configurationService.js';
+@@ -735,5 +736,6 @@ class CodeMain {
+ }
+ 
+ // Main Startup
++installBackgroundWindowsGuard(); // seclab: no-op unless SECLAB_BACKGROUND_WINDOWS=1
+ const code = new CodeMain();
+ code.main();
+diff --git a/src/vs/platform/windows/electron-main/backgroundWindowsGuard.ts b/src/vs/platform/windows/electron-main/backgroundWindowsGuard.ts
+new file mode 100644
+index 0000000..8a2a7a7
+--- /dev/null
++++ b/src/vs/platform/windows/electron-main/backgroundWindowsGuard.ts
+@@ -0,0 +1,102 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import { app, BaseWindow, BrowserWindow, dialog, type MessageBoxOptions, type OpenDialogOptions, type SaveDialogOptions, type WebContents } from 'electron';
++import { backgroundWindows } from './windows.js';
++
++// seclab: in background mode (SECLAB_BACKGROUND_WINDOWS=1), nothing in the main process may
++// activate the app or raise a window over the user's work. Call-site guards (windowImpl, the
++// native host) cover what VS Code calls directly; this covers Electron itself, where activation
++// hides: on macOS NativeWindowMac::Show() and WebContents::Focus() (via owner_window->Focus(true))
++// both call activateIgnoringOtherApps, and a dialog without a parent window runs app-modal.
++// If it can't be installed, the process exits: an unguarded background run is not allowed.
++
++type Fn = (...args: unknown[]) => unknown;
++
++function replace(target: object, name: string, make: (orig: Fn) => Fn): void {
++	const orig = (target as Record<string, unknown>)[name];
++	if (typeof orig !== 'function') {
++		throw new Error(`background windows guard: ${name} is not a function`);
++	}
++	(target as Record<string, unknown>)[name] = make(orig as Fn);
++	if ((target as Record<string, unknown>)[name] === orig) {
++		throw new Error(`background windows guard: could not replace ${name}`);
++	}
++}
++
++/** A window of ours has keyboard focus: the user activated the app, so focus calls are theirs. */
++function appActive(): boolean {
++	return BrowserWindow.getFocusedWindow() !== null;
++}
++
++function dialogParent(): BrowserWindow | undefined {
++	return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
++}
++
++export function installBackgroundWindowsGuard(): void {
++	if (!backgroundWindows) {
++		return;
++	}
++	try {
++		for (const proto of [BaseWindow.prototype, BrowserWindow.prototype]) {
++			if (Object.prototype.hasOwnProperty.call(proto, 'show') || proto === BaseWindow.prototype) {
++				replace(proto, 'show', () => function (this: BaseWindow) { this.showInactive(); });
++			}
++			for (const name of ['focus', 'moveTop']) {
++				if (Object.prototype.hasOwnProperty.call(proto, name) || proto === BaseWindow.prototype) {
++					replace(proto, name, orig => function (this: BaseWindow, ...args: unknown[]) { return appActive() ? orig.apply(this, args) : undefined; });
++				}
++			}
++			for (const name of ['setFullScreen', 'setSimpleFullScreen']) {
++				if (Object.prototype.hasOwnProperty.call(proto, name) || proto === BaseWindow.prototype) {
++					replace(proto, name, orig => function (this: BaseWindow, flag: unknown) { return flag ? undefined : orig.call(this, flag); });
++				}
++			}
++		}
++		replace(app, 'focus', () => () => undefined);
++
++		// WebContents has no exported class: patch its prototype from the first instance.
++		let patched = false;
++		app.on('web-contents-created', (_event, contents: WebContents) => {
++			if (!patched) {
++				patched = true;
++				replace(Object.getPrototypeOf(contents), 'focus', orig => function (this: WebContents) { return appActive() ? orig.call(this) : undefined; });
++			}
++		});
++
++		// Dialogs: always attached to a window (a sheet); with no window to attach to, cancelled
++		// rather than run app-modal.
++		const cancelled = (name: string, options: { cancelId?: number } | undefined) =>
++			name.startsWith('showMessageBox') ? { response: options?.cancelId ?? 0, checkboxChecked: false } : { canceled: true, filePaths: [], filePath: '' };
++		for (const name of ['showMessageBox', 'showOpenDialog', 'showSaveDialog']) {
++			replace(dialog, name, orig => (a: unknown, b?: unknown) => {
++				if (a instanceof BaseWindow) {
++					return orig(a, b);
++				}
++				const parent = dialogParent();
++				return parent ? orig(parent, a) : Promise.resolve(cancelled(name, a as MessageBoxOptions & OpenDialogOptions & SaveDialogOptions));
++			});
++		}
++		for (const name of ['showMessageBoxSync', 'showOpenDialogSync', 'showSaveDialogSync']) {
++			replace(dialog, name, orig => (a: unknown, b?: unknown) => {
++				if (a instanceof BaseWindow) {
++					return orig(a, b);
++				}
++				const parent = dialogParent();
++				if (parent) {
++					return orig(parent, a);
++				}
++				const c = cancelled(name, a as MessageBoxOptions);
++				return 'response' in c ? c.response : undefined;
++			});
++		}
++		replace(dialog, 'showErrorBox', () => (title: unknown, content: unknown) => {
++			console.error(`[background windows] error box suppressed: ${String(title)}: ${String(content)}`);
++		});
++	} catch (error) {
++		console.error(String(error));
++		app.exit(1);
++	}
++}
