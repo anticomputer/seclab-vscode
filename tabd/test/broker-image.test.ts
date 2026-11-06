@@ -55,7 +55,7 @@ test('broker-image: unlabelled, unknown, mitmproxy-inherited and mismatched imag
 	const unknown = good(Object.fromEntries([BROKER_LABELS.revision, BROKER_LABELS.base, BROKER_LABELS.version, BROKER_LABELS.policyRevision].map(k => [k, 'unknown'])));
 	assert.equal(brokerImageProblems(ID, unknown, { allowDirty: true }).length, 4);
 	assert.match(brokerImageProblems(ID, good({ [BROKER_LABELS.base]: 'sha256:' + '0'.repeat(64) }), { allowDirty: false }).join(), /mitmproxy/);
-	assert.match(brokerImageProblems(ID, good({ [BROKER_LABELS.policyRevision]: '2' }), { allowDirty: false }).join(), /policy revision/);
+	assert.match(brokerImageProblems(ID, good({ [BROKER_LABELS.policyRevision]: '2' }), { allowDirty: false }).join(), /policy revision.*\.\/seclab image oci/);
 	assert.match(brokerImageProblems('seclab-broker:dev', good(), { allowDirty: false }).join(), /not a sha256/);
 });
 

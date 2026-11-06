@@ -254,13 +254,24 @@ same strict checks as /user").
   - All three lists include that envelope, so a routine 403, 404 or 429 from
     GitHub reaches the client as itself, not as a security finding. Its
     values still get every other check.
-- **Queries are still refused,** but the shipped runtime's binary contains
+- **Queries are still refused.** The shipped runtime's binary contains
   `/copilot_internal/managed_settings?` and
-  `/copilot_internal/content_exclusion?` (secure-agentic, static evidence).
-  Those two may carry a query, and would then still be denied. Request audit
-  events now carry `queryKeys` (names only, never values), so the next spike
-  run measures the real names. An allowlist of query key names comes after
-  that, with the values treated as untrusted data.
+  `/copilot_internal/content_exclusion?` (secure-agentic, static evidence),
+  so a query was expected on those two.
+- **Measured: no query keys** (spike re-run 2026-11-06, run
+  `20261106T163552Z-7e764e0ec6489881-tab` in the agentic gate session, on
+  main with broker revision 6). All 8 routes the shipped runtime called had
+  `queryKeys: []`:
+  - `GET /copilot_internal/user` (both the `/api/v3` host and the `api.` host);
+  - `GET /copilot_internal/team_customizations`;
+  - `GET /models`;
+  - `POST /chat/completions`, `/responses`, `/v1/messages` and
+    `/mcp/readonly`.
+
+  So no query-key allowlist is needed, and the empty-query rule stays.
+  `managed_settings` and `content_exclusion` were not called in that run.
+  Their exceptions stay as they are, and the measurement is open for them
+  until a run exercises them.
 - Denying them silently dropped an enterprise's Copilot content exclusions,
   which is a policy regression, not a leak.
 
@@ -271,6 +282,11 @@ union of two lists:
 - what upstream's own stub serves (`test/node/e2e/harness/capiStubs.ts`).
 
 It is stub-derived, not measured: the run used no real credential, by rule.
+The 2026-11-06 re-run confirmed the same limit: its `/user` response came from
+the fixture (its `servedKeys` are the stub's keys), so the allowlist can't be
+finalised from a spike. Measuring the real fields needs a real Copilot
+response, which needs a real credential; that is a decision for the user, not
+something a spike may do.
 The order matters:
 1. **The whole document is checked first,** unknown fields included. A
    token-shaped value, or a credential-named key, blocks it as before.
