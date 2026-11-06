@@ -67,8 +67,13 @@ for pass in dirs files links; do
           echo "build: snapshot path '$path' collides with another entry" >&2; exit 1
         fi
         if [ "$pass" = links ]; then
+          # $(...) drops trailing newlines, so the target must still be exactly the blob.
           target=$(git -C "$top" cat-file blob "$obj")
-          [ -n "$target" ] || { echo "build: snapshot symlink '$path' is empty" >&2; exit 1; }
+          size=$(git -C "$top" cat-file -s "$obj")
+          len=$(printf %s "$target" | wc -c)
+          if [ -z "$target" ] || [ "$size" -ne "$len" ]; then
+            echo "build: snapshot symlink '$path' has a target that can't be written exactly" >&2; exit 1
+          fi
           ln -s -- "$target" "$out"
         else
           git -C "$top" cat-file blob "$obj" > "$out"

@@ -8,8 +8,9 @@
   * every requirements*.txt parses strictly (plain `name==version` plus
     `--hash=sha256:` only), every pin is in broker/deps.json, every file is installed
     by some Dockerfile, and its pip-compile source (requirements*.in) pins the same
-    versions (required when the lock is pip-compile output);
-  * no path under broker/ needs git quoting (broker/build.sh refuses those).
+    versions (registered in broker/deps.json `lockSources`; every .in must be).
+(broker/docs-check.sh also refuses tracked paths under broker/ that git would quote,
+because broker/build.sh refuses them.)
 The parsing rules are in tools/supplychain.py. Online provenance checks (PyPI
 attestations, image signatures) are in broker/provenance-check.sh.
 """
@@ -24,11 +25,13 @@ from supplychain import (BROKER, SupplyChainError, install_targets, norm, parse_
                          requirement_files, self_test)
 
 
-def source_drift(req, locked: dict[str, str]) -> list[str]:
+def source_drift(req, locked: dict[str, str], required: bool = False) -> list[str]:
     """A lock's pip-compile source (requirements.txt <- requirements.in) must pin the same
-    versions, or the next recompile silently undoes a re-pin. A lock that is pip-compile
-    output (it has `# via` annotations) must have its source, and every direct requirement
-    (`via -r <source>`) must be pinned there. Only `name==version` lines are allowed."""
+    versions, or the next recompile silently undoes a re-pin. The pairing is registered in
+    broker/deps.json `lockSources` (`required`), not inferred from the lock's own comments;
+    a lock with `# via` annotations also needs its source. The source must pin something,
+    and every direct requirement (`via -r <source>`) must be pinned there. Only
+    `name==version` lines are allowed."""
     src = req.with_suffix(".in")
     text = req.read_text()
     direct, cur = set(), None
@@ -38,9 +41,9 @@ def source_drift(req, locked: dict[str, str]) -> list[str]:
             cur = norm(m[1])
         elif cur and re.fullmatch(r"\s*#\s+(?:via\s+)?-r\s+" + re.escape(src.name) + r"\s*", raw):
             direct.add(cur)
-    compiled = re.search(r"^\s*#\s+via\b", text, re.M) is not None
+    compiled = required or re.search(r"^\s*#\s+via\b", text, re.M) is not None
     if not src.exists():
-        return [f"{rel(req)}: pip-compile output, but its source {src.name} is missing"] if compiled else []
+        return [f"{rel(req)}: pip-compiled lock, but its source {src.name} is missing"] if compiled else []
     errors, sourced = [], set()
     for n, raw in enumerate(src.read_text().splitlines(), 1):
         line = raw.split("#", 1)[0].strip()
@@ -61,19 +64,6 @@ def source_drift(req, locked: dict[str, str]) -> list[str]:
     return errors
 
 
-def unquotable_paths() -> list[str]:
-    """broker/build.sh refuses any path git would quote (non-ASCII, control characters, `"`,
-    `\\`), so flag them here before a build does."""
-    bad = []
-    for p in sorted(BROKER.rglob("*")):
-        r = p.relative_to(BROKER)
-        if ".work" in r.parts or "__pycache__" in r.parts:
-            continue
-        if not re.fullmatch(r'[ !#-\[\]-~]+', str(r)):
-            bad.append(f"{rel(p)!r}: path has characters git quotes; broker/build.sh refuses it")
-    return bad
-
-
 def main() -> int:
     if sys.argv[1:] == ["--self-test"]:
         failures = self_test()
@@ -85,6 +75,7 @@ def main() -> int:
     register = json.loads((BROKER / "deps.json").read_text())
     image_refs = {i["ref"] for i in register["images"]}
     py_pins = {(norm(p["name"]), p["version"]) for p in register["python"]}
+    lock_sources = {"broker/" + e["lock"]: "broker/" + e["source"] for e in register.get("lockSources", [])}
     targets, errs = install_targets(image_refs)
     errors += errs
     for req in requirement_files():
@@ -98,8 +89,14 @@ def main() -> int:
                 errors.append(f"{rel(req)}:{n}: {name}=={version} is not in broker/deps.json")
         if req.resolve() not in targets:
             errors.append(f"{rel(req)}: not installed by any Dockerfile (its target interpreter is unknown)")
-        errors += source_drift(req, {name: version for _, name, version, _ in pins})
-    errors += unquotable_paths()
+        errors += source_drift(req, {name: version for _, name, version, _ in pins},
+                               required=rel(req) in lock_sources)
+    for lock, src in lock_sources.items():
+        if not (BROKER.parent / lock).exists() or not (BROKER.parent / src).exists():
+            errors.append(f"broker/deps.json lockSources: {lock} <- {src}: missing file")
+    for src in sorted(BROKER.rglob("requirements*.in")):
+        if ".work" not in src.parts and rel(src) not in lock_sources.values():
+            errors.append(f"{rel(src)}: not registered in broker/deps.json lockSources")
     for e in errors:
         print("pin-check: " + e, file=sys.stderr)
     if not errors:
