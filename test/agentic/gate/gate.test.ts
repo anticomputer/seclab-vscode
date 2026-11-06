@@ -92,7 +92,7 @@ test('A1: protected resources and auth/required never reach the client; authenti
 // is `kind: 'authRequired'` (McpServerStatus.AuthRequired) and the tool-call one is
 // `status: 'auth-required'` (ToolCallStatus.AuthRequired), both at a717861c. Round 1 matched
 // only the hyphenated `kind`, so the fix was dead code; this pins the real shapes.
-test('A1 (rounds 1-2 HIGH): MCP auth metadata never reaches the client, on any carrier', () => {
+test('A1 (rounds 1-3 HIGH): MCP auth metadata never reaches the client, on any carrier', () => {
 	const { f } = gate();
 	const mcpAuthState = {
 		kind: 'authRequired',
@@ -100,19 +100,29 @@ test('A1 (rounds 1-2 HIGH): MCP auth metadata never reaches the client, on any c
 		resource: { resource: 'http://192.0.2.1/latest/meta-data', scopes_supported: ['x'] },
 		requiredScopes: [],
 	};
-	// The two carriers that reach automatic authentication with no user interaction are denied.
-	for (const type of ['session/mcpServerStateChanged', 'session/customizationsChanged', 'chat/toolCallAuthRequired']) {
-		assert.deepEqual(f.fromUpstream(j({ jsonrpc: '2.0', method: 'action', params: { channel: 's', action: { type, servers: [{ id: 's1', state: mcpAuthState }] } } })).toClient, [], type);
+	// Upstream's real action envelopes at a717861c: a wrong envelope is a reducer no-op, which
+	// would make the unpatched control look contained (review round 3).
+	//   { type, id, state, channel? } / { type, customizations: Customization[] }
+	//   ChatToolCallAuthRequiredAction extends ToolCallActionBase, auth: McpAuthRequirement
+	const carriers = [
+		{ type: 'session/mcpServerStateChanged', id: 's1', state: mcpAuthState },
+		{ type: 'session/customizationsChanged', customizations: [{ type: 'mcpServer', id: 's1', uri: 'http://192.0.2.1/c.json', name: 'n', state: mcpAuthState }] },
+		{ type: 'chat/toolCallAuthRequired', turnId: 't', toolCallId: 'tc', auth: { reason: 'required', resource: mcpAuthState.resource, requiredScopes: [] } },
+	];
+	// The carriers that reach automatic authentication with no user interaction are denied.
+	for (const action of carriers) {
+		assert.deepEqual(f.fromUpstream(j({ jsonrpc: '2.0', method: 'action', params: { channel: 's', action } })).toClient, [], action.type);
 	}
 	// Where the same state is embedded in an allowed result, the sanitiser makes it inert.
 	f.fromClient(j({ jsonrpc: '2.0', id: 9, method: 'listSessions', params: {} }));
-	const out = f.fromUpstream(j({ jsonrpc: '2.0', id: 9, result: { sessions: [{ mcpServers: [{ state: mcpAuthState }] }] } })).toClient;
+	const out = f.fromUpstream(j({ jsonrpc: '2.0', id: 9, result: { sessions: [{ customizations: [{ type: 'mcpServer', id: 's1', state: mcpAuthState }] }] } })).toClient;
 	assert.equal(out.length, 1);
 	assert.ok(!out[0].includes('192.0.2.1'));
-	const state = JSON.parse(out[0]).result.sessions[0].mcpServers[0].state;
+	const state = JSON.parse(out[0]).result.sessions[0].customizations[0].state;
 	// An inert state, in the shape the renderer expects (McpServerErrorState needs `error`).
 	assert.equal(state.kind, 'error');
 	assert.equal(typeof state.error.message, 'string');
+	assert.equal(typeof state.error.errorType, 'string');
 	assert.equal(state.resource, undefined);
 	// Both spellings, on `kind` and on `status`, and nested inside another node.
 	for (const node of [{ kind: 'auth-required' }, { status: 'auth-required' }, { status: 'authRequired' }]) {
