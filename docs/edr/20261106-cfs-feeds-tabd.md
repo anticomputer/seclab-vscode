@@ -1,6 +1,6 @@
 # CFS package feeds in tabs: the tabd side (plan increment B4)
 
-- **Status:** accepted (needs broker policy schema revision 7, `credential.import` `budget`; real-feed measurement pending)
+- **Status:** accepted (broker policy schema revision 7 on main at 47ccdc6; real-feed measurement pending)
 - **Date:** 2026-11-06
 - **Deciders:** Coordinator ("ok continue work" for B4). Broker session: revision 6, then 7 for import budgets. Fork-build session: implementation.
 - **Related:** [ADR cfs-package-feeds-in-tabs](../adr/20261105-cfs-package-feeds-in-tabs.md), [egress prompts](20261106-egress-prompts.md)
@@ -72,6 +72,9 @@ Manager: the per-tab switch, the token source and the tab's npm and pip configur
     unexpected index URL means no feeds.
 - Images must be rebuilt for the `seclab-tab-env` change (`./seclab image oci`,
   `./seclab template sbx`).
+- **Budget lifetime:** usage is keyed by credential id for the broker's lifetime. Turning
+  feeds off and on again doesn't refill the budget, because a re-import never resets it. A
+  fresh budget comes with the next broker start (a tab restart).
 - **Open:** the ADR's real-feed measurements (download paths, redirects, resent
   `Authorization`, the `pypi/download/**` path), through a tab's broker with this host's
   `az`, once revision 7 is in a local broker image.
