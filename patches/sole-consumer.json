@@ -18,5 +18,19 @@
 		"files": {
 			"src/vs/workbench/api/browser/mainThreadDocuments.ts": "getProxy(ExtHostContext.ExtHostDocuments)"
 		}
+	},
+	"__upstreamInvariants": {
+		"why": "facts about upstream that a patch's security argument depends on, which no unit test can hold because the unit container has no upstream checkout. Checked over the patched tree by build/check-sole-consumer.ts, which patch-build already runs.",
+		"rules": [
+			{
+				"file": "src/vs/platform/browserView/common/browserView.ts",
+				"mustContain": [
+					"case BrowserViewStorageScope.Global:\n\t\t\treturn { scope };",
+					"Ephemeral = 'ephemeral'",
+					"case BrowserViewStorageScope.Ephemeral:\n\t\t\treturn { scope, ...networkOption };"
+				],
+				"why": "patch 0017 pins workbench.browser.dataStorage to 'ephemeral' precisely because upstream drops the browser view's network for the global scope and keeps it for ephemeral. If either branch changes, the pinned value must be re-derived before it can still be trusted."
+			}
+		]
 	}
 }

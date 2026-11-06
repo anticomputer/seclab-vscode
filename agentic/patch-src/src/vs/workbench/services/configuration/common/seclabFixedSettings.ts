@@ -34,9 +34,15 @@ export const SECLAB_FIXED_TAB_SETTINGS: ReadonlyMap<string, unknown> = new Map<s
 	['chat.automations.enabled', false],
 	['chat.automations.cloud.enabled', false],
 	// `true`, not `false`. Both values are reachable by a tab, and `true` is the contained
-	// one: it keeps every browser view's traffic on the tab's network, behind that tab's
-	// broker. `false` would drop the browser tools' model-chosen URL onto the HOST network
-	// (security review round 6), which is strictly worse than leaving the setting alone.
+	// one: it keeps every browser view's traffic on the TAB's network. `false` would drop
+	// the browser tools' model-chosen URL onto the HOST network (security review round 6),
+	// which is strictly worse than leaving the setting alone.
+	//
+	// What "on the tab's network" means, precisely (round 7): the destination socket is a
+	// raw TCP connect from inside the sbx, which does not honour the tab's proxy env vars,
+	// so it is NOT brokered. The tab's fence allows only the broker port, so an external
+	// destination is denied there and a tab-local one is reached directly. That is the
+	// containment; the broker is not what provides it here.
 	['workbench.browser.enableRemoteProxy', true],
 	// A browser view's network is kept only for the non-global storage scopes:
 	// `toBrowserViewSessionOptions` returns `{ scope }` with NO network for `global`, so a
