@@ -1,5 +1,5 @@
 diff --git a/src/vs/workbench/services/configuration/browser/configurationService.ts b/src/vs/workbench/services/configuration/browser/configurationService.ts
-index 55e2c0ce..3c2c1aab 100644
+index 55e2c0ce..8a022527 100644
 --- a/src/vs/workbench/services/configuration/browser/configurationService.ts
 +++ b/src/vs/workbench/services/configuration/browser/configurationService.ts
 @@ -44,6 +44,7 @@ import { IPolicyService, NullPolicyService } from '../../../../platform/policy/c
@@ -10,7 +10,7 @@ index 55e2c0ce..3c2c1aab 100644
  import { workbenchConfigurationNodeBase } from '../../../common/configuration.js';
  import { mainWindow } from '../../../../base/browser/window.js';
  import { runWhenWindowIdle } from '../../../../base/browser/dom.js';
-@@ -72,6 +74,8 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
+@@ -72,6 +73,8 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
  	private initRemoteUserConfigurationBarrier: Barrier;
  	private completeWorkspaceBarrier: Barrier;
  	private readonly configurationCache: IConfigurationCache;
@@ -19,24 +19,40 @@ index 55e2c0ce..3c2c1aab 100644
  	private _configuration: Configuration;
  	private initialized: boolean = false;
  	private readonly defaultConfiguration: DefaultConfiguration;
-@@ -131,6 +135,8 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
+@@ -131,6 +134,7 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
  		this.defaultConfiguration = this._register(new DefaultConfiguration(userDataProfileService.currentProfile.id, configurationCache, environmentService, logService));
  		this.policyConfiguration = policyService instanceof NullPolicyService ? new NullPolicyConfiguration() : this._register(new PolicyConfiguration(this.defaultConfiguration, policyService, logService));
  		this.configurationCache = configurationCache;
-+		// seclab: this window's remote authority, for the settings a tab window fixes (patch 0017).
 +		this.seclabAuthority = remoteAuthority;
  		this._configuration = new Configuration(this.defaultConfiguration.configurationModel, this.policyConfiguration.configurationModel, ConfigurationModel.createEmptyModel(logService), ConfigurationModel.createEmptyModel(logService), ConfigurationModel.createEmptyModel(logService), ConfigurationModel.createEmptyModel(logService), new ResourceMap(), ConfigurationModel.createEmptyModel(logService), new ResourceMap<ConfigurationModel>(), this.workspace, logService);
  		this.applicationConfigurationDisposables = this._register(new DisposableStore());
  		this.createApplicationConfiguration();
-@@ -335,7 +341,15 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
+@@ -325,7 +329,16 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
+ 	// Workspace Configuration Service Impl
+ 
+ 	getConfigurationData(): IConfigurationData {
+-		return this._configuration.toData();
++		const data = this._configuration.toData();
++		// seclab: the extension hosts get their configuration from this snapshot, not from
++		// `getValue`, so a tab window's fixed settings have to be applied here too (patch 0017,
++		// security review round 6). `contents` is what ExtHostConfiguration answers reads from.
++		for (const layer of [data.defaults, data.policy, data.application, data.userLocal, data.userRemote, data.workspace]) {
++			if (layer) {
++				layer.contents = seclabScrubFixedSettings(this.seclabAuthority, undefined, layer.contents) as typeof layer.contents;
++			}
++		}
++		return data;
+ 	}
+ 
+ 	getValue<T>(): T;
+@@ -335,7 +348,14 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
  	getValue(arg1?: unknown, arg2?: unknown): unknown {
  		const section = typeof arg1 === 'string' ? arg1 : undefined;
  		const overrides = isConfigurationOverrides(arg1) ? arg1 : isConfigurationOverrides(arg2) ? arg2 : undefined;
 -		return this._configuration.getValue(section, overrides);
 +		// seclab: settings a tab must not be able to turn on for this window (patch 0017).
-+		// Here rather than at each reader: the readers are spread across the browser view
-+		// service, the chat contribution and the sessions providers, and a list of call sites
-+		// would silently miss one added by an upstream bump.
++		// Here rather than at each reader: the readers are spread across several contributions
++		// and a list of call sites would silently miss one added by an upstream bump.
 +		const seclabFixed = seclabFixedSetting(this.seclabAuthority, section);
 +		if (seclabFixed) {
 +			return seclabFixed.value;
@@ -45,25 +61,29 @@ index 55e2c0ce..3c2c1aab 100644
  	}
  
  	updateValue(key: string, value: unknown): Promise<void>;
-@@ -414,7 +428,11 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
+@@ -414,7 +434,15 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
  	}
  
  	inspect<T>(key: string, overrides?: IConfigurationOverrides): IConfigurationValue<T> {
 -		return this._configuration.inspect<T>(key, overrides);
 +		const result = this._configuration.inspect<T>(key, overrides);
-+		// seclab: a fixed key reports its fixed value (patch 0017). The per-layer fields are
-+		// left alone, so a reader that deliberately inspects a single layer still sees it.
++		// seclab: a fixed key reports its fixed value (patch 0017). `Object.create`, not a
++		// spread: the result is a class instance whose per-layer fields are prototype getters,
++		// and spreading it would drop every one of them and expose the raw configuration models
++		// instead (security review round 6).
 +		const seclabFixed = seclabFixedSetting(this.seclabAuthority, key);
-+		return seclabFixed ? { ...result, value: seclabFixed.value as T } : result;
++		return seclabFixed
++			? Object.create(result as object, { value: { value: seclabFixed.value as T, enumerable: true } }) as IConfigurationValue<T>
++			: result;
  	}
  
  	keys(): {
 diff --git a/src/vs/workbench/services/configuration/common/seclabFixedSettings.ts b/src/vs/workbench/services/configuration/common/seclabFixedSettings.ts
 new file mode 100644
-index 00000000..324fb6b9
+index 0000000..0000000
 --- /dev/null
 +++ b/src/vs/workbench/services/configuration/common/seclabFixedSettings.ts
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,114 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -87,21 +107,33 @@ index 00000000..324fb6b9
 + * call sites would silently miss a reader added by an upstream bump; the configuration
 + * service is the single place every one of them goes through.
 + *
-+ * `workbench.browser.enableRemoteProxy` is `false` because the path a hostile tab or agent
-+ * host can drive is the embedded-page one, and there upstream refuses to open rather than
-+ * falling back to the host network (EDR 20261106-increment-2-remote-proxy, finding 3).
++ * `workbench.browser.enableRemoteProxy` is deliberately NOT here yet. Security review round 6
++ * found a third open path the measurement had missed: the browser tools resolve the network
++ * with the PUBLIC `resolveNetwork`, which yields `undefined` when the proxy is off, so the
++ * page loads on the HOST network for a model-chosen URL. Our own authority always reports
++ * `proxySupported: true`, so that is a real change, not a no-op. Forcing `false` would
++ * therefore open a host-network egress path that leaving the setting alone does not. The
++ * value is settled in its own increment; see the EDR.
 + */
 +
 +/** The fixed values, by setting id. Tab windows only. */
 +export const SECLAB_FIXED_TAB_SETTINGS: ReadonlyMap<string, unknown> = new Map<string, unknown>([
-+	['workbench.browser.enableRemoteProxy', false],
 +	['chat.automations.enabled', false],
 +	['chat.automations.cloud.enabled', false],
 +]);
 +
++/**
++ * The authority prefix of a seclab tab window. Declared here rather than imported from
++ * 0015's `seclabAhpGateCheck`, because a value import across patch modules does not resolve
++ * under `node --test`'s type stripping and would make this module untestable. Drift is held
++ * by a unit test that imports both and asserts they are equal, which is a stronger guarantee
++ * than the import it replaces (security review round 6).
++ */
++export const SECLAB_TAB_AUTHORITY_PREFIX = 'seclab+';
++
 +/** Whether this window is a seclab tab window, from its remote authority. */
 +export function isSeclabTabAuthority(authority: string | undefined): boolean {
-+	return typeof authority === 'string' && authority.startsWith('seclab+');
++	return typeof authority === 'string' && authority.startsWith(SECLAB_TAB_AUTHORITY_PREFIX);
 +}
 +
 +/** The fixed value for an exact setting id in a tab window, or `undefined` when none is. */
