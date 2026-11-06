@@ -31,9 +31,10 @@ at the repo root) all apply. Every command here has been run. Design:
 | `strace.ts` | Strict, bounded strace parser; process tracker (lineage, exec deferral until the parent's clone line) |
 | `sbx-collector.ts` | tabd side of `sandbox/rootfs/opt/seclab/bin/seclab-obs-collect`: line caps, seq contiguity, heartbeats, REH gate |
 | `falco.ts` | OCI host sensor: capture-only rules for exact container ids, SIGHUP reload, ready = rules sha in a metrics snapshot |
-| `hub.ts` | Per-tab seq, rate buckets (sensor / tab-driven / client; `tabd` never limited), JSONL segments, observation state |
+| `hub.ts` | Per-tab seq, rate buckets (sensor / tab-driven / client, plus one per broker audit type; `tabd` never limited), JSONL segments, observation state |
 | `detect.ts` | Detection rules (one ruleset for all sensors); detections take the weakest integrity |
 | `workspace-watch.ts` | Trusted host watcher (lstat only; `package.json` scripts diff only inside the root) |
+| `broker-audit.ts` | Broker `audit.event` → trusted events: allowlisted types and fields (tab text into tagged fields), `audit.tail` replay on connect, seq dedupe and gap events, 10 s aggregation of allowed requests and injections |
 | `glue.ts` | Protocol methods (`tab.events.*`, `tab.observe`), sensor hooks for drivers, policy-log poller |
 | `../../tools/gen-obs-docs.ts`, `../../tools/tab-logs.ts` | Doc generator; `seclab tab logs` |
 | `sandbox/sbx/seclab-obs-guard.c` | seccomp guard: no `CLONE_UNTRACED`, `clone3`, seccomp listeners or io_uring; closes fds > 2 |

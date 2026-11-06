@@ -100,6 +100,44 @@ observability-loader-in-tab). No vulnerabilities. Checked:
 
 `mdatp threat list` before and after: no new detection.
 
+## Round 7: broker audit events in the stream (EDR broker-audit-in-tab-events)
+Scope: `tabd/src/obs/broker-audit.ts`, the hub's broker buckets, `rule` vocabulary,
+supervisor wiring, tests. Four passes (7, 7b, 7c, 7d).
+
+| ID | Sev | Area | Finding | Status | Fix |
+|---|---|---|---|---|---|
+| BA-1 | Medium | rate | Cheap denials shared the tab-driven bucket with critical findings (sentinel misplaced, blocked token), so a tab could push findings out. | Fixed | See the passes below. |
+| BA-1b | Medium | rate | (7b) A single cheap finding type (`sentinel.misplaced` via WebSocket frames) could drain the shared finding bucket. | Fixed | Findings aggregated on (type, host, port, credential, hook). |
+| BA-1c | Medium | aggregation | (7c) Tab-chosen methods minted aggregation keys. Once a type's key pool was full, events were only counted and their destination was lost. | Fixed | Keys use broker-determined fields only. A full pool emits the event on its own. |
+| BA-1d | Medium | rate | (7c) A flood of cheap `model.denied` events drained the shared bucket for every other broker event. | Fixed | One bucket per broker audit type. The model, token and session types are aggregated. |
+| BA-2 | Low | tagging | `rule` counted as vocabulary, but an `allow-tab` rule is named by the host the tab chose. | Fixed | `rule` is always tagged untrusted. |
+| BA-L1 | Low | EDR | Unlisted types, the broker's `untrusted` list and flood claims were described inaccurately. | Fixed | Unlisted types now carry only type and seq. EDR corrected. |
+
+How the fixes fit together:
+- Every broker audit type has its own bucket: findings 20/s with a burst of 200, others
+  100/s with a burst of 1000. Broker events share no bucket with any other source.
+- Each type has a pool of 64 aggregation keys (1024 overall).
+- Drop reports name the type and give the dropped broker seq range.
+
+Also hardened (7, questions): broker restart is detected by seq too, and an attach
+generation stops a stale replay from draining into a newer attach.
+
+7d found no issues. It accepted the residual: a flood of distinct broker-determined keys of
+one type can drop other events of that same type, and the drop is reported with its type
+and seq range.
+
+Regression tests (`tabd/test/obs.test.ts`), "broker audit review" × 2:
+- method variants collapse into one key;
+- a 6000-denial flood plus a sentinel flood leave another credential's finding, a new
+  destination and `policy.updated` intact;
+- the per-type drop is reported with its seq range;
+- `rule` is tagged;
+- restart is detected by seq;
+- a stale replay is ignored.
+
+`tabd/test/broker-supervisor.test.ts` "broker audit" covers replay, dedupe, gap
+reporting, the foreign-tab drop and tagging.
+
 ## Accepted residuals (documented in the ADR)
 - `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.
 - Under OCI the privileged Falco sees every container on the Docker host. Only rules for the exact tab container ids are loaded, and its only output is stdout to tabd.
