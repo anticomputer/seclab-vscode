@@ -78,3 +78,31 @@ Manager: the per-tab switch, the token source and the tab's npm and pip configur
 - **Open:** the ADR's real-feed measurements (download paths, redirects, resent
   `Authorization`, the `pypi/download/**` path), through a tab's broker with this host's
   `az`, once revision 7 is in a local broker image.
+
+## Measured 2026-11-06 (`node tabd/test/e2e-cfs.ts`, this host's `az`, a real OCI tab)
+- **Feed reads work with only the sentinel**, credentialed by the broker, each audited as
+  `credential.used` on `pkgs.dev.azure.com` and nowhere else:
+  - the npm packument;
+  - npm's own packument (24 MB);
+  - the PyPI simple index.
+
+  The token was in neither the tab nor the audit log.
+- **PyPI file links use the feed's GUID path**, not its name:
+  `/example-org/00000000-…/_packaging/00000000-…/pypi/download/…`. The provider entry now
+  allows and binds that exact download prefix, GET only.
+- **Every download redirects.** npm tarballs and PyPI files answer `303` to
+  `<prefix>vsblobprodcus<NNN>.blob.core.windows.net/b-<id>/<hash>.blob?<SAS>`: a read-only,
+  time-limited signed URL, on several storage accounts. The host is not
+  `*.vsblob.vsassets.io`. curl, like pip's requests, sends no `Authorization` across hosts, and
+  the broker denied the storage host. So downloads, and with them a real `npm`/`pip install`,
+  don't work yet.
+- **Open decision:** how to reach the storage hosts. The policy grammar can't name
+  `*vsblobprodcus*` narrowly. The options:
+  - allow GET on `*.blob.core.windows.net` (any Azure storage account, an attacker's
+    included);
+  - the broker follows the redirect itself on the credentialed CFS route, to a
+    provider-declared host pattern only, with no credential;
+  - a new host-pattern form.
+
+  Raised with the coordinator and the broker session.
+- Refused as designed: a POST to a feed path, and the sentinel sent to `_apis`.
