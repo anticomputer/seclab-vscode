@@ -80,6 +80,11 @@ allow it for the tab, or deny it.
   text, a long host shown whole, lineage confidence and integrity, the credential wording), the
   button order, and that the broker policy enables prompts only for an approvals-capable client
   and a user policy that doesn't turn them off. Review: [round BBB](../security-reviews/20261106-egress-prompts.md).
+- The broker e2e (`./seclab test e2e-broker [oci|sbx]`, also in ci-linux) now runs with prompts
+  on and a scripted decider in place of the Tab Manager: a prompt before user action carries
+  `no-user-action-yet` and a deny gets 403; a risky destination before user action is denied
+  without a prompt; an unanswered prompt is denied at its timeout; a POST outside a GET rule is
+  prompted and denied; after `tab.userAction`, allow-once lets the request through.
 - **Next:**
   - B3c: control reconnect at adoption, and recovering the window after its server dies or
     the local extension host restarts (found by the focus probe).

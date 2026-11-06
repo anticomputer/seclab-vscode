@@ -5,7 +5,10 @@
 // Proves, from inside the tab: an unlisted host is denied by the broker (403), a direct route
 // does not exist, a host the user policy allows works through the broker with its CA, the
 // proxy refuses requests without the tab's credentials (407), the proxy password is in no log,
-// and removing the tab removes the broker and its egress network.
+// and removing the tab removes the broker and its egress network. B3: with prompts on and a
+// scripted decider, a prompt before user action carries that flag and a deny holds; a risky
+// destination before user action is denied unprompted; an unanswered prompt times out denied;
+// after `tab.userAction`, allow-once lets a request through.
 
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
@@ -26,9 +29,12 @@ const ws = path.join(work, 'tabs', 'ws1');
 fs.mkdirSync(ws, { recursive: true });
 fs.mkdirSync(state, { recursive: true, mode: 0o700 });
 // The user policy (decision 1: tabd's own state dir, never the workspace): one allowed host.
+// Prompts on, with a short timeout: this client declares the approvals capability and answers
+// them with a scripted decider (B3).
 const ALLOWED = 'api.github.com';
+const PROMPT_TIMEOUT_S = 8;
 fs.writeFileSync(path.join(state, 'broker-policy.json'), JSON.stringify({
-	version: 1, baseline: false, prompt: { enabled: false }, allow: [{ host: ALLOWED, methods: ['GET'] }],
+	version: 1, baseline: false, prompt: { enabled: true, timeoutSeconds: PROMPT_TIMEOUT_S }, allow: [{ host: ALLOWED, methods: ['GET'] }],
 }), { mode: 0o600 });
 writeSnapshot(work);
 writeManifest(work, { driver, stateDirs: [state] });
@@ -46,7 +52,7 @@ const client = new TabdClient({
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));
 
-await client.initialize('e2e-broker', '0');
+await client.initialize('e2e-broker', '0', { approvals: true });
 // A host loopback listener standing in for another tab's broker (review ZZ-6): the tab must not
 // reach it, directly or as a proxy. A separate process (the checks block this event loop),
 // logging each request to a file.
@@ -63,6 +69,30 @@ const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('t
 const tabId = tab.metadata.name;
 writeManifest(work, { tabs: [tabId] });
 const ctr = `seclab-${tabId}`;
+// The scripted decider (B3): answers this tab's prompts by host; null leaves one to time out.
+interface Seen { host: string; method: string; flags: string[]; decisions: string[]; resolvedBy?: string; decision?: string }
+const seen = new Map<string, Seen>();
+const DECIDE: Record<string, string | null> = { 'example.com': 'deny', 'example.org': 'allow-once', 'example.net': null };
+client.on('notification', (method: string, p: Record<string, unknown>) => {
+	if (p?.tabId !== tabId) {
+		return;
+	}
+	if (method === 'tab.approval') {
+		const a = p.approval as { approvalId: string; request: { host: string; method: string }; risk: { flags: string[] }; decisions: string[] };
+		seen.set(a.approvalId, { host: a.request.host, method: a.request.method, flags: a.risk.flags, decisions: a.decisions });
+		const d = a.request.host in DECIDE ? DECIDE[a.request.host] : 'deny';
+		if (d) {
+			client.request('tab.approval.decide', { tabId, approvalId: a.approvalId, decision: d }).catch(e => console.log(`decide ${a.request.host}: ${(e as Error).message}`));
+		}
+	} else if (method === 'tab.approval.resolved') {
+		const s = seen.get(String(p.approvalId));
+		if (s) {
+			s.resolvedBy = String(p.by);
+			s.decision = String(p.decision);
+		}
+	}
+});
+const prompted = (host: string) => [...seen.values()].filter(s => s.host === host);
 let failed = false;
 try {
 	await client.request('tab.ensureRunning', { tabId });
@@ -79,6 +109,28 @@ try {
 			console.log(`FAIL ${name}: ${(e as Error).message}`);
 		}
 	};
+	/** As `inTab`, without blocking this event loop, so the decider answers prompts meanwhile. */
+	const inTabAsync = (script: string) => new Promise<{ status: number | null; stdout: string; stderr: string }>(resolve => {
+		const argv = driver === 'sbx'
+			? [SBX, 'exec', '-u', 'agent', ctr, '/opt/seclab/bin/seclab-tab-env', 'sh', '-c', script]
+			: ['docker', 'exec', '-u', '1000:1000', '--', ctr, '/opt/seclab/bin/seclab-tab-env', 'sh', '-c', script];
+		const p = spawn(argv[0], argv.slice(1), { stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
+		let stdout = '';
+		let stderr = '';
+		p.stdout.on('data', (d: Buffer) => stdout += d.toString('utf8'));
+		p.stderr.on('data', (d: Buffer) => stderr += d.toString('utf8'));
+		p.on('close', status => resolve({ status, stdout, stderr }));
+	});
+	const checkAsync = async (name: string, fn: () => Promise<void>) => {
+		try {
+			await fn();
+			console.log(`ok   ${name}`);
+		} catch (e) {
+			failed = true;
+			console.log(`FAIL ${name}: ${(e as Error).message}`);
+		}
+	};
+	const code = async (url: string, extra = '') => (await inTabAsync(`curl -sS -o /dev/null -w '%{http_code}' --max-time 30 ${extra} ${url}`)).stdout.trim();
 
 	const env = inTab('printf "%s\\n%s\\n" "$HTTPS_PROXY" "$NODE_EXTRA_CA_CERTS"');
 	const [proxyUrl, caPath] = env.stdout.trim().split('\n');
@@ -112,10 +164,36 @@ try {
 			assert.ok(!r.stdout.includes('200') && otherHits() === before, `stdout=${r.stdout} hits=${otherHits() - before}`);
 		});
 	}
-	check('an unlisted host is denied by the broker (403, X-Seclab-Broker: denied)', () => {
-		const r = inTab('curl -sS -o /dev/null -D - --max-time 20 https://example.com/');
+	await checkAsync('B3: an unlisted host is prompted before any user action; the decider denies it (403, X-Seclab-Broker: denied)', async () => {
+		const r = await inTabAsync('curl -sS -o /dev/null -D - --max-time 30 https://example.com/');
 		assert.match(r.stdout, /^HTTP\/[0-9.]+ 403/m, r.stdout + r.stderr);
 		assert.match(r.stdout, /^x-seclab-broker: denied/im);
+		const [s] = prompted('example.com');
+		assert.ok(s, 'prompted');
+		assert.ok(s.flags.includes('no-user-action-yet'), `flags ${s.flags}`);
+		assert.deepEqual([s.decision, s.resolvedBy], ['deny', 'controller']);
+	});
+	await checkAsync('B3: a risky destination before user action is denied without a prompt', async () => {
+		assert.equal(await code('https://pastebin.com/'), '403');
+		assert.equal(prompted('pastebin.com').length, 0);
+	});
+	await checkAsync('B3: an unanswered prompt times out and is denied', async () => {
+		const t0 = Date.now();
+		assert.equal(await code('https://example.net/'), '403');
+		assert.ok(Date.now() - t0 >= (PROMPT_TIMEOUT_S - 1) * 1000, 'held until the timeout');
+		const [s] = prompted('example.net');
+		assert.deepEqual([s?.decision, s?.resolvedBy], ['deny', 'timeout']);
+	});
+	await checkAsync('a POST to the allowed host is not covered by its GET rule: prompted and denied (methods are enforced)', async () => {
+		assert.equal(await code(`https://${ALLOWED}/zen`, '-X POST'), '403');
+		assert.ok(prompted(ALLOWED).some(s => s.method === 'POST' && s.decision === 'deny'));
+	});
+	await checkAsync('B3: after user activity, a prompt carries no "no user action" flag; allow-once lets that request through', async () => {
+		await client.request('tab.userAction', { tabId });
+		assert.equal(await code('https://example.org/'), '200');
+		const [s] = prompted('example.org');
+		assert.ok(s && !s.flags.includes('no-user-action-yet'), `flags ${s?.flags}`);
+		assert.deepEqual([s.decision, s.resolvedBy], ['allow-once', 'controller']);
 	});
 	check('there is no direct route (no proxy: connection fails)', () => {
 		const r = inTab(`curl -sS -o /dev/null --noproxy '*' --max-time 10 https://${ALLOWED}/zen`);
@@ -128,10 +206,6 @@ try {
 	check('the broker refuses the proxy without the tab credentials (407)', () => {
 		const r = inTab(`curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -x http://${proxyHost} --proxy-user seclab:wrong-password-xxxxxxxx https://${ALLOWED}/zen`);
 		assert.match(r.stdout.trim() + r.stderr, /407/);
-	});
-	check('a POST to the allowed host is denied (methods are enforced)', () => {
-		const r = inTab(`curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X POST https://${ALLOWED}/zen`);
-		assert.equal(r.stdout.trim(), '403');
 	});
 	check('the proxy password is in no tabd log', () => {
 		const pw = /:([A-Za-z0-9_-]{32})@/.exec(proxyUrl)?.[1];
