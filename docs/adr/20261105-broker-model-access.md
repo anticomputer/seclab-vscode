@@ -219,7 +219,7 @@ API model endpoints by exact path and method").
   does mint. The example policy no longer declares a derive rule, because
   this runtime never mints.
 - The code agrees with the measurement:
-  [`copilotApiService.ts` L384-397](https://github.com/microsoft/vscode/blob/a717861c/src/vs/platform/agentHost/node/shared/copilotApiService.ts#L384-L397)
+  [`copilotApiService.ts` L384-397](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/node/shared/copilotApiService.ts#L384-L397)
   says "The GitHub user token IS the credential. There is no Copilot
   session-token mint", and that this mirrors the `@github/copilot` CLI.
 
@@ -234,7 +234,7 @@ same strict checks as /user").
   the list blocks the response as a finding, rather than relying on a
   pattern.
   - `managed_settings` lists the top-level keys of `IManagedSettingsResponse`
-    ([`managedSettings.ts` L40-85, L118-122](https://github.com/microsoft/vscode/blob/a717861c/src/vs/workbench/services/accounts/browser/managedSettings.ts#L40-L122)):
+    ([`managedSettings.ts` L40-85, L118-122](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/accounts/browser/managedSettings.ts#L40-L122)):
     it is the enterprise's `.github/copilot/settings.json`.
   - Its `telemetry` object carries an OTLP endpoint's credentials in a
     free-form `headers` map. The key-name pattern can't see them (the key is
@@ -267,7 +267,7 @@ same strict checks as /user").
 **The `/user` response has a field allowlist** (`responseFields`). It is the
 union of two lists:
 - what the agent host reads
-  ([`copilotApiService.ts` L80-98](https://github.com/microsoft/vscode/blob/a717861c/src/vs/platform/agentHost/node/shared/copilotApiService.ts#L80-L98));
+  ([`copilotApiService.ts` L80-98](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/node/shared/copilotApiService.ts#L80-L98));
 - what upstream's own stub serves (`test/node/e2e/harness/capiStubs.ts`).
 
 It is stub-derived, not measured: the run used no real credential, by rule.
@@ -345,7 +345,7 @@ URLs at any depth outside `tools`) still applies to all of them.
 - **`snippy: {enabled}`** (`/chat/completions` only) switches on Copilot's
   public-code matching filter for the completion. It is a boolean the client
   sets
-  ([`networking.ts` L84](https://github.com/microsoft/vscode/blob/a717861c/extensions/copilot/src/platform/networking/common/networking.ts#L84)).
+  ([`networking.ts` L84](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/copilot/src/platform/networking/common/networking.ts#L84)).
   When it fires, the server filters or flags the output; the client may
   retry. It names no resource and only ever withholds output.
 - **`system`** (`/v1/messages` only) holds the system prompt: text blocks
@@ -360,15 +360,15 @@ URLs at any depth outside `tools`) still applies to all of them.
 **The github.com route** (the coordinator asked for this to be confirmed
 before calling it verified).
 - **Agent host: verified by code.**
-  [`deriveGitHubEndpoints`](https://github.com/microsoft/vscode/blob/a717861c/src/vs/platform/github/common/githubEndpoints.ts#L42-L72)
+  [`deriveGitHubEndpoints`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/github/common/githubEndpoints.ts#L42-L72)
   gives `https://api.github.com` for github.com, `https://api.<tenant>` for
   `*.ghe.com`, and `https://<host>/api/v3` for GHES. That is the same code
   path the run took, with only the base differing.
   - The CAPI base is discovered from `/copilot_internal/user`'s
     `endpoints.api`
-    ([L1121-L1199](https://github.com/microsoft/vscode/blob/a717861c/src/vs/platform/agentHost/node/shared/copilotApiService.ts#L1121-L1199)).
+    ([L1121-L1199](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/node/shared/copilotApiService.ts#L1121-L1199)).
   - Its default is `https://api.githubcopilot.com`
-    ([L27](https://github.com/microsoft/vscode/blob/a717861c/src/vs/platform/github/common/githubEndpoints.ts#L27)).
+    ([L27](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/github/common/githubEndpoints.ts#L27)).
   - The backstop exceptions cover both path forms (`""` and `/api/v3`), and
     any host whose credential has provider `github`.
 - **Copilot runtime: inferred, not verified.** It is closed source. In the run
