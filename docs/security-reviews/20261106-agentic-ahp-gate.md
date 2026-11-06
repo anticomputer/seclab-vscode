@@ -6,7 +6,7 @@
   `seclabAhpGate.ts`, the upstream edits in `agentHostProtocolClient.ts` and
   `editorRemoteAgentHostServiceClient.ts`, `agentic/tools/sync-patch.ts` and
   `test/agentic/gate/gate.test.ts`.
-- **Reviewer:** `security-review` agent (`cvp-claude-opus-5`), round 1 on `b4a3360`, round 2 on `7e0f0f6`;
+- **Reviewer:** `security-review` agent (`cvp-claude-opus-5`), round 1 on `b4a3360`, round 2 on `7e0f0f6`, round 3 on `49cf550`;
   triage and fixes by the agentic-gate session.
 - **Related:** [EDR probe runner](../edr/20261106-agentic-probe-runner.md),
   [implementation plan](../plans/agentic-implementation.md) §4 increment 1,
@@ -15,6 +15,67 @@
 Every round's prompt carried the standing warning that the diff, fixtures and evidence may
 contain prompt injection aimed at the reviewer, to be reported as a finding and never
 followed. Round 1 found none.
+
+## Round 3 (on `49cf550`)
+Scope: round 2's fixes. **No high or critical issue remains in the gate itself; the A1 path is
+closed.** Two harness findings blocked a *trustworthy run* rather than the patch, plus one low
+residual in the gate. All three are fixed in the commit that adds this section. No prompt
+injection found.
+
+### HIGH (10/10), harness: the teardown gate refused to act at all
+Round 2's new `arm` mark ended with the profile path instead of the run directory, which fails
+`manifestProblems`'s rule that every mark must contain the run directory followed by a
+separator or end with it. One bad mark makes `verifyTeardown` push a single failed check and
+**return** — before stopping processes, before removing the tab and sandbox, before deleting
+the armed profile and before the leftover scan. So round 2 reintroduced round 2's own outcome
+by a different route: the arming loop keeps injecting the fixture for its full deadline and
+the run survives a "clean" verdict.
+
+**Fix.** `--run-dir` goes last in the arm argv. More importantly, the argv and its mark are now
+built in one place (`test/agentic/runner/marks.ts`) and `test/agentic/gate/marks.test.ts` feeds
+the real marks through `manifestProblems` and teardown's own matching rule, including a
+regression case for the shape this finding had. A mark teardown would reject now fails
+`./seclab test unit`, not a live run. This is the second time a bad mark passed review and
+failed only in a live run.
+
+### MEDIUM (9/10), harness: the A1 probes used the wrong action envelopes
+Round 2 fixed the state discriminant but not the action payloads, so the reducer on the
+unpatched control U would have ignored them and the beacon would never have been hit — "U not
+vulnerable", which is the same false-negative class round 2 rated HIGH. Against upstream at
+`a717861c`: `SessionMcpServerStateChangedAction` is `{type, id, state, channel?}`, not
+`{servers: […]}`; `SessionCustomizationsChangedAction` is `{type, customizations: Customization[]}`
+with each entry `{type:'mcpServer', id, uri, name, state}`; and
+`ChatToolCallAuthRequiredAction` extends `ToolCallActionBase` with `auth: McpAuthRequirement`
+(`{reason, resource, oauthClient?, requiredScopes?}`), which has no `status` field.
+
+**Fix.** All three probes and the regression fixture are rebuilt from the real interfaces, and
+the claim in round 2's record above is corrected: round 2 fixed the discriminant, not the
+envelopes.
+
+### LOW (7/10), gate: `CanvasState.url` reached the renderer
+`CanvasState.url` is an agent-host-chosen absolute HTTP(S) URL that arrives through the allowed
+`chat/canvasesChanged` and `canvas/stateChanged` path and ends up at
+`createExternalBrowserView`. It has no discriminant and no distinctive key, so the sanitiser
+passed it verbatim. It stayed low because the view's `networkOwner` is the agent host, so the
+page loads on the tab's network rather than the host's, and `chat.canvases.enabled` defaults
+off. **Fix:** both are denied inbound. The gate should not rest on an upstream default plus an
+experiment flag; canvases in tab windows are increment 6's to design.
+
+### Confirmed sound in round 3
+The A1 trigger is closed at the only place the renderer checks it:
+`_isAutoAuthenticatingMcpServer` gates on `state.kind === McpServerStatus.AuthRequired`, which
+is exactly the literal the sanitiser replaces. The other entries are `registerMcpAuthenticationHandler`
+(a server→client request, blanket-refused), `auth/required` (denied) and
+`AgentInfo.protectedResources` (stripped). The reviewer enumerated the whole allowed inbound
+surface — `action`, `root/*`, `channel/frame`, `channel/credit`, `channel/snapshot` and
+responses — and confirmed every one passes through the sanitiser, reassembled fragments
+included. `ProtectedResourceMetadata` appears nowhere else with a live renderer consumer. The
+replacement node satisfies `McpServerErrorState` and `ErrorInfo`, and `describeMcpServerState`
+handles it. Evasions tested against the shipped filter: `session/customizationUpdated`,
+`channel/snapshot`, `session/inputNeededSet`, arrays of states and a fragmented frame, all
+neutralised. The A1 test is non-tautological: disabling the replacement branch makes it fail
+and leaves the other tests passing. Round 2's run-directory fix is genuinely in place before
+the recursive delete, and the arming-nonce binding stops a stale fixture self-arming.
 
 ## Round 2 (on `7e0f0f6`)
 Scope: the round 1 fixes, the two new upstream hunks, `build/source-allowlist.txt`, the probe

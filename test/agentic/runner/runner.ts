@@ -24,6 +24,7 @@ import * as path from 'node:path';
 import { TabdClient } from '../../../tabd/src/client.ts';
 import { beaconPort, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, lockRun, repoRoot } from '../../harness.ts';
 import { report, type Check } from '../../containment/assert.ts';
+import { armSpawn, beaconSpawn } from './marks.ts';
 import { teardownGate, writeManifest, writeSnapshot } from '../../containment/teardown.ts';
 
 const argv = process.argv.slice(2);
@@ -49,15 +50,7 @@ checkIsolatedProfile(path.join(base, 'ws'));
 // Teardown finds this run's detached helpers by command mark, and a mark must appear in the
 // process's argv with whitespace or a line edge on each side. The helpers are spawned with
 // absolute script paths, so the marks are built from the very argv used to spawn them.
-const BEACON_SCRIPT = path.join(repoRoot, 'test', 'containment', 'beacon.ts');
 const ARM_SCRIPT = path.join(import.meta.dirname, 'runner.ts');
-
-/** The mark teardown matches, derived from the very argv used to spawn the helper. Teardown
- *  requires whitespace or a line edge on each side, so a mark must be a run of whole argv
- *  tokens; a hand-written `beacon.ts start …` never matches an absolute script path. */
-function markFor(argv: readonly string[]): string {
-	return argv.join(' ');
-}
 const ws = path.join(base, 'ws');
 const canary = path.join(base, 'canary', 'host-secret.txt');
 const marker = path.join(base, 'PWNED-AHP');
@@ -173,12 +166,12 @@ if (mode === 'arm') {
 	const port = await beaconPort();
 	// The host beacon decides "a request reached the host network". It binds 127.0.0.1 only
 	// and is reaped by teardown through the command mark below.
-	const beaconArgv = [BEACON_SCRIPT, 'start', beaconLog, String(port)];
-	spawn(process.execPath, beaconArgv, { detached: true, stdio: 'ignore' }).unref();
+	const beacon = beaconSpawn(repoRoot, beaconLog, port);
+	spawn(process.execPath, beacon.argv, { detached: true, stdio: 'ignore' }).unref();
 	writeSnapshot(base);
 	writeManifest(base, {
 		driver, userDataDir: userData, stateDirs: [stateDir],
-		commandMarks: [markFor(beaconArgv)],
+		commandMarks: [beacon.mark],
 	});
 	fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
 	fs.writeFileSync(path.join(userData, 'seclab-run-build.json'), JSON.stringify({ build, app, buildInfo: JSON.parse(fs.readFileSync(buildInfo, 'utf8')) }, null, '\t'));
@@ -226,9 +219,13 @@ if (mode === 'arm') {
 	// re-injects the takeover the moment the tab is up again -- which is still well before the
 	// agent host is spawned, because that happens only when the window's bridge first connects.
 	fs.writeFileSync(path.join(base, 'arm.json'), JSON.stringify({ tabId, driver, inTabRun, arm }, null, '\t'));
-	const armArgv = [ARM_SCRIPT, 'arm', userData, '--driver', driver, '--run-dir', base, '--user-data-dir', userData];
-	spawn(process.execPath, armArgv, { detached: true, stdio: 'ignore' }).unref();
-	writeManifest(base, { commandMarks: [markFor(beaconArgv), markFor(armArgv)] });
+	// `--run-dir` goes LAST: teardown's manifest rule (R-1) requires every command mark to
+	// contain the run directory followed by a separator, or to end with it. A mark ending in
+	// the profile path fails that rule, and one bad mark makes the whole teardown gate refuse
+	// to act, which leaves the armed fixture running (review round 3, HIGH).
+	const armHelper = armSpawn(ARM_SCRIPT, userData, driver, base);
+	spawn(process.execPath, armHelper.argv, { detached: true, stdio: 'ignore' }).unref();
+	writeManifest(base, { commandMarks: [beacon.mark, armHelper.mark] });
 
 	const env: Record<string, string> = build === 'g' ? { SECLAB_AGENTS_ENABLED: '1' } : {};
 	console.log(`\nprepared tab ${tabId} for build ${build} (${app})`);
