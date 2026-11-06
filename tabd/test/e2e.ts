@@ -80,11 +80,15 @@ assert.match(await handshake(), /^HTTP\/1\.1 101/, 'second connection to the sam
 // back under the same connection token, so the window reconnects without a reload.
 const before = (await client.request<{ connectionToken: string }>('tab.ensureRunning', { tabId })).connectionToken;
 const name = `seclab-${tabId}`;
-const killReh = 'for p in /proc/[0-9]*; do tr "\\0" " " < "$p/cmdline" 2>/dev/null | grep -q "^/opt/seclab-reh/" && kill -9 "${p#/proc/}" 2>/dev/null; done; true';
+// Fails unless at least one REH process was killed, so a kill as the wrong user cannot pass silently.
+const killReh = 'n=0; for p in /proc/[0-9]*; do tr "\\0" " " < "$p/cmdline" 2>/dev/null | grep -q "^/opt/seclab-reh/" && kill -9 "${p#/proc/}" 2>/dev/null && n=$((n+1)); done; echo "killed $n"; [ "$n" -gt 0 ]';
+// The OCI driver runs the REH as the workspace owner on Linux (tabUser in drivers/oci.ts), else 1000:1000.
+const st = fs.statSync(ws);
+const ociUser = process.platform === 'linux' ? `${st.uid}:${st.gid}` : '1000:1000';
 const k = driver === 'sbx'
 	? spawnSync('/opt/homebrew/bin/sbx', ['exec', '-u', 'agent', name, 'sh', '-c', killReh], { encoding: 'utf8' })
-	: spawnSync('docker', ['exec', '-u', '1000:1000', '--', name, 'sh', '-c', killReh], { encoding: 'utf8' });
-assert.equal(k.status, 0, `killing the REH: ${k.stderr}`);
+	: spawnSync('docker', ['exec', '-u', ociUser, '--', name, 'sh', '-c', killReh], { encoding: 'utf8' });
+assert.equal(k.status, 0, `killing the REH: ${k.stdout}${k.stderr}`);
 await new Promise(r => setTimeout(r, 1000));
 await assert.rejects(handshake(), /closed/, 'no server: the connection closes');
 const after = (await client.request<{ connectionToken: string }>('tab.ensureRunning', { tabId })).connectionToken;
