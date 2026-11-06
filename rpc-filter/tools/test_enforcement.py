@@ -35,7 +35,7 @@ class EnforcementGateTest(unittest.TestCase):
         self.mapping = {"rpc:x.$y": "deny", "rpc:x.$z": "allow#abc123"}
         self.policy = {"enforcement": {
             "note": "...",
-            "rpc:": {"mechanism": "the choke point",
+            "rpc:": {"mechanism": "the choke point", "whole_class": True,
                      "patch": "0005-filter.patch", "symbol": "checkRpc"}}}
 
     def _patch(self, name, body):
@@ -87,6 +87,47 @@ class EnforcementGateTest(unittest.TestCase):
         self.policy["enforcement"]["rpc:"] = {"mechanism": "hand waving"}
         self.assertTrue(self.run_gate())
 
+    def test_a_prefix_without_whole_class_does_not_vouch_for_its_keys(self):
+        self.policy["enforcement"]["rpc:"].pop("whole_class")
+        errors = self.run_gate()
+        self.assertTrue(errors, "a prefix entry must opt in to standing for "
+                                "every key beneath it")
+
+    def test_push_cannot_buy_the_whole_class_exemption(self):
+        # The review's finding, injected back in: one `push:` entry naming the
+        # patch that disables ONE subscription, vouching for all of them. When
+        # this rule lived in a flag the injection simply set the flag and
+        # passed, so the class list is now structural.
+        self.mapping = {"push:a:$x": "deny", "push:b:$y": "deny"}
+        self.policy["enforcement"]["push:"] = {
+            "mechanism": "one entry for the class", "whole_class": True,
+            "patch": "0005-filter.patch", "symbol": "checkRpc"}
+        errors = self.run_gate()
+        self.assertTrue(errors)
+        self.assertTrue(any("whole_class" in e for e in errors), errors)
+
+    def test_each_denied_push_needs_its_own_entry(self):
+        self.mapping = {"push:a:$x": "deny"}
+        self.policy["enforcement"]["push:"] = {
+            "mechanism": "not a whole-class control", "whole_class": False}
+        self.assertTrue(self.run_gate())
+        self.policy["enforcement"]["push:a:$x"] = {
+            "mechanism": "not registered", "patch": "0005-filter.patch",
+            "symbol": "checkRpc"}
+        self.assertEqual(self.run_gate(), [])
+
+    def test_accepted_unenforced_is_recorded_not_silently_passed(self):
+        # Explicit acceptance passes the gate, but only as an enumerated entry
+        # the summary prints. The distinction being preserved is between a
+        # known gap and a silent one.
+        self.mapping = {"push:a:$x": "deny"}
+        self.policy["enforcement"]["push:"] = {
+            "mechanism": "per-key", "whole_class": False}
+        self.policy["enforcement"]["push:a:$x"] = {
+            "mechanism": "accepted, nothing refuses it",
+            "unenforced_accepted": True}
+        self.assertEqual(self.run_gate(), [])
+
     def test_allow_verdicts_need_no_enforcement_point(self):
         # Only deny makes a claim that code must back up. An allow that is
         # simply not refused needs nothing, and demanding an entry for it would
@@ -101,10 +142,10 @@ class EnforcementGateTest(unittest.TestCase):
         self.mapping = {"ai-setting:chat.foo": "deny"}
         self.policy["enforcement"]["ai-"] = {
             "mechanism": "too broad", "patch": "0005-filter.patch",
-            "symbol": "checkRpc"}
+            "symbol": "checkRpc", "whole_class": True}
         self.policy["enforcement"]["ai-setting:"] = {
             "mechanism": "the real one", "patch": "0005-filter.patch",
-            "symbol": "seclabAiDisabled"}
+            "symbol": "seclabAiDisabled", "whole_class": True}
         errors = self.run_gate()
         self.assertTrue(errors, "the specific prefix's symbol is absent, so it "
                                 "must fail rather than match the broad one")
