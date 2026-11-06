@@ -1,49 +1,85 @@
 #!/bin/sh
 # Build the broker image. Usage: broker/build.sh [tag]   (default seclab-broker:dev)
-# 1. Verifies the mitmproxy base image's signed provenance (tools/verify-images.sh); fails closed.
-# 2. Builds through tools/pybuild.sh (CFS locally, public PyPI in CI).
-# 3. Builds from a snapshot of broker/'s git-tracked files only (ignored and untracked files
-#    never enter the context) and stamps the image's identity as OCI labels: source revision
-#    (`-dirty` if broker/ has uncommitted or untracked files), the verified base digest,
-#    broker version, protocol and policy schema revision.
+# 1. Snapshots broker/'s git-tracked files and builds only that snapshot: ignored and
+#    untracked files never enter the context, and every check and label below is read from
+#    the snapshot, never from the working tree.
+# 2. Verifies the mitmproxy base image's signed provenance (tools/verify-images.sh); fails closed.
+# 3. Builds through tools/pybuild.sh (CFS locally, public PyPI in CI) and stamps the image's
+#    identity as OCI labels: source revision (`-dirty` unless broker/ is exactly HEAD's tree:
+#    no uncommitted, untracked, assume-unchanged or skip-worktree files), the verified base
+#    digest, broker version, protocol and policy schema revision.
 # 4. Prints one JSON line on stdout: {"id","tag","revision","base","version","policyRevision"}.
 #    `id` is exactly `docker image inspect --format '{{.Id}}'` (the manifest/index digest under
 #    the containerd image store, else the config digest; content-addressed over every layer
 #    and label either way). tabd records it and runs the broker by ID, never by tag (XX-6).
 #    All other output goes to stderr.
+# The label vouches for the snapshot, given an honest build.sh: a modified build.sh is itself
+# a change to broker/ and marks the revision `-dirty`, but it could lie about that.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 tag=${1:-seclab-broker:dev}
-. "$here/tools/pybuild.sh"
-"$here/tools/verify-images.sh" >&2
-base=$(sed -n 's/^FROM mitmproxy\/mitmproxy:[^@]*@\(sha256:[0-9a-f]\{64\}\) AS broker$/\1/p' "$here/Dockerfile")
-grep -q "\"ref\": \"mitmproxy/mitmproxy:[^\"]*@$base\"" "$here/deps.json" \
-  || { echo "build: broker base digest '$base' is not the registered (verified) mitmproxy digest" >&2; exit 1; }
-version=$(sed -n 's/^VERSION = "\(.*\)"$/\1/p' "$here/seclab_broker/__init__.py")
-policy_revision=$(sed -n 's/^POLICY_SCHEMA_REVISION = \([0-9]*\)$/\1/p' "$here/seclab_broker/__init__.py")
 top=$(git -C "$here" rev-parse --show-toplevel) || { echo "build: broker/ must be in a git checkout" >&2; exit 1; }
 prefix=$(git -C "$here" rev-parse --show-prefix)
 revision=$(git -C "$here" rev-parse HEAD)
-# The build context holds git-tracked files only, so ignored files (__pycache__, *.pyc) and
-# untracked files can never reach the image under any revision label. It is a snapshot of
-# the working tree's tracked files (`git stash create` makes a commit object and touches no
-# ref, index or file; it prints nothing when the tree is clean), and `-dirty` is decided from
-# that same snapshot, so a file edited mid-build can't ship under a clean label.
+# The snapshot comes first: nothing from the working tree is read or run before it.
+# `git stash create` records the working tree's tracked files as a commit object and touches
+# no ref, index or file; it prints nothing when the tree is clean.
 snap=$(GIT_AUTHOR_NAME=seclab-build GIT_AUTHOR_EMAIL=build@invalid \
   GIT_COMMITTER_NAME=seclab-build GIT_COMMITTER_EMAIL=build@invalid git -C "$here" stash create)
 [ -n "$snap" ] || snap=$revision
-git -C "$here" diff --quiet "$revision" "$snap" -- . || revision="$revision-dirty"
+dirty=
+git -C "$here" diff --quiet "$revision" "$snap" -- . || dirty=1
 # Untracked files can't enter the context, but still mark the revision (agreed with tabd).
-[ -z "$(git -C "$here" status --porcelain --untracked-files=all -- .)" ] || case $revision in *-dirty) ;; *) revision="$revision-dirty" ;; esac
-# gh cfs accepts only a local directory as the context, so the snapshot is extracted into a
-# fresh directory under .work/ (gitignored) and removed on exit.
+[ -z "$(git -C "$here" status --porcelain --untracked-files=all -- .)" ] || dirty=1
+# assume-unchanged and skip-worktree entries hide edits from `git status` and `stash create`.
+[ -z "$(git -C "$here" ls-files -v -- . | grep -v '^H ')" ] || dirty=1
+[ -z "$dirty" ] || revision="$revision-dirty"
+# gh cfs accepts only a local directory as the context, so the snapshot is written into a
+# fresh directory under .work/ (gitignored), removed on exit. It is written from the git
+# objects themselves (`git cat-file blob`, no filters), not with `git archive`, so committed
+# .gitattributes (export-ignore, eol, filters) can't make the context differ from the tree.
+# Symlinks are created last and never over an existing path, so a crafted tree can't write
+# through one; anything other than a file or a symlink (e.g. a submodule) fails the build.
 mkdir -p "$top/.work"
 ctx=$(mktemp -d "$top/.work/broker-context.XXXXXX")
-trap 'rm -rf "$ctx" "$ctx.tar"' EXIT
+trap 'rm -rf "$ctx" "$ctx.list"' EXIT
 trap 'exit 1' HUP INT TERM
-git -C "$top" archive --format=tar -o "$ctx.tar" "$snap:$prefix"
-tar -xf "$ctx.tar" -C "$ctx"
+git -C "$top" -c core.quotePath=true ls-tree -r "$snap:$prefix" > "$ctx.list"
+tab=$(printf '\t')
+for pass in files links; do
+  while IFS= read -r entry; do
+    meta=${entry%%"$tab"*} path=${entry#*"$tab"}
+    mode=${meta%% *} obj=${meta##* }
+    case $path in
+      '' | '"'* | /* | .. | ../* | */.. | */../*)
+        echo "build: refusing snapshot path '$path'" >&2; exit 1 ;;
+    esac
+    case $pass:$mode:${meta#* } in
+      files:100644:blob\ *) mkdir -p "$ctx/$(dirname "$path")"; git -C "$top" cat-file blob "$obj" > "$ctx/$path" ;;
+      files:100755:blob\ *) mkdir -p "$ctx/$(dirname "$path")"; git -C "$top" cat-file blob "$obj" > "$ctx/$path"; chmod 755 "$ctx/$path" ;;
+      links:120000:blob\ *)
+        if [ -e "$ctx/$path" ] || [ -L "$ctx/$path" ]; then echo "build: snapshot path '$path' is duplicated" >&2; exit 1; fi
+        mkdir -p "$ctx/$(dirname "$path")"; ln -s "$(git -C "$top" cat-file blob "$obj")" "$ctx/$path" ;;
+      files:120000:blob\ * | links:100644:blob\ * | links:100755:blob\ *) ;;
+      *) echo "build: snapshot entry '$path' is '$meta'; only files and symlinks are built" >&2; exit 1 ;;
+    esac
+  done < "$ctx.list"
+done
 [ -f "$ctx/Dockerfile" ] || { echo "build: snapshot context has no Dockerfile" >&2; exit 1; }
+# From here on, everything is read and run from the snapshot.
+. "$ctx/tools/pybuild.sh"
+# verify-images.sh finds cached bundles relative to itself; CI points it at the repo's
+# .work/attestations (local runs verify online and don't use bundles).
+if [ -n "${CI:-}" ] && [ -z "${SECLAB_ATTESTATION_DIR:-}" ]; then
+  SECLAB_ATTESTATION_DIR="$top/.work/attestations" "$ctx/tools/verify-images.sh" >&2
+else
+  "$ctx/tools/verify-images.sh" >&2
+fi
+base=$(sed -n 's/^FROM mitmproxy\/mitmproxy:[^@]*@\(sha256:[0-9a-f]\{64\}\) AS broker$/\1/p' "$ctx/Dockerfile")
+grep -q "\"ref\": \"mitmproxy/mitmproxy:[^\"]*@$base\"" "$ctx/deps.json" \
+  || { echo "build: broker base digest '$base' is not the registered (verified) mitmproxy digest" >&2; exit 1; }
+version=$(sed -n 's/^VERSION = "\(.*\)"$/\1/p' "$ctx/seclab_broker/__init__.py")
+policy_revision=$(sed -n 's/^POLICY_SCHEMA_REVISION = \([0-9]*\)$/\1/p' "$ctx/seclab_broker/__init__.py")
 # Build output goes to stderr: the JSON identity is the only line on stdout.
 pybuild -q --target broker -t "$tag" \
   --build-arg SECLAB_REVISION="$revision" --build-arg SECLAB_BASE_DIGEST="$base" \
