@@ -90,6 +90,24 @@ it and carries the user's input and decisions, and nothing else.** Concretely:
 - A rogue extension can spend the user's model quota up to the tab's budget.
 - Phases, probes and residual risks: [plan §11, §12](../plans/secure-agentic-experiences.md#11-phases-exit-criteria-and-probes).
 
+## Amendment 2026-11-06: credential binding measured
+The [real-tab spike](../edr/20261106-agents-in-real-tab-spike.md) ran the shipped agent host
+in an sbx tab behind its broker. The Copilot runtime never mints a Copilot token; it sends
+the GitHub credential to the Copilot API itself. Decided by the user through the
+coordinator:
+- **D7 amended.** The GitHub credential, held by the broker, is bound to the Copilot API
+  model endpoints by exact path and method, instead of a derived Copilot token. The tab
+  still holds only the sentinel, so the decision above is unchanged: model calls stay in
+  the tab, through the broker.
+- **Org-policy reads.** The three org-policy `GET`s the runtime makes (`managed_settings`,
+  `team_customizations`, `content_exclusion`) are exempt from the broker's provider
+  backstop, with the same strict checks as `/copilot_internal/user`, so enterprise
+  restrictions keep applying in tabs.
+- **Remote GitHub MCP.** It is denied by default, with a per-tab Tier C grant
+  (coordinator decision).
+
+See plan §4.2, §4.5 and §13 (D7).
+
 ## Evidence
 - [Agentic surfaces research](../research/agentic-surfaces.md), every claim pinned to
   `microsoft/vscode@a717861c07586a53d83b80d742cd3f59b20a6273`.

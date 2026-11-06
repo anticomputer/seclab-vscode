@@ -1,0 +1,814 @@
+{
+ "run": "20261106T034456Z",
+ "harness": "test/agentic/ahp/tab-spike.ts",
+ "note": "Host-side measurement (fixture log + broker audit). GHES route; fake credentials only; the run nonce is removed. Phase A: plain allow. Phase B: broker draft copilot provider re-hosted onto the fixture.",
+ "brokerDecisions": {
+  "A": [
+   {
+    "host": "ghe.example.test",
+    "method": "GET",
+    "path": "/api/v3/copilot_internal/user",
+    "reason": "approved backstop exception",
+    "type": "credential.backstop_exempt"
+   },
+   {
+    "host": "api.ghe.example.test",
+    "method": "GET",
+    "path": "/copilot_internal/user",
+    "reason": "approved backstop exception",
+    "type": "credential.backstop_exempt"
+   },
+   {
+    "host": "api.ghe.example.test",
+    "method": "GET",
+    "path": "/copilot_internal/managed_settings",
+    "provider": "github",
+    "type": "credential.backstop_denied"
+   },
+   {
+    "host": "api.ghe.example.test",
+    "method": "GET",
+    "path": "/copilot_internal/managed_settings",
+    "reason": "endpoint can mint durable credentials; blocked by provider backstop",
+    "status": 403,
+    "type": "request.denied"
+   },
+   {
+    "host": "api.ghe.example.test",
+    "method": "GET",
+    "path": "/copilot_internal/team_customizations",
+    "provider": "github",
+    "type": "credential.backstop_denied"
+   },
+   {
+    "host": "api.ghe.example.test",
+    "method": "GET",
+    "path": "/copilot_internal/team_customizations",
+    "reason": "endpoint can mint durable credentials; blocked by provider backstop",
+    "status": 403,
+    "type": "request.denied"
+   },
+   {
+    "host": "api.ghe.example.test",
+    "method": "GET",
+    "path": "/copilot_internal/content_exclusion",
+    "provider": "github",
+    "type": "credential.backstop_denied"
+   },
+   {
+    "host": "api.ghe.example.test",
+    "method": "GET",
+    "path": "/copilot_internal/content_exclusion",
+    "reason": "endpoint can mint durable credentials; blocked by provider backstop",
+    "status": 403,
+    "type": "request.denied"
+   }
+  ],
+  "B": [
+   {
+    "host": "ghe.example.test",
+    "method": "GET",
+    "path": "/api/v3/copilot_internal/user",
+    "reason": "approved backstop exception",
+    "type": "credential.backstop_exempt"
+   },
+   {
+    "host": "capi.example.test",
+    "method": "GET",
+    "path": "/models",
+    "provider": "spike-copilot-draft",
+    "status": 200,
+    "tools": [],
+    "type": "model.call"
+   },
+   {
+    "host": "api.ghe.example.test",
+    "method": "GET",
+    "path": "/copilot_internal/team_customizations",
+    "provider": "github",
+    "type": "credential.backstop_denied"
+   },
+   {
+    "host": "api.ghe.example.test",
+    "method": "GET",
+    "path": "/copilot_internal/team_customizations",
+    "reason": "endpoint can mint durable credentials; blocked by provider backstop",
+    "status": 403,
+    "type": "request.denied"
+   },
+   {
+    "host": "api.ghe.example.test",
+    "method": "GET",
+    "path": "/copilot_internal/content_exclusion",
+    "provider": "github",
+    "type": "credential.backstop_denied"
+   },
+   {
+    "host": "api.ghe.example.test",
+    "method": "GET",
+    "path": "/copilot_internal/content_exclusion",
+    "reason": "endpoint can mint durable credentials; blocked by provider backstop",
+    "status": 403,
+    "type": "request.denied"
+   },
+   {
+    "host": "capi.example.test",
+    "method": "POST",
+    "path": "/mcp/readonly",
+    "provider": "spike-copilot-draft",
+    "reason": "endpoint not allowed for this provider",
+    "type": "model.denied"
+   },
+   {
+    "host": "capi.example.test",
+    "method": "POST",
+    "path": "/mcp/readonly",
+    "reason": "model request denied: endpoint not allowed for this provider",
+    "status": 403,
+    "type": "request.denied"
+   },
+   {
+    "detail": "custom",
+    "host": "capi.example.test",
+    "method": "POST",
+    "path": "/responses",
+    "provider": "spike-copilot-draft",
+    "reason": "tool type not allowed",
+    "type": "model.denied"
+   },
+   {
+    "host": "capi.example.test",
+    "method": "POST",
+    "path": "/responses",
+    "reason": "model request denied: tool type not allowed",
+    "status": 403,
+    "type": "request.denied"
+   },
+   {
+    "host": "capi.example.test",
+    "method": "POST",
+    "path": "/v1/messages",
+    "provider": "spike-copilot-draft",
+    "reason": "endpoint not allowed for this provider",
+    "type": "model.denied"
+   },
+   {
+    "host": "capi.example.test",
+    "method": "POST",
+    "path": "/v1/messages",
+    "reason": "model request denied: endpoint not allowed for this provider",
+    "status": 403,
+    "type": "request.denied"
+   },
+   {
+    "detail": "snippy",
+    "host": "capi.example.test",
+    "method": "POST",
+    "path": "/chat/completions",
+    "provider": "spike-copilot-draft",
+    "reason": "field not allowed for this provider",
+    "type": "model.denied"
+   },
+   {
+    "host": "capi.example.test",
+    "method": "POST",
+    "path": "/chat/completions",
+    "reason": "model request denied: field not allowed for this provider",
+    "status": 403,
+    "type": "request.denied"
+   }
+  ]
+ },
+ "routes": {
+  "GET api.ghe.example.test/copilot_internal/user": {
+   "count": 1,
+   "credential": [
+    "github-fake-real"
+   ],
+   "headerNames": [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "host",
+    "user-agent"
+   ],
+   "headerValues": [
+    "accept: application/json",
+    "user-agent: copilot-agent-runtime/1.0.103-unstable.r41379698026.g3219c66"
+   ],
+   "queryKeys": [],
+   "status": [
+    "200"
+   ],
+   "toolTypes": {}
+  },
+  "GET capi.example.test/models": {
+   "count": 10,
+   "credential": [
+    "github-fake-real"
+   ],
+   "headerNames": [
+    "accept",
+    "accept-encoding",
+    "accept-language",
+    "authorization",
+    "connection",
+    "content-type",
+    "copilot-harness-id",
+    "copilot-integration-id",
+    "editor-device-id",
+    "editor-plugin-version",
+    "editor-version",
+    "host",
+    "openai-intent",
+    "sec-fetch-mode",
+    "user-agent",
+    "vscode-machineid",
+    "vscode-sessionid",
+    "x-client-machine-id",
+    "x-github-api-version",
+    "x-initiator",
+    "x-interaction-id"
+   ],
+   "headerValues": [
+    "accept: */*",
+    "accept: application/json",
+    "content-type: application/json",
+    "copilot-harness-id: copilot-sdk",
+    "copilot-integration-id: code-oss",
+    "editor-version: vscode/1.145.0",
+    "openai-intent: conversation-agent",
+    "user-agent: copilot/1.0.103-unstable.r41379698026.g3219c66 (linux unknown) term/unknown",
+    "user-agent: node",
+    "x-github-api-version: 2026-08-01",
+    "x-initiator: user"
+   ],
+   "queryKeys": [],
+   "status": [
+    "200"
+   ],
+   "toolTypes": {}
+  },
+  "GET ghe.example.test/api/v3/copilot_internal/user": {
+   "count": 2,
+   "credential": [
+    "github-fake-real"
+   ],
+   "headerNames": [
+    "accept",
+    "accept-encoding",
+    "accept-language",
+    "authorization",
+    "connection",
+    "host",
+    "sec-fetch-mode",
+    "user-agent",
+    "x-github-api-version"
+   ],
+   "headerValues": [
+    "accept: application/json",
+    "user-agent: node",
+    "x-github-api-version: 2025-04-01"
+   ],
+   "queryKeys": [],
+   "status": [
+    "200"
+   ],
+   "toolTypes": {}
+  },
+  "POST capi.example.test/chat/completions": {
+   "count": 2,
+   "credential": [
+    "github-fake-real"
+   ],
+   "headerNames": [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-length",
+    "content-type",
+    "copilot-harness-id",
+    "copilot-integration-id",
+    "editor-version",
+    "host",
+    "openai-intent",
+    "user-agent",
+    "x-agent-task-id",
+    "x-client-machine-id",
+    "x-client-session-id",
+    "x-github-api-version",
+    "x-github-repository-host",
+    "x-github-repository-nwo",
+    "x-initiator",
+    "x-interaction-id",
+    "x-interaction-type",
+    "x-stainless-helper-method"
+   ],
+   "headerValues": [
+    "accept: application/json",
+    "content-type: application/json",
+    "copilot-harness-id: copilot-sdk",
+    "copilot-integration-id: code-oss",
+    "editor-version: vscode/1.145.0",
+    "openai-intent: conversation-agent",
+    "user-agent: copilot/1.0.103-unstable.r41379698026.g3219c66 (linux unknown) term/unknown client/vscode-agent-host",
+    "x-github-api-version: 2026-08-01",
+    "x-initiator: agent",
+    "x-initiator: user",
+    "x-interaction-type: conversation-agent",
+    "x-interaction-type: conversation-user"
+   ],
+   "messageKeyPaths": [
+    "messages",
+    "messages[].content",
+    "messages[].refusal",
+    "messages[].role",
+    "messages[].tool_call_id",
+    "messages[].tool_calls",
+    "messages[].tool_calls[].function",
+    "messages[].tool_calls[].function.arguments",
+    "messages[].tool_calls[].function.name",
+    "messages[].tool_calls[].id",
+    "messages[].tool_calls[].type",
+    "model",
+    "reasoning_effort",
+    "snippy",
+    "snippy.enabled",
+    "stream",
+    "stream_options",
+    "stream_options.include_usage",
+    "temperature"
+   ],
+   "messageTypeValues": [
+    "messages[].tool_calls[].type=function"
+   ],
+   "queryKeys": [],
+   "status": [
+    "200"
+   ],
+   "toolNames": [
+    "custom:",
+    "function:addComment",
+    "function:archive_chat",
+    "function:ask_user",
+    "function:bash",
+    "function:create_session",
+    "function:deleteComments",
+    "function:delete_session",
+    "function:get_current_session",
+    "function:get_session_context",
+    "function:glob",
+    "function:isolate_session",
+    "function:listComments",
+    "function:list_agents",
+    "function:list_bash",
+    "function:list_sessions",
+    "function:read_agent",
+    "function:read_bash",
+    "function:replyToComment",
+    "function:resolveComments",
+    "function:rg",
+    "function:send_message",
+    "function:session_store_sql",
+    "function:set_workspace",
+    "function:sql",
+    "function:stop_bash",
+    "function:task",
+    "function:view",
+    "function:viewUnreviewedComments",
+    "function:web_fetch",
+    "function:write_agent"
+   ],
+   "toolResultRoundTrips": 1,
+   "toolTypes": {
+    "custom": 1,
+    "function": 30
+   },
+   "topLevelFields": [
+    "messages",
+    "model",
+    "reasoning_effort",
+    "snippy",
+    "stream",
+    "stream_options",
+    "temperature",
+    "tools"
+   ]
+  },
+  "POST capi.example.test/mcp/readonly": {
+   "count": 6,
+   "credential": [
+    "github-fake-real"
+   ],
+   "headerNames": [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-length",
+    "content-type",
+    "copilot-harness-id",
+    "copilot-integration-id",
+    "host",
+    "mcp-method",
+    "mcp-protocol-version",
+    "user-agent",
+    "x-mcp-features",
+    "x-mcp-host",
+    "x-mcp-tools"
+   ],
+   "headerValues": [
+    "accept: text/event-stream, application/json",
+    "content-type: application/json",
+    "copilot-harness-id: copilot-sdk",
+    "copilot-integration-id: code-oss",
+    "user-agent: copilot-cli/1.0.103-unstable.r41379698026.g3219c66"
+   ],
+   "messageKeyPaths": [
+    "id",
+    "jsonrpc",
+    "method",
+    "params",
+    "params._meta",
+    "params._meta.io.modelcontextprotocol/clientCapabilities",
+    "params._meta.io.modelcontextprotocol/clientCapabilities.elicitation",
+    "params._meta.io.modelcontextprotocol/clientCapabilities.elicitation.form",
+    "params._meta.io.modelcontextprotocol/clientCapabilities.elicitation.url",
+    "params._meta.io.modelcontextprotocol/clientCapabilities.extensions",
+    "params._meta.io.modelcontextprotocol/clientCapabilities.extensions.io.modelcontextprotocol/ui",
+    "params._meta.io.modelcontextprotocol/clientCapabilities.extensions.io.modelcontextprotocol/ui.mimeTypes",
+    "params._meta.io.modelcontextprotocol/clientCapabilities.sampling",
+    "params._meta.io.modelcontextprotocol/clientInfo",
+    "params._meta.io.modelcontextprotocol/clientInfo.name",
+    "params._meta.io.modelcontextprotocol/clientInfo.version",
+    "params._meta.io.modelcontextprotocol/protocolVersion",
+    "params.capabilities",
+    "params.capabilities.elicitation",
+    "params.capabilities.elicitation.form",
+    "params.capabilities.elicitation.url",
+    "params.capabilities.extensions",
+    "params.capabilities.extensions.io.modelcontextprotocol/ui",
+    "params.capabilities.extensions.io.modelcontextprotocol/ui.mimeTypes",
+    "params.capabilities.sampling",
+    "params.clientInfo",
+    "params.clientInfo.name",
+    "params.clientInfo.version",
+    "params.protocolVersion"
+   ],
+   "messageTypeValues": [],
+   "queryKeys": [],
+   "status": [
+    "404"
+   ],
+   "toolNames": [],
+   "toolTypes": {},
+   "topLevelFields": [
+    "id",
+    "jsonrpc",
+    "method",
+    "params"
+   ]
+  },
+  "POST capi.example.test/responses": {
+   "count": 2,
+   "credential": [
+    "github-fake-real"
+   ],
+   "headerNames": [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-length",
+    "content-type",
+    "copilot-harness-id",
+    "copilot-integration-id",
+    "editor-version",
+    "host",
+    "openai-intent",
+    "user-agent",
+    "x-agent-task-id",
+    "x-client-machine-id",
+    "x-client-session-id",
+    "x-github-api-version",
+    "x-github-repository-host",
+    "x-github-repository-nwo",
+    "x-initiator",
+    "x-interaction-id",
+    "x-interaction-type",
+    "x-stainless-helper-method"
+   ],
+   "headerValues": [
+    "accept: application/json",
+    "content-type: application/json",
+    "copilot-harness-id: copilot-sdk",
+    "copilot-integration-id: code-oss",
+    "editor-version: vscode/1.145.0",
+    "openai-intent: conversation-agent",
+    "user-agent: copilot/1.0.103-unstable.r41379698026.g3219c66 (linux unknown) term/unknown client/vscode-agent-host",
+    "x-github-api-version: 2026-08-01",
+    "x-initiator: agent",
+    "x-initiator: user",
+    "x-interaction-type: conversation-agent",
+    "x-interaction-type: conversation-user"
+   ],
+   "messageKeyPaths": [
+    "include",
+    "input",
+    "input[].arguments",
+    "input[].call_id",
+    "input[].content",
+    "input[].content[].text",
+    "input[].content[].type",
+    "input[].id",
+    "input[].name",
+    "input[].output",
+    "input[].role",
+    "input[].status",
+    "input[].type",
+    "instructions",
+    "model",
+    "parallel_tool_calls",
+    "reasoning",
+    "reasoning.effort",
+    "reasoning.summary",
+    "store",
+    "stream",
+    "text",
+    "text.verbosity"
+   ],
+   "messageTypeValues": [
+    "input[].content[].type=input_text",
+    "input[].type=function_call",
+    "input[].type=function_call_output",
+    "input[].type=message"
+   ],
+   "queryKeys": [],
+   "status": [
+    "200"
+   ],
+   "toolNames": [
+    "custom:apply_patch",
+    "function:addComment",
+    "function:archive_chat",
+    "function:ask_user",
+    "function:bash",
+    "function:create_session",
+    "function:deleteComments",
+    "function:delete_session",
+    "function:get_current_session",
+    "function:get_session_context",
+    "function:glob",
+    "function:isolate_session",
+    "function:listComments",
+    "function:list_agents",
+    "function:list_bash",
+    "function:list_sessions",
+    "function:read_agent",
+    "function:read_bash",
+    "function:replyToComment",
+    "function:resolveComments",
+    "function:rg",
+    "function:send_message",
+    "function:session_store_sql",
+    "function:set_workspace",
+    "function:sql",
+    "function:stop_bash",
+    "function:task",
+    "function:view",
+    "function:viewUnreviewedComments",
+    "function:web_fetch",
+    "function:write_agent"
+   ],
+   "toolResultRoundTrips": 1,
+   "toolTypes": {
+    "custom": 1,
+    "function": 30
+   },
+   "topLevelFields": [
+    "include",
+    "input",
+    "instructions",
+    "model",
+    "parallel_tool_calls",
+    "reasoning",
+    "store",
+    "stream",
+    "text",
+    "tools"
+   ]
+  },
+  "POST capi.example.test/v1/messages": {
+   "count": 2,
+   "credential": [
+    "github-fake-real"
+   ],
+   "headerNames": [
+    "accept",
+    "accept-encoding",
+    "anthropic-version",
+    "authorization",
+    "content-length",
+    "content-type",
+    "copilot-harness-id",
+    "copilot-integration-id",
+    "editor-version",
+    "host",
+    "user-agent",
+    "x-agent-task-id",
+    "x-client-machine-id",
+    "x-client-session-id",
+    "x-github-api-version",
+    "x-github-repository-host",
+    "x-github-repository-nwo",
+    "x-initiator",
+    "x-interaction-id",
+    "x-interaction-type",
+    "x-stainless-helper-method"
+   ],
+   "headerValues": [
+    "accept: */*",
+    "content-type: application/json",
+    "copilot-harness-id: copilot-sdk",
+    "copilot-integration-id: code-oss",
+    "editor-version: vscode/1.145.0",
+    "user-agent: copilot/1.0.103-unstable.r41379698026.g3219c66 (linux unknown) term/unknown client/vscode-agent-host",
+    "x-github-api-version: 2026-08-01",
+    "x-initiator: agent",
+    "x-initiator: user",
+    "x-interaction-type: conversation-agent",
+    "x-interaction-type: conversation-user"
+   ],
+   "messageKeyPaths": [
+    "max_tokens",
+    "messages",
+    "messages[].content",
+    "messages[].content[].cache_control",
+    "messages[].content[].cache_control.type",
+    "messages[].content[].content",
+    "messages[].content[].id",
+    "messages[].content[].input",
+    "messages[].content[].input.path",
+    "messages[].content[].name",
+    "messages[].content[].text",
+    "messages[].content[].tool_use_id",
+    "messages[].content[].type",
+    "messages[].role",
+    "model",
+    "stream",
+    "system",
+    "system[].cache_control",
+    "system[].cache_control.type",
+    "system[].text",
+    "system[].type",
+    "temperature",
+    "thinking",
+    "thinking.budget_tokens",
+    "thinking.display",
+    "thinking.type"
+   ],
+   "messageTypeValues": [
+    "messages[].content[].cache_control.type=ephemeral",
+    "messages[].content[].type=text",
+    "messages[].content[].type=tool_result",
+    "messages[].content[].type=tool_use",
+    "system[].cache_control.type=ephemeral",
+    "system[].type=text",
+    "thinking.type=enabled"
+   ],
+   "queryKeys": [],
+   "status": [
+    "200"
+   ],
+   "toolNames": [
+    "null:addComment",
+    "null:archive_chat",
+    "null:ask_user",
+    "null:bash",
+    "null:create",
+    "null:create_session",
+    "null:deleteComments",
+    "null:delete_session",
+    "null:edit",
+    "null:get_current_session",
+    "null:get_session_context",
+    "null:glob",
+    "null:grep",
+    "null:isolate_session",
+    "null:listComments",
+    "null:list_agents",
+    "null:list_bash",
+    "null:list_sessions",
+    "null:read_agent",
+    "null:read_bash",
+    "null:replyToComment",
+    "null:resolveComments",
+    "null:send_message",
+    "null:session_store_sql",
+    "null:set_workspace",
+    "null:sql",
+    "null:stop_bash",
+    "null:task",
+    "null:view",
+    "null:viewUnreviewedComments",
+    "null:web_fetch",
+    "null:write_agent"
+   ],
+   "toolResultRoundTrips": 1,
+   "toolTypes": {
+    "null": 32
+   },
+   "topLevelFields": [
+    "max_tokens",
+    "messages",
+    "model",
+    "stream",
+    "system",
+    "temperature",
+    "thinking",
+    "tools"
+   ]
+  }
+ },
+ "source": "fixture log + broker audit (host-side)",
+ "upstream": "a717861c07586a53d83b80d742cd3f59b20a6273",
+ "userShape": {
+  "servedKeys": [
+   "access_type_sku",
+   "chat_enabled",
+   "cli_enabled",
+   "codex_agent_enabled",
+   "copilot_plan",
+   "copilotignore_enabled",
+   "editor_preview_features_enabled",
+   "endpoints",
+   "is_mcp_enabled",
+   "login",
+   "organization_list",
+   "organization_login_list",
+   "quota_snapshots"
+  ],
+  "strippedForBroker": [
+   "$.cloud_session_storage_enabled",
+   "$.quota_snapshots.chat.token_based_billing",
+   "$.quota_snapshots.completions.token_based_billing",
+   "$.quota_snapshots.premium_interactions.token_based_billing",
+   "$.token_based_billing"
+  ],
+  "upstreamStubKeys": [
+   "access_type_sku",
+   "chat_enabled",
+   "cli_enabled",
+   "cloud_session_storage_enabled",
+   "codex_agent_enabled",
+   "copilot_plan",
+   "copilotignore_enabled",
+   "editor_preview_features_enabled",
+   "endpoints",
+   "is_mcp_enabled",
+   "login",
+   "organization_list",
+   "organization_login_list",
+   "quota_snapshots",
+   "token_based_billing"
+  ]
+ },
+ "vsDraft": {
+  "draftFieldsNeverSent": [
+   "max_completion_tokens",
+   "max_output_tokens",
+   "max_tool_calls",
+   "metadata",
+   "n",
+   "previous_response_id",
+   "prompt_cache_key",
+   "response_format",
+   "seed",
+   "stop",
+   "tool_choice",
+   "top_logprobs",
+   "logprobs",
+   "top_p",
+   "truncation",
+   "user",
+   "dimensions",
+   "encoding_format",
+   "intent"
+  ],
+  "endpointsNotInDraft": [
+   "POST capi.example.test/mcp/readonly",
+   "POST capi.example.test/v1/messages"
+  ],
+  "fieldsNotInDraft": [
+   "id",
+   "jsonrpc",
+   "method",
+   "params",
+   "snippy",
+   "system",
+   "thinking"
+  ],
+  "toolTypesNotInDraft": [
+   "custom",
+   "null"
+  ]
+ }
+}

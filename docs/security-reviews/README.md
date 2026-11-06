@@ -82,4 +82,5 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-05 | [local npm installs through GitHub CFS](20261105-cfs-local-builds.md) | - Round YY: 42f1b81..5dc6ee7 (EDR [cfs-local-builds](../edr/20261105-cfs-local-builds.md)) | see record |
 | 2026-11-05 | [secure agentic experiences design (agents in the tab)](20261105-secure-agentic-experiences-design.md) | round 1: 40fa71d (rebased from 9f4ded7; design as first written: [plan](../plans/secure-ag | see record |
 | 2026-11-05 | [tabs wired to their broker (plan tabd-broker-wiring)](20261105-tab-broker.md) | - Round XX (B1, OCI tabs get a real broker): 7d1c94d..325097f, plus 32c3289 (the naming ru | see record |
+| 2026-11-06 | [the real-tab spike, D7 amendment and the agentic implementation plan](20261106-agentic-real-tab-spike.md) | 0f8ac0d.. this branch. That covers: | see record |
 <!-- index:end -->
