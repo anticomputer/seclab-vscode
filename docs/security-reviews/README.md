@@ -76,6 +76,7 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-05 | [agents-in-the-tab spike harness and findings](20261105-agents-in-tab-spike.md) | c6dfbf2..f2b9471 (rebased from f5a479a..44d11bc). That covers test/agentic/ahp/ (run.sh, b | see record |
 | 2026-11-05 | [backstop derive exemption and `GET /copilot_internal/user` exception](20261105-broker-backstop-exceptions.md) | round 8. | see record |
 | 2026-11-05 | [broker local builds through CFS](20261105-broker-cfs-builds.md) | - 440d80f: CFS local builds. | see record |
+| 2026-11-05 | [measured Copilot traffic and the user's decisions (round 11)](20261105-broker-measured-copilot-traffic.md) | - "broker: measured Copilot traffic and the user's decisions" (schema | see record |
 | 2026-11-05 | [broker model access (body policy, budgets, trusted derivation)](20261105-broker-model-access.md) | - Round 7: dcda94b, which adds: | see record |
 | 2026-11-05 | [broker re-pin to CFS-served versions, and the image snapshot](20261105-broker-repin-and-image-snapshot.md) | - 5f41596: broker/build.sh builds the broker image from a snapshot of | see record |
 | 2026-11-05 | [broker WebSocket credential opt-in](20261105-broker-websocket-opt-in.md) | - Round 6: b1558e9 and 83a00cf. | see record |

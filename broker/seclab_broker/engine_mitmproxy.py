@@ -49,6 +49,9 @@ SEALED_PREFIX = "copilot-sealed.v1."
 # Keys that name a credential, in a backstop exception's response.
 CREDENTIAL_KEY = re.compile(r"token|secret|passw|credential|api[_-]?key|private[_-]?key|session|cookie|bearer|jwt",
                             re.I)
+# A URL carrying a credential in its userinfo (`scheme://user:secret@host`, or a token as the
+# user, as in `https://<token>@host`); a plain short user such as `ssh://git@host` is not one.
+URL_USERINFO = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://(?:[^/?#\s@:]*:[^/?#\s@]*|[^/?#\s@:]{16,})@")
 
 
 def fail_closed(fn):
@@ -614,9 +617,15 @@ class SeclabAddon:
         resp.headers.fields = tuple(new_fields)
 
         if resp.trailers:
+            kept_trailers = []
             for name, value in resp.trailers.fields:
                 if self.b.creds.find_real(value) or (scan_minted and find_minted(value.decode("latin-1"))):
                     return self._block_response(flow, "credential material in trailers")
+                if injected and name.decode("latin-1").lower() in SESSION_HEADERS:
+                    self.b.audit("session.stripped", header=name.decode("latin-1").lower(), **self._summary(flow))
+                    continue
+                kept_trailers.append((name, value))
+            resp.trailers.fields = tuple(kept_trailers)
 
         raw = resp.raw_content or b""
         try:
@@ -645,18 +654,26 @@ class SeclabAddon:
 
     def _exception_response_check(self, resp: http.Response, exc=None):
         """An approved backstop exception's response (ADR broker-model-access): a strict JSON
-        object with no credential-named key (bar the exception's exact `benign_keys`) and no
-        token-shaped value, in the body or headers; anything else is blocked and surfaced as
-        a finding. Returns (why, detail, kept): `kept` is (filtered document, dropped names)
-        when the exception has a field allowlist and the document carried other fields."""
-        benign = exc.benign_keys if exc is not None else frozenset()
-        for name, value in resp.headers.fields:
+        object with no credential-named key (bar the exception's exact benign JSON paths), no
+        token-shaped key or value and no URL userinfo, in the body, headers or trailers;
+        anything else is blocked and surfaced as a finding. A bodiless response passes after
+        the header and trailer checks (a 204/304). The field allowlist applies to 2xx only; an
+        error body still gets every other check. Returns (why, detail, kept): `kept` is
+        (filtered document, dropped names) when fields were dropped."""
+        trailers = resp.trailers.fields if resp.trailers else ()
+        for name, value in tuple(resp.headers.fields) + tuple(trailers):
             hname = name.decode("latin-1").lower()
             if CREDENTIAL_KEY.search(hname) or find_minted(value.decode("latin-1")):
                 return "credential-named header or token-shaped value", hname, None
         try:
-            doc = parse_strict(resp.get_content(strict=True) or b"")
-        except (ValueError, StrictJSONError):
+            raw = resp.get_content(strict=True) or b""
+        except ValueError:
+            return "response is not strict JSON", None, None
+        if not raw:
+            return None, None, None
+        try:
+            doc = parse_strict(raw)
+        except StrictJSONError:
             return "response is not strict JSON", None, None
         if not isinstance(doc, dict):
             return "response is not a JSON object", None, None
@@ -665,19 +682,35 @@ class SeclabAddon:
             path, node = stack.pop()
             if isinstance(node, dict):
                 for k, v in node.items():
-                    if CREDENTIAL_KEY.search(k) and k not in benign:
-                        return "credential-named field", f"{path}.{k}", None
-                    stack.append((f"{path}.{k}", v))
+                    kp = f"{path}.{k}"
+                    if CREDENTIAL_KEY.search(k) and not (exc is not None and exc.is_benign(kp)):
+                        return "credential-named field", kp, None
+                    if find_minted(k):
+                        return "token-shaped key", path, None
+                    stack.append((kp, v))
             elif isinstance(node, list):
                 stack += [(f"{path}[{i}]", v) for i, v in enumerate(node)]
-            elif isinstance(node, str) and find_minted(node):
+            elif isinstance(node, str) and (find_minted(node) or URL_USERINFO.search(node)):
                 return "token-shaped value", path, None
-        if exc is None or exc.response_fields is None:
+        if exc is None or (exc.response_fields is None and not exc.drop_paths):
             return None, None, None
-        dropped = sorted(k for k in doc if k not in exc.response_fields)
+        dropped = []
+        if exc.response_fields is not None and 200 <= resp.status_code < 300:
+            unlisted = sorted(k for k in doc if k not in exc.response_fields)
+            if unlisted and exc.strict_fields:
+                return "field outside the allowlist", ",".join(unlisted)[:512], None
+            dropped += unlisted
+            doc = {k: v for k, v in doc.items() if k in exc.response_fields}
+        for parts in exc.drop_paths:
+            node = doc
+            for p in parts[:-1]:
+                node = node.get(p) if isinstance(node, dict) else None
+            if isinstance(node, dict) and parts[-1] in node:
+                del node[parts[-1]]
+                dropped.append(".".join(parts))
         if not dropped:
             return None, None, None
-        return None, None, ({k: v for k, v in doc.items() if k in exc.response_fields}, dropped)
+        return None, None, (doc, dropped)
 
     def _derivations(self, flow: http.HTTPFlow, view: RequestView | None) -> list:
         if view is None:
