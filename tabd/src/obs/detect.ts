@@ -11,6 +11,8 @@ export interface TabContext {
 	/** Broker endpoint as seen from inside the tab (addresses and port), when a broker is wired. */
 	brokerPort?: number;
 	brokerAddrs?: ReadonlySet<string>;
+	/** The tab's DNS resolvers (port 53 to these is name resolution, not a proxy bypass). */
+	resolvers?: ReadonlySet<string>;
 	/** Workspace root (host path == in-tab path). */
 	workspace?: string;
 }
@@ -174,10 +176,11 @@ export class Detector {
 					break;
 				}
 				const isBroker = ctx.brokerPort !== undefined && n.port === ctx.brokerPort && (ctx.brokerAddrs?.has(n.addr) ?? false);
-				if (!isBroker && !LOOPBACK.test(n.addr)) {
+				const isResolver = n.port === 53 && (ctx.resolvers?.has(n.addr) ?? false);
+				if (!isBroker && !isResolver && !LOOPBACK.test(n.addr)) {
 					hits.push({ id: 'egress.bypass', summary: `direct connect to ${n.addr}:${n.port ?? '?'} by ${name || '?'} (${n.result ?? '?'})` });
 				}
-				if (!isBroker) {
+				if (!isBroker && !isResolver) {
 					// Proxied traffic all goes to the broker: its beacons are timed from the broker's
 					// own per-destination events instead (brokerTiming).
 					this.beacon(`${n.addr}:${n.port ?? ''}`, Date.parse(e.time), hits);

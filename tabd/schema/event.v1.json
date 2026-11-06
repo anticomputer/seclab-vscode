@@ -64,6 +64,7 @@
 				"egress.request",
 				"egress.approval",
 				"credential.use",
+				"egress.attribution",
 				"model.call",
 				"broker.status",
 				"rpc.decision",
