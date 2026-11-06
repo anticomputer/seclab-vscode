@@ -27,6 +27,13 @@ shipped build. Nothing here is built until the user approves.
   build F (§2), where the outer control is disabled and the inner one must still contain
   the probe. Without F, a green result for an inner layer would be the absence-of-evidence
   error the RPC session hit with its own AI probes.
+  - **F alone is not enough** (RPC-lockdown, 2026-11-06). F shows that an inner layer can
+    refuse; it does not show that the layer is present and wired in the shipped build.
+    Patch 0011 compiled and reviewed well, but never loaded. So every inner layer and every
+    null provider also emits an `armed` event when it is constructed or registered in a
+    `seclab+` window (`ahp-reverse.armed`, `ahp-credential.armed`,
+    `seclab.null-provider.registered` with the service id). Every G run asserts these
+    events. A probe that infers a control from the absence of an effect is not accepted.
   - **Inner layers are kept where the surface is critical.** Reverse requests (host file
     read and write, A16) get their own refusal in `agentHostProtocolClient.ts` (0016).
     Credential issuance (`authenticate`) is a separate module with its own invariant
@@ -45,9 +52,11 @@ shipped build. Nothing here is built until the user approves.
   - It is registered at `APPLICATION` scope in every window, so the remote-user layer
     cannot supply it (`REMOTE_MACHINE_SCOPES` excludes `APPLICATION`).
   - The other tab-side write path is an extension in the tab calling
-    `getConfiguration().update(…, Global)`. That is closed by a different control: the RPC
-    filter's deny of `MainThreadConfiguration.$updateConfigurationOption`. The plan
-    depends on it, and A23 covers both paths.
+    `getConfiguration().update(…, Global)`. RPC-lockdown's policy marks
+    `MainThreadConfiguration.$updateConfigurationOption` as denied, but its own warning
+    (2026-11-06) is that a verdict in that table records intent, not enforcement, until its
+    enforcement-mapping gate lands: one `deny` there was never implemented. So the plan
+    does not rely on the table. A23 asserts both paths itself, with host-side evidence.
   - The gate reads the setting again at each connection, not once at startup.
   - The probe runner sets it in the isolated test profile, so the probed build is the
     shipped build.
@@ -174,8 +183,9 @@ RPC-lockdown, which will wire A17, A18 and A23 behind it.
   - **Enablement.**
     - 0010 selects the client at
       [agentHostService.ts#L49-L57](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/agentHost/electron-browser/agentHostService.ts#L49-L57).
-      Its `seclab+` branch becomes: setting off, 0010's refusal as today; setting on,
-      `EditorRemoteAgentHostServiceClient` with the gate.
+      RPC-lockdown's rework of 0010 calls the named predicate `seclabAgentHostAllowed`, and
+      0015 implements it: setting off, 0010's refusal as today; setting on,
+      `EditorRemoteAgentHostServiceClient` with the gate. 0015 does not edit 0010's lines.
     - The setting is registered in the gate file at `APPLICATION` scope.
     - With the setting off, nothing changes from v0.
   - **Events.** Each decision is reported over `tab.events.report` as class
@@ -214,13 +224,17 @@ RPC-lockdown, which will wire A17, A18 and A23 behind it.
   shipped G build.
 - **0016, the inner layer.** `_handleReverseRequest`
   ([agentHostProtocolClient.ts#L3188](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts#L3188))
-  refuses every reverse request in a `seclab+` window and emits its own event. Probe:
-  A16 on F (gate passing everything) is contained by 0016, with 0016's event as the
-  deciding fact, and is vulnerable on U.
+  refuses every reverse request in a `seclab+` window and emits its own event. Probes:
+  - A16 on F (the gate passing everything) is contained by 0016, with 0016's event as the
+    deciding fact, and is vulnerable on U;
+  - every G run asserts `ahp-reverse.armed` for each connection, which shows the layer is
+    wired in what ships.
 - **Depends on:**
-  - RPC-lockdown's class (f) verdicts in `rpc-filter/policy/`, pinned by `check_drift.py`;
+  - RPC-lockdown's class (f) verdicts in `rpc-filter/policy/`, pinned by `check_drift.py`,
+    landed after its name-based exemptions are removed;
   - the probe runner;
-  - RPC-lockdown's agreement to the change at 0010's selection line (§5).
+  - the signature of the `seclabAgentHostAllowed` predicate from RPC-lockdown's 0009/0010
+    rework (§5).
 
 ### Increment 2: 0017, fixed values in tab windows
 - **What.** In `seclab+` windows only, the agent settings confirmed tab-writable get a
@@ -244,8 +258,9 @@ RPC-lockdown, which will wire A17, A18 and A23 behind it.
     submission goes through that call
     ([chatWidget.ts#L4088](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/widget/chatWidget.ts#L4088)),
     so with the setting on, the agent-host session would also be refused.
-  - The patch narrows 0009's predicate to allow a request only when the session belongs
-    to this window's own gated connection.
+  - 0018 implements the 0009 side of the named predicate `seclabAgentHostAllowed` (RPC-lockdown
+    calls it; it does not edit 0009's lines). It allows a request only when the session
+    belongs to this window's own gated connection.
     - The check is bound to that connection's provider object (identity), not to a
       session-type string.
     - A string would be safe today only because the RPC filter denies
@@ -276,16 +291,22 @@ RPC-lockdown, which will wire A17, A18 and A23 behind it.
   connection-customization contribution in `seclab+` windows (design §3.5).
   `IRemoteAgentHostService` is already locked by 0011, and 0013 refuses the local agent
   host.
-- **Probes.** A12, and a new probe A17b: Mission Control's "connect to environment"
-  against a fixture. That action is user-initiated, so the probe needs the runner to drive
-  one command in the window. **Open:** how the runner drives UI without a test hook; if
-  it cannot, this stays `not-implemented` and is said so.
+- **Probes.**
+  - A positive assertion on every G run: in a `seclab+` window, each of these services
+    resolves to the null provider, shown by its `seclab.null-provider.registered` event.
+    It is not inferred from the absence of a connection.
+  - A12.
+  - A new probe, A17b: Mission Control's "connect to environment" against a fixture. That
+    action is user-initiated, so the probe needs the runner to drive one command in the
+    window. **Open:** how the runner drives UI without a test hook; if it cannot, A17b
+    stays `not-implemented` and is said so.
 - **Depends on:** the class (f) connection-provider verdicts (RPC-lockdown).
 
 ### Increment 5: 0020, the `authenticate` rewrite
 - **What.** Design §4.2, as amended on 2026-11-06. It is a module separate from the gate
   (review round 1), so that one bug in the content filter does not also leave the tab
   credentialed:
+  - it emits `ahp-credential.armed` when constructed in a `seclab+` window (asserted on every G run);
   - it accepts `authenticate` work only from a gate that has emitted `ahp-gate.verified`
     for this connection; otherwise it issues nothing;
   - it matches the advertised resource against a trusted provider table (product data,
@@ -343,8 +364,8 @@ RPC-lockdown, which will wire A17, A18 and A23 behind it.
 
 | Session | Ask | Needed by |
 |---|---|---|
-| RPC-lockdown | The class (f) AHP verdicts in `rpc-filter/policy/`, pinned by `check_drift.py`, as the gate's policy data | Inc 1 |
-| RPC-lockdown | Agreement that 0015 edits 0010's selection line, and 0018 narrows 0009's `sendRequest` predicate. Alternative: RPC-lockdown puts a named predicate in 0009 and 0010 (`seclabAgentHostAllowed(authority, …)`) that my patches implement, so their lines stay theirs | Inc 1, Inc 3 |
+| RPC-lockdown | The class (f) AHP verdicts in `rpc-filter/policy/`, pinned by `check_drift.py`, as the gate's policy data. They land only after RPC-lockdown removes the name-based coverage exemptions, so that every verdict is in the digest; until its enforcement-mapping gate exists, a verdict is intent, and the gate's own probes prove enforcement | Inc 1 |
+| RPC-lockdown | The named predicate `seclabAgentHostAllowed(authority, …)`, called from 0009 and 0010 and implemented by 0015 and 0018 (agreed 2026-11-06). The exact signature arrives with RPC-lockdown's 0009/0010 rework, and the predicate is the enforcement point its mapping gate will cite | Inc 1, Inc 3 |
 | RPC-lockdown | The shared probe runner (§3) and A17, A18 and A23 behind it; 0009's `invokeTool` refusal stays primary for A18; A23 covers `$updateConfigurationOption` as well as remote settings | Inc 0 |
 | RPC-lockdown | Review of the layering in §1 (gate, inner layers on F) | Inc 1 review |
 | Fork-build | `patches/reach.json` entries pinning 0015–0021 to `desktop`; for U and F: a positive release marker in `check-release`, a separate fetch destination, a distinct product name and bundle id, and a build-info field (§2) | Inc 0 |
