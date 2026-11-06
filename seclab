@@ -21,6 +21,7 @@ usage: ./seclab <command>
   test canary [sbx|oci]         Canary acceptance test: no host secret observable from a tab
   test secrets [sbx|oci]        Pre-mount secret scan (gitleaks) gate, move-to-vault, restore
   test obs [sbx|oci]            Tab observability: inert loader -> expected events and labels; sensor tampering -> gap
+  test probes                   AHP probes against the real upstream client (no window, no network): each must land where it claims
   tab logs [-f] [--format text|json|falco] [--min PRIORITY] [--state-dir DIR] <tabId|all>
                                 Read a tab's observability log (default: the editor's state dir)
   test evidence prepare|check DIR [sbx|oci]
@@ -427,6 +428,10 @@ case "${1:-help}" in
 			secrets) shift; "${SECLAB_NODE:-node}" "$ROOT/test/secrets/run.ts" "${1:-sbx}" ;;
 			evidence) shift; "${SECLAB_NODE:-node}" "$ROOT/test/containment/check-evidence.ts" "$@" ;;
 			obs) shift; "${SECLAB_NODE:-node}" "$ROOT/test/observability/run.ts" "${1:-sbx}" ;;
+			# The probe runner's probes, driven into the REAL upstream agent-host client in a
+			# network-less container. Each probe must reach what it claims before any run can
+			# read its absence as containment.
+			probes) shift; "$ROOT/test/agentic/ahp/validate-probes.sh" "$@" ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	tab)
