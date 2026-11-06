@@ -355,5 +355,12 @@ def test_copilot_user_benign_keys_pass_and_unlisted_fields_are_dropped(pod, ctl)
     assert r.code == 200 and "unlisted_feature" not in r.json() and r.json()["login"] == "octo-test"
     e = ctl.wait_note("audit.event", lambda e: e["type"] == "credential.backstop_exception_filtered", since=mark, timeout=10)
     assert e["detail"] == "unlisted_feature"
+    # Names only, never values: every top-level key, and nothing from the values.
+    assert e["fields"] == sorted(["login", "chat_enabled", "token_based_billing", "cloud_session_storage_enabled",
+                                  "quota_snapshots", "endpoints", "unlisted_feature"]) and "fields" in e["untrusted"]
+    assert "octo-test" not in json.dumps(e) and "model.example.test" not in json.dumps(e)
+    mark = ctl.mark()
     r = pod.curl("https://api.example.test/copilot_internal/user", *auth, "-H", "X-Fixture: token-value")
     assert r.code == 502 and "ghu_" not in r.body
+    blocked = ctl.wait_note("audit.event", lambda e: e["type"] == "credential.backstop_exception_blocked", since=mark, timeout=10)
+    assert "note" in blocked["fields"] and "ghu_" not in json.dumps(blocked)

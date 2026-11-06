@@ -653,9 +653,10 @@ class SeclabAddon:
             # holds whatever the status): no credential-named field, no token-shaped value.
             exc = flow.metadata.get("seclab.backstop_exception")
             why, detail, kept = self._exception_response_check(resp, exc)
+            names = {"fields": n} if (n := self._top_level_names(resp)) is not None else {}
             if why:
                 self.b.audit("credential.backstop_exception_blocked", reason=why,
-                             **({"detail": detail} if detail else {}), **self._summary(flow))
+                             **({"detail": detail} if detail else {}), **names, **self._summary(flow))
                 return self._block_response(flow, f"backstop exception response: {why}")
             if kept is not None:
                 # The whole document passed; fields outside the exception's measured allowlist
@@ -663,7 +664,7 @@ class SeclabAddon:
                 doc, dropped = kept
                 resp.content = json.dumps(doc, separators=(",", ":")).encode()
                 self.b.audit("credential.backstop_exception_filtered", reason="field outside the allowlist",
-                             detail=",".join(dropped)[:512], **self._summary(flow))
+                             detail=",".join(dropped)[:512], **names, **self._summary(flow))
         # Any flow that carried a real value, and any response from a bound host,
         # is scanned for credentials the upstream may have minted.
         scan_minted = injected or self._bound_host(view)
@@ -722,6 +723,21 @@ class SeclabAddon:
                 return self._block_response(flow, "token-like material in a non-text credentialed response")
         if body2 != orig:
             resp.content = body2
+
+    @staticmethod
+    def _top_level_names(resp: http.Response) -> list[str] | None:
+        """The response's top-level JSON key names, for the exception-route audits: names only,
+        never values, so the field allowlist can be measured and drift noticed. A name that is
+        itself token-shaped, or carries URL userinfo, is masked. None if the body isn't a strict
+        JSON object."""
+        try:
+            doc = parse_strict(resp.get_content(strict=True) or b"")
+        except (ValueError, StrictJSONError):
+            return None
+        if not isinstance(doc, dict):
+            return None
+        return ["[token-shaped]" if find_minted(k) or URL_USERINFO.search(k) else k[:64]
+                for k in sorted(doc)][:128]
 
     def _exception_response_check(self, resp: http.Response, exc=None):
         """An approved backstop exception's response (ADR broker-model-access): a strict JSON
