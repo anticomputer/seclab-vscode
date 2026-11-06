@@ -348,3 +348,49 @@ runtime evidence to collect once the runner is finished.
   attempt counts.
 - Whether the workbench client reconnects after the agent host's restart, and with what
   backoff, is to be measured with the runner.
+
+## Where this stopped (2026-11-06, end of session)
+Branch `anticomputer-agentic-gate-0015-v3`, rebased onto `main` (`f669584`). 0015 is still
+**HELD**: the probes are fixed and the reason the old ones could not land is now understood
+and recorded (findings 9–14), but **no U run has yet shown a host effect**, so there is still
+no runtime proof in the shipped build.
+
+Done this session:
+- Findings 9–14 above: why each old probe could not produce a host effect, and the one that
+  can (`vscode/requestMcpAuthentication` with `authorization_servers` omitted).
+- `test/agentic/runner/mitm.js`: probes corrected, the host-effect probe added and re-sent on
+  a timer, gate-surface probes labelled as such.
+- Rebased the whole 0015 stack onto current `main`, resolving the `seclab` unit-test list
+  twice.
+- Fixed the two checks that were already red on the old head: `ci-unit` (the marks test
+  needed `~/.seclab-test/` to exist, which it never does in the container) and `docs-check`.
+  Locally `test unit` is 147/147 and `docs check --run-commands --paired` is green.
+
+Next step, in order:
+1. **Rebuild the shared broker image before any run.** The host's `seclab-broker:dev` was at
+   policy revision 5 while `main`'s tabd expects 4, so `tab.ensureRunning` failed with
+   `broker image seclab-broker:dev refused … policy revision "5", expected 4`. `./seclab build
+   linux reh` has been run; `./seclab image oci` still needs to follow. The revision is a
+   host-wide shared tag, so check it matches the tree under test before blaming the run.
+2. Re-run U (`prepare --build u`, background launch, `check`) and confirm the beacon log has a
+   hit for `/.well-known/oauth-protected-resource/mcp-<arm>`.
+3. Then G: dispatch `build-macos` on the branch head, `./seclab fetch macos-branch <run>`, run
+   with `SECLAB_AGENTS_ENABLED=1`, expect `ahp-gate.reverse-request` denies, no beacon hit and
+   `ahp-gate.verified` plus the real agent list passing.
+4. Security-review round, then land.
+
+**Open problem, not worked around: the editor took focus during the U run.** Teardown's focus
+gate failed with three samples (`editor pid 60644 is the frontmost app`, ~22 s after launch),
+even though the window was started through `test/window.ts launch`, which exits 1 on a
+frontmost editor and did not. So the launch path's own check passes while the window becomes
+frontmost slightly later. This is the hard rule in AGENTS.md ("you keep popping up on top of
+my ongoing work") and it is reported rather than suppressed: the next session must find out
+whether `SECLAB_BACKGROUND_WINDOWS=1` is reaching this build, or whether something after
+window creation (the `seclab+` resolver's progress UI is the first suspect) activates the app.
+No further editor windows should be launched until that is answered.
+
+### Host state at halt
+Teardown ran and passed every check except the focus gate: no process, sandbox, container,
+network or volume from the run is alive, the run profile is removed, and no watched host path
+changed. `./seclab clean-host` lists nothing of this session's. `.work/agentic-runner/` is kept
+on purpose: it holds the run's evidence, it is gitignored, and fixture lint is clean on it.
