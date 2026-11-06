@@ -183,6 +183,7 @@ async def app(scope, receive, send) -> None:
             # the other two shapes are unknown, so an empty object is the honest answer.
             # Canary-style fake values only.
             mode = hdrs.get("x-fixture")
+            status = 403 if mode == "unlisted-error" else 200
             if path.endswith("/managed_settings"):
                 body = {"permissions": {"deny": ["shell(rm -rf *)"]}, "allowManagedMcpServersOnly": True,
                         "telemetry": {"enabled": True, "endpoint": "https://otel.example.test",
@@ -191,15 +192,19 @@ async def app(scope, receive, send) -> None:
                     body["permissions"]["allow"] = ["ghu_" + secrets.token_hex(18)]
                 elif mode == "url-userinfo":
                     body["extraKnownMarketplaces"] = {"m": {"source": {"source": "git", "url": "https://user:fake-pass@git.example.test/m.git"}}}
-                elif mode == "unlisted":
+                elif mode in ("unlisted", "unlisted-error"):
                     body["newPolicyKey"] = True
+                elif mode == "telemetry-list":
+                    body["telemetry"] = [{"headers": {"authorization": "Basic fake-otlp-credential"}}]
+                elif mode == "telemetry-nested":
+                    body["telemetry"] = {"otlp": {"Headers": {"authorization": "Basic fake-otlp-credential"}}}
             else:
                 body = {}
-                if mode == "unlisted":
+                if mode in ("unlisted", "unlisted-error"):
                     body = {"rules": [{"paths": ["**/secrets/**"]}]}
                 elif mode == "token-field":
                     body = {"access_token": "opaque"}
-            return await send_resp(send, 200, json.dumps(body).encode())
+            return await send_resp(send, status, json.dumps(body).encode())
         if path == "/session":
             sid = secrets.token_hex(16)
             return await send_resp(send, 200, b'{"ok": true}',

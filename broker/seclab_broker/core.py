@@ -73,6 +73,7 @@ class Approval:
                "createdAt": self.created, "expiresAt": self.deadline, "waiting": len(self.waiters),
                "decisions": list(self.decisions), "risk": self.risk,
                "untrusted": ["request.host", "request.method", "request.path"]
+               + (["request.queryKeys"] if "queryKeys" in self.request else [])
                + (["risk.origin.label"] if self.risk.get("origin", {}).get("label") else [])}
         if self.kind == "egress":
             out["suggestedRule"] = self.suggested

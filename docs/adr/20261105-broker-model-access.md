@@ -236,11 +236,15 @@ same strict checks as /user").
   - `managed_settings` lists the top-level keys of `IManagedSettingsResponse`
     ([`managedSettings.ts` L40-85, L118-122](https://github.com/microsoft/vscode/blob/a717861c/src/vs/workbench/services/accounts/browser/managedSettings.ts#L40-L122)):
     it is the enterprise's `.github/copilot/settings.json`.
-  - Its `telemetry.headers` is a free-form map that carries an OTLP
-    endpoint's credentials. The key-name pattern can't see them (the key is
-    a header name such as `Authorization`), so it is always dropped and
-    audited (`dropPaths`). The org's restrictions (permissions, MCP and plugin
-    allowlists) still reach the runtime.
+  - Its `telemetry` object carries an OTLP endpoint's credentials in a
+    free-form `headers` map. The key-name pattern can't see them (the key is
+    a header name such as `Authorization`), and a shape-specific drop can be
+    evaded (review 11b-2). So the whole `telemetry` field is always dropped
+    and audited (`dropFields`), whatever its shape. The org's restrictions
+    (permissions, MCP and plugin allowlists) still reach the runtime;
+    telemetry export to the org's collector doesn't run from the tab.
+  - The allowlists apply on every status (review 11b-1), so an error body is
+    held to the same list.
   - `team_customizations` and `content_exclusion` have no public or measured
     shape. Their allowlist is empty, so only `{}` passes, and anything else is
     blocked as a finding until the shape is known. In practice they stay
@@ -286,7 +290,7 @@ returns an opaque, prefix-less secret under an innocuous key, inside an
 allowlisted field, reaches the tab. The controls against that are:
 - the credential-name heuristic;
 - the field allowlists (strict on the org-policy routes);
-- `dropPaths` for known free-form secret maps.
+- `dropFields` for objects known to carry a third party's secrets.
 
 They are not detection of the value itself (review 11-6). The upstream here
 is GitHub's own API, reached with the user's credential.
