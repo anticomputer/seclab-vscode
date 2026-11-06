@@ -77,3 +77,9 @@ deny-everything (one per-sandbox deny for every allow that applies to it).
   `containment oci` with only its known gaps, `e2e-broker oci` unchanged.
 - **Broker image:** pinned by ID with checked build labels, on both drivers
   ([broker image identity](20261105-broker-image-identity.md), review XX-6).
+- **Fix, 2026-11-06 (found by the focus probe):** stopping a tab also stops its broker. When
+  the editor's tabd reconciled it, the fence check failed (no broker port) and quarantine tried
+  to mirror the tab's own `localhost:<old port>` allow as a deny. sbx rejects that as a
+  conflict, so quarantine failed. Quarantine now removes the tab's scoped `localhost:*` allows
+  first; the next start adds the live one back. A unit test covers it
+  (`tabd/test/broker-image.test.ts`).
