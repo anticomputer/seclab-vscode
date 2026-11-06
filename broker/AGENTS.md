@@ -59,7 +59,20 @@ docker run --rm --network none seclab-broker-unit:test
 broker/docs-check.sh
 ```
 - `build.sh` verifies the mitmproxy base image's signed provenance, then
-  produces `seclab-broker:dev`.
+  produces `seclab-broker:dev`. It stamps the image's identity as OCI labels:
+  - `org.opencontainers.image.revision` (`-dirty` if `broker/` has uncommitted
+    or untracked files);
+  - `org.opencontainers.image.base.digest` (the registered, verified mitmproxy
+    digest);
+  - `org.opencontainers.image.version`;
+  - `io.seclab.broker.protocol`;
+  - `io.seclab.broker.policy-revision`.
+
+  Its only stdout line is JSON:
+  `{"id","tag","revision","base","version","policyRevision"}`, where `id` is
+  `docker image inspect --format '{{.Id}}'`; all other output goes to stderr.
+  tabd runs the broker by that ID, never by tag, and checks the labels (XX-6).
+  Don't change the output or the labels without telling the tabd side.
 - `test.sh` runs docs-check, then the dependency provenance gate
   (`provenance-check.sh`; needs network and `gh`), then the unit tests, then the
   integration suite.
