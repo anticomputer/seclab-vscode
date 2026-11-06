@@ -9,8 +9,7 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/.." && pwd)
-. "$here/tools/pybuild.sh"
-pybuild -q -t seclab-attest:local -f "$here/tools/attest/Dockerfile" "$here" >/dev/null
+"$here/tools/attest/build.sh" seclab-attest:local
 docker run --rm -v "$repo:/repo:ro" -w /repo -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python seclab-attest:local \
   broker/tools/provenance.py verify
 "$here/tools/verify-images.sh"
