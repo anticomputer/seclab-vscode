@@ -36,7 +36,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			type: 'boolean',
 			default: false,
 			scope: ConfigurationScope.APPLICATION,
-			description: localize('seclab.agents.enabled', "Connect tab windows to the agent host running inside their tab, through the agent-host gate. When off, tab windows make no agent-host connection."),
+			description: localize('seclab.agents.enabled', "Connect tab windows to the agent host running inside their tab, through the agent-host gate. When off, tab windows make no agent-host connection. Only enterprise policy and the host launch environment (SECLAB_AGENTS_ENABLED=1) turn this on: a value in user, remote or workspace settings is ignored, because a tab can write those."),
 		},
 	},
 });
@@ -73,15 +73,27 @@ function installWindowSink(accessor: ServicesAccessor): (e: SeclabAhpEvent) => v
 
 /**
  * Whether this window may connect to an agent host. Any window that isn't a seclab tab window
- * may; a tab window may only with `seclab.agents.enabled` on. Read at each connection.
+ * may; a tab window may only when agents are enabled for the host. Read at each connection.
  * This is the predicate patches 0009/0010 call (`seclabAgentHostAllowed`).
+ *
+ * The enablement sources are deliberately only those a tab cannot write (review round 1,
+ * MEDIUM): enterprise policy, the registered default, and `SECLAB_AGENTS_ENABLED=1` in the
+ * environment of the host's main process, stamped onto this window's configuration by
+ * `updateConfiguration` on every load. `getValue` is not used: it merges the user, remote
+ * and workspace layers, and `MainThreadConfiguration.$updateConfigurationOption` lets a tab
+ * extension write the user layer (A23).
  */
 export function seclabAgentHostAllowed(accessor: ServicesAccessor, authority: string | undefined): boolean {
 	if (!isSeclabAuthority(authority)) {
 		return true;
 	}
 	const emit = installWindowSink(accessor);
-	if (accessor.get(IConfigurationService).getValue<boolean>(SECLAB_AGENTS_ENABLED_SETTING) === true) {
+	const inspected = accessor.get(IConfigurationService).inspect<boolean>(SECLAB_AGENTS_ENABLED_SETTING);
+	// The desktop window configuration, reached structurally: this file is in the browser
+	// layer and may not import the electron-browser environment service's types.
+	const windowConfiguration = (accessor.get(IWorkbenchEnvironmentService) as { configuration?: { seclabAgentsEnabled?: boolean } }).configuration;
+	if (inspected.policyValue === true || windowConfiguration?.seclabAgentsEnabled === true
+		|| (inspected.policyValue === undefined && inspected.defaultValue === true)) {
 		return true;
 	}
 	emit({ source: 'ahp-gate', class: 'ahp.decision', priority: 'notice', summary: 'ahp-gate.disabled deny', detail: { gateRule: 'ahp-gate.disabled', connection: 0, verdict: 'deny' } });
