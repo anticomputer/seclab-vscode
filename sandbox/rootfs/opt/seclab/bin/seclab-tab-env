@@ -26,11 +26,14 @@ if [ -n "$CA" ]; then
 	# token). The registry in env outranks a workspace .npmrc. Anything unexpected: no feeds.
 	if [ -r "$B/npmrc" ] && [ -r "$B/pip-index-url" ]; then
 		pip="$(head -c 600 "$B/pip-index-url" | head -n 1)"
-		case "$pip" in
-			*[!A-Za-z0-9_.~:/@-]*) pip="" ;;
-			https://cfs:*@pkgs.dev.azure.com/github-cfs/GitHubCFS/_packaging/github-cfs-pypi/pypi/simple/) ;;
+		# Exactly https://cfs:<sentinel>@<the fixed feed URL> (review EEE-5): the password part
+		# is cut out and checked on its own, and the rest must equal the fixed suffix.
+		pw="${pip#https://cfs:}"; pw="${pw%%@*}"
+		case "$pw" in
+			seclab_cfs_*) case "$pw" in *[!A-Za-z0-9_-]*) pip="" ;; esac ;;
 			*) pip="" ;;
 		esac
+		[ "$pip" = "https://cfs:$pw@pkgs.dev.azure.com/github-cfs/GitHubCFS/_packaging/github-cfs-pypi/pypi/simple/" ] || pip=""
 		if [ -n "$pip" ]; then
 			set -- env NPM_CONFIG_GLOBALCONFIG="$B/npmrc" \
 				NPM_CONFIG_REGISTRY=https://pkgs.dev.azure.com/github-cfs/GitHubCFS/_packaging/github-cfs-oss/npm/registry/ \

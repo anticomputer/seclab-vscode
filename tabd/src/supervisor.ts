@@ -8,6 +8,7 @@ import { fileIdentity } from './state.ts';
 import { mintSentinel, rewriteSecret, type ScanResult, type VaultEntry } from './scan.ts';
 import { DriverError, type BrokerHooks, type Driver, type DriverInfo, type FenceReport, type TabRuntimeSpec, type TabTemplate } from './drivers/types.ts';
 import { BrokerControl, connectBroker } from './broker-control.ts';
+import { BROKER_POLICY_SCHEMA } from './broker.ts';
 import { defaultPolicy } from './broker-policy.ts';
 import { Approvals, asJson, sanitizeApproval } from './approvals.ts';
 import { CFS_CREDENTIAL_ID, cfsAllowRules, cfsImportParams, isCfsSentinel, newCfsSentinel, type AzToken } from './cfs.ts';
@@ -97,6 +98,7 @@ export class Supervisor {
 	/** One long-lived control connection per running tab's broker (docs/broker-protocol.md §1). */
 	private readonly brokers = new Map<string, BrokerControl>();
 	private readonly approvals = new Approvals();
+	private readonly cfsQueues = new Map<string, Promise<unknown>>();
 	private clientShowsPrompts = false;
 	private readonly phases = new Map<string, string>();
 	private readonly owned = new Set<string>();
@@ -695,26 +697,69 @@ export class Supervisor {
 		return isCfsSentinel(s) ? s : undefined;
 	}
 
+	/** Import budgets on `credential.import` arrived in broker policy schema revision 7 (review EEE-1). */
+	private cfsSupported(): string | undefined {
+		if (!this.o.cfs) {
+			return 'package feeds are unavailable (no az token source)';
+		}
+		return (BROKER_POLICY_SCHEMA.revision as number) >= 7 ? undefined : 'package feeds need broker policy schema revision 7 (budgets on imported credentials)';
+	}
+
+	/** CFS work for one tab runs one step at a time (review EEE-2): enable, disable and start imports never interleave. */
+	private cfsSerial<T>(tabId: string, fn: () => Promise<T>): Promise<T> {
+		const prev = this.cfsQueues.get(tabId) ?? Promise.resolve();
+		const next = prev.catch(() => undefined).then(fn);
+		const tail = next.catch(() => undefined);
+		this.cfsQueues.set(tabId, tail);
+		void tail.then(() => {
+			if (this.cfsQueues.get(tabId) === tail) {
+				this.cfsQueues.delete(tabId);
+			}
+		});
+		return next;
+	}
+
+	/** Still wanted: feeds on with this sentinel, and this broker connection still the tab's. */
+	private cfsCurrent(tabId: string, c: BrokerControl, sentinel: string): boolean {
+		return this.cfsSentinel(tabId) === sentinel && this.brokers.get(tabId) === c;
+	}
+
 	/**
 	 * Put the CFS credential into a connected broker: mint the host's token (az, never written
 	 * anywhere), import it under the tab's sentinel with GET-only bindings and the budget, allow
-	 * the two feed paths, and answer `credential.needed` with a fresh token from then on.
+	 * the two feed paths. Re-checked after each slow step: if feeds were turned off or the broker
+	 * changed meanwhile, the import is undone rather than left behind (review EEE-2).
 	 */
 	private async importCfs(tabId: string, c: BrokerControl, sentinel: string): Promise<void> {
-		if (!this.o.cfs) {
-			throw new RpcError(-32013, 'package feeds are unavailable (no az token source)');
+		const unsupported = this.cfsSupported();
+		if (unsupported) {
+			throw new RpcError(-32013, unsupported);
 		}
-		const token = await this.o.cfs.token();
+		const token = await this.o.cfs!.token();
+		if (!this.cfsCurrent(tabId, c, sentinel)) {
+			return;
+		}
 		await c.request('credential.import', cfsImportParams(sentinel, token), 30_000);
 		await c.request('policy.update', { removeAllow: ['cfs-npm', 'cfs-pypi'] }).catch(() => undefined);
 		await c.request('policy.update', { addAllow: cfsAllowRules() });
+		if (!this.cfsCurrent(tabId, c, sentinel)) {
+			await this.removeCfs(c);
+			return;
+		}
 		this.audit('tab.packages', 'imported', { tabId, feed: CFS_CREDENTIAL_ID, expiresAt: token.expiresAt });
 	}
 
-	private attachCfs(tabId: string, c: BrokerControl, sentinel: string): void {
+	/** Remove the feed rules and revoke the credential (sentinel rotated); throws if the broker didn't confirm. */
+	private async removeCfs(c: BrokerControl): Promise<void> {
+		await c.request('policy.update', { removeAllow: ['cfs-npm', 'cfs-pypi'] });
+		await c.request('credential.revoke', { id: CFS_CREDENTIAL_ID, rotateSentinel: true });
+	}
+
+	/** Answer the broker's `credential.needed` for cfs with a fresh host token, while feeds stay on with this sentinel. */
+	private attachCfsRefresh(tabId: string, c: BrokerControl, sentinel: string): void {
 		c.onNotification(n => {
 			const p = n.params as { id?: unknown } | null;
-			if (n.method !== 'credential.needed' || p?.id !== CFS_CREDENTIAL_ID || !this.o.cfs || this.cfsSentinel(tabId) !== sentinel) {
+			if (n.method !== 'credential.needed' || p?.id !== CFS_CREDENTIAL_ID || !this.o.cfs || !this.cfsCurrent(tabId, c, sentinel)) {
 				return;
 			}
 			void this.o.cfs.token()
@@ -722,7 +767,12 @@ export class Supervisor {
 				.then(() => this.audit('tab.packages', 'refreshed', { tabId, feed: CFS_CREDENTIAL_ID }))
 				.catch((e: Error) => this.cfsProblem(tabId, e));
 		});
-		void this.importCfs(tabId, c, sentinel).catch((e: Error) => this.cfsProblem(tabId, e));
+	}
+
+	/** At broker bring-up: refresh on demand, and import in the background (az may be slow or fail; the tab still starts). */
+	private attachCfs(tabId: string, c: BrokerControl, sentinel: string): void {
+		this.attachCfsRefresh(tabId, c, sentinel);
+		void this.cfsSerial(tabId, () => this.importCfs(tabId, c, sentinel)).catch((e: Error) => this.cfsProblem(tabId, e));
 	}
 
 	private cfsProblem(tabId: string, e: Error): void {
@@ -741,34 +791,47 @@ export class Supervisor {
 		if (typeof cfsIn !== 'boolean') {
 			throw new RpcError(-32602, 'cfs must be true or false');
 		}
-		const spec = this.spec(r);
-		const driver = this.driverFor(spec.template);
-		const c = this.brokers.get(r.tabId);
-		const before = this.cfsSentinel(r.tabId);
 		if (cfsIn) {
-			if (!this.o.cfs) {
-				throw new RpcError(-32013, 'package feeds are unavailable (no az token source)');
-			}
-			const sentinel = before ?? newCfsSentinel(randomBytes);
-			this.o.store.writeSide(r.tabId, 'packages', [{ feed: CFS_CREDENTIAL_ID, sentinel }]);
-			if (c) {
-				if (!before) {
-					this.attachCfs(r.tabId, c, sentinel);
-				} else {
-					await this.importCfs(r.tabId, c, sentinel);
-				}
-				await driver.installFeed?.(spec, sentinel);
-			}
-		} else {
-			this.o.store.writeSide(r.tabId, 'packages', []);
-			if (c) {
-				await c.request('policy.update', { removeAllow: ['cfs-npm', 'cfs-pypi'] }).catch(() => undefined);
-				await c.request('credential.revoke', { id: CFS_CREDENTIAL_ID, rotateSentinel: true }).catch(() => undefined);
-				await driver.installFeed?.(spec, undefined);
+			const unsupported = this.cfsSupported();
+			if (unsupported) {
+				throw new RpcError(-32013, unsupported);
 			}
 		}
-		this.audit('tab.packages', cfsIn ? 'enabled' : 'disabled', { tabId: r.tabId, feed: CFS_CREDENTIAL_ID, running: !!c });
-		return { cfs: cfsIn, applied: !!c };
+		return this.cfsSerial(r.tabId, async () => {
+			const spec = this.spec(r);
+			const driver = this.driverFor(spec.template);
+			// Only a running sandbox is touched (review EEE-4: sbx exec would start a stopped one
+			// without ensureRunning's checks); otherwise the setting applies at the next start.
+			const running = (await driver.runningSandboxes()).has(spec.sandboxName);
+			const c = running ? this.brokers.get(r.tabId) : undefined;
+			const before = this.cfsSentinel(r.tabId);
+			if (cfsIn) {
+				const sentinel = before ?? newCfsSentinel(randomBytes);
+				this.o.store.writeSide(r.tabId, 'packages', [{ feed: CFS_CREDENTIAL_ID, sentinel }]);
+				if (c) {
+					if (!before) {
+						this.attachCfsRefresh(r.tabId, c, sentinel);
+					}
+					await this.importCfs(r.tabId, c, sentinel);
+					await driver.installFeed?.(spec, sentinel);
+				}
+			} else {
+				this.o.store.writeSide(r.tabId, 'packages', []);
+				if (c) {
+					try {
+						await this.removeCfs(c);
+					} catch (e) {
+						// Fail closed (review EEE-2): the broker didn't confirm the removal, so the tab stops.
+						this.audit('tab.packages', 'disable-failed', { tabId: r.tabId, error: (e as Error).message.slice(0, 200) });
+						await this.stop(r).catch(() => undefined);
+						throw new RpcError(-32013, 'could not turn package feeds off in the running tab, so the tab was stopped');
+					}
+					await driver.installFeed?.(spec, undefined);
+				}
+			}
+			this.audit('tab.packages', cfsIn ? 'enabled' : 'disabled', { tabId: r.tabId, feed: CFS_CREDENTIAL_ID, running: !!c });
+			return { cfs: cfsIn, applied: !!c };
+		});
 	}
 
 	private async blockDestination(r: TabRecord, hostIn: unknown, portIn: unknown) {

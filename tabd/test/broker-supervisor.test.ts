@@ -363,12 +363,28 @@ test('B3 prompt text: tab named first, tab text quoted (no links, icons, bidi), 
 	assert.match(longText, /3 requests waiting\)\. Your answer covers every request held for this destination\./);
 });
 
-test('B4 CFS feeds: off by default; enabling imports the sentinel credential GET-only with a budget, on a running tab and every start; refresh on credential.needed; disabling revokes', async () => {
+test('B4 CFS feeds: off by default; enabling imports the sentinel credential GET-only with a budget, on a running tab and every start; refresh on credential.needed; disabling revokes', async t => {
 	let mints = 0;
-	const cfs = { token: async (): Promise<AzToken> => ({ value: `tok-${++mints}-0123456789abcdef`, expiresAt: Math.floor(Date.now() / 1000) + 3600 }) };
+	let gate: Promise<void> = Promise.resolve();
+	const cfs = { token: async (): Promise<AzToken> => {
+		await gate;
+		return { value: `tok-${++mints}-0123456789abcdef`, expiresAt: Math.floor(Date.now() / 1000) + 3600 };
+	} };
 	const { sup, driver, call, ws, audit } = setup('cfs', undefined, cfs);
 	await call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
 	const tabId = (await call('tab.claim', { workspace: { hostPath: ws } })).tab.metadata.name;
+	if ((BROKER_POLICY_SCHEMA.revision as number) < 7) {
+		// Review EEE-1: a broker whose credential.import drops `budget` is never given the token.
+		await assert.rejects(call('tab.packages.set', { tabId, cfs: true }), /revision 7/);
+		assert.deepEqual(await call('tab.packages.get', { tabId }), { cfs: false });
+		sup.shutdown();
+		t.skip('the import path needs broker policy schema revision 7');
+		return;
+	}
+	// A stopped tab: the setting is persisted only, nothing runs in the sandbox (review EEE-4).
+	assert.deepEqual(await call('tab.packages.set', { tabId, cfs: true }), { cfs: true, applied: false });
+	assert.equal(driver.feeds.length, 0);
+	await call('tab.packages.set', { tabId, cfs: false });
 	await call('tab.ensureRunning', { tabId });
 	assert.equal(driver.setup!.feedSentinel, undefined, 'off by default: no feed config');
 	assert.ok(!driver.brokerLog.some(l => l.method === 'credential.import'));
@@ -424,6 +440,21 @@ test('B4 CFS feeds: off by default; enabling imports the sentinel credential GET
 	assert.ok(driver.brokerLog.some(l => l.method === 'policy.update' && JSON.stringify(l.params?.removeAllow) === '["cfs-npm","cfs-pypi"]'));
 	assert.deepEqual(driver.brokerLog.find(l => l.method === 'credential.revoke')!.params, { id: 'cfs', rotateSentinel: true });
 	assert.equal(driver.feeds.at(-1), undefined);
+	// Review EEE-2: a start's import still waiting for az when feeds are turned off is undone,
+	// never left behind: enable, restart with az held, disable, then let az answer.
+	await call('tab.packages.set', { tabId, cfs: true });
+	await call('tab.stop', { tabId });
+	let release!: () => void;
+	gate = new Promise(r => release = r);
+	driver.brokerLog.length = 0;
+	await call('tab.ensureRunning', { tabId });
+	const off = call('tab.packages.set', { tabId, cfs: false });
+	release();
+	await off;
+	await new Promise(r => setTimeout(r, 50));
+	const last = driver.brokerLog.filter(l => ['credential.import', 'credential.revoke', 'policy.update'].includes(l.method)).at(-1)!;
+	assert.ok(last.method === 'credential.revoke' || (last.method === 'policy.update' && Array.isArray(last.params?.removeAllow)), `ends removed: ${JSON.stringify(driver.brokerLog.map(l => l.method))}`);
+	assert.ok(!driver.brokerLog.some((l, i) => l.method === 'policy.update' && Array.isArray(l.params?.addAllow) && !driver.brokerLog.slice(i).some(m => m.method === 'credential.revoke')), 'no allow rule outlives the disable');
 	await call('tab.stop', { tabId });
 	await call('tab.ensureRunning', { tabId });
 	assert.equal(driver.setup!.feedSentinel, undefined);
