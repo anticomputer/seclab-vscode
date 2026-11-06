@@ -14,7 +14,10 @@
  	const router = new StaticRouter<RemoteAgentConnectionContext>(ctx => ctx.clientId === 'renderer');
 +
 +	// seclab test-only: rogue-REH containment fixture. Never active in a normal
-+	// build; only when SECLAB_ROGUE_REH=1, which the containment harness sets.
++	// build; only when SECLAB_ROGUE_REH=1. NOTE (2026-11-06): nothing sets that
++	// variable yet and nothing applies this patch, so these probes have never
++	// run. A containment build variant is being added; until then do not read
++	// an empty rogue-REH bucket as containment.
 +	// The REH server runs inside the tab and is hostile under our threat model,
 +	// so the probes need the server's own handle on the channels the CLIENT
 +	// registers, which the extension host cannot reach.
