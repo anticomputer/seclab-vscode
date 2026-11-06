@@ -54,6 +54,9 @@ CREDENTIAL_KEY = re.compile(r"token|secret|passw|credential|api[_-]?key|private[
 URL_USERINFO = re.compile(r"(?:[A-Za-z][A-Za-z0-9+.-]*:|(?<![^\s\"'<(,=]))//"
                           r"(?:(?:[^/?#\s@:%]|%(?![3][aA])[0-9A-Fa-f]{2})*(?::|%3[aA])[^/?#\s@]*|[^/?#\s@:]{16,})"
                           r"@(?=[A-Za-z0-9\[])")
+# A plain top-level field name, as the provider data's `responseFields` accept: the only
+# kind of name an exception-route audit lists as is (review 14-1).
+FIELD_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
 def fail_closed(fn):
@@ -728,15 +731,17 @@ class SeclabAddon:
     def _top_level_names(resp: http.Response) -> list[str] | None:
         """The response's top-level JSON key names, for the exception-route audits: names only,
         never values, so the field allowlist can be measured and drift noticed. A name that is
-        itself token-shaped, or carries URL userinfo, is masked. None if the body isn't a strict
-        JSON object."""
+        itself token-shaped, or carries URL userinfo, is masked, and so is any name that isn't a
+        plain field name: never truncated, since a cut-down encoded value would slip past the
+        audit scrubber (review 14-1). None if the body isn't a strict JSON object."""
         try:
             doc = parse_strict(resp.get_content(strict=True) or b"")
         except (ValueError, StrictJSONError):
             return None
         if not isinstance(doc, dict):
             return None
-        return ["[token-shaped]" if find_minted(k) or URL_USERINFO.search(k) else k[:64]
+        return ["[token-shaped]" if find_minted(k) or URL_USERINFO.search(k)
+                else k if FIELD_NAME.fullmatch(k) else "[unusual-name]"
                 for k in sorted(doc)][:128]
 
     def _exception_response_check(self, resp: http.Response, exc=None):
