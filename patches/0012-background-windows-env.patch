@@ -213,7 +213,7 @@ new file mode 100644
 index 0000000..02f6036
 --- /dev/null
 +++ b/src/vs/platform/windows/electron-main/backgroundWindowsGuard.ts
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,132 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -302,11 +302,13 @@ index 0000000..02f6036
 +				const proto = Object.getPrototypeOf(contents);
 +				const origFocus = proto.focus;
 +				replace(proto, 'focus', orig => function (this: WebContents) { return appActive() ? orig.call(this) : undefined; });
++				// Docked, never detached: a detached DevTools window is created natively, not as a
++				// BrowserWindow, so it would escape click-through (review FFF-1).
 +				replace(proto, 'openDevTools', orig => function (this: WebContents, options?: unknown) {
-+					return orig.call(this, { mode: 'detach', ...(options && typeof options === 'object' ? options : {}), activate: false });
++					return orig.call(this, { ...(options && typeof options === 'object' ? options : {}), mode: 'bottom', activate: false });
 +				});
 +				replace(proto, 'toggleDevTools', () => function (this: WebContents) {
-+					return this.isDevToolsOpened() ? this.closeDevTools() : this.openDevTools({ mode: 'detach', activate: false });
++					return this.isDevToolsOpened() ? this.closeDevTools() : this.openDevTools({ mode: 'bottom', activate: false });
 +				});
 +				if (contents.focus === origFocus) {
 +					throw new Error('background windows guard: WebContents.focus not replaced');
@@ -321,7 +323,9 @@ index 0000000..02f6036
 +		// modal one activates the app). Each gives its safe answer: a message box its cancelId
 +		// (VS Code always sets one; review AAA), a file dialog "canceled". Logged on stderr.
 +		const cancelled = (name: string, options: { cancelId?: number; message?: unknown } | undefined) => {
-+			console.error(`[background windows] dialog not shown (${name}): ${String(options?.message ?? '').slice(0, 200)}`);
++			// One line per dialog: the message may be tab text (a remote extension's modal), so no
++			// control or line-separator character can start a forged guard line (review FFF-2).
++			console.error(`[background windows] dialog not shown (${name}): ${String(options?.message ?? '').replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, ' ').slice(0, 200)}`);
 +			return name.startsWith('showMessageBox') ? { response: options?.cancelId ?? 0, checkboxChecked: false } : { canceled: true, filePaths: [], filePath: '' };
 +		};
 +		const optionsOf = (a: unknown, b?: unknown) => (a instanceof BaseWindow ? b : a) as MessageBoxOptions & OpenDialogOptions & SaveDialogOptions;

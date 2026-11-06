@@ -235,10 +235,15 @@ function run(argv) {
 
 /** The editor's largest normal-layer window, or 0. */
 export function editorWindowId(pid: number): number {
-	const out = execFileSync('osascript', ['-l', 'JavaScript', '-e', WINDOW_LIST_JXA, String(pid)], { encoding: 'utf8' }); // fixture-lint: allow persistence -- read-only CGWindowList query (window ids for screencapture -l); no activation
-	const wins = JSON.parse(out) as Array<{ id: number; w: number; h: number }>;
+	const wins = editorWindows(pid);
 	wins.sort((a, b) => b.w * b.h - a.w * a.h);
 	return wins.length && wins[0].w > 200 ? wins[0].id : 0;
+}
+
+/** The editor's normal-layer windows (read-only CGWindowList query). */
+export function editorWindows(pid: number): Array<{ id: number; w: number; h: number }> {
+	const out = execFileSync('osascript', ['-l', 'JavaScript', '-e', WINDOW_LIST_JXA, String(pid)], { encoding: 'utf8' }); // fixture-lint: allow persistence -- read-only CGWindowList query (window ids for screencapture -l); no activation
+	return JSON.parse(out) as Array<{ id: number; w: number; h: number }>;
 }
 
 export interface BackgroundLaunch { pid: number; windowId: number; stoleFocus: boolean }
