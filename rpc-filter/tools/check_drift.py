@@ -116,6 +116,17 @@ def build_mapping(inv: dict, policy: dict) -> dict:
         entry = channels.get(name)
         record("chan:%s" % name,
                entry["verdict"] if entry else policy["default_verdict"], entry)
+    # (c2) Server-initiated pushes. These were previously skipped by name --
+    # the mapping ignored anything starting with `chan:` and the probe checker
+    # blanket-exempted the prefix -- so the deny verdict on
+    # remoteTerminal.onExecuteCommand sat in the policy, outside the digest,
+    # with nothing enforcing it. A verdict that no gate can see is a comment.
+    push_policy = policy.get("pushes") or {}
+    for push in inv["surfaces"]["c2_server_initiated_pushes"]["server_initiated_pushes"]:
+        entry = push_policy.get(push["key"])
+        record(push["key"],
+               entry["verdict"] if entry else policy["default_verdict"], entry)
+
     for sink in inv["surfaces"]["d_tab_supplied_data"]["upstream_sinks"]:
         entry = (policy.get("tab_data") or {}).get(sink["surface"])
         record("data:%s" % sink["surface"],
@@ -188,7 +199,7 @@ def check_keys(inv: dict, policy: dict) -> list:
     known_channels = {c["channel"] for c
                       in inv["surfaces"]["c_client_served_channels"]["client_served_channels"]}
     for name in policy.get("channels", {}):
-        if name in ("note", "server_initiated"):
+        if name == "note":
             continue
         if name not in known_channels:
             errors.append("policy.channels['%s'] matches no channel in the inventory." % name)
@@ -319,8 +330,9 @@ def check_invariants(inv: dict, policy: dict) -> list:
                 errors.append(
                     "%s.%s claims reduced residual impact but names no constraint."
                     % (sid, method))
-    for name, entry in (policy.get("channels") or {}).items():
-        if name in ("note", "server_initiated") or not isinstance(entry, dict):
+    for name, entry in list((policy.get("channels") or {}).items()) \
+            + list((policy.get("pushes") or {}).items()):
+        if name == "note" or not isinstance(entry, dict):
             continue
         if any(i in CREDENTIAL_IMPACTS for i in _residual(entry)) \
                 and entry.get("verdict") in REACHABLE:
@@ -397,6 +409,79 @@ def check_undeclared(inv: dict, policy: dict) -> list:
     return errors
 
 
+def check_enforcement(mapping: dict, policy: dict, repo_root: str) -> list:
+    """Every deny verdict must name code that refuses it, and that code must exist.
+
+    A verdict is a claim about runtime behaviour. Written down and checked by
+    nothing, it reads as assurance while changing no behaviour at all -- which
+    is exactly what happened to ``remoteTerminal.onExecuteCommand``: denied in
+    the policy, skipped by a name-based exemption in this file, and enforced
+    nowhere, while the increment claimed a tab could not execute host code.
+
+    Three things are checked, because each of the three failed independently at
+    some point in this project:
+
+    1. every key prefix carrying a ``deny`` has an entry in ``enforcement``;
+    2. the patch it names is in ``patches/series``, so it is actually applied;
+    3. the symbol it names appears in that patch, so the entry still points at
+       live code after a rewrite rather than at a function that was renamed.
+
+    It deliberately does not try to prove the code *runs*. That is what the
+    runtime probes are for; a static gate that claimed it would be one more
+    check that passes without asking the question.
+    """
+    errors = []
+    enforcement = policy.get("enforcement") or {}
+    prefixes = sorted((k for k in enforcement if k != "note"),
+                      key=len, reverse=True)
+
+    denied_prefixes = set()
+    for key, value in mapping.items():
+        if _verdict_of(value) != "deny":
+            continue
+        match = next((p for p in prefixes if key.startswith(p)), None)
+        if match is None:
+            errors.append(
+                "no enforcement point for denied surface '%s': add the prefix to "
+                "policy.enforcement naming the patch and symbol that refuses it."
+                % key)
+        else:
+            denied_prefixes.add(match)
+
+    series_path = os.path.join(repo_root, "patches", "series")
+    series = ""
+    if os.path.exists(series_path):
+        with open(series_path, encoding="utf-8") as fh:
+            series = fh.read()
+
+    for prefix in sorted(denied_prefixes):
+        entry = enforcement[prefix]
+        patch, symbol = entry.get("patch"), entry.get("symbol")
+        if not patch or not symbol:
+            errors.append("enforcement['%s'] must name both a patch and a symbol."
+                          % prefix)
+            continue
+        if patch not in series:
+            errors.append(
+                "enforcement['%s'] names patch '%s', which is not in patches/series, "
+                "so nothing applies it." % (prefix, patch))
+            continue
+        patch_path = os.path.join(repo_root, "patches", patch)
+        if not os.path.exists(patch_path):
+            errors.append("enforcement['%s'] names patch '%s', which does not exist."
+                          % (prefix, patch))
+            continue
+        with open(patch_path, encoding="utf-8", errors="replace") as fh:
+            body = fh.read()
+        if symbol not in body:
+            errors.append(
+                "enforcement['%s'] names symbol '%s', which does not appear in %s. "
+                "Either the enforcement moved and the entry is stale, or it was "
+                "removed and the deny verdict is now unenforced."
+                % (prefix, symbol, patch))
+    return errors
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--accept", action="store_true",
@@ -434,7 +519,9 @@ def main(argv=None) -> int:
     for name, check in (("keys", lambda: check_keys(inv, policy)),
                         ("undeclared", lambda: check_undeclared(inv, policy)),
                         ("invariants", lambda: check_invariants(inv, policy)),
-                        ("coverage", lambda: check_coverage(mapping))):
+                        ("coverage", lambda: check_coverage(mapping)),
+                        ("enforcement",
+                         lambda: check_enforcement(mapping, policy, REPO_ROOT))):
         errors = check()
         if errors:
             failures.append((name, errors))
