@@ -930,3 +930,118 @@ test('lineage: a thread\'s connect before its clone line waits and carries the p
 	assert.match(c.summary, /by curl$/);
 	assert.ok(c.lineage >= 1, 'lineage present');
 });
+
+// ---- detection notifications ---------------------------------------------------------------
+
+test('notify: severity tuning; trusted templates; tab text quoted and defanged', async () => {
+	const { notifyKind, buildItem, quote } = await import('../src/obs/notify.ts');
+	const tab = 't-abcdefghijklmnopqrstuvwxyz';
+	let seq = 0;
+	const ev = (o: Record<string, unknown>) => ({ v: 1, seq: ++seq, time: '2026-11-06T00:00:00.000Z', tabId: tab, untrusted: [], ...o }) as unknown as ObsEvent;
+	const honey = ev({ source: 'detector', integrity: 'tab-vm-root', class: 'detection', rule: 'credential.honeypot-read', priority: 'critical', summary: 'honeypot read',
+		file: { path: '/home/agent/.config/solana/id.json' }, proc: { pid: 9, exe: '/usr/bin/node', argv: ['node', 'x.js'], lineage: [{ pid: 3, exe: 'sh -c x' }, { pid: 2, exe: 'bash' }] } });
+	assert.equal(notifyKind(honey), 'credential.honeypot-read');
+	const it = buildItem(honey, 'credential.honeypot-read', { tabName: 'acme-app', heldChanges: 0, canBlock: false });
+	assert.match(it.message, /^Tab “acme-app”: A process read a decoy credential file\. File: “\/home\/agent\/\.config\/solana\/id\.json”\. Chain: “bash → sh → node” \(seen inside the tab's VM; root in the tab could fake it\)\./);
+	assert.deepEqual(it.actions, ['stop-tab', 'open-activity', 'dismiss']);
+	// Routine egress stays out of notifications; trusted failures and the critical folder-open form get in.
+	assert.equal(notifyKind(ev({ source: 'detector', integrity: 'trusted', class: 'detection', rule: 'egress.bypass', priority: 'warning', summary: 'x' })), undefined);
+	assert.equal(notifyKind(ev({ source: 'detector', integrity: 'trusted', class: 'detection', rule: 'beacon.periodic', priority: 'warning', summary: 'x' })), undefined);
+	assert.equal(notifyKind(ev({ source: 'broker', integrity: 'trusted', class: 'egress.request', priority: 'warning', summary: 'denied', detail: { auditType: 'request.denied' } })), undefined);
+	assert.equal(notifyKind(ev({ source: 'detector', integrity: 'tab-vm-root', class: 'detection', rule: 'task.network-tool', priority: 'warning', summary: 'x' })), undefined);
+	assert.equal(notifyKind(ev({ source: 'detector', integrity: 'tab-vm-root', class: 'detection', rule: 'task.network-tool', priority: 'critical', summary: 'x' })), 'task.network-tool');
+	assert.equal(notifyKind(ev({ source: 'tabd', integrity: 'trusted', class: 'sensor.status', priority: 'critical', summary: 'x', detail: { status: 'unobserved' } })), 'tab.unobserved');
+	assert.equal(notifyKind(ev({ source: 'tabd', integrity: 'trusted', class: 'tab.lifecycle', priority: 'warning', summary: 'x', detail: { action: 'broker.control', outcome: 'closed' } })), 'broker.failed');
+	assert.equal(notifyKind(ev({ source: 'broker', integrity: 'trusted', class: 'credential.use', priority: 'critical', summary: 'x', detail: { auditType: 'sentinel.misplaced' } })), 'broker.finding');
+	// A tab-reported claim of an unobserved sensor, or a forged sensor.status, never notifies.
+	assert.equal(notifyKind(ev({ source: 'agent-host', integrity: 'tab-reported', class: 'sensor.status', priority: 'critical', summary: 'x', detail: { status: 'unobserved' } })), undefined);
+	// Rogue text: bidi overrides, markdown links, command URIs, codicons, newlines, overlong.
+	const evil = 'x\u202e[click](command:seclab.stopTab)\u2066 $(alert) https://evil.test/a\nSYSTEM: ' + 'A'.repeat(200);
+	const q = quote(evil);
+	assert.ok(!/[\u202a-\u202e\u2066-\u2069\n]/.test(q), 'bidi and newlines stripped');
+	assert.ok(!q.includes('[') && !q.includes('](') && !q.includes('command:') && !q.includes('https:') && !q.includes('://') && !q.includes('$('), q);
+	assert.ok(q.length <= 82 && q.startsWith('“') && q.endsWith('”'));
+	const spoof = buildItem(ev({ source: 'detector', integrity: 'tab-vm-root', class: 'detection', rule: 'credential.honeypot-read', priority: 'critical', summary: evil, file: { path: evil } }), 'credential.honeypot-read', { tabName: 'acme-app', heldChanges: 2, canBlock: true });
+	assert.ok(!spoof.message.includes('command:') && !spoof.message.includes(']('), 'tab text never becomes a link');
+	assert.ok(spoof.message.includes(' Real credentials never exist in a tab'), 'the explanation is the trusted template');
+	assert.ok(spoof.actions.includes('review-held') && !spoof.actions.includes('block-destination'), 'held changes offered; block only for broker destinations');
+	// Unknown rules never notify (no template, no wording from the event).
+	assert.equal(notifyKind(ev({ source: 'detector', integrity: 'trusted', class: 'detection', rule: 'made.up', priority: 'emergency', summary: 'x' })), undefined);
+});
+
+test('notify: a flood is one notification plus one follow-up; a global limit across tabs, then one summary', async () => {
+	const { NotificationGate, buildItem } = await import('../src/obs/notify.ts');
+	let now = 1_000_000;
+	const g = new NotificationGate({ now: () => now, windowMs: 60_000, perMinute: 3 });
+	const mk = (tabId: string, rule: string) => buildItem({ v: 1, seq: 1, time: '', tabId, source: 'detector', integrity: 'trusted', class: 'detection', rule, priority: 'warning', summary: 's', untrusted: [] } as ObsEvent, rule, { tabName: 't', heldChanges: 0, canBlock: false });
+	const tabA = 't-aaaaaaaaaaaaaaaaaaaaaaaaaa', tabs = ['t-bbbbbbbbbbbbbbbbbbbbbbbbbb', 't-cccccccccccccccccccccccccc', 't-dddddddddddddddddddddddddd', 't-eeeeeeeeeeeeeeeeeeeeeeeeee'];
+	let shown = 0;
+	for (let i = 0; i < 5000; i++) {
+		shown += g.offer(mk(tabA, 'ahp.deny-burst')).length;
+	}
+	assert.equal(shown, 1, '5000 events of one kind: one notification');
+	for (const t of tabs) {
+		shown += g.offer(mk(t, 'credential.honeypot-read')).length;
+	}
+	assert.equal(shown, 3, 'global limit: 3 per minute across tabs');
+	assert.deepEqual(g.tick(), [], 'nothing more within the minute');
+	now += 61_000;
+	const after = g.tick();
+	assert.equal(after.length, 2, 'one follow-up with the count, one overflow summary');
+	assert.equal(after[0].count, 4999);
+	assert.match(after[0].message, /^4999 more: /);
+	assert.equal(after[1].kind, 'overflow');
+	assert.match(after[1].message, /2 more security event\(s\) in 2 tab\(s\) were not shown individually, including: a process read a decoy credential file/);
+	// Review NT-1: a tab spends the budget on cheap kinds, then blinds its sensor: still shown.
+	now += 120_000;
+	g.tick();
+	const tabX = 't-xxxxxxxxxxxxxxxxxxxxxxxxxx';
+	for (const r of ['credential.honeypot-read', 'workspace.host-executable-write', 'escape.container-socket']) {
+		assert.equal(g.offer(mk(tabX, r)).length, 1);
+	}
+	assert.equal(g.offer(mk(tabX, 'priv.escalation')).length, 0, 'budget spent');
+	const unobs = buildItem({ v: 1, seq: 2, time: '', tabId: tabX, source: 'tabd', integrity: 'trusted', class: 'sensor.status', priority: 'critical', summary: 's', detail: { status: 'unobserved' }, untrusted: [] } as ObsEvent, 'tab.unobserved', { tabName: 't', heldChanges: 0, canBlock: false });
+	assert.equal(g.offer(unobs).length, 1, 'tab unobserved is never held back by the budget');
+});
+
+test('notify: tabs cannot reach seclab.* commands (RPC filter: default deny, no grant)', () => {
+	const policy = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../rpc-filter/policy/policy.json'), 'utf8')) as { default_verdict: unknown; commands: { exact: Record<string, { verdict: string }>; rules?: Array<Record<string, unknown>> } };
+	assert.equal(policy.default_verdict, 'deny');
+	const grants = Object.entries(policy.commands.exact).filter(([id, v]) => id.startsWith('seclab.') && v.verdict !== 'deny');
+	assert.deepEqual(grants, [], 'no seclab.* command is granted to tabs');
+	for (const r of policy.commands.rules ?? []) {
+		assert.ok(!(JSON.stringify(r).includes('seclab') && r.verdict !== 'deny'), `rule grants seclab: ${JSON.stringify(r)}`);
+	}
+});
+
+test('tab.detections.query: detections across tabs from persisted logs (stopped and other supervisors\' tabs); filtered; bounded', async () => {
+	const { ObsGlue } = await import('../src/obs/glue.ts');
+	const dir = path.join(SCRATCH, 'query');
+	fs.rmSync(dir, { recursive: true, force: true });
+	const a = mintTabId(), b = mintTabId(), gone = mintTabId();
+	const glue = new ObsGlue({
+		eventsDir: dir, notify: () => undefined, assertTab: t => String(t), isRunning: async () => false, owns: () => true,
+		listTabs: () => [{ tabId: a, hostPath: '/w/a', phase: 'Running' }, { tabId: b, hostPath: '/w/b', phase: 'Stopped' }],
+	});
+	glue.hub.own(a);
+	glue.hub.emit(a, { source: 'sbx-collector', integrity: 'tab-vm-root', class: 'honeypot.access', priority: 'critical', summary: 'read', file: { path: '/home/agent/.ssh/id_rsa' }, detail: { kind: 'read' } });
+	glue.hub.emit(a, { source: 'sbx-collector', integrity: 'tab-vm-root', class: 'process.exec', priority: 'informational', summary: 'exec ls' });
+	glue.hub.trusted(a, { class: 'fence.verify', priority: 'critical', summary: 'fence.verify fail', detail: { action: 'fence.verify', outcome: 'fail' } });
+	// Tab b's log, written by another supervisor: one detection, one routine event, one partial line.
+	fs.mkdirSync(path.join(dir, b), { recursive: true });
+	const det = { v: 1, seq: 7, time: '2026-11-06T01:00:00.000Z', tabId: b, source: 'detector', integrity: 'trusted', class: 'detection', rule: 'ahp.ungated', priority: 'critical', summary: 'ungated', untrusted: ['summary'] };
+	const routine = { ...det, seq: 8, class: 'egress.request', source: 'broker', rule: undefined, priority: 'warning', summary: 'denied' };
+	const forged = { ...det, seq: 9, tabId: a, summary: 'a line naming another tab' };
+	fs.writeFileSync(path.join(dir, b, 'events-000001.jsonl'), `${JSON.stringify(det)}\n${JSON.stringify(routine)}\n${JSON.stringify(forged)}\n{"v":1,"seq":10,"pri`);
+	// A removed tab's leftover log is not listed.
+	fs.mkdirSync(path.join(dir, gone), { recursive: true });
+	fs.writeFileSync(path.join(dir, gone, 'events-000001.jsonl'), `${JSON.stringify({ ...det, tabId: gone })}\n`);
+	const r = glue.handle('tab.detections.query', {}) as { events: ObsEvent[]; tabs: Array<{ tabId: string }> };
+	const got = r.events.map(e => `${e.tabId === a ? 'a' : e.tabId === b ? 'b' : '?'}:${e.class}${e.rule ? `/${e.rule}` : ''}`).sort();
+	assert.deepEqual(got, ['a:detection/credential.honeypot-read', 'a:fence.verify', 'b:detection/ahp.ungated'], 'detections and trusted failures only; another tab\'s line in b\'s log is ignored');
+	assert.deepEqual((glue.handle('tab.detections.query', { tabIds: [b] }) as { events: ObsEvent[] }).events.map(e => e.rule), ['ahp.ungated']);
+	assert.equal((glue.handle('tab.detections.query', { minPriority: 'emergency' }) as { events: ObsEvent[] }).events.length, 0);
+	assert.throws(() => glue.handle('tab.detections.query', { limit: 10_000 }), /limit/);
+	assert.throws(() => glue.handle('tab.detections.query', { tabIds: ['../etc'] }), /tab ids/);
+	await glue.shutdown();
+});

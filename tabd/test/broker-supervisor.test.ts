@@ -21,7 +21,7 @@ const SCRATCH = path.resolve(import.meta.dirname, '../../.work/test-scratch/brok
 const PEM = '-----BEGIN CERTIFICATE-----\nZXhhbXBsZSBvbmx5\n-----END CERTIFICATE-----\n';
 
 /** Fake broker: records methods and params, answers like the real one. */
-function fakeBroker(tabId: string, log: Array<{ method: string; params?: Record<string, unknown> }>, opts: { badCa?: boolean; rejectPolicy?: boolean; tail?: unknown[] } = {}, onStdout?: (s: PassThrough) => void) {
+function fakeBroker(tabId: string, log: Array<{ method: string; params?: Record<string, unknown> }>, opts: { badCa?: boolean; rejectPolicy?: boolean; tail?: unknown[]; denyRules?: boolean } = {}, onStdout?: (s: PassThrough) => void) {
 	const proc = new EventEmitter() as unknown as ChildProcessWithoutNullStreams;
 	const stdin = new PassThrough(), stdout = new PassThrough();
 	Object.assign(proc, { stdin, stdout, stderr: new PassThrough(), kill: () => proc.emit('exit', null) });
@@ -36,7 +36,7 @@ function fakeBroker(tabId: string, log: Array<{ method: string; params?: Record<
 			log.push({ method: req.method, params: req.params });
 			const reply = (result: unknown) => stdout.write(JSON.stringify({ jsonrpc: '2.0', id: req.id, result }) + '\n');
 			switch (req.method) {
-				case 'broker.hello': reply({ protocol: BROKER_PROTOCOL, version: '0.3.0', tabId, engine: 'x', engineVersion: '1', policySchema: { ...BROKER_POLICY_SCHEMA }, capabilities: {} }); break;
+				case 'broker.hello': reply({ protocol: BROKER_PROTOCOL, version: '0.3.0', tabId, engine: 'x', engineVersion: '1', policySchema: { ...BROKER_POLICY_SCHEMA }, capabilities: opts.denyRules ? { denyRules: true } : {} }); break;
 				case 'health': reply({ status: 'ok' }); break;
 				case 'policy.load':
 					if (opts.rejectPolicy) {
@@ -59,7 +59,7 @@ class BrokerDriver implements Driver {
 	running = new Set<string>();
 	setup: BrokerSetup | undefined;
 	brokerLog: Array<{ method: string; params?: Record<string, unknown> }> = [];
-	opts: { badCa?: boolean; rejectPolicy?: boolean; tail?: unknown[] } = {};
+	opts: { badCa?: boolean; rejectPolicy?: boolean; tail?: unknown[]; denyRules?: boolean } = {};
 	brokerOut: PassThrough | undefined;
 	async probe() {
 		return { name: 'fake', available: true, capabilities: { isolationClass: 'namespaces', networkFence: 'internal-network', liveMounts: false, holdAndResume: false, fileWatch: 'native', sameAbsolutePathMount: true, writeBack: 'ungated' } as const };
@@ -183,6 +183,36 @@ test('broker audit: replayed and live events become trusted tab events; deduped,
 	const agg = after.find(e => e.detail?.auditType === 'request.allowed' && e.detail.count === 2);
 	assert.ok(agg, 'aggregate emitted with count');
 	assert.match(agg.summary, /×2 more/);
+	sup.shutdown();
+});
+
+test('tab.egress.block: refused without broker deny rules; with them, a deny rule now and on every later start; input checked', async () => {
+	const { sup, driver, call, ws, audit } = setup('block');
+	await call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	const tabId = (await call('tab.claim', { workspace: { hostPath: ws } })).tab.metadata.name;
+	await call('tab.ensureRunning', { tabId });
+	assert.equal((await call('tab.get', { tabId })).tab.status.brokerCapabilities.denyRules, undefined);
+	await assert.rejects(call('tab.egress.block', { tabId, host: 'c2.example', port: 443 }), /cannot block destinations/, 'no button that does nothing');
+	await call('tab.stop', { tabId });
+	driver.opts = { denyRules: true };
+	await call('tab.ensureRunning', { tabId });
+	assert.equal((await call('tab.get', { tabId })).tab.status.brokerCapabilities.denyRules, true);
+	for (const host of ['c2.example/x', 'a b', '*.example', 'x'.repeat(260), '[evil](command:x)']) {
+		await assert.rejects(call('tab.egress.block', { tabId, host }), /exact host/, host);
+	}
+	await assert.rejects(call('tab.egress.block', { tabId, host: 'c2.example', port: 70000 }), /port/);
+	const r = await call('tab.egress.block', { tabId, host: 'C2.Example', port: 443 });
+	assert.match(r.rule, /^user-block-[0-9a-f]{16}$/);
+	const upd = driver.brokerLog.find(l => l.method === 'policy.update')!;
+	assert.deepEqual(upd.params, { addDeny: [{ id: r.rule, host: 'c2.example', ports: [443] }] });
+	await call('tab.egress.block', { tabId, host: 'c2.example', port: 443 });
+	assert.equal(driver.brokerLog.filter(l => l.method === 'policy.update').length, 1, 'idempotent');
+	assert.ok(audit.some(a => a.includes('"tab.egress.block"')));
+	// The next start carries the block in the policy itself.
+	await call('tab.stop', { tabId });
+	await call('tab.ensureRunning', { tabId });
+	const loads = driver.brokerLog.filter(l => l.method === 'policy.load');
+	assert.deepEqual((loads.at(-1)!.params!.policy as Record<string, unknown>).deny, [{ id: r.rule, host: 'c2.example', ports: [443] }]);
 	sup.shutdown();
 });
 

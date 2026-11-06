@@ -388,6 +388,10 @@ export function removeRunResources(runDir: string, m: RunManifest = readManifest
 			spawnSync('docker', ['rm', '-f', ...cs], { stdio: 'ignore' });
 		}
 		spawnSync('docker', ['network', 'rm', `seclab-${t}-net`], { stdio: 'ignore' });
+		// Every other network labelled for this tab (e.g. a sbx tab's broker egress network).
+		for (const n of dockerLines(['network', 'ls', '--filter', `label=seclab.tab=${t}`, '--format', '{{.Name}}']) ?? []) {
+			spawnSync('docker', ['network', 'rm', n], { stdio: 'ignore' });
+		}
 		spawnSync('docker', ['volume', 'rm', `seclab-${t}-home`], { stdio: 'ignore' });
 	}
 	for (const c of m.containers ?? []) {

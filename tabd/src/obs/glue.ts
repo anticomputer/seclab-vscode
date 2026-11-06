@@ -3,11 +3,13 @@
 // core stays small. Spec: docs/tabd/PROTOCOL.md §3-4, docs/tabd/EVENTS.md.
 
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { PolicyLogEntry, SensorHooks } from '../drivers/types.ts';
 import { BrokerAuditFeed, type AuditControl } from './broker-audit.ts';
 import type { FalcoSensor } from './falco.ts';
 import { LineageCorrelator, type Attribution } from './lineage.ts';
-import { ObsHub, type Observation } from './hub.ts';
+import { listSegments, ObsHub, segName, type Observation } from './hub.ts';
 import { CollectorSession } from './sbx-collector.ts';
 import { CLASSES, isTabId, PRIORITIES, priorityRank, SOURCES, weakestIntegrity, type EventClass, type Integrity, type ObsEvent, type Priority } from './schema.ts';
 import { WorkspaceWatcher } from './workspace-watch.ts';
@@ -19,6 +21,17 @@ export const POLICY_POLL_MS = 10_000;
 export const MAX_SUBSCRIPTIONS = 16;
 export const MAX_REPORT_EVENTS = 64;
 export const MAX_TAIL = 1000;
+/** Cross-tab detection query: at most this many events, reading at most this much log per tab. */
+export const MAX_QUERY = 500;
+const QUERY_BYTES_PER_TAB = 16 << 20;
+
+/** Events for the cross-tab summary: detections, and trusted failures worth a user's attention. */
+function isNotable(e: ObsEvent, minRank: number): boolean {
+	if (!(PRIORITIES as readonly string[]).includes(e.priority) || priorityRank(e.priority) > minRank) {
+		return false;
+	}
+	return e.class === 'detection' || (e.integrity === 'trusted' && (e.class === 'fence.verify' || e.class === 'tab.lifecycle' || (e.class === 'sensor.status' && e.detail?.status === 'unobserved')));
+}
 /** Broker events that get a lineage attribution (requests with a destination). */
 const ATTRIBUTED = /^(?:request\.allowed|request\.denied|request\.denied_unprompted|approval\.requested|upstream\.blocked|credential\.injected|sentinel\.misplaced|model\.call|model\.denied)$/;
 const ATTRIBUTION_DELAY_MS = 600;
@@ -57,6 +70,8 @@ export interface ObsGlueOptions {
 	readonly isRunning: (tabId: string) => Promise<boolean>;
 	/** Persist this tab's log (this supervisor holds the lease). */
 	readonly owns: (tabId: string) => boolean;
+	/** Every tab in the state directory (running or stopped), for the cross-tab detection query. */
+	readonly listTabs?: () => Array<{ tabId: string; hostPath: string; phase: string }>;
 	/** OCI host sensor (Falco), when the OCI driver is in use. */
 	readonly hostSensor?: (hub: ObsHub) => FalcoSensor;
 }
@@ -135,6 +150,7 @@ export class ObsGlue {
 				return { events: this.hub.tail(tabId, limit, before as number | undefined), observation: this.hub.observation(tabId) };
 			}
 			case 'tab.events.report': return this.report(p);
+			case 'tab.detections.query': return this.queryDetections(p);
 			case 'tab.observe': {
 				const tabId = this.o.assertTab(p.tabId);
 				if (p.mode !== 'default' && p.mode !== 'deep') {
@@ -146,6 +162,87 @@ export class ObsGlue {
 			}
 			default: return undefined;
 		}
+	}
+
+	/**
+	 * Detections and other notable events across every tab this state directory knows, running
+	 * or stopped, read from the persisted per-tab logs (whichever supervisor wrote them). For the
+	 * Tab Manager's cross-tab summary. Read-only; bounded per tab and in total.
+	 */
+	private queryDetections(p: Record<string, unknown>) {
+		const min = p.minPriority === undefined ? 'warning' : p.minPriority;
+		if (typeof min !== 'string' || !(PRIORITIES as readonly string[]).includes(min)) {
+			throw new ObsParamError('invalid minPriority');
+		}
+		const limit = p.limit === undefined ? 200 : p.limit;
+		if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > MAX_QUERY) {
+			throw new ObsParamError(`limit must be 1..${MAX_QUERY}`);
+		}
+		let only: Set<string> | undefined;
+		if (p.tabIds !== undefined) {
+			if (!Array.isArray(p.tabIds) || p.tabIds.length > 64 || !p.tabIds.every(isTabId)) {
+				throw new ObsParamError('tabIds must be up to 64 tab ids');
+			}
+			only = new Set(p.tabIds as string[]);
+		}
+		const minRank = priorityRank(min as Priority);
+		const tabs = (this.o.listTabs?.() ?? []).filter(t => !only || only.has(t.tabId)).slice(0, 64);
+		const out: ObsEvent[] = [];
+		for (const t of tabs) {
+			out.push(...this.readNotable(t.tabId, minRank));
+		}
+		out.sort((a, b) => b.time.localeCompare(a.time) || b.seq - a.seq);
+		return { events: out.slice(0, limit), tabs };
+	}
+
+	/** A tab's notable events from its log (newest segments first, at most QUERY_BYTES_PER_TAB), plus this supervisor's unflushed ring. */
+	private readNotable(tabId: string, minRank: number): ObsEvent[] {
+		const live = this.hub.tail(tabId, MAX_TAIL).filter(e => isNotable(e, minRank));
+		const dir = this.o.eventsDir ? path.join(this.o.eventsDir, tabId) : undefined;
+		if (!dir) {
+			return live;
+		}
+		const found: ObsEvent[] = [];
+		const seen = new Set(live.map(e => e.seq));
+		let budget = QUERY_BYTES_PER_TAB;
+		for (const n of listSegments(dir).reverse()) {
+			if (budget <= 0 || found.length >= MAX_QUERY) {
+				break;
+			}
+			let text: string;
+			try {
+				const fd = fs.openSync(path.join(dir, segName(n)), fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+				try {
+					const size = fs.fstatSync(fd).size;
+					const len = Math.min(size, budget);
+					const buf = Buffer.alloc(len);
+					fs.readSync(fd, buf, 0, len, size - len);
+					budget -= len;
+					text = buf.toString('utf8');
+				} finally {
+					fs.closeSync(fd);
+				}
+			} catch {
+				continue;
+			}
+			// A partial first line (budget cut, or a writer mid-append) fails to parse and is skipped.
+			for (const line of text.split('\n')) {
+				if (!line.includes('"priority"')) {
+					continue;
+				}
+				let e: ObsEvent;
+				try {
+					e = JSON.parse(line) as ObsEvent;
+				} catch {
+					continue;
+				}
+				if (e && typeof e === 'object' && e.tabId === tabId && typeof e.seq === 'number' && typeof e.time === 'string' && !seen.has(e.seq) && isNotable(e, minRank)) {
+					seen.add(e.seq);
+					found.push(e);
+				}
+			}
+		}
+		return [...live, ...found];
 	}
 
 	private subscribe(p: Record<string, unknown>) {
