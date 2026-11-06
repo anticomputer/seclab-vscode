@@ -9,7 +9,7 @@ from seclab_broker.core import Broker, RpcError
 from seclab_broker.credentials import (CredentialStore, b64_cores, encoded_variants,
                                        header_has_sentinel, infer_inject, new_sentinel)
 from seclab_broker.netguard import deny_reason
-from seclab_broker.policy import Binding, Policy, PolicyError, RequestView
+from seclab_broker.policy import Binding, Inject, Policy, PolicyError, RequestView
 from seclab_broker.scanner import find_minted
 
 # Canary: deliberately NOT shaped like any real provider token.
@@ -365,6 +365,84 @@ def test_unconfirmed_import_cannot_derive():
     from seclab_broker.policy import parse_derive
     with pytest.raises(PolicyError):
         s.import_credential("imp", CANARY, None, [], [], None, {"kind": "host"}, parse_derive([DERIVE]))
+
+
+def test_import_budget_has_policy_accounting():
+    """Revision 7: credential.import takes `budget`, accounted like a policy credential's;
+    usage is keyed by id, so a re-import replaces the cap but never resets usage."""
+    bind = [{"host": "pkgs.example.test", "path": "/feed/**", "methods": ["GET"]}]
+    inject = {"header": "Authorization", "fmt": "Basic {base64:cfs:{value}}"}
+    sentinel = "SECLAB_SNTL_" + "s" * 40
+    imp = {"id": "cfs", "value": CANARY, "sentinel": sentinel, "bind": bind, "inject": inject,
+           "provider": "azure-devops", "budget": {"requests": 2, "bytes": 100}}
+    b = Broker()
+    assert b.dispatch("credential.import", imp)["sentinel"] == sentinel
+    c = b.creds.get("cfs")
+    assert c.budget == (2, 100) and b.credential_budget_exceeded(c) is None
+    b.charge_credential(c, requests=2, nbytes=10)
+    assert b.credential_budget_exceeded(c) == ("cfs", "request budget exhausted")
+    child = b.creds.derive(c, "seclab-canary-derived-0000000000000000", "pattern")
+    assert b.credential_budget_exceeded(child) == ("cfs", "request budget exhausted")
+    assert b.dispatch("health", {})["credentialBudgets"] == [
+        {"id": "cfs", "requests": 2, "bytes": 10, "maxRequests": 2, "maxBytes": 100}]
+    # credential.provide (a refresh) keeps the cap; a re-import keeps usage.
+    b.dispatch("credential.provide", {"id": "cfs", "value": CANARY + "2"})
+    assert b.creds.get("cfs").budget == (2, 100)
+    b.dispatch("credential.import", dict(imp, budget={"requests": 3}))
+    c = b.creds.get("cfs")
+    assert c.sentinel == sentinel and c.budget == (3, None) and b.credential_budget_exceeded(c) is None
+    b.charge_credential(c, requests=1)
+    assert b.credential_budget_exceeded(c) == ("cfs", "request budget exhausted")
+    b.dispatch("credential.revoke", {"id": "cfs"})
+    b.dispatch("credential.import", {k: v for k, v in imp.items() if k != "budget"})
+    assert b.creds.get("cfs").budget is None and b.credential_usage["cfs"].requests == 3
+    assert b.dispatch("health", {})["credentialBudgets"] == []
+    # An unconfirmed import may carry one: it only denies.
+    b.dispatch("credential.import", {"id": "imp", "value": CANARY + "3", "budget": {"requests": 0}})
+    assert b.credential_budget_exceeded(b.creds.get("imp")) == ("imp", "request budget exhausted")
+    # Schema and the websocket byte-cap rule, on bind, proposedBind and derive.
+    ws = dict(bind[0], websocket=True)
+    derive_ws = dict(DERIVE, bind=[dict(DERIVE["bind"][0], websocket=True)])
+    for bad in ({"budget": {"requests": -1}}, {"budget": {"bytes": "1"}}, {"budget": {"requests": 1, "x": 1}},
+                {"bind": [ws], "budget": {"bytes": 1}},
+                {"bind": bind, "proposedBind": [ws], "budget": {"bytes": 1}},
+                {"derive": [derive_ws], "budget": {"bytes": 1}}):
+        with pytest.raises(RpcError):
+            b.dispatch("credential.import", dict(imp, id="bad", sentinel="SECLAB_SNTL_" + "b" * 40, **bad))
+    assert b.creds.get("bad") is None
+    b.dispatch("credential.import", dict(imp, id="ok", sentinel="SECLAB_SNTL_" + "o" * 40, bind=[ws],
+                                         budget={"requests": 5}))
+
+
+def test_approval_cannot_confirm_a_websocket_binding_on_a_byte_budget():
+    """Revision 7: a byte cap can't hold on WebSocket messages, so an approval can't add a
+    websocket binding to a byte-budgeted credential either."""
+    async def go(budget):
+        b = Broker()
+        b.rpc_policy_load({"policy": {"version": 1, "prompt": {"timeoutSeconds": 5}}})
+        notes = []
+        b.add_sink(lambda m, p: notes.append((m, p)))
+        b.dispatch("tab.event", {"kind": "userAction"})
+        b.dispatch("credential.import", {"id": "imp", "value": CANARY, "budget": budget})
+        req = RequestView("https", "api.example.com", 443, "GET", "/socket", "")
+        inject = Inject.from_json({"header": "Authorization", "fmt": "Bearer {value}"})
+        t = asyncio.create_task(b.ask_binding(req, b.creds.get("imp"), inject))
+        await asyncio.sleep(0.01)
+        aid = [p for m, p in notes if m == "approval.requested"][0]["approvalId"]
+        binding = {"host": "api.example.com", "path": "/socket", "methods": ["GET"], "websocket": True,
+                   "inject": {"header": "Authorization", "fmt": "Bearer {value}"}}
+        try:
+            b.dispatch("approval.decide", {"approvalId": aid, "decision": "allow-tab", "binding": binding})
+            err = None
+        except RpcError as e:
+            err = str(e)
+            b.dispatch("approval.decide", {"approvalId": aid, "decision": "deny"})
+        await t
+        return err, b.creds.get("imp")
+    err, cred = asyncio.run(go({"bytes": 100}))
+    assert err and "websocket" in err and not cred.bindings and not cred.confirmed
+    err, cred = asyncio.run(go({"requests": 5}))
+    assert err is None and cred.confirmed and cred.bindings[0].websocket
 
 
 def test_r7_derived_children_never_outlive_their_parent():

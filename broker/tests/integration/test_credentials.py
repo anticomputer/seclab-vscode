@@ -408,3 +408,38 @@ def test_cfs_feed_credential_is_get_only_budgeted_and_audited(pod, ctl):
     ctl.wait_note("audit.event", lambda e: e["type"] == "credential.budget_exceeded" and e["budgetId"] == "cfs",
                   since=mark, timeout=10)
     assert ctl.notes_since(mark, "approval.requested") == []
+
+
+def test_cfs_enabled_on_a_running_tab_by_import_with_budget(pod, ctl):
+    """Revision 7: a supervisor enables a budgeted credential on a running tab with
+    credential.import (host-chosen sentinel, bind, budget) and policy.update addAllow; the
+    budget holds exactly as for a policy credential, and a re-import never resets it."""
+    feed = "/github-cfs/GitHubCFS/_packaging/github-cfs-oss/npm/registry"
+    pod.load({"prompt": {"timeoutSeconds": 10}})
+    value = "seclab-canary-cfs-" + secrets.token_hex(16)
+    pod.canaries["cfs-import"] = value
+    sentinel = "SECLAB_SNTL_" + secrets.token_hex(20)
+    imp = {"id": "cfs-run", "value": value, "sentinel": sentinel, "provider": "azure-devops",
+           "inject": {"header": "Authorization", "fmt": "Basic {base64:cfs:{value}}"},
+           "bind": [{"host": "api.example.test", "path": feed + "/**", "methods": ["GET"]}],
+           "budget": {"requests": 2}}
+    assert ctl.call("credential.import", imp) == {"id": "cfs-run", "sentinel": sentinel, "confirmed": True}
+    ctl.call("policy.update", {"addAllow": [{"id": "cfs-npm", "host": "api.example.test", "methods": ["GET"],
+                                             "path": feed + "/**"}]})
+    basic = "Authorization: Basic " + base64.b64encode(f"cfs:{sentinel}".encode()).decode()
+    real = sha("Basic " + base64.b64encode(f"cfs:{value}".encode()).decode())
+    for pkg in ("left-pad", "is-odd"):
+        r = pod.curl(f"https://api.example.test{feed}/{pkg}", "-H", basic)
+        assert r.code == 200 and r.json()["auth_sha256"] == real
+        pod.assert_no_canary(r.body)
+    h = [x for x in ctl.call("health", {})["credentialBudgets"] if x["id"] == "cfs-run"]
+    assert len(h) == 1 and h[0]["requests"] == 2 and h[0]["maxRequests"] == 2
+    mark = ctl.mark()
+    r = pod.curl(f"https://api.example.test{feed}/is-even", "-H", basic)
+    assert r.code == 429 and "budget" in r.body
+    ctl.wait_note("audit.event", lambda e: e["type"] == "credential.budget_exceeded" and e["budgetId"] == "cfs-run",
+                  since=mark, timeout=10)
+    assert ctl.notes_since(mark, "approval.requested") == []
+    ctl.call("credential.import", imp)
+    assert pod.curl(f"https://api.example.test{feed}/is-number", "-H", basic).code == 429
+    assert len([x for x in pod.seen() if x["auth_sha256"] == real]) == 2

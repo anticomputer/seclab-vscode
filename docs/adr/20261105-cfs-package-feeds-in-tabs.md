@@ -121,6 +121,13 @@ from it counts against it too. The audit log records every credentialed
 response as `credential.used` (`credentialId`, `status`, `respBytes`, host and
 path), so ingestions are attributable to a tab.
 
+From revision 7, `credential.import` takes the same `budget`, so tabd can
+enable CFS on a running tab: it imports `cfs` with its bindings, budget and a
+host-chosen sentinel (so the tab's `.npmrc` stays valid across restarts), then
+adds the two feed rules with `policy.update addAllow`. Usage is keyed by
+credential id, so a re-import never resets what was spent
+(`test_cfs_enabled_on_a_running_tab_by_import_with_budget`).
+
 **6. Trusted provider table entry** (tabd product data):
 - resource `https://pkgs.dev.azure.com/github-cfs/GitHubCFS`;
 - token source `az` with the tenant and resource above;
