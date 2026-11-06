@@ -368,6 +368,31 @@ prune_superseded_images() {
 	"${SECLAB_NODE:-node}" "$ROOT/test/clean-host.ts" --superseded-images >/dev/null 2>&1 || true
 }
 
+# The 7-day rule (EDR pin-age-cooldown): no register pin younger than the feed's hold. Network.
+# GITHUB_TOKEN (CI) only raises the GitHub API rate limit. npm publish dates: CI reads the public
+# registry (its only transport); locally they come from the CFS feed via `gh cfs -- npm view`
+# (gh cfs injects the credential; it is never in argv or logs). No fallback to npmjs.
+lint_pin_age() {
+	local dates="" name version t
+	if [[ -z "${CI:-}" ]]; then
+		mkdir -p "$ROOT/.work"
+		dates="$ROOT/.work/pin-age-npm-dates.json"
+		printf '{}' > "$dates"
+		local pins
+		pins="$(git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/pin-age.ts --list-npm -)"
+		if [[ -n "$pins" ]]; then
+			gh cfs doctor --auth >/dev/null 2>&1 || { echo "pin-age: npm pins are dated through GitHub CFS, and CFS auth failed: run 'az login', then 'gh cfs doctor --auth'" >&2; exit 1; }
+			while read -r name version; do
+				[[ "$name" =~ ^(@[a-z0-9._-]+/)?[a-z0-9._-]+$ && "$version" =~ ^[0-9A-Za-z.+-]+$ ]] || { echo "pin-age: bad npm pin $name $version" >&2; exit 1; }
+				t="$(gh cfs -- npm view "$name" time --json 2>/dev/null | jq -r --arg v "$version" '.[$v] // empty')" || t=""
+				jq --arg k "$name@$version" --arg t "$t" 'if $t == "" then . else .[$k] = $t end' "$dates" > "$dates.new" && mv "$dates.new" "$dates"
+			done <<<"$pins"
+		fi
+	fi
+	git -C "$ROOT" ls-files -z | docker run -i --rm -e GITHUB_TOKEN -e CI -v "$ROOT:/repo:ro" ${dates:+-v "$dates:/npm-dates.json:ro"} -w /repo "$(node_image)" \
+		node build/pin-age.ts "$@" ${dates:+--npm-dates /npm-dates.json} -
+}
+
 case "${1:-help}" in
 	build)
 		shift
@@ -451,8 +476,7 @@ case "${1:-help}" in
 			source) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-source.ts ;;
 			# The 7-day rule (EDR pin-age-cooldown): no register pin younger than the feed's hold. Network;
 			# GITHUB_TOKEN (CI) only raises the GitHub API rate limit.
-			pin-age) shift
-				git -C "$ROOT" ls-files -z | docker run -i --rm -e GITHUB_TOKEN -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/pin-age.ts "$@" - ;;
+			pin-age) shift; lint_pin_age "$@" ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	docs)

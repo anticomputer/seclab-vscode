@@ -10,7 +10,7 @@ const scratch = path.join(import.meta.dirname, '..', '..', '.work', 'test-scratc
 const sha = 'sha512-' + 'A'.repeat(86) + '==';
 const upstream = { name: 'x', lockfileVersion: 3, packages: {
 	'': { name: 'x' },
-	'node_modules/a': { version: '1.0.0', resolved: 'https://registry.npmjs.org/a/-/a-1.0.0.tgz', integrity: sha },
+	'node_modules/a': { version: '1.0.0', resolved: 'https://registry.npmjs.org/a/-/a-1.0.0.tgz', integrity: sha }, // public-registry: fixture lockfile data, never fetched
 	'node_modules/@s/b': { version: '2.0.0', dev: true },
 	'packageMocks/keytar': { version: '7.9.0' },
 } };
@@ -29,7 +29,7 @@ const fill = (mut: (p: Record<string, Record<string, unknown>>) => void) => {
 test('lock-fill --verify: only integrity and the canonical resolved may be added', () => {
 	try {
 		assert.equal(verify(upstream).status, 0, 'unchanged passes');
-		assert.equal(verify(fill(p => { p['node_modules/@s/b'].integrity = sha; p['node_modules/@s/b'].resolved = 'https://registry.npmjs.org/@s/b/-/b-2.0.0.tgz'; })).status, 0, 'a proper fill passes');
+		assert.equal(verify(fill(p => { p['node_modules/@s/b'].integrity = sha; p['node_modules/@s/b'].resolved = 'https://registry.npmjs.org/@s/b/-/b-2.0.0.tgz'; })).status, 0, 'a proper fill passes'); // public-registry: fixture lockfile data, never fetched
 		assert.equal(verify(fill(p => { p['node_modules/@s/b'].integrity = 'sha1-abc'; })).status, 1, 'non-sha512 refused');
 		assert.equal(verify(fill(p => { p['node_modules/@s/b'].integrity = sha; p['node_modules/@s/b'].resolved = 'https://evil.example.test/b.tgz'; })).status, 1, 'non-canonical resolved refused');
 		assert.equal(verify(fill(p => { p['node_modules/a'].integrity = 'sha512-' + 'B'.repeat(86) + '=='; })).status, 1, 'an existing hash may not change');
