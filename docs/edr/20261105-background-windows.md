@@ -184,3 +184,7 @@ Dialogs cancelled in background mode answer with their `cancelId`, which
   (`lsappinfo`), or the launcher kills it and fails the run, whatever the caller. The probe
   also requires the guard's `activation policy: accessory` record. Builds without this fix
   can't be launched in the background at all.
+- **Residual (review GGG-1):** the guard runs after `ready`, so for the first moments the
+  editor is a regular app with a Dock icon. There are no windows yet for the system to
+  promote, and LaunchServices' bring-forward is denied. Only a deliberate Dock click during
+  startup remains.
