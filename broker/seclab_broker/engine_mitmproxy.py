@@ -133,11 +133,11 @@ def _path_representable(path: str) -> bool:
 
 
 class _TooBig(Exception):
-    """A followed redirect's body went past what the byte budget (or the cap) leaves."""
+    """A followed redirect's body would overspend the byte budget, or pass the cap."""
 
-    def __init__(self, read: int) -> None:
+    def __init__(self, budget: bool) -> None:
         super().__init__("body over the limit")
-        self.read = read
+        self.budget = budget
 
 
 class SeclabAddon:
@@ -674,12 +674,13 @@ class SeclabAddon:
                                               "a websocket: true binding")
         if (injected and view is not None and 300 <= resp.status_code < 400 and resp.status_code != 304
                 and "location" in resp.headers):
-            creds = [c for cid in flow.metadata.get("seclab.injected") or [] if (c := self.b.creds.get(cid))]
+            ids = list(flow.metadata.get("seclab.injected") or [])
+            creds = [c for cid in ids if (c := self.b.creds.get(cid))]
             follows = redirect_follow(view, {c.provider for c in creds if c.provider})
             if follows:
                 # Revision 8: a credentialed redirect under a provider that declares one is
                 # followed by the broker or refused; its Location never reaches the tab.
-                if not await self._follow(flow, view, creds, follows):
+                if not await self._follow(flow, view, ids, creds, follows):
                     return
                 resp = flow.response
         textual = _textual(resp.headers)
@@ -761,12 +762,13 @@ class SeclabAddon:
             resp.content = body2
 
     # ------------------------------------------------------- followed redirects
-    def _refuse_redirect(self, flow: http.HTTPFlow, view: RequestView, creds: list[Credential], why: str,
+    def _refuse_redirect(self, flow: http.HTTPFlow, view: RequestView, ids: list[str], why: str,
                          status: int, host: str | None = None) -> bool:
         """A credentialed redirect the broker won't follow is blocked: its Location (and any
-        signed URL in it) never reaches the tab. `why` is fixed text, never the target."""
-        for c in creds:
-            self.b.audit("credential.redirect_refused", credentialId=c.id, reason=why, status=status,
+        signed URL in it) never reaches the tab. `why` is fixed text, never the target. One
+        audit per injected credential id, even one dropped since (review 15-1)."""
+        for cid in ids:
+            self.b.audit("credential.redirect_refused", credentialId=cid, reason=why, status=status,
                          **({"redirectHost": host} if host else {}), **view.summary())
         self._respond(flow, 502, f"credentialed redirect not followed: {why}", "blocked")
         return False
@@ -806,48 +808,71 @@ class SeclabAddon:
             return host, None, f"denied by rule {blocked.id}"
         return host, u.path + (f"?{u.query}" if u.query else ""), None
 
-    async def _follow(self, flow: http.HTTPFlow, view: RequestView, creds: list[Credential],
+    async def _follow(self, flow: http.HTTPFlow, view: RequestView, ids: list[str], creds: list[Credential],
                       follows: list[RedirectFollow]) -> bool:
         """Revision 8: follow a credentialed redirect to a provider-declared host, one hop, GET,
         with no credential and no client header. True when `flow.response` is now the target's
         response; False when refused (the flow already has the broker's response)."""
         status = flow.response.status_code
-        host, target, why = self._redirect_target(flow.response.headers.get("location", ""), follows, status, view)
+        location = flow.response.headers.get("location", "")
+        if len(creds) != len(ids) or not creds:
+            # A credential injected into this request was dropped since: no budget to bound
+            # the read and nothing to account it to, so never follow (review 15-1).
+            return self._refuse_redirect(flow, view, ids, "credential no longer present", status)
+        if self.b.creds.find_real(location.encode("latin-1", "replace")):
+            return self._refuse_redirect(flow, view, ids, "credential material in Location", status)
+        host, target, why = self._redirect_target(location, follows, status, view)
         if why is not None or host is None or target is None:
-            return self._refuse_redirect(flow, view, creds, why or "malformed Location", status, host)
-        # The request was already counted; the follow only spends bytes.
-        tight = min((x for c in creds if (x := self.b.credential_bytes_left(c)) is not None), default=None)
-        if tight is not None and tight[0] == 0:
-            self.b.audit("credential.budget_exceeded", credentialId=creds[0].id, budgetId=tight[1],
-                         reason="byte budget exhausted", **view.summary())
+            return self._refuse_redirect(flow, view, ids, why or "malformed Location", status, host)
+
+        def tight() -> tuple[int, str, str] | None:
+            """(bytes left, budget id, credential id) of the tightest byte budget."""
+            return min(((x[0], x[1], c.id) for c in creds if (x := self.b.credential_bytes_left(c)) is not None),
+                       default=None)
+
+        def fits(n: int) -> bool:
+            t = tight()
+            return t is None or t[0] >= n
+
+        def take(n: int) -> bool:
+            # Checked and charged with no await between, so concurrent follows can't
+            # overspend a byte budget (review 15-2).
+            if not fits(n):
+                return False
+            for c in creds:
+                self.b.charge_credential(c, nbytes=n)
+            return True
+
+        def over_budget() -> bool:
+            t = tight()
+            self.b.audit("credential.budget_exceeded", credentialId=t[2] if t else ids[0],
+                         budgetId=t[1] if t else ids[0], reason="byte budget exhausted", **view.summary())
             self._deny(flow, 429, "credential budget for this tab: byte budget exhausted")
             return False
-        limit = min(FOLLOW_MAX_BYTES, tight[0]) if tight is not None else FOLLOW_MAX_BYTES
+
+        # The request was already counted; the follow only spends bytes.
+        if not fits(1):
+            return over_budget()
         ips, _ = await self._vetted_ips(host, 443)
         if ips is None:
-            return self._refuse_redirect(flow, view, creds, "target address not permitted", status, host)
+            return self._refuse_redirect(flow, view, ids, "target address not permitted", status, host)
         try:
-            got, headers, body = await asyncio.wait_for(self._fetch(str(ips[0]), host, target, limit), FOLLOW_TIMEOUT)
+            got, headers, body = await asyncio.wait_for(self._fetch(str(ips[0]), host, target, fits, take),
+                                                        FOLLOW_TIMEOUT)
         except _TooBig as e:
-            for c in creds:
-                self.b.charge_credential(c, nbytes=e.read)
-            if tight is not None and limit == tight[0]:
-                self.b.audit("credential.budget_exceeded", credentialId=creds[0].id, budgetId=tight[1],
-                             reason="byte budget exhausted", **view.summary())
-                self._deny(flow, 429, "credential budget for this tab: byte budget exhausted")
-                return False
-            return self._refuse_redirect(flow, view, creds, "target body too large", status, host)
+            if e.budget:
+                return over_budget()
+            return self._refuse_redirect(flow, view, ids, "target body too large", status, host)
         except Exception as e:  # noqa: BLE001 -- the type only: a message may carry the target URL
-            return self._refuse_redirect(flow, view, creds, f"fetch failed ({type(e).__name__})", status, host)
+            return self._refuse_redirect(flow, view, ids, f"fetch failed ({type(e).__name__})", status, host)
         if got != 200:
-            return self._refuse_redirect(flow, view, creds, f"target answered {got}", status, host)
+            return self._refuse_redirect(flow, view, ids, f"target answered {got}", status, host)
         ctype = headers.get("content-type", "").split(";", 1)[0].strip()
         encoding = headers.get("content-encoding", "").strip().lower()
         if encoding not in ("", "identity") and encoding not in _CONTENT_ENCODINGS:
-            return self._refuse_redirect(flow, view, creds, "unsupported content encoding", status, host)
+            return self._refuse_redirect(flow, view, ids, "unsupported content encoding", status, host)
         path = display_path(urllib.parse.unquote(target.split("?", 1)[0]))
         for c in creds:
-            self.b.charge_credential(c, nbytes=len(body))
             self.b.audit("credential.redirect_followed", credentialId=c.id, status=status, redirectHost=host,
                          redirectPath=path, respBytes=len(body), **view.summary())
         resp = flow.response
@@ -871,9 +896,11 @@ class SeclabAddon:
             self._tls = ctx
         return self._tls
 
-    async def _fetch(self, ip: str, host: str, target: str, limit: int) -> tuple[int, dict, bytes]:
+    async def _fetch(self, ip: str, host: str, target: str, fits, take) -> tuple[int, dict, bytes]:
         """One GET over HTTP/1.1 to the vetted address (no re-resolve), TLS verified for
-        `host`; reads at most `limit` body bytes. Sends no credential and no client header."""
+        `host`. Sends no credential and no client header. Each body chunk is charged with
+        `take` as it arrives (refused once the byte budget is spent); a declared length that
+        can't `fit` is refused before reading. At most FOLLOW_MAX_BYTES either way."""
         reader, writer = await asyncio.wait_for(
             asyncio.open_connection(ip, 443, ssl=self._tls_context(), server_hostname=host), FOLLOW_CONNECT_TIMEOUT)
         try:
@@ -894,12 +921,16 @@ class SeclabAddon:
                     if status != 200:
                         return status, headers, b""
                     length = headers.get("content-length", "")
-                    if length.isdigit() and int(length) > limit:
-                        raise _TooBig(0)
+                    if length.isdigit() and int(length) > FOLLOW_MAX_BYTES:
+                        raise _TooBig(budget=False)
+                    if length.isdigit() and not fits(int(length)):
+                        raise _TooBig(budget=True)
                 elif isinstance(ev, h11.Data):
                     n += len(ev.data)
-                    if n > limit:
-                        raise _TooBig(n)
+                    if n > FOLLOW_MAX_BYTES:
+                        raise _TooBig(budget=False)
+                    if not take(len(ev.data)):
+                        raise _TooBig(budget=True)
                     chunks.append(bytes(ev.data))
                 elif isinstance(ev, h11.EndOfMessage):
                     return status, headers, b"".join(chunks)

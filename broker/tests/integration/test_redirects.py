@@ -5,6 +5,7 @@ the signature, can't make the broker follow anything else, and can't reach stora
 import base64
 import json
 import secrets
+import shlex
 import urllib.parse
 
 from conftest import STORAGE_HOST
@@ -170,3 +171,22 @@ def test_followed_redirect_is_bounded_by_the_byte_budget(pod, ctl):
     assert not ctl.notes_since(mark, "approval.requested")
     used = [x for x in ctl.call("health", {})["credentialBudgets"] if x["id"] == "cfs-bytes"][0]
     assert 1000 <= used["bytes"] < 4000
+
+
+def test_concurrent_followed_redirects_cannot_overspend_the_byte_budget(pod, ctl):
+    """Review 15-2: each body chunk is checked and charged with no await between, so parallel
+    downloads (npm and pip fetch several at once) share one byte budget rather than each
+    seeing all of it."""
+    basic = _cfs(pod, ctl, "cfs-parallel", {"requests": 50, "bytes": 12000})
+    paths = [f"{FEED}/par{i}/-/par{i}-1.0.0.tgz" for i in range(6)]
+    cmd = " ".join(f"(curl -sS --max-time 30 -o /dev/null -w '%{{http_code}}\\n' -H {shlex.quote(basic)} "
+                   f"-H 'X-Fixture: big-5000' https://api.example.test{p}) &" for p in paths) + " wait"
+    codes = sorted(pod.ws(cmd).stdout.decode().split())
+    for p in paths:
+        _sig(pod, _location(pod, p))
+    assert len(codes) == 6 and set(codes) <= {"200", "429"}, codes
+    assert 1 <= codes.count("200") <= 2 and "429" in codes, codes
+    used = [x for x in ctl.call("health", {})["credentialBudgets"] if x["id"] == "cfs-parallel"][0]
+    # Followed bodies never overspend; only the redirects' own small bodies (counted as
+    # every credentialed response is) can sit on top.
+    assert used["bytes"] <= 12000 + 6 * 512, used

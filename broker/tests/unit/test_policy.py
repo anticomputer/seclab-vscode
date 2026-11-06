@@ -366,6 +366,41 @@ def test_r8_redirect_follow_data_and_target_checks():
             _check_backstop_file("p.json", dict(base, redirects=r))
 
 
+def test_r15_follow_refused_for_a_dropped_credential_or_a_credential_in_location():
+    """Review 15-1: a credential injected into the request but dropped since leaves nothing to
+    bound or account the read, so the redirect is refused and audited by id. A Location that
+    carries a real value is refused too, before anything is fetched."""
+    import asyncio
+    from mitmproxy.test import tflow
+    from seclab_broker.core import Broker
+    from seclab_broker.engine_mitmproxy import SeclabAddon
+    ok = "vsblobprodcus123.blob.core.windows.net"
+    H = "https:" + "//"
+    secret = "seclab-test-canary-" + "R" * 24 + "-value"
+    b = Broker()
+    b.rpc_policy_load({"policy": {"version": 1, "credentials": [{
+        "id": "cfs", "provider": "azure-devops", "inject": {"header": "Authorization", "fmt": "Bearer {value}"},
+        "bind": [{"host": "pkgs.dev.azure.com", "path": "/f/**", "methods": ["GET"]}]}]}})
+    b.dispatch("credential.provide", {"id": "cfs", "value": secret})
+    addon = SeclabAddon(b, frozenset())
+
+    def run(injected, location):
+        f = tflow.tflow(resp=True)
+        f.metadata["seclab.view"] = RequestView("https", "pkgs.dev.azure.com", 443, "GET", "/f/x.tgz", "")
+        f.metadata["seclab.injected"] = injected
+        f.response.status_code = 303
+        f.response.headers["location"] = location
+        asyncio.run(addon.response(f))
+        return f
+    f = run(["gone"], H + f"{ok}/b?sig=s")
+    assert f.response.status_code == 502 and b"credential no longer present" in f.response.content
+    ev = [e for e in b.dispatch("audit.tail", {"limit": 5})["events"] if e["type"] == "credential.redirect_refused"][-1]
+    assert ev["credentialId"] == "gone" and "sig" not in json.dumps(ev)
+    f = run(["cfs"], H + f"{ok}/b?leak={secret}")
+    assert f.response.status_code == 502 and b"credential material in Location" in f.response.content
+    assert secret.encode() not in f.response.content and "location" not in f.response.headers
+
+
 def test_r11b_backstop_data_is_checked_when_a_policy_loads(monkeypatch):
     import seclab_broker.policy as policy
     called = []
