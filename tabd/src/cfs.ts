@@ -38,7 +38,7 @@ export const CFS_RULE_IDS = ['cfs-npm', 'cfs-pypi', 'cfs-pypi-files'];
  * `credential.import` params (broker revision 7): the same credential as
  * broker/examples/cfs-feeds.policy.json, with the host-chosen sentinel persisted for the tab (so
  * the tab's npm/pip config stays valid across restarts), injected as Basic cfs:<token> on the
- * feed reads only, the azure-devops provider backstop, and a lifetime budget that bounds
+ * feed reads only, the azure-devops provider backstop, and a per-broker-start budget that bounds
  * ingestion under the user's identity. Confirmed bindings: never a first-use prompt.
  */
 export function cfsImportParams(sentinel: string, token: AzToken): Record<string, unknown> {

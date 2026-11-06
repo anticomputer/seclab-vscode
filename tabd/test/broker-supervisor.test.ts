@@ -543,6 +543,10 @@ test('B3c: adopting a running tab reconnects its broker control without touching
 	for (const m of ['policy.load', 'proxy.auth.set', 'ca.get']) {
 		assert.ok(!methods.includes(m), `${m} must not run on reattach (the broker keeps its state)`);
 	}
+	// Feeds are off for this tab: the reattach removes any feed rules and revokes the credential (HHH-2).
+	assert.ok(first.driver.brokerLog.some(l => l.method === 'policy.update' && JSON.stringify(l.params?.removeAllow) === '["cfs-npm","cfs-pypi","cfs-pypi-files"]'));
+	assert.deepEqual(first.driver.brokerLog.find(l => l.method === 'credential.revoke')?.params, { id: 'cfs', rotateSentinel: true });
+	assert.equal(first.driver.feeds.at(-1), undefined);
 	// The broker's prompts reach the client again, through the new connection.
 	first.driver.brokerOut!.write(JSON.stringify({ jsonrpc: '2.0', method: 'approval.requested', params: {
 		approvalId: 'adopt1', kind: 'egress', request: { scheme: 'https', host: 'example.org', port: 443, method: 'GET', path: '/' },
