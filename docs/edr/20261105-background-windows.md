@@ -53,7 +53,8 @@ Only `test/harness.ts` sets it, through `open --env`.
 - Not covered:
   - the dev-only "show after 10 s when sources failed to load" path, which runs only in
     unbuilt trees (`!isBuilt`), never in our builds;
-  - `openDevTools`' own `activate` default (user command only).
+  - `openDevTools`' own `activate` default. Superseded 2026-11-06: any extension, including a
+    tab's, can run `toggleDevTools`, and the guard now forces `activate: false` (review AAA-1).
 - Rebase cost: one exported constant and six guarded call sites in upstream's window code.
   The patch fails to apply loudly if they move.
 - 0005-0011 are reserved for the RPC filter series, so this is 0012.
@@ -117,3 +118,17 @@ Each step is timestamped, and the kill-on-steal watcher is armed throughout.
   local extension host restarts. That's a reconnect gap for the tabd broker wiring's B3 step,
   not a focus issue. The probe also exposed an sbx quarantine bug, fixed in
   [EDR sbx-tab-broker](20261105-sbx-tab-broker.md).
+
+**Review AAA (2026-11-06): nothing medium or higher; all six lows fixed.**
+- **AAA-1:** DevTools open with `activate: true` and focus natively. `openDevTools` now forces
+  `activate: false`, and `toggleDevTools` is rebuilt on it.
+- **AAA-2:** a failed `WebContents` patch exits the app, as installation failures do.
+- **AAA-3:** the watcher kills the editor's processes but spares tabd and its children. tabd
+  sees EOF and stops its own tabs, instead of leaving them running unsupervised.
+- **AAA-4:** a watcher that can't sample fails the run, and it follows the profile's editor
+  across a relaunch.
+- **AAA-5:** quarantine removes stale broker allows whatever the current `--broker` mode.
+- **AAA-6:** the probe strips control characters from the tab-written marks.
+
+Dialogs cancelled in background mode answer with their `cancelId`, which
+`massageMessageBoxOptions` always sets, so a confirmation always gets its safe answer.

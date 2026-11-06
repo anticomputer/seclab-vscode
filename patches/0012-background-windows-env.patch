@@ -210,10 +210,10 @@ index 93527ec..9d1504c 100644
  code.main();
 diff --git a/src/vs/platform/windows/electron-main/backgroundWindowsGuard.ts b/src/vs/platform/windows/electron-main/backgroundWindowsGuard.ts
 new file mode 100644
-index 0000000..8a2a7a7
+index 0000000..02f6036
 --- /dev/null
 +++ b/src/vs/platform/windows/electron-main/backgroundWindowsGuard.ts
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,121 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -273,12 +273,31 @@ index 0000000..8a2a7a7
 +		}
 +		replace(app, 'focus', () => () => undefined);
 +
-+		// WebContents has no exported class: patch its prototype from the first instance.
++		// WebContents has no exported class: patch its prototype from the first instance. A failure
++		// here must stop the app too, not just log (review AAA-2). DevTools open with
++		// `activate: true` by default and focus natively, past the focus patch (AAA-1).
 +		let patched = false;
 +		app.on('web-contents-created', (_event, contents: WebContents) => {
-+			if (!patched) {
-+				patched = true;
-+				replace(Object.getPrototypeOf(contents), 'focus', orig => function (this: WebContents) { return appActive() ? orig.call(this) : undefined; });
++			if (patched) {
++				return;
++			}
++			patched = true;
++			try {
++				const proto = Object.getPrototypeOf(contents);
++				const origFocus = proto.focus;
++				replace(proto, 'focus', orig => function (this: WebContents) { return appActive() ? orig.call(this) : undefined; });
++				replace(proto, 'openDevTools', orig => function (this: WebContents, options?: unknown) {
++					return orig.call(this, { mode: 'detach', ...(options && typeof options === 'object' ? options : {}), activate: false });
++				});
++				replace(proto, 'toggleDevTools', () => function (this: WebContents) {
++					return this.isDevToolsOpened() ? this.closeDevTools() : this.openDevTools({ mode: 'detach', activate: false });
++				});
++				if (contents.focus === origFocus) {
++					throw new Error('background windows guard: WebContents.focus not replaced');
++				}
++			} catch (error) {
++				console.error(String(error));
++				app.exit(1);
 +			}
 +		});
 +
