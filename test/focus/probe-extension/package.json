@@ -1,0 +1,11 @@
+{
+	"name": "seclab-focus-probe",
+	"displayName": "seclab focus probe (test only)",
+	"publisher": "seclab-test",
+	"version": "0.0.1",
+	"private": true,
+	"engines": { "vscode": "^1.90.0" },
+	"main": "./extension.js",
+	"activationEvents": ["onStartupFinished"],
+	"extensionKind": ["workspace"]
+}
