@@ -2,7 +2,7 @@
 # tab supervisor): creates the pod, drives the broker over `docker exec -i`
 # stdio, and runs probes inside the workspace container.
 # Build context: broker/ (wheels are fetched as in broker/Dockerfile).
-FROM docker:29-cli@sha256:4d742ab934c2149b628bf26369ac3ec51cb91e2e28fe6722a0e86a6d6efc4bd5 AS cli
+FROM docker:29.9.2-cli@sha256:5e6baf67325a79f64ed3bed6863954d5e05d0f3d4e57cbdb14809346814bbfdb AS cli
 
 FROM python:3.13-slim-trixie@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1 AS wheels
 ARG PIP_SOURCE
