@@ -50,15 +50,25 @@ a skipped line. It fails if:
     /opt/pipfetch/pip-fetch.py <path>`.
 
   Nothing else can run beside or before the token. The keyword is tokenised as
-  BuildKit does (any whitespace). Unknown instructions, `SHELL`, heredocs and
-  control characters are rejected;
+  BuildKit does (any whitespace). The file must be printable ASCII; `\r` is
+  allowed only before `\n`, and whitespace after a continuation backslash is
+  refused. Continuations are joined exactly as BuildKit joins them. Unknown
+  instructions, `SHELL`, heredocs and control characters are rejected
+  ([review](../security-reviews/20261105-broker-cfs-builds.md));
 - a Python install is anything but exactly `RUN
   --mount=type=bind,from=<stage>,source=/wheels,target=/opt/wheels pip install
   --no-cache-dir --no-deps --require-hashes --only-binary=:all: --no-index
   --find-links /opt/wheels -r <path>`. `<stage>` must be an earlier stage, on the
   same base image, that fetched that same requirements file. The install must be
-  the first command of the RUN directly after the COPY of its requirements file,
-  and `PIP_*` must not appear in any shell-parsed token.
+  the first command of the RUN directly after the COPY of its requirements file.
+  Its raw text has no `$`, quotes, backslashes or backticks, tracked paths are
+  plain absolute paths, and `PIP_*` must not appear in any shell-parsed token.
+
+  The gate guarantees two things: the token is isolated, and the canonical
+  install installs exactly the checked file. It does not guarantee that no
+  other `RUN` installs something. A `RUN` is arbitrary shell, so the
+  stray-installer check is a heuristic, and Dockerfile changes are reviewed
+  code.
 
 So nothing can be added without a register entry. `pin_check.py --self-test`
 (also run by `docs-check.sh`) proves that every bypass form found in review is
