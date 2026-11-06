@@ -13,6 +13,8 @@ import { DriverError, type BrokerHooks, type BrokerSetup, type Driver, type Driv
 
 const MIN_VERSION = [0, 51, 0];
 const REH_CONNECT = '/opt/seclab/bin/seclab-reh-connect';
+const REH_START = '/opt/seclab/bin/seclab-reh-start';
+const TAB_USER = 'agent';
 const OBS_COLLECT = '/opt/seclab/bin/seclab-obs-collect';
 const WB_FEED = '/opt/seclab/bin/seclab-wb-feed';
 // The REH relay runs as its own fixed uid:gid (template), so the tab user cannot ptrace it.
@@ -32,6 +34,7 @@ export interface SbxOptions {
 
 export class SbxDriver implements Driver {
 	readonly name = 'sbx';
+	readonly usesCollector = true;
 	private readonly sbx: string;
 	private readonly runner: Runner;
 	private readonly opts: SbxOptions;
@@ -459,6 +462,16 @@ export class SbxDriver implements Driver {
 	connectReh(spec: TabRuntimeSpec): ChildProcessWithoutNullStreams {
 		checkSpec(spec);
 		return this.runner.spawnStream(this.sbx, ['exec', '-i', '-u', RELAY_USER, spec.sandboxName, REH_CONNECT]);
+	}
+
+	async rehAlive(spec: TabRuntimeSpec, connectionToken: string): Promise<boolean> {
+		checkSpec(spec);
+		if (!CONNECTION_TOKEN_RE.test(connectionToken)) {
+			return false;
+		}
+		// As the tab user (its run dir is private to it); the token goes over stdin, never argv.
+		const r = await this.runner.run(this.sbx, ['exec', '-i', '-u', TAB_USER, '-w', '/', spec.sandboxName, REH_START, '--check'], { input: `${connectionToken}\n`, timeoutMs: 15_000 });
+		return r.code === 0;
 	}
 
 	/** `sbx policy log <tab> --json`: untrusted CLI output, validated field by field. */

@@ -120,6 +120,14 @@ export interface Driver {
 	installFeed?(spec: TabRuntimeSpec, sentinel: string | undefined): Promise<void>;
 	/** B3c: a control channel to a running tab's broker (adoption), with the same fixed argv as bring-up. */
 	openBrokerControl?(spec: TabRuntimeSpec): ChildProcessWithoutNullStreams;
+	/**
+	 * True if the tab's REH runs with this connection token (`seclab-reh-start --check`). Starts
+	 * nothing, but `sbx exec` boots a stopped sandbox: check `runningSandboxes()` first. The answer
+	 * is tab-asserted (the tab owns the pid and token files): never let it gate a security step.
+	 */
+	rehAlive?(spec: TabRuntimeSpec, connectionToken: string): Promise<boolean>;
+	/** The REH runs under an in-VM observability collector, which must be up for the tab to count as running. */
+	readonly usesCollector?: boolean;
 }
 
 export interface PolicyLogEntry {

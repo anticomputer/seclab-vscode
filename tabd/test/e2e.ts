@@ -76,18 +76,28 @@ async function handshake(): Promise<string> {
 assert.match(await handshake(), /^HTTP\/1\.1 101/);
 assert.match(await handshake(), /^HTTP\/1\.1 101/, 'second connection to the same REH');
 
-// B3c: the server dies; tab.ensureRunning (what the Tab Manager's reconnect does first) brings it
-// back under the same connection token, so the window reconnects without a reload.
-const before = (await client.request<{ connectionToken: string }>('tab.ensureRunning', { tabId })).connectionToken;
 const name = `seclab-${tabId}`;
-// Fails unless at least one REH process was killed, so a kill as the wrong user cannot pass silently.
-const killReh = 'n=0; for p in /proc/[0-9]*; do tr "\\0" " " < "$p/cmdline" 2>/dev/null | grep -q "^/opt/seclab-reh/" && kill -9 "${p#/proc/}" 2>/dev/null && n=$((n+1)); done; echo "killed $n"; [ "$n" -gt 0 ]';
 // The OCI driver runs the REH as the workspace owner on Linux (tabUser in drivers/oci.ts), else 1000:1000.
 const st = fs.statSync(ws);
 const ociUser = process.platform === 'linux' ? `${st.uid}:${st.gid}` : '1000:1000';
-const k = driver === 'sbx'
-	? spawnSync('/opt/homebrew/bin/sbx', ['exec', '-u', 'agent', name, 'sh', '-c', killReh], { encoding: 'utf8' })
-	: spawnSync('docker', ['exec', '-u', ociUser, '--', name, 'sh', '-c', killReh], { encoding: 'utf8' });
+const inTab = (script: string) => driver === 'sbx'
+	? spawnSync('/opt/homebrew/bin/sbx', ['exec', '-u', 'agent', name, 'sh', '-c', script], { encoding: 'utf8' })
+	: spawnSync('docker', ['exec', '-u', ociUser, '--', name, 'sh', '-c', script], { encoding: 'utf8' });
+const rehPid = () => inTab('cat "/run/user/$(id -u)/seclab/reh.pid"').stdout.trim();
+
+// B3c: tab.ensureRunning on a running tab with a live REH leaves it alone (the Tab Manager calls
+// it before each new connection; on sbx, a second start used to replace the REH every time).
+const pidBefore = rehPid();
+assert.match(pidBefore, /^\d+$/);
+const before = (await client.request<{ connectionToken: string }>('tab.ensureRunning', { tabId })).connectionToken;
+assert.equal(rehPid(), pidBefore, 'ensureRunning on a running tab keeps its REH');
+assert.match(await handshake(), /^HTTP\/1\.1 101/, 'the same REH still answers');
+
+// B3c: the server dies; tab.ensureRunning (what the Tab Manager's reconnect does first) brings it
+// back under the same connection token, so the window reconnects without a reload.
+// Fails unless at least one REH process was killed, so a kill as the wrong user cannot pass silently.
+const killReh = 'n=0; for p in /proc/[0-9]*; do tr "\\0" " " < "$p/cmdline" 2>/dev/null | grep -q "^/opt/seclab-reh/" && kill -9 "${p#/proc/}" 2>/dev/null && n=$((n+1)); done; echo "killed $n"; [ "$n" -gt 0 ]';
+const k = inTab(killReh);
 assert.equal(k.status, 0, `killing the REH: ${k.stdout}${k.stderr}`);
 await new Promise(r => setTimeout(r, 1000));
 await assert.rejects(handshake(), /closed/, 'no server: the connection closes');
