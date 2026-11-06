@@ -87,4 +87,5 @@ Same rules as ADRs:
 | 2026-11-05 | [Pinned tools: verified release binaries and source builds instead of third-party images](20261105-pinned-tools.md) | accepted |
 | 2026-11-05 | [sbx tabs get a real broker (plan increment B2)](20261105-sbx-tab-broker.md) | accepted |
 | 2026-11-05 | [Supply-chain exceptions: host prerequisites, and apt without version pins](20261105-supply-chain-exceptions.md) | accepted |
+| 2026-11-06 | [Branch test builds of the macOS app](20261106-branch-test-builds.md) | accepted |
 <!-- index:end -->

@@ -4,8 +4,9 @@ name: build-macos
 # overrides + patch queue + our built-in extensions. Fetch with `./seclab fetch macos`,
 # which verifies the build provenance attestation before anything is extracted.
 # Release artifacts come only from main (EDR ci-hardening); never from a PR (no
-# pull_request trigger). A manual dispatch on another branch is a compile check: it is
-# attested (harmless: verification pins --source-ref) but uploads nothing.
+# pull_request trigger). A manual dispatch on another branch is a test build: attested, and
+# uploaded under a separate `-branch` artifact name that only `./seclab fetch macos-branch`
+# reads (verified against that branch, extracted outside the release location).
 on:
   workflow_dispatch:
   push:
@@ -71,4 +72,17 @@ jobs:
           name: seclab-vscode-darwin-arm64
           path: dist/
           retention-days: 7
+          if-no-files-found: error
+
+      # A dispatched build of another branch, for testing unlanded patches (e.g. the RPC core
+      # filter) in the real app. A separate artifact name that `./seclab fetch macos` (releases)
+      # never reads; `./seclab fetch macos-branch RUN` verifies its attestation against that
+      # branch and extracts it outside the release location. Short retention; never released.
+      - name: Upload branch test build (dispatch, not main)
+        if: github.ref != 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: seclab-vscode-darwin-arm64-branch
+          path: dist/
+          retention-days: 3
           if-no-files-found: error
