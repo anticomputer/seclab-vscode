@@ -101,6 +101,13 @@
    "note": "Versions are not pinned: they follow Debian's signed archive. Test images only; the broker image installs no apt packages. snapshot.debian.org pinning was tried and rejected (see EDR)."
   }
  ],
+ "lockSources": [
+  {
+   "lock": "tools/attest/requirements.txt",
+   "source": "tools/attest/requirements.in",
+   "note": "pip-compile --generate-hashes source; tools/pin_check.py requires both and equal pins (security review round 10c-1)."
+  }
+ ],
  "python": [
   {
    "name": "annotated-types",
