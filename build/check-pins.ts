@@ -157,7 +157,7 @@ if (process.argv[2] === '--self-test') {
 		['.github/workflows/y.yml', `jobs:\n  a:\n    container: \${{ matrix.img }}\n    services:\n      db:\n        image: postgres\n`, 2],
 		['AGENTS.md', 'prose mentions alpine:3.22 freely\n<!-- ci: run -->\n```sh\ndocker run --rm alpine:3 true\n```\n', 1],
 		// Direct public-registry URLs: a fetch fails; a marked line, a prefix comparison, a lockfile and prose pass.
-		['z.ts', 'await fetch(`https://registry.npmjs.org/${n}`);\nfetch("https://files.pythonhosted.org/x");\nconst u = "https://registry.yarnpkg.com/a"; // public-registry: fixture\nif (r.startsWith("https://registry.npmjs.org/")) {}\n', 2],
+		['z.ts', 'await get(`https://registry.npmjs.org/${n}`);\nget("https://files.pythonhosted.org/x");\nconst u = "https://registry.yarnpkg.com/a"; // public-registry: fixture\nif (r.startsWith("https://registry.npmjs.org/")) {}\n', 2],
 		['package-lock.json', '"resolved": "https://registry.npmjs.org/a/-/a-1.0.0.tgz"\n', 0],
 		['NOTES.md', 'see https://registry.npmjs.org/\n', 0],
 	];
