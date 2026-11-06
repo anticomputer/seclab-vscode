@@ -90,6 +90,7 @@ Same rules as ADRs:
 | 2026-11-05 | [Pinned tools: verified release binaries and source builds instead of third-party images](20261105-pinned-tools.md) | accepted |
 | 2026-11-05 | [sbx tabs get a real broker (plan increment B2)](20261105-sbx-tab-broker.md) | accepted |
 | 2026-11-05 | [Supply-chain exceptions: host prerequisites, and apt without version pins](20261105-supply-chain-exceptions.md) | accepted |
+| 2026-11-06 | [Agentic probe runner: taking over the tab's agent-host socket, and evidence for the AHP gate](20261106-agentic-probe-runner.md) | accepted |
 | 2026-11-06 | [Agents-in-the-tab spike, step 3: the shipped agent host in a real sbx tab behind its broker](20261106-agents-in-real-tab-spike.md) | accepted |
 | 2026-11-06 | [Branch test builds of the macOS app](20261106-branch-test-builds.md) | accepted |
 | 2026-11-06 | [Egress prompts through the Tab Manager (plan increment B3)](20261106-egress-prompts.md) | accepted |
