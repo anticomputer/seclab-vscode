@@ -272,3 +272,20 @@ def test_r11_grant_only_endpoints_cannot_be_shadowed_and_hosts_cannot_overlap():
         with pytest.raises(PolicyError):
             ModelPolicy.from_json({"providers": providers})
     ModelPolicy.from_json({"providers": ["copilot", dict(loose, hosts=["api.example.test"])]})
+
+
+def test_r11b_endpoint_shadowing_is_refused_both_ways():
+    """Review 11b-3: a grant-only endpoint must be a literal path, and no endpoint may sit
+    behind an earlier matching one (its own field and tool lists would never apply)."""
+    def prov(*eps):
+        return {"providers": [{"id": "p", "hosts": ["p.example.test"], "fields": [], "endpoints": list(eps)}]}
+    for eps in ([{"path": "/mcp/readonly", "methods": ["POST"]},
+                 {"id": "g", "path": "/mcp/*", "methods": ["POST"], "requiresGrant": True}],
+                [{"id": "g", "path": "/mcp/**", "methods": ["POST"], "requiresGrant": True}],
+                [{"path": "/**", "methods": ["POST"], "fields": ["x", "evil"]},
+                 {"path": "/responses", "methods": ["POST"], "fields": ["x"]}]):
+        with pytest.raises(PolicyError):
+            ModelPolicy.from_json(prov(*eps))
+    # Specific before general is the intended order.
+    ModelPolicy.from_json(prov({"path": "/responses", "methods": ["POST"], "fields": ["x"]},
+                               {"path": "/**", "methods": ["GET"]}))

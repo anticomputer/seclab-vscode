@@ -65,14 +65,16 @@ def _hosts_overlap(a: HostPattern, b: HostPattern) -> bool:
 
 
 def _check_endpoint_order(pid: str, endpoints: tuple["Endpoint", ...]) -> None:
-    """Endpoint selection is first match, so a grant-only endpoint must not be reachable
-    through an earlier, looser one (review 11-5)."""
+    """Endpoint selection is first match, so no endpoint may sit behind an earlier one with an
+    overlapping method that also matches its path (its own lists would never apply, review
+    11-5/11b-3), and a grant-only endpoint must name one literal path."""
     for i, e in enumerate(endpoints):
-        if not e.requires_grant:
-            continue
+        if e.requires_grant and "*" in e.path:
+            raise PolicyError(f"model provider {pid!r}: grant-only endpoint {e.path!r} must be a literal path")
+        sample = e.path.replace("**", "x").replace("*", "x")
         for f in endpoints[:i]:
-            if set(f.methods) & set(e.methods) and compile_glob(f.path).fullmatch(e.path.replace("*", "x")):
-                raise PolicyError(f"model provider {pid!r}: endpoint {f.path!r} shadows grant-only {e.path!r}")
+            if set(f.methods) & set(e.methods) and compile_glob(f.path).fullmatch(sample):
+                raise PolicyError(f"model provider {pid!r}: endpoint {f.path!r} shadows {e.path!r}")
 
 
 @dataclass(frozen=True)

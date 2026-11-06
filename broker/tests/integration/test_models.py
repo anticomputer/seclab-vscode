@@ -311,23 +311,27 @@ def test_org_policy_gets_are_narrow_and_their_responses_checked(pod, ctl):
     mark = ctl.mark()
     r = pod.curl(url, *auth)
     doc = r.json()
-    assert r.code == 200 and doc["permissions"]["deny"] and doc["telemetry"]["endpoint"], r.body
-    assert "headers" not in doc["telemetry"] and "fake-otlp-credential" not in r.body
+    assert r.code == 200 and doc["permissions"]["deny"] and doc["allowManagedMcpServersOnly"], r.body
+    assert "telemetry" not in doc and "fake-otlp-credential" not in r.body
     e = ctl.wait_note("audit.event", lambda e: e["type"] == "credential.backstop_exception_filtered", since=mark, timeout=10)
-    assert e["detail"] == "telemetry.headers"
+    assert e["detail"] == "telemetry"
+    # Whatever shape telemetry takes, it never reaches the tab (review 11b-2).
+    for mode in ("telemetry-list", "telemetry-nested"):
+        r = pod.curl(url, *auth, "-H", f"X-Fixture: {mode}")
+        assert r.code == 200 and "telemetry" not in r.json() and "fake-otlp-credential" not in r.body, (mode, r.body)
     mark = ctl.mark()
-    for mode in ("token-value", "url-userinfo", "unlisted"):
+    for mode in ("token-value", "url-userinfo", "unlisted", "unlisted-error"):
         r = pod.curl(url, *auth, "-H", f"X-Fixture: {mode}")
         assert r.code == 502 and "ghu_" not in r.body and "fake-pass" not in r.body, (mode, r.body)
     for name in ORG[1:]:
         u = f"https://api.example.test/copilot_internal/{name}"
         r = pod.curl(u, *auth)
         assert r.code == 200 and r.json() == {}, (name, r.body)
-        for mode in ("unlisted", "token-field"):
+        for mode in ("unlisted", "token-field", "unlisted-error"):
             r = pod.curl(u, *auth, "-H", f"X-Fixture: {mode}")
-            assert r.code == 502 and "opaque" not in r.body, (name, mode)
+            assert r.code == 502 and "opaque" not in r.body and "secrets" not in r.body, (name, mode)
     found = [e for e in ctl.notes_since(mark, "audit.event") if e["type"] == "credential.backstop_exception_blocked"]
-    assert len(found) == 7
+    assert len(found) == 10
     for name in ORG:
         u = f"https://api.example.test/copilot_internal/{name}"
         assert pod.curl(u + "?org=x", *auth).code == 403

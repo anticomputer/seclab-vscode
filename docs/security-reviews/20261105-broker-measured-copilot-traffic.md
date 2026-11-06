@@ -12,8 +12,8 @@
     - `/mcp/readonly` behind a per-tab grant (coordinator decision).
     - The measured, per-endpoint `copilot` provider.
   - The round 10c fixes (re-checked).
-  - Fixes: the round 11 commit, which also adopts the secure-agentic
-    review's two asks:
+  - Fixes: the round 11 commit and the round 11b commit. The round 11 commit
+    also adopts the secure-agentic review's two asks:
     - strict allowlists for the org-policy responses;
     - a server-side justification for each body-policy widening.
   - Threat model:
@@ -38,11 +38,18 @@
 | 11-7 | Info | Exception responses | A bodiless 204 or 304 was blocked as "not strict JSON", and an error body lost its fields to the allowlist. | fixed (round 11 commit) | A bodiless response passes after the header and trailer checks. Error bodies get every check except the field allowlist. | Code review |
 | 11-8 | Info | Harness | The first test run used a stale upstream fixture image. | not a defect | The broker session was rebuilding the same tags at the same time. The tags are shared, so concurrent runs race. | n/a |
 | 11-9 | Info | Lock drift | `lockSources[].source` was only checked for existence; the drift comparison still used `<lock>.in`. | fixed (round 11 commit) | The registered source path is the one compared. | `broker/docs-check.sh` |
+| 11b-1 | Medium | Exception responses | The 11-7 fix applied the field allowlist to 2xx only, so any other status (chosen by the upstream) skipped it, including the strict org-policy lists. That was also a regression for `/user`. | fixed (round 11b commit) | The allowlist and `strictFields` apply on every status. GitHub's error fields (`message`, `documentation_url`) are listed for `/user`; the strict org lists block an unlisted error body. | `test_org_policy_gets_are_narrow_and_their_responses_checked` (`unlisted-error`: a 403 carrying unlisted fields is blocked) |
+| 11b-2 | Medium | Exception responses | The `telemetry.headers` drop walked only an exact chain of dicts with exact case. A list, a case variant or a deeper nesting delivered the OTLP credential unchanged, and a `*` in `dropPaths` silently matched nothing. | fixed (round 11b commit) | `dropPaths` replaced by `dropFields`, top-level names only and checked at load. `managed_settings` drops the whole `telemetry` field, whatever its shape. | Same test (`telemetry-list`, `telemetry-nested`); `test_r11b_backstop_data_is_checked_when_a_policy_loads` |
+| 11b-3 | Low | Body policy | Shadow detection sampled one path and guarded only grant-only endpoints: a glob grant-only endpoint behind a literal one, or a stricter endpoint behind a looser one, was accepted. | fixed (round 11b commit) | A grant-only endpoint must be a literal path. No endpoint may sit behind an earlier one with an overlapping method that matches it. | `test_r11b_endpoint_shadowing_is_refused_both_ways` |
+| 11b-4 | Low | Exception responses | URL userinfo missed an encoded colon (`user%3Apass@`) and the scheme-relative `//user:pass@`, and wasn't checked in headers or trailers. | fixed (round 11b commit) | Both forms are matched, in headers and trailers too. | `test_r11_url_userinfo_pattern` |
+| 11b-5 | Low | Shipped data | Backstop files were checked at first request, not at load. | fixed (round 11b commit) | `Policy.from_json` loads them first, so malformed data rejects every policy. | `test_r11b_backstop_data_is_checked_when_a_policy_loads` |
+| 11b-6 | Low | Approvals | `request.queryKeys` reached approval prompts without being listed in `untrusted`. | fixed (round 11b commit) | Listed whenever present. | Code review; the protocol's `requestSummary` marks it tab-controlled |
+| 11b-7 | Info | Request summary | Query key truncation could split a `%XX` escape, and a sealed agent-host token in a key name was exported verbatim. | fixed (round 11b commit) | Truncation never splits an escape; a key containing `copilot-sealed.v1.` becomes `[sealed]`. The prefix now has one definition, in `policy.py`. | `test_r11_request_summary_carries_query_key_names_only` |
 
 **Adopted from the secure-agentic review** (same commit):
 - **Strict org-policy allowlists.**
-  - `managed_settings` follows the public `IManagedSettingsResponse`;
-    `telemetry.headers` (OTLP credentials) is always dropped.
+  - `managed_settings` follows the public `IManagedSettingsResponse`; its
+    whole `telemetry` field (OTLP credentials) is always dropped (since 11b).
   - `team_customizations` and `content_exclusion` pass only `{}` until their
     shapes are known.
   - Any unlisted top-level key blocks the response as a finding.
