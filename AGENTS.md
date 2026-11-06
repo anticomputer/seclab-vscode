@@ -308,6 +308,7 @@ gh workflow run build-macos.yml --ref <branch> -f test_variant=containment
 ./seclab fetch macos-containment <RUN_ID>                  # -> .work/test-builds/containment/
 ./seclab image oci --test-variant containment               # -> seclab-tab-oci:test-containment
 node test/builds/require-hooks.ts --variant containment --hook rogue-reh --image seclab-tab-oci:test-containment
+node test/builds/rogue-reh-arming.ts    # the hook arms only for a staged, unexpired run (real OCI tab)
 
 # Level B (editor-driven). The profile dir must be short (macOS 104-byte socket path) and isolated.
 ./seclab test evidence prepare ~/.seclab-test/ud sbx    # then run the printed `node test/window.ts launch ...` (background, never activated)

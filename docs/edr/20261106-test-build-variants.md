@@ -77,6 +77,17 @@ lands in its own place, and records what it contains.
     test variant contains the hook.
 
 ## Consequences
+- Proven on run 42252088798 (branch commit `66af5e9`):
+  - both halves built, verified and attested, and check-release refuses each;
+  - `fetch macos-containment` refused the run from a checkout without that commit, and
+    verified and extracted it from one with it;
+  - the app is `dev.seclab.vscode.test.containment`;
+  - `image oci --test-variant` built `seclab-tab-oci:test-containment` and refused to tag
+    that REH `:local`;
+  - `require-hooks` accepted the test image and refused `:local`;
+  - `test/builds/rogue-reh-arming.ts`, in a real OCI tab of that image: no targets, an
+    expired run and a malformed nonce leave the hook disarmed, and a valid run loads the
+    payload once, with the socket server and router.
 - The macOS half of a variant with no desktop hooks (containment today) is the release app
   renamed and marked. That gives a client from the same commit and upstream, which pairs with
   the variant REH, and a visibly different app.
