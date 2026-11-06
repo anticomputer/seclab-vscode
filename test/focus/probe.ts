@@ -142,13 +142,18 @@ if (mode === 'prepare') {
 	// Tab-written text: no terminal control sequences reach the operator's terminal (AAA-6).
 	const marks = (raw + hostMarks).replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, '?').split('\n').filter(Boolean).sort().join('\n');
 	const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';
+	// The battery ends at "done", or at its first terminal step: since dialogs are never shown in
+	// background mode, a lost server connection or a restarted local extension host (which takes
+	// tabd with it) leaves the window disconnected for good. Cover the other terminal step with a
+	// second run: prepare --skip server-connection-lost.
+	const completed = / done$/m.test(marks) || / step \d+ (server-connection-lost|restart-extension-host)$/m.test(marks);
 	console.log(`marks (in the tab):\n${marks.trim() || '(none)'}\n`);
 	if (steals) {
 		const at = Date.parse(steals.split(' ')[0]);
 		const before = marks.trim().split('\n').filter(l => Date.parse(l.split(' ')[0]) <= at).pop() ?? '(before the first mark)';
 		console.log(`FOCUS STOLEN:\n${steals}\nlast step before it: ${before}\n`);
 	} else {
-		console.log(`no focus steal recorded; ${/ done$/m.test(marks) ? 'every step ran' : 'NOT every step ran (see marks)'}\n`);
+		console.log(`no focus steal recorded; ${completed ? 'every step ran' : 'NOT every step ran (see marks)'}\n`);
 	}
 	// The guard's own record, read before teardown removes the profile: every window was made
 	// click-through (the user's clicks can't land on it), and which dialogs it didn't show. A
@@ -165,7 +170,7 @@ if (mode === 'prepare') {
 	if (gate.filter(c => !/took focus/.test(c.name)).every(c => c.ok)) {
 		fs.renameSync(path.join(base, 'run.json'), path.join(base, `run-checked-${Date.now()}.json`));
 	}
-	process.exit(!steals && / done$/m.test(marks) && clickThrough > 0 && clickThrough >= windowsNow && /^\[background windows\] activation policy: accessory$/m.test(guardLog) && typeNow === 'UIElement' && gate.every(c => c.ok) ? 0 : 1);
+	process.exit(!steals && completed && clickThrough > 0 && clickThrough >= windowsNow && /^\[background windows\] activation policy: accessory$/m.test(guardLog) && typeNow === 'UIElement' && gate.every(c => c.ok) ? 0 : 1);
 } else {
 	console.error('usage: probe.ts prepare [--app PATH] | check');
 	process.exit(2);
