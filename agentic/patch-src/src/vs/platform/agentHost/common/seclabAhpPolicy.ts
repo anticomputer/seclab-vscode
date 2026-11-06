@@ -89,15 +89,22 @@ export function seclabAhpSanitize(value: Json, depth = 0): number {
 			}
 		}
 	} else if (isObj(value)) {
-		// An `auth-required` MCP state drives the window's automatic authentication path.
-		// Stripping its metadata keys is not enough: the state itself is the trigger, so
-		// it becomes an inert error state (review round 1, HIGH).
-		if (value['kind'] === 'auth-required') {
+		// An MCP `authRequired` state drives the window's automatic authentication path, which
+		// fetches an agent-host-chosen URL on the host network. Stripping metadata keys is not
+		// enough: the state itself is the trigger, so it becomes an inert error state. Upstream
+		// spells the MCP server discriminant `kind: 'authRequired'` (McpServerStatus) and the
+		// tool-call one `status: 'auth-required'` (ToolCallStatus); both spellings are accepted
+		// in both places, so a rename in either direction still lands here (rounds 1 and 2).
+		const authKind = value['kind'] === 'authRequired' || value['kind'] === 'auth-required';
+		const authStatus = value['status'] === 'auth-required' || value['status'] === 'authRequired';
+		if (authKind || authStatus) {
 			for (const k of Object.keys(value)) {
 				delete value[k];
 			}
-			value['kind'] = 'error';
-			value['message'] = REFUSED_MESSAGE;
+			value[authKind ? 'kind' : 'status'] = 'error';
+			// McpServerErrorState wants `error: ErrorInfo`, not a bare message: `{kind:'error'}`
+			// alone makes the renderer dereference `state.error.message` on undefined.
+			value['error'] = { errorType: 'seclab-ahp-gate', message: REFUSED_MESSAGE };
 			return n + 1;
 		}
 		for (const k of Object.keys(value)) {
