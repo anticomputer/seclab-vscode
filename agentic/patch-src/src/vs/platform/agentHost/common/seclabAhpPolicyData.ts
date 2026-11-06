@@ -243,8 +243,14 @@ const serverActions = {
 	'chat/backgroundWorkRemoved': 'allow',
 	'chat/movableChanged': 'allow',
 	'chat/changesetsChanged': 'allow',
-	'chat/canvasesChanged': 'allow',
-	'canvas/stateChanged': 'allow',
+	// Denied inbound: `CanvasState.url` is an agent-host-chosen absolute HTTP(S) URL that the
+	// trusted window hands to `createExternalBrowserView`, and it has no discriminant and no
+	// distinctive key for the sanitiser to catch. Upstream loads it on the agent host's own
+	// network and `chat.canvases.enabled` defaults off, so this was rated LOW, but the gate
+	// does not rest on an upstream default plus an experiment flag (review round 3). Canvases
+	// in tab windows are increment 6's to design.
+	'chat/canvasesChanged': 'deny',
+	'canvas/stateChanged': 'deny',
 	'chat/workingDirectorySet': 'allow',
 	'chat/workingDirectoryRemoved': 'allow',
 	'session/titleChanged': 'allow',

