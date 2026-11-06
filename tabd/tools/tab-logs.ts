@@ -46,7 +46,7 @@ if (!fs.existsSync(eventsDir)) {
 	die(`no event logs under ${eventsDir}`);
 }
 
-const BADGE: Record<string, string> = { 'trusted': 'TRUSTED', 'host-observed': 'HOST-OBS', 'tab-vm-root': 'TAB-ROOT' };
+const BADGE: Record<string, string> = { 'trusted': 'TRUSTED', 'host-observed': 'HOST-OBS', 'tab-vm-root': 'TAB-ROOT', 'tab-reported': 'TAB-SAYS' };
 // LLM-facing output: tab-influenced text fenced as data (tabd/src/obs/llm.ts).
 const llm = new LlmRenderer();
 if (values.format === 'llm') {

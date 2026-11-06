@@ -10,10 +10,12 @@ at the repo root) all apply. Every command here has been run. Design:
 ## What it is, and its trust boundary
 - **What:** one ordered event stream per tab. Every event carries `integrity`,
   fixed by its **source**, never by its content:
-  - `trusted`: produced by tabd, the broker, the RPC filter, `sbx policy log`
-    or the host workspace watcher;
+  - `trusted`: produced by tabd, the broker, the RPC filter, the AHP gate
+    components, `sbx policy log` or the host workspace watcher;
   - `host-observed`: OCI Falco, outside the tab;
-  - `tab-vm-root`: the sbx collector inside the tab VM.
+  - `tab-vm-root`: the sbx collector inside the tab VM;
+  - `tab-reported`: the tab's agent host describing itself, relayed by the
+    renderer (context only; ADR `docs/adr/20261105-agent-events-tab-reported.md`).
 - **Hostile input:** everything a sensor says is tab-derived. It is
   bounded, strictly parsed, escaped, redacted and rate-limited, and never
   becomes argv, a path, a tab id or policy. The one-way rule: the collector's

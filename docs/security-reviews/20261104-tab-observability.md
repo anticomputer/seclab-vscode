@@ -177,6 +177,37 @@ Two passes (8, 8b).
 
 8b found no issues.
 
+## Round 9: agent events and the `tab-reported` label (ADR agent-events-tab-reported)
+Scope:
+- the `tab-reported` integrity label;
+- client sources `ahp-gate`, `ahp-reverse`, `ahp-credential` (trusted) and `agent-host`
+  (tab-reported), with integrity now taken from the source table;
+- `ahp` and `agent` rate buckets;
+- the `ahp.ungated` and `ahp.deny-burst` detections, and the suspicious-content scan of
+  tool and method names;
+- the UI and CLI badges.
+
+Two passes (9, 9b).
+
+| ID | Sev | Area | Finding | Status | Fix |
+|---|---|---|---|---|---|
+| AE-1 | Medium | detection | A tab could provoke enough gate denials to drain the shared `ahp` bucket, dropping `ahp-gate.opened`/`verified` (a missed or a false `ahp.ungated`). The timer's detection also went through the tab-floodable sensor bucket. | Fixed | See below. |
+| AE-L1 | Info | robustness | One global cap on connections awaiting verification. | Fixed | Per tab: 64 each, 1024 overall. |
+
+AE-1 fix:
+- the connection watch runs on the validated report, before rate limiting;
+- opened/verified reports have their own `ahpLife` bucket;
+- `ahp.ungated` is stamped directly, outside every bucket (`hub.detection`);
+- an unwatchable connection is reported at once (fail closed);
+- the watch state is cleared on tab removal.
+
+Regression test: after 2560 gate denials, opened connection 3 is flagged, and connection
+4 (opened, then verified) is not.
+
+Checked as sound: `agent-host` can't reach a trusted event or detection. Its integrity
+comes from the source table, its classes are pinned, the watch requires source `ahp-gate`,
+and the deny burst counts only trusted events. The `rpc-filter` path is unchanged.
+
 ## Accepted residuals (documented in the ADR)
 - `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.
 - Under OCI the privileged Falco sees every container on the Docker host. Only rules for the exact tab container ids are loaded, and its only output is stdout to tabd.
