@@ -10,6 +10,11 @@ export const CFS_CREDENTIAL_ID = 'cfs';
 export const CFS_HOST = 'pkgs.dev.azure.com';
 export const CFS_NPM_PATH = '/github-cfs/GitHubCFS/_packaging/github-cfs-oss/npm/registry/';
 export const CFS_PYPI_PATH = '/github-cfs/GitHubCFS/_packaging/github-cfs-pypi/pypi/';
+/**
+ * Where the PyPI simple index links its files: the feed's GUID path (organisation and feed
+ * GUIDs), not its name (measured 2026-11-06, tabd/test/e2e-cfs.ts). Downloads only.
+ */
+export const CFS_PYPI_DOWNLOAD_PATH = '/github-cfs/9abd351f-45b0-4bcb-a45d-5c080edea161/_packaging/58e9c775-3dd3-4039-9d28-acc0988184b3/pypi/download/';
 export const CFS_TENANT = '398a6654-997b-47e9-b12b-9515b896b4de';
 export const CFS_RESOURCE = '499b84ac-1321-427f-aa17-267ca6975798';
 /** Re-mint when the cached token has less than this left. */
@@ -22,8 +27,12 @@ export function cfsAllowRules(): Record<string, unknown>[] {
 	return [
 		{ id: 'cfs-npm', host: CFS_HOST, methods: ['GET'], path: `${CFS_NPM_PATH}**` },
 		{ id: 'cfs-pypi', host: CFS_HOST, methods: ['GET'], path: `${CFS_PYPI_PATH}**` },
+		{ id: 'cfs-pypi-files', host: CFS_HOST, methods: ['GET'], path: `${CFS_PYPI_DOWNLOAD_PATH}**` },
 	];
 }
+
+/** The rule ids above (removed on disable). */
+export const CFS_RULE_IDS = ['cfs-npm', 'cfs-pypi', 'cfs-pypi-files'];
 
 /**
  * `credential.import` params (broker revision 7): the same credential as
@@ -45,6 +54,7 @@ export function cfsImportParams(sentinel: string, token: AzToken): Record<string
 		bind: [
 			{ host: CFS_HOST, path: `${CFS_NPM_PATH}**`, methods: ['GET'] },
 			{ host: CFS_HOST, path: `${CFS_PYPI_PATH}**`, methods: ['GET'] },
+			{ host: CFS_HOST, path: `${CFS_PYPI_DOWNLOAD_PATH}**`, methods: ['GET'] },
 		],
 		budget: { requests: 5000, bytes: 2 * 1024 ** 3 },
 		source: { kind: 'host', label: 'CFS package feeds (az)' },

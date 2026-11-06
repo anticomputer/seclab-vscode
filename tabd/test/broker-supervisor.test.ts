@@ -411,9 +411,9 @@ test('B4 CFS feeds: off by default; enabling imports the sentinel credential GET
 	for (const b of imp.bind as Array<{ host: string; path: string; methods: string[] }>) {
 		assert.equal(b.host, 'pkgs.dev.azure.com');
 		assert.deepEqual(b.methods, ['GET'], 'GET only');
-		assert.match(b.path, /^\/github-cfs\/GitHubCFS\/_packaging\/github-cfs-(oss\/npm\/registry|pypi\/pypi)\/\*\*$/);
+		assert.match(b.path, /^\/github-cfs\/(GitHubCFS\/_packaging\/github-cfs-(oss\/npm\/registry|pypi\/pypi)|9abd351f-45b0-4bcb-a45d-5c080edea161\/_packaging\/58e9c775-3dd3-4039-9d28-acc0988184b3\/pypi\/download)\/\*\*$/);
 	}
-	assert.deepEqual((driver.brokerLog.find(l => Array.isArray(l.params?.addAllow))!.params!.addAllow as Array<{ id: string }>).map(r => r.id), ['cfs-npm', 'cfs-pypi']);
+	assert.deepEqual((driver.brokerLog.find(l => Array.isArray(l.params?.addAllow))!.params!.addAllow as Array<{ id: string }>).map(r => r.id), ['cfs-npm', 'cfs-pypi', 'cfs-pypi-files']);
 	await wait(() => driver.feeds.length === 1);
 	assert.deepEqual(driver.feeds, [sentinel], 'the running tab gets its npm/pip config with the sentinel');
 	assert.deepEqual(await call('tab.packages.get', { tabId }), { cfs: true });
@@ -437,7 +437,7 @@ test('B4 CFS feeds: off by default; enabling imports the sentinel credential GET
 
 	// Disable: allow rules removed, the credential revoked (sentinel rotated), the config removed.
 	assert.deepEqual(await call('tab.packages.set', { tabId, cfs: false }), { cfs: false, applied: true });
-	assert.ok(driver.brokerLog.some(l => l.method === 'policy.update' && JSON.stringify(l.params?.removeAllow) === '["cfs-npm","cfs-pypi"]'));
+	assert.ok(driver.brokerLog.some(l => l.method === 'policy.update' && JSON.stringify(l.params?.removeAllow) === '["cfs-npm","cfs-pypi","cfs-pypi-files"]'));
 	assert.deepEqual(driver.brokerLog.find(l => l.method === 'credential.revoke')!.params, { id: 'cfs', rotateSentinel: true });
 	assert.equal(driver.feeds.at(-1), undefined);
 	// Review EEE-2: a start's import still waiting for az when feeds are turned off is undone,

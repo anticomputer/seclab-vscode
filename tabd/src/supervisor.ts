@@ -11,7 +11,7 @@ import { BrokerControl, connectBroker } from './broker-control.ts';
 import { BROKER_POLICY_SCHEMA } from './broker.ts';
 import { defaultPolicy } from './broker-policy.ts';
 import { Approvals, asJson, sanitizeApproval } from './approvals.ts';
-import { CFS_CREDENTIAL_ID, cfsAllowRules, cfsImportParams, isCfsSentinel, newCfsSentinel, type AzToken } from './cfs.ts';
+import { CFS_CREDENTIAL_ID, CFS_RULE_IDS, cfsAllowRules, cfsImportParams, isCfsSentinel, newCfsSentinel, type AzToken } from './cfs.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { assertTabId, canonicalWorkspacePath, sandboxNameFor, TEMPLATE_NAME_RE, ValidationError, type PathPolicy } from './validate.ts';
 import { ObsGlue, ObsParamError } from './obs/glue.ts';
@@ -740,7 +740,7 @@ export class Supervisor {
 			return;
 		}
 		await c.request('credential.import', cfsImportParams(sentinel, token), 30_000);
-		await c.request('policy.update', { removeAllow: ['cfs-npm', 'cfs-pypi'] }).catch(() => undefined);
+		await c.request('policy.update', { removeAllow: CFS_RULE_IDS }).catch(() => undefined);
 		await c.request('policy.update', { addAllow: cfsAllowRules() });
 		if (!this.cfsCurrent(tabId, c, sentinel)) {
 			await this.removeCfs(c);
@@ -751,7 +751,7 @@ export class Supervisor {
 
 	/** Remove the feed rules and revoke the credential (sentinel rotated); throws if the broker didn't confirm. */
 	private async removeCfs(c: BrokerControl): Promise<void> {
-		await c.request('policy.update', { removeAllow: ['cfs-npm', 'cfs-pypi'] });
+		await c.request('policy.update', { removeAllow: CFS_RULE_IDS });
 		await c.request('credential.revoke', { id: CFS_CREDENTIAL_ID, rotateSentinel: true });
 	}
 
