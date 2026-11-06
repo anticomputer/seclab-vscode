@@ -21,19 +21,29 @@
  * call sites would silently miss a reader added by an upstream bump; the configuration
  * service is the single place every one of them goes through.
  *
- * `workbench.browser.enableRemoteProxy` is deliberately NOT here yet. Security review round 6
- * found a third open path the measurement had missed: the browser tools resolve the network
- * with the PUBLIC `resolveNetwork`, which yields `undefined` when the proxy is off, so the
- * page loads on the HOST network for a model-chosen URL. Our own authority always reports
- * `proxySupported: true`, so that is a real change, not a no-op. Forcing `false` would
- * therefore open a host-network egress path that leaving the setting alone does not. The
- * value is settled in its own increment; see the EDR.
+ * The two browser keys work together, and both directions matter. Forcing the proxy on keeps
+ * a browser view's traffic on the tab's network; forcing the storage scope off `global` is
+ * what stops a tab taking the network away again, because upstream drops the network for the
+ * global scope. Neither is useful without the other (EDR 20261106-increment-2-remote-proxy,
+ * and security review round 6 for why the proxy is `true` rather than the `false` the plan
+ * first called for).
  */
 
 /** The fixed values, by setting id. Tab windows only. */
 export const SECLAB_FIXED_TAB_SETTINGS: ReadonlyMap<string, unknown> = new Map<string, unknown>([
 	['chat.automations.enabled', false],
 	['chat.automations.cloud.enabled', false],
+	// `true`, not `false`. Both values are reachable by a tab, and `true` is the contained
+	// one: it keeps every browser view's traffic on the tab's network, behind that tab's
+	// broker. `false` would drop the browser tools' model-chosen URL onto the HOST network
+	// (security review round 6), which is strictly worse than leaving the setting alone.
+	['workbench.browser.enableRemoteProxy', true],
+	// A browser view's network is kept only for the non-global storage scopes:
+	// `toBrowserViewSessionOptions` returns `{ scope }` with NO network for `global`, so a
+	// tab that wrote `global` would move its page onto the host network and into the host's
+	// shared, persistent cookie jar, defeating the line above. `ephemeral` keeps the network
+	// and gives each view a session cleaned up when it closes.
+	['workbench.browser.dataStorage', 'ephemeral'],
 ]);
 
 /**

@@ -40,10 +40,47 @@ getting it backwards would force the *less* contained behaviour.
      and the view then loads on the **host** network, with a visible network indicator.
      Upstream says as much: "Browsers using global storage always use the local network."
 
-## Decision (revised by security review round 6; the original is below it)
+## Decision (settled; two earlier versions are kept below)
+**0017 fixes four settings in a `seclab+` window: `chat.automations.enabled` and
+`chat.automations.cloud.enabled` to `false`, `workbench.browser.enableRemoteProxy` to
+`true`, and `workbench.browser.dataStorage` to `ephemeral`.**
+
+The user chose option 1 from the round 6 list (2026-11-06): force the proxy **on**, which is
+the opposite of what the plan's increment 2 first said, and lock the storage scope so a tab
+cannot undo it. The reasoning and the measurement that got there are in the two superseded
+sections below and in "What round 6 found".
+
+**The two browser keys are one control, and neither works without the other.**
+- `enableRemoteProxy: true` keeps every browser view's traffic on the **tab's** network,
+  behind that tab's broker, on all three open paths: embedded pages, user-opened views, and
+  the browser tools' model-chosen URL.
+- `dataStorage: ephemeral` is what stops a tab taking the network away again.
+  `toBrowserViewSessionOptions` returns `{ scope }` with **no network** for `global`
+  ([browserView.ts#L517-L521](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/common/browserView.ts#L517-L521)),
+  so a tab writing `global` would move its page onto the host network and into the host's
+  shared persistent cookie jar. The setting is `WINDOW` scope
+  ([browserDataStorageFeatures.ts#L160-L182](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/browserView/electron-browser/features/browserDataStorageFeatures.ts#L160-L182)),
+  so a tab can write it. `ephemeral` keeps the network and gives each view a session cleaned
+  up when it closes; `workspace` would also keep the network but persists, so `ephemeral` is
+  the one chosen.
+
+This matches the design's own row for "Host view of a tab service" (§3.5): the page runs in
+host Chromium with an ephemeral partition and all of its traffic goes to the tab's broker,
+with no fallback to the host network.
+
+### What the proof must show, on U and on F
+1. the browser tool's **model-chosen URL** goes through the tab's broker, not the host
+   network;
+2. a **tab-written `dataStorage: global`** does not move the page onto the host network.
+
+Both need host-side evidence, as always: the host beacon must be hit on the unfixed build and
+not on the fixed one, and the tab's broker must show the request on the fixed one. The second
+is what makes the pair a control rather than two independent settings.
+
+### Superseded: the round 6 decision
 **0017 ships the two automations keys and NOT `workbench.browser.enableRemoteProxy`.**
-Round 6 found a third open path the measurement below had missed, and it reverses the
-conclusion for that one key. See "What round 6 found" at the end of this record.
+Round 6 found a third open path the original measurement had missed, and it reversed the
+conclusion for that one key, which was then held for the user's decision.
 
 ### The original decision, superseded for `enableRemoteProxy`
 **0017 fixes the value to `false` in `seclab+` windows, as the plan says.** Finding 3 is why
