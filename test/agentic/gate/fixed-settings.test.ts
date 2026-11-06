@@ -35,8 +35,6 @@ test('a tab window fixes exactly the declared keys, and nothing else', () => {
 	// browser view's traffic on the tab's network; `false` would drop the browser tools'
 	// model-chosen URL onto the host network (round 6).
 	assert.equal(SECLAB_FIXED_TAB_SETTINGS.get('workbench.browser.enableRemoteProxy'), true);
-	// And `global` is the one scope upstream drops the network for, so it must not be reachable.
-	assert.notEqual(SECLAB_FIXED_TAB_SETTINGS.get('workbench.browser.dataStorage'), 'global');
 	assert.equal(SECLAB_FIXED_TAB_SETTINGS.get('workbench.browser.dataStorage'), 'ephemeral');
 });
 
@@ -52,9 +50,14 @@ test('a tab cannot take the network away through either browser key', () => {
 	assert.equal(out.workbench.browser.dataStorage, 'ephemeral');
 	assert.equal(seclabFixedSetting(TAB, 'workbench.browser.enableRemoteProxy')?.value, true);
 	assert.equal(seclabFixedSetting(TAB, 'workbench.browser.dataStorage')?.value, 'ephemeral');
-	// An ordinary window keeps whatever it had.
-	assert.deepEqual(seclabScrubFixedSettings('ssh-remote+box', undefined, tabWrote), tabWrote);
+	// An ordinary window keeps whatever it had. Compared against a literal, not against the
+	// input object, which would have matched even if the call mutated it in place (round 7).
+	assert.deepEqual(
+		seclabScrubFixedSettings('ssh-remote+box', undefined, { workbench: { browser: { enableRemoteProxy: false, dataStorage: 'global' } } }),
+		{ workbench: { browser: { enableRemoteProxy: false, dataStorage: 'global' } } },
+	);
 });
+
 
 // The two call sites the patch edits, modelled exactly as upstream shapes them. Round 6
 // found a real break in `inspect` that the helper-only tests could not see.

@@ -23,14 +23,33 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 interface Rule { why: string; files: Record<string, string> }
+interface UpstreamInvariants { why: string; rules: { file: string; mustContain: string[]; why: string }[] }
 
 /** Returns the problems found; empty means the invariants hold. */
 export function soleConsumerProblems(src: string, configFile: string): string[] {
 	if (!fs.existsSync(configFile)) {
 		return [];
 	}
-	const rules = JSON.parse(fs.readFileSync(configFile, 'utf8')) as Record<string, Rule>;
+	const parsed = JSON.parse(fs.readFileSync(configFile, 'utf8')) as Record<string, Rule | UpstreamInvariants>;
 	const problems: string[] = [];
+	// Facts about upstream that a patch's security argument rests on. They live here, not in
+	// a unit test, because the unit container has no upstream checkout, and this check already
+	// runs over the patched tree.
+	const invariants = parsed.__upstreamInvariants as UpstreamInvariants | undefined;
+	for (const rule of invariants?.rules ?? []) {
+		const file = path.join(src, rule.file);
+		if (!fs.existsSync(file)) {
+			problems.push(`upstream invariant: ${rule.file} does not exist (${rule.why})`);
+			continue;
+		}
+		const text = fs.readFileSync(file, 'utf8');
+		for (const needle of rule.mustContain) {
+			if (!text.includes(needle)) {
+				problems.push(`upstream invariant: ${rule.file} no longer contains ${JSON.stringify(needle)}\n      ${rule.why}`);
+			}
+		}
+	}
+	const rules = Object.fromEntries(Object.entries(parsed).filter(([k]) => !k.startsWith('__'))) as Record<string, Rule>;
 	for (const [symbol, rule] of Object.entries(rules)) {
 		const found = new Map<string, string[]>();
 		for (const file of sourceFiles(path.join(src, 'src', 'vs'))) {

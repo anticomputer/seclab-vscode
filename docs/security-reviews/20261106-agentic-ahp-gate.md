@@ -349,3 +349,49 @@ It now asserts the keys literally.
 
 No high or critical issue remains in 0017 as it now stands. The held-back key is a decision,
 not a defect.
+
+## Round 7 (2026-11-06): 0017's browser keys, after the user chose `true`
+Scope: the change that forces `workbench.browser.enableRemoteProxy` to `true` and
+`workbench.browser.dataStorage` to `ephemeral`. No prompt injection found.
+
+**No high or critical issue.** The reviewer checked `true` adversarially and found it is the
+safer of the two reachable values, and not a behaviour change by itself: the registered
+default is already on in these builds, so the pin only removes the tab's ability to select
+`false`. Specifically confirmed sound: `$openNetworkConnection` is restricted to the local
+extension host and an existing agent-host connection; the tunnel proxy binds loopback with
+random-credential auth and a pinned cert; the Electron session sets
+`proxyBypassRules: '<-loopback>'`, so a model-chosen `http://127.0.0.1:…` does **not** fall
+back to host loopback; ephemeral sessions are per view; and a proxy that fails to start fails
+view creation rather than falling back. `ephemeral` is the right one of the two
+network-keeping scopes.
+
+Four findings, all addressed.
+
+1. **MEDIUM, the record claimed brokering that does not happen.** The patch comment and the
+   EDR said this traffic goes "behind that tab's broker". It does not: the destination socket
+   is a raw TCP connect from inside the sbx, which does not honour the tab's proxy env vars,
+   and those variables are the only path to the broker. The containment is the **fence**,
+   which allows the broker port alone, so an external destination is denied and a tab-local
+   one is reached directly. Load-bearing, because a later grant that widens a fence would let
+   this traffic leave unmediated while the record said it was brokered. Corrected in both
+   places.
+2. **MEDIUM, a restored browser editor bypassed the pin.** `_resolveSessionRequest` returns a
+   saved request verbatim when it carries a scope, and a browser editor restored from a
+   previous window carries one. A view stored while a tab could still choose `global` came
+   back with `global` and no network: the host network and the host's shared cookie jar,
+   exactly what the pin is for. Fixed in 0017: a `seclab+` window drops the saved session
+   request and rebuilds it under the fixed setting.
+3. **LOW, two overclaims in the EDR.** It said the decision "matches" the design's §3.5 row;
+   it matches that row's traffic direction but not its gate, since the row says the setting is
+   pinned "so only the grant opens it" and the grant is unimplemented. And the `Consequences`
+   section still argued the superseded `false` case, so the record contradicted its own
+   decision. Both fixed, with fresh consequences for `true` + `ephemeral` including the cost
+   that no browser view in a tab window can persist logins.
+4. **LOW, the tests could pass while the named property was broken.** The security property is
+   an **upstream** invariant (`global` drops the view's network, `ephemeral` keeps it) that
+   nothing in the repo pinned, so an upstream rename would leave every test green. It cannot
+   live in a unit test, because the unit container has no upstream checkout, so it is now an
+   upstream-invariant rule in `patches/sole-consumer.json`, enforced over the patched tree by
+   `build/check-sole-consumer.ts` from inside the check `patch-build` already runs. Verified
+   by renaming the enum member in a scratch tree: the check fails. Two asserts that could not
+   fail were also removed or made literal.
