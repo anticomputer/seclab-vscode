@@ -6,7 +6,7 @@ diff -ruN a/src/vs/workbench/services/commands/common/commandService.ts b/src/vs
  import { ILogService } from '../../../../platform/log/common/log.js';
  import { IExtensionService } from '../../extensions/common/extensions.js';
 +import { ServiceCollection } from '../../../../platform/instantiation/common/serviceCollection.js';
-+import { seclabTaintedCommandService, seclabTaintInFlight } from '../../extensions/common/seclabRpcFilter.js';
++import { seclabEnterTabCommand, seclabExitTabCommand, seclabTaintedCommandService, seclabTaintInFlight } from '../../extensions/common/seclabRpcFilter.js';
  
  export class CommandService extends Disposable implements ICommandService {
  
@@ -47,7 +47,14 @@ diff -ruN a/src/vs/workbench/services/commands/common/commandService.ts b/src/vs
 +
 +	/** seclab: entry point for a command a sandboxed tab asked for. */
 +	public seclabExecuteFromTab<T>(id: string, args: unknown[], origin: unknown): Promise<T> {
-+		return this._tryExecuteCommand(id, args, origin);
++		// Counted here, around the whole origin-bearing execution, so the
++		// laundering backstop sees the outermost call too. Incrementing only
++		// inside the tainted service left a handler one level down -- holding
++		// an injected ICommandService rather than its accessor -- outside both
++		// the taint and the backstop meant to catch exactly that.
++		seclabEnterTabCommand();
++		return this._tryExecuteCommand<T>(id, args, origin)
++			.finally(() => seclabExitTabCommand());
  	}
  
  	public override dispose(): void {
