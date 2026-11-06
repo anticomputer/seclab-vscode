@@ -190,8 +190,20 @@ using this host's `az` (`tabd/test/e2e-cfs.ts`, EDR `20261106-cfs-feeds-tabd`):
 
   Tests: `test_redirects.py` (a canary signature in every Location, swept
   from everything the tab saw, the audit and the broker's logs) and
-  `test_r8_redirect_follow_data_and_target_checks`. A real `npm install` and
-  `pip install` in a CFS-enabled tab gate landing.
+  `test_r8_redirect_follow_data_and_target_checks`.
+
+  **Runtime proof (Fork-build, 2026-11-06,** `tabd/test/e2e-cfs.ts`, an OCI tab
+  with CFS on through tabd, broker 0.8.0, no allow rule for storage):
+  `npm install --ignore-scripts is-number@7.0.0` and
+  `pip install --no-deps --require-hashes six==1.16.0` both succeed, the
+  tarball and wheel arriving as `200` on the feed URL. The audit shows six
+  `credential.redirect_followed` (303) and no refusal. No `sig=`,
+  `vsblobprodcus` or `blob.core.windows.net` appears in the project,
+  `~/.npm` (including `_cacache`), `~/.cache/pip`, or the npm and pip logs,
+  and no `sig=` in the broker's logs, where storage names appear only as the
+  audit's host and path. The first run found the shipped pattern missed the
+  accounts' three-character prefix (`aaavsblobprodcus101`); it failed closed,
+  and the pattern was fixed before landing.
 - **Audit.** `credential.used` came only from `pkgs.dev.azure.com`, with
   statuses 200 and 303 (the 303s at 0 bytes). POST and `_apis` probes were
   refused.
