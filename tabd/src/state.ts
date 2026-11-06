@@ -6,6 +6,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { assertTabId, CONNECTION_TOKEN_RE, foldPath, mintConnectionToken, mintTabId, TEMPLATE_NAME_RE, ValidationError } from './validate.ts';
 
+/** Per-tab side files: moved secrets, accepted secret findings, the user's blocked destinations. */
+export type SideKind = 'vault' | 'exceptions' | 'blocks';
+
 export interface TabRecord {
 	readonly tabId: string;
 	readonly hostPath: string;
@@ -125,6 +128,7 @@ export class TabStore {
 		fs.rmSync(path.join(this.byPathDir, `${key}.json`), { force: true });
 		fs.rmSync(this.recordFile(tabId), { force: true });
 		fs.rmSync(path.join(this.tabsDir, `${tabId}.used`), { force: true });
+		fs.rmSync(this.sideFile(tabId, 'blocks'), { force: true });
 		this.clearLease(tabId);
 	}
 
@@ -135,11 +139,11 @@ export class TabStore {
 
 	// Host-side vault of secrets moved out of a workspace (until the broker imports them)
 	// and the record of "open anyway" secret exceptions. Both 0600, outside every tab.
-	private sideFile(tabId: string, kind: 'vault' | 'exceptions'): string {
+	private sideFile(tabId: string, kind: SideKind): string {
 		return path.join(this.tabsDir, `${assertTabId(tabId)}.${kind}.json`);
 	}
 
-	readSide<T>(tabId: string, kind: 'vault' | 'exceptions'): T[] {
+	readSide<T>(tabId: string, kind: SideKind): T[] {
 		try {
 			const v = JSON.parse(fs.readFileSync(this.sideFile(tabId, kind), 'utf8'));
 			return Array.isArray(v) ? v as T[] : [];
@@ -148,7 +152,7 @@ export class TabStore {
 		}
 	}
 
-	writeSide<T>(tabId: string, kind: 'vault' | 'exceptions', entries: readonly T[]): void {
+	writeSide<T>(tabId: string, kind: SideKind, entries: readonly T[]): void {
 		const file = this.sideFile(tabId, kind);
 		const tmp = `${file}.${process.pid}.tmp`;
 		fs.writeFileSync(tmp, JSON.stringify(entries), { mode: 0o600 });

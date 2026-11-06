@@ -96,6 +96,30 @@
 				"title": "Observation Mode…",
 				"category": "seclab",
 				"icon": "$(telescope)"
+			},
+			{
+				"command": "seclab.detections.refresh",
+				"title": "Refresh Detections",
+				"category": "seclab",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "seclab.detections.filter",
+				"title": "Filter Detections…",
+				"category": "seclab",
+				"icon": "$(filter)"
+			},
+			{
+				"command": "seclab.detections.stopTab",
+				"title": "Stop Tab",
+				"category": "seclab",
+				"icon": "$(debug-stop)"
+			},
+			{
+				"command": "seclab.detections.openTab",
+				"title": "Open Tab",
+				"category": "seclab",
+				"icon": "$(window)"
 			}
 		],
 		"viewsContainers": {
@@ -113,6 +137,10 @@
 					"id": "seclab.tabActivity",
 					"name": "Tab Activity",
 					"when": "remoteName == seclab"
+				},
+				{
+					"id": "seclab.detections",
+					"name": "Detections (All Tabs)"
 				}
 			]
 		},
@@ -120,7 +148,17 @@
 			"view/title": [
 				{ "command": "seclab.activity.filter", "when": "view == seclab.tabActivity", "group": "navigation@1" },
 				{ "command": "seclab.activity.toggleDetections", "when": "view == seclab.tabActivity", "group": "navigation@2" },
-				{ "command": "seclab.activity.deepMode", "when": "view == seclab.tabActivity", "group": "navigation@3" }
+				{ "command": "seclab.activity.deepMode", "when": "view == seclab.tabActivity", "group": "navigation@3" },
+				{ "command": "seclab.detections.filter", "when": "view == seclab.detections", "group": "navigation@1" },
+				{ "command": "seclab.detections.refresh", "when": "view == seclab.detections", "group": "navigation@2" }
+			],
+			"view/item/context": [
+				{ "command": "seclab.detections.stopTab", "when": "view == seclab.detections && viewItem =~ /Running$/", "group": "inline@1" },
+				{ "command": "seclab.detections.openTab", "when": "view == seclab.detections && viewItem =~ /^seclab(Tab|Detection)/", "group": "inline@2" }
+			],
+			"commandPalette": [
+				{ "command": "seclab.detections.stopTab", "when": "false" },
+				{ "command": "seclab.detections.openTab", "when": "false" }
 			]
 		},
 		"keybindings": [

@@ -107,6 +107,11 @@ export class TabActivity implements vscode.TreeDataProvider<Item>, vscode.Dispos
 		this.setObservation({ state: 'unavailable', since: new Date().toISOString(), reason: 'supervisor disconnected' });
 	}
 
+	/** Is this one of this window's tab subscription's notifications? */
+	owns(subscription: unknown): boolean {
+		return this.subscription !== undefined && subscription === this.subscription;
+	}
+
 	private setObservation(o: Observation): void {
 		this.observation = o;
 		if (o.state === 'unobserved') {

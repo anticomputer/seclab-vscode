@@ -135,6 +135,11 @@ export class WriteBackReview implements vscode.TextDocumentContentProvider {
 		return this.cache.get(uri.toString()) ?? '(no longer available)\n';
 	}
 
+	/** Held changes for this window's tab (for notification actions). */
+	heldCount(): number {
+		return this.count;
+	}
+
 	/** tab.writeback.pending for this window's tab. */
 	onPending(params: Record<string, unknown>): void {
 		if (params.tabId !== this.tabId || typeof params.count !== 'number') {

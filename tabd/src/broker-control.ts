@@ -34,6 +34,8 @@ interface Pending {
 }
 
 export class BrokerControl {
+	/** Feature flags from `broker.hello` (booleans only), e.g. `denyRules`. */
+	capabilities: Readonly<Record<string, boolean>> = {};
 	private nextId = 1;
 	private buf = '';
 	private closed: BrokerControlError | undefined;
@@ -171,7 +173,12 @@ export async function connectBroker(openChannel: () => ChildProcessWithoutNullSt
 	while (Date.now() < deadline) {
 		const c = new BrokerControl(openChannel());
 		try {
-			checkBrokerHello(await c.request('broker.hello', undefined, Math.max(1, Math.min(15_000, deadline - Date.now()))), tabId, opts.version);
+			const hello = await c.request('broker.hello', undefined, Math.max(1, Math.min(15_000, deadline - Date.now())));
+			checkBrokerHello(hello, tabId, opts.version);
+			const caps = (hello as { capabilities?: unknown }).capabilities;
+			if (caps && typeof caps === 'object' && !Array.isArray(caps)) {
+				c.capabilities = Object.fromEntries(Object.entries(caps).filter(([, v]) => typeof v === 'boolean')) as Record<string, boolean>;
+			}
 			return c;
 		} catch (e) {
 			c.close();
