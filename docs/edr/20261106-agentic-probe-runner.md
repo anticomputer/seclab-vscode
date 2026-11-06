@@ -473,3 +473,25 @@ which holds the armed rogue extension. It applies verify's own rules: a manifest
 problem, or one naming a profile outside the test roots, is refused rather than acted on, and
 it is a no-op where there is no previous run. `test/containment/teardown.test.ts` covers all
 five cases.
+
+
+## The G build, verified without a window (2026-11-06)
+`./seclab fetch macos-branch 42235450332` fetched the branch build for `bb37621`, with the
+build provenance attestation verified against `build-macos.yml` on this branch at that exact
+SHA. Every gate rule is present in the shipped desktop bundle and absent from the U build,
+so the two differ in the way the run needs them to:
+
+| string in `workbench.desktop.main.js` | G (`bb37621`) | U (main `b46b208`) |
+|---|---|---|
+| `ahp-gate.opened`, `ahp-gate.verified`, `ahp-gate.refused` | present | absent |
+| `ahp-gate.disabled`, `ahp-gate.reverse-request`, `seclabAhpGate` | present | absent |
+
+That is a static check: it shows the gate shipped, not that it executes, which is exactly
+the distinction the user held 0015 for ("review round 2 already showed that kind of evidence
+passing dead code"). The executing-in-the-shipped-build proof is still the U-then-G run.
+
+**Still blocked on one thing only.** Both runs need an editor window, and windows are held
+until the focus-steal regression recorded above is fixed (owned elsewhere). Everything that
+does not need a window is done: the probes are proved against the real client, the teardown
+hole that orphaned a beacon is closed and regression-tested, review round 4 is recorded with
+no high or critical finding left, and every required check is green on `bb37621`.
