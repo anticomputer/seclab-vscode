@@ -358,6 +358,14 @@ npm_fetch_cfs() {
 		fi
 	fi
 	docker run --rm --network none -v "$vol:/work" "$img" sh -c 'rm -rf /work/.npm-cache /work/.npm-locks-filled && cp -a /npm-cache /work/.npm-cache && cp -a /locks-filled /work/.npm-locks-filled && chown -R 1001:1001 /work/.npm-cache /work/.npm-locks-filled'
+	prune_superseded_images
+}
+
+# Remove our images no worktree's build references any more (clean-host's rule), so tagged
+# snapshots (npm caches of ~2.3 GB, tool content tags) don't pile up. Best effort, local only.
+prune_superseded_images() {
+	[[ -n "${CI:-}" ]] && return 0
+	"${SECLAB_NODE:-node}" "$ROOT/test/clean-host.ts" --superseded-images >/dev/null 2>&1 || true
 }
 
 case "${1:-help}" in
@@ -406,7 +414,7 @@ case "${1:-help}" in
 	image)
 		shift
 		case "${1:-}" in
-			oci) shift; "$ROOT/sandbox/oci/build-images.sh" "$@" ;;
+			oci) shift; "$ROOT/sandbox/oci/build-images.sh" "$@"; prune_superseded_images ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	fetch)
@@ -456,7 +464,7 @@ case "${1:-help}" in
 		esac ;;
 	help|-h|--help) usage ;;
 	# Pinned tools (build/tools/tools.json): verify and build; prints the local image tag.
-	tool) shift; [[ $# -eq 1 ]] || { usage; exit 2; }; tool_image "$1" ;;
+	tool) shift; [[ $# -eq 1 ]] || { usage; exit 2; }; tool_image "$1"; prune_superseded_images ;;
 	# Repo-provided git hooks (AGENTS.md). Installed into the clone's common git dir, outside every
 	# worktree, so a branch can't weaken or drop the hook by editing build/hooks (review VV-4);
 	# re-run after build/hooks changes. Shared by every worktree of this clone.
