@@ -1,9 +1,12 @@
 # RPC core increment: state, and what runs next
 
 - **Date:** 2026-11-06
-- **Status:** accepted. Handoff note: the core RPC filter is complete on `rpc-core`
-  and **not landed**, because it has no runtime proof yet.
-- **Branch:** `rpc-core`, head `8be17a6`, pushed. Every gate and suite green.
+- **Status:** accepted. Handoff note, now closed out: the core RPC filter was
+  built on `rpc-core` and handed over for landing.
+- **Branch:** `rpc-core`, final head `597b92c`, pushed, every gate and suite
+  green. **Ownership moved** to the RPC-core landing session, which is bringing
+  `597b92c` onto `anticomputer-rpc-core-landing` and fixing what the runtime
+  proof found (see the outcome section). No further commits from this session.
 
 Written because the session that built this ran long, and the remaining work
 depends on facts that are cheap to state and expensive to rediscover.
@@ -24,7 +27,37 @@ Both paths are **open on main** and say so in `RPC-LOCKDOWN.md` §7 and the
 README's M4 row. They are recorded as accepted-unenforced in `policy.json`,
 so `check.sh` prints them on every run; that list stands at 25.
 
-## The proof, and why it is not done
+## The proof: outcome (2026-11-06, later)
+
+> **Superseded by the run.** The section below described the state before the
+> proof completed. It is kept because the three conditions still stand, but the
+> run happened and the patched half failed for a reason **internal to this
+> increment**, not an environmental one:
+>
+> * baseline reproduced `PWNED-newlocal`, as before;
+> * the patched build **broke the extension host**: the default verdict denied
+>   `$onUnexpectedError` and the activation methods, so the host could neither
+>   report errors nor activate extensions;
+> * the decision log's cap **latched after about 4,900 denials in 666 ms**.
+>
+> Both are mine, and both are one mistake in two places: a default-deny table
+> and a per-window cap each sized for a hostile tab making occasional calls,
+> when the real traffic is an extension host doing ordinary work. Default-deny
+> is right; denying the host's own lifecycle plumbing is not a policy anyone
+> chose, it is a classification gap nothing had exercised. The cap figures
+> (5000 lines, 2 MB) were argued against an attacker's budget rather than a
+> normal session's, and 666 ms shows how far out that was.
+>
+> The honest reading: the **earlier** patched run that produced "no marker and
+> no fixture evidence" was most likely this, not a timing or write-back
+> problem. Refusing to call it a proof was right; the cause was nearer to hand
+> than the overlay theory being pursued at the time. An absent marker had a
+> reason, and the reason was the filter breaking the thing it was filtering.
+>
+> Anyone sizing a cap or a default here should measure a normal session first.
+> The RPC-core landing session owns the fix.
+
+## The proof, and why it was not done
 
 The baseline half **passed**: on main's `24fea4c` build, `newLocal` +
 `sendSequence` wrote `PWNED-newlocal` to the host. Host code execution from a
@@ -117,10 +150,29 @@ Fork-build generalises it repo-wide.
 - **Deferred laundering is an open residual** and is gated: no command may be
   given a verdict other than `deny` until it is fixed
   (`check_drift.py::check_residuals`).
-- **Prove a gate by injecting the defect it claims to catch.** Three times in
-  this session the *injection* was wrong rather than the gate — most
-  instructively, appending `process.exit(1)` after a suite's own `process.exit`
-  and concluding the runner swallowed failures. Check which of the two failed.
+- **Prove a gate by injecting the defect it claims to catch, and when the
+  injection harness reports the *control* failing, establish whether the gate
+  or the harness failed before believing either.** That happened three times in
+  one session, and every time the harness was at fault, not the thing under
+  test:
+
+  1. appending `process.exit(1)` to a suite that already calls `process.exit`,
+     so the injected line was unreachable, and concluding the aggregate runner
+     swallowed failures;
+  2. granting an injection the exemption it was meant to defeat, by setting
+     `whole_class: true` while testing whether `whole_class` could be abused,
+     which is why that rule is now structural rather than a flag;
+  3. restoring a backed-up file inside a shell `&&` chain, so the control ran
+     against a still-modified tree.
+
+  Each would have produced a "fix" to a gate that was working. The habit that
+  catches it is cheap: re-run the control alone, in a clean invocation, before
+  concluding anything. A gate and its prover are two pieces of code, and only
+  one of them is under test at a time.
+
+  This generalises to the approved liveness gate: a liveness gate with a broken
+  prover is the same failure wearing a new hat. "Name what runs this" needs
+  "and show that the thing proving it ran can itself fail".
 
 ## Links
 
