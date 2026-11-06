@@ -3,7 +3,9 @@
 #   build/check-release.sh [--desktop] PATH...   (.app/Contents/Resources/app dir, a dir, or .tar.gz/.zip)
 # Fails on:
 #   - test-hook markers: SECLAB_TEST_ONLY / seclab-test-hook / rogue-reh / rogue-extension
-#     (any code meant only for tests must carry SECLAB_TEST_ONLY so this finds it);
+#     (any code meant only for tests must carry SECLAB_TEST_ONLY so this finds it), and
+#     `seclabTestBuild`, the positive marker every test build variant's product.json carries
+#     (build/test-variant.sh; EDR test-build-variants);
 #   - environment-controlled module loading: require()/import() of a path taken from
 #     process.env (a classic test hook that becomes a backdoor in a release);
 #   - a path with no JS at all (wrong path = no check), or any scan error (fail closed).
@@ -39,7 +41,7 @@ if [ "${1:-}" = "--inner" ]; then
 	}
 	while IFS= read -r d; do
 		[ -n "$(find "$d" -type f -name "*.js" | head -1)" ] || { echo "check-release: no JS files under $d (wrong path?)"; bad=1; }
-		scan "SECLAB_TEST_ONLY|seclab-test-hook|rogue-reh|rogue-extension" "test-hook marker"
+		scan "SECLAB_TEST_ONLY|seclab-test-hook|rogue-reh|rogue-extension|seclabTestBuild" "test-hook marker"
 		scan "(require|import)\([[:space:]]*process\.env(\.[A-Za-z_]+|\[)[^)]{0,80}\)" "env-controlled module load"
 		if [ "$MODE" = desktop ]; then
 			set +e

@@ -302,6 +302,13 @@ xattr -dr com.apple.quarantine .work/app/seclab-vscode.app
 # attested test build into .work/app-branch/ (never the release location; EDR branch-test-builds).
 gh workflow run build-macos.yml --ref <branch>
 ./seclab fetch macos-branch <RUN_ID>
+# A test build variant (EDR test-build-variants): patches/series + the reviewed test-only hooks
+# in test/builds/variants.json, renamed app + hooked arm64 REH, both attested. UNSAFE, never a
+# release. Then build its tab image and check the hook before any probe that needs it.
+gh workflow run build-macos.yml --ref <branch> -f test_variant=containment
+./seclab fetch macos-containment <RUN_ID>                  # -> .work/test-builds/containment/
+./seclab image oci --test-variant containment               # -> seclab-tab-oci:test-containment
+node test/builds/require-hooks.ts --variant containment --hook rogue-reh --image seclab-tab-oci:test-containment
 
 # Level B (editor-driven). The profile dir must be short (macOS 104-byte socket path) and isolated.
 ./seclab test evidence prepare ~/.seclab-test/ud sbx    # then run the printed `node test/window.ts launch ...` (background, never activated)
