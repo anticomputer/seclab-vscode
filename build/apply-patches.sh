@@ -28,7 +28,7 @@ done < "$PATCHES/series"
 for f in "$PATCHES"/* "$PATCHES"/.[!.]*; do
 	[ -e "$f" ] || [ -L "$f" ] || continue
 	name="$(basename "$f")"
-	case "$name" in README.md|series|reach.json|unreachable.json) continue ;; esac
+	case "$name" in README.md|series|reach.json|unreachable.json|sole-consumer.json) continue ;; esac
 	case " $listed " in
 		*" $name "*) [ -f "$f" ] && [ ! -L "$f" ] || { echo "apply-patches: patches/$name is not a regular file" >&2; exit 1; } ;;
 		*) echo "apply-patches: patches/$name is not in patches/series (refusing to build)" >&2; exit 1 ;;

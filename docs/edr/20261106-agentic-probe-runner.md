@@ -579,3 +579,45 @@ Not absence: `seclabAhpGate.log` carries 130 decisions over two connections.
 ### The focus fix holds
 Both runs report `OK  the editor never took focus from the user during the run`, with the
 watcher sampling for the whole run. The regression recorded above is closed.
+
+
+## The 0010/0015 seam, and the invariant it rests on (2026-11-06)
+Asked by the coordinator before `rpc-core` lands. Measured on a worktree at `a717861c` with
+`patches/series` (including 0015) plus `rpc-core`'s 0010 applied; both applied clean.
+
+**There are two selection points, and they select different things.**
+- **0010**, `src/vs/workbench/services/agentHost/electron-browser/agentHostService.ts:60`,
+  selects *which client class* to instantiate: `EditorRemoteAgentHostServiceClient` or
+  `LocalAgentHostServiceClient`.
+- **0015**, `src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts`,
+  decides at `:108` whether to take a connection at all, and wraps the channel at `:123`.
+
+**0010's true branch yields the gated client**, because 0015 gates *inside* the client class
+rather than at the site that selects it. So any caller that instantiates
+`EditorRemoteAgentHostServiceClient` is gated, and there is no ungated client to hand out.
+0010 therefore needs no delegation; it only has to switch its own predicate from
+`seclabAiDisabled` (unconditional, which would refuse the agent host even with
+`SECLAB_AGENTS_ENABLED=1` and break the positive control) to `seclabAgentHostAllowed`.
+
+**What that argument depends on, and how it is now held.** It is sound only while that call
+site is the *only* renderer-side consumer of the `agentHostProxy` channel. A second consumer,
+added by a later patch or an upstream bump, would bypass the gate while every other check
+still passed, because the gate would simply never see those frames. No runtime probe can
+establish this: a probe shows the connections it observed were gated, never that no others
+exist. So it is asserted statically.
+
+`patches/sole-consumer.json` declares, per symbol, every file allowed to mention it and the
+substring each mention must sit on. `build/check-sole-consumer.ts` enforces it over the
+patched tree from inside `build/check-patch-reach.ts`, which the required `patch-build` check
+already runs, so no workflow change was needed. For this symbol the rule is: only
+`editorRemoteAgentHostServiceClient.ts`, only on a `seclabGate.transport(` line, plus the
+REH's own registration in `serverServices.ts`. An unlisted consumer fails, and so does a
+listed file that stops mentioning the symbol, since the invariant is then stale and must be
+re-derived.
+
+Verified both ways on the combined 0010+0015 tree: it passes, and adding a second
+`getChannel(AgentHostIpcChannels.RemoteProxy)` to another browser-layer file fails it.
+
+**0015's comment was wrong and is corrected.** It claimed 0009/0010 call
+`seclabAgentHostAllowed`; neither does. The comment now says so plainly, says why it does not
+matter for soundness, and points at the invariant that does matter.
