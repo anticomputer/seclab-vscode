@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { TabdClient, type TabdChannel } from '../tabd-src/client.ts';
 import type { ObsEvent } from '../tabd-src/obs/schema.ts';
+import { rpcFilterShipped, WindowLogForwarder } from '../tabd-src/obs/windowlog.ts';
 import { TabActivity } from './activity.ts';
 import { DetectionsSummary } from './detections.ts';
 import { DetectionNotifier } from './notifications.ts';
@@ -36,6 +37,7 @@ let writeBack: WriteBackReview | undefined;
 let notifier: DetectionNotifier | undefined;
 let summary: DetectionsSummary | undefined;
 let prompts: EgressPrompts | undefined;
+let windowLogs: WindowLogForwarder | undefined;
 /** Tabs whose broker reported `capabilities.denyRules` (tab.get → broker). */
 const blockable = new Set<string>();
 
@@ -248,6 +250,7 @@ async function resolve(authority: string, ctx: vscode.RemoteAuthorityResolverCon
 			throw vscode.RemoteAuthorityResolverError.NotAvailable('Tab not opened: secrets unresolved', false);
 		});
 	void activity?.attach(c, tabId).catch(e => log.warn(`tab activity unavailable: ${(e as Error).message}`));
+	forwardWindowLogs(tabId);
 	notifier?.setTabName(tabId, hostPath);
 	prompts?.setTabName(tabId, hostPath);
 	void c.request<{ tab: TabView & { status: { brokerCapabilities?: Record<string, unknown> } } }>('tab.get', { tabId }).then(r => {
@@ -523,6 +526,47 @@ async function routeLocalWindow(): Promise<void> {
 function currentTabId(): string | undefined {
 	const id = vscode.env.remoteAuthority?.startsWith(`${AUTHORITY_PREFIX}+`) ? vscode.env.remoteAuthority.slice(AUTHORITY_PREFIX.length + 1) : undefined;
 	return id && TAB_ID_RE.test(id) ? id : undefined;
+}
+
+/**
+ * The trusted renderer's decision logs for this window (AHP gate, RPC filter) into tabd as
+ * trusted events for this window's tab (EDR window-decision-logs). The tab id is the window's
+ * own authority, never anything in a log line. This extension's log folder is
+ * `<windowLogsPath>/exthost/<id>`, so the window's folder is two levels up.
+ */
+function forwardWindowLogs(tabId: string): void {
+	if (windowLogs || tabId !== currentTabId()) {
+		return;
+	}
+	const extHostLogs = path.dirname(extensionContext.logUri.fsPath);
+	if (path.basename(extHostLogs) !== 'exthost') {
+		log.warn(`gate and filter decisions are not forwarded: unexpected log folder ${extHostLogs}`);
+		return;
+	}
+	// The logs are tab-proof only behind the RPC filter (MainThreadLogger.* denied); a build
+	// without it would let a tab write "trusted" lines (review round 12).
+	let product: unknown;
+	try {
+		product = JSON.parse(fs.readFileSync(path.join(vscode.env.appRoot, 'product.json'), 'utf8'));
+	} catch {
+		product = undefined;
+	}
+	if (!rpcFilterShipped(product)) {
+		log.warn('gate and filter decisions are not forwarded: this build does not ship the RPC filter');
+		return;
+	}
+	const key = (name: string) => `seclab.windowLog.${name}`;
+	windowLogs = new WindowLogForwarder({
+		dir: path.dirname(extHostLogs),
+		report: async events => (await getClient()).request('tab.events.report', { tabId, events }),
+		state: {
+			get: name => extensionContext.workspaceState.get<{ ino: number; pos: number }>(key(name)),
+			set: (name, p) => void extensionContext.workspaceState.update(key(name), p),
+		},
+		onInvalid: (file, count) => log.warn(`${path.basename(file)}: ${count} malformed line(s) not forwarded`),
+	});
+	windowLogs.start();
+	extensionContext.subscriptions.push({ dispose: () => windowLogs?.dispose() });
 }
 
 /**

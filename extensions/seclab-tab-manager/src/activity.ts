@@ -171,7 +171,10 @@ export class TabActivity implements vscode.TreeDataProvider<Item>, vscode.Dispos
 			return item;
 		}
 		const e = el.e;
-		const item = new vscode.TreeItem(plain(e.class === 'detection' ? `${e.rule}: ${e.summary}` : e.summary, 200));
+		// The filter's summary is fixed text; what was refused is the (tab-chosen) ref.
+		const target = e.class === 'rpc.decision' ? e.detail?.ref ?? e.detail?.refText : undefined;
+		const label = e.class === 'detection' ? `${e.rule}: ${e.summary}` : target !== undefined ? `${e.summary} "${String(target)}"` : e.summary;
+		const item = new vscode.TreeItem(plain(label, 200));
 		item.description = `${e.priority} · ${BADGE[e.integrity] ?? '?'} · ${e.time.slice(11, 23)}`;
 		const lines = [
 			plain(e.summary, 1000),
@@ -189,6 +192,9 @@ export class TabActivity implements vscode.TreeDataProvider<Item>, vscode.Dispos
 		}
 		if (e.net) {
 			lines.push(`Network ${plain(e.net.addr, 100)}${e.net.port !== undefined ? `:${e.net.port}` : ''} ${e.net.result ?? ''}`);
+		}
+		if (target !== undefined) {
+			lines.push(`Request "${plain(String(target), 300)}" · verdict ${plain(String(e.detail?.verdict ?? '?'), 30)}${e.detail?.reason !== undefined ? ` · ${plain(String(e.detail.reason), 200)}` : ''}${typeof e.detail?.count === 'number' ? ` · ×${e.detail.count}` : ''}`);
 		}
 		if (e.detail?.claimedExtensionId !== undefined) {
 			lines.push(`Claims to be extension ${plain(String(e.detail.claimedExtensionId), 100)} (unverified)`);

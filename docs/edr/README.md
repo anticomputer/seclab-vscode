@@ -98,4 +98,5 @@ Same rules as ADRs:
 | 2026-11-06 | [The 7-day rule: no pin newer than CFS's hold](20261106-pin-age-cooldown.md) | accepted |
 | 2026-11-06 | [RPC filter stamp in product.json](20261106-rpc-policy-stamp.md) | accepted |
 | 2026-11-06 | [Test build variants (containment, and agentic U/F)](20261106-test-build-variants.md) | accepted |
+| 2026-11-06 | [Window decision logs: AHP gate and RPC filter decisions into tabd](20261106-window-decision-logs.md) | accepted |
 <!-- index:end -->

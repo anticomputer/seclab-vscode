@@ -112,6 +112,7 @@ Reported in `tab.observation` notifications, `tab.events.tail` results and `sens
 | `suspicious-content` | `informational` | Text aimed at an AI agent (prompt injection: "ignore previous instructions", role markers, chat-template or tool-call syntax) in a command line, file name, path or hostname. Informational: the stream is data, never instructions. |
 | `ahp.ungated` | `critical` | An agent-host connection was opened but its AHP gate never reported itself verified (`ahp-gate.opened` without `ahp-gate.verified` within 2 s): an ungated transport. Trusted: both signals come from the renderer. |
 | `ahp.deny-burst` | `warning` | The AHP gate denied 20 or more agent-host messages or reverse requests from one tab within 60 s (probing the gate). |
+| `rpc.deny-burst` | `warning` | The RPC capability filter denied 20 or more calls from one tab's extension host within 60 s (probing the filter). |
 
 ## Limits
 | Field | Limit |

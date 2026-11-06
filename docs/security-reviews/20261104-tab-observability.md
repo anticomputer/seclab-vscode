@@ -263,6 +263,34 @@ Checked as sound:
   modally with quoted text, and tabd re-validates the host and port. A block only
   narrows that tab's own egress. The command is hidden from the palette.
 
+## Round 12: window decision logs into tabd (EDR window-decision-logs)
+Scope:
+- `tabd/src/obs/windowlog.ts` (tailer, forwarder, build interlock) and its Tab Manager wiring;
+- `normalizeDraft` keeping a bad `ref` as `refText` (and accepting `data:` refs);
+- `rpc.deny-burst` and its notification template;
+- the Tab Activity rendering of rpc decisions.
+
+One pass, with the fixes reviewed in place. No high or critical findings remain.
+
+| ID | Sev | Area | Finding | Status | Fix |
+|---|---|---|---|---|---|
+| WL-0 | Medium | suppression | (Found while building it.) tabd rejected a whole report whose `ref` wasn't printable ASCII. A tab could hide a denial behind a command id with a space or non-ASCII character, out of the stream and the burst count. | Fixed | The event is kept, with the ref as escaped `detail.refText`; `ref` stays exact or absent. Regression tests. |
+| WL-1 | High (merge order) | integrity | Nothing enforced that forwarding starts only after the RPC filter ships. Before it, a tab learns the logger URIs from its init data and can `$log` forged trusted lines (e.g. a `verified` that clears `ahp.ungated`). | Fixed | The Tab Manager forwards only if `<appRoot>/product.json` has `seclabRpcFilter.policy` (64 hex). The RPC session stamps it after patching, iff the filter patch is in the series, with a build invariant. Unit test for the predicate. |
+| WL-2 | Medium | evasion | spdlog rotates at 5 MB, while the filter's 5000-line cap allowed about 20 MB. The tailer jumped from its old file to the current name, skipping intermediate rotated files with no gap signal. | Fixed | It follows the rotation chain by inode, and reports a trusted skipped marker when its file has rotated off the end. The RPC session caps the log at 2 MB per window. Regression test two rotations behind, and off the end. |
+| WL-3 | Low | false alarm | A filter backlog could delay the gate's `verified` line past tabd's 2 s window and raise a false `ahp.ungated`. | Fixed | At most four batches per file per round, gate log first, every 500 ms. |
+
+Checked as sound:
+- The spdlog prefix contains no `{`, and the gate and filter write `JSON.stringify` output
+  only, so tab text can't add a newline or a forged object.
+- A rogue REH server can't deregister host loggers through the remote `logger` channel.
+- `rpc.deny-burst` counts only trusted deny and prompt events, can't be drained through the
+  `client` bucket, and reports at most once per 10 minutes.
+- The tailer opens with `O_NOFOLLOW` and requires a regular file; memory is one 256 KiB
+  read, an 8 KiB partial line and the batches of one read.
+- The workspace state that holds the resume position is reachable from a tab only through
+  `MainThreadStorage.*`, which the filter denies (and WL-1 makes forwarding conditional on
+  the filter).
+
 ## Accepted residuals (documented in the ADR)
 - `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.
 - Under OCI the privileged Falco sees every container on the Docker host. Only rules for the exact tab container ids are loaded, and its only output is stdout to tabd.

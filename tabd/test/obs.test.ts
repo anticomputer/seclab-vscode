@@ -94,8 +94,10 @@ test('obs schema: fields are picked, capped, escaped and redacted; ref is exact 
 	const rpc = { source: 'rpc-filter', integrity: 'trusted', class: 'rpc.decision', priority: 'warning', summary: 'deny' };
 	const ref = `rpc:MainThreadDiaglogs.$showOpenDialog${'x'.repeat(700)}`;
 	assert.equal(normalizeDraft({ ...rpc, detail: { ref } }).detail!.ref, ref); // never truncated
-	assert.throws(() => normalizeDraft({ ...rpc, detail: { ref: 'rpc:a b' } }));
-	assert.throws(() => normalizeDraft({ ...rpc, detail: { ref: `cmd:${'x'.repeat(1100)}` } }));
+	// Review round 12: a ref that fails the pattern keeps the event, as escaped refText.
+	assert.deepEqual(normalizeDraft({ ...rpc, detail: { ref: 'rpc:a b' } }).detail, { refText: 'rpc:a b' });
+	assert.equal(normalizeDraft({ ...rpc, detail: { ref: `cmd:${'x'.repeat(1100)}` } }).detail!.ref, undefined);
+	assert.equal(normalizeDraft({ ...rpc, detail: { ref: 'data:workspace.fs' } }).detail!.ref, 'data:workspace.fs');
 	const f = toFalco({ ...normalizeDraft(rpc), v: 1, seq: 1, time: '2026-11-04T00:00:00.000Z', tabId: 't-x' } as ObsEvent);
 	assert.equal(f.priority, 'Warning');
 	assert.deepEqual((f.tags as string[]).slice(0, 2), ['seclab', 'integrity:trusted']);
@@ -195,6 +197,23 @@ test('obs detect: the Contagious-Interview shapes fire with the weakest integrit
 	assert.deepEqual(rules(ev({ class: 'net.connect', net: { addr: '/var/run/docker.sock', family: 'unix', result: 'EACCES' } })), ['escape.container-socket:critical:tab-vm-root']);
 	assert.deepEqual(rules(ev({ class: 'detection' })), []);
 	assert.deepEqual(new Detector().check(ev({ source: 'falco', integrity: 'host-observed', proc: { pid: 1, argv: ['wget', 'x'] } }), {}).map(d => d.integrity), ['host-observed']);
+});
+
+test('obs detect: rpc.deny-burst from trusted filter denials only; allows and other levels never count', () => {
+	const det = new Detector();
+	const t0 = Date.now();
+	const rpc = (i: number, verdict: string, integrity = 'trusted') => det.check(ev({ source: 'rpc-filter', integrity: integrity as 'trusted', class: 'rpc.decision', time: new Date(t0 + i * 100).toISOString(), detail: { surface: 'rpc', verdict } }), {}).map(d => `${d.rule}:${d.integrity}`);
+	const hits: string[] = [];
+	for (let i = 0; i < 30; i++) {
+		hits.push(...rpc(i, 'allow'), ...rpc(i, 'deny', 'tab-reported'));
+	}
+	assert.deepEqual(hits, [], 'aggregated allows and untrusted denials never make a burst');
+	for (let i = 0; i < 19; i++) {
+		hits.push(...rpc(i, i % 2 ? 'prompt' : 'deny'));
+	}
+	assert.deepEqual(hits, []);
+	assert.deepEqual(rpc(19, 'deny'), ['rpc.deny-burst:trusted']);
+	assert.deepEqual(rpc(20, 'deny'), [], 'reported once per 10 minutes');
 });
 
 test('obs detect: a regular beacon is reported once; jitter is not a beacon', () => {
@@ -416,9 +435,12 @@ test('obs supervisor: collector gates the REH, is reused, events stream to subsc
 		{ source: 'rpc-filter', class: 'detection', priority: 'critical', summary: 'forged detection' },
 		{ source: 'sbx-collector', class: 'process.exec', priority: 'critical', summary: 'forged sensor event' },
 		{ source: 'broker', class: 'egress.request', priority: 'critical', summary: 'forged broker event' },
-		{ source: 'rpc-filter', class: 'rpc.decision', priority: 'warning', summary: 'bad ref', detail: { ref: 'rpc:has space' } },
+		{ source: 'rpc-filter', class: 'rpc.decision', priority: 'warning', summary: 'bad ref', detail: { surface: 'cmd', ref: 'cmd:has space\u202e', verdict: 'deny' } },
 	] });
-	assert.deepEqual(rep, { accepted: 1, rejected: 4 });
+	assert.deepEqual(rep, { accepted: 2, rejected: 3 }, 'review round 12: a ref that fails the pattern keeps the event (as refText), so a tab can\'t hide a denial behind its command id');
+	const badRef = ((await call('tab.events.tail', { tabId, limit: 100 })).events as ObsEvent[]).find(e => e.summary === 'bad ref')!;
+	assert.equal(badRef.detail?.ref, undefined, 'ref stays exact or absent');
+	assert.ok(typeof badRef.detail?.refText === 'string' && !/\u202e/.test(String(badRef.detail.refText)) && badRef.untrusted.includes('detail.refText'), JSON.stringify(badRef.detail));
 	await assert.rejects(call('tab.events.report', { tabId, events: Array.from({ length: 65 }, () => ({})) }), { code: -32602 });
 	await assert.rejects(call('tab.events.subscribe', { minPriority: 'loud' }), { code: -32602 });
 	await assert.rejects(call('tab.events.tail', { tabId: mintTabId() }), { code: -32004 });
@@ -1100,4 +1122,95 @@ test('tab.detections.query: detections across tabs from persisted logs (stopped 
 	assert.throws(() => glue.handle('tab.detections.query', { limit: 10_000 }), /limit/);
 	assert.throws(() => glue.handle('tab.detections.query', { tabIds: ['../etc'] }), /tab ids/);
 	await glue.shutdown();
+});
+
+test('window decision logs: prefix parsed, sources pinned per file, hostile lines bounded, rotation and truncation followed', async () => {
+	const { WindowLogForwarder, WindowLogTail, WINDOW_LOGS, parseWindowLogLine, rotatedName, rpcFilterShipped, MAX_LINE_BYTES } = await import('../src/obs/windowlog.ts');
+	const dir = path.join(SCRATCH, 'windowlog');
+	fs.rmSync(dir, { recursive: true, force: true });
+	fs.mkdirSync(dir, { recursive: true });
+	const rpcOnly = new Set(['rpc-filter']);
+	const line = (o: unknown) => `2026-11-06 12:00:00.000 [info] ${JSON.stringify(o)}\n`;
+	const deny = (n: number) => ({ source: 'rpc-filter', class: 'rpc.decision', priority: 'warning', summary: 'deny rpc', detail: { surface: 'rpc', ref: `rpc:MainThreadX.$m${n}`, verdict: 'deny', nested: { x: 1 } } });
+	assert.deepEqual(parseWindowLogLine(line(deny(1)).trimEnd(), rpcOnly), { source: 'rpc-filter', class: 'rpc.decision', priority: 'warning', summary: 'deny rpc', detail: { surface: 'rpc', ref: 'rpc:MainThreadX.$m1', verdict: 'deny' } }, 'nested detail dropped');
+	assert.equal(parseWindowLogLine(line({ ...deny(1), source: 'ahp-gate' }), rpcOnly), undefined, 'a source the file may not carry');
+	assert.equal(parseWindowLogLine(line({ ...deny(1), source: 'broker' }), new Set(['ahp-gate'])), undefined);
+	assert.equal(parseWindowLogLine('[info] {"source":', rpcOnly), undefined);
+	assert.equal(parseWindowLogLine(line([1, 2]), rpcOnly), undefined);
+
+	// Tail: a partial line waits for its newline; an oversized line is skipped through its end.
+	const f = path.join(dir, 'seclabRpcFilter.log');
+	fs.writeFileSync(f, line(deny(1)) + line(deny(2)).slice(0, 20));
+	const t = new WindowLogTail(f, WINDOW_LOGS.get('seclabRpcFilter.log')!);
+	assert.deepEqual(t.poll().map(e => e.detail?.ref), ['rpc:MainThreadX.$m1']);
+	fs.appendFileSync(f, line(deny(2)).slice(20) + 'x'.repeat(MAX_LINE_BYTES + 10) + '\n' + 'not json\n' + line(deny(3)));
+	assert.deepEqual(t.poll().map(e => e.detail?.ref), ['rpc:MainThreadX.$m2', 'rpc:MainThreadX.$m3']);
+	assert.equal(t.invalid, 2);
+	// spdlog rotation by rename (a.log -> a.1.log -> a.2.log), two rotations behind (review round
+	// 12): ours is read to its end, then each newer file in turn; nothing is skipped.
+	const rotate = () => {
+		for (let k = 9; k >= 1; k--) {
+			if (fs.existsSync(rotatedName(f, k))) {
+				fs.renameSync(rotatedName(f, k), rotatedName(f, k + 1));
+			}
+		}
+		fs.renameSync(f, rotatedName(f, 1));
+	};
+	fs.appendFileSync(f, line(deny(4)));
+	rotate();
+	fs.writeFileSync(f, line(deny(5)));
+	rotate();
+	fs.writeFileSync(f, line(deny(6)));
+	assert.equal(rotatedName(f, 2), path.join(dir, 'seclabRpcFilter.2.log'));
+	assert.deepEqual(t.poll().map(e => e.detail?.ref), ['rpc:MainThreadX.$m4', 'rpc:MainThreadX.$m5', 'rpc:MainThreadX.$m6']);
+	// Ours rotated off the end: the skipped marker, then the oldest file left.
+	fs.appendFileSync(f, line(deny(7)));
+	rotate();
+	fs.writeFileSync(f, line(deny(8)));
+	for (let k = 1; k <= 11; k++) {
+		fs.rmSync(rotatedName(f, k), { force: true });
+	}
+	assert.deepEqual(t.poll().map(e => e.detail?.ref), ['rpc:MainThreadX.$m7', 'rpc:seclab.log-skipped', 'rpc:MainThreadX.$m8']);
+	// Truncated in place: read again from the start.
+	fs.truncateSync(f, 0);
+	assert.deepEqual(t.poll(), []);
+	fs.appendFileSync(f, line(deny(9)));
+	assert.deepEqual(t.poll().map(e => e.detail?.ref), ['rpc:MainThreadX.$m9']);
+	// A symlink in place of the log is not followed.
+	fs.symlinkSync(f, path.join(dir, 'seclabAhpGate.log'));
+	assert.deepEqual(new WindowLogTail(path.join(dir, 'seclabAhpGate.log'), WINDOW_LOGS.get('seclabAhpGate.log')!).poll(), []);
+	fs.rmSync(path.join(dir, 'seclabAhpGate.log'));
+	t.close();
+	// Review round 12 (merge order): forwarding needs the build's statement that the filter ships.
+	assert.equal(rpcFilterShipped({}), false);
+	assert.equal(rpcFilterShipped({ seclabRpcFilter: true }), false);
+	assert.equal(rpcFilterShipped({ seclabRpcFilter: { policy: 'a'.repeat(64) } }), true);
+
+	// Forwarder: in order, at most 64 per report, held (not dropped) while tabd is away, and a
+	// reload resumes where delivery ended.
+	fs.writeFileSync(f, Array.from({ length: 150 }, (_, i) => line(deny(i))).join(''));
+	const batches: number[] = [];
+	const got: string[] = [];
+	let up = false;
+	const saved = new Map<string, { ino: number; pos: number }>();
+	const fw = new WindowLogForwarder({ dir, report: async evs => {
+		if (!up) {
+			throw new Error('tabd away');
+		}
+		batches.push(evs.length);
+		got.push(...evs.map(e => String(e.detail?.ref)));
+	}, state: { get: n => saved.get(n), set: (n, p) => saved.set(n, p) } });
+	await fw.tick();
+	assert.deepEqual(got, []);
+	up = true;
+	await fw.tick();
+	assert.deepEqual(batches, [64, 64, 22]);
+	assert.deepEqual(got, Array.from({ length: 150 }, (_, i) => `rpc:MainThreadX.$m${i}`));
+	fw.dispose();
+	fs.appendFileSync(f, line(deny(150)));
+	got.length = 0;
+	const again = new WindowLogForwarder({ dir, report: async evs => { got.push(...evs.map(e => String(e.detail?.ref))); }, state: { get: n => saved.get(n), set: (n, p) => saved.set(n, p) } });
+	await again.tick();
+	assert.deepEqual(got, ['rpc:MainThreadX.$m150'], 'a reloaded window reports only new lines');
+	again.dispose();
 });

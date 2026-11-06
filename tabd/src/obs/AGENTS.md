@@ -39,6 +39,7 @@ at the repo root) all apply. Every command here has been run. Design:
 | `broker-audit.ts` | Broker `audit.event` → trusted events: allowlisted types and fields (tab text into tagged fields), `audit.tail` replay on connect, seq dedupe and gap events, 10 s aggregation of allowed requests and injections |
 | `lineage.ts` | Broker request ↔ sensor connect join: exact on the broker's `clientPort` = Falco `net.localPort` (OCI), else by time (`egress.attribution`: exact / single / ambiguous / none, weakest integrity, a used connect not reused); `promptLineage` for prompts |
 | `notify.ts` | Detection notifications: which events notify (`notifyKind`), trusted templates, `quote()` for tab text, coalescing and rate limits (`NotificationGate`). Shared with the Tab Manager (`notifications.ts`, `detections.ts`) |
+| `windowlog.ts` | Tails the window's AHP-gate and RPC-filter decision logs (per-file source allowlist, bounded lines, rotation, resume) and reports them over `tab.events.report`. Runs in the Tab Manager |
 | `glue.ts` | Protocol methods (`tab.events.*`, `tab.observe`), sensor hooks for drivers, policy-log poller |
 | `../../tools/gen-obs-docs.ts`, `../../tools/tab-logs.ts` | Doc generator; `seclab tab logs` |
 | `sandbox/sbx/seclab-obs-guard.c` | seccomp guard: no `CLONE_UNTRACED`, `clone3`, seccomp listeners or io_uring; closes fds > 2 |
