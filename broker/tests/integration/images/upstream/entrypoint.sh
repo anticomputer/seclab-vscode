@@ -13,7 +13,7 @@ if [ ! -f ca.pem ]; then
     -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" \
     -keyout ca.key -out ca.pem 2>/dev/null
   openssl req -newkey rsa:2048 -nodes -subj "/CN=example.test" -keyout server.key -out server.csr 2>/dev/null
-  printf 'subjectAltName=DNS:*.example.test,DNS:example.test\nextendedKeyUsage=serverAuth\n' > ext.cnf
+  printf 'subjectAltName=DNS:*.example.test,DNS:example.test,DNS:*.blob.core.windows.net\nextendedKeyUsage=serverAuth\n' > ext.cnf
   openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial -days 2 \
     -extfile ext.cnf -out server.pem 2>/dev/null
 fi

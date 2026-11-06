@@ -2,6 +2,8 @@
 upgrades, and a protocol switch on a credentialed request that was not approved as a
 WebSocket is never relayed. Uses mitmproxy's own test flows."""
 
+import asyncio
+
 from mitmproxy.test import tflow
 from mitmproxy.websocket import WebSocketData
 
@@ -41,7 +43,7 @@ def _switched(ws_ok: bool):
     f.metadata["seclab.injected"] = ["api"]
     if ws_ok:
         f.metadata["seclab.ws_ok"] = True
-    addon.response(f)
+    asyncio.run(addon.response(f))
     return f
 
 

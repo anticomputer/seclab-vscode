@@ -19,6 +19,17 @@ from collections import deque
 
 SEEN: deque = deque(maxlen=500)
 MINTED: set[str] = set()
+# Test aliases on the harness's --internal networks (no route out): the storage name shape
+# the azure-devops provider declares for broker-followed redirects (revision 8). The second
+# resolves to the private-range network, which netguard must refuse.
+STORAGE_HOST = "vsblobprodcus901.blob.core.windows.net"
+STORAGE_PRIVATE_HOST = "vsblobprodcus902.blob.core.windows.net"
+
+
+def sas_url(host: str, path: str) -> str:
+    """A signed-URL stand-in whose signature is a fresh canary."""
+    sig = "seclab-canary-sas-" + secrets.token_hex(16)
+    return f"https://{host}{path}?sv=2025-01-05&sp=r&se=2099-01-01T00%3A00%3A00Z&sig={sig}"
 
 
 def sha(v) -> str | None:
@@ -137,6 +148,52 @@ async def app(scope, receive, send) -> None:
 
     if path == "/seen":
         return await send_resp(send, 200, json.dumps(list(SEEN)).encode())
+    if host.startswith("vsblobprodcus"):
+        # Azure Storage stand-in (broker-followed CFS downloads, revision 8): records what the
+        # broker sent, including the signed query, so tests can prove it never reaches the tab.
+        record["query"] = scope["query_string"].decode("latin-1")
+        record["header_names"] = sorted(hdrs)
+        if path.startswith("/chain/"):
+            loc = sas_url(STORAGE_HOST, path[len("/chain"):])
+            record["location"] = loc
+            return await send_resp(send, 302, b"", [(b"location", loc.encode())])
+        if path.startswith("/missing/"):
+            err = f"<Error><Code>BlobNotFound</Code><Query>{record['query']}</Query></Error>"
+            return await send_resp(send, 404, err.encode(), ctype=b"application/xml")
+        if path.startswith("/big/"):
+            return await send_resp(send, 200, b"\0" * int(path.split("/")[2]), ctype=b"application/octet-stream")
+        return await send_resp(send, 200, b"seclab-fixture-blob " + path.encode(), ctype=b"application/octet-stream")
+    if path.startswith("/example-org/") and (path.endswith(".tgz") or "/pypi/download/" in path):
+        # A package download: like CFS, a redirect to a signed storage URL. X-Fixture picks a
+        # status or a Location the broker must refuse.
+        mode = hdrs.get("x-fixture", "303")
+        blob = f"/b-{secrets.token_hex(8)}/{hashlib.sha256(path.encode()).hexdigest()[:32]}.blob"
+        status, target_host, target = 303, STORAGE_HOST, blob
+        if mode.isdigit():
+            status = int(mode)
+        elif mode == "off-pattern":
+            target_host = "gist.example.test"
+        elif mode == "private":
+            target_host = STORAGE_PRIVATE_HOST
+        elif mode in ("chain", "missing"):
+            target = f"/{mode}{blob}"
+        elif mode.startswith("big-"):
+            target = f"/big/{int(mode[4:])}"
+        loc = sas_url(target_host, target)
+        if mode == "http":
+            loc = "http" + loc[len("https"):]
+        elif mode == "port":
+            loc = loc.replace(target_host, target_host + ":8443", 1)
+        elif mode == "userinfo":
+            loc = loc.replace("//", "//u:p@", 1)
+        record["location"] = loc
+        return await send_resp(send, status, f'<a href="{loc}">See Other</a>'.encode(),
+                               [(b"location", loc.encode())], ctype=b"text/html")
+    if host == "api.example.test" and path == "/redirect-storage":
+        # A redirect to the storage stand-in from a host no provider declares redirects for.
+        loc = sas_url(STORAGE_HOST, "/b-0/api.blob")
+        record["location"] = loc
+        return await send_resp(send, 303, b"", [(b"location", loc.encode())])
     if path.startswith("/example-org/"):
         # A package-feed read (CFS-in-tab probe): package metadata, never the request headers.
         return await send_resp(send, 200, json.dumps({"name": path.rsplit("/", 1)[-1], "versions": {"1.0.0": {}},

@@ -16,9 +16,14 @@ import json
 import logging
 import re
 import socket
+import ssl
 import time
+import urllib.parse
 import weakref
+from contextlib import suppress
 from typing import Any
+
+import h11
 
 from mitmproxy import connection, http, tcp, udp
 from mitmproxy.net.http import url as mitm_url
@@ -27,9 +32,9 @@ from mitmproxy.proxy import server_hooks
 from .core import Broker
 from .credentials import Credential, header_has_sentinel, infer_inject
 from .netguard import deny_reason
-from .policy import (METHOD_OVERRIDE_HEADERS, SEALED_PREFIX, Binding, PolicyError, RequestView, backstop_denies,
-                     backstop_exception, canonical_path, normalize_host, normalize_ip,
-                     query_has_method_override, validate_fragment)
+from .policy import (METHOD_OVERRIDE_HEADERS, SEALED_PREFIX, Binding, PolicyError, RedirectFollow, RequestView,
+                     backstop_denies, backstop_exception, canonical_path, normalize_host, normalize_ip,
+                     query_has_method_override, redirect_follow, validate_fragment)
 from .scanner import find_minted
 from .models import StrictJSONError, check_request, credential_values, is_model_host, parse_strict
 from .untrusted import display_host, display_path
@@ -38,6 +43,13 @@ log = logging.getLogger("seclab.engine")
 _METHOD = re.compile(r"^[A-Z]{1,16}$")
 _TEXTUAL = re.compile(r"^(text/|application/(.*json|.*xml|javascript|x-www-form-urlencoded))|json")
 DNS_TIMEOUT = 10.0
+# A broker-followed redirect (revision 8): connect and whole-fetch timeouts, and the most
+# it reads (the body size limit's default) when no byte budget is tighter.
+FOLLOW_CONNECT_TIMEOUT = 15.0
+FOLLOW_TIMEOUT = 300.0
+FOLLOW_MAX_BYTES = 512 * 1024 * 1024
+_CONTENT_TYPE = re.compile(r"[A-Za-z0-9!#$&^_.+-]{1,64}/[A-Za-z0-9!#$&^_.+-]{1,64}")
+_CONTENT_ENCODINGS = {"gzip", "deflate", "br", "zstd"}
 SESSION_HEADERS = {"set-cookie", "set-cookie2", "authentication-info", "proxy-authentication-info"}
 # WebSocket server messages are scanned together with this much of what the tab already
 # received on the connection, so a token is found even when it spans messages. It must
@@ -120,10 +132,21 @@ def _path_representable(path: str) -> bool:
     return True
 
 
+class _TooBig(Exception):
+    """A followed redirect's body went past what the byte budget (or the cap) leaves."""
+
+    def __init__(self, read: int) -> None:
+        super().__init__("body over the limit")
+        self.read = read
+
+
 class SeclabAddon:
-    def __init__(self, broker: Broker, local_ips: frozenset) -> None:
+    def __init__(self, broker: Broker, local_ips: frozenset, upstream_ca: str | None = None) -> None:
         self.b = broker
         self.local_ips = local_ips
+        # The upstream trust bundle mitmproxy verifies with, for broker-made fetches too.
+        self.upstream_ca = upstream_ca
+        self._tls: ssl.SSLContext | None = None
         self.authed: weakref.WeakKeyDictionary[connection.Client, int] = weakref.WeakKeyDictionary()
         self.tunnels: weakref.WeakKeyDictionary[connection.Client, tuple[str, int]] = weakref.WeakKeyDictionary()
         self._last_auth_audit = 0.0
@@ -620,7 +643,7 @@ class SeclabAddon:
         self._respond(flow, 502, f"response blocked: {reason}", "blocked")
 
     @fail_closed
-    def response(self, flow: http.HTTPFlow) -> None:
+    async def response(self, flow: http.HTTPFlow) -> None:
         resp = flow.response
         if resp is None or flow.metadata.get("seclab.synthetic"):
             return
@@ -649,6 +672,16 @@ class SeclabAddon:
             flow.websocket = None
             return self._block_response(flow, "protocol switch on a credentialed request without "
                                               "a websocket: true binding")
+        if (injected and view is not None and 300 <= resp.status_code < 400 and resp.status_code != 304
+                and "location" in resp.headers):
+            creds = [c for cid in flow.metadata.get("seclab.injected") or [] if (c := self.b.creds.get(cid))]
+            follows = redirect_follow(view, {c.provider for c in creds if c.provider})
+            if follows:
+                # Revision 8: a credentialed redirect under a provider that declares one is
+                # followed by the broker or refused; its Location never reaches the tab.
+                if not await self._follow(flow, view, creds, follows):
+                    return
+                resp = flow.response
         textual = _textual(resp.headers)
         derive_route = bool(self._derivations(flow, view)) and not 200 <= resp.status_code < 300
         if flow.metadata.get("seclab.backstop_exception") is not None or derive_route:
@@ -726,6 +759,156 @@ class SeclabAddon:
                 return self._block_response(flow, "token-like material in a non-text credentialed response")
         if body2 != orig:
             resp.content = body2
+
+    # ------------------------------------------------------- followed redirects
+    def _refuse_redirect(self, flow: http.HTTPFlow, view: RequestView, creds: list[Credential], why: str,
+                         status: int, host: str | None = None) -> bool:
+        """A credentialed redirect the broker won't follow is blocked: its Location (and any
+        signed URL in it) never reaches the tab. `why` is fixed text, never the target."""
+        for c in creds:
+            self.b.audit("credential.redirect_refused", credentialId=c.id, reason=why, status=status,
+                         **({"redirectHost": host} if host else {}), **view.summary())
+        self._respond(flow, 502, f"credentialed redirect not followed: {why}", "blocked")
+        return False
+
+    def _redirect_target(self, location: str, follows: list[RedirectFollow], status: int,
+                         view: RequestView) -> tuple[str | None, str | None, str | None]:
+        """(host, request target, None) for a redirect the broker may follow; otherwise
+        (host if it is a canonical name, None, reason)."""
+        if (len(location) > 8192 or not location.isascii()
+                or any(ord(ch) <= 0x20 or ord(ch) == 0x7f or ch == "\\" for ch in location)):
+            return None, None, "malformed Location"
+        try:
+            u = urllib.parse.urlsplit(location)
+            port = u.port
+        except ValueError:
+            return None, None, "malformed Location"
+        if u.scheme != "https":
+            return None, None, "Location is not https"
+        if "@" in u.netloc:
+            return None, None, "userinfo in Location"
+        host = normalize_host(u.hostname or "")
+        if host is None or host != u.hostname or normalize_ip(host) is not None:
+            return None, None, "Location host is not a canonical name"
+        match = [f for f in follows if f.matches_host(host)]
+        if not match:
+            return host, None, "host not declared by the provider"
+        if port not in (None, 443):
+            return host, None, "port is not 443"
+        if not any(status in f.statuses for f in match):
+            return host, None, f"status {status} is not followed"
+        if view.method != "GET":
+            return host, None, "only GET is followed"
+        if not u.path.startswith("/"):
+            return host, None, "malformed Location"
+        blocked = self.b.policy.deny_match(RequestView("https", host, 443, "GET", "/"))
+        if blocked is not None:
+            return host, None, f"denied by rule {blocked.id}"
+        return host, u.path + (f"?{u.query}" if u.query else ""), None
+
+    async def _follow(self, flow: http.HTTPFlow, view: RequestView, creds: list[Credential],
+                      follows: list[RedirectFollow]) -> bool:
+        """Revision 8: follow a credentialed redirect to a provider-declared host, one hop, GET,
+        with no credential and no client header. True when `flow.response` is now the target's
+        response; False when refused (the flow already has the broker's response)."""
+        status = flow.response.status_code
+        host, target, why = self._redirect_target(flow.response.headers.get("location", ""), follows, status, view)
+        if why is not None or host is None or target is None:
+            return self._refuse_redirect(flow, view, creds, why or "malformed Location", status, host)
+        # The request was already counted; the follow only spends bytes.
+        tight = min((x for c in creds if (x := self.b.credential_bytes_left(c)) is not None), default=None)
+        if tight is not None and tight[0] == 0:
+            self.b.audit("credential.budget_exceeded", credentialId=creds[0].id, budgetId=tight[1],
+                         reason="byte budget exhausted", **view.summary())
+            self._deny(flow, 429, "credential budget for this tab: byte budget exhausted")
+            return False
+        limit = min(FOLLOW_MAX_BYTES, tight[0]) if tight is not None else FOLLOW_MAX_BYTES
+        ips, _ = await self._vetted_ips(host, 443)
+        if ips is None:
+            return self._refuse_redirect(flow, view, creds, "target address not permitted", status, host)
+        try:
+            got, headers, body = await asyncio.wait_for(self._fetch(str(ips[0]), host, target, limit), FOLLOW_TIMEOUT)
+        except _TooBig as e:
+            for c in creds:
+                self.b.charge_credential(c, nbytes=e.read)
+            if tight is not None and limit == tight[0]:
+                self.b.audit("credential.budget_exceeded", credentialId=creds[0].id, budgetId=tight[1],
+                             reason="byte budget exhausted", **view.summary())
+                self._deny(flow, 429, "credential budget for this tab: byte budget exhausted")
+                return False
+            return self._refuse_redirect(flow, view, creds, "target body too large", status, host)
+        except Exception as e:  # noqa: BLE001 -- the type only: a message may carry the target URL
+            return self._refuse_redirect(flow, view, creds, f"fetch failed ({type(e).__name__})", status, host)
+        if got != 200:
+            return self._refuse_redirect(flow, view, creds, f"target answered {got}", status, host)
+        ctype = headers.get("content-type", "").split(";", 1)[0].strip()
+        encoding = headers.get("content-encoding", "").strip().lower()
+        if encoding not in ("", "identity") and encoding not in _CONTENT_ENCODINGS:
+            return self._refuse_redirect(flow, view, creds, "unsupported content encoding", status, host)
+        path = display_path(urllib.parse.unquote(target.split("?", 1)[0]))
+        for c in creds:
+            self.b.charge_credential(c, nbytes=len(body))
+            self.b.audit("credential.redirect_followed", credentialId=c.id, status=status, redirectHost=host,
+                         redirectPath=path, respBytes=len(body), **view.summary())
+        resp = flow.response
+        new = http.Headers(content_type=ctype if _CONTENT_TYPE.fullmatch(ctype) else "application/octet-stream")
+        if encoding not in ("", "identity"):
+            new["content-encoding"] = encoding
+        new["content-length"] = str(len(body))
+        resp.status_code = 200
+        resp.reason = "OK"
+        resp.headers = new
+        resp.trailers = None
+        resp.raw_content = body
+        return True
+
+    def _tls_context(self) -> ssl.SSLContext:
+        if self._tls is None:
+            import certifi
+            ctx = ssl.create_default_context(cafile=self.upstream_ca or certifi.where())
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+            ctx.set_alpn_protocols(["http/1.1"])
+            self._tls = ctx
+        return self._tls
+
+    async def _fetch(self, ip: str, host: str, target: str, limit: int) -> tuple[int, dict, bytes]:
+        """One GET over HTTP/1.1 to the vetted address (no re-resolve), TLS verified for
+        `host`; reads at most `limit` body bytes. Sends no credential and no client header."""
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(ip, 443, ssl=self._tls_context(), server_hostname=host), FOLLOW_CONNECT_TIMEOUT)
+        try:
+            conn = h11.Connection(h11.CLIENT)
+            writer.write(conn.send(h11.Request(method="GET", target=target, headers=[
+                ("Host", host), ("User-Agent", "seclab-broker"), ("Accept", "*/*"),
+                ("Accept-Encoding", "identity"), ("Connection", "close")])))
+            writer.write(conn.send(h11.EndOfMessage()))
+            await writer.drain()
+            status, headers, chunks, n = 0, {}, [], 0
+            while True:
+                ev = conn.next_event()
+                if ev is h11.NEED_DATA:
+                    conn.receive_data(await reader.read(65536))
+                elif isinstance(ev, h11.Response):
+                    status = ev.status_code
+                    headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in ev.headers}
+                    if status != 200:
+                        return status, headers, b""
+                    length = headers.get("content-length", "")
+                    if length.isdigit() and int(length) > limit:
+                        raise _TooBig(0)
+                elif isinstance(ev, h11.Data):
+                    n += len(ev.data)
+                    if n > limit:
+                        raise _TooBig(n)
+                    chunks.append(bytes(ev.data))
+                elif isinstance(ev, h11.EndOfMessage):
+                    return status, headers, b"".join(chunks)
+                elif isinstance(ev, h11.ConnectionClosed):
+                    raise ConnectionError("closed before the end of the response")
+        finally:
+            writer.close()
+            with suppress(Exception):
+                await writer.wait_closed()
 
     @staticmethod
     def _top_level_names(resp: http.Response) -> list[str] | None:
@@ -930,28 +1113,34 @@ class SeclabAddon:
                              ruleId=blocked.id)
                 return
         ip = normalize_ip(host)
+        ips, error = await self._vetted_ips(host, port, ip)
+        if ips is None:
+            server.error = error
+            return
+        # Pin the vetted address so the connect cannot re-resolve (DNS rebinding).
+        # SNI was already set from the hostname by the HTTP layer.
+        server.address = (str(ips[0]), port)
+
+    async def _vetted_ips(self, host: str, port: int, ip=None) -> tuple[list | None, str]:
+        """Resolve `host` and refuse any non-public or broker-local address (netguard), with
+        the same audits for every upstream connect, mitmproxy's or the broker's own."""
         ips = [ip] if ip is not None else []
         if not ips:
             try:
                 infos = await asyncio.wait_for(asyncio.get_running_loop().getaddrinfo(
                     host, port, type=socket.SOCK_STREAM, proto=socket.IPPROTO_TCP), DNS_TIMEOUT)
             except (OSError, asyncio.TimeoutError):
-                server.error = "seclab: upstream name resolution failed"
                 self.b.audit("upstream.dns_failed", host=host, port=port)
-                return
+                return None, "seclab: upstream name resolution failed"
             for info in infos:
                 cand = normalize_ip(info[4][0])
                 if cand is not None and cand not in ips:
                     ips.append(cand)
         if not ips:
-            server.error = "seclab: no upstream address"
-            return
+            return None, "seclab: no upstream address"
         for cand in ips:
             reason = deny_reason(cand, self.local_ips)
             if reason:
-                server.error = f"seclab: upstream address not permitted ({reason})"
                 self.b.audit("upstream.blocked", host=host, port=port, ip=str(cand), reason=reason)
-                return
-        # Pin the vetted address so the connect cannot re-resolve (DNS rebinding).
-        # SNI was already set from the hostname by the HTTP layer.
-        server.address = (str(ips[0]), port)
+                return None, f"seclab: upstream address not permitted ({reason})"
+        return ips, ""

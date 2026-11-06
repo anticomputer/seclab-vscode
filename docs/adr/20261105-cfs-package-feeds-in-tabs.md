@@ -159,12 +159,37 @@ using this host's `az` (`tabd/test/e2e-cfs.ts`, EDR `20261106-cfs-feeds-tabd`):
   read-only SAS in the query that expires in about an hour. Several storage
   accounts appear, and none is `*.vsblob.vsassets.io`. curl and pip's
   `requests` send no `Authorization` across hosts, so no sentinel was
-  misplaced; the broker denied the storage host. How to allow the blob fetch
-  is open, for the coordinator:
+  misplaced; the broker denied the storage host. The coordinator offered
+  three ways to allow the blob fetch:
   - (a) allow GET on `*.blob.core.windows.net`;
   - (b) the broker follows the `303` itself on the credentialed route, only
     to a provider-declared host pattern, with no credential;
   - (c) a new host-pattern form.
+
+  **Decided (user, 2026-11-06): (b), broker revision 8.** Anyone can create
+  a storage account, so (a) or (c) would give every process in the tab an
+  exfiltration and payload channel. With (b) the target comes from the
+  credentialed feed response, never from the tab, and the tab never reaches
+  storage. The bounds:
+  - only a `302`, `303` or `307` answering a request the CFS credential was
+    injected into;
+  - only to an https host on port 443 matching the `azure-devops` provider's
+    `redirects` pattern, `^vsblobprodcus[0-9]{1,4}\.blob\.core\.windows\.net$`,
+    and not named by a deny rule;
+  - one hop, GET, no credential and no client header, to a netguard-vetted
+    address the broker pins, TLS verified;
+  - the body is read up to the credential's remaining byte budget, charged
+    to it, and handed to the tab as a `200` on its own URL, after the usual
+    credentialed-response checks;
+  - any other redirect on such a request is `502`. The Location, and the
+    signature in it, never reach the tab in a header, body or error, and the
+    audit (`credential.redirect_followed`, `credential.redirect_refused`)
+    records host and path only.
+
+  Tests: `test_redirects.py` (a canary signature in every Location, swept
+  from everything the tab saw, the audit and the broker's logs) and
+  `test_r8_redirect_follow_data_and_target_checks`. A real `npm install` and
+  `pip install` in a CFS-enabled tab gate landing.
 - **Audit.** `credential.used` came only from `pkgs.dev.azure.com`, with
   statuses 200 and 303 (the 303s at 0 bytes). POST and `_apis` probes were
   refused.
