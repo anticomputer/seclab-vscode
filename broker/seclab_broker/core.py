@@ -25,7 +25,8 @@ from .credentials import Credential, CredentialStore
 from .models import Budget
 from .untrusted import display_path, sanitize, untrusted_paths
 from .policy import (LITERAL_PATH_RE, Binding, DenyRule, Inject, Policy, PolicyError, RequestView, Rule, normalize_ip,
-                     parse_bindings, parse_derive, pattern_overlaps_risky, risk_flags, validate_fragment)
+                     check_budget_bindings, parse_bindings, parse_budget, parse_derive, pattern_overlaps_risky,
+                     risk_flags, validate_fragment)
 
 log = logging.getLogger("seclab.broker")
 
@@ -553,9 +554,10 @@ class Broker:
             raise invalid(f"source.kind must be one of {_SOURCE_KINDS}")
         source = {k: v for k, v in source.items() if k in ("kind", "path", "rule", "label")
                   and isinstance(v, str) and len(v) <= 512}
+        derive = parse_derive(params.get("derive", []))
+        budget = parse_budget(cid, params.get("budget"), [*bind, *proposed], derive)
         cred = self.creds.import_credential(cid, params.get("value"), params.get("sentinel"),
-                                            bind, proposed, provider, source,
-                                            parse_derive(params.get("derive", [])))
+                                            bind, proposed, provider, source, derive, budget)
         self.audit("credential.imported", credentialId=cred.id, confirmed=cred.confirmed,
                    source=source)
         return {"id": cred.id, "sentinel": cred.sentinel, "confirmed": cred.confirmed}
@@ -618,6 +620,7 @@ class Broker:
                     raise invalid("binding does not cover the held request")
                 if pattern_overlaps_risky(binding.host.text, self.policy.risky):
                     raise invalid("an approval cannot bind a credential to a risky destination")
+                check_budget_bindings(cred.id, cred.budget, [binding])
                 self.creds.confirm_binding(cred.id, binding)
                 self.notify("credential.bindingConfirmed",
                             {"id": cred.id, "binding": binding.to_json(), "approvalId": aid,
