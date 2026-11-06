@@ -59,6 +59,12 @@
       "statement": "Every surface class carrying a deny verdict must name the code that refuses it, and that code must exist in the patch series.",
       "enforced_by": "policy.enforcement maps each key prefix to a patch and a symbol; the gate fails when a deny verdict has no entry, when the patch is absent from patches/series, or when the symbol is absent from the patch",
       "checked_by": "check_drift.py::check_enforcement"
+    },
+    {
+      "id": "no-allowed-command-while-laundering-is-deferred",
+      "statement": "No command may be given a verdict other than deny until the deferred-laundering residual is fixed.",
+      "enforced_by": "residuals['deferred-laundering'].fixed is false, so the gate refuses any cmd: verdict that is not deny",
+      "checked_by": "check_drift.py::check_residuals"
     }
   ],
   "rpc": {
@@ -1447,6 +1453,17 @@
     "push:logger:onDidChangeVisibility": {
       "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with nothing refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. Found only after the sweep's extends/alias and lookbehind defects were fixed, which is why it is open work rather than a regression.",
       "unenforced_accepted": true
+    }
+  },
+  "residuals": {
+    "note": "Known gaps that the design does not close, recorded as data so a gate can hold the conditions they depend on. A residual written only in prose is forgotten exactly when it stops being true.",
+    "deferred-laundering": {
+      "statement": "A tab-originated command handler that DEFERS a global ICommandService call -- setTimeout, an unawaited promise, an event subscription -- escapes both the taint and the in-flight backstop.",
+      "why": "The origin is threaded by rebinding ICommandService for the handler, and the backstop covers handlers that reach a global service instead. Both are scoped to the synchronous and awaited call tree: seclabInFlight is incremented at seclabExecuteFromTab and unwound when that promise settles. Work deferred past that point runs with no origin and a zero counter.",
+      "fixed": false,
+      "candidate_fix": "Carry the origin in the invoker's disposable scope rather than a window-wide counter, so it follows the handler's lifetime instead of the call's duration.",
+      "safe_while": "every command verdict is deny: with nothing allowed, a laundered call is refused for being denied rather than for being laundered, so the gap has no reachable consequence",
+      "gate": "check_drift.py::check_residuals fails if any cmd: surface is given a verdict other than deny while fixed is false"
     }
   }
 }

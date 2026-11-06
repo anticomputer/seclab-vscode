@@ -316,6 +316,7 @@ The invariants the table is checked against, from `policy.json`:
 5. **no-real-secret-in-tab.sentinel-derivation** — A token minted for the tab reaches it only as a sentinel, bound to no more than its parent's bindings, or to the bindings of a derivation rule the controller declared for that exact route.
 6. **no-seclab-commands-from-tabs** — No command whose id begins 'seclab.' is reachable from a sandboxed host.
 7. **every-deny-has-an-enforcement-point** — Every surface class carrying a deny verdict must name the code that refuses it, and that code must exist in the patch series.
+8. **no-allowed-command-while-laundering-is-deferred** — No command may be given a verdict other than deny until the deferred-laundering residual is fixed.
 <!-- seclab:end invariants -->
 
 ### 3.2 Categories may withhold authority; they may not grant it
@@ -538,6 +539,24 @@ passes.
 Stated plainly, because each one is a thing this design does **not** stop.
 Numbers 1 to 4 came out of the independent design review
 ([`docs/security-reviews/20261104-rpc-lockdown-design.md`](security-reviews/20261104-rpc-lockdown-design.md)).
+
+0. **Deferred laundering escapes the command taint.** A tab-originated handler
+   that *defers* a global `ICommandService` call — `setTimeout`, an unawaited
+   promise, an event subscription — runs after `seclabInFlight` has unwound, so
+   it has neither an origin nor a non-zero counter and escapes both the taint
+   and the backstop. The taint is scoped to the synchronous and awaited call
+   tree, because the counter tracks the *call's duration* rather than the
+   handler's lifetime; the candidate fix is to carry the origin in the
+   invoker's disposable scope instead.
+
+   This is safe only while every command verdict is `deny`: with nothing
+   allowed, a laundered call is refused for being denied rather than for being
+   laundered. That dependency is **checked, not described** —
+   `check_drift.py::check_residuals` fails the build if any command is given a
+   verdict other than `deny` while
+   `residuals['deferred-laundering'].fixed` is false. Allowing a command is the
+   obvious next compatibility fix, and nothing in review would otherwise
+   connect it to this paragraph.
 
 1. **Verdict laundering through nested commands.** Addressed by the command taint (§2.5.2, [ADR](adr/20261104-tab-command-taint.md)), but two escapes remain: a handler using a constructor-injected or imported `ICommandService` rather than its accessor, and services that run commands for a caller such as `IOpenerService` for `command:` URIs. The global-service backstop catches the denied subset; the allowed subset is unfiltered. Probed, not assumed.
 2. **A verdict is pinned to an id, not to behaviour.** The digest covers policy

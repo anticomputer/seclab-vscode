@@ -185,5 +185,68 @@ class RealPolicyEnforcementTest(unittest.TestCase):
             sum(1 for k in mapping if k.startswith("push:")), 20)
 
 
+class ResidualGateTest(unittest.TestCase):
+    """A residual's stated precondition must be checked, not just described.
+
+    `deferred-laundering` is safe only while every command verdict is `deny`.
+    Allowing a command is the obvious next compatibility fix, and nothing in
+    review would connect that change to a paragraph in the residuals section.
+    """
+
+    def setUp(self):
+        self.policy = {"residuals": {"deferred-laundering": {
+            "statement": "...", "fixed": False}}}
+
+    def test_control_all_commands_denied_passes(self):
+        mapping = {"cmd:a": "deny", "cmd:b": "deny", "rpc:x.$y": "allow#abc"}
+        self.assertEqual(CD.check_residuals(mapping, self.policy), [])
+
+    def test_allowing_a_command_fails_while_the_residual_is_unfixed(self):
+        mapping = {"cmd:a": "deny", "cmd:b": "allow#abc123"}
+        errors = CD.check_residuals(mapping, self.policy)
+        self.assertTrue(errors)
+        self.assertIn("cmd:b", errors[0])
+        self.assertIn("deferred-laundering", errors[0])
+
+    def test_any_non_deny_verdict_counts_not_just_allow(self):
+        # prompt and rewrite run the handler too.
+        for verdict in ("prompt", "rewrite", "allow_with_constraint#abc"):
+            with self.subTest(verdict=verdict):
+                self.assertTrue(
+                    CD.check_residuals({"cmd:a": verdict}, self.policy))
+
+    def test_marking_the_residual_fixed_releases_the_constraint(self):
+        # Otherwise the gate would make the residual impossible to retire.
+        self.policy["residuals"]["deferred-laundering"]["fixed"] = True
+        self.assertEqual(
+            CD.check_residuals({"cmd:b": "allow#abc123"}, self.policy), [])
+
+    def test_a_missing_residual_entry_does_not_silently_pass_commands(self):
+        # If the entry is deleted the gate has nothing to hold, which is a
+        # policy-authoring error rather than a safe state. It is caught by the
+        # invariant's checked_by wiring, so assert the shipped policy keeps it.
+        import json
+        with open(os.path.join(CD.REPO_ROOT, "rpc-filter", "policy",
+                               "policy.json"), encoding="utf-8") as fh:
+            policy = json.load(fh)
+        self.assertIn("deferred-laundering", policy.get("residuals", {}))
+        self.assertFalse(policy["residuals"]["deferred-laundering"]["fixed"])
+        self.assertTrue(any(
+            i["id"] == "no-allowed-command-while-laundering-is-deferred"
+            for i in policy["invariants"]))
+
+    def test_the_shipped_policy_satisfies_the_residual_gate(self):
+        import json
+        root = CD.REPO_ROOT
+        with open(os.path.join(root, "rpc-filter", "policy",
+                               "policy.json"), encoding="utf-8") as fh:
+            policy = json.load(fh)
+        with open(os.path.join(root, "rpc-filter", "inventory",
+                               "inventory.json"), encoding="utf-8") as fh:
+            inv = json.load(fh)
+        mapping = CD.build_mapping(inv, policy)
+        self.assertEqual(CD.check_residuals(mapping, policy), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
