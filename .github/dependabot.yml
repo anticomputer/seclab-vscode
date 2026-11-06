@@ -12,6 +12,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # The 7-day rule (EDR pin-age-cooldown): never propose a version younger than the feed's hold.
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ['*']
@@ -23,11 +26,14 @@ updates:
       - /sandbox/oci
       - /build/tools
       - /broker
+      - /broker/tools/attest
       - /broker/tests/integration/images/harness
       - /broker/tests/integration/images/upstream
       - /broker/tests/integration/images/workspace
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     ignore:
       # The builder's Node must equal upstream's .nvmrc (build/prepare.sh asserts it; ADR
       # supply-chain provenance): only digest refreshes of the same tag, never a version bump.
@@ -43,8 +49,11 @@ updates:
       - /broker
       - /broker/tests/integration/images/harness
       - /broker/tests/integration/images/upstream
+      - /broker/tools/attest
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       python:
         patterns: ['*']

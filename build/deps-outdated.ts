@@ -2,7 +2,9 @@
 // deps/registry.json and reports, as Markdown on stdout:
 //   - image pins whose tag now points at a different digest (a rebuild, e.g. a base-image
 //     security refresh);
-//   - entries with `track.github` whose latest GitHub release differs from `track.version`.
+//   - entries with `track.github` whose newest release at least 7 days old differs from
+//     `track.version`.
+// Both respect the 7-day rule (EDR pin-age-cooldown): nothing CFS would still hold is suggested.
 // It never changes a pin: an update is a normal change (register entry, verification, review).
 // Anonymous reads only; registry/API text is data, quoted, never interpreted.
 //   node build/deps-outdated.ts > report.md     (exit 0; per-entry errors are listed)
@@ -10,6 +12,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseRef, Registry } from './registry.ts';
+import { ageDays, COOLDOWN_DAYS, imageDate } from './release-dates.ts';
 
 interface Dep { id: string; name: string; kind: string; pins: string[]; track?: { github?: string; version?: string } }
 const repo = path.resolve(import.meta.dirname, '..');
@@ -27,7 +30,8 @@ for (const d of deps) {
 			}
 			try {
 				const now = await new Registry(ref).tagDigest(ref.tag);
-				if (now !== ref.digest) {
+				// The 7-day rule (EDR pin-age-cooldown): suggest a moved tag only once its image is old enough.
+				if (now !== ref.digest && ageDays(await imageDate(`${ref.host}/${ref.repo}@${now}`)) >= COOLDOWN_DAYS) {
 					rows.push(`| ${d.id} | tag \`${safe(ref.tag)}\` moved | \`${ref.digest.slice(0, 19)}…\` | \`${safe(now).slice(0, 19)}…\` |`);
 				}
 			} catch (e) {
@@ -37,11 +41,18 @@ for (const d of deps) {
 	}
 	if (d.track?.github && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(d.track.github)) {
 		try {
-			const r = await fetch(`https://api.github.com/repos/${d.track.github}/releases/latest`, { headers: { accept: 'application/vnd.github+json' } });
+			// The newest release at least COOLDOWN_DAYS old (never one CFS still holds).
+			const r = await fetch(`https://api.github.com/repos/${d.track.github}/releases?per_page=30`, { headers: { accept: 'application/vnd.github+json' } });
 			if (!r.ok) {
-				throw new Error(`releases/latest: HTTP ${r.status}`);
+				throw new Error(`releases: HTTP ${r.status}`);
 			}
-			const tag = String(((await r.json()) as { tag_name?: string }).tag_name ?? '');
+			const releases = (await r.json()) as Array<{ tag_name?: string; published_at?: string; draft?: boolean; prerelease?: boolean }>;
+			const ok = releases.filter(x => !x.draft && !x.prerelease && x.published_at && ageDays(x.published_at) >= COOLDOWN_DAYS)
+				.sort((a, b) => Date.parse(b.published_at!) - Date.parse(a.published_at!));
+			if (!ok.length) {
+				throw new Error(`no release at least ${COOLDOWN_DAYS} days old among the latest 30`);
+			}
+			const tag = String(ok[0].tag_name ?? '');
 			if (tag.replace(/^v|^lychee-v/, '') !== (d.track.version ?? '').replace(/^v/, '')) {
 				rows.push(`| ${d.id} | new release | \`${safe(d.track.version ?? '?')}\` | \`${safe(tag)}\` |`);
 			}
