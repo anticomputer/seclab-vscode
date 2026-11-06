@@ -105,7 +105,12 @@ allow it for the tab, or deny it.
   - The Tab Manager's connection factory runs `tab.ensureRunning` before every reconnect, but
     not on its first call, right after the resolver's own.
   - `tab.ensureRunning` is idempotent and the connection token is the tab's own, so a dead
-    REH, or a tab stopped with its supervisor, comes back without a window reload.
+    REH, or a tab stopped with its supervisor, comes back under the same token.
+  - Correction (part 3, focus probe): the window still needs a reload after its server dies.
+    The new REH doesn't know the old extension-host session ("Unknown reconnection token"),
+    so the window offers its reload at once instead of retrying a missing socket, and the
+    reload lands on the restarted tab. A dropped connection to a live REH reconnects without
+    a reload.
   - Secret-scan findings on a restart still need the resolver's trusted UI. The reconnect then
     fails and the window offers its reload.
   - tabd e2e (`./seclab test e2e oci`): after the tab's REH processes are killed, a
@@ -144,3 +149,8 @@ allow it for the tab, or deny it.
   - Review [III](../security-reviews/20261106-reh-idempotent.md): one medium and three lows,
     all fixed. The unit test proves III-1 by injection: without the running-sandbox check it
     probes a stopped tab.
+  - Focus probe, branch build 42295175158: exit 0, with no steal. The battery ran in one pass
+    from step 0 to `server-connection-lost`; before, it restarted at every step.
+  - The `--skip server-connection-lost` variant: no steal. After `restart-extension-host` the
+    window stays disconnected: the managed socket factory dies with the local extension host
+    ("No socket factory found for Managed(1)"). This is still open.

@@ -94,7 +94,7 @@ assert.equal(rehPid(), pidBefore, 'ensureRunning on a running tab keeps its REH'
 assert.match(await handshake(), /^HTTP\/1\.1 101/, 'the same REH still answers');
 
 // B3c: the server dies; tab.ensureRunning (what the Tab Manager's reconnect does first) brings it
-// back under the same connection token, so the window reconnects without a reload.
+// back under the same connection token, so the window's reload lands on a running tab.
 // Fails unless at least one REH process was killed, so a kill as the wrong user cannot pass silently.
 const killReh = 'n=0; for p in /proc/[0-9]*; do tr "\\0" " " < "$p/cmdline" 2>/dev/null | grep -q "^/opt/seclab-reh/" && kill -9 "${p#/proc/}" 2>/dev/null && n=$((n+1)); done; echo "killed $n"; [ "$n" -gt 0 ]';
 const k = inTab(killReh);
