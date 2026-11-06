@@ -1,6 +1,6 @@
 # Egress prompts through the Tab Manager (plan increment B3)
 
-- **Status:** accepted (B3a and B3b landed; B3c follows)
+- **Status:** accepted (B3a, B3b and B3c part 1 landed; B3c part 2 follows)
 - **Date:** 2026-11-06
 - **Deciders:** Coordinator (the plan's prompt decision: visual grouping is fine, but each tab's decision stays separate, the originating tab shows on every prompt, the broker's per-tab rate limit stays, and there is no "apply to all"). Fork-build session: implementation.
 - **Related:** [plan tabd-broker-wiring](../plans/tabd-broker-wiring.md), [B1](20261105-oci-tab-broker.md), [B2](20261105-sbx-tab-broker.md), [broker protocol](../broker-protocol.md), [request lineage](20261105-broker-request-lineage.md)
@@ -85,6 +85,19 @@ allow it for the tab, or deny it.
   `no-user-action-yet` and a deny gets 403; a risky destination before user action is denied
   without a prompt; an unanswered prompt is denied at its timeout; a POST outside a GET rule is
   prompted and denied; after `tab.userAction`, allow-once lets the request through.
+- **B3c (part 1): control reconnect at adoption.**
+  - When tabd adopts a running tab whose supervisor died (`initialize` reconciliation,
+    after the fence check), it reconnects to the tab's broker through the driver's
+    `openBrokerControl`: the same fixed `seclab-broker control` argv as bring-up.
+  - It attaches the same handlers as bring-up: the audit stream, prompts with `tab.event
+    opened` and the `approval.list` replay, and the CFS refresh and re-import.
+  - The broker's state is left alone: no `policy.load`, no new proxy credential, no CA
+    fetch.
+  - The fence check has already verified that the running broker is the pinned image.
+  - A failed reconnect is audited (`broker.control reattach-fail`). The tab stays adopted, and
+    its prompts time out to deny as before.
+  - Unit test: a second supervisor over the same state adopts the tab, reconnects without
+    touching broker state, and relays the broker's next prompt.
 - **Next:**
-  - B3c: control reconnect at adoption, and recovering the window after its server dies or
-    the local extension host restarts (found by the focus probe).
+  - B3c (part 2): recovering the window after its server dies or the local extension host
+    restarts (found by the focus probe).

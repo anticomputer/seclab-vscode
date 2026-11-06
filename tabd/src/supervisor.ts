@@ -588,24 +588,7 @@ export class Supervisor {
 					if (typeof certPem !== 'string' || typeof pemSha256 !== 'string' || createHash('sha256').update(certPem).digest('hex') !== pemSha256) {
 						throw new Error('ca.get: certificate does not match its sha256');
 					}
-					c.onClose(e => {
-						this.obs.brokerDetached(r.tabId, c);
-						if (this.brokers.get(r.tabId) === c) {
-							this.brokers.delete(r.tabId);
-							this.audit('broker.control', 'closed', { tabId: r.tabId, reason: e.message });
-						}
-					});
-					this.brokers.set(r.tabId, c);
-					// Observability: the broker's audit stream (trusted) into the tab's event log.
-					void this.obs.brokerAttached(r.tabId, c);
-					this.attachApprovals(r.tabId, c);
-					// CFS package feeds (B4), when the user enabled them for this tab: the tab's npm/pip
-					// config carries its persisted sentinel; the credential is imported in the background
-					// (az may take a while, or fail: the tab still starts, without feeds).
-					const feedSentinel = this.cfsSentinel(r.tabId);
-					if (feedSentinel) {
-						this.attachCfs(r.tabId, c, feedSentinel);
-					}
+					const feedSentinel = this.attachBroker(r.tabId, c);
 					this.audit('broker.configure', 'ok', { tabId: r.tabId, policyRevision: typeof loaded?.revision === 'number' ? loaded.revision : null, caSha256: pemSha256 });
 					return { caPem: certPem, proxyUser: 'seclab', proxyPassword, ...(feedSentinel ? { feedSentinel } : {}) };
 				} catch (e) {
@@ -615,6 +598,52 @@ export class Supervisor {
 				}
 			},
 		};
+	}
+
+	/**
+	 * Make `c` this tab's broker control connection: drop it on close, stream the broker's audit
+	 * into the tab's events, surface its prompts and, when the user enabled package feeds, import
+	 * the CFS credential (in the background: az may take a while, or fail; the tab still runs).
+	 * Used at bring-up and when adopting a running tab (B3c). Returns the tab's CFS sentinel.
+	 */
+	private attachBroker(tabId: string, c: BrokerControl): string | undefined {
+		c.onClose(e => {
+			this.obs.brokerDetached(tabId, c);
+			if (this.brokers.get(tabId) === c) {
+				this.brokers.delete(tabId);
+				this.audit('broker.control', 'closed', { tabId, reason: e.message });
+			}
+		});
+		this.brokers.set(tabId, c);
+		void this.obs.brokerAttached(tabId, c);
+		this.attachApprovals(tabId, c);
+		const feedSentinel = this.cfsSentinel(tabId);
+		if (feedSentinel) {
+			this.attachCfs(tabId, c, feedSentinel);
+		}
+		return feedSentinel;
+	}
+
+	/**
+	 * B3c: a running tab adopted from a dead supervisor gets its broker's control connection
+	 * back, without touching the broker's state (policy, grants, proxy credential, CA): its
+	 * prompts, audit stream and package-feed refresh work again. The fence check before adoption
+	 * already verified the running broker is the pinned image. Failure leaves the tab adopted
+	 * without broker control (prompts time out to deny), and is audited.
+	 */
+	private async reattachBroker(r: TabRecord): Promise<void> {
+		const spec = this.spec(r);
+		const driver = this.driverFor(spec.template);
+		if (spec.template.spec.broker !== 'required' || !driver.openBrokerControl || this.brokers.has(r.tabId)) {
+			return;
+		}
+		try {
+			const c = await connectBroker(() => driver.openBrokerControl!(spec), r.tabId, { deadline: Date.now() + 20_000 });
+			this.attachBroker(r.tabId, c);
+			this.audit('broker.control', 'reattached', { tabId: r.tabId });
+		} catch (e) {
+			this.audit('broker.control', 'reattach-fail', { tabId: r.tabId, error: (e as Error).message.slice(0, 200) });
+		}
 	}
 
 	/**
@@ -1005,6 +1034,7 @@ export class Supervisor {
 					this.own(r.tabId);
 					this.audit('tab.reconcile', 'adopted', { tabId: r.tabId });
 					this.obs.adopted(r.tabId);
+					await this.reattachBroker(r);
 				} else {
 					await this.quarantine(r);
 					this.audit('tab.reconcile', 'quarantined', { tabId: r.tabId });
