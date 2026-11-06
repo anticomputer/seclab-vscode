@@ -64,8 +64,8 @@ if [ "${1:-}" = "--self-test" ]; then
 	hab=$(printf 'a\nb\n' | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | cut -c1-64)
 	habn=$(printf 'a\nb' | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | cut -c1-64)
 	stamp() { printf '{\n\t"nameShort": "x",\n\t"seclabRpcPolicy": {\n\t\t"sha256": "%s",\n\t\t"file": "%s"\n\t}\n}\n' "$1" "$RPC_POLICY_REL" > "$T/root/product.json"; }
-	run() { # $1 patches dir, $2 expect pass|fail, $3 what
-		if SECLAB_PATCHES="$1" sh "$SELF" --inner "$T/w" release "$T/root" >"$T/out" 2>&1; then r=pass; else r=fail; fi
+	run() { # $1 patches dir, $2 expect pass|fail, $3 what, $4 mode (default release)
+		if SECLAB_PATCHES="$1" sh "$SELF" --inner "$T/w" "${4:-release}" "$T/root" >"$T/out" 2>&1; then r=pass; else r=fail; fi
 		rm -rf "$T/w"
 		[ "$r" = "$2" ] || { cat "$T/out" >&2; echo "check-release self-test: $3: got $r, want $2" >&2; exit 1; }
 	}
@@ -84,6 +84,19 @@ if [ "${1:-}" = "--self-test" ]; then
 	stamp "$hab"; run "$T/with5" pass "CRLF series still lists 0005"
 	printf '{"seclabRpcPolicy":{"sha256":"%s"},"x":{"seclabRpcPolicy":{"sha256":"%s"}}}\n' "$hab" "$hab" > "$T/root/product.json"
 	run "$T/with5" fail "a duplicate nested seclabRpcPolicy"
+	# The RPC filter's enforcing marker, each defect injected first: missing from the app with
+	# 0005 listed, naming another table, present without 0005; then the right one passes, and
+	# the REH (no workbench) needs none.
+	stamp "$hab"
+	run "$T/with5" fail "desktop, 0005 listed, enforcing marker missing" desktop
+	echo "var m=\"seclabRpcFilterEnforcing:$habn\";" > "$T/root/m.js"
+	run "$T/with5" fail "an enforcing marker naming another table" desktop
+	echo "var m=\"seclabRpcFilterEnforcing:$hab\";" > "$T/root/m.js"
+	run "$T/with5" pass "desktop, 0005 listed, its enforcing marker" desktop
+	echo '{"nameShort":"x"}' > "$T/root/product.json"
+	run "$T/no5" fail "an enforcing marker without 0005"
+	rm "$T/root/m.js"; stamp "$hab"
+	run "$T/with5" pass "the REH (release mode), 0005 listed, no workbench marker needed"
 	rm -rf "$T/root"; mkdir -p "$T/root"; echo 'var x=1;' > "$T/root/a.js"
 	run "$T/no5" fail "no product.json at all"
 	echo "check-release self-test: ok"
@@ -150,6 +163,28 @@ if [ "${1:-}" = "--inner" ]; then
 		done <<EOF
 $prods
 EOF
+		# The RPC filter's enforcing marker (seclabRpcFilterEnforcing:<sha256 of the table>, emitted
+		# by seclabRpcFilter.ts): without 0005, none anywhere; with it, every one names the table's
+		# hash (so equals the product.json stamp), and the desktop app, where the workbench lives,
+		# must carry one. The REH has no workbench, so there it is only checked when present.
+		set +e
+		marks=$(find "$d" -type f \( -name "*.js" -o -name "*.mjs" -o -name "*.cjs" \) -exec grep -hoaE 'seclabRpcFilterEnforcing:[0-9a-f]{0,64}' {} + 2>&1)
+		rc=$?
+		set -e
+		if [ "$rc" -gt 1 ]; then
+			echo "check-release: scan error (RPC enforcing marker)"; bad=1
+		elif [ -n "$rpc_exp" ]; then
+			marks=$(printf '%s\n' "$marks" | grep -v '^$' | sort -u || true)
+			if [ "$rpc_exp" = absent ]; then
+				[ -z "$marks" ] || { echo "check-release: RPC enforcing marker in $d, but patches/series has no 0005"; bad=1; }
+			else
+				wrong=$(printf '%s\n' "$marks" | grep -v '^$' | grep -vx "seclabRpcFilterEnforcing:$rpc_exp" || true)
+				[ -z "$wrong" ] || { echo "check-release: RPC enforcing marker names another table: $(printf '%s' "$wrong" | head -1)"; bad=1; }
+				if [ "$MODE" = desktop ] && [ -z "$marks" ]; then
+					echo "check-release: RPC filter enforcing marker missing from the desktop app (0005 is listed)"; bad=1
+				fi
+			fi
+		fi
 		if [ "$MODE" = desktop ]; then
 			set +e
 			out=$(find "$d" \( -path "*/@github/copilot*" -o -path "*copilot-shim*" -o -name copilot -o -name runtime.node -o -name "copilot-runtime*" -o -path "*/@openai/codex*" -o -name codex -o -name "codex-*" -o -path "*claude-agent-sdk*" -o -path "*/@anthropic-ai/claude-code*" -o -name "*agent-sdk*" -o -name "*agent-runtime*" -o -name "*agentsdk*" \) -print 2>&1)
