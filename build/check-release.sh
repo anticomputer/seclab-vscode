@@ -16,6 +16,69 @@
 # (hosted macOS) it runs the same POSIX sh/find/grep logic natively.
 set -eu
 
+# The RPC filter stamp this tree's patches/series implies (prepare.sh step 7): "absent" unless
+# 0005 is listed, else the sha256 of the policy table 0005 creates, taken from its new-file hunk.
+# A series where another patch also touches the table can't be derived here: fail closed.
+RPC_POLICY_REL=src/vs/workbench/services/extensions/common/seclabPolicyData.ts
+sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -c1-64; else shasum -a 256 "$1" | cut -c1-64; fi; }
+rpc_expect() { # $1 = patches dir, $2 = scratch file; prints absent|<sha256>, or fails
+	[ -f "$1/series" ] || { echo "check-release: no patches/series at $1" >&2; return 1; }
+	listed=$(sed -e 's/#.*//' "$1/series" | tr -d ' \t\r' | grep -v '^$' || true)
+	p=$(printf '%s\n' "$listed" | grep -E '^0005-[A-Za-z0-9._-]+\.patch$' | head -1 || true)
+	[ -n "$p" ] || { echo absent; return 0; }
+	for q in $listed; do
+		[ "$q" = "$p" ] && continue
+		if grep -q "^+++ b/$RPC_POLICY_REL" "$1/$q"; then echo "check-release: $q also changes $RPC_POLICY_REL" >&2; return 1; fi
+	done
+	# No pipeline: dash has no pipefail, and a failed extraction must not hash to a value.
+	awk -v hdr="+++ b/$RPC_POLICY_REL" '
+		index($0, hdr) == 1 { f = 1; next }
+		f && /^diff / { exit }
+		f && /^@@ / { if ($0 !~ /^@@ -0,0 /) bad = 1; next }
+		f && /^\\ No newline/ { nonl = 1; next }
+		f && /^\+/ { l[n++] = substr($0, 2); next }
+		f { bad = 1 }
+		END { if (bad || !n) exit 3; for (i = 0; i < n; i++) { printf "%s", l[i]; if (i < n - 1 || !nonl) printf "\n" } }' "$1/$p" > "$2" \
+		|| { echo "check-release: cannot read $RPC_POLICY_REL from $p as a new file" >&2; return 1; }
+	sha256_file "$2"
+}
+if [ "${1:-}" = "--self-test" ]; then
+	# The RPC stamp both ways (prepare.sh step 7), on fixture roots and fake patch queues.
+	SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+	T="$(cd "$(dirname "$SELF")/.." && pwd)/.work/check-release-self-test"
+	rm -rf "$T"; mkdir -p "$T/root" "$T/no5" "$T/with5" "$T/two" "$T/nonl"
+	trap 'rm -rf "$T"' EXIT
+	echo 'var x=1;' > "$T/root/a.js"
+	printf '0001-a.patch\n' > "$T/no5/series"; : > "$T/no5/0001-a.patch"
+	mk5() { # $1 dir, $2 trailing line(s) after the hunk
+		printf '0001-a.patch\n0005-rpc.patch # comment\n' > "$1/series"; : > "$1/0001-a.patch"
+		printf 'diff -ruN a/%s b/%s\n--- a/%s\t1970-01-01\n+++ b/%s\t2026-11-06\n@@ -0,0 +1,2 @@\n+a\n+b\n%b' "$RPC_POLICY_REL" "$RPC_POLICY_REL" "$RPC_POLICY_REL" "$RPC_POLICY_REL" "$2" > "$1/0005-rpc.patch"
+	}
+	mk5 "$T/with5" 'diff -ruN a/x b/x\n'
+	mk5 "$T/nonl" '\\ No newline at end of file\n'
+	mk5 "$T/two" ''; printf '0001-a.patch\n0005-rpc.patch\n0006-b.patch\n' > "$T/two/series"; printf '+++ b/%s\n' "$RPC_POLICY_REL" > "$T/two/0006-b.patch"
+	hab=$(printf 'a\nb\n' | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | cut -c1-64)
+	habn=$(printf 'a\nb' | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | cut -c1-64)
+	stamp() { printf '{\n\t"nameShort": "x",\n\t"seclabRpcPolicy": {\n\t\t"sha256": "%s",\n\t\t"file": "%s"\n\t}\n}\n' "$1" "$RPC_POLICY_REL" > "$T/root/product.json"; }
+	run() { # $1 patches dir, $2 expect pass|fail, $3 what
+		if SECLAB_PATCHES="$1" sh "$SELF" --inner "$T/w" release "$T/root" >"$T/out" 2>&1; then r=pass; else r=fail; fi
+		rm -rf "$T/w"
+		[ "$r" = "$2" ] || { cat "$T/out" >&2; echo "check-release self-test: $3: got $r, want $2" >&2; exit 1; }
+	}
+	echo '{"nameShort":"x"}' > "$T/root/product.json"
+	run "$T/no5" pass "no 0005, no stamp"
+	run "$T/with5" fail "0005 listed, no stamp"
+	stamp "$hab"; run "$T/with5" pass "0005 listed, its table's hash"
+	run "$T/no5" fail "a stamp without 0005"
+	stamp "$habn"; run "$T/with5" fail "0005 listed, another hash"
+	run "$T/nonl" pass "0005 without a final newline, its hash"
+	stamp "$hab"; run "$T/two" fail "another patch also changes the table"
+	rm -rf "$T/root"; mkdir -p "$T/root"; echo 'var x=1;' > "$T/root/a.js"
+	run "$T/no5" fail "no product.json at all"
+	echo "check-release self-test: ok"
+	exit 0
+fi
+
 if [ "${1:-}" = "--inner" ]; then
 	shift
 	WORK="$1"; MODE="$2"; shift 2
@@ -30,6 +93,12 @@ if [ "${1:-}" = "--inner" ]; then
 		echo "$d" >> "$WORK/roots"
 	done
 	bad=0
+	# The RPC stamp every app product.json must carry (or must not): from SECLAB_PATCHES (the
+	# container's read-only mount) or the patches/ next to this script.
+	pdir="${SECLAB_PATCHES:-$(cd "$(dirname "$0")/.." && pwd)/patches}"
+	if ! rpc_exp=$(rpc_expect "$pdir" "$WORK/rpc-policy-table"); then
+		echo "check-release: cannot derive the expected RPC policy stamp"; bad=1; rpc_exp=""
+	fi
 	scan() { # $1 = ERE, $2 = label; grep exit 1 = no match, >1 = error (fail closed)
 		set +e
 		# -a: a NUL byte must not hide a file. JS/JSON plus shell launchers (bin/, *.sh).
@@ -43,6 +112,22 @@ if [ "${1:-}" = "--inner" ]; then
 		[ -n "$(find "$d" -type f -name "*.js" | head -1)" ] || { echo "check-release: no JS files under $d (wrong path?)"; bad=1; }
 		scan "SECLAB_TEST_ONLY|seclab-test-hook|rogue-reh|rogue-extension|seclabTestBuild" "test-hook marker"
 		scan "(require|import)\([[:space:]]*process\.env(\.[A-Za-z_]+|\[)[^)]{0,80}\)" "env-controlled module load"
+		# The RPC filter stamp (prepare.sh step 7), both directions, in every app product.json.
+		prods=$(find "$d" -type f -name product.json -not -path "*/extensions/*" -not -path "*/node_modules/*" 2>/dev/null)
+		[ -n "$prods" ] || { echo "check-release: no product.json under $d"; bad=1; }
+		while IFS= read -r pj; do
+			[ -n "$pj" ] && [ -n "$rpc_exp" ] || continue
+			flat=$(tr -d ' \t\r\n' < "$pj")
+			case "$flat" in *'"seclabRpcPolicy"'*) has=1 ;; *) has=0 ;; esac
+			got=$(printf '%s' "$flat" | sed -n 's/.*"seclabRpcPolicy":{"sha256":"\([0-9a-f]\{64\}\)".*/\1/p')
+			if [ "$rpc_exp" = absent ]; then
+				[ "$has" = 0 ] || { echo "check-release: RPC policy stamp in $pj, but patches/series has no 0005"; bad=1; }
+			elif [ "$got" != "$rpc_exp" ]; then
+				echo "check-release: RPC policy stamp in $pj is '${got:-missing}', expected $rpc_exp (0005's table)"; bad=1
+			fi
+		done <<EOF
+$prods
+EOF
 		if [ "$MODE" = desktop ]; then
 			set +e
 			out=$(find "$d" \( -path "*/@github/copilot*" -o -path "*copilot-shim*" -o -name copilot -o -name runtime.node -o -name "copilot-runtime*" -o -path "*/@openai/codex*" -o -name codex -o -name "codex-*" -o -path "*claude-agent-sdk*" -o -path "*/@anthropic-ai/claude-code*" -o -name "*agent-sdk*" -o -name "*agent-runtime*" -o -name "*agentsdk*" \) -print 2>&1)
@@ -82,4 +167,4 @@ for p in "$@"; do
 	i=$((i+1))
 done
 # shellcheck disable=SC2086 # paths are repo/build paths without spaces; split on purpose
-exec docker run --rm --network none -v "$SELF:/check-release.sh:ro" $mounts alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f sh /check-release.sh --inner /x "$MODE" $args
+exec docker run --rm --network none -v "$SELF:/check-release.sh:ro" -v "$(dirname "$SELF")/../patches:/patches:ro" -e SECLAB_PATCHES=/patches $mounts alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f sh /check-release.sh --inner /x "$MODE" $args

@@ -67,4 +67,26 @@ if [ "$want" != "$pinned" ]; then
 	echo "prepare: build/linux/Dockerfile pins node $pinned but upstream .nvmrc wants $want (refusing to build)" >&2
 	exit 1
 fi
+
+# 7. The RPC capability filter's stamp (observability reads it; check-release verifies it):
+#    product.json records the sha256 of the APPLIED policy table iff patch 0005 is in
+#    patches/series. A second jq pass, because step 3 stamps product.json before step 4 patches.
+#    Both directions fail: 0005 listed but no table, or a table (or a stamp) without 0005.
+policy_rel=src/vs/workbench/services/extensions/common/seclabPolicyData.ts
+if jq -e 'has("seclabRpcPolicy")' "$DEST/product.json" >/dev/null; then
+	echo "prepare: product.json already has seclabRpcPolicy before stamping (refusing to build)" >&2
+	exit 1
+fi
+if grep -Eq '^[[:space:]]*0005-[A-Za-z0-9._-]+\.patch' "$ROOT/patches/series"; then
+	[ -f "$DEST/$policy_rel" ] && [ ! -L "$DEST/$policy_rel" ] \
+		|| { echo "prepare: patches/series lists 0005 but $policy_rel is missing (refusing to build)" >&2; exit 1; }
+	if command -v sha256sum >/dev/null; then h="$(sha256sum "$DEST/$policy_rel" | cut -c1-64)"; else h="$(shasum -a 256 "$DEST/$policy_rel" | cut -c1-64)"; fi
+	tmp="$DEST/product.json.seclab"
+	jq --tab --arg h "$h" --arg p "$policy_rel" '.seclabRpcPolicy = {sha256: $h, file: $p}' "$DEST/product.json" > "$tmp"
+	mv "$tmp" "$DEST/product.json"
+	echo "prepare: product.json stamped with the RPC policy table ($h)"
+elif [ -e "$DEST/$policy_rel" ]; then
+	echo "prepare: $policy_rel exists but patches/series has no 0005 (refusing to build)" >&2
+	exit 1
+fi
 echo "prepare: done ($DEST)"
