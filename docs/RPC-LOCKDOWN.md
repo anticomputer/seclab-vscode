@@ -418,7 +418,7 @@ Two properties of the digest matter:
   build over a stale surface. **Open work**, noted in §7.
 
 <!-- seclab:begin baseline -->
-Current baseline at `a717861c0758`: **4223 surfaces, 4189 denied, 34 not denied** (14 allow, 9 allow_with_constraint, 4 prompt, 7 rewrite).
+Current baseline at `a717861c0758`: **4223 surfaces, 4183 denied, 40 not denied** (20 allow, 9 allow_with_constraint, 4 prompt, 7 rewrite).
 <!-- seclab:end baseline -->
 
 ### 4.1 What is reachable right now
@@ -455,6 +455,12 @@ any becomes reachable without one.
 | `rpc:MainThreadCommands.$getCommands` | allow_with_constraint |
 | `rpc:MainThreadCommands.$registerCommand` | allow_with_constraint |
 | `rpc:MainThreadCommands.$unregisterCommand` | allow_with_constraint |
+| `rpc:MainThreadConsole.$logExtensionHostMessage` | allow |
+| `rpc:MainThreadErrors.$onUnexpectedError` | allow |
+| `rpc:MainThreadExtensionService.$onDidActivateExtension` | allow |
+| `rpc:MainThreadExtensionService.$onExtensionRuntimeError` | allow |
+| `rpc:MainThreadExtensionService.$onWillActivateExtension` | allow |
+| `rpc:MainThreadExtensionService.$setPerformanceMarks` | allow |
 | `rpc:MainThreadFileSystem.$readFile` | allow_with_constraint |
 | `rpc:MainThreadFileSystem.$writeFile` | allow_with_constraint |
 | `rpc:MainThreadSecretState.$deletePassword` | rewrite |
