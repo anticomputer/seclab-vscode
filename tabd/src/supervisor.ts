@@ -69,7 +69,7 @@ export interface SupervisorOptions {
 	 * The policy a tab's broker loads (broker-policy.ts: the user's policy from the state
 	 * directory, else deny-all). Throws on an invalid user policy, which fails the start.
 	 */
-	readonly brokerPolicy?: (tabId: string) => Record<string, unknown>;
+	readonly brokerPolicy?: (tabId: string, opts: { prompts: boolean }) => Record<string, unknown>;
 }
 
 interface Channel { tabId: string; child: ChildProcessWithoutNullStreams }
@@ -94,6 +94,7 @@ export class Supervisor {
 	/** One long-lived control connection per running tab's broker (docs/broker-protocol.md §1). */
 	private readonly brokers = new Map<string, BrokerControl>();
 	private readonly approvals = new Approvals();
+	private clientShowsPrompts = false;
 	private readonly phases = new Map<string, string>();
 	private readonly owned = new Set<string>();
 	private dead = false;
@@ -258,6 +259,10 @@ export class Supervisor {
 				throw new RpcError(-32600, `unsupported protocol ${String(v)}; supervisor speaks ${PROTOCOL_VERSION}`);
 			}
 			this.initialized = true;
+			// A client that shows broker prompts says so (the Tab Manager). Without one, nobody can
+			// answer a prompt, so the default policy denies unmatched requests at once (B3).
+			const client = (p.client ?? {}) as { capabilities?: { approvals?: unknown } };
+			this.clientShowsPrompts = client.capabilities?.approvals === true;
 			const drivers: DriverInfo[] = await Promise.all([...this.o.drivers.values()].map(d => d.probe()));
 			await this.reconcile();
 			await this.collectGarbage();
@@ -560,7 +565,7 @@ export class Supervisor {
 					}
 					const proxyPassword = randomBytes(24).toString('base64url');
 					await c.request('proxy.auth.set', { username: 'seclab', password: proxyPassword }, left());
-					const policy = this.o.brokerPolicy ? this.o.brokerPolicy(r.tabId) : defaultPolicy(r.tabId);
+					const policy = this.o.brokerPolicy ? this.o.brokerPolicy(r.tabId, { prompts: this.clientShowsPrompts }) : defaultPolicy(r.tabId, this.clientShowsPrompts);
 					// The user's blocked destinations (tab.egress.block) ride on every start, once the
 					// broker can enforce them; deny precedes every allow, baseline and prompt.
 					const blocks = this.o.store.readSide<BlockRule>(r.tabId, 'blocks');

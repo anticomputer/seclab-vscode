@@ -158,7 +158,7 @@ const supervisor = new Supervisor({
 	// scan is unavailable and opens fail closed unless the user records an exception.
 	scan: dockerPath ? (hostPath: string) => scanWorkspace(runner, dockerPath, hostPath) : undefined,
 	// The user's broker policy from this state dir, else deny-all (plan tabd-broker-wiring, decision 1).
-	brokerPolicy: tabId => tabPolicy(stateDir, tabId),
+	brokerPolicy: (tabId, o) => tabPolicy(stateDir, tabId, o.prompts),
 });
 
 process.stdin.on('data', (d: Buffer) => supervisor.receive(d));
