@@ -288,6 +288,10 @@ export class OciDriver implements Driver {
 		return new Set(r.stdout.split('\n').map(s => s.trim()).filter(s => SANDBOX_NAME_RE.test(s)));
 	}
 
+	openBrokerControl(spec: TabRuntimeSpec): ChildProcessWithoutNullStreams {
+		return this.runner.spawnStream(this.docker, ['exec', '-i', '--', this.names(spec).broker, 'seclab-broker', 'control']);
+	}
+
 	async installFeed(spec: TabRuntimeSpec, sentinel: string | undefined): Promise<void> {
 		const n = this.names(spec);
 		const w = await this.runner.run(this.docker, ['exec', '-i', '-u', '0:0', '--', n.ws, 'sh', '-c', INSTALL_FEED], { input: `${feedLine(sentinel)}\n`, timeoutMs: 30_000 });
