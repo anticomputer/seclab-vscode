@@ -12,11 +12,12 @@ import type { ObsEvent, Priority } from '../tabd-src/obs/schema.ts';
 
 const PRIORITIES: readonly Priority[] = ['emergency', 'alert', 'critical', 'error', 'warning', 'notice', 'informational', 'debug'];
 const MAX_ITEMS = 1000;
-const BADGE: Record<string, string> = { 'trusted': 'trusted', 'host-observed': 'host-observed', 'tab-vm-root': 'tab VM root' };
+const BADGE: Record<string, string> = { 'trusted': 'trusted', 'host-observed': 'host-observed', 'tab-vm-root': 'tab VM root', 'tab-reported': 'tab says' };
 const INTEGRITY_HELP: Record<string, string> = {
 	'trusted': 'Produced outside the tab. The tab can neither forge nor suppress it.',
 	'host-observed': 'Seen by Falco on the host kernel, outside the tab. The content (commands, paths) is chosen by the tab.',
 	'tab-vm-root': 'Seen by the collector inside the tab\'s own VM. Root inside the tab could forge or hide it.',
+	'tab-reported': 'What the tab\'s own agent host says about itself. The tab can make this up: context only.',
 };
 
 interface Observation { state: string; since: string; reason: string; sensor?: string; mode?: string }
@@ -193,7 +194,7 @@ export class TabActivity implements vscode.TreeDataProvider<Item>, vscode.Dispos
 		item.tooltip = lines.join('\n'); // a plain string: never markdown
 		const sev = PRIORITIES.indexOf(e.priority);
 		const color = sev <= 2 ? 'errorForeground' : sev <= 4 ? 'editorWarning.foreground' : undefined;
-		const icon = e.class === 'detection' ? 'alert' : e.integrity === 'trusted' ? 'shield' : e.integrity === 'host-observed' ? 'eye' : 'vm';
+		const icon = e.class === 'detection' ? 'alert' : e.integrity === 'trusted' ? 'shield' : e.integrity === 'host-observed' ? 'eye' : e.integrity === 'tab-reported' ? 'comment' : 'vm';
 		item.iconPath = new vscode.ThemeIcon(icon, color ? new vscode.ThemeColor(color) : undefined);
 		return item;
 	}
