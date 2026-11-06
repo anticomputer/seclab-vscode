@@ -144,16 +144,30 @@ function waitForSocket(onAppear) {
 }
 
 
-/** A19: anything the client sends us that carries a host canary is exfiltration. */
+/**
+ * A19: anything the client sends us that carries a host canary is exfiltration.
+ *
+ * The takeover is NOT given any canary value. It gets a salt and a set of salted hashes, so
+ * it can recognise a canary it is sent without ever holding one. That is what makes a hit
+ * unforgeable: this file ships into the tab inside the vsix, in the mounted workspace, so
+ * anything it carries in plaintext is something in-tab code could echo without the trusted
+ * window ever having sent it, and the verdict would not be able to tell the difference
+ * (security review round 5). Recovering a 64-bit random token from its salted hash is not
+ * feasible, so reporting the token is proof the window sent it.
+ */
 function scanForCanaries(text) {
 	const hits = [];
-	for (const [name, value] of Object.entries(cfg.canaries || {})) {
-		if (value && text.includes(value)) {
-			hits.push(name);
-		}
+	const hashes = cfg.canaryHashes || {};
+	if (!cfg.canarySalt || !Object.keys(hashes).length) {
+		return hits;
 	}
-	if (cfg.canaryValue && text.includes(cfg.canaryValue)) {
-		hits.push('host-file-canary');
+	const byHash = new Map(Object.entries(hashes).map(([name, h]) => [h, name]));
+	// Every token that merely LOOKS like a canary; only a matching hash makes it one.
+	for (const token of new Set(text.match(/seclabcanary_[a-z0-9_]+/g) || [])) {
+		const name = byHash.get(crypto.createHash('sha256').update(`${cfg.canarySalt}${token}`).digest('hex'));
+		if (name) {
+			hits.push(`${name}=${token}`);
+		}
 	}
 	return hits;
 }

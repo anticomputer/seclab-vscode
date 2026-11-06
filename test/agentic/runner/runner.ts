@@ -18,7 +18,7 @@
 // Absence alone is never containment.
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../../tabd/src/client.ts';
@@ -126,6 +126,17 @@ if (mode === 'prepare') {
 	const canaryValue = `seclabcanary_${randomBytes(16).toString('hex')}`;
 	fs.writeFileSync(canary, `${canaryValue}\n`);
 	fs.writeFileSync(outside, `${canaryValue}-outside\n`);
+	// A19, and the host effect this run turns on. Upstream mirrors a declared set of host
+	// settings into the agent host on every connection (`getAgentHostConfigurationSyncEntries`
+	// -> `root/configChanged`), with no user action and no account, and `http.proxy` carries
+	// its credentials. The spike measured this against the real client as `A19-config`.
+	//
+	// So this value exists only in the HOST's profile, which no tab can read: if the hostile
+	// agent host reports it, the trusted window sent it. `proxy.invalid` is never resolved or
+	// contacted (RFC 2606), so the fixture stays inert.
+	const settingsCanary = `seclabcanary_proxyuser_${randomBytes(8).toString('hex')}`;
+	// Fresh per run, so a hash from one run says nothing about another.
+	const canarySalt = randomBytes(16).toString('hex');
 	fs.writeFileSync(path.join(ws, 'README.md'), '# agentic probe runner workspace\n\nInert: the probes come from the agent-host socket, not from this folder.\n');
 	const arm = randomBytes(16).toString('hex');
 	const port = await beaconPort();
@@ -152,6 +163,8 @@ if (mode === 'prepare') {
 		// A23, the settings-layer half: a tab that manages to write this must still not
 		// enable agents. On G the window connects only because of the host environment.
 		'seclab.agents.enabled': false,
+		// A19: a host-only secret in a setting upstream mirrors into the agent host.
+		'http.proxy': `http://${settingsCanary}:x@proxy.invalid:3128`,
 	}, null, '\t'));
 
 	const client = new TabdClient({
@@ -189,7 +202,18 @@ if (mode === 'prepare') {
 	// after the run, as diagnostics only.
 	const inTabExt = `/home/agent/.seclab-vscode-server/extensions/seclab.seclab-ahp-takeover-0.0.1`;
 	fs.writeFileSync(path.join(extBuild, 'mitm.json'), JSON.stringify({
-		arm, runNonce: arm, run: inTabExt, canary, canaryValue, marker, outside,
+		arm, runNonce: arm, run: inTabExt, canary, marker, outside,
+		// NO canary value is given to the tab. `canary` above is a host PATH (what A16-read
+		// asks the window to read), never its content. The takeover gets a salt and salted
+		// hashes so it can recognise a canary it is sent without ever holding one: this
+		// config ships into the tab inside the vsix, in the mounted workspace, so anything
+		// plaintext here is something in-tab code could echo without the window having sent
+		// it, and the verdict could not tell the difference (security review round 5).
+		canarySalt,
+		canaryHashes: {
+			'host-settings-proxy': hashCanary(canarySalt, settingsCanary),
+			'host-file-canary': hashCanary(canarySalt, canaryValue),
+		},
 		beaconPort: port, reh: '/run/user/1000/seclab/reh.log',
 		log: path.join(inTabExt, 'mitm.jsonl'), pid: path.join(inTabExt, 'mitm.pid'),
 	}, null, '\t'));
@@ -211,10 +235,17 @@ if (mode === 'prepare') {
 		console.error('failed to install the takeover extension');
 		process.exit(1);
 	}
+	// The vsix has done its job. Leaving it in the mounted workspace leaves a self-arming
+	// copy of the takeover on disk for the rest of the run, for no benefit (review round 5).
+	fs.rmSync(vsixDir, { recursive: true, force: true });
 
 	client.dispose(); // stops the tab; the editor restarts it (extensions persist in the tab)
 	await new Promise(res => client.once('exit', res));
 	writeManifest(base, { commandMarks: [beacon.mark] });
+	// What this run planted, recorded on the host. `check` fails if a canary is missing or
+	// has changed: on G a canary that was never planted would otherwise make "no canary
+	// reported" true for a reason that has nothing to do with the gate.
+	fs.writeFileSync(path.join(base, 'canaries.json'), JSON.stringify({ 'host-settings-proxy': settingsCanary, 'host-file-canary': canaryValue }, null, '\t'));
 
 	const env: Record<string, string> = build === 'g' ? { SECLAB_AGENTS_ENABLED: '1' } : {};
 	console.log(`\nprepared tab ${tabId} for build ${build} (${app})`);
@@ -250,8 +281,26 @@ if (mode === 'prepare') {
 	// --- Host-side effects. These decide "vulnerable".
 	const markerThere = fs.existsSync(marker);
 	const beaconHits = fs.existsSync(beaconLog) ? fs.readFileSync(beaconLog, 'utf8').trim().split('\n').filter(Boolean) : [];
+	const profileSettings = JSON.parse(fs.readFileSync(path.join(userData, 'User', 'settings.json'), 'utf8')) as Record<string, unknown>;
+	// What `prepare` planted, read from the host. Throws if the file is gone, like the file
+	// canary below: a canary that silently evaluated over nothing would make G's "no canary
+	// reported" true for a reason that has nothing to do with the gate (review round 5).
+	const planted = JSON.parse(fs.readFileSync(path.join(base, 'canaries.json'), 'utf8')) as Record<string, string>;
 	const canaryValue = fs.readFileSync(canary, 'utf8').trim();
-	const canaryLeaked = mitm.some(m => JSON.stringify(m).includes(canaryValue));
+	// Each vector must still be armed where the window would read it. Asserted, not assumed.
+	const armedCanaries = [
+		{ name: 'host-file-canary', armed: canaryValue === planted['host-file-canary'], where: canary },
+		{ name: 'host-settings-proxy', armed: String(profileSettings['http.proxy'] ?? '').includes(planted['host-settings-proxy']), where: 'profile http.proxy' },
+	];
+	checks.push({
+		vector: 'canaries', name: 'every host canary was still planted where the window reads it', ok: armedCanaries.every(c => c.armed),
+		detail: armedCanaries.map(c => `${c.name}@${c.where}:${c.armed ? 'armed' : 'MISSING'}`).join(' '),
+	});
+	// A tab can carry one of these into its own log only by having been sent it: the tab is
+	// given salted hashes, never the values.
+	const mitmText = JSON.stringify(mitm);
+	const leakedCanaries = Object.entries(planted).filter(([, v]) => mitmText.includes(v)).map(([k]) => k);
+	const canaryLeaked = leakedCanaries.length > 0;
 	const hostEffect = markerThere || beaconHits.length > 0 || canaryLeaked;
 
 	// --- The gate's own decisions, from the window's log. Only the gate writes this file.
@@ -273,16 +322,25 @@ if (mode === 'prepare') {
 		checks.push({ vector: 'G', name: 'construction invariant: every opened connection was verified', ok: opened.length > 0 && opened.length === verified.length, detail: `opened=${opened.length} verified=${verified.length} disabled=${disabled.length}` });
 		checks.push({ vector: 'G', name: 'positive control: the real agent host root state passed the gate', ok: rules.includes('ahp-gate.initialize:allow'), detail: JSON.stringify(gateLines.find(l => l.detail?.gateRule === 'ahp-gate.initialize')?.detail ?? {}) });
 		checks.push({ vector: 'G', name: 'the gate denied the probes (its own decisions, not absence)', ok: denies.length > 0, detail: `${denies.length} deny lines: ${[...new Set(denies)].join(', ')}` });
+		// The configuration mirror is what leaks on U, so G must show the gate's own line for
+		// it. `denies` counts only `:deny`, and this one is a `strip`, so it needs its own
+		// check or "contained for A19" would rest on absence (review round 5).
+		const configStrips = rules.filter(r => r === 'ahp-gate.root-config:strip').length;
+		checks.push({ vector: 'G', name: 'the gate stripped the configuration mirror (the vector that leaks on U)', ok: configStrips > 0, detail: `${configStrips} ahp-gate.root-config:strip decisions` });
 		checks.push({ vector: 'G', name: 'CONTAINED: no marker, no beacon hit, no canary reported', ok: !hostEffect, detail: `marker=${markerThere} beaconHits=${beaconHits.length} canaryReported=${canaryLeaked}` });
 	}
 	// A23: whatever the user settings layer says, it is not what enabled the connection.
-	const settings = JSON.parse(fs.readFileSync(path.join(userData, 'User', 'settings.json'), 'utf8')) as Record<string, unknown>;
-	checks.push({ vector: 'A23', name: 'the settings layer did not enable agents', ok: settings['seclab.agents.enabled'] === false, detail: String(settings['seclab.agents.enabled']) });
+	checks.push({ vector: 'A23', name: 'the settings layer did not enable agents', ok: profileSettings['seclab.agents.enabled'] === false, detail: String(profileSettings['seclab.agents.enabled']) });
 
 	const ok = report(checks);
-	fs.writeFileSync(path.join(base, 'verdict.json'), JSON.stringify({ build, ok, rules, beaconHits: beaconHits.length, marker: markerThere, canaryLeaked, probesSent }, null, '\t'));
+	fs.writeFileSync(path.join(base, 'verdict.json'), JSON.stringify({ build, ok, rules, beaconHits: beaconHits.length, marker: markerThere, canaryLeaked, leakedCanaries, probesSent }, null, '\t'));
 	const clean = teardownGate(base);
 	process.exit(ok && clean ? 0 : 1);
+}
+
+/** The salted hash the takeover matches on, so it never holds a canary value. */
+function hashCanary(salt: string, value: string): string {
+	return createHash('sha256').update(`${salt}${value}`).digest('hex');
 }
 
 interface GateLine { detail?: { gateRule?: string; verdict?: string; connection?: number } }

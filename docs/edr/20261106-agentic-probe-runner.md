@@ -495,3 +495,87 @@ until the focus-steal regression recorded above is fixed (owned elsewhere). Ever
 does not need a window is done: the probes are proved against the real client, the teardown
 hole that orphaned a beacon is closed and regression-tested, review round 4 is recorded with
 no high or critical finding left, and every required check is green on `bb37621`.
+
+
+## MEASURED: the runtime proof, U then G (2026-11-06)
+Both runs are on the sbx driver, each launched in the background through `test/window.ts`,
+each ended by the shared teardown gate. **U is vulnerable, G is contained**, so 0015 is
+proved to execute in the shipped build.
+
+| | U (main `24fea4c`, attested, no gate) | G (branch `26137e9`, attested) |
+|---|---|---|
+| takeover | took the REH agent-host socket, window connected | same |
+| probes injected | 17 | 17 |
+| host effect | **yes**: `seclabcanary_proxyuser_…` reached the hostile agent host | **none**: no marker, no beacon hit, no canary |
+| gate log | absent (baseline genuinely unpatched) | present, with its own decisions |
+| verdict | 7/7 | 11/11 |
+
+### What the host effect is, and why it is sound
+The run plants a host-only value in the window profile's `http.proxy`
+(`http://seclabcanary_proxyuser_<rand>:x@proxy.invalid:3128`). Upstream mirrors a declared
+set of host settings into the agent host on every connection
+(`getAgentHostConfigurationSyncEntries` → `root/configChanged`), with **no user action and
+no signed-in account**. On U the tab's hostile agent host received that value:
+
+```
+"canaryHits":["host-settings-proxy=seclabcanary_proxyuser_…"]
+```
+
+**Why the report cannot be forged** (security review round 5 corrected the first version of
+this). The takeover ships into the tab inside a vsix, in the mounted workspace, so anything
+its config carries in plaintext is something in-tab code could echo back without the window
+ever having sent it, and the verdict could not tell the two apart. The first version of this
+change put the canary values in that config and claimed they were host-only; they were not.
+
+So the tab is given **no canary value**. It gets a per-run salt and a set of salted hashes,
+scans each frame for tokens that merely look like canaries, and reports a token only when
+its salted hash matches. Recovering a 64-bit random token from its hash is not feasible, so
+a reported token is proof the trusted window sent it. The host then matches the reported
+token against what `prepare` recorded in `canaries.json`.
+
+`proxy.invalid` is never resolved or contacted (RFC 2606), so the fixture stays inert. The
+spike had already measured this path against the real client as `A19-config`.
+
+On G the same probe run leaked nothing, and the gate's own log says why: the configuration
+mirror is stripped before it leaves the window. Two checks keep that from resting on
+absence, both added in round 5:
+- **the canaries were still armed**, asserted on both builds, so a canary that was never
+  planted cannot make "no canary reported" true for a reason unrelated to the gate;
+- **the gate's own `ahp-gate.root-config:strip` line is required on G**. The general deny
+  check counts only rules ending `:deny`, and this one is a `strip`, so without its own
+  check "contained for A19" would have been absence again.
+
+### The gate's own decisions on G
+Not absence: `seclabAhpGate.log` carries 130 decisions over two connections.
+- **positive control**: `ahp-gate.opened:allow` → `ahp-gate.verified:allow` on both
+  connections, `ahp-gate.initialize:allow`, and the real agent host's root state passed, so
+  the gate is not simply blocking everything;
+- **the A19 leak, closed**: ~100 × `ahp-gate.root-config:strip`;
+- **the request probes**: 10 × `ahp-gate.reverse-request:deny`;
+- **the action probes**: 4 × `ahp-gate.action:deny`, 2 × `ahp-gate.method:deny`,
+  4 × `ahp-gate.strip:strip`.
+
+### Two findings this run settled
+19. **`A20-mcp-auth` cannot land in a `seclab+` window, and the validator's precondition is
+    answered: negatively.** On U the client answered every one of its five attempts with
+    `{"authenticated":false}` and fetched nothing. The reason is upstream's own wiring: the
+    handler is registered by `agentHostChatContribution._enable` only
+    `if (this._agentHostService.registerMcpAuthenticationHandler)`, and **no workbench
+    agent-host service defines that method** — only the platform `AgentHostProtocolClient`
+    does, which is what the SSH/WSL `remoteAgentHostChatContribution` holds. An editor-remote
+    window goes through `EditorRemoteAgentHostServiceClient`, which does not expose it. The
+    probe stays in the table as a gate-surface probe (0015 denies it as
+    `ahp-gate.reverse-request`), and the validator still proves the client-side half, but it
+    is **not** the probe that decides this run. Recording this is the point of having
+    written the precondition down rather than assuming.
+20. **The credentialled paths are all dead ends in a signed-out profile, by upstream's
+    design.** `auth/required` and `protectedResources` both end at
+    `resolveSessionForProtectedResource`, which returns `signedOut` and pushes nothing; the
+    MCP customization path needs a live session subscription that a window with no open chat
+    does not have. A fixture may not carry a real credential, so the configuration mirror is
+    the one host effect available with neither a credential nor user interaction, and it is
+    a real one.
+
+### The focus fix holds
+Both runs report `OK  the editor never took focus from the user during the run`, with the
+watcher sampling for the whole run. The regression recorded above is closed.
