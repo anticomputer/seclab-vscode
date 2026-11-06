@@ -38,6 +38,7 @@ at the repo root) all apply. Every command here has been run. Design:
 | `workspace-watch.ts` | Trusted host watcher (lstat only; `package.json` scripts diff only inside the root) |
 | `broker-audit.ts` | Broker `audit.event` → trusted events: allowlisted types and fields (tab text into tagged fields), `audit.tail` replay on connect, seq dedupe and gap events, 10 s aggregation of allowed requests and injections |
 | `lineage.ts` | Broker request ↔ sensor connect join by time (`egress.attribution`: single / ambiguous / none, weakest integrity, a used connect not reused); `promptLineage` for prompts |
+| `notify.ts` | Detection notifications: which events notify (`notifyKind`), trusted templates, `quote()` for tab text, coalescing and rate limits (`NotificationGate`). Shared with the Tab Manager (`notifications.ts`, `detections.ts`) |
 | `glue.ts` | Protocol methods (`tab.events.*`, `tab.observe`), sensor hooks for drivers, policy-log poller |
 | `../../tools/gen-obs-docs.ts`, `../../tools/tab-logs.ts` | Doc generator; `seclab tab logs` |
 | `sandbox/sbx/seclab-obs-guard.c` | seccomp guard: no `CLONE_UNTRACED`, `clone3`, seccomp listeners or io_uring; closes fds > 2 |
@@ -56,6 +57,10 @@ at the repo root) all apply. Every command here has been run. Design:
 ./seclab lint fixtures test/observability
 node test/observability/demo.ts prepare ~/.seclab-test/obs sbx   # README screenshot run; prints the background launch
 node test/observability/demo.ts teardown ~/.seclab-test/obs      # teardown gate: editor tree, tab, profile, host diff
+# Detection notifications in the real editor (sbx; a branch build from ./seclab fetch macos-branch RUN_ID):
+node test/observability/notify-e2e.ts ~/.seclab-test/notify --app .work/app-branch/seclab-vscode.app --shot .work/shots/notifications.png
+# Typecheck the Tab Manager and tabd against upstream's pinned TypeScript and vscode.d.ts (build volume, read-only):
+docker run --rm -v seclab-vscode-work:/w:ro -v "$PWD":/repo:ro <node image> sh -c 'mkdir -p /x/extensions /x/src && cp -rL /repo/extensions/seclab-tab-manager /x/extensions/ && cp /w/vscode/extensions/tsconfig.base.json /x/extensions/ && ln -s /w/vscode/node_modules /x/node_modules && ln -s /w/vscode/src/vscode-dts /x/src/vscode-dts && cd /x/extensions/seclab-tab-manager && node /w/vscode/node_modules/typescript/lib/tsc.js -p .'
 ```
 Demo windows must never come to the front over the user's work. Launch with `open -g`,
 never activate the app, and capture by window id. See "Demo screenshots" in

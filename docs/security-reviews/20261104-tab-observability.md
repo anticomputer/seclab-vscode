@@ -208,6 +208,35 @@ Checked as sound: `agent-host` can't reach a trusted event or detection. Its int
 comes from the source table, its classes are pinned, the watch requires source `ahp-gate`,
 and the deny burst counts only trusted events. The `rpc-filter` path is unchanged.
 
+## Round 10: detection notifications and the cross-tab summary (ADR detection-notifications)
+Scope:
+- `tabd/src/obs/notify.ts`: notify policy, trusted templates, `quote()`, coalescing and
+  rate limits;
+- Tab Manager notifications and the Detections view;
+- `tab.detections.query` and `tab.egress.block`, with broker capabilities;
+- the e2e harness, and the teardown network fix.
+
+Two passes (10, 10b).
+
+| ID | Sev | Area | Finding | Status | Fix |
+|---|---|---|---|---|---|
+| NT-1 | Low | suppression | The per-minute budget was first come, first served. A tab could spend it on three cheap detections, then blind its sensor, so "tab unobserved" was only a count in a later summary. | Fixed | The trusted-only kinds (unobserved, fence failure, quarantine, broker loss) skip the budget; per-tab coalescing still bounds them. The overflow summary names the kinds it held back. Regression test. |
+| NT-L1 | Info | wording | The Block success message overstated a port-specific block. | Fixed | Says "on that port". |
+
+Checked as sound:
+- Every tab-influenced string in a message goes through `quote()`: file, destination,
+  chain, origin label, and the tab name from tabd's record. Brackets are removed from
+  each quoted part and the templates contain none, so no markdown link can form across
+  parts.
+- Notifications fire only for the window's own subscription, never on replay.
+- `tab-reported` events and unknown rules never notify, and no `seclab.*` command is
+  reachable from a tab (unit test against the RPC filter policy).
+- Block is limited to broker events and validated. The deny rule only narrows policy.
+- The query is bounded and reads only store tab ids, `O_NOFOLLOW`, and the event's own
+  tab.
+- The e2e is inert and AV-safe, and tears down on every path.
+- The screenshot shows demo content only.
+
 ## Accepted residuals (documented in the ADR)
 - `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.
 - Under OCI the privileged Falco sees every container on the Docker host. Only rules for the exact tab container ids are loaded, and its only output is stdout to tabd.

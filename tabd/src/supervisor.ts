@@ -33,6 +33,10 @@ const FENCE_REVERIFY_MS = 60_000;
 const MAX_CHANNELS = 64;
 /** Whole broker bring-up, connect to CA (review XX-2). */
 const BROKER_SETUP_MS = 60_000;
+/** A user-blocked destination as a broker deny rule (broker policy schema revision 5). */
+interface BlockRule { id: string; host: string; ports?: number[] }
+const MAX_BLOCKS = 256;
+const BLOCK_HOST_RE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*|\[?[0-9A-Fa-f:.]{2,45}\]?)$/;
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 interface RpcRequest { jsonrpc: '2.0'; id?: number | string; method: string; params?: unknown }
@@ -115,6 +119,11 @@ export class Supervisor {
 				const holder = this.o.store.leaseHolder(tabId);
 				return this.owned.has(tabId) || holder === undefined || holder === process.pid || !pidAlive(holder);
 			},
+			listTabs: () => this.o.store.list().map(r => {
+				const holder = this.o.store.leaseHolder(r.tabId);
+				const phase = this.phases.get(r.tabId) ?? (holder !== undefined && holder !== process.pid && pidAlive(holder) ? 'Running' : 'Stopped');
+				return { tabId: r.tabId, hostPath: r.hostPath, phase };
+			}),
 		});
 		if (o.writebackDir) {
 			this.wb = new WriteBackManager({
@@ -268,6 +277,7 @@ export class Supervisor {
 			case 'tab.stop': return this.stop(this.record(p.tabId));
 			case 'tab.remove': return this.remove(this.record(p.tabId));
 			case 'tab.reset': return this.reset(this.record(p.tabId));
+			case 'tab.egress.block': return this.blockDestination(this.record(p.tabId), p.host, p.port);
 			case 'tab.writeback.status': return this.writebackStatus(this.record(p.tabId));
 			case 'tab.writeback.sync': return this.writebackSync(this.record(p.tabId));
 			case 'tab.writeback.content': return this.writebackCall(this.record(p.tabId), wb => wb.content(String(p.tabId), wbPath(p.path)));
@@ -357,7 +367,7 @@ export class Supervisor {
 			apiVersion: 'tabd.seclab.dev/v1alpha1', kind: 'Tab',
 			metadata: { name: r.tabId, createdAt: r.createdAt },
 			spec: { workspace: { hostPath: r.hostPath, mountPath: r.hostPath }, templateRef: { name: r.templateName }, driver: t?.spec.driver ?? null },
-			status: { phase: this.phases.get(r.tabId) ?? 'Pending' },
+			status: { phase: this.phases.get(r.tabId) ?? 'Pending', ...(this.brokers.has(r.tabId) ? { brokerCapabilities: { ...this.brokers.get(r.tabId)!.capabilities } } : {}) },
 		};
 	}
 
@@ -546,6 +556,12 @@ export class Supervisor {
 					const proxyPassword = randomBytes(24).toString('base64url');
 					await c.request('proxy.auth.set', { username: 'seclab', password: proxyPassword }, left());
 					const policy = this.o.brokerPolicy ? this.o.brokerPolicy(r.tabId) : defaultPolicy(r.tabId);
+					// The user's blocked destinations (tab.egress.block) ride on every start, once the
+					// broker can enforce them; deny precedes every allow, baseline and prompt.
+					const blocks = this.o.store.readSide<BlockRule>(r.tabId, 'blocks');
+					if (blocks.length && c.capabilities.denyRules) {
+						policy.deny = [...(Array.isArray(policy.deny) ? policy.deny : []), ...blocks];
+					}
 					const loaded = await c.request('policy.load', { policy }, left()) as { revision?: unknown } | undefined;
 					const ca = await c.request('ca.get', undefined, left()) as { certPem?: unknown; pemSha256?: unknown } | undefined;
 					const certPem = ca?.certPem;
@@ -574,6 +590,38 @@ export class Supervisor {
 				}
 			},
 		};
+	}
+
+	/**
+	 * The user blocked a destination for this tab (Block Destination on a notification). Exact
+	 * host, optional port. Persisted with the tab and applied now and on every later start, as a
+	 * broker deny rule, which precedes every allow, baseline rule and prompt. Refused, and never
+	 * recorded as applied, unless the tab's broker can enforce it (`capabilities.denyRules`).
+	 */
+	private async blockDestination(r: TabRecord, hostIn: unknown, portIn: unknown) {
+		if (typeof hostIn !== 'string' || hostIn.length > 253 || !BLOCK_HOST_RE.test(hostIn)) {
+			throw new RpcError(-32602, 'host must be an exact host name or IP address');
+		}
+		const host = hostIn.replace(/^\[|\]$/g, '').toLowerCase();
+		if (portIn !== undefined && (typeof portIn !== 'number' || !Number.isInteger(portIn) || portIn < 1 || portIn > 65535)) {
+			throw new RpcError(-32602, 'port must be 1..65535');
+		}
+		const c = this.brokers.get(r.tabId);
+		if (!c || !c.capabilities.denyRules) {
+			throw new RpcError(-32013, 'this tab\'s broker cannot block destinations (needs broker deny rules)');
+		}
+		const id = `user-block-${createHash('sha256').update(`${host}:${portIn ?? '*'}`).digest('hex').slice(0, 16)}`;
+		const rule: BlockRule = { id, host, ...(portIn !== undefined ? { ports: [portIn as number] } : {}) };
+		const blocks = this.o.store.readSide<BlockRule>(r.tabId, 'blocks');
+		if (!blocks.some(b => b.id === id)) {
+			if (blocks.length >= MAX_BLOCKS) {
+				throw new RpcError(-32602, `at most ${MAX_BLOCKS} blocked destinations per tab`);
+			}
+			await c.request('policy.update', { addDeny: [rule] });
+			this.o.store.writeSide(r.tabId, 'blocks', [...blocks, rule]);
+		}
+		this.audit('tab.egress.block', 'ok', { tabId: r.tabId, host, port: (portIn as number | undefined) ?? null, rule: id });
+		return { rule: id };
 	}
 
 	/** Drop the tab's broker connection; with `shutdown`, first tell the broker to drop every credential and exit. */

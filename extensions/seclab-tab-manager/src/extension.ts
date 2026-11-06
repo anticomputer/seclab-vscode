@@ -11,7 +11,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { TabdClient, type TabdChannel } from '../tabd-src/client.ts';
+import type { ObsEvent } from '../tabd-src/obs/schema.ts';
 import { TabActivity } from './activity.ts';
+import { DetectionsSummary } from './detections.ts';
+import { DetectionNotifier } from './notifications.ts';
 import { WriteBackReview } from './writeback.ts';
 
 const AUTHORITY_PREFIX = 'seclab';
@@ -29,6 +32,10 @@ let clientReady: Promise<TabdClient> | undefined;
 let extensionContext: vscode.ExtensionContext;
 let activity: TabActivity | undefined;
 let writeBack: WriteBackReview | undefined;
+let notifier: DetectionNotifier | undefined;
+let summary: DetectionsSummary | undefined;
+/** Tabs whose broker reported `capabilities.denyRules` (tab.get → broker). */
+const blockable = new Set<string>();
 
 export function activate(context: vscode.ExtensionContext): void {
 	extensionContext = context;
@@ -51,6 +58,19 @@ export function activate(context: vscode.ExtensionContext): void {
 	activity = new TabActivity(context);
 	// Write-back review (ADR write-back-gate): held changes, decisions, "not gated" notice.
 	writeBack = new WriteBackReview(context, getClient, currentTabId(), log);
+	// Detection notifications for this window's tab, and the cross-tab summary (ADR detection notifications).
+	notifier = new DetectionNotifier(context, {
+		getClient, currentTabId, log,
+		heldChanges: () => writeBack?.heldCount() ?? 0,
+		canBlock: tabId => blockable.has(tabId),
+	});
+	summary = new DetectionsSummary(context, getClient, async (tabId, hostPath) => {
+		if (tabId === currentTabId()) {
+			await vscode.commands.executeCommand('seclab.tabActivity.focus');
+		} else {
+			await vscode.commands.executeCommand('vscode.openFolder', tabUri(tabId, hostPath), { forceNewWindow: true });
+		}
+	});
 
 	// Route local folder windows into tabs (no core patch; see docs/edr/20261104-tab-manager-routing.md).
 	if (vscode.env.remoteName === undefined) {
@@ -130,6 +150,13 @@ function getClient(): Promise<TabdClient> {
 function onNotification(method: string, params: Record<string, unknown>): void {
 	if (method === 'tab.event' || method === 'tab.observation') {
 		activity?.onNotification(method, params);
+		if (method === 'tab.event' && activity?.owns(params.subscription)) {
+			const e = params.event as ObsEvent;
+			notifier?.onEvent(e, params.replay === true);
+			if (e.class === 'detection') {
+				summary?.poke();
+			}
+		}
 		return;
 	}
 	if (method === 'tab.writeback.pending') {
@@ -204,6 +231,12 @@ async function resolve(authority: string, ctx: vscode.RemoteAuthorityResolverCon
 			throw vscode.RemoteAuthorityResolverError.NotAvailable('Tab not opened: secrets unresolved', false);
 		});
 	void activity?.attach(c, tabId).catch(e => log.warn(`tab activity unavailable: ${(e as Error).message}`));
+	notifier?.setTabName(tabId, hostPath);
+	void c.request<{ tab: TabView & { status: { brokerCapabilities?: Record<string, unknown> } } }>('tab.get', { tabId }).then(r => {
+		if (r.tab.status.brokerCapabilities?.denyRules === true) {
+			blockable.add(tabId);
+		}
+	}).catch(() => undefined);
 	void showWorkspaceSummary(c, tabId, hostPath);
 
 	const authorityResult = new vscode.ManagedResolvedAuthority(async () => {
