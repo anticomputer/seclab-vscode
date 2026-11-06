@@ -188,9 +188,9 @@ export function editorLaunchArgv(userData: string, folderUri: string, env: Recor
 }
 
 /** The same, as one copy-pasteable shell line (for "prepare" steps that print the command). */
-export function editorLaunchCommand(userData: string, folderUri: string, env: Record<string, string> = {}): string {
+export function editorLaunchCommand(userData: string, folderUri: string, env: Record<string, string> = {}, app?: string): string {
 	const envArgs = Object.entries(env).map(([k, v]) => ` --env ${shq(`${k}=${v}`)}`).join('');
-	return `node test/window.ts launch${envArgs} ${shq(userData)} ${shq(folderUri)}`;
+	return `node test/window.ts launch${app ? ` --app ${shq(app)}` : ''}${envArgs} ${shq(userData)} ${shq(folderUri)}`;
 }
 
 function shq(s: string): string {
