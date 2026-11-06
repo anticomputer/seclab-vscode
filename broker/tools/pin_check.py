@@ -7,8 +7,9 @@
     installs a checked requirements file;
   * every requirements*.txt parses strictly (plain `name==version` plus
     `--hash=sha256:` only), every pin is in broker/deps.json, every file is installed
-    by some Dockerfile, and its pip-compile source (requirements*.in), if any, pins the
-    same versions.
+    by some Dockerfile, and its pip-compile source (requirements*.in) pins the same
+    versions (required when the lock is pip-compile output);
+  * no path under broker/ needs git quoting (broker/build.sh refuses those).
 The parsing rules are in tools/supplychain.py. Online provenance checks (PyPI
 attestations, image signatures) are in broker/provenance-check.sh.
 """
@@ -25,12 +26,22 @@ from supplychain import (BROKER, SupplyChainError, install_targets, norm, parse_
 
 def source_drift(req, locked: dict[str, str]) -> list[str]:
     """A lock's pip-compile source (requirements.txt <- requirements.in) must pin the same
-    versions, or the next recompile silently undoes a re-pin. Only `name==version` lines
-    are allowed in the source."""
+    versions, or the next recompile silently undoes a re-pin. A lock that is pip-compile
+    output (it has `# via` annotations) must have its source, and every direct requirement
+    (`via -r <source>`) must be pinned there. Only `name==version` lines are allowed."""
     src = req.with_suffix(".in")
+    text = req.read_text()
+    direct, cur = set(), None
+    for raw in text.splitlines():
+        m = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)==", raw)
+        if m:
+            cur = norm(m[1])
+        elif cur and re.fullmatch(r"\s*#\s+(?:via\s+)?-r\s+" + re.escape(src.name) + r"\s*", raw):
+            direct.add(cur)
+    compiled = re.search(r"^\s*#\s+via\b", text, re.M) is not None
     if not src.exists():
-        return []
-    errors = []
+        return [f"{rel(req)}: pip-compile output, but its source {src.name} is missing"] if compiled else []
+    errors, sourced = [], set()
     for n, raw in enumerate(src.read_text().splitlines(), 1):
         line = raw.split("#", 1)[0].strip()
         if not line:
@@ -38,10 +49,29 @@ def source_drift(req, locked: dict[str, str]) -> list[str]:
         m = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9._-]*)==([A-Za-z0-9.+!-]+)", line)
         if not m:
             errors.append(f"{rel(src)}:{n}: only plain name==version lines are allowed")
-        elif locked.get(norm(m[1])) != m[2]:
+            continue
+        sourced.add(norm(m[1]))
+        if locked.get(norm(m[1])) != m[2]:
             errors.append(f"{rel(src)}:{n}: {m[1]}=={m[2]} but {rel(req)} pins "
                           f"{locked.get(norm(m[1]), 'nothing')}")
+    if not sourced:
+        errors.append(f"{rel(src)}: pins nothing")
+    for name in sorted(direct - sourced):
+        errors.append(f"{rel(src)}: {rel(req)} says {name} is a direct requirement, but it isn't pinned here")
     return errors
+
+
+def unquotable_paths() -> list[str]:
+    """broker/build.sh refuses any path git would quote (non-ASCII, control characters, `"`,
+    `\\`), so flag them here before a build does."""
+    bad = []
+    for p in sorted(BROKER.rglob("*")):
+        r = p.relative_to(BROKER)
+        if ".work" in r.parts or "__pycache__" in r.parts:
+            continue
+        if not re.fullmatch(r'[ !#-\[\]-~]+', str(r)):
+            bad.append(f"{rel(p)!r}: path has characters git quotes; broker/build.sh refuses it")
+    return bad
 
 
 def main() -> int:
@@ -69,6 +99,7 @@ def main() -> int:
         if req.resolve() not in targets:
             errors.append(f"{rel(req)}: not installed by any Dockerfile (its target interpreter is unknown)")
         errors += source_drift(req, {name: version for _, name, version, _ in pins})
+    errors += unquotable_paths()
     for e in errors:
         print("pin-check: " + e, file=sys.stderr)
     if not errors:
