@@ -38,6 +38,8 @@ jobs:
         run: |
           ./seclab test builds
           for t in desktop reh; do build/test-variant.sh record containment "$t"; done
+      - name: check-release self-test (RPC policy stamp both ways; EDR rpc-policy-stamp)
+        run: sh build/check-release.sh --self-test
       - name: Dependency register self-test (the register itself is checked in docs)
         run: ./seclab lint deps --self-test
       # RPC capability filter (rpc-filter/AGENTS.md): policy drift, generated docs and

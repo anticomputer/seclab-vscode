@@ -96,5 +96,6 @@ Same rules as ADRs:
 | 2026-11-06 | [Egress prompts through the Tab Manager (plan increment B3)](20261106-egress-prompts.md) | accepted |
 | 2026-11-06 | [Exact request lineage on OCI via the broker's client port](20261106-exact-lineage-client-port.md) | accepted |
 | 2026-11-06 | [The 7-day rule: no pin newer than the feed's hold](20261106-pin-age-cooldown.md) | accepted |
+| 2026-11-06 | [RPC filter stamp in product.json](20261106-rpc-policy-stamp.md) | accepted |
 | 2026-11-06 | [Test build variants (containment, and agentic U/F)](20261106-test-build-variants.md) | accepted |
 <!-- index:end -->
