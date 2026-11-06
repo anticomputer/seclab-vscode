@@ -49,5 +49,11 @@ export function tabPolicy(stateDir: string, tabId: string, prompts = false): Rec
 	if (tid !== undefined && tid !== tabId) {
 		throw new PolicyError(`${USER_POLICY_FILE}: names tab ${JSON.stringify(tid)}; omit tabId for a policy that applies to every tab`);
 	}
-	return { ...(p as Record<string, unknown>), tabId };
+	return { ...(p as Record<string, unknown>), tabId, prompt: userPrompt((p as { prompt?: unknown }).prompt, prompts) };
+}
+
+/** The user's prompt settings, but prompts only where a client can answer them, and only if the user didn't turn them off. */
+function userPrompt(v: unknown, prompts: boolean): Record<string, unknown> {
+	const o = v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
+	return { ...o, enabled: prompts && o.enabled !== false };
 }

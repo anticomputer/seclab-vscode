@@ -61,7 +61,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	// Write-back review (ADR write-back-gate): held changes, decisions, "not gated" notice.
 	writeBack = new WriteBackReview(context, getClient, currentTabId(), log);
 	// Broker prompts (EDR egress-prompts): this window's tab asks; user activity opens its gate.
-	prompts = new EgressPrompts(getClient, tabId => tabId === currentTabId() ? (vscode.workspace.workspaceFolders?.[0]?.name ?? tabId) : tabId, log);
+	prompts = new EgressPrompts(getClient, log);
 	context.subscriptions.push(prompts);
 	const here = currentTabId();
 	if (here) {
@@ -249,6 +249,7 @@ async function resolve(authority: string, ctx: vscode.RemoteAuthorityResolverCon
 		});
 	void activity?.attach(c, tabId).catch(e => log.warn(`tab activity unavailable: ${(e as Error).message}`));
 	notifier?.setTabName(tabId, hostPath);
+	prompts?.setTabName(tabId, hostPath);
 	void c.request<{ tab: TabView & { status: { brokerCapabilities?: Record<string, unknown> } } }>('tab.get', { tabId }).then(r => {
 		if (r.tab.status.brokerCapabilities?.denyRules === true) {
 			blockable.add(tabId);
