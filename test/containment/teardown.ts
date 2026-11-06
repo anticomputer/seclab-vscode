@@ -113,32 +113,52 @@ export function readManifest(runDir: string): RunManifest {
  * wiped. The manifest is the only record of a run's helpers, so a harness that deletes the
  * run directory first orphans them: an aborted `prepare` left its beacon listening on the
  * host, and the next `prepare` wrote a manifest naming a different port, so nothing could
- * name the old one again. Safe to call when there is no previous run (empty manifest, no
- * marks, nothing matches).
+ * name the old one again.
+ *
+ * It reports rather than fails silently. A refusal here means the caller is about to wipe
+ * the only record of a run it could not reap, which is the incident this exists to prevent,
+ * so the caller must stop instead of continuing.
  */
-export function reapPreviousRun(runDir: string): Proc[] {
+export function reapPreviousRun(runDir: string): ReapResult {
 	const m = readManifest(runDir);
 	if (!m.userDataDir && !(m.stateDirs ?? []).length && !(m.commandMarks ?? []).length && !(m.tabs ?? []).length) {
-		return [];
+		return { stopped: [], refused: false, problems: [], survivors: [] };
 	}
-	// Refuse a manifest that does not pass the usual rules, exactly as verify does: a
-	// malformed previous manifest must not become a licence to delete.
-	if (manifestProblems(runDir, m).length) {
-		return [];
+	// The same rules verify applies, including R-2: a malformed previous manifest must not
+	// become a licence to delete, and must not be quietly skipped either.
+	const problems = [...runDirProblems(runDir, m), ...manifestProblems(runDir, m)];
+	if (problems.length) {
+		return { stopped: [], refused: true, problems, survivors: [] };
 	}
 	const stopped = stopRunProcesses(runDir, m);
 	// Its tabs and helper runtimes too, and its profile: that profile holds the armed rogue
 	// extension, so leaving it is the same hazard the teardown gate exists to prevent.
 	try {
 		removeRunResources(runDir, m);
-	} catch { /* best effort: verify still reports anything left */ }
+	} catch (err) {
+		problems.push(`could not remove the previous run's runtime resources: ${err instanceof Error ? err.message : String(err)}`);
+	}
 	if (m.userDataDir && fs.existsSync(m.userDataDir)) {
 		try {
 			checkIsolatedProfile(path.resolve(m.userDataDir));
 			fs.rmSync(m.userDataDir, { recursive: true, force: true });
-		} catch { /* not an isolated profile: never delete it */ }
+		} catch (err) {
+			problems.push(`could not remove the previous run's profile: ${err instanceof Error ? err.message : String(err)}`);
+		}
 	}
-	return stopped;
+	// Anything still alive after SIGTERM then SIGKILL. The caller must not wipe over it.
+	const survivors = runProcesses(runDir, m);
+	return { stopped, refused: problems.length > 0 || survivors.length > 0, problems, survivors };
+}
+
+export interface ReapResult {
+	/** Processes this reap stopped. */
+	readonly stopped: Proc[];
+	/** True when the caller must not wipe the run directory. */
+	readonly refused: boolean;
+	readonly problems: string[];
+	/** Processes still alive after the stop. */
+	readonly survivors: Proc[];
 }
 
 /** Merge into run.json. Write it before starting anything the run must later clean up. */

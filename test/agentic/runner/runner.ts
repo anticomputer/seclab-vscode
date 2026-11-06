@@ -95,15 +95,33 @@ if (mode === 'prepare') {
 		old.dispose();
 		fs.rmSync(stateDir, { recursive: true, force: true });
 	}
+	// Take the lock FIRST: the reap kills process trees, and two concurrent `prepare`
+	// invocations would otherwise have one kill the helpers the other has just started.
+	lockRun(path.join(base, '..', `${path.basename(base)}.lock.d`));
 	// Reap the PREVIOUS run before the run directory is wiped. Its manifest is the only
 	// record of the helpers it spawned, so deleting the directory first orphans them: an
 	// aborted `prepare` left its beacon listening on the host with nothing able to name it
 	// again, because the next `prepare` writes a manifest with a different port.
-	reapPreviousRun(base);
+	//
+	// A refusal stops the run. Continuing would wipe the only record of a run that could
+	// not be reaped, which is exactly the incident this exists to prevent.
+	const reaped = reapPreviousRun(base);
+	if (reaped.refused) {
+		for (const p of reaped.problems) {
+			console.error(`prepare: ${p}`);
+		}
+		for (const p of reaped.survivors) {
+			console.error(`prepare: a process from the previous run is still alive: ${p.pid} ${p.args.slice(0, 200)}`);
+		}
+		console.error(`prepare: refusing to wipe ${base}: the previous run could not be reaped. Resolve it (./seclab clean-host) and retry.`);
+		process.exit(1);
+	}
+	if (reaped.stopped.length) {
+		console.log(`prepare: reaped ${reaped.stopped.length} process(es) from the previous run`);
+	}
 	fs.rmSync(base, { recursive: true, force: true });
 	fs.mkdirSync(path.join(base, 'canary'), { recursive: true });
 	fs.mkdirSync(ws, { recursive: true });
-	lockRun(path.join(base, '..', `${path.basename(base)}.lock.d`));
 	// The per-run host canary: random, host-only, so a tab can report it only by reading it.
 	const canaryValue = `seclabcanary_${randomBytes(16).toString('hex')}`;
 	fs.writeFileSync(canary, `${canaryValue}\n`);
