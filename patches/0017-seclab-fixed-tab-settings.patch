@@ -1,0 +1,151 @@
+diff --git a/src/vs/workbench/services/configuration/browser/configurationService.ts b/src/vs/workbench/services/configuration/browser/configurationService.ts
+index 55e2c0ce..b015d91a 100644
+--- a/src/vs/workbench/services/configuration/browser/configurationService.ts
++++ b/src/vs/workbench/services/configuration/browser/configurationService.ts
+@@ -44,6 +44,7 @@ import { IPolicyService, NullPolicyService } from '../../../../platform/policy/c
+ import { IUserDataProfile, IUserDataProfilesService } from '../../../../platform/userDataProfile/common/userDataProfile.js';
+ import { IJSONEditingService } from '../common/jsonEditing.js';
+ import { IBrowserWorkbenchEnvironmentService } from '../../environment/browser/environmentService.js';
++import { seclabFixedSetting, seclabScrubFixedSettings } from '../common/seclabFixedSettings.js';
+ import { workbenchConfigurationNodeBase } from '../../../common/configuration.js';
+ import { mainWindow } from '../../../../base/browser/window.js';
+ import { runWhenWindowIdle } from '../../../../base/browser/dom.js';
+@@ -335,7 +336,16 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
+ 	getValue(arg1?: unknown, arg2?: unknown): unknown {
+ 		const section = typeof arg1 === 'string' ? arg1 : undefined;
+ 		const overrides = isConfigurationOverrides(arg1) ? arg1 : isConfigurationOverrides(arg2) ? arg2 : undefined;
+-		return this._configuration.getValue(section, overrides);
++		// seclab: settings a tab must not be able to turn on for this window (patch 0017).
++		// Here rather than at each reader: the readers are spread across the browser view
++		// service, the chat contribution and the sessions providers, and a list of call sites
++		// would silently miss one added by an upstream bump.
++		const seclabAuthority = this.environmentService.remoteAuthority;
++		const seclabFixed = seclabFixedSetting(seclabAuthority, section);
++		if (seclabFixed) {
++			return seclabFixed.value;
++		}
++		return seclabScrubFixedSettings(seclabAuthority, section, this._configuration.getValue(section, overrides));
+ 	}
+ 
+ 	updateValue(key: string, value: unknown): Promise<void>;
+@@ -414,7 +424,11 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
+ 	}
+ 
+ 	inspect<T>(key: string, overrides?: IConfigurationOverrides): IConfigurationValue<T> {
+-		return this._configuration.inspect<T>(key, overrides);
++		const result = this._configuration.inspect<T>(key, overrides);
++		// seclab: a fixed key reports its fixed value (patch 0017). The per-layer fields are
++		// left alone, so a reader that deliberately inspects a single layer still sees it.
++		const seclabFixed = seclabFixedSetting(this.environmentService.remoteAuthority, key);
++		return seclabFixed ? { ...result, value: seclabFixed.value as T } : result;
+ 	}
+ 
+ 	keys(): {
+diff --git a/src/vs/workbench/services/configuration/common/seclabFixedSettings.ts b/src/vs/workbench/services/configuration/common/seclabFixedSettings.ts
+new file mode 100644
+index 00000000..324fb6b9
+--- /dev/null
++++ b/src/vs/workbench/services/configuration/common/seclabFixedSettings.ts
+@@ -0,0 +1,102 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++/**
++ * seclab patch 0017: settings that are fixed in a tab window.
++ *
++ * These keys are policy-bearing for agent hosts and **tab-writable** in a `seclab+` window:
++ * each is registered at `WINDOW` scope or not registered at all where an editor window reads
++ * it, and `REMOTE_MACHINE_SCOPES` lets the REH's remote user settings supply anything that is
++ * not `APPLICATION`. So a tab can turn them on for the trusted window that is reading them.
++ *
++ * Upstream declares no policy on these registrations, so they cannot be pinned the way a
++ * policy-bearing setting is (design §3.5, review round 2 finding 4). The user's decision on
++ * 0011 rules out re-registering them globally: lock tab windows, leave ordinary windows alone.
++ * This patch therefore fixes the **read** in a tab window and changes no registration.
++ *
++ * It is one override point, not one per reader, deliberately. The readers are spread across
++ * the browser view service, the chat contribution and the sessions providers, and a list of
++ * call sites would silently miss a reader added by an upstream bump; the configuration
++ * service is the single place every one of them goes through.
++ *
++ * `workbench.browser.enableRemoteProxy` is `false` because the path a hostile tab or agent
++ * host can drive is the embedded-page one, and there upstream refuses to open rather than
++ * falling back to the host network (EDR 20261106-increment-2-remote-proxy, finding 3).
++ */
++
++/** The fixed values, by setting id. Tab windows only. */
++export const SECLAB_FIXED_TAB_SETTINGS: ReadonlyMap<string, unknown> = new Map<string, unknown>([
++	['workbench.browser.enableRemoteProxy', false],
++	['chat.automations.enabled', false],
++	['chat.automations.cloud.enabled', false],
++]);
++
++/** Whether this window is a seclab tab window, from its remote authority. */
++export function isSeclabTabAuthority(authority: string | undefined): boolean {
++	return typeof authority === 'string' && authority.startsWith('seclab+');
++}
++
++/** The fixed value for an exact setting id in a tab window, or `undefined` when none is. */
++export function seclabFixedSetting(authority: string | undefined, section: string | undefined): { value: unknown } | undefined {
++	if (!isSeclabTabAuthority(authority) || typeof section !== 'string') {
++		return undefined;
++	}
++	const value = SECLAB_FIXED_TAB_SETTINGS.get(section);
++	return value === undefined ? undefined : { value };
++}
++
++/**
++ * Replace every fixed key inside a value read for `section`, so that a caller asking for a
++ * prefix (`workbench.browser`) or for the whole configuration cannot read the tab's value
++ * around the exact-key override. Returns the input unchanged outside a tab window, and when
++ * nothing below `section` is fixed. Never mutates the input.
++ */
++export function seclabScrubFixedSettings(authority: string | undefined, section: string | undefined, value: unknown): unknown {
++	if (!isSeclabTabAuthority(authority) || value === null || typeof value !== 'object' || Array.isArray(value)) {
++		return value;
++	}
++	let out = value as Record<string, unknown>;
++	let copied = false;
++	for (const [key, fixedValue] of SECLAB_FIXED_TAB_SETTINGS) {
++		if (section !== undefined && !key.startsWith(`${section}.`)) {
++			continue;
++		}
++		const path = (section === undefined ? key : key.slice(section.length + 1)).split('.');
++		if (readPath(out, path) === undefined) {
++			continue;
++		}
++		if (!copied) {
++			out = { ...out };
++			copied = true;
++		}
++		writePath(out, path, fixedValue);
++	}
++	return out;
++}
++
++function readPath(root: Record<string, unknown>, path: string[]): unknown {
++	let current: unknown = root;
++	for (const part of path) {
++		if (current === null || typeof current !== 'object') {
++			return undefined;
++		}
++		current = (current as Record<string, unknown>)[part];
++	}
++	return current;
++}
++
++/** Writes `value` at `path`, copying every object it descends through so the input is not mutated. */
++function writePath(root: Record<string, unknown>, path: string[], value: unknown): void {
++	let current = root;
++	for (let i = 0; i < path.length - 1; i++) {
++		const next = current[path[i]];
++		if (next === null || typeof next !== 'object' || Array.isArray(next)) {
++			return;
++		}
++		current[path[i]] = { ...next as Record<string, unknown> };
++		current = current[path[i]] as Record<string, unknown>;
++	}
++	current[path[path.length - 1]] = value;
++}
