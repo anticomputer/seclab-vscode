@@ -99,6 +99,21 @@ if (c.status === 0) {
 	fs.writeFileSync(path.join(stateDir, 'tabs', `${fakeTab}.json`), '{}');
 	writeManifest(runDir, { stateDirs: [stateDir], driver: 'oci' });
 	check('a leftover tab container is reported', runLeftovers(runDir).left.includes(`container seclab-${fakeTab}`), runLeftovers(runDir).left.join(', '));
+	// Egress networks (2026-11-06: every sbx run left `seclab-<tab>-egress` behind): a labelled
+	// one and an unlabelled one named for the tab are reported, removed, and gate the run.
+	const egress = `seclab-${fakeTab}-egress`, unlabelled = `seclab-${fakeTab}-net`;
+	for (const [n, label] of [[egress, true], [unlabelled, false]] as const) {
+		spawnSync('docker', ['network', 'rm', n], { stdio: 'ignore' });
+		spawnSync('docker', ['network', 'create', ...(label ? ['--label', `seclab.tab=${fakeTab}`] : []), '--', n], { stdio: 'ignore' });
+	}
+	const nl = runLeftovers(runDir).left;
+	check('a leftover egress network (labelled) and a tab-named unlabelled network are reported', nl.includes(`network ${egress}`) && nl.includes(`network ${unlabelled}`), nl.join(', '));
+	const before = verifyTeardown(runDir, { snapshot: false });
+	check('verify removes them and passes', before.every(x => x.ok), before.filter(x => !x.ok).map(x => x.detail).join(' | '));
+	const nets = spawnSync('docker', ['network', 'ls', '--format', '{{.Name}}'], { encoding: 'utf8' }).stdout.split('\n');
+	check('both networks are gone', !nets.includes(egress) && !nets.includes(unlabelled));
+	// Re-plant a container so the original container assertions below still apply.
+	spawnSync('docker', ['run', '-d', '--rm', '--network', 'none', '--label', `seclab.tab=${fakeTab}`, '--name', `seclab-${fakeTab}`, NODE_IMAGE, 'sleep', '600'], { stdio: 'ignore' });
 	check('verify removes it and passes', verifyTeardown(runDir, { snapshot: false }).every(x => x.ok));
 	check('the container is gone', !runLeftovers(runDir).left.length);
 } else {
