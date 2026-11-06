@@ -18,18 +18,62 @@ export async function pinnedBrokerImage(pin: BrokerImagePin | undefined): Promis
 	});
 }
 
+/** A local image reference's ID (`docker image inspect .Id`), never pulling. */
+export async function resolveImageId(runner: Runner, docker: string, ref: string): Promise<string> {
+	const r = await runner.run(docker, ['image', 'inspect', '--format', '{{.Id}}', '--', ref], { timeoutMs: 30_000 });
+	const id = r.stdout.trim();
+	if (r.code !== 0 || !/^sha256:[0-9a-f]{64}$/.test(id)) {
+		throw new DriverError(-32011, `image ${ref} unavailable (run ./seclab image oci)`);
+	}
+	return id;
+}
+
 /**
- * Remove the tab's broker container if it was created from another image than the pinned one
- * (a rebuilt broker, or a container from before XX-6), so it is recreated by ID. The broker
- * holds no state tabd needs: every start re-runs its whole bring-up.
+ * The tab's broker container, as found: absent, or its image ID. Throws when it exists but
+ * isn't this tab's (another label: refuse, never remove), or when docker can't say (ZZ-8:
+ * a failed inspect is never read as "absent").
  */
-export async function dropBrokerFromOtherImage(runner: Runner, docker: string, name: string, imageId: string): Promise<void> {
-	const r = await runner.run(docker, ['container', 'inspect', '--format', '{{.Image}}', '--', name], { timeoutMs: 15_000 });
-	if (r.code === 0 && r.stdout.trim() !== imageId) {
-		const d = await runner.run(docker, ['rm', '-f', '--', name], { timeoutMs: 60_000 });
+async function brokerContainer(runner: Runner, docker: string, name: string, tabId: string): Promise<{ image: string } | undefined> {
+	const r = await runner.run(docker, ['container', 'inspect', '--format', '{{.Image}}|{{index .Config.Labels "seclab.tab"}}', '--', name], { timeoutMs: 15_000 });
+	if (r.code !== 0) {
+		if (/no such (object|container)/i.test(r.stderr)) {
+			return undefined;
+		}
+		throw new DriverError(-32011, `could not inspect the broker container: ${r.stderr.trim().slice(-300)}`);
+	}
+	const [image, label] = r.stdout.trim().split('|');
+	if (label !== tabId) {
+		throw new DriverError(-32011, `container ${name} is not this tab's broker (label ${JSON.stringify(label)}); refusing to use or remove it`);
+	}
+	return { image };
+}
+
+/**
+ * Remove the tab's broker container if it was created from another image than `imageId` (a
+ * rebuilt broker, the placeholder, or a container from before XX-6), so it is recreated by ID.
+ * The broker holds no state tabd needs: every start re-runs its whole bring-up. `-v` also
+ * removes the anonymous volume the mitmproxy base declares.
+ */
+export async function dropBrokerFromOtherImage(runner: Runner, docker: string, name: string, tabId: string, imageId: string): Promise<void> {
+	const c = await brokerContainer(runner, docker, name, tabId);
+	if (c && c.image !== imageId) {
+		const d = await runner.run(docker, ['rm', '-f', '-v', '--', name], { timeoutMs: 60_000 });
 		if (d.code !== 0) {
 			throw new DriverError(-32011, `could not replace the broker built from another image: ${d.stderr.trim().slice(-300)}`);
 		}
+	}
+}
+
+/** The tab's broker exists, is this tab's, and runs `imageId`; else the problem (ZZ-7, ZZ-8). */
+export async function brokerImageProblem(runner: Runner, docker: string, name: string, tabId: string, imageId: string): Promise<string | undefined> {
+	try {
+		const c = await brokerContainer(runner, docker, name, tabId);
+		if (!c) {
+			return 'broker container missing';
+		}
+		return c.image === imageId ? undefined : `broker runs image ${c.image.slice(0, 19)}…, not the checked ${imageId.slice(0, 19)}…`;
+	} catch (e) {
+		return (e as Error).message;
 	}
 }
 

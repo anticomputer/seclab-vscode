@@ -34,10 +34,18 @@ so tabd must know which image it runs.
   - A unit test pins tabd's constants to `broker/deps.json` and
     `broker/schema/protocol.v1.json`, because the shipped app contains neither.
   - Every broker container (OCI and sbx) is created from that ID with `--pull never`. An
-    existing broker container from a different image is removed and recreated, which is safe
-    because every start re-runs the whole bring-up.
+    existing broker container from a different image is removed with its anonymous volume
+    and recreated, which is safe because every start re-runs the whole bring-up. A container
+    that isn't labelled for this tab is refused, never used or removed, and a failed inspect
+    is never read as "absent". After `start`, the container's image is checked again.
+  - The fence check (at start, adoption, connect and every periodic re-verify) also requires
+    the running broker to be the checked image, so a tab started by an earlier tabd, or from
+    a stale image, is quarantined.
+  - `--broker none` runs the placeholder by ID too, and replaces a real broker left from an
+    earlier `required` run, removing its egress network.
   - After `broker.hello`, the reported version must equal the image's version label.
-  - A failed check isn't cached: rebuilding the image fixes it without restarting tabd.
+  - The reference is resolved at every tab start, not cached: creating by ID is race-free
+    either way, and a rebuilt image reaches new tabs without restarting tabd.
 
 ## Why labels and an ID, not an attestation
 Local builds have no Sigstore identity, so an attestation would be self-signed and prove

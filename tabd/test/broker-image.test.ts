@@ -51,7 +51,7 @@ test('broker-image: unlabelled, unknown, mitmproxy-inherited and mismatched imag
 	assert.match(brokerImageProblems('seclab-broker:dev', good(), { allowDirty: false }).join(), /not a sha256/);
 });
 
-test('broker-image: the pin resolves once, caches success, retries after failure', async () => {
+test('broker-image: the pin resolves at every use (a rebuilt image is picked up; ZZ-10)', async () => {
 	let calls = 0;
 	let labels: Record<string, string> | null = null;
 	const runner = { run: async (_cmd: string, args: string[]) => {
@@ -64,7 +64,7 @@ test('broker-image: the pin resolves once, caches success, retries after failure
 	labels = good();
 	assert.deepEqual(await pin.get(), { id: ID, revision: 'c'.repeat(40), version: '0.3.1' });
 	await pin.get();
-	assert.equal(calls, 2);
+	assert.equal(calls, 3);
 });
 
 test('broker-image: hello must report the version the image declares', () => {
@@ -72,4 +72,85 @@ test('broker-image: hello must report the version the image declares', () => {
 	checkBrokerHello(hello, 't', '0.3.1');
 	checkBrokerHello(hello, 't');
 	assert.throws(() => checkBrokerHello(hello, 't', '0.3.2'), /image declares 0.3.2/);
+});
+
+// ---- driver wiring (review ZZ-11): the sbx broker path against a fake docker ----------------
+
+import { SbxDriver } from '../src/drivers/sbx.ts';
+import type { TabRuntimeSpec, TabTemplate } from '../src/drivers/types.ts';
+
+const TAB = 't-' + 'a'.repeat(26);
+const SPEC: TabRuntimeSpec = {
+	tabId: TAB, sandboxName: `seclab-${TAB}`, hostPath: '/w',
+	template: { kind: 'TabTemplate', metadata: { name: 'default' }, spec: { driver: 'sbx', image: 'img', envVarsInjectionPolicy: 'Disallowed', fence: 'required', broker: 'required' } } as TabTemplate,
+};
+const BROKER = `seclab-${TAB}-broker`;
+
+/** Fake docker: the pinned image, an optional pre-existing broker container; sbx stops the run. */
+function fakeDocker(opts: { labels?: Record<string, string> | null; existing?: { image: string; tab: string } }) {
+	const calls: string[][] = [];
+	let container = opts.existing;
+	const runner = {
+		run: async (bin: string, args: readonly string[]) => {
+			const a = [...args];
+			calls.push([bin, ...a]);
+			const ok = (stdout = '') => ({ code: 0, stdout, stderr: '' });
+			if (bin === '/sbx') {
+				throw new Error('stop: sbx reached');
+			}
+			if (a[0] === 'image' && a[1] === 'inspect') {
+				return ok(`${JSON.stringify(ID)}\n${JSON.stringify(opts.labels === undefined ? good() : opts.labels)}\n`);
+			}
+			if (a[0] === 'container' && a[1] === 'inspect') {
+				if (!container) {
+					return { code: 1, stdout: '', stderr: `Error response from daemon: No such container: ${BROKER}` };
+				}
+				return ok(a[3].includes('.Image') ? `${container.image}|${container.tab}` : BROKER);
+			}
+			if (a[0] === 'rm') {
+				container = undefined;
+				return ok();
+			}
+			if (a[0] === 'create') {
+				container = { image: a[a.length - 1], tab: TAB };
+				return ok();
+			}
+			if (a[0] === 'port') {
+				return ok('127.0.0.1:49999');
+			}
+			return ok();
+		},
+		spawnStream: () => { throw new Error('no streams'); },
+	} as unknown as Runner;
+	const pin = new BrokerImagePin(runner, '/docker', 'seclab-broker:dev');
+	return { calls, driver: new SbxDriver('/sbx', runner, { docker: '/docker', brokerPin: pin }) };
+}
+const start = (d: SbxDriver) => d.ensureRunning(SPEC, 'f'.repeat(64), undefined, { configure: async () => { throw new Error('unreached'); } }).catch((e: Error) => e);
+
+test('sbx driver: the broker is created by the checked image ID, never the tag', async () => {
+	const { calls, driver } = fakeDocker({});
+	const e = await start(driver);
+	assert.match(String(e), /sbx reached/);
+	const create = calls.find(c => c[1] === 'create');
+	assert.ok(create, 'broker created');
+	assert.deepEqual(create!.slice(-2), ['--', ID]);
+	assert.ok(!create!.includes('seclab-broker:dev'));
+});
+
+test('sbx driver: a broker from another image is removed (with its volume) and recreated', async () => {
+	const { calls, driver } = fakeDocker({ existing: { image: 'sha256:' + '0'.repeat(64), tab: TAB } });
+	await start(driver);
+	const i = calls.findIndex(c => c[1] === 'rm');
+	assert.ok(i >= 0);
+	assert.deepEqual(calls[i].slice(1), ['rm', '-f', '-v', '--', BROKER]);
+	assert.ok(calls.findIndex(c => c[1] === 'create') > i);
+});
+
+test('sbx driver: a refused image creates nothing; another tab\'s container is never used or removed', async () => {
+	const refused = fakeDocker({ labels: null });
+	assert.match(String(await start(refused.driver)), /refused/);
+	assert.ok(!refused.calls.some(c => c[1] === 'create' || (c[1] === 'network' && c[2] === 'create')));
+	const foreign = fakeDocker({ existing: { image: 'sha256:' + '0'.repeat(64), tab: 'someone-else' } });
+	assert.match(String(await start(foreign.driver)), /not this tab's broker/);
+	assert.ok(!foreign.calls.some(c => c[1] === 'rm' || c[1] === 'create'));
 });
