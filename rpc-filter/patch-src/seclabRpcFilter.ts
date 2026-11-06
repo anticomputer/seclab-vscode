@@ -86,6 +86,16 @@ const SECLAB_LOG_LINE_MAX = 4096;
 const SECLAB_LOG_REF_MAX = 1024;
 /** Denials written per window before the log caps itself. */
 const SECLAB_LOG_DENIALS_MAX = 5000;
+/**
+ * Bytes written per window before the log caps itself.
+ *
+ * The line count alone allowed about 20 MB, and spdlog rotates at 5 MB, so a
+ * capped run could span four files. The consumer follows rotated files by
+ * inode and marks a broken chain, so this is not a correctness problem -- but
+ * a window whose decisions sit in one file is much easier to reason about,
+ * and a tab should not be able to make the host write 20 MB by being noisy.
+ */
+const SECLAB_LOG_BYTES_MAX = 2 * 1024 * 1024;
 
 let seclabLogInstalled = false;
 
@@ -122,6 +132,8 @@ export function seclabInstallDecisionLog(
 	seclabLogInstalled = true;
 	const logger = createLogger('seclabRpcFilter.log');
 	let denials = 0;
+	let bytes = 0;
+	let capped = false;
 
 	const line = (d: SeclabDecision): string | undefined => {
 		const deny = d.verdict !== 'allow' && d.verdict !== 'allow_with_constraint';
@@ -163,11 +175,32 @@ export function seclabInstallDecisionLog(
 			? out.slice(0, SECLAB_LOG_LINE_MAX) : out;
 	};
 
+	const cappedLine = JSON.stringify({
+		source: 'rpc-filter', class: 'rpc.decision', priority: 'warning',
+		summary: 'log capped',
+		detail: {
+			surface: 'rpc', ref: 'rpc:seclab.log-capped', verdict: 'deny',
+			reason: 'log-capped',
+		},
+	});
+
 	seclabOnDecision(d => {
-		const l = line(d);
-		if (l !== undefined) {
-			logger.info(l);
+		if (capped) {
+			return;
 		}
+		const l = line(d);
+		if (l === undefined) {
+			return;
+		}
+		// Count bytes actually written, so the cap holds whatever mix of
+		// verdicts a tab produces rather than only for denials.
+		bytes += l.length + 1;
+		if (bytes > SECLAB_LOG_BYTES_MAX) {
+			capped = true;
+			logger.info(cappedLine);
+			return;
+		}
+		logger.info(l);
 	});
 }
 
