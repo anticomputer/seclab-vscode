@@ -161,16 +161,54 @@ def _accessor_before(body: str, upto: int):
     return hits[-1].group("name") if hits else None
 
 
+_IMPORT_BINDING = re.compile(
+    r"import\s*\{(?P<names>[^}]*)\}\s*from\s*'(?P<mod>[^']+)'")
+
+
+def _import_aliases(text: str) -> dict:
+    """``{local name: exported name}`` for this module's named imports.
+
+    ``extends`` names a *local binding*, not necessarily the class's real name.
+    Upstream writes::
+
+        import { ExtensionManagementChannelClient as BaseExtensionManagementChannelClient } from '...'
+        export abstract class ProfileAwareExtensionManagementChannelClient
+            extends BaseExtensionManagementChannelClient
+
+    Resolving ``extends`` by searching the tree for ``class
+    BaseExtensionManagementChannelClient`` finds nothing, because no such class
+    exists. That lost the five pushes on the ``extensions`` channel, including
+    ``onDidInstallExtensions``, which feeds attacker-chosen manifest
+    contributions into the trusted-side registries.
+    """
+    out = {}
+    for m in _IMPORT_BINDING.finditer(text):
+        for part in m.group("names").split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if " as " in part:
+                exported, local = [x.strip() for x in part.split(" as ", 1)]
+                out[local] = exported
+            else:
+                out[part] = part
+    return out
+
+
 def _base_classes(text: str, name: str) -> list:
+    """Base names for ``name``, mapped through this module's import aliases."""
+    aliases = _import_aliases(text)
     m = re.search(r"\bclass\s+%s\b[^{]*?\bextends\s+(?P<base>[\w.]+)"
                   % re.escape(name), text)
     if m:
-        return [m.group("base").split(".")[-1]]
+        base = m.group("base").split(".")[-1]
+        return [aliases.get(base, base)]
     m = re.search(r"\binterface\s+%s\b[^{]*?\bextends\s+(?P<bases>[^{]+)"
                   % re.escape(name), text)
     if m:
-        return [b.strip().split("<")[0].split(".")[-1]
-                for b in m.group("bases").split(",") if b.strip()]
+        bases = [b.strip().split("<")[0].split(".")[-1]
+                 for b in m.group("bases").split(",") if b.strip()]
+        return [aliases.get(b, b) for b in bases]
     return []
 
 
@@ -222,18 +260,29 @@ def _events_of_sink(tree: SourceTree, consts: dict, sink: str, _seen=None) -> tu
         # The channel client may inherit its events. Follow `extends` once per
         # name, so a wrapper subclass does not hide its base's pushes.
         seen = _seen or {sink}
+        named_a_base = False
         for rel, kind, start, end, line, text in blocks:
             for base in _base_classes(text, sink):
                 if base in seen:
                     continue
+                named_a_base = True
                 seen.add(base)
                 inherited, problem = _events_of_sink(tree, consts, base, seen)
                 if inherited:
                     return inherited, None
-        # Located, and genuinely silent. That is an answer, not a failure:
-        # the channel carries calls but pushes nothing, so there is no event to
-        # give a verdict to. Only a sink that cannot be *found* is unresolved,
-        # because that is the case where the sweep does not know what it missed.
+                if problem and problem != "SILENT":
+                    # The base was named but could not be read. Saying SILENT
+                    # here would report "this channel pushes nothing" on the
+                    # strength of a lookup that failed -- the confidently wrong
+                    # answer this module exists to avoid. Propagate it.
+                    return [], ("sink %s extends %s, which could not be "
+                                "resolved: %s" % (sink, base, problem))
+        if named_a_base:
+            # Every base resolved and every one of them was silent too.
+            return [], "SILENT"
+        # No base class, located, and genuinely silent. That is an answer, not
+        # a failure: the channel carries calls but pushes nothing, so there is
+        # no event to give a verdict to.
         return [], "SILENT"
     return events, None
 
@@ -319,11 +368,17 @@ def _sink_of(text: str, pos: int, end: int) -> tuple:
         if bare and bare[0].isupper():
             return "channel_client", bare
 
-    # `new X(` immediately before the acquisition, on the same statement.
+    # `new X(` whose argument list actually *contains* the acquisition. The
+    # previous version took the last `new X(` within 300 characters, which
+    # picked up the preceding statement: in remote.contribution.ts the `logger`
+    # channel resolved to `DownloadServiceChannel` from the line above and so
+    # reported no pushes, losing both RemoteLoggerChannelClient events.
     head = text[max(0, pos - 300):pos]
-    news = list(_NEW_CLIENT.finditer(head))
-    if news:
-        return "channel_client", news[-1].group("cls")
+    for nm in reversed(list(_NEW_CLIENT.finditer(head))):
+        between = head[nm.end():]
+        # Still inside that call's parentheses if its `(` is unclosed.
+        if between.count("(") >= between.count(")"):
+            return "channel_client", nm.group("cls")
 
     # 2. The channel is handed to a callback: `withChannel(name, channel => ...)`
     #    or assigned to a variable used later in the file.

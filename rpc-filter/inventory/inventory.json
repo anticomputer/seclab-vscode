@@ -39822,19 +39822,6 @@
           "sink_kind": "proxy_channel"
         },
         {
-          "channel": "logger",
-          "channel_token": "'logger'",
-          "channel_unresolved_reason": null,
-          "file": "src/vs/workbench/contrib/remote/common/remote.contribution.ts",
-          "how": "withChannel",
-          "line": 81,
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L81",
-          "reason": "sink exposes no server-sent event",
-          "receiver": "connection",
-          "sink": "DownloadServiceChannel",
-          "sink_kind": "channel_client"
-        },
-        {
           "channel": "sandboxHelper",
           "channel_token": "SANDBOX_HELPER_CHANNEL_NAME",
           "channel_unresolved_reason": null,
@@ -39861,19 +39848,6 @@
           "sink_kind": "call_only"
         },
         {
-          "channel": "extensions",
-          "channel_token": "'extensions'",
-          "channel_unresolved_reason": null,
-          "file": "src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts",
-          "how": "getChannel",
-          "line": 34,
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts#L34",
-          "reason": "sink exposes no server-sent event",
-          "receiver": "remoteAgentConnection",
-          "sink": "RemoteExtensionManagementService",
-          "sink_kind": "channel_client"
-        },
-        {
           "channel": "extensionGalleryManifest",
           "channel_token": "'extensionGalleryManifest'",
           "channel_unresolved_reason": null,
@@ -39885,19 +39859,6 @@
           "receiver": "remoteConnection",
           "sink": null,
           "sink_kind": "call_only"
-        },
-        {
-          "channel": "extensions",
-          "channel_token": "'extensions'",
-          "channel_unresolved_reason": null,
-          "file": "src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts",
-          "how": "getChannel",
-          "line": 39,
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts#L39",
-          "reason": "sink exposes no server-sent event",
-          "receiver": "remoteAgentConnection",
-          "sink": "NativeRemoteExtensionManagementService",
-          "sink_kind": "channel_client"
         },
         {
           "channel": "mcpGalleryManifest",
@@ -39965,8 +39926,8 @@
           "sink_kind": "channel_client"
         }
       ],
-      "channels_without_pushes_count": 14,
-      "server_initiated_push_count": 31,
+      "channels_without_pushes_count": 11,
+      "server_initiated_push_count": 38,
       "server_initiated_pushes": [
         {
           "accessor": "for",
@@ -40258,6 +40219,111 @@
               "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/debugService.ts#L155"
             }
           ],
+          "via": "listen"
+        },
+        {
+          "accessor": "super",
+          "acquired_in": "src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts#L34",
+          "acts_on_push": false,
+          "channel": "extensions",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/extensionManagement/common/extensionManagementIpc.ts#L216",
+          "declared_in": "src/vs/platform/extensionManagement/common/extensionManagementIpc.ts",
+          "event": "onDidInstallExtensions",
+          "key": "push:extensions:onDidInstallExtensions",
+          "sink": "RemoteExtensionManagementService",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": null,
+          "acquired_in": "src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts#L34",
+          "acts_on_push": false,
+          "channel": "extensions",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/extensionManagement/common/extensionManagementIpc.ts#L218",
+          "declared_in": "src/vs/platform/extensionManagement/common/extensionManagementIpc.ts",
+          "event": "onDidUninstallExtension",
+          "key": "push:extensions:onDidUninstallExtension",
+          "sink": "RemoteExtensionManagementService",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": "al",
+          "acquired_in": "src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts#L34",
+          "acts_on_push": false,
+          "channel": "extensions",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/extensionManagement/common/extensionManagementIpc.ts#L219",
+          "declared_in": "src/vs/platform/extensionManagement/common/extensionManagementIpc.ts",
+          "event": "onDidUpdateExtensionMetadata",
+          "key": "push:extensions:onDidUpdateExtensionMetadata",
+          "sink": "RemoteExtensionManagementService",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": "super",
+          "acquired_in": "src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts#L34",
+          "acts_on_push": false,
+          "channel": "extensions",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/extensionManagement/common/extensionManagementIpc.ts#L215",
+          "declared_in": "src/vs/platform/extensionManagement/common/extensionManagementIpc.ts",
+          "event": "onInstallExtension",
+          "key": "push:extensions:onInstallExtension",
+          "sink": "RemoteExtensionManagementService",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": null,
+          "acquired_in": "src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts#L34",
+          "acts_on_push": false,
+          "channel": "extensions",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/extensionManagement/common/extensionManagementIpc.ts#L217",
+          "declared_in": "src/vs/platform/extensionManagement/common/extensionManagementIpc.ts",
+          "event": "onUninstallExtension",
+          "key": "push:extensions:onUninstallExtension",
+          "sink": "RemoteExtensionManagementService",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": "for",
+          "acquired_in": "src/vs/workbench/contrib/remote/common/remote.contribution.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L81",
+          "acts_on_push": false,
+          "channel": "logger",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/log/common/logIpc.ts#L166",
+          "declared_in": "src/vs/platform/log/common/logIpc.ts",
+          "event": "onDidChangeLoggers",
+          "key": "push:logger:onDidChangeLoggers",
+          "sink": "RemoteLoggerChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": "for",
+          "acquired_in": "src/vs/workbench/contrib/remote/common/remote.contribution.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L81",
+          "acts_on_push": false,
+          "channel": "logger",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/log/common/logIpc.ts#L164",
+          "declared_in": "src/vs/platform/log/common/logIpc.ts",
+          "event": "onDidChangeVisibility",
+          "key": "push:logger:onDidChangeVisibility",
+          "sink": "RemoteLoggerChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
           "via": "listen"
         },
         {
