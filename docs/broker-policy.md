@@ -524,6 +524,14 @@ Rules marked gitleaks are taken from https://github.com/gitleaks/gitleaks/blob/5
     "GET"
    ],
    "path": "/example-org/ExampleProject/_packaging/example-pypi-feed/pypi/**"
+  },
+  {
+   "id": "cfs-pypi-files",
+   "host": "pkgs.dev.azure.com",
+   "methods": [
+    "GET"
+   ],
+   "path": "/example-org/00000000-0000-0000-0000-000000000001/_packaging/00000000-0000-0000-0000-000000000002/pypi/download/**"
   }
  ],
  "credentials": [
@@ -545,6 +553,13 @@ Rules marked gitleaks are taken from https://github.com/gitleaks/gitleaks/blob/5
     {
      "host": "pkgs.dev.azure.com",
      "path": "/example-org/ExampleProject/_packaging/example-pypi-feed/pypi/**",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "host": "pkgs.dev.azure.com",
+     "path": "/example-org/00000000-0000-0000-0000-000000000001/_packaging/00000000-0000-0000-0000-000000000002/pypi/download/**",
      "methods": [
       "GET"
      ]
