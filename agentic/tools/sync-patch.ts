@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const repo = path.resolve(import.meta.dirname, '../..');
-export const PATCHES = ['patches/0015-seclab-ahp-gate.patch'];
+export const PATCHES = ['patches/0015-seclab-ahp-gate.patch', 'patches/0017-seclab-fixed-tab-settings.patch'];
 const SRC = path.join(repo, 'agentic', 'patch-src');
 
 interface Section { file: string; text: string; isNew: boolean }

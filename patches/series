@@ -13,3 +13,4 @@
 # 0015 onwards: the secure-agentic-experiences series (plan section 10).
 # New files in 0015 are edited in agentic/patch-src (agentic/tools/sync-patch.ts).
 0015-seclab-ahp-gate.patch
+0017-seclab-fixed-tab-settings.patch
