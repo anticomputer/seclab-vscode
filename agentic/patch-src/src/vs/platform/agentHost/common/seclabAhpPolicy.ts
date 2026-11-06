@@ -46,8 +46,12 @@ export const SECLAB_AHP_MAX_FRAME = 32 * 1024 * 1024;
 const MAX_DEPTH = 64;
 const MAX_TEXT = 80;
 /** Keys removed from everything the agent host sends: the agent host chooses neither an
- *  authorization server for the user's credentials (A1) nor MCP App UI (A21). */
-const STRIP_KEYS = new Set(['protectedResources', 'mcpApp']);
+ *  authorization server for the user's credentials (A1) nor MCP App UI (A21).
+ *  `auth`, `authorization_servers`, `oauthClient` and `protectedResourceMetadata` carry
+ *  `ProtectedResourceMetadata` inside MCP server state and customizations; left in, the
+ *  trusted window fetches an agent-host-chosen URL on the host network and may register a
+ *  dynamic OAuth provider, with no user interaction (review round 1, HIGH). */
+const STRIP_KEYS = new Set(['protectedResources', 'mcpApp', 'auth', 'authorization_servers', 'oauthClient', 'protectedResourceMetadata']);
 /** Error code for requests the gate refuses (JSON-RPC "method not found"). */
 export const SECLAB_AHP_REFUSED = -32601;
 const REFUSED_MESSAGE = 'Refused by the seclab agent-host gate';
@@ -85,6 +89,17 @@ export function seclabAhpSanitize(value: Json, depth = 0): number {
 			}
 		}
 	} else if (isObj(value)) {
+		// An `auth-required` MCP state drives the window's automatic authentication path.
+		// Stripping its metadata keys is not enough: the state itself is the trigger, so
+		// it becomes an inert error state (review round 1, HIGH).
+		if (value['kind'] === 'auth-required') {
+			for (const k of Object.keys(value)) {
+				delete value[k];
+			}
+			value['kind'] = 'error';
+			value['message'] = REFUSED_MESSAGE;
+			return n + 1;
+		}
 		for (const k of Object.keys(value)) {
 			if (STRIP_KEYS.has(k) || isUi(value[k])) {
 				delete value[k];

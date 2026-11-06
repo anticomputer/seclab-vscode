@@ -87,7 +87,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/src/vs/platform/agentHost/common/seclabAhpPolicy.ts
-@@ -0,0 +1,365 @@
+@@ -0,0 +1,380 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: the agent-host protocol gate's filter (patch 0015).
 + *  Pure and import-free on purpose: the same file runs under node's type stripping in the
@@ -136,8 +136,12 @@ index 0000000..0000000
 +const MAX_DEPTH = 64;
 +const MAX_TEXT = 80;
 +/** Keys removed from everything the agent host sends: the agent host chooses neither an
-+ *  authorization server for the user's credentials (A1) nor MCP App UI (A21). */
-+const STRIP_KEYS = new Set(['protectedResources', 'mcpApp']);
++ *  authorization server for the user's credentials (A1) nor MCP App UI (A21).
++ *  `auth`, `authorization_servers`, `oauthClient` and `protectedResourceMetadata` carry
++ *  `ProtectedResourceMetadata` inside MCP server state and customizations; left in, the
++ *  trusted window fetches an agent-host-chosen URL on the host network and may register a
++ *  dynamic OAuth provider, with no user interaction (review round 1, HIGH). */
++const STRIP_KEYS = new Set(['protectedResources', 'mcpApp', 'auth', 'authorization_servers', 'oauthClient', 'protectedResourceMetadata']);
 +/** Error code for requests the gate refuses (JSON-RPC "method not found"). */
 +export const SECLAB_AHP_REFUSED = -32601;
 +const REFUSED_MESSAGE = 'Refused by the seclab agent-host gate';
@@ -175,6 +179,17 @@ index 0000000..0000000
 +			}
 +		}
 +	} else if (isObj(value)) {
++		// An `auth-required` MCP state drives the window's automatic authentication path.
++		// Stripping its metadata keys is not enough: the state itself is the trigger, so
++		// it becomes an inert error state (review round 1, HIGH).
++		if (value['kind'] === 'auth-required') {
++			for (const k of Object.keys(value)) {
++				delete value[k];
++			}
++			value['kind'] = 'error';
++			value['message'] = REFUSED_MESSAGE;
++			return n + 1;
++		}
 +		for (const k of Object.keys(value)) {
 +			if (STRIP_KEYS.has(k) || isUi(value[k])) {
 +				delete value[k];
@@ -458,7 +473,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/src/vs/platform/agentHost/common/seclabAhpPolicyData.ts
-@@ -0,0 +1,334 @@
+@@ -0,0 +1,337 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: the agent-host protocol gate's verdict tables (patch 0015).
 + *  Default deny: the filter refuses anything not listed as 'allow'. Each table `satisfies` a
@@ -690,7 +705,10 @@ index 0000000..0000000
 +	'chat/toolCallComplete': 'allow',
 +	'chat/toolCallResultConfirmed': 'allow',
 +	'chat/toolCallContentChanged': 'allow',
-+	'chat/toolCallAuthRequired': 'allow',
++	// The agent host does not get to ask the trusted window for MCP authorization: its
++	// `auth.resource` reaches `_autoAuthenticateMcpServer` with no user interaction, which
++	// fetches an agent-host-chosen URL on the host network (review round 1, HIGH).
++	'chat/toolCallAuthRequired': 'deny',
 +	'chat/toolCallAuthResolved': 'allow',
 +	'chat/turnComplete': 'allow',
 +	'chat/turnCancelled': 'allow',
@@ -842,7 +860,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/src/vs/workbench/services/agentHost/browser/seclabAhpGate.ts
-@@ -0,0 +1,185 @@
+@@ -0,0 +1,197 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: the agent-host protocol gate (patch 0015).
 + *  In a seclab tab window (`seclab+<tab>` authority) the workbench's only agent-host transport is
@@ -881,7 +899,7 @@ index 0000000..0000000
 +			type: 'boolean',
 +			default: false,
 +			scope: ConfigurationScope.APPLICATION,
-+			description: localize('seclab.agents.enabled', "Connect tab windows to the agent host running inside their tab, through the agent-host gate. When off, tab windows make no agent-host connection."),
++			description: localize('seclab.agents.enabled', "Connect tab windows to the agent host running inside their tab, through the agent-host gate. When off, tab windows make no agent-host connection. Only enterprise policy and the host launch environment (SECLAB_AGENTS_ENABLED=1) turn this on: a value in user, remote or workspace settings is ignored, because a tab can write those."),
 +		},
 +	},
 +});
@@ -918,15 +936,27 @@ index 0000000..0000000
 +
 +/**
 + * Whether this window may connect to an agent host. Any window that isn't a seclab tab window
-+ * may; a tab window may only with `seclab.agents.enabled` on. Read at each connection.
++ * may; a tab window may only when agents are enabled for the host. Read at each connection.
 + * This is the predicate patches 0009/0010 call (`seclabAgentHostAllowed`).
++ *
++ * The enablement sources are deliberately only those a tab cannot write (review round 1,
++ * MEDIUM): enterprise policy, the registered default, and `SECLAB_AGENTS_ENABLED=1` in the
++ * environment of the host's main process, stamped onto this window's configuration by
++ * `updateConfiguration` on every load. `getValue` is not used: it merges the user, remote
++ * and workspace layers, and `MainThreadConfiguration.$updateConfigurationOption` lets a tab
++ * extension write the user layer (A23).
 + */
 +export function seclabAgentHostAllowed(accessor: ServicesAccessor, authority: string | undefined): boolean {
 +	if (!isSeclabAuthority(authority)) {
 +		return true;
 +	}
 +	const emit = installWindowSink(accessor);
-+	if (accessor.get(IConfigurationService).getValue<boolean>(SECLAB_AGENTS_ENABLED_SETTING) === true) {
++	const inspected = accessor.get(IConfigurationService).inspect<boolean>(SECLAB_AGENTS_ENABLED_SETTING);
++	// The desktop window configuration, reached structurally: this file is in the browser
++	// layer and may not import the electron-browser environment service's types.
++	const windowConfiguration = (accessor.get(IWorkbenchEnvironmentService) as { configuration?: { seclabAgentsEnabled?: boolean } }).configuration;
++	if (inspected.policyValue === true || windowConfiguration?.seclabAgentsEnabled === true
++		|| (inspected.policyValue === undefined && inspected.defaultValue === true)) {
 +		return true;
 +	}
 +	emit({ source: 'ahp-gate', class: 'ahp.decision', priority: 'notice', summary: 'ahp-gate.disabled deny', detail: { gateRule: 'ahp-gate.disabled', connection: 0, verdict: 'deny' } });
@@ -1028,3 +1058,48 @@ index 0000000..0000000
 +}
 +
 +registerWorkbenchContribution2(SeclabAhpWindowContribution.ID, SeclabAhpWindowContribution, WorkbenchPhase.BlockStartup);
+diff --git a/src/vs/platform/window/common/window.ts b/src/vs/platform/window/common/window.ts
+index 7e31cd3..8d95f29 100644
+--- a/src/vs/platform/window/common/window.ts
++++ b/src/vs/platform/window/common/window.ts
+@@ -522,6 +522,12 @@ export interface INativeWindowConfiguration extends IWindowConfiguration, Native
+ 	mainPid: number;
+ 	handle?: VSBuffer;
+ 
++	// seclab: whether the host's main process was launched with SECLAB_AGENTS_ENABLED=1, which
++	// is the only tab-unreachable way to let a tab window connect to its agent host. Stamped on
++	// every load by `updateConfiguration`, so a value carried in from anywhere else (a window
++	// opened through the remote CLI, say) is overwritten (patch 0015).
++	seclabAgentsEnabled?: boolean;
++
+ 	machineId: string;
+ 	sqmId: string;
+ 	devDeviceId: string;
+diff --git a/src/vs/platform/windows/electron-main/windowImpl.ts b/src/vs/platform/windows/electron-main/windowImpl.ts
+index 484851f..35cb85e 100644
+--- a/src/vs/platform/windows/electron-main/windowImpl.ts
++++ b/src/vs/platform/windows/electron-main/windowImpl.ts
+@@ -65,6 +65,12 @@ interface ILoadOptions {
+ 	readonly disableExtensions?: boolean;
+ }
+ 
++// seclab: tab windows may connect to the agent host in their tab only when the host's main
++// process was launched with SECLAB_AGENTS_ENABLED=1. Read once here, from the main process
++// environment, because the user, remote and workspace settings layers are all writable from
++// inside a tab (patch 0015, security review round 1).
++export const seclabAgentsEnabled = process.env['SECLAB_AGENTS_ENABLED'] === '1';
++
+ const enum ReadyState {
+ 
+ 	/**
+@@ -1357,6 +1363,10 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
+ 			}
+ 		}
+ 
++		// seclab: stamped on every load, so it is this host launch's value and never one
++		// carried in by whoever asked for the window (patch 0015).
++		configuration.seclabAgentsEnabled = seclabAgentsEnabled;
++
+ 		// If named pipe was instantiated for the crashpad_handler process, reuse the same
+ 		// pipe for new app instances connecting to the original app instance.
+ 		// Ref: https://github.com/microsoft/vscode/issues/115874
