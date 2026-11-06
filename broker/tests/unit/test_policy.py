@@ -290,6 +290,23 @@ def test_r11_url_userinfo_pattern():
         assert not URL_USERINFO.search(ok), ok
 
 
+def test_r14_audited_field_names_are_never_truncated_values():
+    """Review 14-1: an exception-route audit lists only plain field names. Anything else,
+    including a long hex or base64 blob a 64-char cut would leave unmatched by the audit
+    scrubber, or a name with a zero-width character, is masked whole."""
+    from mitmproxy import http
+    from seclab_broker.engine_mitmproxy import SeclabAddon
+    hexblob = ("ghu_" + "Z" * 40).encode().hex()
+    doc = {"login": 1, "quota_snapshots": 2, "access-type": 3, hexblob: 4, "b64/x+y==": 5,
+           "fake\u200bname": 6, "a" * 65: 7, "ghu_" + "Z" * 36: 8, "": 9}
+    names = SeclabAddon._top_level_names(http.Response.make(200, json.dumps(doc, ensure_ascii=False).encode()))
+    assert names.count("[unusual-name]") == 5 and names.count("[token-shaped]") == 1
+    assert {"login", "quota_snapshots", "access-type"} <= set(names) and len(names) == len(doc)
+    assert not [n for n in names if n not in ("login", "quota_snapshots", "access-type", "[unusual-name]",
+                                              "[token-shaped]")]
+    assert SeclabAddon._top_level_names(http.Response.make(200, b"[1]")) is None
+
+
 def test_r11b_backstop_data_is_checked_when_a_policy_loads(monkeypatch):
     import seclab_broker.policy as policy
     called = []
