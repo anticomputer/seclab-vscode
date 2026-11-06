@@ -25,14 +25,15 @@ from supplychain import (BROKER, SupplyChainError, install_targets, norm, parse_
                          requirement_files, self_test)
 
 
-def source_drift(req, locked: dict[str, str], required: bool = False) -> list[str]:
+def source_drift(req, locked: dict[str, str], source=None) -> list[str]:
     """A lock's pip-compile source (requirements.txt <- requirements.in) must pin the same
     versions, or the next recompile silently undoes a re-pin. The pairing is registered in
-    broker/deps.json `lockSources` (`required`), not inferred from the lock's own comments;
-    a lock with `# via` annotations also needs its source. The source must pin something,
-    and every direct requirement (`via -r <source>`) must be pinned there. Only
-    `name==version` lines are allowed."""
-    src = req.with_suffix(".in")
+    broker/deps.json `lockSources` (`source`, the registered path, required), not inferred
+    from the lock's own comments; an unregistered lock with `# via` annotations also needs a
+    sibling `.in`. The source must pin something, and every direct requirement
+    (`via -r <source>`) must be pinned there. Only `name==version` lines are allowed."""
+    required = source is not None
+    src = source if required else req.with_suffix(".in")
     text = req.read_text()
     direct, cur = set(), None
     for raw in text.splitlines():
@@ -89,8 +90,9 @@ def main() -> int:
                 errors.append(f"{rel(req)}:{n}: {name}=={version} is not in broker/deps.json")
         if req.resolve() not in targets:
             errors.append(f"{rel(req)}: not installed by any Dockerfile (its target interpreter is unknown)")
+        reg = lock_sources.get(rel(req))
         errors += source_drift(req, {name: version for _, name, version, _ in pins},
-                               required=rel(req) in lock_sources)
+                               source=(BROKER.parent / reg) if reg else None)
     for lock, src in lock_sources.items():
         if not (BROKER.parent / lock).exists() or not (BROKER.parent / src).exists():
             errors.append(f"broker/deps.json lockSources: {lock} <- {src}: missing file")

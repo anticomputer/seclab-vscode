@@ -300,22 +300,38 @@ def test_github_remote_mcp_is_denied_until_a_tab_grant(pod, ctl):
 
 def test_org_policy_gets_are_narrow_and_their_responses_checked(pod, ctl):
     """User decision: exactly GET /copilot_internal/{managed_settings,team_customizations,
-    content_exclusion}, with the same checks as /user. A rogue upstream's token-shaped value
-    or credential-named key is blocked and audited; the tab never sees it."""
+    content_exclusion}, with the same checks as /user, and (secure-agentic review) strict
+    allowlists: any unlisted top-level key blocks. managed_settings passes in its public shape
+    with the OTLP headers map dropped; the other two pass only as {} until their shapes are
+    known. A token-shaped value, a credential-named key or URL userinfo is blocked and audited;
+    the tab never sees it."""
     s = load_gh(pod, ctl)
     auth = ["-H", f"Authorization: Bearer {s}"]
+    url = "https://api.example.test/copilot_internal/managed_settings"
+    mark = ctl.mark()
+    r = pod.curl(url, *auth)
+    doc = r.json()
+    assert r.code == 200 and doc["permissions"]["deny"] and doc["telemetry"]["endpoint"], r.body
+    assert "headers" not in doc["telemetry"] and "fake-otlp-credential" not in r.body
+    e = ctl.wait_note("audit.event", lambda e: e["type"] == "credential.backstop_exception_filtered", since=mark, timeout=10)
+    assert e["detail"] == "telemetry.headers"
+    mark = ctl.mark()
+    for mode in ("token-value", "url-userinfo", "unlisted"):
+        r = pod.curl(url, *auth, "-H", f"X-Fixture: {mode}")
+        assert r.code == 502 and "ghu_" not in r.body and "fake-pass" not in r.body, (mode, r.body)
+    for name in ORG[1:]:
+        u = f"https://api.example.test/copilot_internal/{name}"
+        r = pod.curl(u, *auth)
+        assert r.code == 200 and r.json() == {}, (name, r.body)
+        for mode in ("unlisted", "token-field"):
+            r = pod.curl(u, *auth, "-H", f"X-Fixture: {mode}")
+            assert r.code == 502 and "opaque" not in r.body, (name, mode)
+    found = [e for e in ctl.notes_since(mark, "audit.event") if e["type"] == "credential.backstop_exception_blocked"]
+    assert len(found) == 7
     for name in ORG:
-        url = f"https://api.example.test/copilot_internal/{name}"
-        r = pod.curl(url, *auth)
-        assert r.code == 200 and r.json()["rules"][0]["source"] == "org", (name, r.body)
-        mark = ctl.mark()
-        for mode in ("token-value", "token-field"):
-            r = pod.curl(url, *auth, "-H", f"X-Fixture: {mode}")
-            assert r.code == 502 and "ghu_" not in r.body and "opaque" not in r.body, (name, mode)
-        found = [e for e in ctl.notes_since(mark, "audit.event") if e["type"] == "credential.backstop_exception_blocked"]
-        assert len(found) == 2
-        assert pod.curl(url + "?org=x", *auth).code == 403
-        assert pod.curl(url, *auth, "-X", "POST", "-d", "{}").code == 403
+        u = f"https://api.example.test/copilot_internal/{name}"
+        assert pod.curl(u + "?org=x", *auth).code == 403
+        assert pod.curl(u, *auth, "-X", "POST", "-d", "{}").code == 403
     assert pod.curl("https://api.example.test/copilot_internal/v2/token", *auth).code == 403
 
 

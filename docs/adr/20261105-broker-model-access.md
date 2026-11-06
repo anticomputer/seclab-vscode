@@ -15,7 +15,7 @@
   - [ADR no real secret enters a tab](20261104-no-real-secret-enters-a-tab.md):
     a derived credential can be bound beyond its parent, but only by a
     controller-declared rule.
-- **Related:** [plan §4](../plans/secure-agentic-experiences.md#4-model-and-credential-access), [EDR agents-in-tab spike](../edr/20261105-agents-in-tab-spike.md), [security review](../security-reviews/20261105-broker-model-access.md), [security review: backstop exceptions](../security-reviews/20261105-broker-backstop-exceptions.md)
+- **Related:** [plan §4](../plans/secure-agentic-experiences.md#4-model-and-credential-access), [EDR agents-in-tab spike](../edr/20261105-agents-in-tab-spike.md), [security review](../security-reviews/20261105-broker-model-access.md), [security review: backstop exceptions](../security-reviews/20261105-broker-backstop-exceptions.md), [security review: measured Copilot traffic](../security-reviews/20261105-broker-measured-copilot-traffic.md)
 
 ## Context
 Agents run inside the tab. Their model calls go out through the tab's broker,
@@ -227,10 +227,31 @@ API model endpoints by exact path and method").
 same strict checks as /user").
 - They are `exceptions` in `providers/github.json`: exact method and path, no
   query, body or upgrade.
-- The response must be a strict JSON object with no credential-named key and
-  no token-shaped value.
-- Their fields are unmeasured: the fixture saw no real response. So they have
-  no field allowlist: every key and value is checked, and nothing is dropped.
+- The response must be a strict JSON object with no credential-named key, no
+  token-shaped key or value, and no URL userinfo (`user:secret@`, or a token
+  as the user).
+- **Strict field allowlists** (secure-agentic review): any top-level key off
+  the list blocks the response as a finding, rather than relying on a
+  pattern.
+  - `managed_settings` lists the top-level keys of `IManagedSettingsResponse`
+    ([`managedSettings.ts` L40-85, L118-122](https://github.com/microsoft/vscode/blob/a717861c/src/vs/workbench/services/accounts/browser/managedSettings.ts#L40-L122)):
+    it is the enterprise's `.github/copilot/settings.json`.
+  - Its `telemetry.headers` is a free-form map that carries an OTLP
+    endpoint's credentials. The key-name pattern can't see them (the key is
+    a header name such as `Authorization`), so it is always dropped and
+    audited (`dropPaths`). The org's restrictions (permissions, MCP and plugin
+    allowlists) still reach the runtime.
+  - `team_customizations` and `content_exclusion` have no public or measured
+    shape. Their allowlist is empty, so only `{}` passes, and anything else is
+    blocked as a finding until the shape is known. In practice they stay
+    unavailable to the tab until then, as they were before this amendment.
+- **Queries are still refused,** but the shipped runtime's binary contains
+  `/copilot_internal/managed_settings?` and
+  `/copilot_internal/content_exclusion?` (secure-agentic, static evidence).
+  Those two may carry a query, and would then still be denied. Request audit
+  events now carry `queryKeys` (names only, never values), so the next spike
+  run measures the real names. An allowlist of query key names comes after
+  that, with the values treated as untrusted data.
 - Denying them silently dropped an enterprise's Copilot content exclusions,
   which is a policy regression, not a leak.
 
@@ -248,10 +269,27 @@ The order matters:
    `credential.backstop_exception_filtered`, a finding.
 
 So a rogue upstream still fails loudly, and a benign new field degrades the
-tab gracefully instead of breaking Copilot. Two measured false positives,
-`token_based_billing` and `cloud_session_storage_enabled` (`benignKeys`),
-pass the credential-name check by exact name only. Token-shaped values are
+tab gracefully instead of breaking Copilot. Three measured false positives
+pass the credential-name check only at their exact JSON paths
+(`benignKeys`): `$.token_based_billing`, `$.cloud_session_storage_enabled`
+and `$.quota_snapshots.*.token_based_billing`. Token-shaped values are
 refused everywhere.
+
+On any exception route:
+- a bodiless response (204, 304) passes after the header and trailer checks;
+- an error body gets every check except the field allowlist;
+- headers and HTTP/2 trailers are checked alike (review 11-2).
+
+**Residual: opaque credentials.** The value checks only recognise known token
+shapes (`find_minted`) and URL userinfo. An upstream that deliberately
+returns an opaque, prefix-less secret under an innocuous key, inside an
+allowlisted field, reaches the tab. The controls against that are:
+- the credential-name heuristic;
+- the field allowlists (strict on the org-policy routes);
+- `dropPaths` for known free-form secret maps.
+
+They are not detection of the value itself (review 11-6). The upstream here
+is GitHub's own API, reached with the user's credential.
 
 **GitHub's remote MCP server is denied by default** (coordinator decision).
 - `POST <capi>/mcp/readonly` is JSON-RPC to an MCP server that acts on the
@@ -281,6 +319,34 @@ reverses "Per-endpoint field lists: deferred" below).
   provider, so it can't make the provider a relay. Server-side types (web
   search, file search, code interpreter, MCP, computer use, image generation,
   versioned Anthropic server tools) stay denied.
+
+**Each widening, against what it does on the server** (secure-agentic review).
+The GitHub token on model traffic is the durable credential, so these lists
+are the main limit on what a rogue tab can send with it. Each item below
+reads only the request body, and none fetches, executes or stores anything
+outside the provider's own inference. The remote-content check (no fetchable
+URLs at any depth outside `tools`) still applies to all of them.
+- **`POST /v1/messages`** is Anthropic's Messages API, served by CAPI. It is
+  inference on the body, like `/chat/completions`. Its relay surfaces are
+  server tools (versioned `type`s) and the `mcp_servers` and `container`
+  fields. Server tools are refused (untyped tools only count as `custom`),
+  and the two fields are not on the list.
+- **`custom` with a `grammar` format.** See above. The grammar (Lark or regex
+  text) constrains decoding on the server, with no I/O.
+- **`snippy: {enabled}`** (`/chat/completions` only) switches on Copilot's
+  public-code matching filter for the completion. It is a boolean the client
+  sets
+  ([`networking.ts` L84](https://github.com/microsoft/vscode/blob/a717861c/extensions/copilot/src/platform/networking/common/networking.ts#L84)).
+  When it fires, the server filters or flags the output; the client may
+  retry. It names no resource and only ever withholds output.
+- **`system`** (`/v1/messages` only) holds the system prompt: text blocks
+  that are inference input like `messages`, under the same content checks.
+- **`thinking: {type, budget_tokens, display}`** (`/v1/messages` only) sets
+  the extended-reasoning budget and how reasoning is returned. It costs
+  tokens, bounded by the tab's model budget, and reaches nothing else.
+- **Remaining residual:** with these fields a tab can spend the user's
+  Copilot quota on inference of its choosing, up to the per-tab model
+  budget. It can't make the provider fetch, run or store anything for it.
 
 **The github.com route** (the coordinator asked for this to be confirmed
 before calling it verified).

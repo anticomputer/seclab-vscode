@@ -206,10 +206,17 @@ class RequestView:
         return (self.scheme, self.host, self.port)
 
     def summary(self) -> dict:
-        """For audit and prompts. Tab-controlled: host, method, path (percent-encoded ASCII)."""
+        """For audit and prompts. Tab-controlled: host, method, path (percent-encoded ASCII),
+        and the query's key names (percent-encoded, deduplicated, capped; values never)."""
+        import urllib.parse
         from .untrusted import display_path
-        return {"scheme": self.scheme, "host": self.host[:253], "port": self.port,
-                "method": self.method, "path": display_path(self.path)}
+        out = {"scheme": self.scheme, "host": self.host[:253], "port": self.port,
+               "method": self.method, "path": display_path(self.path)}
+        if self.query:
+            keys = sorted({urllib.parse.quote(k, safe="")[:64]
+                           for k, _ in urllib.parse.parse_qsl(self.query, keep_blank_values=True)})
+            out["queryKeys"] = keys[:32]
+        return out
 
 
 # --------------------------------------------------------------------------
@@ -610,16 +617,26 @@ class BackstopException:
     exact path (case-sensitive, no trailing-slash variant), with no body, query or upgrade.
     Its response is held to the no-credential-fields check in the engine.
 
-    `response_fields`: when set, the response's top-level fields allowed through; others are
-    dropped (and audited) after the whole document has passed the check. `benign_keys`:
-    exact key names the credential-name check accepts (measured false positives such as
-    `token_based_billing`); token-shaped values are refused everywhere regardless."""
+    `response_fields`: when set, the response's top-level fields allowed. With `strict_fields`
+    any other top-level field blocks the response (a finding); without, others are dropped
+    (and audited) after the whole document has passed the check. `drop_paths`: dotted paths
+    to free-form maps that may carry a third party's credential (e.g. OTLP headers), always
+    dropped (and audited). `benign_keys`: exact key names the credential-name check accepts
+    (measured false positives such as `token_based_billing`); token-shaped values and URL
+    userinfo are refused everywhere regardless."""
     provider: str
     method: str
     path: str
     reason: str
     response_fields: frozenset[str] | None = None
     benign_keys: frozenset[str] = frozenset()
+    strict_fields: bool = False
+    drop_paths: tuple[tuple[str, ...], ...] = ()
+
+    def is_benign(self, json_path: str) -> bool:
+        """`benign_keys` are exact JSON paths (`$.a`, `$.a.*.b`; `*` is one object key), so a
+        benign name is accepted only where it was measured (review 11-3)."""
+        return any(re.fullmatch(re.escape(p).replace(r"\*", r"[^.\[\]]+"), json_path) for p in self.benign_keys)
 
     def matches(self, req: RequestView, prefixes: tuple[str, ...]) -> bool:
         return req.method == self.method and not req.query and any(req.path == p + self.path for p in prefixes)
@@ -634,11 +651,35 @@ class Provider:
     exceptions: tuple[BackstopException, ...] = ()
 
 
+_BACKSTOP_KEYS = {"provider", "description", "source", "hosts", "pathPrefixes", "exceptions", "deny"}
+_EXCEPTION_KEYS = {"method", "path", "reason", "responseFields", "benignKeys", "strictFields", "dropPaths"}
+_DENY_KEYS = {"methods", "path", "reason"}
+
+
+def _check_backstop_file(name: str, d: dict) -> None:
+    """Shipped provider data is a security control: an unknown or misspelt key (say
+    `responseField`) must fail at load rather than silently disable a check (review 11-1)."""
+    def bad(where: str, obj: Any, allowed: set[str], required: set[str]) -> None:
+        if not isinstance(obj, dict) or set(obj) - allowed or required - set(obj):
+            raise PolicyError(f"providers/{name}: malformed {where}")
+    bad("file", d, _BACKSTOP_KEYS, {"provider", "hosts", "deny"})
+    for e in d.get("exceptions", []):
+        bad("exception", e, _EXCEPTION_KEYS, {"method", "path", "reason"})
+        if e.get("dropPaths") and "responseFields" not in e or e.get("strictFields") and "responseFields" not in e:
+            raise PolicyError(f"providers/{name}: strictFields/dropPaths need responseFields")
+        for k in ("responseFields", "benignKeys", "dropPaths"):
+            if k in e and not (isinstance(e[k], list) and all(isinstance(x, str) and x for x in e[k])):
+                raise PolicyError(f"providers/{name}: {k} must be a list of names")
+    for e in d["deny"]:
+        bad("deny entry", e, _DENY_KEYS, _DENY_KEYS)
+
+
 @lru_cache(maxsize=1)
 def providers() -> dict[str, Provider]:
     out = {}
     for f in sorted((DATA_DIR / "providers").glob("*.json")):
         d = json.loads(f.read_text())
+        _check_backstop_file(f.name, d)
         out[d["provider"]] = Provider(
             name=d["provider"],
             hosts=tuple(_parse_host_pattern(h) for h in d["hosts"]),
@@ -648,7 +689,8 @@ def providers() -> dict[str, Provider]:
             exceptions=tuple(BackstopException(
                 d["provider"], e["method"], e["path"], e["reason"],
                 frozenset(e["responseFields"]) if "responseFields" in e else None,
-                frozenset(e.get("benignKeys", []))) for e in d.get("exceptions", [])),
+                frozenset(e.get("benignKeys", [])), bool(e.get("strictFields", False)),
+                tuple(tuple(p.split(".")) for p in e.get("dropPaths", []))) for e in d.get("exceptions", [])),
         )
     return out
 

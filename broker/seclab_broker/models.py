@@ -57,6 +57,24 @@ class Endpoint:
         return method in self.methods and compile_glob(self.path).fullmatch(path) is not None
 
 
+def _hosts_overlap(a: HostPattern, b: HostPattern) -> bool:
+    """Could one host match both patterns? (`*.x` covers every strict subdomain of x.)"""
+    def probe(p: HostPattern) -> str:
+        return "z." + p.text[2:] if p.text.startswith("*.") else p.text
+    return a.matches(probe(b)) or b.matches(probe(a)) or a.text == b.text
+
+
+def _check_endpoint_order(pid: str, endpoints: tuple["Endpoint", ...]) -> None:
+    """Endpoint selection is first match, so a grant-only endpoint must not be reachable
+    through an earlier, looser one (review 11-5)."""
+    for i, e in enumerate(endpoints):
+        if not e.requires_grant:
+            continue
+        for f in endpoints[:i]:
+            if set(f.methods) & set(e.methods) and compile_glob(f.path).fullmatch(e.path.replace("*", "x")):
+                raise PolicyError(f"model provider {pid!r}: endpoint {f.path!r} shadows grant-only {e.path!r}")
+
+
 @dataclass(frozen=True)
 class Provider:
     id: str
@@ -71,10 +89,12 @@ class Provider:
 
     @classmethod
     def from_json(cls, obj: dict) -> "Provider":
+        endpoints = tuple(Endpoint.from_json(e) for e in obj["endpoints"])
+        _check_endpoint_order(obj["id"], endpoints)
         return cls(
             id=obj["id"],
             hosts=tuple(_parse_host_pattern(h) for h in obj["hosts"]),
-            endpoints=tuple(Endpoint.from_json(e) for e in obj["endpoints"]),
+            endpoints=endpoints,
             fields=frozenset(obj["fields"]),
             tool_fields=tuple(obj.get("toolFields", ["tools"])),
             tool_types=frozenset(obj.get("toolTypes", [])),
@@ -126,6 +146,11 @@ class ModelPolicy:
         ids = [p.id for p in providers]
         if len(ids) != len(set(ids)):
             raise PolicyError("duplicate model provider id")
+        for i, a in enumerate(providers):
+            for b in providers[i + 1:]:
+                if any(_hosts_overlap(x, y) for x in a.hosts for y in b.hosts):
+                    # First match would decide which body policy applies (review 11-5).
+                    raise PolicyError(f"model providers {a.id!r} and {b.id!r} claim overlapping hosts")
         raw = obj.get("grants", [])
         grants = frozenset((g["provider"], g["toolType"]) for g in raw if "toolType" in g)
         endpoint_grants = frozenset((g["provider"], g["endpoint"]) for g in raw if "endpoint" in g)
@@ -147,7 +172,14 @@ class ModelPolicy:
 
 @lru_cache(maxsize=1)
 def builtin_providers() -> dict[str, dict]:
+    """The shipped providers, each validated against the policy schema's `modelProvider`
+    (review round 11-1): a misspelt key such as `requiresGrant` must fail at load, not
+    silently open an endpoint."""
+    from .policy import validate_fragment
     data = json.loads((DATA_DIR / "model-providers.v1.json").read_text())
+    for p in data["providers"]:
+        validate_fragment("modelProvider", p)
+        Provider.from_json(p)  # endpoint-level checks (requiresGrant needs id, shadowing)
     return {p["id"]: p for p in data["providers"]}
 
 
