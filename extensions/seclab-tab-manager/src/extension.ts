@@ -15,6 +15,7 @@ import type { ObsEvent } from '../tabd-src/obs/schema.ts';
 import { TabActivity } from './activity.ts';
 import { DetectionsSummary } from './detections.ts';
 import { DetectionNotifier } from './notifications.ts';
+import { EgressPrompts } from './prompts.ts';
 import { WriteBackReview } from './writeback.ts';
 
 const AUTHORITY_PREFIX = 'seclab';
@@ -34,6 +35,7 @@ let activity: TabActivity | undefined;
 let writeBack: WriteBackReview | undefined;
 let notifier: DetectionNotifier | undefined;
 let summary: DetectionsSummary | undefined;
+let prompts: EgressPrompts | undefined;
 /** Tabs whose broker reported `capabilities.denyRules` (tab.get → broker). */
 const blockable = new Set<string>();
 
@@ -58,6 +60,13 @@ export function activate(context: vscode.ExtensionContext): void {
 	activity = new TabActivity(context);
 	// Write-back review (ADR write-back-gate): held changes, decisions, "not gated" notice.
 	writeBack = new WriteBackReview(context, getClient, currentTabId(), log);
+	// Broker prompts (EDR egress-prompts): this window's tab asks; user activity opens its gate.
+	prompts = new EgressPrompts(getClient, tabId => tabId === currentTabId() ? (vscode.workspace.workspaceFolders?.[0]?.name ?? tabId) : tabId, log);
+	context.subscriptions.push(prompts);
+	const here = currentTabId();
+	if (here) {
+		prompts.watchUserActivity(here);
+	}
 	// Detection notifications for this window's tab, and the cross-tab summary (ADR detection notifications).
 	notifier = new DetectionNotifier(context, {
 		getClient, currentTabId, log,
@@ -138,7 +147,7 @@ function getClient(): Promise<TabdClient> {
 			clientReady = undefined;
 			activity?.detach();
 		});
-		const init = await c.initialize('seclab-tab-manager', '0.1.0');
+		const init = await c.initialize('seclab-tab-manager', '0.1.0', { approvals: true });
 		log.info(`seclab-tabd ${init.protocolVersion}; drivers ${JSON.stringify(init.drivers)}`);
 		client = c;
 		return c;
@@ -161,6 +170,14 @@ function onNotification(method: string, params: Record<string, unknown>): void {
 	}
 	if (method === 'tab.writeback.pending') {
 		writeBack?.onPending(params);
+		return;
+	}
+	if (method === 'tab.approval') {
+		prompts?.onApproval(params);
+		return;
+	}
+	if (method === 'tab.approval.resolved') {
+		prompts?.onResolved(params);
 		return;
 	}
 	if (method === 'tab.status') {

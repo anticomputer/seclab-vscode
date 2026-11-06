@@ -6,6 +6,9 @@
 // Everything in an approval is broker-relayed, tab-influenced data: it is validated, capped and
 // passed on as data, never interpreted.
 
+import { INTEGRITY_WORDS, quote } from './obs/notify.ts';
+import type { Integrity } from './obs/schema.ts';
+
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 
 export const DECISIONS = ['allow-once', 'allow-tab', 'deny', 'deny-new-destinations'] as const;
@@ -122,3 +125,45 @@ export class Approvals {
 }
 
 export const asJson = (a: ApprovalView): Json => a as unknown as Json;
+
+const FLAG_WORDS: Readonly<Record<string, string>> = {
+	'early-after-open': 'right after the folder opened',
+	'no-user-action-yet': 'before you did anything in this tab',
+	'raw-ip': 'to a raw IP address',
+	'ip-in-hostname': 'to an IP address hidden in a host name',
+	'cleartext': 'unencrypted (http)',
+	'nonstandard-port': 'on an unusual port',
+};
+
+/** Prompt buttons, deny first; "allow for this tab" last (and never pre-selected). */
+export const DECISION_LABELS: ReadonlyArray<readonly [Decision, string]> = [
+	['deny', 'Deny'],
+	['deny-new-destinations', 'Deny All New Destinations'],
+	['allow-once', 'Allow Once'],
+	['allow-tab', 'Allow for This Tab'],
+];
+
+/**
+ * The prompt's text: the tab first, the destination prominent, the risk, and the process lineage
+ * as quoted data. Every tab-influenced string goes through `quote` (no links, icons, controls).
+ */
+export function approvalPromptText(tabName: string, a: ApprovalView, lineage: { confidence?: string; chain?: string; integrity?: Integrity } | undefined): string {
+	const dest = `${quote(a.request.host, 120)}${a.request.port === 443 || a.request.port === 80 ? '' : `:${a.request.port}`}`;
+	const what = a.kind === 'credential-binding'
+		? `wants to send credential ${quote(a.credentialId ?? '?', 40)} to ${dest}`
+		: `wants to connect to ${dest}`;
+	const parts = [`Tab ${quote(tabName, 60)} ${what} (${quote(`${a.request.method} ${a.request.path}`, 80)}).`];
+	const flags = a.risk.flags.map(f => FLAG_WORDS[f] ?? (f.startsWith('risky-destination:') ? `to a risky destination (${quote(f.slice(18), 30)})` : quote(f, 30)));
+	if (flags.length) {
+		parts.push(`Asked ${flags.join(', ')}.`);
+	}
+	if (a.risk.origin) {
+		parts.push(`The tab labels it ${quote(a.risk.origin, 60)} (unverified).`);
+	}
+	// promptLineage confidence: single | ambiguous | none. Shown as data, never used to decide.
+	if (lineage?.chain && lineage.integrity && INTEGRITY_WORDS[lineage.integrity] && lineage.confidence !== 'none') {
+		parts.push(`Process: ${quote(lineage.chain, 120)} (${INTEGRITY_WORDS[lineage.integrity]}${lineage.confidence === 'ambiguous' ? '; ambiguous, may be another process' : ''}).`);
+	}
+	parts.push('Ignoring this denies it.');
+	return parts.join(' ');
+}

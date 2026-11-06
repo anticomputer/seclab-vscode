@@ -117,8 +117,9 @@ export class TabdClient extends EventEmitter {
 		this.send(encodeJson({ jsonrpc: '2.0', method, params }));
 	}
 
-	initialize(name: string, version: string) {
-		return this.request<{ protocolVersion: string; drivers: unknown[] }>('initialize', { protocolVersion: CLIENT_PROTOCOL_VERSION, client: { name, version } });
+	/** `capabilities.approvals`: this client shows broker prompts (the Tab Manager; B3). */
+	initialize(name: string, version: string, capabilities?: { approvals?: boolean }) {
+		return this.request<{ protocolVersion: string; drivers: unknown[] }>('initialize', { protocolVersion: CLIENT_PROTOCOL_VERSION, client: { name, version, ...(capabilities ? { capabilities } : {}) } });
 	}
 
 	/** Connect to a tab's REH. Register listeners synchronously on the returned channel. */
