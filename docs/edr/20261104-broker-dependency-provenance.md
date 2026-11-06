@@ -166,10 +166,17 @@ local image it runs.
     files:
     - `git stash create` records the working tree without touching any ref,
       index or file;
-    - `git archive` extracts it into a fresh `.work/` directory, which is
-      removed on exit.
-  - `-dirty` is decided from that same snapshot, so nothing outside it can
-    ship and an edit made mid-build can't ship under a clean label.
+    - the context is written into a fresh `.work/` directory from the git
+      objects themselves (`git cat-file blob`, no filters), and removed on
+      exit. Committed `.gitattributes` can't change it, and anything but
+      files and symlinks fails the build.
+  - The snapshot is taken first. `-dirty`, the base-digest check, the labels,
+    `pybuild.sh` and `verify-images.sh` all come from it, so nothing outside
+    it can ship and an edit made mid-build can't ship under a clean label.
+  - Untracked files, and index entries marked assume-unchanged or
+    skip-worktree (which hide edits from `git status`), also mark the build
+    `-dirty`. This follows security review round 10
+    ([record](../security-reviews/20261105-broker-repin-and-image-snapshot.md)).
   - Counting ignored files instead (`git status --ignored`) would mark nearly
     every local build dirty, because tests leave `__pycache__` in `broker/`.
 - **tabd side.**
@@ -243,7 +250,10 @@ local image it runs.
     2.22.2 itself fixes a schema-controlled code injection, so we must not
     go below it.
   - **`dnspython` 2.9.1 has a known high advisory,**
-    [GHSA-vvf4-9x63-8xvv](https://github.com/advisories/GHSA-vvf4-9x63-8xvv):
+    [GHSA-vvf4-9x63-8xvv](https://github.com/rthalley/dnspython/security/advisories/GHSA-vvf4-9x63-8xvv)
+    (a repository advisory, published 2026-11-04; not yet in the global
+    advisory database or OSV, and no CVE yet; see also the
+    [v2.9.2 release notes](https://github.com/rthalley/dnspython/releases/tag/v2.9.2)):
     a malicious WKS record in text format exhausts memory and CPU. It's fixed
     only in 2.9.2, which was still in the hold. It is accepted until 2.9.2
     clears the hold (about 2026-11-10), because the verifier can't reach it:
