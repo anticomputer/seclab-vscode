@@ -90,8 +90,9 @@ broker/docs-check.sh
   sets `CI`, which selects `public`. Override either way with
   `SECLAB_PIP_SOURCE=cfs|public`. Never call `docker build` directly for these
   images, and never fall back to public PyPI locally.
-- A pin younger than CFS's 7-day hold fails locally until the hold ends. That
-  is expected; see the provenance EDR.
+- Pin only versions CFS serves, i.e. at least 7 days old; a younger pin
+  can't build locally. A version too new for CFS that carries a security fix
+  is noted in the provenance EDR and bumped once it clears the hold.
 
 Regenerate generated doc sections after changing the protocol, schema, data,
 examples or capabilities:
