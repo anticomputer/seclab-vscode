@@ -5,7 +5,6 @@
 // These assert the marks against teardown's real rules, so the next drift fails `test unit`.
 
 import assert from 'node:assert/strict';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
 import { manifestProblems } from '../../containment/teardown.ts';
@@ -13,7 +12,11 @@ import { repoRoot } from '../../harness.ts';
 import { armSpawn, beaconSpawn } from '../runner/marks.ts';
 
 const base = path.join(repoRoot, '.work', 'agentic-runner');
-const userData = path.join(os.homedir(), '.seclab-test', 'ahp');
+// `.work/`, not `~/.seclab-test/`: the isolated-profile check resolves the deepest existing
+// ancestor, so a home root that does not exist (the unit tests run in a container, where it
+// never does) made the deepest ancestor `$HOME` and failed the check. Both are accepted
+// roots, and this one is always present.
+const userData = path.join(repoRoot, '.work', 'agentic-runner-ud');
 const beacon = beaconSpawn(repoRoot, path.join(base, 'beacon.log'), 18099);
 const arm = armSpawn(path.join(repoRoot, 'test', 'agentic', 'runner', 'runner.ts'), userData, 'sbx', base);
 
