@@ -213,7 +213,7 @@ new file mode 100644
 index 0000000..02f6036
 --- /dev/null
 +++ b/src/vs/platform/windows/electron-main/backgroundWindowsGuard.ts
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,128 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -227,6 +227,11 @@ index 0000000..02f6036
 +// native host) cover what VS Code calls directly; this covers Electron itself, where activation
 +// hides: on macOS NativeWindowMac::Show() and WebContents::Focus() (via owner_window->Focus(true))
 +// both call activateIgnoringOtherApps, and a dialog without a parent window runs app-modal.
++// And the user's own clicks: showInactive orders a window in front of the user's windows
++// without activating the app, so the user's next click on that spot landed on it and the
++// WindowServer made the editor frontmost (2026-11-06, seen in the unified log as
++// PostFilteredEventTapData "Making ... the front process"). So every window is click-through,
++// and dialogs (sheets are separate windows a click can reach) give their safe answer instead.
 +// If it can't be installed, the process exits: an unguarded background run is not allowed.
 +
 +type Fn = (...args: unknown[]) => unknown;
@@ -245,10 +250,6 @@ index 0000000..02f6036
 +/** A window of ours has keyboard focus: the user activated the app, so focus calls are theirs. */
 +function appActive(): boolean {
 +	return BrowserWindow.getFocusedWindow() !== null;
-+}
-+
-+function dialogParent(): BrowserWindow | undefined {
-+	return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows().find(w => !w.isDestroyed() && w.isVisible());
 +}
 +
 +export function installBackgroundWindowsGuard(): void {
@@ -270,8 +271,23 @@ index 0000000..02f6036
 +					replace(proto, name, orig => function (this: BaseWindow, flag: unknown) { return flag ? undefined : orig.call(this, flag); });
 +				}
 +			}
++			// Click-through, and nothing can turn it off.
++			if (Object.prototype.hasOwnProperty.call(proto, 'setIgnoreMouseEvents') || proto === BaseWindow.prototype) {
++				replace(proto, 'setIgnoreMouseEvents', orig => function (this: BaseWindow, _ignore: unknown, options?: unknown) { return orig.call(this, true, options); });
++			}
 +		}
 +		replace(app, 'focus', () => () => undefined);
++		// Every window (workbench and auxiliary) is click-through from creation, before it is
++		// shown. The line on stderr is what the focus probe checks (test/focus/probe.ts).
++		app.on('browser-window-created', (_event, win: BrowserWindow) => {
++			try {
++				win.setIgnoreMouseEvents(true);
++				console.error(`[background windows] window ${win.id} is click-through`);
++			} catch (error) {
++				console.error(String(error));
++				app.exit(1);
++			}
++		});
 +
 +		// WebContents has no exported class: patch its prototype from the first instance. A failure
 +		// here must stop the app too, not just log (review AAA-2). DevTools open with
@@ -301,29 +317,20 @@ index 0000000..02f6036
 +			}
 +		});
 +
-+		// Dialogs: always attached to a window (a sheet); with no window to attach to, cancelled
-+		// rather than run app-modal.
-+		const cancelled = (name: string, options: { cancelId?: number } | undefined) =>
-+			name.startsWith('showMessageBox') ? { response: options?.cancelId ?? 0, checkboxChecked: false } : { canceled: true, filePaths: [], filePath: '' };
++		// Dialogs: never shown (a sheet is its own window, which a click can reach, and an app-
++		// modal one activates the app). Each gives its safe answer: a message box its cancelId
++		// (VS Code always sets one; review AAA), a file dialog "canceled". Logged on stderr.
++		const cancelled = (name: string, options: { cancelId?: number; message?: unknown } | undefined) => {
++			console.error(`[background windows] dialog not shown (${name}): ${String(options?.message ?? '').slice(0, 200)}`);
++			return name.startsWith('showMessageBox') ? { response: options?.cancelId ?? 0, checkboxChecked: false } : { canceled: true, filePaths: [], filePath: '' };
++		};
++		const optionsOf = (a: unknown, b?: unknown) => (a instanceof BaseWindow ? b : a) as MessageBoxOptions & OpenDialogOptions & SaveDialogOptions;
 +		for (const name of ['showMessageBox', 'showOpenDialog', 'showSaveDialog']) {
-+			replace(dialog, name, orig => (a: unknown, b?: unknown) => {
-+				if (a instanceof BaseWindow) {
-+					return orig(a, b);
-+				}
-+				const parent = dialogParent();
-+				return parent ? orig(parent, a) : Promise.resolve(cancelled(name, a as MessageBoxOptions & OpenDialogOptions & SaveDialogOptions));
-+			});
++			replace(dialog, name, () => (a: unknown, b?: unknown) => Promise.resolve(cancelled(name, optionsOf(a, b))));
 +		}
 +		for (const name of ['showMessageBoxSync', 'showOpenDialogSync', 'showSaveDialogSync']) {
-+			replace(dialog, name, orig => (a: unknown, b?: unknown) => {
-+				if (a instanceof BaseWindow) {
-+					return orig(a, b);
-+				}
-+				const parent = dialogParent();
-+				if (parent) {
-+					return orig(parent, a);
-+				}
-+				const c = cancelled(name, a as MessageBoxOptions);
++			replace(dialog, name, () => (a: unknown, b?: unknown) => {
++				const c = cancelled(name, optionsOf(a, b));
 +				return 'response' in c ? c.response : undefined;
 +			});
 +		}
