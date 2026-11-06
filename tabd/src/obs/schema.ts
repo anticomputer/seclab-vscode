@@ -46,7 +46,7 @@ export const CLASSES = {
 	'egress.request': { ocsf: 4002, desc: 'Broker allowed, denied or blocked a request.' },
 	'egress.approval': { ocsf: 4002, desc: 'Broker prompt opened or resolved.' },
 	'credential.use': { ocsf: 3002, desc: 'Broker credential event (never a value).' },
-	'egress.attribution': { ocsf: 4001, desc: 'The process that probably made a broker request: the connect to the broker closest in time (`confidence` single, ambiguous or none). Integrity is the weakest of the broker event and the sensor connect.' },
+	'egress.attribution': { ocsf: 4001, desc: 'The process that made a broker request: under OCI the connect whose source port is the broker\'s `clientPort` (`confidence` exact, `detail.joinedBy: client-port`), else the connect to the broker closest in time (single, ambiguous or none). Integrity is the weakest of the broker event and the sensor connect.' },
 	'model.call': { ocsf: 6003, desc: 'Broker model-host call summary, body-policy denial or budget denial (sizes, status, provider; never bodies).' },
 	'broker.status': { ocsf: 6002, desc: 'Broker lifecycle, policy and control events.' },
 	'rpc.decision': { ocsf: 6003, desc: 'RPC capability filter verdict.' },
@@ -105,7 +105,7 @@ export interface ObsEvent {
 	rule?: string;
 	proc?: ProcInfo;
 	file?: { path: string; op?: string };
-	net?: { addr: string; port?: number; family?: 'inet' | 'inet6' | 'unix' | 'other'; result?: string; proto?: 'tcp' | 'udp' };
+	net?: { addr: string; port?: number; family?: 'inet' | 'inet6' | 'unix' | 'other'; result?: string; proto?: 'tcp' | 'udp'; localPort?: number };
 	detail?: Record<string, string | number | boolean>;
 	cause?: number[];
 	sensorTime?: string;
@@ -128,7 +128,7 @@ export class EventError extends Error { }
  */
 const VOCAB_DETAIL_KEYS = new Set(['action', 'outcome', 'status', 'mode', 'sensor', 'stream', 'change', 'kind', 'decision', 'verdict', 'surface', 'call', 'request', 'signal', 'result', 'proxyType', 'userDecision',
 	// Broker-produced identifiers and vocabulary (broker audit events).
-	'auditType', 'scheme', 'by', 'provider', 'approvalId', 'credentialId', 'parentId', 'hook', 'limit', 'confidence',
+	'auditType', 'scheme', 'by', 'provider', 'approvalId', 'credentialId', 'parentId', 'hook', 'limit', 'confidence', 'joinedBy',
 	// AHP gate vocabulary (agreed with the secure-agentic session).
 	'direction', 'consent', 'gateRule', 'policyRev', 'phase']);
 // Our own vocabulary (lowercase words, dotted actions), errno, signal and ptrace names: no ':'
@@ -160,12 +160,15 @@ export function untrustedFields(d: Omit<EventDraft, 'untrusted'>): string[] {
 		}
 	}
 	for (const [k, v] of Object.entries(d.detail ?? {})) {
-		if (typeof v === 'string' && !(VOCAB_DETAIL_KEYS.has(k) && VOCAB_RE.test(v))) {
+		if ((typeof v === 'string' && !(VOCAB_DETAIL_KEYS.has(k) && VOCAB_RE.test(v))) || TAB_CHOSEN_NUMBERS.has(k)) {
 			out.push(`detail.${k}`);
 		}
 	}
 	return out;
 }
+
+/** Numeric detail the tab can choose (a source port is the tab's to bind), tagged like text. */
+const TAB_CHOSEN_NUMBERS = new Set(['clientPort']);
 
 // No '.' in detail keys: field paths ("detail.<key>") must stay unambiguous (review PI-L1).
 const DETAIL_KEY_RE = /^[a-zA-Z][a-zA-Z0-9_]{0,31}$/;
@@ -257,6 +260,10 @@ export function normalizeDraft(input: unknown): EventDraft {
 		}
 		if (n.proto === 'tcp' || n.proto === 'udp') {
 			out.net.proto = n.proto;
+		}
+		const lport = int(n.localPort, 1, 65535);
+		if (lport !== undefined) {
+			out.net.localPort = lport;
 		}
 	}
 	if (o.detail !== undefined) {

@@ -52,6 +52,7 @@ export class DetectionsSummary implements vscode.TreeDataProvider<Node>, vscode.
 			vscode.commands.registerCommand('seclab.detections.filter', () => this.pickFilter()),
 			vscode.commands.registerCommand('seclab.detections.stopTab', (n?: Node) => this.stop(n)),
 			vscode.commands.registerCommand('seclab.detections.openTab', (n?: Node) => this.open(n)),
+			vscode.commands.registerCommand('seclab.detections.blockDestination', (n?: Node) => this.block(n)),
 		);
 	}
 
@@ -124,7 +125,7 @@ export class DetectionsSummary implements vscode.TreeDataProvider<Node>, vscode.
 			lines.push(`Chain: ${quote(chainOf(e.proc), 200)}`);
 		}
 		item.tooltip = lines.filter(Boolean).join('\n'); // plain string, never markdown
-		item.contextValue = n.tab.phase === 'Running' ? 'seclabDetectionRunning' : 'seclabDetection';
+		item.contextValue = n.tab.phase !== 'Running' ? 'seclabDetection' : blockTarget(e) ? 'seclabDetectionRunningBlockable' : 'seclabDetectionRunning';
 		const sev = PRIORITIES.indexOf(e.priority);
 		item.iconPath = new vscode.ThemeIcon(e.class === 'detection' ? 'alert' : 'shield', new vscode.ThemeColor(sev <= 2 ? 'errorForeground' : 'editorWarning.foreground'));
 		return item;
@@ -153,6 +154,28 @@ export class DetectionsSummary implements vscode.TreeDataProvider<Node>, vscode.
 		const t = this.tabOf(n);
 		if (t) {
 			await this.openTab(t.tabId, t.hostPath);
+		}
+	}
+
+	/** Deny the destination a broker event names, for that tab only. The host is the tab's text, so ask. */
+	private async block(n?: Node): Promise<void> {
+		const t = this.tabOf(n);
+		const dest = n?.kind === 'event' ? blockTarget(n.e) : undefined;
+		if (!t || !dest) {
+			return;
+		}
+		// In full (tabd accepts up to 253): a truncated name could pass for a familiar host.
+		const where = quote(`${dest.host}${dest.port !== undefined ? `:${dest.port}` : ''}`, 300);
+		const name = quote(path.basename(t.hostPath) || t.tabId, 60);
+		const ok = await vscode.window.showWarningMessage(`Block ${where} for tab ${name}? Its broker refuses every request to that destination, including any waiting for your approval.`, { modal: true }, 'Block Destination');
+		if (ok !== 'Block Destination') {
+			return;
+		}
+		try {
+			await (await this.getClient()).request('tab.egress.block', { tabId: t.tabId, host: dest.host, ...(dest.port !== undefined ? { port: dest.port } : {}) });
+			void vscode.window.showInformationMessage(`Blocked ${where} for tab ${name}.`);
+		} catch (e) {
+			void vscode.window.showErrorMessage(`Could not block: ${quote((e as Error).message, 200)}`);
 		}
 	}
 
@@ -185,6 +208,11 @@ export class DetectionsSummary implements vscode.TreeDataProvider<Node>, vscode.
 		clearInterval(this.timer);
 		this.changed.dispose();
 	}
+}
+
+/** A destination a trusted broker event names (the same rule as notifications' Block Destination). */
+function blockTarget(e: ObsEvent): { host: string; port?: number } | undefined {
+	return e.source === 'broker' && e.net?.addr && e.net.family !== 'unix' ? { host: e.net.addr, ...(e.net.port !== undefined ? { port: e.net.port } : {}) } : undefined;
 }
 
 /** Codicon syntax and newlines in tab-influenced labels must never render. */

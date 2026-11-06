@@ -237,6 +237,32 @@ Checked as sound:
 - The e2e is inert and AV-safe, and tears down on every path.
 - The screenshot shows demo content only.
 
+## Round 11: Block Destination enabled, exact OCI lineage (EDR exact-lineage-client-port)
+Scope:
+- broker revision 5 audit fields in the stream (`ruleId`, `clientPort`, `upstream.denied`,
+  `credential.backstop_exception_filtered`);
+- Falco `%fd.cport` → `net.localPort`, and the exact join in `lineage.ts` / `glue.ts`;
+- the Detections view's Block Destination action;
+- the e2e's prompt-then-block check (both drivers) and the OCI exact-join check.
+
+One pass. No high, critical or medium findings.
+
+| ID | Sev | Area | Finding | Status | Fix |
+|---|---|---|---|---|---|
+| EX-1 | Low | honesty | `normalizeDraft` accepts `net.localPort` from any sensor, so root in an sbx VM could forge collector connects that join exactly, contrary to the EDR. Integrity stayed `tab-vm-root`, and the time join was already steerable. | Fixed | The correlator keeps `localPort` only from Falco. Regression test. |
+| EX-2 | Low | display | Block confirmations cut the host at 60 (notification) or 120 (Detections) characters, while tabd accepts 253. A long name could pass for a familiar host. The rule still matches the event's own name. | Fixed | Both show the destination in full. Regression test for the notification. |
+
+Checked as sound:
+- Connects are kept per tab and each OCI tab reaches only its own broker, so a client
+  port can't join across tabs. Failed connects (port in use) never become candidates.
+- Exact matches keep the sensor's integrity, then the weaker of it and the broker
+  event; never `trusted`. `detail.clientPort` is tagged untrusted.
+- `recentExact` is capped (512) and only suppresses a repeat attribution, never a
+  broker event.
+- Block from the Detections view takes the tab id from tabd's tab list, confirms
+  modally with quoted text, and tabd re-validates the host and port. A block only
+  narrows that tab's own egress. The command is hidden from the palette.
+
 ## Accepted residuals (documented in the ADR)
 - `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.
 - Under OCI the privileged Falco sees every container on the Docker host. Only rules for the exact tab container ids are loaded, and its only output is stdout to tabd.

@@ -91,6 +91,7 @@ export class ObsGlue {
 	private readonly pendingAttributions = new Map<string, number>();
 	private readonly promptLineages = new Map<string, Map<string, Attribution>>();
 	private readonly ahpOpen = new Map<string, NodeJS.Timeout>();
+	private readonly recentExact = new Map<string, number>();
 
 	constructor(o: ObsGlueOptions) {
 		this.o = o;
@@ -582,7 +583,20 @@ export class ObsGlue {
 		this.pendingAttributions.set(e.tabId, n + 1);
 		const timer = setTimeout(() => {
 			this.pendingAttributions.set(e.tabId, (this.pendingAttributions.get(e.tabId) ?? 1) - 1);
-			const a = this.lineage.attribute(e.tabId, Date.parse(e.time), true, this.sensorIntegrity(e.tabId));
+			const clientPort = typeof e.detail?.clientPort === 'number' ? e.detail.clientPort : undefined;
+			const a = this.lineage.attribute(e.tabId, Date.parse(e.time), true, this.sensorIntegrity(e.tabId), clientPort);
+			if (a.confidence === 'exact') {
+				// One request can produce two audit events (e.g. denied_unprompted, then denied).
+				const k = `${e.tabId}\u0000${clientPort}\u0000${e.net?.addr}:${e.net?.port}`;
+				const last = this.recentExact.get(k);
+				this.recentExact.set(k, Date.parse(e.time));
+				if (this.recentExact.size > 512) {
+					this.recentExact.delete(this.recentExact.keys().next().value!);
+				}
+				if (last !== undefined && Math.abs(Date.parse(e.time) - last) < 1000 && e.detail?.auditType !== 'approval.requested') {
+					return;
+				}
+			}
 			const approvalId = e.detail?.auditType === 'approval.requested' && typeof e.detail.approvalId === 'string' ? e.detail.approvalId : undefined;
 			if (approvalId) {
 				// Per tab, so one tab's prompt flood can't evict another's (review LN-3).
@@ -602,9 +616,9 @@ export class ObsGlue {
 			const target = `${e.net?.addr ?? '?'}:${e.net?.port ?? '?'}`;
 			this.hub.emit(e.tabId, {
 				source: 'detector', integrity: weakestIntegrity([e.integrity, a.integrity]), class: 'egress.attribution', priority: 'informational',
-				summary: a.chain ? `${a.chain} → ${target}${a.confidence === 'ambiguous' ? ` (probable; ${a.candidates} candidates)` : ' (probable)'}` : `${target}: no process observed connecting to the broker`,
+				summary: a.chain ? `${a.chain} → ${target}${a.confidence === 'exact' ? ' (matched by connection)' : a.confidence === 'ambiguous' ? ` (probable; ${a.candidates} candidates)` : ' (probable)'}` : `${target}: no process observed connecting to the broker`,
 				...(a.proc ? { proc: a.proc } : {}), ...(e.net ? { net: e.net } : {}),
-				detail: { confidence: a.confidence, candidates: a.candidates, auditType: String(e.detail?.auditType ?? '') },
+				detail: { confidence: a.confidence, candidates: a.candidates, auditType: String(e.detail?.auditType ?? ''), ...(a.confidence === 'exact' ? { joinedBy: 'client-port' } : {}) },
 				cause: [e.seq, ...a.cause],
 			});
 		}, ATTRIBUTION_DELAY_MS);
