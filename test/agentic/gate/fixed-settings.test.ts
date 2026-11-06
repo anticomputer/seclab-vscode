@@ -23,15 +23,37 @@ test('a tab window fixes exactly the declared keys, and nothing else', () => {
 	assert.deepEqual([...SECLAB_FIXED_TAB_SETTINGS.entries()].sort(), [
 		['chat.automations.cloud.enabled', false],
 		['chat.automations.enabled', false],
+		['workbench.browser.dataStorage', 'ephemeral'],
+		['workbench.browser.enableRemoteProxy', true],
 	]);
 	for (const [key, value] of SECLAB_FIXED_TAB_SETTINGS) {
 		assert.equal(seclabFixedSetting(TAB, key)?.value, value, key);
 	}
 	assert.equal(seclabFixedSetting(TAB, 'chat.automations.enabledX'), undefined);
 	assert.equal(seclabFixedSetting(TAB, 'editor.fontSize'), undefined);
-	// Round 6 removed this one: forcing it false sends the browser tools' model-chosen URL
-	// to the HOST network, which leaving it alone does not. It returns with its own measurement.
-	assert.equal(SECLAB_FIXED_TAB_SETTINGS.has('workbench.browser.enableRemoteProxy'), false);
+	// The two values the containment argument rests on, asserted literally. `true` keeps a
+	// browser view's traffic on the tab's network; `false` would drop the browser tools'
+	// model-chosen URL onto the host network (round 6).
+	assert.equal(SECLAB_FIXED_TAB_SETTINGS.get('workbench.browser.enableRemoteProxy'), true);
+	// And `global` is the one scope upstream drops the network for, so it must not be reachable.
+	assert.notEqual(SECLAB_FIXED_TAB_SETTINGS.get('workbench.browser.dataStorage'), 'global');
+	assert.equal(SECLAB_FIXED_TAB_SETTINGS.get('workbench.browser.dataStorage'), 'ephemeral');
+});
+
+test('a tab cannot take the network away through either browser key', () => {
+	// The pair is the control: the proxy keeps the page on the tab's network, and the storage
+	// scope is what stops a tab removing it again, since upstream yields no network for
+	// `global`. A tab writing either value must read back the fixed one.
+	const tabWrote = {
+		workbench: { browser: { enableRemoteProxy: false, dataStorage: 'global' } },
+	};
+	const out = seclabScrubFixedSettings(TAB, undefined, tabWrote) as typeof tabWrote;
+	assert.equal(out.workbench.browser.enableRemoteProxy, true);
+	assert.equal(out.workbench.browser.dataStorage, 'ephemeral');
+	assert.equal(seclabFixedSetting(TAB, 'workbench.browser.enableRemoteProxy')?.value, true);
+	assert.equal(seclabFixedSetting(TAB, 'workbench.browser.dataStorage')?.value, 'ephemeral');
+	// An ordinary window keeps whatever it had.
+	assert.deepEqual(seclabScrubFixedSettings('ssh-remote+box', undefined, tabWrote), tabWrote);
 });
 
 // The two call sites the patch edits, modelled exactly as upstream shapes them. Round 6

@@ -237,6 +237,14 @@ RPC-lockdown, which will wire A17, A18 and A23 behind it.
     rework (§5).
 
 ### Increment 2: 0017, fixed values in tab windows
+> **Superseded in part, 2026-11-06 (user decision).** `workbench.browser.enableRemoteProxy`
+> is fixed to **`true`**, not `false`, and `workbench.browser.dataStorage` is fixed to
+> `ephemeral` alongside it. Forcing the proxy off would have moved the browser tools'
+> model-chosen URL onto the **host** network, which leaving the setting alone does not;
+> forcing it on keeps every browser view on the tab's network, and locking the storage scope
+> is what stops a tab taking that network away again. See
+> [EDR](../edr/20261106-increment-2-remote-proxy.md) and security review round 6.
+
 - **What.** In `seclab+` windows only, the agent settings confirmed tab-writable get a
   fixed value: `workbench.browser.enableRemoteProxy` is `false`, and
   `chat.automations.enabled` and `chat.automations.cloud.enabled` are `false`. The setting

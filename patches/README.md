@@ -58,13 +58,14 @@ Current queue:
   `seclabAhpGate.log`. New files are edited in `agentic/patch-src` and synced with
   `node agentic/tools/sync-patch.ts --write`
   ([EDR](../docs/edr/20261106-agentic-probe-runner.md), [plan](../docs/plans/agentic-implementation.md) increment 1).
-- `0017-seclab-fixed-tab-settings.patch`: in a `seclab+` window two agent-policy settings that
-  a tab can otherwise write through the REH's remote user settings read as `false`:
-  `chat.automations.enabled` and `chat.automations.cloud.enabled`. The read is fixed in
-  `getValue`, `inspect` and `getConfigurationData` (the snapshot the extension hosts read
-  from); no registration is changed. `workbench.browser.enableRemoteProxy` is deliberately
-  not included: forcing it `false` would move the browser tools' model-chosen URL onto the
-  host network
+- `0017-seclab-fixed-tab-settings.patch`: in a `seclab+` window four agent-policy settings a
+  tab can otherwise write through the REH's remote user settings get fixed values:
+  `chat.automations.enabled` and `chat.automations.cloud.enabled` are `false`,
+  `workbench.browser.enableRemoteProxy` is `true` and `workbench.browser.dataStorage` is
+  `ephemeral`. The read is fixed in `getValue`, `inspect` and `getConfigurationData` (the
+  snapshot the extension hosts read from); no registration is changed. The two browser keys
+  are one control: the proxy keeps a browser view's traffic on the tab's network, and the
+  storage scope stops a tab removing that network by asking for `global`
   ([EDR](../docs/edr/20261106-increment-2-remote-proxy.md), [plan](../docs/plans/agentic-implementation.md) increment 2).
 
 `reach.json` requires targets per patch. `unreachable.json` lists modules, or `dir/` prefixes
