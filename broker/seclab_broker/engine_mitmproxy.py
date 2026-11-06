@@ -162,8 +162,12 @@ class SeclabAddon:
         if view is not None:
             return view.summary()
         r = flow.request
-        return {"scheme": r.scheme, "host": display_host(r.pretty_host), "port": r.port,
-                "method": display_host(r.method)[:16], "path": display_path(r.path.split("?", 1)[0])}
+        out = {"scheme": r.scheme, "host": display_host(r.pretty_host), "port": r.port,
+               "method": display_host(r.method)[:16], "path": display_path(r.path.split("?", 1)[0])}
+        peer = flow.client_conn.peername
+        if peer and isinstance(peer[1], int):
+            out["clientPort"] = peer[1]
+        return out
 
     def _deny(self, flow: http.HTTPFlow, status: int, reason: str, **extra: Any) -> None:
         self._respond(flow, status, reason)
@@ -245,7 +249,9 @@ class SeclabAddon:
         path, query = cp
         if query_has_method_override(query):
             return None, "method override parameter is not allowed"
-        return RequestView(r.scheme, host, port, method, path, query), ""
+        peer = flow.client_conn.peername
+        return RequestView(r.scheme, host, port, method, path, query,
+                           client_port=peer[1] if peer and isinstance(peer[1], int) else None), ""
 
     # ------------------------------------------------------------ egress
     @fail_closed
@@ -266,6 +272,12 @@ class SeclabAddon:
         if not (flow.request.is_http2 or flow.request.is_http3):
             flow.request.authority = ""  # always forward origin-form
         flow.metadata["seclab.view"] = view
+        # A user's block beats every allow rule, the baseline, allow-tab grants, prompts and
+        # credential bindings (revision 5); nothing is forwarded or asked.
+        blocked = self.b.policy.deny_match(view)
+        if blocked is not None:
+            self._deny(flow, 403, f"denied by rule {blocked.id}", ruleId=blocked.id)
+            return
         rule = self.b.allowed(view)
         if rule is not None:
             flow.metadata["seclab.rule"] = rule.id or rule.host.text
@@ -351,6 +363,10 @@ class SeclabAddon:
             return
         if view is None:
             self._deny(flow, 403, "request was not classified")
+            return
+        blocked = self.b.policy.deny_match(view)  # a block added since requestheaders
+        if blocked is not None:
+            self._deny(flow, 403, f"denied by rule {blocked.id}", ruleId=blocked.id)
             return
         upgrade = _upgrade_token(flow.request)
         sealed = SEALED_PREFIX.encode()
@@ -758,6 +774,14 @@ class SeclabAddon:
         if flow.metadata.get("seclab.ws_dead"):
             # mitmproxy cannot close a WebSocket from this hook (flow.kill() is not applied
             # in transit, mitmproxy#4711), so a killed connection relays nothing more.
+            msg.drop()
+            return
+        blocked = self.b.policy.deny_match(view) if view is not None else None
+        if blocked is not None:
+            # A destination blocked while the socket was open relays nothing more (revision 5).
+            flow.metadata["seclab.ws_dead"] = True
+            self.b.audit("request.denied", status=403, reason=f"denied by rule {blocked.id}",
+                         ruleId=blocked.id, **view.summary())
             msg.drop()
             return
         if msg.from_client:

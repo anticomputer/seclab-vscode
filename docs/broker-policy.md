@@ -40,6 +40,23 @@ are pinned by its unit tests (see the matcher invariants in
 - A rule defaults to `https` on the scheme's default port, any method, and
   `/**`.
 
+**Deny rules** (`deny`, revision 5)
+- A deny rule blocks a destination: host pattern, optional `ports` and
+  `schemes`, and a required `id`.
+- It is checked before everything else: allow rules, the baseline,
+  `allow-tab` grants, prompts and credential bindings. A matching request
+  gets `403` and the audit event `request.denied` (reason
+  `denied by rule <id>`), and is never prompted.
+- Omitted `ports` means every port, and omitted `schemes` means http and
+  https. This is the opposite of an allow rule's defaults, so a block can't be
+  sidestepped by a non-default port or scheme.
+- At runtime, `policy.update` takes `addDeny` and `removeDeny`. A new deny
+  rule resolves any pending prompt it matches as `deny`. It applies to every
+  new request on an open connection, and an open WebSocket relays nothing
+  more.
+- It matches the request's host name. A destination reached by IP literal
+  needs its own rule; IP literals are denied anyway unless allowed.
+
 **Credentials**
 - A credential's real value is written only into its binding's
   `inject.header`, only when the tab put the sentinel in that header, and only
@@ -71,6 +88,7 @@ Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, sc
 | `prompt.autoDenyRiskyBeforeUserAction` | `boolean` |  | Until the supervisor reports the first user action (`tab.event userAction`), requests to raw IPs and risky destinations are denied without a prompt. This defeats folder-open loaders that need no click. (default `true`) |
 | `sentinelMismatch` | `"block"` \| `"log"` |  | What to do when a sentinel appears anywhere other than the header a matching binding names. It is never swapped either way. (default `"block"`) |
 | `allow` | [`rule`](broker-policy.md#rule)[] |  | Egress allow rules. Anything not matched is held for a prompt, or denied. (max items `1024`) |
+| `deny` | [`denyRule`](broker-policy.md#denyrule)[] |  | Blocked destinations (revision 5), checked before everything else. See `denyRule`. (max items `1024`) |
 | `credentials` | [`credential`](broker-policy.md#credential)[] |  | Sentinel credentials. A binding does not imply egress: the request must also be allowed. (max items `256`) |
 | `models` | `object` |  | Model-host policy (revision 3; per-endpoint allowlists and endpoint grants in revision 4). A request to a host of a declared provider, or to any host on the broker's known model-host list, is checked before forwarding: the provider must be declared, the method and path must be one of its endpoints (an endpoint marked `requiresGrant` also needs a grant), no upgrades, the body must be strict JSON with only listed top-level fields, and every tool must have an allowed `type`. Requests and bytes on model hosts count against a per-tab budget; over budget is denied, never prompted. All of this only denies. |
 | `models.providers` | `"copilot"` \| `"openai"` \| `"anthropic"` \| [`modelProvider`](broker-policy.md#modelprovider)[] |  | (max items `32`) |
@@ -162,6 +180,18 @@ An egress allow rule. A request matches if every field matches.
 | `ports` | [`ports`](broker-policy.md#ports) |  | Defaults to the scheme's default port. |
 | `methods` | [`methods`](broker-policy.md#methods) |  | (default `["*"]`) |
 | `path` | [`path`](broker-policy.md#path) |  | (default `"/**"`) |
+
+<a id="denyrule"></a>
+### `denyRule`
+
+A blocked destination (revision 5). It takes precedence over every allow rule, the baseline, `allow-tab` grants, prompts and credential bindings: a matching request is denied (`request.denied`, reason `denied by rule <id>`) and never prompted. Unlike an allow rule, omitted `ports` means every port and omitted `schemes` means http and https. It matches the request's host name; a destination reached by IP literal needs its own rule.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | [`id`](broker-policy.md#id) | yes | Required: `policy.update` removes deny rules by id. |
+| `host` | [`host`](broker-policy.md#host) | yes |  |
+| `schemes` | [`schemes`](broker-policy.md#schemes) |  | (default `["http", "https"]`) |
+| `ports` | [`ports`](broker-policy.md#ports) |  | Defaults to every port. |
 
 <a id="inject"></a>
 ### `inject`

@@ -274,6 +274,10 @@ Each has a unit or integration test; grep for the phrase.
 - The baseline and examples never match the risky list (enforced by
   docs-check).
 - The origin label is display-only. Never use it for a decision.
+- A deny rule (`deny`, revision 5) is checked before anything else, in
+  `requestheaders`, again in `request` and on every WebSocket message. Never
+  let an allow rule, the baseline, an `allow-tab` grant, a prompt or a binding
+  get ahead of it. Its omitted ports and schemes mean all of them.
 
 **Untrusted text and content ([ADR](../docs/adr/20261104-broker-output-is-data.md))**
 - Every string in an approval or audit event goes through

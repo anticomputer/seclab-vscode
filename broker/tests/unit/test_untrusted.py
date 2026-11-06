@@ -53,6 +53,52 @@ def test_approvals_are_sanitized_and_tagged():
     asyncio.run(go())
 
 
+def test_query_keys_and_client_port_are_tagged_untrusted():
+    """Both are tab-controlled (the tab chooses its query and its source port): tagged in
+    audit events and in approvals, and query keys reach neither as raw text."""
+    view = RequestView("https", "api.example.com", 443, "GET", "/x", f"{BIDI}k=1&j=2", client_port=50123)
+    b = Broker()
+    b.audit("request.denied", reason="test", **view.summary())
+    e = b.dispatch("audit.tail", {"limit": 1})["events"][0]
+    assert {"queryKeys", "clientPort"} <= set(e["untrusted"]) and BIDI not in json.dumps(e, ensure_ascii=False)
+    assert e["queryKeys"] == ["%E2%80%AEk", "j"]
+
+    async def go():
+        b = Broker()
+        b.rpc_policy_load({"policy": {"version": 1, "prompt": {"timeoutSeconds": 5}}})
+        notes = []
+        b.add_sink(lambda m, p: notes.append((m, p)))
+        b.dispatch("tab.event", {"kind": "userAction"})
+        t = asyncio.create_task(b.ask_egress(
+            RequestView("https", "new.example.com", 443, "GET", "/a", "q=1", client_port=50124)))
+        await asyncio.sleep(0.01)
+        p = [p for m, p in notes if m == "approval.requested"][0]
+        assert {"request.queryKeys", "request.clientPort"} <= set(p["untrusted"])
+        assert p["request"]["clientPort"] == 50124
+        b.dispatch("approval.decide", {"approvalId": p["approvalId"], "decision": "deny"})
+        await t
+    asyncio.run(go())
+
+
+def test_a_new_deny_rule_resolves_a_waiting_prompt():
+    async def go():
+        b = Broker()
+        b.rpc_policy_load({"policy": {"version": 1, "prompt": {"timeoutSeconds": 5}}})
+        notes = []
+        b.add_sink(lambda m, p: notes.append((m, p)))
+        b.dispatch("tab.event", {"kind": "userAction"})
+        t = asyncio.create_task(b.ask_egress(RequestView("https", "new.example.com", 443, "GET", "/a", "")))
+        await asyncio.sleep(0.01)
+        b.dispatch("policy.update", {"addDeny": [{"id": "blk", "host": "new.example.com"}]})
+        d = await t
+        assert not d.allow
+        resolved = [p for m, p in notes if m == "approval.resolved"][0]
+        assert resolved["by"] == "deny-rule" and resolved["decision"] == "deny"
+        changed = [p for m, p in notes if m == "policy.changed"][0]
+        assert changed["addedDeny"] == [{"id": "blk", "host": "new.example.com", "schemes": ["http", "https"]}]
+    asyncio.run(go())
+
+
 def test_inferred_inject_format_is_printable_ascii_only():
     s = new_sentinel()
     assert infer_inject("Authorization", f"Bearer {s}", s) is not None
