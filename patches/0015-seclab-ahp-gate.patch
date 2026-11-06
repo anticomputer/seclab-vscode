@@ -1,0 +1,1030 @@
+diff --git a/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts b/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts
+index b74b0c6d..fc381410 100644
+--- a/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts
++++ b/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts
+@@ -31,6 +31,7 @@ import { vArray, vEnum, vObj, vOptionalProp, vString, vUndefined, vUnknown } fro
+ import { AgentHostChannelScheduler, readChannelFlowControl } from '../common/agentHostChannelDelivery.js';
+ import { AgentHostTcpBudget, AgentHostTcpConnection, agentHostTcpReceiveLimits, type IAgentHostTcpConnection } from '../common/agentHostTcpConnection.js';
+ import { LoadClientCertificatesExtensionMethod, type IAgentHostClientCertificatesProvider } from '../common/clientCertificatesProtocol.js';
++import { seclabAhpCheckTransport } from '../common/seclabAhpGateCheck.js';
+ import { AgentHostClientCertificatesCapabilityMetaKey } from '../common/meta/agentHostClientCertificatesMeta.js';
+ import { ClientProxyChangedExtensionMethod, LookupClientProxyKerberosAuthorizationExtensionMethod, lookupClientProxyKerberosAuthorizationParamsValidator, ResolveClientProxyExtensionMethod, resolveClientProxyParamsValidator, type IAgentHostClientProxyProvider } from '../common/clientProxyProtocol.js';
+ import { AgentHostClientProxyCapabilityMetaKey, servesAgentHostClientProxy } from '../common/meta/agentHostClientProxyMeta.js';
+@@ -737,6 +738,8 @@ export class AgentHostProtocolClient extends Disposable implements IAgentConnect
+ 	 * transport-level reconnect.
+ 	 */
+ 	private _installTransport(transport: IProtocolTransport): void {
++		// seclab: no agent-host transport in a tab window bypasses the gate (patch 0015).
++		seclabAhpCheckTransport(this._resourceIdentity, transport);
+ 		this._lastSuccessfulResponseAt = undefined;
+ 		const listeners = new DisposableStore();
+ 		listeners.add(transport);
+diff --git a/src/vs/platform/agentHost/common/seclabAhpGateCheck.ts b/src/vs/platform/agentHost/common/seclabAhpGateCheck.ts
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/src/vs/platform/agentHost/common/seclabAhpGateCheck.ts
+@@ -0,0 +1,57 @@
++/*---------------------------------------------------------------------------------------------
++ *  seclab-vscode: the AHP gate's construction invariant (patch 0015).
++ *  `AgentHostProtocolClient` calls `seclabAhpCheckTransport` for every transport it installs.
++ *  In a seclab tab window every transport reports `ahp-gate.opened`; one built over the gate
++ *  then reports `ahp-gate.verified`, and any other is refused. The brand lives in this module's
++ *  private WeakMap, which nothing outside the renderer can reach.
++ *--------------------------------------------------------------------------------------------*/
++
++import type { SeclabAhpEvent } from './seclabAhpPolicy.js';
++
++export const SECLAB_AUTHORITY_PREFIX = 'seclab+';
++
++const gated = new WeakMap<object, number>();
++let sink: ((e: SeclabAhpEvent) => void) | undefined;
++let nextConnection = 1;
++
++/** True for a `seclab+<tab>` remote authority. */
++export function isSeclabAuthority(authority: string | undefined): boolean {
++	return typeof authority === 'string' && authority.startsWith(SECLAB_AUTHORITY_PREFIX);
++}
++
++/** Marks this window as a seclab tab window: from now on every agent-host transport in it
++ *  must be gated. Called once, at startup, by the workbench; it can't be undone. */
++export function seclabAhpInstallWindow(eventSink: (e: SeclabAhpEvent) => void): void {
++	sink ??= eventSink;
++}
++
++/** A fresh connection number, shared by gated and ungated transports. */
++export function seclabAhpNextConnection(): number {
++	return nextConnection++;
++}
++
++/** Called by the gate for a transport it built over its filtered channel. */
++export function seclabAhpBrandTransport(transport: object, connection: number): void {
++	gated.set(transport, connection);
++}
++
++function connectionEvent(rule: string, connection: number, priority: SeclabAhpEvent['priority'], verdict: string): SeclabAhpEvent {
++	return { source: 'ahp-gate', class: 'ahp.decision', priority, summary: `${rule} connection ${connection}`, detail: { gateRule: rule, connection, verdict } };
++}
++
++/** The invariant. Throws for an ungated transport in a seclab tab window. */
++export function seclabAhpCheckTransport(identity: unknown, transport: object): void {
++	const tabIdentity = typeof identity === 'string' && identity.startsWith(`vscode-remote://${SECLAB_AUTHORITY_PREFIX}`);
++	if (!sink && !tabIdentity) {
++		return;
++	}
++	const branded = gated.get(transport);
++	const connection = branded ?? seclabAhpNextConnection();
++	sink?.(connectionEvent('ahp-gate.opened', connection, 'informational', 'allow'));
++	if (branded !== undefined) {
++		sink?.(connectionEvent('ahp-gate.verified', connection, 'informational', 'allow'));
++		return;
++	}
++	sink?.(connectionEvent('ahp-gate.refused', connection, 'critical', 'deny'));
++	throw new Error('seclab: refusing an agent-host transport that does not pass through the gate');
++}
+diff --git a/src/vs/platform/agentHost/common/seclabAhpPolicy.ts b/src/vs/platform/agentHost/common/seclabAhpPolicy.ts
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/src/vs/platform/agentHost/common/seclabAhpPolicy.ts
+@@ -0,0 +1,365 @@
++/*---------------------------------------------------------------------------------------------
++ *  seclab-vscode: the agent-host protocol gate's filter (patch 0015).
++ *  Pure and import-free on purpose: the same file runs under node's type stripping in the
++ *  repo's unit tests. Everything the tab's agent host sends is data, filtered here before the
++ *  workbench parses it; everything the workbench sends is filtered before it leaves.
++ *--------------------------------------------------------------------------------------------*/
++
++/** Verdict tables. Anything not listed is denied. Built from `seclabAhpPolicyData.ts`. */
++export interface SeclabAhpTables {
++	/** Client-to-agent-host requests. */
++	readonly clientRequests: Readonly<Record<string, SeclabAhpVerdict>>;
++	/** Client-to-agent-host notifications. */
++	readonly clientNotifications: Readonly<Record<string, SeclabAhpVerdict>>;
++	/** Agent-host-to-client notifications. Agent-host-to-client requests are always refused. */
++	readonly serverNotifications: Readonly<Record<string, SeclabAhpVerdict>>;
++	/** Action types the client may dispatch. */
++	readonly clientActions: Readonly<Record<string, SeclabAhpVerdict>>;
++	/** Action types the agent host may send. */
++	readonly serverActions: Readonly<Record<string, SeclabAhpVerdict>>;
++	/** `initialize` / `reconnect` `_meta` keys the client may send. */
++	readonly clientMetaKeys: readonly string[];
++	/** Root config keys the client may mirror into the agent host. */
++	readonly rootConfigKeys: readonly string[];
++}
++
++export type SeclabAhpVerdict = 'allow' | 'deny';
++export type SeclabAhpPriority = 'critical' | 'warning' | 'notice' | 'informational';
++
++/** The shape `tab.events.report` accepts for source `ahp-gate` (tabd/src/obs/glue.ts). */
++export interface SeclabAhpEvent {
++	readonly source: 'ahp-gate';
++	readonly class: 'ahp.decision';
++	readonly priority: SeclabAhpPriority;
++	readonly summary: string;
++	readonly detail: Record<string, string | number | boolean>;
++}
++
++export interface SeclabAhpOutput {
++	/** Frames to send on toward the agent host, in order. */
++	readonly toUpstream: string[];
++	/** Frames to deliver to the workbench's protocol client, in order. */
++	readonly toClient: string[];
++}
++
++export const SECLAB_AHP_MAX_FRAME = 32 * 1024 * 1024;
++const MAX_DEPTH = 64;
++const MAX_TEXT = 80;
++/** Keys removed from everything the agent host sends: the agent host chooses neither an
++ *  authorization server for the user's credentials (A1) nor MCP App UI (A21). */
++const STRIP_KEYS = new Set(['protectedResources', 'mcpApp']);
++/** Error code for requests the gate refuses (JSON-RPC "method not found"). */
++export const SECLAB_AHP_REFUSED = -32601;
++const REFUSED_MESSAGE = 'Refused by the seclab agent-host gate';
++
++type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
++type Obj = { [k: string]: Json };
++
++function isObj(v: unknown): v is Obj {
++	return typeof v === 'object' && v !== null && !Array.isArray(v);
++}
++
++function clip(s: unknown): string {
++	const t = typeof s === 'string' ? s : typeof s;
++	return t.length > MAX_TEXT ? t.slice(0, MAX_TEXT) : t;
++}
++
++function isUi(v: Json): boolean {
++	return typeof v === 'string' && /^\s*ui:/i.test(v);
++}
++
++/** Removes STRIP_KEYS and any `ui:` string value, in place. Returns how many it removed.
++ *  Throws past MAX_DEPTH. */
++export function seclabAhpSanitize(value: Json, depth = 0): number {
++	if (depth > MAX_DEPTH) {
++		throw new Error('seclab AHP gate: message too deep');
++	}
++	let n = 0;
++	if (Array.isArray(value)) {
++		for (let i = value.length - 1; i >= 0; i--) {
++			if (isUi(value[i])) {
++				value.splice(i, 1);
++				n++;
++			} else {
++				n += seclabAhpSanitize(value[i], depth + 1);
++			}
++		}
++	} else if (isObj(value)) {
++		for (const k of Object.keys(value)) {
++			if (STRIP_KEYS.has(k) || isUi(value[k])) {
++				delete value[k];
++				n++;
++			} else {
++				n += seclabAhpSanitize(value[k], depth + 1);
++			}
++		}
++	}
++	return n;
++}
++
++interface Fragments { readonly originals: string[]; joined: string }
++type Dir = 'in' | 'out';
++
++/** One instance per transport (connection); never shared across connections. */
++export class SeclabAhpFilter {
++	private readonly tables: SeclabAhpTables;
++	private readonly connection: number;
++	private readonly emit: (e: SeclabAhpEvent) => void;
++	/** Outbound request ids the gate let through, with their method. */
++	private readonly pending = new Map<string, string>();
++	private readonly fragments = { in: new Map<string, Fragments>(), out: new Map<string, Fragments>() };
++
++	constructor(tables: SeclabAhpTables, connection: number, emit: (e: SeclabAhpEvent) => void) {
++		this.tables = tables;
++		this.connection = connection;
++		this.emit = emit;
++	}
++
++	/** A frame the workbench sends toward the agent host. */
++	fromClient(text: string): SeclabAhpOutput {
++		return this.frame(text, 'out');
++	}
++
++	/** A frame the agent host sends toward the workbench. */
++	fromUpstream(text: string): SeclabAhpOutput {
++		return this.frame(text, 'in');
++	}
++
++	private frame(text: string, dir: Dir): SeclabAhpOutput {
++		const out: SeclabAhpOutput = { toUpstream: [], toClient: [] };
++		const msg = this.parse(text, dir);
++		if (!msg) {
++			return out;
++		}
++		const handle = (m: Obj, t: string, inner: boolean) => dir === 'in' ? this.upstream(m, t, out, inner) : this.client(m, t, out, inner);
++		if (msg.method === 'channel/frame' && !('id' in msg)) {
++			this.reassemble(text, msg, dir, out, handle);
++		} else {
++			const forward = handle(msg, text, false);
++			if (forward !== undefined) {
++				(dir === 'in' ? out.toClient : out.toUpstream).push(forward);
++			}
++		}
++		return out;
++	}
++
++	/** Returns the text to forward (the original, or the rewritten message), or undefined to drop. */
++	private client(msg: Obj, text: string, out: SeclabAhpOutput, inner: boolean): string | undefined {
++		const method = msg.method;
++		const hasId = 'id' in msg;
++		if (typeof method !== 'string') {
++			// The gate refuses every agent-host request, so the client has nothing to answer.
++			this.deny('ahp-gate.client-response', 'out', '', { id: clip(String(msg.id)) });
++			return undefined;
++		}
++		if (inner && (hasId || method === 'channel/frame')) {
++			this.deny('ahp-gate.fragment-content', 'out', method);
++			return undefined;
++		}
++		if (hasId) {
++			if (this.tables.clientRequests[method] !== 'allow') {
++				this.deny('ahp-gate.method', 'out', method);
++				out.toClient.push(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { code: SECLAB_AHP_REFUSED, message: REFUSED_MESSAGE } }));
++				return undefined;
++			}
++			this.pending.set(String(msg.id), method);
++			if ((method === 'initialize' || method === 'reconnect') && isObj(msg.params) && isObj(msg.params._meta)) {
++				const meta = msg.params._meta;
++				const removed = Object.keys(meta).filter(k => !this.tables.clientMetaKeys.includes(k));
++				if (removed.length) {
++					for (const k of removed) {
++						delete meta[k];
++					}
++					this.strip('ahp-gate.client-meta', 'out', method, removed.length);
++					return JSON.stringify(msg);
++				}
++			}
++			return text;
++		}
++		if (this.tables.clientNotifications[method] !== 'allow') {
++			this.deny('ahp-gate.method', 'out', method);
++			return undefined;
++		}
++		if (method !== 'dispatchAction') {
++			return text;
++		}
++		const action = isObj(msg.params) ? msg.params.action : undefined;
++		const type = isObj(action) ? action.type : undefined;
++		if (!isObj(action) || typeof type !== 'string' || this.tables.clientActions[type] !== 'allow') {
++			this.deny('ahp-gate.action', 'out', method, { actionType: clip(type) });
++			return undefined;
++		}
++		let removed = 0;
++		if (type === 'root/configChanged') {
++			// A19: host settings mirrored into the agent host. Only allowlisted keys leave.
++			const config = isObj(action.config) ? action.config : {};
++			for (const k of Object.keys(config)) {
++				if (!this.tables.rootConfigKeys.includes(k)) {
++					delete config[k];
++					removed++;
++				}
++			}
++			if (!Object.keys(config).length) {
++				this.strip('ahp-gate.root-config', 'out', method, removed, type);
++				return undefined;
++			}
++		} else if (type === 'session/activeClientSet' && isObj(action.activeClient)) {
++			// No client tools (A18) and no host customizations (A19) are advertised to the tab.
++			const client = action.activeClient;
++			if (Array.isArray(client.tools) && client.tools.length) {
++				removed += client.tools.length;
++				client.tools = [];
++			}
++			if ('customizations' in client) {
++				delete client.customizations;
++				removed++;
++			}
++		}
++		if (!removed) {
++			return text;
++		}
++		this.strip(type === 'root/configChanged' ? 'ahp-gate.root-config' : 'ahp-gate.client-tools', 'out', method, removed, type);
++		return JSON.stringify(msg);
++	}
++
++	private upstream(msg: Obj, text: string, out: SeclabAhpOutput, inner: boolean): string | undefined {
++		const method = msg.method;
++		const hasId = 'id' in msg;
++		if (typeof method === 'string' && hasId) {
++			// A16, A5, A26, A7: the agent host asks the trusted side to act (files, certificates,
++			// proxies, credentials). The gate answers every such request itself.
++			this.deny('ahp-gate.reverse-request', 'in', method);
++			if (!inner) {
++				out.toUpstream.push(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { code: SECLAB_AHP_REFUSED, message: REFUSED_MESSAGE } }));
++			}
++			return undefined;
++		}
++		if (inner && (hasId || method === 'channel/frame')) {
++			this.deny('ahp-gate.fragment-content', 'in', typeof method === 'string' ? method : '');
++			return undefined;
++		}
++		let label: string;
++		if (typeof method !== 'string') {
++			const id = String(msg.id);
++			const request = this.pending.get(id);
++			if (request === undefined) {
++				this.deny('ahp-gate.unsolicited-response', 'in', '', { id: clip(id) });
++				return undefined;
++			}
++			this.pending.delete(id);
++			label = request;
++		} else {
++			if (this.tables.serverNotifications[method] !== 'allow') {
++				this.deny('ahp-gate.method', 'in', method);
++				return undefined;
++			}
++			if (method === 'action') {
++				const action = isObj(msg.params) ? msg.params.action : undefined;
++				const type = isObj(action) ? action.type : undefined;
++				if (typeof type !== 'string' || this.tables.serverActions[type] !== 'allow') {
++					this.deny('ahp-gate.action', 'in', method, { actionType: clip(type) });
++					return undefined;
++				}
++			}
++			label = method;
++		}
++		let removed: number;
++		try {
++			removed = seclabAhpSanitize(msg);
++		} catch {
++			this.deny('ahp-gate.depth', 'in', label);
++			return undefined;
++		}
++		if (label === 'initialize' && isObj(msg.result)) {
++			// Positive control: the real agent host's root state passed the gate.
++			this.event('informational', 'ahp-gate.initialize', 'allow', { dir: 'in', method: label, agents: rootAgents(msg.result) });
++		}
++		if (!removed) {
++			return text;
++		}
++		this.strip('ahp-gate.strip', 'in', label, removed);
++		return JSON.stringify(msg);
++	}
++
++	/** Holds fragments until the final one and filters the joined message. Releases the original
++	 *  fragments if it passed unchanged, or the rewritten message as one final fragment. */
++	private reassemble(text: string, msg: Obj, dir: Dir, out: SeclabAhpOutput, handle: (m: Obj, t: string, inner: boolean) => string | undefined): void {
++		const p = msg.params;
++		if (!isObj(p) || typeof p.channel !== 'string' || typeof p.data !== 'string') {
++			this.deny('ahp-gate.fragment', dir, 'channel/frame');
++			return;
++		}
++		const store = this.fragments[dir];
++		const f = store.get(p.channel) ?? { originals: [], joined: '' };
++		f.originals.push(text);
++		f.joined += p.data;
++		if (f.joined.length > SECLAB_AHP_MAX_FRAME) {
++			store.delete(p.channel);
++			this.deny('ahp-gate.size', dir, 'channel/frame');
++			return;
++		}
++		if (p.final !== true) {
++			store.set(p.channel, f);
++			return;
++		}
++		store.delete(p.channel);
++		const joined = this.parse(f.joined, dir);
++		if (!joined) {
++			return;
++		}
++		const result = handle(joined, f.joined, true);
++		if (result === undefined) {
++			return;
++		}
++		const target = dir === 'in' ? out.toClient : out.toUpstream;
++		if (result === f.joined) {
++			target.push(...f.originals);
++		} else {
++			target.push(JSON.stringify({ jsonrpc: '2.0', method: 'channel/frame', params: { channel: p.channel, data: result, final: true } }));
++		}
++	}
++
++	private parse(text: string, dir: Dir): Obj | undefined {
++		if (typeof text !== 'string' || text.length > SECLAB_AHP_MAX_FRAME) {
++			this.deny('ahp-gate.size', dir, '');
++			return undefined;
++		}
++		let v: unknown;
++		try {
++			v = JSON.parse(text);
++		} catch {
++			v = undefined;
++		}
++		if (!isObj(v) || v.jsonrpc !== '2.0') {
++			this.deny('ahp-gate.malformed', dir, '');
++			return undefined;
++		}
++		return v;
++	}
++
++	private deny(rule: string, dir: Dir, method: string, extra: Record<string, string | number> = {}): void {
++		this.event('warning', rule, 'deny', { dir, method: clip(method), ...extra });
++	}
++
++	private strip(rule: string, dir: Dir, method: string, count: number, actionType?: string): void {
++		this.event('notice', rule, 'strip', { dir, method: clip(method), count, ...(actionType ? { actionType: clip(actionType) } : {}) });
++	}
++
++	private event(priority: SeclabAhpPriority, rule: string, verdict: 'allow' | 'deny' | 'strip', extra: Record<string, string | number | boolean>): void {
++		this.emit({
++			source: 'ahp-gate', class: 'ahp.decision', priority,
++			summary: `${rule} ${verdict}${extra.method ? ` ${extra.method}` : ''}`,
++			detail: { gateRule: rule, connection: this.connection, verdict, ...extra },
++		});
++	}
++}
++
++function rootAgents(result: Obj): number {
++	const snapshots = Array.isArray(result.snapshots) ? result.snapshots : [];
++	for (const s of snapshots) {
++		if (isObj(s) && isObj(s.state) && Array.isArray(s.state.agents)) {
++			return s.state.agents.length;
++		}
++	}
++	return 0;
++}
+diff --git a/src/vs/platform/agentHost/common/seclabAhpPolicyData.ts b/src/vs/platform/agentHost/common/seclabAhpPolicyData.ts
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/src/vs/platform/agentHost/common/seclabAhpPolicyData.ts
+@@ -0,0 +1,334 @@
++/*---------------------------------------------------------------------------------------------
++ *  seclab-vscode: the agent-host protocol gate's verdict tables (patch 0015).
++ *  Default deny: the filter refuses anything not listed as 'allow'. Each table `satisfies` a
++ *  record keyed by upstream's own protocol types, so an upstream bump that adds or removes a
++ *  method or an action type fails `typecheck-client` (the required patch-build check) until
++ *  it is classified here. Imports are type-only, so node's type stripping runs this file too.
++ *--------------------------------------------------------------------------------------------*/
++
++import type { CommandMap, ServerCommandMap, ClientNotificationMap, ServerNotificationMap } from './state/protocol/messages.js';
++import type { ActionType } from './state/protocol/common/actions.js';
++import type { SeclabAhpTables, SeclabAhpVerdict } from './seclabAhpPolicy.js';
++
++/** Client-to-agent-host requests. Resource methods act on the tab's own files. */
++const clientRequests = {
++	'initialize': 'allow',
++	'ping': 'allow',
++	'reconnect': 'allow',
++	'subscribe': 'allow',
++	'createSession': 'allow',
++	'disposeSession': 'allow',
++	'createChat': 'allow',
++	// A7: the agent host would open TCP connections and tunnel them to this client.
++	'createTcpConnection': 'deny',
++	'moveChat': 'allow',
++	'disposeChat': 'allow',
++	'createTerminal': 'allow',
++	'disposeTerminal': 'allow',
++	'createResourceWatch': 'allow',
++	'listSessions': 'allow',
++	'resourceRead': 'allow',
++	'resourceWrite': 'allow',
++	'resourceList': 'allow',
++	'resourceCopy': 'allow',
++	'resourceDelete': 'allow',
++	'resourceMove': 'allow',
++	'resourceResolve': 'allow',
++	'resourceMkdir': 'allow',
++	'resourceRequest': 'allow',
++	'fetchTurns': 'allow',
++	// The credential path is its own module (0020). Until it lands nothing is authenticated.
++	'authenticate': 'deny',
++	'resolveSessionConfig': 'allow',
++	'sessionConfigCompletions': 'allow',
++	'completions': 'allow',
++	'invokeChangesetOperation': 'allow',
++	'listAutomationTriggerDefinitions': 'allow',
++	'runAutomation': 'allow',
++	'fetchAutomationRuns': 'allow',
++} as const satisfies Record<keyof CommandMap, SeclabAhpVerdict>;
++
++/** Agent-host-to-client requests (A16, A5, A26). The filter refuses every one, listed or not;
++ *  this table exists so that a new reverse request fails the type check and gets reviewed. */
++export const SECLAB_AHP_SERVER_REQUESTS = {
++	'resourceRead': 'deny',
++	'resourceWrite': 'deny',
++	'resourceList': 'deny',
++	'resourceCopy': 'deny',
++	'resourceDelete': 'deny',
++	'resourceMove': 'deny',
++	'resourceResolve': 'deny',
++	'resourceMkdir': 'deny',
++	'resourceRequest': 'deny',
++	'createResourceWatch': 'deny',
++} as const satisfies Record<keyof ServerCommandMap, 'deny'>;
++
++const clientNotifications = {
++	'unsubscribe': 'allow',
++	'dispatchAction': 'allow',
++	'channel/frame': 'allow',
++	'channel/credit': 'allow',
++	'tcp/data': 'deny',
++	'tcp/eof': 'deny',
++	'tcp/reset': 'deny',
++} as const satisfies Record<keyof ClientNotificationMap, SeclabAhpVerdict>;
++
++const serverNotifications = {
++	'action': 'allow',
++	'root/sessionAdded': 'allow',
++	'root/sessionRemoved': 'allow',
++	'root/sessionSummaryChanged': 'allow',
++	'root/progress': 'allow',
++	// A1: the agent host names a resource for the trusted side to authenticate to.
++	'auth/required': 'deny',
++	// The client would export these to the host's telemetry endpoint.
++	'otlp/exportLogs': 'deny',
++	'otlp/exportTraces': 'deny',
++	'otlp/exportMetrics': 'deny',
++	'channel/frame': 'allow',
++	'channel/credit': 'allow',
++	'tcp/data': 'deny',
++	'tcp/eof': 'deny',
++	'tcp/reset': 'deny',
++	'channel/snapshot': 'allow',
++} as const satisfies Record<keyof ServerNotificationMap, SeclabAhpVerdict>;
++
++/** Actions the client may dispatch: upstream's client-dispatchable set
++ *  (`IS_CLIENT_DISPATCHABLE`). The filter rewrites two of them: `root/configChanged` (only
++ *  `rootConfigKeys` leave) and `session/activeClientSet` (no tools, no customizations). */
++const clientActions = {
++	'root/agentsChanged': 'deny',
++	'root/activeSessionsChanged': 'deny',
++	'session/ready': 'deny',
++	'session/creationFailed': 'deny',
++	'session/chatAdded': 'deny',
++	'session/chatRemoved': 'deny',
++	'session/chatUpdated': 'deny',
++	'session/chatsReordered': 'deny',
++	'session/defaultChatChanged': 'deny',
++	'chat/turnStarted': 'allow',
++	'chat/delta': 'deny',
++	'chat/responsePart': 'deny',
++	'chat/toolCallStart': 'deny',
++	'chat/toolCallDelta': 'deny',
++	'chat/toolCallReady': 'deny',
++	'chat/toolCallConfirmed': 'allow',
++	'chat/toolCallComplete': 'allow',
++	'chat/toolCallResultConfirmed': 'allow',
++	'chat/toolCallContentChanged': 'allow',
++	'chat/toolCallAuthRequired': 'deny',
++	'chat/toolCallAuthResolved': 'deny',
++	'chat/turnComplete': 'deny',
++	'chat/turnCancelled': 'allow',
++	'chat/error': 'deny',
++	'chat/turnResume': 'allow',
++	'chat/activityChanged': 'deny',
++	'chat/backgroundWorkSet': 'deny',
++	'chat/backgroundWorkRemoved': 'deny',
++	'chat/movableChanged': 'deny',
++	'chat/changesetsChanged': 'deny',
++	'chat/canvasesChanged': 'deny',
++	'canvas/stateChanged': 'deny',
++	'chat/workingDirectorySet': 'allow',
++	'chat/workingDirectoryRemoved': 'allow',
++	'session/titleChanged': 'allow',
++	'chat/usage': 'deny',
++	'chat/reasoning': 'deny',
++	'session/serverToolsChanged': 'deny',
++	'session/activeClientSet': 'allow',
++	'session/activeClientRemoved': 'allow',
++	'session/workingDirectorySet': 'allow',
++	'session/workingDirectoryRemoved': 'allow',
++	'session/workingDirectoryReplaced': 'allow',
++	'session/inputNeededSet': 'deny',
++	'session/inputNeededRemoved': 'deny',
++	'chat/pendingMessageSet': 'allow',
++	'chat/pendingMessageRemoved': 'allow',
++	'chat/queuedMessagesReordered': 'allow',
++	'chat/draftChanged': 'allow',
++	'chat/isReadChanged': 'allow',
++	'chat/isArchivedChanged': 'allow',
++	'chat/configChanged': 'allow',
++	'chat/moved': 'deny',
++	'chat/inputRequested': 'deny',
++	'chat/inputAnswerChanged': 'allow',
++	'chat/inputCompleted': 'allow',
++	'session/customizationsChanged': 'deny',
++	'session/customizationToggled': 'allow',
++	'session/customizationUpdated': 'deny',
++	'session/customizationRemoved': 'deny',
++	'session/mcpServerStateChanged': 'deny',
++	'session/mcpServerStartRequested': 'allow',
++	'session/mcpServerStopRequested': 'allow',
++	'session/mcpServerBackgroundRequested': 'allow',
++	'chat/truncated': 'allow',
++	'chat/turnsLoaded': 'deny',
++	'session/isReadChanged': 'allow',
++	'session/isArchivedChanged': 'allow',
++	'session/activityChanged': 'deny',
++	'session/changesetsChanged': 'deny',
++	'session/configChanged': 'allow',
++	'session/metaChanged': 'deny',
++	'changeset/statusChanged': 'deny',
++	'changeset/fileSet': 'deny',
++	'changeset/fileRemoved': 'deny',
++	'changeset/filesReviewChanged': 'allow',
++	'changeset/contentChanged': 'deny',
++	'changeset/operationsChanged': 'deny',
++	'changeset/operationStatusChanged': 'deny',
++	'changeset/cleared': 'deny',
++	'annotations/set': 'allow',
++	'annotations/updated': 'allow',
++	'annotations/removed': 'allow',
++	'annotations/entrySet': 'allow',
++	'annotations/entryRemoved': 'allow',
++	'root/terminalsChanged': 'deny',
++	'root/configChanged': 'allow',
++	'terminal/data': 'deny',
++	'terminal/input': 'allow',
++	'terminal/resized': 'allow',
++	'terminal/claimed': 'allow',
++	'terminal/titleChanged': 'allow',
++	'terminal/cwdChanged': 'deny',
++	'terminal/exited': 'deny',
++	'terminal/cleared': 'allow',
++	'terminal/commandDetectionAvailable': 'deny',
++	'terminal/commandExecuted': 'deny',
++	'terminal/commandFinished': 'deny',
++	'resourceWatch/changed': 'deny',
++	'automation/createRequested': 'allow',
++	'automation/updateRequested': 'allow',
++	'automation/set': 'deny',
++	'automation/removed': 'allow',
++	'automationRun/lifecycleChanged': 'deny',
++	'automationRun/sessionSet': 'deny',
++	'automationRun/sessionRemoved': 'deny',
++	'automationRun/primarySessionChanged': 'deny',
++	'automationRun/cancelRequested': 'allow',
++} as const satisfies Record<`${ActionType}`, SeclabAhpVerdict>;
++
++/** Actions the agent host may send. Their content is sanitised (no protected resources, no
++ *  MCP App UI); dropping a known action would desynchronise the client's state. */
++const serverActions = {
++	'root/agentsChanged': 'allow',
++	'root/activeSessionsChanged': 'allow',
++	'session/ready': 'allow',
++	'session/creationFailed': 'allow',
++	'session/chatAdded': 'allow',
++	'session/chatRemoved': 'allow',
++	'session/chatUpdated': 'allow',
++	'session/chatsReordered': 'allow',
++	'session/defaultChatChanged': 'allow',
++	'chat/turnStarted': 'allow',
++	'chat/delta': 'allow',
++	'chat/responsePart': 'allow',
++	'chat/toolCallStart': 'allow',
++	'chat/toolCallDelta': 'allow',
++	'chat/toolCallReady': 'allow',
++	'chat/toolCallConfirmed': 'allow',
++	'chat/toolCallComplete': 'allow',
++	'chat/toolCallResultConfirmed': 'allow',
++	'chat/toolCallContentChanged': 'allow',
++	'chat/toolCallAuthRequired': 'allow',
++	'chat/toolCallAuthResolved': 'allow',
++	'chat/turnComplete': 'allow',
++	'chat/turnCancelled': 'allow',
++	'chat/error': 'allow',
++	'chat/turnResume': 'allow',
++	'chat/activityChanged': 'allow',
++	'chat/backgroundWorkSet': 'allow',
++	'chat/backgroundWorkRemoved': 'allow',
++	'chat/movableChanged': 'allow',
++	'chat/changesetsChanged': 'allow',
++	'chat/canvasesChanged': 'allow',
++	'canvas/stateChanged': 'allow',
++	'chat/workingDirectorySet': 'allow',
++	'chat/workingDirectoryRemoved': 'allow',
++	'session/titleChanged': 'allow',
++	'chat/usage': 'allow',
++	'chat/reasoning': 'allow',
++	'session/serverToolsChanged': 'allow',
++	'session/activeClientSet': 'allow',
++	'session/activeClientRemoved': 'allow',
++	'session/workingDirectorySet': 'allow',
++	'session/workingDirectoryRemoved': 'allow',
++	'session/workingDirectoryReplaced': 'allow',
++	'session/inputNeededSet': 'allow',
++	'session/inputNeededRemoved': 'allow',
++	'chat/pendingMessageSet': 'allow',
++	'chat/pendingMessageRemoved': 'allow',
++	'chat/queuedMessagesReordered': 'allow',
++	'chat/draftChanged': 'allow',
++	'chat/isReadChanged': 'allow',
++	'chat/isArchivedChanged': 'allow',
++	'chat/configChanged': 'allow',
++	'chat/moved': 'allow',
++	'chat/inputRequested': 'allow',
++	'chat/inputAnswerChanged': 'allow',
++	'chat/inputCompleted': 'allow',
++	'session/customizationsChanged': 'allow',
++	'session/customizationToggled': 'allow',
++	'session/customizationUpdated': 'allow',
++	'session/customizationRemoved': 'allow',
++	'session/mcpServerStateChanged': 'allow',
++	'session/mcpServerStartRequested': 'allow',
++	'session/mcpServerStopRequested': 'allow',
++	'session/mcpServerBackgroundRequested': 'allow',
++	'chat/truncated': 'allow',
++	'chat/turnsLoaded': 'allow',
++	'session/isReadChanged': 'allow',
++	'session/isArchivedChanged': 'allow',
++	'session/activityChanged': 'allow',
++	'session/changesetsChanged': 'allow',
++	'session/configChanged': 'allow',
++	'session/metaChanged': 'allow',
++	'changeset/statusChanged': 'allow',
++	'changeset/fileSet': 'allow',
++	'changeset/fileRemoved': 'allow',
++	'changeset/filesReviewChanged': 'allow',
++	'changeset/contentChanged': 'allow',
++	'changeset/operationsChanged': 'allow',
++	'changeset/operationStatusChanged': 'allow',
++	'changeset/cleared': 'allow',
++	'annotations/set': 'allow',
++	'annotations/updated': 'allow',
++	'annotations/removed': 'allow',
++	'annotations/entrySet': 'allow',
++	'annotations/entryRemoved': 'allow',
++	'root/terminalsChanged': 'allow',
++	'root/configChanged': 'allow',
++	'terminal/data': 'allow',
++	'terminal/input': 'allow',
++	'terminal/resized': 'allow',
++	'terminal/claimed': 'allow',
++	'terminal/titleChanged': 'allow',
++	'terminal/cwdChanged': 'allow',
++	'terminal/exited': 'allow',
++	'terminal/cleared': 'allow',
++	'terminal/commandDetectionAvailable': 'allow',
++	'terminal/commandExecuted': 'allow',
++	'terminal/commandFinished': 'allow',
++	'resourceWatch/changed': 'allow',
++	'automation/createRequested': 'allow',
++	'automation/updateRequested': 'allow',
++	'automation/set': 'allow',
++	'automation/removed': 'allow',
++	'automationRun/lifecycleChanged': 'allow',
++	'automationRun/sessionSet': 'allow',
++	'automationRun/sessionRemoved': 'allow',
++	'automationRun/primarySessionChanged': 'allow',
++	'automationRun/cancelRequested': 'allow',
++} as const satisfies Record<`${ActionType}`, SeclabAhpVerdict>;
++
++export const SECLAB_AHP_TABLES: SeclabAhpTables = {
++	clientRequests,
++	clientNotifications,
++	serverNotifications,
++	clientActions,
++	serverActions,
++	// Session and chat URI capabilities, telemetry level and connection kind. Not the machine
++	// or device ids, and not the client certificate or proxy capabilities.
++	clientMetaKeys: ['vscode.ahpSessionUris', 'vscode.ahpChatUris', 'vscode.telemetryLevel', 'vscode.clientConnectionKind'],
++	// A19: no host setting is mirrored into a tab's agent host in this increment.
++	rootConfigKeys: [],
++};
+diff --git a/src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts b/src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts
+index d2bb9f4a..f4ffd9d0 100644
+--- a/src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts
++++ b/src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts
+@@ -43,6 +43,7 @@ import { IAgentHostFileSystemService } from '../common/agentHostFileSystemServic
+ import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+ import { IRequestService } from '../../../../platform/request/common/request.js';
+ import { getRemoteName } from '../../../../platform/remote/common/remoteHosts.js';
++import { SeclabAhpGate, seclabAgentHostAllowed } from './seclabAhpGate.js';
+ 
+ const REMOTE_NOT_SUPPORTED = (op: string) => new Error(`${op} is not supported when the agent host runs on a remote.`);
+ const LOG_PREFIX = '[AgentHost:remote]';
+@@ -103,7 +104,8 @@ export class EditorRemoteAgentHostServiceClient extends Disposable implements IA
+ 	) {
+ 		super();
+ 
+-		const connection = this._remoteAgentService.getConnection();
++		// seclab: a tab window connects only with `seclab.agents.enabled` on (patch 0015).
++		const connection = instantiationService.invokeFunction(seclabAgentHostAllowed, environmentService.remoteAuthority) ? this._remoteAgentService.getConnection() : null;
+ 		this._connectionAuthority = connection ? agentHostAuthority(`vscode-remote://${connection.remoteAuthority}`) : undefined;
+ 		this._logService.info(`${LOG_PREFIX} Initializing (remoteAuthority=${connection?.remoteAuthority ?? 'none'})`);
+ 
+@@ -116,8 +118,10 @@ export class EditorRemoteAgentHostServiceClient extends Disposable implements IA
+ 		// Create the protocol client eagerly so consumers can subscribe to
+ 		// rootState etc. before the AHP handshake completes. The transport's
+ 		// `connect()` will be awaited by `_connect()` below.
+-		const createTransport = () => new AgentHostIpcChannelTransport(
+-			connection.getChannel(AgentHostIpcChannels.RemoteProxy),
++		// seclab: in a tab window the transport is built over the gate's filtered channel (patch 0015).
++		const seclabGate = this._register(instantiationService.createInstance(SeclabAhpGate, connection.remoteAuthority));
++		const createTransport = () => seclabGate.transport(connection.getChannel(AgentHostIpcChannels.RemoteProxy), channel => new AgentHostIpcChannelTransport(
++			channel,
+ 			undefined,
+ 			AgentHostClientConnectionKind.RemoteExtensionHost,
+ 			async () => {
+@@ -134,7 +138,7 @@ export class EditorRemoteAgentHostServiceClient extends Disposable implements IA
+ 					debugEnv: environmentService.debugExtensionHost.env,
+ 				};
+ 			},
+-		);
++		));
+ 		const address = `vscode-remote://${connection.remoteAuthority}`;
+ 		const clientInfo = environmentService.isSessionsWindow ? agentsWindowAgentHostClientInfo : editorWindowAgentHostClientInfo;
+ 		// Like the remote extension host, a WSL or container remote with `useHostProxy` shares this client's network.
+diff --git a/src/vs/workbench/services/agentHost/browser/seclabAhpGate.ts b/src/vs/workbench/services/agentHost/browser/seclabAhpGate.ts
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/src/vs/workbench/services/agentHost/browser/seclabAhpGate.ts
+@@ -0,0 +1,185 @@
++/*---------------------------------------------------------------------------------------------
++ *  seclab-vscode: the agent-host protocol gate (patch 0015).
++ *  In a seclab tab window (`seclab+<tab>` authority) the workbench's only agent-host transport is
++ *  built over a filtered channel: every frame in either direction passes `SeclabAhpFilter`
++ *  with the verdict tables in `seclabAhpPolicyData.ts`. With `seclab.agents.enabled` off, no
++ *  connection is made at all. Decisions go to a per-window log, `seclabAhpGate.log`, one JSON
++ *  object per line in the shape `tab.events.report` accepts. Other windows are unchanged.
++ *--------------------------------------------------------------------------------------------*/
++
++import type { CancellationToken } from '../../../../base/common/cancellation.js';
++import { Emitter, Event } from '../../../../base/common/event.js';
++import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
++import { joinPath } from '../../../../base/common/resources.js';
++import type { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
++import { localize } from '../../../../nls.js';
++import { isSeclabAuthority, seclabAhpBrandTransport, seclabAhpInstallWindow, seclabAhpNextConnection } from '../../../../platform/agentHost/common/seclabAhpGateCheck.js';
++import { SeclabAhpEvent, SeclabAhpFilter, SeclabAhpOutput } from '../../../../platform/agentHost/common/seclabAhpPolicy.js';
++import { SECLAB_AHP_TABLES } from '../../../../platform/agentHost/common/seclabAhpPolicyData.js';
++import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
++import { ConfigurationScope, Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
++import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
++import { ILoggerService } from '../../../../platform/log/common/log.js';
++import { Registry } from '../../../../platform/registry/common/platform.js';
++import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
++import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
++
++export const SECLAB_AGENTS_ENABLED_SETTING = 'seclab.agents.enabled';
++
++// APPLICATION scope: the remote (tab-supplied) user settings layer can't set it.
++Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
++	id: 'seclab.agents',
++	title: localize('seclab.agents.title', "Sandboxed tab agents"),
++	type: 'object',
++	properties: {
++		[SECLAB_AGENTS_ENABLED_SETTING]: {
++			type: 'boolean',
++			default: false,
++			scope: ConfigurationScope.APPLICATION,
++			description: localize('seclab.agents.enabled', "Connect tab windows to the agent host running inside their tab, through the agent-host gate. When off, tab windows make no agent-host connection."),
++		},
++	},
++});
++
++const DECISIONS_PER_CONNECTION = 2000;
++let emitWindow: ((e: SeclabAhpEvent) => void) | undefined;
++
++/** Creates this window's gate log and installs it as the invariant's sink. Idempotent. */
++function installWindowSink(accessor: ServicesAccessor): (e: SeclabAhpEvent) => void {
++	if (!emitWindow) {
++		const environmentService = accessor.get(IWorkbenchEnvironmentService);
++		const logger = accessor.get(ILoggerService).createLogger(joinPath(environmentService.windowLogsPath, 'seclabAhpGate.log'), { id: 'seclabAhpGate', name: 'seclab agent-host gate', logLevel: 'always', hidden: true });
++		const counts = new Map<number, number>();
++		const sink = (e: SeclabAhpEvent) => {
++			const connection = typeof e.detail.connection === 'number' ? e.detail.connection : 0;
++			const rule = e.detail.gateRule;
++			if (rule !== 'ahp-gate.opened' && rule !== 'ahp-gate.verified' && rule !== 'ahp-gate.refused') {
++				const n = (counts.get(connection) ?? 0) + 1;
++				counts.set(connection, n);
++				if (n > DECISIONS_PER_CONNECTION) {
++					if (n === DECISIONS_PER_CONNECTION + 1) {
++						logger.info(JSON.stringify({ source: 'ahp-gate', class: 'ahp.decision', priority: 'warning', summary: 'ahp-gate.log-capped', detail: { gateRule: 'ahp-gate.log-capped', connection, verdict: 'deny' } } satisfies SeclabAhpEvent));
++					}
++					return;
++				}
++			}
++			logger.info(JSON.stringify(e));
++		};
++		emitWindow = sink;
++		seclabAhpInstallWindow(sink);
++	}
++	return emitWindow;
++}
++
++/**
++ * Whether this window may connect to an agent host. Any window that isn't a seclab tab window
++ * may; a tab window may only with `seclab.agents.enabled` on. Read at each connection.
++ * This is the predicate patches 0009/0010 call (`seclabAgentHostAllowed`).
++ */
++export function seclabAgentHostAllowed(accessor: ServicesAccessor, authority: string | undefined): boolean {
++	if (!isSeclabAuthority(authority)) {
++		return true;
++	}
++	const emit = installWindowSink(accessor);
++	if (accessor.get(IConfigurationService).getValue<boolean>(SECLAB_AGENTS_ENABLED_SETTING) === true) {
++		return true;
++	}
++	emit({ source: 'ahp-gate', class: 'ahp.decision', priority: 'notice', summary: 'ahp-gate.disabled deny', detail: { gateRule: 'ahp-gate.disabled', connection: 0, verdict: 'deny' } });
++	return false;
++}
++
++/** Builds the agent-host transport for one remote authority: through the gate for a seclab tab
++ *  window, unchanged otherwise. */
++export class SeclabAhpGate extends Disposable {
++	constructor(
++		private readonly _authority: string,
++		@IInstantiationService private readonly _instantiationService: IInstantiationService,
++	) {
++		super();
++	}
++
++	transport<T extends object>(channel: IChannel, make: (channel: IChannel) => T): T {
++		if (!isSeclabAuthority(this._authority)) {
++			return make(channel);
++		}
++		if (!this._instantiationService.invokeFunction(seclabAgentHostAllowed, this._authority)) {
++			throw new Error(`seclab: agents are off in tab windows (${SECLAB_AGENTS_ENABLED_SETTING})`);
++		}
++		const emit = this._instantiationService.invokeFunction(installWindowSink);
++		const connection = seclabAhpNextConnection();
++		const transport = make(new SeclabAhpGatedChannel(channel, new SeclabAhpFilter(SECLAB_AHP_TABLES, connection, emit)));
++		seclabAhpBrandTransport(transport, connection);
++		return transport;
++	}
++}
++
++/** The `agentHostProxy` channel with every frame filtered. Only `connect`, `send` and `close`
++ *  calls and the `frame` and `close` events exist on it. */
++class SeclabAhpGatedChannel implements IChannel {
++	private readonly _frames: Emitter<string>;
++	private _upstream: IDisposable | undefined;
++
++	constructor(
++		private readonly _channel: IChannel,
++		private readonly _filter: SeclabAhpFilter,
++	) {
++		this._frames = new Emitter<string>({
++			onWillAddFirstListener: () => { this._upstream = this._channel.listen<string>('frame')(text => this._deliver(this._filter.fromUpstream(text), false)); },
++			onDidRemoveLastListener: () => { this._upstream?.dispose(); this._upstream = undefined; },
++		});
++	}
++
++	call<T>(command: string, arg?: unknown, cancellationToken?: CancellationToken): Promise<T> {
++		if (command === 'send') {
++			return this._deliver(this._filter.fromClient(typeof arg === 'string' ? arg : ''), true) as Promise<T>;
++		}
++		if (command === 'connect' || command === 'close') {
++			return this._channel.call<T>(command, arg, cancellationToken);
++		}
++		return Promise.reject(new Error(`seclab: agent-host channel call '${command}' refused`));
++	}
++
++	listen<T>(event: string, arg?: unknown): Event<T> {
++		if (event === 'frame') {
++			return this._frames.event as unknown as Event<T>;
++		}
++		if (event === 'close') {
++			return this._channel.listen<T>('close', arg);
++		}
++		return Event.None;
++	}
++
++	private _deliver(out: SeclabAhpOutput, fromClient: boolean): Promise<undefined> {
++		const sends = out.toUpstream.map(frame => this._channel.call<void>('send', frame));
++		if (out.toClient.length) {
++			// A refusal answers the client's own send: deliver it after that send returns.
++			const deliver = () => out.toClient.forEach(frame => this._frames.fire(frame));
++			if (fromClient) {
++				queueMicrotask(deliver);
++			} else {
++				deliver();
++			}
++		}
++		const all = Promise.all(sends).then(() => undefined);
++		if (!fromClient) {
++			all.catch(() => undefined);
++		}
++		return all;
++	}
++}
++
++class SeclabAhpWindowContribution implements IWorkbenchContribution {
++	static readonly ID = 'workbench.contrib.seclabAhpGate';
++
++	constructor(
++		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
++		@IInstantiationService instantiationService: IInstantiationService,
++	) {
++		// Before any agent-host client exists: from here on, every transport in this window must be gated.
++		if (isSeclabAuthority(environmentService.remoteAuthority)) {
++			instantiationService.invokeFunction(installWindowSink);
++		}
++	}
++}
++
++registerWorkbenchContribution2(SeclabAhpWindowContribution.ID, SeclabAhpWindowContribution, WorkbenchPhase.BlockStartup);
