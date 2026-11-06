@@ -13,7 +13,7 @@ Manager: the per-tab switch, the token source and the tab's npm and pip configur
 
 ## Decision
 - **Off by default, per tab, from the user.**
-  - The Tab Manager's command "Package Feeds (CFS) for This Tab…" shows a modal. It says that
+  - The Tab Manager's command "Package Feeds (CFS) for This Tab…" shows a modal, then asks the user to type a random code (review EEE-3). The modal says that
     installs run under the user's identity, that a missing version gets added to the shared
     feed, and what the budget is.
   - On confirmation the Tab Manager sends `tab.packages.set {cfs: true}`.
@@ -54,6 +54,13 @@ Manager: the per-tab switch, the token source and the tab's npm and pip configur
   through the same root-only directory checks (OCI and sbx).
 
 ## Consequences
+- Review [EEE](../security-reviews/20261106-cfs-feeds-tabd.md), with all five findings fixed:
+  - feeds are refused below broker revision 7, whose import keeps `budget`;
+  - CFS work is serialised per tab and re-checked after each slow step; a disable the
+    broker can't confirm stops the tab;
+  - enabling needs a typed random code after the modal;
+  - only running sandboxes are touched;
+  - the pip URL is parsed exactly.
 - Unit tests cover:
   - off by default, and enabling on a running tab: the import's params, GET-only bindings,
     budget, allow rules, and config with the sentinel;

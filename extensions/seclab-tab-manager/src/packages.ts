@@ -3,6 +3,7 @@
 // installs run under the user's Azure DevOps identity, and a version the feed lacks gets added
 // to the shared feed. The tab only ever holds a sentinel; tabd mints the token on the host.
 
+import { randomBytes } from 'node:crypto';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { TabdClient } from '../tabd-src/client.ts';
@@ -60,6 +61,19 @@ export class PackageFeeds implements vscode.Disposable {
 			'Use Package Feeds',
 		);
 		if (pick !== 'Use Package Feeds') {
+			return;
+		}
+		// A modal's first button is its default, so a timed Enter could accept it, and until the
+		// RPC filter lands a tab extension can open this command (review EEE-3). Typing a fresh
+		// random code can't happen by accident or from the tab.
+		const code = Array.from(randomBytes(4), b => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[b % 24]).join('');
+		const typed = await vscode.window.showInputBox({
+			title: `Turn on package feeds for tab ${name}`,
+			prompt: `Type ${code} to turn on GitHub CFS package feeds for this tab.`,
+			ignoreFocusOut: false,
+			validateInput: v => v === '' || v === code ? undefined : `Type ${code}`,
+		});
+		if (typed !== code) {
 			return;
 		}
 		try {
