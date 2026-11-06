@@ -8,7 +8,7 @@ import type { Runner } from '../run.ts';
 import { assertImageRef, assertPolicyResource, SANDBOX_NAME_RE, CONNECTION_TOKEN_RE } from '../validate.ts';
 import type { UpperReader } from '../writeback-feed.ts';
 import type { BrokerImagePin } from '../broker-image.ts';
-import { brokerInstallInput, dropBrokerFromOtherImage, INSTALL_BROKER, pinnedBrokerImage } from './broker-install.ts';
+import { brokerImageProblem, brokerInstallInput, dropBrokerFromOtherImage, INSTALL_BROKER, pinnedBrokerImage } from './broker-install.ts';
 import { DriverError, type BrokerHooks, type BrokerSetup, type Driver, type DriverInfo, type FenceReport, type PolicyLogEntry, type SensorHooks, type TabRuntimeSpec } from './types.ts';
 
 const MIN_VERSION = [0, 51, 0];
@@ -72,7 +72,7 @@ export class SbxDriver implements Driver {
 		if (!await exists('network', n.egress)) {
 			await must(['network', 'create', '-o', 'com.docker.network.bridge.enable_icc=false', '--label', label, '--', n.egress], 'broker egress network create');
 		}
-		await dropBrokerFromOtherImage(this.runner, docker, n.broker, image.id);
+		await dropBrokerFromOtherImage(this.runner, docker, n.broker, spec.tabId, image.id);
 		if (!await exists('container', n.broker)) {
 			await must(['create', '--pull', 'never', '--name', n.broker, '--label', label, '--network', n.egress,
 				'--publish', '127.0.0.1::8080',
@@ -81,6 +81,10 @@ export class SbxDriver implements Driver {
 				'--env', `SECLAB_TAB_ID=${spec.tabId}`, '--', image.id], 'broker create');
 		}
 		await must(['start', '--', n.broker], 'broker start');
+		const bad = await brokerImageProblem(this.runner, docker, n.broker, spec.tabId, image.id);
+		if (bad) {
+			throw new DriverError(-32011, bad);
+		}
 		return { port: await this.brokerPort(spec), version: image.version };
 	}
 
@@ -369,7 +373,7 @@ export class SbxDriver implements Driver {
 			return r.code === 0 && r.stdout.trim() === spec.tabId;
 		};
 		if (await ours('container', n.broker)) {
-			const r = await this.runner.run(docker, what === 'stop' ? ['stop', '--', n.broker] : ['rm', '-f', '--', n.broker], { timeoutMs: 60_000 });
+			const r = await this.runner.run(docker, what === 'stop' ? ['stop', '--', n.broker] : ['rm', '-f', '-v', '--', n.broker], { timeoutMs: 60_000 });
 			if (r.code !== 0) {
 				throw new DriverError(-32011, `broker ${what} failed: ${tail(r.stderr)}`);
 			}
@@ -394,6 +398,14 @@ export class SbxDriver implements Driver {
 			const rules = await this.policyRules();
 			const problems = checkFence(rules, spec.sandboxName, spec.brokerPort);
 			problems.push(...await this.secretProblems(spec));
+			// The running broker is the checked image (ZZ-7).
+			if (spec.template.spec.broker === 'required') {
+				const image = await pinnedBrokerImage(this.opts.brokerPin);
+				const bad = await brokerImageProblem(this.runner, this.opts.docker!, this.brokerNames(spec).broker, spec.tabId, image.id);
+				if (bad) {
+					problems.push(bad);
+				}
+			}
 			const probes: Array<[string, boolean]> = CANARY_TARGETS.map(t => [t, false]);
 			// Plus a few concrete (non-glob) global allows: these must be denied for the tab.
 			for (const res of resourcesToMirror(rules, spec.sandboxName, spec.brokerPort).filter(r => !/[*?[\]]/.test(r)).slice(0, 3)) {

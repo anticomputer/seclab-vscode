@@ -58,6 +58,20 @@ OCI tabs have no route to host loopback, and the proxy requires the tab's passwo
 XX-6 is closed by the broker image identity change below.
 
 ## Round ZZ, part 2: broker image identity (XX-6)
-Scope: `broker/build.sh` labels (broker session, `4d55351`, reviewed there) and the tabd side
-([EDR](../edr/20261105-broker-image-identity.md)). Findings and dispositions are recorded below
-once the round completes.
+Scope: the tabd side (`0f0fdc0` and its fix-up; [EDR](../edr/20261105-broker-image-identity.md));
+`broker/build.sh`'s labels were reviewed in the broker session. Nothing medium or higher.
+Confirmed: brokers are created by the checked ID on both drivers; on the containerd store a
+container's `.Image` equals the image's `.Id`; the current local pre-label image is refused;
+`broker/test.sh` images carry `unknown` labels and are refused; no setting can choose the image
+or `--broker-dev`.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| ZZ-7 | Low | tabd | Already-running brokers were never checked against the pin: adoption and `tab.connect` check only the fence. | Fixed | The fence check on both drivers requires the running broker's image to be the checked ID and its label to be this tab's; a mismatch quarantines. |
+| ZZ-8 | Low | tabd | Replace-and-reuse trusted the container name, read a failed inspect as "absent", and never re-checked after `start`. | Fixed | A container with another tab's label is refused, never removed; only "no such container" means absent; the image is re-checked after `start`. |
+| ZZ-9 | Low | tabd | `--broker none` started the placeholder by tag, and reused a real broker left from an earlier `required` run. | Fixed | The placeholder runs by ID; a broker from another image is replaced, and a leftover labelled egress network removed. |
+| ZZ-10 | Low | tabd | A successful pin was cached for tabd's lifetime: a rebuild needed a restart, and a pruned old ID stranded every create. | Fixed | Resolved at every start (creating by ID is race-free either way). |
+| ZZ-11 | Low | tests | Only the pure functions were tested. | Fixed | Driver tests with a fake docker: create argv ends in the ID, never the tag; another image is removed (`-v`) then recreated; a refused image creates nothing; another tab's container is neither used nor removed. The e2e asserts the running broker's `.Image` equals the tag's ID. |
+
+Also fixed: `rm -f -v` for brokers, so the anonymous volume the mitmproxy base declares isn't
+leaked. Passed to the broker session: `build.sh`'s dirty check doesn't count gitignored files.
