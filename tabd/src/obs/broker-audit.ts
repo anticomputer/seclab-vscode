@@ -35,6 +35,7 @@ export const AUDIT_KINDS: Readonly<Record<string, Kind>> = {
 	'request.denied': K('egress.request', 'warning', 'denied', true),
 	'request.denied_unprompted': K('egress.request', 'warning', 'denied without a prompt', true),
 	'upstream.blocked': K('egress.request', 'warning', 'upstream address refused', true),
+	'upstream.denied': K('egress.request', 'warning', 'upstream connection to a blocked destination refused', true),
 	'upstream.dns_failed': K('egress.request', 'notice', 'upstream name did not resolve', true),
 	'tcp.blocked': K('egress.request', 'warning', 'non-HTTP TCP stream killed', true),
 	'udp.blocked': K('egress.request', 'warning', 'UDP flow killed', true),
@@ -56,6 +57,7 @@ export const AUDIT_KINDS: Readonly<Record<string, Kind>> = {
 	'credential.backstop_denied': K('credential.use', 'critical', 'credentialed request hit the provider backstop', true),
 	'credential.backstop_exempt': K('credential.use', 'notice', 'credentialed request passed the backstop on a declared derive route'),
 	'credential.backstop_exception_blocked': K('credential.use', 'critical', 'backstop exception response blocked', true),
+	'credential.backstop_exception_filtered': K('credential.use', 'notice', 'unlisted fields dropped from a backstop exception response', true),
 	'sentinel.misplaced': K('credential.use', 'critical', 'sentinel sent outside its binding', true),
 	'token.redacted': K('credential.use', 'warning', 'minted token redacted', true),
 	'model.call': K('model.call', 'informational', 'model call'),
@@ -109,7 +111,7 @@ export function mapAudit(input: unknown, tabId: string): MappedAudit | string {
 		detail.brokerSeq = seq;
 	}
 	// Broker-produced vocabulary and numbers.
-	for (const k of ['scheme', 'decision', 'by', 'kind', 'provider', 'approvalId', 'credentialId', 'parentId', 'rule', 'limit', 'hook'] as const) {
+	for (const k of ['scheme', 'decision', 'by', 'kind', 'provider', 'approvalId', 'credentialId', 'parentId', 'rule', 'ruleId', 'limit', 'hook'] as const) {
 		const v = e[k];
 		if (typeof v === 'string') {
 			detail[k] = v.slice(0, 96);
@@ -117,11 +119,16 @@ export function mapAudit(input: unknown, tabId: string): MappedAudit | string {
 			detail[k] = v;
 		}
 	}
-	for (const k of ['status', 'reqBytes', 'respBytes', 'durationMs', 'requests', 'bytes', 'count', 'revision', 'rules', 'waiting', 'controllers', 'epoch'] as const) {
+	// The tab-side source port of the proxy connection: a number the tab can choose (bind), used
+	// only to join this request to the sensor's connect (EDR broker-request-lineage).
+	for (const k of ['status', 'reqBytes', 'respBytes', 'durationMs', 'requests', 'bytes', 'count', 'revision', 'rules', 'waiting', 'controllers', 'epoch', 'clientPort'] as const) {
 		const v = num(e[k]);
 		if (v !== undefined) {
 			detail[k] = v;
 		}
+	}
+	if (typeof detail.clientPort === 'number' && (detail.clientPort < 1 || detail.clientPort > 65535)) {
+		delete detail.clientPort;
 	}
 	if (typeof e.confirmed === 'boolean') {
 		detail.confirmed = e.confirmed;

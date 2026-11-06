@@ -118,7 +118,8 @@ export function buildItem(e: ObsEvent, kind: string, ctx: NotifyContext): Notify
 		facts.push(`File: ${quote(e.file.path)}.`);
 	}
 	if (e.net?.addr && e.net.family !== 'unix') {
-		facts.push(`Destination: ${quote(`${e.net.addr}${e.net.port !== undefined ? `:${e.net.port}` : ''}`, 60)}.`);
+		// In full: Block Destination acts on this exact name, and a cut one could pass for a familiar host.
+		facts.push(`Destination: ${quote(`${e.net.addr}${e.net.port !== undefined ? `:${e.net.port}` : ''}`, 270)}.`);
 	} else if (e.net?.addr) {
 		facts.push(`Socket: ${quote(e.net.addr)}.`);
 	}
