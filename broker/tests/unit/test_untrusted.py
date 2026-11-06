@@ -96,6 +96,23 @@ def test_a_new_deny_rule_resolves_a_waiting_prompt():
         assert resolved["by"] == "deny-rule" and resolved["decision"] == "deny"
         changed = [p for m, p in notes if m == "policy.changed"][0]
         assert changed["addedDeny"] == [{"id": "blk", "host": "new.example.com", "schemes": ["http", "https"]}]
+        # Review 12-3/12-4: a block is not a prompt refusal; unblocking prompts again at once.
+        assert b.session_denials == 0 and not b._cooldown
+        b.dispatch("policy.update", {"removeDeny": ["blk"]})
+        t = asyncio.create_task(b.ask_egress(RequestView("https", "new.example.com", 443, "GET", "/a", "")))
+        await asyncio.sleep(0.01)
+        assert len([p for m, p in notes if m == "approval.requested"]) == 2
+        b.dispatch("approval.decide", {"approvalId": [p for m, p in notes if m == "approval.requested"][1]["approvalId"],
+                                       "decision": "allow-once"})
+        assert (await t).allow
+        # Review 12-6: runtime edits stay within the schema caps.
+        import pytest
+        from seclab_broker.core import MAX_DENY_RULES
+        for i in range(MAX_DENY_RULES // 256):
+            b.dispatch("policy.update", {"addDeny": [{"id": f"d{i}-{j}", "host": f"h{j}.example.com"} for j in range(256)]})
+        with pytest.raises(Exception):
+            b.dispatch("policy.update", {"addDeny": [{"id": "one-more", "host": "x.example.com"}]})
+        assert len(b.policy.deny) == MAX_DENY_RULES
     asyncio.run(go())
 
 
