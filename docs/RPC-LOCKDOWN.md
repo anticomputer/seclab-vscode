@@ -317,6 +317,7 @@ The invariants the table is checked against, from `policy.json`:
 6. **no-seclab-commands-from-tabs** — No command whose id begins 'seclab.' is reachable from a sandboxed host.
 7. **every-deny-has-an-enforcement-point** — Every surface class carrying a deny verdict must name the code that refuses it, and that code must exist in the patch series.
 8. **no-allowed-command-while-laundering-is-deferred** — No command may be given a verdict other than deny until the deferred-laundering residual is fixed.
+9. **rpc-filter-log-is-trustworthy** — The filter's decision log may only be treated as trusted evidence while a tab can neither forge lines in it nor write the file.
 <!-- seclab:end invariants -->
 
 ### 3.2 Categories may withhold authority; they may not grant it

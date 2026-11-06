@@ -81,6 +81,97 @@ function seclabDeliver(d: SeclabDecision): void {
  * collapsed per (surface, id, verdict) so a chatty extension cannot drown the
  * stream.
  */
+/** Max bytes for one log line, and for the tab-chosen `ref` inside it. */
+const SECLAB_LOG_LINE_MAX = 4096;
+const SECLAB_LOG_REF_MAX = 1024;
+/** Denials written per window before the log caps itself. */
+const SECLAB_LOG_DENIALS_MAX = 5000;
+
+let seclabLogInstalled = false;
+
+/**
+ * Write this window's filter decisions to a log the Tab Manager forwards.
+ *
+ * Until this existed, `seclabOnDecision` had no subscriber at all: every deny
+ * was pushed into an in-memory array and observed by nobody, and a
+ * `CALLER_EXEMPT` entry claiming the Tab Manager consumed it is what kept the
+ * dead-entry-point check quiet. A security control whose refusals nothing can
+ * see is hard to defend as a control, independently of any test needing it.
+ *
+ * Written through `ILoggerService` into the window's logs directory, which is
+ * host-side, so it does not depend on the tab's overlay write-back. The shape
+ * is `rpc.decision`, which tabd already accepts from source `rpc-filter`.
+ *
+ * Integrity rests on two policy facts, pinned by the
+ * `rpc-filter-log-is-trustworthy` invariant: every `MainThreadLogger.*` method
+ * is denied, so a tab cannot forge lines through `$log`; and `$writeFile` is
+ * constrained to this tab's own authority, so it cannot write the log file
+ * directly. If either weakens, this log stops being evidence.
+ *
+ * `summary` is fixed text. `ref`, `reason` and `claimedExtensionId` are chosen
+ * by the tab, so they stay in `detail`, where the consumer tags them untrusted
+ * and the UI quotes them; putting a tab-chosen string in a summary line is how
+ * a log becomes a spoofing surface.
+ */
+export function seclabInstallDecisionLog(
+	createLogger: (name: string) => { info(line: string): void },
+): void {
+	if (seclabLogInstalled) {
+		return;
+	}
+	seclabLogInstalled = true;
+	const logger = createLogger('seclabRpcFilter.log');
+	let denials = 0;
+
+	const line = (d: SeclabDecision): string | undefined => {
+		const deny = d.verdict !== 'allow' && d.verdict !== 'allow_with_constraint';
+		if (deny) {
+			denials++;
+			if (denials > SECLAB_LOG_DENIALS_MAX) {
+				return denials === SECLAB_LOG_DENIALS_MAX + 1
+					? JSON.stringify({
+						source: 'rpc-filter', class: 'rpc.decision',
+						priority: 'warning', summary: 'log capped',
+						detail: {
+							surface: 'rpc', ref: 'rpc:seclab.log-capped',
+							verdict: 'deny', reason: 'log-capped',
+						},
+					})
+					: undefined;
+			}
+		}
+		const detail: Record<string, unknown> = {
+			surface: d.surface,
+			ref: d.ref.length > SECLAB_LOG_REF_MAX
+				? d.ref.slice(0, SECLAB_LOG_REF_MAX) : d.ref,
+			verdict: d.verdict,
+		};
+		if (d.reason) { detail.reason = d.reason; }
+		if (d.constraint) { detail.constraint = d.constraint; }
+		if (d.claimedExtensionId) { detail.claimedExtensionId = d.claimedExtensionId; }
+		if (typeof d.count === 'number' && d.count > 1) { detail.count = d.count; }
+		const priority = d.verdict === 'deny' || d.verdict === 'prompt'
+			? 'warning' : d.verdict === 'rewrite' ? 'notice' : 'informational';
+		const out = JSON.stringify({
+			source: 'rpc-filter', class: 'rpc.decision', priority,
+			summary: `${d.verdict} ${d.surface}`, detail,
+		});
+		// `tabId` and `at` are deliberately absent: the forwarder takes the tab
+		// from its own window's authority and tabd stamps the time, so neither
+		// can be influenced by anything the tab chose.
+		return out.length > SECLAB_LOG_LINE_MAX
+			? out.slice(0, SECLAB_LOG_LINE_MAX) : out;
+	};
+
+	seclabOnDecision(d => {
+		const l = line(d);
+		if (l !== undefined) {
+			logger.info(l);
+		}
+	});
+}
+
+
 function seclabRecord(d: SeclabDecision): void {
 	if (d.verdict !== 'allow' && d.verdict !== 'allow_with_constraint') {
 		seclabDeliver(d);

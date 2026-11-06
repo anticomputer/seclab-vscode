@@ -1,29 +1,48 @@
 diff -ruN a/src/vs/workbench/services/extensions/common/extensionHostManager.ts b/src/vs/workbench/services/extensions/common/extensionHostManager.ts
---- a/src/vs/workbench/services/extensions/common/extensionHostManager.ts	2026-11-04 18:55:50
-+++ b/src/vs/workbench/services/extensions/common/extensionHostManager.ts	2026-11-04 18:55:50
-@@ -22,6 +22,7 @@
+--- a/src/vs/workbench/services/extensions/common/extensionHostManager.ts	2026-11-06 11:37:55
++++ b/src/vs/workbench/services/extensions/common/extensionHostManager.ts	2026-11-06 11:38:07
+@@ -22,6 +22,9 @@
  import { IEditorService } from '../../editor/common/editorService.js';
  import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
  import { ExtHostCustomersRegistry, IInternalExtHostContext } from './extHostCustomers.js';
-+import { seclabFilterFor, seclabResolveTabId } from './seclabRpcFilter.js';
++import { seclabFilterFor, seclabInstallDecisionLog, seclabResolveTabId } from './seclabRpcFilter.js';
++import { ILoggerService, LogLevel } from '../../../../platform/log/common/log.js';
++import { joinPath } from '../../../../base/common/resources.js';
  import { ExtensionHostKind, extensionHostKindToString } from './extensionHostKind.js';
  import { IExtensionHostManager } from './extensionHostManagers.js';
  import { IExtensionDescriptionDelta } from './extensionHostProtocol.js';
-@@ -255,7 +256,10 @@
+@@ -97,6 +100,7 @@
+ 		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
+ 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+ 		@ILogService private readonly _logService: ILogService,
++		@ILoggerService private readonly _seclabLoggerService: ILoggerService,
+ 	) {
+ 		super();
+ 		this._cachedActivationEvents = new Map<string, Promise<void>>();
+@@ -255,7 +259,19 @@
  			logger = new TelemetryRPCLogger(this._telemetryService);
  		}
  
 -		this._rpcProtocol = new RPCProtocol(protocol, logger);
 +		// seclab: attach the capability filter for sandboxed hosts. Fails closed:
 +		// an unregistered seclab+ authority throws rather than running unfiltered.
++		//
++		// The decision log is installed here, the one place a filter is built, so
++		// a window that has a filter always has somewhere its denials are written.
++		// Until this existed `seclabOnDecision` had no subscriber at all: every
++		// deny went into an in-memory array nothing read. Idempotent, so several
++		// extension hosts in one window share the window's log.
++		seclabInstallDecisionLog(name => this._seclabLoggerService.createLogger(
++			joinPath(this._environmentService.windowLogsPath, name),
++			{ id: 'seclabRpcFilter', name: 'seclab RPC filter', logLevel: LogLevel.Info, hidden: true }));
 +		this._rpcProtocol = new RPCProtocol(protocol, logger, null,
 +			seclabFilterFor(this._extensionHost.remoteAuthority, seclabResolveTabId) ?? null);
  		this._register(this._rpcProtocol.onDidChangeResponsiveState((responsiveState: ResponsiveState) => this._onDidChangeResponsiveState.fire(responsiveState)));
  		let extensionHostProxy: IExtensionHostProxy | null = null as IExtensionHostProxy | null;
  		let mainProxyIdentifiers: ProxyIdentifier<any>[] = [];
 diff -ruN a/src/vs/workbench/services/extensions/common/rpcProtocol.ts b/src/vs/workbench/services/extensions/common/rpcProtocol.ts
---- a/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-04 18:55:50
-+++ b/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-04 18:55:50
+--- a/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-06 11:37:55
++++ b/src/vs/workbench/services/extensions/common/rpcProtocol.ts	2026-11-06 11:37:55
 @@ -16,6 +16,7 @@
  import { IMessagePassingProtocol } from '../../../../base/parts/ipc/common/ipc.js';
  import { CanceledLazyPromise, LazyPromise } from './lazyPromise.js';
@@ -264,7 +283,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-04 18:55:50
-@@ -0,0 +1,630 @@
+@@ -0,0 +1,721 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -348,6 +367,97 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 + * collapsed per (surface, id, verdict) so a chatty extension cannot drown the
 + * stream.
 + */
++/** Max bytes for one log line, and for the tab-chosen `ref` inside it. */
++const SECLAB_LOG_LINE_MAX = 4096;
++const SECLAB_LOG_REF_MAX = 1024;
++/** Denials written per window before the log caps itself. */
++const SECLAB_LOG_DENIALS_MAX = 5000;
++
++let seclabLogInstalled = false;
++
++/**
++ * Write this window's filter decisions to a log the Tab Manager forwards.
++ *
++ * Until this existed, `seclabOnDecision` had no subscriber at all: every deny
++ * was pushed into an in-memory array and observed by nobody, and a
++ * `CALLER_EXEMPT` entry claiming the Tab Manager consumed it is what kept the
++ * dead-entry-point check quiet. A security control whose refusals nothing can
++ * see is hard to defend as a control, independently of any test needing it.
++ *
++ * Written through `ILoggerService` into the window's logs directory, which is
++ * host-side, so it does not depend on the tab's overlay write-back. The shape
++ * is `rpc.decision`, which tabd already accepts from source `rpc-filter`.
++ *
++ * Integrity rests on two policy facts, pinned by the
++ * `rpc-filter-log-is-trustworthy` invariant: every `MainThreadLogger.*` method
++ * is denied, so a tab cannot forge lines through `$log`; and `$writeFile` is
++ * constrained to this tab's own authority, so it cannot write the log file
++ * directly. If either weakens, this log stops being evidence.
++ *
++ * `summary` is fixed text. `ref`, `reason` and `claimedExtensionId` are chosen
++ * by the tab, so they stay in `detail`, where the consumer tags them untrusted
++ * and the UI quotes them; putting a tab-chosen string in a summary line is how
++ * a log becomes a spoofing surface.
++ */
++export function seclabInstallDecisionLog(
++	createLogger: (name: string) => { info(line: string): void },
++): void {
++	if (seclabLogInstalled) {
++		return;
++	}
++	seclabLogInstalled = true;
++	const logger = createLogger('seclabRpcFilter.log');
++	let denials = 0;
++
++	const line = (d: SeclabDecision): string | undefined => {
++		const deny = d.verdict !== 'allow' && d.verdict !== 'allow_with_constraint';
++		if (deny) {
++			denials++;
++			if (denials > SECLAB_LOG_DENIALS_MAX) {
++				return denials === SECLAB_LOG_DENIALS_MAX + 1
++					? JSON.stringify({
++						source: 'rpc-filter', class: 'rpc.decision',
++						priority: 'warning', summary: 'log capped',
++						detail: {
++							surface: 'rpc', ref: 'rpc:seclab.log-capped',
++							verdict: 'deny', reason: 'log-capped',
++						},
++					})
++					: undefined;
++			}
++		}
++		const detail: Record<string, unknown> = {
++			surface: d.surface,
++			ref: d.ref.length > SECLAB_LOG_REF_MAX
++				? d.ref.slice(0, SECLAB_LOG_REF_MAX) : d.ref,
++			verdict: d.verdict,
++		};
++		if (d.reason) { detail.reason = d.reason; }
++		if (d.constraint) { detail.constraint = d.constraint; }
++		if (d.claimedExtensionId) { detail.claimedExtensionId = d.claimedExtensionId; }
++		if (typeof d.count === 'number' && d.count > 1) { detail.count = d.count; }
++		const priority = d.verdict === 'deny' || d.verdict === 'prompt'
++			? 'warning' : d.verdict === 'rewrite' ? 'notice' : 'informational';
++		const out = JSON.stringify({
++			source: 'rpc-filter', class: 'rpc.decision', priority,
++			summary: `${d.verdict} ${d.surface}`, detail,
++		});
++		// `tabId` and `at` are deliberately absent: the forwarder takes the tab
++		// from its own window's authority and tabd stamps the time, so neither
++		// can be influenced by anything the tab chose.
++		return out.length > SECLAB_LOG_LINE_MAX
++			? out.slice(0, SECLAB_LOG_LINE_MAX) : out;
++	};
++
++	seclabOnDecision(d => {
++		const l = line(d);
++		if (l !== undefined) {
++			logger.info(l);
++		}
++	});
++}
++
++
 +function seclabRecord(d: SeclabDecision): void {
 +	if (d.verdict !== 'allow' && d.verdict !== 'allow_with_constraint') {
 +		seclabDeliver(d);

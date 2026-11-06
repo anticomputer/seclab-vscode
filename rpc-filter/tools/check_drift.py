@@ -518,6 +518,45 @@ def check_enforcement(mapping: dict, policy: dict, repo_root: str) -> list:
     return errors
 
 
+def check_log_trust(mapping: dict) -> list:
+    """Hold the two facts the decision log's trustworthiness rests on.
+
+    The Tab Manager forwards `seclabRpcFilter.log` to tabd as *trusted*. That
+    is only sound while a tab can neither forge lines nor write the file, and
+    both are policy decisions that could be relaxed by someone who has no idea
+    a log depends on them. Stated in a comment, the dependency would be found
+    again only after it stopped holding.
+    """
+    errors = []
+    for key, value in mapping.items():
+        if key.startswith("rpc:MainThreadLogger.") \
+                and _verdict_of(value) != "deny":
+            errors.append(
+                "invariant rpc-filter-log-is-trustworthy: %s is not denied, so "
+                "a tab could forge lines in the filter's decision log." % key)
+    writes = ("rpc:MainThreadFileSystem.$writeFile",
+              "rpc:MainThreadFileSystem.$mkdir",
+              "rpc:MainThreadFileSystem.$copy",
+              "rpc:MainThreadFileSystem.$rename")
+    for key in writes:
+        value = mapping.get(key)
+        if value is None:
+            continue
+        verdict = _verdict_of(value)
+        if key.endswith("$writeFile"):
+            if verdict not in ("deny", "allow_with_constraint"):
+                errors.append(
+                    "invariant rpc-filter-log-is-trustworthy: %s is '%s'. It "
+                    "must stay denied or URI-constrained, or a tab can write "
+                    "the window logs directory directly." % (key, verdict))
+        elif verdict != "deny":
+            errors.append(
+                "invariant rpc-filter-log-is-trustworthy: %s is not denied, "
+                "which reopens a create-then-rename route into the window "
+                "logs directory." % key)
+    return errors
+
+
 def check_residuals(mapping: dict, policy: dict) -> list:
     """Hold the conditions a recorded residual says it depends on.
 
@@ -593,7 +632,8 @@ def main(argv=None) -> int:
                         ("enforcement",
                          lambda: check_enforcement(mapping, policy, REPO_ROOT)),
                         ("residuals",
-                         lambda: check_residuals(mapping, policy))):
+                         lambda: check_residuals(mapping, policy)),
+                        ("log-trust", lambda: check_log_trust(mapping))):
         errors = check()
         if errors:
             failures.append((name, errors))

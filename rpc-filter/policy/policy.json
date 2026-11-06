@@ -65,6 +65,12 @@
       "statement": "No command may be given a verdict other than deny until the deferred-laundering residual is fixed.",
       "enforced_by": "residuals['deferred-laundering'].fixed is false, so the gate refuses any cmd: verdict that is not deny",
       "checked_by": "check_drift.py::check_residuals"
+    },
+    {
+      "id": "rpc-filter-log-is-trustworthy",
+      "statement": "The filter's decision log may only be treated as trusted evidence while a tab can neither forge lines in it nor write the file.",
+      "enforced_by": "every MainThreadLogger.* method is deny, so $log cannot append to an existing logger by URI; and MainThreadFileSystem.$writeFile is constrained to this tab's own vscode-remote://seclab+ authority, so the window logs directory is unreachable, with $mkdir, $copy and $rename denied so there is no create-then-rename route",
+      "checked_by": "check_drift.py::check_invariants"
     }
   ],
   "rpc": {

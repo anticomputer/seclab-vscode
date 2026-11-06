@@ -131,13 +131,6 @@ def _patch_added_text() -> str:
 # exemption is strictly worse than no check, because it reads as having been
 # checked.
 CALLER_EXEMPT = {
-    "seclabOnDecision": {
-        "consumer": None,
-        "reason": "NOTHING consumes this yet. The previous entry claimed the "
-                  "Tab Manager did; no file referenced the symbol. Until the "
-                  "denial log registers a listener in the patched tree, filter "
-                  "denials are recorded in memory and observed by nobody.",
-    },
     "seclabTaintEscapes": {
         "consumer": None,
         "reason": "NOTHING reads this yet. The previous entry claimed the probe "
