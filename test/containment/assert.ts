@@ -100,3 +100,55 @@ export function report(checks: Check[]): boolean {
 	console.log(`\n${checks.length - failed - xfail}/${checks.length} checks passed${xfail ? `, ${xfail} known gap(s) (XFAIL)` : ''}${failed ? `, ${failed} FAILED` : ''}`);
 	return ok;
 }
+
+/** One line of the trusted-side RPC filter decision log (patch 0005). */
+export interface RpcDecision {
+	source?: string;
+	class?: string;
+	priority?: string;
+	summary?: string;
+	detail?: { surface?: string; ref?: string; verdict?: string; reason?: string; constraint?: string; claimedExtensionId?: string; count?: number };
+}
+
+/**
+ * Every decision the RPC filter logged in a profile's window logs. Host-side: the filter
+ * writes through ILoggerService into `<userData>/logs/<session>/window<N>/seclabRpcFilter.log`,
+ * which nothing inside a tab can reach, so a denial read from here is observed rather than
+ * inferred from an absent marker. Unparseable lines are skipped, never guessed at: the file is
+ * trusted-side but its `ref` and `claimedExtensionId` fields carry tab-chosen strings, so
+ * callers must match on exact fields and never on free text (EDR prompt-injection-hygiene).
+ */
+export function rpcDecisions(userDataDir: string): RpcDecision[] {
+	const logs = path.join(userDataDir, 'logs');
+	const files: string[] = [];
+	const walk = (dir: string, depth: number): void => {
+		if (depth > 4) {
+			return;
+		}
+		for (const e of (() => { try { return fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; } })()) {
+			const p = path.join(dir, e.name);
+			if (e.isDirectory()) {
+				walk(p, depth + 1);
+			} else if (e.isFile() && e.name === 'seclabRpcFilter.log') {
+				files.push(p);
+			}
+		}
+	};
+	walk(logs, 0);
+	const out: RpcDecision[] = [];
+	for (const f of files) {
+		for (const line of fs.readFileSync(f, 'utf8').split('\n')) {
+			const i = line.indexOf('{'); // ILoggerService prefixes each entry with a timestamp and level
+			if (i < 0) {
+				continue;
+			}
+			try {
+				const d = JSON.parse(line.slice(i)) as RpcDecision;
+				if (d.class === 'rpc.decision') {
+					out.push(d);
+				}
+			} catch { /* a truncated or capped line is not a decision */ }
+		}
+	}
+	return out;
+}

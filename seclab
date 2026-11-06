@@ -506,9 +506,12 @@ case "${1:-help}" in
 			# committed, and never executed by any workflow or subcommand, which is
 			# the same "cannot fail" shape as a probe with no assertion.
 			command-taint) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/command-taint.test.ts ;;
+			# RPC filter: the trusted-side decision log has a strict reader, so proof
+			# condition 2 ("the denial is observed, not inferred") can actually fail.
+			decision-log) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/decision-log.test.ts ;;
 			# Every pure RPC-filter suite, so adding one to CI is a single edit.
 			rpc-filter)
-				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint; do
+				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log; do
 					printf '\n=== %s\n' "$t"
 					"$0" test "$t" || exit 1
 				done ;;

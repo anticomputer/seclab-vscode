@@ -15,8 +15,8 @@ import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
 import { beaconPort, checkUserDataDir, editorLaunchCommand, lockRun } from '../harness.ts';
-import { brokerProxy, checkEvidence, readEvidence, report, type Check } from './assert.ts';
-import { materialiseFixture, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
+import { brokerProxy, checkEvidence, readEvidence, report, rpcDecisions, type Check } from './assert.ts';
+import { materialiseFixture, readManifest, runTabs, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
 const [mode, userDataArg, driverArg] = process.argv.slice(2);
 if ((mode !== 'prepare' && mode !== 'check') || !userDataArg) {
@@ -158,7 +158,7 @@ if (mode === 'prepare') {
 	});
 	await client.initialize('containment-editor', '0');
 	const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
-	writeManifest(base, { tabs: [tab.metadata.name] });
+	writeManifest(base, { tabs: [tab.metadata.name], driver });
 	await client.request('tab.ensureRunning', { tabId: tab.metadata.name });
 	const name = `seclab-${tab.metadata.name}`;
 	const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
@@ -176,16 +176,48 @@ if (mode === 'prepare') {
 	})}`);
 } else {
 	const checks: Check[] = [];
+	// Evidence is written by the fixture INSIDE the tab's workspace. It reaches the host
+	// checkout only when tabd's write-back gate syncs it, and the gate may hold, defer or
+	// (for anything the host's git ignores) permanently refuse a path. So "the fixture ran"
+	// must never be read from the host copy: an absent file would be indistinguishable from
+	// a fixture that never started, which is exactly how the first patched run produced a
+	// clean-looking result with 13 of 32 checks. Read the tab's own view instead, the way
+	// the automated runner (run.ts) already does. The write-back gate is not weakened and
+	// is not under test here; the trusted-side denial log is host-side regardless.
+	const manifest = readManifest(base);
+	const runDriver = manifest.driver ?? driver;
+	const tabId = runTabs(manifest)[0];
+	const runtime = runDriver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
+	const tabUser = runDriver === 'sbx' ? ['-u', 'agent'] : [];
+	const container = tabId ? `seclab-${tabId}` : undefined;
+	const inTab = (argv: string[]): string | undefined => {
+		if (!container) {
+			return undefined;
+		}
+		const r = spawnSync(runtime, ['exec', ...tabUser, container, ...argv], { encoding: 'utf8', timeout: 30_000 });
+		return r.status === 0 ? r.stdout : undefined;
+	};
+	/** A workspace file as the TAB sees it, falling back to the host copy if the tab is gone. */
+	const readInTab = (p: string): string | undefined => inTab(['cat', p])
+		?? (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : undefined);
+	const evDir = path.join(ws, '.seclab-evidence');
+	/** Evidence file names as the tab sees them, union the host's (neither alone is complete). */
+	const listEvidence = (): string[] => {
+		const inner = (inTab(['sh', '-c', `ls -1 ${evDir} 2>/dev/null`]) ?? '').split('\n').filter(Boolean);
+		const outer = fs.existsSync(evDir) ? fs.readdirSync(evDir) : [];
+		return [...new Set([...inner, ...outer])];
+	};
+	checks.push({ vector: 'rogue-extension', name: 'the run recorded a tab to read evidence from', ok: Boolean(container), detail: container ?? 'no tab in run.json' });
 	for (const vector of ['task', 'fsmonitor', 'rogue-extension']) {
-		checks.push(...checkEvidence(readEvidence(ws, vector), vector, { marker, proxy: brokerProxy(driver) }));
+		checks.push(...checkEvidence(readEvidence(ws, vector, readInTab), vector, { marker, proxy: brokerProxy(runDriver) }));
 	}
-	const hostFile = path.join(ws, '.seclab-evidence', 'rogue-extension-host.json');
-	const host = fs.existsSync(hostFile) ? JSON.parse(fs.readFileSync(hostFile, 'utf8')) : undefined;
+	const hostText = readInTab(path.join(evDir, 'rogue-extension-host.json'));
+	const host = hostText ? JSON.parse(hostText) : undefined;
 	checks.push({ vector: 'rogue-extension', name: 'ui-kind rogue extension was forced into the tab (remoteName=seclab)', ok: host?.remoteName === 'seclab' && host?.seclabTab === '1', detail: JSON.stringify(host) });
 	// No trusted-side extension agents in tab windows: the same ui-declared extension
 	// registered a chat participant and called vscode.lm, and that code ran in the tab.
-	const agentFile = path.join(ws, '.seclab-evidence', 'rogue-agent.json');
-	const agent = fs.existsSync(agentFile) ? JSON.parse(fs.readFileSync(agentFile, 'utf8')) as Record<string, unknown> : undefined;
+	const agentText = readInTab(path.join(evDir, 'rogue-agent.json'));
+	const agent = agentText ? JSON.parse(agentText) as Record<string, unknown> : undefined;
 	checks.push({ vector: 'rogue-extension', name: 'ui-declared chat participant / vscode.lm caller ran in the tab, not trusted-side', ok: agent?.ranIn === 'tab' && agent?.remoteName === 'seclab',
 		detail: JSON.stringify(agent ?? 'no rogue-agent.json') });
 	checks.push({ vector: 'host', name: 'canary intact', ok: fs.readFileSync(canary, 'utf8') === 'HOST-SECRET-CANARY\n', detail: '' });
@@ -194,6 +226,21 @@ if (mode === 'prepare') {
 		name: 'workbench.action.terminal.newLocal + sendSequence did not reach the host',
 		ok: !fs.existsSync(newLocalMarker),
 		detail: fs.existsSync(newLocalMarker) ? `host marker written: ${newLocalMarker}` : '',
+	});
+	// Proof condition 2: the denial is OBSERVED on the trusted side, not inferred from an
+	// absent marker. An absent marker alone is equally consistent with a probe that never
+	// ran. `seclabInstallDecisionLog` (patch 0005) writes every verdict to the window's own
+	// log through ILoggerService, host-side, where a tab cannot reach it. Until this check
+	// existed the log had a producer and no consumer, which is the pattern that made four
+	// other artefacts in this increment look complete while never running.
+	const decisions = rpcDecisions(userData);
+	const denied = decisions.filter(d => d.detail?.ref === 'cmd:workbench.action.terminal.newLocal' && d.detail?.verdict === 'deny');
+	checks.push({
+		vector: 'rpc-probes',
+		name: 'the trusted side recorded the newLocal denial (seclabRpcFilter.log)',
+		ok: denied.length > 0,
+		detail: denied.length > 0 ? JSON.stringify(denied[0])
+			: `${decisions.length} decision line(s) in ${userData}/logs/**/seclabRpcFilter.log`,
 	});
 	// The host shell environment must not be readable through the pty host's
 	// variable-resolution reverse request. The marker holds the editor-env
@@ -218,15 +265,15 @@ if (mode === 'prepare') {
 	// API (env, configuration, clipboard, auth sessions, secrets) nor any evidence may
 	// contain an editor-side canary in any encoding.
 	const canaries = deserialize(fs.readFileSync(path.join(base, 'canaries.json'), 'utf8'));
-	const evDir = path.join(ws, '.seclab-evidence');
-	const observedOk = fs.existsSync(path.join(evDir, 'rogue-observed.json'));
+	const observedOk = readInTab(path.join(evDir, 'rogue-observed.json')) !== undefined;
 	checks.push({ vector: 'canary', name: 'rogue extension recorded its API observations', ok: observedOk, detail: '' });
 	// Stores the rogue extension can still read through the extension API until the RPC
 	// capability filter (M4) lands: configuration (user settings) and the clipboard.
 	const M4 = 'M4 RPC capability filter (docs/adr/20261104-rpc-capability-filter.md)';
 	const knownUntilM4 = new Set(['user-settings', 'clipboard']);
-	for (const f of fs.existsSync(evDir) ? fs.readdirSync(evDir) : []) {
-		for (const h of scan(canaries, f, fs.readFileSync(path.join(evDir, f)))) {
+	for (const f of listEvidence()) {
+		const body = readInTab(path.join(evDir, f));
+		for (const h of scan(canaries, f, Buffer.from(body ?? '', 'utf8'))) {
 			checks.push({ vector: 'canary', name: `no ${h.store} canary in tab-observable data`, ok: false, detail: `${h.encoding} in ${h.source}`,
 				knownGap: knownUntilM4.has(h.store) ? M4 : undefined });
 		}
