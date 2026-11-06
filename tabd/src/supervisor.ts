@@ -522,7 +522,7 @@ export class Supervisor {
 	 */
 	private brokerHooks(r: TabRecord): BrokerHooks {
 		return {
-			configure: async openControl => {
+			configure: async (openControl, image) => {
 				this.closeBroker(r.tabId).catch(() => undefined);
 				// One deadline for the whole bring-up (review XX-2): connect, health and every request.
 				const deadline = Date.now() + BROKER_SETUP_MS;
@@ -533,7 +533,7 @@ export class Supervisor {
 					}
 					return Math.min(ms, 15_000);
 				};
-				const c = await connectBroker(openControl, r.tabId, { deadline });
+				const c = await connectBroker(openControl, r.tabId, { deadline, version: image?.version });
 				try {
 					for (;;) {
 						const h = await c.request('health', undefined, left()) as { status?: unknown } | undefined;

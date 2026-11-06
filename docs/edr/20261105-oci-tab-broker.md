@@ -52,8 +52,8 @@ credentials yet.
   OCI and exactly the blackhole on sbx (review XX-4).
 - **No implicit pulls** (review XX-6): every tab, broker and placeholder container is created
   with `--pull never`, so a missing local image fails the start rather than fetching from a
-  registry. Pinning the broker by image ID or a build label, as tabd does for its scanner, is
-  still open.
+  registry. Pinning the broker by image ID and build labels followed in
+  [broker image identity](20261105-broker-image-identity.md).
 
 ## Deviation from the protocol doc
 Protocol §7 asks for the CA in the tab's system store, installed as root at creation. The OCI
