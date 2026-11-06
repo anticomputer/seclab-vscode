@@ -265,6 +265,8 @@ export class StraceTracker {
 	private readonly o: TrackerOptions;
 	private tick = 0;
 	private deferred: Array<{ pid: number; ts: number; draft: Omit<EventDraft, 'source' | 'integrity' | 'proc'>; snapshot: { exe?: string; argv?: string[] } }> = [];
+	/** Socket type per (pid, fd) from socket(): tells a TCP connect from a UDP routability probe. */
+	private readonly sockets = new Map<string, 'tcp' | 'udp'>();
 
 	constructor(o: TrackerOptions = {}) {
 		this.o = o;
@@ -282,7 +284,9 @@ export class StraceTracker {
 				return true;
 			}
 			// The process may have exec'd again since; report what it ran at the time.
-			out.push({ ...d.draft, proc: { ...this.proc(d.pid), ...d.snapshot } });
+			const proc = { ...this.proc(d.pid), ...d.snapshot };
+			const summary = d.draft.class === 'net.connect' ? `${d.draft.summary} by ${base(proc.exe ?? String(d.pid))}` : d.draft.summary;
+			out.push({ ...d.draft, summary, proc });
 			return false;
 		});
 		return out;
@@ -440,8 +444,25 @@ export class StraceTracker {
 				}
 				return [{ ...draft, proc: proc() }];
 			}
+			case 'socket': {
+				const fd = Number(r.ret);
+				const type = raw(a[1]) ?? '';
+				if (ok && Number.isInteger(fd) && fd >= 0) {
+					const kind = /\bSOCK_STREAM\b/.test(type) ? 'tcp' : /\bSOCK_DGRAM\b/.test(type) ? 'udp' : undefined;
+					const key = `${r.pid}:${fd}`;
+					this.sockets.delete(key);
+					if (kind) {
+						if (this.sockets.size >= MAX_PIDS * 4) {
+							this.sockets.delete(this.sockets.keys().next().value!);
+						}
+						this.sockets.set(key, kind);
+					}
+				}
+				return [];
+			}
 			case 'connect': {
 				const sa = a[1];
+				const proto = this.sockets.get(`${r.pid}:${Number(raw(a[0]))}`);
 				const fam = raw(field(sa, 'sa_family'));
 				let addr: string | undefined, port: number | undefined, family: 'inet' | 'inet6' | 'unix' | 'other' = 'other';
 				if (fam === 'AF_INET') {
@@ -466,8 +487,15 @@ export class StraceTracker {
 				if (family === 'unix' && /docker\.sock|containerd|podman/.test(addr ?? '')) {
 					priority = 'warning';
 				}
+				const net = { addr: addr ?? '?', port, family, result: res, ...(proto && family !== 'unix' ? { proto } : {}) };
+				if (this.procs.get(r.pid)?.ppid === undefined && this.deferred.length < MAX_DEFERRED) {
+					// A new thread or child whose clone() line isn't in yet (e.g. a resolver thread):
+					// wait briefly so the connect carries the process and its lineage.
+					this.deferred.push({ pid: r.pid, ts: r.ts, draft: { class: 'net.connect', priority, net, summary: `connect ${family === 'unix' ? addr : `${addr}:${port}`} ${res}`, sensorTime }, snapshot: {} });
+					return [];
+				}
 				return [{
-					class: 'net.connect', priority, proc: proc(), net: { addr: addr ?? '?', port, family, result: res },
+					class: 'net.connect', priority, proc: proc(), net,
 					summary: `connect ${family === 'unix' ? addr : `${addr}:${port}`} ${res} by ${base(this.get(r.pid).exe ?? String(r.pid))}`, sensorTime,
 				}];
 			}

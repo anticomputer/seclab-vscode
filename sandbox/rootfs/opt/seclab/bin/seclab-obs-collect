@@ -7,7 +7,7 @@
 # creates is traced from birth. It never reads anything from the tab user except /proc.
 import ctypes, json, os, pwd, grp, re, select, secrets, signal, socket, stat, subprocess, sys, threading, time
 
-TRACE_DEFAULT = ("execve,execveat,clone,clone3,fork,vfork,chdir,connect,unlinkat,?unlink,?rmdir,"
+TRACE_DEFAULT = ("execve,execveat,clone,clone3,fork,vfork,chdir,socket,connect,unlinkat,?unlink,?rmdir,"
                  "renameat,renameat2,?rename,linkat,?link,symlinkat,?symlink,fchmodat,?fchmodat2,?chmod,"
                  "setuid,setgid,setreuid,setregid,setresuid,setresgid,setfsuid,setfsgid,capset,ptrace,"
                  "kill,tkill,tgkill,mount,umount2,unshare,setns,bpf,memfd_create,?init_module,?finit_module,"
@@ -130,6 +130,21 @@ def pids_of(uid):
             continue
         if (st.get("Uid", "").split() or [""])[0] == str(uid):
             yield int(d), st
+
+
+def resolvers():
+    # The VM's DNS resolvers (read as root before the REH starts): lookups of the proxy's own
+    # name go there, and detection shouldn't call each one a proxy bypass.
+    out = []
+    try:
+        with open("/etc/resolv.conf", "rb") as f:
+            for line in f.read(8192).decode("latin-1").splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[0] == "nameserver" and re.fullmatch(r"[0-9a-fA-F.:]{2,64}", parts[1]) and len(out) < 4:
+                    out.append(parts[1])
+    except OSError:
+        pass
+    return out
 
 
 def broker_addrs():
@@ -359,7 +374,7 @@ def main():
             fail("missing " + p + " (rebuild the template: ./seclab template sbx)")
     version = subprocess.run([STRACE, "-V"], capture_output=True, env={"PATH": "/usr/bin:/bin"}).stdout.split(b"\n")[0]
     emit({"k": "hello", "v": 1, "pid": os.getpid(), "mode": cfg["mode"], "kernel": os.uname().release,
-          "strace": version.decode("latin-1")[:64], "brokerAddrs": broker_addrs()})
+          "strace": version.decode("latin-1")[:64], "brokerAddrs": broker_addrs(), "resolvers": resolvers()})
     harden()
     stop_clipboard_bridge()
     if not wb_mount(cfg["workspace"]):

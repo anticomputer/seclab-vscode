@@ -20,6 +20,8 @@ export interface MappedAudit {
 	detail: Detail;
 	/** Allowed traffic is aggregated per key and window; everything else is emitted one by one. */
 	aggKey?: string;
+	/** The broker's own timestamp (epoch seconds), when present. */
+	ts?: number;
 }
 
 interface Kind { class: EventClass; priority: Priority; what: string; agg?: boolean }
@@ -172,6 +174,9 @@ export function mapAudit(input: unknown, tabId: string): MappedAudit | string {
 		detail.reason !== undefined ? `: ${String(detail.reason)}` : '',
 	];
 	const m: MappedAudit = { class: kind.class, priority: kind.priority, summary: parts.filter(Boolean).join(' ').replace(' :', ':'), detail };
+	if (num(e.ts) !== undefined) {
+		m.ts = num(e.ts);
+	}
 	if (net) {
 		m.net = net;
 	}

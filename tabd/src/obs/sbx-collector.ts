@@ -229,7 +229,8 @@ export class CollectorSession {
 					this.sensorPids.add(pid);
 				}
 				const addrs = Array.isArray(r.brokerAddrs) ? r.brokerAddrs.map(a => s(a, 64)).filter((a): a is string => !!a && /^[0-9a-fA-F.:]+$/.test(a)).slice(0, 8) : [];
-				this.hub.context(this.tabId, { brokerAddrs: new Set(addrs) });
+				const resolvers = Array.isArray(r.resolvers) ? r.resolvers.map(a => s(a, 64)).filter((a): a is string => !!a && /^[0-9a-fA-F.:]+$/.test(a)).slice(0, 4) : [];
+				this.hub.context(this.tabId, { brokerAddrs: new Set(addrs), resolvers: new Set(resolvers) });
 				this.hub.heartbeat(this.tabId);
 				this.hub.setObservation(this.tabId, 'observed', 'collector started', { sensor: 'sbx-collector', mode: this.o.mode });
 				this.status('informational', `collector up: kernel ${s(r.kernel, 64) ?? '?'}, ${s(r.strace, 64) ?? '?'}, mode ${this.o.mode}`, { status: 'started', mode: this.o.mode });

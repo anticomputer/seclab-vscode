@@ -157,6 +157,26 @@ Accepted: under sbx, VM root can poison `brokerAddrs` (`/etc/hosts`, forged hell
 hide bypass detection to that address. That gives root nothing new: the whole collector
 stream is `tab-vm-root`, and sbx's network policy, not detection, is what blocks egress.
 
+## Round 8: process lineage for broker requests (EDR broker-request-lineage)
+Scope:
+- `tabd/src/obs/lineage.ts`: a time join of broker requests to sensor connects, and
+  `promptLineage`;
+- strace: deferral of connects from new threads, and `socket()` traced to set
+  `net.proto`;
+- Falco `fd.l4proto`;
+- the resolver exemption.
+
+Two passes (8, 8b).
+
+| ID | Sev | Area | Finding | Status | Fix |
+|---|---|---|---|---|---|
+| LN-1 | Medium | integrity | A `none` attribution ("no process observed") was labelled `trusted`, though the tab can cause it with a kept-alive connection or a dropped line. | Fixed | Never `trusted`: it takes the tab's sensor level, and the event the weakest of both. |
+| LN-2 | Low | accuracy | `single` and "never someone else" overstated the join: a kept-alive request can be pinned on whoever connects next. | Fixed | Semantics stated as "one unused connect in the window". EDR, comments and tests corrected. |
+| LN-3 | Low | API | The `promptLineage` cache was global (one tab could evict another's entries), and computed results looked recorded. | Fixed | Per-tab maps, cleared on remove. Computed results are marked `computed`. |
+| LN-L1 | Info | EDR | DNS tunnelling blind spot, the deferral bound, "not known to be UDP", stale fd labels. | Fixed | EDR Consequences. |
+
+8b found no issues.
+
 ## Accepted residuals (documented in the ADR)
 - `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.
 - Under OCI the privileged Falco sees every container on the Docker host. Only rules for the exact tab container ids are loaded, and its only output is stdout to tabd.

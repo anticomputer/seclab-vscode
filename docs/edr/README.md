@@ -78,6 +78,7 @@ Same rules as ADRs:
 | 2026-11-05 | [Agents-in-the-tab spike: real client, rogue and real agent hosts, measured](20261105-agents-in-tab-spike.md) | accepted |
 | 2026-11-05 | [Background windows: an env-gated patch so harness windows never take focus](20261105-background-windows.md) | accepted |
 | 2026-11-05 | [Broker audit events in the tab's event stream](20261105-broker-audit-in-tab-events.md) | accepted |
+| 2026-11-05 | [Process lineage for broker requests](20261105-broker-request-lineage.md) | accepted |
 | 2026-11-05 | [Local npm and pip installs go through GitHub CFS; CI keeps the public registries](20261105-cfs-local-builds.md) | accepted |
 | 2026-11-05 | [A failed local install never destroys the working one](20261105-local-install-cache.md) | accepted |
 | 2026-11-05 | [Secret scanning before push is mechanical: a pre-push hook and a required CI step](20261105-mechanical-secret-scan.md) | accepted |

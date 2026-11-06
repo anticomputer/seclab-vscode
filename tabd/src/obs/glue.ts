@@ -6,9 +6,10 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { PolicyLogEntry, SensorHooks } from '../drivers/types.ts';
 import { BrokerAuditFeed, type AuditControl } from './broker-audit.ts';
 import type { FalcoSensor } from './falco.ts';
+import { LineageCorrelator, type Attribution } from './lineage.ts';
 import { ObsHub, type Observation } from './hub.ts';
 import { CollectorSession } from './sbx-collector.ts';
-import { CLASSES, isTabId, PRIORITIES, priorityRank, type EventClass, type ObsEvent, type Priority } from './schema.ts';
+import { CLASSES, isTabId, PRIORITIES, priorityRank, weakestIntegrity, type EventClass, type Integrity, type ObsEvent, type Priority } from './schema.ts';
 import { WorkspaceWatcher } from './workspace-watch.ts';
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
@@ -18,6 +19,12 @@ export const POLICY_POLL_MS = 10_000;
 export const MAX_SUBSCRIPTIONS = 16;
 export const MAX_REPORT_EVENTS = 64;
 export const MAX_TAIL = 1000;
+/** Broker events that get a lineage attribution (requests with a destination). */
+const ATTRIBUTED = /^(?:request\.allowed|request\.denied|request\.denied_unprompted|approval\.requested|upstream\.blocked|credential\.injected|sentinel\.misplaced|model\.call|model\.denied)$/;
+const ATTRIBUTION_DELAY_MS = 600;
+/** A broker event is live (attributable) when its own timestamp is this close to now. */
+const LIVE_SKEW_MS = 5_000;
+const MAX_PENDING_ATTRIBUTIONS = 256;
 /** Stop pushing event notifications while this many bytes wait for the client to read. */
 export const NOTIFY_BACKLOG_LIMIT = 4 << 20;
 /** What each trusted client component may report. The write-back gate's classes are reserved. */
@@ -52,13 +59,19 @@ export class ObsGlue {
 	private readonly watchers = new Map<string, WorkspaceWatcher>();
 	private readonly pollers = new Map<string, NodeJS.Timeout>();
 	private readonly brokerFeeds = new Map<string, { feed: BrokerAuditFeed; control?: AuditControl }>();
+	private readonly lineage = new LineageCorrelator();
+	private readonly pendingAttributions = new Map<string, number>();
+	private readonly promptLineages = new Map<string, Map<string, Attribution>>();
 
 	constructor(o: ObsGlueOptions) {
 		this.o = o;
 		this.hub = new ObsHub({
 			dir: o.eventsDir,
 			persist: tabId => o.owns(tabId),
-			onEvent: e => this.fanout(e),
+			onEvent: e => {
+				this.lineage.observe(e, this.hub.contextOf(e.tabId));
+				this.fanout(e);
+			},
 			// `reason` can carry sensor-derived text: tagged like event fields.
 			onObservation: (tabId, ob) => o.notify('tab.observation', { tabId, ...ob, untrusted: ['reason'] } as unknown as Json),
 		});
@@ -334,6 +347,10 @@ export class ObsGlue {
 							lastByDest.delete(lastByDest.keys().next().value!);
 						}
 						lastByDest.set(dest(m), e);
+						// Only live events: a replayed one is stamped now, not when it happened.
+						if (!count && ATTRIBUTED.test(String(m.detail.auditType)) && m.ts !== undefined && Math.abs(Date.now() - m.ts * 1000) < LIVE_SKEW_MS) {
+							this.scheduleAttribution(e);
+						}
 					}
 				},
 				status: (priority, summary, detail) => {
@@ -363,6 +380,68 @@ export class ObsGlue {
 	brokerForget(tabId: string): void {
 		this.brokerFeeds.get(tabId)?.feed.detach();
 		this.brokerFeeds.delete(tabId);
+		this.lineage.forget(tabId);
+		this.promptLineages.delete(tabId);
+	}
+
+	/**
+	 * Which process probably made the broker request tabd saw at `atMs` (default now): for the
+	 * prompt (plan B3) to show "bash → node → curl" with its integrity and confidence. Display
+	 * data only: the chain is tab-chosen text and must never drive a decision.
+	 */
+	lineageFor(tabId: string, atMs = Date.now()): Attribution {
+		return { ...this.lineage.attribute(tabId, atMs, false, this.sensorIntegrity(tabId)), computed: true };
+	}
+
+	/**
+	 * The attribution for a broker prompt (plan B3): the one recorded when the broker event
+	 * arrived, or one computed now, marked `computed` (review LN-3), if none was recorded yet.
+	 */
+	promptLineage(tabId: string, approvalId: string): Attribution {
+		return this.promptLineages.get(tabId)?.get(approvalId) ?? this.lineageFor(tabId);
+	}
+
+	/** The integrity a "nobody observed" claim can have: the level of the tab's sensor. */
+	private sensorIntegrity(tabId: string): Integrity {
+		return this.hub.observation(tabId).sensor === 'falco' ? 'host-observed' : 'tab-vm-root';
+	}
+
+	/** Emit an egress.attribution for a broker event once late connects have had time to arrive. */
+	private scheduleAttribution(e: ObsEvent): void {
+		const n = this.pendingAttributions.get(e.tabId) ?? 0;
+		if (n >= MAX_PENDING_ATTRIBUTIONS) {
+			return;
+		}
+		this.pendingAttributions.set(e.tabId, n + 1);
+		const timer = setTimeout(() => {
+			this.pendingAttributions.set(e.tabId, (this.pendingAttributions.get(e.tabId) ?? 1) - 1);
+			const a = this.lineage.attribute(e.tabId, Date.parse(e.time), true, this.sensorIntegrity(e.tabId));
+			const approvalId = e.detail?.auditType === 'approval.requested' && typeof e.detail.approvalId === 'string' ? e.detail.approvalId : undefined;
+			if (approvalId) {
+				// Per tab, so one tab's prompt flood can't evict another's (review LN-3).
+				let m = this.promptLineages.get(e.tabId);
+				if (!m) {
+					m = new Map();
+					this.promptLineages.set(e.tabId, m);
+				}
+				if (m.size >= 64) {
+					m.delete(m.keys().next().value!);
+				}
+				m.set(approvalId, a);
+			}
+			if (a.confidence === 'none' && e.detail?.auditType !== 'approval.requested') {
+				return;
+			}
+			const target = `${e.net?.addr ?? '?'}:${e.net?.port ?? '?'}`;
+			this.hub.emit(e.tabId, {
+				source: 'detector', integrity: weakestIntegrity([e.integrity, a.integrity]), class: 'egress.attribution', priority: 'informational',
+				summary: a.chain ? `${a.chain} → ${target}${a.confidence === 'ambiguous' ? ` (probable; ${a.candidates} candidates)` : ' (probable)'}` : `${target}: no process observed connecting to the broker`,
+				...(a.proc ? { proc: a.proc } : {}), ...(e.net ? { net: e.net } : {}),
+				detail: { confidence: a.confidence, candidates: a.candidates, auditType: String(e.detail?.auditType ?? '') },
+				cause: [e.seq, ...a.cause],
+			});
+		}, ATTRIBUTION_DELAY_MS);
+		timer.unref();
 	}
 
 	shutdown(): Promise<void> {
