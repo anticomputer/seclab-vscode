@@ -86,30 +86,40 @@ test('A1: protected resources and auth/required never reach the client; authenti
 	assert.equal(events[1].detail.agents, 1);
 });
 
-// Security review round 1, HIGH: `McpAuthRequirement.resource` carries ProtectedResourceMetadata
-// into the trusted window, which auto-fetches the agent host's chosen URL on the host network
-// and can register a dynamic OAuth provider. Every carrier the inbound tables allow is checked.
-test('A1 (round 1 HIGH): MCP auth metadata never reaches the client, on any carrier', () => {
+// Security review rounds 1 and 2, HIGH: `McpServerAuthRequiredState.resource` carries
+// ProtectedResourceMetadata into the trusted window, which auto-fetches the agent host's chosen
+// URL on the host network and can register a dynamic OAuth provider. Upstream's MCP discriminant
+// is `kind: 'authRequired'` (McpServerStatus.AuthRequired) and the tool-call one is
+// `status: 'auth-required'` (ToolCallStatus.AuthRequired), both at a717861c. Round 1 matched
+// only the hyphenated `kind`, so the fix was dead code; this pins the real shapes.
+test('A1 (rounds 1-2 HIGH): MCP auth metadata never reaches the client, on any carrier', () => {
 	const { f } = gate();
-	const authRequired = {
-		kind: 'auth-required',
-		resource: { resource: 'https://beacon.invalid/mcp', authorization_servers: ['http://127.0.0.1:9'], scopes_supported: ['x'] },
-		oauthClient: { client_id: 'c' },
+	const mcpAuthState = {
+		kind: 'authRequired',
+		reason: 'required',
+		resource: { resource: 'http://192.0.2.1/latest/meta-data', scopes_supported: ['x'] },
+		requiredScopes: [],
 	};
-	// `chat/toolCallAuthRequired` is denied outright: it exists only to drive that path.
-	assert.deepEqual(f.fromUpstream(j({ jsonrpc: '2.0', method: 'action', params: { channel: 's', action: { type: 'chat/toolCallAuthRequired', auth: authRequired } } })).toClient, []);
-	// The remaining carriers are allowed actions, so their content must come out inert.
-	for (const type of ['session/mcpServerStateChanged', 'session/customizationsChanged']) {
-		const out = f.fromUpstream(j({ jsonrpc: '2.0', method: 'action', params: { channel: 's', action: { type, servers: [{ id: 's1', state: authRequired }] } } })).toClient;
-		assert.equal(out.length, 1, type);
-		assert.deepEqual(JSON.parse(out[0]).params.action.servers[0].state.kind, 'error', type);
-		assert.ok(!out[0].includes('127.0.0.1'), type);
-		assert.ok(!out[0].includes('beacon.invalid'), type);
+	// The two carriers that reach automatic authentication with no user interaction are denied.
+	for (const type of ['session/mcpServerStateChanged', 'session/customizationsChanged', 'chat/toolCallAuthRequired']) {
+		assert.deepEqual(f.fromUpstream(j({ jsonrpc: '2.0', method: 'action', params: { channel: 's', action: { type, servers: [{ id: 's1', state: mcpAuthState }] } } })).toClient, [], type);
 	}
-	// And in a result that embeds McpServerState (initialize, listSessions, resolveSessionConfig).
+	// Where the same state is embedded in an allowed result, the sanitiser makes it inert.
 	f.fromClient(j({ jsonrpc: '2.0', id: 9, method: 'listSessions', params: {} }));
-	const result = JSON.parse(f.fromUpstream(j({ jsonrpc: '2.0', id: 9, result: { sessions: [{ mcpServers: [{ state: authRequired }] }] } })).toClient[0]);
-	assert.equal(result.result.sessions[0].mcpServers[0].state.kind, 'error');
+	const out = f.fromUpstream(j({ jsonrpc: '2.0', id: 9, result: { sessions: [{ mcpServers: [{ state: mcpAuthState }] }] } })).toClient;
+	assert.equal(out.length, 1);
+	assert.ok(!out[0].includes('192.0.2.1'));
+	const state = JSON.parse(out[0]).result.sessions[0].mcpServers[0].state;
+	// An inert state, in the shape the renderer expects (McpServerErrorState needs `error`).
+	assert.equal(state.kind, 'error');
+	assert.equal(typeof state.error.message, 'string');
+	assert.equal(state.resource, undefined);
+	// Both spellings, on `kind` and on `status`, and nested inside another node.
+	for (const node of [{ kind: 'auth-required' }, { status: 'auth-required' }, { status: 'authRequired' }]) {
+		const wrapped = { a: { ...node, resource: { resource: 'http://192.0.2.1/x' } } } as Record<string, never>;
+		seclabAhpSanitize(wrapped);
+		assert.ok(!JSON.stringify(wrapped).includes('192.0.2.1'), JSON.stringify(node));
+	}
 	// The bare metadata keys are stripped wherever they appear, auth node or not.
 	const loose = { a: { authorization_servers: ['http://127.0.0.1:9'] }, b: { oauthClient: { client_id: 'c' } }, c: { auth: { resource: 'https://beacon.invalid' } } };
 	seclabAhpSanitize(loose as never);
