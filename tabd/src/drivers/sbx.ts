@@ -346,6 +346,14 @@ export class SbxDriver implements Driver {
 		}
 	}
 
+	openBrokerControl(spec: TabRuntimeSpec): ChildProcessWithoutNullStreams {
+		checkSpec(spec);
+		if (!this.opts.docker) {
+			throw new DriverError(-32013, 'no docker: this sbx tab has no broker to reconnect to');
+		}
+		return this.runner.spawnStream(this.opts.docker, ['exec', '-i', '--', this.brokerNames(spec).broker, 'seclab-broker', 'control']);
+	}
+
 	async installFeed(spec: TabRuntimeSpec, sentinel: string | undefined): Promise<void> {
 		checkSpec(spec);
 		const w = await this.runner.run(this.sbx, ['exec', '-i', '-u', 'root', '-w', '/', spec.sandboxName, 'sh', '-c', INSTALL_FEED], { input: `${feedLine(sentinel)}\n`, timeoutMs: 60_000 });

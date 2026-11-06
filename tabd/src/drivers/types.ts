@@ -118,6 +118,8 @@ export interface Driver {
 	upperReader?(spec: TabRuntimeSpec): UpperReader;
 	/** CFS package feeds (B4) on a running tab: write (or remove, with no sentinel) its npm/pip config as root. */
 	installFeed?(spec: TabRuntimeSpec, sentinel: string | undefined): Promise<void>;
+	/** B3c: a control channel to a running tab's broker (adoption), with the same fixed argv as bring-up. */
+	openBrokerControl?(spec: TabRuntimeSpec): ChildProcessWithoutNullStreams;
 }
 
 export interface PolicyLogEntry {

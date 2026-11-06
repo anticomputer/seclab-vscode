@@ -67,6 +67,11 @@ class BrokerDriver implements Driver {
 	brokerOut: PassThrough | undefined;
 	feeds: Array<string | undefined> = [];
 	async installFeed(_spec: TabRuntimeSpec, sentinel: string | undefined) { this.feeds.push(sentinel); }
+	openBrokerControl(spec: TabRuntimeSpec): ChildProcessWithoutNullStreams {
+		return fakeBroker(spec.tabId, this.brokerLog, this.opts, s => {
+			this.brokerOut = s;
+		});
+	}
 	async probe() {
 		return { name: 'fake', available: true, capabilities: { isolationClass: 'namespaces', networkFence: 'internal-network', liveMounts: false, holdAndResume: false, fileWatch: 'native', sameAbsolutePathMount: true, writeBack: 'ungated' } as const };
 	}
@@ -85,12 +90,14 @@ class BrokerDriver implements Driver {
 	async remove() { /* */ }
 }
 
-function setup(name: string, policy?: (tabId: string) => Record<string, unknown>, cfs?: { token(): Promise<AzToken> }) {
+function setup(name: string, policy?: (tabId: string) => Record<string, unknown>, cfs?: { token(): Promise<AzToken> }, reuse?: { driver: BrokerDriver }) {
 	const dir = path.join(SCRATCH, name);
-	fs.rmSync(dir, { recursive: true, force: true });
+	if (!reuse) {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
 	const ws = path.join(dir, 'home', 'src', 'proj');
 	fs.mkdirSync(ws, { recursive: true });
-	const driver = new BrokerDriver();
+	const driver = reuse?.driver ?? new BrokerDriver();
 	const template: TabTemplate = { kind: 'TabTemplate', metadata: { name: 'default' }, spec: { driver: 'fake', image: 'img', envVarsInjectionPolicy: 'Disallowed', fence: 'required', broker: 'required' } };
 	const out: Array<{ channel: number; payload: Buffer }> = [];
 	const audit: string[] = [];
@@ -508,4 +515,44 @@ test('B4 CFS token: tenant checked, expiry required; feed line validated; the in
 	assert.equal(run('feed -\n').status, 0);
 	assert.ok(!fs.existsSync('/run/seclab-broker/npmrc') && !fs.existsSync('/run/seclab-broker/pip-index-url'), 'disabled: config removed');
 	fs.rmSync('/run/seclab-broker', { recursive: true, force: true });
+});
+
+test('B3c: adopting a running tab reconnects its broker control without touching its state; prompts flow again', async () => {
+	const first = setup('adopt');
+	await first.call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	const tabId = (await first.call('tab.claim', { workspace: { hostPath: first.ws } })).tab.metadata.name;
+	await first.call('tab.ensureRunning', { tabId });
+	first.sup.shutdown();
+	// A new supervisor over the same state (the editor restarted): it adopts the running tab.
+	first.driver.brokerLog.length = 0;
+	const second = setup('adopt', undefined, undefined, { driver: first.driver });
+	const notes: Array<{ method: string; params: Record<string, unknown> }> = [];
+	const origNotify = (second.sup as unknown as { notify: (m: string, p: unknown) => void }).notify.bind(second.sup);
+	(second.sup as unknown as { notify: (m: string, p: unknown) => void }).notify = (m, p) => {
+		notes.push({ method: m, params: p as Record<string, unknown> });
+		origNotify(m, p);
+	};
+	await second.call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0', capabilities: { approvals: true } } });
+	assert.ok(second.audit.some(a => a.includes('"action":"tab.reconcile"') && a.includes('"outcome":"adopted"')), 'adopted');
+	assert.ok(second.audit.some(a => a.includes('"action":"broker.control"') && a.includes('"outcome":"reattached"')), 'reattached');
+	const methods = first.driver.brokerLog.map(l => l.method).filter(m => m !== 'audit.tail');
+	assert.equal(methods[0], 'broker.hello');
+	for (const m of ['tab.event', 'approval.list']) {
+		assert.ok(methods.includes(m), `${m} on reattach`);
+	}
+	for (const m of ['policy.load', 'proxy.auth.set', 'ca.get']) {
+		assert.ok(!methods.includes(m), `${m} must not run on reattach (the broker keeps its state)`);
+	}
+	// The broker's prompts reach the client again, through the new connection.
+	first.driver.brokerOut!.write(JSON.stringify({ jsonrpc: '2.0', method: 'approval.requested', params: {
+		approvalId: 'adopt1', kind: 'egress', request: { scheme: 'https', host: 'example.org', port: 443, method: 'GET', path: '/' },
+		createdAt: 1, expiresAt: Date.now() / 1000 + 60, waiting: 1, decisions: ['allow-once', 'deny'],
+		risk: { flags: [], origin: { label: '', verified: false }, userActionSeen: true }, untrusted: {},
+	} }) + '\n');
+	for (let i = 0; i < 100 && !notes.some(n => n.method === 'tab.approval'); i++) {
+		await new Promise(r => setTimeout(r, 5));
+	}
+	assert.equal(notes.find(n => n.method === 'tab.approval')?.params.tabId, tabId);
+	assert.equal((await second.call('tab.get', { tabId })).tab.status.brokerCapabilities !== undefined, true, 'tab.get shows broker capabilities again');
+	second.sup.shutdown();
 });
