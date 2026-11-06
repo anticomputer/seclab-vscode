@@ -83,6 +83,7 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-05 | [broker re-pin to CFS-served versions, and the image snapshot](20261105-broker-repin-and-image-snapshot.md) | - 5f41596: broker/build.sh builds the broker image from a snapshot of | see record |
 | 2026-11-05 | [broker WebSocket credential opt-in](20261105-broker-websocket-opt-in.md) | - Round 6: b1558e9 and 83a00cf. | see record |
 | 2026-11-05 | [local npm installs through GitHub CFS](20261105-cfs-local-builds.md) | - Round YY: 42f1b81..5dc6ee7 (EDR [cfs-local-builds](../edr/20261105-cfs-local-builds.md)) | see record |
+| 2026-11-05 | [the rpc-core increment, patches 0005–0010](20261105-rpc-core-increment.md) | see record | see record |
 | 2026-11-05 | [Security re-review: patches 0006 and 0009–0011, and the surface-(e) tooling](20261105-rpc-filter-rereview.md) | see record | see record |
 | 2026-11-05 | [secure agentic experiences design (agents in the tab)](20261105-secure-agentic-experiences-design.md) | round 1: 40fa71d (rebased from 9f4ded7; design as first written: [plan](../plans/secure-ag | see record |
 | 2026-11-05 | [tabs wired to their broker (plan tabd-broker-wiring)](20261105-tab-broker.md) | - Round XX (B1, OCI tabs get a real broker): 7d1c94d..325097f, plus 32c3289 (the naming ru | see record |
