@@ -4,6 +4,7 @@
 // arrive on stdin, after validation here.
 
 import type { BrokerImage, BrokerImagePin } from '../broker-image.ts';
+import { CFS_HOST, CFS_NPM_PATH, CFS_PYPI_PATH, feedInstallLine } from '../cfs.ts';
 import type { Runner } from '../run.ts';
 import type { BrokerSetup } from './types.ts';
 import { DriverError } from './types.ts';
@@ -80,18 +81,43 @@ export async function brokerImageProblem(runner: Runner, docker: string, name: s
 export const BROKER_DIR = '/run/seclab-broker';
 const PEM_RE = /^-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----\r?\n?$/;
 
+// Root-only directory check, shared by both scripts (review ZZ-4).
+const CHECK_DIR = `d=${BROKER_DIR}; mkdir -p "$d"
+[ ! -L "$d" ] && [ -d "$d" ] && [ "$(stat -c %u "$d")" = 0 ] && [ $(( 0$(stat -c %a "$d") & 022 )) = 0 ] || { echo "broker dir is not a root-owned, non-writable directory" >&2; exit 1; }`;
+
 /**
- * Root script: line 1 of stdin is the proxy URL, the rest the CA PEM. `mkdir` covers sbx (the
- * VM's /run); OCI mounts a root-owned tmpfs there. The directory must be a real directory,
- * root-owned, and not group/other-writable, or it is refused (review ZZ-4); stale `*.new`
- * entries are removed before writing.
+ * CFS package feeds (ADR cfs-package-feeds-in-tabs): from a `feed <sentinel> <base64>` or
+ * `feed -` line, write (or remove) the tab's npm user config and pip index URL. The feed URLs
+ * are fixed here, never from input; only the broker's sentinel goes in, never the token.
+ * seclab-tab-env points npm (NPM_CONFIG_GLOBALCONFIG) and pip (PIP_INDEX_URL) at them.
  */
-export const INSTALL_BROKER = `set -eu; umask 022; d=${BROKER_DIR}; mkdir -p "$d"
-[ ! -L "$d" ] && [ -d "$d" ] && [ "$(stat -c %u "$d")" = 0 ] && [ $(( 0$(stat -c %a "$d") & 022 )) = 0 ] || { echo "broker dir is not a root-owned, non-writable directory" >&2; exit 1; }
-rm -f "$d/ca.pem.new" "$d/bundle.pem.new" "$d/proxy-url.new"; IFS= read -r url; cat > "$d/ca.pem.new"
+const npmFeed = `https://${CFS_HOST}${CFS_NPM_PATH}`;
+const npmKey = `//${CFS_HOST}${CFS_NPM_PATH}`;
+const WRITE_FEED = `IFS=' ' read -r tag fs fb; [ "$tag" = feed ] || { echo "bad feed line" >&2; exit 1; }
+rm -f "$d/npmrc.new" "$d/pip-index-url.new"
+if [ "$fs" = - ]; then rm -f "$d/npmrc" "$d/pip-index-url"; else
+case "$fs$fb" in *[!A-Za-z0-9_.~=+/-]*|"") echo "bad feed sentinel" >&2; exit 1 ;; esac
+printf 'registry=${npmFeed}\\n${npmKey}:username=cfs\\n${npmKey}:_password=%s\\n${npmKey}:always-auth=true\\n' "$fb" > "$d/npmrc.new"
+printf 'https://cfs:%s@${CFS_HOST}${CFS_PYPI_PATH}simple/\\n' "$fs" > "$d/pip-index-url.new"
+mv "$d/npmrc.new" "$d/npmrc"; mv "$d/pip-index-url.new" "$d/pip-index-url"; fi`;
+
+/**
+ * Root script: line 1 of stdin is the proxy URL, line 2 the feed line, the rest the CA PEM.
+ * `mkdir` covers sbx (the VM's /run); OCI mounts a root-owned tmpfs there. The directory must
+ * be a real directory, root-owned, and not group/other-writable, or it is refused (review
+ * ZZ-4); stale `*.new` entries are removed before writing.
+ */
+export const INSTALL_BROKER = `set -eu; umask 022; ${CHECK_DIR}
+rm -f "$d/ca.pem.new" "$d/bundle.pem.new" "$d/proxy-url.new"; IFS= read -r url
+${WRITE_FEED}
+cat > "$d/ca.pem.new"
 cat /etc/ssl/certs/ca-certificates.crt "$d/ca.pem.new" > "$d/bundle.pem.new"
 printf '%s\\n' "$url" > "$d/proxy-url.new"
 mv "$d/ca.pem.new" "$d/ca.pem"; mv "$d/bundle.pem.new" "$d/bundle.pem"; mv "$d/proxy-url.new" "$d/proxy-url"`;
+
+/** Root script for a running tab: one feed line on stdin (`tab.packages.set`). */
+export const INSTALL_FEED = `set -eu; umask 022; ${CHECK_DIR}
+${WRITE_FEED}`;
 
 /** Validated stdin for INSTALL_BROKER, with the proxy at `proxyHost` (host:port). */
 export function brokerInstallInput(setup: BrokerSetup, proxyHost: string): string {
@@ -99,5 +125,14 @@ export function brokerInstallInput(setup: BrokerSetup, proxyHost: string): strin
 		|| !/^(broker:8080|host\.docker\.internal:[0-9]{1,5})$/.test(proxyHost)) {
 		throw new DriverError(-32013, 'broker setup returned an invalid CA or proxy credential');
 	}
-	return `http://${setup.proxyUser}:${setup.proxyPassword}@${proxyHost}\n${setup.caPem}`;
+	return `http://${setup.proxyUser}:${setup.proxyPassword}@${proxyHost}\n${feedLine(setup.feedSentinel)}\n${setup.caPem}`;
+}
+
+/** The feed line for INSTALL_BROKER / INSTALL_FEED. */
+export function feedLine(sentinel: string | undefined): string {
+	try {
+		return feedInstallLine(sentinel);
+	} catch {
+		throw new DriverError(-32013, 'broker setup returned an invalid package feed sentinel');
+	}
 }
