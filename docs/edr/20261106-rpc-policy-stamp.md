@@ -35,6 +35,14 @@ second pass.
   product.json at all. It passes under macOS sh, dash and busybox.
 
 ## Consequences
+- **Enforcing marker** (RPC session request; the stamp alone shows only the table): with
+  0005 listed, every `seclabRpcFilterEnforcing:<hash>` in an artifact's JS must name the
+  table's hash, which also equals the product.json stamp, and the desktop app must carry one.
+  The marker is emitted by `seclabRpcFilter.ts`, and the workbench lives in the desktop app.
+  The REH has no workbench, so there it is only checked when present. Without 0005 there
+  must be none. The scan matches the folded literal, so a marker the bundler doesn't fold
+  into one string fails closed. The self-test injects each defect first: a missing marker,
+  a marker naming another table, and a marker without 0005. The release app passes.
 - **What the stamp proves** (review DDD-3): the reviewed policy table that 0005 creates was
   applied to the source this build came from. It doesn't prove that the enforcing code was
   bundled, or that the rest of the filter series (0006–0011) is listed. Observability
