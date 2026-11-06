@@ -37,6 +37,15 @@ const marker = path.join(base, 'PWNED');
 // marker is written by several vectors, so its absence after a patch cannot
 // distinguish "this chain was denied" from "some other vector did not run".
 const newLocalMarker = path.join(base, 'PWNED-newlocal');
+// One marker per server-initiated _remoteCLI vector. They shared the generic
+// PWNED marker before, and the shared check fails for every vector at once:
+// any one escape masked the state of the others, and fixing one read as fixing
+// all three.
+const execCommandMarkers: ReadonlyArray<readonly [string, string]> = [
+	['windowOpen', path.join(base, 'PWNED-windowopen')],
+	['manageExtensions', path.join(base, 'PWNED-manageextensions')],
+	['openExternal', path.join(base, 'PWNED-openexternal')],
+];
 const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
 
 if (mode === 'prepare') {
@@ -186,6 +195,14 @@ if (mode === 'prepare') {
 		ok: !fs.existsSync(newLocalMarker),
 		detail: fs.existsSync(newLocalMarker) ? `host marker written: ${newLocalMarker}` : '',
 	});
+	for (const [command, m] of execCommandMarkers) {
+		checks.push({
+			vector: 'reh-probes',
+			name: `server-initiated onExecuteCommand did not run _remoteCLI.${command} on the host`,
+			ok: !fs.existsSync(m),
+			detail: fs.existsSync(m) ? `host marker written: ${m}` : '',
+		});
+	}
 	// Shared canary harness, editor side: nothing the rogue extension observed through the
 	// API (env, configuration, clipboard, auth sessions, secrets) nor any evidence may
 	// contain an editor-side canary in any encoding.

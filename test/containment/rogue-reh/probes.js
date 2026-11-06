@@ -51,6 +51,122 @@ async function probe(results, id, policyRef, fn) {
 	}
 }
 
+
+/** The server's own handle on the terminal channel it registered. */
+function terminalChannel(socketServer) {
+	// ChannelServer keeps its registrations in a private `channels` map, which
+	// is an ordinary property at runtime. Reaching it is exactly the liberty a
+	// compromised REH has: it is the same process.
+	const channels = socketServer && socketServer.channels;
+	const get = channels && (channels.get ? (n) => channels.get(n) : (n) => channels[n]);
+	return get ? (get('remoteterminal') || get('remoteTerminal')) : undefined;
+}
+
+/** Persistent process ids this REH has created, which the window owns. */
+function persistentProcessIds(channel) {
+	const svc = channel && (channel._ptyService || channel.ptyService);
+	const ptys = svc && (svc._ptys || svc.ptys);
+	if (ptys && typeof ptys.keys === 'function') {
+		return Array.from(ptys.keys());
+	}
+	return [];
+}
+
+/**
+ * Fire onExecuteCommand for each _remoteCLI command on the client's allow list.
+ *
+ * Each command gets its OWN marker and its own probe id. They were previously
+ * asserted only through the shared "no host file outside the workspace" check,
+ * which fails for every vector at once: with one marker, any one escape masks
+ * the state of the others, and a fix to one looks like a fix to all.
+ */
+async function runExecuteCommandProbes(results, ctx, socketServer) {
+	const channel = terminalChannel(socketServer);
+	const emitter = channel && (channel._onExecuteCommand || channel.onExecuteCommandEmitter);
+
+	// Each entry: probe id, command, marker suffix, and how to build its args.
+	const vectors = [
+		{
+			id: 'reh-onexecutecommand-windowopen',
+			commandId: '_remoteCLI.windowOpen',
+			suffix: '-windowopen',
+			// Opening a window on a host path is host-side UI acting on our input,
+			// and the opened folder is then trusted by the window that opens it.
+			args: (ctx) => [[], { forceNewWindow: true, folderURIs: [] }],
+		},
+		{
+			id: 'reh-onexecutecommand-manageextensions',
+			commandId: '_remoteCLI.manageExtensions',
+			suffix: '-manageextensions',
+			// Installing an extension on the trusted side is host code execution.
+			// We ask only for a LIST, never an install: the escape is reaching the
+			// command at all, and the payload must not also be an attack.
+			args: () => [{ list: { showVersions: false } }],
+		},
+		{
+			id: 'reh-onexecutecommand-openexternal',
+			commandId: '_remoteCLI.openExternal',
+			suffix: '-openexternal',
+			// Egress from the trusted side, around the tab's broker. The target is
+			// the harness beacon, so reaching it is observed host-side.
+			args: (ctx) => [[safety.safeUrl(ctx, 'openExternal target')]],
+		},
+	];
+
+	if (!emitter || typeof emitter.fire !== 'function') {
+		// Not a pass. An absent fixture must never read as containment, so this
+		// is ERROR, which check-probes.ts refuses to count as a denial.
+		for (const v of vectors) {
+			results.push({
+				id: v.id, policyRef: 'push:remoteterminal:$onExecuteCommand',
+				outcome: ERROR,
+				detail: 'no onExecuteCommand emitter on the registered terminal channel',
+			});
+		}
+		return;
+	}
+
+	const ids = persistentProcessIds(channel);
+	if (ids.length === 0) {
+		for (const v of vectors) {
+			results.push({
+				id: v.id, policyRef: 'push:remoteterminal:$onExecuteCommand',
+				outcome: ERROR,
+				detail: 'no persistent pty in this window yet; the client drops the '
+					+ 'event when it owns no matching pty, so this is inconclusive',
+			});
+		}
+		return;
+	}
+
+	const persistentProcessId = ids[0];
+	let reqId = 0x5EC1AB00;
+	for (const v of vectors) {
+		await probe(results, v.id, 'push:remoteterminal:$onExecuteCommand', async () => {
+			const marker = safety.runPath(ctx, `PWNED${v.suffix}`, 'execute-command marker');
+			safety.note(ctx, marker);
+			const reply = new Promise((resolve) => {
+				// The client answers through sendCommandResult, so a reply is proof
+				// the trusted side ran -- or refused -- rather than ignored us.
+				const done = (payload) => resolve(payload);
+				const pending = channel._pendingCommands;
+				if (pending && typeof pending.set === 'function') {
+					pending.set(reqId, { resolve: done, reject: done });
+				}
+				setTimeout(() => resolve('no reply within 5s'), 5000);
+			});
+			emitter.fire({
+				reqId: reqId++,
+				persistentProcessId,
+				commandId: v.commandId,
+				commandArgs: v.args(ctx),
+			});
+			const payload = await reply;
+			return { command: v.commandId, marker, reply: String(payload).slice(0, 200) };
+		});
+	}
+}
+
 /**
  * @param socketServer the server's SocketServer; getChannel(name, router)
  *   returns a proxy to a channel the CLIENT registered.
@@ -133,17 +249,17 @@ async function runRehProbes(socketServer, router) {
 	}
 
 	// --- server-initiated terminal callback ----------------------------------
-	// onExecuteCommand lets the server ask the client to run one of four
-	// _remoteCLI commands. Driving it needs a live persistent pty id, which the
-	// payload only has once a terminal exists in this tab, so it is recorded as
-	// unimplemented rather than silently absent: an absent probe must never read
-	// as containment.
-	results.push({
-		id: 'terminal-onexecutecommand',
-		policyRef: 'chan:server_initiated.remoteTerminal.onExecuteCommand',
-		outcome: ERROR,
-		detail: 'not implemented: needs a live persistentProcessId from the remote terminal channel',
-	});
+	// onExecuteCommand is the push direction: the SERVER names a command and the
+	// trusted workbench runs it. It reaches none of the other enforcement points
+	// -- it never crosses RPCProtocol, it arrives on a ChannelClient rather than
+	// a ChannelServer, and it carries no origin, so the command taint sees
+	// nothing in flight.
+	//
+	// The client guards on `this._ptys.get(e.persistentProcessId)`, so the event
+	// is only honoured for a terminal this window owns. That is why this was a
+	// stub for so long. We satisfy it the way a real attacker would: the REH is
+	// the thing that creates ptys, so it already knows their ids.
+	await runExecuteCommandProbes(results, ctx, socketServer);
 
 	return results;
 }

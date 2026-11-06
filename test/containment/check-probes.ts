@@ -202,11 +202,14 @@ for (const [id, spec] of Object.entries(specs)) {
 	const composite = (ref: string): boolean =>
 		(ref.startsWith('ai-tool:') || ref.startsWith('ai-setting:'))
 		&& Object.keys(mapping).some(k => k === ref || k.startsWith(`${ref}|`));
+	// `chan:server_initiated` and `push:` used to be exempt here, and skipped
+	// by name in check_drift.py, so server-initiated surfaces were in neither
+	// the digest nor this check. A probe could name one and link to nothing.
+	// Both classes are now ordinary keys in coverage.json, so a probe that
+	// references a push the policy does not know about fails like any other.
 	const known = spec.policyRef in mapping
 		|| composite(spec.policyRef)
 		|| spec.policyRef.startsWith('data:')
-		|| spec.policyRef.startsWith('chan:server_initiated')
-		|| spec.policyRef.startsWith('push:')
 		|| spec.needsTestContribution
 		|| spec.policyRef === 'rpc:raw';
 	c('probe-policy-link', known, `${id} references a real policy entry (${spec.policyRef})`,

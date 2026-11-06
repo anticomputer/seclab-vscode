@@ -315,6 +315,7 @@ The invariants the table is checked against, from `policy.json`:
 4. **key-on-wire-sid** — RPC policy is keyed on the createProxyIdentifier sid string, never the MainContext property name and never the numeric nid.
 5. **no-real-secret-in-tab.sentinel-derivation** — A token minted for the tab reaches it only as a sentinel, bound to no more than its parent's bindings, or to the bindings of a derivation rule the controller declared for that exact route.
 6. **no-seclab-commands-from-tabs** — No command whose id begins 'seclab.' is reachable from a sandboxed host.
+7. **every-deny-has-an-enforcement-point** — Every surface class carrying a deny verdict must name the code that refuses it, and that code must exist in the patch series.
 <!-- seclab:end invariants -->
 
 ### 3.2 Categories may withhold authority; they may not grant it
@@ -415,7 +416,7 @@ Two properties of the digest matter:
   build over a stale surface. **Open work**, noted in §7.
 
 <!-- seclab:begin baseline -->
-Current baseline at `a717861c0758`: **4174 surfaces, 4153 denied, 21 not denied** (1 allow, 9 allow_with_constraint, 4 prompt, 7 rewrite).
+Current baseline at `a717861c0758`: **4205 surfaces, 4171 denied, 34 not denied** (14 allow, 9 allow_with_constraint, 4 prompt, 7 rewrite).
 <!-- seclab:end baseline -->
 
 ### 4.1 What is reachable right now
@@ -433,6 +434,19 @@ any becomes reachable without one.
 | `data:uri-handler` | prompt |
 | `data:webview-content` | allow_with_constraint |
 | `data:workspace-configuration` | allow_with_constraint |
+| `push:remoteFilesystem:fileChange` | allow |
+| `push:remoteFilesystem:readFileStream` | allow |
+| `push:remoteterminal:$onDidChangeProperty` | allow |
+| `push:remoteterminal:$onDidRequestDetach` | allow |
+| `push:remoteterminal:$onProcessDataEvent` | allow |
+| `push:remoteterminal:$onProcessExitEvent` | allow |
+| `push:remoteterminal:$onProcessOrphanQuestion` | allow |
+| `push:remoteterminal:$onProcessReadyEvent` | allow |
+| `push:remoteterminal:$onProcessReplayEvent` | allow |
+| `push:remoteterminal:$onPtyHostExitEvent` | allow |
+| `push:remoteterminal:$onPtyHostResponsiveEvent` | allow |
+| `push:remoteterminal:$onPtyHostStartEvent` | allow |
+| `push:remoteterminal:$onPtyHostUnresponsiveEvent` | allow |
 | `rpc:MainThreadAuthentication.$getSession` | rewrite |
 | `rpc:MainThreadClipboard.$writeText` | allow |
 | `rpc:MainThreadCommands.$executeCommand` | allow_with_constraint |
