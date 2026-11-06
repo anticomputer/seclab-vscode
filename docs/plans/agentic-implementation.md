@@ -178,10 +178,22 @@ RPC-lockdown, which will wire A17, A18 and A23 behind it.
       `EditorRemoteAgentHostServiceClient` with the gate.
     - The setting is registered in the gate file at `APPLICATION` scope.
     - With the setting off, nothing changes from v0.
-  - **Events.** Each decision becomes a `trusted` event (source `ahp-gate`). It reaches
-    the observability stream through the `MainThreadSeclab*` path agreed with RPC-lockdown
-    and observability, never through a command (the `seclab.*` prefix is denied).
-    Samples go to the observability session with this increment.
+  - **Events.** Each decision is reported over `tab.events.report` as class
+    `ahp.decision`, from sources `ahp-gate`, `ahp-reverse` and `ahp-credential`. tabd fixes
+    integrity to `trusted` for those three sources. The path is the trusted client's, as
+    for `rpc-filter`, and never a command (the `seclab.*` prefix is denied). The shape was
+    agreed with the observability session on 2026-11-06:
+    - fields are `{source, class, priority, summary, detail}`;
+    - `detail` is flat, with at most 16 keys and scalar values, and the gate's rule id is
+      `detail.gateRule`;
+    - priorities use the Falco names;
+    - tabd tags untrusted strings itself.
+    
+    The client reports `ahp-gate.opened` for **every** agent-host connection it opens,
+    gated or not, and `ahp-gate.verified` from the construction invariant.
+    Observability's critical `ahp.ungated` detection fires on `opened` with no `verified`
+    for that connection within about two seconds. Both events are trusted, so the tab can
+    neither raise the detection nor suppress it.
 - **Size.** About 25 lines in upstream files. The gate, the policy loader and the
   setting registration are new files.
 - **Probes** (each must fail on U first):
@@ -337,7 +349,7 @@ RPC-lockdown, which will wire A17, A18 and A23 behind it.
 | RPC-lockdown | Review of the layering in §1 (gate, inner layers on F) | Inc 1 review |
 | Fork-build | `patches/reach.json` entries pinning 0015–0021 to `desktop`; for U and F: a positive release marker in `check-release`, a separate fetch destination, a distinct product name and bundle id, and a build-info field (§2) | Inc 0 |
 | Broker | Provider-table rows per the amended D7 and the org-policy exceptions (in progress); fail closed on unknown keys for the unmeasured org-policy responses; a justification per widened field or tool type | Inc 5 |
-| Observability | Accept the `ahp-gate`, `ahp-reverse` and `ahp-credential` event samples; integrity `trusted` from those three sources only | Inc 1 |
+| Observability | The class `ahp.decision` and sources `ahp-gate`, `ahp-reverse` and `ahp-credential` in the `tab.events.report` allowlist, with integrity fixed to `trusted`; the `ahp.ungated` detection; the vocabulary keys. Agreed on 2026-11-06; to be added with a review round once the renderer side emits | Inc 1 |
 | tabd owner | A supervisor method for trusted-side credential import (Tab Manager to tabd) | Inc 5 |
 
 ## 6. Risks to this plan
