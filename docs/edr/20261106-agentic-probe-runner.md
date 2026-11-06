@@ -349,7 +349,7 @@ runtime evidence to collect once the runner is finished.
 - Whether the workbench client reconnects after the agent host's restart, and with what
   backoff, is to be measured with the runner.
 
-## Where this stopped (2026-11-06, end of session)
+## Superseded: where this stopped (2026-11-06, end of the first session)
 Branch `anticomputer-agentic-gate-0015-v3`, rebased onto `main` (`f669584`). 0015 is still
 **HELD**: the probes are fixed and the reason the old ones could not land is now understood
 and recorded (findings 9–14), but **no U run has yet shown a host effect**, so there is still
@@ -394,3 +394,61 @@ Teardown ran and passed every check except the focus gate: no process, sandbox, 
 network or volume from the run is alive, the run profile is removed, and no watched host path
 changed. `./seclab clean-host` lists nothing of this session's. `.work/agentic-runner/` is kept
 on purpose: it holds the run's evidence, it is gitignored, and fixture lint is clean on it.
+
+
+## Measured: every probe is proved to land before any run (2026-11-06)
+The halt note above is superseded. The probes are no longer taken on trust, and the gap it
+described (no U run yet) is now the only thing left.
+
+**`./seclab test probes`** (`test/agentic/ahp/validate-probes.sh`) drives the probe runner's
+own probe table into the **real upstream agent-host client**, bundled from the pinned source
+by the spike's `bundle.mjs`, in a container with `--network none` and no editor. Each probe
+declares what it must reach, and the check fails if it does not:
+
+- **lands** -- the probe reaches the behaviour that makes it a threat, so it can decide
+  `vulnerable` in a run;
+- **surface** -- it is well formed and reaches the client's dispatch, but upstream itself
+  refuses it, so a run must not read its absence as containment.
+
+The probe table lives in `test/agentic/runner/probes.js` and is **imported** by both the
+in-tab takeover and the validator. A validator with its own copy of the probes proves
+nothing about the probes a run sends; that is the same false-negative shape as review
+round 2's dead code and its matching fixture.
+
+**Result: 13/13 reach what they claim, 2 can decide vulnerable.**
+
+| probe | kind | what it reaches, measured |
+|---|---|---|
+| `A20-mcp-auth` | lands | the client fetched `http://127.0.0.1:<beacon>/.well-known/oauth-protected-resource/mcp-<nonce>` through `IRequestService`, with no user action and no signed-in account |
+| `A1-protected` | lands | the root reducer applied the envelope; `rootState.agents` carries the attacker's agent (`["p"]`) |
+| `A16-read`, `A16-write`, `A5-outside`, `A26-scheme` | surface | `Access to <uri> is not granted` from the resource service's permission gate, **not** a shape error in front of it |
+| `A14-method`, `A7-tcp` | surface | `Unknown method: …` |
+| `A14-action`, `A21-ui`, `A1-mcp-state`, `A1-customizations`, `A1-toolcall-auth` | surface | accepted and dispatched, no subscription matches, nothing fetched |
+
+Two things this settles, beyond the probes themselves:
+15. **The `resourceWrite` fix is confirmed at the point that matters.** It now reaches the
+    permission gate; before, it died on `Missing uri or data` before any gate ran. The
+    validator refuses a reply matching `missing uri` for exactly this reason.
+16. **The check earned its place on its first run.** It caught a call site left with the old
+    single-argument signature when the probe table was extracted into its own module, which
+    made `A20-mcp-auth` a *notification* aimed at port `undefined`. That probe would have
+    been silently inert in a real run, and its silence would have looked exactly like the
+    gate working. This is the third time in this record that a probe that could not fire
+    nearly passed as containment, and the first time something other than a review caught it.
+
+**The U run is what remains.** The host-side behaviour is now proved against the real client
+code; the open question is only whether the in-tab takeover delivers it to a shipped window,
+which needs an editor window and is blocked on the focus-steal regression (owned elsewhere).
+
+### Teardown: a run reaps the previous run first
+An aborted `prepare` left its beacon listening on the host. The manifest is the only record
+of a run's helpers, and `prepare` deletes the run directory **before** writing the new
+manifest, which names a different port: after the wipe nothing could name the old helper
+again, and the next run's teardown gate reported clean because that beacon was never its own.
+
+`reapPreviousRun` (in `test/containment/teardown.ts`, so every harness gets it) stops the
+previous run's process trees, removes its tabs and helper runtimes, and removes its profile,
+which holds the armed rogue extension. It applies verify's own rules: a manifest with any
+problem, or one naming a profile outside the test roots, is refused rather than acted on, and
+it is a no-op where there is no previous run. `test/containment/teardown.test.ts` covers all
+five cases.

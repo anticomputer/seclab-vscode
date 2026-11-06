@@ -276,6 +276,7 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab test canary sbx        # canary acceptance test, level A (also: oci)
 ./seclab test secrets sbx       # pre-mount gitleaks gate: block, move-to-vault + sentinel, restore, accept (also: oci)
 ./seclab test obs sbx           # tab observability: inert loader -> expected events/labels; sensor tampering -> gap (also: oci)
+./seclab test probes            # AHP probes driven into the real upstream client (no window, no network): each must land where it claims, or the check fails
 ./seclab tab logs [-f] [--format text|json|falco] <tabId|all>   # read a tab's event log (--state-dir DIR for test runs)
 ./seclab lint fixtures          # fixture-safety lint (docker, no network); also: test/safety/fixture-lint.sh PATH...
 build/apply-patches.sh --check  # patch queue == patches/series (no unlisted patch can ship)
