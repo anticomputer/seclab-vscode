@@ -90,6 +90,7 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-06 | [CFS package feeds in tabs, broker side (round 13)](20261106-broker-cfs-feeds.md) | "broker: B4 CFS package feeds in tabs, broker side" (policy schema | see record |
 | 2026-11-06 | [deny rules and clientPort (round 12)](20261106-broker-deny-rules.md) | "broker: deny rules and clientPort" (policy schema revision 5, | see record |
 | 2026-11-06 | [budget on credential.import, and names-only field audits (round 14)](20261106-broker-import-budget.md) | three commits on the broker branch, and the round 14 fix commit. | see record |
+| 2026-11-06 | [adopted tabs reconnect broker control (B3c), and the CFS install e2e](20261106-broker-reattach.md) | round HHH: | see record |
 | 2026-11-06 | [broker-followed CFS download redirects (round 15)](20261106-broker-redirect-follow.md) | "broker: broker-followed CFS download redirects" (policy schema | see record |
 | 2026-11-06 | [CFS package feeds in tabs, tabd side (B4)](20261106-cfs-feeds-tabd.md) | round EEE, 20fb5bb and its fixes: | see record |
 | 2026-11-06 | [egress prompts (B3a, B3b)](20261106-egress-prompts.md) | round BBB, 24fea4c..79dcbea: | see record |

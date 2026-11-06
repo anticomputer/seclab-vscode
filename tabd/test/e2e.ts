@@ -3,6 +3,7 @@
 // Proves: claim -> ensureRunning (fence applied + verified) -> REH reachable over exec stdio.
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -74,6 +75,22 @@ async function handshake(): Promise<string> {
 
 assert.match(await handshake(), /^HTTP\/1\.1 101/);
 assert.match(await handshake(), /^HTTP\/1\.1 101/, 'second connection to the same REH');
+
+// B3c: the server dies; tab.ensureRunning (what the Tab Manager's reconnect does first) brings it
+// back under the same connection token, so the window reconnects without a reload.
+const before = (await client.request<{ connectionToken: string }>('tab.ensureRunning', { tabId })).connectionToken;
+const name = `seclab-${tabId}`;
+const killReh = 'for p in /proc/[0-9]*; do tr "\\0" " " < "$p/cmdline" 2>/dev/null | grep -q "^/opt/seclab-reh/" && kill -9 "${p#/proc/}" 2>/dev/null; done; true';
+const k = driver === 'sbx'
+	? spawnSync('/opt/homebrew/bin/sbx', ['exec', '-u', 'agent', name, 'sh', '-c', killReh], { encoding: 'utf8' })
+	: spawnSync('docker', ['exec', '-u', '1000:1000', '--', name, 'sh', '-c', killReh], { encoding: 'utf8' });
+assert.equal(k.status, 0, `killing the REH: ${k.stderr}`);
+await new Promise(r => setTimeout(r, 1000));
+await assert.rejects(handshake(), /closed/, 'no server: the connection closes');
+const after = (await client.request<{ connectionToken: string }>('tab.ensureRunning', { tabId })).connectionToken;
+assert.equal(after, before, 'same connection token after the restart');
+assert.match(await handshake(), /^HTTP\/1\.1 101/, 'the server is back: the window can reconnect');
+console.log('server restart: reconnect works with the same token');
 
 const list = await client.request<{ tabs: unknown[] }>('tab.list');
 assert.equal(list.tabs.length, 1);
