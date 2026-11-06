@@ -320,7 +320,7 @@ test('broker.hello: policy schema revision, protocol and tab must match (fail cl
 	assert.ok(ex, 'broker.hello example present in the protocol doc');
 	const hello = { ...JSON.parse(ex![1]) as Record<string, unknown>, policySchema: { ...BROKER_POLICY_SCHEMA } };
 	checkBrokerHello(hello, String(hello.tabId));
-	assert.throws(() => checkBrokerHello({ ...hello, policySchema: { version: 1, revision: BROKER_POLICY_SCHEMA.revision - 1 } }, String(hello.tabId)), /policy schema/);
+	assert.throws(() => checkBrokerHello({ ...hello, policySchema: { version: 1, revision: BROKER_POLICY_SCHEMA.revision - 1 } }, String(hello.tabId)), /policy schema.*\.\/seclab image oci/);
 	assert.throws(() => checkBrokerHello({ ...hello, policySchema: { version: 1, revision: BROKER_POLICY_SCHEMA.revision + 1 } }, String(hello.tabId)), /policy schema/);
 	assert.throws(() => checkBrokerHello({ ...hello, policySchema: undefined }, String(hello.tabId)), /policy schema/);
 	assert.throws(() => checkBrokerHello({ ...hello, protocol: 'seclab-broker/2' }, String(hello.tabId)), /protocol/);

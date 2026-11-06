@@ -6,7 +6,7 @@
 // docker access, who already controls the VM.
 
 import type { Runner } from './run.ts';
-import { BROKER_POLICY_SCHEMA, BROKER_PROTOCOL } from './broker.ts';
+import { BROKER_POLICY_SCHEMA, BROKER_PROTOCOL, REBUILD_HINT } from './broker.ts';
 
 /** The verified mitmproxy base (broker/deps.json, images[name=mitmproxy/mitmproxy].ref after `@`). A unit test pins it. */
 export const BROKER_BASE_DIGEST = 'sha256:2711066c855659b5af8b1dbb84494ed3eff69b42ece439c60b4fe09a2db829d4';
@@ -38,10 +38,10 @@ export function brokerImageProblems(id: string, labels: Record<string, string> |
 		p.push(`base ${JSON.stringify(l[BROKER_LABELS.base] ?? null)} is not the verified mitmproxy digest`);
 	}
 	if (l[BROKER_LABELS.protocol] !== BROKER_PROTOCOL) {
-		p.push(`protocol ${JSON.stringify(l[BROKER_LABELS.protocol] ?? null)}, expected ${BROKER_PROTOCOL}`);
+		p.push(`protocol ${JSON.stringify(l[BROKER_LABELS.protocol] ?? null)}, expected ${BROKER_PROTOCOL} (${REBUILD_HINT})`);
 	}
 	if (l[BROKER_LABELS.policyRevision] !== String(BROKER_POLICY_SCHEMA.revision)) {
-		p.push(`policy revision ${JSON.stringify(l[BROKER_LABELS.policyRevision] ?? null)}, expected ${BROKER_POLICY_SCHEMA.revision}`);
+		p.push(`policy revision ${JSON.stringify(l[BROKER_LABELS.policyRevision] ?? null)}, expected ${BROKER_POLICY_SCHEMA.revision} (${REBUILD_HINT})`);
 	}
 	if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(l[BROKER_LABELS.version] ?? '')) {
 		p.push(`version ${JSON.stringify(l[BROKER_LABELS.version] ?? null)} is not a release version`);
