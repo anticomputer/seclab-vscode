@@ -404,6 +404,8 @@ def cross_checks(errors: list[str]) -> None:
         errors.append(f"error codes differ: code {sorted(codes)} vs protocol {sorted(protocol.error_codes())}")
     if d["protocol"] != seclab_broker.PROTOCOL:
         errors.append("protocol.v1.json 'protocol' differs from seclab_broker.PROTOCOL")
+    if f"io.seclab.broker.protocol={seclab_broker.PROTOCOL}" not in (BROKER / "Dockerfile").read_text():
+        errors.append("broker/Dockerfile's io.seclab.broker.protocol label differs from seclab_broker.PROTOCOL")
     latest = (d.get("changelog") or [{}])[0]
     if latest.get("version") != seclab_broker.VERSION:
         errors.append(f"protocol changelog's latest version {latest.get('version')!r} != seclab_broker.VERSION "

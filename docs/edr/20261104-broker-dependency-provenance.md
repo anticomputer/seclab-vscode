@@ -137,6 +137,29 @@ image. Approved by the user via the coordinator on 2026-11-05 ("signed
 archive, versions not pinned"). It is registered as `apt-broker-tests` with
 bar `exception` in `deps/registry.json`.
 
+**The broker image's identity (XX-6, agreed with the Fork-build session,
+2026-11-05).** tabd runs the broker with `--pull never`, so it must know which
+local image it runs.
+- **Build side.** `broker/build.sh` checks that the Dockerfile's base digest is
+  the registered, verified mitmproxy digest. It labels the image with:
+  - its source revision (`-dirty` if `broker/` has uncommitted or untracked
+    files);
+  - that base digest;
+  - the broker version, protocol and policy schema revision.
+
+  Its only stdout line is the image ID (`docker image inspect {{.Id}}`) as
+  JSON.
+- **tabd side.**
+  - It records the ID and creates the broker by `sha256:…`, never by tag, so
+    retagging can't swap the image. The ID is content-addressed over config,
+    labels and layers.
+  - It checks the labels against constants pinned in tabd, with a unit test
+    tying them to `broker/deps.json` and the protocol changelog.
+  - It refuses `-dirty` builds outside dev mode.
+- **Why not an attestation.** A local build has no Sigstore identity, so an
+  attestation would be self-signed. Publishing a signed broker image from CI is
+  for released builds.
+
 **Where the files come from: CFS locally, PyPI in CI (2026-11-05).**
 - **Local builds.** Public PyPI is unavailable locally, so a local build
   fetches through GitHub's CFS feed, the same exact files by hash.

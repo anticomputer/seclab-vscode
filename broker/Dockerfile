@@ -27,6 +27,17 @@ RUN --mount=type=bind,from=wheels,source=/wheels,target=/opt/wheels pip install 
 COPY seclab_broker /opt/seclab/seclab_broker
 COPY schema/policy.v1.schema.json schema/protocol.v1.json /opt/seclab/seclab_broker/data/
 ENV PYTHONPATH=/opt/seclab PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+# Identity (set by build.sh; tabd checks it, then runs the image by ID). Defaults mark an
+# image not built by build.sh, which tabd refuses.
+ARG SECLAB_REVISION=unknown
+ARG SECLAB_BASE_DIGEST=unknown
+ARG SECLAB_VERSION=unknown
+ARG SECLAB_POLICY_REVISION=unknown
+LABEL org.opencontainers.image.revision=$SECLAB_REVISION \
+      org.opencontainers.image.base.digest=$SECLAB_BASE_DIGEST \
+      org.opencontainers.image.version=$SECLAB_VERSION \
+      io.seclab.broker.protocol=seclab-broker/1 \
+      io.seclab.broker.policy-revision=$SECLAB_POLICY_REVISION
 
 USER mitmproxy
 EXPOSE 8080
