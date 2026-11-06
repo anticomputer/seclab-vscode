@@ -35,6 +35,17 @@ second pass.
   product.json at all. It passes under macOS sh, dash and busybox.
 
 ## Consequences
+- **What the stamp proves** (review DDD-3): the reviewed policy table that 0005 creates was
+  applied to the source this build came from. It doesn't prove that the enforcing code was
+  bundled, or that the rest of the filter series (0006–0011) is listed. Observability
+  should label it "RPC policy table applied (hash)", not "filter active". A stronger signal
+  would be a literal emitted by the table and required in the built JS, as the test hooks'
+  markers are; that is passed to the RPC session.
+- Review DDD's other fixes:
+  - an expectation that isn't `absent` or a sha256 fails, as does a missing or failing hasher;
+  - the series is read on its own, so a read error fails;
+  - product.json must carry exactly one `seclabRpcPolicy`;
+  - the self-test also covers a commented-out 0005, a CRLF series and a duplicate nested key.
 - Checked against the real 0005 on the RPC branch: the hash derived from its hunk equals the
   sha256 of `rpc-filter/patch-src/seclabPolicyData.ts`.
 - Every check-release run now also needs `patches/`: next to the script, or mounted

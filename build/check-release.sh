@@ -20,10 +20,14 @@ set -eu
 # 0005 is listed, else the sha256 of the policy table 0005 creates, taken from its new-file hunk.
 # A series where another patch also touches the table can't be derived here: fail closed.
 RPC_POLICY_REL=src/vs/workbench/services/extensions/common/seclabPolicyData.ts
-sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -c1-64; else shasum -a 256 "$1" | cut -c1-64; fi; }
+sha256_file() { # no pipeline: a missing or failing hasher must fail, not print nothing
+	if command -v sha256sum >/dev/null 2>&1; then s=$(sha256sum "$1") || return 1; else s=$(shasum -a 256 "$1") || return 1; fi
+	printf '%s\n' "${s%% *}"
+}
 rpc_expect() { # $1 = patches dir, $2 = scratch file; prints absent|<sha256>, or fails
 	[ -f "$1/series" ] || { echo "check-release: no patches/series at $1" >&2; return 1; }
-	listed=$(sed -e 's/#.*//' "$1/series" | tr -d ' \t\r' | grep -v '^$' || true)
+	sed -e 's/#.*//' "$1/series" > "$2.series" || return 1
+	listed=$(tr -d ' \t\r' < "$2.series" | grep -v '^$' || true)
 	p=$(printf '%s\n' "$listed" | grep -E '^0005-[A-Za-z0-9._-]+\.patch$' | head -1 || true)
 	[ -n "$p" ] || { echo absent; return 0; }
 	for q in $listed; do
@@ -73,6 +77,13 @@ if [ "${1:-}" = "--self-test" ]; then
 	stamp "$habn"; run "$T/with5" fail "0005 listed, another hash"
 	run "$T/nonl" pass "0005 without a final newline, its hash"
 	stamp "$hab"; run "$T/two" fail "another patch also changes the table"
+	# DDD: a commented-out 0005 is absent; CRLF in series still lists it; a duplicate key fails.
+	printf '0001-a.patch\n# 0005-rpc.patch\n' > "$T/no5/series"
+	echo '{"nameShort":"x"}' > "$T/root/product.json"; run "$T/no5" pass "0005 only in a comment: absent"
+	printf '0001-a.patch\r\n0005-rpc.patch\r\n' > "$T/with5/series"
+	stamp "$hab"; run "$T/with5" pass "CRLF series still lists 0005"
+	printf '{"seclabRpcPolicy":{"sha256":"%s"},"x":{"seclabRpcPolicy":{"sha256":"%s"}}}\n' "$hab" "$hab" > "$T/root/product.json"
+	run "$T/with5" fail "a duplicate nested seclabRpcPolicy"
 	rm -rf "$T/root"; mkdir -p "$T/root"; echo 'var x=1;' > "$T/root/a.js"
 	run "$T/no5" fail "no product.json at all"
 	echo "check-release self-test: ok"
@@ -99,6 +110,12 @@ if [ "${1:-}" = "--inner" ]; then
 	if ! rpc_exp=$(rpc_expect "$pdir" "$WORK/rpc-policy-table"); then
 		echo "check-release: cannot derive the expected RPC policy stamp"; bad=1; rpc_exp=""
 	fi
+	# Only "absent" or a sha256 is an expectation; anything else (an empty hash) fails (DDD-1).
+	case "$rpc_exp" in
+		absent|"") ;;
+		*) printf '%s' "$rpc_exp" | grep -Eq '^[0-9a-f]{64}$' || { echo "check-release: bad RPC policy expectation"; bad=1; rpc_exp=""; } ;;
+	esac
+	[ -n "$rpc_exp" ] || bad=1
 	scan() { # $1 = ERE, $2 = label; grep exit 1 = no match, >1 = error (fail closed)
 		set +e
 		# -a: a NUL byte must not hide a file. JS/JSON plus shell launchers (bin/, *.sh).
@@ -118,10 +135,15 @@ if [ "${1:-}" = "--inner" ]; then
 		while IFS= read -r pj; do
 			[ -n "$pj" ] && [ -n "$rpc_exp" ] || continue
 			flat=$(tr -d ' \t\r\n' < "$pj")
+			# Exactly one seclabRpcPolicy key when stamped, none otherwise (DDD-2).
+			rest=${flat#*\"seclabRpcPolicy\"}
 			case "$flat" in *'"seclabRpcPolicy"'*) has=1 ;; *) has=0 ;; esac
+			case "$rest" in *'"seclabRpcPolicy"'*) has=2 ;; esac
 			got=$(printf '%s' "$flat" | sed -n 's/.*"seclabRpcPolicy":{"sha256":"\([0-9a-f]\{64\}\)".*/\1/p')
 			if [ "$rpc_exp" = absent ]; then
 				[ "$has" = 0 ] || { echo "check-release: RPC policy stamp in $pj, but patches/series has no 0005"; bad=1; }
+			elif [ "$has" != 1 ]; then
+				echo "check-release: $pj must carry exactly one seclabRpcPolicy (found ${has})"; bad=1
 			elif [ "$got" != "$rpc_exp" ]; then
 				echo "check-release: RPC policy stamp in $pj is '${got:-missing}', expected $rpc_exp (0005's table)"; bad=1
 			fi
