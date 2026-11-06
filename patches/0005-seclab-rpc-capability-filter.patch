@@ -264,7 +264,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-04 18:55:50
-@@ -0,0 +1,608 @@
+@@ -0,0 +1,624 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -607,19 +607,33 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +	}
 +
 +	public commandVerdict(id: string): SeclabVerdict {
-+		// Prefixes first, before the table. `commands.exact` is resolved ahead
-+		// of rules when the table is generated, so a prefix rule there can be
-+		// overridden by an exact entry; checking here means the guarantee does
-+		// not depend on the table staying correct. The fork's own `seclab.*`
-+		// commands exist to ask the user to approve what a tab may not do for
-+		// itself, so a tab that could raise them would be supplying the prompt.
-+		for (const prefix of SECLAB_COMMAND_DENY_PREFIXES) {
-+			if (id.startsWith(prefix)) {
-+				return 'deny';
-+			}
-+		}
-+		return SECLAB_COMMANDS.get(id)?.verdict ?? SECLAB_DEFAULT_VERDICT;
++		return seclabCommandVerdict(id);
 +	}
++}
++
++/**
++ * The verdict for a command id, independent of any filter instance.
++ *
++ * Both the tainted path and the laundering backstop must get the same answer.
++ * The backstop used to read `SECLAB_COMMANDS` directly, which skipped the deny
++ * prefixes below and did not accept `allow_with_constraint`: if an exact entry
++ * ever granted `allow` to an id matching a deny prefix, the backstop would
++ * have permitted exactly what `commandVerdict` refuses. Two readings of one
++ * table is one reading too many, and the divergence was in the open direction.
++ */
++function seclabCommandVerdict(id: string): SeclabVerdict {
++	// Prefixes first, before the table. `commands.exact` is resolved ahead
++	// of rules when the table is generated, so a prefix rule there can be
++	// overridden by an exact entry; checking here means the guarantee does
++	// not depend on the table staying correct. The fork's own `seclab.*`
++	// commands exist to ask the user to approve what a tab may not do for
++	// itself, so a tab that could raise them would be supplying the prompt.
++	for (const prefix of SECLAB_COMMAND_DENY_PREFIXES) {
++		if (id.startsWith(prefix)) {
++			return 'deny';
++		}
++	}
++	return SECLAB_COMMANDS.get(id)?.verdict ?? SECLAB_DEFAULT_VERDICT;
 +}
 +
 +/**
@@ -687,7 +701,9 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +		}
 +		return undefined;
 +	}
-+	if (seclabInFlight > 0 && SECLAB_COMMANDS.get(id)?.verdict !== 'allow') {
++	const backstopVerdict = seclabCommandVerdict(id);
++	if (seclabInFlight > 0
++		&& backstopVerdict !== 'allow' && backstopVerdict !== 'allow_with_constraint') {
 +		// Not tab-originated as far as the call path knows, but a tab command is
 +		// running: this is the laundering shape the backstop exists for.
 +		seclabEscapes.push(id);

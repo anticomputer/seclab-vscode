@@ -169,6 +169,25 @@ test('the tainted service does not double-count the nested call', () => {
 	assert.equal((filter.match(/seclabInFlight--/g) ?? []).length, 1);
 });
 
+test('the backstop and the tainted path read one verdict, not two', () => {
+	const filter = fs.readFileSync(path.join(
+		repoRoot, 'rpc-filter', 'patch-src', 'seclabRpcFilter.ts'), 'utf8');
+	// The backstop must not read the raw table: that skips the deny prefixes
+	// and rejects allow_with_constraint, so the two paths could disagree in the
+	// open direction the moment any command stops being denied.
+	const backstop = filter.slice(filter.indexOf('seclabInFlight > 0'));
+	const window = backstop.slice(0, 200);
+	assert.doesNotMatch(window, /SECLAB_COMMANDS\.get/,
+		'the backstop must call seclabCommandVerdict, not read the table');
+	// Module-internal on purpose: both callers live in this file, and the
+	// patch queue's dead-entry-point check treats an export with no external
+	// caller as the shape that type-checks, reviews well and never runs.
+	assert.match(filter, /\nfunction seclabCommandVerdict/,
+		'one shared verdict function must exist');
+	assert.match(filter, /backstopVerdict !== 'allow_with_constraint'/,
+		'the backstop must accept allow_with_constraint like the tainted path');
+});
+
 let failed = 0;
 for (const [name, fn] of tests) {
 	try {
