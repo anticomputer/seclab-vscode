@@ -17,15 +17,15 @@
 //               marker, no beacon hit and no canary anywhere in the tab's output.
 // Absence alone is never containment.
 
-import { spawn, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../../tabd/src/client.ts';
 import { beaconPort, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, lockRun, repoRoot } from '../../harness.ts';
 import { report, type Check } from '../../containment/assert.ts';
-import { armSpawn, beaconSpawn } from './marks.ts';
-import { teardownGate, writeManifest, writeSnapshot } from '../../containment/teardown.ts';
+import { beaconSpawn } from './marks.ts';
+import { readManifest, teardownGate, writeManifest, writeSnapshot } from '../../containment/teardown.ts';
 
 const argv = process.argv.slice(2);
 const mode = argv.shift();
@@ -34,8 +34,8 @@ function opt(name: string, fallback?: string): string | undefined {
 	const i = argv.indexOf(`--${name}`);
 	return i >= 0 ? argv[i + 1] : fallback;
 }
-if ((mode !== 'prepare' && mode !== 'check' && mode !== 'arm') || !userDataArg) {
-	console.error('usage: runner.ts prepare|arm|check <user-data-dir> [--build u|g] [--driver sbx|oci]');
+if ((mode !== 'prepare' && mode !== 'check') || !userDataArg) {
+	console.error('usage: runner.ts prepare|check <user-data-dir> [--build u|g] [--driver sbx|oci]');
 	process.exit(2);
 }
 const driver = opt('driver', 'sbx') as 'sbx' | 'oci';
@@ -50,7 +50,6 @@ checkIsolatedProfile(path.join(base, 'ws'));
 // Teardown finds this run's detached helpers by command mark, and a mark must appear in the
 // process's argv with whitespace or a line edge on each side. The helpers are spawned with
 // absolute script paths, so the marks are built from the very argv used to spawn them.
-const ARM_SCRIPT = path.join(import.meta.dirname, 'runner.ts');
 const ws = path.join(base, 'ws');
 const canary = path.join(base, 'canary', 'host-secret.txt');
 const marker = path.join(base, 'PWNED-AHP');
@@ -62,25 +61,6 @@ const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manage
 /** Builds: U is the release app, G is the attested branch test build. Never the same path. */
 const APPS = { u: path.join(repoRoot, '.work', 'app', 'seclab-vscode.app'), g: path.join(repoRoot, '.work', 'app-branch', 'seclab-vscode.app') };
 
-/** Whether this tab's sandbox is up, asked of the runtime on the host: never an exec into the
- *  tab, which would race the editor's own tab startup. */
-function sandboxRunning(tabId: string): boolean {
-	const name = `seclab-${tabId}`;
-	if (driver === 'sbx') {
-		const r = spawnSync('/opt/homebrew/bin/sbx', ['ls', '--json'], { encoding: 'utf8' });
-		if (r.status !== 0) {
-			return false;
-		}
-		try {
-			return (JSON.parse(r.stdout) as Array<{ name?: string; status?: string }>).some(s => s.name === name && s.status === 'running');
-		} catch {
-			return false;
-		}
-	}
-	const r = spawnSync('docker', ['ps', '--filter', `name=^${name}$`, '--format', '{{.Names}}'], { encoding: 'utf8' });
-	return (r.stdout ?? '').trim() === name;
-}
-
 function tabExec(name: string, args: string[], opts: { detached?: boolean } = {}): { status: number | null; stdout: string; stderr: string } {
 	const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
 	const user = driver === 'sbx' ? ['-u', 'agent'] : [];
@@ -89,45 +69,7 @@ function tabExec(name: string, args: string[], opts: { detached?: boolean } = {}
 	return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
 
-if (mode === 'arm') {
-	// The editor restarts the tab, and stopping a tab kills everything in it. So the takeover is
-	// re-injected whenever its heartbeat goes stale. Liveness is read from the workspace bind
-	// mount on the host: polling the tab itself with `sbx exec` raced the editor's own tab
-	// startup and made the REH fail to start ("workspace overlay not mounted").
-	const { tabId, inTabRun, arm } = JSON.parse(fs.readFileSync(path.join(base, 'arm.json'), 'utf8')) as { tabId: string; inTabRun: string; arm: string };
-	const heartbeat = path.join(ws, '.mitm.pid');
-	const deadline = Date.now() + 10 * 60_000;
-	const armLog = path.join(base, 'arm.log');
-	let injections = 0;
-	let gone = 0;
-	while (Date.now() < deadline) {
-		spawnSync('sleep', ['0.5']);
-		let live = false;
-		try {
-			live = Date.now() - (JSON.parse(fs.readFileSync(heartbeat, 'utf8')) as { at: number }).at < 3000;
-		} catch { /* no heartbeat yet, or a torn write */ }
-		if (live) {
-			gone = 0;
-			continue;
-		}
-		if (!sandboxRunning(tabId)) {
-			// The run is over (teardown removed the tab), so stop re-injecting rather than
-			// outliving it as an orphaned loop (review round 2).
-			if (++gone > 20) {
-				break;
-			}
-			continue;
-		}
-		gone = 0;
-		const r = tabExec(tabId, ['/opt/seclab/bin/seclab-tab-env', 'sh', '-c',
-			`cd ${inTabRun} && rm -f .mitm.pid && nohup /opt/seclab-reh/node .mitm.js .mitm.json ${arm} > .mitm.out 2>&1 & echo started $!`]);
-		injections++;
-		fs.appendFileSync(armLog, `${new Date().toISOString()} injection ${injections} status=${r.status} ${r.stdout.trim()} ${r.stderr.trim()}\n`);
-		spawnSync('sleep', ['2']); // let it come up before judging liveness again
-	}
-	fs.appendFileSync(armLog, `${new Date().toISOString()} done after ${injections} injection(s)\n`);
-	process.exit(0);
-} else if (mode === 'prepare') {
+if (mode === 'prepare') {
 	const build = (opt('build') ?? '') as 'u' | 'g';
 	if (build !== 'u' && build !== 'g') {
 		console.error('prepare needs --build u (the release app) or --build g (the branch test build)');
@@ -200,32 +142,52 @@ if (mode === 'arm') {
 	writeManifest(base, { tabs: [tabId] });
 	await client.request('tab.ensureRunning', { tabId });
 
-	// The takeover runs as the tab user, from inside the tab. The run directory is the tab's
-	// workspace mount, so the config, the log and every path it may touch are inside it.
-	const inTabRun = ws;
-	fs.writeFileSync(path.join(ws, '.mitm.json'), JSON.stringify({
-		arm, runNonce: arm, run: inTabRun, canary, canaryValue, marker, outside,
-		beaconPort: port, reh: '/run/user/1000/seclab/reh.log', log: path.join(inTabRun, '.mitm.jsonl'), pid: path.join(inTabRun, '.mitm.pid'),
+	// The takeover is packaged as an extension, so the REH starts it inside the tab. That is
+	// what makes the run work across a tab restart: the editor restarts the tab, which kills
+	// everything in it, and every host-side way of restarting the takeover was worse (an
+	// `sbx exec` loop during the editor's own tab startup makes `tab.ensureRunning` fail with
+	// "collector: workspace overlay not mounted", and a workspace heartbeat is invisible to
+	// the host because the tab's workspace is an overlay). The REH restarts an extension by
+	// itself, so there is no host polling and no liveness signal at all.
+	const extSrc = path.join(import.meta.dirname, 'mitm-extension');
+	const extBuild = path.join(base, 'mitm-extension');
+	fs.rmSync(extBuild, { recursive: true, force: true });
+	fs.mkdirSync(extBuild, { recursive: true });
+	for (const f of fs.readdirSync(extSrc)) {
+		fs.copyFileSync(path.join(extSrc, f), path.join(extBuild, f));
+	}
+	fs.copyFileSync(path.join(import.meta.dirname, 'mitm.js'), path.join(extBuild, 'mitm.js'));
+	// The takeover's own files live in the installed extension directory inside the tab, not
+	// in the workspace: the overlay would hide them, and `check` collects them with one exec
+	// after the run, as diagnostics only.
+	const inTabExt = `/home/agent/.seclab-vscode-server/extensions/seclab.seclab-ahp-takeover-0.0.1`;
+	fs.writeFileSync(path.join(extBuild, 'mitm.json'), JSON.stringify({
+		arm, runNonce: arm, run: inTabExt, canary, canaryValue, marker, outside,
+		beaconPort: port, reh: '/run/user/1000/seclab/reh.log',
+		log: path.join(inTabExt, 'mitm.jsonl'), pid: path.join(inTabExt, 'mitm.pid'),
 	}, null, '\t'));
-	fs.copyFileSync(path.join(import.meta.dirname, 'mitm.js'), path.join(ws, '.mitm.js'));
-	// No pre-launch injection: this tab is stopped a moment from now so the editor can claim
-	// it, and stopping a tab kills everything inside. The arming loop below does the work.
-	fs.rmSync(path.join(ws, '.mitm.pid'), { force: true });
+	// Inside the workspace: it is the only thing mounted into the tab, so a vsix anywhere
+	// else in the run directory is simply not there as far as the REH is concerned.
+	const vsixDir = path.join(ws, '.seclab');
+	fs.mkdirSync(vsixDir, { recursive: true });
+	const VSCE_IMAGE = 'seclab-vsce:3.9.2';
+	if (spawnSync('docker', ['image', 'inspect', VSCE_IMAGE], { stdio: 'ignore' }).status !== 0) {
+		execFileSync('gh', ['cfs', '--', 'docker', 'build', '-q', '-t', VSCE_IMAGE, path.join(repoRoot, 'build', 'vsce')], { stdio: 'inherit' });
+	}
+	execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`,
+		'-v', `${extBuild}:/ext:ro`, '-v', `${vsixDir}:/out`, VSCE_IMAGE,
+		'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/takeover.vsix'], { stdio: 'inherit' });
+	const install = tabExec(tabId, ['/opt/seclab/bin/seclab-tab-env',
+		'/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(vsixDir, 'takeover.vsix')]);
+	console.log(`takeover extension: ${install.stdout.trim()} ${install.stderr.trim()}`);
+	if (install.status !== 0) {
+		console.error('failed to install the takeover extension');
+		process.exit(1);
+	}
 
-	client.dispose(); // stops the tab; the editor restarts it
+	client.dispose(); // stops the tab; the editor restarts it (extensions persist in the tab)
 	await new Promise(res => client.once('exit', res));
-
-	// Stopping the tab killed that daemon. The editor restarts the tab, so a host-side poller
-	// re-injects the takeover the moment the tab is up again -- which is still well before the
-	// agent host is spawned, because that happens only when the window's bridge first connects.
-	fs.writeFileSync(path.join(base, 'arm.json'), JSON.stringify({ tabId, driver, inTabRun, arm }, null, '\t'));
-	// `--run-dir` goes LAST: teardown's manifest rule (R-1) requires every command mark to
-	// contain the run directory followed by a separator, or to end with it. A mark ending in
-	// the profile path fails that rule, and one bad mark makes the whole teardown gate refuse
-	// to act, which leaves the armed fixture running (review round 3, HIGH).
-	const armHelper = armSpawn(ARM_SCRIPT, userData, driver, base);
-	spawn(process.execPath, armHelper.argv, { detached: true, stdio: 'ignore' }).unref();
-	writeManifest(base, { commandMarks: [beacon.mark, armHelper.mark] });
+	writeManifest(base, { commandMarks: [beacon.mark] });
 
 	const env: Record<string, string> = build === 'g' ? { SECLAB_AGENTS_ENABLED: '1' } : {};
 	console.log(`\nprepared tab ${tabId} for build ${build} (${app})`);
@@ -239,9 +201,18 @@ if (mode === 'arm') {
 	// The verdict refuses a run whose build is not the one requested.
 	checks.push({ vector: 'build', name: `ran the requested build (${build}, repo ${meta.buildInfo.repoSha.slice(0, 7)})`, ok: true, detail: meta.buildInfo.repoSha });
 
-	// --- The tab's own report. Never the deciding fact; it is a lead and a canary carrier.
-	const tabLog = path.join(ws, '.mitm.jsonl');
-	const mitm = fs.existsSync(tabLog) ? fs.readFileSync(tabLog, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l) as Record<string, unknown>) : [];
+	// The tab's own report. Never the deciding fact; it is diagnostics and a canary carrier.
+	// The tab's workspace is an overlay, so this is collected with one exec after the run.
+	const tabId = (readManifest(base).tabs ?? [])[0] ?? '';
+	const inTabExt = '/home/agent/.seclab-vscode-server/extensions/seclab.seclab-ahp-takeover-0.0.1';
+	const collected = tabId ? tabExec(tabId, ['sh', '-c', `cat ${inTabExt}/mitm.jsonl 2>/dev/null`]) : { status: 1, stdout: '', stderr: '' };
+	const mitm = collected.stdout.trim().split('\n').filter(Boolean).flatMap(l => {
+		try {
+			return [JSON.parse(l) as Record<string, unknown>];
+		} catch {
+			return [];
+		}
+	});
 	fs.writeFileSync(mitmLog, mitm.map(m => JSON.stringify(m)).join('\n'));
 	const took = mitm.some(m => m.kind === 'takeover');
 	const connected = mitm.some(m => m.kind === 'client-connected');
@@ -253,8 +224,7 @@ if (mode === 'arm') {
 	const markerThere = fs.existsSync(marker);
 	const beaconHits = fs.existsSync(beaconLog) ? fs.readFileSync(beaconLog, 'utf8').trim().split('\n').filter(Boolean) : [];
 	const canaryValue = fs.readFileSync(canary, 'utf8').trim();
-	const canaryLeaked = mitm.some(m => JSON.stringify(m).includes(canaryValue))
-		|| (fs.existsSync(path.join(ws, '.mitm.out')) && fs.readFileSync(path.join(ws, '.mitm.out'), 'utf8').includes(canaryValue));
+	const canaryLeaked = mitm.some(m => JSON.stringify(m).includes(canaryValue));
 	const hostEffect = markerThere || beaconHits.length > 0 || canaryLeaked;
 
 	// --- The gate's own decisions, from the window's log. Only the gate writes this file.
