@@ -44,6 +44,8 @@ usage: ./seclab <command>
                                 --online resolves external links (lychee, cached); --paired enforces doc
                                 changes next to protocol/patch/provider/product changes vs origin/main
   fetch macos [RUN_ID]          Download the unsigned macOS app from Actions -> .work/app/
+  fetch macos-branch RUN_ID     A dispatched non-main test build (attestation checked against its
+                                branch) -> .work/app-branch/ (never the release location)
   clean-host [--apply] [--running] [--caches]
                                 List (dry run) or remove every seclab resource on this host: sandboxes,
                                 containers, networks, volumes, test profiles, stray test editors/tabd.
@@ -236,6 +238,8 @@ fetch_macos() {
 	local run="${1:-}"
 	local dest="$ROOT/.work/app"
 	local repo="anticomputer/seclab-vscode"
+	local artifact="seclab-vscode-darwin-arm64" branch_build="${FETCH_BRANCH_BUILD:-}"
+	[[ -n "$branch_build" ]] && { dest="$ROOT/.work/app-branch"; artifact="seclab-vscode-darwin-arm64-branch"; }
 	if [[ -z "$run" ]]; then
 		# Only builds of main triggered by a push (reviewed code), never dispatch/PR runs.
 		run="$(gh run list -R "$repo" --workflow build-macos.yml --branch main --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
@@ -244,7 +248,12 @@ fetch_macos() {
 	local meta
 	meta="$(gh run view -R "$repo" "$run" --json headBranch,event,conclusion,workflowName,headSha --jq '[.headBranch,.event,.conclusion,.workflowName,.headSha]|join(" ")')"
 	read -r branch event conclusion workflow head_sha <<<"$meta"
-	if [[ "$workflow" != "build-macos" || "$conclusion" != "success" || "$branch" != "main" || "$event" != "push" ]]; then
+	if [[ -n "$branch_build" ]]; then
+		# A test build of an unlanded branch: dispatched, never main, never released.
+		if [[ "$workflow" != "build-macos" || "$conclusion" != "success" || "$branch" == "main" || "$event" != "workflow_dispatch" || ! "$branch" =~ ^[A-Za-z0-9._/-]{1,100}$ ]]; then
+			echo "refusing run $run: $meta (fetch macos-branch takes a successful dispatched build of a non-main branch)" >&2; exit 1
+		fi
+	elif [[ "$workflow" != "build-macos" || "$conclusion" != "success" || "$branch" != "main" || "$event" != "push" ]]; then
 		echo "refusing run $run: $meta (only successful main push builds are released)" >&2; exit 1
 	fi
 	[[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "bad head SHA $head_sha" >&2; exit 1; }
@@ -263,23 +272,26 @@ fetch_macos() {
 	stage="$(mktemp -d "$ROOT/.work/app-staging.XXXXXX")"
 	chmod 700 "$stage"
 	trap 'rm -rf "$stage"' RETURN
-	gh run download -R "$repo" "$run" --name seclab-vscode-darwin-arm64 --dir "$stage/dl"
+	gh run download -R "$repo" "$run" --name "$artifact" --dir "$stage/dl"
 	# Integrity of the download (same artifact)...
 	(cd "$stage/dl" && shasum -a 256 -c SHA256SUMS)
 	# ...and provenance, before anything is extracted or run: signed by this repo's
-	# build-macos workflow on a GitHub-hosted runner, from main at that commit (EDR ci-hardening).
+	# build-macos workflow on a GitHub-hosted runner, from that branch (main for releases) at
+	# that commit (EDR ci-hardening).
 	local f
 	for f in seclab-vscode-darwin-arm64.zip build-info.json; do
 		gh attestation verify "$stage/dl/$f" -R "$repo" \
 			--signer-workflow "$repo/.github/workflows/build-macos.yml" \
-			--source-ref "refs/heads/main" --source-digest "$head_sha" --deny-self-hosted-runners >/dev/null \
+			--source-ref "refs/heads/$branch" --source-digest "$head_sha" --deny-self-hosted-runners >/dev/null \
 			|| { echo "provenance verification failed for $f; not extracting" >&2; exit 1; }
 	done
-	echo "provenance verified: $repo build-macos.yml @ main $head_sha"
+	echo "provenance verified: $repo build-macos.yml @ $branch $head_sha"
 	# Parse, don't source: `.` would fire the RETURN trap above and delete the staging dir.
 	local UPSTREAM_SHA
 	UPSTREAM_SHA="$(sed -n 's/^UPSTREAM_SHA=\([0-9a-f]\{40\}\)$/\1/p' "$ROOT/upstream.lock")"
 	[[ "$UPSTREAM_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "upstream.lock: no valid UPSTREAM_SHA" >&2; exit 1; }
+	# A branch may pin another upstream: only its own commit is checked then.
+	[[ -n "$branch_build" ]] && UPSTREAM_SHA="$(jq -r .upstreamSha "$stage/dl/build-info.json")"
 	jq -e --arg u "$UPSTREAM_SHA" --arg h "$head_sha" '.upstreamSha == $u and .repoSha == $h' "$stage/dl/build-info.json" >/dev/null \
 		|| { echo "build-info.json does not match upstream.lock / run head SHA" >&2; exit 1; }
 	(cd "$stage/dl" && shasum -a 256 -c SHA256SUMS >/dev/null) || { echo "artifact changed after verification" >&2; exit 1; }
@@ -399,6 +411,8 @@ case "${1:-help}" in
 		shift
 		case "${1:-}" in
 			macos) shift; fetch_macos "$@" ;;
+			# A dispatched build of a non-main branch, for testing unlanded patches. Never released.
+			macos-branch) shift; [[ $# -eq 1 ]] || { usage; exit 2; }; FETCH_BRANCH_BUILD=1 fetch_macos "$1" ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	lint)

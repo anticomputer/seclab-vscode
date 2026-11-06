@@ -281,6 +281,10 @@ node test/containment/teardown.test.ts   # teardown regression: orphaned editor 
 # attestation (gh attestation verify) before extracting. Then quarantine (user approval).
 ./seclab fetch macos [RUN_ID]
 xattr -dr com.apple.quarantine .work/app/seclab-vscode.app
+# Testing an unlanded branch in the real app: dispatch build-macos on it, then fetch its
+# attested test build into .work/app-branch/ (never the release location; EDR branch-test-builds).
+gh workflow run build-macos.yml --ref <branch>
+./seclab fetch macos-branch <RUN_ID>
 
 # Level B (editor-driven). The profile dir must be short (macOS 104-byte socket path) and isolated.
 ./seclab test evidence prepare ~/.seclab-test/ud sbx    # then run the printed `node test/window.ts launch ...` (background, never activated)
