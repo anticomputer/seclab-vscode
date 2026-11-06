@@ -23,7 +23,10 @@ rm -rf "$CTX" && mkdir -p "$CTX/reh"
 tar -xzf "$REH_TGZ" --strip-components=1 -C "$CTX/reh"
 # The REH's own record decides: a test build only ever under its test tag, and only its own.
 got="$(jq -r '.seclabTestBuild.variant // ""' "$CTX/reh/product.json")"
-[[ "$got" == "$VARIANT" ]] || { echo "refusing: $REH_TGZ is ${got:+test build '$got'}${got:-a release REH}, building $TAG" >&2; exit 1; }
+if [[ "$got" != "$VARIANT" ]]; then
+	what="a release REH"; [[ -z "$got" ]] || what="test build '$got'"
+	echo "refusing: $REH_TGZ is $what, building $TAG" >&2; exit 1
+fi
 cp -R "$ROOT/sandbox/rootfs/opt/seclab" "$CTX/seclab"
 docker build -q -t "$TAG" -f "$ROOT/sandbox/oci/Dockerfile.tab" "$CTX"
 if [[ -n "$VARIANT" ]]; then
