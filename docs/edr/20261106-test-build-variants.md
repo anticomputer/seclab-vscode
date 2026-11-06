@@ -19,7 +19,10 @@ lands in its own place, and records what it contains.
   - `id`;
   - `patch`, a regular file under `test/`;
   - `target`, `desktop` or `reh`;
-  - `marker`, a `SECLAB_TEST_ONLY:<name>` string literal the hook's code emits.
+  - `marker`, a `SECLAB_TEST_ONLY:<name>` string literal the hook's code emits;
+  - `bundle`, the built file that code lands in (`out/server-main.js` for rogue-REH). The
+    marker must be in that file. It is never written to product.json, which the build inlines
+    into other bundles (review CCC-1).
 
   Each variant names its review record. Adding a variant or a hook needs a review round.
   `containment` has one REH hook, `rogue-reh`. The agentic session adds U and F as entries.
@@ -34,7 +37,7 @@ lands in its own place, and records what it contains.
 
     The REH keeps its server names, which tabd and the tab image use.
   - `verify`, after the build, fails unless:
-    - every hook's marker is in the built output's code;
+    - every hook's marker is in its bundle;
     - the built product.json records exactly those hooks;
     - `check-release` refuses the artifact on the test markers and nothing else, so the I8
       agent-runtime scan still has to come back clean.
@@ -52,9 +55,9 @@ lands in its own place, and records what it contains.
     series change that breaks a hook fails on the PR.
   - ci-unit runs the `require-hooks` self-test.
 - **Fetch:** `./seclab fetch macos-<variant> RUN` checks the run, both artifacts' hashes and
-  attestations (build-macos.yml at that branch and commit), and that both build-info files
-  record exactly the hooks this checkout's manifest lists. It extracts into
-  `.work/test-builds/<variant>/` only.
+  attestations (build-macos.yml at that branch and commit), that the run's commit is HEAD or an
+  ancestor of it (review CCC-3), and that both build-info files record exactly the hooks this
+  checkout's manifest lists. It extracts into `.work/test-builds/<variant>/` only.
 - **Local REH:** `SECLAB_TEST_VARIANT=<v> ./seclab build linux reh` uses its own volume,
   `seclab-test-<v>`, and output directory. `./seclab image oci --test-variant <v>` builds
   only `seclab-tab-oci:test-<v>`, refusing a tarball whose REH records a different

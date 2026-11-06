@@ -35,7 +35,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-macos-${{ github.ref }}
+  # Per variant (review CCC-2): a test variant dispatch must never displace a queued release build.
+  group: build-macos-${{ github.ref }}-${{ inputs.test_variant != 'none' && inputs.test_variant || 'release' }}
   # Never cancel a main build: every reviewed SHA gets its artifact.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 

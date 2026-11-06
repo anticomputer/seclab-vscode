@@ -21,13 +21,20 @@ if [[ "$cmd" == check-all ]]; then
 	# CI (patch-build): every variant's hooks, both targets, still apply on top of the series
 	# at SRC, so a series change that breaks a hook fails on the PR, not at dispatch.
 	src="${2:?usage: test-variant.sh check-all SRC}"
-	for v in $(jq -r 'keys[] | select(startswith("$") | not)' "$MANIFEST"); do
+	# A failed jq in a `for` word list would not trip set -e (review CCC-4): read it on its own.
+	vs="$(jq -r 'keys[] | select(startswith("$") | not)' "$MANIFEST")"
+	[[ -n "$vs" ]] || die "no variants in $MANIFEST"
+	for v in $vs; do
 		for t in desktop reh; do
 			"${BASH_SOURCE[0]}" record "$v" "$t" >/dev/null
-			jq -r --arg v "$v" --arg t "$t" '.[$v].hooks[] | select(.target == $t) | .patch' "$MANIFEST" | while IFS= read -r p; do
-				git -C "$src" apply --check "$ROOT/$p" || die "$v/$t: $p does not apply on top of patches/series"
-				echo "test-variant: $v/$t $p applies" >&2
-			done
+			ps=()
+			while IFS= read -r p; do
+				[[ -n "$p" ]] && ps+=("$ROOT/$p")
+			done < <(jq -r --arg v "$v" --arg t "$t" '.[$v].hooks[] | select(.target == $t) | .patch' "$MANIFEST")
+			[[ ${#ps[@]} -gt 0 ]] || continue
+			# All of a target's hooks together, in order, as the build applies them.
+			git -C "$src" apply --check "${ps[@]}" || die "$v/$t: its hooks do not apply on top of patches/series"
+			echo "test-variant: $v/$t: ${#ps[@]} hook(s) apply" >&2
 		done
 	done
 	exit 0
@@ -37,16 +44,18 @@ jq -e --arg v "$variant" 'has($v) and ($v | startswith("$") | not)' "$MANIFEST" 
 [[ "$target" == desktop || "$target" == reh ]] || die "target must be desktop or reh"
 
 # This target's hooks, validated: an id, a regular file under test/ (no traversal, no symlink),
-# a marker that is a plain token. Prints "id<TAB>patch<TAB>marker" lines.
+# a marker that is a plain token, and the bundle (path in the target's app root) its code is
+# built into. Prints "id<TAB>patch<TAB>marker<TAB>bundle" lines.
 hooks() {
-	jq -r --arg v "$variant" --arg t "$target" '.[$v].hooks // error("no hooks list") | .[] | select(.target == $t) | [.id, .patch, .marker] | @tsv' "$MANIFEST" \
-		| while IFS=$'\t' read -r id patch marker; do
+	jq -r --arg v "$variant" --arg t "$target" '.[$v].hooks // error("no hooks list") | .[] | select(.target == $t) | [.id, .patch, .marker, .bundle] | @tsv' "$MANIFEST" \
+		| while IFS=$'\t' read -r id patch marker bundle; do
 			[[ "$id" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || die "bad hook id '$id'"
 			[[ "$patch" =~ ^test/[A-Za-z0-9._/-]+\.patch$ && "$patch" != *..* ]] || die "$id: hook patch must be a .patch under test/"
 			[[ -f "$ROOT/$patch" && ! -L "$ROOT/$patch" ]] || die "$id: $patch is missing or not a regular file"
 			[[ "$marker" =~ ^SECLAB_TEST_ONLY:[a-z0-9-]{1,48}$ ]] || die "$id: marker must be SECLAB_TEST_ONLY:<name>"
 			grep -qF "$marker" "$ROOT/$patch" || die "$id: $patch does not contain its marker $marker"
-			printf '%s\t%s\t%s\n' "$id" "$patch" "$marker"
+			[[ "$bundle" =~ ^out/[A-Za-z0-9._/-]+\.(c|m)?js$ && "$bundle" != *..* ]] || die "$id: bundle must be an out/**.js path"
+			printf '%s\t%s\t%s\t%s\n' "$id" "$patch" "$marker" "$bundle"
 		done
 }
 # Every hook of the variant targets desktop or reh; a typo must not silently drop one.
@@ -54,8 +63,10 @@ jq -e --arg v "$variant" '[.[$v].hooks[] | select(.target != "desktop" and .targ
 	|| die "$variant: a hook has a target other than desktop or reh"
 
 record() {
-	hooks | while IFS=$'\t' read -r id patch marker; do
-		jq -nc --arg id "$id" --arg p "$patch" --arg m "$marker" --arg s "$(sha256 "$ROOT/$patch")" '{id: $id, patch: $p, sha256: $s, marker: $m}'
+	# No marker here (review CCC-1): product.json is inlined into the bundles, so a marker in the
+	# record would make the presence check match the record instead of the hook's code.
+	hooks | while IFS=$'\t' read -r id patch marker bundle; do
+		jq -nc --arg id "$id" --arg p "$patch" --arg s "$(sha256 "$ROOT/$patch")" '{id: $id, patch: $p, sha256: $s}'
 	done | jq -sc --arg v "$variant" --arg t "$target" '{variant: $v, target: $t, hooks: .}'
 }
 
@@ -65,7 +76,7 @@ apply)
 	src="${4:?usage: test-variant.sh apply VARIANT TARGET SRC}"
 	[[ -f "$src/product.json" ]] || die "no product.json in $src"
 	jq -e 'has("seclabTestBuild") | not' "$src/product.json" >/dev/null || die "$src is already a test build; run prepare.sh first"
-	hooks | while IFS=$'\t' read -r id patch marker; do
+	hooks | while IFS=$'\t' read -r id patch marker bundle; do
 		git -C "$src" apply --check "$ROOT/$patch" || die "$id: $patch does not apply"
 		git -C "$src" apply --whitespace=nowarn "$ROOT/$patch"
 		echo "test-variant: applied $id ($patch)" >&2
@@ -91,11 +102,13 @@ apply)
 verify)
 	out="${4:?usage: test-variant.sh verify VARIANT TARGET OUTDIR}"
 	[[ -d "$out" ]] || die "no output directory $out"
-	hooks | while IFS=$'\t' read -r id patch marker; do
-		# -a: binary-safe; any JS file. A hook that didn't make it into the output fails the build.
-		found="$(find "$out" -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \) -exec grep -laF "$marker" {} + 2>/dev/null | head -1 || true)"
-		[[ -n "$found" ]] || die "$id: marker $marker is not in the $target output (the hook is absent)"
-		echo "test-variant: $id present (${found#"$out"/})" >&2
+	hooks | while IFS=$'\t' read -r id patch marker bundle; do
+		# The marker in the hook's own bundle (review CCC-1: product.json is inlined elsewhere, and
+		# the record carries no marker). The app root: the REH dir, or the .app's Resources/app.
+		base="$out"; [[ "$target" == desktop ]] && base="$out/Contents/Resources/app"
+		[[ -f "$base/$bundle" ]] || die "$id: bundle $bundle is not in the $target output"
+		grep -qaF "$marker" "$base/$bundle" || die "$id: marker $marker is not in $bundle (the hook is absent)"
+		echo "test-variant: $id present ($bundle)" >&2
 	done
 	# The product marker in the built output names exactly this variant's hooks for this target.
 	prod="$(find "$out" -type f -name product.json -not -path '*/node_modules/*' -not -path '*/extensions/*' | head -1)"
