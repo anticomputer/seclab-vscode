@@ -2,6 +2,7 @@
 	"0012-background-windows-env.patch": ["desktop"],
 	"0013-no-local-agent-host.patch": ["desktop"],
 	"0015-seclab-ahp-gate.patch": ["desktop"],
+	"0017-seclab-fixed-tab-settings.patch": ["desktop"],
 	"0035-seclab-document-sync-provenance.patch": ["desktop"],
 	"0040-reresolve-managed-authority-on-restart.patch": ["desktop"]
 }

@@ -21,6 +21,7 @@
 # 0015 onwards: the secure-agentic-experiences series (plan section 10).
 # New files in 0015 are edited in agentic/patch-src (agentic/tools/sync-patch.ts).
 0015-seclab-ahp-gate.patch
+0017-seclab-fixed-tab-settings.patch
 # 0030-0034 are reserved for the RPC sessions.
 0035-seclab-document-sync-provenance.patch
 # Fork build: Restart Extension Host re-resolves a managed (seclab+) authority (EDR ext-host-restart-reresolve).
