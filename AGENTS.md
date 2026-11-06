@@ -233,7 +233,10 @@ RPC-lockdown session adds. Keep them consistent with this file.
   - launch with `node test/window.ts launch …` (`open -g -n`, isolated profile,
     `SECLAB_BACKGROUND_WINDOWS=1`, so the app shows windows inactive and never focuses
     or activates: patch 0012); it exits 1 if the editor became the frontmost app.
-    Report that; never work around it;
+    A watcher started before the editor samples the frontmost app every 200 ms for the run's
+    whole life and kills the editor's process tree on the first steal (fail closed). Report
+    any steal; never work around it. `node test/focus/probe.ts` is the regression check for
+    the activation paths;
   - capture with `node test/window.ts shot …` (`screencapture -o -l <windowid>`,
     which reads the covered window directly);
   - never call activate/frontmost APIs, `open` without `-g`, or the app's
@@ -302,6 +305,10 @@ gh workflow run build-macos.yml --ref <branch>
 # Level B (editor-driven). The profile dir must be short (macOS 104-byte socket path) and isolated.
 ./seclab test evidence prepare ~/.seclab-test/ud sbx    # then run the printed `node test/window.ts launch ...` (background, never activated)
 ./seclab test evidence check ~/.seclab-test/ud sbx      # known M4 gaps (settings/clipboard canaries, git askpass) report as XFAIL
+
+# Focus regression (activation paths: notification, dialogs, full screen, new window, reload, reconnect)
+node test/focus/probe.ts prepare [--app .work/app-branch/seclab-vscode.app]   # then run the printed launch line
+node test/focus/probe.ts check                                                 # marks vs steals, then the teardown gate
 
 # sbx inspection
 sbx ls; sbx policy ls --wide --json; sbx policy log <sandbox>; sbx secret ls --json

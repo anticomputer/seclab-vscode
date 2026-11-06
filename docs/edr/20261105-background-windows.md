@@ -95,3 +95,25 @@ If the guard can't be installed, the process exits rather than run unguarded.
   sample in which the editor is frontmost, it kills the editor's whole process tree and
   records the steal. A steal can now last at most about 200 ms plus the kill.
 - The launch-time check kills too.
+
+**Verified 2026-11-06** with `test/focus/probe.ts`. A benign sbx tab runs a probe extension
+that steps through: a notification, a quick pick, focus commands, full screen, a modal dialog,
+a new window, a reload, killing the server (the reconnect path), and an extension-host restart.
+Each step is timestamped, and the kill-on-steal watcher is armed throughout.
+- **Release build** (main `5c18c5f`, run 42185096401): the editor took focus 0.7 s into
+  `toggleFullScreen` (Electron's `setFullScreen` activates the app) and was killed within one
+  sample. With full screen skipped, every other step stayed in the background, modal dialogs
+  included (sheets don't activate).
+- **Branch build with the guard** (`751c6c7`, run 42231186243, fetched with
+  `./seclab fetch macos-branch`): no step took focus, full screen included. The
+  extension-host restart, run alone, recorded no steal either. It restarts the local
+  extension host and with it the Tab Manager's tabd, which stops the tab, so the step's
+  later marks were lost with the tab.
+- **Not reproduced:** the agentic run's exact trigger. Its probes impersonate the agent host
+  (MCP UI, auth prompts). The guard covers each class of path Electron activates through, and
+  the watcher now kills on the first frontmost sample, so a new path fails closed within
+  about 200 ms.
+- **Found along the way:** the window doesn't recover after the server is killed or the
+  local extension host restarts. That's a reconnect gap for the tabd broker wiring's B3 step,
+  not a focus issue. The probe also exposed an sbx quarantine bug, fixed in
+  [EDR sbx-tab-broker](20261105-sbx-tab-broker.md).
