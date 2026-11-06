@@ -59,29 +59,30 @@ Enforced in code, at two choke points (patch 0009):
   this, the loop still runs with no tools and tab-authored instructions still
   reach the model along with whatever workspace content it gathers.
 
-> **Correction, 2026-11-06: 0010 is an unconditional refusal, deliberately,
-> for this landing.** Patch 0015 (the AHP gate, now on main) introduces
-> `seclabAgentHostAllowed`, and its comment says 0009 and 0010 call it. They do
-> not: 0010 calls `seclabAiDisabled` and refuses the agent-host client in a
-> `seclab+` window **always**, where the predicate would permit it when agents
-> are enabled by policy, the registered default, or the host main process's
-> environment.
+> **Resolved, 2026-11-06.** 0010 now calls `seclabAgentHostAllowed`, which is
+> the single source of truth for "may this window reach an agent host". An
+> earlier note here recorded a hard refusal as a deliberate interim, because it
+> was not established from this side whether the permitted branch would hand a
+> tab the *gated* client or an unguarded one. That is now checked rather than
+> assumed:
 >
-> The consequence is accepted and is the point: **agents cannot be enabled in
-> tab windows at all while this stands**, not even through the host
-> environment. That is fail-closed, and a narrower refusal is not worth taking
-> on trust. At 0010's call site the permitted branch yields
-> `remoteAgentService.getConnection()` directly, and 0015 performs its own
-> selection elsewhere, so it is not established from this side whether a tab
-> would receive the *gated* client or the ungated one. Switching 0010 to the
-> predicate would convert a hard refusal into a conditional one, and if that
-> reading is wrong it reopens precisely the token-forwarding path described
-> below.
+> * there is exactly **one** renderer consumer of
+>   `AgentHostIpcChannels.RemoteProxy`, at
+>   `editorRemoteAgentHostServiceClient.ts:120`, inside the class 0010 selects;
+>   every other reference is the REH registering the channel in
+>   `src/vs/server/`;
+> * patch 0015 patches that same file, and its `connection` is `null` when the
+>   predicate says no, so the gate holds inside the client as well as at the
+>   selection — the two are layers, not alternatives;
+> * the false branch is inert: patch 0013 answers every
+>   `vscode:createAgentHostMessageChannel` with a fatal refusal in the Electron
+>   main process and spawns no utility process, so `LocalAgentHostServiceClient`
+>   in a tab window cannot start a local agent host.
 >
-> Interim, not a position: superseded once the agentic-gate work identifies
-> every selection point and a probe runs both patches together with agents
-> enabled. Until then the predicate is not the single source of truth, and
-> 0015's comment overstates the current state.
+> The predicate reads policy, the registered default and the host main
+> process's environment through `inspect`. `getValue` must never be substituted:
+> it merges the user layer, which a tab can write through
+> `$updateConfigurationOption` (A23).
 
 And in patch 0010, because disabling the callers was not enough:
 
