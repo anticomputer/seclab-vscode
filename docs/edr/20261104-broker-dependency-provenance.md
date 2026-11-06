@@ -123,8 +123,8 @@ two parts:
 |---|---|---|
 | `mitmproxy/mitmproxy:12.3.1@sha256:2711066c…` (broker base) | **attested** | Sigstore-signed SLSA build provenance (`actions/attest-build-provenance`). Signer `mitmproxy/mitmproxy/.github/workflows/main.yml@refs/tags/v12.3.1`, source commit `51c1d6b2…` (the commit the broker's code citations use), GitHub-hosted runner. It covers mitmproxy and its whole Python closure inside the image. |
 | `python:3.13-slim-trixie`, `debian:trixie-slim`, `docker:29-cli` (test and tool images) | hash-pinned | Docker Official Images pinned by index digest. They carry in-registry BuildKit SLSA provenance bound to that digest, but **no publisher signature**: `cosign tree` finds no sigstore artifacts, and Docker Content Trust is being retired. |
-| Python: 43 pins across the broker runtime, unit tests, integration images and the verifier tool | 25 attested, 18 hash-pinned | Every pinned hash is a PyPI-served file. 32 attestation files verified for linux/arm64. |
-| Broker runtime Python: `fastjsonschema` 2.22.3 | hash-pinned | The project publishes no attestations; pinned by sha256 from PyPI, its official index. |
+| Python: 43 pins across the broker runtime, unit tests, integration images and the verifier tool (44 since the 2026-11-05 re-pin added `pyasn1`) | 25 attested, 18 hash-pinned (now 19) | Every pinned hash is a PyPI-served file. 32 attestation files verified for linux/arm64. |
+| Broker runtime Python: `fastjsonschema` 2.22.3 (2.22.2 since the 2026-11-05 re-pin) | hash-pinned | The project publishes no attestations; pinned by sha256 from PyPI, its official index. |
 | apt packages in the two test images | attested (Debian archive signature), **with an exception** | apt verifies the signed `InRelease` against `debian-archive-keyring` from the digest-pinned base, and each package's sha256 from the signed index. The broker image installs no apt packages. See the exception below. |
 | `seclab-broker`, `seclab-attest` images | built-from-source | Built from this repository's Dockerfiles, using only registered inputs. No BuildKit frontend is pulled (no `# syntax=` directive). |
 
@@ -200,13 +200,60 @@ local image it runs.
   or to `public` when `CI` is set (hosted runners can't use CFS). A local
   build therefore never silently falls back to public PyPI. With `cfs` and no
   secret, or with no `PIP_SOURCE` at all, the build fails.
-- **The CFS hold.** CFS holds new package versions for 7 days. A pin younger
-  than that fails locally until the hold ends; CI is unaffected. On
-  2026-11-05 that applied to 7 pins (`fastjsonschema` 2.22.3, `dnspython`
-  2.9.2, `platformdirs` 4.14.5, `pydantic` 2.14.2 and `pydantic-core` 2.50.2,
-  `pypi-attestations` 0.0.31, `typing-inspection` 0.4.5). This is expected, so
-  the pins stay. Pinning only versions past the hold would trade security
-  fixes for local convenience.
+- **The CFS hold.** CFS holds new package versions for 7 days, so a pin
+  younger than that can't build locally; CI is unaffected.
+  - On 2026-11-05 seven pins were younger than that. At first they stayed,
+    and the local images were blocked until the hold ended.
+  - The user then decided: "Pin back to the newest versions already past the
+    7-day hold, and add a 7-day Dependabot cooldown so pins never get ahead
+    of CFS."
+  - The re-pin and its exceptions are in the next point. The cooldown and a
+    shared pin-age lint (`./seclab lint pin-age`) belong to the Fork-build
+    session.
+- **The re-pin to versions CFS serves (2026-11-05).** Each pin moved to the
+  newest version that CFS's simple index served that day. Every hash comes
+  from PyPI's JSON API for that version.
+  - Five pins moved:
+    - `fastjsonschema` 2.22.3 to 2.22.2;
+    - `dnspython` 2.9.2 to 2.9.1;
+    - `platformdirs` 4.14.5 to 4.14.0;
+    - `pypi-attestations` 0.0.31 to 0.0.30;
+    - `typing-inspection` 0.4.5 to 0.4.4.
+  - `pydantic` 2.14.2 and `pydantic-core` 2.50.2 had passed the hold by then,
+    so they stay.
+  - The packages that publish attestations still do so at the older
+    versions, from the same publisher and workflow.
+  - **pyasn1 is added** (0.6.5, hash-pinned; it publishes no attestations).
+    `pypi-attestations` 0.0.30 still depends on `pyasn1~=0.6`; 0.0.31
+    replaced it with `cryptography`. 0.6.5 is the only 0.6.x with no OSV
+    advisory, and CFS serves it.
+  - **`fastjsonschema` 2.22.2** lacks the 2.22.3 fixes
+    ([`v2.22.2...v2.22.3`](https://github.com/horejsek/python-fastjsonschema/compare/b88fa37cd46bb81e8d9dce91a7e1bc4debedd3a2...9d3f5ee74d0749ef4abf695f370437aca5f9d56c)).
+    None of them changes what our schemas accept:
+    - our schemas don't use `format`, `exclusiveMinimum`,
+      `exclusiveMaximum`, `multipleOf` or `propertyNames`;
+    - no schema property name contains `{` or `}`, which is the
+      format-string fix;
+    - two fixes (numeric keywords applied to booleans, booleans versus
+      strings in `uniqueItems`) only make 2.22.2 reject more input, so it
+      fails closed;
+    - every numeric limit we use sits on a typed field, and fastjsonschema's
+      integer type already excludes booleans.
+
+    2.22.2 itself fixes a schema-controlled code injection, so we must not
+    go below it.
+  - **`dnspython` 2.9.1 has a known high advisory,**
+    [GHSA-vvf4-9x63-8xvv](https://github.com/advisories/GHSA-vvf4-9x63-8xvv):
+    a malicious WKS record in text format exhausts memory and CPU. It's fixed
+    only in 2.9.2, which was still in the hold. It is accepted until 2.9.2
+    clears the hold (about 2026-11-10), because the verifier can't reach it:
+    - dnspython is in the attestation verifier image only, via
+      `pydantic` → `email-validator`;
+    - the verifier's imports don't load `dns` at all (checked in the built
+      image);
+    - email-validator imports it only for deliverability checks, which
+      pydantic's `EmailStr` doesn't enable;
+    - DNS answers are wire format, and the advisory is about parsing text.
 - **Source.** The design is based on the Fork-build session's CFS local-build
   recipe and `gh cfs generate docker-helper` (gh-cfs v0.3.1).
 
@@ -248,6 +295,9 @@ local image it runs.
 - `broker/provenance-check.sh` on 2026-11-04, after security review round 4:
   `provenance: ok (5 files, 43 pins, 32 attestations verified against pinned
   digests)` and `verify-images: ok (1 attested image(s))`.
+- `broker/provenance-check.sh` on 2026-11-05, after the re-pin to versions
+  CFS serves: `provenance: ok (5 files, 44 pins, 32 attestations verified
+  against pinned digests)`.
 - **Negative tests:**
   - `pin_check.py --self-test` rejects every bypass form in the review:
     - extras, `==` with spaces, direct URLs, `-r`/`-c`/`-e`, index and
