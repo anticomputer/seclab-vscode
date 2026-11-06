@@ -84,6 +84,7 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-05 | [secure agentic experiences design (agents in the tab)](20261105-secure-agentic-experiences-design.md) | round 1: 40fa71d (rebased from 9f4ded7; design as first written: [plan](../plans/secure-ag | see record |
 | 2026-11-05 | [tabs wired to their broker (plan tabd-broker-wiring)](20261105-tab-broker.md) | - Round XX (B1, OCI tabs get a real broker): 7d1c94d..325097f, plus 32c3289 (the naming ru | see record |
 | 2026-11-06 | [patch 0015, the agent-host gate](20261106-agentic-ahp-gate.md) | patch 0015 (seclab-ahp-gate) and its sources under agentic/patch-src/: | see record |
+| 2026-11-06 | [the `agentic-browser` test build variant](20261106-agentic-browser-variant.md) | test/builds/variants.json (new agentic-browser variant), | see record |
 | 2026-11-06 | [the real-tab spike, D7 amendment and the agentic implementation plan](20261106-agentic-real-tab-spike.md) | 0f8ac0d.. this branch. That covers: | see record |
 | 2026-11-06 | [background windows are click-through; dialogs never shown](20261106-background-windows-click-through.md) | round FFF, 9fa5f9f and its fixes: patch 0012's guard (click-through windows, no | see record |
 | 2026-11-06 | [background windows guard (focus steal)](20261106-background-windows-guard.md) | round AAA, 5c18c5f..0567ef3: | see record |

@@ -12,5 +12,18 @@
 				"bundle": "out/server-main.js"
 			}
 		]
+	},
+	"agentic-browser": {
+		"description": "Increment 2 (patch 0017): drives the browser tool's own network resolution without a model, so a probe can measure where a model-chosen URL is fetched from. The hook is written against the series WITHOUT 0017, so it applies both on main (the U baseline) and on the agentic branch (the fixed build). Valid as a measurement of the tool only in a seclab+ tab window, with no sandbox restrictions, against a non-localhost target; see the hook's comment.",
+		"review": "docs/security-reviews/20261106-agentic-browser-variant.md",
+		"hooks": [
+			{
+				"id": "browser-drive",
+				"patch": "test/agentic/browser-drive/browserView-hook.patch",
+				"target": "desktop",
+				"marker": "SECLAB_TEST_ONLY:browser-drive-hook",
+				"bundle": "out/vs/workbench/workbench.desktop.main.js"
+			}
+		]
 	}
 }

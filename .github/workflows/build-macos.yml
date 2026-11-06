@@ -17,7 +17,7 @@ on:
       test_variant:
         description: "Test build variant (test/builds/variants.json); none = normal build"
         type: choice
-        options: [none, containment]
+        options: [none, containment, agentic-browser]
         default: none
   push:
     # Release builds: main only. (Tags come back with a ruleset restricting v* tag creation
