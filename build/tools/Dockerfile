@@ -31,10 +31,14 @@ ARG COMMIT
 ENV CGO_ENABLED=0 GOFLAGS=-mod=readonly GOTOOLCHAIN=local GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org
 RUN git clone -q --depth 1 --branch "$TAG" "$GIT" /src && test "$(git -C /src rev-parse HEAD)" = "$COMMIT"
 WORKDIR /src
+# Modules once (go.sum-verified), retried: a transient proxy failure must fail the build, never
+# leave one arch unbuilt (the loop below used to run without -e and shipped only amd64).
+RUN for i in 1 2 3; do go mod download && exit 0; sleep $((i * 5)); done; exit 1
 # Both arches from one build (Go cross-compiles reproducibly), so either host can check both pins.
-RUN for a in arm64 amd64; do GOARCH=$a go build -trimpath -buildvcs=false \
+# Offline (GOPROXY=off): everything comes from the verified module cache.
+RUN set -eu; for a in arm64 amd64; do GOPROXY=off GOARCH=$a go build -trimpath -buildvcs=false \
       -ldflags "-s -w -buildid= -X=github.com/zricethezav/gitleaks/v8/version.Version=$TAG" -o /out/gitleaks-linux-$a . ; done \
-    && cd /out && sha256sum gitleaks-linux-* > SHA256SUMS
+    && cd /out && test -s gitleaks-linux-arm64 && test -s gitleaks-linux-amd64 && sha256sum gitleaks-linux-* > SHA256SUMS
 
 FROM scratch AS gitleaks-bins
 COPY --from=gitleaks-build /out/ /
