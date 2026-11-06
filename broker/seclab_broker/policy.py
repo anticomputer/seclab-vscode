@@ -437,12 +437,15 @@ class CredentialSpec:
         default_inject = Inject.from_json(obj["inject"]) if "inject" in obj else None
         b = obj.get("budget")
         bindings = tuple(parse_bindings(obj["bind"], default_inject))
-        if b is not None and b.get("bytes") is not None and any(x.websocket for x in bindings):
-            # WebSocket messages aren't charged, so a byte cap there would not hold (review 13-10).
+        derive = parse_derive(obj.get("derive", []))
+        ws = any(x.websocket for x in bindings) or any(x.websocket for r in derive for x in r.bindings)
+        if b is not None and b.get("bytes") is not None and ws:
+            # WebSocket messages aren't charged, so a byte cap there would not hold (review
+            # 13-10); derived children roll up to this budget too (13b-1).
             raise PolicyError(f"credential {obj['id']!r}: a byte budget can't be combined with a websocket binding")
         return cls(id=obj["id"], bindings=bindings,
                    provider=obj.get("provider"), sentinel_prefix=obj.get("sentinelPrefix"),
-                   derive=parse_derive(obj.get("derive", [])),
+                   derive=derive,
                    budget=(b.get("requests"), b.get("bytes")) if b is not None else None)
 
 
@@ -665,6 +668,11 @@ def baseline_rules() -> tuple[Rule, ...]:
 # Provider backstop: endpoints that let a tab mint its own durable credential
 # --------------------------------------------------------------------------
 
+def _trim_segment(seg: str) -> str:
+    """Trailing dots and any (Unicode) whitespace, as IIS/.NET trims them (review 13-9/13b-2)."""
+    return re.sub(r"[.\s]+$", "", seg)
+
+
 @dataclass(frozen=True)
 class BackstopEntry:
     provider: str
@@ -678,7 +686,7 @@ class BackstopEntry:
         # Servers that trim trailing dots or whitespace from a segment (IIS/ASP.NET, which
         # serves Azure DevOps) would route `/_apis.` as `/_apis`; match what they route
         # (review 13-9). This can only make the deny-list match more.
-        path = "/".join(seg.rstrip(". \t") for seg in req.path.split("/")).rstrip("/") or "/"
+        path = "/".join(_trim_segment(seg) for seg in req.path.split("/")).rstrip("/") or "/"
         return any(compile_glob(prefix + self.path, ignore_case=True).fullmatch(path)
                    for prefix in prefixes)
 
@@ -751,6 +759,9 @@ def _check_backstop_file(name: str, d: dict) -> None:
                 raise PolicyError(f"providers/{name}: benign key {p!r} is not a JSON path")
     for e in d["deny"]:
         bad("deny entry", e, _DENY_KEYS, _DENY_KEYS)
+        if any(_trim_segment(s) != s for s in e["path"].split("/")):
+            # Request paths are trimmed before matching, so this entry could never match (13b-3).
+            raise PolicyError(f"providers/{name}: deny path {e['path']!r} has a segment ending in a dot or space")
 
 
 @lru_cache(maxsize=1)

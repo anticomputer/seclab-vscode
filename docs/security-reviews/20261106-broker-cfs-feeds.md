@@ -2,7 +2,8 @@
 
 - **Date:** 2026-11-06
 - **Scope:** "broker: B4 CFS package feeds in tabs, broker side" (policy schema
-  revision 6, broker 0.6.0) and the round 13 fix commit. Design:
+  revision 6, broker 0.6.0) and the round 13 and 13b fix commits (the 13b
+  re-review confirmed every round 13 fix). Design:
   [ADR CFS package feeds in tabs](../adr/20261105-cfs-package-feeds-in-tabs.md).
   - `credentials[].budget`, `credential.used`, the `azure-devops` provider
     backstop and the `cfs-feeds` example policy.
@@ -27,6 +28,9 @@
 | 13-8 | Low | Budget | The budget was checked after the binding prompt, so a spent credential could still be prompted for. Not reachable today: budgets exist only on policy credentials, which are never unbound. | fixed (round 13 commit) | Checked before the prompt too. The check after the last wait stays. | Code review |
 | 13-9 | Low | Backstop | Backstop matching kept trailing dots and spaces, which IIS-hosted services trim (`/_apis.`). | fixed (round 13 commit) | Each segment's trailing dots and whitespace are removed before matching. This can only widen the deny-list. | `test_azure_devops_backstop` |
 | 13-10 | Low | Budget | WebSocket messages aren't charged, so a byte budget on a `websocket: true` binding wouldn't hold. Not reachable from the CFS policy. | fixed (round 13 commit) | A byte budget together with a websocket binding is refused at load. | `test_credential_budget_is_validated_and_counts_parent` |
+| 13b-1 | Low | Budget | The 13-10 refusal checked only the credential's own bindings. A `derive` rule's binding with `websocket: true` still let a derived child, which charges the parent, escape the parent's byte cap. | fixed (round 13b commit) | Derive-rule bindings are checked too. | `test_credential_budget_is_validated_and_counts_parent` |
+| 13b-2 | Low | Backstop | Segment trimming was ASCII-only, while .NET trims Unicode whitespace (`/_apis\u00a0`). | fixed (round 13b commit) | Trailing dots and any Unicode whitespace are trimmed. | `test_azure_devops_backstop` |
+| 13b-3 | Low | Shipped data | A deny path with a segment ending in a dot or space could never match once requests are trimmed: a silent fail-open. None ships today. | fixed (round 13b commit) | Refused at load. | `test_r11b_backstop_data_is_checked_when_a_policy_loads` |
 
 Probed and held:
 - **Method reach.** HEAD, POST, OPTIONS and TRACE don't match `GET`. Method
