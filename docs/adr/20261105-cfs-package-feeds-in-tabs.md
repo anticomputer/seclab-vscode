@@ -1,6 +1,6 @@
 # Package feeds through CFS: the tab holds a sentinel, the broker injects the Azure DevOps token
 
-- **Status:** proposed (draft; implement with increment B4)
+- **Status:** accepted 2026-11-06 (the coordinator, relaying "ok continue work" for B4). The broker side is implemented in policy schema revision 6 (broker 0.6.0); the tabd side (prompt, `az` token source, tab configuration) follows in the Fork-build session.
 - **Date:** 2026-11-05
 - **Deciders:**
   - anticomputer (user) supplied the context: "CFS context for broker builds and for tabs" and "CFS docs for the in-tab feed design".
@@ -37,7 +37,7 @@ Two facts from the docs shape this design:
 Inside a tab, `npm install` and `pip install` would need this token. It is a
 real credential, so the invariant says it must never enter the tab.
 
-## Decision (proposed)
+## Decision
 **1. Off by default; a per-tab prompt turns it on.** A tab gets no CFS
 credential unless the user approves CFS for that tab. tabd shows the prompt,
 the first time the tab needs a package or when the tab is created with
@@ -62,8 +62,8 @@ outside this tab's broker, and useless there on any route but the feed reads.
 
 **3. Bindings: GET only, on the exact feed paths.** Every other path and method
 on `pkgs.dev.azure.com` (publishing, feed management, `_apis/**`) gets no
-credential. A sentinel sent there is misplaced and blocked. Draft policy
-fragment, validated against today's schema:
+credential. A sentinel sent there is misplaced and blocked. The shipped policy
+is [`broker/examples/cfs-feeds.policy.json`](../../broker/examples/cfs-feeds.policy.json):
 
 <!-- check: policy -->
 ```json
@@ -71,8 +71,10 @@ fragment, validated against today's schema:
   "version": 1,
   "baseline": false,
   "allow": [
-    {"id": "cfs-feeds", "host": "pkgs.dev.azure.com", "methods": ["GET"],
-     "path": "/github-cfs/GitHubCFS/_packaging/**"}
+    {"id": "cfs-npm", "host": "pkgs.dev.azure.com", "methods": ["GET"],
+     "path": "/github-cfs/GitHubCFS/_packaging/github-cfs-oss/npm/registry/**"},
+    {"id": "cfs-pypi", "host": "pkgs.dev.azure.com", "methods": ["GET"],
+     "path": "/github-cfs/GitHubCFS/_packaging/github-cfs-pypi/pypi/**"}
   ],
   "credentials": [
     {
@@ -81,12 +83,17 @@ fragment, validated against today's schema:
       "inject": {"header": "Authorization", "fmt": "Basic {base64:cfs:{value}}"},
       "bind": [
         {"host": "pkgs.dev.azure.com", "path": "/github-cfs/GitHubCFS/_packaging/github-cfs-oss/npm/registry/**", "methods": ["GET"]},
-        {"host": "pkgs.dev.azure.com", "path": "/github-cfs/GitHubCFS/_packaging/github-cfs-pypi/pypi/simple/**", "methods": ["GET"]}
-      ]
+        {"host": "pkgs.dev.azure.com", "path": "/github-cfs/GitHubCFS/_packaging/github-cfs-pypi/pypi/**", "methods": ["GET"]}
+      ],
+      "budget": {"requests": 5000, "bytes": 2147483648}
     }
   ]
 }
 ```
+
+The PyPI binding covers `pypi/**`, not only `pypi/simple/**`: the simple index
+links files under the feed's `pypi/download/…` paths. Uploads are POST, so
+they still get no credential.
 
 **4. Short-lived token, refreshed on the host.**
 - tabd runs the `az` command above on the host. It checks the returned tenant,
@@ -104,12 +111,15 @@ Bindings can't prevent this: an ingestion is a GET. It is bounded three ways:
 - CFS's own ingestion gates (malware scanning and the hold window for new
   versions);
 - the per-tab prompt;
-- a per-tab request budget on the feed host, over which the tab is denied and
-  never prompted.
+- a per-tab budget on the credential (`credentials[].budget`, requests and
+  bytes over the tab's lifetime). Over budget, the request is denied with
+  `429` and never prompted (`credential.budget_exceeded`).
 
-B4 generalises today's model-host budget (`models.budget`) to any credential
-or host. The audit log records every credentialed feed request (`host`,
-`path`, `status`), so ingestions are attributable to a tab.
+The budget is per credential rather than per host (revision 6), because the
+side effect belongs to the identity, not the host. Use of a credential derived
+from it counts against it too. The audit log records every credentialed
+response as `credential.used` (`credentialId`, `status`, `respBytes`, host and
+path), so ingestions are attributable to a tab.
 
 **6. Trusted provider table entry** (tabd product data):
 - resource `https://pkgs.dev.azure.com/github-cfs/GitHubCFS`;
@@ -119,12 +129,22 @@ or host. The audit log records every credentialed feed request (`host`,
 
 The tab never chooses the feed URL, the tenant or the scope.
 
-**7. Defence in depth, added with B4:**
-- an Azure DevOps provider backstop file, denying credentialed calls to token
-  and PAT endpoints (`_apis/tokens/**`) and to feed publishing;
-- tests that the binding never injects on `PUT`, `POST`, `PATCH` or `DELETE`.
+**7. Defence in depth** (implemented in revision 6):
+- the `azure-devops` provider backstop
+  ([`providers/azure-devops.json`](../../broker/seclab_broker/data/providers/azure-devops.json)).
+  It denies credentialed calls to the REST API under `_apis` (including PATs
+  and feed management) and any write (POST, PUT, PATCH, DELETE) under
+  `_packaging`, by host and by the credential's `provider`;
+- tests that the binding never injects on `PUT`, `POST`, `PATCH` or `DELETE`
+  (`test_cfs_feed_credential_is_get_only_budgeted_and_audited`).
 
 ## Open items to measure when B4 lands
+The Fork-build session will measure these with a real CFS pull through a tab's
+broker (`npm view`, `npm pack` and `pip download --no-deps`), using this host's
+`az`; the harness can't reach CFS.
+- **Download paths.** Confirm that npm tarballs stay under
+  `npm/registry/**`, and that PyPI files are under `pypi/**` on this feed, not
+  under a feed-GUID path.
 - **Redirects.** Downloads can redirect through `ms-feed-*.pkgs.visualstudio.com`
   to dynamic `*.vsblob.vsassets.io` hosts. Those need allow rules with no
   credential. Two things to measure:

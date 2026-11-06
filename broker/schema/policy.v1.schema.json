@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/anticomputer/seclab-vscode/broker/schema/policy.v1.schema.json",
   "title": "seclab-vscode broker policy, version 1",
-  "x-revision": 5,
+  "x-revision": 6,
   "description": "Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, schemes, methods and paths, never engine internals. Default is deny.",
   "type": "object",
   "additionalProperties": false,
@@ -595,6 +595,23 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9_-]{0,16}$",
           "description": "Replaces `SECLAB_SNTL_` for clients that check a token format."
+        },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Per-tab cap on this credential's use (revision 6), over the tab's lifetime: requests it is injected into, and bytes sent and received on them. Over budget is `429`, never a prompt (audit `credential.budget_exceeded`). Use of credentials derived from it counts against it too. For example, it bounds package ingestion under the user's identity through CFS.",
+          "properties": {
+            "requests": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000000
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1099511627776
+            }
+          }
         },
         "derive": {
           "type": "array",

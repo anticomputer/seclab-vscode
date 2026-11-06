@@ -126,6 +126,8 @@ class Credential:
     source: dict = field(default_factory=dict)
     # Controller-declared derivations (policy.DeriveRule); only for confirmed credentials.
     derive_rules: tuple = ()
+    # (requests, bytes) caps from the policy (revision 6); usage lives on the broker.
+    budget: tuple | None = None
 
     def has_value(self) -> bool:
         if self.value is None:
@@ -176,11 +178,12 @@ class CredentialStore:
                 self._by_id[spec.id] = Credential(
                     id=spec.id, sentinel=new_sentinel(spec.sentinel_prefix),
                     bindings=list(spec.bindings), origin="policy", provider=spec.provider,
-                    derive_rules=spec.derive)
+                    derive_rules=spec.derive, budget=spec.budget)
             else:
                 existing.bindings = list(spec.bindings)
                 existing.provider = spec.provider
                 existing.derive_rules = spec.derive
+                existing.budget = spec.budget
                 self._drop_children(spec.id, keep_rules=frozenset(r.id for r in spec.derive))
         self._rebuild()
 

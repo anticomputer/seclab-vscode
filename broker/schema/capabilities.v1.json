@@ -249,6 +249,19 @@
       ]
     },
     {
+      "flag": "credentialBudget",
+      "label": "Per-credential budget (requests, bytes) over the tab's lifetime, counting derived use; over budget denied, never prompted; `credential.used` audit per credentialed response",
+      "cells": {
+        "sbx-native": {
+          "value": false
+        }
+      },
+      "tests": [
+        "unit:test_credential_budget_is_validated_and_counts_parent",
+        "it:test_cfs_feed_credential_is_get_only_budgeted_and_audited"
+      ]
+    },
+    {
       "label": "DNS control",
       "cells": {
         "mitmproxy-oci": {
