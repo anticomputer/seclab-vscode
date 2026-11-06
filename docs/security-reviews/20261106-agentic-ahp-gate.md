@@ -218,3 +218,53 @@ Recorded here so they are not lost; each is tracked for round 2 or a later incre
 Bypass paths (a single `_transport` assignment site; the reconnect path also goes through
 `_installTransport`), parse differentials, the `_meta` allowlist, the outbound tables, the
 construction invariant (it fails closed), and log-line integrity.
+
+## Round 4 (2026-11-06): the probe validator and the teardown reap
+Scope: `test/agentic/ahp/probe-validate.ts`, `validate-probes.sh`, `rogue-agent-host.ts`,
+`test/agentic/runner/{probes.js,mitm.js,runner.ts}`, `test/containment/teardown{.ts,.test.ts}`,
+`test/agentic/gate/marks.test.ts`, `seclab`. Patch 0015 itself was not re-reviewed.
+
+The reviewer found no prompt injection, and confirmed the probes are fixture-safe:
+loopback-only, `seclabcanary_` values only, every path under the run directory, and the
+container runs `--rm --network none` as the invoking uid against a digest-pinned image with
+a pristine-upstream check.
+
+Five findings, all fixed in this round. Three are the same failure mode the gate itself is
+about: **a check that cannot fail**.
+
+1. **HIGH, the validator's catch-all could not fail.** Five notification probes fell into a
+   `default:` arm whose whole predicate was `newUrls.length === 0`, so they asserted that
+   *nothing happened*. Reverting the channel fix, dropping `serverSeq`, or sending `{}`
+   all passed, and a new probe typed `lands` with no check would have been counted as proof
+   that probes land. Fixed: every probe id needs an explicit case and an unknown one fails;
+   notification probes now assert a positive observable (the client parsed and dispatched
+   the envelope, via `onDidAction`); `RogueAgentHost.notify` throws instead of returning
+   quietly when disarmed or unattached, because a silent no-op was indistinguishable from a
+   dispatched frame. Verified by reverting `ROOT_CHANNEL` to the old `'c'`: the suite now
+   fails, where before it passed.
+2. **HIGH, a test pointed a recursive delete at the user's `~/Documents`.** The negative
+   test handed `reapPreviousRun` a manifest naming a real home directory and asserted it
+   survived, so a regression in `checkIsolatedProfile` (there was one in this very change)
+   would have deleted it with `force: true`, from a command AGENTS.md tells people to run on
+   the host. Fixed: the bait is a directory the test creates and owns, and the guard is
+   asserted directly on a real path without handing it to anything that deletes.
+3. **MEDIUM, "at least one probe can decide vulnerable" was satisfiable by a probe that
+   cannot.** `A1-protected` was typed `lands` but produces no host marker, beacon hit or
+   canary, so the runner's verdict cannot read it. Fixed: the kinds are now `host-effect`,
+   `renderer` and `surface`, and the suite requires a **named** host-effect probe
+   (`A20-mcp-auth`) to be present and passing, not merely a non-zero count.
+4. **MEDIUM, `reapPreviousRun` failed open and silently.** Every failure path returned an
+   empty array with no log, and the caller wiped the run directory immediately after, which
+   reproduces the incident it was written to fix. It also omitted `runDirProblems` (R-2) and
+   ran before `lockRun`. Fixed: it returns `{ stopped, refused, problems, survivors }`,
+   applies R-2, and `prepare` now takes the lock first and exits rather than wiping over a
+   run it could not reap.
+5. **MEDIUM, the MCP handler stub diverged from the workbench.** The validator registers the
+   handler itself, unconditionally; the real contribution registers it only for a connection
+   it has adopted. Fixed as far as a harness can: the same `{ authenticate }` shape and the
+   same `{ scheme: AGENT_HOST_SCHEME, authority: '' }` identity. The remaining gap is
+   recorded as an explicit precondition in the file and in the EDR: this proves the
+   client-side half, and whether a `seclab+` window registers a handler at all is what the
+   pending U run must show.
+
+No high or critical issue remains in the reviewed paths.

@@ -415,15 +415,25 @@ in-tab takeover and the validator. A validator with its own copy of the probes p
 nothing about the probes a run sends; that is the same false-negative shape as review
 round 2's dead code and its matching fixture.
 
-**Result: 13/13 reach what they claim, 2 can decide vulnerable.**
+**Result: 13/13 reach what they claim; one produces host-observable evidence a run can read.**
+
+Review round 4 tightened what "reach" means. Probes are typed by the evidence they can
+produce, because the runner's verdict reads only a host marker, a host beacon hit or the
+host canary:
+- **host-effect** -- produces evidence that verdict reads. Only `A20-mcp-auth` does, and the
+  suite requires it **by name** to be present and passing, not merely a non-zero count.
+- **renderer** -- an attacker-controlled effect inside the trusted renderer, real but
+  invisible to that verdict (`A1-protected`).
+- **surface** -- exercises the gate's surface; upstream itself refuses it, so a run must
+  never read its silence as containment.
 
 | probe | kind | what it reaches, measured |
 |---|---|---|
-| `A20-mcp-auth` | lands | the client fetched `http://127.0.0.1:<beacon>/.well-known/oauth-protected-resource/mcp-<nonce>` through `IRequestService`, with no user action and no signed-in account |
-| `A1-protected` | lands | the root reducer applied the envelope; `rootState.agents` carries the attacker's agent (`["p"]`) |
+| `A20-mcp-auth` | host-effect | the client fetched `http://127.0.0.1:<beacon>/.well-known/oauth-protected-resource/mcp-<nonce>` through `IRequestService`, with no user action and no signed-in account |
+| `A1-protected` | renderer | the root reducer applied the envelope; `rootState.agents` carries the attacker's agent (`["p"]`) |
 | `A16-read`, `A16-write`, `A5-outside`, `A26-scheme` | surface | `Access to <uri> is not granted` from the resource service's permission gate, **not** a shape error in front of it |
 | `A14-method`, `A7-tcp` | surface | `Unknown method: …` |
-| `A14-action`, `A21-ui`, `A1-mcp-state`, `A1-customizations`, `A1-toolcall-auth` | surface | accepted and dispatched, no subscription matches, nothing fetched |
+| `A14-action`, `A21-ui`, `A1-mcp-state`, `A1-customizations`, `A1-toolcall-auth` | surface | the client parsed and dispatched the envelope (observed through `onDidAction`), no subscription matches, nothing fetched |
 
 Two things this settles, beyond the probes themselves:
 15. **The `resourceWrite` fix is confirmed at the point that matters.** It now reaches the
@@ -435,6 +445,17 @@ Two things this settles, beyond the probes themselves:
     been silently inert in a real run, and its silence would have looked exactly like the
     gate working. This is the third time in this record that a probe that could not fire
     nearly passed as containment, and the first time something other than a review caught it.
+
+17. **The validator's own checks had to be made able to fail** (review round 4). Five
+    notification probes were passing on "nothing was fetched", which any malformed frame
+    satisfies, and the suite's "at least one probe can decide vulnerable" was satisfiable by
+    a probe whose evidence the verdict cannot read. Both are fixed, and the fix is verified
+    the only way that means anything: reverting `ROOT_CHANNEL` to the old `'c'` now fails
+    the suite, where before it passed.
+18. **What this does not prove.** The handler that makes `A20-mcp-auth` land is registered
+    here by the harness. The real contribution registers it only for a connection it has
+    adopted, after root state. So this is the client-side half; whether a `seclab+` window
+    registers one at all is the window-side half, and only the U run shows it.
 
 **The U run is what remains.** The host-side behaviour is now proved against the real client
 code; the open question is only whether the in-tab takeover delivers it to a shipped window,

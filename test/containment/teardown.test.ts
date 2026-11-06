@@ -175,20 +175,39 @@ fs.unlinkSync(link);
 	check('reapPreviousRun stops it before the run directory is wiped', !alive(stale.pid!));
 	check('reapPreviousRun removes the previous profile (it holds the armed extension)', !fs.existsSync(prevProfile));
 	// A manifest naming a profile outside the test roots must not become a licence to delete.
+	// The bait is a directory this test creates and owns, never a real one: the guard in
+	// front of the delete is `checkIsolatedProfile`, and a regression in it (there was one
+	// in this very change) would otherwise make this test recursively delete the user's
+	// data with `force: true`. The guard itself is asserted directly, below, which costs
+	// nothing and risks nothing.
 	const guarded = path.join(base, 'guarded');
 	fs.mkdirSync(guarded, { recursive: true });
-	const foreign = path.join(os.homedir(), 'Documents');
+	const foreign = path.join(os.tmpdir(), `seclab-teardown-bait-${process.pid}`);
+	fs.mkdirSync(foreign, { recursive: true });
 	writeManifest(guarded, { commandMarks: [], userDataDir: foreign });
-	reapPreviousRun(guarded);
+	const guardedResult = reapPreviousRun(guarded);
 	check('reapPreviousRun refuses a manifest naming a profile outside the test roots', fs.existsSync(foreign));
+	// It must SAY it refused: a silent skip is how the caller came to wipe the only record
+	// of a run it had not reaped.
+	check('reapPreviousRun reports the refusal rather than skipping silently', guardedResult.refused && guardedResult.problems.length > 0, guardedResult.problems.join(' | '));
+	fs.rmSync(foreign, { recursive: true, force: true });
+	// The guard that decides it, asserted on a real path without ever handing that path to
+	// anything that deletes.
+	let documentsRefused = false;
+	try {
+		checkIsolatedProfile(path.join(os.homedir(), 'Documents'));
+	} catch {
+		documentsRefused = true;
+	}
+	check('checkIsolatedProfile refuses a real home directory', documentsRefused);
 	// And it must be a no-op, not a throw, when there is no previous run at all.
 	const freshDir = path.join(base, 'fresh');
 	fs.mkdirSync(freshDir, { recursive: true });
-	let fresh: unknown[] | undefined;
+	let fresh: { stopped: unknown[]; refused: boolean } | undefined;
 	try {
 		fresh = reapPreviousRun(freshDir);
 	} catch { /* reported below */ }
-	check('reapPreviousRun on a directory with no manifest is a no-op', Array.isArray(fresh) && fresh.length === 0);
+	check('reapPreviousRun on a directory with no manifest is a no-op, not a refusal', !!fresh && fresh.stopped.length === 0 && !fresh.refused);
 	try {
 		process.kill(stale.pid!, 'SIGKILL');
 	} catch { /* gone */ }
