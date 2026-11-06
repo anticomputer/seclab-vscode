@@ -328,6 +328,10 @@ fetch_test_variant() {
 	if [[ "$workflow" != "build-macos" || "$conclusion" != "success" || "$event" != "workflow_dispatch" || ! "$branch" =~ ^[A-Za-z0-9._/-]{1,100}$ || ! "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
 		echo "refusing run $run: $meta (needs a successful dispatched build-macos run with test_variant=$variant)" >&2; exit 1
 	fi
+	# The run's whole tree (series, product transform, build scripts), not only its hook list, is
+	# code this checkout has: its commit is HEAD or an ancestor (review CCC-3).
+	git -C "$ROOT" merge-base --is-ancestor "$head_sha" HEAD 2>/dev/null \
+		|| { echo "refusing run $run: its commit $head_sha ($branch) is not in this checkout's history; check it out first" >&2; exit 1; }
 	mkdir -p "$ROOT/.work"
 	local stage
 	stage="$(mktemp -d "$ROOT/.work/test-staging.XXXXXX")"
