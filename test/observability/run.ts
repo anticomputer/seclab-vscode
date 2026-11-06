@@ -89,7 +89,9 @@ process.on('uncaughtException', e => {
 	});
 });
 
-await client.initialize('observability-e2e', '0');
+// This harness answers the held prompt itself (Block Destination), so it declares the approvals
+// capability; without it tabd keeps prompts off whatever the user policy says (review BBB-5).
+await client.initialize('observability-e2e', '0', { approvals: true });
 const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
 tabId = tab.metadata.name;
 const sandbox = `seclab-${tabId}`;
