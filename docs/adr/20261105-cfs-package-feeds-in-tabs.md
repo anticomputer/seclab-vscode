@@ -155,7 +155,8 @@ using this host's `az` (`tabd/test/e2e-cfs.ts`, EDR `20261106-cfs-feeds-tabd`):
   so that exact prefix is a third GET-only binding and allow rule
   ([`cfs-feeds.policy.json`](../../broker/examples/cfs-feeds.policy.json)).
 - **Redirects.** Every download answers `303` to a storage blob,
-  `vsblobprodcus<NNN>.blob.core.windows.net/b-<id>/<hash>.blob`, with a
+  `<xyz>vsblobprodcus<NNN>.blob.core.windows.net/b-<id>/<hash>.blob` (for
+  example `5zbvsblobprodcus417`, `tqtvsblobprodcus420`, `sagvsblobprodcus435`), with a
   read-only SAS in the query that expires in about an hour. Several storage
   accounts appear, and none is `*.vsblob.vsassets.io`. curl and pip's
   `requests` send no `Authorization` across hosts, so no sentinel was
@@ -174,7 +175,8 @@ using this host's `az` (`tabd/test/e2e-cfs.ts`, EDR `20261106-cfs-feeds-tabd`):
   - only a `302`, `303` or `307` answering a request the CFS credential was
     injected into;
   - only to an https host on port 443 matching the `azure-devops` provider's
-    `redirects` pattern, `^vsblobprodcus[0-9]{1,4}\.blob\.core\.windows\.net$`,
+    `redirects` pattern,
+    `^[a-z0-9]{3}vsblobprodcus[0-9]{1,4}\.blob\.core\.windows\.net$`,
     and not named by a deny rule;
   - one hop, GET, no credential and no client header, to a netguard-vetted
     address the broker pins, TLS verified;
