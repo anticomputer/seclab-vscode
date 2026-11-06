@@ -108,6 +108,39 @@ export function readManifest(runDir: string): RunManifest {
 	}
 }
 
+/**
+ * Stop whatever a previous run in this directory left behind, before the directory is
+ * wiped. The manifest is the only record of a run's helpers, so a harness that deletes the
+ * run directory first orphans them: an aborted `prepare` left its beacon listening on the
+ * host, and the next `prepare` wrote a manifest naming a different port, so nothing could
+ * name the old one again. Safe to call when there is no previous run (empty manifest, no
+ * marks, nothing matches).
+ */
+export function reapPreviousRun(runDir: string): Proc[] {
+	const m = readManifest(runDir);
+	if (!m.userDataDir && !(m.stateDirs ?? []).length && !(m.commandMarks ?? []).length && !(m.tabs ?? []).length) {
+		return [];
+	}
+	// Refuse a manifest that does not pass the usual rules, exactly as verify does: a
+	// malformed previous manifest must not become a licence to delete.
+	if (manifestProblems(runDir, m).length) {
+		return [];
+	}
+	const stopped = stopRunProcesses(runDir, m);
+	// Its tabs and helper runtimes too, and its profile: that profile holds the armed rogue
+	// extension, so leaving it is the same hazard the teardown gate exists to prevent.
+	try {
+		removeRunResources(runDir, m);
+	} catch { /* best effort: verify still reports anything left */ }
+	if (m.userDataDir && fs.existsSync(m.userDataDir)) {
+		try {
+			checkIsolatedProfile(path.resolve(m.userDataDir));
+			fs.rmSync(m.userDataDir, { recursive: true, force: true });
+		} catch { /* not an isolated profile: never delete it */ }
+	}
+	return stopped;
+}
+
 /** Merge into run.json. Write it before starting anything the run must later clean up. */
 export function writeManifest(runDir: string, add: RunManifest): RunManifest {
 	const m = readManifest(runDir);

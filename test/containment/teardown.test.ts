@@ -15,7 +15,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { checkIsolatedProfile, NODE_IMAGE } from '../harness.ts';
-import { runLeftovers, runProcesses, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
+import { reapPreviousRun, runLeftovers, runProcesses, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
 
 const repo = path.resolve(import.meta.dirname, '../..');
 const base = path.join(repo, '.work', 'teardown-test');
@@ -152,6 +152,47 @@ try {
 }
 check('a profile reached through a symlink out of the test roots is refused (R-3)', linkRefused);
 fs.unlinkSync(link);
+
+// The 2026-11-06 miss: an aborted `prepare` left its beacon listening on the host. The
+// harness wipes the run directory before writing the new manifest, and the new manifest
+// names a different port, so after the wipe nothing could name the old helper again. The
+// fix is to reap the PREVIOUS run from its own manifest first; this plants exactly that
+// shape and asserts the helper is gone before the directory is wiped.
+{
+	const prevDir = path.join(base, 'prev');
+	fs.mkdirSync(prevDir, { recursive: true });
+	const prevMark = `${path.join(repo, 'test', 'containment', 'beacon.ts')} start ${path.join(prevDir, 'beacon.log')} 18231`;
+	const stale = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 600000)', ...prevMark.split(' ')], { detached: true, stdio: 'ignore' });
+	stale.unref();
+	// A profile under an accepted test root, as a previous run's would be: it holds the
+	// armed rogue extension, so the reap must remove it too.
+	const prevProfile = path.join(base, 'prev-udd');
+	fs.mkdirSync(path.join(prevProfile, 'User'), { recursive: true });
+	writeManifest(prevDir, { commandMarks: [prevMark], userDataDir: prevProfile });
+	spawnSync('sleep', ['0.5']);
+	check('a previous run\'s helper is visible through its own manifest', runProcesses(prevDir).some(p => p.pid === stale.pid));
+	reapPreviousRun(prevDir);
+	check('reapPreviousRun stops it before the run directory is wiped', !alive(stale.pid!));
+	check('reapPreviousRun removes the previous profile (it holds the armed extension)', !fs.existsSync(prevProfile));
+	// A manifest naming a profile outside the test roots must not become a licence to delete.
+	const guarded = path.join(base, 'guarded');
+	fs.mkdirSync(guarded, { recursive: true });
+	const foreign = path.join(os.homedir(), 'Documents');
+	writeManifest(guarded, { commandMarks: [], userDataDir: foreign });
+	reapPreviousRun(guarded);
+	check('reapPreviousRun refuses a manifest naming a profile outside the test roots', fs.existsSync(foreign));
+	// And it must be a no-op, not a throw, when there is no previous run at all.
+	const freshDir = path.join(base, 'fresh');
+	fs.mkdirSync(freshDir, { recursive: true });
+	let fresh: unknown[] | undefined;
+	try {
+		fresh = reapPreviousRun(freshDir);
+	} catch { /* reported below */ }
+	check('reapPreviousRun on a directory with no manifest is a no-op', Array.isArray(fresh) && fresh.length === 0);
+	try {
+		process.kill(stale.pid!, 'SIGKILL');
+	} catch { /* gone */ }
+}
 
 for (const d of decoys) {
 	try {

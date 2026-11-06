@@ -25,7 +25,7 @@ import { TabdClient } from '../../../tabd/src/client.ts';
 import { beaconPort, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, lockRun, repoRoot } from '../../harness.ts';
 import { report, type Check } from '../../containment/assert.ts';
 import { beaconSpawn } from './marks.ts';
-import { readManifest, teardownGate, writeManifest, writeSnapshot } from '../../containment/teardown.ts';
+import { readManifest, reapPreviousRun, teardownGate, writeManifest, writeSnapshot } from '../../containment/teardown.ts';
 
 const argv = process.argv.slice(2);
 const mode = argv.shift();
@@ -95,6 +95,11 @@ if (mode === 'prepare') {
 		old.dispose();
 		fs.rmSync(stateDir, { recursive: true, force: true });
 	}
+	// Reap the PREVIOUS run before the run directory is wiped. Its manifest is the only
+	// record of the helpers it spawned, so deleting the directory first orphans them: an
+	// aborted `prepare` left its beacon listening on the host with nothing able to name it
+	// again, because the next `prepare` writes a manifest with a different port.
+	reapPreviousRun(base);
 	fs.rmSync(base, { recursive: true, force: true });
 	fs.mkdirSync(path.join(base, 'canary'), { recursive: true });
 	fs.mkdirSync(ws, { recursive: true });
