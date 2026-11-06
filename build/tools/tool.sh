@@ -26,6 +26,44 @@ verifier() {
 	"$ROOT/broker/tools/attest/build.sh" seclab-attest:local || die "cannot build the attestation verifier image (broker/tools/attest/build.sh)"
 	docker run --rm -v "$ctx:/w:ro" -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python seclab-attest:local -m sigstore "$@"
 }
+# Both gitleaks binaries must exist and match their pins, whatever the host arch (the build
+# cross-compiles both). A missing one is a failed build, never skipped. LOCK_FOR_CHECK overrides
+# the pin file (self-test only).
+check_bins() {
+	local dir="$1" a got want lock="${LOCK_FOR_CHECK:-$LOCK}"
+	for a in arm64 amd64; do
+		want="$(jq -r --arg a "$a" '.gitleaks.binarySha256[$a] // ""' "$lock")"
+		[[ "$want" =~ ^[0-9a-f]{64}$ ]] || { log "gitleaks-linux-$a: no sha256 pin"; return 1; }
+		[[ -f "$dir/gitleaks-linux-$a" ]] || { log "gitleaks-linux-$a: not built (the build produced: $(ls "$dir" 2>/dev/null | tr '\n' ' '))"; return 1; }
+		got="$(sha256 "$dir/gitleaks-linux-$a")"
+		[[ "$got" == "$want" ]] || { log "gitleaks-linux-$a: built sha256 $got, pinned $want (reproducibility check; pin it only from a CI build)"; return 1; }
+	done
+}
+
+if [[ "${1:-}" == --self-test ]]; then
+	# CI (workflow-lint, amd64) and local (arm64): check_bins fails closed for a missing or
+	# mismatched binary of either arch, and passes only when both match.
+	st="$ROOT/.work/tools/self-test"; rm -rf "$st"; mkdir -p "$st/b"
+	trap 'rm -rf "$st"' EXIT
+	printf 'arm' >"$st/b/gitleaks-linux-arm64"; printf 'amd' >"$st/b/gitleaks-linux-amd64"
+	jq -n --arg a "$(sha256 "$st/b/gitleaks-linux-arm64")" --arg b "$(sha256 "$st/b/gitleaks-linux-amd64")" \
+		'{gitleaks: {binarySha256: {arm64: $a, amd64: $b}}}' >"$st/lock.json"
+	export LOCK_FOR_CHECK="$st/lock.json"
+	check_bins "$st/b" 2>/dev/null || die "self-test: both binaries match, but check_bins failed"
+	for a in arm64 amd64; do
+		c="${a:0:3}"
+		mv "$st/b/gitleaks-linux-$a" "$st/x"
+		! check_bins "$st/b" 2>/dev/null || die "self-test: missing gitleaks-linux-$a passed"
+		mv "$st/x" "$st/b/gitleaks-linux-$a"
+		printf '%sx' "$c" >"$st/b/gitleaks-linux-$a"
+		! check_bins "$st/b" 2>/dev/null || die "self-test: mismatched gitleaks-linux-$a passed"
+		printf '%s' "$c" >"$st/b/gitleaks-linux-$a"
+	done
+	check_bins "$st/b" 2>/dev/null || die "self-test: restored binaries failed"
+	grep -q '^RUN set -eu; for a in arm64 amd64' "$DOCKERFILE" || die "self-test: the gitleaks build loop must run under set -eu"
+	log "self-test: ok"
+	exit 0
+fi
 
 bins_dir=""
 if [[ "${1:-}" == --bins ]]; then
@@ -90,12 +128,9 @@ source)
 	args=(--build-arg GIT="$git_url" --build-arg TAG="$tg" --build-arg COMMIT="$commit")
 	if [[ "$NAME" == gitleaks ]]; then
 		out="${bins_dir:-$ctx/bins}"
-		docker build -q --target gitleaks-bins -f "$DOCKERFILE" "${args[@]}" --output "type=local,dest=$out" "$ctx" >/dev/null
-		for a in arm64 amd64; do
-			got="$(sha256 "$out/gitleaks-linux-$a")"
-			want="$(jq -r --arg a "$a" '.gitleaks.binarySha256[$a] // ""' "$LOCK")"
-			[[ "$got" == "$want" ]] || die "gitleaks-linux-$a: built sha256 $got, pinned ${want:-<none>} (reproducibility check; pin it only from a CI build)"
-		done
+		docker build --progress=plain --target gitleaks-bins -f "$DOCKERFILE" "${args[@]}" --output "type=local,dest=$out" "$ctx" >"$ctx/build.log" 2>&1 \
+			|| { tail -30 "$ctx/build.log" >&2; die "gitleaks: build failed (log: $ctx/build.log)"; }
+		check_bins "$out" || { tail -30 "$ctx/build.log" >&2; exit 1; }
 		log "gitleaks $ver: built from $commit; both binaries match their pinned sha256"
 		[[ -n "$bins_dir" ]] && exit 0
 		args+=(--build-arg BIN_SHA256="$(jq -r --arg a "$arch" '.gitleaks.binarySha256[$a]' "$LOCK")")
