@@ -351,10 +351,9 @@ export class SbxDriver implements Driver {
 		try {
 			// Drop the broker's own allow first (its port is stale or the broker is gone; the next
 			// start re-adds the live one). Mirroring it as a deny instead is rejected by sbx as a
-			// conflict, which left quarantine failing (focus probe, 2026-11-06).
-			if (spec.template.spec.broker === 'required') {
-				await this.syncBrokerAllow(spec, undefined);
-			}
+			// conflict, which left quarantine failing (focus probe, 2026-11-06). Whatever the
+			// current --broker mode: an earlier broker's allow may remain (review AAA-5).
+			await this.syncBrokerAllow(spec, undefined);
 			await this.syncDenies(spec);
 		} finally {
 			await this.runner.run(this.sbx, ['stop', spec.sandboxName], { timeoutMs: 60_000 });

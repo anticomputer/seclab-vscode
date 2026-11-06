@@ -297,32 +297,61 @@ const WATCH_SAMPLE_MS = 200;
  * tree is killed at once: a run that steals focus must not keep the user's desktop (fail closed).
  */
 export async function watchFocus(userData: string): Promise<void> {
-	let pid = 0;
-	for (const until = Date.now() + 120_000; !pid && Date.now() < until;) {
-		await new Promise(r => setTimeout(r, WATCH_SAMPLE_MS));
-		pid = editorPid(userData);
-	}
-	while (pid) {
-		if (frontmostPid() === pid) {
-			killTree(pid);
-			fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${pid} became the frontmost app; killed it and its processes\n`);
-			return;
+	const failed = (why: string) => fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} focus watcher failed: ${why} (the run can't show it kept focus)\n`);
+	try {
+		let pid = 0;
+		for (const until = Date.now() + 120_000; !pid && Date.now() < until;) {
+			await new Promise(r => setTimeout(r, WATCH_SAMPLE_MS));
+			pid = editorPid(userData);
 		}
-		await new Promise(r => setTimeout(r, WATCH_SAMPLE_MS));
-		pid = editorPid(userData) === pid ? pid : 0;
+		// Follow the profile's editor, even across a relaunch, until none has run for 5 s. A
+		// sampling error must fail the run, never silently stop the watch (review AAA-4).
+		let errors = 0;
+		let lastSeen = Date.now();
+		while (pid || Date.now() - lastSeen < 5000) {
+			try {
+				if (pid && frontmostPid() === pid) {
+					killTree(pid);
+					fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${pid} became the frontmost app; killed it and its processes\n`);
+					return;
+				}
+				errors = 0;
+			} catch (e) {
+				if (++errors >= 5) {
+					failed((e as Error).message.slice(0, 200));
+					if (pid) {
+						killTree(pid);
+					}
+					return;
+				}
+			}
+			await new Promise(r => setTimeout(r, WATCH_SAMPLE_MS));
+			pid = editorPid(userData);
+			if (pid) {
+				lastSeen = Date.now();
+			}
+		}
+	} catch (e) {
+		failed((e as Error).message.slice(0, 200));
 	}
 }
 
-/** SIGKILL a process and all its descendants (children first found, then killed together). */
+/**
+ * SIGKILL a process and all its descendants, except tabd and its children (review AAA-3): with
+ * the editor gone tabd sees EOF on stdin and stops its tabs itself, instead of leaving them
+ * running unsupervised or a policy write half done.
+ */
 export function killTree(root: number): void {
-	const rows = execFileSync('ps', ['-axo', 'pid=,ppid='], { encoding: 'utf8' }).trim().split('\n')
-		.map(l => l.trim().split(/\s+/).map(Number)).filter(r => r.length === 2);
+	const rows = execFileSync('ps', ['-axww', '-o', 'pid=,ppid=,args='], { encoding: 'utf8' }).trim().split('\n')
+		.map(l => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l)).filter((m): m is RegExpExecArray => !!m)
+		.map(m => ({ pid: Number(m[1]), ppid: Number(m[2]), args: m[3] }));
+	const isTabd = (args: string) => /(\/tabd\/src\/main\.ts|\/seclab-tab-manager\/dist\/tabd\.js)\s.*--state-dir\s/.test(args);
 	const tree = new Set([root]);
 	for (let grew = true; grew;) {
 		grew = false;
-		for (const [p, pp] of rows) {
-			if (tree.has(pp) && !tree.has(p)) {
-				tree.add(p);
+		for (const r of rows) {
+			if (tree.has(r.ppid) && !tree.has(r.pid) && !isTabd(r.args)) {
+				tree.add(r.pid);
 				grew = true;
 			}
 		}
