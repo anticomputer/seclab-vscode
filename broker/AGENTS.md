@@ -60,11 +60,12 @@ broker/docs-check.sh
 ```
 - `build.sh` verifies the mitmproxy base image's signed provenance, then
   produces `seclab-broker:dev`. Its build context is a snapshot of `broker/`'s
-  git-tracked files only, so ignored files (`__pycache__`, `*.pyc`) and
-  untracked files never reach the image. It stamps the image's identity as OCI
-  labels:
-  - `org.opencontainers.image.revision` (`-dirty` if `broker/` has uncommitted
-    or untracked files);
+  git-tracked files only, written from the git objects, so ignored files
+  (`__pycache__`, `*.pyc`) and untracked files never reach the image. Every
+  check and label is read from that snapshot. It stamps the image's identity
+  as OCI labels:
+  - `org.opencontainers.image.revision` (`-dirty` if `broker/` has uncommitted,
+    untracked, assume-unchanged or skip-worktree files);
   - `org.opencontainers.image.base.digest` (the registered, verified mitmproxy
     digest);
   - `org.opencontainers.image.version`;
