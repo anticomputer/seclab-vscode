@@ -39,6 +39,9 @@ jobs:
           ./seclab test builds
           for t in desktop reh; do build/test-variant.sh record containment "$t"; done
       - name: check-release self-test (RPC policy stamp both ways; EDR rpc-policy-stamp)
+        env:
+          # An earlier step's container creates .work as root; scratch on the runner instead.
+          SECLAB_SCRATCH: ${{ runner.temp }}
         run: sh build/check-release.sh --self-test
       - name: Dependency register self-test (the register itself is checked in docs)
         run: ./seclab lint deps --self-test
