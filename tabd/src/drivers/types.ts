@@ -69,6 +69,11 @@ export interface SensorHooks {
 	startCollector?(spawnCollector: () => ChildProcessWithoutNullStreams, connectionToken: string): Promise<void>;
 	/** OCI: the workspace container exists; make sure the host sensor watches it before the REH starts. */
 	beforeReh?(info: { containerId: string }): Promise<void>;
+	/**
+	 * The tab's broker endpoint as seen from inside the tab (port, and addresses when the driver
+	 * knows them), so detection can tell broker connects from bypass attempts. Driver-supplied.
+	 */
+	brokerEndpoint?(ep: { port: number; addrs?: readonly string[] }): void;
 }
 
 /** What the workspace needs from its configured broker (docs/broker-protocol.md §7). */

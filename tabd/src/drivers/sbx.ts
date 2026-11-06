@@ -255,6 +255,10 @@ export class SbxDriver implements Driver {
 		if (!sensor?.startCollector) {
 			throw new DriverError(-32012, 'sbx tabs require the observability collector');
 		}
+		if (spec.brokerPort !== undefined) {
+			// host.docker.internal:<port>; the collector reports what that name resolves to in the VM.
+			sensor.brokerEndpoint?.({ port: spec.brokerPort });
+		}
 		try {
 			await sensor.startCollector(() => this.runner.spawnStream(this.sbx, ['exec', '-i', '-u', 'root', '-w', '/', spec.sandboxName, OBS_COLLECT]), connectionToken);
 		} catch (e) {

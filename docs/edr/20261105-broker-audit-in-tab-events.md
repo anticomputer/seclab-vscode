@@ -58,6 +58,28 @@ list: it tags fields itself (below).
      - Broker events share no bucket with other sources (review BA-1).
 5. **No new channel and no host action.** The feed reads the control channel tabd
    already owns. Nothing in an audit event drives a host action.
+6. **Detection context.**
+   - **Broker endpoint.** The driver tells tabd the broker's endpoint inside the tab:
+     - sbx: `host.docker.internal:<port>`. The port comes from the host. What that
+       name resolves to in the VM is reported by the collector, so recognising broker
+       connects rests on `tab-vm-root` data, like every sbx sensor event;
+     - OCI: the broker's address on the pod network (`docker inspect`, host side),
+       port 8080.
+     
+     A connect to it is no longer an `egress.bypass`. Before this, every proxied
+     request was flagged.
+   - **Beacons through the broker.** Proxied traffic all goes to the broker's
+     address, so connects to it are no longer beacon candidates.
+     - The feed hands each denied or blocked request to the beacon rule before
+       aggregation, timed by the broker's clock and keyed by the real destination.
+     - That state is kept apart from the sensors' beacon state (review BA-3), and
+       its detections are rate-limited like findings.
+     - A periodic proxied beacon is a `beacon.periodic` with the integrity of its
+       cause: the latest broker event emitted for that destination, normally
+       `trusted`. If the hub dropped that event, an older one or none is cited.
+     - Limit: only denied or blocked proxied requests are timed. A periodic
+       request to an allowed destination isn't a beacon candidate, because routine
+       polling would drown the rule.
 
 ## Alternatives considered
 - **Parse the broker's stderr `{"audit": …}` lines:** this duplicates the control

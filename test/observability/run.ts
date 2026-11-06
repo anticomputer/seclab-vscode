@@ -138,12 +138,16 @@ check('no event claims trusted from a sensor', events.every(e => !['sbx-collecto
 
 // Broker audit (EDR broker-audit-in-tab-events): a request through the tab's proxy to a raw
 // RFC 5737 address is refused by the broker without a prompt; its audit event arrives trusted.
-inTab('sleep 1; curl -s -m 5 -o /dev/null http://192.0.2.11/via-broker; true');
-await until(() => events.some(e => e.source === 'broker' && e.class === 'egress.request' && e.net?.addr === '192.0.2.11'), 20_000);
+inTab('sleep 1; for i in 1 2 3 4; do curl -s -m 5 -o /dev/null http://192.0.2.11/via-broker; sleep 1.5; done; true');
+await until(() => events.some(e => e.source === 'broker' && e.class === 'egress.request' && e.net?.addr === '192.0.2.11') && events.some(e => e.rule === 'beacon.periodic' && e.net?.addr === '192.0.2.11'), 30_000);
 const viaBroker = events.find(e => e.source === 'broker' && e.class === 'egress.request' && e.net?.addr === '192.0.2.11');
 check('broker: proxied raw-IP request denied, reported as a trusted egress.request', viaBroker?.integrity === 'trusted' && /^request\.denied/.test(String(viaBroker.detail?.auditType)), JSON.stringify(viaBroker ?? events.filter(e => e.source === 'broker').map(e => e.summary)));
 check('broker: tab-controlled request text is tagged untrusted', !!viaBroker && ['net.addr', 'detail.path', 'detail.method'].every(f => viaBroker.untrusted.includes(f)), JSON.stringify(viaBroker?.untrusted));
 check('broker: lifecycle events replayed (broker.started)', events.some(e => e.source === 'broker' && e.detail?.auditType === 'broker.started'));
+const proxiedBeacon = events.find(e => e.rule === 'beacon.periodic' && e.net?.addr === '192.0.2.11');
+check('broker: a regular proxied request is a trusted beacon, timed by the broker', proxiedBeacon?.integrity === 'trusted' && /through the broker/.test(proxiedBeacon.summary), JSON.stringify(proxiedBeacon));
+const bypassToBroker = events.filter(e => e.rule === 'egress.bypass' && (e.proc?.argv ?? []).some(a => a.includes('via-broker')) && e.net?.port !== 53);
+check('broker: proxied connects to the broker are not bypass attempts', bypassToBroker.length === 0, bypassToBroker.map(e => e.summary).join(' | '));
 
 // 2. The log: per-tab JSONL, private, contiguous.
 const logDir = path.join(work, 'state', 'events', tabId);

@@ -101,6 +101,8 @@ interface Beacon { times: number[]; reportedAt: number }
 
 export class Detector {
 	private readonly beacons = new Map<string, Beacon>();
+	/** Broker timings only (review BA-3): sensor events, whatever their address text, never touch it. */
+	private readonly brokerBeacons = new Map<string, Beacon>();
 
 	/** Return detection drafts for one event (never for detections themselves). */
 	check(e: ObsEvent, ctx: TabContext): EventDraft[] {
@@ -175,14 +177,15 @@ export class Detector {
 				if (!isBroker && !LOOPBACK.test(n.addr)) {
 					hits.push({ id: 'egress.bypass', summary: `direct connect to ${n.addr}:${n.port ?? '?'} by ${name || '?'} (${n.result ?? '?'})` });
 				}
-				this.beacon(`${n.addr}:${n.port ?? ''}`, Date.parse(e.time), hits);
+				if (!isBroker) {
+					// Proxied traffic all goes to the broker: its beacons are timed from the broker's
+					// own per-destination events instead (brokerTiming).
+					this.beacon(`${n.addr}:${n.port ?? ''}`, Date.parse(e.time), hits);
+				}
 				break;
 			}
 			case 'egress.request':
-				// Per-request broker decisions only: policy.log is polled (its timing is ours).
-				if (e.detail?.decision === 'denied' || e.detail?.decision === 'blocked') {
-					this.beacon(String(e.detail?.host ?? e.net?.addr ?? ''), Date.parse(e.time), hits);
-				}
+				// Beacons through the broker: see brokerTiming (fed before aggregation).
 				break;
 			case 'priv.change':
 				if (e.priority === 'critical') {
@@ -237,17 +240,32 @@ export class Detector {
 		}));
 	}
 
-	private beacon(key: string, t: number, hits: Array<{ id: string; summary: string }>): void {
+	/**
+	 * A request the broker denied or blocked, timed by the broker's own clock and fed before
+	 * aggregation (EDR broker-audit-in-tab-events). `cause` is the trusted broker event for that
+	 * destination, so a beacon found here is `trusted`.
+	 */
+	brokerTiming(dest: string, t: number, cause: ObsEvent | undefined): EventDraft[] {
+		const hits: Array<{ id: string; summary: string }> = [];
+		this.beacon(dest, t, hits, this.brokerBeacons);
+		return hits.map(h => ({
+			source: 'detector', integrity: cause?.integrity ?? 'trusted', class: 'detection', rule: h.id, priority: RULE.get(h.id)!.priority,
+			summary: `${h.summary} (through the broker, denied)`,
+			...(cause?.net ? { net: cause.net } : {}), cause: cause ? [cause.seq] : [],
+		}));
+	}
+
+	private beacon(key: string, t: number, hits: Array<{ id: string; summary: string }>, map = this.beacons): void {
 		if (!key || !Number.isFinite(t)) {
 			return;
 		}
-		let b = this.beacons.get(key);
+		let b = map.get(key);
 		if (!b) {
-			if (this.beacons.size >= 512) {
-				this.beacons.delete(this.beacons.keys().next().value!);
+			if (map.size >= 512) {
+				map.delete(map.keys().next().value!);
 			}
 			b = { times: [], reportedAt: 0 };
-			this.beacons.set(key, b);
+			map.set(key, b);
 		}
 		// Coalesce bursts (several sockets per attempt, or a fetch right before the first beacon).
 		if (b.times.length && t - b.times[b.times.length - 1] < 250) {

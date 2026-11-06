@@ -163,6 +163,19 @@ export class OciDriver implements Driver {
 				throw new DriverError(-32012, `observability sensor failed: ${(e as Error).message}`);
 			}
 		}
+		if (realBroker && sensor?.brokerEndpoint) {
+			// The broker's address on the pod network (detection context only; best effort).
+			const ip = await this.runner.run(this.docker, ['container', 'inspect', '--format', '{{json .NetworkSettings.Networks}}', '--', n.broker]);
+			const nets = ip.code === 0 ? (() => {
+				try {
+					return (JSON.parse(ip.stdout) ?? {}) as Record<string, { IPAddress?: unknown; GlobalIPv6Address?: unknown } | null>;
+				} catch {
+					return {};
+				}
+			})() : {};
+			const addrs = [nets[n.net]?.IPAddress, nets[n.net]?.GlobalIPv6Address].filter((a): a is string => typeof a === 'string' && /^[0-9a-fA-F.:]{2,64}$/.test(a));
+			sensor.brokerEndpoint({ port: Number(BROKER_PROXY.split(':')[1]), addrs });
+		}
 		if (realBroker) {
 			// Plan tabd-broker-wiring B1: the supervisor connects, authenticates and loads policy;
 			// the workspace gets the CA and the proxy URL before anything in it starts.
