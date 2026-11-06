@@ -184,7 +184,14 @@ export const EDITOR_APP = path.join(repoRoot, '.work', 'app', 'seclab-vscode.app
  *  (patch 0012) makes the app itself show windows inactive and never focus or activate. */
 export function editorLaunchArgv(userData: string, folderUri: string, env: Record<string, string> = {}, app = EDITOR_APP): string[] {
 	const envArgs = Object.entries({ ...env, SECLAB_BACKGROUND_WINDOWS: '1' }).flatMap(([k, v]) => ['--env', `${k}=${v}`]);
-	return ['open', '-g', '-n', ...envArgs, '-a', app, '--args', '--user-data-dir', userData, '--folder-uri', folderUri];
+	// The main process's stderr carries the background-windows guard's record (click-through
+	// windows, dialogs not shown), which the focus probe checks.
+	return ['open', '-g', '-n', ...envArgs, '--stderr', editorStderrLog(userData), '-a', app, '--args', '--user-data-dir', userData, '--folder-uri', folderUri];
+}
+
+/** Where the editor's main-process stderr goes (inside the run's profile, removed at teardown). */
+export function editorStderrLog(userData: string): string {
+	return path.join(userData, 'editor-stderr.log');
 }
 
 /** The same, as one copy-pasteable shell line (for "prepare" steps that print the command). */
@@ -244,6 +251,7 @@ export async function launchEditorInBackground(userData: string, folderUri: stri
 		throw new Error(`an editor already runs with ${userData}; tear it down first`);
 	}
 	startFocusWatch(userData);
+	fs.mkdirSync(userData, { recursive: true });
 	const argv = editorLaunchArgv(userData, folderUri, env, app);
 	execFileSync(argv[0], argv.slice(1), { stdio: 'ignore' });
 	const deadline = Date.now() + timeoutMs;

@@ -132,3 +132,32 @@ Each step is timestamped, and the kill-on-steal watcher is armed throughout.
 
 Dialogs cancelled in background mode answer with their `cancelId`, which
 `massageMessageBoxOptions` always sets, so a confirmation always gets its safe answer.
+
+## Addendum 2026-11-06 (evening): the user's own clicks
+- **Finding:** the RPC core landing session's proof run (85ca160) was killed for focus about
+  3m48s after launch. Here, main's release (a986b9d) and the 24fea4c guard build were both
+  killed within about 2.5 s of launch, but only while the user was working in another app
+  (Microsoft Teams frontmost); the same builds ran clean minutes earlier.
+- **Cause, from the unified log:**
+  - LaunchServices' bring-forward was denied (`dontMakeFrontmost=1`, "presents 0 windows ...
+    Denying the request"), and nothing in the app asked to activate.
+  - The WindowServer made the editor frontmost from an input event:
+    `PostFilteredEventTapData ... Making seclab-vscode the front process`.
+  - `showInactive` orders the window in front of the user's windows without activating the
+    app, so the user's next click on that spot landed on the editor. No code path in the guard
+    was missed. The window being on top of the user's work was itself the defect.
+- **Fix (patch 0012's guard):**
+  - In background mode every window is click-through from creation, and
+    `setIgnoreMouseEvents` always passes `true`.
+  - Dialogs are never shown, because a sheet is its own window a click can reach. Each
+    gives its safe answer (a message box its `cancelId`, a file dialog "canceled").
+  - Both are recorded on the main process's stderr.
+- **Probe:**
+  - The launcher captures the editor's stderr (`open --stderr`, inside the run's profile).
+  - `test/focus/probe.ts check` fails unless the guard recorded click-through windows. Main's
+    release records none, so it fails there.
+  - `check` also adds two host-side steps: the renderer stopped until Electron reports it
+    unresponsive, and the renderer terminated, as teardown's SIGTERM can do.
+  - A behavioural click test isn't possible on a shared desktop. A click posted only to the
+    editor's pid doesn't reach WindowServer hit-testing (verified: no activation), and a real
+    click would land in the user's app once the fix works.
