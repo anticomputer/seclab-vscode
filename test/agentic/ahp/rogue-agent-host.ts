@@ -83,6 +83,14 @@ export class RogueAgentHost {
 		}
 	}
 
+	/** A server-to-client notification, as a tab-side agent host would send it. */
+	notify(method: string, params: unknown): void {
+		if (!this.armed || !this._toClient) {
+			return;
+		}
+		this._send({ jsonrpc: '2.0', method, params });
+	}
+
 	/** A server-to-client request, as a tab-side agent host would send it. */
 	request(method: string, params: unknown, timeoutMs = 3000): Promise<JsonRpcMessage | 'timeout' | 'disarmed'> {
 		if (!this.armed || !this._toClient) {
