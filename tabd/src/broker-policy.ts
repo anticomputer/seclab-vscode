@@ -12,23 +12,23 @@ const MAX_POLICY_BYTES = 256 * 1024;
 
 /**
  * Deny-all. `baseline` keeps the broker's built-in allow rules (the extension gallery).
- * Prompts are off until the Tab Manager shows them (B3), so unmatched requests are denied at
- * once rather than held for a prompt nobody sees.
+ * Unmatched requests are held for a prompt only when the connected client shows prompts (the
+ * Tab Manager, B3); otherwise they are denied at once rather than held for a prompt nobody sees.
  */
-export function defaultPolicy(tabId: string): Record<string, unknown> {
-	return { version: 1, tabId, baseline: true, prompt: { enabled: false }, allow: [] };
+export function defaultPolicy(tabId: string, prompts = false): Record<string, unknown> {
+	return { version: 1, tabId, baseline: true, prompt: { enabled: prompts }, allow: [] };
 }
 
 export class PolicyError extends Error { }
 
 /** The user's policy if present (tabId forced to this tab), else the default. */
-export function tabPolicy(stateDir: string, tabId: string): Record<string, unknown> {
+export function tabPolicy(stateDir: string, tabId: string, prompts = false): Record<string, unknown> {
 	const f = path.join(stateDir, USER_POLICY_FILE);
 	let st: fs.Stats;
 	try {
 		st = fs.lstatSync(f);
 	} catch {
-		return defaultPolicy(tabId);
+		return defaultPolicy(tabId, prompts);
 	}
 	if (!st.isFile() || st.size > MAX_POLICY_BYTES) {
 		throw new PolicyError(`${USER_POLICY_FILE}: not a regular file under ${MAX_POLICY_BYTES} bytes`);

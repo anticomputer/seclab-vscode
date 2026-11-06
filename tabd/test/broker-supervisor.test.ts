@@ -16,6 +16,7 @@ import { Supervisor } from '../src/supervisor.ts';
 import { BROKER_POLICY_SCHEMA, BROKER_PROTOCOL } from '../src/broker.ts';
 import type { BrokerHooks, BrokerSetup, Driver, FenceReport, SensorHooks, TabRuntimeSpec, TabTemplate } from '../src/drivers/types.ts';
 import { defaultPolicy, tabPolicy, USER_POLICY_FILE } from '../src/broker-policy.ts';
+import { approvalPromptText, DECISION_LABELS, sanitizeApproval } from '../src/approvals.ts';
 
 const SCRATCH = path.resolve(import.meta.dirname, '../../.work/test-scratch/broker-supervisor');
 const PEM = '-----BEGIN CERTIFICATE-----\nZXhhbXBsZSBvbmx5\n-----END CERTIFICATE-----\n';
@@ -311,4 +312,38 @@ test('B3 prompts: approvals reach the client sanitised; only offered decisions, 
 	await call('tab.userAction', { tabId });
 	assert.deepEqual(driver.brokerLog.filter(l => l.method === 'tab.event').map(l => l.params), [{ kind: 'opened' }, { kind: 'userAction' }]);
 	assert.ok(audit.some(e => e.includes('"decided"')) && !audit.some(e => e.includes('\u001b')));
+});
+
+test('B3 prompts: the default policy holds for a prompt only when the client shows prompts', async () => {
+	for (const shows of [false, true]) {
+		const { driver, call, ws } = setup(`prompts-${shows}`);
+		await call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0', ...(shows ? { capabilities: { approvals: true } } : {}) } });
+		const tabId = (await call('tab.claim', { workspace: { hostPath: ws } })).tab.metadata.name;
+		await call('tab.ensureRunning', { tabId });
+		const policy = driver.brokerLog.find(l => l.method === 'policy.load')!.params!.policy as { prompt: { enabled: boolean } };
+		assert.equal(policy.prompt.enabled, shows);
+	}
+});
+
+test('B3 prompt text: tab named first, tab text quoted (no links, icons, bidi), deny first, lineage only as data', () => {
+	const raw = {
+		approvalId: 'a1', kind: 'egress', decisions: ['allow-tab', 'allow-once', 'deny'], expiresAt: 1,
+		request: { scheme: 'https', host: 'evil.example', port: 8443, method: 'POST', path: '/[x](command:workbench.action.reloadWindow)' },
+		risk: { flags: ['no-user-action-yet', 'risky-destination:paste$(zap)'], origin: { label: 'npm \u202e[click](https://x)', verified: false } },
+	};
+	const a = sanitizeApproval(raw)!;
+	const text = approvalPromptText('my repo', a, { confidence: 'ambiguous', chain: 'sh → curl [x](https://y)', integrity: 'tab-vm-root' });
+	assert.ok(text.startsWith('Tab “my repo” wants to connect to “evil.example”:8443'), text);
+	assert.match(text, /before you did anything in this tab/);
+	assert.match(text, /ambiguous, may be another process/);
+	assert.match(text, /root in the tab could fake it/);
+	assert.match(text, /Ignoring this denies it\.$/);
+	for (const bad of ['[', ']', '$(', '://', 'command:', 'https:', '\u202e']) {
+		assert.ok(!text.includes(bad), `${JSON.stringify(bad)} in ${text}`);
+	}
+	assert.doesNotMatch(approvalPromptText('t', a, { confidence: 'none', chain: 'sh', integrity: 'trusted' }), /Process:/);
+	assert.doesNotMatch(approvalPromptText('t', a, { confidence: 'single', chain: 'sh', integrity: 'bogus' as never }), /Process:/);
+	const cred = approvalPromptText('t', { ...a, kind: 'credential-binding', credentialId: 'cfs' }, undefined);
+	assert.match(cred, /wants to send credential “cfs” to “evil\.example”:8443/);
+	assert.deepEqual(DECISION_LABELS.map(([d]) => d), ['deny', 'deny-new-destinations', 'allow-once', 'allow-tab']);
 });

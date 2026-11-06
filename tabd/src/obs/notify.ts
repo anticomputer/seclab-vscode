@@ -63,7 +63,7 @@ export function quote(s: unknown, max = 80): string {
 	return `“${t.replace(/[“”]/g, '"')}”`;
 }
 
-const INTEGRITY_WORDS: Readonly<Record<Integrity, string>> = {
+export const INTEGRITY_WORDS: Readonly<Record<Integrity, string>> = {
 	'trusted': 'seen outside the tab',
 	'host-observed': 'seen on the host kernel; the names are the tab\'s',
 	'tab-vm-root': 'seen inside the tab\'s VM; root in the tab could fake it',
