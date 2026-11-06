@@ -11,3 +11,5 @@
 0013-no-local-agent-host.patch
 0014-build-desktop-without-copilot-runtime.patch
 # 0015 onwards: the secure-agentic-experiences series (plan section 10).
+# New files in 0015 are edited in agentic/patch-src (agentic/tools/sync-patch.ts).
+0015-seclab-ahp-gate.patch

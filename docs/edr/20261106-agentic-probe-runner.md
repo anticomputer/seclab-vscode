@@ -116,6 +116,48 @@ launch and refused by `check-release`. It is never used silently.
   Each launch records the app's `product.json` commit, and the verdict refuses a run whose
   build is not the one requested.
 
+## The gate's placement and log, as built (0015)
+Derived from the pinned source, for patch 0015:
+- **One transport, one place.** In a remote window `WorkbenchAgentHostService` picks
+  `EditorRemoteAgentHostServiceClient`
+  ([agentHostService.ts#L49-L57](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/agentHost/electron-browser/agentHostService.ts#L49-L57)),
+  whose `createTransport` factory builds an `AgentHostIpcChannelTransport` over the
+  `agentHostProxy` channel
+  ([editorRemoteAgentHostServiceClient.ts#L116-L135](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts#L116-L135)).
+  The factory runs again for every transport-level reconnect.
+- **The gate wraps the channel, not the parsed messages.** The transport reads raw JSON
+  text from `listen('frame')` and writes it with `call('send', text)`
+  ([agentHostIpcChannelTransport.ts#L63-L90](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostIpcChannelTransport.ts#L63-L90)).
+  Wrapping the `IChannel` lets the gate cap sizes on the raw text, parse once, and
+  re-serialise only what it allows. The transport built over the gated channel is branded
+  in a module-private `WeakMap`; nothing in a tab can reach the renderer's module scope.
+- **Construction invariant.** `AgentHostProtocolClient._installTransport` runs for the
+  first transport and every replacement
+  ([agentHostProtocolClient.ts#L737-L760](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts#L737-L760)).
+  0015 adds one call there: in a `seclab+` window every transport reports
+  `ahp-gate.opened`, and an unbranded one is refused (it throws) after reporting
+  `ahp-gate.refused`; a branded one reports `ahp-gate.verified`.
+- **Reverse requests** all arrive through `_handleMessage` → `_handleReverseRequest`
+  ([#L3025-L3026](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts#L3025-L3026)).
+  The gate answers every inbound request itself with a JSON-RPC error, so none reaches it.
+- **The surface.** `CommandMap`, `ServerCommandMap`, `ClientNotificationMap` and
+  `ServerNotificationMap` in the generated protocol
+  ([messages.ts#L86-L200](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/state/protocol/common/messages.ts#L86-L200))
+  are the method list the gate's table covers; anything else is denied.
+- **The setting's write paths.** `seclab.agents.enabled` is `APPLICATION` scope, so the
+  remote-user layer can't supply it. `MainThreadConfiguration.$updateConfigurationOption`
+  writes with the target the extension asks for and does not check scope
+  ([mainThreadConfiguration.ts#L48-L70](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadConfiguration.ts#L48-L70)),
+  so on main a tab extension may be able to turn it on. That is A23's to measure. The
+  setting is an off switch, not the boundary: with it on, the connection is still gated.
+- **Log lines** use the shape `tab.events.report` accepts today (`tabd/src/obs/glue.ts`
+  on `f19cf49`), so the Tab Manager can forward them unchanged:
+  `{source:'ahp-gate', class:'ahp.decision', priority, summary, detail}` with `detail`
+  flat, at most 16 scalar keys, `detail.gateRule` the rule id, `detail.connection` an
+  integer per transport, and `detail.verdict` one of `allow`, `deny`, `strip`. The
+  connection rules are exactly `ahp-gate.opened` and `ahp-gate.verified`, which
+  `ahp.ungated` pairs within 2 s; every `deny` counts toward `ahp.deny-burst`.
+
 ## Consequences
 - Increment 1 needs no unsafe build, so the fork-build preconditions (positive release
   marker, separate destination, distinct bundle id) are needed by increment 1's F probe for

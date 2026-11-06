@@ -51,6 +51,13 @@ Current queue:
   build that contains a runtime, and `unreachable.json` (below) fails one that reaches
   agent-host code (same EDR).
   0015 onwards: the secure-agentic-experiences series.
+- `0015-seclab-ahp-gate.patch`: in a `seclab+` window the workbench's agent-host transport is
+  built over a filtered channel (default-deny verdict tables pinned by type to upstream's
+  protocol), the protocol client refuses any ungated transport, and with
+  `seclab.agents.enabled` off (the default) no connection is made. Decisions go to the window's
+  `seclabAhpGate.log`. New files are edited in `agentic/patch-src` and synced with
+  `node agentic/tools/sync-patch.ts --write`
+  ([EDR](../docs/edr/20261106-agentic-probe-runner.md), [plan](../docs/plans/agentic-implementation.md) increment 1).
 
 `reach.json` requires targets per patch. `unreachable.json` lists modules, or `dir/` prefixes
 with explicit exceptions, that a target must not reach. Both are enforced by `build/check-patch-reach.ts` in the required `patch-build` check.
