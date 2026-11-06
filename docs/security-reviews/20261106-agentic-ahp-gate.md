@@ -268,3 +268,42 @@ about: **a check that cannot fail**.
    pending U run must show.
 
 No high or critical issue remains in the reviewed paths.
+
+## Round 5 (2026-11-06): the host effect that makes U fire
+Scope: the change that plants a host-only value in the window profile's `http.proxy`, which
+upstream mirrors into the agent host, plus the verdict and takeover changes around it
+(`test/agentic/runner/{runner.ts,mitm.js}`) and the new EDR sections. No prompt injection
+found. Fixture safety judged sound: the value matches no real credential format,
+`proxy.invalid` is RFC 2606 reserved so every attempt dies at name resolution and no TCP
+connection is made, and the setting is confined to the isolated profile.
+
+Three findings, all fixed. Two are again the project's recurring failure mode.
+
+1. **HIGH, the "unforgeable" evidence rule was forgeable.** The change claimed the canary
+   existed only in the host profile. It did not: the runner wrote it into the takeover's
+   `mitm.json`, which `vsce` packages into `takeover.vsix` in the **mounted workspace** and
+   installs into the tab's extension directory. The deciding fact is computed over the log
+   the tab writes, and the only thing licensing that exception was unforgeability, which did
+   not hold. The measured leak was almost certainly genuine, but the rule could not
+   distinguish it from a tab echoing its own config.
+   Fixed: the tab is given **no canary value**. It receives a per-run salt and salted
+   hashes, scans frames for canary-shaped tokens, and reports a token only when its salted
+   hash matches; a 64-bit random token is not recoverable from its hash, so a report is
+   proof the window sent it. The host matches the reported token against what `prepare`
+   recorded. The vsix is also removed from the workspace once installed, so no self-arming
+   copy is left on disk for the rest of the run.
+2. **HIGH, two silent-pass paths on the G side.** The settings canary was recovered with a
+   regex that yields `undefined` when the setting is missing, which was then dropped by a
+   `filter` -- so a canary that was never planted made "no canary reported" true, and G
+   would pass for a reason unrelated to the gate (the file canary, by contrast, throws).
+   And nothing asserted the A19 vector was exercised on G at all: the general deny check
+   counts only rules ending `:deny`, while the configuration mirror is a `strip`.
+   Fixed: `prepare` records what it planted in `canaries.json`; `check` asserts on **both**
+   builds that every canary is still armed where the window reads it, and G additionally
+   requires at least one `ahp-gate.root-config:strip` decision.
+3. **MEDIUM, the record overclaimed.** The EDR asserted "a forged report is impossible" on
+   the strength of the broken argument in finding 1. Rewritten to describe the asymmetry
+   that actually holds, and to say what the first version got wrong.
+
+Re-measured after the fixes: **U 7/7 vulnerable, G 11/11 contained.** No high or critical
+issue remains.
