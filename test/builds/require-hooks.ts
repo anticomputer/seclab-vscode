@@ -13,7 +13,7 @@ import * as path from 'node:path';
 const repo = path.resolve(import.meta.dirname, '../..');
 const MANIFEST = path.join(repo, 'test/builds/variants.json');
 
-interface Hook { id: string; patch: string; target: 'desktop' | 'reh'; marker: string }
+interface Hook { id: string; patch: string; target: 'desktop' | 'reh'; marker: string; bundle: string }
 interface TestBuild { variant?: unknown; target?: unknown; hooks?: Array<{ id?: unknown }> }
 
 /** The manifest's hooks for a variant and target (the reviewed list). */
@@ -27,10 +27,11 @@ export function manifestHooks(variant: string, target: 'desktop' | 'reh', manife
 
 /**
  * Problems with a REH as the artifact for these hooks: its product.json must record this
- * variant and each hook, and each hook's marker must be in its code. An empty list means usable.
- * `product` is the REH's product.json text; `hasMarker` searches its code.
+ * variant and each hook, and each hook's marker must be in its own bundle (never anywhere in the
+ * tree: product.json is inlined into several bundles; review CCC-1). An empty list means usable.
+ * `product` is the REH's product.json text; `hasMarker` searches one bundle (a path in the REH).
  */
-export function rehProblems(variant: string, wanted: string[], product: string | undefined, hasMarker: (marker: string) => boolean, manifestFile = MANIFEST): string[] {
+export function rehProblems(variant: string, wanted: string[], product: string | undefined, hasMarker: (marker: string, bundle: string) => boolean, manifestFile = MANIFEST): string[] {
 	const problems: string[] = [];
 	const hooks = manifestHooks(variant, 'reh', manifestFile);
 	if (!wanted.length) {
@@ -57,26 +58,27 @@ export function rehProblems(variant: string, wanted: string[], product: string |
 		if (tb && !recorded.has(id)) {
 			problems.push(`hook ${id} is not recorded in the REH's seclabTestBuild`);
 		}
-		if (!hasMarker(h.marker)) {
-			problems.push(`hook ${id}: marker ${h.marker} is not in the REH's code (the hook is absent)`);
+		if (!/^out\/[A-Za-z0-9._/-]+\.(c|m)?js$/.test(h.bundle ?? '') || h.bundle.includes('..')) {
+			problems.push(`hook ${id}: no valid bundle in test/builds/variants.json`);
+		} else if (!hasMarker(h.marker, h.bundle)) {
+			problems.push(`hook ${id}: marker ${h.marker} is not in ${h.bundle} (the hook is absent)`);
 		}
 	}
 	return problems;
 }
 
-function grepTree(dir: string, marker: string): boolean {
-	for (const e of fs.readdirSync(dir, { withFileTypes: true, recursive: true })) {
-		if (e.isFile() && /\.(c|m)?js$/.test(e.name) && fs.readFileSync(path.join(e.parentPath, e.name)).includes(marker)) {
-			return true;
-		}
+function inFile(file: string, marker: string): boolean {
+	try {
+		return fs.readFileSync(file).includes(marker);
+	} catch {
+		return false;
 	}
-	return false;
 }
 
 function check(variant: string, wanted: string[], where: { image?: string; dir?: string }): string[] {
 	if (where.dir) {
 		const p = path.join(where.dir, 'product.json');
-		return rehProblems(variant, wanted, fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : undefined, m => grepTree(path.join(where.dir!, 'out'), m));
+		return rehProblems(variant, wanted, fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : undefined, (m, b) => inFile(path.join(where.dir!, b), m));
 	}
 	const image = where.image!;
 	if (!/^[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[0-9a-f]{64})?$/.test(image)) {
@@ -90,9 +92,9 @@ function check(variant: string, wanted: string[], where: { image?: string; dir?:
 	} catch {
 		product = undefined;
 	}
-	return rehProblems(variant, wanted, product, m => {
+	return rehProblems(variant, wanted, product, (m, b) => {
 		try {
-			return inImage('grep -rlaF -- "$1" /opt/seclab-reh/out | head -1', m).trim() !== '';
+			return inImage('grep -qaF -- "$1" "/opt/seclab-reh/$2" && echo yes', m, b).trim() === 'yes';
 		} catch {
 			return false;
 		}
@@ -108,7 +110,7 @@ function selfTest(): void {
 	const dir = fs.mkdtempSync(path.join(repo, '.work', 'require-hooks-'));
 	try {
 		const mf = path.join(dir, 'variants.json');
-		fs.writeFileSync(mf, JSON.stringify({ v: { hooks: [{ id: 'h', patch: 'test/x.patch', target: 'reh', marker: 'SECLAB_TEST_ONLY:h' }, { id: 'd', patch: 'test/d.patch', target: 'desktop', marker: 'SECLAB_TEST_ONLY:d' }] } }));
+		fs.writeFileSync(mf, JSON.stringify({ v: { hooks: [{ id: 'h', patch: 'test/x.patch', target: 'reh', marker: 'SECLAB_TEST_ONLY:h', bundle: 'out/a.js' }, { id: 'd', patch: 'test/d.patch', target: 'desktop', marker: 'SECLAB_TEST_ONLY:d', bundle: 'out/a.js' }] } }));
 		const prod = (tb: unknown) => JSON.stringify({ nameShort: 'x', ...(tb ? { seclabTestBuild: tb } : {}) });
 		const good = { variant: 'v', target: 'reh', hooks: [{ id: 'h' }] };
 		assert(rehProblems('v', ['h'], prod(good), () => true, mf).length === 0, 'a test REH with its hook passes');
@@ -121,14 +123,19 @@ function selfTest(): void {
 		assert(rehProblems('v', ['h'], undefined, () => true, mf).some(p => p.includes('not a test build')), 'no product.json is refused');
 		// The real manifest: the containment variant's rogue-REH hook is a REH hook.
 		assert(manifestHooks('containment', 'reh').some(h => h.id === 'rogue-reh'), 'containment lists rogue-reh');
-		// A REH directory on disk, end to end.
+		// A REH directory on disk, end to end. product.json inlined in another bundle carries the
+		// record; only the hook's own bundle counts (CCC-1).
 		const reh = path.join(dir, 'reh');
 		fs.mkdirSync(path.join(reh, 'out', 'vs'), { recursive: true });
-		fs.writeFileSync(path.join(reh, 'product.json'), prod({ variant: 'containment', target: 'reh', hooks: [{ id: 'rogue-reh' }] }));
-		fs.writeFileSync(path.join(reh, 'out', 'vs', 'server.js'), 'x');
-		assert(check('containment', ['rogue-reh'], { dir: reh }).some(p => p.includes('hook is absent')), 'dir without the marker is refused');
-		fs.writeFileSync(path.join(reh, 'out', 'vs', 'server.js'), 'const h="[SECLAB_TEST_ONLY:rogue-reh-hook]";');
-		assert(check('containment', ['rogue-reh'], { dir: reh }).length === 0, 'dir with the marker passes');
+		const record = prod({ variant: 'containment', target: 'reh', hooks: [{ id: 'rogue-reh', marker: 'SECLAB_TEST_ONLY:rogue-reh-hook' }] });
+		fs.writeFileSync(path.join(reh, 'product.json'), record);
+		fs.writeFileSync(path.join(reh, 'out', 'vs', 'other.js'), `var p=${record};`);
+		fs.writeFileSync(path.join(reh, 'out', 'server-main.js'), `var p=${prod({ variant: 'containment' })};`);
+		assert(check('containment', ['rogue-reh'], { dir: reh }).some(p => p.includes('hook is absent')), 'the marker only in an inlined record elsewhere is refused');
+		fs.writeFileSync(path.join(reh, 'out', 'server-main.js'), 'const h="[SECLAB_TEST_ONLY:rogue-reh-hook]";');
+		assert(check('containment', ['rogue-reh'], { dir: reh }).length === 0, 'the marker in the hook bundle passes');
+		fs.rmSync(path.join(reh, 'out', 'server-main.js'));
+		assert(check('containment', ['rogue-reh'], { dir: reh }).some(p => p.includes('hook is absent')), 'a missing bundle is refused');
 	} finally {
 		fs.rmSync(dir, { recursive: true, force: true });
 	}
