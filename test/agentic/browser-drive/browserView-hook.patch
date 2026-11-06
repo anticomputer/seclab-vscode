@@ -1,0 +1,93 @@
+diff --git a/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts b/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
+index cd1678b2..8c676b69 100644
+--- a/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
++++ b/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
+@@ -35,6 +35,7 @@ import { ChatEditorInput } from '../../chat/browser/widgetHosts/editor/chatEdito
+ import { IChatWidgetService } from '../../chat/browser/chat.js';
+ import { IAccessibilityService } from '../../../../platform/accessibility/common/accessibility.js';
+ import { URI } from '../../../../base/common/uri.js';
++import { IFileService } from '../../../../platform/files/common/files.js';
+ import { isEqual } from '../../../../base/common/resources.js';
+ import { Schemas } from '../../../../base/common/network.js';
+ import { getCopilotRootPaths } from '../../../../platform/environment/common/copilotHome.js';
+@@ -161,6 +162,7 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
+ 		@IAccessibilityService private readonly accessibilityService: IAccessibilityService,
+ 		@INotificationService private readonly notificationService: INotificationService,
+ 		@ILabelService private readonly labelService: ILabelService,
++		@IFileService private readonly seclabFileService: IFileService,
+ 	) {
+ 		super();
+ 		const channel = mainProcessService.getChannel(ipcBrowserViewChannelName);
+@@ -241,6 +243,72 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
+ 		void this._browserViewsReady.p.catch(error => {
+ 			this.logService.error('[BrowserViewWorkbenchService] Failed to initialize browser view event stream.', error);
+ 		});
++
++		// SECLAB_TEST_ONLY: browser-drive hook. Applied only to the `agentic-browser` test build
++		// variant (test/builds/variants.json), never by patches/series; check-release fails any
++		// artifact containing it. It lets a probe exercise the browser tool's own network
++		// resolution without a model.
++		//
++		// WHAT IT IS FAITHFUL TO, and where it is not (security review of this variant). It
++		// reproduces `openBrowserTool._openNewPage`: `resolveNetwork({ type: 'agent', … })` and
++		// `createBrowserView` with the agent creation defaults, inlined here rather than
++		// imported so this patch's context does not overlap patch 0017's and can apply with or
++		// without it. It deliberately omits the tool's URL handling
++		// (`rewriteRemoteLocalhostUrl`, the network policy errors) and its `storageAffinity`,
++		// which is `undefined` for a plain tab window and a session id otherwise. So the probe
++		// is a measurement of the tool ONLY in a seclab+ tab window, with no sandbox
++		// restrictions, against a NON-localhost target. Outside that shape every divergence
++		// pushes toward the host network, i.e. toward a false "not contained", never a false
++		// "contained".
++		//
++		// Disarmed unless the harness staged a run. The arming file is read through the file
++		// service (the renderer has no direct fs) at a FIXED path under the HOST user's home
++		// (`INativeWorkbenchEnvironmentService.userHome` is the host home even in a remote
++		// window), never from the environment and never from anywhere a tab can write: a tab
++		// mounts only the workspace. Arming is not a boundary; the boundary is that nothing but
++		// this variant contains the hook at all.
++		const seclabDriveMarker = '[SECLAB_TEST_ONLY:browser-drive-hook]';
++		const seclabDriveFile = URI.joinPath(this.environmentService.userHome, '.seclab-test', 'browser-drive', 'targets');
++		let seclabDriven = false;
++		const seclabDriveTick = setInterval(async () => {
++			if (seclabDriven) {
++				return;
++			}
++			// Latched BEFORE the await: the callback is async and the read crosses an IPC
++			// boundary, so two ticks could otherwise both pass the guard and open two pages,
++			// which would make the probe's evidence ambiguous.
++			seclabDriven = true;
++			let fields: Record<string, string>;
++			try {
++				const content = (await this.seclabFileService.readFile(seclabDriveFile)).value.toString();
++				fields = Object.fromEntries(content.split('\n').filter(Boolean).map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
++			} catch {
++				seclabDriven = false; // not staged: the normal case, and the only one on a user's machine
++				return;
++			}
++			// Fails CLOSED on anything malformed: a non-numeric `until` makes the comparison
++			// false, so the run is treated as expired rather than as unexpired. `until` is
++			// epoch milliseconds. The nonce shape matches the rogue-REH hook's.
++			if (!/^[0-9a-f]{32}$/.test(fields.arm ?? '') || !fields.url || !(Number(fields.until) > Date.now())) {
++				seclabDriven = false;
++				return;
++			}
++			clearInterval(seclabDriveTick);
++			try {
++				const network = this.resolveNetwork({ type: 'agent', sessionId: fields.arm });
++				this.logService.warn(`${seclabDriveMarker} opening ${fields.url} network=${network?.authority ?? 'none'}`);
++				await this.createBrowserView({
++					owner: { type: 'agent', sessionId: fields.arm } as const,
++					initialAudiences: [{ type: 'agent' }] as const,
++					session: { scope: BrowserViewStorageScope.Agent, affinity: undefined, network } as const,
++					initialUrl: fields.url,
++					openSource: 'cdpCreated',
++				}, { preserveFocus: true });
++			} catch (error) {
++				this.logService.warn(`${seclabDriveMarker} failed: ${error instanceof Error ? error.message : String(error)}`);
++			}
++		}, 1000);
++		this._register(toDisposable(() => clearInterval(seclabDriveTick)));
+ 	}
+ 
+ 	resolveNetwork(owner: IBrowserViewOwner): IBrowserViewNetwork | undefined {
