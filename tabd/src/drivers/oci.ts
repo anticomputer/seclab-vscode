@@ -6,7 +6,7 @@ import * as fs from 'node:fs';
 import type { Runner } from '../run.ts';
 import { assertImageRef, SANDBOX_NAME_RE, CONNECTION_TOKEN_RE } from '../validate.ts';
 import type { BrokerImagePin } from '../broker-image.ts';
-import { BROKER_DIR, brokerImageProblem, brokerInstallInput, dropBrokerFromOtherImage, INSTALL_BROKER, pinnedBrokerImage, resolveImageId } from './broker-install.ts';
+import { BROKER_DIR, brokerImageProblem, brokerInstallInput, dropBrokerFromOtherImage, feedLine, INSTALL_BROKER, INSTALL_FEED, pinnedBrokerImage, resolveImageId } from './broker-install.ts';
 import { DriverError, type BrokerHooks, type BrokerSetup, type Driver, type DriverInfo, type FenceReport, type SensorHooks, type TabRuntimeSpec } from './types.ts';
 
 const REH_START = '/opt/seclab/bin/seclab-reh-start';
@@ -286,6 +286,14 @@ export class OciDriver implements Driver {
 			throw new DriverError(-32003, 'docker ps failed');
 		}
 		return new Set(r.stdout.split('\n').map(s => s.trim()).filter(s => SANDBOX_NAME_RE.test(s)));
+	}
+
+	async installFeed(spec: TabRuntimeSpec, sentinel: string | undefined): Promise<void> {
+		const n = this.names(spec);
+		const w = await this.runner.run(this.docker, ['exec', '-i', '-u', '0:0', '--', n.ws, 'sh', '-c', INSTALL_FEED], { input: `${feedLine(sentinel)}\n`, timeoutMs: 30_000 });
+		if (w.code !== 0) {
+			throw new DriverError(-32013, `could not write the package feed config in the workspace: ${w.stderr.trim().slice(-300)}`);
+		}
 	}
 
 	async quarantine(spec: TabRuntimeSpec): Promise<void> {

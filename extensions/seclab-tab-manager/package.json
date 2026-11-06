@@ -57,6 +57,12 @@
 				"category": "seclab"
 			},
 			{
+				"command": "seclab.packageFeeds",
+				"title": "Package Feeds (CFS) for This Tab…",
+				"category": "seclab",
+				"enablement": "remoteName == seclab"
+			},
+			{
 				"command": "seclab.resetTab",
 				"title": "Reset This Tab…",
 				"category": "seclab",

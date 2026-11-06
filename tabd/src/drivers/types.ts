@@ -83,6 +83,8 @@ export interface BrokerSetup {
 	/** Proxy credentials the tab presents to its own broker (`proxy.auth.set`). */
 	readonly proxyUser: string;
 	readonly proxyPassword: string;
+	/** CFS package feeds (B4): the tab's cfs sentinel when enabled; its npm/pip config is written with it. */
+	readonly feedSentinel?: string;
 }
 
 /**
@@ -114,6 +116,8 @@ export interface Driver {
 	policyLog?(spec: TabRuntimeSpec): Promise<PolicyLogEntry[]>;
 	/** Write-back gate (capability writeBack: gated): read the tab's upper layer, as root, directly. */
 	upperReader?(spec: TabRuntimeSpec): UpperReader;
+	/** CFS package feeds (B4) on a running tab: write (or remove, with no sentinel) its npm/pip config as root. */
+	installFeed?(spec: TabRuntimeSpec, sentinel: string | undefined): Promise<void>;
 }
 
 export interface PolicyLogEntry {

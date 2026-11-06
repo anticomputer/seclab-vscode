@@ -16,6 +16,7 @@ import { TabActivity } from './activity.ts';
 import { DetectionsSummary } from './detections.ts';
 import { DetectionNotifier } from './notifications.ts';
 import { EgressPrompts } from './prompts.ts';
+import { PackageFeeds } from './packages.ts';
 import { WriteBackReview } from './writeback.ts';
 
 const AUTHORITY_PREFIX = 'seclab';
@@ -36,6 +37,7 @@ let writeBack: WriteBackReview | undefined;
 let notifier: DetectionNotifier | undefined;
 let summary: DetectionsSummary | undefined;
 let prompts: EgressPrompts | undefined;
+let packages: PackageFeeds | undefined;
 /** Tabs whose broker reported `capabilities.denyRules` (tab.get → broker). */
 const blockable = new Set<string>();
 
@@ -67,6 +69,9 @@ export function activate(context: vscode.ExtensionContext): void {
 	if (here) {
 		prompts.watchUserActivity(here);
 	}
+	// CFS package feeds, per tab, off by default (ADR cfs-package-feeds-in-tabs).
+	packages = new PackageFeeds(getClient, currentTabId, log);
+	context.subscriptions.push(packages);
 	// Detection notifications for this window's tab, and the cross-tab summary (ADR detection notifications).
 	notifier = new DetectionNotifier(context, {
 		getClient, currentTabId, log,
@@ -180,6 +185,10 @@ function onNotification(method: string, params: Record<string, unknown>): void {
 		prompts?.onResolved(params);
 		return;
 	}
+	if (method === 'tab.packages.problem') {
+		packages?.onProblem(params);
+		return;
+	}
 	if (method === 'tab.status') {
 		log.info(`tab ${String(params.tabId)}: ${String(params.phase)}`);
 		const conditions = (params.conditions as Array<{ type: string; status: string; message?: string }> | undefined) ?? [];
@@ -250,6 +259,7 @@ async function resolve(authority: string, ctx: vscode.RemoteAuthorityResolverCon
 	void activity?.attach(c, tabId).catch(e => log.warn(`tab activity unavailable: ${(e as Error).message}`));
 	notifier?.setTabName(tabId, hostPath);
 	prompts?.setTabName(tabId, hostPath);
+	packages?.setTabName(tabId, hostPath);
 	void c.request<{ tab: TabView & { status: { brokerCapabilities?: Record<string, unknown> } } }>('tab.get', { tabId }).then(r => {
 		if (r.tab.status.brokerCapabilities?.denyRules === true) {
 			blockable.add(tabId);
