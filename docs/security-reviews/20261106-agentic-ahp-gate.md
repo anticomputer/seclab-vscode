@@ -307,3 +307,45 @@ Three findings, all fixed. Two are again the project's recurring failure mode.
 
 Re-measured after the fixes: **U 7/7 vulnerable, G 11/11 contained.** No high or critical
 issue remains.
+
+## Round 6 (2026-11-06): patch 0017, settings fixed in a tab window
+Scope: `patches/0017-seclab-fixed-tab-settings.patch`, its module under `agentic/patch-src`,
+`test/agentic/gate/fixed-settings.test.ts`, and the increment 2 EDR. No prompt injection found.
+The reviewer confirmed `seclabScrubFixedSettings` itself is sound: it copies on write at every
+level, the key paths are constants so no `__proto__` path is attacker-reachable, arrays and
+scalars on the path are skipped consistently, and an absent key is not invented.
+
+Four findings, all addressed.
+
+1. **HIGH, forcing `enableRemoteProxy` false would have made one path worse.** The EDR's
+   measurement found two open paths; there is a third. The browser tools (`openBrowserTool`,
+   `navigateBrowserTool`) resolve the network with the **public** `resolveNetwork`, which
+   returns `undefined` when the proxy is off, so the page loads on the **host** network for a
+   model-chosen URL, with `allowAutoConfirm: true`. The caveat that would have voided this
+   does not hold: `getNetworkStatus` returns `proxySupported: true` unconditionally for the
+   window's own authority. **Fixed by removing the key from 0017** rather than guessing a
+   value: the two automations keys ship now, and `enableRemoteProxy` is recorded in the EDR
+   with three candidate resolutions for the user to choose. Forcing `true` now looks the most
+   likely, since it matches the design's own end state for that row.
+2. **MEDIUM, `inspect` dropped every per-layer field.** `{ ...result }` spreads a class whose
+   layer fields are prototype getters, so for a fixed key `policyValue`, `defaultValue`,
+   `userRemoteValue` and the rest all became `undefined`, and the raw configuration models
+   were exposed as enumerable own properties instead. That also broke `updateValue`'s target
+   derivation, which reads `inspect`. Fixed with `Object.create(result, { value })`, which
+   keeps the prototype and so the getters. A unit test now models upstream's getter shape and
+   asserts the spread form fails, so the regression is named rather than described.
+3. **MEDIUM, the claimed single chokepoint was not one.** `getConfigurationData()` was not
+   overridden, and that snapshot is what `MainThreadConfiguration` ships to every extension
+   host, which `ExtHostConfiguration` then answers reads from. Fixed by scrubbing each layer's
+   `contents` there too, with a test.
+4. **LOW, the `seclab+` prefix was declared twice.** Sharing it by import does not work here:
+   a value import across patch modules uses a `.js` specifier that `node --test`'s type
+   stripping cannot resolve, which would make the module untestable. Resolved the other way:
+   the prefix stays local and a unit test imports both modules and asserts they are equal, so
+   drift fails the build.
+
+Also noted and fixed: the first test asserted the key map against itself and was tautological.
+It now asserts the keys literally.
+
+No high or critical issue remains in 0017 as it now stands. The held-back key is a decision,
+not a defect.
