@@ -119,6 +119,10 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 | `launder-open-external` | rogue extension | `cmd:_remoteCLI.openExternal` | denied |
 | `launder-timer` | rogue extension | `cmd:_seclabTest.launder` | denied |
 | `open-external-silent` | rogue extension | `rpc:MainThreadWindow.$openUri` | denied |
+| `reh-onexecutecommand-manageextensions` | rogue extension | `push:remoteterminal:$onExecuteCommand` | denied |
+| `reh-onexecutecommand-openexternal` | rogue extension | `push:remoteterminal:$onExecuteCommand` | denied |
+| `reh-onexecutecommand-windowopen` | rogue extension | `push:remoteterminal:$onExecuteCommand` | denied |
+| `reh-resolve-variables-host-env` | rogue extension | `push:remoteterminal:$onPtyHostRequestResolveVariablesEvent` | denied |
 | `secret-read-cross-tab` | rogue extension | `rpc:MainThreadSecretState.$getPassword` | succeeded |
 | `secret-write-own` | rogue extension | `rpc:MainThreadSecretState.$setPassword` | denied |
 | `webview-egress` | rogue extension | `data:webview-content` | succeeded |
@@ -126,9 +130,13 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 | `channel-download-host-write` | rogue REH | `chan:download` | denied |
 | `channel-mcp-call-tool` | rogue REH | `chan:mcpGatewayToolBroker` | denied |
 | `channel-mcp-list-servers` | rogue REH | `chan:mcpGatewayToolBroker` | denied |
+| `harness` | rogue REH | `rpc:raw` | denied |
+| `reh-onexecutecommand-manageextensions` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
+| `reh-onexecutecommand-openexternal` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
+| `reh-onexecutecommand-windowopen` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
+| `reh-resolve-variables-host-env` | rogue REH | `push:remoteterminal:$onPtyHostRequestResolveVariablesEvent` | denied |
 | `rpc-proxy-auth` | rogue REH | `rpc:MainThreadWorkspace.$lookupAuthorization` | denied |
 | `rpc-secret-identity-spoof` | rogue REH | `rpc:MainThreadSecretState.$getKeys` | denied |
-| `terminal-onexecutecommand` | rogue REH | `chan:server_initiated.remoteTerminal.onExecuteCommand` | denied |
 <!-- seclab:end probes -->
 
 ## 6. Adding a probe (Phase 3)
