@@ -154,3 +154,38 @@ test('sbx driver: a refused image creates nothing; another tab\'s container is n
 	assert.match(String(await start(foreign.driver)), /not this tab's broker/);
 	assert.ok(!foreign.calls.some(c => c[1] === 'rm' || c[1] === 'create'));
 });
+
+test('sbx driver: quarantine removes the tab\'s stale broker allow instead of denying it (focus probe 2026-11-06)', async () => {
+	const sb = `seclab-${TAB}`;
+	const allowId = '0123abcd-0000-4000-8000-000000000001';
+	let rules = [
+		{ id: 'default-deny-all', applies_to: 'all', scope: 'global', decision: 'deny', resource_type: 'network', resources: ['**'], actions: ['net:connect:tcp'], status: 'active' },
+		{ id: allowId, applies_to: `sandbox:${sb}`, scope: `sandbox:${sb}`, decision: 'allow', resource_type: 'network', resources: ['localhost:62285'], actions: ['net:connect:tcp'], status: 'active' },
+	];
+	const calls: string[][] = [];
+	const runner = {
+		run: async (bin: string, args: readonly string[]) => {
+			const a = [...args];
+			calls.push([bin, ...a]);
+			if (bin === '/sbx' && a[0] === 'policy' && a[1] === 'ls') {
+				return { code: 0, stdout: JSON.stringify({ rules }), stderr: '' };
+			}
+			if (bin === '/sbx' && a[0] === 'policy' && a[1] === 'rm') {
+				rules = rules.filter(r => r.id !== a[a.indexOf('--id') + 1]);
+			}
+			if (bin === '/sbx' && a[0] === 'policy' && a[1] === 'deny' && a.includes('localhost:62285')) {
+				return { code: 1, stdout: '', stderr: 'conflicts with existing allow rule' };
+			}
+			if (bin === '/docker' && a[1] === 'inspect') {
+				return { code: 1, stdout: '', stderr: 'Error: No such container' };
+			}
+			return { code: 0, stdout: '', stderr: '' };
+		},
+		spawnStream: () => { throw new Error('no streams'); },
+	} as unknown as Runner;
+	const driver = new SbxDriver('/sbx', runner, { docker: '/docker', brokerPin: new BrokerImagePin(runner, '/docker', 'seclab-broker:dev') });
+	await driver.quarantine(SPEC);
+	assert.ok(calls.some(c => c[0] === '/sbx' && c[2] === 'rm' && c.includes(allowId)), 'stale broker allow removed');
+	assert.ok(!calls.some(c => c[0] === '/sbx' && c[2] === 'deny' && c.includes('localhost:62285')), 'never mirrored as a deny');
+	assert.ok(calls.some(c => c[0] === '/sbx' && c[1] === 'stop'), 'sandbox stopped');
+});
