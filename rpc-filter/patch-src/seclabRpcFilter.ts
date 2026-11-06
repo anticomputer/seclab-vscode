@@ -377,6 +377,29 @@ export function seclabRegisterRewrite(sid: string, method: string): void {
  * That is the closed direction and is accepted (ADR 20261104-tab-command-taint).
  */
 let seclabInFlight = 0;
+
+/**
+ * Mark a tab-originated command as running, for the laundering backstop.
+ *
+ * Both entry points must do this, not just the tainted service. The backstop
+ * at `seclabTaintInFlight` catches a handler that reaches a *global*
+ * `ICommandService` instead of its accessor -- the laundering shape the taint
+ * cannot see. That only works while a tab command is known to be running.
+ *
+ * An earlier version incremented solely inside `seclabTaintedCommandService`,
+ * so the outermost call -- the one `seclabExecuteFromTab` starts -- did not
+ * count. A handler one level down holding an injected `ICommandService`
+ * therefore escaped both the taint and the backstop that documents itself as
+ * covering exactly that case. It was latent only because every command verdict
+ * is currently `deny`; the first `allow` would have made it reachable.
+ */
+export function seclabEnterTabCommand(): void {
+	seclabInFlight++;
+}
+
+export function seclabExitTabCommand(): void {
+	seclabInFlight--;
+}
 const seclabEscapes: string[] = [];
 
 /** Denied escapes observed via the global service. Probes assert on these. */
@@ -420,9 +443,9 @@ export function seclabTaintedCommandService(
 		onWillExecuteCommand: () => ({ dispose() { } }),
 		onDidExecuteCommand: () => ({ dispose() { } }),
 		executeCommand<T>(id: string, ...args: unknown[]): Promise<T | undefined> {
-			seclabInFlight++;
-			return real.seclabExecuteFromTab<T>(id, args, origin)
-				.finally(() => { seclabInFlight--; });
+			// seclabExecuteFromTab now counts itself, so this must not
+			// double-count: the nested call is already inside that window.
+			return real.seclabExecuteFromTab<T>(id, args, origin);
 		},
 	};
 }
@@ -494,6 +517,19 @@ export function seclabExecuteCommandFromTab<T>(
  * tab is the real answer; see `docs/plans/chat-in-tabs.md`.
  */
 export function seclabAiDisabled(remoteAuthority: string | null | undefined): boolean {
+	return seclabIsTabAuthority(remoteAuthority);
+}
+
+/**
+ * Whether an authority belongs to a sandboxed tab.
+ *
+ * The same test as `seclabAiDisabled`, under the name that says what it
+ * checks rather than what one caller does with the answer. Callers outside the
+ * AI surfaces -- the terminal backend refusing a server-initiated command push,
+ * for instance -- want this one; reusing `seclabAiDisabled` there would read
+ * as a claim about chat that the code is not making.
+ */
+export function seclabIsTabAuthority(remoteAuthority: string | null | undefined): boolean {
 	return typeof remoteAuthority === 'string' && SECLAB_AUTHORITY.test(remoteAuthority);
 }
 
