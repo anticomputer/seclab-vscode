@@ -1,8 +1,8 @@
 # Agentic experiences: implementation plan for Tier A
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-11-06
-- **Deciders:** coordinator, forwarding the user's "Next phase for agentic experiences" ("write up the §10 patch series (0015 onward) and its probes as increments, with the transport gate (AHP) first. Coordinate with the RPC session"); secure-agentic-experiences session (plan). Implementation waits for the user's approval of this plan.
+- **Deciders:** coordinator, forwarding the user's "Next phase for agentic experiences" ("write up the §10 patch series (0015 onward) and its probes as increments, with the transport gate (AHP) first. Coordinate with the RPC session"); secure-agentic-experiences session (plan). Accepted 2026-11-06 by the user: "Approve; build the probe runner and increment 1 (the agent connection gate) first". Runner and increment 1 findings: [EDR agentic probe runner](../edr/20261106-agentic-probe-runner.md) (U for increment 1 is main's release, which has no RPC filter; 0015 stands alone).
 - **Related:** [design plan](secure-agentic-experiences.md) (§3, §4, §10, §11), [ADR agents run in the tab](../adr/20261105-agents-run-in-the-tab.md), [spike EDR](../edr/20261105-agents-in-tab-spike.md), [real-tab spike EDR](../edr/20261106-agents-in-real-tab-spike.md), [patch-build gate](../edr/20261105-patch-build-gate.md), [patch queue](../../patches/README.md)
 
 This plan turns the design's §10 table into ordered increments. Each increment is one or
