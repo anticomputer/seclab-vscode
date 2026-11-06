@@ -117,15 +117,75 @@ def _patch_added_text() -> str:
     return "".join(chunks)
 
 
-# Entry points with no in-tree caller by design, with the reason they are kept.
+# Entry points with no in-tree caller by design.
+#
+# Each entry declares a `consumer`: a repo-relative file that must exist and
+# must mention the symbol, or None for "nothing consumes this yet", with the
+# reason why that is the intended state.
+#
+# It used to be a bare string of prose. `seclabOnDecision` carried "consumed by
+# the Tab Manager, outside the patched tree", and no Tab Manager file referenced
+# it -- the whole decision stream had no consumer, so no filter denial was
+# observable anywhere, and this exemption is what stopped the gate asking. An
+# exemption is a claim that something is fine; an unverified claim in an
+# exemption is strictly worse than no check, because it reads as having been
+# checked.
 CALLER_EXEMPT = {
-    # Consumed by the Tab Manager and the observability adapter, which are not
-    # part of the patched upstream tree.
-    "seclabOnDecision": "consumed by the Tab Manager, outside the patched tree",
-    "seclabTaintEscapes": "read by the probe suite, not by shipped code",
-    "seclabRegisterRewrite": "called by a rewrite implementation; none ships yet, "
-                             "and the absence is what makes rewrites deny",
+    "seclabOnDecision": {
+        "consumer": None,
+        "reason": "NOTHING consumes this yet. The previous entry claimed the "
+                  "Tab Manager did; no file referenced the symbol. Until the "
+                  "denial log registers a listener in the patched tree, filter "
+                  "denials are recorded in memory and observed by nobody.",
+    },
+    "seclabTaintEscapes": {
+        "consumer": None,
+        "reason": "NOTHING reads this yet. The previous entry claimed the probe "
+                  "suite did; no test references the symbol. So a laundering "
+                  "attempt caught by the backstop is recorded in an array and "
+                  "seen by nobody -- the same gap as seclabOnDecision, found by "
+                  "this gate on its first run. The denial log is the intended "
+                  "consumer for both.",
+    },
+    "seclabRegisterRewrite": {
+        "consumer": None,
+        "reason": "called by a rewrite implementation; none ships yet, and the "
+                  "absence is what makes rewrites deny",
+    },
 }
+
+
+def _check_exemptions() -> list:
+    """An exemption naming a consumer must name one that exists and refers to it.
+
+    Verifying the claim is the whole point: the gate it suppresses is the one
+    that catches code which ships, type-checks and never runs.
+    """
+    errors = []
+    for symbol, entry in CALLER_EXEMPT.items():
+        if not isinstance(entry, dict) or "consumer" not in entry \
+                or not entry.get("reason"):
+            errors.append(
+                "CALLER_EXEMPT[%s] must be a dict with 'consumer' (a path or "
+                "None) and 'reason'." % symbol)
+            continue
+        consumer = entry["consumer"]
+        if consumer is None:
+            continue
+        path = os.path.join(REPO, consumer)
+        if not os.path.exists(path):
+            errors.append(
+                "CALLER_EXEMPT[%s] names consumer %s, which does not exist. "
+                "Point it at a real file, or set consumer=None and say so."
+                % (symbol, consumer))
+            continue
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            if symbol not in fh.read():
+                errors.append(
+                    "CALLER_EXEMPT[%s] names consumer %s, which never mentions "
+                    "it. The exemption asserts something that is not true."
+                    % (symbol, consumer))
+    return errors
 
 
 _IMPORT_BLOCK = re.compile(r"^\s*import\s[\s\S]*?from\s*['\"][^'\"]+['\"]\s*;?\s*$", re.M)
@@ -157,6 +217,8 @@ def check_callers() -> list:
     than assumed.
     """
     errors = []
+    errors.extend(_check_exemptions())
+
     added = _patch_added_text()
     sources = sorted(set(MAPPING.values()))
     texts = {}

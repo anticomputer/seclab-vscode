@@ -3044,14 +3044,14 @@
         "external-and-uri": 23,
         "host-filesystem": 57,
         "host-process": 288,
-        "internal-underscore": 108,
+        "internal-underscore": 111,
         "remote-and-tunnel": 26,
         "secrets-and-auth": 11,
         "settings-and-policy": 44,
-        "unclassified": 2089,
+        "unclassified": 2097,
         "window-and-workspace": 19
       },
-      "command_count": 3199,
+      "command_count": 3210,
       "commands": [
         {
           "category": "unclassified",
@@ -3887,6 +3887,39 @@
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/issue/browser/issue.contribution.ts",
           "sources": [
             "CommandsRegistry.registerCommand"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "extensions/json-language-features/client/src/jsonClient.ts"
+          ],
+          "id": "_json.configureTrustedDomains",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/json-language-features/client/src/jsonClient.ts",
+          "sources": [
+            "constant:CommandIds.configureTrustedDomainsCommandId"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "extensions/json-language-features/client/src/jsonClient.ts"
+          ],
+          "id": "_json.retryResolveSchema",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/json-language-features/client/src/jsonClient.ts",
+          "sources": [
+            "constant:CommandIds.retryResolveSchemaCommandId"
+          ]
+        },
+        {
+          "category": "internal-underscore",
+          "files": [
+            "extensions/json-language-features/client/src/languageStatus.ts"
+          ],
+          "id": "_json.showAssociatedSchemaList",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/json-language-features/client/src/languageStatus.ts",
+          "sources": [
+            "constant:CommandIds.showAssociatedSchemaList"
           ]
         },
         {
@@ -6566,6 +6599,39 @@
           ]
         },
         {
+          "category": "unclassified",
+          "files": [
+            "src/vs/editor/browser/coreCommands.ts"
+          ],
+          "id": "compositionEnd",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/browser/coreCommands.ts",
+          "sources": [
+            "constant:Handler.CompositionEnd"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/editor/browser/coreCommands.ts"
+          ],
+          "id": "compositionStart",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/browser/coreCommands.ts",
+          "sources": [
+            "constant:Handler.CompositionStart"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/editor/browser/coreCommands.ts"
+          ],
+          "id": "compositionType",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/browser/coreCommands.ts",
+          "sources": [
+            "constant:Handler.CompositionType"
+          ]
+        },
+        {
           "category": "settings-and-policy",
           "files": [
             "src/vs/workbench/api/common/configurationExtensionPoint.ts"
@@ -6805,6 +6871,17 @@
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/customEditor/common/extensionPoint.ts",
           "sources": [
             "register*Action"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/editor/browser/coreCommands.ts"
+          ],
+          "id": "cut",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/browser/coreCommands.ts",
+          "sources": [
+            "constant:Handler.Cut"
           ]
         },
         {
@@ -15170,23 +15247,38 @@
         {
           "category": "unclassified",
           "files": [
+            "extensions/json-language-features/client/src/jsonClient.ts",
             "extensions/json-language-features/package.json"
           ],
           "id": "json.clearCache",
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/json-language-features/package.json",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/json-language-features/client/src/jsonClient.ts",
           "sources": [
+            "constant:CommandIds.clearCacheCommandId",
             "contributes.commands"
           ]
         },
         {
           "category": "unclassified",
           "files": [
+            "extensions/json-language-features/client/src/jsonClient.ts",
             "extensions/json-language-features/package.json"
           ],
           "id": "json.sort",
-          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/json-language-features/package.json",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/json-language-features/client/src/jsonClient.ts",
           "sources": [
+            "constant:CommandIds.sortCommandId",
             "contributes.commands"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "extensions/json-language-features/client/src/jsonClient.ts"
+          ],
+          "id": "json.validate",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/json-language-features/client/src/jsonClient.ts",
+          "sources": [
+            "constant:CommandIds.validateCommandId"
           ]
         },
         {
@@ -19429,6 +19521,17 @@
         {
           "category": "unclassified",
           "files": [
+            "src/vs/editor/browser/coreCommands.ts"
+          ],
+          "id": "paste",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/browser/coreCommands.ts",
+          "sources": [
+            "constant:Handler.Paste"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
             "src/vs/workbench/contrib/performance/browser/performance.contribution.ts"
           ],
           "id": "perf.event.profiling",
@@ -20487,6 +20590,17 @@
           "sources": [
             "Action2",
             "EditorCommand"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/editor/browser/coreCommands.ts"
+          ],
+          "id": "replacePreviousChar",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/browser/coreCommands.ts",
+          "sources": [
+            "constant:Handler.ReplacePreviousChar"
           ]
         },
         {
@@ -24750,6 +24864,17 @@
           "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/tunnel-forwarding/package.json",
           "sources": [
             "contributes.commands"
+          ]
+        },
+        {
+          "category": "unclassified",
+          "files": [
+            "src/vs/editor/browser/coreCommands.ts"
+          ],
+          "id": "type",
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/editor/browser/coreCommands.ts",
+          "sources": [
+            "constant:Handler.Type"
           ]
         },
         {
@@ -39428,7 +39553,7 @@
           ]
         }
       ],
-      "resolved_from_constants": 1264,
+      "resolved_from_constants": 1277,
       "unresolved_count": 172,
       "unresolved_id_expressions": [
         "ACTION_ID_NEW_CHAT",

@@ -39,7 +39,7 @@ So the surface is four things, not one:
 | | Surface | Size at this pin |
 |---|---|---|
 | (a) | `MainThread*` RPC the extension host calls | 89 services, 546 methods |
-| (b) | The command registry reachable via `$executeCommand` | 3199 ids |
+| (b) | The command registry reachable via `$executeCommand` | 3210 ids |
 | (c) | Channels the client serves to the server, and server-initiated callbacks | 2 channels, 20 callback sites |
 | (d) | Tab-supplied data the trusted side interprets with authority | 15 sink classes over 475 sites |
 <!-- seclab:end surface-counts -->
@@ -417,7 +417,7 @@ Two properties of the digest matter:
   build over a stale surface. **Open work**, noted in §7.
 
 <!-- seclab:begin baseline -->
-Current baseline at `a717861c0758`: **4212 surfaces, 4178 denied, 34 not denied** (14 allow, 9 allow_with_constraint, 4 prompt, 7 rewrite).
+Current baseline at `a717861c0758`: **4223 surfaces, 4189 denied, 34 not denied** (14 allow, 9 allow_with_constraint, 4 prompt, 7 rewrite).
 <!-- seclab:end baseline -->
 
 ### 4.1 What is reachable right now
