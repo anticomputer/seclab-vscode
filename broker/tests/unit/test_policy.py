@@ -302,3 +302,29 @@ def test_r11b_backstop_data_is_checked_when_a_policy_loads(monkeypatch):
         gh["exceptions"][1].update(bad)
         with pytest.raises(PolicyError):
             policy._check_backstop_file("github.json", gh)
+
+
+def test_deny_rules_are_every_port_and_scheme_and_validated():
+    """Revision 5: a block can't be sidestepped by a non-default port or scheme, and it wins
+    over allow rules and the baseline (the engine checks deny_match first)."""
+    p = Policy.from_json({"version": 1, "allow": [{"host": "evil.example.test"}],
+                          "deny": [{"id": "b", "host": "*.evil.example.test"}, {"id": "c", "host": "evil.example.test",
+                                                                               "ports": [443], "schemes": ["https"]}]})
+    for r in (req(host="evil.example.test"), req(host="a.evil.example.test", port=8443),
+              req(host="x.y.evil.example.test", scheme="http", port=8080)):
+        assert p.deny_match(r) is not None, r
+    assert p.deny_match(req(host="evil.example.test", port=8443)) is None  # narrowed rule
+    assert p.allow_match(req(host="evil.example.test")) is not None and p.deny_match(req(host="evil.example.test")).id == "c"
+    assert p.to_json()["deny"][0] == {"id": "b", "host": "*.evil.example.test", "schemes": ["http", "https"]}
+    for bad in ([{"host": "x.example.test"}], [{"id": "d", "host": "x.example.test", "path": "/x"}],
+                [{"id": "d", "host": "x.example.test"}, {"id": "d", "host": "y.example.test"}],
+                [{"id": "d", "host": "X.Example.test"}]):
+        with pytest.raises(PolicyError):
+            Policy.from_json({"version": 1, "deny": bad})
+    assert "deny" not in Policy.from_json({"version": 1}).to_json()
+
+
+def test_request_summary_carries_client_port():
+    v = RequestView("https", "api.example.com", 443, "GET", "/", "", client_port=50123)
+    assert v.summary()["clientPort"] == 50123 and "clientPort" not in req().summary()
+    assert v == req(host="api.example.com")  # not part of request identity

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/anticomputer/seclab-vscode/broker/schema/policy.v1.schema.json",
   "title": "seclab-vscode broker policy, version 1",
-  "x-revision": 4,
+  "x-revision": 5,
   "description": "Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, schemes, methods and paths, never engine internals. Default is deny.",
   "type": "object",
   "additionalProperties": false,
@@ -112,6 +112,14 @@
         "$ref": "#/definitions/rule"
       },
       "description": "Egress allow rules. Anything not matched is held for a prompt, or denied."
+    },
+    "deny": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "$ref": "#/definitions/denyRule"
+      },
+      "description": "Blocked destinations (revision 5), checked before everything else. See `denyRule`."
     },
     "credentials": {
       "type": "array",
@@ -456,6 +464,35 @@
         "path": {
           "$ref": "#/definitions/path",
           "default": "/**"
+        }
+      }
+    },
+    "denyRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "host"
+      ],
+      "description": "A blocked destination (revision 5). It takes precedence over every allow rule, the baseline, `allow-tab` grants, prompts and credential bindings: a matching request is denied (`request.denied`, reason `denied by rule <id>`) and never prompted. Unlike an allow rule, omitted `ports` means every port and omitted `schemes` means http and https. It matches the request's host name; a destination reached by IP literal needs its own rule.",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/id",
+          "description": "Required: `policy.update` removes deny rules by id."
+        },
+        "host": {
+          "$ref": "#/definitions/host"
+        },
+        "schemes": {
+          "$ref": "#/definitions/schemes",
+          "default": [
+            "http",
+            "https"
+          ]
+        },
+        "ports": {
+          "$ref": "#/definitions/ports",
+          "description": "Defaults to every port."
         }
       }
     },

@@ -9,7 +9,7 @@
 // sentinel-only model credentials, and trusted derivation, which tabd does not use yet.
 
 export const BROKER_PROTOCOL = 'seclab-broker/1';
-export const BROKER_POLICY_SCHEMA = { version: 1, revision: 4 } as const;
+export const BROKER_POLICY_SCHEMA = { version: 1, revision: 5 } as const;
 
 export class BrokerContractError extends Error { }
 

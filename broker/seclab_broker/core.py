@@ -24,7 +24,7 @@ from . import POLICY_SCHEMA_REVISION, POLICY_SCHEMA_VERSION, PROTOCOL, VERSION, 
 from .credentials import Credential, CredentialStore
 from .models import Budget
 from .untrusted import display_path, sanitize, untrusted_paths
-from .policy import (LITERAL_PATH_RE, Binding, Inject, Policy, PolicyError, RequestView, Rule, normalize_ip,
+from .policy import (LITERAL_PATH_RE, Binding, DenyRule, Inject, Policy, PolicyError, RequestView, Rule, normalize_ip,
                      parse_bindings, parse_derive, pattern_overlaps_risky, risk_flags, validate_fragment)
 
 log = logging.getLogger("seclab.broker")
@@ -74,6 +74,7 @@ class Approval:
                "decisions": list(self.decisions), "risk": self.risk,
                "untrusted": ["request.host", "request.method", "request.path"]
                + (["request.queryKeys"] if "queryKeys" in self.request else [])
+               + (["request.clientPort"] if "clientPort" in self.request else [])
                + (["risk.origin.label"] if self.risk.get("origin", {}).get("label") else [])}
         if self.kind == "egress":
             out["suggestedRule"] = self.suggested
@@ -403,9 +404,17 @@ class Broker:
         self.revision += 1
         self._cooldown.clear()
         self.audit("policy.loaded", revision=self.revision, rules=len(policy.rules),
-                   credentials=[c.id for c in policy.credentials])
+                   credentials=[c.id for c in policy.credentials], denyRules=len(policy.deny))
+        self._resolve_denied_prompts()
         return {"revision": self.revision,
                 "sentinels": {c.id: c.sentinel for c in self.creds.all() if c.origin == "policy"}}
+
+    def _resolve_denied_prompts(self) -> None:
+        """Prompts waiting on a now-blocked destination resolve as deny, never as a later
+        allow (revision 5)."""
+        for aid, approval in list(self.approvals.items()):
+            if approval.view is not None and self.policy.deny_match(approval.view) is not None:
+                self._resolve(aid, "deny", by="deny-rule")
 
     def rpc_policy_get(self, params: dict) -> dict:
         out = {"revision": self.revision, "policy": self.policy.to_json()}
@@ -417,8 +426,10 @@ class Broker:
     def rpc_policy_update(self, params: dict) -> dict:
         add = params.get("addAllow", [])
         remove = params.get("removeAllow", [])
-        if not isinstance(add, list) or not isinstance(remove, list):
-            raise invalid("addAllow and removeAllow must be arrays")
+        add_deny = params.get("addDeny", [])
+        remove_deny = params.get("removeDeny", [])
+        if not all(isinstance(x, list) for x in (add, remove, add_deny, remove_deny)):
+            raise invalid("addAllow, removeAllow, addDeny and removeDeny must be arrays")
         new_rules = [Rule.from_json(r) for r in add]
         existing_ids = {r.id for r in self.policy.rules if r.id}
         for rid in remove:
@@ -427,13 +438,26 @@ class Broker:
         for r in new_rules:
             if r.id and (r.id in existing_ids and r.id not in remove):
                 raise invalid(f"duplicate allow rule id {r.id!r}")
+        try:
+            new_deny = [DenyRule.from_json(d) for d in add_deny]
+        except PolicyError as e:
+            raise invalid(str(e)) from None
+        deny_ids = {d.id for d in self.policy.deny}
+        for did in remove_deny:
+            if did not in deny_ids:
+                raise invalid(f"no deny rule with id {did!r}")
+        added_ids = [d.id for d in new_deny]
+        if len(set(added_ids)) != len(added_ids) or any(d in deny_ids and d not in remove_deny for d in added_ids):
+            raise invalid("duplicate deny rule id")
         self.policy.rules = [r for r in self.policy.rules if r.id not in remove] + new_rules
+        self.policy.deny = [d for d in self.policy.deny if d.id not in remove_deny] + new_deny
         self.revision += 1
-        self.audit("policy.updated", revision=self.revision, added=[r.to_json() for r in new_rules],
-                   removed=remove)
-        self.notify("policy.changed", {"revision": self.revision,
-                                       "added": [r.to_json() for r in new_rules], "removed": remove,
-                                       "by": "controller"})
+        change = {"added": [r.to_json() for r in new_rules], "removed": remove}
+        if add_deny or remove_deny:
+            change.update(addedDeny=[d.to_json() for d in new_deny], removedDeny=remove_deny)
+        self.audit("policy.updated", revision=self.revision, **change)
+        self.notify("policy.changed", {"revision": self.revision, **change, "by": "controller"})
+        self._resolve_denied_prompts()
         return {"revision": self.revision}
 
     def rpc_credential_provide(self, params: dict) -> dict:
@@ -623,6 +647,7 @@ CAPABILITIES = {
     "modelBodyPolicy": True,
     "modelBudget": True,
     "trustedDerivation": True,
+    "denyRules": True,
 }
 
 
