@@ -51,9 +51,9 @@ cannot undo it. The reasoning and the measurement that got there are in the two 
 sections below and in "What round 6 found".
 
 **The two browser keys are one control, and neither works without the other.**
-- `enableRemoteProxy: true` keeps every browser view's traffic on the **tab's** network,
-  behind that tab's broker, on all three open paths: embedded pages, user-opened views, and
-  the browser tools' model-chosen URL.
+- `enableRemoteProxy: true` keeps every browser view's traffic on the **tab's** network, on
+  all three open paths: embedded pages, user-opened views, and the browser tools'
+  model-chosen URL.
 - `dataStorage: ephemeral` is what stops a tab taking the network away again.
   `toBrowserViewSessionOptions` returns `{ scope }` with **no network** for `global`
   ([browserView.ts#L517-L521](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/common/browserView.ts#L517-L521)),
@@ -64,9 +64,29 @@ sections below and in "What round 6 found".
   up when it closes; `workspace` would also keep the network but persists, so `ephemeral` is
   the one chosen.
 
-This matches the design's own row for "Host view of a tab service" (§3.5): the page runs in
-host Chromium with an ephemeral partition and all of its traffic goes to the tab's broker,
-with no fallback to the host network.
+**What "on the tab's network" means, and what it does not** (security review round 7). The
+destination socket is a raw TCP connect from inside the sbx
+(`extHostBrowserTunnelProxy` → `connectRemoteAgentTunnel`), and a raw socket does not honour
+the tab's `HTTP_PROXY`/`HTTPS_PROXY` variables, which is the only way tab egress reaches the
+broker. The tab's fence allows exactly one network resource, the broker port, and denies
+everything else. So:
+- a **tab-local** destination (the §3.5 case, a service on the tab's own `:3000`) is reached
+  directly;
+- an **external** destination is **denied by the fence**, not brokered.
+
+The containment is real but it comes from the fence; this traffic is not brokered and does
+not appear in the broker's audit. Saying otherwise would matter later: if a tab's fence is
+ever widened by a grant, browser-view traffic would leave the tab unmediated and unlogged,
+and anyone reading a claim of "behind the broker" would not look for it.
+
+This implements the **traffic direction** of the design's "Host view of a tab service" row
+(§3.5), but **not its gate**. That row says the setting is "pinned for `seclab+` so only the
+grant opens it"; pinning it to `true` unconditionally means every browser view in a tab
+window is tunnel-capable with no grant anywhere on the path, including one opened by
+`open_page` on a model-chosen URL with `allowAutoConfirm: true`. The grant remains
+unimplemented and is a later increment. 0015's denial of agent-host-chosen canvas URLs stays
+load-bearing: it is what prevents unattended host-Chromium page loads chosen by the agent
+host, and this pin does not substitute for it.
 
 ### What the proof must show, on U and on F
 1. the browser tool's **model-chosen URL** goes through the tab's broker, not the host
@@ -95,7 +115,7 @@ this probe must be run with the gate's canvas rule in mind: on U it is the brows
 produces the hit, and on G there are two independent reasons for silence. The probe has to
 distinguish them, or it is another absence-proves-nothing result.
 
-## Consequences
+### Superseded consequences (they argue the `false` case)
 - The one genuine trade-off, recorded rather than hidden: in a `seclab+` window a **user**
   who opens a browser view gets the host network, because `false` disables the proxy for
   that path too. The design's end state (design §3.5, "Host view of a tab service") is the
@@ -144,3 +164,25 @@ in the order they should be considered:
 
 This needs the user's or the coordinator's decision, because it changes an increment the plan
 already fixed in writing. It is recorded here rather than resolved quietly.
+
+
+## Consequences of the settled decision (`true` + `ephemeral`)
+- **No persistent browser storage in a tab window.** `ephemeral` gives each view a session
+  cleaned up when it closes, so pages in a tab window always start logged out, lose state on
+  close, and the Clear Storage actions have nothing to clear. `workspace` would also keep the
+  network and would preserve logins, but it persists tab-influenced data on host disk;
+  `ephemeral` is the security choice and this is its cost, recorded rather than discovered.
+- **External browsing in a tab window fails** rather than being brokered, because the fence
+  denies everything but the broker port (see above). A tab-local service works, which is the
+  case §3.5 is about.
+- **The grant is still missing.** Every browser view in a tab window is tunnel-capable; the
+  design's gate is not implemented by this increment.
+- **A restored browser editor could have bypassed the pin, and no longer can** (round 7). A
+  saved session carries its scope, so a view stored while a tab could still choose `global`
+  came back with `global` and no network, i.e. on the host network and the host's shared
+  cookie jar. 0017 drops a saved session request in a `seclab+` window and rebuilds it under
+  the fixed setting.
+- **The upstream invariant the pin rests on is now held in CI.** That `global` drops the
+  network and `ephemeral` keeps it is upstream's behaviour, not ours; it is asserted over the
+  patched tree by `patches/sole-consumer.json`, which `patch-build` already runs, because the
+  unit-test container has no upstream checkout.

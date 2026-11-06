@@ -1,3 +1,30 @@
+diff --git a/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts b/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
+index cd1678b2..c9e37645 100644
+--- a/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
++++ b/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
+@@ -4,6 +4,7 @@
+  *--------------------------------------------------------------------------------------------*/
+ 
+ import { BrowserViewChangeEvent, BrowserViewEventData, BrowserViewCommandId, BrowserViewPresentation, BrowserViewSessionSelector, BrowserViewStorageScope, getBrowserViewSessionAffinity, getBrowserViewSessionNetwork, IBrowserViewEditorOpenOptions, IBrowserViewInfo, IBrowserViewNetwork, IBrowserViewOwner, IBrowserViewService, IBrowserViewTheme, ipcBrowserViewChannelName, reviveBrowserViewInfo, IBrowserViewSessionOptions, toBrowserViewSessionOptions } from '../../../../platform/browserView/common/browserView.js';
++import { isSeclabTabAuthority } from '../../../services/configuration/common/seclabFixedSettings.js';
+ import { matchesBrowserViewSandboxSession } from '../../../../platform/browserView/common/browserViewGroup.js';
+ import { BrowserRemoteProxyEnabledSettingId, BrowserViewEventEmitters, createBrowserViewEventEmitters, BrowserViewSharingState, IBrowserViewWorkbenchService, IBrowserViewModel, BrowserViewModel, IBrowserViewContextualFilter, IBrowserViewFilterContext, IBrowserViewOpenHandler, IBrowserViewWorkbenchCreateOptions, IBrowserViewNetworkProxyProvider, IBrowserViewNetworkResolver, IBrowserViewNetworkStatus, IBrowserViewSessionRequest } from '../common/browserView.js';
+ import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
+@@ -584,6 +585,14 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
+ 
+ 	/** Fill missing session options from the opening context and configured storage. */
+ 	private _resolveSessionRequest(owner: IBrowserViewOwner, request?: IBrowserViewSessionRequest): IBrowserViewSessionOptions {
++		// seclab: a persisted session must not outlive the fixed value (patch 0017, security
++		// review round 7). A browser editor restored from a previous window carries its saved
++		// scope, so a view stored while a tab could still choose `global` would come back with
++		// `global` and no network, i.e. on the HOST network and the host's shared cookie jar.
++		// Dropping the saved request rebuilds it from the owner under the fixed setting.
++		if (isSeclabTabAuthority(this.environmentService.remoteAuthority)) {
++			request = undefined;
++		}
+ 		if (request?.scope !== undefined) {
+ 			return request;
+ 		}
 diff --git a/src/vs/workbench/services/configuration/browser/configurationService.ts b/src/vs/workbench/services/configuration/browser/configurationService.ts
 index 55e2c0ce..8a022527 100644
 --- a/src/vs/workbench/services/configuration/browser/configurationService.ts
@@ -83,7 +110,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/src/vs/workbench/services/configuration/common/seclabFixedSettings.ts
-@@ -0,0 +1,124 @@
+@@ -0,0 +1,130 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -120,9 +147,15 @@ index 0000000..0000000
 +	['chat.automations.enabled', false],
 +	['chat.automations.cloud.enabled', false],
 +	// `true`, not `false`. Both values are reachable by a tab, and `true` is the contained
-+	// one: it keeps every browser view's traffic on the tab's network, behind that tab's
-+	// broker. `false` would drop the browser tools' model-chosen URL onto the HOST network
-+	// (security review round 6), which is strictly worse than leaving the setting alone.
++	// one: it keeps every browser view's traffic on the TAB's network. `false` would drop
++	// the browser tools' model-chosen URL onto the HOST network (security review round 6),
++	// which is strictly worse than leaving the setting alone.
++	//
++	// What "on the tab's network" means, precisely (round 7): the destination socket is a
++	// raw TCP connect from inside the sbx, which does not honour the tab's proxy env vars,
++	// so it is NOT brokered. The tab's fence allows only the broker port, so an external
++	// destination is denied there and a tab-local one is reached directly. That is the
++	// containment; the broker is not what provides it here.
 +	['workbench.browser.enableRemoteProxy', true],
 +	// A browser view's network is kept only for the non-global storage scopes:
 +	// `toBrowserViewSessionOptions` returns `{ scope }` with NO network for `global`, so a
