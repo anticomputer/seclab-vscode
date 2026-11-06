@@ -734,17 +734,37 @@ class BackstopException:
 
 
 @dataclass(frozen=True)
+class RedirectFollow:
+    """Provider data `redirects` (revision 8): on a request the provider's credential was
+    injected into, the broker itself follows a redirect with one of `statuses` to an https
+    host matching one of `hosts` (anchored patterns), one hop, GET, with no credential and no
+    client header; the tab only ever sees the followed response."""
+    provider: str
+    statuses: frozenset[int]
+    hosts: tuple[re.Pattern, ...]
+
+    def matches_host(self, host: str) -> bool:
+        return any(p.fullmatch(host) for p in self.hosts)
+
+
+@dataclass(frozen=True)
 class Provider:
     name: str
     hosts: tuple[HostPattern, ...]
     path_prefixes: tuple[str, ...]
     deny: tuple[BackstopEntry, ...]
     exceptions: tuple[BackstopException, ...] = ()
+    redirects: RedirectFollow | None = None
 
 
-_BACKSTOP_KEYS = {"provider", "description", "source", "hosts", "pathPrefixes", "exceptions", "deny"}
+_BACKSTOP_KEYS = {"provider", "description", "source", "hosts", "pathPrefixes", "exceptions", "deny", "redirects"}
 _EXCEPTION_KEYS = {"method", "path", "reason", "responseFields", "benignKeys", "strictFields", "dropFields"}
 _DENY_KEYS = {"methods", "path", "reason"}
+_REDIRECT_KEYS = {"statuses", "hosts", "reason"}
+FOLLOWABLE_STATUSES = frozenset({302, 303, 307})
+# A redirect host pattern: anchored, made only of literal labels and bounded character
+# classes, so it can't widen to an arbitrary host (`.*`, `.+`, alternation) by accident.
+_REDIRECT_HOST_PATTERN = re.compile(r"\^(?:[a-z0-9-]|\[[a-z0-9-]+\](?:\{\d+(?:,\d+)?\}|\+)?|\\\.)+\$")
 
 
 def _check_backstop_file(name: str, d: dict) -> None:
@@ -772,6 +792,14 @@ def _check_backstop_file(name: str, d: dict) -> None:
         if any(_trim_segment(s) != s for s in e["path"].split("/")):
             # Request paths are trimmed before matching, so this entry could never match (13b-3).
             raise PolicyError(f"providers/{name}: deny path {e['path']!r} has a segment ending in a dot or space")
+    if "redirects" in d:
+        r = d["redirects"]
+        bad("redirects", r, _REDIRECT_KEYS, _REDIRECT_KEYS)
+        if not (isinstance(r["statuses"], list) and r["statuses"] and set(r["statuses"]) <= FOLLOWABLE_STATUSES):
+            raise PolicyError(f"providers/{name}: redirects.statuses must be some of {sorted(FOLLOWABLE_STATUSES)}")
+        if not (isinstance(r["hosts"], list) and r["hosts"]
+                and all(isinstance(h, str) and _REDIRECT_HOST_PATTERN.fullmatch(h) and r"\." in h for h in r["hosts"])):
+            raise PolicyError(f"providers/{name}: redirects.hosts must be anchored host patterns")
 
 
 @lru_cache(maxsize=1)
@@ -791,8 +819,19 @@ def providers() -> dict[str, Provider]:
                 frozenset(e["responseFields"]) if "responseFields" in e else None,
                 frozenset(e.get("benignKeys", [])), bool(e.get("strictFields", False)),
                 frozenset(e.get("dropFields", []))) for e in d.get("exceptions", [])),
+            redirects=RedirectFollow(d["provider"], frozenset(d["redirects"]["statuses"]),
+                                     tuple(re.compile(h) for h in d["redirects"]["hosts"]))
+            if "redirects" in d else None,
         )
     return out
+
+
+def redirect_follow(req: RequestView, cred_providers: Iterable[str]) -> list[RedirectFollow]:
+    """The redirect-follow declarations that apply to a credentialed request: those of the
+    providers applied by the request's host or named by an injected credential."""
+    names = set(cred_providers)
+    return [p.redirects for p in providers().values() if p.redirects is not None
+            and (p.name in names or any(h.matches(req.host) for h in p.hosts))]
 
 
 def backstop_exception(req: RequestView, extra_provider: str | None = None) -> BackstopException | None:

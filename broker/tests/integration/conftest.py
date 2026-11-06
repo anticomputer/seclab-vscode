@@ -26,6 +26,10 @@ UPSTREAM_IMAGE = os.environ.get("UPSTREAM_IMAGE", "seclab-broker-it-upstream:tes
 WORKSPACE_IMAGE = os.environ.get("WORKSPACE_IMAGE", "seclab-broker-it-workspace:test")
 UPSTREAM_HOSTS = ["api.example.test", "gist.example.test", "git.example.test", "ws.example.test",
                   "blocked.example.test", "model.example.test"]
+# Azure Storage stand-ins for broker-followed CFS downloads (revision 8): test aliases on the
+# --internal networks, so the shipped azure-devops redirect pattern is what's exercised.
+STORAGE_HOST = "vsblobprodcus901.blob.core.windows.net"
+STORAGE_PRIVATE_HOST = "vsblobprodcus902.blob.core.windows.net"
 HARDENING = ["--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
              "--pids-limit", "256"]
 
@@ -93,11 +97,12 @@ class Pod:
             "git": "seclab-canary-git-" + secrets.token_hex(16),
             "imported": "seclab-canary-imp-" + secrets.token_hex(16),
         }
-        aliases = sum((["--network-alias", h] for h in UPSTREAM_HOSTS), [])
+        aliases = sum((["--network-alias", h] for h in [*UPSTREAM_HOSTS, STORAGE_HOST]), [])
         docker("run", "-d", "--name", self.name("upstream"), "--network", self.name("inet"), *aliases,
                "-e", f"UPSTREAM_GIT_TOKEN={self.canaries['git']}", UPSTREAM_IMAGE)
         docker("run", "-d", "--name", self.name("internal"), "--network", self.name("priv"),
-               "--network-alias", "internal.example.test", "-e", "UPSTREAM_GIT_TOKEN=unused", UPSTREAM_IMAGE)
+               "--network-alias", "internal.example.test", "--network-alias", STORAGE_PRIVATE_HOST,
+               "-e", "UPSTREAM_GIT_TOKEN=unused", UPSTREAM_IMAGE)
         docker("run", "-d", "--name", self.name("dns"), "--network", self.name("inet"),
                UPSTREAM_IMAGE, "dns")
         docker("network", "connect", self.name("ctl"), self.name("dns"))

@@ -3,6 +3,15 @@
   "protocol": "seclab-broker/1",
   "changelog": [
     {
+      "version": "0.8.0",
+      "policySchemaRevision": 8,
+      "date": "2026-11-06",
+      "changes": [
+        "Broker-followed redirects (capability `credentialRedirectFollow`; provider data `redirects {statuses, hosts, reason}`). When a request a credential was injected into gets a `302`, `303` or `307`, and a provider applied by the request's host or named by the credential declares `redirects`, the broker follows it itself: only to an https host on port 443 matching one of the provider's anchored host patterns, one hop, GET, with no credential and no client header, to a netguard-vetted address it pins, with TLS verified. The target's body (read up to the credential's remaining byte budget) is charged to that budget and returned to the tab as a `200` on its original URL, with only `content-type`, `content-encoding` and `content-length`; it then gets every check a credentialed response gets. Any other redirect on such a request (undeclared host, other status, non-GET, deny rule, refused address, failed or non-200 fetch) is `502`. Either way the Location, and any signed URL in it, never reaches the tab. Audits `credential.redirect_followed` (host and path, never the query) and `credential.redirect_refused`; `redirectHost` and `redirectPath` are tagged untrusted. The `azure-devops` provider declares the CFS download target, `vsblobprodcus<NNN>.blob.core.windows.net` (ADR cfs-package-feeds-in-tabs).",
+        "Example policy `cfs-feeds.policy.json`: a third GET-only binding for PyPI files under the feed-GUID download path (measured)."
+      ]
+    },
+    {
       "version": "0.7.0",
       "policySchemaRevision": 7,
       "date": "2026-11-06",
@@ -1317,6 +1326,8 @@
     "model.budget_exceeded": "The tab's model budget (`models.budget`) is spent; the request was denied with `429`, never prompted.",
     "credential.used": "A credentialed request got a response (revision 6): `credentialId`, `status`, `respBytes` and the request summary. One per injected credential per response, so every use (for example a CFS feed read that ingests a package) is attributable to the tab.",
     "credential.budget_exceeded": "A credential's per-tab budget (`credentials[].budget`, revision 6) is spent: `credentialId` is the credential used, `budgetId` the one whose budget ran out (it or its parent). The request was denied with `429`, never prompted.",
+    "credential.redirect_followed": "The broker followed a redirect that answered a credentialed request (revision 8; provider data `redirects`, for example a CFS package download to Azure Storage): `credentialId`, `status` (the redirect's), `redirectHost`, `redirectPath` (never the query, which carries the target's signature), `respBytes` (charged to the credential's byte budget) and the request summary. The tab got the target's body as a `200` on its own URL.",
+    "credential.redirect_refused": "A redirect that answered a credentialed request, under a provider that declares `redirects`, was not followed (revision 8): `reason` is fixed text (an undeclared host, a status or method not followed, not https, a deny rule, an address netguard refuses, a failed or non-200 fetch), `status` the redirect's, and `redirectHost` when the Location named a canonical host. The tab got `502`; the Location never reached it.",
     "broker.started": "The proxy started.",
     "broker.shutdown": "`broker.shutdown` was called.",
     "control.connected": "A control client connected.",

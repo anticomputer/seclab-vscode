@@ -101,7 +101,7 @@ async def run(args: argparse.Namespace) -> int:
         save_stream_file=None,
         **({"ssl_verify_upstream_trusted_ca": trusted} if trusted else {}),
     )
-    master.addons.add(SeclabAddon(broker, local_ips))
+    master.addons.add(SeclabAddon(broker, local_ips, trusted))
 
     server = await serve(broker, Path(os.environ.get("SECLAB_CONTROL_SOCKET", str(DEFAULT_SOCKET))))
     broker.on_shutdown = master.shutdown

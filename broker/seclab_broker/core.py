@@ -164,6 +164,14 @@ class Broker:
                 return c.id, "byte budget exhausted"
         return None
 
+    def credential_bytes_left(self, cred: Credential) -> tuple[int, str] | None:
+        """The fewest bytes left on any byte budget in the credential's chain, and that
+        budget's credential id; None if none is capped (revision 8: bounds a broker-followed
+        redirect's read)."""
+        left = [(max(0, c.budget[1] - self.credential_usage.get(c.id, Budget()).bytes), c.id)
+                for c in self._budget_chain(cred) if c.budget is not None and c.budget[1] is not None]
+        return min(left) if left else None
+
     def charge_credential(self, cred: Credential, requests: int = 0, nbytes: int = 0) -> None:
         for c in self._budget_chain(cred):
             used = self.credential_usage.setdefault(c.id, Budget())
@@ -710,6 +718,7 @@ CAPABILITIES = {
     "trustedDerivation": True,
     "denyRules": True,
     "credentialBudget": True,
+    "credentialRedirectFollow": True,
 }
 
 
