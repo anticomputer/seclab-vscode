@@ -186,6 +186,9 @@ def compile_glob(pattern: str, ignore_case: bool = False) -> re.Pattern:
 
 # A request path a binding can name literally: the schema's path alphabet without '*'.
 LITERAL_PATH_RE = re.compile(r"/[A-Za-z0-9._~!$&'()+,=:@/-]{0,1023}")
+# Agent-host tokens sealed to an advertised key (upstream agentHostAuth): never forwarded
+# (engine) and never exported in a request summary.
+SEALED_PREFIX = "copilot-sealed.v1."
 
 
 # --------------------------------------------------------------------------
@@ -213,9 +216,15 @@ class RequestView:
         out = {"scheme": self.scheme, "host": self.host[:253], "port": self.port,
                "method": self.method, "path": display_path(self.path)}
         if self.query:
-            keys = sorted({urllib.parse.quote(k, safe="")[:64]
-                           for k, _ in urllib.parse.parse_qsl(self.query, keep_blank_values=True)})
-            out["queryKeys"] = keys[:32]
+            keys = set()
+            for k, _ in urllib.parse.parse_qsl(self.query, keep_blank_values=True):
+                if SEALED_PREFIX in k:
+                    k = "[sealed]"  # an agent-host sealed token is never exported (review 11b-7)
+                q = urllib.parse.quote(k, safe="[]")
+                if len(q) > 64:
+                    q = re.sub(r"%[0-9A-F]?$", "", q[:64])  # never split a %XX escape
+                keys.add(q)
+            out["queryKeys"] = sorted(keys)[:32]
         return out
 
 
@@ -527,6 +536,7 @@ class Policy:
     @classmethod
     def from_json(cls, obj: Any) -> "Policy":
         from .models import ModelPolicy
+        providers()  # shipped backstop data is checked before any policy is accepted (review 11b-5)
         try:
             _validator()(obj)
         except fastjsonschema.JsonSchemaException as e:
@@ -619,11 +629,12 @@ class BackstopException:
 
     `response_fields`: when set, the response's top-level fields allowed. With `strict_fields`
     any other top-level field blocks the response (a finding); without, others are dropped
-    (and audited) after the whole document has passed the check. `drop_paths`: dotted paths
-    to free-form maps that may carry a third party's credential (e.g. OTLP headers), always
-    dropped (and audited). `benign_keys`: exact key names the credential-name check accepts
-    (measured false positives such as `token_based_billing`); token-shaped values and URL
-    userinfo are refused everywhere regardless."""
+    (and audited) after the whole document has passed the check. Both apply on every status.
+    `drop_fields`: top-level fields always dropped (and audited) whatever their shape, for
+    objects that may carry a third party's credential (managed_settings `telemetry`, with
+    its OTLP headers; review 11b-2). `benign_keys`: exact JSON paths the credential-name
+    check accepts (measured false positives such as `$.token_based_billing`); token-shaped
+    keys and values and URL userinfo are refused everywhere regardless."""
     provider: str
     method: str
     path: str
@@ -631,7 +642,7 @@ class BackstopException:
     response_fields: frozenset[str] | None = None
     benign_keys: frozenset[str] = frozenset()
     strict_fields: bool = False
-    drop_paths: tuple[tuple[str, ...], ...] = ()
+    drop_fields: frozenset[str] = frozenset()
 
     def is_benign(self, json_path: str) -> bool:
         """`benign_keys` are exact JSON paths (`$.a`, `$.a.*.b`; `*` is one object key), so a
@@ -652,7 +663,7 @@ class Provider:
 
 
 _BACKSTOP_KEYS = {"provider", "description", "source", "hosts", "pathPrefixes", "exceptions", "deny"}
-_EXCEPTION_KEYS = {"method", "path", "reason", "responseFields", "benignKeys", "strictFields", "dropPaths"}
+_EXCEPTION_KEYS = {"method", "path", "reason", "responseFields", "benignKeys", "strictFields", "dropFields"}
 _DENY_KEYS = {"methods", "path", "reason"}
 
 
@@ -665,11 +676,17 @@ def _check_backstop_file(name: str, d: dict) -> None:
     bad("file", d, _BACKSTOP_KEYS, {"provider", "hosts", "deny"})
     for e in d.get("exceptions", []):
         bad("exception", e, _EXCEPTION_KEYS, {"method", "path", "reason"})
-        if e.get("dropPaths") and "responseFields" not in e or e.get("strictFields") and "responseFields" not in e:
-            raise PolicyError(f"providers/{name}: strictFields/dropPaths need responseFields")
-        for k in ("responseFields", "benignKeys", "dropPaths"):
+        if e.get("strictFields") and "responseFields" not in e:
+            raise PolicyError(f"providers/{name}: strictFields needs responseFields")
+        for k in ("responseFields", "benignKeys", "dropFields"):
             if k in e and not (isinstance(e[k], list) and all(isinstance(x, str) and x for x in e[k])):
                 raise PolicyError(f"providers/{name}: {k} must be a list of names")
+        for f in e.get("responseFields", []) + e.get("dropFields", []):
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", f):
+                raise PolicyError(f"providers/{name}: {f!r} is not a top-level field name")
+        for p in e.get("benignKeys", []):
+            if not re.fullmatch(r"\$(\.([A-Za-z0-9_-]+|\*))+", p):
+                raise PolicyError(f"providers/{name}: benign key {p!r} is not a JSON path")
     for e in d["deny"]:
         bad("deny entry", e, _DENY_KEYS, _DENY_KEYS)
 
@@ -690,7 +707,7 @@ def providers() -> dict[str, Provider]:
                 d["provider"], e["method"], e["path"], e["reason"],
                 frozenset(e["responseFields"]) if "responseFields" in e else None,
                 frozenset(e.get("benignKeys", [])), bool(e.get("strictFields", False)),
-                tuple(tuple(p.split(".")) for p in e.get("dropPaths", []))) for e in d.get("exceptions", [])),
+                frozenset(e.get("dropFields", []))) for e in d.get("exceptions", [])),
         )
     return out
 

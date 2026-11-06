@@ -27,7 +27,7 @@ from mitmproxy.proxy import server_hooks
 from .core import Broker
 from .credentials import Credential, header_has_sentinel, infer_inject
 from .netguard import deny_reason
-from .policy import (METHOD_OVERRIDE_HEADERS, Binding, PolicyError, RequestView, backstop_denies,
+from .policy import (METHOD_OVERRIDE_HEADERS, SEALED_PREFIX, Binding, PolicyError, RequestView, backstop_denies,
                      backstop_exception, canonical_path, normalize_host, normalize_ip,
                      query_has_method_override, validate_fragment)
 from .scanner import find_minted
@@ -44,14 +44,14 @@ SESSION_HEADERS = {"set-cookie", "set-cookie2", "authentication-info", "proxy-au
 # exceed the longest token rule (json-token-field: 4096 plus its key).
 WS_WINDOW = 8192
 REDACTED_MARK = "[seclab-redacted:"
-# Agent-host tokens sealed to an advertised key (upstream agentHostAuth); never forwarded.
-SEALED_PREFIX = "copilot-sealed.v1."
 # Keys that name a credential, in a backstop exception's response.
 CREDENTIAL_KEY = re.compile(r"token|secret|passw|credential|api[_-]?key|private[_-]?key|session|cookie|bearer|jwt",
                             re.I)
-# A URL carrying a credential in its userinfo (`scheme://user:secret@host`, or a token as the
-# user, as in `https://<token>@host`); a plain short user such as `ssh://git@host` is not one.
-URL_USERINFO = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://(?:[^/?#\s@:]*:[^/?#\s@]*|[^/?#\s@:]{16,})@")
+# A URL carrying a credential in its userinfo (`scheme://user:secret@host`, an encoded colon,
+# a token as the user as in `https://<token>@host`, or the scheme-relative `//user:pw@host`);
+# a plain short user such as `ssh://git@host` is not one.
+URL_USERINFO = re.compile(r"(?:[A-Za-z][A-Za-z0-9+.-]*:)?//(?:(?:[^/?#\s@:%]|%(?![3][aA])[0-9A-Fa-f]{2})*"
+                          r"(?::|%3[aA])[^/?#\s@]*|[^/?#\s@:]{16,})@")
 
 
 def fail_closed(fn):
@@ -663,7 +663,8 @@ class SeclabAddon:
         trailers = resp.trailers.fields if resp.trailers else ()
         for name, value in tuple(resp.headers.fields) + tuple(trailers):
             hname = name.decode("latin-1").lower()
-            if CREDENTIAL_KEY.search(hname) or find_minted(value.decode("latin-1")):
+            text = value.decode("latin-1")
+            if CREDENTIAL_KEY.search(hname) or find_minted(text) or URL_USERINFO.search(text):
                 return "credential-named header or token-shaped value", hname, None
         try:
             raw = resp.get_content(strict=True) or b""
@@ -692,22 +693,18 @@ class SeclabAddon:
                 stack += [(f"{path}[{i}]", v) for i, v in enumerate(node)]
             elif isinstance(node, str) and (find_minted(node) or URL_USERINFO.search(node)):
                 return "token-shaped value", path, None
-        if exc is None or (exc.response_fields is None and not exc.drop_paths):
+        if exc is None or (exc.response_fields is None and not exc.drop_fields):
             return None, None, None
-        dropped = []
-        if exc.response_fields is not None and 200 <= resp.status_code < 300:
+        # Every status (review 11b-1): the upstream chooses the status, so an error body is
+        # held to the same allowlist; error shapes that should pass are listed in it.
+        dropped = sorted(k for k in doc if k in exc.drop_fields)
+        doc = {k: v for k, v in doc.items() if k not in exc.drop_fields}
+        if exc.response_fields is not None:
             unlisted = sorted(k for k in doc if k not in exc.response_fields)
             if unlisted and exc.strict_fields:
                 return "field outside the allowlist", ",".join(unlisted)[:512], None
             dropped += unlisted
             doc = {k: v for k, v in doc.items() if k in exc.response_fields}
-        for parts in exc.drop_paths:
-            node = doc
-            for p in parts[:-1]:
-                node = node.get(p) if isinstance(node, dict) else None
-            if isinstance(node, dict) and parts[-1] in node:
-                del node[parts[-1]]
-                dropped.append(".".join(parts))
         if not dropped:
             return None, None, None
         return None, None, (doc, dropped)

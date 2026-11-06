@@ -1,6 +1,7 @@
 """Matcher invariants. Each test here guards a bypass class; none may regress."""
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -213,10 +214,10 @@ def test_org_policy_backstop_exceptions_are_exact(name):
         # Strict allowlists (secure-agentic review): any unlisted top-level key blocks.
         assert exc is not None and exc.strict_fields and exc.response_fields is not None and not exc.benign_keys
     if name == "managed_settings":
-        assert {"permissions", "telemetry", "allowedMcpServers"} <= exc.response_fields
-        assert exc.drop_paths == (("telemetry", "headers"),)
+        assert {"permissions", "allowedMcpServers", "deniedMcpServers"} <= exc.response_fields
+        assert exc.drop_fields == {"telemetry"} and "telemetry" not in exc.response_fields
     else:
-        assert exc.response_fields == frozenset() and exc.drop_paths == ()
+        assert exc.response_fields == frozenset() and exc.drop_fields == frozenset()
     for bad in (dict(method="POST"), dict(method="PUT"), dict(path=path.upper()), dict(path=path + "/x"),
                 dict(path=path + "s"), dict(query="org=x")):
         assert backstop_exception(req(**{"host": "api.github.com", "method": "GET", "path": path, **bad})) is None
@@ -268,12 +269,32 @@ def test_r11_request_summary_carries_query_key_names_only():
     s = req(host="api.github.com", path="/copilot_internal/content_exclusion", query="repository=o%2Fr&b=2&b=3&x").summary()
     assert s["queryKeys"] == ["b", "repository", "x"] and "o%2Fr" not in json.dumps(s)
     assert "queryKeys" not in req(host="api.github.com").summary()
+    # Review 11b-7: no split %XX escape; a sealed agent-host token never exported.
+    long = req(query="%C3%A9" * 40 + "=1").summary()["queryKeys"][0]
+    assert len(long) <= 64 and not re.search(r"%[0-9A-F]?$", long)
+    assert req(query="copilot-sealed.v1.BBBB=1").summary()["queryKeys"] == ["[sealed]"]
 
 
 def test_r11_url_userinfo_pattern():
     from seclab_broker.engine_mitmproxy import URL_USERINFO
     for bad in ("https://user:fake-pass@git.example.test/m.git", "https://abcdefghijklmnop1234@h.example.test/",
-                "ssh://git:x@h.example.test/r"):
+                "ssh://git:x@h.example.test/r", "https://user%3Afake@h.example.test/", "//user:fake@h.example.test/",
+                "HTTPS://u:p@h.example.test/"):
         assert URL_USERINFO.search(bad), bad
-    for ok in ("ssh://git@h.example.test/r.git", "https://h.example.test/a@b", "mailto:a@b.example.test", "git@h.example.test:o/r"):
+    for ok in ("ssh://git@h.example.test/r.git", "https://h.example.test/a@b", "mailto:a@b.example.test",
+               "git@h.example.test:o/r", "https://h.example.test/x%40y"):
         assert not URL_USERINFO.search(ok), ok
+
+
+def test_r11b_backstop_data_is_checked_when_a_policy_loads(monkeypatch):
+    import seclab_broker.policy as policy
+    called = []
+    monkeypatch.setattr(policy, "providers", lambda: called.append(1) or {})
+    Policy.from_json({"version": 1})
+    assert called
+    for bad in ({"dropFields": ["telemetry.headers"]}, {"dropFields": ["*"]}, {"benignKeys": ["token"]},
+                {"responseFields": ["a.b"]}):
+        gh = json.loads((policy.DATA_DIR / "providers" / "github.json").read_text())
+        gh["exceptions"][1].update(bad)
+        with pytest.raises(PolicyError):
+            policy._check_backstop_file("github.json", gh)
