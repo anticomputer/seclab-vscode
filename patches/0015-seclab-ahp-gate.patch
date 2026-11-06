@@ -480,7 +480,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/src/vs/platform/agentHost/common/seclabAhpPolicyData.ts
-@@ -0,0 +1,341 @@
+@@ -0,0 +1,347 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: the agent-host protocol gate's verdict tables (patch 0015).
 + *  Default deny: the filter refuses anything not listed as 'allow'. Each table `satisfies` a
@@ -726,8 +726,14 @@ index 0000000..0000000
 +	'chat/backgroundWorkRemoved': 'allow',
 +	'chat/movableChanged': 'allow',
 +	'chat/changesetsChanged': 'allow',
-+	'chat/canvasesChanged': 'allow',
-+	'canvas/stateChanged': 'allow',
++	// Denied inbound: `CanvasState.url` is an agent-host-chosen absolute HTTP(S) URL that the
++	// trusted window hands to `createExternalBrowserView`, and it has no discriminant and no
++	// distinctive key for the sanitiser to catch. Upstream loads it on the agent host's own
++	// network and `chat.canvases.enabled` defaults off, so this was rated LOW, but the gate
++	// does not rest on an upstream default plus an experiment flag (review round 3). Canvases
++	// in tab windows are increment 6's to design.
++	'chat/canvasesChanged': 'deny',
++	'canvas/stateChanged': 'deny',
 +	'chat/workingDirectorySet': 'allow',
 +	'chat/workingDirectoryRemoved': 'allow',
 +	'session/titleChanged': 'allow',
