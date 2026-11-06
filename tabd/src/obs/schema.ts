@@ -41,6 +41,7 @@ export const CLASSES = {
 	'egress.request': { ocsf: 4002, desc: 'Broker allowed, denied or blocked a request.' },
 	'egress.approval': { ocsf: 4002, desc: 'Broker prompt opened or resolved.' },
 	'credential.use': { ocsf: 3002, desc: 'Broker credential event (never a value).' },
+	'model.call': { ocsf: 6003, desc: 'Broker model-host call summary, body-policy denial or budget denial (sizes, status, provider; never bodies).' },
 	'broker.status': { ocsf: 6002, desc: 'Broker lifecycle, policy and control events.' },
 	'rpc.decision': { ocsf: 6003, desc: 'RPC capability filter verdict.' },
 	'policy.log': { ocsf: 4001, desc: 'sbx proxy allowed or blocked a destination (aggregated count delta).' },
@@ -115,7 +116,9 @@ export class EventError extends Error { }
  * Detail keys whose values come from a fixed vocabulary we produce (enum-like). Their values
  * count as trusted only when they also have vocabulary shape; anything else is tagged untrusted.
  */
-const VOCAB_DETAIL_KEYS = new Set(['action', 'outcome', 'status', 'mode', 'sensor', 'stream', 'change', 'kind', 'decision', 'verdict', 'surface', 'call', 'request', 'signal', 'result', 'proxyType', 'userDecision']);
+const VOCAB_DETAIL_KEYS = new Set(['action', 'outcome', 'status', 'mode', 'sensor', 'stream', 'change', 'kind', 'decision', 'verdict', 'surface', 'call', 'request', 'signal', 'result', 'proxyType', 'userDecision',
+	// Broker-produced identifiers and vocabulary (broker audit events).
+	'auditType', 'scheme', 'by', 'provider', 'approvalId', 'credentialId', 'parentId', 'hook', 'limit']);
 // Our own vocabulary (lowercase words, dotted actions), errno, signal and ptrace names: no ':'
 // or spaces, so role markers like "system:" never pass (review PI-L2).
 const VOCAB_RE = /^(?:[a-z0-9][a-z0-9._-]{0,31}|E[A-Z0-9]{1,15}|SIG[A-Z0-9]{1,10}|PTRACE_[A-Z_]{1,20}|[0-9]{1,5})$/;

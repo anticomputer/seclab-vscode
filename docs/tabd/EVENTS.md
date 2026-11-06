@@ -45,6 +45,7 @@ A `detection` takes the weakest integrity of its causes.
 | `egress.request` | 4002 | Broker allowed, denied or blocked a request. |
 | `egress.approval` | 4002 | Broker prompt opened or resolved. |
 | `credential.use` | 3002 | Broker credential event (never a value). |
+| `model.call` | 6003 | Broker model-host call summary, body-policy denial or budget denial (sizes, status, provider; never bodies). |
 | `broker.status` | 6002 | Broker lifecycle, policy and control events. |
 | `rpc.decision` | 6003 | RPC capability filter verdict. |
 | `policy.log` | 4001 | sbx proxy allowed or blocked a destination (aggregated count delta). |

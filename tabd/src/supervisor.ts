@@ -556,12 +556,15 @@ export class Supervisor {
 						throw new Error('ca.get: certificate does not match its sha256');
 					}
 					c.onClose(e => {
+						this.obs.brokerDetached(r.tabId, c);
 						if (this.brokers.get(r.tabId) === c) {
 							this.brokers.delete(r.tabId);
 							this.audit('broker.control', 'closed', { tabId: r.tabId, reason: e.message });
 						}
 					});
 					this.brokers.set(r.tabId, c);
+					// Observability: the broker's audit stream (trusted) into the tab's event log.
+					void this.obs.brokerAttached(r.tabId, c);
 					this.audit('broker.configure', 'ok', { tabId: r.tabId, policyRevision: typeof loaded?.revision === 'number' ? loaded.revision : null, caSha256: pemSha256 });
 					return { caPem: certPem, proxyUser: 'seclab', proxyPassword };
 				} catch (e) {
@@ -826,6 +829,7 @@ export class Supervisor {
 		const spec = this.spec(r);
 		await this.driverFor(spec.template).remove(spec);
 		this.wb?.discard(r.tabId);
+		this.obs.brokerForget(r.tabId);
 		this.o.store.forget(r.tabId);
 		this.audit('tab.remove', 'ok', { tabId: r.tabId });
 		return {};
