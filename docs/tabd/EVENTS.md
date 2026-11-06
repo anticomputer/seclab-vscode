@@ -19,6 +19,7 @@ Falco-compatible lines for SIEM forwarders, tagged with the OCSF `class_uid` bel
 | `trusted` | Produced outside the tab by host components (tabd, broker, RPC filter, host watchers). The tab can neither forge nor suppress it. |
 | `host-observed` | Observed by a sensor outside the tab's namespaces on the host kernel (OCI: Falco). Only a kernel escape can suppress it; the content (argv, paths) is still chosen by the tab. |
 | `tab-vm-root` | Observed by the collector running as root inside the tab's own microVM (sbx). Root inside the tab can forge or suppress it; the tab user cannot. |
+| `tab-reported` | Reported by the tab's own user space (its agent host) and relayed by a trusted component that saw it arrive. The tab can forge, alter or omit it at will: context only, never a basis for a decision. |
 
 A `detection` takes the weakest integrity of its causes.
 
@@ -32,6 +33,10 @@ A `detection` takes the weakest integrity of its causes.
 | `sbx-policy` | `trusted` | `sbx policy log --json` for the tab, polled and diffed. |
 | `workspace-watch` | `trusted` | Host-side watcher on the workspace directory (no process attribution). |
 | `gate` | `trusted` | Workspace write-back gate decisions (reserved). |
+| `ahp-gate` | `trusted` | Agent Host Protocol transport gate in the trusted renderer: connections opened and verified, messages dropped or rewritten, reverse requests refused. Reported over `tab.events.report`. |
+| `ahp-reverse` | `trusted` | AHP inner reverse-request layer in the trusted renderer. Reported over `tab.events.report`. |
+| `ahp-credential` | `trusted` | AHP authenticate module in the trusted renderer: sentinel issued, empty token for an unknown resource (never a value). Reported over `tab.events.report`. |
+| `agent-host` | `tab-reported` | The tab's agent host describing itself (sessions, turns, tool calls), relayed by the trusted renderer. Context only. |
 | `sbx-collector` | `tab-vm-root` | `seclab-obs-collect` inside an sbx tab VM: strace, honeypot inotify, heartbeats. |
 | `falco` | `host-observed` | Falco modern_ebpf on the Docker host, filtered to tab containers. |
 | `detector` | weakest cause | tabd detection rules over the stream; integrity is the weakest of the causes. |
@@ -49,6 +54,10 @@ A `detection` takes the weakest integrity of its causes.
 | `model.call` | 6003 | Broker model-host call summary, body-policy denial or budget denial (sizes, status, provider; never bodies). |
 | `broker.status` | 6002 | Broker lifecycle, policy and control events. |
 | `rpc.decision` | 6003 | RPC capability filter verdict. |
+| `ahp.decision` | 6003 | Agent Host Protocol gate verdict: connection opened or verified, message allowed, dropped or rewritten, reverse request refused, credential sentinel issued (never a value). |
+| `agent.session` | 6002 | Agent host session started or ended (tab-reported). |
+| `agent.turn` | 6003 | Agent turn started or completed (tab-reported; never prompt text). |
+| `agent.tool` | 6003 | Agent tool call: tool name and a sha256 digest of its arguments (tab-reported; never the arguments). |
 | `policy.log` | 4001 | sbx proxy allowed or blocked a destination (aggregated count delta). |
 | `workspace.change` | 1001 | A workspace file was created, changed or removed (host watcher). |
 | `workspace.gate` | 1001 | Write-back gate: a tab change to a workspace file was synced, held, approved or rejected (reserved for the gate). |
@@ -101,6 +110,8 @@ Reported in `tab.observation` notifications, `tab.events.tail` results and `sens
 | `sensor.tamper` | `critical` | A signal or ptrace aimed at the sensor or init. |
 | `beacon.periodic` | `warning` | Repeated connection attempts to one destination at a regular interval (C2 beacon pattern). |
 | `suspicious-content` | `informational` | Text aimed at an AI agent (prompt injection: "ignore previous instructions", role markers, chat-template or tool-call syntax) in a command line, file name, path or hostname. Informational: the stream is data, never instructions. |
+| `ahp.ungated` | `critical` | An agent-host connection was opened but its AHP gate never reported itself verified (`ahp-gate.opened` without `ahp-gate.verified` within 2 s): an ungated transport. Trusted: both signals come from the renderer. |
+| `ahp.deny-burst` | `warning` | The AHP gate denied 20 or more agent-host messages or reverse requests from one tab within 60 s (probing the gate). |
 
 ## Limits
 | Field | Limit |

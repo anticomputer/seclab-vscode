@@ -9,7 +9,7 @@ import type { FalcoSensor } from './falco.ts';
 import { LineageCorrelator, type Attribution } from './lineage.ts';
 import { ObsHub, type Observation } from './hub.ts';
 import { CollectorSession } from './sbx-collector.ts';
-import { CLASSES, isTabId, PRIORITIES, priorityRank, weakestIntegrity, type EventClass, type Integrity, type ObsEvent, type Priority } from './schema.ts';
+import { CLASSES, isTabId, PRIORITIES, priorityRank, SOURCES, weakestIntegrity, type EventClass, type Integrity, type ObsEvent, type Priority } from './schema.ts';
 import { WorkspaceWatcher } from './workspace-watch.ts';
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
@@ -25,10 +25,23 @@ const ATTRIBUTION_DELAY_MS = 600;
 /** A broker event is live (attributable) when its own timestamp is this close to now. */
 const LIVE_SKEW_MS = 5_000;
 const MAX_PENDING_ATTRIBUTIONS = 256;
+/** How long an opened agent-host connection may go without `ahp-gate.verified`. */
+export const AHP_VERIFY_MS = 2_000;
+const MAX_AHP_OPEN = 1024;
+const MAX_AHP_OPEN_PER_TAB = 64;
 /** Stop pushing event notifications while this many bytes wait for the client to read. */
 export const NOTIFY_BACKLOG_LIMIT = 4 << 20;
-/** What each trusted client component may report. The write-back gate's classes are reserved. */
-const CLIENT_SOURCES: ReadonlyMap<string, ReadonlySet<string>> = new Map([['rpc-filter', new Set(['rpc.decision'])], ['gate', new Set<string>()]]);
+/**
+ * What each trusted client component may report. The write-back gate's classes are reserved.
+ * Integrity comes from the source table (schema SOURCES), never from the report: the AHP
+ * sources are `trusted`, `agent-host` (the agent host's self-description, relayed) is
+ * `tab-reported`.
+ */
+const CLIENT_SOURCES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+	['rpc-filter', new Set(['rpc.decision'])], ['gate', new Set<string>()],
+	['ahp-gate', new Set(['ahp.decision'])], ['ahp-reverse', new Set(['ahp.decision'])], ['ahp-credential', new Set(['ahp.decision'])],
+	['agent-host', new Set(['agent.session', 'agent.turn', 'agent.tool'])],
+]);
 
 export class ObsParamError extends Error { }
 
@@ -62,6 +75,7 @@ export class ObsGlue {
 	private readonly lineage = new LineageCorrelator();
 	private readonly pendingAttributions = new Map<string, number>();
 	private readonly promptLineages = new Map<string, Map<string, Attribution>>();
+	private readonly ahpOpen = new Map<string, NodeJS.Timeout>();
 
 	constructor(o: ObsGlueOptions) {
 		this.o = o;
@@ -184,13 +198,63 @@ export class ObsGlue {
 				continue;
 			}
 			// Only these fields; integrity is fixed by the source, never taken from the report.
-			if (this.hub.emit(tabId, { source: e.source, class: e.class, priority: e.priority, summary: e.summary, detail: e.detail, integrity: 'trusted' })) {
+			const integrity = SOURCES[e.source as string].integrity;
+			// The connection watch runs on the validated report before any rate limit, so a tab
+			// that floods the gate with denials can't drop an opened/verified signal (review AE-1).
+			const watch = e.source === 'ahp-gate' ? this.ahpSignal(e.detail) : undefined;
+			const ev2 = this.hub.emit(tabId, { source: e.source, class: e.class, priority: e.priority, summary: e.summary, detail: e.detail, integrity });
+			if (watch) {
+				this.watchAhp(tabId, watch, ev2);
+			}
+			if (ev2) {
 				accepted++;
 			} else {
 				rejected++;
 			}
 		}
 		return { accepted, rejected };
+	}
+
+	private ahpSignal(detail: unknown): { rule: 'opened' | 'verified'; conn: number } | undefined {
+		const d = (typeof detail === 'object' && detail !== null ? detail : {}) as Record<string, unknown>;
+		const conn = d.connection;
+		if (typeof conn !== 'number' || !Number.isInteger(conn) || conn < 0) {
+			return undefined;
+		}
+		return d.gateRule === 'ahp-gate.opened' ? { rule: 'opened', conn } : d.gateRule === 'ahp-gate.verified' ? { rule: 'verified', conn } : undefined;
+	}
+
+	/**
+	 * AHP connections must be gated (secure-agentic §3): the trusted renderer reports
+	 * `ahp-gate.opened` for every agent-host connection and `ahp-gate.verified` once its gate is
+	 * in place. Opened and not verified within AHP_VERIFY_MS is an ungated transport. The
+	 * detection is stamped directly (no rate bucket a tab could drain).
+	 */
+	private watchAhp(tabId: string, s: { rule: 'opened' | 'verified'; conn: number }, e: ObsEvent | undefined): void {
+		const key = `${tabId}\u0000${s.conn}`;
+		if (s.rule === 'verified') {
+			clearTimeout(this.ahpOpen.get(key));
+			this.ahpOpen.delete(key);
+			return;
+		}
+		if (this.ahpOpen.has(key)) {
+			return;
+		}
+		if (this.ahpOpen.size >= MAX_AHP_OPEN || [...this.ahpOpen.keys()].filter(k => k.startsWith(`${tabId}\u0000`)).length >= MAX_AHP_OPEN_PER_TAB) {
+			// Fail closed: a connection we can't watch is reported, not ignored. Per tab, so one
+			// tab's connection churn can't raise alarms for another's (review 9b note).
+			this.hub.detection(tabId, { rule: 'ahp.ungated', summary: `agent-host connection ${s.conn} opened while too many others await verification`, detail: { connection: s.conn }, cause: e ? [e.seq] : [] });
+			return;
+		}
+		const timer = setTimeout(() => {
+			this.ahpOpen.delete(key);
+			this.hub.detection(tabId, {
+				rule: 'ahp.ungated', summary: `agent-host connection ${s.conn} opened without a verified gate within ${AHP_VERIFY_MS / 1000} s`,
+				detail: { connection: s.conn }, cause: e ? [e.seq] : [],
+			});
+		}, AHP_VERIFY_MS);
+		timer.unref();
+		this.ahpOpen.set(key, timer);
 	}
 
 	/** Hooks handed to driver.ensureRunning for this tab. */
@@ -382,6 +446,12 @@ export class ObsGlue {
 		this.brokerFeeds.delete(tabId);
 		this.lineage.forget(tabId);
 		this.promptLineages.delete(tabId);
+		for (const [k, t] of this.ahpOpen) {
+			if (k.startsWith(`${tabId}\u0000`)) {
+				clearTimeout(t);
+				this.ahpOpen.delete(k);
+			}
+		}
 	}
 
 	/**

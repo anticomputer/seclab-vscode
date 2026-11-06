@@ -37,6 +37,8 @@ export const RULES: readonly RuleInfo[] = [
 	{ id: 'sensor.tamper', priority: 'critical', desc: 'A signal or ptrace aimed at the sensor or init.' },
 	{ id: 'beacon.periodic', priority: 'warning', desc: 'Repeated connection attempts to one destination at a regular interval (C2 beacon pattern).' },
 	{ id: 'suspicious-content', priority: 'informational', desc: 'Text aimed at an AI agent (prompt injection: "ignore previous instructions", role markers, chat-template or tool-call syntax) in a command line, file name, path or hostname. Informational: the stream is data, never instructions.' },
+	{ id: 'ahp.ungated', priority: 'critical', desc: 'An agent-host connection was opened but its AHP gate never reported itself verified (`ahp-gate.opened` without `ahp-gate.verified` within 2 s): an ungated transport. Trusted: both signals come from the renderer.' },
+	{ id: 'ahp.deny-burst', priority: 'warning', desc: 'The AHP gate denied 20 or more agent-host messages or reverse requests from one tab within 60 s (probing the gate).' },
 ];
 const RULE = new Map(RULES.map(r => [r.id, r]));
 
@@ -103,6 +105,8 @@ interface Beacon { times: number[]; reportedAt: number }
 
 export class Detector {
 	private readonly beacons = new Map<string, Beacon>();
+	private readonly ahpDenies: number[] = [];
+	private ahpDenyReportedAt = -Infinity;
 	/** Broker timings only (review BA-3): sensor events, whatever their address text, never touch it. */
 	private readonly brokerBeacons = new Map<string, Beacon>();
 
@@ -190,6 +194,22 @@ export class Detector {
 			case 'egress.request':
 				// Beacons through the broker: see brokerTiming (fed before aggregation).
 				break;
+			case 'ahp.decision':
+				if (e.integrity === 'trusted' && e.detail?.verdict === 'deny') {
+					const t = Date.parse(e.time);
+					this.ahpDenies.push(t);
+					while (this.ahpDenies.length && t - this.ahpDenies[0] > 60_000) {
+						this.ahpDenies.shift();
+					}
+					if (this.ahpDenies.length > 20) {
+						this.ahpDenies.shift();
+					}
+					if (this.ahpDenies.length >= 20 && t - this.ahpDenyReportedAt >= 600_000) {
+						this.ahpDenyReportedAt = t;
+						hits.push({ id: 'ahp.deny-burst', summary: `${this.ahpDenies.length} AHP gate denials in ${Math.round((t - this.ahpDenies[0]) / 1000)} s` });
+					}
+				}
+				break;
 			case 'priv.change':
 				if (e.priority === 'critical') {
 					hits.push({ id: 'priv.escalation', summary: e.summary });
@@ -225,7 +245,7 @@ export class Detector {
 		for (const l of e.proc?.lineage ?? []) {
 			texts.push(['parent command', l.exe]);
 		}
-		for (const k of ['from', 'host', 'paths', 'reason', 'claimedExtensionId']) {
+		for (const k of ['from', 'host', 'paths', 'reason', 'claimedExtensionId', 'tool', 'method', 'actionType', 'resourceHost', 'path', 'originLabel']) {
 			const v = e.detail?.[k];
 			if (typeof v === 'string') {
 				texts.push([k, v]);

@@ -5,7 +5,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { Detector, type TabContext } from './detect.ts';
+import { Detector, RULES, type TabContext } from './detect.ts';
 import { EventError, isTabId, normalizeDraft, priorityRank, untrustedFields, type EventDraft, type ObsEvent, type ObservationState } from './schema.ts';
 import { safeText } from './text.ts';
 
@@ -53,8 +53,8 @@ export interface HubOptions {
  * (cheap denials, model denials, one finding) can only drop events of that same type, and
  * the drop is reported with its type. Findings (error or worse) get a lower rate.
  */
-type BucketName = 'sensor' | 'tabDriven' | 'client';
-const BUCKETS: readonly BucketName[] = ['sensor', 'tabDriven', 'client'];
+type BucketName = 'sensor' | 'tabDriven' | 'client' | 'ahp' | 'ahpLife' | 'agent';
+const BUCKETS: readonly BucketName[] = ['sensor', 'tabDriven', 'client', 'ahp', 'ahpLife', 'agent'];
 const FINDING_RATE = { rate: 20, burst: 200 };
 const BROKER_TYPE_RATE = { rate: 100, burst: 1000 };
 const MAX_BROKER_BUCKETS = 64;
@@ -62,6 +62,10 @@ const BUCKET_OF: Readonly<Record<string, BucketName | undefined>> = {
 	'sbx-collector': 'sensor', 'falco': 'sensor', 'detector': 'sensor',
 	'workspace-watch': 'tabDriven', 'sbx-policy': 'tabDriven', 'scan': 'tabDriven',
 	'rpc-filter': 'client', 'gate': 'client',
+	// Tab-driven volume of their own (a tab can make the gate deny, or its agent host chatter):
+	// never shared with the RPC filter, the workspace watcher or each other.
+	'ahp-gate': 'ahp', 'ahp-reverse': 'ahp', 'ahp-credential': 'ahp',
+	'agent-host': 'agent',
 };
 
 export class ObsHub {
@@ -97,6 +101,9 @@ export class ObsHub {
 					sensor: { tokens: sr.burst, last: t, rate: sr.rate, burst: sr.burst, dropped: 0 },
 					tabDriven: { tokens: tr.burst, last: t, rate: tr.rate, burst: tr.burst, dropped: 0 },
 					client: { tokens: tr.burst, last: t, rate: tr.rate, burst: tr.burst, dropped: 0 },
+					ahp: { tokens: tr.burst, last: t, rate: tr.rate, burst: tr.burst, dropped: 0 },
+					ahpLife: { tokens: 200, last: t, rate: 20, burst: 200, dropped: 0 },
+					agent: { tokens: tr.burst, last: t, rate: tr.rate, burst: tr.burst, dropped: 0 },
 				},
 				findings: new Map(),
 				observation: { state: 'unavailable', since: new Date(t).toISOString(), reason: 'no sensor attached' },
@@ -155,7 +162,10 @@ export class ObsHub {
 				s.findings.set(key, bucket);
 			}
 		} else {
-			const group = BUCKET_OF[draft.source];
+			// AHP connection lifecycle (renderer-driven) never shares a bucket with the denials a
+			// tab can provoke (review AE-1).
+			const life = draft.source === 'ahp-gate' && (draft.detail?.gateRule === 'ahp-gate.opened' || draft.detail?.gateRule === 'ahp-gate.verified');
+			const group = life ? 'ahpLife' : BUCKET_OF[draft.source];
 			bucket = group ? s.buckets[group] : undefined;
 		}
 		if (bucket && !take(bucket, this.now())) {
@@ -302,6 +312,19 @@ export class ObsHub {
 		for (const s of this.tabs.values()) {
 			s.writer?.close();
 		}
+	}
+
+	/**
+	 * A trusted detection tabd itself derived from trusted signals (e.g. `ahp.ungated`): stamped
+	 * directly like Detector.check results, so no tab-drainable bucket can drop it.
+	 */
+	detection(tabId: string, d: { rule: string; summary: string; detail?: Record<string, string | number | boolean>; cause?: number[] }): ObsEvent {
+		const s = this.state(tabId);
+		const rule = RULES.find(r => r.id === d.rule);
+		if (!rule) {
+			throw new EventError(`unknown rule ${d.rule}`);
+		}
+		return this.stamp(tabId, s, normalizeDraft({ source: 'detector', integrity: 'trusted', class: 'detection', rule: d.rule, priority: rule.priority, summary: d.summary, detail: d.detail, cause: d.cause }));
 	}
 
 	/** For tests: run the periodic work now. */

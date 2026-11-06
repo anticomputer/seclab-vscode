@@ -44,6 +44,10 @@
 				"sbx-policy",
 				"workspace-watch",
 				"gate",
+				"ahp-gate",
+				"ahp-reverse",
+				"ahp-credential",
+				"agent-host",
 				"sbx-collector",
 				"falco",
 				"detector"
@@ -53,7 +57,8 @@
 			"enum": [
 				"trusted",
 				"host-observed",
-				"tab-vm-root"
+				"tab-vm-root",
+				"tab-reported"
 			]
 		},
 		"class": {
@@ -68,6 +73,10 @@
 				"model.call",
 				"broker.status",
 				"rpc.decision",
+				"ahp.decision",
+				"agent.session",
+				"agent.turn",
+				"agent.tool",
 				"policy.log",
 				"workspace.change",
 				"workspace.gate",
