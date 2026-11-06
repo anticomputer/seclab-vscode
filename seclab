@@ -494,7 +494,7 @@ case "${1:-help}" in
 			# RPC-probe safety guards (pure; in the pinned node container, no network).
 			probe-safety) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/probe-safety.test.ts ;;
 			# Test build variants: the harness's hook check and the variant manifest (pure; no network).
-			builds) docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" node test/builds/require-hooks.ts --self-test ;;
+			builds) docker run --rm --network none -v "$ROOT:/repo:ro" -v seclab-test-scratch:/scratch -e SECLAB_SCRATCH=/scratch -w /repo "$(node_image)" node test/builds/require-hooks.ts --self-test ;;
 			# RPC filter: generated UriComponents argument positions are constrained (pure; no network).
 			uri-constraint) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/uri-constraint.test.ts ;;
 			canary) shift; "${SECLAB_NODE:-node}" "$ROOT/test/canary/run.ts" "${1:-sbx}" ;;
