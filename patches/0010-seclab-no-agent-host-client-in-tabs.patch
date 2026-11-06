@@ -5,17 +5,17 @@ diff -ruN a/src/vs/workbench/services/agentHost/electron-browser/agentHostServic
  import { IAgentHostOTelPolicyReadiness, IAgentHostService } from '../../../../platform/agentHost/common/agentService.js';
  import { LocalAgentHostServiceClient } from '../../../../platform/agentHost/electron-browser/localAgentHostService.js';
  import { IAgentHostEnablementService } from '../../../../platform/agentHost/common/agentHostEnablementService.js';
-+import { seclabAiDisabled } from '../../extensions/common/seclabRpcFilter.js';
++import { seclabAgentHostAllowed } from '../../agentHost/browser/seclabAhpGate.js';
  import { agentsWindowAgentHostClientInfo, editorWindowAgentHostClientInfo } from '../../../../platform/agentHost/common/agentHostClientInfo.js';
  import { CopilotCliVSCodeAssignmentContextKey } from '../../../../platform/agentHost/common/copilotCliConfig.js';
  import { ActionType } from '../../../../platform/agentHost/common/state/sessionActions.js';
-@@ -47,7 +48,16 @@
+@@ -47,7 +48,26 @@
  		@IAccountPolicyGateService accountPolicyGateService: IAccountPolicyGateService,
  		@ILogService logService: ILogService,
  	) {
 -		const inner = environmentService.remoteAuthority
-+		// seclab: a tab window takes the local branch, the same one an ordinary
-+		// non-remote window takes. EditorRemoteAgentHostServiceClient connects to
++		// seclab: in a tab window, take the local branch unless agents are
++		// enabled for this host. EditorRemoteAgentHostServiceClient connects to
 +		// the REH's own agentHostProxy channel and then forwards a *real*
 +		// accessToken for every entry the remote advertises in protectedResources
 +		// (agentHostAuth.ts, forwardAuthenticationToken). That is a client->server
@@ -23,7 +23,17 @@ diff -ruN a/src/vs/workbench/services/agentHost/electron-browser/agentHostServic
 +		// guard sees it, and a rogue REH advertising api.github.com would be handed
 +		// the user's token. Patch 0009 disables chat here, which removes the
 +		// callers but not this connection, because it is established eagerly.
-+		const inner = environmentService.remoteAuthority && !seclabAiDisabled(environmentService.remoteAuthority)
++		//
++		// The decision is `seclabAgentHostAllowed` and nothing else, so there is
++		// one answer to "may this window reach an agent host". It reads policy,
++		// the registered default and the host main process's environment through
++		// `inspect`; `getValue` would merge the user layer, which a tab can write
++		// via $updateConfigurationOption (A23). This line only picks a class: the
++		// gate itself lives inside EditorRemoteAgentHostServiceClient, whose
++		// `connection` is null when the same predicate says no, so an enabled tab
++		// window gets the gated client rather than an unguarded one.
++		const inner = environmentService.remoteAuthority
++			&& instantiationService.invokeFunction(seclabAgentHostAllowed, environmentService.remoteAuthority)
  			? instantiationService.createInstance(EditorRemoteAgentHostServiceClient)
  			: instantiationService.createInstance(
  				LocalAgentHostServiceClient,
