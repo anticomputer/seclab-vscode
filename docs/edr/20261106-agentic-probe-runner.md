@@ -150,6 +150,22 @@ Derived from the pinned source, for patch 0015:
   ([mainThreadConfiguration.ts#L48-L70](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadConfiguration.ts#L48-L70)),
   so on main a tab extension may be able to turn it on. That is A23's to measure. The
   setting is an off switch, not the boundary: with it on, the connection is still gated.
+- **MCP authentication never reaches the window** (security review rounds 1 and 2). The agent
+  host does not get to choose a URL the trusted renderer fetches. Three things enforce that:
+  `chat/toolCallAuthRequired`, `session/mcpServerStateChanged` and
+  `session/customizationsChanged` are denied inbound, because they reach
+  `autoAuthenticateMcpServer` with no user interaction; any auth-required node (`kind` of
+  `authRequired` or `auth-required`, `status` of `auth-required` or `authRequired`) is replaced
+  by a well-formed inert error state wherever it is embedded; and `auth`,
+  `authorization_servers`, `oauthClient`, `protectedResourceMetadata`, `protectedResources` and
+  `mcpApp` are stripped everywhere. Matching the key names alone is deliberately not the only
+  line of defence: round 1's fix matched a discriminant that does not exist upstream and was
+  dead code, which the unit tests did not catch because the fixture used the same wrong shape.
+- **Enablement is only what a tab cannot write** (review round 1). `seclabAgentHostAllowed`
+  reads `inspect().policyValue`, the registered `defaultValue`, and
+  `SECLAB_AGENTS_ENABLED=1` in the **host main process** environment, which `updateConfiguration`
+  stamps onto the window configuration on every load. It never calls `getValue`, which merges
+  the user, remote and workspace layers that `$updateConfigurationOption` can reach (A23).
 - **Log lines** use the shape `tab.events.report` accepts today (`tabd/src/obs/glue.ts`
   on `f19cf49`), so the Tab Manager can forward them unchanged:
   `{source:'ahp-gate', class:'ahp.decision', priority, summary, detail}` with `detail`
