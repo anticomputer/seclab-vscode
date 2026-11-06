@@ -7,7 +7,7 @@
   [ADR CFS package feeds in tabs](../adr/20261105-cfs-package-feeds-in-tabs.md).
   - The broker follows a `302`, `303` or `307` answering a credentialed
     request, under a provider declaring `redirects` (azure-devops:
-    `vsblobprodcus<NNN>.blob.core.windows.net`), one hop, GET, no credential
+    `<xyz>vsblobprodcus<NNN>.blob.core.windows.net`), one hop, GET, no credential
     or client header, to a netguard-vetted pinned address.
   - **Threat model:** the signed storage URL (or any Location) reaching the
     tab, the audit or the broker's logs; the tab triggering or steering a
@@ -25,10 +25,20 @@ Hardening taken from the review's residuals: a Location carrying a real
 credential value is refused before anything is fetched (same regression test
 as 15-1).
 
+Runtime proof (Fork-build, a real OCI tab with CFS on, 2026-11-06) found the
+first shipped pattern, `^vsblobprodcus[0-9]{1,4}…`, matched none of the real
+accounts, which carry a three-character prefix (`aaavsblobprodcus101`). It
+failed closed (`502`, "host not declared by the provider"), and no signature
+reached the tab. The test fixture had used the same wrong shape, so only the
+real run could catch it. The pattern is now
+`^[a-z0-9]{3}vsblobprodcus[0-9]{1,4}\.blob\.core\.windows\.net$`, the unit
+test checks the three measured hosts, and the fixture aliases use the
+measured shape.
+
 Residuals, recorded:
 - **The declared pattern names a namespace Microsoft doesn't reserve.**
   Azure Storage account names are self-service, so an unused
-  `vsblobprodcus<NNN>` name could be claimed. Using it needs control of a
+  `<xyz>vsblobprodcus<NNN>` name could be claimed. Using it needs control of a
   Location on a credentialed response under the provider: an open redirect
   on the feed, or a user-approved binding to an attacker host with
   `provider: azure-devops`, which already gives that host the tab's traffic.

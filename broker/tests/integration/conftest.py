@@ -28,8 +28,8 @@ UPSTREAM_HOSTS = ["api.example.test", "gist.example.test", "git.example.test", "
                   "blocked.example.test", "model.example.test"]
 # Azure Storage stand-ins for broker-followed CFS downloads (revision 8): test aliases on the
 # --internal networks, so the shipped azure-devops redirect pattern is what's exercised.
-STORAGE_HOST = "vsblobprodcus901.blob.core.windows.net"
-STORAGE_PRIVATE_HOST = "vsblobprodcus902.blob.core.windows.net"
+STORAGE_HOST = "zzzvsblobprodcus901.blob.core.windows.net"
+STORAGE_PRIVATE_HOST = "zzyvsblobprodcus902.blob.core.windows.net"
 HARDENING = ["--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
              "--pids-limit", "256"]
 

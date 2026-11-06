@@ -22,8 +22,8 @@ MINTED: set[str] = set()
 # Test aliases on the harness's --internal networks (no route out): the storage name shape
 # the azure-devops provider declares for broker-followed redirects (revision 8). The second
 # resolves to the private-range network, which netguard must refuse.
-STORAGE_HOST = "vsblobprodcus901.blob.core.windows.net"
-STORAGE_PRIVATE_HOST = "vsblobprodcus902.blob.core.windows.net"
+STORAGE_HOST = "zzzvsblobprodcus901.blob.core.windows.net"
+STORAGE_PRIVATE_HOST = "zzyvsblobprodcus902.blob.core.windows.net"
 
 
 def sas_url(host: str, path: str) -> str:
@@ -148,7 +148,7 @@ async def app(scope, receive, send) -> None:
 
     if path == "/seen":
         return await send_resp(send, 200, json.dumps(list(SEEN)).encode())
-    if host.startswith("vsblobprodcus"):
+    if "vsblobprodcus" in host:
         # Azure Storage stand-in (broker-followed CFS downloads, revision 8): records what the
         # broker sent, including the signed query, so tests can prove it never reaches the tab.
         record["query"] = scope["query_string"].decode("latin-1")
