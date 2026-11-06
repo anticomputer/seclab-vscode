@@ -1,5 +1,6 @@
 // seclab-tabd entry point. Speaks docs/tabd/PROTOCOL.md over stdin/stdout.
-// Usage: seclab-tabd --state-dir ABS [--driver sbx|oci] [--image REF] [--broker-image REF]
+// Usage: seclab-tabd --state-dir ABS [--driver sbx|oci] [--image REF] [--broker required|none]
+//                    [--broker-image REF] [--broker-dev]
 //                    [--allowed-root ABS]... [--sensitive ABS]... [--cpus N] [--memory 4g]
 
 import { createHash } from 'node:crypto';
@@ -17,6 +18,7 @@ import { scanWorkspace } from './scan.ts';
 import { Supervisor } from './supervisor.ts';
 import { assertImageRef } from './validate.ts';
 import { tabPolicy } from './broker-policy.ts';
+import { BrokerImagePin } from './broker-image.ts';
 
 // 1. Only the framer may write to stdout; everything else goes to stderr.
 const realStdoutWrite = process.stdout.write.bind(process.stdout);
@@ -42,6 +44,8 @@ const { values } = parseArgs({
 		// `required` (the default): each tab gets a real broker (plan tabd-broker-wiring B1 OCI,
 		// B2 sbx). `none` keeps the placeholder (OCI) and blackhole egress.
 		'broker': { type: 'string' },
+		// Accept a broker image built from uncommitted broker sources (a `-dirty` revision).
+		'broker-dev': { type: 'boolean' },
 		'allowed-root': { type: 'string', multiple: true, default: [] },
 		'sensitive': { type: 'string', multiple: true, default: [] },
 		'cpus': { type: 'string' },
@@ -73,20 +77,23 @@ const runner = createRunner((action, outcome, detail) => {
 const drivers = new Map<string, Driver>();
 let hostSensor: ((hub: ObsHub) => FalcoSensor) | undefined;
 const driverName = values.driver;
+// The real broker's image, resolved once to its content-addressed ID and checked against the
+// labels broker/build.sh stamps (review XX-6); every broker container is created by that ID.
+const brokerRef = assertImageRef(values['broker-image'] ?? 'seclab-broker:dev');
+const brokerPin = dockerPath ? new BrokerImagePin(runner, dockerPath, brokerRef, { allowDirty: values['broker-dev'] === true }) : undefined;
 if (driverName === 'sbx') {
 	if (!sbxPath) {
 		die('sbx not found in system locations');
 	}
 	// Plan tabd-broker-wiring B2: the broker runs on Docker Desktop beside the sbx VM.
-	const brokerImage = values['broker-image'] ?? 'seclab-broker:dev';
-	drivers.set('sbx', new SbxDriver(sbxPath, runner, { docker: dockerPath, brokerImage }));
+	drivers.set('sbx', new SbxDriver(sbxPath, runner, { docker: dockerPath, brokerPin }));
 } else if (driverName === 'oci') {
 	if (!dockerPath) {
 		die('docker not found in system locations');
 	}
-	// The real broker by default; the placeholder only for `--broker none`.
-	const brokerImage = values['broker-image'] ?? ((values.broker ?? 'required') === 'required' ? 'seclab-broker:dev' : 'seclab-broker-placeholder:local');
-	drivers.set('oci', new OciDriver(dockerPath, runner, { brokerImage }));
+	// `--broker none` runs the placeholder (`--broker-image` names it in that mode).
+	const placeholder = values.broker === 'none' && values['broker-image'] ? brokerRef : 'seclab-broker-placeholder:local';
+	drivers.set('oci', new OciDriver(dockerPath, runner, { brokerImage: placeholder, brokerPin }));
 	// Tab observability: Falco on the Docker host, only while OCI tabs run (ADR tab-observability).
 	const stateTag = createHash('sha256').update(stateDir).digest('hex').slice(0, 8);
 	hostSensor = hub => new FalcoSensor({

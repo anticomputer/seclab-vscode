@@ -16,10 +16,12 @@ docker build -q -t seclab-tab-oci:local -f "$ROOT/sandbox/oci/Dockerfile.tab" "$
 docker build -q -t seclab-broker-placeholder:local -f "$ROOT/sandbox/oci/Dockerfile.broker-placeholder" "$ROOT/sandbox/oci"
 # The tab's broker (plan tabd-broker-wiring B1; OCI tabs use it by default). broker/build.sh
 # verifies the base image's signed provenance first (online with gh locally; offline from
-# downloaded bundles in CI) and fails closed.
-"$ROOT/broker/build.sh" seclab-broker:dev
-# The observability sensor OCI tabs need (ADR tab-observability): signature-verified, by digest.
+# downloaded bundles in CI) and fails closed. Its one stdout line is the image identity; tabd
+# resolves the tag to that ID, checks the labels and creates brokers by ID (review XX-6).
 mkdir -p "$ROOT/.work"
+"$ROOT/broker/build.sh" seclab-broker:dev > "$ROOT/.work/broker-image.json"
+echo "broker: $(cat "$ROOT/.work/broker-image.json")"
+# The observability sensor OCI tabs need (ADR tab-observability): signature-verified, by digest.
 "$ROOT/sandbox/oci/verify-falco.sh"
 # The pre-mount secret scanner tabd runs before any mount (built from pinned gitleaks source).
 "$ROOT/build/tools/tool.sh" gitleaks >/dev/null

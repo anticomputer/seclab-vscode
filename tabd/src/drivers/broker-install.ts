@@ -3,8 +3,35 @@
 // drivers. Nothing tab- or broker-supplied is interpolated into the script: the URL and the PEM
 // arrive on stdin, after validation here.
 
+import type { BrokerImage, BrokerImagePin } from '../broker-image.ts';
+import type { Runner } from '../run.ts';
 import type { BrokerSetup } from './types.ts';
 import { DriverError } from './types.ts';
+
+/** The checked broker image (XX-6), as a driver error when it is missing or refused. */
+export async function pinnedBrokerImage(pin: BrokerImagePin | undefined): Promise<BrokerImage> {
+	if (!pin) {
+		throw new DriverError(-32011, 'the template requires a broker, but no broker image was configured');
+	}
+	return pin.get().catch((e: Error) => {
+		throw new DriverError(-32011, e.message);
+	});
+}
+
+/**
+ * Remove the tab's broker container if it was created from another image than the pinned one
+ * (a rebuilt broker, or a container from before XX-6), so it is recreated by ID. The broker
+ * holds no state tabd needs: every start re-runs its whole bring-up.
+ */
+export async function dropBrokerFromOtherImage(runner: Runner, docker: string, name: string, imageId: string): Promise<void> {
+	const r = await runner.run(docker, ['container', 'inspect', '--format', '{{.Image}}', '--', name], { timeoutMs: 15_000 });
+	if (r.code === 0 && r.stdout.trim() !== imageId) {
+		const d = await runner.run(docker, ['rm', '-f', '--', name], { timeoutMs: 60_000 });
+		if (d.code !== 0) {
+			throw new DriverError(-32011, `could not replace the broker built from another image: ${d.stderr.trim().slice(-300)}`);
+		}
+	}
+}
 
 export const BROKER_DIR = '/run/seclab-broker';
 const PEM_RE = /^-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----\r?\n?$/;

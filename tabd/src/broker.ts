@@ -13,9 +13,12 @@ export const BROKER_POLICY_SCHEMA = { version: 1, revision: 4 } as const;
 
 export class BrokerContractError extends Error { }
 
-/** Validate a `broker.hello` result; throws (refuse the tab's credentials) on any mismatch. */
-export function checkBrokerHello(hello: unknown, tabId: string): void {
-	const h = hello as { protocol?: unknown; tabId?: unknown; policySchema?: { version?: unknown; revision?: unknown } } | null;
+/**
+ * Validate a `broker.hello` result; throws (refuse the tab's credentials) on any mismatch.
+ * `version`: the version the broker image's label declares (XX-6), when known.
+ */
+export function checkBrokerHello(hello: unknown, tabId: string, version?: string): void {
+	const h = hello as { protocol?: unknown; tabId?: unknown; version?: unknown; policySchema?: { version?: unknown; revision?: unknown } } | null;
 	if (!h || typeof h !== 'object') {
 		throw new BrokerContractError('broker.hello: no result');
 	}
@@ -28,5 +31,8 @@ export function checkBrokerHello(hello: unknown, tabId: string): void {
 	const s = h.policySchema;
 	if (!s || s.version !== BROKER_POLICY_SCHEMA.version || s.revision !== BROKER_POLICY_SCHEMA.revision) {
 		throw new BrokerContractError(`broker.hello: policy schema ${JSON.stringify(s)}, expected ${JSON.stringify(BROKER_POLICY_SCHEMA)}`);
+	}
+	if (version !== undefined && h.version !== version) {
+		throw new BrokerContractError(`broker.hello: version ${JSON.stringify(h.version)}, but the image declares ${version}`);
 	}
 }

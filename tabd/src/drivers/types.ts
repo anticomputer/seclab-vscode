@@ -92,7 +92,7 @@ export interface BrokerSetup {
  */
 export interface BrokerHooks {
 	/** The broker is running: connect, check, authenticate, load policy, return what the tab needs. */
-	configure(openControl: () => ChildProcessWithoutNullStreams): Promise<BrokerSetup>;
+	configure(openControl: () => ChildProcessWithoutNullStreams, image?: { version: string }): Promise<BrokerSetup>;
 }
 
 export interface Driver {

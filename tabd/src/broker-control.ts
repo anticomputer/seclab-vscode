@@ -165,13 +165,13 @@ export class BrokerControl {
  * protocol, tab or policy-schema mismatch). Retries while the bridge reports the socket isn't up,
  * never past `deadline` (epoch ms; review XX-2: a stalling broker can't hold a start for long).
  */
-export async function connectBroker(openChannel: () => ChildProcessWithoutNullStreams, tabId: string, opts: { deadline?: number; delayMs?: number } = {}): Promise<BrokerControl> {
+export async function connectBroker(openChannel: () => ChildProcessWithoutNullStreams, tabId: string, opts: { deadline?: number; delayMs?: number; version?: string } = {}): Promise<BrokerControl> {
 	const deadline = opts.deadline ?? Date.now() + 60_000;
 	let last: Error | undefined;
 	while (Date.now() < deadline) {
 		const c = new BrokerControl(openChannel());
 		try {
-			checkBrokerHello(await c.request('broker.hello', undefined, Math.max(1, Math.min(15_000, deadline - Date.now()))), tabId);
+			checkBrokerHello(await c.request('broker.hello', undefined, Math.max(1, Math.min(15_000, deadline - Date.now()))), tabId, opts.version);
 			return c;
 		} catch (e) {
 			c.close();
