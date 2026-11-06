@@ -436,7 +436,11 @@ class CredentialSpec:
     def from_json(cls, obj: dict) -> "CredentialSpec":
         default_inject = Inject.from_json(obj["inject"]) if "inject" in obj else None
         b = obj.get("budget")
-        return cls(id=obj["id"], bindings=tuple(parse_bindings(obj["bind"], default_inject)),
+        bindings = tuple(parse_bindings(obj["bind"], default_inject))
+        if b is not None and b.get("bytes") is not None and any(x.websocket for x in bindings):
+            # WebSocket messages aren't charged, so a byte cap there would not hold (review 13-10).
+            raise PolicyError(f"credential {obj['id']!r}: a byte budget can't be combined with a websocket binding")
+        return cls(id=obj["id"], bindings=bindings,
                    provider=obj.get("provider"), sentinel_prefix=obj.get("sentinelPrefix"),
                    derive=parse_derive(obj.get("derive", [])),
                    budget=(b.get("requests"), b.get("bytes")) if b is not None else None)
@@ -671,7 +675,10 @@ class BackstopEntry:
     def matches(self, req: RequestView, prefixes: tuple[str, ...]) -> bool:
         if "*" not in self.methods and req.method not in self.methods:
             return False
-        path = req.path.rstrip("/") or "/"
+        # Servers that trim trailing dots or whitespace from a segment (IIS/ASP.NET, which
+        # serves Azure DevOps) would route `/_apis.` as `/_apis`; match what they route
+        # (review 13-9). This can only make the deny-list match more.
+        path = "/".join(seg.rstrip(". \t") for seg in req.path.split("/")).rstrip("/") or "/"
         return any(compile_glob(prefix + self.path, ignore_case=True).fullmatch(path)
                    for prefix in prefixes)
 

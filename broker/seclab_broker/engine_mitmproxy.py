@@ -312,6 +312,17 @@ class SeclabAddon:
         self._deny(flow, 403, f"denied by rule {blocked.id}", ruleId=blocked.id)
         return True
 
+    def _over_budget(self, flow: http.HTTPFlow, view: RequestView, cred: Credential) -> bool:
+        """Revision 6: a capped credential (e.g. CFS feed reads, which can ingest packages
+        under the user's identity) is denied with 429, never prompted."""
+        over = self.b.credential_budget_exceeded(cred)
+        if over is None:
+            return False
+        self.b.audit("credential.budget_exceeded", credentialId=cred.id, budgetId=over[0],
+                     reason=over[1], **view.summary())
+        self._deny(flow, 429, f"credential budget for this tab: {over[1]}")
+        return True
+
     # ------------------------------------------------------------ credentials
     def _sentinel_locations(self, flow: http.HTTPFlow) -> list[tuple[str, str, str | None, str | None]]:
         """(credential_id, location, header_name, header_value) for every sentinel occurrence."""
@@ -478,6 +489,8 @@ class SeclabAddon:
                 if inject is None:
                     self._deny(flow, 403, "cannot infer how to inject an unbound credential")
                     return
+                if self._over_budget(flow, view, cred):  # never prompt for a spent credential (13-8)
+                    return
                 decision = await self.b.ask_binding(view, cred, inject, flow.metadata.get("seclab.origin"))
                 if self._blocked(flow, view):
                     return
@@ -513,13 +526,7 @@ class SeclabAddon:
             if self._blocked(flow, view):
                 return
             for cred, _binding in planned.values():
-                over = self.b.credential_budget_exceeded(cred)
-                if over is not None:
-                    # Revision 6: a capped credential (e.g. CFS feed reads, which can ingest
-                    # packages under the user's identity) is denied, never prompted.
-                    self.b.audit("credential.budget_exceeded", credentialId=cred.id, budgetId=over[0],
-                                 reason=over[1], **view.summary())
-                    self._deny(flow, 429, f"credential budget for this tab: {over[1]}")
+                if self._over_budget(flow, view, cred):
                     return
             req_bytes = len(flow.request.raw_content or b"")
             for cred, _binding in planned.values():

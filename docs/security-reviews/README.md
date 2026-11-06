@@ -85,5 +85,6 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-05 | [tabs wired to their broker (plan tabd-broker-wiring)](20261105-tab-broker.md) | - Round XX (B1, OCI tabs get a real broker): 7d1c94d..325097f, plus 32c3289 (the naming ru | see record |
 | 2026-11-06 | [the real-tab spike, D7 amendment and the agentic implementation plan](20261106-agentic-real-tab-spike.md) | 0f8ac0d.. this branch. That covers: | see record |
 | 2026-11-06 | [background windows guard (focus steal)](20261106-background-windows-guard.md) | round AAA, 5c18c5f..0567ef3: | see record |
+| 2026-11-06 | [CFS package feeds in tabs, broker side (round 13)](20261106-broker-cfs-feeds.md) | "broker: B4 CFS package feeds in tabs, broker side" (policy schema | see record |
 | 2026-11-06 | [deny rules and clientPort (round 12)](20261106-broker-deny-rules.md) | "broker: deny rules and clientPort" (policy schema revision 5, | see record |
 <!-- index:end -->

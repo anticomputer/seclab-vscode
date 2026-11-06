@@ -168,6 +168,7 @@ none
 | `models.bytes` | `integer` | yes |  |
 | `models.maxRequests` | `integer` | yes |  |
 | `models.maxBytes` | `integer` | yes |  |
+| `credentialBudgets` | `object`[] |  | Usage of every credential that has a budget (revision 6), over the tab's lifetime. Counters are keyed by credential id: the controller, which sets budgets, decides ids too. |
 
 
 Example:
@@ -1077,9 +1078,10 @@ as `version` and `policySchema.revision`, so a supervisor can detect it.
 <!-- BEGIN GENERATED: protocol-changelog (broker/tools/docs.py; do not edit) -->
 **0.6.0** (2026-11-06; policy schema revision 6)
 
-- Per-credential budgets (`credentials[].budget {requests, bytes}`; capability `credentialBudget`): a cap on a credential's use over the tab's lifetime (requests it is injected into; bytes sent and received on them). Use of a credential derived from it counts against it too. Over budget is `429`, never prompted (audit `credential.budget_exceeded`). Counters survive `policy.load`. For CFS package feeds in tabs, it bounds package ingestion under the user's identity (ADR cfs-package-feeds-in-tabs).
+- Per-credential budgets (`credentials[].budget {requests, bytes}`; capability `credentialBudget`): a cap on a credential's use over the tab's lifetime (requests it is injected into; bytes sent and received on them). Use of a credential derived from it, at any depth, counts against it too. Over budget is `429`, never prompted, including before a binding prompt (audit `credential.budget_exceeded`). Counters are keyed by credential id and survive `policy.load`; `health` reports them (`credentialBudgets`). The request cap is exact, the byte cap best-effort; a byte budget can't be combined with a `websocket: true` binding. For CFS package feeds in tabs, it bounds package ingestion under the user's identity (ADR cfs-package-feeds-in-tabs).
 - Audit `credential.used` on every credentialed response: `credentialId`, `status`, `respBytes` and the request summary.
-- Provider backstop `azure-devops`: credentialed calls to the REST API under `_apis` (PATs, feed management) and writes under `_packaging` are denied, by host (`pkgs.dev.azure.com`, `dev.azure.com`, `vssps.dev.azure.com`, `*.visualstudio.com`) or by the credential's `provider`.
+- Provider backstop `azure-devops`: credentialed calls to the REST API under `_apis` at any depth (PATs, token sessions, feed management) and writes under `_packaging` at any depth are denied, by host (`dev.azure.com`, `*.dev.azure.com`, `visualstudio.com`, `*.visualstudio.com`) or by the credential's `provider`. Backstop paths now also ignore trailing dots and whitespace in each segment, as IIS-hosted services route them.
+- The observability classifier (`tabd/src/obs/broker-audit.ts`) must list exactly the protocol's audit types; a tabd test enforces it.
 - Example policy `cfs-feeds.policy.json`: the CFS credential bound to GET on the npm registry and PyPI feed paths, injected as `Basic cfs:<token>`, with a budget.
 
 **0.5.0** (2026-11-06; policy schema revision 5)
