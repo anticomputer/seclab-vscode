@@ -2,12 +2,13 @@
 # seclab-reh-start: start this tab's REH once (idempotent). Runs INSIDE the tab as the
 # tab user, invoked by seclab-tabd with a fixed argv. The connection token arrives on
 # stdin, never argv. Listens on a Unix socket only: no TCP port, nothing published.
+# With --check, only reports whether the REH runs with this token (exit 0, else 3).
 set -eu
 umask 077
 
 RUN="/run/user/$(id -u)/seclab"
-mkdir -p "$RUN"
-chmod 700 "$RUN"
+# --check reads only: it creates nothing, even the run dir.
+[ "${1:-}" = "--check" ] || { mkdir -p "$RUN"; chmod 700 "$RUN"; }
 # sbx: the observability collector (root) creates /run/seclab/reh, group seclab-relay, so the
 # relay can connect under its own uid. Elsewhere (OCI) the socket stays private to the tab user.
 SOCK="$RUN/reh.sock"
@@ -21,12 +22,34 @@ case "$TOKEN" in
 esac
 [ "${#TOKEN}" -eq 64 ] || { echo "seclab-reh-start: invalid token length" >&2; exit 2; }
 
-if [ -S "$SOCK" ] && [ -f "$RUN/reh.pid" ] && kill -0 "$(cat "$RUN/reh.pid")" 2>/dev/null; then
-	if [ "$(cat "$RUN/token")" = "$TOKEN" ]; then
+# Liveness through /proc, not signals: on sbx each start runs in its own Landlock domain with
+# signals scoped (seclab-obs-guard), so kill -0 on an earlier start's REH fails with EPERM.
+reh_alive() {
+	p=$(cat "$RUN/reh.pid" 2>/dev/null) || return 1
+	case "$p" in ""|*[!0-9]*) return 1 ;; esac
+	tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q '^[^ ]*sh /opt/seclab-reh/bin/seclab-code-server '
+}
+same_token() {
+	[ "$(cat "$RUN/token" 2>/dev/null)" = "$TOKEN" ]
+}
+
+# --check: exit 0 if the REH runs with this token, 3 if not. Starts and stops nothing.
+if [ "${1:-}" = "--check" ]; then
+	[ -S "$SOCK" ] && reh_alive && same_token && exit 0
+	exit 3
+fi
+
+if [ -S "$SOCK" ] && reh_alive; then
+	if same_token; then
 		exit 0
 	fi
 	kill "$(cat "$RUN/reh.pid")" 2>/dev/null || true
 	sleep 1
+	# Never a second REH beside one that can't be stopped from here (it would take the socket).
+	if reh_alive; then
+		echo "seclab-reh-start: a REH with another token runs and cannot be stopped" >&2
+		exit 1
+	fi
 fi
 
 printf '%s' "$TOKEN" > "$RUN/token"

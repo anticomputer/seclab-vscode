@@ -25,6 +25,9 @@ class FakeDriver implements Driver {
 		return { name: 'fake', available: true, capabilities: { isolationClass: 'namespaces', networkFence: 'none', liveMounts: false, holdAndResume: false, fileWatch: 'native', sameAbsolutePathMount: true, writeBack: 'ungated' } as const };
 	}
 	async ensureRunning(spec: TabRuntimeSpec) { this.calls.push(`start ${spec.tabId}`); this.running.add(spec.sandboxName); }
+	rehUp = true;
+	// Like the real exec, it answers without looking at whether the sandbox runs (review III-1).
+	async rehAlive(spec: TabRuntimeSpec) { this.calls.push(`check ${spec.tabId}`); return this.rehUp; }
 	async verifyFence(): Promise<FenceReport> { return { ok: this.fenceOk, problems: this.fenceOk ? [] : ['drift'], checkedAt: '' }; }
 	async quarantine(spec: TabRuntimeSpec) { this.calls.push(`quarantine ${spec.tabId}`); this.running.delete(spec.sandboxName); }
 	async runningSandboxes() { return new Set(this.running); }
@@ -103,6 +106,34 @@ test('supervisor: connect requires a running sandbox; echo over a channel; drift
 	driver.fenceOk = false;
 	await new Promise(r => setTimeout(r, 120));
 	assert.ok(driver.calls.includes(`quarantine ${tabId}`), driver.calls.join());
+	sup.shutdown();
+});
+
+test('supervisor: ensureRunning on a running tab with a live REH starts nothing; a dead REH restarts (B3c)', async () => {
+	const { call, driver, ws, sup } = setup('idempotent');
+	await call('initialize', { protocolVersion: 'seclab-tabd/0.1', client: { name: 't', version: '0' } });
+	const { tab } = await call('tab.claim', { workspace: { hostPath: ws } });
+	const tabId = tab.metadata.name;
+	const first = await call('tab.ensureRunning', { tabId });
+	const again = await call('tab.ensureRunning', { tabId });
+	assert.equal(again.connectionToken, first.connectionToken);
+	assert.deepEqual(driver.calls.filter(c => c.startsWith('start ')), [`start ${tabId}`], driver.calls.join());
+	assert.ok(driver.calls.includes(`check ${tabId}`));
+	driver.rehUp = false;
+	const restarted = await call('tab.ensureRunning', { tabId });
+	assert.equal(restarted.connectionToken, first.connectionToken);
+	assert.equal(driver.calls.filter(c => c.startsWith('start ')).length, 2, driver.calls.join());
+	// Stopped outside tabd (phase still Running): never probed (an exec would boot it), full start.
+	driver.rehUp = true;
+	driver.running.clear();
+	driver.calls.length = 0;
+	await call('tab.ensureRunning', { tabId });
+	assert.deepEqual(driver.calls, [`start ${tabId}`]);
+	// Quarantined: the fast path is closed until a full start.
+	driver.fenceOk = false;
+	await new Promise(r => setTimeout(r, 120));
+	assert.ok(driver.calls.includes(`quarantine ${tabId}`), driver.calls.join());
+	assert.equal((await call('tab.get', { tabId })).tab.status.phase, 'Failed');
 	sup.shutdown();
 });
 

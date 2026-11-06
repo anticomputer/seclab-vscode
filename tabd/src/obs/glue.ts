@@ -454,6 +454,11 @@ export class ObsGlue {
 		}
 	}
 
+	/** The tab's in-VM collector session (sbx) is up. */
+	collectorAlive(tabId: string): boolean {
+		return this.sessions.get(tabId)?.alive ?? false;
+	}
+
 	own(tabId: string): void {
 		this.hub.own(tabId);
 	}
