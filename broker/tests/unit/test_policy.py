@@ -336,3 +336,47 @@ def test_request_summary_carries_client_port():
     v = RequestView("https", "api.example.com", 443, "GET", "/", "", client_port=50123)
     assert v.summary()["clientPort"] == 50123 and "clientPort" not in req().summary()
     assert v == req(host="api.example.com")  # not part of request identity
+
+
+def test_credential_budget_is_validated_and_counts_parent():
+    """Revision 6: a per-credential budget over the tab's lifetime; derived use counts
+    against the parent; counters survive policy.load."""
+    from seclab_broker.core import Broker
+    cred = {"id": "cfs", "inject": {"header": "Authorization", "fmt": "Basic {base64:cfs:{value}}"},
+            "bind": [{"host": "pkgs.example.test", "path": "/feed/**", "methods": ["GET"]}],
+            "budget": {"requests": 2, "bytes": 100}}
+    b = Broker()
+    b.rpc_policy_load({"policy": {"version": 1, "credentials": [cred]}})
+    c = b.creds.get("cfs")
+    assert c.budget == (2, 100) and b.credential_budget_exceeded(c) is None
+    b.charge_credential(c, requests=1, nbytes=10)
+    child = b.creds.derive(c, "seclab-canary-derived-0000000000000000", "pattern")
+    assert b.credential_budget_exceeded(child) is None
+    b.charge_credential(child, requests=1)
+    assert b.credential_budget_exceeded(c) == ("cfs", "request budget exhausted")
+    assert b.credential_budget_exceeded(child) == ("cfs", "request budget exhausted")
+    b.rpc_policy_load({"policy": {"version": 1, "credentials": [dict(cred, budget={"bytes": 100})]}})
+    assert b.credential_budget_exceeded(c) is None  # the request cap was lifted; usage kept
+    b.charge_credential(c, nbytes=90)
+    assert b.credential_budget_exceeded(c) == ("cfs", "byte budget exhausted")
+    for bad in ({"requests": -1}, {"requests": 1, "other": 1}, {"bytes": "1"}):
+        with pytest.raises(PolicyError):
+            Policy.from_json({"version": 1, "credentials": [dict(cred, budget=bad)]})
+
+
+@pytest.mark.parametrize("method,path,denied", [
+    ("GET", "/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/left-pad", False),
+    ("GET", "/example-org/ExampleProject/_packaging/example-pypi-feed/pypi/download/x/1.0/x-1.0-py3-none-any.whl", False),
+    ("PUT", "/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/left-pad", True),
+    ("POST", "/example-org/ExampleProject/_packaging/example-pypi-feed/pypi/upload", True),
+    ("DELETE", "/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/left-pad/-rev/1", True),
+    ("PATCH", "/example-org/_packaging/feed/npm/registry/x", True),
+    ("GET", "/example-org/_apis/tokens/pats", True),
+    ("POST", "/example-org/ExampleProject/_apis/packaging/feeds", True),
+    ("GET", "/_apis/token/sessiontokens", True),
+    ("GET", "/EXAMPLE-ORG/_APIS/Tokens/Pats", True),
+])
+def test_azure_devops_backstop(method, path, denied):
+    for host, provider in (("pkgs.dev.azure.com", None), ("vssps.dev.azure.com", None), ("feed.example.test", "azure-devops")):
+        assert (backstop_denies(req(host=host, method=method, path=path), provider) is not None) == denied, (host, method, path)
+    assert backstop_denies(req(host="feed.example.test", method="PUT", path="/o/p/_packaging/f")) is None  # not by host

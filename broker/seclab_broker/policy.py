@@ -429,13 +429,17 @@ class CredentialSpec:
     provider: str | None = None
     sentinel_prefix: str | None = None
     derive: tuple["DeriveRule", ...] = ()
+    # (requests, bytes) caps over the tab's lifetime; None means uncapped (revision 6).
+    budget: tuple[int | None, int | None] | None = None
 
     @classmethod
     def from_json(cls, obj: dict) -> "CredentialSpec":
         default_inject = Inject.from_json(obj["inject"]) if "inject" in obj else None
+        b = obj.get("budget")
         return cls(id=obj["id"], bindings=tuple(parse_bindings(obj["bind"], default_inject)),
                    provider=obj.get("provider"), sentinel_prefix=obj.get("sentinelPrefix"),
-                   derive=parse_derive(obj.get("derive", [])))
+                   derive=parse_derive(obj.get("derive", [])),
+                   budget=(b.get("requests"), b.get("bytes")) if b is not None else None)
 
 
 @dataclass(frozen=True)

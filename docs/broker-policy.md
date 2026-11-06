@@ -234,6 +234,9 @@ A sentinel credential. The broker mints its sentinel (returned by `policy.load`)
 | `inject` | [`inject`](broker-policy.md#inject) |  | Default for bindings without their own `inject`. |
 | `provider` | `string` |  | Extra provider backstop deny-list to apply (by name). Providers are also applied automatically by host. (pattern `^[a-z0-9-]{1,32}$`) |
 | `sentinelPrefix` | `string` |  | Replaces `SECLAB_SNTL_` for clients that check a token format. (pattern `^[A-Za-z0-9_-]{0,16}$`) |
+| `budget` | `object` |  | Per-tab cap on this credential's use (revision 6), over the tab's lifetime: requests it is injected into, and bytes sent and received on them. Over budget is `429`, never a prompt (audit `credential.budget_exceeded`). Use of credentials derived from it counts against it too. For example, it bounds package ingestion under the user's identity through CFS. |
+| `budget.requests` | `integer` |  | (min `0`; max `10000000`) |
+| `budget.bytes` | `integer` |  | (min `0`; max `1099511627776`) |
 | `derive` | [`derive`](broker-policy.md#derive)[] |  | Trusted derivation rules (revision 3). See `derive`. (max items `8`) |
 
 <a id="derive"></a>
@@ -402,6 +405,21 @@ endpoints is refused with `403`, whatever the bindings say. These endpoints let
 a tab mint or register its own durable credential.
 
 <!-- BEGIN GENERATED: policy-backstop (broker/tools/docs.py; do not edit) -->
+#### `azure-devops`
+
+Hosts: `pkgs.dev.azure.com`, `dev.azure.com`, `vssps.dev.azure.com`, `*.visualstudio.com`. Path prefixes: `/`. Source: https://learn.microsoft.com/en-us/rest/api/azure/devops/
+
+| Methods | Path | Why |
+|---|---|---|
+| * | `/_apis` | Azure DevOps REST API root (organisation-less hosts such as vssps.dev.azure.com): tokens, PATs, identities https://learn.microsoft.com/en-us/rest/api/azure/devops/tokens/pats |
+| * | `/_apis/**` | Azure DevOps REST API (see above) |
+| * | `/*/_apis` | Organisation-level REST API: PAT lifecycle (_apis/tokens/pats), feed management (_apis/packaging/feeds) https://learn.microsoft.com/en-us/rest/api/azure/devops/artifacts/feed-management |
+| * | `/*/_apis/**` | Organisation-level REST API (see above) |
+| * | `/*/*/_apis` | Project-level REST API, including project-scoped feed management |
+| * | `/*/*/_apis/**` | Project-level REST API (see above) |
+| POST, PUT, PATCH, DELETE | `/*/_packaging/**` | Writes to an organisation-scoped feed: npm publish is a PUT on the registry path, PyPI upload a POST, unpublish a DELETE https://learn.microsoft.com/en-us/azure/devops/artifacts/npm/publish |
+| POST, PUT, PATCH, DELETE | `/*/*/_packaging/**` | Writes to a project-scoped feed such as /example-org/ExampleProject/_packaging/... (see above) |
+
 #### `github`
 
 Hosts: `api.github.com`. Path prefixes: `/`, `/api/v3`. Source: https://github.com/github/rest-api-description/blob/99b1432b55b9a71d0881fd792a87f1807cf4c8f2/descriptions/api.github.com/api.github.com.json
@@ -474,6 +492,69 @@ Rules marked gitleaks are taken from https://github.com/gitleaks/gitleaks/blob/5
 ## Examples (generated)
 
 <!-- BEGIN GENERATED: policy-examples (broker/tools/docs.py; do not edit) -->
+#### [`broker/examples/cfs-feeds.policy.json`](../broker/examples/cfs-feeds.policy.json)
+
+<!-- check: policy -->
+```json
+{
+ "version": 1,
+ "tabId": "example-cfs-feeds",
+ "baseline": false,
+ "prompt": {
+  "enabled": true,
+  "timeoutSeconds": 60
+ },
+ "allow": [
+  {
+   "id": "cfs-npm",
+   "host": "pkgs.dev.azure.com",
+   "methods": [
+    "GET"
+   ],
+   "path": "/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/**"
+  },
+  {
+   "id": "cfs-pypi",
+   "host": "pkgs.dev.azure.com",
+   "methods": [
+    "GET"
+   ],
+   "path": "/example-org/ExampleProject/_packaging/example-pypi-feed/pypi/**"
+  }
+ ],
+ "credentials": [
+  {
+   "id": "cfs",
+   "provider": "azure-devops",
+   "inject": {
+    "header": "Authorization",
+    "fmt": "Basic {base64:cfs:{value}}"
+   },
+   "bind": [
+    {
+     "host": "pkgs.dev.azure.com",
+     "path": "/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/**",
+     "methods": [
+      "GET"
+     ]
+    },
+    {
+     "host": "pkgs.dev.azure.com",
+     "path": "/example-org/ExampleProject/_packaging/example-pypi-feed/pypi/**",
+     "methods": [
+      "GET"
+     ]
+    }
+   ],
+   "budget": {
+    "requests": 5000,
+    "bytes": 2147483648
+   }
+  }
+ ]
+}
+```
+
 #### [`broker/examples/copilot-agent.policy.json`](../broker/examples/copilot-agent.policy.json)
 
 <!-- check: policy -->
