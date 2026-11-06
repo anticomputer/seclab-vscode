@@ -10,6 +10,9 @@
 
 export const BROKER_PROTOCOL = 'seclab-broker/1';
 export const BROKER_POLICY_SCHEMA = { version: 1, revision: 6 } as const;
+// A local broker image built before the broker's protocol or schema changed is stale, not
+// hostile: say how to rebuild it.
+export const REBUILD_HINT = 'the local broker image is stale: rebuild it with ./seclab image oci';
 
 export class BrokerContractError extends Error { }
 
@@ -30,7 +33,7 @@ export function checkBrokerHello(hello: unknown, tabId: string, version?: string
 	}
 	const s = h.policySchema;
 	if (!s || s.version !== BROKER_POLICY_SCHEMA.version || s.revision !== BROKER_POLICY_SCHEMA.revision) {
-		throw new BrokerContractError(`broker.hello: policy schema ${JSON.stringify(s)}, expected ${JSON.stringify(BROKER_POLICY_SCHEMA)}`);
+		throw new BrokerContractError(`broker.hello: policy schema ${JSON.stringify(s)}, expected ${JSON.stringify(BROKER_POLICY_SCHEMA)} (${REBUILD_HINT})`);
 	}
 	if (version !== undefined && h.version !== version) {
 		throw new BrokerContractError(`broker.hello: version ${JSON.stringify(h.version)}, but the image declares ${version}`);
