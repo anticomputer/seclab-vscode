@@ -1,16 +1,35 @@
 diff --git a/src/vs/workbench/services/configuration/browser/configurationService.ts b/src/vs/workbench/services/configuration/browser/configurationService.ts
-index 55e2c0ce..b015d91a 100644
+index 55e2c0ce..3c2c1aab 100644
 --- a/src/vs/workbench/services/configuration/browser/configurationService.ts
 +++ b/src/vs/workbench/services/configuration/browser/configurationService.ts
-@@ -44,6 +44,7 @@ import { IPolicyService, NullPolicyService } from '../../../../platform/policy/c
+@@ -44,6 +44,8 @@ import { IPolicyService, NullPolicyService } from '../../../../platform/policy/c
  import { IUserDataProfile, IUserDataProfilesService } from '../../../../platform/userDataProfile/common/userDataProfile.js';
  import { IJSONEditingService } from '../common/jsonEditing.js';
  import { IBrowserWorkbenchEnvironmentService } from '../../environment/browser/environmentService.js';
 +import { seclabFixedSetting, seclabScrubFixedSettings } from '../common/seclabFixedSettings.js';
++import { seclabFixedSetting, seclabScrubFixedSettings } from '../common/seclabFixedSettings.js';
  import { workbenchConfigurationNodeBase } from '../../../common/configuration.js';
  import { mainWindow } from '../../../../base/browser/window.js';
  import { runWhenWindowIdle } from '../../../../base/browser/dom.js';
-@@ -335,7 +336,16 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
+@@ -72,6 +74,8 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
+ 	private initRemoteUserConfigurationBarrier: Barrier;
+ 	private completeWorkspaceBarrier: Barrier;
+ 	private readonly configurationCache: IConfigurationCache;
++	/** seclab: this window's remote authority, for the settings a tab window fixes (patch 0017). */
++	private readonly seclabAuthority: string | undefined;
+ 	private _configuration: Configuration;
+ 	private initialized: boolean = false;
+ 	private readonly defaultConfiguration: DefaultConfiguration;
+@@ -131,6 +135,8 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
+ 		this.defaultConfiguration = this._register(new DefaultConfiguration(userDataProfileService.currentProfile.id, configurationCache, environmentService, logService));
+ 		this.policyConfiguration = policyService instanceof NullPolicyService ? new NullPolicyConfiguration() : this._register(new PolicyConfiguration(this.defaultConfiguration, policyService, logService));
+ 		this.configurationCache = configurationCache;
++		// seclab: this window's remote authority, for the settings a tab window fixes (patch 0017).
++		this.seclabAuthority = remoteAuthority;
+ 		this._configuration = new Configuration(this.defaultConfiguration.configurationModel, this.policyConfiguration.configurationModel, ConfigurationModel.createEmptyModel(logService), ConfigurationModel.createEmptyModel(logService), ConfigurationModel.createEmptyModel(logService), ConfigurationModel.createEmptyModel(logService), new ResourceMap(), ConfigurationModel.createEmptyModel(logService), new ResourceMap<ConfigurationModel>(), this.workspace, logService);
+ 		this.applicationConfigurationDisposables = this._register(new DisposableStore());
+ 		this.createApplicationConfiguration();
+@@ -335,7 +341,15 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
  	getValue(arg1?: unknown, arg2?: unknown): unknown {
  		const section = typeof arg1 === 'string' ? arg1 : undefined;
  		const overrides = isConfigurationOverrides(arg1) ? arg1 : isConfigurationOverrides(arg2) ? arg2 : undefined;
@@ -19,16 +38,15 @@ index 55e2c0ce..b015d91a 100644
 +		// Here rather than at each reader: the readers are spread across the browser view
 +		// service, the chat contribution and the sessions providers, and a list of call sites
 +		// would silently miss one added by an upstream bump.
-+		const seclabAuthority = this.environmentService.remoteAuthority;
-+		const seclabFixed = seclabFixedSetting(seclabAuthority, section);
++		const seclabFixed = seclabFixedSetting(this.seclabAuthority, section);
 +		if (seclabFixed) {
 +			return seclabFixed.value;
 +		}
-+		return seclabScrubFixedSettings(seclabAuthority, section, this._configuration.getValue(section, overrides));
++		return seclabScrubFixedSettings(this.seclabAuthority, section, this._configuration.getValue(section, overrides));
  	}
  
  	updateValue(key: string, value: unknown): Promise<void>;
-@@ -414,7 +424,11 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
+@@ -414,7 +428,11 @@ export class WorkspaceService extends Disposable implements IWorkbenchConfigurat
  	}
  
  	inspect<T>(key: string, overrides?: IConfigurationOverrides): IConfigurationValue<T> {
@@ -36,7 +54,7 @@ index 55e2c0ce..b015d91a 100644
 +		const result = this._configuration.inspect<T>(key, overrides);
 +		// seclab: a fixed key reports its fixed value (patch 0017). The per-layer fields are
 +		// left alone, so a reader that deliberately inspects a single layer still sees it.
-+		const seclabFixed = seclabFixedSetting(this.environmentService.remoteAuthority, key);
++		const seclabFixed = seclabFixedSetting(this.seclabAuthority, key);
 +		return seclabFixed ? { ...result, value: seclabFixed.value as T } : result;
  	}
  
