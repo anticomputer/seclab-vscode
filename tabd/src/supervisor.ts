@@ -9,6 +9,7 @@ import { mintSentinel, rewriteSecret, type ScanResult, type VaultEntry } from '.
 import { DriverError, type BrokerHooks, type Driver, type DriverInfo, type FenceReport, type TabRuntimeSpec, type TabTemplate } from './drivers/types.ts';
 import { BrokerControl, connectBroker } from './broker-control.ts';
 import { defaultPolicy } from './broker-policy.ts';
+import { Approvals, asJson, sanitizeApproval } from './approvals.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { assertTabId, canonicalWorkspacePath, sandboxNameFor, TEMPLATE_NAME_RE, ValidationError, type PathPolicy } from './validate.ts';
 import { ObsGlue, ObsParamError } from './obs/glue.ts';
@@ -92,6 +93,7 @@ export class Supervisor {
 	private readonly fenceTimers = new Map<string, NodeJS.Timeout>();
 	/** One long-lived control connection per running tab's broker (docs/broker-protocol.md §1). */
 	private readonly brokers = new Map<string, BrokerControl>();
+	private readonly approvals = new Approvals();
 	private readonly phases = new Map<string, string>();
 	private readonly owned = new Set<string>();
 	private dead = false;
@@ -278,6 +280,9 @@ export class Supervisor {
 			case 'tab.remove': return this.remove(this.record(p.tabId));
 			case 'tab.reset': return this.reset(this.record(p.tabId));
 			case 'tab.egress.block': return this.blockDestination(this.record(p.tabId), p.host, p.port);
+			case 'tab.approval.list': return { approvals: this.approvals.list(this.record(p.tabId).tabId).map(asJson) };
+			case 'tab.approval.decide': return this.decideApproval(this.record(p.tabId), p.approvalId, p.decision);
+			case 'tab.userAction': return this.userAction(this.record(p.tabId));
 			case 'tab.writeback.status': return this.writebackStatus(this.record(p.tabId));
 			case 'tab.writeback.sync': return this.writebackSync(this.record(p.tabId));
 			case 'tab.writeback.content': return this.writebackCall(this.record(p.tabId), wb => wb.content(String(p.tabId), wbPath(p.path)));
@@ -581,6 +586,7 @@ export class Supervisor {
 					this.brokers.set(r.tabId, c);
 					// Observability: the broker's audit stream (trusted) into the tab's event log.
 					void this.obs.brokerAttached(r.tabId, c);
+					this.attachApprovals(r.tabId, c);
 					this.audit('broker.configure', 'ok', { tabId: r.tabId, policyRevision: typeof loaded?.revision === 'number' ? loaded.revision : null, caSha256: pemSha256 });
 					return { caPem: certPem, proxyUser: 'seclab', proxyPassword };
 				} catch (e) {
@@ -590,6 +596,74 @@ export class Supervisor {
 				}
 			},
 		};
+	}
+
+	/**
+	 * Prompts (plan tabd-broker-wiring B3): the broker's held requests reach the Tab Manager as
+	 * `tab.approval` (sanitised, with the request's process lineage as quoted data, never a
+	 * decision input), and their resolution as `tab.approval.resolved`. On every (re)connect
+	 * the broker learns the tab was just opened, and still-pending approvals are re-surfaced.
+	 */
+	private attachApprovals(tabId: string, c: BrokerControl): void {
+		const surface = (raw: unknown) => {
+			const a = sanitizeApproval(raw);
+			if (!a || !this.approvals.add(tabId, a)) {
+				this.audit('broker.approval', 'dropped', { tabId });
+				return;
+			}
+			const lineage = this.obs.promptLineage(tabId, a.approvalId);
+			this.audit('broker.approval', 'requested', { tabId, approvalId: a.approvalId, kind: a.kind, host: a.request.host, port: a.request.port });
+			this.notify('tab.approval', { tabId, approval: asJson(a), lineage: lineage as unknown as Json });
+		};
+		c.onNotification(n => {
+			if (n.method === 'approval.requested') {
+				surface(n.params);
+			} else if (n.method === 'approval.resolved') {
+				const p = n.params as { approvalId?: unknown; decision?: unknown; by?: unknown } | null;
+				if (p && typeof p.approvalId === 'string' && this.approvals.resolve(tabId, p.approvalId)) {
+					this.notify('tab.approval.resolved', { tabId, approvalId: p.approvalId, decision: String(p.decision).slice(0, 32), by: String(p.by).slice(0, 32) });
+				}
+			}
+		});
+		c.onClose(() => {
+			if (!this.brokers.has(tabId) || this.brokers.get(tabId) === c) {
+				this.approvals.forget(tabId);
+			}
+		});
+		void c.request('tab.event', { kind: 'opened' }).catch(() => undefined);
+		void c.request('approval.list').then(res => {
+			for (const a of ((res as { approvals?: unknown[] } | undefined)?.approvals ?? [])) {
+				surface(a);
+			}
+		}).catch(() => undefined);
+	}
+
+	/** The user's answer to one of this tab's approvals; only a decision the approval offered. */
+	private async decideApproval(r: TabRecord, approvalId: unknown, decision: unknown) {
+		const ok = this.approvals.check(r.tabId, approvalId, decision);
+		if (typeof ok === 'string') {
+			throw new RpcError(-32602, ok);
+		}
+		const c = this.brokers.get(r.tabId);
+		if (!c) {
+			throw new RpcError(-32013, 'this tab has no broker connection');
+		}
+		await c.request('approval.decide', { approvalId: ok.approval.approvalId, decision: ok.decision });
+		this.approvals.resolve(r.tabId, ok.approval.approvalId);
+		this.audit('broker.approval', 'decided', { tabId: r.tabId, approvalId: ok.approval.approvalId, decision: ok.decision, host: ok.approval.request.host });
+		return {};
+	}
+
+	/**
+	 * The user did ordinary work in this tab (from the Tab Manager: editor input, never a consent
+	 * dialog). Opens the broker's user-action gate; at most once a second.
+	 */
+	private async userAction(r: TabRecord) {
+		const c = this.brokers.get(r.tabId);
+		if (c && this.approvals.userActionDue(r.tabId)) {
+			await c.request('tab.event', { kind: 'userAction' });
+		}
+		return {};
 	}
 
 	/**
