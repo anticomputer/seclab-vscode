@@ -1125,7 +1125,7 @@ test('tab.detections.query: detections across tabs from persisted logs (stopped 
 });
 
 test('window decision logs: prefix parsed, sources pinned per file, hostile lines bounded, rotation and truncation followed', async () => {
-	const { WindowLogForwarder, WindowLogTail, WINDOW_LOGS, parseWindowLogLine, rotatedName, rpcFilterShipped, MAX_LINE_BYTES } = await import('../src/obs/windowlog.ts');
+	const { WindowLogForwarder, WindowLogTail, WINDOW_LOGS, parseWindowLogLine, rotatedName, rpcFilterShipped, rpcPolicyApplied, ENFORCEMENT_MARKER, MAX_LINE_BYTES } = await import('../src/obs/windowlog.ts');
 	const dir = path.join(SCRATCH, 'windowlog');
 	fs.rmSync(dir, { recursive: true, force: true });
 	fs.mkdirSync(dir, { recursive: true });
@@ -1181,10 +1181,18 @@ test('window decision logs: prefix parsed, sources pinned per file, hostile line
 	assert.deepEqual(new WindowLogTail(path.join(dir, 'seclabAhpGate.log'), WINDOW_LOGS.get('seclabAhpGate.log')!).poll(), []);
 	fs.rmSync(path.join(dir, 'seclabAhpGate.log'));
 	t.close();
-	// Review round 12 (merge order): forwarding needs the build's statement that the filter ships.
-	assert.equal(rpcFilterShipped({}), false);
-	assert.equal(rpcFilterShipped({ seclabRpcFilter: true }), false);
-	assert.equal(rpcFilterShipped({ seclabRpcFilter: { policy: 'a'.repeat(64) } }), true);
+	// Review round 12 (merge order): forwarding needs the policy stamp AND the enforcing code's
+	// marker for that table in the bundle (the stamp alone proves only the table was applied).
+	const sha = 'a'.repeat(64);
+	const bundle = path.join(dir, 'workbench.js');
+	fs.writeFileSync(bundle, `${'x'.repeat(3 << 20)}const m="${ENFORCEMENT_MARKER(sha)}";`);
+	assert.equal(rpcPolicyApplied({ seclabRpcPolicy: { sha256: sha, file: 'x' } }), sha);
+	assert.equal(await rpcFilterShipped({}, bundle), false);
+	assert.equal(await rpcFilterShipped({ seclabRpcPolicy: { sha256: 'nothex' } }, bundle), false);
+	assert.equal(await rpcFilterShipped({ seclabRpcPolicy: { sha256: 'b'.repeat(64) } }, bundle), false, 'a marker for another table');
+	assert.equal(await rpcFilterShipped({ seclabRpcPolicy: { sha256: sha } }, path.join(dir, 'missing.js')), false);
+	assert.equal(await rpcFilterShipped({ seclabRpcPolicy: { sha256: sha } }, bundle), true, 'found past several read chunks');
+	fs.rmSync(bundle);
 
 	// Forwarder: in order, at most 64 per report, held (not dropped) while tabd is away, and a
 	// reload resumes where delivery ended.

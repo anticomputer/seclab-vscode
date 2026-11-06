@@ -42,10 +42,44 @@ const MAX_DETAIL_KEYS = 32;
 /** spdlog keeps `<name>.<k>.log` for k = 1..filecount (6 in 1.145); look a little further. */
 const MAX_ROTATED = 10;
 
-/** Whether this build ships the RPC filter, which is what makes the window logs tab-proof. */
-export function rpcFilterShipped(product: unknown): boolean {
-	const f = typeof product === 'object' && product !== null ? (product as Record<string, unknown>).seclabRpcFilter : undefined;
-	return typeof f === 'object' && f !== null && /^[0-9a-f]{64}$/.test(String((f as Record<string, unknown>).policy));
+/**
+ * The RPC policy table this build applied (`product.json` `seclabRpcPolicy.sha256`, stamped
+ * by prepare.sh iff the filter's 0005 is in the series; EDR rpc-policy-stamp). This proves the
+ * table was applied, not that the filter enforces: see `ENFORCEMENT_MARKER`.
+ */
+export function rpcPolicyApplied(product: unknown): string | undefined {
+	const s = typeof product === 'object' && product !== null ? (product as Record<string, unknown>).seclabRpcPolicy : undefined;
+	const sha = typeof s === 'object' && s !== null ? (s as Record<string, unknown>).sha256 : undefined;
+	return typeof sha === 'string' && /^[0-9a-f]{64}$/.test(sha) ? sha : undefined;
+}
+
+/** The literal the filter's enforcing code carries in the built workbench bundle, for that table. */
+export const ENFORCEMENT_MARKER = (sha256: string) => `seclabRpcFilterEnforcing:${sha256}`;
+
+/**
+ * Whether this build ships the RPC filter, which is what makes the window logs tab-proof: the
+ * policy stamp, and the enforcing code's marker for that same table in the workbench bundle.
+ */
+export async function rpcFilterShipped(product: unknown, bundle: string): Promise<boolean> {
+	const sha = rpcPolicyApplied(product);
+	return sha !== undefined && fileContains(bundle, ENFORCEMENT_MARKER(sha));
+}
+
+/** Streams a (large) file looking for an ASCII literal. */
+async function fileContains(file: string, needle: string): Promise<boolean> {
+	let tail = '';
+	try {
+		for await (const chunk of fs.createReadStream(file, { encoding: 'latin1', highWaterMark: 1 << 20 })) {
+			const s = tail + (chunk as string);
+			if (s.includes(needle)) {
+				return true;
+			}
+			tail = s.slice(-needle.length);
+		}
+	} catch {
+		return false;
+	}
+	return false;
 }
 
 /** One log line (logger prefix, then a JSON object) to a report event, or undefined. */

@@ -77,11 +77,18 @@ the build fails if either weakens.
 
 **Merge order is enforced in code** (review round 12, HIGH before this fix). Before the
 filter ships, a tab can reach `MainThreadLogger.$log`, and its init data names the logger
-URIs. The build stamps `product.json` with `seclabRpcFilter.policy` (the sha256 of the
-applied `seclabPolicyData.ts`, written after patching) if and only if the filter patch is in
-`patches/series`; an invariant fails the build otherwise. The Tab Manager reads its own
-`<appRoot>/product.json` and forwards nothing, with a warning in its log, unless that key
-is a 64-hex string.
+URIs. The Tab Manager forwards nothing, with a warning in its log, unless both of these hold:
+- its own `<appRoot>/product.json` has `seclabRpcPolicy.sha256`. The build stamps it after
+  patching, if and only if 0005 is in `patches/series`
+  ([EDR rpc-policy-stamp](20261106-rpc-policy-stamp.md)). The stamp proves only that the
+  policy table was applied, so the log calls it "RPC policy table applied", never "filter
+  active";
+- the built workbench bundle (`out/vs/workbench/workbench.desktop.main.js`) contains
+  `seclabRpcFilterEnforcing:<that sha256>`, a literal the filter's enforcing code carries
+  (asked of the RPC session). This ties the table to code that enforces it, so a series
+  with 0005 but without the enforcing patches forwards nothing.
+
+The bundle is scanned once per window, off the activation path.
 
 ## Alternatives considered
 - **A `MainThreadSeclab*` service from the renderer to the Tab Manager**, as first

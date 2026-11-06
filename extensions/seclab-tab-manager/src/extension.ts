@@ -12,7 +12,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { TabdClient, type TabdChannel } from '../tabd-src/client.ts';
 import type { ObsEvent } from '../tabd-src/obs/schema.ts';
-import { rpcFilterShipped, WindowLogForwarder } from '../tabd-src/obs/windowlog.ts';
+import { rpcFilterShipped, rpcPolicyApplied, WindowLogForwarder } from '../tabd-src/obs/windowlog.ts';
 import { TabActivity } from './activity.ts';
 import { DetectionsSummary } from './detections.ts';
 import { DetectionNotifier } from './notifications.ts';
@@ -37,7 +37,8 @@ let writeBack: WriteBackReview | undefined;
 let notifier: DetectionNotifier | undefined;
 let summary: DetectionsSummary | undefined;
 let prompts: EgressPrompts | undefined;
-let windowLogs: WindowLogForwarder | undefined;
+/** undefined: not started; null: checking the build, or declined. */
+let windowLogs: WindowLogForwarder | null | undefined;
 /** Tabs whose broker reported `capabilities.denyRules` (tab.get → broker). */
 const blockable = new Set<string>();
 
@@ -535,7 +536,7 @@ function currentTabId(): string | undefined {
  * `<windowLogsPath>/exthost/<id>`, so the window's folder is two levels up.
  */
 function forwardWindowLogs(tabId: string): void {
-	if (windowLogs || tabId !== currentTabId()) {
+	if (windowLogs !== undefined || tabId !== currentTabId()) {
 		return;
 	}
 	const extHostLogs = path.dirname(extensionContext.logUri.fsPath);
@@ -544,17 +545,27 @@ function forwardWindowLogs(tabId: string): void {
 		return;
 	}
 	// The logs are tab-proof only behind the RPC filter (MainThreadLogger.* denied); a build
-	// without it would let a tab write "trusted" lines (review round 12).
+	// without it would let a tab write "trusted" lines (review round 12). Checked off the
+	// activation path: the bundle is large.
 	let product: unknown;
 	try {
 		product = JSON.parse(fs.readFileSync(path.join(vscode.env.appRoot, 'product.json'), 'utf8'));
 	} catch {
 		product = undefined;
 	}
-	if (!rpcFilterShipped(product)) {
-		log.warn('gate and filter decisions are not forwarded: this build does not ship the RPC filter');
-		return;
-	}
+	const bundle = path.join(vscode.env.appRoot, 'out', 'vs', 'workbench', 'workbench.desktop.main.js');
+	windowLogs = null;
+	void rpcFilterShipped(product, bundle).then(ok => {
+		if (!ok) {
+			const table = rpcPolicyApplied(product);
+			log.warn(`gate and filter decisions are not forwarded: ${table ? `RPC policy table applied (${table.slice(0, 12)}), enforcement marker missing` : 'no RPC policy table applied'} in this build`);
+			return;
+		}
+		startWindowLogs(tabId, extHostLogs);
+	});
+}
+
+function startWindowLogs(tabId: string, extHostLogs: string): void {
 	const key = (name: string) => `seclab.windowLog.${name}`;
 	windowLogs = new WindowLogForwarder({
 		dir: path.dirname(extHostLogs),
