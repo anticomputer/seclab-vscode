@@ -156,7 +156,11 @@ if (mode === 'prepare') {
 	for (const f of fs.readdirSync(extSrc)) {
 		fs.copyFileSync(path.join(extSrc, f), path.join(extBuild, f));
 	}
-	fs.copyFileSync(path.join(import.meta.dirname, 'mitm.js'), path.join(extBuild, 'mitm.js'));
+	// `probes.js` too: the probe table is a separate module so the protocol-level validator
+	// and the run share one definition, and the takeover requires it at runtime.
+	for (const f of ['mitm.js', 'probes.js']) {
+		fs.copyFileSync(path.join(import.meta.dirname, f), path.join(extBuild, f));
+	}
 	// The takeover's own files live in the installed extension directory inside the tab, not
 	// in the workspace: the overlay would hide them, and `check` collects them with one exec
 	// after the run, as diagnostics only.
