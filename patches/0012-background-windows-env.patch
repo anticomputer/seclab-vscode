@@ -213,7 +213,7 @@ new file mode 100644
 index 0000000..02f6036
 --- /dev/null
 +++ b/src/vs/platform/windows/electron-main/backgroundWindowsGuard.ts
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,146 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -277,6 +277,20 @@ index 0000000..02f6036
 +			}
 +		}
 +		replace(app, 'focus', () => () => undefined);
++		// macOS: an accessory (UI-element) app. The system never hands it the front when another
++		// app's window closes, which it did here twice while the user worked in another app
++		// (WindowServer SetFrontProcess from a system connection, not from this app), and it has
++		// no Dock icon to click. Set at ready, before any window, and kept: nothing may switch
++		// it back to a regular app.
++		if (process.platform === 'darwin') {
++			const setPolicy = app.setActivationPolicy.bind(app);
++			replace(app, 'setActivationPolicy', () => () => setPolicy('accessory'));
++			replace(app.dock!, 'show', () => () => Promise.resolve());
++			app.whenReady().then(() => {
++				setPolicy('accessory');
++				console.error('[background windows] activation policy: accessory');
++			}, () => undefined);
++		}
 +		// Every window (workbench and auxiliary) is click-through from creation, before it is
 +		// shown. The line on stderr is what the focus probe checks (test/focus/probe.ts).
 +		app.on('browser-window-created', (_event, win: BrowserWindow) => {

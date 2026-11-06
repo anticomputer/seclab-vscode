@@ -168,3 +168,19 @@ Dialogs cancelled in background mode answer with their `cancelId`, which
     forge a guard line;
   - the probe requires a click-through record for every editor window;
   - stopped renderers always get SIGCONT, even if the probe is interrupted.
+- **Second path, found on the fixed build (95f2c83/97a1b09):** with click-through windows and
+  no dialogs, the editor was still made frontmost about 76 s after the probe's
+  server-connection-lost step.
+  - This time the WindowServer logged `SetFrontProcess` from a system connection (`0x5ce03`),
+    not from the editor and not from an input event.
+  - The same connection promoted the RPC session's editor at 17:22:13Z. Both times another
+    app (Teams) was frontmost.
+  - It's the system choosing a new front app, as when the front app's window closes, and
+    picking the regular app whose window sits on top.
+- **Fix:** in background mode on macOS the editor is an accessory (UI-element) app from
+  `ready`, before any window. `setActivationPolicy` and `dock.show` can't switch it back.
+  The system doesn't promote accessory apps, and there's no Dock icon to click.
+- **Harness:** every background launch must report `ApplicationType` `UIElement`
+  (`lsappinfo`), or the launcher kills it and fails the run, whatever the caller. The probe
+  also requires the guard's `activation policy: accessory` record. Builds without this fix
+  can't be launched in the background at all.
