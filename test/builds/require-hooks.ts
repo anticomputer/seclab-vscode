@@ -107,7 +107,10 @@ function selfTest(): void {
 			throw new Error(`self-test: ${msg}`);
 		}
 	};
-	const dir = fs.mkdtempSync(path.join(repo, '.work', 'require-hooks-'));
+	// Scratch: SECLAB_SCRATCH (a named volume in ./seclab test builds; the repo is mounted read-only).
+	const base = process.env.SECLAB_SCRATCH ?? path.join(repo, '.work');
+	fs.mkdirSync(base, { recursive: true });
+	const dir = fs.mkdtempSync(path.join(base, 'require-hooks-'));
 	try {
 		const mf = path.join(dir, 'variants.json');
 		fs.writeFileSync(mf, JSON.stringify({ v: { hooks: [{ id: 'h', patch: 'test/x.patch', target: 'reh', marker: 'SECLAB_TEST_ONLY:h', bundle: 'out/a.js' }, { id: 'd', patch: 'test/d.patch', target: 'desktop', marker: 'SECLAB_TEST_ONLY:d', bundle: 'out/a.js' }] } }));
