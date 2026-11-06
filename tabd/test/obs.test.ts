@@ -775,3 +775,38 @@ test('broker audit review BA-2 and restart: a rule name is tab-influenced; resta
 	assert.ok(!got.includes('engine.error#50'), 'stale replay dropped');
 	feed.detach();
 });
+
+test('broker endpoint and beacons: connects to the broker are neither bypass nor beacon; proxied beacons are timed by the broker (trusted)', () => {
+	const tab = 't-abcdefghijklmnopqrstuvwxyz';
+	const seen: ObsEvent[] = [];
+	const hub = new ObsHub({ onEvent: e => seen.push(e) });
+	hub.context(tab, { brokerPort: 49364, brokerAddrs: new Set(['169.254.1.1']) });
+	for (let i = 0; i < 6; i++) {
+		hub.emit(tab, { source: 'sbx-collector', integrity: 'tab-vm-root', class: 'net.connect', priority: 'debug', summary: 'connect', proc: { pid: 7, exe: '/usr/bin/curl' }, net: { addr: '169.254.1.1', port: 49364, family: 'inet', result: 'ok' }, sensorTime: new Date(1_793_800_000_000 + i * 2000).toISOString() });
+	}
+	assert.ok(!seen.some(e => e.class === 'detection'), `broker connects raise nothing: ${seen.filter(e => e.class === 'detection').map(e => e.rule)}`);
+	hub.emit(tab, { source: 'sbx-collector', integrity: 'tab-vm-root', class: 'net.connect', priority: 'debug', summary: 'connect', proc: { pid: 8, exe: '/usr/bin/curl' }, net: { addr: '169.254.1.1', port: 8081, family: 'inet', result: 'ok' } });
+	assert.ok(seen.some(e => e.rule === 'egress.bypass'), 'another port on the broker host is still a bypass');
+	// Five denials to one destination, 2 s apart by the broker's clock.
+	const cause = hub.emit(tab, { source: 'broker', integrity: 'trusted', class: 'egress.request', priority: 'warning', summary: 'denied', net: { addr: 'c2.test', port: 443 }, detail: { auditType: 'request.denied_unprompted' } });
+	for (let i = 0; i < 5; i++) {
+		hub.brokerTiming(tab, 'c2.test:443', 1_793_800_000_000 + i * 2000, cause);
+	}
+	const b = seen.find(e => e.rule === 'beacon.periodic');
+	assert.ok(b, 'beacon found from broker timing');
+	assert.equal(b.integrity, 'trusted');
+	assert.deepEqual(b.cause, [cause!.seq]);
+	assert.match(b.summary, /attempts to c2\.test:443 every ~2\.0 s \(through the broker, denied\)/);
+	hub.close();
+	// Review BA-3: forged sensor connects with the same destination text can't feed broker beacons.
+	let now = 1_793_900_000_000;
+	const seen2: ObsEvent[] = [];
+	const hub2 = new ObsHub({ now: () => now, onEvent: e => seen2.push(e) });
+	for (let i = 0; i < 3; i++, now += 2000) {
+		hub2.emit(tab, { source: 'sbx-collector', integrity: 'tab-vm-root', class: 'net.connect', priority: 'debug', summary: 'c', net: { addr: 'c2.test', port: 443, family: 'inet', result: 'pending' } });
+	}
+	const cause2 = hub2.emit(tab, { source: 'broker', integrity: 'trusted', class: 'egress.request', priority: 'warning', summary: 'denied', net: { addr: 'c2.test', port: 443 }, detail: { auditType: 'request.denied' } });
+	hub2.brokerTiming(tab, 'c2.test:443', now, cause2);
+	assert.ok(!seen2.some(e => e.rule === 'beacon.periodic' && e.integrity === 'trusted'), 'no trusted beacon from mostly tab-vm-root evidence');
+	hub2.close();
+});

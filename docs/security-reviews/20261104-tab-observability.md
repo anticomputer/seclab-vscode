@@ -138,6 +138,25 @@ Regression tests (`tabd/test/obs.test.ts`), "broker audit review" × 2:
 `tabd/test/broker-supervisor.test.ts` "broker audit" covers replay, dedupe, gap
 reporting, the foreign-tab drop and tagging.
 
+### Round 7e: broker endpoint and beacons through the broker
+Scope:
+- the `brokerEndpoint` sensor hook (sbx port from the host, OCI address from
+  `docker inspect`);
+- broker connects are no longer flagged as `egress.bypass` (every proxied request had
+  been);
+- broker per-destination timing feeds the beacon rule before aggregation.
+
+| ID | Sev | Area | Finding | Status | Fix |
+|---|---|---|---|---|---|
+| BA-3 | Low | detection | Sensor and broker beacon state shared one map, and a VM-root collector could forge `net.addr` text to collide with a broker key. Mostly `tab-vm-root` evidence could then fire a `trusted` beacon, or suppress one. | Fixed | Broker timings get their own map. Regression test added. |
+| BA-L2 | Low | rate | Beacon detections from broker timing bypassed the hub's buckets. | Fixed | Rate-limited like findings (`#broker-beacon`). |
+| BA-L3 | Info | robustness | `docker inspect` printing `null` would have thrown in the OCI start path. | Fixed | `?? {}`. |
+| BA-L4 | Info | EDR | Overstated `trusted` for the beacon cause; left out that sbx endpoint addresses are `tab-vm-root` data and that allowed destinations aren't timed. | Fixed | EDR decision 6. |
+
+Accepted: under sbx, VM root can poison `brokerAddrs` (`/etc/hosts`, forged hello) and so
+hide bypass detection to that address. That gives root nothing new: the whole collector
+stream is `tab-vm-root`, and sbx's network policy, not detection, is what blocks egress.
+
 ## Accepted residuals (documented in the ADR)
 - `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.
 - Under OCI the privileged Falco sees every container on the Docker host. Only rules for the exact tab container ids are loaded, and its only output is stdout to tabd.
