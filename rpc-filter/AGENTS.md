@@ -105,6 +105,10 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 | `auth-get-session` | rogue extension | `rpc:MainThreadAuthentication.$getSession` | succeeded |
 | `clipboard-read` | rogue extension | `rpc:MainThreadClipboard.$readText` | denied |
 | `command-enumeration` | rogue extension | `rpc:MainThreadCommands.$getCommands` | succeeded |
+| `host-doc-open-userdata` | rogue extension | `rpc:MainThreadDocuments.$tryOpenDocument` | denied |
+| `host-doc-show-userdata` | rogue extension | `rpc:MainThreadTextEditors.$tryShowTextDocument` | denied |
+| `host-file-search-nested-uri` | rogue extension | `rpc:MainThreadWorkspace.$startFileSearch` | denied |
+| `host-fs-activation-scheme` | rogue extension | `rpc:MainThreadFileSystem.$ensureActivation` | denied |
 | `host-fs-read-file-scheme` | rogue extension | `rpc:MainThreadFileSystem.$readFile` | denied |
 | `host-fs-read-userdata` | rogue extension | `rpc:MainThreadFileSystem.$readFile` | denied |
 | `host-fs-write-file-scheme` | rogue extension | `rpc:MainThreadFileSystem.$writeFile` | denied |

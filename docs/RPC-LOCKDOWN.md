@@ -418,7 +418,7 @@ Two properties of the digest matter:
   build over a stale surface. **Open work**, noted in §7.
 
 <!-- seclab:begin baseline -->
-Current baseline at `a717861c0758`: **4239 surfaces, 4193 denied, 46 not denied** (20 allow, 13 allow_with_constraint, 4 prompt, 9 rewrite).
+Current baseline at `a717861c0758`: **4239 surfaces, 4187 denied, 52 not denied** (22 allow, 17 allow_with_constraint, 4 prompt, 9 rewrite).
 <!-- seclab:end baseline -->
 
 ### 4.1 What is reachable right now
@@ -459,23 +459,29 @@ any becomes reachable without one.
 | `rpc:MainThreadCommands.$registerCommand` | allow_with_constraint |
 | `rpc:MainThreadCommands.$unregisterCommand` | allow_with_constraint |
 | `rpc:MainThreadConsole.$logExtensionHostMessage` | allow |
+| `rpc:MainThreadDocuments.$tryOpenDocument` | allow_with_constraint |
 | `rpc:MainThreadErrors.$onUnexpectedError` | allow |
 | `rpc:MainThreadExtensionService.$onDidActivateExtension` | allow |
 | `rpc:MainThreadExtensionService.$onExtensionActivationError` | allow_with_constraint |
 | `rpc:MainThreadExtensionService.$onExtensionRuntimeError` | allow |
 | `rpc:MainThreadExtensionService.$onWillActivateExtension` | allow |
 | `rpc:MainThreadExtensionService.$setPerformanceMarks` | allow |
+| `rpc:MainThreadFileSystem.$ensureActivation` | allow_with_constraint |
 | `rpc:MainThreadFileSystem.$readFile` | allow_with_constraint |
 | `rpc:MainThreadFileSystem.$writeFile` | allow_with_constraint |
+| `rpc:MainThreadLanguageFeatures.$unregister` | allow |
 | `rpc:MainThreadSecretState.$deletePassword` | rewrite |
 | `rpc:MainThreadSecretState.$getKeys` | rewrite |
 | `rpc:MainThreadSecretState.$getPassword` | rewrite |
 | `rpc:MainThreadSecretState.$setPassword` | rewrite |
 | `rpc:MainThreadStorage.$initializeExtensionStorage` | rewrite |
 | `rpc:MainThreadStorage.$setValue` | rewrite |
+| `rpc:MainThreadTextEditors.$tryShowTextDocument` | allow_with_constraint |
 | `rpc:MainThreadTunnelService.$openTunnel` | prompt |
 | `rpc:MainThreadWindow.$asExternalUri` | prompt |
+| `rpc:MainThreadWindow.$getInitialState` | allow |
 | `rpc:MainThreadWindow.$openUri` | prompt |
+| `rpc:MainThreadWorkspace.$startFileSearch` | allow_with_constraint |
 <!-- seclab:end reachable -->
 
 ## 5. Integration with the broker
@@ -584,14 +590,52 @@ Numbers 1 to 4 came out of the independent design review
    handler's lifetime; the candidate fix is to carry the origin in the
    invoker's disposable scope instead.
 
-   This is safe only while every command verdict is `deny`: with nothing
-   allowed, a laundered call is refused for being denied rather than for being
-   laundered. That dependency is **checked, not described** —
-   `check_drift.py::check_residuals` fails the build if any command is given a
-   verdict other than `deny` while
-   `residuals['deferred-laundering'].fixed` is false. Allowing a command is the
-   obvious next compatibility fix, and nothing in review would otherwise
-   connect it to this paragraph.
+   This is safe only while no reachable command can launder. That dependency is
+   **checked, not described**: `check_drift.py::check_residuals` fails the build
+   if any command is given a verdict other than `deny` while
+   `residuals['deferred-laundering'].fixed` is false, unless it is one of the
+   residual's recorded **leaf exceptions** (`_setContext`,
+   `_executeHoverProvider`, `_executeCompletionItemProvider`): a handler shown
+   never to reach `ICommandService`, with an argument validator, because a leaf
+   can still leak or spoof host state on its own
+   ([EDR](edr/20261106-ordinary-session-rpc-trace.md)). Fixing the residual
+   properly is the follow-up after this landing.
+
+10. **Every text model in the window is synced to the tab's extension host.**
+    `MainThreadDocumentsAndEditors` filters models only by
+    `shouldSynchronizeModel` (size and simple-widget), with no scheme check. A
+    user who opens their settings (`vscode-userdata:`) or an output channel in a
+    tab window hands its content to the tab. This is a Win → Ext push, so this
+    filter never sees it. Open on main; needs its own push-side control.
+11. **Responses are not filtered.** The filter screens requests, never what a
+    tab returns. Any tab-provided item that carries a command, a `command:` link,
+    trusted markdown or a remote image would put tab-chosen actions or fetches
+    into trusted UI, executed by the global `ICommandService` on a user gesture.
+    So every provider, tree, SCM, status bar, decoration and notification
+    registration stays denied until one structural response-side control exists
+    (taint by origin for commands and links; neutralise trusted markdown and
+    remote images from tab data). The ordinary-session classification drafts for
+    them are kept, not enforced, in
+    [`rpc-filter/policy/drafts/`](../rpc-filter/policy/drafts/20261106-ordinary-session.json).
+12. **Nested URIs.** `SECLAB_URI_ARGS` covers parameters typed exactly
+    `UriComponents`; a URI inside an options object or a union type is invisible
+    to it. Every allowed method with nested URIs has a named validator
+    (`$startFileSearch` today); the drafts list the rest.
+
+### 7.1 What a tab's extensions cannot do yet
+
+Denied until the response-side control above lands, so these are visible
+losses, not bugs:
+- source control (the git extension's SCM view, quick diff, timeline);
+- tree views, output channels, status bar items and decorations;
+- language features registered by the tab (hover, completion, code actions,
+  code lens, links, folding), so a language extension in a tab activates but
+  contributes nothing to the editor;
+- tasks, debugging, terminal environment contributions, URI handlers, quick
+  fixes, workspace trust requests.
+
+Extensions activate, run their commands, keep per-tab state and secrets, read,
+write, search and open their own workspace files.
 
 1. **Verdict laundering through nested commands.** Addressed by the command taint (§2.5.2, [ADR](adr/20261104-tab-command-taint.md)), but two escapes remain: a handler using a constructor-injected or imported `ICommandService` rather than its accessor, and services that run commands for a caller such as `IOpenerService` for `command:` URIs. The global-service backstop catches the denied subset; the allowed subset is unfiltered. Probed, not assumed.
 2. **A verdict is pinned to an id, not to behaviour.** The digest covers policy

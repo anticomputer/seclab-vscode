@@ -235,6 +235,15 @@ const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
 	'provider-completion-host-file': r => {
 		try { return JSON.parse(r.detail).sawHostContent === true ? null : 'no host file content came back'; } catch { return `unparseable detail: ${r.detail}`; }
 	},
+	'host-doc-open-userdata': r => {
+		try { return JSON.parse(r.detail).sawHostContent === true ? null : 'the host settings canary did not come back'; } catch { return `unparseable detail: ${r.detail}`; }
+	},
+	'host-doc-show-userdata': r => {
+		try { return JSON.parse(r.detail).sawHostContent === true ? null : 'the host settings canary did not come back'; } catch { return `unparseable detail: ${r.detail}`; }
+	},
+	'host-file-search-nested-uri': r => {
+		try { return JSON.parse(r.detail).sawHostResult === true ? null : 'no host resource in the search results'; } catch { return `unparseable detail: ${r.detail}`; }
+	},
 	'state-claim-tab-manager-write': () => {
 		const userData = opt('--user-data');
 		if (!userData) { return 'needs --user-data'; }

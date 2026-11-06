@@ -14,8 +14,11 @@
 export interface SeclabValidatorContext {
 	/** `seclab+<tabId>`, from the connection. */
 	readonly authority: string;
-	/** Revive as the consumer will; a reason when it is not a canonical resource of this tab. */
-	checkTabUri(raw: unknown): string | undefined;
+	/**
+	 * Revive as the consumer will (`URI.revive`). `canonical` is false when the revived URI's
+	 * cached string or fsPath disagrees with its own components. Undefined if it does not revive.
+	 */
+	reviveUri(raw: unknown): { readonly scheme: string; readonly authority: string; readonly canonical: boolean } | undefined;
 	/** A handler is registered for this id right now (by anyone). */
 	isCommandRegistered(id: string): boolean;
 	/** A command id the trusted side owns (generated from the inventory and the policy). */
@@ -32,6 +35,8 @@ export interface SeclabValidatorContext {
 	contextValueFingerprint(value: unknown): string | undefined;
 	/** Fingerprint of what this tab last stored, per key: a key someone else has since written is not the tab's. */
 	readonly tabContextKeys: Map<string, string | undefined>;
+	/** Command ids this tab registered (tabCommandRegistration adds; unregistration needs them). */
+	readonly tabRegisteredCommands: Set<string>;
 }
 
 /** @returns a reason to deny, or undefined to let the call through. */
@@ -113,6 +118,190 @@ const tabCommandRegistration: SeclabValidator = (args, ctx) => {
 	if (ctx.isCommandRegistered(id)) {
 		return 'command id is already registered';
 	}
+	ctx.tabRegisteredCommands.add(id);
+	return undefined;
+};
+
+/**
+ * `$unregisterCommand(id)`. Upstream already confines it to this host's own registrations
+ * (MainThreadCommands is per host and keeps its own map); this keeps that true if upstream
+ * stops doing so, and refuses anything this tab did not register.
+ */
+const tabCommandUnregistration: SeclabValidator = (args, ctx) => {
+	const bad = arity(args, 1, 1);
+	if (bad) {
+		return bad;
+	}
+	const id = args[0];
+	if (typeof id !== 'string' || !ctx.tabRegisteredCommands.has(id)) {
+		return 'not a command this tab registered';
+	}
+	ctx.tabRegisteredCommands.delete(id);
+	return undefined;
+};
+
+/** A canonical `vscode-remote` resource of this tab, and nothing else (not `untitled:`). */
+function checkTabUri(raw: unknown, ctx: SeclabValidatorContext): string | undefined {
+	const u = ctx.reviveUri(raw);
+	if (!u) {
+		return 'not URI components';
+	}
+	if (u.scheme !== 'vscode-remote') {
+		return `scheme ${u.scheme} is not this tab's file system`;
+	}
+	if (u.authority !== ctx.authority) {
+		return `authority ${u.authority} is not this tab`;
+	}
+	if (!u.canonical) {
+		return 'URI carries a cached form that is not its own';
+	}
+	return undefined;
+}
+
+function tabUri(v: unknown, what: string, ctx: SeclabValidatorContext): string | undefined {
+	if (!isPlainObject(v)) {
+		return `${what} is not URI components`;
+	}
+	const reason = checkTabUri(v, ctx);
+	return reason ? `${what}: ${reason}` : undefined;
+}
+
+/**
+ * `$tryOpenDocument(uri, options?)`. The default branch hands the URI to
+ * `ITextModelService.createModelReference`, and the model is then synced to the tab: with
+ * `file:` or `vscode-userdata:` that is a host read. Only this tab's own resources.
+ */
+const tabDocumentOpen: SeclabValidator = (args, ctx) => {
+	const bad = arity(args, 1, 2);
+	if (bad) {
+		return bad;
+	}
+	const options = args[1];
+	if (options !== undefined && options !== null && !(isPlainObject(options)
+		&& Object.keys(options).every(k => k === 'encoding')
+		&& (options.encoding === undefined || (typeof options.encoding === 'string' && options.encoding.length <= 64)))) {
+		return 'argument 1 is not document open options';
+	}
+	return tabUri(args[0], 'argument 0', ctx);
+};
+
+const SHOW_OPTIONS = new Set(['position', 'preserveFocus', 'pinned', 'selection']);
+
+/** `$tryShowTextDocument(resource, options)`: opens an editor on the resource, which syncs its model to the tab. */
+const tabDocumentShow: SeclabValidator = (args, ctx) => {
+	const bad = arity(args, 1, 2);
+	if (bad) {
+		return bad;
+	}
+	const o = args[1];
+	if (o !== undefined && o !== null) {
+		if (!isPlainObject(o) || !Object.keys(o).every(k => SHOW_OPTIONS.has(k))) {
+			return 'argument 1 is not editor show options';
+		}
+		if ((o.preserveFocus !== undefined && typeof o.preserveFocus !== 'boolean')
+			|| (o.pinned !== undefined && typeof o.pinned !== 'boolean')
+			|| (o.position !== undefined && !Number.isInteger(o.position))
+			|| (o.selection !== undefined && !(isPlainObject(o.selection) && Object.values(o.selection).every(n => Number.isInteger(n))))) {
+			return 'argument 1 has a malformed option';
+		}
+	}
+	return tabUri(args[0], 'argument 0', ctx);
+};
+
+/**
+ * `$ensureActivation(scheme)`: activates the extensions declaring `onFileSystem:<scheme>`, in
+ * the trusted UI host as well as the tab's. A tab's own files are `vscode-remote`; nothing else.
+ */
+const tabFileSystemActivation: SeclabValidator = (args) => {
+	return arity(args, 1, 1) ?? (args[0] === 'vscode-remote' ? undefined : 'only the vscode-remote file system');
+};
+
+const FILE_SEARCH_BOOLEANS = ['expandPatterns', 'disregardIgnoreFiles', 'disregardGlobalIgnoreFiles',
+	'disregardParentIgnoreFiles', 'disregardExcludeSettings', 'disregardSearchExcludeSettings', 'ignoreSymlinks',
+	'ignoreGlobCase', 'onlyOpenEditors', 'onlyFileScheme', 'exists', 'sortByScore', 'shouldGlobSearch'];
+const FILE_SEARCH_NUMBERS = ['maxResults', 'maxFileSize'];
+const FILE_SEARCH_STRINGS = ['_reason', 'filePattern', 'cacheKey'];
+const FILE_SEARCH_KEYS = new Set([...FILE_SEARCH_BOOLEANS, ...FILE_SEARCH_NUMBERS, ...FILE_SEARCH_STRINGS,
+	'includePattern', 'excludePattern', 'extraFileResources', 'changedFileUris']);
+const MAX_PATTERN = 1024;
+const MAX_LIST = 1000;
+
+function pathPattern(v: unknown): boolean {
+	const ok = (s: unknown) => typeof s === 'string' && s.length <= MAX_PATTERN;
+	return ok(v) || (Array.isArray(v) && v.length <= MAX_LIST && v.every(ok));
+}
+
+/**
+ * `$startFileSearch(includeFolder, options)`. The folder is a declared URI; `options` carries
+ * NESTED URIs (`extraFileResources`, `changedFileUris`, `excludePattern[].uri`) that the search
+ * backend stats, which the positional rule does not see. Every URI must be this tab's own; an
+ * option this validator does not know is refused, so an upstream-added URI option cannot pass.
+ */
+const tabFileSearch: SeclabValidator = (args, ctx) => {
+	const bad = arity(args, 2, 3);
+	if (bad) {
+		return bad;
+	}
+	if (args[2] !== undefined && args[2] !== null) {
+		return 'unexpected argument 2';
+	}
+	if (args[0] !== null && args[0] !== undefined) {
+		const r = tabUri(args[0], 'argument 0', ctx);
+		if (r) {
+			return r;
+		}
+	}
+	const o = args[1];
+	if (!isPlainObject(o)) {
+		return 'argument 1 is not search options';
+	}
+	for (const [k, v] of Object.entries(o)) {
+		if (!FILE_SEARCH_KEYS.has(k)) {
+			return `unknown search option ${k}`;
+		}
+		if (v === undefined || v === null) {
+			continue;
+		}
+		if (FILE_SEARCH_BOOLEANS.includes(k) && typeof v !== 'boolean') {
+			return `${k} is not a boolean`;
+		}
+		if (FILE_SEARCH_NUMBERS.includes(k) && !(Number.isSafeInteger(v) && (v as number) >= 0)) {
+			return `${k} is not a count`;
+		}
+		if (FILE_SEARCH_STRINGS.includes(k) && !(typeof v === 'string' && v.length <= MAX_PATTERN)) {
+			return `${k} is not a short string`;
+		}
+		if (k === 'includePattern' && !pathPattern(v)) {
+			return 'includePattern is not a pattern';
+		}
+		if (k === 'excludePattern') {
+			if (!Array.isArray(v) || v.length > MAX_LIST) {
+				return 'excludePattern is not a list';
+			}
+			for (const e of v) {
+				if (!isPlainObject(e) || !Object.keys(e).every(x => x === 'pattern' || x === 'uri') || !pathPattern(e.pattern)) {
+					return 'excludePattern entry is malformed';
+				}
+				if (e.uri !== undefined && e.uri !== null) {
+					const r = tabUri(e.uri, 'excludePattern uri', ctx);
+					if (r) {
+						return r;
+					}
+				}
+			}
+		}
+		if (k === 'extraFileResources' || k === 'changedFileUris') {
+			if (!Array.isArray(v) || v.length > MAX_LIST) {
+				return `${k} is not a list`;
+			}
+			for (const u of v) {
+				const r = tabUri(u, k, ctx);
+				if (r) {
+					return r;
+				}
+			}
+		}
+	}
 	return undefined;
 };
 
@@ -176,7 +365,7 @@ const tabModelPosition: SeclabValidator = (args, ctx) => {
 	if (!isPlainObject(uri) || uri.$mid !== 1) {
 		return 'argument 0 is not a marshalled URI';
 	}
-	const reason = ctx.checkTabUri(uri);
+	const reason = checkTabUri(uri, ctx);
 	if (reason) {
 		return reason;
 	}
@@ -262,6 +451,11 @@ const setContextKey: SeclabValidator = (args, ctx) => {
 export const SECLAB_VALIDATORS: ReadonlyMap<string, SeclabValidator> = new Map([
 	['activationErrorNoInstallPrompt', activationErrorNoInstallPrompt],
 	['tabCommandRegistration', tabCommandRegistration],
+	['tabCommandUnregistration', tabCommandUnregistration],
+	['tabDocumentOpen', tabDocumentOpen],
+	['tabDocumentShow', tabDocumentShow],
+	['tabFileSystemActivation', tabFileSystemActivation],
+	['tabFileSearch', tabFileSearch],
 	['extensionStorageInit', extensionStorageInit],
 	['extensionStorageSet', extensionStorageSet],
 	['secretByKey', secretByKey],

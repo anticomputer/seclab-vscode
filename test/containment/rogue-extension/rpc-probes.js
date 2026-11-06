@@ -244,22 +244,60 @@ async function runProbes(vscode, context, targets) {
 			return 'written';
 		});
 
-	// --- provider commands over a host file -----------------------------------
+	// --- the core editing set, against the host ---------------------------------
+	// In a remote extension host `file:` is the TAB's disk (the REH transforms it to
+	// vscode-remote), so a probe that means the host names vscode-userdata:, which the
+	// trusted side resolves against the host profile. The harness seeds a canary in its
+	// settings.json; the probes report only whether it came back, never the text.
+	const hostSettings = Uri.parse('vscode-userdata:/User/settings.json');
+	const sawCanary = s => /seclabcanary_/.test(String(s));
+	await probe(results, 'host-doc-open-userdata', 'rpc:MainThreadDocuments.$tryOpenDocument',
+		async () => ({ sawHostContent: sawCanary((await vscode.workspace.openTextDocument(hostSettings)).getText()) }));
+	await probe(results, 'host-doc-show-userdata', 'rpc:MainThreadTextEditors.$tryShowTextDocument',
+		async () => {
+			const editor = await vscode.window.showTextDocument(hostSettings, { preserveFocus: true, preview: true });
+			return { sawHostContent: sawCanary(editor.document.getText()) };
+		});
+	await probe(results, 'host-file-search-nested-uri', 'rpc:MainThreadWorkspace.$startFileSearch',
+		async () => {
+			// findFiles has no public way to name extra resources, so add one to the
+			// outgoing request, as a rogue extension host can.
+			const found = await withRewrittenRequest(
+				a => a.length === 2 && a[1] && typeof a[1] === 'object' && 'maxResults' in a[1],
+				a => [a[0], { ...a[1], extraFileResources: [hostSettings.toJSON()] }],
+				() => vscode.workspace.findFiles('**/settings.json', undefined, 10));
+			return { sawHostResult: found.some(u => u.scheme === 'vscode-userdata') };
+		});
+	await probe(results, 'host-fs-activation-scheme', 'rpc:MainThreadFileSystem.$ensureActivation',
+		async () => {
+			try {
+				await vscode.workspace.fs.stat(Uri.parse('seclab-probe-scheme:/x'));
+				return { activationReached: true };
+			} catch (e) {
+				// A denial looks like an unsupported operation; anything else means the
+				// trusted side processed the activation request and then found no provider.
+				if (/unsupported operation/i.test(String(e && e.message))) {
+					throw e;
+				}
+				return { activationReached: true, error: String(e && e.message).slice(0, 120) };
+			}
+		});
+
+	// --- provider commands over a host resource --------------------------------
 	// _executeCompletionItemProvider / _executeHoverProvider hand the caller's URI
-	// to ITextModelService.createModelReference, and in a remote window file: is
-	// the HOST disk. Word-based completion then returns the file's words.
-	const hostModel = Uri.file(safety.safePath(ctx, ctx.canary, 'host model read'));
+	// to ITextModelService.createModelReference; word-based completion then returns
+	// the document's words.
 	await probe(results, 'provider-completion-host-file', 'cmd:_executeCompletionItemProvider',
 		async () => {
 			const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider',
-				hostModel, new vscode.Position(0, 0));
+				hostSettings, new vscode.Position(0, 0));
 			const labels = (list?.items ?? []).map(i => typeof i.label === 'string' ? i.label : i.label?.label);
-			return { items: labels.length, sawHostContent: labels.some(l => /CANARY/.test(String(l))) };
+			return { items: labels.length, sawHostContent: labels.some(sawCanary) };
 		});
 	await probe(results, 'provider-hover-host-file', 'cmd:_executeHoverProvider',
 		async () => {
 			const hovers = await vscode.commands.executeCommand('vscode.executeHoverProvider',
-				hostModel, new vscode.Position(0, 0));
+				hostSettings, new vscode.Position(0, 0));
 			return { hovers: Array.isArray(hovers) ? hovers.length : null };
 		});
 

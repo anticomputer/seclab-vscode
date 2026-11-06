@@ -32,15 +32,16 @@ function ctx(over: Partial<Ctx> = {}): Ctx {
 	const context = new Map<string, unknown>([['editorTextFocus', true], ['someone.elses', 'x']]);
 	return {
 		authority: TAB,
-		checkTabUri: (raw: unknown) => {
-			const u = raw as { scheme?: unknown; authority?: unknown };
-			if (u.scheme === 'untitled') {
+		// Stands in for URI.revive plus the filter's canonical comparison: a URI carrying a
+		// cached `external` or `fsPath` that disagrees with its components is not canonical.
+		reviveUri: (raw: unknown) => {
+			const u = raw as { scheme?: unknown; authority?: unknown; path?: unknown; external?: unknown; fsPath?: unknown };
+			if (!u || typeof u !== 'object' || typeof u.scheme !== 'string') {
 				return undefined;
 			}
-			if (u.scheme !== 'vscode-remote') {
-				return `scheme ${String(u.scheme)} is not reachable from a tab`;
-			}
-			return u.authority === TAB ? undefined : 'authority is not this tab';
+			const own = `${u.scheme}://${String(u.authority ?? '')}${String(u.path ?? '')}`;
+			const canonical = (u.external === undefined || u.external === own) && (u.fsPath === undefined || u.fsPath === u.path);
+			return { scheme: u.scheme, authority: String(u.authority ?? ''), canonical };
 		},
 		isCommandRegistered: id => id === 'workbench.action.files.save' || id === 'already.registered',
 		isTrustedCommandId: id => id.startsWith('workbench.') || id === 'simpleBrowser.show',
@@ -49,6 +50,7 @@ function ctx(over: Partial<Ctx> = {}): Ctx {
 		contextKeyValue: key => context.get(key),
 		contextValueFingerprint: v => JSON.stringify(v),
 		tabContextKeys: new Map(),
+		tabRegisteredCommands: new Set(),
 		...over,
 	};
 }
@@ -93,7 +95,7 @@ const DEFECTS: Defect[] = [
 	{
 		name: 'a host file URI for a provider command', validator: 'tabModelPosition',
 		dangerous: [{ $mid: 1, scheme: 'file', path: '/seclab-canary/host-only-marker' }, POS],
-		from: 'const reason = ctx.checkTabUri(uri);', to: 'const reason = undefined;',
+		from: 'const reason = checkTabUri(uri, ctx);', to: 'const reason = undefined;',
 	},
 	{
 		name: 'a core context key', validator: 'setContextKey',
@@ -104,6 +106,46 @@ const DEFECTS: Defect[] = [
 		name: 'a context key someone else set', validator: 'setContextKey',
 		dangerous: ['someone.elses', 'spoofed'],
 		from: 'if (!mine) {', to: 'if (false) {',
+	},
+	{
+		name: 'a URI whose cached fsPath points somewhere else', validator: 'tabModelPosition',
+		dangerous: [{ $mid: 1, scheme: 'vscode-remote', authority: TAB, path: '/w/a.ts', fsPath: '/seclab-canary/host-only-marker' }, POS],
+		from: "if (!u.canonical) {\n\t\treturn 'URI carries a cached form that is not its own';", to: "if (false) {\n\t\treturn 'URI carries a cached form that is not its own';",
+	},
+	{
+		name: 'an untitled: URI where only the tab\'s file system is allowed', validator: 'tabDocumentOpen',
+		dangerous: [{ $mid: 1, scheme: 'untitled', authority: TAB, path: '/Untitled-1' }],
+		from: "if (u.scheme !== 'vscode-remote') {", to: "if (u.scheme !== 'vscode-remote' && u.scheme !== 'untitled') {",
+	},
+	{
+		name: 'unregistering a command the tab never registered', validator: 'tabCommandUnregistration',
+		dangerous: ['workbench.action.files.save'],
+		from: "if (typeof id !== 'string' || !ctx.tabRegisteredCommands.has(id)) {", to: "if (typeof id !== 'string') {",
+	},
+	{
+		name: 'opening a host file as a document', validator: 'tabDocumentOpen',
+		dangerous: [{ $mid: 1, scheme: 'vscode-userdata', path: '/User/settings.json' }],
+		from: "return tabUri(args[0], 'argument 0', ctx);\n};\n\nconst SHOW_OPTIONS", to: "return undefined;\n};\n\nconst SHOW_OPTIONS",
+	},
+	{
+		name: 'showing a host file in an editor', validator: 'tabDocumentShow',
+		dangerous: [{ $mid: 1, scheme: 'file', path: '/seclab-canary/host-only-marker' }, {}],
+		from: "return tabUri(args[0], 'argument 0', ctx);\n};\n\n/**\n * `$ensureActivation", to: "return undefined;\n};\n\n/**\n * `$ensureActivation",
+	},
+	{
+		name: 'activating a file system other than the tab\'s', validator: 'tabFileSystemActivation',
+		dangerous: ['vscode-userdata'],
+		from: "(args[0] === 'vscode-remote' ? undefined : 'only the vscode-remote file system')", to: 'undefined',
+	},
+	{
+		name: 'a host path nested in file search options', validator: 'tabFileSearch',
+		dangerous: [null, { extraFileResources: [{ $mid: 1, scheme: 'file', path: '/seclab-canary/host-only-marker' }] }],
+		from: 'const r = tabUri(u, k, ctx);', to: 'const r = undefined;',
+	},
+	{
+		name: 'an unknown file search option', validator: 'tabFileSearch',
+		dangerous: [null, { someFutureUris: ['x'] }],
+		from: 'if (!FILE_SEARCH_KEYS.has(k)) {', to: 'if (false) {',
 	},
 ];
 
@@ -189,6 +231,9 @@ test('provider commands: this tab\'s resource and a position pass', () => {
 	ok(shipped, 'tabModelPosition', [tabUri(), POS, '.', 10]);
 });
 test('provider commands: host files, other tabs, unmarshalled URIs and bad positions are refused', () => {
+	no(shipped, 'tabModelPosition', [{ ...tabUri(), fsPath: '/Users/someone/.config/x' }, POS]);
+	no(shipped, 'tabModelPosition', [{ ...tabUri(), external: 'file:///seclab-canary/host-only-marker' }, POS]);
+	no(shipped, 'tabModelPosition', [{ $mid: 1, scheme: 'untitled', path: '/Untitled-1' }, POS]);
 	no(shipped, 'tabModelPosition', [{ $mid: 1, scheme: 'file', path: '/seclab-canary/host-only-marker' }, POS]);
 	no(shipped, 'tabModelPosition', [{ $mid: 1, scheme: 'vscode-userdata', path: '/User/settings.json' }, POS]);
 	no(shipped, 'tabModelPosition', [{ ...tabUri(), authority: 'seclab+t-bbbbbbbbbbbbbbbbbbbbbbbbbb' }, POS]);
@@ -233,6 +278,48 @@ test('setContext: with no context service the key reads as foreign, so a set key
 	const UNKNOWN = Object.freeze({});
 	const c = ctx({ contextKeyValue: () => UNKNOWN, contextValueFingerprint: x => x === UNKNOWN ? 'unknown' : JSON.stringify(x) });
 	no(shipped, 'setContextKey', ['myExt.active', true], c);
+});
+
+// --- core editing set ------------------------------------------------------------------------
+test('unregister command: only an id this tab registered, once', () => {
+	const c = ctx();
+	no(shipped, 'tabCommandUnregistration', ['my.cmd'], c);
+	ok(shipped, 'tabCommandRegistration', ['my.cmd'], c);
+	ok(shipped, 'tabCommandUnregistration', ['my.cmd'], c);
+	no(shipped, 'tabCommandUnregistration', ['my.cmd'], c);
+	no(shipped, 'tabCommandUnregistration', ['seclab.openFolder'], c);
+});
+test('open document: this tab\'s resource passes; host, userdata, untitled and other tabs are refused', () => {
+	ok(shipped, 'tabDocumentOpen', [tabUri()]);
+	ok(shipped, 'tabDocumentOpen', [tabUri(), { encoding: 'utf8' }]);
+	no(shipped, 'tabDocumentOpen', [{ $mid: 1, scheme: 'file', path: '/seclab-canary/host-only-marker' }]);
+	no(shipped, 'tabDocumentOpen', [{ $mid: 1, scheme: 'vscode-userdata', path: '/User/settings.json' }]);
+	no(shipped, 'tabDocumentOpen', [{ $mid: 1, scheme: 'untitled', path: '/seclab-canary/x' }]);
+	no(shipped, 'tabDocumentOpen', [{ ...tabUri(), authority: 'seclab+t-bbbbbbbbbbbbbbbbbbbbbbbbbb' }]);
+	no(shipped, 'tabDocumentOpen', [tabUri(), { encoding: 'utf8', other: 1 }]);
+});
+test('show document: this tab\'s resource with known options passes; odd options and host files are refused', () => {
+	ok(shipped, 'tabDocumentShow', [tabUri(), { preserveFocus: true, pinned: false, position: 1 }]);
+	ok(shipped, 'tabDocumentShow', [tabUri(), { selection: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 2 } }]);
+	no(shipped, 'tabDocumentShow', [tabUri(), { preserveFocus: 'no' }]);
+	no(shipped, 'tabDocumentShow', [tabUri(), { revealIfOpen: true }]);
+	no(shipped, 'tabDocumentShow', [{ $mid: 1, scheme: 'file', path: '/x' }, {}]);
+});
+test('fs activation: only vscode-remote', () => {
+	ok(shipped, 'tabFileSystemActivation', ['vscode-remote']);
+	for (const s of ['file', 'vscode-userdata', 'git', 'onFileSystem:x', '', 1]) {
+		no(shipped, 'tabFileSystemActivation', [s]);
+	}
+});
+test('file search: workspace-wide and tab-folder searches pass; nested host URIs and unknown options are refused', () => {
+	ok(shipped, 'tabFileSearch', [null, { _reason: 'startFileSearch', includePattern: '**/*', maxResults: 5, excludePattern: [{ pattern: '**/node_modules' }] }]);
+	ok(shipped, 'tabFileSearch', [tabUri('/w'), { filePattern: 'a', sortByScore: true, extraFileResources: [tabUri()] }]);
+	no(shipped, 'tabFileSearch', [{ $mid: 1, scheme: 'file', path: '/Users' }, {}]);
+	no(shipped, 'tabFileSearch', [null, { changedFileUris: [{ $mid: 1, scheme: 'file', path: '/x' }] }]);
+	no(shipped, 'tabFileSearch', [null, { excludePattern: [{ pattern: 'x', uri: { $mid: 1, scheme: 'vscode-userdata', path: '/' } }] }]);
+	no(shipped, 'tabFileSearch', [null, { maxResults: -1 }]);
+	no(shipped, 'tabFileSearch', [null, { includePattern: { evil: true } }]);
+	no(shipped, 'tabFileSearch', [null, 'options']);
 });
 
 // --- injected defects ------------------------------------------------------------------------

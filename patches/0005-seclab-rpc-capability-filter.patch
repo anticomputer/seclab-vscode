@@ -93,8 +93,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/rpcProtocol.ts b/src/vs/
  		let cancel: (() => void) | undefined;
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b/src/vs/workbench/services/extensions/common/seclabArgValidators.ts
 --- a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts	1969-12-31 19:00:00
-+++ b/src/vs/workbench/services/extensions/common/seclabArgValidators.ts	2026-11-06 17:58:08
-@@ -0,0 +1,285 @@
++++ b/src/vs/workbench/services/extensions/common/seclabArgValidators.ts	2026-11-06 18:50:32
+@@ -0,0 +1,479 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: named argument validators for the RPC capability filter.
 + *
@@ -111,8 +111,11 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b
 +export interface SeclabValidatorContext {
 +	/** `seclab+<tabId>`, from the connection. */
 +	readonly authority: string;
-+	/** Revive as the consumer will; a reason when it is not a canonical resource of this tab. */
-+	checkTabUri(raw: unknown): string | undefined;
++	/**
++	 * Revive as the consumer will (`URI.revive`). `canonical` is false when the revived URI's
++	 * cached string or fsPath disagrees with its own components. Undefined if it does not revive.
++	 */
++	reviveUri(raw: unknown): { readonly scheme: string; readonly authority: string; readonly canonical: boolean } | undefined;
 +	/** A handler is registered for this id right now (by anyone). */
 +	isCommandRegistered(id: string): boolean;
 +	/** A command id the trusted side owns (generated from the inventory and the policy). */
@@ -129,6 +132,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b
 +	contextValueFingerprint(value: unknown): string | undefined;
 +	/** Fingerprint of what this tab last stored, per key: a key someone else has since written is not the tab's. */
 +	readonly tabContextKeys: Map<string, string | undefined>;
++	/** Command ids this tab registered (tabCommandRegistration adds; unregistration needs them). */
++	readonly tabRegisteredCommands: Set<string>;
 +}
 +
 +/** @returns a reason to deny, or undefined to let the call through. */
@@ -210,6 +215,190 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b
 +	if (ctx.isCommandRegistered(id)) {
 +		return 'command id is already registered';
 +	}
++	ctx.tabRegisteredCommands.add(id);
++	return undefined;
++};
++
++/**
++ * `$unregisterCommand(id)`. Upstream already confines it to this host's own registrations
++ * (MainThreadCommands is per host and keeps its own map); this keeps that true if upstream
++ * stops doing so, and refuses anything this tab did not register.
++ */
++const tabCommandUnregistration: SeclabValidator = (args, ctx) => {
++	const bad = arity(args, 1, 1);
++	if (bad) {
++		return bad;
++	}
++	const id = args[0];
++	if (typeof id !== 'string' || !ctx.tabRegisteredCommands.has(id)) {
++		return 'not a command this tab registered';
++	}
++	ctx.tabRegisteredCommands.delete(id);
++	return undefined;
++};
++
++/** A canonical `vscode-remote` resource of this tab, and nothing else (not `untitled:`). */
++function checkTabUri(raw: unknown, ctx: SeclabValidatorContext): string | undefined {
++	const u = ctx.reviveUri(raw);
++	if (!u) {
++		return 'not URI components';
++	}
++	if (u.scheme !== 'vscode-remote') {
++		return `scheme ${u.scheme} is not this tab's file system`;
++	}
++	if (u.authority !== ctx.authority) {
++		return `authority ${u.authority} is not this tab`;
++	}
++	if (!u.canonical) {
++		return 'URI carries a cached form that is not its own';
++	}
++	return undefined;
++}
++
++function tabUri(v: unknown, what: string, ctx: SeclabValidatorContext): string | undefined {
++	if (!isPlainObject(v)) {
++		return `${what} is not URI components`;
++	}
++	const reason = checkTabUri(v, ctx);
++	return reason ? `${what}: ${reason}` : undefined;
++}
++
++/**
++ * `$tryOpenDocument(uri, options?)`. The default branch hands the URI to
++ * `ITextModelService.createModelReference`, and the model is then synced to the tab: with
++ * `file:` or `vscode-userdata:` that is a host read. Only this tab's own resources.
++ */
++const tabDocumentOpen: SeclabValidator = (args, ctx) => {
++	const bad = arity(args, 1, 2);
++	if (bad) {
++		return bad;
++	}
++	const options = args[1];
++	if (options !== undefined && options !== null && !(isPlainObject(options)
++		&& Object.keys(options).every(k => k === 'encoding')
++		&& (options.encoding === undefined || (typeof options.encoding === 'string' && options.encoding.length <= 64)))) {
++		return 'argument 1 is not document open options';
++	}
++	return tabUri(args[0], 'argument 0', ctx);
++};
++
++const SHOW_OPTIONS = new Set(['position', 'preserveFocus', 'pinned', 'selection']);
++
++/** `$tryShowTextDocument(resource, options)`: opens an editor on the resource, which syncs its model to the tab. */
++const tabDocumentShow: SeclabValidator = (args, ctx) => {
++	const bad = arity(args, 1, 2);
++	if (bad) {
++		return bad;
++	}
++	const o = args[1];
++	if (o !== undefined && o !== null) {
++		if (!isPlainObject(o) || !Object.keys(o).every(k => SHOW_OPTIONS.has(k))) {
++			return 'argument 1 is not editor show options';
++		}
++		if ((o.preserveFocus !== undefined && typeof o.preserveFocus !== 'boolean')
++			|| (o.pinned !== undefined && typeof o.pinned !== 'boolean')
++			|| (o.position !== undefined && !Number.isInteger(o.position))
++			|| (o.selection !== undefined && !(isPlainObject(o.selection) && Object.values(o.selection).every(n => Number.isInteger(n))))) {
++			return 'argument 1 has a malformed option';
++		}
++	}
++	return tabUri(args[0], 'argument 0', ctx);
++};
++
++/**
++ * `$ensureActivation(scheme)`: activates the extensions declaring `onFileSystem:<scheme>`, in
++ * the trusted UI host as well as the tab's. A tab's own files are `vscode-remote`; nothing else.
++ */
++const tabFileSystemActivation: SeclabValidator = (args) => {
++	return arity(args, 1, 1) ?? (args[0] === 'vscode-remote' ? undefined : 'only the vscode-remote file system');
++};
++
++const FILE_SEARCH_BOOLEANS = ['expandPatterns', 'disregardIgnoreFiles', 'disregardGlobalIgnoreFiles',
++	'disregardParentIgnoreFiles', 'disregardExcludeSettings', 'disregardSearchExcludeSettings', 'ignoreSymlinks',
++	'ignoreGlobCase', 'onlyOpenEditors', 'onlyFileScheme', 'exists', 'sortByScore', 'shouldGlobSearch'];
++const FILE_SEARCH_NUMBERS = ['maxResults', 'maxFileSize'];
++const FILE_SEARCH_STRINGS = ['_reason', 'filePattern', 'cacheKey'];
++const FILE_SEARCH_KEYS = new Set([...FILE_SEARCH_BOOLEANS, ...FILE_SEARCH_NUMBERS, ...FILE_SEARCH_STRINGS,
++	'includePattern', 'excludePattern', 'extraFileResources', 'changedFileUris']);
++const MAX_PATTERN = 1024;
++const MAX_LIST = 1000;
++
++function pathPattern(v: unknown): boolean {
++	const ok = (s: unknown) => typeof s === 'string' && s.length <= MAX_PATTERN;
++	return ok(v) || (Array.isArray(v) && v.length <= MAX_LIST && v.every(ok));
++}
++
++/**
++ * `$startFileSearch(includeFolder, options)`. The folder is a declared URI; `options` carries
++ * NESTED URIs (`extraFileResources`, `changedFileUris`, `excludePattern[].uri`) that the search
++ * backend stats, which the positional rule does not see. Every URI must be this tab's own; an
++ * option this validator does not know is refused, so an upstream-added URI option cannot pass.
++ */
++const tabFileSearch: SeclabValidator = (args, ctx) => {
++	const bad = arity(args, 2, 3);
++	if (bad) {
++		return bad;
++	}
++	if (args[2] !== undefined && args[2] !== null) {
++		return 'unexpected argument 2';
++	}
++	if (args[0] !== null && args[0] !== undefined) {
++		const r = tabUri(args[0], 'argument 0', ctx);
++		if (r) {
++			return r;
++		}
++	}
++	const o = args[1];
++	if (!isPlainObject(o)) {
++		return 'argument 1 is not search options';
++	}
++	for (const [k, v] of Object.entries(o)) {
++		if (!FILE_SEARCH_KEYS.has(k)) {
++			return `unknown search option ${k}`;
++		}
++		if (v === undefined || v === null) {
++			continue;
++		}
++		if (FILE_SEARCH_BOOLEANS.includes(k) && typeof v !== 'boolean') {
++			return `${k} is not a boolean`;
++		}
++		if (FILE_SEARCH_NUMBERS.includes(k) && !(Number.isSafeInteger(v) && (v as number) >= 0)) {
++			return `${k} is not a count`;
++		}
++		if (FILE_SEARCH_STRINGS.includes(k) && !(typeof v === 'string' && v.length <= MAX_PATTERN)) {
++			return `${k} is not a short string`;
++		}
++		if (k === 'includePattern' && !pathPattern(v)) {
++			return 'includePattern is not a pattern';
++		}
++		if (k === 'excludePattern') {
++			if (!Array.isArray(v) || v.length > MAX_LIST) {
++				return 'excludePattern is not a list';
++			}
++			for (const e of v) {
++				if (!isPlainObject(e) || !Object.keys(e).every(x => x === 'pattern' || x === 'uri') || !pathPattern(e.pattern)) {
++					return 'excludePattern entry is malformed';
++				}
++				if (e.uri !== undefined && e.uri !== null) {
++					const r = tabUri(e.uri, 'excludePattern uri', ctx);
++					if (r) {
++						return r;
++					}
++				}
++			}
++		}
++		if (k === 'extraFileResources' || k === 'changedFileUris') {
++			if (!Array.isArray(v) || v.length > MAX_LIST) {
++				return `${k} is not a list`;
++			}
++			for (const u of v) {
++				const r = tabUri(u, k, ctx);
++				if (r) {
++					return r;
++				}
++			}
++		}
++	}
 +	return undefined;
 +};
 +
@@ -273,7 +462,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b
 +	if (!isPlainObject(uri) || uri.$mid !== 1) {
 +		return 'argument 0 is not a marshalled URI';
 +	}
-+	const reason = ctx.checkTabUri(uri);
++	const reason = checkTabUri(uri, ctx);
 +	if (reason) {
 +		return reason;
 +	}
@@ -359,6 +548,11 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b
 +export const SECLAB_VALIDATORS: ReadonlyMap<string, SeclabValidator> = new Map([
 +	['activationErrorNoInstallPrompt', activationErrorNoInstallPrompt],
 +	['tabCommandRegistration', tabCommandRegistration],
++	['tabCommandUnregistration', tabCommandUnregistration],
++	['tabDocumentOpen', tabDocumentOpen],
++	['tabDocumentShow', tabDocumentShow],
++	['tabFileSystemActivation', tabFileSystemActivation],
++	['tabFileSearch', tabFileSearch],
 +	['extensionStorageInit', extensionStorageInit],
 +	['extensionStorageSet', extensionStorageSet],
 +	['secretByKey', secretByKey],
@@ -382,8 +576,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b
 +}
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/src/vs/workbench/services/extensions/common/seclabPolicyData.ts
 --- a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts	1969-12-31 19:00:00
-+++ b/src/vs/workbench/services/extensions/common/seclabPolicyData.ts	2026-11-06 17:58:08
-@@ -0,0 +1,2953 @@
++++ b/src/vs/workbench/services/extensions/common/seclabPolicyData.ts	2026-11-06 18:50:32
+@@ -0,0 +1,2962 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: generated RPC capability policy. DO NOT EDIT.
 + *
@@ -419,16 +613,19 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 +	['MainThreadCommands.$executeCommand', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadCommands.$executeCommand', constraint: 'the id argument must resolve to an allow or prompt verdict in the commands table; arguments are additionally validated by the per-command argument validators' }],
 +	['MainThreadCommands.$getCommands', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadCommands.$getCommands', constraint: 'the returned list is filtered to the ids this tab is allowed to execute' }],
 +	['MainThreadCommands.$registerCommand', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadCommands.$registerCommand', constraint: 'the id is a command id, outside the fork\'s reserved prefixes, not one the trusted side owns (the workbench\'s ids from the inventory and the UI-side extensions\' ids, SECLAB_TRUSTED_COMMAND_IDS), and not registered by anyone at the time of the call. The registration routes back only to this extension host: MainThreadCommands is per host and its handler calls this host\'s $executeContributedCommand', validator: 'tabCommandRegistration' }],
-+	['MainThreadCommands.$unregisterCommand', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadCommands.$unregisterCommand', constraint: 'only ids this tab registered' }],
++	['MainThreadCommands.$unregisterCommand', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadCommands.$unregisterCommand', constraint: 'only ids this tab registered (validator bookkeeping); upstream already confines it to this host\'s own registrations', validator: 'tabCommandUnregistration' }],
 +	['MainThreadConsole.$logExtensionHostMessage', { verdict: 'allow', ref: 'rpc:MainThreadConsole.$logExtensionHostMessage' }],
++	['MainThreadDocuments.$tryOpenDocument', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadDocuments.$tryOpenDocument', constraint: 'argument 0 is a canonical vscode-remote resource of this tab (no other scheme, not untitled:); options holds at most an encoding name', validator: 'tabDocumentOpen' }],
 +	['MainThreadErrors.$onUnexpectedError', { verdict: 'allow', ref: 'rpc:MainThreadErrors.$onUnexpectedError' }],
 +	['MainThreadExtensionService.$onDidActivateExtension', { verdict: 'allow', ref: 'rpc:MainThreadExtensionService.$onDidActivateExtension' }],
 +	['MainThreadExtensionService.$onExtensionActivationError', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadExtensionService.$onExtensionActivationError', constraint: 'missingExtensionDependency (argument 2) is null or undefined; argument 0 is an extension identifier object and argument 1 a serialized error', validator: 'activationErrorNoInstallPrompt' }],
 +	['MainThreadExtensionService.$onExtensionRuntimeError', { verdict: 'allow', ref: 'rpc:MainThreadExtensionService.$onExtensionRuntimeError' }],
 +	['MainThreadExtensionService.$onWillActivateExtension', { verdict: 'allow', ref: 'rpc:MainThreadExtensionService.$onWillActivateExtension' }],
 +	['MainThreadExtensionService.$setPerformanceMarks', { verdict: 'allow', ref: 'rpc:MainThreadExtensionService.$setPerformanceMarks' }],
++	['MainThreadFileSystem.$ensureActivation', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadFileSystem.$ensureActivation', constraint: 'the scheme is vscode-remote, the tab\'s own file system; nothing else', validator: 'tabFileSystemActivation' }],
 +	['MainThreadFileSystem.$readFile', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadFileSystem.$readFile', constraint: 'scheme and authority must be vscode-remote://seclab+<this tab>, or untitled:, or an extension-owned read-only resource of an extension running in this tab' }],
 +	['MainThreadFileSystem.$writeFile', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadFileSystem.$writeFile', constraint: 'same as $readFile' }],
++	['MainThreadLanguageFeatures.$unregister', { verdict: 'allow', ref: 'rpc:MainThreadLanguageFeatures.$unregister' }],
 +	['MainThreadLanguageModels.$cancelLanguageModelChatRequest', { verdict: 'deny', ref: 'rpc:MainThreadLanguageModels.$cancelLanguageModelChatRequest' }],
 +	['MainThreadLanguageModels.$countTokens', { verdict: 'deny', ref: 'rpc:MainThreadLanguageModels.$countTokens' }],
 +	['MainThreadLanguageModels.$fileIsIgnored', { verdict: 'deny', ref: 'rpc:MainThreadLanguageModels.$fileIsIgnored' }],
@@ -448,12 +645,15 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 +	['MainThreadStorage.$initializeExtensionStorage', { verdict: 'rewrite', ref: 'rpc:MainThreadStorage.$initializeExtensionStorage', constraint: 'the storage key is partitioned by the tab bound to the connection, seclab-tab:<tabId>/<id>, in both scopes; storage migration is skipped for tab hosts; the id must be an extension id (patch 0011)', validator: 'extensionStorageInit' }],
 +	['MainThreadStorage.$registerExtensionStorageKeysToSync', { verdict: 'deny', ref: 'rpc:MainThreadStorage.$registerExtensionStorageKeysToSync' }],
 +	['MainThreadStorage.$setValue', { verdict: 'rewrite', ref: 'rpc:MainThreadStorage.$setValue', constraint: 'same partition as $initializeExtensionStorage; the value must be a state object', validator: 'extensionStorageSet' }],
++	['MainThreadTextEditors.$tryShowTextDocument', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadTextEditors.$tryShowTextDocument', constraint: 'argument 0 is a canonical vscode-remote resource of this tab; options has only position, preserveFocus, pinned and an integer selection', validator: 'tabDocumentShow' }],
 +	['MainThreadTunnelService.$openTunnel', { verdict: 'prompt', ref: 'rpc:MainThreadTunnelService.$openTunnel', constraint: 'prompt naming the tab, the port and the direction; the tunnel is torn down with the tab' }],
 +	['MainThreadTunnelService.$setRemoteTunnelService', { verdict: 'deny', ref: 'rpc:MainThreadTunnelService.$setRemoteTunnelService' }],
 +	['MainThreadWindow.$asExternalUri', { verdict: 'prompt', ref: 'rpc:MainThreadWindow.$asExternalUri', constraint: 'tunnel creation is prompted and the resulting tunnel is bound to this tab' }],
++	['MainThreadWindow.$getInitialState', { verdict: 'allow', ref: 'rpc:MainThreadWindow.$getInitialState' }],
 +	['MainThreadWindow.$openUri', { verdict: 'prompt', ref: 'rpc:MainThreadWindow.$openUri', constraint: 'the prompt names the tab and shows the full target; allowTunneling and allowContributedOpeners are forced to false' }],
 +	['MainThreadWorkspace.$lookupAuthorization', { verdict: 'deny', ref: 'rpc:MainThreadWorkspace.$lookupAuthorization' }],
 +	['MainThreadWorkspace.$lookupKerberosAuthorization', { verdict: 'deny', ref: 'rpc:MainThreadWorkspace.$lookupKerberosAuthorization' }],
++	['MainThreadWorkspace.$startFileSearch', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadWorkspace.$startFileSearch', constraint: 'the folder (argument 0) is null or a canonical vscode-remote resource of this tab; every URI nested in options (extraFileResources, changedFileUris, excludePattern[].uri) is the same; options is a whitelist of known keys with bounded primitive values, so an option this validator does not know is refused', validator: 'tabFileSearch' }],
 +]);
 +
 +/** Per-service fallback for a method with no entry of its own. */
@@ -463,12 +663,15 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 +	['MainThreadClipboard', 'deny'],
 +	['MainThreadCommands', 'deny'],
 +	['MainThreadConsole', 'deny'],
++	['MainThreadDocuments', 'deny'],
 +	['MainThreadErrors', 'deny'],
 +	['MainThreadExtensionService', 'deny'],
 +	['MainThreadFileSystem', 'deny'],
++	['MainThreadLanguageFeatures', 'deny'],
 +	['MainThreadLanguageModels', 'deny'],
 +	['MainThreadSecretState', 'deny'],
 +	['MainThreadStorage', 'deny'],
++	['MainThreadTextEditors', 'deny'],
 +	['MainThreadTunnelService', 'deny'],
 +	['MainThreadWindow', 'deny'],
 +	['MainThreadWorkspace', 'deny'],
@@ -476,8 +679,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 +
 +/** Commands reachable through $executeCommand. Only ids listed here are reachable; categories may withhold authority but never grant it. */
 +export const SECLAB_COMMANDS: ReadonlyMap<string, SeclabEntry> = new Map([
-+	['_executeCompletionItemProvider', { verdict: 'allow_with_constraint', ref: 'cmd:_executeCompletionItemProvider', constraint: 'argument 0 is a marshalled URI that revives, canonically, to vscode-remote://seclab+<this tab> (or untitled:); argument 1 is a position; argument 2 at most a short trigger string; argument 3 an item count of at most 1000', validator: 'tabModelPosition' }],
-+	['_executeHoverProvider', { verdict: 'allow_with_constraint', ref: 'cmd:_executeHoverProvider', constraint: 'argument 0 is a marshalled URI that revives, canonically, to vscode-remote://seclab+<this tab> (or untitled:); argument 1 is a position', validator: 'tabModelPosition' }],
++	['_executeCompletionItemProvider', { verdict: 'allow_with_constraint', ref: 'cmd:_executeCompletionItemProvider', constraint: 'argument 0 is a marshalled URI that revives, canonically, to vscode-remote://seclab+<this tab> (no other scheme, not untitled:); argument 1 is a position; argument 2 at most a short trigger string; argument 3 an item count of at most 1000', validator: 'tabModelPosition' }],
++	['_executeHoverProvider', { verdict: 'allow_with_constraint', ref: 'cmd:_executeHoverProvider', constraint: 'argument 0 is a marshalled URI that revives, canonically, to vscode-remote://seclab+<this tab> (no other scheme, not untitled:); argument 1 is a position', validator: 'tabModelPosition' }],
 +	['_remoteCLI.getSystemStatus', { verdict: 'deny', ref: 'cmd:_remoteCLI.getSystemStatus' }],
 +	['_remoteCLI.manageExtensions', { verdict: 'deny', ref: 'cmd:_remoteCLI.manageExtensions' }],
 +	['_remoteCLI.openExternal', { verdict: 'deny', ref: 'cmd:_remoteCLI.openExternal' }],
@@ -3339,8 +3542,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 +]);
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
-+++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-06 17:58:08
-@@ -0,0 +1,974 @@
++++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-06 18:50:32
+@@ -0,0 +1,991 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -3376,6 +3579,23 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +
 +/** A context value no tab ever set: what an unreadable context key reports. */
 +const SECLAB_UNKNOWN_VALUE: unknown = Object.freeze({});
++
++/**
++ * Revive as the consumer will, and say whether the result is canonical. `URI.revive` takes
++ * `external` and `fsPath` from the wire as the URI's cached string and path (on macOS
++ * `_pathSepMarker` is undefined, so a missing `_sep` matches), so a URI with this tab's
++ * scheme and authority could carry a host `fsPath` that every consumer of `fsPath` or
++ * `toString()` would use. No extension host produces one; a validator refuses it.
++ */
++function seclabReviveUri(raw: unknown): { readonly uri: URI; readonly canonical: boolean } | undefined {
++	try {
++		const uri = URI.revive(raw as never);
++		const canonical = URI.from({ scheme: uri.scheme, authority: uri.authority, path: uri.path, query: uri.query, fragment: uri.fragment });
++		return { uri, canonical: uri.toString() === canonical.toString() && uri.fsPath === canonical.fsPath };
++	} catch {
++		return undefined;
++	}
++}
 +
 +export interface SeclabDenial {
 +	readonly ref: string;
@@ -3471,7 +3691,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 + * and fails the release check on a build that is in fact correct. The whole
 + * line is generated by `emit_policy.py`, which is also why it is not typed.
 + */
-+export const SECLAB_ENFORCING_MARKER = 'seclabRpcFilterEnforcing:a45343a6cc75483fea75a7c7a4865936be8dc3ed604b36477ebe486ec5f2dc71';
++export const SECLAB_ENFORCING_MARKER = 'seclabRpcFilterEnforcing:bc5637e0435cca10cd7a04d31daa347190b361f7b282a83e44e0606e4f63dc35';
 +
 +/** Max bytes for one log line, and for the tab-chosen `ref` inside it. */
 +const SECLAB_LOG_LINE_MAX = 4096;
@@ -3755,7 +3975,10 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +		const contextKeys = this._services.contextKeys;
 +		return this._validatorContext ??= {
 +			authority: this._authority,
-+			checkTabUri: raw => this._checkUriComponents(raw),
++			reviveUri: raw => {
++				const revived = seclabReviveUri(raw);
++				return revived && { scheme: revived.uri.scheme, authority: revived.uri.authority, canonical: revived.canonical };
++			},
 +			isCommandRegistered: id => CommandsRegistry.getCommand(id) !== undefined,
 +			isTrustedCommandId: id => SECLAB_TRUSTED_COMMAND_IDS.has(id),
 +			commandDenyPrefixes: SECLAB_COMMAND_DENY_PREFIXES,
@@ -3780,6 +4003,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +					v && typeof v === 'object' && (v as { $mid?: unknown }).$mid === 1 ? URI.revive(v as never).toString() : v);
 +			},
 +			tabContextKeys: new Map(),
++			tabRegisteredCommands: new Set(),
 +		};
 +	}
 +
@@ -3946,19 +4170,15 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +	 * different resource. Such a URI is not one any extension host produces: refuse it.
 +	 */
 +	private _checkUriComponents(raw: unknown): string | undefined {
-+		let uri: URI;
-+		let canonical: URI;
-+		try {
-+			uri = URI.revive(raw as never);
-+			canonical = URI.from({ scheme: uri.scheme, authority: uri.authority, path: uri.path, query: uri.query, fragment: uri.fragment });
-+		} catch {
++		const revived = seclabReviveUri(raw);
++		if (!revived) {
 +			return 'not URI components';
 +		}
-+		const reason = this._checkUri(uri);
++		const reason = this._checkUri(revived.uri);
 +		if (reason) {
 +			return reason;
 +		}
-+		if (uri.toString() !== canonical.toString() || uri.fsPath !== canonical.fsPath) {
++		if (!revived.canonical) {
 +			return 'URI carries a cached form that is not its own';
 +		}
 +		return undefined;

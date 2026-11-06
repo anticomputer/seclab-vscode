@@ -246,6 +246,22 @@
       "service_default": "deny",
       "review": "classified",
       "methods": {
+        "$startFileSearch": {
+          "verdict": "allow_with_constraint",
+          "capability": "search for files by name under a folder, with caller-chosen options",
+          "impact": [
+            "host-fs-read",
+            "reconnaissance"
+          ],
+          "residual_impact": [],
+          "constraint": "the folder (argument 0) is null or a canonical vscode-remote resource of this tab; every URI nested in options (extraFileResources, changedFileUris, excludePattern[].uri) is the same; options is a whitelist of known keys with bounded primitive values, so an option this validator does not know is refused",
+          "validator": "tabFileSearch",
+          "rationale": "vscode.workspace.findFiles; the benign control's findFiles step and most real extensions need it. With a null folder the query covers the window's workspace folders, which in a tab window are the tab's own. The positional rule covers argument 0 but not options: IFileQueryBuilderOptions declares extraFileResources and changedFileUris as URI arrays and excludePattern entries carry a uri, revive(options) materialises them, and QueryBuilder puts them on the query where the search backend stats them, a host-path existence oracle with file: URIs.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWorkspace.ts#L148-L165",
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/search/common/queryBuilder.ts#L45-L91"
+          ]
+        },
         "$lookupAuthorization": {
           "verdict": "deny",
           "capability": "retrieve the host's configured proxy credentials",
@@ -341,10 +357,12 @@
           "impact": [
             "dos"
           ],
-          "constraint": "only ids this tab registered",
-          "rationale": "Otherwise a tab can unregister trusted commands.",
+          "constraint": "only ids this tab registered (validator bookkeeping); upstream already confines it to this host's own registrations",
+          "validator": "tabCommandUnregistration",
+          "rationale": "MainThreadCommands is instantiated per extension host and _commandRegistrations is its own DisposableMap, so deleteAndDispose can only reach a registration this host made; an id it never registered is a no-op. The validator keeps that true if upstream stops doing it structurally. Measured on an ordinary session as an extension's dispose path.",
           "evidence": [
-            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCommands.ts#L81-L93"
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCommands.ts#L68-L70",
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCommands.ts#L19-L19"
           ]
         },
         "$getCommands": {
@@ -365,6 +383,20 @@
       "service_default": "deny",
       "review": "classified",
       "methods": {
+        "$ensureActivation": {
+          "verdict": "allow_with_constraint",
+          "capability": "activate the extensions that provide a file system scheme",
+          "impact": [
+            "log-noise"
+          ],
+          "constraint": "the scheme is vscode-remote, the tab's own file system; nothing else",
+          "validator": "tabFileSystemActivation",
+          "rationale": "workspace.fs on a scheme the extension host does not serve itself awaits this, so it gates every workspace.fs call (measured: 20 calls on an ordinary session). IFileService.activateProvider returns at once for a scheme that already has a provider; otherwise it fires onFileSystem:<scheme> activation in the trusted UI host as well as the tab's. Pinning it to vscode-remote leaves only the tab's own file system.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadFileSystem.ts#L179-L181",
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/files/common/fileService.ts#L94-L113"
+          ]
+        },
         "$readFile": {
           "verdict": "allow_with_constraint",
           "capability": "read any URI the IFileService can resolve",
@@ -394,10 +426,80 @@
         }
       }
     },
+    "MainThreadDocuments": {
+      "service_default": "deny",
+      "review": "classified",
+      "methods": {
+        "$tryOpenDocument": {
+          "verdict": "allow_with_constraint",
+          "capability": "open a text model on a caller-named resource; the model is then synced to the extension host",
+          "impact": [
+            "host-fs-read",
+            "credential-access"
+          ],
+          "residual_impact": [],
+          "constraint": "argument 0 is a canonical vscode-remote resource of this tab (no other scheme, not untitled:); options holds at most an encoding name",
+          "validator": "tabDocumentOpen",
+          "rationale": "vscode.workspace.openTextDocument; the benign control's openTextDocument step and most extensions need it. The default branch hands the URI to ITextModelService.createModelReference, which reads the real bytes for any scheme the file service serves, and the model is then synchronised to the calling host: with file: or vscode-userdata: (user settings, which can hold tokens) that is a host read into the tab. untitled: is refused too, because its branch maps a path through toLocalResource and probes existence.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadDocuments.ts#L237-L272",
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadDocuments.ts#L291-L299"
+          ]
+        }
+      }
+    },
+    "MainThreadTextEditors": {
+      "service_default": "deny",
+      "review": "classified",
+      "methods": {
+        "$tryShowTextDocument": {
+          "verdict": "allow_with_constraint",
+          "capability": "open an editor on a caller-named resource in this window",
+          "impact": [
+            "host-fs-read",
+            "ui-spoofing"
+          ],
+          "residual_impact": [
+            "ui-spoofing"
+          ],
+          "constraint": "argument 0 is a canonical vscode-remote resource of this tab; options has only position, preserveFocus, pinned and an integer selection",
+          "validator": "tabDocumentShow",
+          "rationale": "vscode.window.showTextDocument. IEditorService.openEditor on an unconstrained URI opens a host file in the window, and an open model is synced to the tab, so it is a read primitive as well as UI; the URI rule removes the read. What remains is that a tab can choose the active editor in its own window, which is a nuisance, not a boundary crossing (patch 0012 keeps the window from taking focus from the user's other apps).",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadEditors.ts#L242-L268"
+          ]
+        }
+      }
+    },
+    "MainThreadLanguageFeatures": {
+      "service_default": "deny",
+      "review": "classified",
+      "methods": {
+        "$unregister": {
+          "verdict": "allow",
+          "capability": "dispose a language feature registration by handle",
+          "impact": [],
+          "rationale": "The handle is looked up in this MainThreadLanguageFeatures instance's own map, one instance per extension host, so a tab can only dispose registrations it made; unknown handles are a no-op. Every $register* in this service stays denied in this landing (a tab-provided item's command, command: links and remote images would reach trusted UI and the global ICommandService on a user gesture; deferred to a structural response-side control), so today this has nothing to dispose; it is allowed so that dispose paths do not raise errors.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts#L100-L102"
+          ]
+        }
+      }
+    },
     "MainThreadWindow": {
       "service_default": "deny",
       "review": "classified",
       "methods": {
+        "$getInitialState": {
+          "verdict": "allow",
+          "capability": "read whether this window is focused and active",
+          "impact": [],
+          "rationale": "Returns hostService.hasFocus and userActivityService.isActive for this window: no path, identity or host configuration. The same two facts are pushed to the extension host on every change ($onDidChangeWindowFocus/$onDidChangeWindowActive), so denying the initial read only leaves vscode.window.state wrong. Residual: a tab can time work for when the user is away, which it can do regardless. Measured on an ordinary session (ExtHostWindow's constructor).",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWindow.ts#L51-L56",
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadWindow.ts#L30-L33"
+          ]
+        },
         "$openUri": {
           "verdict": "prompt",
           "capability": "hand a caller-chosen URI to the host OS opener",
@@ -800,7 +902,7 @@
           "exfiltration"
         ],
         "residual_impact": [],
-        "constraint": "argument 0 is a marshalled URI that revives, canonically, to vscode-remote://seclab+<this tab> (or untitled:); argument 1 is a position",
+        "constraint": "argument 0 is a marshalled URI that revives, canonically, to vscode-remote://seclab+<this tab> (no other scheme, not untitled:); argument 1 is a position",
         "validator": "tabModelPosition",
         "leaf": true,
         "leaf_evidence": [
@@ -821,7 +923,7 @@
           "exfiltration"
         ],
         "residual_impact": [],
-        "constraint": "argument 0 is a marshalled URI that revives, canonically, to vscode-remote://seclab+<this tab> (or untitled:); argument 1 is a position; argument 2 at most a short trigger string; argument 3 an item count of at most 1000",
+        "constraint": "argument 0 is a marshalled URI that revives, canonically, to vscode-remote://seclab+<this tab> (no other scheme, not untitled:); argument 1 is a position; argument 2 at most a short trigger string; argument 3 an item count of at most 1000",
         "validator": "tabModelPosition",
         "leaf": true,
         "leaf_evidence": [

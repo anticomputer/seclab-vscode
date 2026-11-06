@@ -65,6 +65,73 @@ The trace also exposed a scanner gap. `registerModelAndPositionCommand` was not 
 recognised registration form, so `_executeHoverProvider` and 15 siblings were missing from
 the inventory. The generator now recognises it; the policy was not bent to fit.
 
+## What this landing allows (the core set), and what it defers
+Two independent review passes drafted a classification for every traced method and its
+lifecycle companions: 100 methods, kept unenforced in
+[`rpc-filter/policy/drafts/`](../../rpc-filter/policy/drafts/20261106-ordinary-session.json).
+The user chose a **core set** for this landing. It is what ordinary activation and basic
+editing need, each entry with a simple validator and a host probe:
+
+| Method | Validator | Host probe |
+|---|---|---|
+| `MainThreadDocuments.$tryOpenDocument` | `tabDocumentOpen`: a canonical `vscode-remote` URI of this tab only | `host-doc-open-userdata` |
+| `MainThreadTextEditors.$tryShowTextDocument` | `tabDocumentShow`: same URI rule, known options only | `host-doc-show-userdata` |
+| `MainThreadWorkspace.$startFileSearch` | `tabFileSearch`: folder and every nested URI the tab's, whitelisted options | `host-file-search-nested-uri` |
+| `MainThreadFileSystem.$ensureActivation` | `tabFileSystemActivation`: `vscode-remote` only | `host-fs-activation-scheme` |
+| `MainThreadWindow.$getInitialState` | (allow: focus and activity booleans only) | none needed |
+| `MainThreadCommands.$unregisterCommand` | `tabCommandUnregistration`: ids this tab registered | none needed |
+| `MainThreadLanguageFeatures.$unregister` | (allow: per-host handle map) | none needed |
+
+A tab's extension host turns `file:` into `vscode-remote` on the way out, so a probe that
+means the host names `vscode-userdata:`, which resolves against the host profile. The
+harness seeds a canary in the profile's settings.
+
+**Deferred: every registration whose results reach trusted UI.** Hover and completion
+registration were in the first core-set proposal. They came out because the filter screens
+requests, not responses. A tab-provided completion item's `command` runs through the global
+`ICommandService` when the user accepts the suggestion, and hover markdown can carry
+`command:` links and remote images. Code lens, code actions, the status bar, tree items,
+SCM, decorations and notifications with actions all have the same flaw. The follow-up is one
+structural response-side control, not a sanitiser per feature:
+- any command id or `command:` link that came from a `seclab+` host's data executes through
+  the filter's command verdict (taint by origin);
+- trusted markdown and remote images from tab data are neutralised in the trusted renderer.
+
+Its proof includes a completion item and a hover link carrying
+`workbench.action.terminal.newLocal`, reproduced on the unfiltered baseline and denied
+after the fix. In order of usefulness, the follow-up covers SCM and git, then output, the
+status bar and tree views, then decorations. Decorations need an egress-safe icon-URI
+validator, because the trusted renderer must not fetch tab-chosen remote URLs.
+
+**DTO sweep of the core set (before landing).** No core-set method or its result carries a
+command, markdown, or a URI that the trusted side later fetches or executes:
+- `$tryOpenDocument` and `$startFileSearch` return URIs to the tab.
+- `$tryShowTextDocument` returns an editor id.
+- `$ensureActivation` and the two unregisters return nothing.
+- `$getInitialState` returns two booleans.
+
+Among what was already allowed, one path needs recording. A tab-registered command
+invoked by trusted UI returns the tab's value to that caller. Menus and keybindings
+ignore it; a trusted caller that acts on another extension's command result is not known.
+It is listed as an open question for the response-side control.
+
+**The positive control's provider steps.** With hover and completion registration denied,
+the benign extension's providers never reach the UI. Its `languageFeature` and
+`completionProvider` steps only check that the `_execute*` commands return a result, which
+needs no registration. Whether they pass is measured on the build, not assumed: if they
+fail, they are recorded as expected failures for this reason.
+
+## Findings beyond this increment
+- **Every text model in the window is synced to the tab's extension host** (no scheme check
+  in `shouldSynchronizeModel`). Opening user settings or an output channel in a tab window
+  hands it to the tab. It is a Win → Ext push the filter cannot see; open on main
+  ([RPC-LOCKDOWN §7](../RPC-LOCKDOWN.md#7-residual-risks) item 10).
+- `$setEnvironmentVariableCollection` merges tab mutators into **local** terminals, except
+  `PATH` (`BASH_ENV`, `NODE_OPTIONS`, `DYLD_INSERT_LIBRARIES`): host code execution.
+  `$registerUriHandler` takes the extension id as its only authorisation and can take over
+  the auth extensions' OAuth redirects. `$registerQuickFixProvider` returns fixes that run
+  arbitrary command ids. All three stay denied, and the drafts record why.
+
 ## Named argument validators
 `rpc-filter/patch-src/seclabArgValidators.ts`, shipped in 0005, holds every validator. It
 has **no imports**: whatever needs the workbench (URI revival, the command registry,
