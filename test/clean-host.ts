@@ -3,7 +3,10 @@
 //   ./seclab clean-host --apply              remove stopped test tabs and leftovers, kill stray test processes
 //   ./seclab clean-host --apply --running    also remove RUNNING test tabs
 //   ./seclab clean-host --apply --all-tabs   also the real editor's tabs and tabs of unknown owner
-//   ./seclab clean-host --apply --caches     also remove build caches and local images
+//   ./seclab clean-host --apply --caches     also remove build caches and live local images
+//   ./seclab clean-host --superseded-images  only superseded images (builds run this after tagging)
+// Images: --apply removes superseded ones (no worktree's build references them); live ones only
+// with --caches.
 // Scope: this project's exact resource name patterns (OURS below: tab sandboxes and pods,
 // harness helpers, broker test pods, our images and volumes), the test profiles under
 // ~/.seclab-test and the demo folders under /Users/Shared/seclab-demo. Nothing else: the
@@ -25,8 +28,8 @@ import { avFindings } from './safety/av-shape.ts';
 
 const args = new Set(process.argv.slice(2));
 for (const a of args) {
-	if (!['--apply', '--running', '--caches', '--all-tabs', '--self-test'].includes(a)) {
-		console.error(`unknown option ${a}\nusage: clean-host [--apply] [--running] [--caches] [--all-tabs]`);
+	if (!['--apply', '--running', '--caches', '--all-tabs', '--self-test', '--superseded-images'].includes(a)) {
+		console.error(`unknown option ${a}\nusage: clean-host [--apply] [--running] [--caches] [--all-tabs] | --superseded-images`);
 		process.exit(2);
 	}
 }
@@ -42,7 +45,7 @@ const OURS = {
 	container: new RegExp(`^seclab-(${TAB}(-broker)?|containment-hostsvc-(sbx|oci)-[0-9a-f]{8}|spike-[a-z0-9-]+|it-[0-9a-f]{6}-[a-z0-9-]+|brkval-[0-9a-f]{6}-[a-z0-9]+)$`),
 	network: new RegExp(`^seclab-(${TAB}-(net|egress)|it-[0-9a-f]{6}-[a-z0-9-]+|brkval-[0-9a-f]{6}-[a-z0-9]+|spike-[a-z0-9-]+)$`),
 	volume: new RegExp(`^seclab-${TAB}-home$`),
-	image: /^seclab-(tab|tab-oci|builder|broker|broker-placeholder|broker-unit|broker-it-[a-z]+|broker-spike-[0-9a-f]{16}|template-builder|npm-cache|vsce):[A-Za-z0-9._-]+$/,
+	image: /^seclab-(tab|tab-oci|builder|broker|broker-placeholder|broker-unit|broker-it-[a-z]+|broker-spike-[0-9a-f]{16}|template-builder|npm-cache|vsce|attest|tool-[a-z]+):[A-Za-z0-9._-]+$/,
 };
 const tabIdOf = (name: string) => new RegExp(`^seclab-(${TAB})(-broker|-net|-egress|-home)?$`).exec(name)?.[1];
 if (args.has('--self-test')) {
@@ -50,7 +53,8 @@ if (args.has('--self-test')) {
 	const yes: Array<[keyof typeof OURS, string]> = [['sandbox', 'seclab-t-dyhhlwazovvh3p7sk4el4vbjeq'], ['sandbox', 'seclab-spike-a'],
 		['container', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-broker'], ['container', 'seclab-spike-proxy'], ['container', 'seclab-containment-hostsvc-sbx-1a2b3c4d'],
 		['container', 'seclab-it-4af231-broker'], ['network', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-net'], ['network', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-egress'], ['volume', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-home'],
-		['image', 'seclab-tab-oci:local'], ['image', 'seclab-broker-it-harness:test'], ['image', 'seclab-broker-spike-0123456789abcdef:local']];
+		['image', 'seclab-tab-oci:local'], ['image', 'seclab-broker-it-harness:test'], ['image', 'seclab-broker-spike-0123456789abcdef:local'],
+		['image', 'seclab-tool-gitleaks:8.30.1-e3e2f34c682a'], ['image', 'seclab-attest:local']];
 	const no: Array<[keyof typeof OURS, string]> = [['sandbox', 'copilot-bla'], ['sandbox', 'seclab-shell-base'], ['image', 'seclab-audit:test-caching'],
 		['image', 'seclab-cleanroom:local'], ['image', 'seclab-shell-sast:latest'], ['image', 'seclab-shell-base:latest'], ['volume', 'seclab-vscode-work'],
 		['container', 'seclab-audit-runner'], ['network', 'seclab-cleanroom-net']];
@@ -203,6 +207,54 @@ if (!sbx.error && sbx.status === 0) {
 }
 
 // ---- docker ------------------------------------------------------------------------------
+/** Image names and IDs a current build in any worktree uses (see the image loop below). */
+function liveImages(): { names: Set<string>; ids: Set<string> } {
+	const names = new Set<string>();
+	const ids = new Set<string>();
+	const tag = /seclab-[a-z][a-z0-9-]*:[A-Za-z0-9._-]+(?![A-Za-z0-9._${}-])/g;
+	for (const w of worktrees) {
+		for (const f of lines('git', ['-C', w, 'ls-files']).filter(f => !/\.(png|jpe?g|gif|patch)$/.test(f))) {
+			try {
+				const text = fs.readFileSync(path.join(w, f), 'utf8');
+				for (const m of text.matchAll(tag)) {
+					names.add(m[0]);
+				}
+			} catch { /* deleted or unreadable */ }
+		}
+		// Tool images by their pinned version (build/tools/tool.sh tags NAME:VERSION and NAME:VERSION-HASH).
+		try {
+			const tools = JSON.parse(fs.readFileSync(path.join(w, 'build/tools/tools.json'), 'utf8')) as Record<string, { version?: string }>;
+			for (const [n, t] of Object.entries(tools)) {
+				if (!n.startsWith('$') && t.version) {
+					names.add(`seclab-tool-${n}:${t.version}`);
+				}
+			}
+		} catch { /* no tools lock */ }
+		// The npm cache for this worktree's current lock set (seclab npm_fetch_cfs).
+		const locks = path.join(w, '.work', 'npm-locks');
+		if (fs.existsSync(locks)) {
+			const key = run('sh', ['-c', 'cd "$1" && find . -type f | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256 | cut -c1-16', 'sh', locks]).stdout.trim();
+			if (/^[0-9a-f]{16}$/.test(key)) {
+				names.add(`seclab-npm-cache:${key}`);
+			}
+		}
+	}
+	// The gitleaks image the shared pre-push hook has baked in, by ID.
+	const common = run('git', ['-C', repo, 'rev-parse', '--git-common-dir']).stdout.trim();
+	try {
+		for (const m of fs.readFileSync(path.resolve(repo, common, 'seclab-hooks', 'pre-push'), 'utf8').matchAll(/sha256:[0-9a-f]{64}/g)) {
+			ids.add(m[0]);
+		}
+	} catch { /* no hook installed */ }
+	// Tags sharing a live name's image are the same image.
+	for (const n of names) {
+		const id = run('docker', ['image', 'inspect', '--format', '{{.Id}}', '--', n]).stdout.trim();
+		if (/^sha256:[0-9a-f]{64}$/.test(id)) {
+			ids.add(id);
+		}
+	}
+	return { names, ids };
+}
 const containers = new Map<string, string>();
 for (const l of [...lines('docker', ['ps', '-a', '--filter', 'label=seclab.tab', '--format', '{{.Names}}\t{{.State}}']),
 	...lines('docker', ['ps', '-a', '--filter', 'name=seclab-', '--format', '{{.Names}}\t{{.State}}'])]) {
@@ -232,9 +284,23 @@ for (const n of lines('docker', ['volume', 'ls', '--filter', 'name=seclab-', '--
 		why: pol.remove ? '' : pol.why, del: () => ok('docker', ['volume', 'rm', n]),
 	});
 }
-for (const n of lines('docker', ['image', 'ls', '--format', '{{.Repository}}:{{.Tag}}']).filter(n => OURS.image.test(n))) {
+// Images: superseded ones go with --apply; live ones only with --caches. Live means named
+// literally in any worktree's tracked files (other sessions' branches included), the current
+// tool images (and tags sharing their image), the npm cache for the current lock set, the
+// gitleaks image the pre-push hook has baked in, or built in the last hour (a build or test may
+// be using it right now).
+const live = liveImages();
+const imageIds = new Map(lines('docker', ['image', 'ls', '--no-trunc', '--format', '{{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.CreatedAt}}']).map(l => {
+	const [n, id, created] = l.split('\t');
+	const m = /^(\S+) (\S+) ([+-]\d\d)(\d\d)/.exec(created ?? '');
+	return [n, { id, created: m ? Date.parse(`${m[1]}T${m[2]}${m[3]}:${m[4]}`) : NaN }] as const;
+}));
+for (const n of [...imageIds.keys()].filter(n => OURS.image.test(n))) {
+	const img = imageIds.get(n)!;
+	const isLive = live.names.has(n) || live.ids.has(img.id) || !(Date.now() - img.created > 3_600_000);
+	const remove = isLive ? args.has('--caches') : true;
 	items.push({
-		kind: 'image', name: n, state: '', remove: args.has('--caches'), why: args.has('--caches') ? '' : 'build output (use --caches)',
+		kind: 'image', name: `${n}${isLive ? '' : ' (superseded)'}`, state: '', remove, why: remove ? '' : 'in use by a current build (use --caches)',
 		del: () => ok('docker', ['image', 'rm', n]),
 	});
 }
@@ -364,6 +430,14 @@ for (const [p, f] of fixtureRoots) {
 }
 
 // ---- report / apply ------------------------------------------------------------------------
+// --superseded-images (builds call it after tagging): remove only superseded images, nothing else.
+if (args.has('--superseded-images')) {
+	const gone = items.filter(i => i.kind === 'image' && i.name.endsWith(' (superseded)'));
+	for (const it of gone) {
+		console.log(`${it.del() ? 'removed' : 'FAILED '} image ${it.name}`);
+	}
+	process.exit(0);
+}
 // Processes first (they hold sandboxes and dirs), then sandboxes and containers, then the rest.
 const order = ['editor process', 'tabd process', 'sbx sandbox', 'container', 'network', 'volume', 'cache volume', 'image', 'directory', 'fixture copy'];
 items.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));

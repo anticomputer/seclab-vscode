@@ -111,6 +111,14 @@ RPC-lockdown session adds. Keep them consistent with this file.
   register image or one of ours as "possibly ours, verify"; it never removes them. Why:
   an unnamed `docker create` from a review command sat on the host for about 20 hours, and
   nothing could tell whose it was.
+- **Superseded images are pruned, live ones kept.** `./seclab image oci`, `./seclab tool`
+  and the local npm fetch run `clean-host --superseded-images` after tagging. That removes
+  our images that no worktree's tracked files name literally and that aren't the current
+  tool, npm-cache or hook image (anything built in the last hour stays).
+  `./seclab clean-host --apply` does the same. Use fixed, literal tags in scripts (for
+  example `seclab-broker:test`), so a tag a build uses is recognised as live. Why: 5 npm-cache
+  snapshots of about 2.3 GB each and dozens of review and branch tags piled up to about
+  10 GB.
 - **Base claims on code, with permalinks pinned to a SHA.** Why: upstream
   moves; unpinned claims rot.
 - **Keep core patches minimal: one concern per patch, under about 50 lines.**
@@ -268,7 +276,7 @@ build/apply-patches.sh --check  # patch queue == patches/series (no unlisted pat
 ./seclab docs check --run-commands --paired   # docs gate (records, links, ARCHITECTURE, ci: run blocks, paired docs); --online adds lychee
 build/check-release.sh .work/out/seclab-reh-linux-arm64.tar.gz   # no test hooks in a release artifact (also: <app>/Contents/Resources/app)
 node test/containment/teardown.test.ts   # teardown regression: orphaned editor tree + leftover tab pod are stopped/removed
-./seclab clean-host [--apply] [--running] [--caches] [--all-tabs]   # list (dry run) / remove seclab-vscode resources; test tabs only unless --all-tabs; never copilot-* or other projects
+./seclab clean-host [--apply] [--running] [--caches] [--all-tabs]   # list (dry run) / remove seclab-vscode resources (superseded images too); test tabs only unless --all-tabs; never copilot-* or other projects
 ./seclab lint pins              # every third-party image and action pinned by digest/SHA (--self-test too)
 ./seclab lint deps              # every pin registered in deps/registry.json with provenance (--self-test too)
 ./seclab tool gitleaks          # pinned tools (build/tools/tools.json): verify + build locally; prints the image tag
