@@ -165,7 +165,7 @@ if (mode === 'prepare') {
 	if (gate.filter(c => !/took focus/.test(c.name)).every(c => c.ok)) {
 		fs.renameSync(path.join(base, 'run.json'), path.join(base, `run-checked-${Date.now()}.json`));
 	}
-	process.exit(!steals && / done$/m.test(marks) && clickThrough > 0 && clickThrough >= windowsNow && /activation policy: accessory/.test(guardLog) && gate.every(c => c.ok) ? 0 : 1);
+	process.exit(!steals && / done$/m.test(marks) && clickThrough > 0 && clickThrough >= windowsNow && /^\[background windows\] activation policy: accessory$/m.test(guardLog) && typeNow === 'UIElement' && gate.every(c => c.ok) ? 0 : 1);
 } else {
 	console.error('usage: probe.ts prepare [--app PATH] | check');
 	process.exit(2);
