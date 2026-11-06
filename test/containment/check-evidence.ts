@@ -208,7 +208,20 @@ if (mode === 'prepare') {
 		return [...new Set([...inner, ...outer])];
 	};
 	checks.push({ vector: 'rogue-extension', name: 'the run recorded a tab to read evidence from', ok: Boolean(container), detail: container ?? 'no tab in run.json' });
-	for (const vector of ['task', 'fsmonitor', 'rogue-extension']) {
+	// Only `task` is a level-B vector. The editor's auto-task runs probe.sh on folder open,
+	// so `.seclab-evidence/task.json` is produced by the run under test.
+	//
+	// `fsmonitor` and `rogue-extension` were asserted here too, and could never pass:
+	// - nothing in the editor-driven run executes `git status` inside the tab, which is what
+	//   makes the hostile `core.fsmonitor` fire;
+	// - the rogue extension deliberately does NOT spawn probe.sh (see
+	//   test/containment/rogue-extension/extension.js: on an unpatched build it can land
+	//   host-side, and probe.sh makes external calls and writes an unconstrained marker).
+	// Both are triggered, in the tab, by level A (`./seclab test containment`), which is where
+	// they belong. Asserting them here produced two permanent FAILs that said nothing about
+	// the build under test, and made a real regression one line harder to see.
+	// The rogue extension's own evidence is asserted below, from the files it does write.
+	for (const vector of ['task']) {
 		checks.push(...checkEvidence(readEvidence(ws, vector, readInTab), vector, { marker, proxy: brokerProxy(runDriver) }));
 	}
 	const hostText = readInTab(path.join(evDir, 'rogue-extension-host.json'));

@@ -34,9 +34,13 @@ But the policy is not the only thing that keeps a path off the host.
 
 So "not in the policy's hold list" does not mean "on the host", and none of
 those outcomes is distinguishable, from the host side, from a fixture that
-never ran. That is exactly how the first patched run reported
-`rogue-extension ran -> no evidence file` with 13 checks instead of 32 and
-still looked like containment.
+never ran.
+
+**Measured:** on the baseline run (main `90fc1fa`, sbx) the evidence did reach
+the host checkout, so write-back is not what emptied the earlier patched run.
+The conclusion is unchanged, and is the stronger one: the proof must not rest
+on a channel that has four ways to legitimately withhold a file, none of which
+the reader can tell apart from "the fixture never started".
 
 ## Decision
 
@@ -74,8 +78,36 @@ tab chose, so the reader matches exact JSON fields and never free text (EDR
 [prompt-injection-hygiene](20261104-prompt-injection-hygiene.md)). A line whose
 `claimedExtensionId` merely *contains* the ref must not count as an acquittal.
 
-## Proving the new gate
+## The sixth artefact: two checks that could only fail
 
+The baseline run showed `[fsmonitor] ran -> no evidence file` and
+`[rogue-extension] ran -> no evidence file`. Neither is a containment result.
+`check-evidence.ts` asserted three `probe.sh` vectors, and level B triggers
+exactly one of them:
+
+- `task` fires: the editor's `runOn: folderOpen` task runs `probe.sh` in the
+  tab. This one genuinely tests the build under test.
+- `fsmonitor` needs `git status` to run **inside** the tab, which is what makes
+  the fixture's hostile `core.fsmonitor` fire. Nothing in the editor-driven run
+  does that. Level A triggers it explicitly
+  (`test/containment/run.ts:137`).
+- `rogue-extension` can never fire: the rogue extension **deliberately refuses**
+  to spawn `probe.sh` (`test/containment/rogue-extension/extension.js:46`),
+  because on an unpatched build that extension can land host-side and
+  `probe.sh` makes external calls and writes an unconstrained marker.
+
+So two of the three were permanent failures carrying no information about the
+build, in a report whose whole value is that a failure means something. Level B
+now asserts `task` only, and says in the code why the other two belong to level
+A. The rogue extension's own evidence (`rogue-extension-host.json`,
+`rogue-agent.json`, `rogue-observed.json`) is asserted as before, and is what
+actually establishes condition 1.
+
+This is the same defect class as the four in the handoff, mirrored: there, a
+check that could not fail; here, a check that could not pass. Both come from
+reviewing what a check *says* rather than what makes it move.
+
+## Proving the new gate
 `test/containment/decision-log.test.ts` (10 assertions, pure, no network;
 `./seclab test decision-log`, and in the `rpc-filter` aggregate). Per
 AGENTS.md, the defect each claim catches was injected before the gate was
