@@ -5,17 +5,18 @@
   - `5f41596`: `broker/build.sh` builds the broker image from a snapshot of
     `broker/`'s git-tracked files (review ZZ from the Fork-build session: an
     ignored file could ship under a clean revision label).
-  - `eefcc07`: re-pin to the newest versions CFS serves, following the user's
+  - "broker: re-pin to versions CFS serves": re-pin to the newest versions CFS serves, following the user's
     decision: "Pin back to the newest versions already past the 7-day hold".
     - `fastjsonschema` 2.22.3 to 2.22.2, `dnspython` 2.9.2 to 2.9.1,
       `platformdirs` 4.14.5 to 4.14.0, `pypi-attestations` 0.0.31 to 0.0.30,
       `typing-inspection` 0.4.5 to 0.4.4;
     - `pyasn1` 0.6.5 added.
-  - `c15072d`: the harness's `docker` CLI image moves to
+  - "broker: harness docker CLI image to docker:29.9.2-cli": the harness's `docker` CLI image moves to
     `docker:29.9.2-cli`, under the shared 7-day pin-age rule.
-  - Fixes: the round 10 commit (`1b4e7bf`) and the round 10b commit. The 10b
-    re-review checked the round 10 fixes and found new holes in the
-    rewritten snapshot writer.
+  - Fixes: the commits titled "broker: fix security review round 10", "… round 10b"
+    and the round 10c commit. The 10b re-review checked the round 10 fixes and
+    found new holes in the rewritten snapshot writer; the 10c re-review
+    confirmed every 10b fix on both shells and found three lows.
   - Threat model:
     - an image whose identity labels (revision, base digest, version) don't
       describe what was built, which tabd would then trust (XX-6);
@@ -44,6 +45,9 @@
 | 10b-5 | Low | Lock drift | A missing, empty or comment-only `requirements.in` turned the drift check off. | fixed (round 10b commit) | A lock that is pip-compile output (`# via` annotations) must have its `.in`. The `.in` must pin something, and every direct requirement (`via -r requirements.in`) must be pinned in it. | `broker/docs-check.sh` with the `.in` missing, empty and comment-only: all three fail. |
 | 10b-6 | Info | Comment | The comment said local runs never use attestation bundles, but an explicit `SECLAB_ATTESTATION_DIR` makes `verify-images.sh` use them. A forged bundle still fails; only staleness is exposed. | fixed (round 10b commit) | The comment now states the real contract. That contract (`$CI` or `$SECLAB_ATTESTATION_DIR`) is unchanged. | n/a |
 | 10b-7 | Info | Snapshot writer | The files pass had no collision guard. On a case-insensitive filesystem two names that differ only in case collapse into one. The label was already `-dirty`, because the working tree can't represent such a tree. | fixed (round 10b commit) | The same "must not exist yet" guard as for symlinks. | n/a |
+| 10c-1 | Low | Lock drift | The drift gate decided that a lock was pip-compile output from its own `# via` comments. Deleting the `.in` and stripping those comments turned the gate off. | fixed (round 10c commit) | The pairing is registered in `broker/deps.json` `lockSources`. A registered pair needs both files, and every `requirements*.in` must be registered. | `broker/docs-check.sh` with the `.in` deleted and the annotations stripped fails; so does an unregistered `.in`. |
+| 10c-2 | Low | Snapshot writer | `$(git cat-file blob …)` drops trailing newlines, so a symlink whose target ends in `\n` was written one byte short of the tree, under a clean label. | fixed (round 10c commit) | The target's byte length must equal the blob's size (`git cat-file -s`); otherwise the build fails. | Writer probe (macOS `/bin/sh` and dash): a trailing-newline target is refused; embedded newlines and plain targets are written exactly. |
+| 10c-3 | Low | Path lint | The quoting lint walked the working tree, so an ignored or untracked local file broke `docs-check`, and a tracked path that wasn't checked out was missed. | fixed (round 10c commit) | `broker/docs-check.sh` lints `git ls-files -- broker` (tracked paths, the set `build.sh` snapshots) instead of `pin_check.py` walking the tree. | An untracked odd name passes; the same name once added to the index fails. |
 
 Confirmed sound:
 - **Hashes.** All 11 new hashes are the files PyPI serves for those

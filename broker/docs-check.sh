@@ -22,6 +22,13 @@ dock() {
     seclab-broker-unit:docs /repo/broker/tools/docs.py "$@"
 }
 dock "$mode"
+# broker/build.sh refuses any tracked path git would quote (non-ASCII, control characters,
+# `"`, `\`); catch one here first. Only tracked paths matter: they are what it snapshots.
+quoted=$(git -C "$repo" -c core.quotePath=true ls-files -- broker | grep '^"' || true)
+if [ -n "$quoted" ]; then
+  printf 'docs-check: tracked path under broker/ needs git quoting; broker/build.sh refuses it: %s\n' $quoted >&2
+  exit 1
+fi
 docker run --rm --network none -u "$(id -u):$(id -g)" -v "$repo:/repo:ro" \
   -e PYTHONPATH=/repo/broker -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python \
   seclab-broker-unit:docs /repo/broker/tools/fixture_lint.py
