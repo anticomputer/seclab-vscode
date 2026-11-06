@@ -39779,6 +39779,1238 @@
         "undefined": "undefined"
       }
     },
+    "c2_server_initiated_pushes": {
+      "acting_push_count": 7,
+      "channels_without_pushes": [
+        {
+          "channel": "githubCredentials",
+          "channel_token": "GITHUB_CREDENTIALS_CHANNEL_NAME",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/platform/github/common/remote/ipcServer.ts",
+          "how": "getChannel",
+          "line": 26,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/github/common/remote/ipcServer.ts#L26",
+          "reason": "sink exposes no server-sent event",
+          "receiver": "connection.channelClient",
+          "sink": "GitHubChannel",
+          "sink_kind": "channel_client"
+        },
+        {
+          "channel": "NativeMcpDiscoveryHelper",
+          "channel_token": "NativeMcpDiscoveryHelperChannelName",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/workbench/contrib/mcp/common/discovery/nativeMcpRemoteDiscovery.ts",
+          "how": "withChannel",
+          "line": 39,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/common/discovery/nativeMcpRemoteDiscovery.ts#L39",
+          "reason": "sink exposes no server-sent event",
+          "receiver": "connection",
+          "sink": "INativeMcpDiscoveryHelperService",
+          "sink_kind": "proxy_channel"
+        },
+        {
+          "channel": "NativeMcpDiscoveryHelper",
+          "channel_token": "NativeMcpDiscoveryHelperChannelName",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/workbench/contrib/mcp/common/mcpCopilotGlobalConfigurationService.ts",
+          "how": "withChannel",
+          "line": 51,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/common/mcpCopilotGlobalConfigurationService.ts#L51",
+          "reason": "sink exposes no server-sent event",
+          "receiver": "connection",
+          "sink": "INativeMcpDiscoveryHelperService",
+          "sink_kind": "proxy_channel"
+        },
+        {
+          "channel": "logger",
+          "channel_token": "'logger'",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/workbench/contrib/remote/common/remote.contribution.ts",
+          "how": "withChannel",
+          "line": 81,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/remote/common/remote.contribution.ts#L81",
+          "reason": "sink exposes no server-sent event",
+          "receiver": "connection",
+          "sink": "DownloadServiceChannel",
+          "sink_kind": "channel_client"
+        },
+        {
+          "channel": "sandboxHelper",
+          "channel_token": "SANDBOX_HELPER_CHANNEL_NAME",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/workbench/contrib/terminalContrib/chatAgentTools/common/terminalSandboxService.ts",
+          "how": "withChannel",
+          "line": 235,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/chatAgentTools/common/terminalSandboxService.ts#L235",
+          "reason": "sink exposes no server-sent event",
+          "receiver": "connection",
+          "sink": "SandboxHelperChannelClient",
+          "sink_kind": "channel_client"
+        },
+        {
+          "channel": "extensionGalleryManifest",
+          "channel_token": "'extensionGalleryManifest'",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/workbench/services/extensionManagement/browser/extensionGalleryManifestService.ts",
+          "how": "getChannel",
+          "line": 21,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensionManagement/browser/extensionGalleryManifestService.ts#L21",
+          "reason": "channel is call-only: this module never listens on a channel",
+          "receiver": "remoteConnection",
+          "sink": null,
+          "sink_kind": "call_only"
+        },
+        {
+          "channel": "extensions",
+          "channel_token": "'extensions'",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts",
+          "how": "getChannel",
+          "line": 34,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensionManagement/common/extensionManagementServerService.ts#L34",
+          "reason": "sink exposes no server-sent event",
+          "receiver": "remoteAgentConnection",
+          "sink": "RemoteExtensionManagementService",
+          "sink_kind": "channel_client"
+        },
+        {
+          "channel": "extensionGalleryManifest",
+          "channel_token": "'extensionGalleryManifest'",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/workbench/services/extensionManagement/electron-browser/extensionGalleryManifestService.ts",
+          "how": "getChannel",
+          "line": 106,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensionManagement/electron-browser/extensionGalleryManifestService.ts#L106",
+          "reason": "channel is call-only: this module never listens on a channel",
+          "receiver": "remoteConnection",
+          "sink": null,
+          "sink_kind": "call_only"
+        },
+        {
+          "channel": "extensions",
+          "channel_token": "'extensions'",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts",
+          "how": "getChannel",
+          "line": 39,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts#L39",
+          "reason": "sink exposes no server-sent event",
+          "receiver": "remoteAgentConnection",
+          "sink": "NativeRemoteExtensionManagementService",
+          "sink_kind": "channel_client"
+        },
+        {
+          "channel": "mcpGalleryManifest",
+          "channel_token": "'mcpGalleryManifest'",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/workbench/services/mcp/browser/mcpGalleryManifestService.ts",
+          "how": "getChannel",
+          "line": 38,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/mcp/browser/mcpGalleryManifestService.ts#L38",
+          "reason": "channel is call-only: this module never listens on a channel",
+          "receiver": "remoteConnection",
+          "sink": null,
+          "sink_kind": "call_only"
+        },
+        {
+          "channel": "remoteextensionsenvironment",
+          "channel_token": "'remoteextensionsenvironment'",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts",
+          "how": "withChannel",
+          "line": 135,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts#L135",
+          "reason": "channel is call-only: this module never listens on a channel",
+          "receiver": "connection",
+          "sink": null,
+          "sink_kind": "call_only"
+        },
+        {
+          "channel": "telemetry",
+          "channel_token": "'telemetry'",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts",
+          "how": "withChannel",
+          "line": 143,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts#L143",
+          "reason": "channel is call-only: this module never listens on a channel",
+          "receiver": "connection",
+          "sink": null,
+          "sink_kind": "call_only"
+        },
+        {
+          "channel": "remoteExtensionsScanner",
+          "channel_token": "RemoteExtensionsScannerChannelName",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts",
+          "how": "withChannel",
+          "line": 74,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts#L74",
+          "reason": "channel is call-only: this module never listens on a channel",
+          "receiver": "connection",
+          "sink": null,
+          "sink_kind": "call_only"
+        },
+        {
+          "channel": "request",
+          "channel_token": "'request'",
+          "channel_unresolved_reason": null,
+          "file": "src/vs/workbench/services/request/browser/requestService.ts",
+          "how": "withChannel",
+          "line": 74,
+          "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/request/browser/requestService.ts#L74",
+          "reason": "sink exposes no server-sent event",
+          "receiver": "connection",
+          "sink": "RequestChannelClient",
+          "sink_kind": "channel_client"
+        }
+      ],
+      "channels_without_pushes_count": 14,
+      "server_initiated_push_count": 31,
+      "server_initiated_pushes": [
+        {
+          "accessor": "for",
+          "acquired_in": "src/vs/platform/agentHost/node/agentHostService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/node/agentHostService.ts#L170",
+          "acts_on_push": false,
+          "channel": "agentHostLogger",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/log/common/logIpc.ts#L166",
+          "declared_in": "src/vs/platform/log/common/logIpc.ts",
+          "event": "onDidChangeLoggers",
+          "key": "push:agentHostLogger:onDidChangeLoggers",
+          "sink": "RemoteLoggerChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": "for",
+          "acquired_in": "src/vs/platform/agentHost/node/agentHostService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/node/agentHostService.ts#L170",
+          "acts_on_push": false,
+          "channel": "agentHostLogger",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/log/common/logIpc.ts#L164",
+          "declared_in": "src/vs/platform/log/common/logIpc.ts",
+          "event": "onDidChangeVisibility",
+          "key": "push:agentHostLogger:onDidChangeVisibility",
+          "sink": "RemoteLoggerChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": "if",
+          "acquired_in": "src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts#L120",
+          "acts_on_push": false,
+          "channel": "agentHostProxy",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostIpcChannelTransport.ts#L74",
+          "declared_in": "src/vs/platform/agentHost/browser/agentHostIpcChannelTransport.ts",
+          "event": "close",
+          "key": "push:agentHostProxy:close",
+          "sink": "AgentHostIpcChannelTransport",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": "if",
+          "acquired_in": "src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts#L120",
+          "acts_on_push": false,
+          "channel": "agentHostProxy",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostIpcChannelTransport.ts#L73",
+          "declared_in": "src/vs/platform/agentHost/browser/agentHostIpcChannelTransport.ts",
+          "event": "frame",
+          "key": "push:agentHostProxy:frame",
+          "sink": "AgentHostIpcChannelTransport",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": "onAttachSession",
+          "acquired_in": "src/vs/workbench/contrib/debug/browser/extensionHostDebugService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/extensionHostDebugService.ts#L43",
+          "acts_on_push": false,
+          "channel": "extensionhostdebugservice",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/debug/common/extensionHostDebugIpc.ts#L78",
+          "declared_in": "src/vs/platform/debug/common/extensionHostDebugIpc.ts",
+          "event": "attach",
+          "key": "push:extensionhostdebugservice:attach",
+          "sink": "BrowserExtensionHostDebugService",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/debug/browser/debugService.ts",
+              "line": 145,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/debugService.ts#L145"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onClose",
+          "acquired_in": "src/vs/workbench/contrib/debug/browser/extensionHostDebugService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/extensionHostDebugService.ts#L43",
+          "acts_on_push": false,
+          "channel": "extensionhostdebugservice",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/debug/common/extensionHostDebugIpc.ts#L70",
+          "declared_in": "src/vs/platform/debug/common/extensionHostDebugIpc.ts",
+          "event": "close",
+          "key": "push:extensionhostdebugservice:close",
+          "sink": "BrowserExtensionHostDebugService",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/browser/parts/banner/bannerPart.ts",
+              "line": 102,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/browser/parts/banner/bannerPart.ts#L102"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/common/notifications.ts",
+              "line": 170,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/common/notifications.ts#L170"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/common/notifications.ts",
+              "line": 246,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/common/notifications.ts#L246"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/accessibility/browser/accessibleView.ts",
+              "line": 753,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/accessibility/browser/accessibleView.ts#L753"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/debug/browser/extensionHostDebugService.ts",
+              "line": 69,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/extensionHostDebugService.ts#L69"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/testing/browser/testingOutputPeek.ts",
+              "line": 756,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/testing/browser/testingOutputPeek.ts#L756"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/services/extensions/electron-browser/localProcessExtensionHost.ts",
+              "line": 157,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/electron-browser/localProcessExtensionHost.ts#L157"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/agentHost/browser/agentHostProtocolClient.ts",
+              "line": 747,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts#L747"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/agentHost/common/reconnectingTransport.ts",
+              "line": 100,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/reconnectingTransport.ts#L100"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/agentHost/node/messagePortProtocolServer.ts",
+              "line": 101,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/node/messagePortProtocolServer.ts#L101"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/agentHost/node/protocolServerHandler.ts",
+              "line": 966,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/node/protocolServerHandler.ts#L966"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/agentHost/node/missionControl/missionControlEnvironment.ts",
+              "line": 756,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/node/missionControl/missionControlEnvironment.ts#L756"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/agentHost/node/missionControl/missionControlEnvironment.ts",
+              "line": 797,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/node/missionControl/missionControlEnvironment.ts#L797"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/browserView/common/cdp/proxy.ts",
+              "line": 110,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/common/cdp/proxy.ts#L110"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/browserView/common/cdp/proxy.ts",
+              "line": 194,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/common/cdp/proxy.ts#L194"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/browserView/electron-main/browserViewCDPTarget.ts",
+              "line": 81,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/electron-main/browserViewCDPTarget.ts#L81"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/browserView/electron-main/browserViewDebugger.ts",
+              "line": 273,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/electron-main/browserViewDebugger.ts#L273"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/browserView/electron-main/browserViewFrameInspector.ts",
+              "line": 148,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/electron-main/browserViewFrameInspector.ts#L148"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/browserView/electron-main/browserViewGroup.ts",
+              "line": 196,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/browserView/electron-main/browserViewGroup.ts#L196"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/debug/electron-main/extensionHostDebugIpc.ts",
+              "line": 201,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/debug/electron-main/extensionHostDebugIpc.ts#L201"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/remote/browser/browserSocketFactory.ts",
+              "line": 249,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/remote/browser/browserSocketFactory.ts#L249"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/remote/common/managedSocket.ts",
+              "line": 73,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/remote/common/managedSocket.ts#L73"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/tunnel/node/tunnelService.ts",
+              "line": 160,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/tunnel/node/tunnelService.ts#L160"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/tunnel/node/tunnelStream.ts",
+              "line": 96,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/tunnel/node/tunnelStream.ts#L96"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onReload",
+          "acquired_in": "src/vs/workbench/contrib/debug/browser/extensionHostDebugService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/extensionHostDebugService.ts#L43",
+          "acts_on_push": false,
+          "channel": "extensionhostdebugservice",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/debug/common/extensionHostDebugIpc.ts#L62",
+          "declared_in": "src/vs/platform/debug/common/extensionHostDebugIpc.ts",
+          "event": "reload",
+          "key": "push:extensionhostdebugservice:reload",
+          "sink": "BrowserExtensionHostDebugService",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/debug/browser/extensionHostDebugService.ts",
+              "line": 62,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/extensionHostDebugService.ts#L62"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/services/extensions/electron-browser/localProcessExtensionHost.ts",
+              "line": 162,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/extensions/electron-browser/localProcessExtensionHost.ts#L162"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onTerminateSession",
+          "acquired_in": "src/vs/workbench/contrib/debug/browser/extensionHostDebugService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/extensionHostDebugService.ts#L43",
+          "acts_on_push": false,
+          "channel": "extensionhostdebugservice",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/debug/common/extensionHostDebugIpc.ts#L86",
+          "declared_in": "src/vs/platform/debug/common/extensionHostDebugIpc.ts",
+          "event": "terminate",
+          "key": "push:extensionhostdebugservice:terminate",
+          "sink": "BrowserExtensionHostDebugService",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/debug/browser/debugService.ts",
+              "line": 155,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/debug/browser/debugService.ts#L155"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": null,
+          "acquired_in": "src/vs/workbench/contrib/mcp/browser/mcpGatewayService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/browser/mcpGatewayService.ts#L47",
+          "acts_on_push": false,
+          "channel": "mcpGateway",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/mcp/browser/mcpGatewayService.ts#L57",
+          "declared_in": "src/vs/workbench/contrib/mcp/browser/mcpGatewayService.ts",
+          "event": "onDidChangeGatewayServers",
+          "key": "push:mcpGateway:onDidChangeGatewayServers",
+          "sink": "channel",
+          "sink_kind": "callback",
+          "subscriptions": [],
+          "via": "callback_listen"
+        },
+        {
+          "accessor": "super",
+          "acquired_in": "src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts#L150",
+          "acts_on_push": false,
+          "channel": "mcpManagement",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/mcp/common/mcpManagementIpc.ts#L147",
+          "declared_in": "src/vs/platform/mcp/common/mcpManagementIpc.ts",
+          "event": "onDidInstallMcpServers",
+          "key": "push:mcpManagement:onDidInstallMcpServers",
+          "sink": "McpManagementChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": null,
+          "acquired_in": "src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts#L150",
+          "acts_on_push": false,
+          "channel": "mcpManagement",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/mcp/common/mcpManagementIpc.ts#L150",
+          "declared_in": "src/vs/platform/mcp/common/mcpManagementIpc.ts",
+          "event": "onDidUninstallMcpServer",
+          "key": "push:mcpManagement:onDidUninstallMcpServer",
+          "sink": "McpManagementChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": "super",
+          "acquired_in": "src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts#L150",
+          "acts_on_push": false,
+          "channel": "mcpManagement",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/mcp/common/mcpManagementIpc.ts#L148",
+          "declared_in": "src/vs/platform/mcp/common/mcpManagementIpc.ts",
+          "event": "onDidUpdateMcpServers",
+          "key": "push:mcpManagement:onDidUpdateMcpServers",
+          "sink": "McpManagementChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": "super",
+          "acquired_in": "src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts#L150",
+          "acts_on_push": false,
+          "channel": "mcpManagement",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/mcp/common/mcpManagementIpc.ts#L146",
+          "declared_in": "src/vs/platform/mcp/common/mcpManagementIpc.ts",
+          "event": "onInstallMcpServer",
+          "key": "push:mcpManagement:onInstallMcpServer",
+          "sink": "McpManagementChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": null,
+          "acquired_in": "src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/mcp/common/mcpWorkbenchManagementService.ts#L150",
+          "acts_on_push": false,
+          "channel": "mcpManagement",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/mcp/common/mcpManagementIpc.ts#L149",
+          "declared_in": "src/vs/platform/mcp/common/mcpManagementIpc.ts",
+          "event": "onUninstallMcpServer",
+          "key": "push:mcpManagement:onUninstallMcpServer",
+          "sink": "McpManagementChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": "registerFileChangeListeners",
+          "acquired_in": "src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts#L54",
+          "acts_on_push": false,
+          "channel": "remoteFilesystem",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/files/common/diskFileSystemProviderClient.ts#L233",
+          "declared_in": "src/vs/platform/files/common/diskFileSystemProviderClient.ts",
+          "event": "fileChange",
+          "key": "push:remoteFilesystem:fileChange",
+          "sink": "RemoteFileSystemProviderClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": "readFileStream",
+          "acquired_in": "src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts#L54",
+          "acts_on_push": false,
+          "channel": "remoteFilesystem",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/files/common/diskFileSystemProviderClient.ts#L100",
+          "declared_in": "src/vs/platform/files/common/diskFileSystemProviderClient.ts",
+          "event": "readFileStream",
+          "key": "push:remoteFilesystem:readFileStream",
+          "sink": "RemoteFileSystemProviderClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": "onDidChangeProperty",
+          "acquired_in": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L45",
+          "acts_on_push": true,
+          "channel": "remoteterminal",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L101",
+          "declared_in": "src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts",
+          "event": "$onDidChangeProperty",
+          "key": "push:remoteterminal:$onDidChangeProperty",
+          "sink": "RemoteTerminalChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/api/common/extHostTerminalService.ts",
+              "line": 708,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTerminalService.ts#L708"
+            },
+            {
+              "effects": [
+                "manages extensions",
+                "opens a window or folder",
+                "opens an external URI",
+                "reports host state back"
+              ],
+              "file": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+              "line": 92,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L92"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalInstance.ts",
+              "line": 1570,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalInstance.ts#L1570"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts",
+              "line": 419,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts#L419"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts",
+              "line": 153,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts#L153"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyHostService.ts",
+              "line": 180,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyHostService.ts#L180"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyService.ts",
+              "line": 357,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyService.ts#L357"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyService.ts",
+              "line": 824,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyService.ts#L824"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onDidRequestDetach",
+          "acquired_in": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L45",
+          "acts_on_push": true,
+          "channel": "remoteterminal",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L98",
+          "declared_in": "src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts",
+          "event": "$onDidRequestDetach",
+          "key": "push:remoteterminal:$onDidRequestDetach",
+          "sink": "RemoteTerminalChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [
+                "opens a window or folder",
+                "opens an external URI",
+                "reports host state back"
+              ],
+              "file": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+              "line": 90,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L90"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalService.ts",
+              "line": 290,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalService.ts#L290"
+            },
+            {
+              "effects": [
+                "reports host state back"
+              ],
+              "file": "src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts",
+              "line": 165,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts#L165"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyHostService.ts",
+              "line": 183,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyHostService.ts#L183"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onExecuteCommand",
+          "acquired_in": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L45",
+          "acts_on_push": true,
+          "channel": "remoteterminal",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L95",
+          "declared_in": "src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts",
+          "event": "$onExecuteCommand",
+          "key": "push:remoteterminal:$onExecuteCommand",
+          "sink": "RemoteTerminalChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [
+                "executes a command"
+              ],
+              "file": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+              "line": 103,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L103"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onProcessData",
+          "acquired_in": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L45",
+          "acts_on_push": false,
+          "channel": "remoteterminal",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L80",
+          "declared_in": "src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts",
+          "event": "$onProcessDataEvent",
+          "key": "push:remoteterminal:$onProcessDataEvent",
+          "sink": "RemoteTerminalChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+              "line": 82,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L82"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalInstance.ts",
+              "line": 899,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalInstance.ts#L899"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalInstance.ts",
+              "line": 1607,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalInstance.ts#L1607"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts",
+              "line": 175,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts#L175"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts",
+              "line": 908,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts#L908"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts",
+              "line": 972,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts#L972"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts",
+              "line": 994,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts#L994"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts",
+              "line": 152,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts#L152"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyHostService.ts",
+              "line": 177,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyHostService.ts#L177"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyService.ts",
+              "line": 353,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyService.ts#L353"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyService.ts",
+              "line": 833,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyService.ts#L833"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/terminalContrib/autoReplies/terminalAutoResponder.ts",
+              "line": 36,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/terminalContrib/autoReplies/terminalAutoResponder.ts#L36"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onProcessExit",
+          "acquired_in": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L45",
+          "acts_on_push": true,
+          "channel": "remoteterminal",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L83",
+          "declared_in": "src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts",
+          "event": "$onProcessExitEvent",
+          "key": "push:remoteterminal:$onProcessExitEvent",
+          "sink": "RemoteTerminalChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/api/common/extHostTerminalService.ts",
+              "line": 712,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTerminalService.ts#L712"
+            },
+            {
+              "effects": [
+                "manages extensions",
+                "opens a window or folder",
+                "opens an external URI",
+                "reports host state back"
+              ],
+              "file": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+              "line": 93,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L93"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalInstance.ts",
+              "line": 1569,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalInstance.ts#L1569"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts",
+              "line": 418,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts#L418"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts",
+              "line": 154,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts#L154"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyHostService.ts",
+              "line": 179,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyHostService.ts#L179"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyService.ts",
+              "line": 345,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyService.ts#L345"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyService.ts",
+              "line": 818,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyService.ts#L818"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onProcessOrphanQuestion",
+          "acquired_in": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L45",
+          "acts_on_push": true,
+          "channel": "remoteterminal",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L92",
+          "declared_in": "src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts",
+          "event": "$onProcessOrphanQuestion",
+          "key": "push:remoteterminal:$onProcessOrphanQuestion",
+          "sink": "RemoteTerminalChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+              "line": 89,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L89"
+            },
+            {
+              "effects": [
+                "reports host state back"
+              ],
+              "file": "src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts",
+              "line": 164,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts#L164"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyHostService.ts",
+              "line": 182,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyHostService.ts#L182"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyService.ts",
+              "line": 356,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyService.ts#L356"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onProcessReady",
+          "acquired_in": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L45",
+          "acts_on_push": true,
+          "channel": "remoteterminal",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L86",
+          "declared_in": "src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts",
+          "event": "$onProcessReadyEvent",
+          "key": "push:remoteterminal:$onProcessReadyEvent",
+          "sink": "RemoteTerminalChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/api/common/extHostTerminalService.ts",
+              "line": 707,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/common/extHostTerminalService.ts#L707"
+            },
+            {
+              "effects": [
+                "manages extensions",
+                "opens a window or folder",
+                "opens an external URI",
+                "reports host state back"
+              ],
+              "file": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+              "line": 91,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L91"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalInstance.ts",
+              "line": 906,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalInstance.ts#L906"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalInstance.ts",
+              "line": 1532,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalInstance.ts#L1532"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts",
+              "line": 402,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts#L402"
+            },
+            {
+              "effects": [
+                "reports host state back"
+              ],
+              "file": "src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts",
+              "line": 162,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts#L162"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminalContrib/typeAhead/browser/terminal.typeAhead.contribution.ts",
+              "line": 43,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminalContrib/typeAhead/browser/terminal.typeAhead.contribution.ts#L43"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyHostService.ts",
+              "line": 178,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyHostService.ts#L178"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyService.ts",
+              "line": 355,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyService.ts#L355"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyService.ts",
+              "line": 819,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyService.ts#L819"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/terminalProcess.ts",
+              "line": 188,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/terminalProcess.ts#L188"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/terminalProcess.ts",
+              "line": 331,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/terminalProcess.ts#L331"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onProcessReplay",
+          "acquired_in": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L45",
+          "acts_on_push": true,
+          "channel": "remoteterminal",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L89",
+          "declared_in": "src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts",
+          "event": "$onProcessReplayEvent",
+          "key": "push:remoteterminal:$onProcessReplayEvent",
+          "sink": "RemoteTerminalChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+              "line": 83,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L83"
+            },
+            {
+              "effects": [
+                "reports host state back"
+              ],
+              "file": "src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts",
+              "line": 163,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/electron-browser/localTerminalBackend.ts#L163"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyHostService.ts",
+              "line": 181,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyHostService.ts#L181"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/platform/terminal/node/ptyService.ts",
+              "line": 354,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/terminal/node/ptyService.ts#L354"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onPtyHostExit",
+          "acquired_in": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L45",
+          "acts_on_push": false,
+          "channel": "remoteterminal",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L65",
+          "declared_in": "src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts",
+          "event": "$onPtyHostExitEvent",
+          "key": "push:remoteterminal:$onPtyHostExitEvent",
+          "sink": "RemoteTerminalChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts",
+              "line": 47,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts#L47"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onPtyHostRequestResolveVariables",
+          "acquired_in": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L45",
+          "acts_on_push": false,
+          "channel": "remoteterminal",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L77",
+          "declared_in": "src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts",
+          "event": "$onPtyHostRequestResolveVariablesEvent",
+          "key": "push:remoteterminal:$onPtyHostRequestResolveVariablesEvent",
+          "sink": "RemoteTerminalChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts",
+              "line": 86,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts#L86"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onPtyHostResponsive",
+          "acquired_in": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L45",
+          "acts_on_push": false,
+          "channel": "remoteterminal",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L74",
+          "declared_in": "src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts",
+          "event": "$onPtyHostResponsiveEvent",
+          "key": "push:remoteterminal:$onPtyHostResponsiveEvent",
+          "sink": "RemoteTerminalChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts",
+              "line": 77,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts#L77"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts",
+              "line": 581,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts#L581"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onPtyHostStart",
+          "acquired_in": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L45",
+          "acts_on_push": false,
+          "channel": "remoteterminal",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L68",
+          "declared_in": "src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts",
+          "event": "$onPtyHostStartEvent",
+          "key": "push:remoteterminal:$onPtyHostStartEvent",
+          "sink": "RemoteTerminalChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts",
+              "line": 51,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts#L51"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "onPtyHostUnresponsive",
+          "acquired_in": "src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts#L45",
+          "acts_on_push": false,
+          "channel": "remoteterminal",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts#L71",
+          "declared_in": "src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts",
+          "event": "$onPtyHostUnresponsiveEvent",
+          "key": "push:remoteterminal:$onPtyHostUnresponsiveEvent",
+          "sink": "RemoteTerminalChannelClient",
+          "sink_kind": "channel_client",
+          "subscriptions": [
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts",
+              "line": 61,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts#L61"
+            },
+            {
+              "effects": [],
+              "file": "src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts",
+              "line": 577,
+              "permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts#L577"
+            }
+          ],
+          "via": "listen"
+        },
+        {
+          "accessor": "super",
+          "acquired_in": "src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts#L60",
+          "acts_on_push": false,
+          "channel": "userDataProfiles",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/userDataProfile/common/userDataProfileIpc.ts#L77",
+          "declared_in": "src/vs/platform/userDataProfile/common/userDataProfileIpc.ts",
+          "event": "onDidChangeProfiles",
+          "key": "push:userDataProfiles:onDidChangeProfiles",
+          "sink": "UserDataProfilesService",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        },
+        {
+          "accessor": null,
+          "acquired_in": "src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts",
+          "acquisition_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts#L60",
+          "acts_on_push": false,
+          "channel": "userDataProfiles",
+          "declaration_permalink": "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/userDataProfile/common/userDataProfileIpc.ts#L84",
+          "declared_in": "src/vs/platform/userDataProfile/common/userDataProfileIpc.ts",
+          "event": "onDidResetWorkspaces",
+          "key": "push:userDataProfiles:onDidResetWorkspaces",
+          "sink": "UserDataProfilesService",
+          "sink_kind": "channel_client",
+          "subscriptions": [],
+          "via": "listen"
+        }
+      ],
+      "unresolved_channel_count": 0,
+      "unresolved_channels": []
+    },
     "c_client_served_channels": {
       "client_served_channel_count": 2,
       "client_served_channels": [
