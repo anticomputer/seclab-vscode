@@ -161,3 +161,7 @@ must ignore unknown notification methods and unknown fields.
   Under sbx the broker is a container on Docker Desktop, published on `127.0.0.1:<P>`; the
   fence's only allow is `localhost:<P>`, read live at every check, and the tab's proxy is
   `host.docker.internal:<P>`.
+  The broker image is resolved once to its image ID, and its build labels are checked
+  (base digest, protocol, policy revision, a clean revision unless `--broker-dev`); every
+  broker is created by that ID, and `broker.hello` must report the labelled version
+  ([EDR](../edr/20261105-broker-image-identity.md)).

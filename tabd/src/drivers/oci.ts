@@ -5,7 +5,8 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import * as fs from 'node:fs';
 import type { Runner } from '../run.ts';
 import { assertImageRef, SANDBOX_NAME_RE, CONNECTION_TOKEN_RE } from '../validate.ts';
-import { BROKER_DIR, brokerInstallInput, INSTALL_BROKER } from './broker-install.ts';
+import type { BrokerImagePin } from '../broker-image.ts';
+import { BROKER_DIR, brokerInstallInput, dropBrokerFromOtherImage, INSTALL_BROKER, pinnedBrokerImage } from './broker-install.ts';
 import { DriverError, type BrokerHooks, type BrokerSetup, type Driver, type DriverInfo, type FenceReport, type SensorHooks, type TabRuntimeSpec } from './types.ts';
 
 const REH_START = '/opt/seclab/bin/seclab-reh-start';
@@ -31,8 +32,10 @@ function tabUser(spec: TabRuntimeSpec): string {
 }
 
 export interface OciOptions {
-	/** Image for the broker sidecar slot. The real broker (M2) replaces the placeholder. */
+	/** Image for the placeholder broker (`--broker none`). */
 	readonly brokerImage: string;
+	/** The real broker's image, resolved to its ID and checked (XX-6); required for `broker: required`. */
+	readonly brokerPin?: BrokerImagePin;
 	/** Extra `docker run` runtime, e.g. 'runsc' for gVisor; validated. */
 	readonly runtime?: string;
 }
@@ -92,6 +95,7 @@ export class OciDriver implements Driver {
 		if (realBroker && !broker) {
 			throw new DriverError(-32011, 'the template requires a broker, but no broker setup was supplied');
 		}
+		const image = realBroker ? await pinnedBrokerImage(this.opts.brokerPin) : undefined;
 		if (!await this.exists('network', n.net)) {
 			await this.must(['network', 'create', '--internal', '--label', label, '--', n.net], 'network create');
 		}
@@ -102,11 +106,12 @@ export class OciDriver implements Driver {
 			if (!await this.exists('network', n.egress)) {
 				await this.must(['network', 'create', '-o', 'com.docker.network.bridge.enable_icc=false', '--label', label, '--', n.egress], 'egress network create');
 			}
+			await dropBrokerFromOtherImage(this.runner, this.docker, n.broker, image!.id);
 			if (!await this.exists('container', n.broker)) {
 				await this.must(['create', '--pull', 'never', '--name', n.broker, '--label', label, '--network', n.egress,
 					'--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '256', '--memory', '512m',
 					'--tmpfs', '/run/seclab:rw,nosuid,nodev,noexec,size=16m,uid=1000,gid=1000,mode=0700',
-					'--env', `SECLAB_TAB_ID=${spec.tabId}`, '--', assertImageRef(this.opts.brokerImage)], 'broker create');
+					'--env', `SECLAB_TAB_ID=${spec.tabId}`, '--', image!.id], 'broker create');
 				await this.must(['network', 'connect', '--alias', 'broker', '--', n.net, n.broker], 'broker network connect');
 			}
 			await this.must(['start', '--', n.broker], 'broker start');
@@ -179,7 +184,7 @@ export class OciDriver implements Driver {
 		if (realBroker) {
 			// Plan tabd-broker-wiring B1: the supervisor connects, authenticates and loads policy;
 			// the workspace gets the CA and the proxy URL before anything in it starts.
-			const setup: BrokerSetup = await broker!.configure(() => this.runner.spawnStream(this.docker, ['exec', '-i', '--', n.broker, 'seclab-broker', 'control']))
+			const setup: BrokerSetup = await broker!.configure(() => this.runner.spawnStream(this.docker, ['exec', '-i', '--', n.broker, 'seclab-broker', 'control']), { version: image!.version })
 				.catch((e: unknown) => {
 					throw new DriverError(-32013, `broker setup failed: ${(e as Error).message}`);
 				});

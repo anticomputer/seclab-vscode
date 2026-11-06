@@ -39,7 +39,7 @@ left over from older tabs, or a wrong schema revision all refuse the start.
 |---|---|---|---|---|---|
 | XX-4 | Low | containment | The proxy check accepted the blackhole *or* a broker URL for every tab, so an OCI tab that silently lost its broker would still pass. | Fixed | The check takes the expected mode. OCI requires exactly the broker URL; sbx (until B2) requires exactly the blackhole. |
 | XX-5 | Low | CI | On PR runs the broker build has no attestation bundle (the token step is push-only), so the `oci` job fails on PRs. | Accepted | Same as HH-2: changes land by branch push and fast-forward, never by PR. It fails closed. |
-| XX-6 | Low | tabd | The broker image is trusted by its mutable local tag (`seclab-broker:dev`). A missing image made `docker create` try a registry pull. | Fixed / open | `--pull never` on every tab, broker and placeholder container. Open: pin the broker by a build label or image ID checked before create, as tabd does for the scanner (UU-4). Tracked for B2. |
+| XX-6 | Low | tabd | The broker image is trusted by its mutable local tag (`seclab-broker:dev`). A missing image made `docker create` try a registry pull. | Fixed | `--pull never` on every tab, broker and placeholder container; then the broker is pinned by image ID with checked build labels ([EDR](../edr/20261105-broker-image-identity.md)). |
 
 ## Round ZZ: sbx tabs get a real broker (B2)
 Nothing medium or higher. A tab reaches only its own broker: the fence's one allow is its
@@ -55,5 +55,9 @@ OCI tabs have no route to host loopback, and the proxy requires the tab's passwo
 | ZZ-5 | Low | sbx | Stale-allow removal also removes user-added `localhost:<n>` allows scoped to the tab, and ignored `rm` failures. | Fixed | Documented (the fence forbids them anyway); a failed `rm` now fails the start. |
 | ZZ-6 | Low | tests | The tests checked the fence rules but never tried another loopback port from inside the tab. | Fixed / accepted | The sbx e2e starts a host listener (with a host-side control) and asserts the tab can't reach it, directly or as a proxy. Accepted: the containment check accepts any `host.docker.internal` port (the e2e pins the exact one), and "no direct route" accepts any curl failure. |
 
-XX-6 (pin the broker image beyond `--pull never`) stays open. Unlike the scanner, the broker
-image has no pinned binary hash to check, so it needs a build label tied to its provenance.
+XX-6 is closed by the broker image identity change below.
+
+## Round ZZ, part 2: broker image identity (XX-6)
+Scope: `broker/build.sh` labels (broker session, `4d55351`, reviewed there) and the tabd side
+([EDR](../edr/20261105-broker-image-identity.md)). Findings and dispositions are recorded below
+once the round completes.

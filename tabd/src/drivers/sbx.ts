@@ -7,7 +7,8 @@ import { checkFence, parsePolicyJson, resourcesToMirror } from '../fence.ts';
 import type { Runner } from '../run.ts';
 import { assertImageRef, assertPolicyResource, SANDBOX_NAME_RE, CONNECTION_TOKEN_RE } from '../validate.ts';
 import type { UpperReader } from '../writeback-feed.ts';
-import { brokerInstallInput, INSTALL_BROKER } from './broker-install.ts';
+import type { BrokerImagePin } from '../broker-image.ts';
+import { brokerInstallInput, dropBrokerFromOtherImage, INSTALL_BROKER, pinnedBrokerImage } from './broker-install.ts';
 import { DriverError, type BrokerHooks, type BrokerSetup, type Driver, type DriverInfo, type FenceReport, type PolicyLogEntry, type SensorHooks, type TabRuntimeSpec } from './types.ts';
 
 const MIN_VERSION = [0, 51, 0];
@@ -25,8 +26,8 @@ interface SbxListEntry { name: string; status: string; workspaces?: string[] }
 export interface SbxOptions {
 	/** docker CLI for the tab's broker container (plan tabd-broker-wiring B2). */
 	readonly docker?: string;
-	/** Broker image; required with a `broker: required` template. */
-	readonly brokerImage?: string;
+	/** The broker's image, resolved to its ID and checked (XX-6); required with a `broker: required` template. */
+	readonly brokerPin?: BrokerImagePin;
 }
 
 export class SbxDriver implements Driver {
@@ -39,9 +40,6 @@ export class SbxDriver implements Driver {
 		this.sbx = sbxPath;
 		this.runner = runner;
 		this.opts = opts;
-		if (opts.brokerImage !== undefined) {
-			assertImageRef(opts.brokerImage);
-		}
 	}
 
 	private brokerNames(spec: TabRuntimeSpec) {
@@ -54,11 +52,12 @@ export class SbxDriver implements Driver {
 	 * ephemeral port, which the sbx fence then allows as its single destination. Returns the
 	 * port (it changes whenever the broker container restarts).
 	 */
-	private async ensureBroker(spec: TabRuntimeSpec): Promise<number> {
+	private async ensureBroker(spec: TabRuntimeSpec): Promise<{ port: number; version: string }> {
 		const docker = this.opts.docker;
-		if (!docker || !this.opts.brokerImage) {
-			throw new DriverError(-32011, 'the template requires a broker, but no docker or broker image was configured');
+		if (!docker) {
+			throw new DriverError(-32011, 'the template requires a broker, but no docker was configured');
 		}
+		const image = await pinnedBrokerImage(this.opts.brokerPin);
 		const n = this.brokerNames(spec);
 		const label = `seclab.tab=${spec.tabId}`;
 		const exists = async (kind: 'container' | 'network', name: string) =>
@@ -73,15 +72,16 @@ export class SbxDriver implements Driver {
 		if (!await exists('network', n.egress)) {
 			await must(['network', 'create', '-o', 'com.docker.network.bridge.enable_icc=false', '--label', label, '--', n.egress], 'broker egress network create');
 		}
+		await dropBrokerFromOtherImage(this.runner, docker, n.broker, image.id);
 		if (!await exists('container', n.broker)) {
 			await must(['create', '--pull', 'never', '--name', n.broker, '--label', label, '--network', n.egress,
 				'--publish', '127.0.0.1::8080',
 				'--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '256', '--memory', '512m',
 				'--tmpfs', '/run/seclab:rw,nosuid,nodev,noexec,size=16m,uid=1000,gid=1000,mode=0700',
-				'--env', `SECLAB_TAB_ID=${spec.tabId}`, '--', assertImageRef(this.opts.brokerImage)], 'broker create');
+				'--env', `SECLAB_TAB_ID=${spec.tabId}`, '--', image.id], 'broker create');
 		}
 		await must(['start', '--', n.broker], 'broker start');
-		return this.brokerPort(spec);
+		return { port: await this.brokerPort(spec), version: image.version };
 	}
 
 	/** The broker's current loopback port, read live from docker (never a cached value). */
@@ -223,8 +223,11 @@ export class SbxDriver implements Driver {
 
 	private async start(spec: TabRuntimeSpec, connectionToken: string, realBroker: boolean, sensor?: SensorHooks, broker?: BrokerHooks): Promise<void> {
 		// The broker first: its port is the fence's single allow (plan tabd-broker-wiring B2).
+		let brokerVersion = '';
 		if (realBroker) {
-			spec = { ...spec, brokerPort: await this.ensureBroker(spec) };
+			const b = await this.ensureBroker(spec);
+			spec = { ...spec, brokerPort: b.port };
+			brokerVersion = b.version;
 		}
 		const existing = (await this.list()).find(e => e.name === spec.sandboxName);
 		if (existing) {
@@ -247,7 +250,7 @@ export class SbxDriver implements Driver {
 		// The tab's broker: the supervisor connects, authenticates and loads policy; the proxy
 		// URL and CA go into a root-owned tmpfs in the VM before the REH starts (B2).
 		if (realBroker) {
-			await this.installBroker(spec, broker!);
+			await this.installBroker(spec, broker!, brokerVersion);
 		}
 		// The REH starts under the observability collector (root in the VM, strace + seccomp
 		// guard), so every tab process is traced from birth. No collector, no REH (fail closed).
@@ -267,9 +270,9 @@ export class SbxDriver implements Driver {
 	}
 
 	/** Plan tabd-broker-wiring B2: configure the broker, then write its proxy URL and CA into the VM as root. */
-	private async installBroker(spec: TabRuntimeSpec, broker: BrokerHooks): Promise<void> {
+	private async installBroker(spec: TabRuntimeSpec, broker: BrokerHooks, version: string): Promise<void> {
 		const docker = this.opts.docker!;
-		const setup: BrokerSetup = await broker.configure(() => this.runner.spawnStream(docker, ['exec', '-i', '--', this.brokerNames(spec).broker, 'seclab-broker', 'control']))
+		const setup: BrokerSetup = await broker.configure(() => this.runner.spawnStream(docker, ['exec', '-i', '--', this.brokerNames(spec).broker, 'seclab-broker', 'control']), { version })
 			.catch((e: unknown) => {
 				throw new DriverError(-32013, `broker setup failed: ${(e as Error).message}`);
 			});

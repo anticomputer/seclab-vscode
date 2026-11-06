@@ -75,4 +75,5 @@ deny-everything (one per-sandbox deny for every allow that applies to it).
   adoption and can re-run the allow and the in-VM install then.
 - **Containment on both drivers, 2026-11-05:** `containment sbx` 120/121 (1 known gap),
   `containment oci` with only its known gaps, `e2e-broker oci` unchanged.
-- **Open:** pinning the broker image by ID or build label (review XX-6) applies to sbx too.
+- **Broker image:** pinned by ID with checked build labels, on both drivers
+  ([broker image identity](20261105-broker-image-identity.md), review XX-6).
