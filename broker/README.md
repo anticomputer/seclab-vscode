@@ -104,7 +104,8 @@ Decision records:
   [20261104-broker-prompt-injection](../docs/security-reviews/20261104-broker-prompt-injection.md),
   [20261105-broker-websocket-opt-in](../docs/security-reviews/20261105-broker-websocket-opt-in.md),
   [20261105-broker-model-access](../docs/security-reviews/20261105-broker-model-access.md),
-  [20261105-broker-backstop-exceptions](../docs/security-reviews/20261105-broker-backstop-exceptions.md).
+  [20261105-broker-backstop-exceptions](../docs/security-reviews/20261105-broker-backstop-exceptions.md),
+  [20261105-broker-cfs-builds](../docs/security-reviews/20261105-broker-cfs-builds.md).
 
 **Prompts and audit are data, not instructions.** Hosts, paths, methods,
 origin labels, header names and import-source names in approvals and audit

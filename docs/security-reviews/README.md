@@ -75,6 +75,7 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-04 | [write-back gate, increment 1 (engine and policy)](20261104-write-back-engine.md) | - tabd/src/writeback.ts: the engine (classification, trusted host writer, conflicts, fail- | see record |
 | 2026-11-05 | [agents-in-the-tab spike harness and findings](20261105-agents-in-tab-spike.md) | c6dfbf2..f2b9471 (rebased from f5a479a..44d11bc). That covers test/agentic/ahp/ (run.sh, b | see record |
 | 2026-11-05 | [backstop derive exemption and `GET /copilot_internal/user` exception](20261105-broker-backstop-exceptions.md) | round 8. | see record |
+| 2026-11-05 | [broker local builds through CFS](20261105-broker-cfs-builds.md) | - 440d80f: CFS local builds. | see record |
 | 2026-11-05 | [broker model access (body policy, budgets, trusted derivation)](20261105-broker-model-access.md) | - Round 7: dcda94b, which adds: | see record |
 | 2026-11-05 | [broker WebSocket credential opt-in](20261105-broker-websocket-opt-in.md) | - Round 6: b1558e9 and 83a00cf. | see record |
 | 2026-11-05 | [local npm installs through GitHub CFS](20261105-cfs-local-builds.md) | - Round YY: 42f1b81..5dc6ee7 (EDR [cfs-local-builds](../edr/20261105-cfs-local-builds.md)) | see record |
