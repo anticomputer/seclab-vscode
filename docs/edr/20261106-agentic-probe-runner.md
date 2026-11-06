@@ -166,6 +166,58 @@ Derived from the pinned source, for patch 0015:
   reported to the coordinator.
 - Clearing quarantine on the fetched apps needs the user's approval (AGENTS.md).
 
+## Measured, 2026-11-06 (increment 0, first runs)
+Seven runs of `test/agentic/runner/` against the attested release build U
+(`.work/app`, main `f19cf49`) on the sbx driver. What they established, with the evidence:
+
+1. **A `seclab+` window on main connects to its tab's agent host with no user action.** The
+   REH log in the tab shows, within two seconds of the window opening:
+   `[AgentHostChannel] Renderer ctx=… requested connect to upstream` →
+   `ServerAgentHostManager: agent host started` →
+   `[AgentHostChannel] Opening upstream to /run/user/1000/vscode-ipc-….sock`. This is the
+   runtime confirmation that main's release is exposed, and it is what patch 0015's
+   `ahp-gate.disabled` deny closes.
+2. **The takeover needs no race.** The REH computes `createRandomIPCHandle()` and logs the
+   path at **startup**, when it registers the lazy `agentHostProxy` channel
+   ([serverServices.ts#L362-L395](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/server/node/serverServices.ts#L362-L395)),
+   long before any window connects. Only the agent-host *spawn* is lazy. So tab code reads
+   the path first and waits for the socket to appear.
+   - Pre-binding that path does **not** work: the starter unlinks it immediately before each
+     spawn ([nodeAgentHostStarter.ts `_removeStaleSocket`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/node/nodeAgentHostStarter.ts#L188-L207)),
+     so the rename-on-appearance in the Decision above is the right shape.
+3. **The REH log is in two places, depending on who started the REH.** tabd's own launch
+   writes `/run/user/1000/seclab/reh.log`; the REH the **editor** starts writes
+   `~/.seclab-vscode-server/data/logs/<timestamp>/remoteagent.log`. A takeover that reads only
+   the first latches a stale path from a previous REH and never fires. `mitm.js` reads the
+   newest of both on every tick, and falls back to `VSCODE_AGENT_HOST_SOCKET_PATH` in the
+   agent host's own `/proc/<pid>/environ`.
+4. **The tab's workspace is an overlay, so in-tab writes are not host-visible.** The same
+   `.mitm.jsonl` was 7722 bytes inside the tab and 4 lines on the host bind mount. Two
+   consequences:
+   - it confirms the evidence rule from the Decision: only the host marker, the host beacon
+     and the host canary decide anything, and the tab's own record is unreadable from the
+     host anyway;
+   - a host-side liveness file written by tab code cannot work, so arming must ask the tab.
+5. **Polling the tab with `sbx exec` during the editor's tab startup breaks the tab.**
+   `tab.ensureRunning` failed with `REH failed to start: collector: workspace overlay not
+   mounted`. The arming loop must not exec while the editor is bringing the tab up.
+6. **The editor restarts the tab, which kills anything running in it.** `prepare` claims the
+   tab and then releases it so the editor's own tabd can claim it; that stop kills a takeover
+   started during `prepare`. Re-injection after the editor's tab is up is therefore required,
+   and it still lands before the agent host is spawned (point 2).
+
+**Status: the runner does not yet produce probe evidence.** The takeover arms and watches, but
+each injected process is replaced before it sees the socket, because findings 4 and 5 together
+leave the arming loop without a sound liveness signal: the host cannot read the tab's
+heartbeat, and it must not poll the tab while the editor is starting it. The next step is to
+arm through a channel that survives a tab restart without host polling at all. The most
+promising is the one the plan already names: package the takeover as the rogue extension
+(`check-evidence.ts prepare` already installs one into the tab), so the REH itself starts it
+when the window's extension host comes up, with no host exec in the loop.
+
+Patch 0015 therefore lands on finding 1 plus its unit tests, with `ahp-gate.disabled` as the
+runtime evidence to collect once the runner is finished.
+
 ## Not done yet
 - The race in the takeover is unmeasured. This record is updated with the measured
   attempt counts.

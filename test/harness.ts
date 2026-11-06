@@ -188,9 +188,10 @@ export function editorLaunchArgv(userData: string, folderUri: string, env: Recor
 }
 
 /** The same, as one copy-pasteable shell line (for "prepare" steps that print the command). */
-export function editorLaunchCommand(userData: string, folderUri: string, env: Record<string, string> = {}): string {
+export function editorLaunchCommand(userData: string, folderUri: string, env: Record<string, string> = {}, app?: string): string {
 	const envArgs = Object.entries(env).map(([k, v]) => ` --env ${shq(`${k}=${v}`)}`).join('');
-	return `node test/window.ts launch${envArgs} ${shq(userData)} ${shq(folderUri)}`;
+	const appArg = app ? ` --app ${shq(app)}` : '';
+	return `node test/window.ts launch${appArg}${envArgs} ${shq(userData)} ${shq(folderUri)}`;
 }
 
 function shq(s: string): string {
@@ -237,11 +238,11 @@ export function editorWindowId(pid: number): number {
 export interface BackgroundLaunch { pid: number; windowId: number; stoleFocus: boolean }
 
 /** Launch without activating; wait for the window; report whether the editor took focus. */
-export async function launchEditorInBackground(userData: string, folderUri: string, env: Record<string, string> = {}, timeoutMs = 90_000): Promise<BackgroundLaunch> {
+export async function launchEditorInBackground(userData: string, folderUri: string, env: Record<string, string> = {}, timeoutMs = 90_000, app = EDITOR_APP): Promise<BackgroundLaunch> {
 	if (editorPid(userData)) {
 		throw new Error(`an editor already runs with ${userData}; tear it down first`);
 	}
-	const argv = editorLaunchArgv(userData, folderUri, env);
+	const argv = editorLaunchArgv(userData, folderUri, env, app);
 	execFileSync(argv[0], argv.slice(1), { stdio: 'ignore' });
 	const deadline = Date.now() + timeoutMs;
 	let pid = 0;
