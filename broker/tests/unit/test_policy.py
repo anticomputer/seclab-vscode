@@ -302,6 +302,10 @@ def test_r11b_backstop_data_is_checked_when_a_policy_loads(monkeypatch):
         gh["exceptions"][1].update(bad)
         with pytest.raises(PolicyError):
             policy._check_backstop_file("github.json", gh)
+    gh = json.loads((policy.DATA_DIR / "providers" / "github.json").read_text())
+    gh["deny"][0]["path"] = "/user/keys."  # review 13b-3: unmatchable once requests are trimmed
+    with pytest.raises(PolicyError):
+        policy._check_backstop_file("github.json", gh)
 
 
 def test_deny_rules_are_every_port_and_scheme_and_validated():
@@ -370,6 +374,11 @@ def test_credential_budget_is_validated_and_counts_parent():
     with pytest.raises(PolicyError):  # review 13-10
         Policy.from_json({"version": 1, "credentials": [ws]})
     Policy.from_json({"version": 1, "credentials": [dict(ws, budget={"requests": 5})]})
+    derive_ws = dict(cred, derive=[{"id": "d", "from": {"host": "pkgs.example.test", "path": "/feed/mint", "method": "GET"},
+                                    "field": "token", "bind": [{"host": "ws.example.test", "path": "/x", "methods": ["GET"],
+                                                                "websocket": True}]}])
+    with pytest.raises(PolicyError):  # review 13b-1
+        Policy.from_json({"version": 1, "credentials": [derive_ws]})
     for bad in ({"requests": -1}, {"requests": 1, "other": 1}, {"bytes": "1"}):
         with pytest.raises(PolicyError):
             Policy.from_json({"version": 1, "credentials": [dict(cred, budget=bad)]})
@@ -390,6 +399,7 @@ def test_credential_budget_is_validated_and_counts_parent():
     ("PUT", "/_packaging/example-npm-feed/npm/registry/left-pad", True),
     ("GET", "/a/b/team/_apis/tokens/pats", True),
     ("GET", "/_apis.", True),
+    ("GET", "/_apis\u00a0", True),
     ("GET", "/org/_apis. /tokens", True),
     ("GET", "/_packaging/example-npm-feed/npm/registry/left-pad", False),
 ])
