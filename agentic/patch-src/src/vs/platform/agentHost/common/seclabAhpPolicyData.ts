@@ -269,11 +269,15 @@ const serverActions = {
 	'chat/inputRequested': 'allow',
 	'chat/inputAnswerChanged': 'allow',
 	'chat/inputCompleted': 'allow',
-	'session/customizationsChanged': 'allow',
+	// Denied, not sanitised: these two are the carriers that reach the window's automatic MCP
+	// authentication with no user interaction, so a key-name filter is the wrong last line of
+	// defence for them (review round 2). The sanitiser still covers the same state where it is
+	// embedded in an allowed result (initialize, listSessions, resolveSessionConfig).
+	'session/customizationsChanged': 'deny',
 	'session/customizationToggled': 'allow',
 	'session/customizationUpdated': 'allow',
 	'session/customizationRemoved': 'allow',
-	'session/mcpServerStateChanged': 'allow',
+	'session/mcpServerStateChanged': 'deny',
 	'session/mcpServerStartRequested': 'allow',
 	'session/mcpServerStopRequested': 'allow',
 	'session/mcpServerBackgroundRequested': 'allow',

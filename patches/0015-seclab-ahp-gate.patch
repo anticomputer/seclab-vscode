@@ -87,7 +87,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/src/vs/platform/agentHost/common/seclabAhpPolicy.ts
-@@ -0,0 +1,380 @@
+@@ -0,0 +1,387 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: the agent-host protocol gate's filter (patch 0015).
 + *  Pure and import-free on purpose: the same file runs under node's type stripping in the
@@ -179,15 +179,22 @@ index 0000000..0000000
 +			}
 +		}
 +	} else if (isObj(value)) {
-+		// An `auth-required` MCP state drives the window's automatic authentication path.
-+		// Stripping its metadata keys is not enough: the state itself is the trigger, so
-+		// it becomes an inert error state (review round 1, HIGH).
-+		if (value['kind'] === 'auth-required') {
++		// An MCP `authRequired` state drives the window's automatic authentication path, which
++		// fetches an agent-host-chosen URL on the host network. Stripping metadata keys is not
++		// enough: the state itself is the trigger, so it becomes an inert error state. Upstream
++		// spells the MCP server discriminant `kind: 'authRequired'` (McpServerStatus) and the
++		// tool-call one `status: 'auth-required'` (ToolCallStatus); both spellings are accepted
++		// in both places, so a rename in either direction still lands here (rounds 1 and 2).
++		const authKind = value['kind'] === 'authRequired' || value['kind'] === 'auth-required';
++		const authStatus = value['status'] === 'auth-required' || value['status'] === 'authRequired';
++		if (authKind || authStatus) {
 +			for (const k of Object.keys(value)) {
 +				delete value[k];
 +			}
-+			value['kind'] = 'error';
-+			value['message'] = REFUSED_MESSAGE;
++			value[authKind ? 'kind' : 'status'] = 'error';
++			// McpServerErrorState wants `error: ErrorInfo`, not a bare message: `{kind:'error'}`
++			// alone makes the renderer dereference `state.error.message` on undefined.
++			value['error'] = { errorType: 'seclab-ahp-gate', message: REFUSED_MESSAGE };
 +			return n + 1;
 +		}
 +		for (const k of Object.keys(value)) {
@@ -473,7 +480,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/src/vs/platform/agentHost/common/seclabAhpPolicyData.ts
-@@ -0,0 +1,337 @@
+@@ -0,0 +1,341 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: the agent-host protocol gate's verdict tables (patch 0015).
 + *  Default deny: the filter refuses anything not listed as 'allow'. Each table `satisfies` a
@@ -745,11 +752,15 @@ index 0000000..0000000
 +	'chat/inputRequested': 'allow',
 +	'chat/inputAnswerChanged': 'allow',
 +	'chat/inputCompleted': 'allow',
-+	'session/customizationsChanged': 'allow',
++	// Denied, not sanitised: these two are the carriers that reach the window's automatic MCP
++	// authentication with no user interaction, so a key-name filter is the wrong last line of
++	// defence for them (review round 2). The sanitiser still covers the same state where it is
++	// embedded in an allowed result (initialize, listSessions, resolveSessionConfig).
++	'session/customizationsChanged': 'deny',
 +	'session/customizationToggled': 'allow',
 +	'session/customizationUpdated': 'allow',
 +	'session/customizationRemoved': 'allow',
-+	'session/mcpServerStateChanged': 'allow',
++	'session/mcpServerStateChanged': 'deny',
 +	'session/mcpServerStartRequested': 'allow',
 +	'session/mcpServerStopRequested': 'allow',
 +	'session/mcpServerBackgroundRequested': 'allow',
