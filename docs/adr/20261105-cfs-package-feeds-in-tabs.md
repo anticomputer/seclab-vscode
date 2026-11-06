@@ -145,20 +145,29 @@ The tab never chooses the feed URL, the tenant or the scope.
 - tests that the binding never injects on `PUT`, `POST`, `PATCH` or `DELETE`
   (`test_cfs_feed_credential_is_get_only_budgeted_and_audited`).
 
-## Open items to measure when B4 lands
-The Fork-build session will measure these with a real CFS pull through a tab's
-broker (`npm view`, `npm pack` and `pip download --no-deps`), using this host's
-`az`; the harness can't reach CFS.
-- **Download paths.** Confirm that npm tarballs stay under
-  `npm/registry/**`, and that PyPI files are under `pypi/**` on this feed, not
-  under a feed-GUID path.
-- **Redirects.** Downloads can redirect through `ms-feed-*.pkgs.visualstudio.com`
-  to dynamic `*.vsblob.vsassets.io` hosts. Those need allow rules with no
-  credential. Two things to measure:
-  - whether npm or pip resend `Authorization` across the redirect. If they do,
-    the broker blocks the sentinel as misplaced, which is fail closed, but
-    installs would break;
-  - whether the redirect URLs carry their own signature in the query.
+## Measured with a real CFS pull (2026-11-06)
+The Fork-build session pulled from CFS through a real tab and broker 0.7.0,
+using this host's `az` (`tabd/test/e2e-cfs.ts`, EDR `20261106-cfs-feeds-tabd`):
+`npm view`, `npm pack` and `pip download --no-deps`. The harness can't reach CFS.
+- **Download paths.** npm tarballs stay under `npm/registry/**`. PyPI's simple
+  index links files under a feed-GUID path,
+  `/example-org/00000000-0000-0000-0000-000000000001/_packaging/00000000-0000-0000-0000-000000000002/pypi/download/**`,
+  so that exact prefix is a third GET-only binding and allow rule
+  ([`cfs-feeds.policy.json`](../../broker/examples/cfs-feeds.policy.json)).
+- **Redirects.** Every download answers `303` to a storage blob,
+  `vsblobprodcus<NNN>.blob.core.windows.net/b-<id>/<hash>.blob`, with a
+  read-only SAS in the query that expires in about an hour. Several storage
+  accounts appear, and none is `*.vsblob.vsassets.io`. curl and pip's
+  `requests` send no `Authorization` across hosts, so no sentinel was
+  misplaced; the broker denied the storage host. How to allow the blob fetch
+  is open, for the coordinator:
+  - (a) allow GET on `*.blob.core.windows.net`;
+  - (b) the broker follows the `303` itself on the credentialed route, only
+    to a provider-declared host pattern, with no credential;
+  - (c) a new host-pattern form.
+- **Audit.** `credential.used` came only from `pkgs.dev.azure.com`, with
+  statuses 200 and 303 (the 303s at 0 bytes). POST and `_apis` probes were
+  refused.
 - **Path case.** Azure DevOps paths are case-insensitive, while binding globs
   match exactly. A case variant fails closed (no credential), so tab
   configuration must use the canonical URLs above.
