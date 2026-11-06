@@ -545,7 +545,13 @@ export function seclabAiDisabled(remoteAuthority: string | null | undefined): bo
  * for instance -- want this one; reusing `seclabAiDisabled` there would read
  * as a claim about chat that the code is not making.
  */
-export function seclabIsTabAuthority(remoteAuthority: string | null | undefined): boolean {
+// Not exported on this branch. Its only external callers were the two
+// server-initiated push patches, which are held back until the rogue-REH
+// fixture can actually run them; exporting it here would leave a seclab entry
+// point that ships, type-checks and is never called -- the shape the patch
+// queue's dead-entry-point check exists to catch. The follow-up branch
+// re-exports it as part of those patches.
+function seclabIsTabAuthority(remoteAuthority: string | null | undefined): boolean {
 	return typeof remoteAuthority === 'string' && SECLAB_AUTHORITY.test(remoteAuthority);
 }
 

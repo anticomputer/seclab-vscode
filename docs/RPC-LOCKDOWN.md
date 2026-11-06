@@ -517,6 +517,28 @@ if it did.** For v0 the feature is **turned off** in `seclab+` windows
 (patches 0009–0011, [ADR](adr/20261105-no-builtin-chat-in-tabs.md)) — a
 withdrawal, not containment.
 
+> **Two server-initiated push paths stay open on main (2026-11-06).** The REH
+> can still reach the trusted side through `remoteTerminal`:
+>
+> * **`$onExecuteCommand`** — the server names a command and the workbench runs
+>   it, against a four-entry `_remoteCLI` allow list. **Host code execution.**
+> * **`$onPtyHostRequestResolveVariablesEvent`** — the server names strings the
+>   workbench resolves over `shellEnvironmentService.getShellEnv()`, so
+>   `${env:X}` returns the host user's shell environment. **Host credential
+>   exfiltration**, and unlike the above it needs no live pty.
+>
+> Patches that refuse both exist, on the RPC-filter follow-up branch. They are
+> **held back deliberately.** Both are rogue-REH surfaces, and the rogue-REH
+> fixture has never been runnable: nothing applies its hook, so there is no
+> runtime proof that either refusal works. A patch whose effect has never been
+> observed is not containment, it is an untested claim, and this increment's
+> scope is exactly what its probes demonstrate. Both are recorded as
+> accepted-unenforced in `policy.json`, so the gate prints them on every run.
+>
+> They land once the attested containment build variant exists and each probe
+> is shown going from succeeding on a baseline build to denied on a patched
+> one.
+
 > **The agent-host dial path is still open (2026-11-05).** Patch 0011, which
 > closes it, is **not in this increment**. It is on a follow-up branch, held
 > back so the core RPC filter can land first: host code execution from a tab
