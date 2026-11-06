@@ -42,7 +42,7 @@ const OURS = {
 	container: new RegExp(`^seclab-(${TAB}(-broker)?|containment-hostsvc-(sbx|oci)-[0-9a-f]{8}|spike-[a-z0-9-]+|it-[0-9a-f]{6}-[a-z0-9-]+|brkval-[0-9a-f]{6}-[a-z0-9]+)$`),
 	network: new RegExp(`^seclab-(${TAB}-(net|egress)|it-[0-9a-f]{6}-[a-z0-9-]+|brkval-[0-9a-f]{6}-[a-z0-9]+|spike-[a-z0-9-]+)$`),
 	volume: new RegExp(`^seclab-${TAB}-home$`),
-	image: /^seclab-(tab|tab-oci|builder|broker|broker-placeholder|broker-unit|broker-it-[a-z]+|template-builder|npm-cache|vsce):[A-Za-z0-9._-]+$/,
+	image: /^seclab-(tab|tab-oci|builder|broker|broker-placeholder|broker-unit|broker-it-[a-z]+|broker-spike-[0-9a-f]{16}|template-builder|npm-cache|vsce):[A-Za-z0-9._-]+$/,
 };
 const tabIdOf = (name: string) => new RegExp(`^seclab-(${TAB})(-broker|-net|-egress|-home)?$`).exec(name)?.[1];
 if (args.has('--self-test')) {
@@ -50,7 +50,7 @@ if (args.has('--self-test')) {
 	const yes: Array<[keyof typeof OURS, string]> = [['sandbox', 'seclab-t-dyhhlwazovvh3p7sk4el4vbjeq'], ['sandbox', 'seclab-spike-a'],
 		['container', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-broker'], ['container', 'seclab-spike-proxy'], ['container', 'seclab-containment-hostsvc-sbx-1a2b3c4d'],
 		['container', 'seclab-it-4af231-broker'], ['network', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-net'], ['network', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-egress'], ['volume', 'seclab-t-lih2z3i4s2dizitdpovzfpyi7y-home'],
-		['image', 'seclab-tab-oci:local'], ['image', 'seclab-broker-it-harness:test']];
+		['image', 'seclab-tab-oci:local'], ['image', 'seclab-broker-it-harness:test'], ['image', 'seclab-broker-spike-0123456789abcdef:local']];
 	const no: Array<[keyof typeof OURS, string]> = [['sandbox', 'copilot-bla'], ['sandbox', 'seclab-example-kit-base'], ['image', 'seclab-example-a:test-caching'],
 		['image', 'seclab-example-b:local'], ['image', 'seclab-example-kit-sast:latest'], ['image', 'seclab-example-kit-base:latest'], ['volume', 'seclab-vscode-work'],
 		['container', 'seclab-example-a-runner'], ['network', 'seclab-example-b-net']];

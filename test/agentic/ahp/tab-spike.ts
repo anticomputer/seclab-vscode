@@ -18,7 +18,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../../tabd/src/client.ts';
 import { connectBroker, type BrokerControl } from '../../../tabd/src/broker-control.ts';
-import { teardownGate, writeManifest, writeSnapshot } from '../../containment/teardown.ts';
+import { teardownGate, treeTexts, writeManifest, writeSnapshot } from '../../containment/teardown.ts';
+import { avFindings } from '../../safety/av-shape.ts';
 
 const SBX = '/opt/homebrew/bin/sbx';
 const NODE_IMG = 'node:24.22.1-trixie@sha256:f1e034976f948cf212ef1f659c12e5dd58ac7eab947831813e81a62401ca38be';
@@ -60,7 +61,8 @@ const SUBNET = `11.250.${64 + (randomBytes(1)[0] % 180)}.0/24`;
 const upstream = Object.fromEntries(fs.readFileSync(path.join(repo, 'upstream.lock'), 'utf8').split('\n').filter(l => /^[A-Z_]+=/.test(l)).map(l => l.split('=', 2).map(s => s.replace(/^"|"$/g, ''))));
 fs.writeFileSync(path.join(run, 'spike.json'), JSON.stringify({ nonce: NONCE, upstream: upstream.UPSTREAM_SHA, fixtureImage: NODE_IMG, baseBroker: BASE_BROKER, subnet: SUBNET, hosts: [GHE, GHE_API, CAPI] }, null, 1));
 writeSnapshot(run);
-writeManifest(run, { driver: 'sbx', stateDirs: [state], workspaces: [] });
+// The tab writes into ws (hostile content on a host path): teardown owns and deletes it.
+writeManifest(run, { driver: 'sbx', stateDirs: [state], workspaces: [ws] });
 
 const docker = (...a: string[]) => execFileSync('docker', a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const dockerQuiet = (...a: string[]) => spawnSync('docker', a, { encoding: 'utf8' });
@@ -168,7 +170,7 @@ try {
 		'ENTRYPOINT ["sh", "-c", "SECLAB_EXTRA_UPSTREAM_CA_PEM=\\"$(cat /etc/seclab-spike-ca.pem)\\" exec seclab-broker \\"$@\\"", "seclab-broker"]',
 		'CMD ["run"]', '',
 	].join('\n'));
-	docker('build', '-q', '--label', `seclab.spike=${NONCE}`, '-t', BROKER_IMG, ctx);
+	docker('build', '-q', '--label', `seclab.spike=${NONCE}`, '--label', 'io.seclab.broker.derived=spike-test-only', '-t', BROKER_IMG, ctx);
 	cleanups.push(() => void dockerQuiet('image', 'rm', '-f', BROKER_IMG));
 
 	// 3. A real sbx tab behind its real broker (B2), policy A from tabd's state dir.
@@ -192,6 +194,15 @@ try {
 	const broker = `${ctr}-broker`;
 	docker('network', 'connect', NET, broker);
 	note(`tab ${tabId} up; broker ${broker} joined ${NET}`);
+	// Fail closed if a fixture name resolves anywhere but this run's internal subnet: the broker
+	// trusts certifi as well as the fixture CA, so a real host with a public certificate would pass.
+	const prefix = SUBNET.replace(/0\/24$/, '');
+	for (const h of [GHE, GHE_API, CAPI]) {
+		const ip = docker('exec', broker, 'python3', '-c', `import socket,sys;print(' '.join(sorted({a[4][0] for a in socket.getaddrinfo(sys.argv[1], 443)})))`, h);
+		if (!ip || ip.split(' ').some(a => !a.startsWith(prefix))) {
+			throw new Error(`${h} resolved to ${ip || 'nothing'} from the broker, not inside ${SUBNET}`);
+		}
+	}
 
 	ctl = await connectBroker(() => spawn('docker', ['exec', '-i', broker, 'seclab-broker', 'control'], { stdio: ['pipe', 'pipe', 'pipe'] }), tabId);
 	const audit: unknown[] = [];
@@ -257,12 +268,30 @@ try {
 	fs.writeFileSync(path.join(run, 'measured.json'), JSON.stringify(summarise(phases), null, 1));
 	await new Promise(r => setTimeout(r, 3000)); // sbx file sharing lags the VM's last writes
 	// Measured facts must not depend on a file the tab could have written: the fixture log and
-	// the broker audit are host-side; the tab's own report is recorded but labelled tab-written.
+	// the broker audit are host-side. Of the tab's output only the driver report is kept, as a
+	// regular file under 1 MiB that passes the AV-shape check (EDR fixture-safety); the rest
+	// goes with the workspace at teardown.
 	for (const phase of ['A', 'B']) {
-		const src = path.join(ws, `out-${phase}`);
-		if (fs.existsSync(src)) {
-			fs.cpSync(src, path.join(run, `tab-written-${phase}`), { recursive: true, filter: s => !/\/ud(\/|$)/.test(s) });
+		const src = path.join(ws, `out-${phase}`, 'driver-report.json');
+		const st = fs.lstatSync(src, { throwIfNoEntry: false });
+		if (!st?.isFile() || st.size >= 1 << 20) {
+			continue;
 		}
+		const text = fs.readFileSync(src, 'utf8');
+		const av = avFindings(new Map([['driver-report.json', text]]));
+		if (av.length) {
+			failed = true;
+			console.log(`FAIL tab-written report ${phase} has an AV loader shape; not copied: ${av.join('; ')}`);
+			continue;
+		}
+		fs.writeFileSync(path.join(run, `tab-written-${phase}.driver-report.json`), text);
+	}
+	// The fixture log carries tab-influenced strings (key names, tool names): same check.
+	const fxAv = avFindings(treeTexts(fixtureOut));
+	if (fxAv.length) {
+		failed = true;
+		fs.rmSync(fixtureOut, { recursive: true, force: true });
+		console.log(`FAIL fixture log has an AV loader shape; removed: ${fxAv.join('; ')}`);
 	}
 } catch (e) {
 	failed = true;
@@ -279,7 +308,8 @@ try {
 	for (const c of cleanups) {
 		c();
 	}
-	const left = [dockerQuiet('ps', '-aq', '--filter', `label=seclab.spike=${NONCE}`).stdout.trim(), dockerQuiet('network', 'ls', '-q', '--filter', `label=seclab.spike=${NONCE}`).stdout.trim()].filter(Boolean);
+	const left = [dockerQuiet('ps', '-aq', '--filter', `label=seclab.spike=${NONCE}`).stdout.trim(), dockerQuiet('network', 'ls', '-q', '--filter', `label=seclab.spike=${NONCE}`).stdout.trim(),
+		dockerQuiet('image', 'ls', '-q', '--filter', `label=seclab.spike=${NONCE}`).stdout.trim()].filter(Boolean);
 	if (left.length) {
 		failed = true;
 		console.log(`FAIL spike resources left: ${left.join(' ')}`);

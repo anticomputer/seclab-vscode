@@ -401,6 +401,27 @@ In a `seclab+` window the gate replaces that with:
   policy change (§13, D7);
 - whether the Copilot runtime honours the tab's proxy and CA is unmeasured (spike §11.1).
 
+**Amended 2026-11-06 (user decision, from the [real-tab spike](../edr/20261106-agents-in-real-tab-spike.md)).**
+The bullets above describe the design before the runtime was measured behind a real
+broker; where they conflict, this amendment wins.
+
+- **No minted token on this runtime's path.** The Copilot runtime never calls
+  `copilot_internal/v2/token`. It sends the GitHub credential itself to the Copilot API.
+  The GitHub credential is therefore bound to the Copilot API model endpoints **by exact
+  path and method**: `GET /models`, `POST /chat/completions`, `POST /responses` and
+  `POST /v1/messages`. Agent, job and MCP endpoints on those hosts are not bound. The
+  derive rule stays for any client that does mint. The tab still holds only the sentinel.
+- **Both GitHub API hosts.** The agent host calls `<api>/copilot_internal/user` from
+  `deriveGitHubEndpoints`, and the runtime calls the `api.<host>` form. On github.com both
+  are `api.github.com`; for an enterprise host, the provider table lists both.
+- **Org-policy reads are allowed.** `GET /copilot_internal/managed_settings`,
+  `/team_customizations` and `/content_exclusion` are exempt from the provider backstop
+  with the same strict checks as `/copilot_internal/user`: exact method and path, no
+  query, no body, and a strict-JSON response with no credential material. They carry
+  restrictions an enterprise places on Copilot, such as content exclusions, which would
+  otherwise silently stop applying in tabs.
+- Proxy and CA: measured honoured (both spike EDRs).
+
 BYOK keys follow the same path: imported to the broker, bound to the provider's host and
 path, a sentinel in the tab. **Harness sign-ins are denied.** Upstream's Codex account
 sign-in is a configuration key that makes the agent host mint a real ChatGPT credential
@@ -445,6 +466,12 @@ amends that rule rather than an edit to the accepted record.
   ([agentHostChatContribution.ts#L228-L231](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostChatContribution.ts#L228-L231));
   we key them by tab, and nothing is silent.
 - MCP tool responses are untrusted input (gh-aw's distinction, prior art §2).
+- **Remote GitHub MCP (amended 2026-11-06).** The Copilot runtime calls GitHub's remote MCP
+  server itself (`POST <copilot-api>/mcp/readonly`, with the GitHub credential), so its
+  tools act on the user's GitHub account from outside the tab
+  ([real-tab spike EDR](../edr/20261106-agents-in-real-tab-spike.md), finding 5).
+  Coordinator decision: the broker denies it by default, and a per-tab Tier C grant lifts
+  it.
 
 ## 5. Blast-radius tiers
 
@@ -732,7 +759,19 @@ doubled the first draft's four:
 | MCP App UI | `stateToProgressAdapter.ts` `getMcpAppData` | No MCP App webviews for `seclab+` |
 
 The table lists patches from this design. They are numbered from 0015, each with its own
-EDR and review round. Two patches are owned by the fork-build session:
+EDR and review round.
+
+**Amended 2026-11-06.** The [implementation plan](agentic-implementation.md) orders this
+work into increments, with the transport gate first. It folds the reverse-request,
+client-capabilities, customizations and MCP App rows into the gate, which is the only
+control on the AHP transport. Second layers behind a gate that already drops the traffic
+never run in the shipped build, so no probe could show them working. Defence in depth
+comes instead from a construction invariant (no protocol client on an ungated transport),
+from 0009's `invokeTool` refusal, and from the broker and the fence. The client-tool
+execution row is covered by 0009 (RPC-lockdown), which stays on. This is proposed, for
+review with increment 1.
+
+Two patches are owned by the fork-build session:
 - **0013, "no local agent host" (`code/electron-main/app.ts`).** Main refuses every
   window's agent-host connection request and never spawns the utility process.
 - **0014, a build patch.** It keeps the Copilot SDK runtime out of the desktop app; the
@@ -770,8 +809,13 @@ gate hook when Tier A ships.
 - The shipped agent host runs offline, honours the tab's proxy and CA, and presents
   credentials as `Bearer`.
 - The class (f) draft has been handed to RPC-lockdown.
-- Still to come: running it inside an sbx tab behind the real broker, once tab-broker
-  wiring lands.
+
+**Status (2026-11-06):** run in a real sbx tab behind its real broker
+([EDR](../edr/20261106-agents-in-real-tab-spike.md)). All three model endpoints completed a
+turn, each with a tool run in the tab, using only sentinels; the broker's draft provider
+lists were measured against the traffic. The §4.2 and §4.5 amendments and D7's amendment
+follow from it. What remains is driving the workbench itself, which is the probe runner in
+the [implementation plan](agentic-implementation.md).
 
 **Goal:** measure, not ship. Find out from evidence what the trusted client does with a
 hostile agent host.
@@ -899,6 +943,13 @@ runtimes as a recorded exception, hash-pinned, since they only ever run inside t
 7. **D7. Derived Copilot token: accepted.** Bound to the Copilot API hosts, by path and
    method, through the trusted provider table. This is a broker policy change for the
    broker session.
+   **Amended 2026-11-06** (user, after the [real-tab spike](../edr/20261106-agents-in-real-tab-spike.md)):
+   the runtime sends the GitHub credential, not a minted token, so **the GitHub credential
+   is bound to the Copilot API model endpoints by exact path and method** (§4.2
+   amendment). The user also accepted exempting the three org-policy `GET`s
+   (`managed_settings`, `team_customizations`, `content_exclusion`) with the same strict
+   checks as `/copilot_internal/user`. The coordinator decided that the remote GitHub MCP
+   server is denied by default, with a per-tab Tier C grant (§4.5).
 8. **D8. Agent writes to ordinary files: accepted.** Sync as today for v1; agent-attributed
    writes are not held.
 9. **D9. Forwarding the user's own trusted-profile instructions into tabs: accepted.**
