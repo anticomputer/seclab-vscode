@@ -100,6 +100,7 @@ Same rules as ADRs:
 | 2026-11-06 | [Exact request lineage on OCI via the broker's client port](20261106-exact-lineage-client-port.md) | accepted |
 | 2026-11-06 | [The extension host's own plumbing is not a capability](20261106-extension-host-plumbing.md) | accepted |
 | 2026-11-06 | [Measure an ordinary session's RPC calls once, then classify them by name](20261106-ordinary-session-rpc-trace.md) | accepted |
+| 2026-11-06 | [Increment 2 (0017): what `workbench.browser.enableRemoteProxy` actually does, measured from the source](20261106-increment-2-remote-proxy.md) | accepted |
 | 2026-11-06 | [The 7-day rule: no pin newer than the feed's hold](20261106-pin-age-cooldown.md) | accepted |
 | 2026-11-06 | [RPC core increment: state, and what runs next](20261106-rpc-core-handoff.md) | accepted |
 | 2026-11-06 | [The rpc-core proof run: DO NOT LAND](20261106-rpc-core-proof-run.md) | accepted |
