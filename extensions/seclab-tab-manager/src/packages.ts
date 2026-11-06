@@ -56,7 +56,7 @@ export class PackageFeeds implements vscode.Disposable {
 				modal: true,
 				detail: 'npm and pip installs in this tab will run under your Azure DevOps identity. Installing a version the feed does not have yet adds it to the shared feed. '
 					+ 'The tab never sees your token: it gets a placeholder that works only for package downloads from the CFS feeds, through this tab\'s broker, '
-					+ 'and at most 5000 requests or 2 GiB over the tab\'s lifetime. The token comes from `az` on this machine.',
+					+ 'and at most 5000 requests or 2 GiB each time the tab starts. The token comes from `az` on this machine.',
 			},
 			'Use Package Feeds',
 		);

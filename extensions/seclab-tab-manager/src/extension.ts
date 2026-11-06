@@ -267,8 +267,18 @@ async function resolve(authority: string, ctx: vscode.RemoteAuthorityResolverCon
 	}).catch(() => undefined);
 	void showWorkspaceSummary(c, tabId, hostPath);
 
+	// B3c: a reconnect (any call after the first) first makes sure the tab and its REH run again.
+	// tab.ensureRunning is idempotent and the connection token is the tab's own, stable across
+	// restarts, so a server that died (or a tab stopped with its supervisor) comes back without a
+	// window reload. Secret-scan findings on a restart still need the resolver's trusted UI: the
+	// reconnect then fails and the window offers its reload.
+	let connects = 0;
 	const authorityResult = new vscode.ManagedResolvedAuthority(async () => {
 		const cl = await getClient();
+		if (connects++ > 0) {
+			await cl.request('tab.ensureRunning', { tabId });
+			log.info(`tab ${tabId}: reconnect (attempt ${connects - 1}), tab and server running`);
+		}
 		const { channel } = await cl.connect(tabId); // the supervisor re-verifies the fence first
 		log.debug(`channel ${channel.id} open for ${tabId}`);
 		return toMessagePassing(channel);

@@ -606,7 +606,7 @@ export class Supervisor {
 	 * the CFS credential (in the background: az may take a while, or fail; the tab still runs).
 	 * Used at bring-up and when adopting a running tab (B3c). Returns the tab's CFS sentinel.
 	 */
-	private attachBroker(tabId: string, c: BrokerControl): string | undefined {
+	private attachBroker(tabId: string, c: BrokerControl, surfacePrompts = true): string | undefined {
 		c.onClose(e => {
 			this.obs.brokerDetached(tabId, c);
 			if (this.brokers.get(tabId) === c) {
@@ -616,7 +616,9 @@ export class Supervisor {
 		});
 		this.brokers.set(tabId, c);
 		void this.obs.brokerAttached(tabId, c);
-		this.attachApprovals(tabId, c);
+		if (surfacePrompts) {
+			this.attachApprovals(tabId, c);
+		}
 		const feedSentinel = this.cfsSentinel(tabId);
 		if (feedSentinel) {
 			this.attachCfs(tabId, c, feedSentinel);
@@ -639,8 +641,15 @@ export class Supervisor {
 		}
 		try {
 			const c = await connectBroker(() => driver.openBrokerControl!(spec), r.tabId, { deadline: Date.now() + 20_000 });
-			this.attachBroker(r.tabId, c);
-			this.audit('broker.control', 'reattached', { tabId: r.tabId });
+			// Prompts only to a client that can answer them (review HHH-1); otherwise the broker's
+			// held requests time out to deny, as with no controller.
+			this.attachBroker(r.tabId, c, this.clientShowsPrompts);
+			// Feeds turned off while nothing controlled this broker: apply it now (review HHH-2).
+			if (!this.cfsSentinel(r.tabId)) {
+				await this.removeCfs(c).catch(() => undefined);
+				await driver.installFeed?.(spec, undefined).catch((e: Error) => this.audit('tab.packages', 'cleanup-failed', { tabId: r.tabId, error: e.message.slice(0, 200) }));
+			}
+			this.audit('broker.control', 'reattached', { tabId: r.tabId, prompts: this.clientShowsPrompts });
 		} catch (e) {
 			this.audit('broker.control', 'reattach-fail', { tabId: r.tabId, error: (e as Error).message.slice(0, 200) });
 		}

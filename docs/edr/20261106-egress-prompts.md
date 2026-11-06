@@ -101,3 +101,14 @@ allow it for the tab, or deny it.
 - **Next:**
   - B3c (part 2): recovering the window after its server dies or the local extension host
     restarts (found by the focus probe).
+- **B3c (part 2): the window reconnects after its server dies.**
+  - The Tab Manager's connection factory runs `tab.ensureRunning` before every reconnect, but
+    not on its first call, right after the resolver's own.
+  - `tab.ensureRunning` is idempotent and the connection token is the tab's own, so a dead
+    REH, or a tab stopped with its supervisor, comes back without a window reload.
+  - Secret-scan findings on a restart still need the resolver's trusted UI. The reconnect then
+    fails and the window offers its reload.
+  - tabd e2e (`./seclab test e2e oci`): after the tab's REH processes are killed, a
+    connection closes; `tab.ensureRunning` returns the same token and the handshake succeeds
+    again.
+  - Review [HHH](../security-reviews/20261106-broker-reattach.md): three lows, all fixed.
