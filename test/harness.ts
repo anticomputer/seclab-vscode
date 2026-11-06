@@ -2,7 +2,7 @@
 //   SECLAB_BEACON_PORT  host-loopback beacon port (default: a free port picked per run)
 //   SECLAB_EVIDENCE_DIR level B fixture dir (default: <repo>/.work/containment-editor)
 
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash, createHmac } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
@@ -279,7 +279,23 @@ export async function launchEditorInBackground(userData: string, folderUri: stri
 		killTree(pid);
 		fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${pid} was the frontmost app at launch; killed it and its processes\n`);
 	}
+	// A background editor must be an accessory (UI-element) app, which the system never makes
+	// frontmost on its own (patch 0012). A build without that can take focus whenever another
+	// app's window closes, so it isn't run at all.
+	if (!focusStolen(userData) && appType(pid) !== 'UIElement') {
+		killTree(pid);
+		fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${pid} is a ${appType(pid) || 'unknown'} app, not a background (UIElement) one: its build lacks the background-windows guard; killed it\n`);
+	}
 	return { pid, windowId, stoleFocus: focusStolen(userData) };
+}
+
+/** macOS application type of a process (Foreground, UIElement, BackgroundOnly), read-only. */
+export function appType(pid: number): string {
+	const asn = spawnSync('lsappinfo', ['find', `pid=${pid}`], { encoding: 'utf8' }).stdout.trim();
+	if (!asn) {
+		return '';
+	}
+	return /"ApplicationType"="([^"]+)"/.exec(spawnSync('lsappinfo', ['info', '-only', 'ApplicationType', asn], { encoding: 'utf8' }).stdout)?.[1] ?? '';
 }
 
 function focusStolen(userData: string): boolean {

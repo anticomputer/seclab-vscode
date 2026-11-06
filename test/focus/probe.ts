@@ -13,7 +13,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
-import { checkUserDataDir, editorLaunchCommand, editorPid, editorStderrLog, editorWindows, focusStealLog } from '../harness.ts';
+import { appType, checkUserDataDir, editorLaunchCommand, editorPid, editorStderrLog, editorWindows, focusStealLog } from '../harness.ts';
 import { readManifest, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
 
 const repo = path.resolve(import.meta.dirname, '../..');
@@ -105,6 +105,7 @@ if (mode === 'prepare') {
 	// click-through (review FFF-3), not just one.
 	const mainPid = editorPid(userData);
 	const windowsNow = mainPid ? editorWindows(mainPid).length : 0;
+	const typeNow = mainPid ? appType(mainPid) : '';
 	if (!rest.includes('--no-host-steps') && renderers().length) {
 		hostMark('renderer-unresponsive');
 		const stopped = renderers();
@@ -155,7 +156,7 @@ if (mode === 'prepare') {
 	const guardLog = fs.existsSync(editorStderrLog(userData)) ? fs.readFileSync(editorStderrLog(userData), 'utf8') : '';
 	const clickThrough = (guardLog.match(/^\[background windows\] window \d+ is click-through$/gm) ?? []).length;
 	const notShown = guardLog.split('\n').filter(l => l.startsWith('[background windows] dialog not shown'));
-	console.log(`guard: ${clickThrough} click-through window(s) for ${windowsNow} editor window(s); ${notShown.length} dialog(s) not shown${notShown.length ? `\n  ${notShown.slice(0, 5).map(l => l.replace(/[\u0000-\u001f\u007f-\u009f]/g, '?').slice(0, 200)).join('\n  ')}` : ''}\n`);
+	console.log(`guard: app type ${typeNow || '(editor gone)'}; ${clickThrough} click-through window(s) for ${windowsNow} editor window(s); ${notShown.length} dialog(s) not shown${notShown.length ? `\n  ${notShown.slice(0, 5).map(l => l.replace(/[\u0000-\u001f\u007f-\u009f]/g, '?').slice(0, 200)).join('\n  ')}` : ''}\n`);
 	const gate = verifyTeardown(base);
 	for (const c of gate) {
 		console.log(`${c.ok ? 'OK  ' : 'FAIL'}  ${c.name}${c.ok || !c.detail ? '' : `  ${c.detail}`}`);
@@ -164,7 +165,7 @@ if (mode === 'prepare') {
 	if (gate.filter(c => !/took focus/.test(c.name)).every(c => c.ok)) {
 		fs.renameSync(path.join(base, 'run.json'), path.join(base, `run-checked-${Date.now()}.json`));
 	}
-	process.exit(!steals && / done$/m.test(marks) && clickThrough > 0 && clickThrough >= windowsNow && gate.every(c => c.ok) ? 0 : 1);
+	process.exit(!steals && / done$/m.test(marks) && clickThrough > 0 && clickThrough >= windowsNow && /activation policy: accessory/.test(guardLog) && gate.every(c => c.ok) ? 0 : 1);
 } else {
 	console.error('usage: probe.ts prepare [--app PATH] | check');
 	process.exit(2);

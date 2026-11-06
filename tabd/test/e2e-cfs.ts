@@ -78,7 +78,7 @@ try {
 	});
 
 	// npm: packument, then the tarball, recording a redirect.
-	const pk = inTab(`${auth}; curl -sS --max-time 60 -u "cfs:$S" -o /tmp/pk.json -w '%{http_code}' ${FEED}/example-npm-feed/npm/registry/is-number && node -e 'const p=require("/tmp/pk.json");console.log(" "+p.versions["7.0.0"].dist.tarball)' 2>/dev/null || true`.replace('node -e', '/opt/seclab-reh/node -e'));
+	const pk = inTab(`${auth}; curl -sS --max-time 60 -u "cfs:$S" -o /tmp/pk.json -w '%{http_code}' ${FEED}/example-npm-feed/npm/registry/is-number; printf ' '; grep -o '"tarball":"[^"]*is-number-7\\.0\\.0\\.tgz"' /tmp/pk.json | head -1 | sed 's/^"tarball":"//; s/"$//'`);
 	const [pkCode, tarball] = pk.stdout.trim().split(' ');
 	check('npm packument through the broker (200)', () => assert.equal(pkCode, '200', pk.stderr));
 	const tb = inTab(`${auth}; curl -sS --max-time 60 -u "cfs:$S" -o /tmp/t.tgz -D /tmp/h -w '%{http_code} %{redirect_url}' '${tarball ?? ''}'; echo; grep -i '^location:' /tmp/h | head -1 | sed 's/[?].*/?…/'`);
