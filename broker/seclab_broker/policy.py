@@ -213,16 +213,20 @@ class RequestView:
         and the query's key names (percent-encoded, deduplicated, capped; values never)."""
         import urllib.parse
         from .untrusted import display_path
+        path = display_path(self.path)
+        if SEALED_PREFIX in path:
+            # Marker added after encoding, so a tab can't forge it (review 11c-4/11c-5).
+            path = re.sub(re.escape(SEALED_PREFIX) + r"[^/]*", "[sealed]", path)
         out = {"scheme": self.scheme, "host": self.host[:253], "port": self.port,
-               "method": self.method, "path": display_path(self.path)}
+               "method": self.method, "path": path}
         if self.query:
             keys = set()
             for k, _ in urllib.parse.parse_qsl(self.query, keep_blank_values=True):
-                if SEALED_PREFIX in k:
-                    k = "[sealed]"  # an agent-host sealed token is never exported (review 11b-7)
-                q = urllib.parse.quote(k, safe="[]")
+                q = urllib.parse.quote(k, safe="")
                 if len(q) > 64:
                     q = re.sub(r"%[0-9A-F]?$", "", q[:64])  # never split a %XX escape
+                if SEALED_PREFIX in k:
+                    q = "[sealed]"  # an agent-host sealed token is never exported (review 11b-7)
                 keys.add(q)
             out["queryKeys"] = sorted(keys)[:32]
         return out

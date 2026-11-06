@@ -246,9 +246,14 @@ same strict checks as /user").
   - The allowlists apply on every status (review 11b-1), so an error body is
     held to the same list.
   - `team_customizations` and `content_exclusion` have no public or measured
-    shape. Their allowlist is empty, so only `{}` passes, and anything else is
-    blocked as a finding until the shape is known. In practice they stay
-    unavailable to the tab until then, as they were before this amendment.
+    shape. Their allowlist holds only GitHub's REST error envelope
+    (`message`, `documentation_url`, `status`; review 11c-2), so only `{}` or
+    an error passes, and anything else is blocked as a finding until the
+    shape is known. In practice they stay unavailable to the tab until then,
+    as they were before this amendment.
+  - All three lists include that envelope, so a routine 403, 404 or 429 from
+    GitHub reaches the client as itself, not as a security finding. Its
+    values still get every other check.
 - **Queries are still refused,** but the shipped runtime's binary contains
   `/copilot_internal/managed_settings?` and
   `/copilot_internal/content_exclusion?` (secure-agentic, static evidence).

@@ -198,6 +198,9 @@ async def app(scope, receive, send) -> None:
                     body["telemetry"] = [{"headers": {"authorization": "Basic fake-otlp-credential"}}]
                 elif mode == "telemetry-nested":
                     body["telemetry"] = {"otlp": {"Headers": {"authorization": "Basic fake-otlp-credential"}}}
+                elif mode == "telemetry-token":
+                    body["telemetry"] = {"headers": {"Authorization": "Bearer ghu_" + secrets.token_hex(18)},
+                                         "endpoint": "https://otel-user:fake-pass@otel.example.test"}
             else:
                 body = {}
                 if mode in ("unlisted", "unlisted-error"):

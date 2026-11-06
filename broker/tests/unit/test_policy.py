@@ -217,7 +217,7 @@ def test_org_policy_backstop_exceptions_are_exact(name):
         assert {"permissions", "allowedMcpServers", "deniedMcpServers"} <= exc.response_fields
         assert exc.drop_fields == {"telemetry"} and "telemetry" not in exc.response_fields
     else:
-        assert exc.response_fields == frozenset() and exc.drop_fields == frozenset()
+        assert exc.response_fields == {"message", "documentation_url", "status"} and exc.drop_fields == frozenset()
     for bad in (dict(method="POST"), dict(method="PUT"), dict(path=path.upper()), dict(path=path + "/x"),
                 dict(path=path + "s"), dict(query="org=x")):
         assert backstop_exception(req(**{"host": "api.github.com", "method": "GET", "path": path, **bad})) is None
@@ -273,16 +273,20 @@ def test_r11_request_summary_carries_query_key_names_only():
     long = req(query="%C3%A9" * 40 + "=1").summary()["queryKeys"][0]
     assert len(long) <= 64 and not re.search(r"%[0-9A-F]?$", long)
     assert req(query="copilot-sealed.v1.BBBB=1").summary()["queryKeys"] == ["[sealed]"]
+    # The marker can't be forged (review 11c-4), and a sealed token in the path isn't exported (11c-5).
+    assert req(query="[sealed]=1").summary()["queryKeys"] == ["%5Bsealed%5D"]
+    assert req(path="/x/copilot-sealed.v1.AAAA/y").summary()["path"] == "/x/[sealed]/y"
+    assert "[sealed]" not in req(path="/[sealed]").summary()["path"]
 
 
 def test_r11_url_userinfo_pattern():
     from seclab_broker.engine_mitmproxy import URL_USERINFO
     for bad in ("https://user:fake-pass@git.example.test/m.git", "https://abcdefghijklmnop1234@h.example.test/",
                 "ssh://git:x@h.example.test/r", "https://user%3Afake@h.example.test/", "//user:fake@h.example.test/",
-                "HTTPS://u:p@h.example.test/"):
+                "HTTPS://u:p@h.example.test/", "see //user:fake@h.example.test/ ok"):
         assert URL_USERINFO.search(bad), bad
     for ok in ("ssh://git@h.example.test/r.git", "https://h.example.test/a@b", "mailto:a@b.example.test",
-               "git@h.example.test:o/r", "https://h.example.test/x%40y"):
+               "git@h.example.test:o/r", "https://h.example.test/x%40y", "a//b:c@d", "x://y:z@ "):
         assert not URL_USERINFO.search(ok), ok
 
 

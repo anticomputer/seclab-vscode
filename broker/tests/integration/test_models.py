@@ -315,10 +315,12 @@ def test_org_policy_gets_are_narrow_and_their_responses_checked(pod, ctl):
     assert "telemetry" not in doc and "fake-otlp-credential" not in r.body
     e = ctl.wait_note("audit.event", lambda e: e["type"] == "credential.backstop_exception_filtered", since=mark, timeout=10)
     assert e["detail"] == "telemetry"
-    # Whatever shape telemetry takes, it never reaches the tab (review 11b-2).
-    for mode in ("telemetry-list", "telemetry-nested"):
+    # Whatever shape telemetry takes, and whatever it carries, it is dropped without blocking
+    # the org's restrictions (reviews 11b-2, 11c-1).
+    for mode in ("telemetry-list", "telemetry-nested", "telemetry-token"):
         r = pod.curl(url, *auth, "-H", f"X-Fixture: {mode}")
-        assert r.code == 200 and "telemetry" not in r.json() and "fake-otlp-credential" not in r.body, (mode, r.body)
+        assert r.code == 200 and "telemetry" not in r.json() and r.json()["permissions"]["deny"], (mode, r.body)
+        assert "fake-otlp-credential" not in r.body and "ghu_" not in r.body and "fake-pass" not in r.body
     mark = ctl.mark()
     for mode in ("token-value", "url-userinfo", "unlisted", "unlisted-error"):
         r = pod.curl(url, *auth, "-H", f"X-Fixture: {mode}")
