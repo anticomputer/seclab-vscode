@@ -81,6 +81,30 @@ function seclabDeliver(d: SeclabDecision): void {
  * collapsed per (surface, id, verdict) so a chatty extension cannot drown the
  * stream.
  */
+/**
+ * Proof that the filter that enforces this policy table is in the build.
+ *
+ * `build/prepare.sh` stamps `product.json` with
+ * `seclabRpcPolicy.sha256 = sha256(seclabPolicyData.ts)`, which shows the table
+ * was *applied*. It cannot show that anything *reads* it -- a build could carry
+ * the table and no enforcement and stamp identically. So the enforcing side
+ * carries the same hash, and a consumer requiring both has evidence that the
+ * table present is the table being enforced.
+ *
+ * The hash is of `seclabPolicyData.ts`, a *different* file, deliberately: a
+ * marker inside the file whose hash it carries would be its own fixed point.
+ * `emit_policy.py` writes this line and `--check` fails when it drifts, so it
+ * cannot be edited to agree with a table it does not describe.
+ *
+ * Referenced at install (see `seclabInstallDecisionLog`) rather than merely
+ * exported, so bundling and minification cannot drop it as dead code. That is
+ * the whole point: an unreferenced string is exactly what a tree-shaker
+ * removes, and the marker would then be missing from the one artefact the
+ * consumer inspects.
+ */
+const SECLAB_POLICY_SHA256 = '2534c796dc739cc155c9c66bfb4edd62f9360c269faf55ee4165b0d48846669e';
+export const SECLAB_ENFORCING_MARKER = 'seclabRpcFilterEnforcing:' + SECLAB_POLICY_SHA256;
+
 /** Max bytes for one log line, and for the tab-chosen `ref` inside it. */
 const SECLAB_LOG_LINE_MAX = 4096;
 const SECLAB_LOG_REF_MAX = 1024;
@@ -131,6 +155,17 @@ export function seclabInstallDecisionLog(
 	}
 	seclabLogInstalled = true;
 	const logger = createLogger('seclabRpcFilter.log');
+	// First line names the marker, so the string is reachable from the install
+	// path and survives bundling, and so a reader of the log can tie it to the
+	// policy table the window is enforcing.
+	logger.info(JSON.stringify({
+		source: 'rpc-filter', class: 'rpc.decision', priority: 'informational',
+		summary: 'filter installed',
+		detail: {
+			surface: 'rpc', ref: 'rpc:seclab.installed', verdict: 'allow',
+			reason: SECLAB_ENFORCING_MARKER,
+		},
+	}));
 	let denials = 0;
 	let bytes = 0;
 	let capped = false;

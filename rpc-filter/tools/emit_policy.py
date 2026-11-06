@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import hashlib
+import re
 import os
 import sys
 
@@ -174,6 +176,46 @@ def render(policy: dict, sha: str, inventory: dict | None = None) -> str:
     return "".join(out)
 
 
+
+
+FILTER_SRC = os.path.join(REPO, "rpc-filter", "patch-src", "seclabRpcFilter.ts")
+SHA_LINE = re.compile(
+    r"^const SECLAB_POLICY_SHA256 = '(?P<sha>[0-9a-f]{64})';$", re.M)
+
+
+def _sync_policy_sha(policy_text: str, check: bool) -> list:
+    """Keep the enforcing marker's hash equal to sha256(seclabPolicyData.ts).
+
+    `build/prepare.sh` stamps `product.json` with the same hash, which shows the
+    table was applied. It cannot show anything reads it. The consumer requires
+    both, so the hash on the enforcing side must be generated rather than typed:
+    a hand-maintained copy would drift to whatever made the check pass.
+
+    Hashing a *different* file than the one carrying the marker is deliberate.
+    A marker inside the file whose hash it states is its own fixed point.
+    """
+    want = hashlib.sha256(policy_text.encode("utf-8")).hexdigest()
+    with open(FILTER_SRC, "r", encoding="utf-8") as fh:
+        src = fh.read()
+    m = SHA_LINE.search(src)
+    if not m:
+        return ["%s has no `const SECLAB_POLICY_SHA256 = '<64 hex>';` line. "
+                "The enforcing marker is what proves the filter, not just the "
+                "table, is in the build." % os.path.relpath(FILTER_SRC, REPO)]
+    if m.group("sha") == want:
+        return []
+    if check:
+        return ["%s records policy sha256 %s but the table hashes to %s; run "
+                "rpc-filter/tools/emit.sh"
+                % (os.path.relpath(FILTER_SRC, REPO), m.group("sha")[:12],
+                   want[:12])]
+    with open(FILTER_SRC, "w", encoding="utf-8") as fh:
+        fh.write(SHA_LINE.sub(
+            "const SECLAB_POLICY_SHA256 = '%s';" % want, src, count=1))
+    print("updated SECLAB_POLICY_SHA256 -> %s" % want[:12])
+    return []
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default=DEFAULT_OUT)
@@ -197,12 +239,22 @@ def main(argv=None) -> int:
             print("FAIL %s is stale; run rpc-filter/tools/emit.sh"
                   % os.path.relpath(args.out, REPO), file=sys.stderr)
             return 1
+        problems = _sync_policy_sha(text, check=True)
+        if problems:
+            for p in problems:
+                print("FAIL %s" % p, file=sys.stderr)
+            return 1
         print("policy module is in sync with the policy table")
         return 0
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as fh:
         fh.write(text)
+    problems = _sync_policy_sha(text, check=False)
+    if problems:
+        for p in problems:
+            print("FAIL %s" % p, file=sys.stderr)
+        return 1
     data = build(policy)
     print("wrote %s: %d rpc methods, %d commands, %d channels, default %s"
           % (os.path.relpath(args.out, REPO), len(data["rpc"]),
