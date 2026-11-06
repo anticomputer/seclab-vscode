@@ -84,7 +84,13 @@ async function runProbes(vscode, context, targets) {
 		() => vscode.commands.executeCommand('workbench.action.terminal.newLocal'));
 	await probe(results, 'host-terminal-sendsequence', 'cmd:workbench.action.terminal.sendSequence',
 		() => vscode.commands.executeCommand('workbench.action.terminal.sendSequence',
-			{ text: safety.markerCommand(ctx, '') }));
+			// Its own marker suffix, so the evidence is specific to this chain.
+			// The shared marker is written by several vectors, so a check on it
+			// alone cannot say *which* one reached the host -- and after a patch
+			// it cannot say whether this chain was denied or some unrelated
+			// vector simply did not run. A named marker makes the claim
+			// "newLocal + sendSequence reached the host" falsifiable on its own.
+			{ text: safety.markerCommand(ctx, '-newlocal') }));
 
 	// --- host filesystem -----------------------------------------------------
 	// $readFile accepts any scheme the IFileService can resolve. vscode-userdata:

@@ -16,8 +16,8 @@
 			"required": true,
 			"surface": "code-execution",
 			"policyRef": "cmd:workbench.action.terminal.sendSequence",
-			"why": "types into the active terminal; with newLocal this writes the host marker file",
-			"hostEffect": "marker"
+			"why": "types into the active terminal; with newLocal this writes the host marker file Its own marker, not the shared one: several vectors write PWNED, so after a patch the shared marker's absence cannot distinguish this chain being denied from another vector not running. This is the chain 0007/0008 exist to close, so its evidence has to stand alone.",
+			"hostEffect": "PWNED-newlocal"
 		},
 		"host-fs-read-userdata": {
 			"required": true,
