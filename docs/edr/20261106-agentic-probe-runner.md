@@ -218,15 +218,78 @@ Two things this settles:
    renderer of the shipped, attested macOS build, which then spoke AHP to it and stayed
    connected (steady `ping`s). The takeover needed no product hook and no test-only build.
 
-**Still open: the probes produce no host effect on U.** The renderer answers each injected
-probe with a short frame and no marker, beacon hit or canary appears. That is not yet a
-containment result: the probes have to be shown landing on U before absence means anything on
-G (plan §1, "every probe fails first"). The runner now records a clipped copy of the renderer's
-reply for exactly this, which the next run reads to tell "the renderer refused this for a
-protocol reason" from "the probe is wrong". The likely causes, in order: the probes are sent on
-a `channel` the client never subscribed to, and the request-form probes (`resourceRead`,
-`resourceWrite`, `createTcpConnection`) may need a capability the client negotiated away in
-`initialize`.
+**Why the first probes produced no host effect on U, and what does (2026-11-06).** Both leads
+were right, and reading upstream at `a717861c` found two more defects and, more importantly,
+that **most of the probes could never have produced a host effect**, for reasons that have
+nothing to do with the gate. Each is a false-negative source of exactly the class reviews 2 and
+3 flagged, so each is recorded with its line.
+
+9. **The action probes named a channel nobody subscribed to.** `RootStateSubscription`
+   accepts an envelope only when `isAhpRootChannel(envelope.channel)`
+   ([agentSubscription.ts#L303-L305](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/state/agentSubscription.ts#L303-L305)),
+   and the root channel is the literal `ahp-root://`
+   ([sessionState.ts#L366](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/state/sessionState.ts#L366)).
+   The probes sent `channel: 'c'`, or omitted it, and carried no `serverSeq`, which
+   `_handleMessage` folds into `_serverSeq`
+   ([#L3068-L3072](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts#L3068-L3072)).
+   Fixed: root probes use `ahp-root://` with a `serverSeq`.
+   - The session and chat probes stay **gate-surface only**: a window with no open session
+     holds no session or chat subscription, so their envelopes are dropped before any
+     reducer whatever they say. They are now labelled as such rather than counted.
+10. **`resourceWrite` was malformed.** `ResourceWriteParams` is `{ channel, uri, data,
+    encoding }`
+    ([commands.ts#L876-L890](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/state/protocol/common/commands.ts#L876-L890)),
+    and the handler rejects anything without `data` before any permission check
+    ([#L3347-L3352](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts#L3347-L3352)).
+    The probe sent `content`. Fixed to base64 `data`.
+11. **`createTcpConnection` is a client-to-server command, not a reverse request.** The client
+    *calls* it ([#L3450](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts#L3450));
+    inbound it reaches `_handleReverseRequest`'s `default:` and is answered "Unknown method".
+    It can never open a tunnel on U, so it is a gate-surface probe too.
+12. **The resource probes are refused by upstream's own gate on U, correctly.** Every
+    `resource*` reverse request goes through `IAgentHostResourceService`, whose `_isCovered`
+    short-circuits only for `LOCAL_AGENT_HOST_RESOURCE_IDENTITY`
+    ([agentHostResourceService.ts#L408-L411](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/agentHost/common/agentHostResourceService.ts#L408-L411)).
+    A `seclab+` window's identity is the string `vscode-remote://seclab+<tab>`
+    ([editorRemoteAgentHostServiceClient.ts#L137-L143](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts#L137-L143)),
+    so with no persisted grant the check enqueues a user prompt and the call throws
+    `PermissionDenied`. A16, A5 and A26 therefore **cannot** mark the host without the user,
+    and absence of a marker on U says nothing about the gate. The implicit-read grants that
+    would bypass this are granted only for **outgoing** actions
+    ([#L2883-L2895](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostProtocolClient.ts#L2883-L2895)),
+    so a hostile host cannot induce them.
+13. **One probe does land, and it is the one that matters.**
+    `vscode/requestMcpAuthentication`
+    ([agentHostExtensionProtocol.ts#L81](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostExtensionProtocol.ts#L81))
+    is an unsolicited server-to-client request that the client answers by calling the handler
+    the remote chat contribution registers
+    ([remoteAgentHostChatContribution.ts#L313-L317](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHostChatContribution.ts#L313-L317)),
+    which is `autoAuthenticateMcpServer` with `allowInteraction: false`. When the agent host
+    **omits** `authorization_servers`, `resolveMcpServerAuthentication` calls
+    `IAgentHostMcpOAuthMetadataService.resolveResource(resource)` unconditionally, before any
+    `allowCreation` check
+    ([agentHostAuth.ts#L1159-L1170](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/agentSessions/agentHost/agentHostAuth.ts#L1159-L1170)),
+    and that service is a shared-process remote service whose fetch leaves the **trusted host**
+    through `IRequestService`
+    ([agentHostMcpOAuthMetadataService.ts#L59-L96](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/common/agentHostMcpOAuthMetadataService.ts#L59-L96),
+    registered in
+    [sharedProcessMain.ts#L451](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/code/electron-utility/sharedProcess/sharedProcessMain.ts#L451)).
+    So a tab that owns its agent-host socket makes the host fetch a URL of its choosing, with
+    no user action and outside the tab's broker. That is the host beacon hit, and it is what
+    0015 denies as `ahp-gate.reverse-request`.
+    - Supplying `authorization_servers` instead is a dead end:
+      `getOrCreateProviderForMcpResource` returns before the metadata fetcher whenever
+      `allowCreation` is false.
+    - The probe is re-sent on a timer, because the handler is registered only once the
+      contribution has the connection's root state, which is after `initialize`.
+14. **The `protectedResources` token push needs a signed-in account.**
+    `authenticateProtectedResources` runs on every root-state change with no user action
+    ([remoteAgentHostChatContribution.ts#L602-L625](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHostChatContribution.ts#L602-L625)),
+    but each resource resolves through `resolveSessionForProtectedResource` and pushes nothing
+    when the profile is signed out. The run profile is isolated and signed out, and no real
+    credential may enter a fixture, so A1-protected stays a gate-surface probe. The
+    `chat.agentHost.unsafeTestToken` path is not used: it needs `--enable-smoke-test-driver`,
+    which would be a deliberately weakened launch.
 
 ## Measured, 2026-11-06 (increment 0, first runs)
 Seven runs of `test/agentic/runner/` against the attested release build U
