@@ -7,8 +7,18 @@ name: build-macos
 # pull_request trigger). A manual dispatch on another branch is a test build: attested, and
 # uploaded under a separate `-branch` artifact name that only `./seclab fetch macos-branch`
 # reads (verified against that branch, extracted outside the release location).
+# A dispatch with test_variant set (EDR test-build-variants) builds patches/series plus that
+# variant's reviewed test-only hooks (test/builds/variants.json), on any branch: a renamed
+# app and an arm64 REH, each attested, uploaded under `-test-<variant>` names that only
+# `./seclab fetch macos-<variant>` reads. check-release refuses them; they are never released.
 on:
   workflow_dispatch:
+    inputs:
+      test_variant:
+        description: "Test build variant (test/builds/variants.json); none = normal build"
+        type: choice
+        options: [none, containment]
+        default: none
   push:
     # Release builds: main only. (Tags come back with a ruleset restricting v* tag creation
     # to reviewed main SHAs; until then a tag push could attest an unreviewed commit: CI-1.)
@@ -56,17 +66,18 @@ jobs:
           ARCH: arm64
           SRC: ${{ github.workspace }}/vscode
           OUT_DIR: ${{ github.workspace }}/dist
+          SECLAB_TEST_VARIANT: ${{ github.event_name == 'workflow_dispatch' && inputs.test_variant != 'none' && inputs.test_variant || '' }}
         run: build/build-darwin.sh
 
       - name: Build provenance attestation
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
-            dist/seclab-vscode-darwin-arm64.zip
+            dist/*.zip
             dist/build-info.json
 
       - name: Upload (main only)
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || inputs.test_variant == 'none')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: seclab-vscode-darwin-arm64
@@ -79,10 +90,60 @@ jobs:
       # never reads; `./seclab fetch macos-branch RUN` verifies its attestation against that
       # branch and extracts it outside the release location. Short retention; never released.
       - name: Upload branch test build (dispatch, not main)
-        if: github.ref != 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+        if: github.ref != 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.test_variant == 'none'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: seclab-vscode-darwin-arm64-branch
           path: dist/
+          retention-days: 3
+          if-no-files-found: error
+
+      # A test build variant: never under a release or branch name (the conditions above exclude
+      # it), only under its own, which only `./seclab fetch macos-<variant>` reads.
+      - name: Upload test build variant (dispatch with test_variant)
+        if: github.event_name == 'workflow_dispatch' && inputs.test_variant != 'none'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: seclab-vscode-darwin-arm64-test-${{ inputs.test_variant }}
+          path: dist/
+          retention-days: 3
+          if-no-files-found: error
+
+  # The REH half of a test build variant, built in a container from the same commit (the
+  # pinned upstream SHA pairs it with the app), for arm64 tabs. Attested; never released.
+  reh-test:
+    name: reh (test variant)
+    if: github.event_name == 'workflow_dispatch' && inputs.test_variant != 'none'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      id-token: write      # Sigstore signing of the provenance attestation
+      attestations: write  # store the attestation
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the variant REH (container, pinned upstream; its hooks verified, check-release refuses it)
+        env:
+          ARCH: arm64
+          SECLAB_TEST_VARIANT: ${{ inputs.test_variant }}
+        run: ./seclab build linux reh
+
+      - name: Build provenance attestation
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            .work/test-builds/${{ inputs.test_variant }}/seclab-reh-linux-arm64-test-${{ inputs.test_variant }}.tar.gz
+            .work/test-builds/${{ inputs.test_variant }}/build-info-test-${{ inputs.test_variant }}.json
+
+      - name: Upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: seclab-reh-linux-arm64-test-${{ inputs.test_variant }}
+          path: |
+            .work/test-builds/${{ inputs.test_variant }}/seclab-reh-linux-arm64-test-${{ inputs.test_variant }}.tar.gz
+            .work/test-builds/${{ inputs.test_variant }}/build-info-test-${{ inputs.test_variant }}.json
           retention-days: 3
           if-no-files-found: error

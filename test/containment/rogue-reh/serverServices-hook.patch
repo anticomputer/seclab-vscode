@@ -1,32 +1,50 @@
 --- a/src/vs/server/node/serverServices.ts
 +++ b/src/vs/server/node/serverServices.ts
-@@ -3,6 +3,7 @@
+@@ -3,8 +3,9 @@
   *  Licensed under the MIT License. See License.txt in the project root for license information.
   *--------------------------------------------------------------------------------------------*/
  
 +import { createRequire } from 'node:module';
  import * as fs from 'fs';
- import { hostname, release } from 'os';
+-import { hostname, release } from 'os';
++import { homedir, hostname, release } from 'os';
  import { Emitter, Event } from '../../base/common/event.js';
-@@ -146,6 +147,21 @@
- 
+ import { DisposableStore, toDisposable } from '../../base/common/lifecycle.js';
+ import { Schemas } from '../../base/common/network.js';
+@@ -147,6 +148,36 @@
  	// TODO: @Sandy @Joao need dynamic context based router
  	const router = new StaticRouter<RemoteAgentConnectionContext>(ctx => ctx.clientId === 'renderer');
-+
-+	// seclab test-only: rogue-REH containment fixture. Never active in a normal
-+	// build; only when SECLAB_ROGUE_REH=1, which the containment harness sets.
-+	// The REH server runs inside the tab and is hostile under our threat model,
-+	// so the probes need the server's own handle on the channels the CLIENT
-+	// registers, which the extension host cannot reach.
-+	if (process.env.SECLAB_ROGUE_REH === '1' && process.env.SECLAB_ROGUE_REH_PAYLOAD) {
+ 
++	// SECLAB_TEST_ONLY: rogue-REH containment hook. Applied only to the `containment` test
++	// build variant (test/builds/variants.json), never by patches/series; check-release fails
++	// any artifact containing it. Disarmed unless the harness has staged a run: the tab runs
++	// under `env -i`, so arming is a file the harness copies into the tab, as for the rogue
++	// extension: ~/.seclab-test/rogue-reh/targets with a per-run nonce (arm), its run directory
++	// and an expiry (until). The payload and output paths are fixed, never read from env.
++	const seclabHook = '[SECLAB_TEST_ONLY:rogue-reh-hook]';
++	const seclabDir = path.join(homedir(), '.seclab-test', 'rogue-reh');
++	const seclabArm = setInterval(() => {
++		let t: Record<string, string>;
 +		try {
-+			// The server bundle is ESM, so reach CJS the way this tree already does.
-+			const payload = createRequire(import.meta.url)(process.env.SECLAB_ROGUE_REH_PAYLOAD);
++			t = Object.fromEntries(fs.readFileSync(path.join(seclabDir, 'targets'), 'utf8').split('\n').map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
++		} catch {
++			return;
++		}
++		if (!/^[0-9a-f]{32}$/.test(t.arm ?? '') || !(t.run ?? '').startsWith('/') || !(Number(t.until) > Date.now() / 1000)) {
++			return;
++		}
++		clearInterval(seclabArm);
++		try {
++			process.env.SECLAB_ROGUE_REH_OUT = path.join(seclabDir, 'evidence');
++			const payload = createRequire(import.meta.url)(path.join(seclabDir, 'probes.js'));
++			console.error(`${seclabHook} armed for run ${t.arm.slice(0, 8)}`);
 +			setTimeout(() => void payload.main(socketServer, router), 5000);
 +		} catch (err) {
-+			console.error('[seclab] rogue-REH payload failed to load', err);
++			console.error(`${seclabHook} payload failed to load`, err);
 +		}
-+	}
- 
++	}, 2000);
++	disposables.add(toDisposable(() => clearInterval(seclabArm)));
++
  	// Files
  	const fileService = disposables.add(new FileService(logService));
+ 	services.set(IFileService, fileService);

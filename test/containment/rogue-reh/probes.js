@@ -9,11 +9,15 @@
 //   * raw MainThread* RPC with arguments no public API would produce, notably a
 //     spoofed extension identity.
 //
-// Loaded by the test-only hook in patches/0005-test-only-rogue-reh-hook.patch,
-// which runs only when SECLAB_ROGUE_REH=1. It is a fixture, never shipped
-// behaviour, and it only ever runs against our own local builds.
+// Loaded by the test-only hook test/containment/rogue-reh/serverServices-hook.patch, which
+// only the `containment` test build variant carries (test/builds/variants.json; never
+// patches/series). It arms only when the harness stages a run in the tab:
+// ~/.seclab-test/rogue-reh/{targets,probes.js,probe-safety.js}, targets holding a per-run
+// nonce (arm), the run directory (run) and an expiry (until). It is a fixture, never shipped
+// behaviour, and it only ever runs against our own test builds.
 //
-// Evidence goes to $SECLAB_ROGUE_REH_OUT/reh-probes.json, in the same shape as
+// Evidence goes to $SECLAB_ROGUE_REH_OUT/reh-probes.json (the hook sets it to
+// ~/.seclab-test/rogue-reh/evidence), in the same shape as
 // the extension-side probes so check-probes.ts can apply the same rules.
 
 'use strict';

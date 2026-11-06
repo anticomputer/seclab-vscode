@@ -39,6 +39,8 @@ jobs:
         run: test "$(cat "$PB_SRC/.nvmrc")" = "$(node --version | sed s/^v//)"
       - name: Apply patches/series (fails on any patch that doesn't apply)
         run: build/apply-patches.sh "$PB_SRC"
+      - name: Test build variants' hooks still apply on top of the series (never shipped; EDR test-build-variants)
+        run: build/test-variant.sh check-all "$PB_SRC"
       # node_modules is keyed on the pinned SHA and upstream's lockfile, restored read-only on
       # branches and PRs, saved only from main (a branch can't seed what main restores).
       - name: Restore node_modules
