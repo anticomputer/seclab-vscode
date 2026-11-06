@@ -236,27 +236,41 @@ export function editorWindowId(pid: number): number {
 
 export interface BackgroundLaunch { pid: number; windowId: number; stoleFocus: boolean }
 
-/** Launch without activating; wait for the window; report whether the editor took focus. */
+/** Launch without activating; wait for the window; report whether the editor took focus. The focus
+ *  watcher starts before the editor does and runs for its whole life: the first sample in which the
+ *  editor is the frontmost app is recorded and the editor's process tree is killed (fail closed). */
 export async function launchEditorInBackground(userData: string, folderUri: string, env: Record<string, string> = {}, timeoutMs = 90_000, app = EDITOR_APP): Promise<BackgroundLaunch> {
 	if (editorPid(userData)) {
 		throw new Error(`an editor already runs with ${userData}; tear it down first`);
 	}
+	startFocusWatch(userData);
 	const argv = editorLaunchArgv(userData, folderUri, env, app);
 	execFileSync(argv[0], argv.slice(1), { stdio: 'ignore' });
 	const deadline = Date.now() + timeoutMs;
 	let pid = 0;
 	let windowId = 0;
-	while (Date.now() < deadline && !windowId) {
+	while (Date.now() < deadline && !windowId && !focusStolen(userData)) {
 		await new Promise(r => setTimeout(r, 1000));
 		pid ||= editorPid(userData);
 		windowId = pid ? editorWindowId(pid) : 0;
+	}
+	if (focusStolen(userData)) {
+		return { pid, windowId, stoleFocus: true };
 	}
 	if (!windowId) {
 		throw new Error(`no editor window for ${userData} within ${timeoutMs / 1000}s`);
 	}
 	// Activation happens as the window is shown; give it a moment to settle, then check.
 	await new Promise(r => setTimeout(r, 1500));
-	return { pid, windowId, stoleFocus: frontmostPid() === pid };
+	if (!focusStolen(userData) && frontmostPid() === pid) {
+		killTree(pid);
+		fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${pid} was the frontmost app at launch; killed it and its processes\n`);
+	}
+	return { pid, windowId, stoleFocus: focusStolen(userData) };
+}
+
+function focusStolen(userData: string): boolean {
+	return fs.existsSync(focusStealLog(userData)) && fs.readFileSync(focusStealLog(userData), 'utf8').trim() !== '';
 }
 
 /** Capture one window by id, covered or not, without touching focus or z-order. */
@@ -270,19 +284,52 @@ export function focusStealLog(userData: string): string {
 	return path.join(userData, 'seclab-focus-steals.log');
 }
 
-/** Watch the frontmost app for the editor's whole life, not only at launch (review UU-2). */
+/** Watch the frontmost app for the editor's whole life, from before it starts (review UU-2). */
 export function startFocusWatch(userData: string): void {
 	spawn(process.execPath, [path.join(repoRoot, 'test', 'window.ts'), 'watch', userData, '-'], { detached: true, stdio: 'ignore' }).unref();
 }
 
-/** Poll once a second while the editor runs; append every second it is the frontmost app. */
+const WATCH_SAMPLE_MS = 200;
+
+/**
+ * Wait for the editor to start (up to 2 minutes), then sample the frontmost app every 200 ms while
+ * it runs. The first sample in which it is frontmost is recorded and the editor's whole process
+ * tree is killed at once: a run that steals focus must not keep the user's desktop (fail closed).
+ */
 export async function watchFocus(userData: string): Promise<void> {
-	let pid = editorPid(userData);
+	let pid = 0;
+	for (const until = Date.now() + 120_000; !pid && Date.now() < until;) {
+		await new Promise(r => setTimeout(r, WATCH_SAMPLE_MS));
+		pid = editorPid(userData);
+	}
 	while (pid) {
 		if (frontmostPid() === pid) {
-			fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${pid} is the frontmost app\n`);
+			killTree(pid);
+			fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${pid} became the frontmost app; killed it and its processes\n`);
+			return;
 		}
-		await new Promise(r => setTimeout(r, 1000));
-		pid = editorPid(userData);
+		await new Promise(r => setTimeout(r, WATCH_SAMPLE_MS));
+		pid = editorPid(userData) === pid ? pid : 0;
+	}
+}
+
+/** SIGKILL a process and all its descendants (children first found, then killed together). */
+export function killTree(root: number): void {
+	const rows = execFileSync('ps', ['-axo', 'pid=,ppid='], { encoding: 'utf8' }).trim().split('\n')
+		.map(l => l.trim().split(/\s+/).map(Number)).filter(r => r.length === 2);
+	const tree = new Set([root]);
+	for (let grew = true; grew;) {
+		grew = false;
+		for (const [p, pp] of rows) {
+			if (tree.has(pp) && !tree.has(p)) {
+				tree.add(p);
+				grew = true;
+			}
+		}
+	}
+	for (const p of tree) {
+		try {
+			process.kill(p, 'SIGKILL');
+		} catch { /* already gone */ }
 	}
 }

@@ -57,3 +57,41 @@ Only `test/harness.ts` sets it, through `open --env`.
 - Rebase cost: one exported constant and six guarded call sites in upstream's window code.
   The patch fails to apply loudly if they move.
 - 0005-0011 are reserved for the RPC filter series, so this is 0012.
+
+## Addendum 2026-11-06: activation inside Electron, and a watcher that kills
+**What happened.** An agentic-gate run on main's release build took focus mid-run. Teardown's
+watcher recorded three samples, but `window.ts launch`'s own check had passed, so the editor
+kept the user's desktop until the end of the run. The patch guarded VS Code's call sites, but
+on macOS Electron 43 activates the app in its own code (permalinks pinned to the `v43.8.3` commit):
+- `NativeWindowMac::Show()` calls `activateIgnoringOtherApps:YES`
+  ([native_window_mac.mm](https://github.com/electron/electron/blob/1c0ee213f150fc4a0d06304dcedabd9b2e8ce0f7/shell/browser/native_window_mac.mm#L486)),
+  so any `show()` activates.
+- `WebContents::Focus()` calls `owner_window()->Focus(true)`, which activates
+  ([electron_api_web_contents.cc](https://github.com/electron/electron/blob/1c0ee213f150fc4a0d06304dcedabd9b2e8ce0f7/shell/browser/api/electron_api_web_contents.cc#L3976-L3982)).
+  VS Code calls `webContents.focus()` in the main process outside `CodeWindow.focus()`,
+  for example the browser view's `focus(force)`.
+- A dialog with no parent window runs `[NSAlert runModal]`
+  ([message_box_mac.mm](https://github.com/electron/electron/blob/1c0ee213f150fc4a0d06304dcedabd9b2e8ce0f7/shell/browser/ui/message_box_mac.mm#L144)).
+  Several main-process dialogs pass `BrowserWindow.getFocusedWindow()`, which is undefined
+  for a background window.
+
+**Patch.** 0012 adds `backgroundWindowsGuard.ts`, installed first in `main.ts`. In
+background mode only:
+- `BaseWindow`/`BrowserWindow` `show()` becomes `showInactive()`;
+- `focus()` and `moveTop()` do nothing unless a window of ours already has focus (the user
+  activated the app);
+- `setFullScreen(true)` and `setSimpleFullScreen(true)` are refused;
+- `app.focus()` does nothing;
+- `webContents.focus()` does nothing unless a window of ours has focus;
+- every dialog gets a parent window, so it shows as a sheet, and one with no window to
+  attach to is cancelled instead of run app-modal; `showErrorBox` is logged instead.
+
+If the guard can't be installed, the process exits rather than run unguarded.
+
+**Harness.**
+- `launchEditorInBackground` (`test/harness.ts`) starts the watcher before `open`, for every
+  caller, not only `window.ts`.
+- The watcher samples the frontmost app every 200 ms for the editor's whole life. On the first
+  sample in which the editor is frontmost, it kills the editor's whole process tree and
+  records the steal. A steal can now last at most about 200 ms plus the kill.
+- The launch-time check kills too.

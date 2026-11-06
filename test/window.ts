@@ -2,13 +2,15 @@
 // from the user (AGENTS.md hard rule). macOS only.
 //   node test/window.ts launch [--env K=V]... USER_DATA_DIR FOLDER_URI   # background launch; exit 1 if it took focus
 //   node test/window.ts shot USER_DATA_DIR OUT.png                       # capture the (covered) window by id
-//   (launch also starts `window.ts watch USER_DATA_DIR -`: it records any later focus steal, and
-//    teardown fails the run if one happened; review UU-2)
+//   (every background launch starts `window.ts watch USER_DATA_DIR -` first: it samples the
+//    frontmost app every 200 ms for the editor's whole life, and on the first sample in which the
+//    editor is frontmost it records the steal and kills the editor's process tree; teardown fails
+//    the run if one happened. Review UU-2, 2026-11-06 focus steal.)
 // Teardown stays with each suite (demo.ts teardown, check-evidence's manifest).
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { captureWindow, checkUserDataDir, editorPid, editorWindowId, focusStealLog, launchEditorInBackground, startFocusWatch, watchFocus } from './harness.ts';
+import { captureWindow, checkUserDataDir, editorPid, editorWindowId, focusStealLog, launchEditorInBackground, watchFocus } from './harness.ts';
 
 const argv = process.argv.slice(2);
 const mode = argv.shift();
@@ -31,11 +33,12 @@ if (mode === 'watch') {
 	const r = await launchEditorInBackground(userData, arg, env);
 	console.log(`editor pid ${r.pid}, window ${r.windowId}, launched in the background`);
 	if (r.stoleFocus) {
-		fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${r.pid} took focus at launch\n`);
-		console.error('FAIL: the editor became the frontmost app (focus stolen). Report it; do not work around it with activate.');
+		if (!fs.existsSync(focusStealLog(userData)) || !fs.readFileSync(focusStealLog(userData), 'utf8').trim()) {
+			fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${r.pid} took focus at launch\n`);
+		}
+		console.error('FAIL: the editor became the frontmost app (focus stolen); it was killed. Report it; do not work around it with activate.');
 		process.exit(1);
 	}
-	startFocusWatch(userData);
 } else {
 	const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';
 	if (steals) {
