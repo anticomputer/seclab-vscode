@@ -184,6 +184,9 @@ export class ObsGlue {
 	sensorHooks(tabId: string, workspace: string): SensorHooks {
 		const falco = this.falco;
 		return {
+			brokerEndpoint: ep => {
+				this.hub.context(tabId, { brokerPort: ep.port, ...(ep.addrs?.length ? { brokerAddrs: new Set(ep.addrs) } : {}) });
+			},
 			...(falco ? {
 				beforeReh: async ({ containerId }: { containerId: string }) => {
 					this.hub.context(tabId, { openedAt: Date.now(), workspace });
@@ -318,15 +321,26 @@ export class ObsGlue {
 	brokerAttached(tabId: string, control: AuditControl): Promise<void> {
 		let entry = this.brokerFeeds.get(tabId);
 		if (!entry) {
+			const lastByDest = new Map<string, ObsEvent>();
+			const dest = (m: { net?: { addr: string; port?: number } }) => `${m.net?.addr ?? ''}:${m.net?.port ?? ''}`;
 			const feed = new BrokerAuditFeed(tabId, {
 				emit: (m, count) => {
-					this.hub.emit(tabId, {
+					const e = this.hub.emit(tabId, {
 						source: 'broker', integrity: 'trusted', class: m.class, priority: m.priority, summary: m.summary,
 						...(m.net ? { net: m.net } : {}), detail: count ? { ...m.detail, count } : m.detail,
 					});
+					if (e && m.net) {
+						if (!lastByDest.has(dest(m)) && lastByDest.size >= 512) {
+							lastByDest.delete(lastByDest.keys().next().value!);
+						}
+						lastByDest.set(dest(m), e);
+					}
 				},
 				status: (priority, summary, detail) => {
 					this.hub.trusted(tabId, { class: 'broker.status', priority, summary, detail });
+				},
+				timing: (m, tMs) => {
+					this.hub.brokerTiming(tabId, dest(m), tMs, lastByDest.get(dest(m)));
 				},
 			});
 			entry = { feed };

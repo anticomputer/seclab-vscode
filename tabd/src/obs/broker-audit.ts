@@ -191,7 +191,11 @@ export interface AuditControl {
 export interface AuditSink {
 	emit(m: MappedAudit, count?: number): void;
 	status(priority: Priority, summary: string, detail: Detail): void;
+	/** Every denied or blocked request, before aggregation, timed by the broker (beacon rule). */
+	timing?(m: MappedAudit, tMs: number): void;
 }
+
+const TIMED = /^(?:request\.denied|request\.denied_unprompted|upstream\.blocked|tcp\.blocked|udp\.blocked|approval\.rate_limited)$/;
 
 interface Agg { m: MappedAudit; extra: number; timer: NodeJS.Timeout }
 
@@ -299,6 +303,14 @@ export class BrokerAuditFeed {
 			this.drop(m);
 			return;
 		}
+		this.route(m);
+		const ts = num((input as Record<string, unknown>).ts);
+		if (m.net && TIMED.test(String(m.detail.auditType)) && ts !== undefined) {
+			this.sink.timing?.(m, ts * 1000);
+		}
+	}
+
+	private route(m: MappedAudit): void {
 		if (!m.aggKey) {
 			this.sink.emit(m);
 			return;

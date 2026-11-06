@@ -304,6 +304,23 @@ export class ObsHub {
 		this.tick();
 	}
 
+	/** Broker per-destination timing (before aggregation) for the beacon rule; rate-limited like findings. */
+	brokerTiming(tabId: string, dest: string, t: number, cause: ObsEvent | undefined): void {
+		const s = this.state(tabId);
+		for (const d of s.detector.brokerTiming(dest, t, cause)) {
+			let b = s.findings.get('#broker-beacon');
+			if (!b) {
+				b = { tokens: FINDING_RATE.burst, last: this.now(), rate: FINDING_RATE.rate, burst: FINDING_RATE.burst, dropped: 0 };
+				s.findings.set('#broker-beacon', b);
+			}
+			if (!take(b, this.now())) {
+				b.dropped++;
+				continue;
+			}
+			this.stamp(tabId, s, normalizeDraft(d));
+		}
+	}
+
 	/** A sensor sent something unparseable (counted and summarised once a second). */
 	countInvalid(tabId: string): void {
 		this.state(tabId).invalid++;
