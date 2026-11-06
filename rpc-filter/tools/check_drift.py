@@ -518,6 +518,40 @@ def check_enforcement(mapping: dict, policy: dict, repo_root: str) -> list:
     return errors
 
 
+def check_residuals(mapping: dict, policy: dict) -> list:
+    """Hold the conditions a recorded residual says it depends on.
+
+    A residual risk written only in prose is forgotten exactly when it stops
+    being true. ``deferred-laundering`` is safe only while every command
+    verdict is ``deny``: with nothing allowed, a laundered call is refused for
+    being denied rather than for being laundered. The moment someone allows a
+    command -- a reasonable thing to want, and the obvious next compatibility
+    fix -- the gap becomes reachable, and nothing in review would connect that
+    change to a paragraph in section 7.
+
+    So the dependency is checked rather than described. Granting a command any
+    verdict but ``deny`` fails the build until the residual is marked fixed.
+    """
+    errors = []
+    residuals = policy.get("residuals") or {}
+    entry = residuals.get("deferred-laundering")
+    if isinstance(entry, dict) and not entry.get("fixed"):
+        offenders = sorted(
+            key for key, value in mapping.items()
+            if key.startswith("cmd:") and _verdict_of(value) != "deny")
+        for key in offenders[:20]:
+            errors.append(
+                "%s is not denied, but the deferred-laundering residual is "
+                "unfixed: a handler that defers a global executeCommand "
+                "escapes both the taint and the backstop. Fix the residual and "
+                "set residuals['deferred-laundering'].fixed, or keep the "
+                "verdict at deny." % key)
+        if len(offenders) > 20:
+            errors.append("... and %d more non-denied commands."
+                          % (len(offenders) - 20))
+    return errors
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--accept", action="store_true",
@@ -557,7 +591,9 @@ def main(argv=None) -> int:
                         ("invariants", lambda: check_invariants(inv, policy)),
                         ("coverage", lambda: check_coverage(mapping)),
                         ("enforcement",
-                         lambda: check_enforcement(mapping, policy, REPO_ROOT))):
+                         lambda: check_enforcement(mapping, policy, REPO_ROOT)),
+                        ("residuals",
+                         lambda: check_residuals(mapping, policy))):
         errors = check()
         if errors:
             failures.append((name, errors))
