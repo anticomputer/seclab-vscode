@@ -137,6 +137,10 @@ async def app(scope, receive, send) -> None:
 
     if path == "/seen":
         return await send_resp(send, 200, json.dumps(list(SEEN)).encode())
+    if path.startswith("/example-org/"):
+        # A package-feed read (CFS-in-tab probe): package metadata, never the request headers.
+        return await send_resp(send, 200, json.dumps({"name": path.rsplit("/", 1)[-1], "versions": {"1.0.0": {}},
+                                                      "auth_sha256": sha(auth)}).encode())
     if host == "git.example.test":
         return await git_backend(scope, receive, send, hdrs, body)
     if host == "api.example.test":

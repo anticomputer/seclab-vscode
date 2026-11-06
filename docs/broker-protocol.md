@@ -941,6 +941,8 @@ listed type is never emitted.
 | `model.call` | A request to a model host completed: `provider`, `host`, `path`, `method`, `reqBytes`, `respBytes`, `status`, `durationMs`, and the tool `type`s it declared. The single source of model-call facts for observability; never bodies. |
 | `model.denied` | A model-host request failed the body policy (undeclared provider, endpoint, upgrade, encoding, content type, strict JSON, field or tool type); `reason` says which. |
 | `model.budget_exceeded` | The tab's model budget (`models.budget`) is spent; the request was denied with `429`, never prompted. |
+| `credential.used` | A credentialed request got a response (revision 6): `credentialId`, `status`, `respBytes` and the request summary. One per injected credential per response, so every use (for example a CFS feed read that ingests a package) is attributable to the tab. |
+| `credential.budget_exceeded` | A credential's per-tab budget (`credentials[].budget`, revision 6) is spent: `credentialId` is the credential used, `budgetId` the one whose budget ran out (it or its parent). The request was denied with `429`, never prompted. |
 | `broker.started` | The proxy started. |
 | `broker.shutdown` | `broker.shutdown` was called. |
 | `control.connected` | A control client connected. |
@@ -1073,6 +1075,13 @@ as `version` and `policySchema.revision`, so a supervisor can detect it.
 ### Changelog (generated)
 
 <!-- BEGIN GENERATED: protocol-changelog (broker/tools/docs.py; do not edit) -->
+**0.6.0** (2026-11-06; policy schema revision 6)
+
+- Per-credential budgets (`credentials[].budget {requests, bytes}`; capability `credentialBudget`): a cap on a credential's use over the tab's lifetime (requests it is injected into; bytes sent and received on them). Use of a credential derived from it counts against it too. Over budget is `429`, never prompted (audit `credential.budget_exceeded`). Counters survive `policy.load`. For CFS package feeds in tabs, it bounds package ingestion under the user's identity (ADR cfs-package-feeds-in-tabs).
+- Audit `credential.used` on every credentialed response: `credentialId`, `status`, `respBytes` and the request summary.
+- Provider backstop `azure-devops`: credentialed calls to the REST API under `_apis` (PATs, feed management) and writes under `_packaging` are denied, by host (`pkgs.dev.azure.com`, `dev.azure.com`, `vssps.dev.azure.com`, `*.visualstudio.com`) or by the credential's `provider`.
+- Example policy `cfs-feeds.policy.json`: the CFS credential bound to GET on the npm registry and PyPI feed paths, injected as `Basic cfs:<token>`, with a budget.
+
 **0.5.0** (2026-11-06; policy schema revision 5)
 
 - Deny rules (policy `deny`, `policy.update` `addDeny`/`removeDeny`; capability `denyRules`). A deny rule (`id`, `host`, optional `ports` and `schemes`) takes precedence over every allow rule, the baseline, `allow-tab` grants, prompts and credential bindings. A matching request is denied with `403` and audited as `request.denied` (reason `denied by rule <id>`, key `ruleId`), never prompted; a CONNECT to it is refused the same way. It is re-checked after every wait (prompt, just-in-time credential) immediately before injection, and at upstream connect (audit `upstream.denied`). Omitted `ports` means every port, omitted `schemes` means http and https, and `*.x` also blocks `x`. Adding one resolves a pending prompt it matches as `deny` (`approval.resolved` `by: deny-rule`, with no prompt cooldown and not counted toward `deny-new-destinations`), denies new requests on open connections, and stops relaying on an open WebSocket. `policy.changed` carries `addedDeny`/`removedDeny`. `policy.update` refuses to grow `allow` or `deny` past the schema's 1024-entry caps. Requested by tab observability for its user-approved Block destination action.

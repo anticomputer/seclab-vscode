@@ -512,6 +512,18 @@ class SeclabAddon:
             # (review 12-1: a block added during a JIT credential hold).
             if self._blocked(flow, view):
                 return
+            for cred, _binding in planned.values():
+                over = self.b.credential_budget_exceeded(cred)
+                if over is not None:
+                    # Revision 6: a capped credential (e.g. CFS feed reads, which can ingest
+                    # packages under the user's identity) is denied, never prompted.
+                    self.b.audit("credential.budget_exceeded", credentialId=cred.id, budgetId=over[0],
+                                 reason=over[1], **view.summary())
+                    self._deny(flow, 429, f"credential budget for this tab: {over[1]}")
+                    return
+            req_bytes = len(flow.request.raw_content or b"")
+            for cred, _binding in planned.values():
+                self.b.charge_credential(cred, requests=1, nbytes=req_bytes)
             injected = []
             for cred, binding in planned.values():
                 assert binding.inject is not None and cred.value is not None
@@ -611,6 +623,16 @@ class SeclabAddon:
             self.b.audit("model.call", provider=model["provider"], reqBytes=model["reqBytes"],
                          respBytes=resp_bytes, status=resp.status_code, tools=model["tools"],
                          durationMs=round((time.monotonic() - model["start"]) * 1000), **view.summary())
+        if injected and view is not None:
+            # One record per credentialed response (revision 6): what each use returned, so
+            # an ingestion or other side effect is attributable to this tab.
+            resp_bytes = len(resp.raw_content or b"")
+            for cid in flow.metadata.get("seclab.injected") or []:
+                cred = self.b.creds.get(cid)
+                if cred is not None:
+                    self.b.charge_credential(cred, nbytes=resp_bytes)
+                self.b.audit("credential.used", credentialId=cid, status=resp.status_code,
+                             respBytes=resp_bytes, **view.summary())
         if resp.status_code == 101 and injected and not flow.metadata.get("seclab.ws_ok"):
             # The upstream switched protocols on a credentialed request that was not approved
             # as a WebSocket (mitmproxy decides on the response); never relay the stream.

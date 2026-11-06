@@ -1,6 +1,7 @@
 """Sentinel credentials: placement-only injection, misplacement, response
 scanning, minted tokens, backstop, JIT, import, WebSocket, git over HTTPS."""
 
+import base64
 import hashlib
 import json
 import secrets
@@ -361,3 +362,49 @@ def test_git_clone_and_fetch_with_sentinel(pod, ctl):
     assert p.returncode != 0
     cfg = pod.ws("cat demo/.git/config; git config --global --list").stdout.decode()
     pod.assert_no_canary(cfg)
+
+
+def test_cfs_feed_credential_is_get_only_budgeted_and_audited(pod, ctl):
+    """ADR cfs-package-feeds-in-tabs (revision 6), on the fixture host: the tab sends
+    `Basic cfs:<sentinel>` as npm/pip would; the broker injects the real token only on GET
+    to the feed paths, never on a write; every use is audited with its status; an expired
+    token is refreshed through credential.needed without a retry; over budget is 429 with no
+    prompt."""
+    feed = "/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry"
+    cfs = {"id": "cfs", "provider": "azure-devops",
+           "inject": {"header": "Authorization", "fmt": "Basic {base64:cfs:{value}}"},
+           "bind": [{"host": "api.example.test", "path": feed + "/**", "methods": ["GET"]}],
+           "budget": {"requests": 3}}
+    s = pod.load({"allow": [{"host": "api.example.test", "methods": ["*"]}], "credentials": [cfs],
+                  "prompt": {"timeoutSeconds": 10}})["cfs"]
+    value = "seclab-canary-cfs-" + secrets.token_hex(16)
+    pod.canaries["cfs"] = value
+    ctl.call("credential.provide", {"id": "cfs", "value": value, "expiresAt": time.time() + 2})
+    basic = "Authorization: Basic " + base64.b64encode(f"cfs:{s}".encode()).decode()
+    real = sha("Basic " + base64.b64encode(f"cfs:{value}".encode()).decode())
+    mark = ctl.mark()
+    r = pod.curl(f"https://api.example.test{feed}/left-pad", "-H", basic)
+    assert r.code == 200 and r.json()["auth_sha256"] == real
+    pod.assert_no_canary(r.body)
+    used = ctl.wait_note("audit.event", lambda e: e["type"] == "credential.used", since=mark, timeout=10)
+    assert used["credentialId"] == "cfs" and used["status"] == 200 and used["respBytes"] > 0
+    # Writes never carry the token: publish (PUT), upload (POST), unpublish (DELETE), PATCH.
+    for method in ("PUT", "POST", "DELETE", "PATCH"):
+        r = pod.curl(f"https://api.example.test{feed}/left-pad", "-X", method, "-H", basic, "-d", "{}")
+        assert r.code == 403, (method, r.code)
+    assert not [x for x in pod.seen() if x["auth_sha256"] == real and x["method"] != "GET"]
+    # Expired: the next use holds, the host refreshes, the request resumes.
+    time.sleep(2.2)
+    fresh = "seclab-canary-cfs-" + secrets.token_hex(16)
+    pod.canaries["cfs2"] = fresh
+    ctl.handlers["credential.needed"] = lambda p: ctl.call("credential.provide", {"id": p["id"], "value": fresh})
+    r = pod.curl(f"https://api.example.test{feed}/is-odd", "-H", basic)
+    assert r.code == 200 and r.json()["auth_sha256"] == sha("Basic " + base64.b64encode(f"cfs:{fresh}".encode()).decode())
+    assert pod.curl(f"https://api.example.test{feed}/is-even", "-H", basic).code == 200
+    # Budget: three uses spent; the fourth is 429 and never prompted.
+    mark = ctl.mark()
+    r = pod.curl(f"https://api.example.test{feed}/is-number", "-H", basic)
+    assert r.code == 429 and "budget" in r.body
+    ctl.wait_note("audit.event", lambda e: e["type"] == "credential.budget_exceeded" and e["budgetId"] == "cfs",
+                  since=mark, timeout=10)
+    assert ctl.notes_since(mark, "approval.requested") == []

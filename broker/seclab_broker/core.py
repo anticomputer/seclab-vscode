@@ -131,6 +131,38 @@ class Broker:
         self._prompt_times: deque[float] = deque()
         # Model-host usage for this tab's lifetime (never reset by policy.load).
         self.model_usage = Budget()
+        # Per-credential usage for this tab's lifetime, by credential id (revision 6).
+        self.credential_usage: dict[str, Budget] = {}
+
+    # --------------------------------------------------------- credential budgets
+    def _budget_chain(self, cred: Credential) -> list[Credential]:
+        """The credential and the one it was derived from: a derived token's use counts
+        against its parent's budget too."""
+        out = [cred]
+        parent = self.creds.get(cred.parent_id) if cred.parent_id else None
+        if parent is not None:
+            out.append(parent)
+        return out
+
+    def credential_budget_exceeded(self, cred: Credential) -> tuple[str, str] | None:
+        """(credential id, reason) if this credential, or the one it derives from, is out of
+        budget; None otherwise. Over budget is denied, never prompted."""
+        for c in self._budget_chain(cred):
+            if c.budget is None:
+                continue
+            used = self.credential_usage.get(c.id, Budget())
+            max_req, max_bytes = c.budget
+            if max_req is not None and used.requests >= max_req:
+                return c.id, "request budget exhausted"
+            if max_bytes is not None and used.bytes >= max_bytes:
+                return c.id, "byte budget exhausted"
+        return None
+
+    def charge_credential(self, cred: Credential, requests: int = 0, nbytes: int = 0) -> None:
+        for c in self._budget_chain(cred):
+            used = self.credential_usage.setdefault(c.id, Budget())
+            used.requests += requests
+            used.bytes += nbytes
 
     # ------------------------------------------------------------------ sinks
     def add_sink(self, sink: Callable[[str, dict], None]) -> None:
@@ -662,6 +694,7 @@ CAPABILITIES = {
     "modelBudget": True,
     "trustedDerivation": True,
     "denyRules": True,
+    "credentialBudget": True,
 }
 
 
