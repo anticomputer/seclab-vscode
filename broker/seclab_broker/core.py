@@ -557,6 +557,9 @@ class Broker:
                 if normalize_ip(rule.host.text.removeprefix("*.")) is not None or \
                         pattern_overlaps_risky(rule.host.text, self.policy.risky):
                     raise invalid("an approval cannot add a rule for a raw IP or a risky destination")
+                if len(self.policy.rules) >= MAX_ALLOW_RULES:
+                    # Stay reloadable (review 12b-1); the controller can still answer allow-once.
+                    raise invalid(f"policy already has {MAX_ALLOW_RULES} allow rules")
                 self.policy.rules.append(rule)
                 self.revision += 1
                 self.notify("policy.changed", {

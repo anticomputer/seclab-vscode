@@ -205,12 +205,14 @@ class SeclabAddon:
             return
         # A tunnel to a blocked host is refused at CONNECT (review 12-7), audited like a request.
         peer = flow.client_conn.peername
-        view = RequestView("https", host, flow.request.port, "CONNECT", "/",
-                           client_port=peer[1] if peer and isinstance(peer[1], int) else None)
-        if self.b.policy.deny_match(view) is not None:
-            flow.metadata["seclab.view"] = view
-            self._blocked(flow, view)
-            return
+        cport = peer[1] if peer and isinstance(peer[1], int) else None
+        # A tunnel can carry either scheme, so a rule for either refuses it (review 12b-2).
+        for scheme in ("https", "http"):
+            view = RequestView(scheme, host, flow.request.port, "CONNECT", "/", client_port=cport)
+            if self.b.policy.deny_match(view) is not None:
+                flow.metadata["seclab.view"] = view
+                self._blocked(flow, view)
+                return
         self.authed[flow.client_conn] = (self.b.auth_epoch, flow.metadata.get("seclab.origin"))
         self.tunnels[flow.client_conn] = (host, flow.request.port)
 
