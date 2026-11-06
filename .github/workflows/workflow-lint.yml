@@ -37,6 +37,10 @@ jobs:
         run: ./seclab lint pins --self-test
       - name: Every image and action is pinned by digest/SHA
         run: ./seclab lint pins
+      - name: No pin younger than 7 days (CFS hold; EDR pin-age-cooldown)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./seclab lint pin-age
       - name: actionlint + zizmor (offline, no token)
         # Both verified before use without a token: actionlint against its committed attestation
         # bundle, zizmor's image signature with our pinned cosign (build/tools/tool.sh).

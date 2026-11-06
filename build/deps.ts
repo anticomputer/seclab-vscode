@@ -57,6 +57,11 @@ export interface Dep {
 	verifiedBy?: { file: string; contains: string };
 	/** Update tracking for build/deps-outdated.ts. */
 	track?: { github?: string; version?: string };
+	/**
+	 * Exempt from the 7-day pin-age rule (build/pin-age.ts): why, and the EDR recording the
+	 * decision. Only for pins whose availability is proven otherwise or dictated by the host.
+	 */
+	ageExempt?: { reason: string; record: string };
 }
 
 export interface TreePin {
@@ -231,6 +236,14 @@ export function validate(deps: Dep[], tree: TreePin[], exists: (p: string) => bo
 				}
 			}
 		}
+		// A pin-age exemption is a recorded decision that names this entry (EDR pin-age-cooldown).
+		if (d.ageExempt) {
+			const a = d.ageExempt;
+			if (!a.reason?.trim() || !/^docs\/edr\/[^/]+\.md$/.test(a.record ?? '') || !exists(a.record)
+				|| !new RegExp(`\`${d.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\``).test(read(a.record) ?? '')) {
+				problems.push(`${at}: ageExempt needs a reason and an existing EDR record that lists \`${d.id}\``);
+			}
+		}
 		// A claimed verification must be implemented in the tree (apt verifies by default) (DD-3).
 		if (d.bar === 'signed-verified' && d.kind !== 'apt-set') {
 			const v = d.verifiedBy;
@@ -335,6 +348,8 @@ function selfTest(): number {
 		['unregistered action and apt set are found', validate([base], tree, () => true).filter(p => /unregistered/.test(p)).length === 2],
 		['stale registered pin', validate([{ ...base, pins: [pin, 'gone@sha256:' + 'c'.repeat(64)] }], tree.slice(0, 1), () => true).some(p => /no longer in the tree/.test(p))],
 		['exception needs an EDR', validate([{ ...base, bar: 'exception' }], tree.slice(0, 1), () => true).some(p => /needs an EDR/.test(p))],
+		['ageExempt needs an EDR listing the entry', validate([{ ...base, ageExempt: { reason: 'r', record: 'docs/edr/x.md' } }], tree.slice(0, 1), () => true, () => 'no mention').some(p => /ageExempt/.test(p))
+			&& validate([{ ...base, ageExempt: { reason: 'r', record: 'docs/edr/x.md' } }], tree.slice(0, 1), () => true, () => `\`${base.id}\``).every(p => !/ageExempt/.test(p))],
 		['official-pinned needs official', validate([{ ...base, official: false }], tree.slice(0, 1), () => true).some(p => /requires an official/.test(p))],
 		['missing record file', validate([base], tree.slice(0, 1), () => false).some(p => /does not exist/.test(p))],
 		['clean', validate([base], tree.slice(0, 1), () => true).length === 0],
