@@ -41,9 +41,13 @@ allow it for the tab, or deny it.
     `client.capabilities.approvals: true`. The Tab Manager does; the CLI, the e2e harness and
     older clients don't, so their tabs keep the deny-all policy instead of holding requests
     nobody can answer. The flag is read when a tab's broker policy is built, at its start.
-  - The prompt names the tab first, then the destination, the method and path, the risk flags
-    in words, the tab's own origin label marked unverified, and the process chain with its
-    integrity. An `ambiguous` lineage says it may be another process; `none` shows no chain.
+  - The prompt names the tab first (its host folder's basename and tab ID, from tabd's record;
+    never `workspaceFolders[].name`, which a `.code-workspace` in the tab sets), then the
+    whole destination host (never cut, so its owning domain shows), the first request's method
+    and path, how many requests wait, and that the answer covers every request held for that
+    destination (the broker holds them under one approval). Then the risk flags in words, the
+    tab's own origin label marked unverified, and the process chain with its integrity. An
+    `ambiguous` lineage says it may be another process; `none` shows no chain.
     Every one of these strings is tab-influenced and goes through `quote`, so it can't render
     as a link, an icon or bidi-reordered text.
   - Buttons: Deny, Deny All New Destinations, Allow Once, Allow for This Tab, in that order,
@@ -54,8 +58,16 @@ allow it for the tab, or deny it.
   - Warning severity when there are risk flags or a credential is involved; information
     otherwise.
   - `tab.userAction` comes only from keyboard or mouse selection changes in an editor of this
-    window's tab, at most once a second. Notification buttons, commands and programmatic
-    selection changes don't produce it, so answering a prompt can't open the user-action gate.
+    window's tab, while the window is focused and `active`, at most once a second.
+    Notification buttons and programmatic selection changes don't produce it, so answering a
+    prompt can't open the user-action gate. The selection kind alone is not enough: an
+    extension in the tab can run `cursorMove` with `source: 'mouse'`, or `type` (review
+    BBB-1). `window.state.active` follows the window's own input events, which a command can't
+    produce. While the user is working in the window, a tab extension can still fake the kind;
+    that only says the user is active, which is then true. A core fix that strips `source` from
+    commands run by remote extension hosts belongs with the RPC filter.
+  - A user policy file keeps its prompt settings, but `enabled` is the capability AND the
+    user's own `enabled` (review BBB-5).
   - Prompts arrive in the window whose tabd owns the tab's broker control connection, which
     is the window that opened the tab. If that window closes while the tab runs, its prompts
     time out and are denied until B3c reconnects control at adoption.
@@ -65,8 +77,9 @@ allow it for the tab, or deny it.
   malformed approvals, the decision checks (unoffered, unknown, another tab's), relaying,
   resolution forwarding and the `userAction` rate limit.
 - B3b's tests cover the prompt text (tab first, no link, icon or bidi characters from tab
-  text, lineage confidence and integrity, the credential wording), the button order, and that
-  the broker policy enables prompts only for an approvals-capable client.
+  text, a long host shown whole, lineage confidence and integrity, the credential wording), the
+  button order, and that the broker policy enables prompts only for an approvals-capable client
+  and a user policy that doesn't turn them off. Review: [round BBB](../security-reviews/20261106-egress-prompts.md).
 - **Next:**
   - B3c: control reconnect at adoption, and recovering the window after its server dies or
     the local extension host restarts (found by the focus probe).

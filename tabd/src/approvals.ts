@@ -148,11 +148,14 @@ export const DECISION_LABELS: ReadonlyArray<readonly [Decision, string]> = [
  * as quoted data. Every tab-influenced string goes through `quote` (no links, icons, controls).
  */
 export function approvalPromptText(tabName: string, a: ApprovalView, lineage: { confidence?: string; chain?: string; integrity?: Integrity } | undefined): string {
-	const dest = `${quote(a.request.host, 120)}${a.request.port === 443 || a.request.port === 80 ? '' : `:${a.request.port}`}`;
+	// Never cut the host: the right end names its owner (HOST_RE caps it at 253 ASCII characters).
+	const dest = `${quote(a.request.host, 253)}${a.request.port === 443 || a.request.port === 80 ? '' : `:${a.request.port}`}`;
 	const what = a.kind === 'credential-binding'
-		? `wants to send credential ${quote(a.credentialId ?? '?', 40)} to ${dest}`
+		? `wants to send credential ${quote(a.credentialId ?? '?', 64)} to ${dest}`
 		: `wants to connect to ${dest}`;
-	const parts = [`Tab ${quote(tabName, 60)} ${what} (${quote(`${a.request.method} ${a.request.path}`, 80)}).`];
+	// The broker holds every request to one destination under one approval; the answer covers them all.
+	const more = a.waiting > 1 ? `, ${a.waiting} requests waiting` : '';
+	const parts = [`Tab ${quote(tabName, 80)} ${what} (first request ${quote(`${a.request.method} ${a.request.path}`, 80)}${more}). Your answer covers every request held for this destination.`];
 	const flags = a.risk.flags.map(f => FLAG_WORDS[f] ?? (f.startsWith('risky-destination:') ? `to a risky destination (${quote(f.slice(18), 30)})` : quote(f, 30)));
 	if (flags.length) {
 		parts.push(`Asked ${flags.join(', ')}.`);

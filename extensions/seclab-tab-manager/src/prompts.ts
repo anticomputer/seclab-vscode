@@ -6,6 +6,7 @@
 // the first or a pre-selected choice. Every string in an approval is tab-influenced: rendered
 // with `quote`, never as markdown, a link or an icon.
 
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { TabdClient } from '../tabd-src/client.ts';
 import type { Integrity } from '../tabd-src/obs/schema.ts';
@@ -17,15 +18,23 @@ const MAX_RESOLVED = 256;
 
 export class EgressPrompts implements vscode.Disposable {
 	private readonly resolved = new Set<string>();
+	private readonly names = new Map<string, string>();
 	private readonly disposables: vscode.Disposable[] = [];
 	private readonly getClient: () => Promise<TabdClient>;
-	private readonly tabName: (tabId: string) => string;
 	private readonly log: vscode.LogOutputChannel;
 
-	constructor(getClient: () => Promise<TabdClient>, tabName: (tabId: string) => string, log: vscode.LogOutputChannel) {
+	constructor(getClient: () => Promise<TabdClient>, log: vscode.LogOutputChannel) {
 		this.getClient = getClient;
-		this.tabName = tabName;
 		this.log = log;
+	}
+
+	/** Name a tab from tabd's record of its host folder, never from workspace content (a `.code-workspace` names its folders). */
+	setTabName(tabId: string, hostPath: string): void {
+		this.names.set(tabId, `${path.basename(hostPath) || hostPath}, ${tabId}`);
+	}
+
+	private tabName(tabId: string): string {
+		return this.names.get(tabId) ?? tabId;
 	}
 
 	/** `tab.approval` from tabd. */
@@ -78,12 +87,21 @@ export class EgressPrompts implements vscode.Disposable {
 	/**
 	 * The user did ordinary work in this window's tab: keyboard or mouse moves in an editor. That
 	 * opens the broker's user-action gate. Consent dialogs never produce these events.
+	 *
+	 * The selection-change kind alone can be faked: an extension in the tab can run `cursorMove`
+	 * with `source: 'mouse'`, or `type`, which report Mouse or Keyboard (review BBB-1). So the
+	 * window must also be focused and `active`; `active` follows the window's own input events,
+	 * not commands. A core-side fix (strip `source` from commands run by remote extension hosts)
+	 * belongs with the RPC filter.
 	 */
 	watchUserActivity(tabId: string): void {
 		let last = 0;
 		this.disposables.push(vscode.window.onDidChangeTextEditorSelection(e => {
 			const kind = e.kind;
 			if (kind !== vscode.TextEditorSelectionChangeKind.Keyboard && kind !== vscode.TextEditorSelectionChangeKind.Mouse) {
+				return;
+			}
+			if (!vscode.window.state.focused || !vscode.window.state.active) {
 				return;
 			}
 			const now = Date.now();
