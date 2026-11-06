@@ -77,9 +77,16 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
 builds. The rogue-REH hook lives at
-`test/containment/rogue-reh/serverServices-hook.patch` and is applied by the
-containment harness for a dedicated probe build
-([EDR](../docs/edr/20261104-rpc-escape-probes.md)).
+`test/containment/rogue-reh/serverServices-hook.patch`.
+
+**It is applied by nothing today (2026-11-06).** This file previously said it
+was "applied by the containment harness for a dedicated probe build". That
+mechanism does not exist: no build script, workflow, harness or `seclab`
+subcommand applies the patch or sets `SECLAB_ROGUE_REH`. The rogue-REH probes
+have therefore never executed, and `check-probes.ts` skips the whole bucket
+when their evidence file is absent. A dedicated containment build variant is
+being added; until it lands, treat every `rehProbes` entry as a specification
+and not as a result ([EDR](../docs/edr/20261104-rpc-escape-probes.md)).
 
 Expected later patches (M4): the RPC capability filter, auth mediation,
 partitioning, webview egress, and main-process folder routing (proposed).
