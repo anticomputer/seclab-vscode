@@ -161,3 +161,10 @@ Dialogs cancelled in background mode answer with their `cancelId`, which
   - A behavioural click test isn't possible on a shared desktop. A click posted only to the
     editor's pid doesn't reach WindowServer hit-testing (verified: no activation), and a real
     click would land in the user's app once the fix works.
+- **Review FFF** (four lows, all fixed):
+  - DevTools stay docked in the click-through window, since a detached DevTools window isn't a
+    BrowserWindow;
+  - logged dialog text has control and line-separator characters replaced, so tab text can't
+    forge a guard line;
+  - the probe requires a click-through record for every editor window;
+  - stopped renderers always get SIGCONT, even if the probe is interrupted.
