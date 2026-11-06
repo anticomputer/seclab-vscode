@@ -60,6 +60,16 @@ _PATTERNS = (
 # constant-based id is visible as unresolved work rather than silently missing.
 _UNRESOLVED = (
     re.compile(r"CommandsRegistry\.registerCommand\(\s*(?P<expr>[A-Z][\w.]*)\s*,"),
+    # Any register*Command(CONSTANT, ...) helper, matched by shape rather than
+    # by helper name -- the same reasoning as the literal patterns above.
+    # registerOverwritableCommand(Handler.Type, ...) registers the seven
+    # user-input primitives (Type, ReplacePreviousChar, CompositionType,
+    # CompositionStart, CompositionEnd, Cut, Paste), and none of them appeared
+    # in a 3199-id scan. They were denied at runtime by the default verdict, so
+    # containment held, but they had no entry, no classification and no gate
+    # watching them -- which is what matters for a tab forging user-action
+    # provenance.
+    re.compile(r"\bregister\w*Command\(\s*(?P<expr>[A-Z][\w$]*\.[\w$]+)\s*[,)]"),
     re.compile(r"(?:CommandsRegistry\.registerCommand|registerCommandAndKeybindingRule|MenuRegistry\.addCommand)"
                r"\(\s*\{\s*id\s*:\s*(?P<expr>[A-Za-z_$][\w.]*)\s*[,}]"),
     re.compile(r"super\(\s*\{\s*id\s*:\s*(?P<expr>[A-Z][\w.]*(?:\.\w+)*)\s*[,}]"),
