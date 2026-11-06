@@ -234,7 +234,7 @@ A sentinel credential. The broker mints its sentinel (returned by `policy.load`)
 | `inject` | [`inject`](broker-policy.md#inject) |  | Default for bindings without their own `inject`. |
 | `provider` | `string` |  | Extra provider backstop deny-list to apply (by name). Providers are also applied automatically by host. (pattern `^[a-z0-9-]{1,32}$`) |
 | `sentinelPrefix` | `string` |  | Replaces `SECLAB_SNTL_` for clients that check a token format. (pattern `^[A-Za-z0-9_-]{0,16}$`) |
-| `budget` | `object` |  | Per-tab cap on this credential's use (revision 6), over the tab's lifetime: requests it is injected into, and bytes sent and received on them. Over budget is `429`, never a prompt (audit `credential.budget_exceeded`). Use of credentials derived from it counts against it too. For example, it bounds package ingestion under the user's identity through CFS. |
+| `budget` | `object` |  | Per-tab cap on this credential's use (revision 6), over the tab's lifetime: requests it is injected into, and bytes sent and received on them. Over budget is `429`, never a prompt (audit `credential.budget_exceeded`). Use of credentials derived from it, at any depth, counts against it too. The request cap is exact. The byte cap is best-effort: response bytes are charged when a response completes, so one request can overshoot it, and a flow that fails after injection counts its request but not its response. It can't be combined with a `websocket: true` binding. Usage is reported by `health` (`credentialBudgets`) and keyed by credential id. For example, it bounds package ingestion under the user's identity through CFS. |
 | `budget.requests` | `integer` |  | (min `0`; max `10000000`) |
 | `budget.bytes` | `integer` |  | (min `0`; max `1099511627776`) |
 | `derive` | [`derive`](broker-policy.md#derive)[] |  | Trusted derivation rules (revision 3). See `derive`. (max items `8`) |
@@ -407,18 +407,14 @@ a tab mint or register its own durable credential.
 <!-- BEGIN GENERATED: policy-backstop (broker/tools/docs.py; do not edit) -->
 #### `azure-devops`
 
-Hosts: `pkgs.dev.azure.com`, `dev.azure.com`, `vssps.dev.azure.com`, `*.visualstudio.com`. Path prefixes: `/`. Source: https://learn.microsoft.com/en-us/rest/api/azure/devops/
+Hosts: `dev.azure.com`, `*.dev.azure.com`, `visualstudio.com`, `*.visualstudio.com`. Path prefixes: `/`. Source: https://learn.microsoft.com/en-us/rest/api/azure/devops/
 
 | Methods | Path | Why |
 |---|---|---|
-| * | `/_apis` | Azure DevOps REST API root (organisation-less hosts such as vssps.dev.azure.com): tokens, PATs, identities https://learn.microsoft.com/en-us/rest/api/azure/devops/tokens/pats |
-| * | `/_apis/**` | Azure DevOps REST API (see above) |
-| * | `/*/_apis` | Organisation-level REST API: PAT lifecycle (_apis/tokens/pats), feed management (_apis/packaging/feeds) https://learn.microsoft.com/en-us/rest/api/azure/devops/artifacts/feed-management |
-| * | `/*/_apis/**` | Organisation-level REST API (see above) |
-| * | `/*/*/_apis` | Project-level REST API, including project-scoped feed management |
-| * | `/*/*/_apis/**` | Project-level REST API (see above) |
-| POST, PUT, PATCH, DELETE | `/*/_packaging/**` | Writes to an organisation-scoped feed: npm publish is a PUT on the registry path, PyPI upload a POST, unpublish a DELETE https://learn.microsoft.com/en-us/azure/devops/artifacts/npm/publish |
-| POST, PUT, PATCH, DELETE | `/*/*/_packaging/**` | Writes to a project-scoped feed such as /github-cfs/GitHubCFS/_packaging/... (see above) |
+| * | `**/_apis` | Azure DevOps REST API, at any depth (organisation, project or team scope, or none on organisation-in-hostname and service hosts): PAT lifecycle, token sessions, identities https://learn.microsoft.com/en-us/rest/api/azure/devops/tokens/pats |
+| * | `**/_apis/**` | Azure DevOps REST API (see above), including feed management (POST feeds.dev.azure.com/{org}/{project}/_apis/packaging/feeds) https://learn.microsoft.com/en-us/rest/api/azure/devops/artifacts/feed-management |
+| POST, PUT, PATCH, DELETE | `**/_packaging` | Writes to a feed, at any depth (see below) |
+| POST, PUT, PATCH, DELETE | `**/_packaging/**` | Writes to a feed, at any depth including {org}.pkgs.visualstudio.com/_packaging/...: npm publish is a PUT on the registry path, PyPI upload a POST, unpublish a DELETE https://learn.microsoft.com/en-us/azure/devops/artifacts/npm/publish |
 
 #### `github`
 

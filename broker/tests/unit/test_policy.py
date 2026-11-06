@@ -355,10 +355,21 @@ def test_credential_budget_is_validated_and_counts_parent():
     b.charge_credential(child, requests=1)
     assert b.credential_budget_exceeded(c) == ("cfs", "request budget exhausted")
     assert b.credential_budget_exceeded(child) == ("cfs", "request budget exhausted")
+    # Review 13-2: a grandchild charges the root too.
+    grandchild = b.creds.derive(child, "seclab-canary-derived-1111111111111111", "pattern")
+    assert b.credential_budget_exceeded(grandchild) == ("cfs", "request budget exhausted")
+    b.charge_credential(grandchild, requests=5)
+    assert b.credential_usage["cfs"].requests == 7
+    health = b.dispatch("health", {})["credentialBudgets"]
+    assert health == [{"id": "cfs", "requests": 7, "bytes": 10, "maxRequests": 2, "maxBytes": 100}]
     b.rpc_policy_load({"policy": {"version": 1, "credentials": [dict(cred, budget={"bytes": 100})]}})
     assert b.credential_budget_exceeded(c) is None  # the request cap was lifted; usage kept
     b.charge_credential(c, nbytes=90)
     assert b.credential_budget_exceeded(c) == ("cfs", "byte budget exhausted")
+    ws = dict(cred, bind=[{"host": "pkgs.example.test", "path": "/feed/**", "methods": ["GET"], "websocket": True}])
+    with pytest.raises(PolicyError):  # review 13-10
+        Policy.from_json({"version": 1, "credentials": [ws]})
+    Policy.from_json({"version": 1, "credentials": [dict(ws, budget={"requests": 5})]})
     for bad in ({"requests": -1}, {"requests": 1, "other": 1}, {"bytes": "1"}):
         with pytest.raises(PolicyError):
             Policy.from_json({"version": 1, "credentials": [dict(cred, budget=bad)]})
@@ -375,8 +386,16 @@ def test_credential_budget_is_validated_and_counts_parent():
     ("POST", "/github-cfs/GitHubCFS/_apis/packaging/feeds", True),
     ("GET", "/_apis/token/sessiontokens", True),
     ("GET", "/GITHUB-CFS/_APIS/Tokens/Pats", True),
+    # Review 13-1/13-4/13-9: any depth, organisation in the hostname, trailing dots.
+    ("PUT", "/_packaging/github-cfs-oss/npm/registry/left-pad", True),
+    ("GET", "/a/b/team/_apis/tokens/pats", True),
+    ("GET", "/_apis.", True),
+    ("GET", "/org/_apis. /tokens", True),
+    ("GET", "/_packaging/github-cfs-oss/npm/registry/left-pad", False),
 ])
 def test_azure_devops_backstop(method, path, denied):
-    for host, provider in (("pkgs.dev.azure.com", None), ("vssps.dev.azure.com", None), ("feed.example.test", "azure-devops")):
+    for host, provider in (("pkgs.dev.azure.com", None), ("vssps.dev.azure.com", None), ("feeds.dev.azure.com", None),
+                           ("myorg.pkgs.visualstudio.com", None), ("visualstudio.com", None),
+                           ("feed.example.test", "azure-devops")):
         assert (backstop_denies(req(host=host, method=method, path=path), provider) is not None) == denied, (host, method, path)
     assert backstop_denies(req(host="feed.example.test", method="PUT", path="/o/p/_packaging/f")) is None  # not by host

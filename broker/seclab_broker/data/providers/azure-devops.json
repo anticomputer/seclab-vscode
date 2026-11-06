@@ -1,20 +1,16 @@
 {
   "provider": "azure-devops",
-  "description": "Backstop deny-list for Azure DevOps credentials (CFS package feeds in tabs, ADR 20261105-cfs-package-feeds-in-tabs). A tab's CFS credential is bound to GET on the exact feed read paths; this denies, by provider name or host, any credentialed call that could mint or manage a credential (the REST API under _apis, including PATs and token sessions) or write to a feed (publish, unlist, delete). Paths are matched case-insensitively against the canonical path with any trailing slash removed.",
+  "description": "Backstop deny-list for Azure DevOps credentials (CFS package feeds in tabs, ADR 20261105-cfs-package-feeds-in-tabs). A tab's CFS credential is bound to GET on the exact feed read paths; this denies, by provider name or host, any credentialed call that could mint or manage a credential (the REST API under _apis at any depth, including PATs, token sessions and feed management) or write to a feed (publish, unlist, delete) under _packaging at any depth, including the organisation-in-hostname form. Paths are matched case-insensitively against the canonical path, with a trailing slash and trailing dots or whitespace in each segment removed.",
   "source": {
     "openapi": "https://learn.microsoft.com/en-us/rest/api/azure/devops/",
     "note": "Azure DevOps REST API reference. Feed URLs and the package-feed layout are from github/cfs-at-github docs/package-feeds.md at 8dcb42bcb7d27eb7eeb931b8ca1c2e3c64bb15a0 (private; cited by path)."
   },
-  "hosts": ["pkgs.dev.azure.com", "dev.azure.com", "vssps.dev.azure.com", "*.visualstudio.com"],
+  "hosts": ["dev.azure.com", "*.dev.azure.com", "visualstudio.com", "*.visualstudio.com"],
   "pathPrefixes": [""],
   "deny": [
-    { "methods": ["*"], "path": "/_apis", "reason": "Azure DevOps REST API root (organisation-less hosts such as vssps.dev.azure.com): tokens, PATs, identities https://learn.microsoft.com/en-us/rest/api/azure/devops/tokens/pats" },
-    { "methods": ["*"], "path": "/_apis/**", "reason": "Azure DevOps REST API (see above)" },
-    { "methods": ["*"], "path": "/*/_apis", "reason": "Organisation-level REST API: PAT lifecycle (_apis/tokens/pats), feed management (_apis/packaging/feeds) https://learn.microsoft.com/en-us/rest/api/azure/devops/artifacts/feed-management" },
-    { "methods": ["*"], "path": "/*/_apis/**", "reason": "Organisation-level REST API (see above)" },
-    { "methods": ["*"], "path": "/*/*/_apis", "reason": "Project-level REST API, including project-scoped feed management" },
-    { "methods": ["*"], "path": "/*/*/_apis/**", "reason": "Project-level REST API (see above)" },
-    { "methods": ["POST", "PUT", "PATCH", "DELETE"], "path": "/*/_packaging/**", "reason": "Writes to an organisation-scoped feed: npm publish is a PUT on the registry path, PyPI upload a POST, unpublish a DELETE https://learn.microsoft.com/en-us/azure/devops/artifacts/npm/publish" },
-    { "methods": ["POST", "PUT", "PATCH", "DELETE"], "path": "/*/*/_packaging/**", "reason": "Writes to a project-scoped feed such as /github-cfs/GitHubCFS/_packaging/... (see above)" }
+    { "methods": ["*"], "path": "**/_apis", "reason": "Azure DevOps REST API, at any depth (organisation, project or team scope, or none on organisation-in-hostname and service hosts): PAT lifecycle, token sessions, identities https://learn.microsoft.com/en-us/rest/api/azure/devops/tokens/pats" },
+    { "methods": ["*"], "path": "**/_apis/**", "reason": "Azure DevOps REST API (see above), including feed management (POST feeds.dev.azure.com/{org}/{project}/_apis/packaging/feeds) https://learn.microsoft.com/en-us/rest/api/azure/devops/artifacts/feed-management" },
+    { "methods": ["POST", "PUT", "PATCH", "DELETE"], "path": "**/_packaging", "reason": "Writes to a feed, at any depth (see below)" },
+    { "methods": ["POST", "PUT", "PATCH", "DELETE"], "path": "**/_packaging/**", "reason": "Writes to a feed, at any depth including {org}.pkgs.visualstudio.com/_packaging/...: npm publish is a PUT on the registry path, PyPI upload a POST, unpublish a DELETE https://learn.microsoft.com/en-us/azure/devops/artifacts/npm/publish" }
   ]
 }
