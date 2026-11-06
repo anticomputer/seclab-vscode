@@ -7,7 +7,9 @@
 //     `docker://` uses, `container:`/`image:` keys without @sha256;
 //   - external image references (`repo:tag`) anywhere in code without @sha256. External =
 //     a registry host, or a Docker Hub library/org image we know of. Locally built images
-//     (seclab-*:local etc.) are built from pinned bases and are allowed.
+//     (seclab-*:local etc.) are built from pinned bases and are allowed;
+//   - URLs to public package registries this Mac blocks (npm, Yarn, PyPI files) in code:
+//     local installs and lookups go through CFS, so each must be marked as a non-fetch.
 // The sbx `shell` kit is pinned by the sbx version, not here (sbx manages it).
 
 import { execFileSync } from 'node:child_process';
@@ -109,8 +111,25 @@ function checkText(f: string, text: string): string[] {
 			}
 		}
 	});
+	// Public package registries this Mac blocks (AGENTS.md: local npm/pip go through CFS, never
+	// around it). A URL to one in code is a potential direct fetch; each must state why it isn't
+	// one (a comparison, a canonical `resolved` rewritten at fetch time, a CI-only path) with
+	// `public-registry: <reason>` on its line. Lockfiles and prose are out of scope.
+	if (!/(^|\/)(package-lock\.json|[^/]*\.lock|[^/]*\.md)$/.test(f) && !PUBLIC_REGISTRY_FILES.has(f)) {
+		raw.forEach((line, i) => {
+			if (PUBLIC_REGISTRY.test(line) && !/public-registry: \S/.test(line) && !PUBLIC_REGISTRY_COMPARE.test(line)) {
+				findings.add(`${f}:${i + 1}: URL to a public package registry (local installs and lookups go through CFS; mark a non-fetch use with "public-registry: <reason>")`);
+			}
+		});
+	}
 	return [...findings];
 }
+const PUBLIC_REGISTRY = /https?:\/\/(registry\.npmjs\.org|registry\.yarnpkg\.com|files\.pythonhosted\.org)\b/;
+// A prefix comparison of a lockfile's `resolved` (an origin check, not a fetch).
+const PUBLIC_REGISTRY_COMPARE = /startsWith\(\s*["'`]https?:\/\/(registry\.npmjs\.org|registry\.yarnpkg\.com|files\.pythonhosted\.org)\//;
+// Writes the canonical `resolved` URL into lockfiles, rewritten to CFS at fetch time
+// (EDR cfs-local-builds); its bytes key the npm cache, so it carries no inline markers.
+const PUBLIC_REGISTRY_FILES = new Set(['build/linux/lock-fill.mjs']);
 
 /** Markdown: only the blocks CI executes (`<!-- ci: run -->` fenced shell), line numbers kept. */
 function ciRunBlocks(text: string): string {
@@ -137,6 +156,10 @@ if (process.argv[2] === '--self-test') {
 		['y.sh', `docker run --rm alpine sh\ndocker run -d -v a:/b --name x postgres:16\ndocker pull curlimages/curl:8\ndocker run --rm \\\n  -e X=1 \\\n  redis:7 true\ndocker run --rm "$IMG" x\ndocker run --rm seclab-tab-oci:local x\ndocker run --rm alpine${pin} x\n`, 4],
 		['.github/workflows/y.yml', `jobs:\n  a:\n    container: \${{ matrix.img }}\n    services:\n      db:\n        image: postgres\n`, 2],
 		['AGENTS.md', 'prose mentions alpine:3.22 freely\n<!-- ci: run -->\n```sh\ndocker run --rm alpine:3 true\n```\n', 1],
+		// Direct public-registry URLs: a fetch fails; a marked line, a prefix comparison, a lockfile and prose pass.
+		['z.ts', 'await fetch(`https://registry.npmjs.org/${n}`);\nfetch("https://files.pythonhosted.org/x");\nconst u = "https://registry.yarnpkg.com/a"; // public-registry: fixture\nif (r.startsWith("https://registry.npmjs.org/")) {}\n', 2],
+		['package-lock.json', '"resolved": "https://registry.npmjs.org/a/-/a-1.0.0.tgz"\n', 0],
+		['NOTES.md', 'see https://registry.npmjs.org/\n', 0],
 	];
 	const bad = cases.filter(([f, t, n]) => checkText(f, f.endsWith('.md') ? ciRunBlocks(t) : t).length !== n)
 		.map(([f, t, n]) => `${f}: expected ${n}, got ${JSON.stringify(checkText(f, f.endsWith('.md') ? ciRunBlocks(t) : t))}`);

@@ -1,14 +1,16 @@
 // The 7-day rule (EDR pin-age-cooldown): no pin in the dependency register may be younger than
 // CFS's hold on new versions, so a local build through CFS never waits on a pin and nothing
 // lands that hasn't been public for a week. Network; runs in CI's lint job.
-//   node build/pin-age.ts [--days N] [--verbose] [-]     (`-`: `git ls-files -z` on stdin)
+//   node build/pin-age.ts [--days N] [--verbose] [--npm-dates FILE] [--list-npm] [-]
+//     (`-`: `git ls-files -z` on stdin; --npm-dates: {"name@version": iso} resolved through CFS)
 // Every register pin is dated, or exempt with its reason printed (Debian apt/debs; an entry's
 // recorded `ageExempt`); an unknown date fails.
 //   upstream:<sha>, git:<url>@<sha>, actions        commit date (GitHub)
 //   tool:<name>:<arch>@sha256, asset:ripgrep-v…     GitHub release publish date
 //   images                                          image config `created` (linux/amd64)
 //   pip:<file>                                      every `==` pin: first upload to PyPI
-//   npm installs of name@x.y.z in tracked Dockerfiles   npm publish time
+//   npm installs of name@x.y.z in tracked Dockerfiles   npm publish time (CFS packument locally,
+//                                                       the public registry in CI only)
 // The Code-OSS npm tree and the runtimes in upstream's product.json are dated by the upstream
 // commit's age (a lockfile can't name a version published after it was committed); the
 // upstream commit itself is exempt (it isn't fetched through CFS, and the local CFS fetch fails
@@ -17,7 +19,7 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ageDays, commitDate, COOLDOWN_DAYS, imageDate, npmDate, pypiDate, releaseDate } from './release-dates.ts';
+import { ageDays, commitDate, COOLDOWN_DAYS, imageDate, npmDatePublic, pypiDate, releaseDate } from './release-dates.ts';
 
 const repo = path.resolve(import.meta.dirname, '..');
 const daysArg = process.argv.indexOf('--days');
@@ -91,18 +93,43 @@ for (const d of deps) {
 
 // npm packages installed by exact version in tracked Dockerfiles (e.g. build/vsce). The file
 // list comes from `git ls-files -z` on stdin when given `-` (containers can't read a worktree's git).
+// Transport, chosen by environment, never by fallback (AGENTS.md: never bypass CFS): CI reads the
+// public registry (its only transport, EDR cfs-local-builds); local runs take dates the host
+// resolved through CFS (`gh cfs -- npm view`, in ./seclab lint pin-age) via --npm-dates FILE.
 const listed = process.argv.includes('-') ? fs.readFileSync(0, 'utf8') : execFileSync('git', ['-C', repo, 'ls-files', '-z'], { encoding: 'utf8' });
 const files = listed.split('\0').filter(f => /(^|\/)Dockerfile[^/]*$/.test(f));
+const npmPins: Array<{ file: string; name: string; version: string }> = [];
 for (const f of files) {
 	const text = fs.readFileSync(path.join(repo, f), 'utf8').replace(/\\\r?\n/g, ' ');
 	for (const line of text.split('\n').filter(l => /\bnpm\s+(install|i)\b/.test(l))) {
 		for (const t of line.split(/\s+/)) {
 			const m = /^((?:@[a-z0-9._-]+\/)?[a-z0-9._-]+)@([0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*)$/.exec(t);
 			if (m) {
-				items.push({ dep: f, what: `${m[1]}@${m[2]}`, date: () => npmDate(m[1], m[2]) });
+				npmPins.push({ file: f, name: m[1], version: m[2] });
 			}
 		}
 	}
+}
+if (process.argv.includes('--list-npm')) {
+	for (const p of npmPins) {
+		console.log(`${p.name} ${p.version}`);
+	}
+	process.exit(0);
+}
+const datesArg = process.argv.indexOf('--npm-dates');
+const cfsDates = datesArg > 0 ? JSON.parse(fs.readFileSync(process.argv[datesArg + 1], 'utf8')) as Record<string, string> : {};
+for (const p of npmPins) {
+	const key = `${p.name}@${p.version}`;
+	items.push({ dep: p.file, what: key, date: async () => {
+		if (process.env.CI) {
+			return npmDatePublic(p.name, p.version);
+		}
+		const d = cfsDates[key];
+		if (typeof d !== 'string' || !/^\d{4}-\d\d-\d\dT/.test(d)) {
+			throw new Error('not available through CFS (run ./seclab lint pin-age; if CFS auth fails: gh cfs doctor --auth)');
+		}
+		return d;
+	} });
 }
 
 const seen = new Set<string>();
