@@ -3,6 +3,15 @@
   "protocol": "seclab-broker/1",
   "changelog": [
     {
+      "version": "0.7.0",
+      "policySchemaRevision": 7,
+      "date": "2026-11-06",
+      "changes": [
+        "`credential.import` accepts `budget {requests, bytes}` (definition `credentialBudget`, shared with policy credentials), with the same accounting: derived use counts against it, over budget is `429`, never prompted, and `health.credentialBudgets` reports it. Allowed on an unconfirmed import too, since it only denies. Usage is keyed by credential id, so a re-import replaces the cap but never resets usage. A byte budget can't be combined with a `websocket: true` binding in `bind`, `proposedBind`, `derive` or a binding later confirmed by `approval.decide`. Lets a supervisor enable a budgeted credential (for example CFS) on a running tab with `credential.import` and `policy.update addAllow`, keeping a host-chosen sentinel stable across restarts.",
+        "Audits `credential.backstop_exception_filtered` and `credential.backstop_exception_blocked` carry `fields`: the response's top-level key names, never values, with token-shaped names masked; tagged untrusted."
+      ]
+    },
+    {
       "version": "0.6.0",
       "policySchemaRevision": 6,
       "date": "2026-11-06",
@@ -723,6 +732,10 @@
               "$ref": "#/definitions/derive"
             },
             "description": "Trusted derivation rules (revision 3), for example the Copilot token minted from a GitHub token. Requires `bind`: an unconfirmed import never derives."
+          },
+          "budget": {
+            "$ref": "#/definitions/credentialBudget",
+            "description": "Per-tab cap on this credential's use (revision 7), with the same accounting as a policy credential's `budget`. Allowed on an unconfirmed import too: it only denies. A re-import replaces it (omit it to lift the cap) but never resets usage; `credential.provide` keeps it."
           },
           "provider": {
             "type": "string",

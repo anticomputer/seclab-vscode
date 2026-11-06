@@ -250,7 +250,7 @@
     },
     {
       "flag": "credentialBudget",
-      "label": "Per-credential budget (requests, bytes) over the tab's lifetime, counting derived use; over budget denied, never prompted; `credential.used` audit per credentialed response",
+      "label": "Per-credential budget (requests, bytes) over the tab's lifetime, on policy credentials and imports (revision 7), counting derived use; over budget denied, never prompted; `credential.used` audit per credentialed response",
       "cells": {
         "sbx-native": {
           "value": false
@@ -258,7 +258,10 @@
       },
       "tests": [
         "unit:test_credential_budget_is_validated_and_counts_parent",
-        "it:test_cfs_feed_credential_is_get_only_budgeted_and_audited"
+        "unit:test_import_budget_has_policy_accounting",
+        "unit:test_approval_cannot_confirm_a_websocket_binding_on_a_byte_budget",
+        "it:test_cfs_feed_credential_is_get_only_budgeted_and_audited",
+        "it:test_cfs_enabled_on_a_running_tab_by_import_with_budget"
       ]
     },
     {

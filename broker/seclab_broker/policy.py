@@ -435,18 +435,28 @@ class CredentialSpec:
     @classmethod
     def from_json(cls, obj: dict) -> "CredentialSpec":
         default_inject = Inject.from_json(obj["inject"]) if "inject" in obj else None
-        b = obj.get("budget")
         bindings = tuple(parse_bindings(obj["bind"], default_inject))
         derive = parse_derive(obj.get("derive", []))
-        ws = any(x.websocket for x in bindings) or any(x.websocket for r in derive for x in r.bindings)
-        if b is not None and b.get("bytes") is not None and ws:
-            # WebSocket messages aren't charged, so a byte cap there would not hold (review
-            # 13-10); derived children roll up to this budget too (13b-1).
-            raise PolicyError(f"credential {obj['id']!r}: a byte budget can't be combined with a websocket binding")
         return cls(id=obj["id"], bindings=bindings,
                    provider=obj.get("provider"), sentinel_prefix=obj.get("sentinelPrefix"),
-                   derive=derive,
-                   budget=(b.get("requests"), b.get("bytes")) if b is not None else None)
+                   derive=derive, budget=parse_budget(obj["id"], obj.get("budget"), bindings, derive))
+
+
+def parse_budget(cid: str, b: dict | None, bindings, derive) -> tuple[int | None, int | None] | None:
+    """A credential budget (policy `credentials[].budget`, or `credential.import` from
+    revision 7), already schema-validated, as (requests, bytes)."""
+    if b is None:
+        return None
+    budget = (b.get("requests"), b.get("bytes"))
+    check_budget_bindings(cid, budget, [*bindings, *(x for r in derive for x in r.bindings)])
+    return budget
+
+
+def check_budget_bindings(cid: str, budget: tuple | None, bindings) -> None:
+    # WebSocket messages aren't charged, so a byte cap there would not hold (review 13-10);
+    # derived children roll up to this budget too (13b-1), and so do bindings confirmed later.
+    if budget is not None and budget[1] is not None and any(x.websocket for x in bindings):
+        raise PolicyError(f"credential {cid!r}: a byte budget can't be combined with a websocket binding")
 
 
 @dataclass(frozen=True)

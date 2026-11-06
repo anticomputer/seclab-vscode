@@ -126,7 +126,8 @@ class Credential:
     source: dict = field(default_factory=dict)
     # Controller-declared derivations (policy.DeriveRule); only for confirmed credentials.
     derive_rules: tuple = ()
-    # (requests, bytes) caps from the policy (revision 6); usage lives on the broker.
+    # (requests, bytes) caps from the policy (revision 6) or the import (revision 7); usage
+    # lives on the broker, keyed by id, so a re-import never resets it.
     budget: tuple | None = None
 
     def has_value(self) -> bool:
@@ -189,7 +190,8 @@ class CredentialStore:
 
     def import_credential(self, cid: str, value: str, sentinel: str | None,
                           bindings: list[Binding], proposed: list[Binding],
-                          provider: str | None, source: dict, derive_rules: tuple = ()) -> Credential:
+                          provider: str | None, source: dict, derive_rules: tuple = (),
+                          budget: tuple | None = None) -> Credential:
         check_value(value)
         if derive_rules and not bindings:
             raise PolicyError("derive needs bind: an unconfirmed import never derives")
@@ -208,7 +210,7 @@ class CredentialStore:
             id=cid, sentinel=sentinel or (existing.sentinel if existing else new_sentinel()),
             bindings=list(bindings), origin="import", confirmed=bool(bindings),
             provider=provider, proposed=list(proposed), value=value, source=source,
-            derive_rules=tuple(derive_rules))
+            derive_rules=tuple(derive_rules), budget=budget)
         self._by_id[cid] = cred
         self._rebuild()
         return cred

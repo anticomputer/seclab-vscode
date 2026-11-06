@@ -420,6 +420,7 @@ With no `bind` the credential is *unconfirmed*. On first use (its sentinel in a 
 | `proposedBind` | [`bindOrBindings`](#bindorbindings) |  | Only shapes the first-use prompt. |
 | `inject` | [`inject`](broker-policy.md#inject) |  | Default inject for bindings that have none. |
 | `derive` | [`derive`](broker-policy.md#derive)[] |  | Trusted derivation rules (revision 3), for example the Copilot token minted from a GitHub token. Requires `bind`: an unconfirmed import never derives. (max items `8`) |
+| `budget` | [`credentialBudget`](broker-policy.md#credentialbudget) |  | Per-tab cap on this credential's use (revision 7), with the same accounting as a policy credential's `budget`. Allowed on an unconfirmed import too: it only denies. A re-import replaces it (omit it to lift the cap) but never resets usage; `credential.provide` keeps it. |
 | `provider` | `string` |  | (pattern `^[a-z0-9-]{1,32}$`) |
 | `source` | `object` |  | Where the secret came from (audit only). Defaults to `{kind: host}`. |
 | `source.kind` | `"workspace-scan"` \| `"password-input"` \| `"user"` \| `"host"` | yes |  |
@@ -1076,6 +1077,11 @@ as `version` and `policySchema.revision`, so a supervisor can detect it.
 ### Changelog (generated)
 
 <!-- BEGIN GENERATED: protocol-changelog (broker/tools/docs.py; do not edit) -->
+**0.7.0** (2026-11-06; policy schema revision 7)
+
+- `credential.import` accepts `budget {requests, bytes}` (definition `credentialBudget`, shared with policy credentials), with the same accounting: derived use counts against it, over budget is `429`, never prompted, and `health.credentialBudgets` reports it. Allowed on an unconfirmed import too, since it only denies. Usage is keyed by credential id, so a re-import replaces the cap but never resets usage. A byte budget can't be combined with a `websocket: true` binding in `bind`, `proposedBind`, `derive` or a binding later confirmed by `approval.decide`. Lets a supervisor enable a budgeted credential (for example CFS) on a running tab with `credential.import` and `policy.update addAllow`, keeping a host-chosen sentinel stable across restarts.
+- Audits `credential.backstop_exception_filtered` and `credential.backstop_exception_blocked` carry `fields`: the response's top-level key names, never values, with token-shaped names masked; tagged untrusted.
+
 **0.6.0** (2026-11-06; policy schema revision 6)
 
 - Per-credential budgets (`credentials[].budget {requests, bytes}`; capability `credentialBudget`): a cap on a credential's use over the tab's lifetime (requests it is injected into; bytes sent and received on them). Use of a credential derived from it, at any depth, counts against it too. Over budget is `429`, never prompted, including before a binding prompt (audit `credential.budget_exceeded`). Counters are keyed by credential id and survive `policy.load`; `health` reports them (`credentialBudgets`). The request cap is exact, the byte cap best-effort; a byte budget can't be combined with a `websocket: true` binding. For CFS package feeds in tabs, it bounds package ingestion under the user's identity (ADR cfs-package-feeds-in-tabs).

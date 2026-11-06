@@ -234,10 +234,18 @@ A sentinel credential. The broker mints its sentinel (returned by `policy.load`)
 | `inject` | [`inject`](broker-policy.md#inject) |  | Default for bindings without their own `inject`. |
 | `provider` | `string` |  | Extra provider backstop deny-list to apply (by name). Providers are also applied automatically by host. (pattern `^[a-z0-9-]{1,32}$`) |
 | `sentinelPrefix` | `string` |  | Replaces `SECLAB_SNTL_` for clients that check a token format. (pattern `^[A-Za-z0-9_-]{0,16}$`) |
-| `budget` | `object` |  | Per-tab cap on this credential's use (revision 6), over the tab's lifetime: requests it is injected into, and bytes sent and received on them. Over budget is `429`, never a prompt (audit `credential.budget_exceeded`). Use of credentials derived from it, at any depth, counts against it too. The request cap is exact. The byte cap is best-effort: response bytes are charged when a response completes, so one request can overshoot it, and a flow that fails after injection counts its request but not its response. It can't be combined with a `websocket: true` binding. Usage is reported by `health` (`credentialBudgets`) and keyed by credential id. For example, it bounds package ingestion under the user's identity through CFS. |
-| `budget.requests` | `integer` |  | (min `0`; max `10000000`) |
-| `budget.bytes` | `integer` |  | (min `0`; max `1099511627776`) |
+| `budget` | [`credentialBudget`](broker-policy.md#credentialbudget) |  |  |
 | `derive` | [`derive`](broker-policy.md#derive)[] |  | Trusted derivation rules (revision 3). See `derive`. (max items `8`) |
+
+<a id="credentialbudget"></a>
+### `credentialBudget`
+
+Per-tab cap on a credential's use (revision 6; on `credential.import` too from revision 7), over the tab's lifetime: requests it is injected into, and bytes sent and received on them. Over budget is `429`, never a prompt (audit `credential.budget_exceeded`). Use of credentials derived from it, at any depth, counts against it too. The request cap is exact. The byte cap is best-effort: response bytes are charged when a response completes, so one request can overshoot it, and a flow that fails after injection counts its request but not its response. It can't be combined with a `websocket: true` binding, including one confirmed later by an approval. Usage is reported by `health` (`credentialBudgets`) and keyed by credential id, so it survives `policy.load`, re-import and `credential.revoke`. For example, it bounds package ingestion under the user's identity through CFS.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `requests` | `integer` |  | (min `0`; max `10000000`) |
+| `bytes` | `integer` |  | (min `0`; max `1099511627776`) |
 
 <a id="derive"></a>
 ### `derive`
