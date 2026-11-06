@@ -99,6 +99,8 @@ export class Supervisor {
 	private readonly brokers = new Map<string, BrokerControl>();
 	private readonly approvals = new Approvals();
 	private readonly cfsQueues = new Map<string, Promise<unknown>>();
+	/** Per tab: the ensureRunning fast-path probe and quarantine's stop never overlap (review III-1). */
+	private readonly probeLocks = new Map<string, Promise<unknown>>();
 	private clientShowsPrompts = false;
 	private readonly phases = new Map<string, string>();
 	private readonly owned = new Set<string>();
@@ -516,6 +518,14 @@ export class Supervisor {
 
 	private async ensureRunning(r: TabRecord, acceptFindings?: unknown) {
 		const spec = this.spec(r);
+		// Idempotent on a running tab (B3c: the Tab Manager calls this before each new connection,
+		// and a window opens several). A tab this supervisor runs, with its broker control up and
+		// its REH alive under the tab's token, is left alone: a full start would rescan, rotate
+		// the broker's proxy password and start the REH again.
+		if (await this.alreadyRunning(r, spec)) {
+			this.audit('tab.ensureRunning', 'ok', { tabId: r.tabId, already: true });
+			return { tab: this.view(r), connectionToken: r.connectionToken };
+		}
 		this.setPhase(r.tabId, 'Starting');
 		try {
 			// Re-validate right before mounting: the path may have been swapped (e.g. for a
@@ -540,6 +550,36 @@ export class Supervisor {
 		this.obs.started(r.tabId, r.hostPath, drv.policyLog ? () => drv.policyLog!(spec) : undefined);
 		this.audit('tab.ensureRunning', 'ok', { tabId: r.tabId });
 		return { tab: this.view(r), connectionToken: r.connectionToken };
+	}
+
+	private async alreadyRunning(r: TabRecord, spec: TabRuntimeSpec): Promise<boolean> {
+		const drv = this.driverFor(spec.template);
+		const eligible = () => this.phases.get(r.tabId) === 'Running' && this.owned.has(r.tabId)
+			&& (spec.template.spec.broker !== 'required' || this.brokers.has(r.tabId))
+			&& (!drv.usesCollector || this.obs.collectorAlive(r.tabId));
+		if (!drv.rehAlive || !eligible()) {
+			return false;
+		}
+		// Serialized with quarantine (review III-1): the check execs into the sandbox, and an exec
+		// boots a stopped sbx VM, so it must never run on a tab being or already stopped.
+		return this.withProbeLock(r.tabId, async () => {
+			if (!eligible() || !(await drv.runningSandboxes()).has(spec.sandboxName) || !eligible()) {
+				return false;
+			}
+			return drv.rehAlive!(spec, r.connectionToken).catch(() => false);
+		});
+	}
+
+	private withProbeLock<T>(tabId: string, fn: () => Promise<T>): Promise<T> {
+		const next = (this.probeLocks.get(tabId) ?? Promise.resolve()).catch(() => undefined).then(fn);
+		const tail = next.catch(() => undefined);
+		this.probeLocks.set(tabId, tail);
+		void tail.then(() => {
+			if (this.probeLocks.get(tabId) === tail) {
+				this.probeLocks.delete(tabId);
+			}
+		});
+		return next;
 	}
 
 	/**
@@ -971,6 +1011,10 @@ export class Supervisor {
 			// Keep verifying for as long as the sandbox runs, connected or not: workspace
 			// code can keep running in the sandbox after the UI disconnects.
 			if (!(await this.driverFor(spec.template).runningSandboxes()).has(spec.sandboxName)) {
+				// Stopped outside tabd: not Running any more, so no ensureRunning fast path (III-1).
+				if (this.phases.get(tabId) === 'Running') {
+					this.setPhase(tabId, 'Stopped');
+				}
 				return stopMonitoring();
 			}
 			const report = await this.verify(r);
@@ -1059,12 +1103,17 @@ export class Supervisor {
 				this.closeChannel(id, 'tab quarantined');
 			}
 		}
+		// No fast path from here on: an ensureRunning now takes the full start (review III-1).
+		if (this.phases.get(r.tabId) !== 'Failed') {
+			this.setPhase(r.tabId, 'Failed', [{ type: 'Ready', status: 'False', reason: 'Quarantined' }]);
+		}
 		try {
 			const spec = this.spec(r);
 			this.obs.stopping(r.tabId);
 			this.wb?.stop(r.tabId);
 			await this.closeBroker(r.tabId, 'tab quarantined');
-			await this.driverFor(spec.template).quarantine(spec);
+			// After any fast-path probe already running: it must not exec into the stopped VM.
+			await this.withProbeLock(r.tabId, () => this.driverFor(spec.template).quarantine(spec));
 			this.audit('tab.quarantine', 'ok', { tabId: r.tabId });
 		} catch (e) {
 			this.audit('tab.quarantine', 'fail', { tabId: r.tabId, error: (e as Error).message });

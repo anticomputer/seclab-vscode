@@ -280,6 +280,15 @@ export class OciDriver implements Driver {
 		return this.runner.spawnStream(this.docker, ['exec', '-i', '-u', tabUser(spec), '--', n.ws, REH_CONNECT]);
 	}
 
+	async rehAlive(spec: TabRuntimeSpec, connectionToken: string): Promise<boolean> {
+		if (!CONNECTION_TOKEN_RE.test(connectionToken)) {
+			return false;
+		}
+		const n = this.names(spec);
+		const r = await this.runner.run(this.docker, ['exec', '-i', '-u', tabUser(spec), '--', n.ws, REH_START, '--check'], { input: `${connectionToken}\n`, timeoutMs: 15_000 });
+		return r.code === 0;
+	}
+
 	async runningSandboxes(): Promise<Set<string>> {
 		const r = await this.runner.run(this.docker, ['ps', '--filter', 'label=seclab.tab', '--format', '{{.Names}}'], { timeoutMs: 30_000 });
 		if (r.code !== 0) {

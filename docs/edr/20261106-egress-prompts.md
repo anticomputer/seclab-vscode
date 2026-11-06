@@ -112,3 +112,35 @@ allow it for the tab, or deny it.
     connection closes; `tab.ensureRunning` returns the same token and the handshake succeeds
     again.
   - Review [HHH](../security-reviews/20261106-broker-reattach.md): three lows, all fixed.
+- **B3c (part 3): `tab.ensureRunning` is idempotent on a running tab.** Found by the focus
+  probe on branch build 42289834002: the battery restarted at every step and stopped after
+  three, with "Cannot reconnect".
+  - Cause: VS Code opens several connections per window (management, extension host), so
+    "every call after the first" is not a reconnect. Each ran `tab.ensureRunning`, which
+    reconfigured the broker (a fresh proxy password) and started the REH again.
+  - On sbx the start was never a no-op. Each `seclab-reh-start` runs in its own Landlock
+    domain with signals scoped (`seclab-obs-guard`), so `kill -0` on the previous REH failed
+    with EPERM. The live REH looked dead, could not be stopped either, and a second REH took
+    its socket ("Unknown reconnection token").
+  - Fix, in two layers, each enough on its own (both proven by the sbx e2e):
+    - `seclab-reh-start` checks liveness through `/proc/<pid>/cmdline`, not signals. It
+      refuses to start a second REH beside one it can't stop. `--check` reports without
+      starting anything.
+    - The supervisor returns at once for a tab it runs, with broker control up (when
+      required) and the REH alive under the tab's token (`Driver.rehAlive`, which runs
+      `seclab-reh-start --check` as the tab user).
+  - The fast path also requires the sandbox to be running, and on sbx a live collector session
+    (an adopted tab has none, and its next `ensureRunning` restores observation). The probe
+    holds a per-tab lock that quarantine's stop also takes, since `sbx exec` boots a stopped
+    VM. Quarantine and an external stop take the tab out of `Running`.
+  - `rehAlive` is tab-asserted (the tab owns the pid and token files and can fake a match). It
+    only saves a restart and never gates a security step.
+  - Trade-off: the per-connection secret rescan and deny sync no longer run on a running tab.
+    Nothing is remounted then; the fence is still checked on every `tab.connect` and by the
+    monitor.
+  - tabd e2e: a second `tab.ensureRunning` keeps the REH pid. With the fast path removed and
+    the old template, it fails (pid 386, then 444). The REH kill step now fails unless it
+    killed something; it had matched nothing on Linux CI (wrong uid).
+  - Review [III](../security-reviews/20261106-reh-idempotent.md): one medium and three lows,
+    all fixed. The unit test proves III-1 by injection: without the running-sandbox check it
+    probes a stopped tab.
