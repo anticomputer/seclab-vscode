@@ -169,8 +169,8 @@
   },
   {
    "name": "dnspython",
-   "version": "2.9.2",
-   "source": "https://pypi.org/project/dnspython/2.9.2/",
+   "version": "2.9.1",
+   "source": "https://pypi.org/project/dnspython/2.9.1/",
    "pin": "sha256 (pip --require-hashes)",
    "usedBy": [
     "attestation verifier (tool)"
@@ -194,8 +194,8 @@
   },
   {
    "name": "fastjsonschema",
-   "version": "2.22.3",
-   "source": "https://pypi.org/project/fastjsonschema/2.22.3/",
+   "version": "2.22.2",
+   "source": "https://pypi.org/project/fastjsonschema/2.22.2/",
    "pin": "sha256 (pip --require-hashes)",
    "usedBy": [
     "broker runtime",
@@ -343,8 +343,8 @@
   },
   {
    "name": "platformdirs",
-   "version": "4.14.5",
-   "source": "https://pypi.org/project/platformdirs/4.14.5/",
+   "version": "4.14.0",
+   "source": "https://pypi.org/project/platformdirs/4.14.0/",
    "pin": "sha256 (pip --require-hashes)",
    "usedBy": [
     "attestation verifier (tool)"
@@ -445,9 +445,19 @@
    }
   },
   {
+   "name": "pyasn1",
+   "version": "0.6.5",
+   "source": "https://pypi.org/project/pyasn1/0.6.5/",
+   "pin": "sha256 (pip --require-hashes)",
+   "usedBy": [
+    "attestation verifier (tool)"
+   ],
+   "tier": "hash-pinned"
+  },
+  {
    "name": "pypi-attestations",
-   "version": "0.0.31",
-   "source": "https://pypi.org/project/pypi-attestations/0.0.31/",
+   "version": "0.0.30",
+   "source": "https://pypi.org/project/pypi-attestations/0.0.30/",
    "pin": "sha256 (pip --require-hashes)",
    "usedBy": [
     "attestation verifier (tool)"
@@ -627,8 +637,8 @@
   },
   {
    "name": "typing-inspection",
-   "version": "0.4.5",
-   "source": "https://pypi.org/project/typing-inspection/0.4.5/",
+   "version": "0.4.4",
+   "source": "https://pypi.org/project/typing-inspection/0.4.4/",
    "pin": "sha256 (pip --require-hashes)",
    "usedBy": [
     "attestation verifier (tool)"

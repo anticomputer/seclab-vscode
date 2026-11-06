@@ -425,7 +425,7 @@
       "purpose": "Broker runtime on mitmproxy, its tests, and the PEP 740 verifier that checks them.",
       "pins": ["pip:broker/requirements.txt", "pip:broker/requirements-test.txt", "pip:broker/tests/integration/images/harness/requirements.txt", "pip:broker/tests/integration/images/upstream/requirements.txt", "pip:broker/tools/attest/requirements.txt"],
       "used": ["broker/Dockerfile", "broker/tests/integration/images/*/Dockerfile", "broker/tools/attest/Dockerfile"],
-      "provenance": "Hash-locked, binary-only; PEP 740 attestations where the package publishes them (25 of 43 packages; 32 attestations verified on linux/arm64).",
+      "provenance": "Hash-locked, binary-only; PEP 740 attestations where the package publishes them (25 of 44 packages; 32 attestations verified on linux/arm64).",
       "verify": "broker/deps.json (per package) and broker/provenance-check.sh: strict lockfile parsing (broker/tools/supplychain.py), every pinned sha256 PyPI-served, PEP 740 publisher equal to the register, each attestation verified against the pinned sha256 and the registered workflow; installs fetch wheels with pip download --require-hashes --no-deps --only-binary=:all: in a token-holding stage (broker/tools/pip-fetch.py; CFS locally via gh cfs, public PyPI in CI) and install them offline with --no-index (enforced offline by broker/tools/pin_check.py).",
       "bar": "official-pinned",
       "record": "docs/edr/20261104-broker-dependency-provenance.md",
