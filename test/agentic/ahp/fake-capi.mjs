@@ -12,7 +12,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as https from 'node:https';
 
-const { NONCE, GH_FAKE, CP_MINT, OUT, STRIP_KEYS_RE } = process.env;
+const { NONCE, GH_FAKE, CP_MINT, OUT } = process.env;
 if (!/^[0-9a-f]{16}$/.test(NONCE ?? '') || !GH_FAKE?.startsWith('seclabcanary_') || !CP_MINT?.startsWith('seclabcanary_') || !OUT) {
 	console.error('fake-capi: NONCE, GH_FAKE, CP_MINT (seclabcanary_ values) and OUT are required');
 	process.exit(2);
@@ -130,25 +130,15 @@ const userBody = () => ({
 	endpoints: { api: CAPI, proxy: CAPI, telemetry: CAPI, 'origin-tracker': CAPI },
 	quota_snapshots: { chat: { ...quota, quota_id: 'chat' }, completions: { ...quota, quota_id: 'completions' }, premium_interactions: { ...quota, quota_id: 'premium_interactions' } },
 });
-// The broker blocks a /copilot_internal/user response with any key matching its credential-name
-// pattern (engine_mitmproxy.py CREDENTIAL_KEY, passed in by tab-spike.ts). Upstream's own stub
-// shape trips it; strip those keys so the run can proceed, and record which were stripped.
-const stripRe = STRIP_KEYS_RE ? new RegExp(STRIP_KEYS_RE, 'i') : undefined;
-const stripped = new Set();
-function strip(v, p) {
-	if (!stripRe || !v || typeof v !== 'object') {
-		return v;
-	}
-	if (Array.isArray(v)) {
-		return v.map(e => strip(e, `${p}[]`));
-	}
-	return Object.fromEntries(Object.entries(v).filter(([k]) => !(stripRe.test(k) && stripped.add(`${p}.${k}`))).map(([k, e]) => [k, strip(e, `${p}.${k}`)]));
-}
+// Served unmodified, on purpose. Upstream's own stub carries keys that match the broker's
+// credential-name pattern but are benign (`token_based_billing`, `cloud_session_storage_enabled`),
+// and since policy revision 4 the broker accepts them at their measured JSON paths. The fixture
+// used to strip them so a run could proceed, which meant the benign-key path was never exercised
+// in a real tab: a regression that re-blocked them would not have shown up here.
 const servedUserBody = () => {
 	const full = userBody();
-	const out = strip(full, '$');
-	fs.writeFileSync(`${OUT}/user-shape.json`, JSON.stringify({ upstreamStubKeys: Object.keys(full).sort(), servedKeys: Object.keys(out).sort(), strippedForBroker: [...stripped].sort() }, null, 1));
-	return out;
+	fs.writeFileSync(`${OUT}/user-shape.json`, JSON.stringify({ upstreamStubKeys: Object.keys(full).sort(), servedKeys: Object.keys(full).sort(), strippedForBroker: [] }, null, 1));
+	return full;
 };
 const tokenBody = () => ({ token: CP_MINT, expires_at: Math.floor(Date.now() / 1000) + 3600, refresh_in: 1800, endpoints: { api: CAPI, proxy: CAPI, telemetry: CAPI } });
 

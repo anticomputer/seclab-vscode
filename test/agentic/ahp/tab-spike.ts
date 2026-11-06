@@ -29,11 +29,6 @@ const GHE_API = `api.${GHE}`;
 const CAPI = 'capi.example.test';
 // The broker's credential-name pattern for exception-route responses, read from its source so the
 // fixture strips exactly what the broker would block (and records it).
-const brokerSrc = fs.readFileSync(path.resolve(import.meta.dirname, '../../../broker/seclab_broker/engine_mitmproxy.py'), 'utf8');
-const CREDENTIAL_KEY = /^CREDENTIAL_KEY = re\.compile\(r"([^"]+)"/m.exec(brokerSrc)?.[1];
-if (!CREDENTIAL_KEY) {
-	throw new Error('cannot read CREDENTIAL_KEY from the broker source');
-}
 const repo = path.resolve(import.meta.dirname, '../../..');
 const here = import.meta.dirname;
 const NONCE = randomBytes(8).toString('hex');
@@ -148,7 +143,7 @@ try {
 		'--sysctl', 'net.ipv4.ip_unprivileged_port_start=0', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--read-only',
 		'--tmpfs', `/run/fixture-tls:rw,noexec,nosuid,size=4m,mode=0700,uid=${process.getuid!()},gid=${process.getgid!()}`, '-e', 'HOME=/run/fixture-tls',
 		'-v', `${path.join(here, 'fake-capi.mjs')}:/fx/fake-capi.mjs:ro`, '-v', `${fixtureOut}:/out`,
-		'-e', `NONCE=${NONCE}`, '-e', `GH_FAKE=${GH_FAKE}`, '-e', `CP_MINT=${CP_MINT}`, '-e', 'OUT=/out', '-e', `STRIP_KEYS_RE=${CREDENTIAL_KEY}`,
+		'-e', `NONCE=${NONCE}`, '-e', `GH_FAKE=${GH_FAKE}`, '-e', `CP_MINT=${CP_MINT}`, '-e', 'OUT=/out',
 		NODE_IMG, 'node', '/fx/fake-capi.mjs');
 	cleanups.unshift(() => void dockerQuiet('rm', '-f', FIXTURE));
 	const caFile = path.join(fixtureOut, 'ca.pem');
