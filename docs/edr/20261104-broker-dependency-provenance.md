@@ -168,8 +168,10 @@ local image it runs.
       index or file;
     - the context is written into a fresh `.work/` directory from the git
       objects themselves (`git cat-file blob`, no filters), and removed on
-      exit. Committed `.gitattributes` can't change it, and anything but
-      files and symlinks fails the build.
+      exit. Committed `.gitattributes` can't change it. Parent directories
+      are made first, then files, then symlinks, and no path may already
+      exist when written, so a crafted tree can't write outside the context.
+      Anything but files and symlinks fails the build.
   - The snapshot is taken first. `-dirty`, the base-digest check, the labels,
     `pybuild.sh` and `verify-images.sh` all come from it, so nothing outside
     it can ship and an edit made mid-build can't ship under a clean label.

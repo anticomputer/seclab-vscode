@@ -38,28 +38,42 @@ git -C "$here" diff --quiet "$revision" "$snap" -- . || dirty=1
 # fresh directory under .work/ (gitignored), removed on exit. It is written from the git
 # objects themselves (`git cat-file blob`, no filters), not with `git archive`, so committed
 # .gitattributes (export-ignore, eol, filters) can't make the context differ from the tree.
-# Symlinks are created last and never over an existing path, so a crafted tree can't write
-# through one; anything other than a file or a symlink (e.g. a submodule) fails the build.
+# Three passes so nothing is written through a symlink: every parent directory first, then
+# regular files, then symlinks. No path may already exist when it is written, so a crafted
+# tree (duplicate entries, a symlink named like a directory) fails instead of escaping.
+# Anything other than a file or a symlink (e.g. a submodule) fails the build. Paths git
+# would quote (non-ASCII, control characters, `"` or `\`) are refused; pin_check.py lints
+# for them so this never surprises a build.
 mkdir -p "$top/.work"
 ctx=$(mktemp -d "$top/.work/broker-context.XXXXXX")
 trap 'rm -rf "$ctx" "$ctx.list"' EXIT
 trap 'exit 1' HUP INT TERM
 git -C "$top" -c core.quotePath=true ls-tree -r "$snap:$prefix" > "$ctx.list"
 tab=$(printf '\t')
-for pass in files links; do
+for pass in dirs files links; do
   while IFS= read -r entry; do
     meta=${entry%%"$tab"*} path=${entry#*"$tab"}
     mode=${meta%% *} obj=${meta##* }
     case $path in
-      '' | '"'* | /* | .. | ../* | */.. | */../*)
+      '' | '"'* | /* | .. | ../* | */.. | */../* | . | ./* | */. | */./* | *//*)
         echo "build: refusing snapshot path '$path'" >&2; exit 1 ;;
     esac
+    case $path in */*) dir=${path%/*} ;; *) dir=. ;; esac
+    out=$ctx/$path
     case $pass:$mode:${meta#* } in
-      files:100644:blob\ *) mkdir -p "$ctx/$(dirname "$path")"; git -C "$top" cat-file blob "$obj" > "$ctx/$path" ;;
-      files:100755:blob\ *) mkdir -p "$ctx/$(dirname "$path")"; git -C "$top" cat-file blob "$obj" > "$ctx/$path"; chmod 755 "$ctx/$path" ;;
-      links:120000:blob\ *)
-        if [ -e "$ctx/$path" ] || [ -L "$ctx/$path" ]; then echo "build: snapshot path '$path' is duplicated" >&2; exit 1; fi
-        mkdir -p "$ctx/$(dirname "$path")"; ln -s "$(git -C "$top" cat-file blob "$obj")" "$ctx/$path" ;;
+      dirs:100644:blob\ * | dirs:100755:blob\ * | dirs:120000:blob\ *) mkdir -p "$ctx/$dir" ;;
+      files:100644:blob\ * | files:100755:blob\ * | links:120000:blob\ *)
+        if [ -e "$out" ] || [ -L "$out" ] || [ -L "$ctx/$dir" ]; then
+          echo "build: snapshot path '$path' collides with another entry" >&2; exit 1
+        fi
+        if [ "$pass" = links ]; then
+          target=$(git -C "$top" cat-file blob "$obj")
+          [ -n "$target" ] || { echo "build: snapshot symlink '$path' is empty" >&2; exit 1; }
+          ln -s -- "$target" "$out"
+        else
+          git -C "$top" cat-file blob "$obj" > "$out"
+          [ "$mode" = 100644 ] || chmod 755 "$out"
+        fi ;;
       files:120000:blob\ * | links:100644:blob\ * | links:100755:blob\ *) ;;
       *) echo "build: snapshot entry '$path' is '$meta'; only files and symlinks are built" >&2; exit 1 ;;
     esac
@@ -68,8 +82,10 @@ done
 [ -f "$ctx/Dockerfile" ] || { echo "build: snapshot context has no Dockerfile" >&2; exit 1; }
 # From here on, everything is read and run from the snapshot.
 . "$ctx/tools/pybuild.sh"
-# verify-images.sh finds cached bundles relative to itself; CI points it at the repo's
-# .work/attestations (local runs verify online and don't use bundles).
+# verify-images.sh uses cached bundles when $CI or $SECLAB_ATTESTATION_DIR is set, and
+# otherwise verifies online. Its default bundle directory is relative to itself, so under CI
+# it is pointed at the repo's .work/attestations; an explicit SECLAB_ATTESTATION_DIR is
+# passed through unchanged (forged bundles still fail cryptographically).
 if [ -n "${CI:-}" ] && [ -z "${SECLAB_ATTESTATION_DIR:-}" ]; then
   SECLAB_ATTESTATION_DIR="$top/.work/attestations" "$ctx/tools/verify-images.sh" >&2
 else
