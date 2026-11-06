@@ -241,7 +241,13 @@ test('tabPolicy: default deny-all; the user policy is a private regular file, ve
 	const f = path.join(dir, USER_POLICY_FILE);
 	assert.deepEqual(tabPolicy(dir, 't-1'), defaultPolicy('t-1'));
 	fs.writeFileSync(f, JSON.stringify({ version: 1, allow: [{ host: 'example.com' }] }), { mode: 0o600 });
-	assert.deepEqual(tabPolicy(dir, 't-1'), { version: 1, allow: [{ host: 'example.com' }], tabId: 't-1' });
+	assert.deepEqual(tabPolicy(dir, 't-1'), { version: 1, allow: [{ host: 'example.com' }], tabId: 't-1', prompt: { enabled: false } });
+	assert.deepEqual(tabPolicy(dir, 't-1', true).prompt, { enabled: true });
+	fs.writeFileSync(f, JSON.stringify({ version: 1, allow: [], prompt: { enabled: true, timeoutSeconds: 30 } }), { mode: 0o600 });
+	assert.deepEqual(tabPolicy(dir, 't-1', false).prompt, { enabled: false, timeoutSeconds: 30 }, 'no client to answer: prompts off');
+	assert.deepEqual(tabPolicy(dir, 't-1', true).prompt, { enabled: true, timeoutSeconds: 30 });
+	fs.writeFileSync(f, JSON.stringify({ version: 1, allow: [], prompt: { enabled: false } }), { mode: 0o600 });
+	assert.deepEqual(tabPolicy(dir, 't-1', true).prompt, { enabled: false }, 'the user turned prompts off');
 	fs.chmodSync(f, 0o666);
 	assert.throws(() => tabPolicy(dir, 't-1'), /writable by group or others/);
 	fs.chmodSync(f, 0o600);
@@ -346,4 +352,8 @@ test('B3 prompt text: tab named first, tab text quoted (no links, icons, bidi), 
 	const cred = approvalPromptText('t', { ...a, kind: 'credential-binding', credentialId: 'cfs' }, undefined);
 	assert.match(cred, /wants to send credential “cfs” to “evil\.example”:8443/);
 	assert.deepEqual(DECISION_LABELS.map(([d]) => d), ['deny', 'deny-new-destinations', 'allow-once', 'allow-tab']);
+	const long = `api.github.com.${'a'.repeat(60)}.${'b'.repeat(60)}.attacker.example`;
+	const longText = approvalPromptText('t', sanitizeApproval({ ...raw, waiting: 3, request: { ...raw.request, host: long } })!, undefined);
+	assert.ok(longText.includes(`“${long}”`), 'the whole host, right end included');
+	assert.match(longText, /3 requests waiting\)\. Your answer covers every request held for this destination\./);
 });
