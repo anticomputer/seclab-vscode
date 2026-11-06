@@ -203,6 +203,9 @@ class RequestView:
     method: str
     path: str  # decoded canonical path, no query
     query: str = ""
+    # The tab-side TCP source port of the proxy connection (revision 5): exact process
+    # attribution for observability. Tab-influenced: a process can choose its source port.
+    client_port: int | None = field(default=None, compare=False)
 
     @property
     def origin(self) -> tuple[str, str, int]:
@@ -219,6 +222,8 @@ class RequestView:
             path = re.sub(re.escape(SEALED_PREFIX) + r"[^/]*", "[sealed]", path)
         out = {"scheme": self.scheme, "host": self.host[:253], "port": self.port,
                "method": self.method, "path": path}
+        if self.client_port is not None:
+            out["clientPort"] = self.client_port
         if self.query:
             keys = set()
             for k, _ in urllib.parse.parse_qsl(self.query, keep_blank_values=True):
@@ -301,6 +306,35 @@ class Rule:
         if "*" not in self.methods and req.method not in self.methods:
             return False
         return compile_glob(self.path).fullmatch(req.path) is not None
+
+
+@dataclass(frozen=True)
+class DenyRule:
+    """A destination the user blocked (revision 5). Precedence over every allow rule, the
+    baseline, `allow-tab` grants, prompts and credential bindings. Unlike an allow rule,
+    omitted `ports` means every port and omitted `schemes` means http and https, so a block
+    can't be sidestepped by a non-default port or scheme."""
+    id: str
+    host: HostPattern
+    schemes: tuple[str, ...] = ("http", "https")
+    ports: tuple[int, ...] | None = None
+
+    @classmethod
+    def from_json(cls, obj: dict) -> "DenyRule":
+        validate_fragment("denyRule", obj)
+        return cls(id=obj["id"], host=_parse_host_pattern(obj["host"]),
+                   schemes=tuple(obj.get("schemes", ["http", "https"])),
+                   ports=tuple(obj["ports"]) if "ports" in obj else None)
+
+    def to_json(self) -> dict:
+        out: dict[str, Any] = {"id": self.id, "host": self.host.text, "schemes": list(self.schemes)}
+        if self.ports is not None:
+            out["ports"] = list(self.ports)
+        return out
+
+    def matches(self, req: RequestView) -> bool:
+        return (req.scheme in self.schemes and (self.ports is None or req.port in self.ports)
+                and self.host.matches(req.host))
 
 
 _B64_TOKEN = re.compile(r"\{base64:((?:[^{}]|\{value\})*)\}")
@@ -535,6 +569,7 @@ class Policy:
     credentials: list[CredentialSpec]
     risky: tuple[RiskyEntry, ...] = ()
     models: Any = None  # models.ModelPolicy
+    deny: list[DenyRule] = field(default_factory=list)
     raw: dict = field(repr=False, default_factory=dict)
 
     @classmethod
@@ -553,6 +588,9 @@ class Policy:
         cids = [c.id for c in creds]
         if len(cids) != len(set(cids)):
             raise PolicyError("duplicate credential id")
+        deny = [DenyRule.from_json(d) for d in obj.get("deny", [])]
+        if len({d.id for d in deny}) != len(deny):
+            raise PolicyError("duplicate deny rule id")
         p = obj.get("prompt", {})
         return cls(
             version=obj["version"],
@@ -576,6 +614,7 @@ class Policy:
             risky=tuple(RiskyEntry(_parse_host_pattern(e["host"]), e["category"])
                         for e in obj.get("riskyDestinations", [])),
             models=ModelPolicy.from_json(obj.get("models")),
+            deny=deny,
             raw=obj,
         )
 
@@ -594,9 +633,15 @@ class Policy:
                 return rule
         return None
 
+    def deny_match(self, req: RequestView) -> DenyRule | None:
+        """Checked before everything else (revision 5)."""
+        return next((d for d in self.deny if d.matches(req)), None)
+
     def to_json(self) -> dict:
         out = dict(self.raw)
         out["allow"] = [r.to_json() for r in self.rules]
+        if self.deny or "deny" in out:
+            out["deny"] = [d.to_json() for d in self.deny]
         return out
 
 

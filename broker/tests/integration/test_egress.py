@@ -141,6 +141,67 @@ def test_approval_queue_is_bounded(pod, ctl):
     assert any(e["type"] == "approval.queue_full" for e in pod.audit())
 
 
+def test_deny_rule_beats_allow_baseline_and_bindings(pod, ctl):
+    """Revision 5 (tab observability's Block destination): a deny rule wins over an allow
+    rule, the baseline and a credential binding; nothing reaches the upstream and nothing is
+    prompted. Deny rules are editable at runtime; request audits carry clientPort."""
+    cred = {"id": "api", "inject": {"header": "Authorization", "fmt": "Bearer {value}"},
+            "bind": [{"host": "api.example.test", "path": "/echo/**", "methods": ["GET"]}]}
+    s = pod.load({"allow": ALLOW_API, "baseline": True, "credentials": [cred],
+                  "deny": [{"id": "blk-gist", "host": "gist.example.test"}],
+                  "prompt": {"timeoutSeconds": 5, "denyCooldownSeconds": 0}})["api"]
+    ctl.call("credential.provide", {"id": "api", "value": pod.canaries["api"]})
+    mark = ctl.mark()
+    before = len(pod.seen())
+    r = pod.curl("https://gist.example.test/echo/blocked")
+    assert r.code == 403 and "denied by rule blk-gist" in r.body
+    denied = ctl.wait_note("audit.event", lambda e: e["type"] == "request.denied" and e.get("ruleId") == "blk-gist",
+                           since=mark, timeout=10)
+    assert isinstance(denied["clientPort"], int) and "clientPort" in denied["untrusted"]
+    # Runtime block on an allowed, credential-bound host; then unblock.
+    assert pod.curl("https://api.example.test/echo/x", "-H", f"Authorization: Bearer {s}").code == 200
+    ctl.call("policy.update", {"addDeny": [{"id": "blk-api", "host": "*.example.test"}]})
+    changed = ctl.wait_note("policy.changed", lambda p: p.get("addedDeny"), since=mark, timeout=10)
+    assert changed["addedDeny"][0] == {"id": "blk-api", "host": "*.example.test", "schemes": ["http", "https"]}
+    seen = len(pod.seen())
+    for url in ("https://api.example.test/echo/x", "http://api.example.test/echo/x"):
+        assert pod.curl(url, "-H", f"Authorization: Bearer {s}").code == 403, url
+    assert len(pod.seen()) == seen
+    assert ctl.notes_since(mark, "approval.requested") == []
+    assert ctl.call("policy.get")["policy"]["deny"][1]["id"] == "blk-api"
+    ctl.call("policy.update", {"removeDeny": ["blk-api"]})
+    assert pod.curl("https://api.example.test/echo/x", "-H", f"Authorization: Bearer {s}").code == 200
+    assert pod.curl("https://gist.example.test/echo/still").code == 403
+    assert len([x for x in pod.seen()[before:] if x["host"] == "gist.example.test"]) == 0
+    for bad in ({"addDeny": [{"host": "x.example.test"}]}, {"removeDeny": ["nope"]},
+                {"addDeny": [{"id": "blk-gist", "host": "x.example.test"}]}):
+        try:
+            ctl.call("policy.update", bad)
+        except Exception:
+            continue
+        raise AssertionError(f"accepted {bad}")
+
+
+def test_adding_a_deny_rule_resolves_pending_prompts(pod, ctl):
+    """A prompt waiting on a destination the user then blocks resolves as deny (by
+    deny-rule), and the held request gets 403; it can't be allowed later."""
+    pod.load({"allow": [], "prompt": {"timeoutSeconds": 20, "denyCooldownSeconds": 0}})
+    mark = ctl.mark()
+    pod.ws("(curl -s -o /dev/null -w '%{http_code}' https://blocked.example.test/echo/held-deny > /tmp/held-deny.code &)")
+    pending = ctl.wait_note("approval.requested", since=mark, timeout=10)
+    ctl.call("policy.update", {"addDeny": [{"id": "blk", "host": "blocked.example.test"}]})
+    resolved = ctl.wait_note("approval.resolved", lambda p: p["approvalId"] == pending["approvalId"],
+                             since=mark, timeout=10)
+    assert resolved == {"approvalId": pending["approvalId"], "decision": "deny", "by": "deny-rule"}
+    for _ in range(20):
+        code = pod.ws("cat /tmp/held-deny.code 2>/dev/null").stdout.decode()
+        if code:
+            break
+        time.sleep(0.25)
+    assert code == "403"
+    assert not [x for x in pod.seen() if x["path"] == "/echo/held-deny"]
+
+
 def test_http2_end_to_end(pod, ctl):
     pod.load({"allow": ALLOW_API, "prompt": {"enabled": False}})
     r = pod.curl("https://api.example.test/echo/h2", "--http2")

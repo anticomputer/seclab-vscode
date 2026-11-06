@@ -3,6 +3,15 @@
   "protocol": "seclab-broker/1",
   "changelog": [
     {
+      "version": "0.5.0",
+      "policySchemaRevision": 5,
+      "date": "2026-11-06",
+      "changes": [
+        "Deny rules (policy `deny`, `policy.update` `addDeny`/`removeDeny`; capability `denyRules`). A deny rule (`id`, `host`, optional `ports` and `schemes`) takes precedence over every allow rule, the baseline, `allow-tab` grants, prompts and credential bindings. A matching request is denied with `403` and audited as `request.denied` (reason `denied by rule <id>`, key `ruleId`), never prompted. Omitted `ports` means every port and omitted `schemes` means http and https. Adding one resolves a pending prompt it matches as `deny` (`approval.resolved` `by: deny-rule`), denies new requests on open connections, and stops relaying on an open WebSocket. `policy.changed` carries `addedDeny`/`removedDeny`. Requested by tab observability for its user-approved Block destination action.",
+        "Request summaries (audit events, approvals) carry `clientPort`, the tab-side TCP source port of the proxy connection, for exact process attribution on OCI tabs. It is tagged untrusted: a process in the tab can choose its source port."
+      ]
+    },
+    {
       "version": "0.4.0",
       "policySchemaRevision": 4,
       "date": "2026-11-05",
@@ -486,7 +495,7 @@
       }
     },
     "policy.update": {
-      "description": "Live edit of the allow list. Emits `policy.changed`. Removing a rule requires that it has an `id`.",
+      "description": "Live edit of the allow list and (revision 5) the deny list. Emits `policy.changed`. Removing a rule requires that it has an `id`. A deny rule takes precedence over every allow rule, the baseline, `allow-tab` grants, prompts and credential bindings; adding one resolves any pending prompt it matches as `deny`.",
       "params": {
         "type": "object",
         "additionalProperties": false,
@@ -505,6 +514,22 @@
               "$ref": "#/definitions/id"
             },
             "description": "Ids of runtime or policy rules to remove."
+          },
+          "addDeny": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "$ref": "#/definitions/denyRule"
+            },
+            "description": "Destinations to block (revision 5)."
+          },
+          "removeDeny": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "$ref": "#/definitions/id"
+            },
+            "description": "Ids of deny rules to remove (revision 5)."
           }
         }
       },
@@ -1092,8 +1117,10 @@
           "by": {
             "enum": [
               "controller",
-              "timeout"
-            ]
+              "timeout",
+              "deny-rule"
+            ],
+            "description": "`deny-rule` (revision 5): a deny rule added by `policy.update` or `policy.load` matched the waiting request."
           }
         }
       }
@@ -1124,6 +1151,20 @@
             "items": {
               "type": "string"
             }
+          },
+          "addedDeny": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/denyRule"
+            },
+            "description": "Deny rules added (revision 5); present when the update touched the deny list."
+          },
+          "removedDeny": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids of deny rules removed (revision 5)."
           },
           "by": {
             "enum": [
@@ -1328,6 +1369,12 @@
             "maxLength": 64
           },
           "description": "The query string's key names, percent-encoded, deduplicated and sorted; present only when there is a query. Values are never recorded. Tab-controlled."
+        },
+        "clientPort": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "description": "The tab-side TCP source port of the proxy connection (revision 5), for exact process attribution. Tab-influenced: a process in the tab can choose its source port."
         }
       }
     },

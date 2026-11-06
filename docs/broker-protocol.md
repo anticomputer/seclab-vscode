@@ -309,7 +309,7 @@ none
 
 ### `policy.update`
 
-Live edit of the allow list. Emits `policy.changed`. Removing a rule requires that it has an `id`.
+Live edit of the allow list and (revision 5) the deny list. Emits `policy.changed`. Removing a rule requires that it has an `id`. A deny rule takes precedence over every allow rule, the baseline, `allow-tab` grants, prompts and credential bindings; adding one resolves any pending prompt it matches as `deny`.
 
 **Params**
 
@@ -317,6 +317,8 @@ Live edit of the allow list. Emits `policy.changed`. Removing a rule requires th
 |---|---|---|---|
 | `addAllow` | [`rule`](broker-policy.md#rule)[] |  | (max items `256`) |
 | `removeAllow` | [`id`](broker-policy.md#id)[] |  | Ids of runtime or policy rules to remove. (max items `256`) |
+| `addDeny` | [`denyRule`](broker-policy.md#denyrule)[] |  | Destinations to block (revision 5). (max items `256`) |
+| `removeDeny` | [`id`](broker-policy.md#id)[] |  | Ids of deny rules to remove (revision 5). (max items `256`) |
 
 **Result**
 
@@ -770,7 +772,7 @@ Dismiss the prompt.
 |---|---|---|---|
 | `approvalId` | `string` | yes |  |
 | `decision` | [`decision`](#decision) | yes |  |
-| `by` | `"controller"` \| `"timeout"` | yes |  |
+| `by` | `"controller"` \| `"timeout"` \| `"deny-rule"` | yes | `deny-rule` (revision 5): a deny rule added by `policy.update` or `policy.load` matched the waiting request. |
 
 ### `policy.changed`
 
@@ -781,6 +783,8 @@ The allow list changed at runtime. Persist it if the user chose "always".
 | `revision` | `integer` | yes |  |
 | `added` | [`rule`](broker-policy.md#rule)[] | yes |  |
 | `removed` | `string`[] | yes |  |
+| `addedDeny` | [`denyRule`](broker-policy.md#denyrule)[] |  | Deny rules added (revision 5); present when the update touched the deny list. |
+| `removedDeny` | `string`[] |  | Ids of deny rules removed (revision 5). |
 | `by` | `"controller"` \| `"approval"` | yes |  |
 | `approvalId` | `string` |  |  |
 | `untrusted` | [`untrusted`](#untrusted) |  |  |
@@ -856,6 +860,7 @@ Type: [`binding`](broker-policy.md#binding) \| [`binding`](broker-policy.md#bind
 | `method` | `string` | yes |  |
 | `path` | `string` | yes | Canonical request path, percent-encoded ASCII for display (non-ASCII, spaces and non-path characters encoded). Tab-controlled. |
 | `queryKeys` | `string`[] |  | The query string's key names, percent-encoded, deduplicated and sorted; present only when there is a query. Values are never recorded. Tab-controlled. (max items `32`) |
+| `clientPort` | `integer` |  | The tab-side TCP source port of the proxy connection (revision 5), for exact process attribution. Tab-influenced: a process in the tab can choose its source port. (min `0`; max `65535`) |
 
 <a id="approval"></a>
 #### `approval`
@@ -1067,6 +1072,11 @@ as `version` and `policySchema.revision`, so a supervisor can detect it.
 ### Changelog (generated)
 
 <!-- BEGIN GENERATED: protocol-changelog (broker/tools/docs.py; do not edit) -->
+**0.5.0** (2026-11-06; policy schema revision 5)
+
+- Deny rules (policy `deny`, `policy.update` `addDeny`/`removeDeny`; capability `denyRules`). A deny rule (`id`, `host`, optional `ports` and `schemes`) takes precedence over every allow rule, the baseline, `allow-tab` grants, prompts and credential bindings. A matching request is denied with `403` and audited as `request.denied` (reason `denied by rule <id>`, key `ruleId`), never prompted. Omitted `ports` means every port and omitted `schemes` means http and https. Adding one resolves a pending prompt it matches as `deny` (`approval.resolved` `by: deny-rule`), denies new requests on open connections, and stops relaying on an open WebSocket. `policy.changed` carries `addedDeny`/`removedDeny`. Requested by tab observability for its user-approved Block destination action.
+- Request summaries (audit events, approvals) carry `clientPort`, the tab-side TCP source port of the proxy connection, for exact process attribution on OCI tabs. It is tagged untrusted: a process in the tab can choose its source port.
+
 **0.4.0** (2026-11-05; policy schema revision 4)
 
 - **Behaviour change:** the built-in `copilot` model provider is now measured, not drafted (secure-agentic B2 run in a real tab). Endpoints: `GET /models`, `POST /responses`, `POST /chat/completions`, `POST /v1/messages`; each POST has its own top-level field list and tool types (`function` and `custom` on `/responses` and `/chat/completions`; untyped tools count as `custom` on `/v1/messages`). `/embeddings` and the never-sent draft fields are gone. `POST /mcp/readonly` (GitHub's remote MCP server) is denied unless a grant names it.
