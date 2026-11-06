@@ -2,7 +2,8 @@
 
 - **Date:** 2026-11-06
 - **Scope:** "broker: deny rules and clientPort" (policy schema revision 5,
-  broker 0.5.0), and its fixes in the round 12 commit.
+  broker 0.5.0), and its fixes in the round 12 and 12b commits (the 12b
+  re-review confirmed every round 12 fix).
   - **Deny rules.** Policy `deny`; `policy.update` takes `addDeny` and
     `removeDeny`; capability `denyRules`. Requested by tab observability for
     its user-approved Block destination action.
@@ -28,6 +29,9 @@
 | 12-6 | Low | Runtime policy | Repeated `addDeny` could grow the deny list past the schema's 1024 cap. `policy.get` then returned a policy `policy.load` rejects, so a controller that persists and replays would lose every block on the next tab. The same applied to `allow`. | fixed (round 12 commit) | `policy.update` refuses to grow `allow` or `deny` past 1024. | `test_a_new_deny_rule_resolves_a_waiting_prompt` |
 | 12-7 | Info | CONNECT | A CONNECT to a blocked host was accepted. The tab completed TLS against the per-tab CA before the inner request got 403. Nothing reached upstream (lazy connection strategy), but nothing was audited until the inner request. | fixed (round 12 commit) | CONNECT to a host matched by a deny rule is refused with the canonical audit. | Code review |
 | 12-8 | Info | Performance | The fragment validator cache held 4 entries for 8 fragment names, so validation recompiled on request paths. | fixed (round 12 commit) | Unbounded cache (8 fixed names). | n/a |
+| 12b-1 | Low | Runtime policy | 12-6 was fixed in `policy.update` only; an `allow-tab` approval could still grow the allow list past 1024. | fixed (round 12b commit) | `approval.decide` refuses `allow-tab` at the cap; the controller can still answer `allow-once`. | Code review |
+| 12b-2 | Info | CONNECT | The CONNECT check assumed `https`, so a deny rule narrowed to `schemes: ["http"]` let the tunnel open, unaudited. Nothing left the broker: the inner request and `server_connect` both refused it. | fixed (round 12b commit) | A CONNECT is refused when a deny rule for either scheme matches. | Code review |
+| 12b-3 | Info | Residual | Between the last check and the bytes reaching an already-open keep-alive upstream, a block landing in that same event-loop turn isn't caught (`server_connect` doesn't fire for a reused connection). Before 12-1 this window was up to the prompt timeout; now it is under one turn, with no `await` in it. | accepted | Closing it would need a write-time hook. A request already being written when the user clicks Block completes; the next one is denied. | n/a |
 
 Probed and held:
 - **Host normalisation:** case, trailing dot, IDNA, IPv4-mapped IPv6 and
