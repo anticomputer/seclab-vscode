@@ -153,8 +153,22 @@ if (mode === 'prepare') {
 	if (spawnSync('docker', ['image', 'inspect', VSCE_IMAGE], { stdio: 'ignore' }).status !== 0) {
 		execFileSync('gh', ['cfs', '--', 'docker', 'build', '-q', '-t', VSCE_IMAGE, path.join(repo, 'build', 'vsce')], { stdio: 'inherit' });
 	}
-	execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`, '-v', `${path.join(import.meta.dirname, 'rogue-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
-		VSCE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/rogue.vsix'], { stdio: 'inherit' });
+	// The rogue extension, and the POSITIVE CONTROL beside it. A suite made only of
+	// "the bad thing did not happen" cannot tell containment from a broken editor: the
+	// first patched build denied the extension host's own error and activation plumbing,
+	// so nothing activated, no marker was written, and it read as success
+	// (docs/edr/20261106-rpc-core-proof-run.md). The benign extension must ACTIVATE AND
+	// WORK in the same window the rogue one is contained in.
+	// SECLAB_BENIGN_ONLY=1 leaves the rogue extension out, so a boot can be measured
+	// with nothing hostile in it. That is how the extension-host plumbing entries are
+	// derived: the denial set of a clean boot, read from a log that has not capped.
+	// Never set for a proof run -- check asserts the rogue evidence.
+	const benignOnly = process.env.SECLAB_BENIGN_ONLY === '1';
+	const bundles = (benignOnly ? [] : [['rogue-extension', 'rogue.vsix']]).concat([['benign-extension', 'benign.vsix']]);
+	for (const [dir, vsix] of bundles as ReadonlyArray<readonly [string, string]>) {
+		execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`, '-v', `${path.join(import.meta.dirname, dir)}:/ext:ro`, '-v', `${vsixDir}:/out`,
+			VSCE_IMAGE, 'sh', '-c', `cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/${vsix}`], { stdio: 'inherit' });
+	}
 	const client = new TabdClient({
 		command: process.execPath,
 		args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', driver, '--allowed-root', base],
@@ -167,9 +181,11 @@ if (mode === 'prepare') {
 	const name = `seclab-${tab.metadata.name}`;
 	const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
 	const user = driver === 'sbx' ? ['-u', 'agent'] : [];
-	const r = spawnSync(runtime, ['exec', ...user, name, '/opt/seclab/bin/seclab-tab-env',
-		'/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(vsixDir, 'rogue.vsix')], { encoding: 'utf8' });
-	console.log(r.stdout.trim(), r.stderr.trim());
+	for (const vsix of benignOnly ? ['benign.vsix'] : ['rogue.vsix', 'benign.vsix']) {
+		const r = spawnSync(runtime, ['exec', ...user, name, '/opt/seclab/bin/seclab-tab-env',
+			'/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(vsixDir, vsix)], { encoding: 'utf8' });
+		console.log(r.stdout.trim(), r.stderr.trim());
+	}
 	client.dispose(); // stops the tab; the editor restarts it (extensions persist in the tab)
 	await new Promise(res => client.once('exit', res));
 	console.log(`\nprepared tab ${tab.metadata.name} for ${ws}`);
@@ -296,6 +312,28 @@ if (mode === 'prepare') {
 	checks.push({ vector: 'rogue-extension', name: 'ui-declared chat participant / vscode.lm caller ran in the tab, not trusted-side', ok: agent?.ranIn === 'tab' && agent?.remoteName === 'seclab',
 		detail: JSON.stringify(agent ?? 'no rogue-agent.json') });
 	checks.push({ vector: 'host', name: 'canary intact', ok: fs.readFileSync(canary, 'utf8') === 'HOST-SECRET-CANARY\n', detail: '' });
+	// POSITIVE CONTROL. Everything else in this file asserts that something did NOT
+	// happen, and a build whose extension host cannot start satisfies all of it. The
+	// benign extension must have activated in the tab and completed every ordinary
+	// operation a workspace extension performs. If this fails while the rogue checks
+	// pass, the filter has broken the editor, not contained it -- which is exactly the
+	// state the first patched build was in, and read as success.
+	const benign = readJsonInTab(path.join(evDir, 'benign.json'));
+	const benignWhere = benign?.where as { remoteName?: unknown; seclabTab?: unknown } | undefined;
+	checks.push({
+		vector: 'positive-control',
+		name: 'an ordinary workspace extension activated in the tab',
+		ok: benign?.activated === true && benignWhere?.remoteName === 'seclab' && benignWhere?.seclabTab === '1',
+		detail: benign === undefined ? 'no benign.json: the extension host could not run it' : JSON.stringify(benignWhere),
+	});
+	const benignFailed = Array.isArray(benign?.failed) ? benign.failed as unknown[] : undefined;
+	checks.push({
+		vector: 'positive-control',
+		name: 'every ordinary extension operation succeeded in the tab',
+		ok: benignFailed !== undefined && benignFailed.length === 0,
+		detail: benignFailed === undefined ? 'no step results'
+			: `${benignFailed.length} failed: ${benignFailed.join(', ')} | ${JSON.stringify(benign?.results).slice(0, 600)}`,
+	});
 	checks.push({
 		vector: 'rpc-probes',
 		name: 'workbench.action.terminal.newLocal + sendSequence did not reach the host',

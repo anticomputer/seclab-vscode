@@ -543,6 +543,96 @@
           ]
         }
       }
+    },
+    "MainThreadErrors": {
+      "service_default": "deny",
+      "review": "classified",
+      "methods": {
+        "$onUnexpectedError": {
+          "verdict": "allow",
+          "capability": "report an error into the window error handler",
+          "impact": [
+            "log-noise"
+          ],
+          "rationale": "The extension host's own plumbing. Denying it does not contain a tab, it stops the tab working at all: measured on the first patched build, where the extension host never activated anything and the absent host marker read as containment (docs/edr/20261106-rpc-core-proof-run.md). The body deserialises the error and calls onUnexpectedError; it grants no capability and returns nothing. Denying it is self-amplifying by construction: the denial is itself an unexpected error, reported through the same denied channel. Measured at 92,365 calls in one window on a clean boot with no hostile extension installed. The payload is tab-chosen text and is treated as tab data by every consumer. Residual: a tab can make the host write to its own error log; that is bounded by the window log's own rotation, and the rpc-filter decision log aggregates repeats per key so it cannot be used to hide a denial.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadErrors.ts#L17-L22"
+          ]
+        }
+      }
+    },
+    "MainThreadConsole": {
+      "service_default": "deny",
+      "review": "classified",
+      "methods": {
+        "$logExtensionHostMessage": {
+          "verdict": "allow",
+          "capability": "write the extension host console through the log service",
+          "impact": [
+            "log-noise"
+          ],
+          "rationale": "The extension host's own plumbing. Denying it does not contain a tab, it stops the tab working at all: measured on the first patched build, where the extension host never activated anything and the absent host marker read as containment (docs/edr/20261106-rpc-core-proof-run.md). Routes a console entry to the log service, and to the local console only when the window was started with the development flags. No capability, no return value. The entry is tab-chosen text and is treated as tab data.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadConsole.ts#L35-L41"
+          ]
+        }
+      }
+    },
+    "MainThreadExtensionService": {
+      "service_default": "deny",
+      "review": "classified",
+      "methods": {
+        "$onWillActivateExtension": {
+          "verdict": "allow",
+          "capability": "tell the window an extension is about to activate",
+          "impact": [],
+          "rationale": "The extension host's own plumbing. Denying it does not contain a tab, it stops the tab working at all: measured on the first patched build, where the extension host never activated anything and the absent host marker read as containment (docs/edr/20261106-rpc-core-proof-run.md). One call into _internalExtensionService._onWillActivateExtension with an extension identifier. It is a notification, not a capability, and it is on the path of EVERY activation, so denying it is what stops any extension running in a tab at all.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadExtensionService.ts#L70-L72"
+          ]
+        },
+        "$onDidActivateExtension": {
+          "verdict": "allow",
+          "capability": "tell the window an extension finished activating, with its timings",
+          "impact": [],
+          "rationale": "The extension host's own plumbing. Denying it does not contain a tab, it stops the tab working at all: measured on the first patched build, where the extension host never activated anything and the absent host marker read as containment (docs/edr/20261106-rpc-core-proof-run.md). The same shape as $onWillActivateExtension plus three numeric timings and an activation reason. Forwarded to the internal service; grants nothing and returns nothing.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadExtensionService.ts#L73-L75"
+          ]
+        },
+        "$onExtensionRuntimeError": {
+          "verdict": "allow",
+          "capability": "report an extension runtime error",
+          "impact": [
+            "log-noise"
+          ],
+          "rationale": "The extension host's own plumbing. Denying it does not contain a tab, it stops the tab working at all: measured on the first patched build, where the extension host never activated anything and the absent host marker read as containment (docs/edr/20261106-rpc-core-proof-run.md). Deserialises the error, notifies the internal service and console.errors the message and stack. No prompt, no install path, no return value. Tab-chosen text, treated as tab data.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadExtensionService.ts#L76-L81"
+          ]
+        },
+        "$setPerformanceMarks": {
+          "verdict": "allow",
+          "capability": "record extension host performance marks",
+          "impact": [],
+          "rationale": "The extension host's own plumbing. Denying it does not contain a tab, it stops the tab working at all: measured on the first patched build, where the extension host never activated anything and the absent host marker read as containment (docs/edr/20261106-rpc-core-proof-run.md). Hands marks to the timer service, bucketed by extension host kind; a tab is always remoteExtHost, so a tab cannot write marks attributed to the local host. Data only.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadExtensionService.ts#L182-L190"
+          ]
+        },
+        "$onExtensionActivationError": {
+          "verdict": "deny",
+          "capability": "report an activation failure, with an optional missing dependency",
+          "impact": [
+            "ui-spoofing",
+            "supply-chain"
+          ],
+          "rationale": "DENIED, deliberately, while its siblings are allowed. Unlike the rest of the lifecycle this one has a host effect a tab chooses: with a non-null missingExtensionDependency it reaches _handleMissingNotInstalledDependency, which prompts the user to INSTALL an extension the tab named, and in a development window it raises notificationService.error. It is on the failure path, not the success path, so denying it does not stop an extension activating -- the positive control (test/containment/benign-extension) is what holds that claim. Allowing it needs an argument constraint pinning missingExtensionDependency to null, which the constraint machinery cannot express yet, and an unimplemented constraint fails closed.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadExtensionService.ts#L82-L110"
+          ]
+        }
+      }
     }
   },
   "commands": {

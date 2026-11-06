@@ -108,7 +108,7 @@ function seclabDeliver(d: SeclabDecision): void {
  * removes, and the marker would then be missing from the one artefact the
  * consumer inspects.
  */
-const SECLAB_POLICY_SHA256 = '2534c796dc739cc155c9c66bfb4edd62f9360c269faf55ee4165b0d48846669e';
+const SECLAB_POLICY_SHA256 = '682e21a8ffafc7bac358ee24857bbb7a1fe23da598fe72ebb217b3f379c0b72c';
 export const SECLAB_ENFORCING_MARKER = 'seclabRpcFilterEnforcing:' + SECLAB_POLICY_SHA256;
 
 /** Max bytes for one log line, and for the tab-chosen `ref` inside it. */

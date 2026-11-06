@@ -1,0 +1,15 @@
+{
+	"name": "benign-workspace",
+	"displayName": "Ordinary Workspace Extension (seclab positive control)",
+	"description": "Does only what a normal workspace extension does. If this cannot activate and work in a tab window, the filter has broken the editor rather than contained it.",
+	"version": "0.0.1",
+	"publisher": "seclab-test",
+	"license": "MIT",
+	"engines": { "vscode": "^1.80.0" },
+	"activationEvents": ["*"],
+	"main": "./extension.js",
+	"contributes": {
+		"commands": [{ "command": "seclab-test.benign.ping", "title": "seclab positive control: ping" }]
+	},
+	"capabilities": { "untrustedWorkspaces": { "supported": true } }
+}
