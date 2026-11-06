@@ -74,7 +74,16 @@ function installWindowSink(accessor: ServicesAccessor): (e: SeclabAhpEvent) => v
 /**
  * Whether this window may connect to an agent host. Any window that isn't a seclab tab window
  * may; a tab window may only when agents are enabled for the host. Read at each connection.
- * This is the predicate patches 0009/0010 call (`seclabAgentHostAllowed`).
+ * This is the predicate patches 0009 and 0010 are intended to call, once they do. As of
+ * `c0f25eb` neither does: 0009/0010 live on `rpc-core` and 0010 selects the client class
+ * with its own `seclabAiDisabled`, which refuses a tab window's agent host unconditionally.
+ * Stated plainly because the earlier wording claimed callers that do not exist.
+ *
+ * It does not matter for soundness which of them calls it. 0015 gates the transport INSIDE
+ * `EditorRemoteAgentHostServiceClient`, not at whichever site selects that client, so every
+ * caller that instantiates it is gated and there is no ungated client to hand out. What that
+ * does depend on is this channel having exactly one renderer-side consumer, which
+ * `patches/sole-consumer.json` asserts on the patched tree.
  *
  * The enablement sources are deliberately only those a tab cannot write (review round 1,
  * MEDIUM): enterprise policy, the registered default, and `SECLAB_AGENTS_ENABLED=1` in the

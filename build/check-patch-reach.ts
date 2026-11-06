@@ -9,6 +9,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { patchedFiles, runtimeSpecs } from './patch-reach-imports.ts';
+import { soleConsumerProblems } from './check-sole-consumer.ts';
 
 const repo = path.resolve(import.meta.dirname, '..');
 // `--patches DIR` (self-test only) reads series, reach.json and the patches from DIR.
@@ -170,8 +171,12 @@ for (const [t, rule] of Object.entries(forbidden)) {
 		}
 	}
 }
+// Sole-consumer invariants: a patch that gates a capability at one call site is only sound
+// while that site is the only one. Checked here so it runs wherever reachability does.
+const soleProblems = soleConsumerProblems(src, path.join(patchesDir, 'sole-consumer.json'));
+problems.push(...soleProblems);
 for (const pr of problems) {
 	console.error(pr);
 }
-console.log(problems.length ? `check-patch-reach: ${problems.length} problem(s)` : `check-patch-reach: ok (${checked} patched files, ${forbiddenChecked} forbidden; ${reached.desktop.size} desktop, ${reached.server.size} server modules)`);
+console.log(problems.length ? `check-patch-reach: ${problems.length} problem(s)` : `check-patch-reach: ok (${checked} patched files, ${forbiddenChecked} forbidden; ${reached.desktop.size} desktop, ${reached.server.size} server modules; sole-consumer invariants ok)`);
 process.exit(problems.length ? 1 : 0);

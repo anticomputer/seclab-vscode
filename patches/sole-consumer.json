@@ -1,0 +1,9 @@
+{
+	"AgentHostIpcChannels.RemoteProxy": {
+		"why": "patch 0015 gates the agent-host transport by wrapping this channel inside EditorRemoteAgentHostServiceClient, so every caller that instantiates that client is gated (including patch 0010's selection in agentHostService.ts). A second renderer-side consumer would bypass the gate entirely, and no runtime probe can show that none exists.",
+		"files": {
+			"src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts": "seclabGate.transport(",
+			"src/vs/server/node/serverServices.ts": ""
+		}
+	}
+}
