@@ -22,7 +22,8 @@ log() { echo "tool: $*" >&2; }
 die() { log "$*"; exit 1; }
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -c1-64; else shasum -a 256 "$1" | cut -c1-64; fi; }
 verifier() {
-	docker build -q -t seclab-attest:local "$ROOT/broker/tools/attest" >/dev/null
+	# broker/tools/attest/build.sh is the only supported build (wheels via CFS locally, PyPI in CI); it fails closed.
+	"$ROOT/broker/tools/attest/build.sh" seclab-attest:local || die "cannot build the attestation verifier image (broker/tools/attest/build.sh)"
 	docker run --rm -v "$ctx:/w:ro" -e PYTHONDONTWRITEBYTECODE=1 --entrypoint python seclab-attest:local -m sigstore "$@"
 }
 
