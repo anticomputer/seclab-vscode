@@ -26,6 +26,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      - name: Tool build checks self-test (both gitleaks binaries required on this amd64 runner)
+        run: build/tools/tool.sh --self-test
       - name: No secret in any commit main doesn't have yet (gitleaks built from pinned source)
         env:
           # Pushes to main scan from the previous head; everything else scans every commit since
