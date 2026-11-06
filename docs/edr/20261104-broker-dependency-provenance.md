@@ -159,6 +159,19 @@ local image it runs.
 
   Its only stdout line is the image ID (`docker image inspect {{.Id}}`) as
   JSON.
+- **Only tracked files are built (review ZZ, 2026-11-05).** The Fork-build
+  review found that the dirty check ignored gitignored files, so a stray
+  `__pycache__/*.pyc` inside `seclab_broker/` could ship under a clean label.
+  - `build.sh` therefore builds from a snapshot of `broker/`'s git-tracked
+    files:
+    - `git stash create` records the working tree without touching any ref,
+      index or file;
+    - `git archive` extracts it into a fresh `.work/` directory, which is
+      removed on exit.
+  - `-dirty` is decided from that same snapshot, so nothing outside it can
+    ship and an edit made mid-build can't ship under a clean label.
+  - Counting ignored files instead (`git status --ignored`) would mark nearly
+    every local build dirty, because tests leave `__pycache__` in `broker/`.
 - **tabd side.**
   - It records the ID and creates the broker by `sha256:…`, never by tag, so
     retagging can't swap the image. The ID is content-addressed over config,
