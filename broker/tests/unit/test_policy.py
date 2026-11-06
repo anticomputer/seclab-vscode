@@ -307,6 +307,65 @@ def test_r14_audited_field_names_are_never_truncated_values():
     assert SeclabAddon._top_level_names(http.Response.make(200, b"[1]")) is None
 
 
+def test_r8_redirect_follow_data_and_target_checks():
+    """Revision 8: the azure-devops provider declares the CFS storage target by an anchored
+    pattern; the engine follows only an https, port-443, canonical-host Location matching it,
+    for a followed status, on GET, unless a deny rule names the host."""
+    from seclab_broker.core import Broker
+    from seclab_broker.engine_mitmproxy import SeclabAddon
+    from seclab_broker.policy import _check_backstop_file, providers, redirect_follow
+    ok = "vsblobprodcus123.blob.core.windows.net"
+    H = "https:" + "//"  # built, so the fixture lint reads these as data, not as live URLs
+    rf = providers()["azure-devops"].redirects
+    assert rf.statuses == {302, 303, 307} and rf.matches_host(ok)
+    for bad in ("vsblobprodcus.blob.core.windows.net", "vsblobprodcus12345.blob.core.windows.net",
+                "xvsblobprodcus1.blob.core.windows.net", "vsblobprodcusa1.blob.core.windows.net",
+                "vsblobprodcus1.blob.core.windows.net.example.test", "attacker.blob.core.windows.net",
+                "vsblobprodcus1xblobxcorexwindowsxnet"):
+        assert not rf.matches_host(bad), bad
+    feed = RequestView("https", "pkgs.dev.azure.com", 443, "GET", "/github-cfs/x", "")
+    other = RequestView("https", "api.example.test", 443, "GET", "/x", "")
+    assert redirect_follow(feed, set()) == [rf] and redirect_follow(other, {"azure-devops"}) == [rf]
+    assert redirect_follow(other, {"github"}) == [] and redirect_follow(other, set()) == []
+
+    b = Broker()
+    addon = SeclabAddon(b, frozenset())
+    assert addon._redirect_target(f"https://{ok}/b-1/h.blob?sig=s", [rf], 303, feed) == (ok, "/b-1/h.blob?sig=s", None)
+    assert addon._redirect_target(f"https://{ok.upper()}:443/b", [rf], 307, feed) == (ok, "/b", None)
+    for loc, status, view, why in (
+            (f"http://{ok}/b", 303, feed, "Location is not https"),
+            (f"//{ok}/b", 303, feed, "Location is not https"),
+            ("/relative", 303, feed, "Location is not https"),
+            (H + f"u@{ok}/b", 303, feed, "userinfo in Location"),
+            (H + f"{ok}./b", 303, feed, "Location host is not a canonical name"),
+            ("https://[::1]/b", 303, feed, "Location host is not a canonical name"),
+            ("https://203.0.113.9/b", 303, feed, "Location host is not a canonical name"),
+            (f"https://{ok}/b c", 303, feed, "malformed Location"),
+            (f"https://{ok}/b\\c", 303, feed, "malformed Location"),
+            (f"https://{ok}/caf\u00e9", 303, feed, "malformed Location"),
+            (f"https://{ok}:x/b", 303, feed, "malformed Location"),
+            (f"https://{ok}", 303, feed, "malformed Location"),
+            (f"https://{ok}:8443/b", 303, feed, "port is not 443"),
+            (H + "attacker.blob.core.windows.net/b", 303, feed, "host not declared by the provider"),
+            (f"https://{ok}/b", 301, feed, "status 301 is not followed"),
+            (f"https://{ok}/b", 308, feed, "status 308 is not followed"),
+            (f"https://{ok}/b", 303, RequestView("https", "pkgs.dev.azure.com", 443, "HEAD", "/x", ""),
+             "only GET is followed")):
+        assert addon._redirect_target(loc, [rf], status, view)[2] == why, loc
+    b.rpc_policy_load({"policy": {"version": 1, "deny": [{"id": "no-storage", "host": "*.blob.core.windows.net"}]}})
+    assert addon._redirect_target(f"https://{ok}/b", [rf], 303, feed)[2] == "denied by rule no-storage"
+
+    base = {"provider": "p", "hosts": ["x.example.test"], "deny": []}
+    good = {"statuses": [303], "hosts": ["^a[0-9]{1,3}\\.example\\.test$"], "reason": "r"}
+    _check_backstop_file("p.json", dict(base, redirects=good))
+    for bad in ({"statuses": [301]}, {"statuses": []}, {"hosts": ["^.*\\.example\\.test$"]},
+                {"hosts": ["a\\.example\\.test"]}, {"hosts": ["^a\\.example\\.test"]}, {"hosts": ["^localhost$"]},
+                {"hosts": ["^(a|b)\\.example\\.test$"]}, {"hosts": []}, {"reason": None}, {"extra": 1}):
+        r = {k: v for k, v in {**good, **bad}.items() if v is not None}
+        with pytest.raises(PolicyError):
+            _check_backstop_file("p.json", dict(base, redirects=r))
+
+
 def test_r11b_backstop_data_is_checked_when_a_policy_loads(monkeypatch):
     import seclab_broker.policy as policy
     called = []

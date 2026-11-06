@@ -265,6 +265,22 @@
       ]
     },
     {
+      "flag": "credentialRedirectFollow",
+      "label": "Broker-followed redirect on a credentialed request (revision 8): only to a provider-declared https host, one hop, GET, no credential or client header, charged to the byte budget; the Location never reaches the tab",
+      "cells": {
+        "sbx-native": {
+          "value": false
+        }
+      },
+      "tests": [
+        "unit:test_r8_redirect_follow_data_and_target_checks",
+        "it:test_cfs_download_redirect_is_followed_by_the_broker",
+        "it:test_cfs_redirect_refusals_never_reach_the_tab",
+        "it:test_tab_cannot_trigger_the_follow_itself",
+        "it:test_followed_redirect_is_bounded_by_the_byte_budget"
+      ]
+    },
+    {
       "label": "DNS control",
       "cells": {
         "mitmproxy-oci": {

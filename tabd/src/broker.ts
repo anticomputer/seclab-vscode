@@ -9,7 +9,7 @@
 // sentinel-only model credentials, and trusted derivation, which tabd does not use yet.
 
 export const BROKER_PROTOCOL = 'seclab-broker/1';
-export const BROKER_POLICY_SCHEMA = { version: 1, revision: 7 } as const;
+export const BROKER_POLICY_SCHEMA = { version: 1, revision: 8 } as const;
 // A local broker image built before the broker's protocol or schema changed is stale, not
 // hostile: say how to rebuild it.
 export const REBUILD_HINT = 'the local broker image is stale: rebuild it with ./seclab image oci';
