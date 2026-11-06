@@ -84,9 +84,17 @@ URIs. The Tab Manager forwards nothing, with a warning in its log, unless both o
   policy table was applied, so the log calls it "RPC policy table applied", never "filter
   active";
 - the built workbench bundle (`out/vs/workbench/workbench.desktop.main.js`) contains
-  `seclabRpcFilterEnforcing:<that sha256>`, a literal the filter's enforcing code carries
-  (asked of the RPC session). This ties the table to code that enforces it, so a series
-  with 0005 but without the enforcing patches forwards nothing.
+  `seclabRpcFilterEnforcing:<that sha256>`. The marker is generated into `seclabRpcFilter.ts`
+  (rpc-core `597b92c`, the same patch as the filter and its log), and `emit_policy.py --check`
+  fails on drift. The filter names it in the log's first line (`rpc:seclab.installed`), so
+  tree-shaking can't drop it. A series with 0005 but without the enforcing code therefore
+  forwards nothing.
+
+Together these establish **policy table applied and enforcement code present**, not
+enforcement demonstrated. That the filter is attached to every RPC protocol is the RPC
+session's runtime proof, which is not yet complete. Nothing yet checks in a release artefact
+that the marker agrees with the stamp: that `check-release` assertion is owed by Fork-build.
+Until it exists, this runtime check is the only one.
 
 The bundle is scanned once per window, off the activation path.
 
