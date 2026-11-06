@@ -25,3 +25,8 @@ tabd/src/gitignore.ts:process-spawn:const r = spawnSync(git, argv, { env, input:
 # Core patches (lines they add; review UU-3). Patch 0012 (2026-11-05, review UU): the main process
 # reads one launch-env flag at startup that only withholds focus (EDR background-windows).
 patches/0012-background-windows-env.patch:env:export const backgroundWindows = process.env['SECLAB_BACKGROUND_WINDOWS'] === '1';
+# Patch 0015 (2026-11-06, security review round 1, MEDIUM): the main process reads one launch-env
+# flag at startup that lets a tab window connect to the agent host in its tab, through the gate.
+# It is the only enablement source a tab cannot write: the user, remote and workspace settings
+# layers are all reachable from inside a tab via $updateConfigurationOption (A23).
+patches/0015-seclab-ahp-gate.patch:env:export const seclabAgentsEnabled = process.env['SECLAB_AGENTS_ENABLED'] === '1';
