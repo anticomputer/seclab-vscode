@@ -65,6 +65,11 @@ RPC-lockdown session adds. Keep them consistent with this file.
   ([EDR](docs/edr/20261105-cfs-local-builds.md)). Hosted CI keeps the public registries,
   with the same lockfile hashes. If `gh cfs doctor --auth` fails, ask the user to run
   `az login`. Why: public registries are unavailable locally, and install scripts can read the token.
+  Metadata lookups count too. A local tool that needs registry data (publish dates,
+  versions) gets it through CFS (`gh cfs -- npm view`), with the transport chosen by
+  environment and no fallback to the public registry. `./seclab lint pins` flags any
+  public-registry URL in code that isn't marked `public-registry: <reason>`. Why: a pin-age
+  lookup once called registry.npmjs.org directly.
 - **Never use `/tmp` for anything that matters; commit early.** Why: sessions
   are long-lived and `/tmp` is pruned mid-session. Use `.work/` or named
   volumes.

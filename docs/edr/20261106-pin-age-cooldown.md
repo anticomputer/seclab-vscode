@@ -21,7 +21,13 @@ available rather than wait.
   - Tool releases and the ripgrep prebuilt: the GitHub release's publish date.
   - Images: the config's `created` (linux/amd64).
   - pip: every `==` pin in the registered requirements files, by first upload to PyPI.
-  - npm: exact-version installs in tracked Dockerfiles (vsce), by npm publish time.
+  - npm: exact-version installs in tracked Dockerfiles (vsce), by publish time. The transport
+    is chosen by environment, never by fallback. Locally, `./seclab lint pin-age` reads the
+    CFS feed's packument (`gh cfs -- npm view <name> time --json`; gh cfs injects the
+    credential, which never reaches argv or logs) and passes the dates in. In CI, the public
+    registry is its only transport (EDR cfs-local-builds). A version CFS doesn't serve fails
+    locally, with a `gh cfs doctor --auth` hint.
+  - pip uses the PyPI JSON API on pypi.org, which isn't blocked; wheels are never fetched.
 
   An unknown date fails. Debian apt sets and debs are exempt, and printed as such: they come
   from the apt-signed Debian archive, not a CFS feed.

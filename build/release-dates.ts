@@ -71,12 +71,18 @@ export async function pypiDate(name: string, version: string): Promise<string> {
 	return times[0];
 }
 
-/** An npm version's publish date. */
-export async function npmDate(name: string, version: string): Promise<string> {
+/**
+ * An npm version's publish date from the PUBLIC registry. CI only: local runs must date npm pins
+ * through CFS (AGENTS.md: never bypass CFS; build/pin-age.ts takes them from `gh cfs -- npm view`).
+ */
+export async function npmDatePublic(name: string, version: string): Promise<string> {
+	if (!process.env.CI) {
+		throw new Error('the public npm registry is CI-only; local runs date npm pins through CFS');
+	}
 	if (!/^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/.test(name) || !/^[0-9A-Za-z.+-]+$/.test(version)) {
 		throw new Error(`bad npm reference ${name}@${version}`);
 	}
-	const r = await json(`https://registry.npmjs.org/${name.replace('/', '%2f')}`) as { time?: Record<string, string> };
+	const r = await json(`https://registry.npmjs.org/${name.replace('/', '%2f')}`) as { time?: Record<string, string> }; // public-registry: CI only (guarded above)
 	const t = r.time?.[version];
 	if (!t) {
 		throw new Error(`${name}@${version}: not published`);
