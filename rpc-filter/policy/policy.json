@@ -1359,11 +1359,11 @@
       "whole_class": true
     },
     "push:remoteterminal:$onExecuteCommand": {
-      "mechanism": "ACCEPTED UNENFORCED ON THIS BRANCH. A patch exists that refuses this (0015-seclab-no-remote-cli-push-in-tabs.patch, kept on the rpc-filter follow-up branch), but it is held back because the rogue-REH fixture has never been runnable: nothing applies its hook, so no runtime proof exists that the refusal works. Nothing unproven ships. The path is OPEN on main until the containment build variant lands and the probe is shown to go from succeeding to denied.",
+      "mechanism": "ACCEPTED UNENFORCED ON THIS BRANCH. A patch exists that refuses this (0030-seclab-no-remote-cli-push-in-tabs.patch, kept on the rpc-filter follow-up branch; renumbered out of the 0015-0021 range, which belongs to the agentic series, so that applying the queue by filename cannot silently displace 0015-seclab-ahp-gate.patch), but it is held back because the rogue-REH fixture has never been runnable: nothing applies its hook, so no runtime proof exists that the refusal works. Nothing unproven ships. The path is OPEN on main until the containment build variant lands and the probe is shown to go from succeeding to denied.",
       "unenforced_accepted": true
     },
     "push:remoteterminal:$onPtyHostRequestResolveVariablesEvent": {
-      "mechanism": "ACCEPTED UNENFORCED ON THIS BRANCH. A patch exists that refuses this (0016-seclab-no-variable-resolution-for-tab-pty-hosts.patch, kept on the rpc-filter follow-up branch), but it is held back because the rogue-REH fixture has never been runnable: nothing applies its hook, so no runtime proof exists that the refusal works. Nothing unproven ships. The path is OPEN on main until the containment build variant lands and the probe is shown to go from succeeding to denied.",
+      "mechanism": "ACCEPTED UNENFORCED ON THIS BRANCH. A patch exists that refuses this (0031-seclab-no-variable-resolution-for-tab-pty-hosts.patch, kept on the rpc-filter follow-up branch; renumbered out of the 0015-0021 range, which belongs to the agentic series, so that applying the queue by filename cannot silently displace 0015-seclab-ahp-gate.patch), but it is held back because the rogue-REH fixture has never been runnable: nothing applies its hook, so no runtime proof exists that the refusal works. Nothing unproven ships. The path is OPEN on main until the containment build variant lands and the probe is shown to go from succeeding to denied.",
       "unenforced_accepted": true
     },
     "push:agentHostLogger:onDidChangeLoggers": {

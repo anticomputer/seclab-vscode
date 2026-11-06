@@ -182,6 +182,8 @@ def _check_exemptions() -> list:
 
 
 _IMPORT_BLOCK = re.compile(r"^\s*import\s[\s\S]*?from\s*['\"][^'\"]+['\"]\s*;?\s*$", re.M)
+_BLOCK_COMMENT = re.compile(r"/\*[\s\S]*?\*/")
+_LINE_COMMENT = re.compile(r"//[^\n]*")
 
 
 def _without_imports(text: str) -> str:
@@ -192,6 +194,50 @@ def _without_imports(text: str) -> str:
     looking for.
     """
     return _IMPORT_BLOCK.sub("", text)
+
+
+def _without_comments(text: str) -> str:
+    """Drop comment text.
+
+    Prose is not a caller. Review round 9 alert 4: the *only* match for
+    `seclabOnDecision` in the patch-added text was the sentence
+    "Until this existed `seclabOnDecision` had no subscriber at all", so the
+    gate written to catch a mechanism nothing invokes was satisfied by a
+    comment describing that exact history. Deleting the real subscriber left it
+    green.
+
+    Stripping is deliberately crude: a `//` inside a string literal takes the
+    rest of that line with it. That direction is safe -- it can only hide a
+    use, i.e. fail the gate -- while leaving comments in can only invent one.
+    """
+    return _LINE_COMMENT.sub("", _BLOCK_COMMENT.sub("", text))
+
+
+def _code_only(text: str) -> str:
+    """Executable text: no imports, no comments."""
+    return _without_imports(_without_comments(text))
+
+
+_EXPORT_SPLIT = re.compile(r"^export (?:async )?(?:function|const|class) ", re.M)
+
+
+def _bodies(text: str) -> dict:
+    """Map each exported `seclab*` symbol to the code of its own declaration.
+
+    Used to decide whether an intra-file reference is a genuine call. Bodies
+    run from one top-level `export` to the next, which is accurate for these
+    files because every declaration in them is top-level.
+    """
+    code = _code_only(text)
+    out = {}
+    starts = [m.start() for m in _EXPORT_SPLIT.finditer(code)]
+    for i, start in enumerate(starts):
+        end = starts[i + 1] if i + 1 < len(starts) else len(code)
+        chunk = code[start:end]
+        m = re.match(r"export (?:async )?(?:function|const|class) (seclab\w+)", chunk)
+        if m:
+            out[m.group(1)] = chunk
+    return out
 
 
 def check_callers() -> list:
@@ -205,36 +251,68 @@ def check_callers() -> list:
 
     A symbol counts as called if it is referenced outside the file that
     declares it -- in another patch-src file, or in a line the patch queue adds
-    to an upstream file. An entry point that genuinely has no in-tree caller
-    belongs in CALLER_EXEMPT with the reason, so the claim is visible rather
-    than assumed.
+    to an upstream file. Comments do not count (round 9 alert 4).
+
+    An intra-file reference counts too, but only transitively: it must sit in
+    the body of another exported symbol that is itself live. That keeps a
+    helper called only by a live entry point from being reported, without
+    letting a cluster of symbols that only call each other vouch for itself --
+    liveness is seeded exclusively from outside the declaring file, and
+    propagated, so an unreachable cycle never becomes live.
+
+    An entry point that genuinely has no in-tree caller belongs in
+    CALLER_EXEMPT with the reason, so the claim is visible rather than assumed.
     """
     errors = []
     errors.extend(_check_exemptions())
 
-    added = _patch_added_text()
+    added = _code_only(_patch_added_text())
     sources = sorted(set(MAPPING.values()))
     texts = {}
     for rel in sources:
         with open(os.path.join(REPO, rel), "r", encoding="utf-8") as fh:
             texts[rel] = fh.read()
 
+    # Seed: referenced from outside the declaring file. A bare word, not
+    # `symbol(`: passing an entry point as a value --
+    # `seclabFilterFor(authority, seclabResolveTabId)` -- is a use, and
+    # requiring a call shape missed exactly that.
+    declared = {}
+    live = set()
     for rel in sources:
         for symbol in _exported_symbols(rel):
-            if symbol in CALLER_EXEMPT:
+            declared[symbol] = rel
+            elsewhere = "".join(_code_only(t) for r, t in texts.items() if r != rel)
+            if re.search(r"\b%s\b" % re.escape(symbol), elsewhere + "\n" + added):
+                live.add(symbol)
+
+    # Propagate through intra-file bodies until nothing new becomes live.
+    bodies = {}
+    for rel in sources:
+        for symbol, body in _bodies(texts[rel]).items():
+            bodies[symbol] = body
+    changed = True
+    while changed:
+        changed = False
+        for caller in list(live):
+            body = bodies.get(caller)
+            if not body:
                 continue
-            elsewhere = "".join(t for r, t in texts.items() if r != rel)
-            haystack = _without_imports(elsewhere) + "\n" + _without_imports(added)
-            # A bare word, not `symbol(`: passing an entry point as a value --
-            # `seclabFilterFor(authority, seclabResolveTabId)` -- is a use, and
-            # requiring a call shape missed exactly that.
-            if re.search(r"\b%s\b" % re.escape(symbol), haystack):
-                continue
-            errors.append(
-                "%s exports %s, but nothing calls it. An entry point with no "
-                "caller is the failure this check exists for: it type-checks, "
-                "reviews well and never runs. Wire it, delete it, or add it to "
-                "CALLER_EXEMPT with the reason." % (rel, symbol))
+            for symbol in declared:
+                if symbol in live or symbol == caller:
+                    continue
+                if re.search(r"\b%s\b" % re.escape(symbol), body):
+                    live.add(symbol)
+                    changed = True
+
+    for symbol, rel in sorted(declared.items()):
+        if symbol in CALLER_EXEMPT or symbol in live:
+            continue
+        errors.append(
+            "%s exports %s, but nothing calls it. An entry point with no "
+            "caller is the failure this check exists for: it type-checks, "
+            "reviews well and never runs. Wire it, delete it, or add it to "
+            "CALLER_EXEMPT with the reason." % (rel, symbol))
     return errors
 
 

@@ -1,7 +1,7 @@
 diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/ipc.ts
---- a/src/vs/base/parts/ipc/common/ipc.ts	2026-11-05 13:28:54
-+++ b/src/vs/base/parts/ipc/common/ipc.ts	2026-11-05 13:28:54
-@@ -329,6 +329,30 @@
+--- a/src/vs/base/parts/ipc/common/ipc.ts	2026-11-06 13:06:58
++++ b/src/vs/base/parts/ipc/common/ipc.ts	2026-11-06 13:07:21
+@@ -329,6 +329,65 @@
  	timeoutTimer: Timeout;
  }
  
@@ -29,10 +29,45 @@ diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/i
 +	seclabChannelGuard = guard;
 +}
 +
++/**
++ * seclab: is this channel being served to a tab?
++ *
++ * ipc.ts is base-layer and cannot import the workbench, so the test is on the
++ * context the connection supplies: the authority string itself, or an object
++ * carrying `remoteAuthority` (what the management connection passes).
++ */
++function seclabIsTabContext(ctx: unknown): boolean {
++	const a = typeof ctx === 'string'
++		? ctx
++		: (ctx && typeof ctx === 'object' && typeof (ctx as { remoteAuthority?: unknown }).remoteAuthority === 'string')
++			? (ctx as { remoteAuthority: string }).remoteAuthority
++			: '';
++	return a.startsWith('seclab+');
++}
++
++/**
++ * seclab: the verdict when NO guard is installed.
++ *
++ * Previously `undefined`, i.e. allow. The guard is installed by a top-level
++ * side effect in the workbench, which runs only once something imports that
++ * module, so "installed before the hostile server's first channel call" was an
++ * assumption about bundle evaluation order rather than an enforced property --
++ * and the REH inside the tab chooses when to make that call (review round 9
++ * alert 5). A tab context with no guard is now refused.
++ *
++ * Only tab contexts: the trusted side serves channels over this same class
++ * before any tab exists, and refusing those would brick the window.
++ */
++function seclabRefuseUnguarded(...ctxs: unknown[]): Error | undefined {
++	return seclabChannelGuard === undefined && ctxs.some(seclabIsTabContext)
++		? new Error('Unsupported operation')
++		: undefined;
++}
++
  export class ChannelServer<TContext = string> implements IChannelServer<TContext>, IDisposable {
  
  	private channels = new Map<string, IServerChannel<TContext>>();
-@@ -345,7 +369,38 @@
+@@ -345,7 +404,38 @@
  	}
  
  	registerChannel(channelName: string, channel: IServerChannel<TContext>): void {
@@ -49,11 +84,11 @@ diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/i
 +		const ctx = this.ctx;
 +		this.channels.set(channelName, {
 +			call(c: TContext, command: string, arg?: any, cancellationToken?: any): Promise<any> {
-+				const refused = seclabChannelGuard?.(ctx, channelName, command);
++				const refused = seclabRefuseUnguarded(c, ctx) ?? seclabChannelGuard?.(ctx, channelName, command);
 +				return refused ? Promise.reject(refused) : channel.call(c, command, arg, cancellationToken);
 +			},
 +			listen(c: TContext, event: string, arg?: any): Event<any> {
-+				const refused = seclabChannelGuard?.(ctx, channelName, event);
++				const refused = seclabRefuseUnguarded(c, ctx) ?? seclabChannelGuard?.(ctx, channelName, event);
 +				if (refused) {
 +					// Return an event that never fires, rather than throwing.
 +					// `onPromise` wraps `channel.call` in try/catch, so a throw

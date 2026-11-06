@@ -87,12 +87,12 @@ test('a line of another class in the same file is not a decision', () => {
 	assert.equal(rpcDecisions(root).length, 1);
 });
 
-test('the capped marker is a decision, and is not a newLocal denial', () => {
-	const capped = {
-		source: 'rpc-filter', class: 'rpc.decision', priority: 'warning', summary: 'log capped',
-		detail: { surface: 'rpc', ref: 'rpc:seclab.log-capped', verdict: 'deny', reason: 'log-capped' },
+test('the throttle marker is a decision, and is not a newLocal denial', () => {
+	const throttled = {
+		source: 'rpc-filter', class: 'rpc.decision', priority: 'warning', summary: 'log throttled',
+		detail: { surface: 'rpc', ref: 'rpc:seclab.log-throttled', verdict: 'deny', reason: 'over the window byte budget; repeats were counted, not dropped silently', count: 17 },
 	};
-	const root = profile([JSON.stringify(capped)]);
+	const root = profile([JSON.stringify(throttled)]);
 	assert.equal(rpcDecisions(root).length, 1);
 	assert.equal(newLocalDenials(root).length, 0);
 });

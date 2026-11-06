@@ -114,8 +114,8 @@ that would settle it, and should be run before the next landing attempt.
 5. Clear security review alerts 2-5 (see
    [`../security-reviews/20261106-rpc-core-landing.md`](../security-reviews/20261106-rpc-core-landing.md)).
 
-The held-back patches `0015-seclab-no-remote-cli-push-in-tabs` and
-`0016-seclab-no-variable-resolution-for-tab-pty-hosts` remain held, and
+The held-back patches `0030-seclab-no-remote-cli-push-in-tabs` and
+`0031-seclab-no-variable-resolution-for-tab-pty-hosts` remain held, and
 `remoteTerminal.$onExecuteCommand` and `$onPtyHostRequestResolveVariablesEvent`
 remain open on main. So does the `newLocal` chain this round failed to close.
 

@@ -47,6 +47,10 @@ const execCommandMarkers: ReadonlyArray<readonly [string, string]> = [
 	['openExternal', path.join(base, 'PWNED-openexternal')],
 ];
 const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
+// Evidence is written by a hostile fixture, so its size is attacker-chosen. Reads are
+// bounded: a 2 GiB "evidence" file must fail this check, not the harness (review round 9
+// alert 2). Real evidence files are a few KiB.
+const EVIDENCE_MAX_BYTES = 4 << 20;
 
 if (mode === 'prepare') {
 	// A previous run's claim points at the old fixture (a new folder has a new inode, which
@@ -176,6 +180,33 @@ if (mode === 'prepare') {
 	})}`);
 } else {
 	const checks: Check[] = [];
+	// The run is torn down even if this branch throws. Every byte read below is
+	// tab-authored, and `prepare` is the only branch that registered handlers, so an
+	// exception here used to skip report(), the .git disarm and teardownGate() --
+	// leaving the editor running, the tab up and the profile holding the armed rogue
+	// .vsix on the host. A hostile fixture must not be able to veto its own teardown
+	// (review round 9 alert 2; AGENTS.md "a run leaves nothing behind").
+	let tornDown = false;
+	const disarmAndTeardown = (): boolean => {
+		if (tornDown) {
+			return true;
+		}
+		tornDown = true;
+		try { fs.rmSync(path.join(ws, '.git'), { recursive: true, force: true }); } catch { /* best effort */ }
+		return teardownGate(base);
+	};
+	process.on('uncaughtException', err => {
+		console.error('check failed before its own teardown; tearing down anyway');
+		console.error(err);
+		disarmAndTeardown();
+		process.exit(2);
+	});
+	process.on('unhandledRejection', err => {
+		console.error('check failed before its own teardown; tearing down anyway');
+		console.error(err);
+		disarmAndTeardown();
+		process.exit(2);
+	});
 	// Evidence is written by the fixture INSIDE the tab's workspace. It reaches the host
 	// checkout only when tabd's write-back gate syncs it, and the gate may hold, defer or
 	// (for anything the host's git ignores) permanently refuse a path. So "the fixture ran"
@@ -194,18 +225,51 @@ if (mode === 'prepare') {
 		if (!container) {
 			return undefined;
 		}
-		const r = spawnSync(runtime, ['exec', ...tabUser, container, ...argv], { encoding: 'utf8', timeout: 30_000 });
+		const r = spawnSync(runtime, ['exec', ...tabUser, container, ...argv],
+			{ encoding: 'utf8', timeout: 30_000, maxBuffer: EVIDENCE_MAX_BYTES });
 		return r.status === 0 ? r.stdout : undefined;
 	};
 	/** A workspace file as the TAB sees it, falling back to the host copy if the tab is gone. */
-	const readInTab = (p: string): string | undefined => inTab(['cat', p])
-		?? (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : undefined);
+	const readInTab = (p: string): string | undefined => {
+		try {
+			const text = inTab(['cat', p])
+				?? (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : undefined);
+			return text !== undefined && text.length <= EVIDENCE_MAX_BYTES ? text : undefined;
+		} catch {
+			// Every byte here is tab-authored. A read that throws (oversize,
+			// vanished mid-run, unreadable) is "no evidence", never a crash:
+			// see readJsonInTab for why that distinction matters.
+			return undefined;
+		}
+	};
+	/**
+	 * Tab-authored JSON, or `undefined`. Review round 9 alert 2: these reads were
+	 * `JSON.parse(...)` with no `try`, and the `check` branch registers none of the
+	 * `uncaughtException`/`exit` handlers `prepare` has. One malformed byte written by
+	 * the rogue extension therefore skipped `report()`, the `.git` disarm and
+	 * `teardownGate()` -- so the hostile fixture could veto its own teardown and stay
+	 * live on the host, armed.
+	 */
+	const readJsonInTab = (p: string): Record<string, unknown> | undefined => {
+		const text = readInTab(p);
+		if (text === undefined) {
+			return undefined;
+		}
+		try {
+			const v: unknown = JSON.parse(text);
+			return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : undefined;
+		} catch {
+			return undefined;
+		}
+	};
 	const evDir = path.join(ws, '.seclab-evidence');
 	/** Evidence file names as the tab sees them, union the host's (neither alone is complete). */
 	const listEvidence = (): string[] => {
 		const inner = (inTab(['sh', '-c', `ls -1 ${evDir} 2>/dev/null`]) ?? '').split('\n').filter(Boolean);
-		const outer = fs.existsSync(evDir) ? fs.readdirSync(evDir) : [];
-		return [...new Set([...inner, ...outer])];
+		const outer = (() => { try { return fs.existsSync(evDir) ? fs.readdirSync(evDir) : []; } catch { return []; } })();
+		// A name is tab-chosen: anything with a separator is not a file in this
+		// directory and must never be joined onto it.
+		return [...new Set([...inner, ...outer])].filter(f => f !== '' && !f.includes('/') && f !== '.' && f !== '..');
 	};
 	checks.push({ vector: 'rogue-extension', name: 'the run recorded a tab to read evidence from', ok: Boolean(container), detail: container ?? 'no tab in run.json' });
 	// Only `task` is a level-B vector. The editor's auto-task runs probe.sh on folder open,
@@ -224,13 +288,11 @@ if (mode === 'prepare') {
 	for (const vector of ['task']) {
 		checks.push(...checkEvidence(readEvidence(ws, vector, readInTab), vector, { marker, proxy: brokerProxy(runDriver) }));
 	}
-	const hostText = readInTab(path.join(evDir, 'rogue-extension-host.json'));
-	const host = hostText ? JSON.parse(hostText) : undefined;
+	const host = readJsonInTab(path.join(evDir, 'rogue-extension-host.json'));
 	checks.push({ vector: 'rogue-extension', name: 'ui-kind rogue extension was forced into the tab (remoteName=seclab)', ok: host?.remoteName === 'seclab' && host?.seclabTab === '1', detail: JSON.stringify(host) });
 	// No trusted-side extension agents in tab windows: the same ui-declared extension
 	// registered a chat participant and called vscode.lm, and that code ran in the tab.
-	const agentText = readInTab(path.join(evDir, 'rogue-agent.json'));
-	const agent = agentText ? JSON.parse(agentText) as Record<string, unknown> : undefined;
+	const agent = readJsonInTab(path.join(evDir, 'rogue-agent.json'));
 	checks.push({ vector: 'rogue-extension', name: 'ui-declared chat participant / vscode.lm caller ran in the tab, not trusted-side', ok: agent?.ranIn === 'tab' && agent?.remoteName === 'seclab',
 		detail: JSON.stringify(agent ?? 'no rogue-agent.json') });
 	checks.push({ vector: 'host', name: 'canary intact', ok: fs.readFileSync(canary, 'utf8') === 'HOST-SECRET-CANARY\n', detail: '' });
@@ -293,10 +355,10 @@ if (mode === 'prepare') {
 	}
 	checks.push({ vector: 'canary', name: 'no editor-side canary observed by the tab (outside known gaps)', ok: !checks.some(c => c.vector === 'canary' && !c.ok && !c.knownGap), detail: '' });
 	const ok = report(checks);
-	// Disarm the hostile git config left in the host work dir.
-	fs.rmSync(path.join(ws, '.git'), { recursive: true, force: true });
-	// End of run: stop the editor (by its user-data-dir) and everything it started, remove
-	// the tab, delete the profile holding the armed rogue extension, diff the host.
-	const clean = teardownGate(base);
+	// Disarm the hostile git config, then end the run: stop the editor (by its
+	// user-data-dir) and everything it started, remove the tab, delete the profile
+	// holding the armed rogue extension, diff the host. Same path the exception
+	// handlers above take, so there is one teardown, not two.
+	const clean = disarmAndTeardown();
 	process.exit(ok && clean ? 0 : 1);
 }

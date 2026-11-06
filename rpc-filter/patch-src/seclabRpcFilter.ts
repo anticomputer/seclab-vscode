@@ -76,26 +76,42 @@ function seclabDeliver(d: SeclabDecision): void {
 }
 
 /**
- * deny, prompt and rewrite are delivered individually: they are the decisions a
- * user or an investigator acts on. allow and allow_with_constraint are
- * collapsed per (surface, id, verdict) so a chatty extension cannot drown the
- * stream.
+ * Every verdict is collapsed per (surface, id, verdict). Denials used to be
+ * delivered individually, on the reasoning that they are what an investigator
+ * acts on -- but an investigator acts on the *first* one, and the repeats are
+ * what drowned the log. See the proof run
+ * (docs/edr/20261106-rpc-core-proof-run.md): 4932 copies of one denied line in
+ * 666 ms of ordinary startup, with no attacker involved.
+ *
+ * So a first-seen key is delivered immediately, and repeats within the window
+ * are collapsed into one follow-up carrying `count`. Nothing is lost and the
+ * line rate is bounded by the number of distinct keys, not by call volume.
  */
 /** Max bytes for one log line, and for the tab-chosen `ref` inside it. */
 const SECLAB_LOG_LINE_MAX = 4096;
-const SECLAB_LOG_REF_MAX = 1024;
-/** Denials written per window before the log caps itself. */
-const SECLAB_LOG_DENIALS_MAX = 5000;
 /**
- * Bytes written per window before the log caps itself.
- *
- * The line count alone allowed about 20 MB, and spdlog rotates at 5 MB, so a
- * capped run could span four files. The consumer follows rotated files by
- * inode and marks a broken chain, so this is not a correctness problem -- but
- * a window whose decisions sit in one file is much easier to reason about,
- * and a tab should not be able to make the host write 20 MB by being noisy.
+ * `ref` is tab-chosen for an unmatched method (`rpc:<sid>.<method>`) and for
+ * every `cmd:` id. 1024 let ~512 calls spend the whole byte budget. No real
+ * surface or command id is anywhere near 256.
  */
-const SECLAB_LOG_BYTES_MAX = 2 * 1024 * 1024;
+const SECLAB_LOG_REF_MAX = 256;
+/**
+ * The byte budget is per rolling window and is **never latched off**: at the
+ * end of each window it refills, and a suppressed run is summarised rather
+ * than silently dropped. The previous design latched `capped` forever on the
+ * first window that overran, so one noisy second silenced the window for its
+ * whole life -- which is the property the log exists to deny a tab.
+ */
+const SECLAB_LOG_WINDOW_MS = 60_000;
+const SECLAB_LOG_BYTES_PER_WINDOW = 512 * 1024;
+/**
+ * A key never logged before is always written, even over budget, so a flood of
+ * one key can never hide the *first* occurrence of another -- which is exactly
+ * what proof condition 2 needs. Bounded so a tab cannot grow the set without
+ * limit by inventing method names; past the bound, first-seen loses its
+ * reservation and the budget alone applies.
+ */
+const SECLAB_LOG_KEYS_MAX = 4096;
 
 let seclabLogInstalled = false;
 
@@ -131,27 +147,13 @@ export function seclabInstallDecisionLog(
 	}
 	seclabLogInstalled = true;
 	const logger = createLogger('seclabRpcFilter.log');
-	let denials = 0;
+	/** Keys written at least once, so a first occurrence is never throttled. */
+	const seen = new Set<string>();
+	let windowStart = Date.now();
 	let bytes = 0;
-	let capped = false;
+	let suppressed = 0;
 
-	const line = (d: SeclabDecision): string | undefined => {
-		const deny = d.verdict !== 'allow' && d.verdict !== 'allow_with_constraint';
-		if (deny) {
-			denials++;
-			if (denials > SECLAB_LOG_DENIALS_MAX) {
-				return denials === SECLAB_LOG_DENIALS_MAX + 1
-					? JSON.stringify({
-						source: 'rpc-filter', class: 'rpc.decision',
-						priority: 'warning', summary: 'log capped',
-						detail: {
-							surface: 'rpc', ref: 'rpc:seclab.log-capped',
-							verdict: 'deny', reason: 'log-capped',
-						},
-					})
-					: undefined;
-			}
-		}
+	const line = (d: SeclabDecision): string => {
 		const detail: Record<string, unknown> = {
 			surface: d.surface,
 			ref: d.ref.length > SECLAB_LOG_REF_MAX
@@ -161,7 +163,7 @@ export function seclabInstallDecisionLog(
 		if (d.reason) { detail.reason = d.reason; }
 		if (d.constraint) { detail.constraint = d.constraint; }
 		if (d.claimedExtensionId) { detail.claimedExtensionId = d.claimedExtensionId; }
-		if (typeof d.count === 'number' && d.count > 1) { detail.count = d.count; }
+		if (typeof d.count === 'number' && d.count > 0) { detail.count = d.count; }
 		const priority = d.verdict === 'deny' || d.verdict === 'prompt'
 			? 'warning' : d.verdict === 'rewrite' ? 'notice' : 'informational';
 		const out = JSON.stringify({
@@ -175,53 +177,80 @@ export function seclabInstallDecisionLog(
 			? out.slice(0, SECLAB_LOG_LINE_MAX) : out;
 	};
 
-	const cappedLine = JSON.stringify({
+	/** How many lines this window dropped, written once, as a decision. */
+	const throttledLine = (n: number): string => JSON.stringify({
 		source: 'rpc-filter', class: 'rpc.decision', priority: 'warning',
-		summary: 'log capped',
+		summary: 'log throttled',
 		detail: {
-			surface: 'rpc', ref: 'rpc:seclab.log-capped', verdict: 'deny',
-			reason: 'log-capped',
+			surface: 'rpc', ref: 'rpc:seclab.log-throttled', verdict: 'deny',
+			reason: 'over the window byte budget; repeats were counted, not dropped silently',
+			count: n,
 		},
 	});
 
-	seclabOnDecision(d => {
-		if (capped) {
-			return;
-		}
-		const l = line(d);
-		if (l === undefined) {
-			return;
-		}
-		// Count bytes actually written, so the cap holds whatever mix of
-		// verdicts a tab produces rather than only for denials.
+	const write = (l: string): void => {
 		bytes += l.length + 1;
-		if (bytes > SECLAB_LOG_BYTES_MAX) {
-			capped = true;
-			logger.info(cappedLine);
+		logger.info(l);
+	};
+
+	seclabOnDecision(d => {
+		const now = Date.now();
+		if (now - windowStart >= SECLAB_LOG_WINDOW_MS) {
+			// Roll the window. The budget refills; it is never latched off.
+			windowStart = now;
+			bytes = 0;
+			if (suppressed > 0) {
+				const n = suppressed;
+				suppressed = 0;
+				write(throttledLine(n));
+			}
+		}
+		const key = `${d.surface}\u0000${d.id}\u0000${d.verdict}`;
+		// A key this window has never written is always logged: a flood of one
+		// key must not be able to hide the first occurrence of another.
+		const first = !seen.has(key) && seen.size < SECLAB_LOG_KEYS_MAX;
+		if (!first && bytes >= SECLAB_LOG_BYTES_PER_WINDOW) {
+			suppressed++;
 			return;
 		}
-		logger.info(l);
+		if (first) {
+			seen.add(key);
+		}
+		write(line(d));
+		if (suppressed > 0 && bytes < SECLAB_LOG_BYTES_PER_WINDOW) {
+			const n = suppressed;
+			suppressed = 0;
+			write(throttledLine(n));
+		}
 	});
 }
 
 
+/**
+ * Collapse repeated decisions per (surface, id, verdict).
+ *
+ * A key not seen in this window is delivered **immediately**: the first denial
+ * of a command is the evidence, and delaying it by the aggregation window
+ * would make a short-lived window lose it entirely. Repeats within the window
+ * are counted and delivered once, as a follow-up carrying `count`, so the line
+ * rate is bounded by distinct keys rather than by how often a tab calls.
+ */
 function seclabRecord(d: SeclabDecision): void {
-	if (d.verdict !== 'allow' && d.verdict !== 'allow_with_constraint') {
-		seclabDeliver(d);
-		return;
-	}
 	const key = `${d.surface}\u0000${d.id}\u0000${d.verdict}`;
 	const open = seclabPending.get(key);
 	if (open) {
 		open.count++;
 		return;
 	}
+	seclabDeliver(d);
 	const entry = {
-		decision: d, count: 1,
+		decision: d, count: 0,
 		timer: setTimeout(() => {
 			const done = seclabPending.get(key);
 			seclabPending.delete(key);
-			if (done) {
+			// Only the repeats: the first was delivered above, so a quiet key
+			// produces one line, not two.
+			if (done && done.count > 0) {
 				seclabDeliver({ ...done.decision, count: done.count });
 			}
 		}, SECLAB_AGGREGATE_MS),
@@ -457,8 +486,28 @@ class SeclabFilter implements ISeclabFilter {
 		const entry = SECLAB_CHANNELS.get(channel);
 		const verdict = entry?.verdict ?? SECLAB_DEFAULT_VERDICT;
 		const ref = entry?.ref ?? `chan:${channel}`;
+		// The same fail-closed ladder as checkRpc. Review round 9 alert 3: this
+		// used to deny only an explicit `deny` and permit everything else, so
+		// `prompt`, `rewrite` and `allow_with_constraint` were silently full
+		// allows -- and recorded in the log as honoured. No channel carries
+		// those verdicts today, so the defect was latent; it would have gone
+		// live the first time a reviewer wrote `"verdict": "prompt"` on a
+		// channel believing it would be held.
+		//
+		// A channel is call-and-event, not an argument list, so there is no
+		// positional constraint to apply: a constraint we cannot enforce here
+		// is a constraint that is not enforced.
 		if (verdict === 'deny') {
 			return this._deny(ref, `method ${method}`);
+		}
+		if (verdict === 'prompt') {
+			return this._deny(ref, 'prompt not yet wired; failing closed');
+		}
+		if (verdict === 'rewrite') {
+			return this._deny(ref, 'rewrite is not defined for a channel; failing closed');
+		}
+		if (verdict === 'allow_with_constraint') {
+			return this._deny(ref, 'no constraint can be applied to a channel; failing closed');
 		}
 		return this._permit(ref, verdict);
 	}

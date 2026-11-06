@@ -94,6 +94,7 @@ Same rules as ADRs:
 | 2026-11-06 | [Agents-in-the-tab spike, step 3: the shipped agent host in a real sbx tab behind its broker](20261106-agents-in-real-tab-spike.md) | accepted |
 | 2026-11-06 | [Branch test builds of the macOS app](20261106-branch-test-builds.md) | accepted |
 | 2026-11-06 | [The containment proof reads the tab, not the host checkout](20261106-containment-proof-reads-the-tab.md) | accepted |
+| 2026-11-06 | [The decision log cannot be silenced, and four gates that could not fail](20261106-decision-log-and-four-gates.md) | accepted |
 | 2026-11-06 | [Egress prompts through the Tab Manager (plan increment B3)](20261106-egress-prompts.md) | accepted |
 | 2026-11-06 | [Exact request lineage on OCI via the broker's client port](20261106-exact-lineage-client-port.md) | accepted |
 | 2026-11-06 | [The 7-day rule: no pin newer than CFS's hold](20261106-pin-age-cooldown.md) | accepted |

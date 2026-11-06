@@ -509,9 +509,14 @@ case "${1:-help}" in
 			# RPC filter: the trusted-side decision log has a strict reader, so proof
 			# condition 2 ("the denial is observed, not inferred") can actually fail.
 			decision-log) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/decision-log.test.ts ;;
+			# RPC filter: the decision log cannot be silenced by a flood or by boot noise.
+			log-throttle) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/log-throttle.test.ts ;;
+			# Containment harness: hostile evidence fails a check, and never throws out of
+			# the run before its own teardown.
+			evidence-shape) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/evidence-shape.test.ts ;;
 			# Every pure RPC-filter suite, so adding one to CI is a single edit.
 			rpc-filter)
-				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log; do
+				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape; do
 					printf '\n=== %s\n' "$t"
 					"$0" test "$t" || exit 1
 				done ;;
