@@ -354,6 +354,12 @@ export function runLeftovers(runDir: string, m: RunManifest = readManifest(runDi
 		for (const n of docker(['network', 'ls', '--filter', `label=seclab.tab=${t}`, '--format', '{{.Name}}'])) {
 			left.push(`network ${n}`);
 		}
+		// Also by name: a tab's networks (pod `-net`, broker `-egress`) even if unlabelled.
+		for (const n of tabNetworksByName(docker, t)) {
+			if (!left.includes(`network ${n}`)) {
+				left.push(`network ${n}`);
+			}
+		}
 		for (const v of docker(['volume', 'ls', '--filter', `name=seclab-${t}-home`, '--format', '{{.Name}}'])) {
 			if (v === `seclab-${t}-home`) {
 				left.push(`volume ${v}`);
@@ -379,6 +385,13 @@ function falcoStateTags(m: RunManifest): string[] {
 	return (m.stateDirs ?? []).map(d => createHash('sha256').update(d).digest('hex').slice(0, 8));
 }
 
+/** Networks named for this tab: `seclab-<tab>-<suffix>` (docker's name filter is a substring match). */
+function tabNetworksByName(docker: (args: string[]) => string[], tab: string): string[] {
+	const prefix = `seclab-${tab}-`;
+	return docker(['network', 'ls', '--filter', `name=${prefix}`, '--format', '{{.Name}}'])
+		.filter(n => n.startsWith(prefix) && /^[a-z0-9-]+$/.test(n.slice(prefix.length)));
+}
+
 /** Remove the run's tabs and helpers directly in the runtimes (after tabd is gone). */
 export function removeRunResources(runDir: string, m: RunManifest = readManifest(runDir), tabs: string[] = runTabs(m)): void {
 	for (const t of tabs) {
@@ -388,8 +401,11 @@ export function removeRunResources(runDir: string, m: RunManifest = readManifest
 			spawnSync('docker', ['rm', '-f', ...cs], { stdio: 'ignore' });
 		}
 		spawnSync('docker', ['network', 'rm', `seclab-${t}-net`], { stdio: 'ignore' });
-		// Every other network labelled for this tab (e.g. a sbx tab's broker egress network).
-		for (const n of dockerLines(['network', 'ls', '--filter', `label=seclab.tab=${t}`, '--format', '{{.Name}}']) ?? []) {
+		// Every other network labelled for this tab (e.g. a sbx tab's broker egress network), and
+		// any named for it (`seclab-<tab>-*`) even without the label.
+		const nets = new Set([...dockerLines(['network', 'ls', '--filter', `label=seclab.tab=${t}`, '--format', '{{.Name}}']) ?? [],
+			...tabNetworksByName(a => dockerLines(a) ?? [], t)]);
+		for (const n of nets) {
 			spawnSync('docker', ['network', 'rm', n], { stdio: 'ignore' });
 		}
 		spawnSync('docker', ['volume', 'rm', `seclab-${t}-home`], { stdio: 'ignore' });
