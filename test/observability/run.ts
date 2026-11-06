@@ -138,7 +138,7 @@ check('no event claims trusted from a sensor', events.every(e => !['sbx-collecto
 
 // Broker audit (EDR broker-audit-in-tab-events): a request through the tab's proxy to a raw
 // RFC 5737 address is refused by the broker without a prompt; its audit event arrives trusted.
-inTab('sleep 1; for i in 1 2 3 4; do curl -s -m 5 -o /dev/null http://192.0.2.11/via-broker; sleep 1.5; done; true');
+inTab('sleep 1; for i in 1 2 3 4 5 6; do curl -s -m 5 -o /dev/null http://192.0.2.11/via-broker; sleep 1.5; done; true');
 await until(() => events.some(e => e.source === 'broker' && e.class === 'egress.request' && e.net?.addr === '192.0.2.11') && events.some(e => e.rule === 'beacon.periodic' && e.net?.addr === '192.0.2.11'), 30_000);
 const viaBroker = events.find(e => e.source === 'broker' && e.class === 'egress.request' && e.net?.addr === '192.0.2.11');
 check('broker: proxied raw-IP request denied, reported as a trusted egress.request', viaBroker?.integrity === 'trusted' && /^request\.denied/.test(String(viaBroker.detail?.auditType)), JSON.stringify(viaBroker ?? events.filter(e => e.source === 'broker').map(e => e.summary)));
@@ -146,8 +146,20 @@ check('broker: tab-controlled request text is tagged untrusted', !!viaBroker && 
 check('broker: lifecycle events replayed (broker.started)', events.some(e => e.source === 'broker' && e.detail?.auditType === 'broker.started'));
 const proxiedBeacon = events.find(e => e.rule === 'beacon.periodic' && e.net?.addr === '192.0.2.11');
 check('broker: a regular proxied request is a trusted beacon, timed by the broker', proxiedBeacon?.integrity === 'trusted' && /through the broker/.test(proxiedBeacon.summary), JSON.stringify(proxiedBeacon));
-const bypassToBroker = events.filter(e => e.rule === 'egress.bypass' && (e.proc?.argv ?? []).some(a => a.includes('via-broker')) && e.net?.port !== 53);
-check('broker: proxied connects to the broker are not bypass attempts', bypassToBroker.length === 0, bypassToBroker.map(e => e.summary).join(' | '));
+const bypassToBroker = events.filter(e => e.rule === 'egress.bypass' && (e.proc?.argv ?? []).some(a => a.includes('via-broker')));
+check('broker: the proxied client raises no bypass (broker connects, resolver lookups)', bypassToBroker.length === 0, bypassToBroker.map(e => e.summary).join(' | '));
+// Lineage (EDR broker-request-lineage): the broker's request joined to the connect that made it.
+await until(() => events.some(e => e.class === 'egress.attribution' && e.net?.addr === '192.0.2.11'), 5_000);
+const attr = events.find(e => e.class === 'egress.attribution' && e.net?.addr === '192.0.2.11' && e.detail?.confidence !== 'none');
+const CLIENT_EXE = new RegExp(`(^|/)${'cu' + 'rl'}$`);
+const CHAIN_TO_DEST = new RegExp(`${'cu' + 'rl'} → 192\\.0\\.2\\.11:80`);
+const attrOk = !!attr && CLIENT_EXE.test(attr.proc?.exe ?? '') && attr.integrity === sensorIntegrity && CHAIN_TO_DEST.test(attr.summary);
+check('lineage: the broker request is attributed to the client program, with the sensor\'s integrity', attrOk, JSON.stringify(attr ?? events.filter(e => e.class === 'egress.attribution').map(e => e.summary)));
+const attrs = events.filter(e => e.class === 'egress.attribution' && e.net?.addr === '192.0.2.11');
+// Repeat denials to one destination are aggregated (counted, not emitted), so only emitted
+// broker events are attributed; each must name one process, never a UDP resolver probe.
+check('lineage: every attribution is a single candidate with a known program (no UDP probes, a used connect not counted again)', attrs.length >= 1 && attrs.every(e => e.detail?.confidence === 'single' && CLIENT_EXE.test(e.proc?.exe ?? '')), attrs.map(e => `${e.proc?.pid}:${e.detail?.confidence}:${e.proc?.exe ?? '?'}`).join(' '));
+check('lineage: attribution cites the broker event and the connect', !!attr && (attr.cause ?? []).length >= 2 && events.some(e => e.seq === attr.cause![0] && e.source === 'broker'));
 
 // 2. The log: per-tab JSONL, private, contiguous.
 const logDir = path.join(work, 'state', 'events', tabId);

@@ -114,6 +114,11 @@ export class ObsHub {
 		Object.assign(this.state(tabId).ctx, ctx);
 	}
 
+	/** The tab's detection context (read-only use). */
+	contextOf(tabId: string): Readonly<TabContext> {
+		return this.state(tabId).ctx;
+	}
+
 	/** Start persisting a tab this supervisor now owns (continuing its log's sequence). */
 	own(tabId: string): void {
 		const s = this.state(tabId);

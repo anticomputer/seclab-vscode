@@ -810,3 +810,82 @@ test('broker endpoint and beacons: connects to the broker are neither bypass nor
 	assert.ok(!seen2.some(e => e.rule === 'beacon.periodic' && e.integrity === 'trusted'), 'no trusted beacon from mostly tab-vm-root evidence');
 	hub2.close();
 });
+
+test('lineage: broker requests joined to the connect closest in time; honest confidence and integrity', async () => {
+	const { LineageCorrelator, chainOf } = await import('../src/obs/lineage.ts');
+	const tab = 't-abcdefghijklmnopqrstuvwxyz';
+	const c = new LineageCorrelator();
+	const ctx = { brokerPort: 49364, brokerAddrs: new Set(['169.254.1.1']) };
+	let seq = 0;
+	const connect = (t: number, pid: number, o: { addr?: string; port?: number; result?: string; integrity?: string } = {}) => c.observe({
+		v: 1, seq: ++seq, time: new Date(t).toISOString(), tabId: tab, source: 'sbx-collector', integrity: (o.integrity ?? 'tab-vm-root') as 'tab-vm-root', class: 'net.connect', priority: 'informational', summary: 'c',
+		proc: { pid, exe: '/usr/bin/curl', argv: ['curl', 'http://x'], lineage: [{ pid: 9, exe: 'node /home/agent/.cache/x.js' }, { pid: 3, exe: 'bash' }] },
+		net: { addr: o.addr ?? '169.254.1.1', port: o.port ?? 49364, family: 'inet', result: o.result ?? 'ok' }, untrusted: [],
+	}, ctx);
+	const t0 = 1_793_800_000_000;
+	assert.equal(c.attribute(tab, t0).confidence, 'none');
+	assert.equal(c.attribute(tab, t0).integrity, 'tab-vm-root', 'review LN-1: "nobody observed" is never trusted');
+	assert.equal(c.attribute(tab, t0, false, 'host-observed').integrity, 'host-observed');
+	connect(t0 - 20_000, 40); // too old
+	connect(t0 - 300, 41, { addr: '192.0.2.10', port: 80 }); // not the broker
+	connect(t0 - 250, 42, { result: 'ECONNREFUSED' }); // failed
+	connect(t0 - 200, 43);
+	connect(t0 - 150, 43); // same process again (happy eyeballs): still one candidate
+	const one = c.attribute(tab, t0);
+	assert.equal(one.confidence, 'single');
+	assert.equal(one.proc?.pid, 43);
+	assert.equal(one.integrity, 'tab-vm-root');
+	assert.equal(one.chain, 'bash → node → curl');
+	connect(t0 - 1000, 44, { integrity: 'host-observed' });
+	const two = c.attribute(tab, t0);
+	assert.equal(two.confidence, 'ambiguous');
+	assert.equal(two.candidates, 2);
+	assert.equal(two.proc?.pid, 43, 'nearest first');
+	assert.equal(two.integrity, 'tab-vm-root', 'weakest of the candidates');
+	// Consumption: a connect attributed to one request isn't counted for the next.
+	const first = c.attribute(tab, t0, true);
+	assert.equal(first.proc?.pid, 43);
+	const next = c.attribute(tab, t0 + 10);
+	assert.equal(next.confidence, 'single', 'the used process is no longer a candidate');
+	assert.equal(next.proc?.pid, 44);
+	c.attribute(tab, t0 + 20, true);
+	assert.equal(c.attribute(tab, t0 + 30).confidence, 'none', 'with no unused connect left, a further request reads as none');
+	connect(t0 + 100, 45);
+	c.observe({ v: 1, seq: ++seq, time: new Date(t0 + 100).toISOString(), tabId: tab, source: 'sbx-collector', integrity: 'tab-vm-root', class: 'net.connect', priority: 'informational', summary: 'c', proc: { pid: 46 }, net: { addr: '169.254.1.1', port: 49364, family: 'inet', result: 'ok', proto: 'udp' }, untrusted: [] }, ctx);
+	assert.equal(c.attribute(tab, t0 + 200).candidates, 1, 'a UDP probe to the broker address is not a candidate');
+	assert.equal(chainOf({ pid: 5 }), '5');
+});
+
+test('lineage: a thread\'s connect before its clone line waits and carries the process', () => {
+	const p = new StraceParser();
+	const t = new StraceTracker();
+	const out: Array<{ summary: string; exe?: string; lineage: number }> = [];
+	const protos: string[] = [];
+	const feed = (l: string) => {
+		const r = p.parse(l);
+		for (const d of r ? t.handle(r) : []) {
+			out.push({ summary: d.summary, exe: d.proc?.exe, lineage: d.proc?.lineage?.length ?? 0 });
+			if (d.net?.proto) {
+				protos.push(d.net.proto);
+			}
+		}
+	};
+	feed('20 1.0 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0xffff) = 21');
+	feed('21 1.01 execve("/usr/bin/curl", ["curl", "-s", "http://x.test/"], 0x0 /* 3 vars */) = 0');
+	feed('21 1.011 socket(AF_INET, SOCK_DGRAM|SOCK_CLOEXEC, IPPROTO_IP) = 4');
+	feed('21 1.012 connect(4, {sa_family=AF_INET, sin_port=htons(53), sin_addr=inet_addr("172.17.0.4")}, 16) = 0');
+	feed('21 1.013 socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK, IPPROTO_TCP) = 4');
+	feed('21 1.014 connect(4, {sa_family=AF_INET, sin_port=htons(49364), sin_addr=inet_addr("169.254.1.1")}, 16) = -1 EINPROGRESS (Operation now in progress)');
+	assert.deepEqual(out.slice(1).map(o => o.summary), ['connect 172.17.0.4:53 ok by curl', 'connect 169.254.1.1:49364 pending by curl']);
+	assert.deepEqual(protos, ['udp', 'tcp'], 'socket type follows the fd');
+	out.length = 1;
+	// The resolver thread connects before curl's clone() line for it arrives.
+	feed('22 1.02 connect(3, {sa_family=AF_INET, sin_port=htons(49364), sin_addr=inet_addr("169.254.1.1")}, 16) = 0');
+	assert.equal(out.length, 1, 'only the exec so far; the connect waits');
+	feed('21 1.015 clone(child_stack=0x7f, flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, parent_tid=[22], tls=0x7f, child_tidptr=0x7f) = 22');
+	const c = out.find(o => o.summary.startsWith('connect 169.254.1.1:49364'));
+	assert.ok(c, JSON.stringify(out));
+	assert.equal(c.exe, '/usr/bin/curl');
+	assert.match(c.summary, /by curl$/);
+	assert.ok(c.lineage >= 1, 'lineage present');
+});
