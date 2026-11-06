@@ -179,8 +179,15 @@ def render(policy: dict, sha: str, inventory: dict | None = None) -> str:
 
 
 FILTER_SRC = os.path.join(REPO, "rpc-filter", "patch-src", "seclabRpcFilter.ts")
-SHA_LINE = re.compile(
-    r"^const SECLAB_POLICY_SHA256 = '(?P<sha>[0-9a-f]{64})';$", re.M)
+# ONE folded literal, not a concatenation. main's build/check-release.sh scans the
+# built JS for `seclabRpcFilterEnforcing:<64 hex>` as a single string; if a bundler
+# declines to fold `'seclabRpcFilterEnforcing:' + SHA`, the marker is simply absent
+# from the artefact and the release check fails closed on a build that is in fact
+# correct. Generating the whole literal removes the dependency on constant folding.
+MARKER_PREFIX = "seclabRpcFilterEnforcing:"
+MARKER_LINE = re.compile(
+    r"^export const SECLAB_ENFORCING_MARKER = '"
+    + MARKER_PREFIX + r"(?P<sha>[0-9a-f]{64})';$", re.M)
 
 
 def _sync_policy_sha(policy_text: str, check: bool) -> list:
@@ -197,11 +204,13 @@ def _sync_policy_sha(policy_text: str, check: bool) -> list:
     want = hashlib.sha256(policy_text.encode("utf-8")).hexdigest()
     with open(FILTER_SRC, "r", encoding="utf-8") as fh:
         src = fh.read()
-    m = SHA_LINE.search(src)
+    m = MARKER_LINE.search(src)
     if not m:
-        return ["%s has no `const SECLAB_POLICY_SHA256 = '<64 hex>';` line. "
-                "The enforcing marker is what proves the filter, not just the "
-                "table, is in the build." % os.path.relpath(FILTER_SRC, REPO)]
+        return ["%s has no `export const SECLAB_ENFORCING_MARKER = "
+                "'%s<64 hex>';` line, as ONE literal. The enforcing marker is "
+                "what proves the filter, not just the table, is in the build, "
+                "and check-release scans the built JS for the folded string."
+                % (os.path.relpath(FILTER_SRC, REPO), MARKER_PREFIX)]
     if m.group("sha") == want:
         return []
     if check:
@@ -210,9 +219,10 @@ def _sync_policy_sha(policy_text: str, check: bool) -> list:
                 % (os.path.relpath(FILTER_SRC, REPO), m.group("sha")[:12],
                    want[:12])]
     with open(FILTER_SRC, "w", encoding="utf-8") as fh:
-        fh.write(SHA_LINE.sub(
-            "const SECLAB_POLICY_SHA256 = '%s';" % want, src, count=1))
-    print("updated SECLAB_POLICY_SHA256 -> %s" % want[:12])
+        fh.write(MARKER_LINE.sub(
+            "export const SECLAB_ENFORCING_MARKER = '%s%s';"
+            % (MARKER_PREFIX, want), src, count=1))
+    print("updated SECLAB_ENFORCING_MARKER -> %s" % want[:12])
     return []
 
 
