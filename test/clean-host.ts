@@ -66,6 +66,8 @@ if (args.has('--self-test')) {
 	process.exit(bad.length ? 1 : 0);
 }
 const CACHE_VOLUMES = new Set(['seclab-vscode-work', 'seclab-lychee-cache', 'seclab-test-scratch']);
+// Test build variants' build volumes (EDR test-build-variants): build caches too.
+const isCacheVolume = (n: string) => CACHE_VOLUMES.has(n) || /^seclab-test-[a-z][a-z0-9-]{0,31}$/.test(n);
 
 interface Item { kind: string; name: string; state: string; remove: boolean; why: string; del: () => boolean }
 const items: Item[] = [];
@@ -276,8 +278,8 @@ for (const n of lines('docker', ['network', 'ls', '--filter', 'name=seclab-', '-
 	const pol = tabPolicy(n);
 	items.push({ kind: 'network', name: `${n} (${pol.owner})`, state: '', remove: pol.remove, why: pol.why, del: () => ok('docker', ['network', 'rm', n]) });
 }
-for (const n of lines('docker', ['volume', 'ls', '--filter', 'name=seclab-', '--format', '{{.Name}}']).filter(n => OURS.volume.test(n) || CACHE_VOLUMES.has(n))) {
-	const cache = CACHE_VOLUMES.has(n);
+for (const n of lines('docker', ['volume', 'ls', '--filter', 'name=seclab-', '--format', '{{.Name}}']).filter(n => OURS.volume.test(n) || isCacheVolume(n))) {
+	const cache = isCacheVolume(n);
 	const pol = cache ? { remove: args.has('--caches'), why: 'build cache (use --caches)', owner: 'cache' } : tabPolicy(n);
 	items.push({
 		kind: cache ? 'cache volume' : 'volume', name: `${n} (${pol.owner})`, state: '', remove: pol.remove,

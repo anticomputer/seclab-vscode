@@ -34,6 +34,10 @@ jobs:
         run: build/apply-patches.sh --check
       - name: Shipped sources have no test hooks (env/spawn review, dynamic loading)
         run: ./seclab lint source
+      - name: Test build variants (EDR test-build-variants)
+        run: |
+          ./seclab test builds
+          for t in desktop reh; do build/test-variant.sh record containment "$t"; done
       - name: Dependency register self-test (the register itself is checked in docs)
         run: ./seclab lint deps --self-test
       # RPC capability filter (rpc-filter/AGENTS.md): policy drift, generated docs and

@@ -1,0 +1,15 @@
+{
+	"$comment": "Test build variants (EDR test-build-variants). Each is patches/series plus an explicit list of test-only hooks, built only by a workflow_dispatch of build-macos with test_variant set, and never releasable: check-release fails any artifact carrying seclabTestBuild or a hook marker. Adding a variant or a hook needs a security review round recorded in `review`. A hook's `target` is the artifact it must end up in (desktop or reh); its `marker` is a string literal its code emits, which the build requires in that artifact's output.",
+	"containment": {
+		"description": "Rogue-REH containment probes (RPC lockdown): the tab's REH loads the probe payload once the harness stages an armed run in the tab.",
+		"review": "docs/security-reviews/20261106-test-build-variants.md",
+		"hooks": [
+			{
+				"id": "rogue-reh",
+				"patch": "test/containment/rogue-reh/serverServices-hook.patch",
+				"target": "reh",
+				"marker": "SECLAB_TEST_ONLY:rogue-reh-hook"
+			}
+		]
+	}
+}

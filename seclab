@@ -12,7 +12,8 @@ usage: ./seclab <command>
                                 (SECLAB_BUILD_VOLUME=seclab-<name>: a separate builder volume for experiments)
                                 (editor needs >= 12 GB Docker memory: esbuild peaks ~5 GB RSS)
   template sbx                  Build the sbx tab template (shell kit + REH) -> seclab-tab:local
-  image oci                     Build the OCI tab images (seclab-tab-oci:local, broker placeholder)
+  image oci [--test-variant V]  Build the OCI tab images (seclab-tab-oci:local, broker placeholder);
+                                with --test-variant, only seclab-tab-oci:test-V from that variant's REH
   test unit                     seclab-tabd unit tests (in a node container)
   test e2e [sbx|oci]            seclab-tabd end-to-end against a real runtime (local)
   test e2e-broker [oci|sbx] [IMAGE]
@@ -22,6 +23,7 @@ usage: ./seclab <command>
   test secrets [sbx|oci]        Pre-mount secret scan (gitleaks) gate, move-to-vault, restore
   test obs [sbx|oci]            Tab observability: inert loader -> expected events and labels; sensor tampering -> gap
   test probes                   AHP probes against the real upstream client (no window, no network): each must land where it claims
+  test builds                   Test build variants: the harness's hook check (require-hooks) self-test
   tab logs [-f] [--format text|json|falco] [--min PRIORITY] [--state-dir DIR] <tabId|all>
                                 Read a tab's observability log (default: the editor's state dir)
   test evidence prepare|check DIR [sbx|oci]
@@ -49,6 +51,9 @@ usage: ./seclab <command>
   fetch macos [RUN_ID]          Download the unsigned macOS app from Actions -> .work/app/
   fetch macos-branch RUN_ID     A dispatched non-main test build (attestation checked against its
                                 branch) -> .work/app-branch/ (never the release location)
+  fetch macos-VARIANT RUN_ID    A test build variant (test/builds/variants.json, e.g. macos-containment):
+                                the renamed app + hooked REH, attested -> .work/test-builds/VARIANT/
+                                (UNSAFE, never a release; check-release refuses it)
   clean-host [--apply] [--running] [--caches]
                                 List (dry run) or remove every seclab resource on this host: sandboxes,
                                 containers, networks, volumes, test profiles, stray test editors/tabd.
@@ -295,8 +300,8 @@ fetch_macos() {
 	[[ "$UPSTREAM_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "upstream.lock: no valid UPSTREAM_SHA" >&2; exit 1; }
 	# A branch may pin another upstream: only its own commit is checked then.
 	[[ -n "$branch_build" ]] && UPSTREAM_SHA="$(jq -r .upstreamSha "$stage/dl/build-info.json")"
-	jq -e --arg u "$UPSTREAM_SHA" --arg h "$head_sha" '.upstreamSha == $u and .repoSha == $h' "$stage/dl/build-info.json" >/dev/null \
-		|| { echo "build-info.json does not match upstream.lock / run head SHA" >&2; exit 1; }
+	jq -e --arg u "$UPSTREAM_SHA" --arg h "$head_sha" '.upstreamSha == $u and .repoSha == $h and (has("testBuild") | not)' "$stage/dl/build-info.json" >/dev/null \
+		|| { echo "build-info.json does not match upstream.lock / run head SHA, or is a test build" >&2; exit 1; }
 	(cd "$stage/dl" && shasum -a 256 -c SHA256SUMS >/dev/null) || { echo "artifact changed after verification" >&2; exit 1; }
 	ditto -x -k "$stage/dl/seclab-vscode-darwin-arm64.zip" "$stage/app"
 	cp "$stage/dl/build-info.json" "$stage/dl/SHA256SUMS" "$stage/app/"
@@ -308,12 +313,73 @@ fetch_macos() {
 	echo "that step needs your explicit approval:  xattr -dr com.apple.quarantine \"$dest/seclab-vscode.app\""
 }
 
+# A test build variant (EDR test-build-variants): the renamed app and the hooked arm64 REH from
+# one dispatched build-macos run with test_variant set, each attested by that workflow at that
+# branch and commit. Into .work/test-builds/<variant>/ only, never the release or branch
+# location. Both build-info files must record exactly the hooks this checkout's manifest lists.
+fetch_test_variant() {
+	local variant="$1" run="$2" repo="anticomputer/seclab-vscode"
+	[[ "$variant" =~ ^[a-z][a-z0-9-]{0,31}$ ]] && jq -e --arg v "$variant" 'has($v)' "$ROOT/test/builds/variants.json" >/dev/null \
+		|| { echo "unknown test variant '$variant' (test/builds/variants.json)" >&2; exit 2; }
+	[[ "$run" =~ ^[0-9]+$ ]] || { echo "usage: ./seclab fetch macos-$variant RUN_ID" >&2; exit 2; }
+	local dest="$ROOT/.work/test-builds/$variant" meta branch event conclusion workflow head_sha
+	meta="$(gh run view -R "$repo" "$run" --json headBranch,event,conclusion,workflowName,headSha --jq '[.headBranch,.event,.conclusion,.workflowName,.headSha]|join(" ")')"
+	read -r branch event conclusion workflow head_sha <<<"$meta"
+	if [[ "$workflow" != "build-macos" || "$conclusion" != "success" || "$event" != "workflow_dispatch" || ! "$branch" =~ ^[A-Za-z0-9._/-]{1,100}$ || ! "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+		echo "refusing run $run: $meta (needs a successful dispatched build-macos run with test_variant=$variant)" >&2; exit 1
+	fi
+	mkdir -p "$ROOT/.work"
+	local stage
+	stage="$(mktemp -d "$ROOT/.work/test-staging.XXXXXX")"
+	chmod 700 "$stage"
+	trap 'rm -rf "$stage"' RETURN
+	local app_zip="seclab-vscode-TEST-$variant-darwin-arm64.zip" reh_tgz="seclab-reh-linux-arm64-test-$variant.tar.gz" reh_info="build-info-test-$variant.json"
+	gh run download -R "$repo" "$run" --name "seclab-vscode-darwin-arm64-test-$variant" --dir "$stage/app-dl"
+	gh run download -R "$repo" "$run" --name "seclab-reh-linux-arm64-test-$variant" --dir "$stage/reh-dl"
+	(cd "$stage/app-dl" && shasum -a 256 -c SHA256SUMS)
+	local f
+	for f in "app-dl/$app_zip" app-dl/build-info.json "reh-dl/$reh_tgz" "reh-dl/$reh_info"; do
+		[[ -f "$stage/$f" ]] || { echo "missing $f in run $run" >&2; exit 1; }
+		gh attestation verify "$stage/$f" -R "$repo" \
+			--signer-workflow "$repo/.github/workflows/build-macos.yml" \
+			--source-ref "refs/heads/$branch" --source-digest "$head_sha" --deny-self-hosted-runners >/dev/null \
+			|| { echo "provenance verification failed for $f; not extracting" >&2; exit 1; }
+	done
+	echo "provenance verified: $repo build-macos.yml @ $branch $head_sha (test variant $variant)"
+	# Both halves name this variant, its upstream and commit, and exactly the hooks the manifest
+	# in this checkout lists for each target (same ids, patches and patch hashes).
+	local want_app want_reh
+	want_app="$("$ROOT/build/test-variant.sh" record "$variant" desktop)"
+	want_reh="$("$ROOT/build/test-variant.sh" record "$variant" reh)"
+	jq -e --arg h "$head_sha" --argjson w "$want_app" '.repoSha == $h and .testBuild == $w' "$stage/app-dl/build-info.json" >/dev/null \
+		|| { echo "app build-info.json does not record $variant's desktop hooks at $head_sha (rebuild, or check out the run's commit)" >&2; exit 1; }
+	jq -e --arg h "$head_sha" --argjson w "$want_reh" --arg u "$(jq -r .upstreamSha "$stage/app-dl/build-info.json")" \
+		'.repoSha == $h and .upstreamSha == $u and .testBuild == $w' "$stage/reh-dl/$reh_info" >/dev/null \
+		|| { echo "REH $reh_info does not record $variant's reh hooks at $head_sha with the app's upstream" >&2; exit 1; }
+	(cd "$stage/app-dl" && shasum -a 256 -c SHA256SUMS >/dev/null) || { echo "artifact changed after verification" >&2; exit 1; }
+	mkdir -p "$stage/out"
+	ditto -x -k "$stage/app-dl/$app_zip" "$stage/out"
+	cp "$stage/app-dl/build-info.json" "$stage/out/build-info-app.json"
+	cp "$stage/reh-dl/$reh_tgz" "$stage/reh-dl/$reh_info" "$stage/out/"
+	rm -rf "$dest" && mkdir -p "$(dirname "$dest")" && mv "$stage/out" "$dest"
+	echo "UNSAFE test build '$variant' (never a release) in $dest:"
+	ls "$dest"
+	echo "Tab image from its REH: ./seclab image oci --test-variant $variant  (-> seclab-tab-oci:test-$variant)"
+}
+
 build_linux() {
-	local targets="${*:-reh}" vol="${SECLAB_BUILD_VOLUME:-seclab-vscode-work}" offline=0
+	local targets="${*:-reh}" vol="${SECLAB_BUILD_VOLUME:-seclab-vscode-work}" offline=0 out="$OUT"
+	local variant="${SECLAB_TEST_VARIANT:-}"
+	# A test build variant (EDR test-build-variants) never shares the release build's volume or
+	# output: its own volume (the hooked tree) and .work/test-builds/<variant>/.
+	if [[ -n "$variant" ]]; then
+		[[ "$variant" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || { echo "bad SECLAB_TEST_VARIANT" >&2; exit 2; }
+		vol="seclab-test-$variant"; out="$ROOT/.work/test-builds/$variant"
+	fi
 	# A separate volume keeps an experimental tree (e.g. a test-only REH) out of the one that
 	# builds what ships; the shared default is also CI's.
 	[[ "$vol" =~ ^seclab-[a-z0-9-]{1,48}$ ]] || { echo "SECLAB_BUILD_VOLUME must be seclab-<name>" >&2; exit 2; }
-	mkdir -p "$OUT"
+	mkdir -p "$out"
 	docker build -q -t seclab-builder:local "$ROOT/build/linux" >/dev/null
 	# Durable named volume for the upstream checkout + node_modules (not /tmp, not the Mac FS).
 	docker volume create "$vol" >/dev/null
@@ -327,8 +393,9 @@ build_linux() {
 	docker run --rm \
 		-v "$ROOT:/repo:ro" \
 		-v "$vol:/work" \
-		-v "$OUT:/out" \
+		-v "$out:/out" \
 		-e TARGETS="$targets" -e ARCH -e MAX_OLD_SPACE_SIZE -e GOGC -e SECLAB_NPM_OFFLINE="$offline" \
+		-e SECLAB_TEST_VARIANT="$variant" -e GITHUB_SHA -e GITHUB_RUN_ID \
 		seclab-builder:local bash /repo/build/linux/build.sh
 }
 
@@ -422,6 +489,8 @@ case "${1:-help}" in
 			containment) shift; "${SECLAB_NODE:-node}" "$ROOT/test/containment/run.ts" "${1:-sbx}" ;;
 			# RPC-probe safety guards (pure; in the pinned node container, no network).
 			probe-safety) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/probe-safety.test.ts ;;
+			# Test build variants: the harness's hook check and the variant manifest (pure; no network).
+			builds) docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" node test/builds/require-hooks.ts --self-test ;;
 			# RPC filter: generated UriComponents argument positions are constrained (pure; no network).
 			uri-constraint) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/uri-constraint.test.ts ;;
 			canary) shift; "${SECLAB_NODE:-node}" "$ROOT/test/canary/run.ts" "${1:-sbx}" ;;
@@ -453,6 +522,7 @@ case "${1:-help}" in
 			macos) shift; fetch_macos "$@" ;;
 			# A dispatched build of a non-main branch, for testing unlanded patches. Never released.
 			macos-branch) shift; [[ $# -eq 1 ]] || { usage; exit 2; }; FETCH_BRANCH_BUILD=1 fetch_macos "$1" ;;
+			macos-*) v="${1#macos-}"; shift; [[ $# -eq 1 ]] || { usage; exit 2; }; fetch_test_variant "$v" "$1" ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	lint)

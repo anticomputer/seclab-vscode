@@ -12,6 +12,13 @@ TARGETS="${TARGETS:-editor reh}"
 SRC=/work/vscode
 
 /repo/build/prepare.sh "$SRC"
+# A test build variant (EDR test-build-variants): REH only, with its reviewed reh hooks. Its
+# tarball has its own name, and check-release must refuse it (test-variant.sh verify).
+VARIANT="${SECLAB_TEST_VARIANT:-}"
+if [[ -n "$VARIANT" ]]; then
+	[[ "$TARGETS" == reh ]] || { echo "build: a test variant builds the REH only (TARGETS=reh)" >&2; exit 2; }
+	/repo/build/test-variant.sh apply "$VARIANT" reh "$SRC"
+fi
 cd "$SRC"
 # `./seclab build` runs this once with PHASE=prepare locally, to export the lockfiles for the
 # CFS fetch (EDR cfs-local-builds), then again to build.
@@ -95,12 +102,20 @@ for t in $TARGETS; do
 			sh /repo/build/check-release.sh --inner /work/.check-release desktop "/work/VSCode-linux-${ARCH}/resources/app"
 			tar -C /work -czf "/out/seclab-vscode-linux-${ARCH}.tar.gz" "VSCode-linux-${ARCH}" ;;
 		reh) npm run gulp "vscode-reh-linux-${ARCH}-min"
-			tar -C /work -czf "/out/seclab-reh-linux-${ARCH}.tar.gz" "vscode-reh-linux-${ARCH}" ;;
+			if [[ -n "$VARIANT" ]]; then
+				/repo/build/test-variant.sh verify "$VARIANT" reh "/work/vscode-reh-linux-${ARCH}"
+				tar -C /work -czf "/out/seclab-reh-linux-${ARCH}-test-${VARIANT}.tar.gz" "vscode-reh-linux-${ARCH}"
+			else
+				tar -C /work -czf "/out/seclab-reh-linux-${ARCH}.tar.gz" "vscode-reh-linux-${ARCH}"
+			fi ;;
 		*) echo "unknown target $t" >&2; exit 2 ;;
 	esac
 done
 
 . /repo/upstream.lock
-printf '{"upstreamTag":"%s","upstreamSha":"%s","arch":"%s","targets":"%s"}\n' \
-	"$UPSTREAM_TAG" "$UPSTREAM_SHA" "$ARCH" "$TARGETS" > /out/build-info.json
+test_build=null
+[[ -z "$VARIANT" ]] || test_build="$(/repo/build/test-variant.sh record "$VARIANT" reh)"
+jq -nc --arg t "$UPSTREAM_TAG" --arg u "$UPSTREAM_SHA" --arg a "$ARCH" --arg g "$TARGETS" --arg r "${GITHUB_SHA:-}" --arg i "${GITHUB_RUN_ID:-}" --argjson tb "$test_build" \
+	'{upstreamTag: $t, upstreamSha: $u, arch: $a, targets: $g} + (if $r == "" then {} else {repoSha: $r, runId: $i} end) + (if $tb == null then {} else {testBuild: $tb} end)' \
+	> "/out/build-info${VARIANT:+-test-$VARIANT}.json"
 ls -la /out
