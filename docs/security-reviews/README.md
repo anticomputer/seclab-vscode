@@ -89,6 +89,7 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-06 | [CFS package feeds in tabs, broker side (round 13)](20261106-broker-cfs-feeds.md) | "broker: B4 CFS package feeds in tabs, broker side" (policy schema | see record |
 | 2026-11-06 | [deny rules and clientPort (round 12)](20261106-broker-deny-rules.md) | "broker: deny rules and clientPort" (policy schema revision 5, | see record |
 | 2026-11-06 | [budget on credential.import, and names-only field audits (round 14)](20261106-broker-import-budget.md) | three commits on the broker branch, and the round 14 fix commit. | see record |
+| 2026-11-06 | [CFS package feeds in tabs, tabd side (B4)](20261106-cfs-feeds-tabd.md) | round EEE, 20fb5bb and its fixes: | see record |
 | 2026-11-06 | [egress prompts (B3a, B3b)](20261106-egress-prompts.md) | round BBB, 24fea4c..79dcbea: | see record |
 | 2026-11-06 | [RPC filter stamp in product.json](20261106-rpc-policy-stamp.md) | round DDD, b9af5e5 and its fixes: prepare.sh step 7, the RPC stamp check | see record |
 | 2026-11-06 | [test build variants, and the gitleaks build fail-closed fix](20261106-test-build-variants.md) | round CCC: | see record |

@@ -14,7 +14,8 @@ export const CFS_TENANT = '00000000-0000-0000-0000-000000000003';
 export const CFS_RESOURCE = '499b84ac-1321-427f-aa17-267ca6975798';
 /** Re-mint when the cached token has less than this left. */
 const REFRESH_MARGIN_S = 300;
-const SENTINEL_RE = /^[A-Za-z0-9_.~-]{32,256}$/;
+/** Exactly what newCfsSentinel mints (base64url of 32 bytes), which seclab-tab-env also requires. */
+const SENTINEL_RE = /^seclab_cfs_[A-Za-z0-9_-]{43}$/;
 
 /** The two feed rules, GET only, on the exact feed paths (`policy.update addAllow`). */
 export function cfsAllowRules(): Record<string, unknown>[] {
@@ -56,7 +57,7 @@ export function newCfsSentinel(bytes: (n: number) => Buffer): string {
 }
 
 export function isCfsSentinel(s: unknown): s is string {
-	return typeof s === 'string' && SENTINEL_RE.test(s) && s.startsWith('seclab_cfs_');
+	return typeof s === 'string' && SENTINEL_RE.test(s);
 }
 
 export interface AzToken { value: string; expiresAt: number }
