@@ -77,7 +77,7 @@ Per-tab egress and credential policy. Engine-agnostic: it names hosts, ports, sc
 | `models.budget` | `object` |  | Per-tab totals over the broker's lifetime. |
 | `models.budget.requests` | `integer` |  | (min `0`; default `5000`) |
 | `models.budget.bytes` | `integer` |  | Request plus response body bytes. (min `0`; default `1073741824`) |
-| `models.grants` | `object` \| `object`[] |  | Tier C exceptions the user granted for this tab: a server-side tool type (`toolType`), or (revision 4) an endpoint the provider marks `requiresGrant` (`endpoint`, its `id`; for example the built-in copilot provider's `github-mcp-readonly`). (max items `64`) |
+| `models.grants` | `object` \| `object`[] |  | Tier C exceptions the user granted for this tab: a server-side tool type (`toolType`), or (revision 4) an endpoint the provider marks `requiresGrant` (`endpoint`, its `id`; for example the built-in copilot provider's `github-mcp-readonly`). A `toolType` grant applies to every endpoint of its provider, and `remote-content` turns off the fetchable-URL check on all of them; grant it knowing that. (max items `64`) |
 | `riskyDestinations` | `object`[] |  | Extra risky destinations for this tab, added to the broker's maintained list (see docs/broker-policy.md). Same treatment: no `allow-tab`, auto-deny before the first user action. (max items `1024`) |
 <!-- END GENERATED: policy-fields -->
 
@@ -257,14 +257,15 @@ Built-in providers (`seclab_broker/data/model-providers.v1.json`; `copilot` is m
 - `POST /mcp/readonly` (denied unless a grant names `github-mcp-readonly`): fields `id`, `jsonrpc`, `method`, `params`; tool types none.
 
 **`openai`**: hosts `api.openai.com`.
-- Endpoints: `POST /v1/chat/completions`, `POST /v1/responses`, `GET /v1/models`, `POST /v1/embeddings`.
-- Tool types: `function`.
-- Top-level fields: `model`, `messages`, `input`, `instructions`, `include`, `audio`, `modalities`, `frequency_penalty`, `presence_penalty`, `logit_bias`, `logprobs`, `top_logprobs`, `max_tokens`, `max_completion_tokens`, `max_output_tokens`, `max_tool_calls`, `metadata`, `n`, `parallel_tool_calls`, `prediction`, `previous_response_id`, `prompt_cache_key`, `reasoning`, `reasoning_effort`, `response_format`, `safety_identifier`, `seed`, `service_tier`, `stop`, `store`, `stream`, `stream_options`, `temperature`, `text`, `tool_choice`, `tools`, `top_p`, `truncation`, `user`, `verbosity`, `dimensions`, `encoding_format`.
+- `POST /v1/chat/completions`.
+- `POST /v1/responses`.
+- `GET /v1/models`.
+- `POST /v1/embeddings`.
 
 **`anthropic`**: hosts `api.anthropic.com`.
-- Endpoints: `POST /v1/messages`, `POST /v1/messages/count_tokens`, `GET /v1/models`.
-- Tool types: `custom`; untyped tools count as `custom`.
-- Top-level fields: `model`, `messages`, `system`, `max_tokens`, `metadata`, `stop_sequences`, `stream`, `temperature`, `thinking`, `tool_choice`, `tools`, `top_k`, `top_p`, `service_tier`.
+- `POST /v1/messages`.
+- `POST /v1/messages/count_tokens`.
+- `GET /v1/models`.
 
 Known model hosts (`seclab_broker/data/model-hosts.v1.json`). A request to one of these is denied unless the policy declares a provider for its host:
 
@@ -374,10 +375,13 @@ Approved exceptions (exact method and path, no body, query or upgrade; the respo
 
 - `GET /copilot_internal/user`: Copilot runtime's and agent host's first call (secure-agentic spike, 2026-11-05; measured in a tab behind its broker, B2 run at secure-agentic c759e5c): read-only user info, not a mint. Coordinator-approved 2026-11-05 with conditions: exact path, case-sensitive; no body, no query, no upgrade; the response must be a strict JSON object with no credential-named key (bar benignKeys) and no token-shaped value anywhere, else it is blocked and audited as credential.backstop_exception_blocked (a finding). Top-level fields outside responseFields are then dropped and audited as credential.backstop_exception_filtered. responseFields is the union of what the agent host reads (src/vs/platform/agentHost/node/shared/copilotApiService.ts L84-98 @ microsoft/vscode a717861c) and upstream's own stub (test/node/e2e/harness/capiStubs.ts); STUB-DERIVED, the real response is unmeasured (no real credential, by rule). ADR 20261105-broker-model-access.
   - Response fields allowed (others dropped): `access_type_sku`, `analytics_tracking_id`, `chat_enabled`, `cli_enabled`, `cloud_session_storage_enabled`, `codex_agent_enabled`, `copilot_plan`, `copilotignore_enabled`, `editor_preview_features_enabled`, `endpoints`, `is_mcp_enabled`, `is_staff`, `login`, `organization_list`, `organization_login_list`, `quota_snapshots`, `restricted_telemetry`, `token_based_billing`
-  - Benign key names: `cloud_session_storage_enabled`, `token_based_billing`
-- `GET /copilot_internal/managed_settings`: Org policy the runtime enforces on the agent (measured in the B2 run; denied then, turns completed). User-approved 2026-11-05: 'Allow exactly those three GETs, with the same strict checks as /user'. Fields unmeasured: no responseFields yet, so every key and value is checked and nothing is dropped. ADR 20261105-broker-model-access.
-- `GET /copilot_internal/team_customizations`: As managed_settings (one of the three user-approved org-policy GETs, 2026-11-05).
-- `GET /copilot_internal/content_exclusion`: As managed_settings: an enterprise's Copilot content exclusions; denying it would silently drop them (one of the three user-approved org-policy GETs, 2026-11-05).
+  - Benign key names: `$.cloud_session_storage_enabled`, `$.token_based_billing`, `$.quota_snapshots.*.token_based_billing`
+- `GET /copilot_internal/managed_settings`: Org policy the runtime enforces on the agent (measured in the B2 run; denied then, turns completed). User-approved 2026-11-05: 'Allow exactly those three GETs, with the same strict checks as /user'. The response is the enterprise's .github/copilot/settings.json; responseFields are the top-level keys of IManagedSettingsResponse (src/vs/workbench/services/accounts/browser/managedSettings.ts L40-85 @ microsoft/vscode a717861c) plus its compatibility-error fields (L118-122). strictFields: any other top-level key blocks the response (secure-agentic review: fail closed until measured). telemetry.headers is a free-form map that carries an OTLP endpoint's credentials, so it is always dropped (dropPaths). ADR 20261105-broker-model-access.
+  - Response fields allowed (others dropped): `permissions`, `model`, `enabledPlugins`, `extraKnownMarketplaces`, `strictKnownMarketplaces`, `allowedMcpServers`, `deniedMcpServers`, `strictPluginOnlyCustomization`, `allowManagedMcpServersOnly`, `allowManagedHooksOnly`, `forceRemoteSettingsRefresh`, `telemetry`, `error_code`, `client_version`, `minimum_client_version`
+- `GET /copilot_internal/team_customizations`: One of the three user-approved org-policy GETs (2026-11-05). Its response shape is unmeasured and not in public client code, so responseFields is empty and strict: only an empty object passes; anything else is blocked as a finding until the shape is known.
+  - Response fields allowed (others dropped): 
+- `GET /copilot_internal/content_exclusion`: One of the three user-approved org-policy GETs (2026-11-05): an enterprise's Copilot content exclusions. The runtime's response shape is unmeasured; the Copilot extension parses an array of {rules, last_updated_at} from its own content-exclusion endpoint (extensions/copilot/src/platform/ignore/node/remoteContentExclusion.ts L30-40 @ a717861c), not proven to be this route's shape. So responseFields is empty and strict: only an empty object passes; anything else (including a top-level array) is blocked as a finding until the shape is measured.
+  - Response fields allowed (others dropped): 
 
 | Methods | Path | Why |
 |---|---|---|

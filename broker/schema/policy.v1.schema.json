@@ -167,7 +167,7 @@
         "grants": {
           "type": "array",
           "maxItems": 64,
-          "description": "Tier C exceptions the user granted for this tab: a server-side tool type (`toolType`), or (revision 4) an endpoint the provider marks `requiresGrant` (`endpoint`, its `id`; for example the built-in copilot provider's `github-mcp-readonly`).",
+          "description": "Tier C exceptions the user granted for this tab: a server-side tool type (`toolType`), or (revision 4) an endpoint the provider marks `requiresGrant` (`endpoint`, its `id`; for example the built-in copilot provider's `github-mcp-readonly`). A `toolType` grant applies to every endpoint of its provider, and `remote-content` turns off the fetchable-URL check on all of them; grant it knowing that.",
           "items": {
             "oneOf": [
               {

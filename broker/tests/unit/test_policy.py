@@ -210,7 +210,13 @@ def test_org_policy_backstop_exceptions_are_exact(name):
     path = f"/copilot_internal/{name}"
     for host, p in (("api.github.com", path), ("ghe.corp.example", "/api/v3" + path), ("api.acme.ghe.example", path)):
         exc = backstop_exception(req(host=host, method="GET", path=p), "github")
-        assert exc is not None and exc.response_fields is None and not exc.benign_keys
+        # Strict allowlists (secure-agentic review): any unlisted top-level key blocks.
+        assert exc is not None and exc.strict_fields and exc.response_fields is not None and not exc.benign_keys
+    if name == "managed_settings":
+        assert {"permissions", "telemetry", "allowedMcpServers"} <= exc.response_fields
+        assert exc.drop_paths == (("telemetry", "headers"),)
+    else:
+        assert exc.response_fields == frozenset() and exc.drop_paths == ()
     for bad in (dict(method="POST"), dict(method="PUT"), dict(path=path.upper()), dict(path=path + "/x"),
                 dict(path=path + "s"), dict(query="org=x")):
         assert backstop_exception(req(**{"host": "api.github.com", "method": "GET", "path": path, **bad})) is None
@@ -223,5 +229,51 @@ def test_copilot_user_exception_has_the_measured_field_allowlist():
     from seclab_broker.policy import backstop_exception
     exc = backstop_exception(req(host="api.github.com", method="GET", path="/copilot_internal/user"))
     assert {"login", "endpoints", "copilotignore_enabled", "quota_snapshots"} <= exc.response_fields
-    assert "token" not in exc.response_fields
-    assert exc.benign_keys == {"token_based_billing", "cloud_session_storage_enabled"}
+    assert "token" not in exc.response_fields and not exc.strict_fields
+    # Benign names only at their measured JSON paths (review 11-3).
+    assert exc.is_benign("$.token_based_billing") and exc.is_benign("$.quota_snapshots.chat.token_based_billing")
+    for p in ("$.endpoints.token_based_billing", "$.quota_snapshots.token_based_billing",
+              "$.quota_snapshots.a.b.token_based_billing", "$.x.cloud_session_storage_enabled", "$.token"):
+        assert not exc.is_benign(p), p
+
+
+def test_r11_shipped_provider_data_is_validated(tmp_path, monkeypatch):
+    """Review 11-1: a misspelt key in shipped data fails at load instead of silently
+    disabling a check (here the grant gate on remote MCP, and the /user field filter)."""
+    import seclab_broker.models as models
+    import seclab_broker.policy as policy
+    data = json.loads((policy.DATA_DIR / "model-providers.v1.json").read_text())
+    ep = next(e for e in data["providers"][0]["endpoints"] if e.get("requiresGrant"))
+    ep["requireGrant"] = ep.pop("requiresGrant")
+    (tmp_path / "model-providers.v1.json").write_text(json.dumps(data))
+    monkeypatch.setattr(models, "DATA_DIR", tmp_path)
+    models.builtin_providers.cache_clear()
+    try:
+        with pytest.raises(PolicyError):
+            models.builtin_providers()
+    finally:
+        models.builtin_providers.cache_clear()
+    gh = json.loads((policy.DATA_DIR / "providers" / "github.json").read_text())
+    for mutate in (lambda d: d["exceptions"][0].update(responseField=d["exceptions"][0].pop("responseFields")),
+                   lambda d: d["exceptions"][1].pop("responseFields"),
+                   lambda d: d["deny"][0].update(method="POST")):
+        d = json.loads(json.dumps(gh))
+        mutate(d)
+        with pytest.raises(PolicyError):
+            policy._check_backstop_file("github.json", d)
+    policy._check_backstop_file("github.json", gh)
+
+
+def test_r11_request_summary_carries_query_key_names_only():
+    s = req(host="api.github.com", path="/copilot_internal/content_exclusion", query="repository=o%2Fr&b=2&b=3&x").summary()
+    assert s["queryKeys"] == ["b", "repository", "x"] and "o%2Fr" not in json.dumps(s)
+    assert "queryKeys" not in req(host="api.github.com").summary()
+
+
+def test_r11_url_userinfo_pattern():
+    from seclab_broker.engine_mitmproxy import URL_USERINFO
+    for bad in ("https://user:fake-pass@git.example.test/m.git", "https://abcdefghijklmnop1234@h.example.test/",
+                "ssh://git:x@h.example.test/r"):
+        assert URL_USERINFO.search(bad), bad
+    for ok in ("ssh://git@h.example.test/r.git", "https://h.example.test/a@b", "mailto:a@b.example.test", "git@h.example.test:o/r"):
+        assert not URL_USERINFO.search(ok), ok

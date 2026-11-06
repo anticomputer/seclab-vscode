@@ -30,7 +30,7 @@ from .policy import (LITERAL_PATH_RE, Binding, Inject, Policy, PolicyError, Requ
 log = logging.getLogger("seclab.broker")
 
 DECISIONS = ("allow-once", "allow-tab", "deny", "deny-new-destinations")
-REQUEST_KEYS = ("host", "method", "path", "rawAuthority", "detail", "tools")
+REQUEST_KEYS = ("host", "method", "path", "rawAuthority", "detail", "tools", "queryKeys")
 _USER_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _PASS_RE = re.compile(r"^[A-Za-z0-9_-]{22,128}$")  # >= 128 bits as base64url
 _LABEL_RE = re.compile(r"^[A-Za-z0-9._:-]{1,96}$")

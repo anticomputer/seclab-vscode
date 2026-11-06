@@ -251,3 +251,24 @@ def test_revision4_policy_shapes_validate():
     for bad in ({"provider": "copilot", "endpoint": "github-mcp-readonly", "toolType": "x"}, {"provider": "copilot"}):
         with pytest.raises(PolicyError):
             Policy.from_json({"version": 1, "models": {"providers": ["copilot"], "grants": [bad]}})
+
+
+def test_r11_grant_only_endpoints_cannot_be_shadowed_and_hosts_cannot_overlap():
+    """Review 11-5: selection is first match, so a looser endpoint before a grant-only one,
+    or a second provider claiming the same host, is refused at load."""
+    shadow = {"id": "p", "hosts": ["p.example.test"], "fields": [], "endpoints": [
+        {"path": "/**", "methods": ["POST"], "toolTypes": ["mcp"]},
+        {"id": "g", "path": "/mcp/readonly", "methods": ["POST"], "requiresGrant": True}]}
+    with pytest.raises(PolicyError):
+        ModelPolicy.from_json({"providers": [shadow]})
+    # A shadowing endpoint with disjoint methods is fine; so is the grant-only one first.
+    ModelPolicy.from_json({"providers": [dict(shadow, endpoints=[dict(shadow["endpoints"][0], methods=["GET"]),
+                                                                  shadow["endpoints"][1]])]})
+    ModelPolicy.from_json({"providers": [dict(shadow, endpoints=shadow["endpoints"][::-1])]})
+    loose = {"id": "loose", "hosts": ["*.githubcopilot.com"], "fields": ["anything"],
+             "endpoints": [{"path": "/**", "methods": ["POST"]}]}
+    for providers in ([loose, "copilot"], ["copilot", loose],
+                      [dict(loose, hosts=["api.githubcopilot.com"]), "copilot"]):
+        with pytest.raises(PolicyError):
+            ModelPolicy.from_json({"providers": providers})
+    ModelPolicy.from_json({"providers": ["copilot", dict(loose, hosts=["api.example.test"])]})

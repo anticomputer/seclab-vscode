@@ -9,8 +9,10 @@
       "changes": [
         "**Behaviour change:** the built-in `copilot` model provider is now measured, not drafted (secure-agentic B2 run in a real tab). Endpoints: `GET /models`, `POST /responses`, `POST /chat/completions`, `POST /v1/messages`; each POST has its own top-level field list and tool types (`function` and `custom` on `/responses` and `/chat/completions`; untyped tools count as `custom` on `/v1/messages`). `/embeddings` and the never-sent draft fields are gone. `POST /mcp/readonly` (GitHub's remote MCP server) is denied unless a grant names it.",
         "Model provider endpoints may carry `id`, `fields`, `toolTypes`, `untypedTool` and `requiresGrant`; a model grant may name an `endpoint` instead of a `toolType` (Tier C).",
-        "User-approved backstop exceptions: exactly `GET /copilot_internal/managed_settings`, `/team_customizations` and `/content_exclusion` on GitHub, with the same checks as `/user` (no body, query or upgrade; strict JSON object; no credential-named key or token-shaped value, else blocked).",
-        "The `/copilot_internal/user` exception has a field allowlist: once the whole response has passed the check, top-level fields outside it are dropped (audit `credential.backstop_exception_filtered`, the names in `detail`). Two measured benign key names (`token_based_billing`, `cloud_session_storage_enabled`) no longer trip the credential-name check; token-shaped values are still refused everywhere."
+        "User-approved backstop exceptions: exactly `GET /copilot_internal/managed_settings`, `/team_customizations` and `/content_exclusion` on GitHub (no body, query or upgrade). Their responses get the `/user` checks plus a strict top-level field allowlist (an unlisted key blocks): `managed_settings` per the public `IManagedSettingsResponse`, with `telemetry.headers` (OTLP credentials) always dropped; the other two allow only `{}` until their shapes are known.",
+        "The `/copilot_internal/user` exception has a field allowlist: once the whole response has passed the check, top-level fields outside it are dropped (audit `credential.backstop_exception_filtered`, the names in `detail`). Three measured benign keys pass the credential-name check only at their exact JSON paths; token-shaped values are still refused everywhere.",
+        "Exception responses: headers and trailers are checked alike; token-shaped keys and URL userinfo block; a bodiless response passes after the header checks; error bodies skip the field allowlist only. Session headers are stripped from trailers on credentialed flows too.",
+        "Request summaries (audit events, approvals) carry `queryKeys`: the query's key names, never values. Shipped provider data is validated at load (built-in model providers against `modelProvider`; backstop files' keys), and a model policy whose providers claim overlapping hosts, or whose grant-only endpoint is shadowed by an earlier endpoint, is refused."
       ]
     },
     {
@@ -1317,6 +1319,15 @@
         "path": {
           "type": "string",
           "description": "Canonical request path, percent-encoded ASCII for display (non-ASCII, spaces and non-path characters encoded). Tab-controlled."
+        },
+        "queryKeys": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "description": "The query string's key names, percent-encoded, deduplicated and sorted; present only when there is a query. Values are never recorded. Tab-controlled."
         }
       }
     },

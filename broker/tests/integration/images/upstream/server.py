@@ -179,13 +179,26 @@ async def app(scope, receive, send) -> None:
             return await send_resp(send, 200, json.dumps(body).encode())
         if path in ("/copilot_internal/managed_settings", "/copilot_internal/team_customizations",
                     "/copilot_internal/content_exclusion"):
-            # Org policy (shape made up: the real responses are unmeasured).
-            body = {"rules": [{"paths": ["**/secrets/**"], "source": "org"}], "enabled": True}
+            # Org policy. managed_settings follows IManagedSettingsResponse (public client code);
+            # the other two shapes are unknown, so an empty object is the honest answer.
+            # Canary-style fake values only.
             mode = hdrs.get("x-fixture")
-            if mode == "token-value":
-                body["rules"][0]["note"] = "ghu_" + secrets.token_hex(18)
-            elif mode == "token-field":
-                body["access_token"] = "opaque"
+            if path.endswith("/managed_settings"):
+                body = {"permissions": {"deny": ["shell(rm -rf *)"]}, "allowManagedMcpServersOnly": True,
+                        "telemetry": {"enabled": True, "endpoint": "https://otel.example.test",
+                                      "headers": {"Authorization": "Basic fake-otlp-credential"}}}
+                if mode == "token-value":
+                    body["permissions"]["allow"] = ["ghu_" + secrets.token_hex(18)]
+                elif mode == "url-userinfo":
+                    body["extraKnownMarketplaces"] = {"m": {"source": {"source": "git", "url": "https://user:fake-pass@git.example.test/m.git"}}}
+                elif mode == "unlisted":
+                    body["newPolicyKey"] = True
+            else:
+                body = {}
+                if mode == "unlisted":
+                    body = {"rules": [{"paths": ["**/secrets/**"]}]}
+                elif mode == "token-field":
+                    body = {"access_token": "opaque"}
             return await send_resp(send, 200, json.dumps(body).encode())
         if path == "/session":
             sid = secrets.token_hex(16)
