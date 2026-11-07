@@ -212,8 +212,11 @@ dispatched from this branch.
 - The new probes have never executed: the Tab Manager id claims, `vscode-userdata:` reads
   through open, show, search and the provider commands, and the core context key. Nothing
   may be cited until they run, baseline first.
-- Security review round 10 (cvp-claude-opus-5) was in flight at the stop. Its result is
-  **not recorded**; re-run it on the branch head before the build.
+- Security review round 10 (cvp-claude-opus-5) finished at the stop
+  ([record](../security-reviews/20261106-rpc-core-landing-v2.md)). It found **one high and one
+  medium that block landing**, both unfixed: `tabFileSearch` accepts `expandPatterns`, which
+  lets the pattern pick host search roots, and the decision log's line cap can be made to
+  emit invalid JSON. There are three more, non-blocking.
 
 **Patch numbering (coordinator decision).** The partition patch is
 **`0032-seclab-partition-tab-extension-state`** (storage and secrets in one patch, 35
@@ -230,8 +233,8 @@ address over the host network by then. The held patch refuses the dial itself.
 this landing.
 
 **Exact next step:**
-1. Re-run security review round 10 on the branch head and fix anything high or critical.
-   Record it in `docs/security-reviews/`.
+1. Fix round 10's findings 1 and 2, with regression tests and the `expandPatterns` probe,
+   then 3 to 5. Re-review until nothing high or critical remains, and record it.
 2. Push, and wait for `unit`, `lint`, `docs` and `patch-build` green on that SHA.
    `workflow-lint` failed once on a transient pin-age fetch of `pygments`; it is unrelated,
    so re-run it.
