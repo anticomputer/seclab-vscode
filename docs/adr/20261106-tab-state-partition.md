@@ -31,7 +31,7 @@ restarts and never sees another tab's. The id comes from the connection
 (`seclabPartitionOf`), never from an argument. An unparseable `seclab+` authority throws
 rather than falling back to the shared store.
 
-- Patch `0011-seclab-partition-tab-extension-state` (35 changed lines, one concern):
+- Patch `0032-seclab-partition-tab-extension-state` (35 changed lines, one concern):
   - `MainThreadStorage` prefixes both scopes with `seclab-tab:<tabId>/`. The shared-key
     watcher maps the prefix back.
   - **Migration is off for tab hosts.** It copies a source id's state into the target, and
@@ -40,7 +40,7 @@ rather than falling back to the shared store.
     listener see only their own partition; trusted hosts keep upstream's shape and never
     see a tab's keys.
 - The policy verdict is **`rewrite`**. The filter permits these methods only once the
-  customer has registered its rewrite, so a build without 0011 denies them rather than
+  customer has registered its rewrite, so a build without 0032 denies them rather than
   reaching the shared store. Each has a shape validator: an extension id, a bounded key, a
   state object.
 - `$registerExtensionStorageKeysToSync` stays denied: Settings Sync would carry tab state

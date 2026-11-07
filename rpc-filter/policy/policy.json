@@ -116,9 +116,9 @@
             "cross-tab-access"
           ],
           "identity_from_argument": true,
-          "constraint": "the storage key is partitioned by the tab bound to the connection: {seclabTab, extensionId, key} (patch 0011). extensionId remains a claim, but only within this tab's partition, where every extension shares the one extension host a rogue extension already controls; nothing outside the partition, including UI-side extensions' secrets and other tabs', is addressable",
+          "constraint": "the storage key is partitioned by the tab bound to the connection: {seclabTab, extensionId, key} (patch 0032). extensionId remains a claim, but only within this tab's partition, where every extension shares the one extension host a rogue extension already controls; nothing outside the partition, including UI-side extensions' secrets and other tabs', is addressable",
           "validator": "secretByKey",
-          "rationale": "extensionId is an RPC argument, so a hostile host can name any extension, including vscode.github-authentication, and read its stored sessions. The stored value is also global across windows, so without partitioning one tab reads another tab's secrets. The partition makes the tab, not the claimed extension, the unit of isolation: the filter permits this rewrite only once patch 0011 has registered it, and the validator holds the arguments to an extension id and a bounded key.",
+          "rationale": "extensionId is an RPC argument, so a hostile host can name any extension, including vscode.github-authentication, and read its stored sessions. The stored value is also global across windows, so without partitioning one tab reads another tab's secrets. The partition makes the tab, not the claimed extension, the unit of isolation: the filter permits this rewrite only once patch 0032 has registered it, and the validator holds the arguments to an extension id and a bounded key.",
           "evidence": [
             "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L38-L48",
             "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSecretState.ts#L90-L92"
@@ -182,7 +182,7 @@
             "credential-access"
           ],
           "identity_from_argument": true,
-          "constraint": "the storage key is partitioned by the tab bound to the connection, seclab-tab:<tabId>/<id>, in both scopes; storage migration is skipped for tab hosts; the id must be an extension id (patch 0011)",
+          "constraint": "the storage key is partitioned by the tab bound to the connection, seclab-tab:<tabId>/<id>, in both scopes; storage migration is skipped for tab hosts; the id must be an extension id (patch 0032)",
           "validator": "extensionStorageInit",
           "rationale": "Every activation awaits BOTH mementos (extHostExtensionService.ts L504-L517), so denying either scope stops every extension activating. Unpartitioned, the caller-named id is used verbatim as a storage KEY in the profile or workspace store, so a tab could read any key there, not only extension state: other tabs' state for the same extension, UI-side extensions' state (the Tab Manager keeps pending routes in globalState), and workbench keys. Migration copies state from a source id into the target, which would import unpartitioned state into the partition, so tab hosts skip it.",
           "evidence": [

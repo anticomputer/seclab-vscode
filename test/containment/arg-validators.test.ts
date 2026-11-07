@@ -202,7 +202,7 @@ test('storage: both scopes of an extension id pass, set needs an object', () => 
 });
 test('storage: keys that are not extension ids, and non-object state, are refused', () => {
 	// The shape check keeps the argument an extension id; an id-shaped key such as
-	// `workbench.panel` passes it, and the per-tab partition (patch 0011) is what keeps that
+	// `workbench.panel` passes it, and the per-tab partition (patch 0032) is what keeps that
 	// key inside the tab's own `seclab-tab:<tabId>/` prefix.
 	for (const key of ['extensionsIdentifiers/disabled', 'seclab-tab:t-x/vscode.git', 'a', '', 7]) {
 		no(shipped, 'extensionStorageInit', [true, key]);

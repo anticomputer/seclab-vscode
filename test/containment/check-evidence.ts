@@ -378,7 +378,7 @@ if (mode === 'prepare') {
 			detail: fs.existsSync(m) ? `host marker written: ${m}` : '',
 		});
 	}
-	// Per-tab state partition (patch 0011): the rogue probes wrote state and a secret under
+	// Per-tab state partition (patch 0032): the rogue probes wrote state and a secret under
 	// the Tab Manager's id. Read where they landed from the profile's own database,
 	// host-side; the tab cannot write this file.
 	for (const f of partitionFindings(stateItems(userData), tabId ?? '')) {

@@ -73,7 +73,7 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
 - `0007-seclab-command-taint.patch`: `commandService.ts` only. Tab-originated
   commands carry the tab identity into everything they trigger
   ([ADR](../docs/adr/20261104-tab-command-taint.md)).
-- `0011-seclab-partition-tab-extension-state.patch`: `mainThreadStorage.ts` and
+- `0032-seclab-partition-tab-extension-state.patch`: `mainThreadStorage.ts` and
   `mainThreadSecretState.ts`. A tab's `globalState`, `workspaceState` and `SecretStorage` live
   in a partition keyed on the tab's stable id from the connection (`seclab-tab:<tabId>/<id>`,
   `{seclabTab, extensionId, key}`), storage migration is off for tab hosts, and each customer

@@ -308,7 +308,7 @@ const tabFileSearch: SeclabValidator = (args, ctx) => {
 /**
  * `$initializeExtensionStorage(shared, extensionId)`. The id is used verbatim as a storage KEY
  * in the profile or workspace store, so without a shape check it names any key, not just
- * extension state. The partition (patch 0011) prefixes it with the tab; this keeps it an id.
+ * extension state. The partition (patch 0032) prefixes it with the tab; this keeps it an id.
  */
 const extensionStorageInit: SeclabValidator = (args) => {
 	return arity(args, 2, 2)
@@ -328,7 +328,7 @@ function secretKey(v: unknown): string | undefined {
 	return typeof v !== 'string' || v.length > MAX_SECRET_KEY ? 'argument 1 is not a secret key' : undefined;
 }
 
-/** `$getPassword` / `$deletePassword(extensionId, key)`. Partitioned per tab by patch 0011. */
+/** `$getPassword` / `$deletePassword(extensionId, key)`. Partitioned per tab by patch 0032. */
 const secretByKey: SeclabValidator = (args) => {
 	return arity(args, 2, 2) ?? extensionId(args[0], 'argument 0') ?? secretKey(args[1]);
 };

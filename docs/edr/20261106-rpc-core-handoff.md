@@ -174,6 +174,81 @@ Fork-build generalises it repo-wide.
   prover is the same failure wearing a new hat. "Name what runs this" needs
   "and show that the thing proving it ran can itself fail".
 
+## Landing v2: state at the weekend stop (2026-11-06, evening)
+
+Owner: the "RPC core landing v2" session, branch `anticomputer-rpc-core-landing-v2`
+(continues `anticomputer-rpc-core-landing` @ `d2a4a9b`). **Not landed.** No build has been
+dispatched from this branch.
+
+**Done and proven:**
+- **Measured once, not layer by layer.** Upstream's own RPC tracer on the unfiltered main
+  build `bc85925` (benign fixtures only) gives every call an ordinary session makes: 69
+  distinct, of which 64 were denied. The raw trace was deleted; the derived list is
+  committed. Teardown was clean and focus was never stolen
+  ([EDR](20261106-ordinary-session-rpc-trace.md)).
+- **Named, fail-closed argument validators.** `seclabArgValidators.ts` ships in 0005 with
+  `check_validators` gating it. The 39 unit assertions import the shipped module, including
+  16 injected defects, and the harness was seen to fail on a broken mutant.
+- **Per-tab partition of `globalState`, `workspaceState` and secrets**
+  ([ADR](../adr/20261106-tab-state-partition.md)).
+- **What this landing allows:**
+  - the core set the user chose: open, show and search documents, file system activation,
+    initial window state, the two unregisters;
+  - three leaf-exception commands (`_setContext`, `_executeHoverProvider`,
+    `_executeCompletionItemProvider`), each validated;
+  - `$onExtensionActivationError` with no install prompt;
+  - `$registerCommand` with no trusted or registered id.
+- **Everything whose results reach trusted UI stays denied.** That covers providers, SCM,
+  tree views, output, the status bar and decorations. Their drafted classifications are kept
+  in `rpc-filter/policy/drafts/`.
+- All local gates pass: drift, emit and sync, docs, the rpc-filter suites, the
+  `test_enforcement`/`test_generator` tests, source and fixture lint.
+
+**Not proven: no runtime result exists for any of this.**
+- The benign control activating in a patched tab is unmeasured. Its hover and completion
+  steps may fail now that provider registration is denied; if they do, record them as
+  expected failures.
+- The three-condition proof has not run.
+- The new probes have never executed: the Tab Manager id claims, `vscode-userdata:` reads
+  through open, show, search and the provider commands, and the core context key. Nothing
+  may be cited until they run, baseline first.
+- Security review round 10 (cvp-claude-opus-5) was in flight at the stop. Its result is
+  **not recorded**; re-run it on the branch head before the build.
+
+**Patch numbering (coordinator decision).** The partition patch is
+**`0032-seclab-partition-tab-extension-state`** (storage and secrets in one patch, 35
+lines), listed after 0015 in `patches/series`. 0011 stays with the held-back
+`0011-seclab-no-remote-agent-host-dialing`, 0030/0031 with the REH-push patches, 0034 is
+free for this branch, and 0035 belongs to the document-sync session.
+
+**`0011-no-remote-agent-host-dialing` is still needed.** 0015 does not subsume it: 0015
+refuses an ungated agent-host protocol client in a tab window, but
+`RemoteAgentHostService._connectTo` has already opened the transport to the tab-chosen
+address over the host network by then. The held patch refuses the dial itself.
+
+**The document-sync leak** (RPC-LOCKDOWN §7 item 10) has its own session. It stays out of
+this landing.
+
+**Exact next step:**
+1. Re-run security review round 10 on the branch head and fix anything high or critical.
+   Record it in `docs/security-reviews/`.
+2. Push, and wait for `unit`, `lint`, `docs` and `patch-build` green on that SHA.
+   `workflow-lint` failed once on a transient pin-age fetch of `pygments`; it is unrelated,
+   so re-run it.
+3. Dispatch `gh workflow run build-macos.yml --ref anticomputer-rpc-core-landing-v2 -f test_variant=containment`, then **stop pushing**.
+4. `./seclab fetch macos-containment <RUN>`, `./seclab image oci --test-variant containment`,
+   then `node test/builds/require-hooks.ts --variant containment --hook rogue-reh --image seclab-tab-oci:test-containment`.
+5. `SECLAB_BENIGN_ONLY=1` evidence run on the patched app, which shows whether the benign
+   control activates. Then `node test/focus/probe.ts` against it.
+6. Run the new probes on the baseline (`.work/app` is main `bc85925`, de-quarantined),
+   then the three-condition proof on the patched build. Check with
+   `check-evidence.ts check` and
+   `check-probes.ts patched|unpatched … --user-data DIR --tab ID`.
+7. Land. Then the response-side control increment: SCM and git first, then output, the
+   status bar and tree views, then decorations. Its proof includes the newLocal completion
+   and hover-link probe. After that, the deferred-laundering fix, 0030/0031, and the
+   liveness-gate EDR.
+
 ## Links
 
 - Architecture and residuals: [`docs/RPC-LOCKDOWN.md`](../RPC-LOCKDOWN.md)
