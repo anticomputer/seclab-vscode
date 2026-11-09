@@ -30,6 +30,7 @@ usage: ./seclab <command>
                                 Editor-driven run (rogue extension, editor-side canaries)
   lint fixtures [PATH...]       Fixture-safety lint (no real secrets/hosts/persistence in test payloads)
   lint source                   Shipped sources: no unreviewed env/spawn sites, no dynamic loading, no test markers
+  lint mounts                   Single-file container mounts (deps outdated, image verify) cover their imports
   lint deps [--self-test]       Dependency register: every pin in deps/registry.json, entries complete (ADR)
   lint pin-age [--days N] [--verbose]
                                 No register pin younger than 7 days (the feed's hold; EDR pin-age-cooldown). Network
@@ -68,6 +69,13 @@ ZIZMOR_IMAGE="ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf0
 # from pinned source. Prints the local image tag; fails closed.
 tool_image() { "$ROOT/build/tools/tool.sh" "$1"; }
 
+# Networked containers get single files, not the repo (reviews DD-4, EE-2). Each list must cover
+# its entry's import closure: `./seclab lint mounts` checks it (build/import-closure.ts).
+VERIFY_IMAGE_FILES=(build/verify-image.ts build/registry.ts)
+DEPS_OUTDATED_FILES=(build/deps-outdated.ts build/registry.ts build/release-dates.ts)
+# Sets MOUNTS to -v flags mounting each listed file read-only at /d/<path> (bash 3.2: no mapfile).
+mount_files() { local f; MOUNTS=(); for f in "$@"; do MOUNTS+=(-v "$ROOT/$f:/d/$f:ro"); done; }
+
 # Workflow static analysis (EDR ci-hardening): actionlint, then zizmor, both offline with no
 # network and no credentials: they are third-party images (ADR supply-chain provenance).
 # zizmor's online audits (impostor commits, ref confusion) are covered by the repo's
@@ -97,8 +105,9 @@ verify_signed_image() {
 	marker="$ROOT/.work/deps-verified/$key"
 	[[ -z "${CI:-}" && -f "$marker" ]] && return 0
 	local pairs
-	# Only the two scripts are mounted: the verifier sees no repo content or run state (DD-4).
-	pairs="$(docker run --rm -v "$ROOT/build/verify-image.ts:/v/verify-image.ts:ro" -v "$ROOT/build/registry.ts:/v/registry.ts:ro" -w /v "$(node_image)" node verify-image.ts "$repo@$digest")" \
+	# Only the listed scripts are mounted: the verifier sees no repo content or run state (DD-4).
+	mount_files "${VERIFY_IMAGE_FILES[@]}"
+	pairs="$(docker run --rm "${MOUNTS[@]}" -w /d "$(node_image)" node build/verify-image.ts "$repo@$digest")" \
 		|| { echo "verify: $image: attestation chain incomplete (refusing to run it)" >&2; return 1; }
 	while read -r line; do
 		att="${line##* }"
@@ -553,6 +562,11 @@ case "${1:-help}" in
 					git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/deps.ts check -
 				fi ;;
 			source) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-source.ts ;;
+			# Single-file container mounts cover their entry's imports (build/import-closure.ts).
+			mounts) docker run --rm --network none --tmpfs /scratch -e SECLAB_SCRATCH=/scratch -v "$ROOT:/repo:ro" -w /repo "$(node_image)" sh -ec "
+				node build/import-closure.ts --self-test
+				node build/import-closure.ts build/verify-image.ts -- ${VERIFY_IMAGE_FILES[*]}
+				node build/import-closure.ts build/deps-outdated.ts -- ${DEPS_OUTDATED_FILES[*]}" ;;
 			# The 7-day rule (EDR pin-age-cooldown): no register pin younger than the feed's hold. Network;
 			# GITHUB_TOKEN (CI) only raises the GitHub API rate limit.
 			pin-age) shift; lint_pin_age "$@" ;;
@@ -589,10 +603,13 @@ case "${1:-help}" in
 	deps)
 		shift
 		case "${1:-}" in
-			# Only the files it needs: no repo content or run state in a networked container (EE-2).
-			outdated) docker run --rm -v "$ROOT/build/deps-outdated.ts:/d/build/deps-outdated.ts:ro" -v "$ROOT/build/registry.ts:/d/build/registry.ts:ro" \
-				-v "$ROOT/build/release-dates.ts:/d/build/release-dates.ts:ro" \
-				-v "$ROOT/deps/registry.json:/d/deps/registry.json:ro" -w /d "$(node_image)" node build/deps-outdated.ts ;;
+			# Only the listed scripts and the register: no repo content or run state in a networked container (EE-2).
+			outdated) mount_files "${DEPS_OUTDATED_FILES[@]}" deps/registry.json
+				if [[ "${2:-}" == --self-test ]]; then
+					docker run --rm --network none "${MOUNTS[@]}" -w /d "$(node_image)" node build/deps-outdated.ts --self-test
+				else
+					docker run --rm "${MOUNTS[@]}" -w /d "$(node_image)" node build/deps-outdated.ts
+				fi ;;
 			host) deps_host ;;
 			*) usage; exit 2 ;;
 		esac ;;
