@@ -186,3 +186,46 @@ already fixed in writing. It is recorded here rather than resolved quietly.
   network and `ephemeral` keeps it is upstream's behaviour, not ours; it is asserted over the
   patched tree by `patches/sole-consumer.json`, which `patch-build` already runs, because the
   unit-test container has no upstream checkout.
+
+## Liveness evidence for the probe's build hook
+The repo-wide liveness gate ([EDR](20261109-liveness-gate.md)) requires evidence that a test
+hook actually ran, not just that it was built.
+
+- **`hook:agentic-browser/browser-drive`:** ran in a real `seclab+` tab window on macOS, on
+  the U baseline build of 2026-11-09, and drove a browser view exactly as
+  `openBrowserTool._openNewPage` would. Its own lines in the window log, in two separate
+  runs:
+  - `[SECLAB_TEST_ONLY:browser-drive-hook] opening http://127.0.0.1:<beacon>/browser-probe-<nonce> network=seclab+t-q6e62bfkumso…`
+    followed by `failed: ERR_EMPTY_RESPONSE (-324)`, i.e. the page was really created and
+    really attempted its fetch;
+  - `[SECLAB_TEST_ONLY:browser-drive-hook] ready=no: the tab's remote settings never arrived;
+    this run is inconclusive`, from the later build, which is the readiness gate refusing to
+    measure (see below).
+
+  The hook is applied only by `build-macos.yml` dispatched with
+  `test_variant=agentic-browser`; the pinned run in the register is the build that carries
+  it. `check-release` refuses any artifact containing its marker.
+
+### What those two runs already established, before the full U/F verdict
+1. **The probe measured too early, and would have reported a false "contained".** The first
+   run resolved the **tab's** network on a build with **no 0017**, while the tab's hostile
+   settings were present and correct inside the tab. The hook had run before the window's
+   remote configuration layer loaded, so it read the registered defaults. An unfixed build
+   looked contained. The fix is a positive readiness signal, not a longer sleep: the tab
+   writes a neutral key and the hook waits until it can read that value back, logging
+   `ready=yes`; otherwise it logs `ready=no` and the run is reported **inconclusive**.
+2. **A readiness sentinel has to be a scope a tab can write.** The first one was
+   `workbench.browser.maxHistoryEntries`, which is `APPLICATION` -- exactly the scope
+   `REMOTE_MACHINE_SCOPES` withholds from a tab -- so it could never arrive and every run was
+   inconclusive. That is the gate working: an inconclusive run was reported as inconclusive,
+   never as contained. The sentinel is now `workbench.browser.newTabPlacement`, `WINDOW`
+   scope like the two keys under test, and fixed by no patch.
+3. **Two harness defects, both found by running it.** `process.exit(ok && teardownGate(base) ? 0 : 1)`
+   short-circuits, so a failing verdict skipped teardown and left an editor running, which is
+   the hard rule teardown exists for; and the arming directory was created after the host
+   snapshot, so teardown reported `~/` as changed.
+
+**The U-vs-G verdict itself is still outstanding**, because both runs need an editor window
+and launches are held while a third focus-steal path is fixed (the system activates the owner
+of the topmost window when the user switches macOS Spaces). The harness, the hook and the two
+attested builds are ready; only the two runs remain.
