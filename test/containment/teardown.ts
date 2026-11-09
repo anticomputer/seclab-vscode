@@ -23,8 +23,22 @@ import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { checkIsolatedProfile, hostSnapshot, snapshotDiff, type Snapshot } from '../harness.ts';
+import { checkIsolatedProfile, editorPortableDir, hostSnapshot, snapshotDiff, type Snapshot } from '../harness.ts';
 import { avFindings } from '../safety/av-shape.ts';
+
+/** The profile's portable sibling (test/harness.ts editorPortableDir): checked as isolated, removed. */
+function removePortable(userDataDir: string, problems: string[]): void {
+	const p = editorPortableDir(path.resolve(userDataDir));
+	if (!fs.existsSync(p) && !fs.lstatSync(p, { throwIfNoEntry: false })) {
+		return;
+	}
+	try {
+		checkIsolatedProfile(p);
+		fs.rmSync(p, { recursive: true, force: true }); // the user-data link is removed, not followed
+	} catch (err) {
+		problems.push(`could not remove the portable dir: ${err instanceof Error ? err.message : String(err)}`);
+	}
+}
 
 export interface RunManifest {
 	userDataDir?: string;
@@ -145,6 +159,9 @@ export function reapPreviousRun(runDir: string): ReapResult {
 		} catch (err) {
 			problems.push(`could not remove the previous run's profile: ${err instanceof Error ? err.message : String(err)}`);
 		}
+	}
+	if (m.userDataDir) {
+		removePortable(m.userDataDir, problems);
 	}
 	// Anything still alive after SIGTERM then SIGKILL. The caller must not wipe over it.
 	const survivors = runProcesses(runDir, m);
@@ -510,7 +527,9 @@ export function verifyTeardown(runDir: string, opts: { snapshot?: boolean } = {}
 		fs.rmSync(m.userDataDir, { recursive: true, force: true });
 	}
 	if (m.userDataDir) {
-		add(!fs.existsSync(m.userDataDir), 'run user-data-dir removed (it holds the armed rogue extension)', m.userDataDir);
+		const portableProblems: string[] = [];
+		removePortable(m.userDataDir, portableProblems);
+		add(!fs.existsSync(m.userDataDir) && !fs.existsSync(editorPortableDir(m.userDataDir)), 'run user-data-dir and its portable dir removed (it holds the armed rogue extension)', [m.userDataDir, ...portableProblems].join('; '));
 	}
 	// Generated fixture workspaces never outlive the run: copies on the host are what endpoint
 	// protection scans (EDR fixture-safety). Only after every process and tab is gone.

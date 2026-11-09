@@ -183,7 +183,10 @@ export const EDITOR_APP = path.join(repoRoot, '.work', 'app', 'seclab-vscode.app
 /** argv that opens an isolated-profile editor window without activating it. SECLAB_BACKGROUND_WINDOWS
  *  (patch 0012) makes the app itself show windows inactive and never focus or activate. */
 export function editorLaunchArgv(userData: string, folderUri: string, env: Record<string, string> = {}, app = EDITOR_APP): string[] {
-	const envArgs = Object.entries({ ...env, SECLAB_BACKGROUND_WINDOWS: '1' }).flatMap(([k, v]) => ['--env', `${k}=${v}`]);
+	// VSCODE_PORTABLE keeps argv.json, extensions and shared data in the run's portable dir (a
+	// sibling of the profile, removed with it). Without it the app creates ~/<dataFolderName> and
+	// ~/<sharedDataFolderName> (e.g. ~/.seclab-vscode-test-containment) in the user's home.
+	const envArgs = Object.entries({ ...env, SECLAB_BACKGROUND_WINDOWS: '1', VSCODE_PORTABLE: editorPortableDir(userData) }).flatMap(([k, v]) => ['--env', `${k}=${v}`]);
 	// The main process's stderr carries the background-windows guard's record (click-through
 	// windows, dialogs not shown), which the focus probe checks.
 	return ['open', '-g', '-n', ...envArgs, '--stderr', editorStderrLog(userData), '-a', app, '--args', '--user-data-dir', userData, '--folder-uri', folderUri];
@@ -192,6 +195,26 @@ export function editorLaunchArgv(userData: string, folderUri: string, env: Recor
 /** Where the editor's main-process stderr goes (inside the run's profile, removed at teardown). */
 export function editorStderrLog(userData: string): string {
 	return path.join(userData, 'editor-stderr.log');
+}
+
+/**
+ * The editor's portable data dir (argv.json, extensions, shared data): a sibling of the run's
+ * profile, removed with it at teardown. VS Code puts user data at `<portable>/user-data`
+ * (VSCODE_PORTABLE wins over --user-data-dir), so that is a symlink back to the profile and every
+ * path the harness uses stays the same. A sibling, not a child: a child would make a cycle.
+ */
+export function editorPortableDir(userData: string): string {
+	return `${userData.replace(/\/+$/, '')}-portable`;
+}
+
+/** Create the portable dir and its user-data link before a launch. */
+export function preparePortable(userData: string): void {
+	const portable = editorPortableDir(userData);
+	fs.mkdirSync(portable, { recursive: true });
+	const link = path.join(portable, 'user-data');
+	if (!fs.existsSync(link)) {
+		fs.symlinkSync(path.resolve(userData), link);
+	}
 }
 
 /** The same, as one copy-pasteable shell line (for "prepare" steps that print the command). */
@@ -257,6 +280,7 @@ export async function launchEditorInBackground(userData: string, folderUri: stri
 	}
 	startFocusWatch(userData);
 	fs.mkdirSync(userData, { recursive: true });
+	preparePortable(userData);
 	const argv = editorLaunchArgv(userData, folderUri, env, app);
 	execFileSync(argv[0], argv.slice(1), { stdio: 'ignore' });
 	const deadline = Date.now() + timeoutMs;
