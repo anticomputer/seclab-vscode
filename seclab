@@ -38,7 +38,7 @@ usage: ./seclab <command>
                                 with origin/main); also run by CI (lint) and the pre-push hook
   hooks install                 Use the repo's git hooks (build/hooks: pre-push runs lint secrets) in this clone
   deps outdated                 Report image tags that moved and tracked tools with newer releases
-  liveness --self-test | check [--verify-runs] | marks FILE.yml#JOB LOG
+  liveness --self-test | check | verify-runs | marks FILE.yml#JOB LOG
                                 Everything that only matters if something runs it names what runs it,
                                 with evidence it ran (build/liveness/register.json)
   tool NAME                     Verify and build a pinned tool image (cosign, actionlint, gitleaks, lychee;
@@ -78,6 +78,8 @@ tool_image() { "$ROOT/build/tools/tool.sh" "$1"; }
 VERIFY_IMAGE_FILES=(build/verify-image.ts build/registry.ts)
 DEPS_OUTDATED_FILES=(build/deps-outdated.ts build/registry.ts build/release-dates.ts)
 DEPS_OUTDATED_DATA=(deps/registry.json)
+LIVENESS_VERIFY_FILES=(build/liveness/liveness.ts)
+LIVENESS_VERIFY_DATA=(build/liveness/register.json)
 # Sets MOUNTS to -v flags mounting each listed file read-only at /d/<path> (bash 3.2: no mapfile;
 # an empty list would abort "${MOUNTS[@]}" under set -u there, so it is refused: JJJ-3).
 mount_files() { local f; [[ $# -gt 0 ]] || { echo "mount_files: empty list" >&2; return 1; }; MOUNTS=(); for f in "$@"; do MOUNTS+=(-v "$ROOT/$f:/d/$f:ro"); done; }
@@ -572,7 +574,8 @@ case "${1:-help}" in
 			mounts) docker run --rm --network none --tmpfs /scratch -e SECLAB_SCRATCH=/scratch -v "$ROOT:/repo:ro" -w /repo "$(node_image)" sh -ec "
 				node build/import-closure.ts --self-test
 				node build/import-closure.ts build/verify-image.ts -- ${VERIFY_IMAGE_FILES[*]}
-				node build/import-closure.ts build/deps-outdated.ts -- ${DEPS_OUTDATED_FILES[*]}" ;;
+				node build/import-closure.ts build/deps-outdated.ts -- ${DEPS_OUTDATED_FILES[*]}
+				node build/import-closure.ts build/liveness/liveness.ts -- ${LIVENESS_VERIFY_FILES[*]}" ;;
 			# The 7-day rule (EDR pin-age-cooldown): no register pin younger than the feed's hold. Network;
 			# GITHUB_TOKEN (CI) only raises the GitHub API rate limit.
 			pin-age) shift; lint_pin_age "$@" ;;
@@ -613,13 +616,12 @@ case "${1:-help}" in
 		case "${1:-}" in
 			--self-test) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/liveness/liveness.ts --self-test ;;
 			check)
-				if [[ "${2:-}" == --verify-runs ]]; then
-					git -C "$ROOT" ls-files -z | docker run -i --rm -e GITHUB_TOKEN -e GITHUB_REPOSITORY -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/liveness/liveness.ts check - --verify-runs
-				elif [[ -z "${2:-}" ]]; then
-					git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/liveness/liveness.ts check -
-				else
-					usage; exit 2
-				fi ;;
+				[[ $# -eq 1 ]] || { usage; exit 2; }
+				git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/liveness/liveness.ts check - ;;
+			# The only networked, token-holding step: it sees the register and the checker, nothing
+			# else (KKK-4; `lint mounts` keeps the list exact).
+			verify-runs) mount_files "${LIVENESS_VERIFY_FILES[@]}" "${LIVENESS_VERIFY_DATA[@]}"
+				docker run --rm -e GITHUB_TOKEN -e GITHUB_REPOSITORY "${MOUNTS[@]}" -w /d "$(node_image)" node build/liveness/liveness.ts verify-runs ;;
 			# No log file: nothing recorded a mark (mounting a missing path would create a directory).
 			marks) [[ $# -eq 3 ]] || { usage; exit 2; }
 				local_log=()

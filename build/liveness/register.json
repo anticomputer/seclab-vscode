@@ -13,30 +13,30 @@
 		{
 			"id": "workflow:deps-updates",
 			"runBy": "schedule (Mondays 06:17 UTC) and workflow_dispatch: ./seclab deps outdated, then one tracking issue",
-			"evidence": [{ "run": 42649243164, "workflow": "deps-updates.yml" }]
+			"evidence": [{ "run": 42653627676, "workflow": "deps-updates.yml", "sha": "362dcc321657a4938683ab042b9fb094b9b19238", "date": "2026-11-09" }]
 		},
 		{
 			"id": "hook:containment/rogue-reh",
 			"runBy": "build-macos.yml dispatched with test_variant=containment applies it (build/test-variant.sh); test/builds/rogue-reh-arming.ts arms it in a real OCI tab of that REH",
 			"evidence": [
-				{ "run": 42252088798, "workflow": "build-macos.yml", "artifact": "seclab-reh-linux-arm64-test-containment" },
+				{ "run": 42252088798, "workflow": "build-macos.yml", "artifact": "seclab-reh-linux-arm64-test-containment", "sha": "66af5e97afc352bedd24405a420c02b870071ad3", "date": "2026-11-06" },
 				{ "record": "docs/edr/20261109-liveness-gate.md" }
 			]
 		},
 		{
 			"id": "fixture:test/containment/fixtures/malicious-workspace",
 			"runBy": "./seclab test containment oci (test/containment/run.ts triggers each vector in the tab)",
-			"evidence": [{ "ci": "ci-linux.yml#oci", "mark": "containment:malicious-workspace" }]
+			"evidence": [{ "ci": "ci-linux.yml#oci", "mark": "containment:malicious-workspace", "runner": "test/containment/run.ts" }]
 		},
 		{
 			"id": "fixture:test/containment/fixtures/contagious-interview",
 			"runBy": "./seclab test containment oci (test/containment/campaign.ts, its own tab)",
-			"evidence": [{ "ci": "ci-linux.yml#oci", "mark": "containment:contagious-interview" }]
+			"evidence": [{ "ci": "ci-linux.yml#oci", "mark": "containment:contagious-interview", "runner": "test/containment/campaign.ts" }]
 		},
 		{
 			"id": "fixture:test/observability/fixtures/loader-workspace",
 			"runBy": "./seclab test obs oci (test/observability/loader.ts assembles the loader inside the tab)",
-			"evidence": [{ "ci": "ci-linux.yml#oci", "mark": "obs:loader-workspace" }]
+			"evidence": [{ "ci": "ci-linux.yml#oci", "mark": "obs:loader-workspace", "runner": "test/observability/run.ts" }]
 		},
 		{
 			"id": "fixture:test/containment/rogue-extension",

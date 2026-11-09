@@ -39,14 +39,14 @@ import * as path from 'node:path';
 export interface Exempt { subject: string; consumer: string | null; reason: string }
 /** A declaration a host calls (VS Code calls `activate`): live, and so is what it reaches. */
 export interface Entry { subject: string; calledBy: string; declaredIn: string }
-export interface Evidence { run?: number; workflow?: string; artifact?: string; ci?: string; mark?: string; record?: string }
+export interface Evidence { run?: number; workflow?: string; artifact?: string; sha?: string; date?: string; ci?: string; mark?: string; runner?: string; record?: string }
 export interface Subject { id: string; runBy: string; evidence: Evidence[] }
 export interface Register { entry?: Entry[]; exempt: Exempt[]; subjects: Subject[] }
 
 const REGISTER = 'build/liveness/register.json';
-// Code that runs: product sources, and the tools CI or an operator runs (doc generators, log CLI).
-const TS_ROOTS = ['tabd/src/', 'tabd/tools/', 'extensions/seclab-tab-manager/src/'];
-const PY_ROOTS = ['broker/seclab_broker/', 'broker/tools/'];
+// Code that runs: product sources (every built-in extension's src), and the tools CI or an
+// operator runs (doc generators, log CLI).
+const IN_SCOPE = /^(?:tabd\/src\/|tabd\/tools\/|extensions\/[^/]+\/src\/|broker\/seclab_broker\/|broker\/tools\/)/;
 const BIN = 'sandbox/rootfs/opt/seclab/bin/';
 // Who may invoke an in-tab program: product code and the image build, not tests.
 const BIN_USERS = ['tabd/src/', 'sandbox/', 'build/', 'extensions/seclab-tab-manager/src/'];
@@ -78,6 +78,25 @@ export function codeOnly(text: string, lang: Lang, blankStrings = false): string
 			.replace(/^\s*(?:from\s+\S+\s+)?import\s[^\n]*$/gm, '');
 	}
 	return text.replace(/(^|\s)#[^\n]*/g, '$1');
+}
+
+/**
+ * Marks a TS file passes to liveMark('…') in code. The call is found in the string-blanked
+ * lexer output (so a mention inside a string or comment doesn't count) and its argument is read
+ * at the same offset from the unblanked output: both have the same length.
+ */
+export function markCalls(text: string): string[] {
+	const code = lexTs(text, false);
+	const blank = lexTs(text, true);
+	const out: string[] = [];
+	for (const m of blank.matchAll(/(?<![\w$.])liveMark\(\s*'/g)) {
+		const at = m.index! + m[0].length;
+		const end = code.indexOf('\'', at);
+		if (end > at) {
+			out.push(code.slice(at, end));
+		}
+	}
+	return out;
 }
 
 /** TS/JS: drop comments; keep string delimiters (and contents unless blanked); keep newlines. */
@@ -270,8 +289,66 @@ export function importsOf(file: string, text: string, have: Set<string>, links: 
 	return out;
 }
 
+/**
+ * Module aliases a file binds to repo modules: `import * as ns from './x.ts'` (TS);
+ * `from . import mod`, `from seclab_broker import mod`, `import seclab_broker.mod as m` (Python).
+ * `alias.name` is a use of that module's `name` (any other `.name` is not: KKK-6).
+ */
+export function aliasesOf(file: string, text: string, have: Set<string>, links: Map<string, string> = new Map()): Array<[string, string]> {
+	const out: Array<[string, string]> = [];
+	const dir = path.posix.dirname(file);
+	const pick = (cands: string[]) => cands.map(c => path.posix.normalize(c)).map(c => {
+		for (const [from, to] of links) {
+			if (c === from || c.startsWith(`${from}/`)) {
+				return to + c.slice(from.length);
+			}
+		}
+		return c;
+	}).find(c => have.has(c));
+	if (langOf(file) === 'ts') {
+		for (const m of lexTs(text, false).matchAll(/\bimport\s*\*\s*as\s+([A-Za-z_$][\w$]*)\s+from\s*['"](\.{1,2}\/[^'"]+)['"]/g)) {
+			const p = path.posix.join(dir, m[2]);
+			const hit = pick([p, p.replace(/\.js$/, '.ts'), `${p}.ts`, `${p}/index.ts`]);
+			if (hit) {
+				out.push([hit, m[1]]);
+			}
+		}
+		return out;
+	}
+	const src = lexPy(text, false);
+	for (const m of src.matchAll(/^\s*from\s+(\.+|seclab_broker)\s+import\s+([^\n(]+)$/gm)) {
+		let base = 'broker/seclab_broker';
+		if (m[1].startsWith('.')) {
+			base = dir;
+			for (let i = 1; i < m[1].length; i++) {
+				base = path.posix.dirname(base);
+			}
+		}
+		for (const part of m[2].split(',')) {
+			const [name, alias] = part.trim().split(/\s+as\s+/);
+			const hit = name ? pick([`${base}/${name}.py`]) : undefined;
+			if (hit) {
+				out.push([hit, alias ?? name]);
+			}
+		}
+	}
+	for (const m of src.matchAll(/^\s*import\s+seclab_broker\.([\w.]+)\s+as\s+(\w+)/gm)) {
+		const hit = pick([`broker/seclab_broker/${m[1].split('.').join('/')}.py`]);
+		if (hit) {
+			out.push([hit, m[2]]);
+		}
+	}
+	for (const m of src.matchAll(/^\s*import\s+(\w+)\s*$/gm)) {
+		const hit = pick([`${dir}/${m[1]}.py`]);
+		if (hit) {
+			out.push([hit, m[1]]);
+		}
+	}
+	return out;
+}
+
 interface Decl { name: string; exported: boolean; body: string; file: string }
-interface Parsed { decls: Decl[]; roots: string; imports: Set<string> }
+interface Parsed { decls: Decl[]; roots: string; imports: Set<string>; aliases: Array<[string, string]> }
 
 const TS_DECL = /^(export\s+)?(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(function\*?|const|let|var|class|enum|interface|type)\s+([A-Za-z_$][\w$]*)/;
 const PY_DECL = /^(?:async\s+)?(def|class)\s+([A-Za-z_]\w*)/;
@@ -326,10 +403,35 @@ export function parse(file: string, text: string, have: Set<string>, links?: Map
 		}
 		roots = roots.replace(/^export\s*\{[^}]*\}\s*;?[ \t]*$/gm, ''); // an export list is not a use
 	}
-	return { decls, roots, imports: importsOf(file, text, have, links) };
+	return { decls, roots, imports: importsOf(file, text, have, links), aliases: aliasesOf(file, text, have, links) };
 }
 
 const word = (name: string) => new RegExp(`(?<![\\w$])${name.replace(/\$/g, '\\$')}(?![\\w$])`);
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+
+/**
+ * Whether `text` uses `name` as a binding (KKK-6): a bare word, but not a member access
+ * (`x.name`, though `...name` is a use), an object or destructuring key (`{ name: …`,
+ * `, name: …`), or a keyword argument (`(name=`, `, name=`).
+ */
+export function uses(text: string, name: string): boolean {
+	for (const m of text.matchAll(new RegExp(word(name).source, 'g'))) {
+		const i = m.index!;
+		if (text[i - 1] === '.' && text[i - 2] !== '.') {
+			continue;
+		}
+		const prev = /(\S)\s*$/.exec(text.slice(Math.max(0, i - 200), i))?.[1];
+		const after = text.slice(i + name.length, i + name.length + 3).replace(/^\s+/, '');
+		if ((prev === '{' || prev === ',') && /^:(?!:)/.test(after)) {
+			continue;
+		}
+		if ((prev === '(' || prev === ',') && /^=(?!=)/.test(after)) {
+			continue;
+		}
+		return true;
+	}
+	return false;
+}
 
 /**
  * Exported declarations that nothing which runs reaches. Seeds: each non-test file's anonymous
@@ -349,7 +451,12 @@ export function deadExports(texts: Map<string, string>, entries: string[] = [], 
 		const p = parsed.get(from.file)!;
 		const targets = [...p.decls, ...[...p.imports].flatMap(i => parsed.get(i)?.decls.filter(d => d.exported) ?? [])];
 		for (const t of targets) {
-			if (!live.has(key(t)) && t.body !== from.body && word(t.name).test(from.body)) {
+			if (live.has(key(t)) || t.body === from.body) {
+				continue;
+			}
+			const viaAlias = t.file !== from.file && p.aliases.some(([f, a]) => f === t.file
+				&& new RegExp(`(?<![\\w$.])${escapeRe(a)}\\s*\\.\\s*${escapeRe(t.name)}(?![\\w$])`).test(from.body));
+			if (viaAlias || uses(from.body, t.name)) {
 				live.add(key(t));
 				queue.push(t);
 			}
@@ -382,7 +489,10 @@ export function deadExports(texts: Map<string, string>, entries: string[] = [], 
 
 // ---- workflows ----------------------------------------------------------------------------
 
-/** Trigger names of a workflow (`on:` as a map, a list or a scalar). */
+/**
+ * Trigger names of a workflow (`on:` as a map, a list or a scalar). A push or pull_request
+ * trigger whose `branches` filter can't match main is left out (KKK-7): it never runs there.
+ */
 export function triggers(yml: string): string[] {
 	const lines = yml.split('\n');
 	const i = lines.findIndex(l => /^(?:on|"on"|'on'):/.test(l));
@@ -394,6 +504,8 @@ export function triggers(yml: string): string[] {
 		return inline.replace(/^\[|\]$/g, '').split(',').map(s => s.trim()).filter(Boolean);
 	}
 	const out: string[] = [];
+	let cur: string | undefined;
+	const branches = new Map<string, string>();
 	for (const l of lines.slice(i + 1)) {
 		if (/^\S/.test(l)) {
 			break;
@@ -401,48 +513,77 @@ export function triggers(yml: string): string[] {
 		const m = /^ {2}([A-Za-z_]+):/.exec(l) ?? /^ {2}- ([A-Za-z_]+)\s*$/.exec(l);
 		if (m) {
 			out.push(m[1]);
+			cur = m[1];
+			continue;
+		}
+		const b = /^ {4}(branches|branches-ignore):\s*(.*)$/.exec(l);
+		if (b && cur) {
+			branches.set(cur, `${b[1]}=${b[2].replace(/#.*/, '').trim()}`);
 		}
 	}
-	return out;
+	const reachesMain = (t: string) => {
+		const f = branches.get(t);
+		if (!f) {
+			return true;
+		}
+		const [kind, list] = f.split('=');
+		const names = list.replace(/^\[|\]$/g, '').split(',').map(s => s.trim().replace(/^['"]|['"]$/g, ''));
+		const hit = names.some(n => n === 'main' || n === '**' || n === '*');
+		return kind === 'branches' ? hit : !hit;
+	};
+	return out.filter(t => (t !== 'push' && t !== 'pull_request') || reachesMain(t));
 }
 
-/** The steps' `run:` texts of one job, in order (block scalars joined). */
-export function jobSteps(yml: string, job: string): string[] | undefined {
+export interface Step { run: string; if?: string; continueOnError?: string }
+export interface Job { if?: string; continueOnError?: string; steps: Step[] }
+
+/** One job: its own `if:`/`continue-on-error:`, and each step's `run:` text and the same keys. */
+export function jobOf(yml: string, job: string): Job | undefined {
 	const lines = yml.split('\n');
 	const start = lines.findIndex(l => l === `  ${job}:`);
 	if (start < 0 || !lines.slice(0, start).some(l => l === 'jobs:')) {
 		return undefined;
 	}
-	const steps: string[] = [];
-	let cur: string[] | undefined;
+	const out: Job = { steps: [] };
+	let cur: Step | undefined;
 	let inRun = false;
 	for (const l of lines.slice(start + 1)) {
 		if (/^ {2}\S/.test(l) || /^\S/.test(l)) {
 			break;
 		}
+		const jobKey = /^ {4}(if|continue-on-error):\s*(.*)$/.exec(l);
+		if (jobKey) {
+			out[jobKey[1] === 'if' ? 'if' : 'continueOnError'] = jobKey[2].trim();
+			continue;
+		}
 		if (/^ {6}- /.test(l)) {
 			if (cur) {
-				steps.push(cur.join('\n'));
+				out.steps.push(cur);
 			}
-			cur = [];
+			cur = { run: '' };
 			inRun = false;
 		}
-		const m = /^ {6}(?:- )? {0,2}run:\s*(.*)$/.exec(l);
-		if (m && cur) {
-			inRun = true;
-			if (!/^[|>][-+]?$/.test(m[1].trim())) {
-				cur.push(m[1].trim());
+		const key = /^ {6}(?:- )? {0,2}(run|if|continue-on-error):\s*(.*)$/.exec(l);
+		if (key && cur) {
+			if (key[1] === 'run') {
+				inRun = true;
+				if (!/^[|>][-+]?$/.test(key[2].trim())) {
+					cur.run = key[2].trim();
+				}
+			} else {
+				inRun = false;
+				cur[key[1] === 'if' ? 'if' : 'continueOnError'] = key[2].trim();
 			}
 		} else if (inRun && cur && /^ {10}\S/.test(l)) {
-			cur.push(l.trim());
+			cur.run += (cur.run ? '\n' : '') + l.trim();
 		} else if (/^ {8}\S/.test(l)) {
 			inRun = false;
 		}
 	}
 	if (cur) {
-		steps.push(cur.join('\n'));
+		out.steps.push(cur);
 	}
-	return steps;
+	return out;
 }
 
 // ---- discovery ----------------------------------------------------------------------------
@@ -487,7 +628,7 @@ export function discover(files: string[], read: (f: string) => string): Map<stri
 
 export interface Report { errors: string[]; notes: string[] }
 
-export async function check(files: string[], read: (f: string) => string, opts: { verifyRuns?: (e: Evidence) => Promise<string | undefined>; links?: Map<string, string> } = {}): Promise<Report> {
+export async function check(files: string[], read: (f: string) => string, opts: { links?: Map<string, string> } = {}): Promise<Report> {
 	const errors: string[] = [];
 	const notes: string[] = [];
 	const has = new Set(files);
@@ -501,7 +642,7 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 	// Static: exports.
 	const sources = new Map<string, string>();
 	for (const f of files) {
-		if ([...TS_ROOTS, ...PY_ROOTS].some(r => f.startsWith(r)) && langOf(f)) {
+		if (IN_SCOPE.test(f) && langOf(f)) {
 			sources.set(f, read(f));
 		}
 	}
@@ -512,16 +653,25 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 			continue;
 		}
 		const [file, name] = x.subject.split('#');
-		if (!sources.has(file) || !name || !new RegExp(`^export\\s+(?:async\\s+)?function\\s+${name}\\b`, 'm').test(sources.get(file)!)) {
+		if (!sources.has(file) || !name || !new RegExp(`^export\\s+(?:async\\s+)?function\\s+${escapeRe(name)}\\b`, 'm').test(codeOnly(sources.get(file)!, langOf(file)!))) {
 			errors.push(`entry ${x.subject}: no exported function ${name} in ${file}`);
 			continue;
 		}
-		// The host finds the entry through its manifest: it must name the entry's module.
+		// The only host-called entries: a VS Code extension's activate/deactivate, declared by the
+		// `main` of that extension's own package.json (KKK-3).
+		const extRoot = /^(extensions\/[^/]+)\/src\//.exec(file)?.[1];
+		let main: unknown;
+		try {
+			main = extRoot && x.declaredIn === `${extRoot}/package.json` && has.has(x.declaredIn) ? (JSON.parse(read(x.declaredIn)) as { main?: unknown }).main : undefined;
+		} catch {
+			main = undefined;
+		}
 		const stem = path.posix.basename(file).replace(/\.\w+$/, '');
-		if (!has.has(x.declaredIn) || !word(stem).test(read(x.declaredIn))) {
-			errors.push(`entry ${x.subject}: ${x.declaredIn} does not name ${stem}`);
+		if (!['activate', 'deactivate'].includes(name) || typeof main !== 'string' || path.posix.basename(main).replace(/\.js$/, '') !== stem) {
+			errors.push(`entry ${x.subject}: only an extension's activate/deactivate, in the module its own package.json \`main\` names`);
 			continue;
 		}
+		notes.push(`entry: ${x.subject} (${x.calledBy})`);
 		entries.push(x.subject);
 	}
 	const dead = new Map(deadExports(sources, entries, opts.links).map(d => [`${d.file}#${d.name}`, d]));
@@ -567,7 +717,7 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 			continue;
 		}
 		const sym = name ?? path.posix.basename(file);
-		if (!word(sym).test(codeOnly(read(x.consumer), langOf(x.consumer) ?? 'sh', true))) {
+		if (!uses(codeOnly(read(x.consumer), langOf(x.consumer) ?? 'sh', true), sym)) {
 			errors.push(`exempt ${x.subject}: consumer ${x.consumer} never uses ${sym} (comments don't count). The exemption claims something untrue.`);
 		}
 	}
@@ -604,33 +754,48 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 				continue;
 			}
 			if (e.run !== undefined) {
-				if (!Number.isSafeInteger(e.run) || e.run <= 0 || typeof e.workflow !== 'string' || !has.has(`.github/workflows/${e.workflow}`)) {
-					errors.push(`subject ${s.id}: run evidence needs a run id and an existing workflow file`);
-				} else if (opts.verifyRuns) {
-					const bad = await opts.verifyRuns(e);
-					if (bad) {
-						errors.push(`subject ${s.id}: run ${e.run}: ${bad}`);
-					}
+				if (!Number.isSafeInteger(e.run) || e.run <= 0 || typeof e.workflow !== 'string' || !has.has(`.github/workflows/${e.workflow}`)
+					|| typeof e.sha !== 'string' || !/^[0-9a-f]{40}$/.test(e.sha) || typeof e.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(e.date)) {
+					errors.push(`subject ${s.id}: run evidence needs a run id, an existing workflow file, the run's head sha (40 hex) and date (YYYY-MM-DD)`);
 				}
 			} else if (e.ci !== undefined) {
 				const [wf, job] = e.ci.split('#');
 				const yml = has.has(`.github/workflows/${wf}`) ? read(`.github/workflows/${wf}`) : undefined;
-				const steps = yml && job ? jobSteps(yml, job) : undefined;
-				if (!steps) {
+				const j = yml && job ? jobOf(yml, job) : undefined;
+				const last = j?.steps.at(-1);
+				// Exactly the marks step, unconditional, failing the job (KKK-1).
+				const want = `./seclab liveness marks ${e.ci} "$SECLAB_LIVENESS_LOG"`;
+				if (!j || !yml) {
 					errors.push(`subject ${s.id}: ci evidence ${e.ci}: no such workflow job`);
-				} else if (!new RegExp(`^\\./seclab liveness marks ${e.ci.replace(/[.#]/g, '\\$&')} `).test(steps.at(-1) ?? '')) {
-					errors.push(`subject ${s.id}: ci job ${e.ci} must end with \`./seclab liveness marks ${e.ci} <log>\`, or nothing checks its marks`);
+				} else {
+					const t = triggers(yml);
+					if (!t.includes('push') && !t.includes('pull_request')) {
+						errors.push(`subject ${s.id}: ci job ${e.ci} must run on push or pull_request`);
+					}
+					if (j.if !== undefined || j.continueOnError !== undefined) {
+						errors.push(`subject ${s.id}: ci job ${e.ci} must have no if: or continue-on-error:`);
+					}
+					if (!last || last.run !== want || last.if !== undefined || last.continueOnError !== undefined) {
+						errors.push(`subject ${s.id}: ci job ${e.ci} must end with exactly \`${want}\` (no if:, no continue-on-error:), or nothing checks its marks`);
+					}
 				}
+				// The registered runner itself calls liveMark with this mark, in code (KKK-2): not in a
+				// comment, not inside a string, not in some other file.
 				if (typeof e.mark !== 'string' || !/^[a-z0-9][a-z0-9:/._-]{2,120}$/.test(e.mark)) {
 					errors.push(`subject ${s.id}: ci evidence needs a mark ([a-z0-9:/._-])`);
-				} else if (!files.some(f => /^(?:test|tabd\/test)\//.test(f) && langOf(f) === 'ts' && codeOnly(read(f), 'ts').includes(`liveMark('${e.mark}'`))) {
-					errors.push(`subject ${s.id}: no runner calls liveMark('${e.mark}')`);
+				} else if (typeof e.runner !== 'string' || !/^(?:test|tabd\/test)\/.+\.ts$/.test(e.runner) || !has.has(e.runner)) {
+					errors.push(`subject ${s.id}: ci evidence needs runner, the test file that calls liveMark`);
+				} else if (!markCalls(read(e.runner)).includes(e.mark)) {
+					errors.push(`subject ${s.id}: runner ${e.runner} never calls liveMark('${e.mark}') in code`);
 				}
 			} else if (e.record !== undefined) {
+				// A structured line, as in the liveness EDR's "Evidence on record": a passing mention
+				// (even "never ran") doesn't count (KKK-5).
+				const line = new RegExp(`^- \\*\\*\`${escapeRe(s.id)}\`:\\*\\* \\S`, 'm');
 				if (!/^docs\/.+\.md$/.test(e.record) || !has.has(e.record)) {
 					errors.push(`subject ${s.id}: record ${e.record} is not a doc in docs/`);
-				} else if (!read(e.record).includes(s.id)) {
-					errors.push(`subject ${s.id}: record ${e.record} never names ${s.id}`);
+				} else if (!line.test(read(e.record))) {
+					errors.push(`subject ${s.id}: record ${e.record} has no "- **\`${s.id}\`:** …" evidence line`);
 				} else if (!s.evidence.some(x => x.run !== undefined || x.ci !== undefined)) {
 					notes.push(`record only: ${s.id} (${e.record})`);
 				}
@@ -658,40 +823,66 @@ export function checkMarks(reg: Register, job: string, log: string | undefined):
 	return expected.filter(x => !got.has(x.mark)).map(x => `${x.id}: never ran in ${job} (no mark ${x.mark})`);
 }
 
-async function verifyRun(e: Evidence): Promise<string | undefined> {
-	const repo = process.env.GITHUB_REPOSITORY;
-	const token = process.env.GITHUB_TOKEN;
-	if (!repo || !token) {
-		return 'cannot verify: GITHUB_REPOSITORY and GITHUB_TOKEN are required with --verify-runs';
-	}
-	const api = async (p: string) => {
-		const r = await fetch(`https://api.github.com/repos/${repo}/actions/runs/${p}`, { headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${token}` } });
-		if (!r.ok) {
-			throw new Error(`HTTP ${r.status}`);
-		}
-		return r.json() as Promise<Record<string, unknown>>;
-	};
-	try {
-		const run = await api(String(e.run));
-		if (run.path !== `.github/workflows/${e.workflow}`) {
-			return `is a run of ${String(run.path)}, not ${e.workflow}`;
-		}
-		if (run.event !== 'workflow_dispatch' && run.event !== 'schedule') {
-			return `was triggered by ${String(run.event)}, not dispatch or schedule`;
-		}
-		if (run.conclusion !== 'success') {
-			return `concluded ${String(run.conclusion)}`;
-		}
-		if (e.artifact) {
-			const a = await api(`${e.run}/artifacts?per_page=100`) as { artifacts?: Array<{ name?: string }> };
-			if (!a.artifacts?.some(x => x.name === e.artifact)) {
-				return `has no artifact ${e.artifact}`;
+type Api = (p: string) => Promise<{ status: number; body?: Record<string, unknown> }>;
+
+/**
+ * The register's Actions runs (KKK-4: this needs only the register, so its networked, token-
+ * holding container mounts nothing else). Each must be a successful dispatch or scheduled run
+ * of the named workflow, at the recorded head sha and date, carrying `artifact` if named. A run
+ * deleted at the retention horizon degrades to a note, so expiry can't block every PR (KKK-5).
+ */
+export async function verifyRuns(reg: Register, api: Api, now = Date.now()): Promise<Report> {
+	const errors: string[] = [];
+	const notes: string[] = [];
+	for (const s of reg.subjects ?? []) {
+		for (const e of (s.evidence ?? []).filter(x => x.run !== undefined)) {
+			const at = `subject ${s.id}: run ${e.run}`;
+			if (!Number.isSafeInteger(e.run) || typeof e.sha !== 'string' || typeof e.date !== 'string' || typeof e.workflow !== 'string') {
+				errors.push(`${at}: malformed evidence (run the offline check)`);
+				continue;
+			}
+			const r = await api(String(e.run));
+			if (r.status === 404 && (now - Date.parse(e.date)) / 86_400_000 > 85) {
+				notes.push(`${at}: expired (recorded ${e.date}); re-run and update the register`);
+				continue;
+			}
+			const run = r.body;
+			if (r.status !== 200 || !run) {
+				errors.push(`${at}: lookup failed (HTTP ${r.status})`);
+				continue;
+			}
+			const bad = run.path !== `.github/workflows/${e.workflow}` ? `is a run of ${String(run.path)}, not ${e.workflow}`
+				: run.event !== 'workflow_dispatch' && run.event !== 'schedule' ? `was triggered by ${String(run.event)}, not dispatch or schedule`
+				: run.conclusion !== 'success' ? `concluded ${String(run.conclusion)}`
+				: run.head_sha !== e.sha ? `ran at ${String(run.head_sha)}, not the recorded ${e.sha}`
+				: !String(run.created_at ?? '').startsWith(e.date) ? `ran on ${String(run.created_at)}, not the recorded ${e.date}`
+				: undefined;
+			if (bad) {
+				errors.push(`${at}: ${bad}`);
+				continue;
+			}
+			if (e.artifact) {
+				const a = await api(`${e.run}/artifacts?per_page=100`);
+				const names = (a.body as { artifacts?: Array<{ name?: string }> } | undefined)?.artifacts?.map(x => x.name) ?? [];
+				if (!names.includes(e.artifact)) {
+					errors.push(`${at}: has no artifact ${e.artifact}`);
+				}
 			}
 		}
-	} catch (err) {
-		return `lookup failed: ${(err as Error).message}`;
 	}
-	return undefined;
+	return { errors, notes };
+}
+
+function githubApi(): Api {
+	const repo = process.env.GITHUB_REPOSITORY;
+	const token = process.env.GITHUB_TOKEN;
+	if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo) || !token) {
+		throw new Error('verify-runs needs GITHUB_REPOSITORY and GITHUB_TOKEN');
+	}
+	return async p => {
+		const r = await fetch(`https://api.github.com/repos/${repo}/actions/runs/${p}`, { headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${token}` } });
+		return { status: r.status, body: r.ok ? await r.json() as Record<string, unknown> : undefined };
+	};
 }
 
 // ---- self-test ----------------------------------------------------------------------------
@@ -703,13 +894,21 @@ async function verifyRun(e: Evidence): Promise<string | undefined> {
  */
 async function selfTest(): Promise<void> {
 	const base: Record<string, string> = {
-		'.github/workflows/ci.yml': 'on:\n  push:\njobs:\n  oci:\n    steps:\n      - run: ./seclab test containment\n      - name: marks\n        run: ./seclab liveness marks ci.yml#oci "$LOG"\n',
+		'.github/workflows/ci.yml': 'on:\n  push:\njobs:\n  oci:\n    steps:\n      - run: ./seclab test containment\n      - name: marks\n        run: ./seclab liveness marks ci.yml#oci "$SECLAB_LIVENESS_LOG"\n',
 		'.github/workflows/weekly.yml': "on:\n  schedule:\n    - cron: '1 1 * * 1'\n  workflow_dispatch:\njobs:\n  r:\n    steps:\n      - run: echo\n",
 		'test/builds/variants.json': '{"v":{"hooks":[{"id":"h","patch":"test/h.patch"}]}}',
 		'test/h.patch': '',
 		'test/x/fixtures/evil/a.txt': '',
 		'test/run.ts': "import { liveMark } from './liveness.ts';\nliveMark('evil-ran');\n",
-		'docs/proof.md': 'hook:v/h ran in run 7\n',
+		'docs/proof.md': '- **`hook:v/h`:** ran in run 7\n',
+		'extensions/e/package.json': '{"main": "./out/extension"}',
+		'extensions/e/src/extension.ts': "import { boot } from './boot.ts';\nexport function activate() { boot(); }\n",
+		'extensions/e/src/boot.ts': 'export function boot() {}\nexport function keyOnly() {}\nconst o = { keyOnly: 1 }; o.keyOnly;\n',
+		// Module-alias uses are uses (KKK-6 must not drop them): Python `mod.fn`, TS `ns.fn`.
+		'broker/seclab_broker/protocol.py': 'def check(x):\n    return x\n',
+		'broker/seclab_broker/core.py': 'from . import protocol\n\nprotocol.check(1)\n',
+		'tabd/src/ns.ts': 'export function viaNs() {}\n',
+		'tabd/src/usens.ts': "import * as ns from './ns.ts';\nns.viaNs();\n",
 		'tabd/src/main.ts': "import { start } from './sup.ts';\nimport { onDecision } from './rpc.ts';\nstart();\nonDecision(() => {});\n",
 		'tabd/src/sup.ts': "import { mint } from './scan.ts';\nexport function start() { helper(); }\nfunction helper() { const glob = '/**'; mint(); /* a comment */ }\n",
 		'tabd/src/scan.ts': "export function mint() {}\nexport function msgOnly() {}\nexport const note = `uses ${mint.name} but msgOnly only in text`;\n",
@@ -718,17 +917,19 @@ async function selfTest(): Promise<void> {
 		'sandbox/rootfs/opt/seclab/bin/seclab-x': '#!/bin/sh\n',
 		'tabd/src/drivers.ts': "export const X = '/opt/seclab/bin/seclab-x';\n",
 		'build/liveness/register.json': JSON.stringify({
+			entry: [{ subject: 'extensions/e/src/extension.ts#activate', calledBy: 'VS Code', declaredIn: 'extensions/e/package.json' }],
 			exempt: [
 				{ subject: 'tabd/src/rpc.ts#escapes', consumer: null, reason: 'nothing reads it yet' },
 				{ subject: 'tabd/src/rpc.ts#record', consumer: 'tabd/test/rpc.test.ts', reason: 'test only' },
 				{ subject: 'tabd/src/drivers.ts#X', consumer: null, reason: 'synthetic' },
 				{ subject: 'tabd/src/scan.ts#msgOnly', consumer: null, reason: 'synthetic: named only inside a string' },
 				{ subject: 'tabd/src/scan.ts#note', consumer: null, reason: 'synthetic' },
+				{ subject: 'extensions/e/src/boot.ts#keyOnly', consumer: null, reason: 'synthetic: only an object key and a member' },
 			],
 			subjects: [
-				{ id: 'workflow:weekly', runBy: 'schedule', evidence: [{ run: 1, workflow: 'weekly.yml' }] },
+				{ id: 'workflow:weekly', runBy: 'schedule', evidence: [{ run: 1, workflow: 'weekly.yml', sha: 'a'.repeat(40), date: '2026-11-01' }] },
 				{ id: 'hook:v/h', runBy: 'harness', evidence: [{ record: 'docs/proof.md' }] },
-				{ id: 'fixture:test/x/fixtures/evil', runBy: 'test/run.ts', evidence: [{ ci: 'ci.yml#oci', mark: 'evil-ran' }] },
+				{ id: 'fixture:test/x/fixtures/evil', runBy: 'test/run.ts', evidence: [{ ci: 'ci.yml#oci', mark: 'evil-ran', runner: 'test/run.ts' }] },
 			],
 		}),
 	};
@@ -751,7 +952,7 @@ async function selfTest(): Promise<void> {
 		injections.push(['unrun hook', withReg(r), /hook:v\/h .* add it to/]);
 	}
 	{ // 2. a fixture/probe whose runner never records it (the eight rogue-REH probes)
-		injections.push(['probe never run', { ...base, 'test/run.ts': "import { liveMark } from './liveness.ts';\n// liveMark('evil-ran');\n" }, /no runner calls liveMark\('evil-ran'\)/]);
+		injections.push(['probe never run', { ...base, 'test/run.ts': "import { liveMark } from './liveness.ts';\n// liveMark('evil-ran');\n" }, /never calls liveMark\('evil-ran'\) in code/]);
 	}
 	{ // 3. a listener API with no listener, behind an exemption claiming one (seclabOnDecision)
 		const r = reg();
@@ -769,12 +970,36 @@ async function selfTest(): Promise<void> {
 		injections.push(['scheduled job never run', withReg(r), /workflow:weekly .* add it to/]);
 	}
 	{ // and a ci job that never checks its marks
-		injections.push(['marks step removed', { ...base, '.github/workflows/ci.yml': 'on:\n  push:\njobs:\n  oci:\n    steps:\n      - run: ./seclab test containment\n' }, /must end with `\.\/seclab liveness marks/]);
+		injections.push(['marks step removed', { ...base, '.github/workflows/ci.yml': 'on:\n  push:\njobs:\n  oci:\n    steps:\n      - run: ./seclab test containment\n' }, /must end with exactly/]);
 	}
 	{ // a name inside a string is not a use
 		const r = reg();
 		r.exempt = r.exempt.filter(x => x.subject !== 'tabd/src/scan.ts#msgOnly');
 		injections.push(['string mention', withReg(r), /exports msgOnly, but nothing/]);
+	}
+	// Review KKK: each way the first version could be satisfied falsely.
+	const ciWith = (job: string) => ({ ...base, '.github/workflows/ci.yml': job });
+	const marksStep = '      - name: marks\n        run: ./seclab liveness marks ci.yml#oci "$SECLAB_LIVENESS_LOG"\n';
+	injections.push(
+		['KKK-1 job if: false', ciWith(`on:\n  push:\njobs:\n  oci:\n    if: \${{ false }}\n    steps:\n      - run: x\n${marksStep}`), /must have no if: or continue-on-error/],
+		['KKK-1 marks step || true', ciWith('on:\n  push:\njobs:\n  oci:\n    steps:\n      - run: x\n      - name: marks\n        run: ./seclab liveness marks ci.yml#oci "$SECLAB_LIVENESS_LOG" || true\n'), /must end with exactly/],
+		['KKK-1 marks step continue-on-error', ciWith(`on:\n  push:\njobs:\n  oci:\n    steps:\n      - run: x\n${marksStep}        continue-on-error: true\n`), /must end with exactly/],
+		['KKK-1 dispatch-only ci job', ciWith(`on:\n  workflow_dispatch:\njobs:\n  oci:\n    steps:\n      - run: x\n${marksStep}`), /must run on push or pull_request/],
+		['KKK-7 push filtered off main', ciWith(`on:\n  push:\n    branches: [nope]\njobs:\n  oci:\n    steps:\n      - run: x\n${marksStep}`), /workflow:ci .* add it to/],
+		['KKK-2 mark only in a string', { ...base, 'test/run.ts': "import { liveMark } from './liveness.ts';\nconst s = \"liveMark('evil-ran')\";\n" }, /never calls liveMark\('evil-ran'\) in code/],
+		['KKK-2 mark in another file', { ...base, 'test/run.ts': '\n', 'test/other.ts': "import { liveMark } from './liveness.ts';\nliveMark('evil-ran');\n" }, /never calls liveMark\('evil-ran'\) in code/],
+		['KKK-5 record mentions the id in passing', { ...base, 'docs/proof.md': 'hook:v/h never ran\n' }, /has no "- \*\*`hook:v\/h`:\*\* …" evidence line/],
+	);
+	{ // KKK-3: an entry hatch for something no host calls
+		const r = reg();
+		r.entry = [...(r.entry ?? []), { subject: 'tabd/src/rpc.ts#record', calledBy: 'nothing really', declaredIn: 'docs/proof.md' }];
+		r.exempt = r.exempt.filter(x => x.subject !== 'tabd/src/rpc.ts#record');
+		injections.push(['KKK-3 fake entry', withReg(r), /only an extension's activate\/deactivate/]);
+	}
+	{ // KKK-6: an object key and a member access are not uses
+		const r = reg();
+		r.exempt = r.exempt.filter(x => x.subject !== 'extensions/e/src/boot.ts#keyOnly');
+		injections.push(['KKK-6 key and member only', withReg(r), /exports keyOnly, but nothing/]);
 	}
 	for (const [name, tree, want] of injections) {
 		const got = await run(tree);
@@ -792,7 +1017,28 @@ async function selfTest(): Promise<void> {
 	if (!checkMarks(r, 'ci.yml#other', 'x').length) {
 		throw new Error('self-test: a marks step for a job nobody names passed');
 	}
-	console.log(`liveness self-test: ok (control clean; ${injections.length} injections and ${marks.length + 1} mark cases caught)`);
+	// verify-runs against a fake API: the good run passes; each mismatch fails; a deleted run
+	// is an error while recent and a note once past the retention horizon.
+	const now = Date.parse('2026-11-09T00:00:00Z');
+	const good = { path: '.github/workflows/weekly.yml', event: 'workflow_dispatch', conclusion: 'success', head_sha: 'a'.repeat(40), created_at: '2026-11-01T10:00:00Z' };
+	const runCases: Array<[string, Record<string, unknown> | undefined, string, 'ok' | 'error' | 'note']> = [
+		['good run', good, '2026-11-01', 'ok'],
+		['other workflow', { ...good, path: '.github/workflows/ci.yml' }, '2026-11-01', 'error'],
+		['push event', { ...good, event: 'push' }, '2026-11-01', 'error'],
+		['failed', { ...good, conclusion: 'failure' }, '2026-11-01', 'error'],
+		['other sha', { ...good, head_sha: 'b'.repeat(40) }, '2026-11-01', 'error'],
+		['deleted, recent', undefined, '2026-11-01', 'error'],
+		['deleted, expired', undefined, '2026-07-01', 'note'],
+	];
+	for (const [name, body, date, want] of runCases) {
+		const reg1: Register = { exempt: [], subjects: [{ id: 'workflow:weekly', runBy: 'x', evidence: [{ run: 1, workflow: 'weekly.yml', sha: 'a'.repeat(40), date }] }] };
+		const got = await verifyRuns(reg1, async () => body ? { status: 200, body } : { status: 404 }, now);
+		const kind = got.errors.length ? 'error' : got.notes.length ? 'note' : 'ok';
+		if (kind !== want) {
+			throw new Error(`self-test: verify-runs "${name}": ${kind}, want ${want}`);
+		}
+	}
+	console.log(`liveness self-test: ok (control clean; ${injections.length} injections, ${marks.length + 1} mark cases and ${runCases.length} run cases caught)`);
 }
 
 // ---- main ---------------------------------------------------------------------------------
@@ -801,9 +1047,21 @@ if (import.meta.main) {
 	const [cmd, ...rest] = process.argv.slice(2);
 	const repo = process.cwd();
 	const read = (f: string) => fs.readFileSync(path.join(repo, f), 'utf8');
+	const report = (r: Report, ok: string) => {
+		for (const n of r.notes) {
+			console.log(`note: ${n}`);
+		}
+		if (r.errors.length) {
+			for (const e of r.errors) {
+				console.error(`liveness: ${e}`);
+			}
+			process.exit(1);
+		}
+		console.log(ok);
+	};
 	if (cmd === '--self-test') {
 		await selfTest();
-	} else if (cmd === 'check' && rest[0] === '-') {
+	} else if (cmd === 'check' && rest.length === 1 && rest[0] === '-') {
 		const files = fs.readFileSync(0, 'utf8').split('\0').filter(Boolean).filter(f => fs.existsSync(path.join(repo, f)));
 		const links = new Map<string, string>();
 		for (const f of files) {
@@ -811,29 +1069,14 @@ if (import.meta.main) {
 				links.set(f, path.posix.normalize(path.posix.join(path.posix.dirname(f), fs.readlinkSync(path.join(repo, f)))));
 			}
 		}
-		const { errors, notes } = await check(files.filter(f => !links.has(f)), read, { links, ...(rest.includes('--verify-runs') ? { verifyRuns: verifyRun } : {}) });
-		for (const n of notes) {
-			console.log(`note: ${n}`);
-		}
-		if (errors.length) {
-			for (const e of errors) {
-				console.error(`liveness: ${e}`);
-			}
-			process.exit(1);
-		}
-		console.log(`liveness: ok${rest.includes('--verify-runs') ? ' (runs verified)' : ' (runs not verified offline)'}`);
+		report(await check(files.filter(f => !links.has(f)), read, { links }), 'liveness: ok (Actions runs are verified by verify-runs)');
+	} else if (cmd === 'verify-runs' && rest.length === 0) {
+		report(await verifyRuns(JSON.parse(read(REGISTER)) as Register, githubApi()), 'liveness: recorded Actions runs verified');
 	} else if (cmd === 'marks' && rest.length === 2) {
 		const log = fs.existsSync(rest[1]) ? fs.readFileSync(rest[1], 'utf8') : undefined;
-		const errs = checkMarks(JSON.parse(read(REGISTER)) as Register, rest[0], log);
-		if (errs.length) {
-			for (const e of errs) {
-				console.error(`liveness: ${e}`);
-			}
-			process.exit(1);
-		}
-		console.log(`liveness marks ${rest[0]}: ok`);
+		report({ errors: checkMarks(JSON.parse(read(REGISTER)) as Register, rest[0], log), notes: [] }, `liveness marks ${rest[0]}: ok`);
 	} else {
-		console.error('usage: liveness.ts check - [--verify-runs] | marks FILE.yml#JOB LOG | --self-test');
+		console.error('usage: liveness.ts check - | verify-runs | marks FILE.yml#JOB LOG | --self-test');
 		process.exit(2);
 	}
 }
