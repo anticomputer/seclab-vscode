@@ -62,9 +62,9 @@ Current queue:
   is sent a text model only if it owns it:
   - a file on the window's own tab authority;
   - a model its own content provider created (tagged per model, untagged by any other write);
-  - a file of a filesystem provider it registered;
+  - a text file born under a filesystem provider it registered;
   - an untitled document it created, or that the user typed;
-  - a notebook cell judged by its notebook.
+  - a notebook cell whose notebook is on the tab authority.
 
   Host settings, output and files opened in a tab window no longer reach the tab. Change, dirty,
   saved and encoding events use the same filter

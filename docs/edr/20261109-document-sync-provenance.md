@@ -52,15 +52,29 @@ host:
    itself isn't sent either: `ModelTracker` re-checks the predicate before `$acceptModelChanged`,
    and the revoking listener is registered at tagging time, before the model is ever synced, so it
    runs first.
-4. **Filesystem providers the host registered:** the model's scheme is served right now
-   (`fileService.getProvider`) by a provider this host registered through `MainThreadFileSystem`.
-   `registerProvider` throws on a scheme that's already taken, so a tab can't take over a
-   registered host filesystem scheme.
-5. **Untitled:** synced if this host created it (`openTextDocument({ content })`, `untitled:`
-   paths), or if it was empty with no associated path when the window first saw it: the user typed
-   it. Untitled documents the host seeds with content don't sync.
-6. **Notebook cells:** a `vscode-notebook-cell` URI is judged by its notebook URI
-   (`CellUri.parse`), with rules 1 and 4.
+4. **Text files of a filesystem provider the host registered** (review round 1, F1). The model was
+   born as a text file model, under a provider this host registered through `MainThreadFileSystem`,
+   and that provider still serves the scheme. "Born" means what the window saw the first time any
+   host's predicate observed the model, which is at `onModelAdded`. The textfile manager registers
+   its model before the asynchronous resolve creates the text model, so a text file model is
+   recorded as one at birth.
+
+   A tab can register a filesystem provider for a host scheme that has none (`output`), so a rule
+   keyed on the current provider would sync the host's output models. A model born otherwise never
+   qualifies, even if a text file model later wraps it, as `BaseTextEditorModel` does when a model
+   already exists at its URI.
+5. **Untitled:** synced in two cases.
+   - This host's call created it: `openTextDocument({ content })` or an `untitled:` path. Only a
+     model the call really created is tagged (`untitled.onDidCreate`). A call that names an existing
+     untitled URI reopens the host's model, and that model isn't tagged (review round 1, F2).
+   - It was empty with no associated path when the window first saw it, meaning the user typed it.
+
+   Untitled documents the host seeds with content don't sync.
+6. **Notebook cells:** a `vscode-notebook-cell` URI syncs only if its notebook (`CellUri.parse`) is
+   on this window's own tab authority. A parse failure fails closed.
+
+A filtered host's `$onVirtualDocumentChange` also only writes to models its own provider made
+(review round 1, F3). Before, it could replace the text of any loaded model, host settings included.
 
 Everything else isn't sent, so the tab never sees it. `vscode.workspace.openTextDocument` on a host
 URI fails, as it already does for a model too large to sync.
@@ -72,7 +86,8 @@ Files, one concern each:
   revocation.
 - `mainThreadDocuments.ts`: the change, dirty, saved and encoding events use the predicate, and
   untitled documents the host creates are tagged.
-- `mainThreadDocumentContentProviders.ts`: tags on create, and marks the host's own writes.
+- `mainThreadDocumentContentProviders.ts`: tags on create, and limits a host's writes to its own
+  models.
 - `mainThreadFileSystem.ts`: records the providers the host registers.
 
 The patch is longer than the queue's usual 50 lines because a scheme-level rule is unsound (above).
@@ -107,6 +122,13 @@ second sender of document text fails `patch-build`.
     text reaches the tab anyway, through the SCM API).
 - **Residual:** a host feature that creates an empty untitled document and then fills it with host
   data programmatically would sync. None was seen in the measurement below.
+- **Residual (review R2-1, low):** "born as a text file" means a text file model existed for the URI
+  when the text model appeared. A tab that stalls its own filesystem provider could keep one pending
+  while host code creates a model directly at that URI. No such host creator is known: output and
+  perf models are made only through their content providers, which the resolver skips once the
+  scheme has a filesystem.
+- **Review:** [security review](../security-reviews/20261109-document-sync-provenance.md), two
+  rounds, no open high or critical.
 - **Siblings** (other window-to-tab pushes of host data) aren't covered by this patch. They're
   reported to the coordinator: the configuration snapshot (every user setting value), notebook
   document sync (cells of host notebooks), the editor-tab model (host URIs), ext-host init

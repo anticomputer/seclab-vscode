@@ -180,7 +180,7 @@ if (mode === 'prepare') {
 		console.log(`perf pre-create: precreated=${rep.perf.precreated} foreignSeen=${rep.perf.foreignSeen} removedAt=${String(rep.perf.removedAt).replace(/[^a-z-]/g, '?').slice(0, 40) || '(never)'}`);
 		console.log(`controls: ${JSON.stringify(rep.controls)}; seeded=${rep.seeded}; untitledForeign=${rep.untitledForeign}`);
 		const clip = (v: unknown) => String(v ?? '').replace(/[^\x20-\x7e]/g, '?').slice(0, 120);
-		console.log(`hijack: providers=${Number(rep.hijack?.providers) || 0} fsUserdata=${clip(rep.hijack?.fsUserdata)} fsOutput=${clip(rep.hijack?.fsOutput)} untitledClaims=${Number(rep.hijack?.untitledClaims) || 0}\n`);
+		console.log(`hijack: providers=${Number(rep.hijack?.providers) || 0} fsUserdata=${clip(rep.hijack?.fsUserdata)} fsOutput=${clip(rep.hijack?.fsOutput)} hostUntitledSeen=${Number(rep.hijack?.hostUntitledSeen) || 0} untitledClaims=${Number(rep.hijack?.untitledClaims) || 0}\n`);
 		// Every step must have run and succeeded: a step that failed would pass the leak checks
 		// vacuously (review round 1, P1).
 		const failed = (rep.steps as Array<{ name: string; ok: boolean }>).filter(s => !s.ok).map(s => s.name.replace(/[^a-z-]/g, '?'));
@@ -195,6 +195,7 @@ if (mode === 'prepare') {
 		expect('hijack 2: no host content reached the tab through the pre-created model', rep.perf.foreignSeen === false);
 		// Proof the host did write into it: the write untagged the model, so the tab saw it removed.
 		expect('hijack 2: the host write removed the pre-created model from the tab', measure || rep.perf.removedAt === 'perfview-after-release', String(rep.perf.removedAt));
+		expect('a host-seeded untitled document existed and the tab tried to claim it', Number(rep.hijack?.hostUntitledSeen) >= 1 && Number(rep.hijack?.untitledClaims) >= 1);
 		expect('no host-seeded untitled text reached the tab (claim by URI refused)', rep.untitledForeign === false);
 		for (const c of ['editSaved', 'untitledTyped', 'tabUntitled', 'gitDoc', 'cellDoc']) {
 			expect(`control: ${c}`, rep.controls[c] === true);

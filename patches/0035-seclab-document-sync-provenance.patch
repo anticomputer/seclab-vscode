@@ -260,8 +260,8 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadFileSystem.ts b/src/vs/workbe
  	$unregisterProvider(handle: number): void {
 diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts
 --- a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	1970-01-01 00:00:00
-+++ b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-09 16:59:21
-@@ -0,0 +1,124 @@
++++ b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-09 17:06:52
+@@ -0,0 +1,126 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab: which text models belong to a tab's extension host (patch 0035, EDR
 + *  document-sync-provenance). In a `seclab+` window a non-local extension host is sent a model only
@@ -327,7 +327,9 @@ diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbe
 +/** `$onVirtualDocumentChange`: a filtered host may only write to models its own provider made. */
 +export function seclabProviderWrite(ctx: IExtHostContext, model: ITextModel, write: () => void): void {
 +	const o = seclabOrigin(ctx);
-+	if (o.filtered && !o.models.has(model)) {
++	// `filtered` is set by MainThreadDocumentsAndEditors; a tab's remote host also fails closed without it.
++	const filtered = o.filtered || (ctx.extensionHostKind !== ExtensionHostKind.LocalProcess && !!ctx.remoteAuthority?.startsWith('seclab+'));
++	if (filtered && !o.models.has(model)) {
 +		return;
 +	}
 +	const outer = o.writing;
