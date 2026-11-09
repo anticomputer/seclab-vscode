@@ -45,6 +45,10 @@ jobs:
         run: sh build/check-release.sh --self-test
       - name: Dependency register self-test (the register itself is checked in docs)
         run: ./seclab lint deps --self-test
+      - name: Single-file container mounts cover their imports (deps-updates, image verify)
+        run: |
+          ./seclab lint mounts
+          ./seclab deps outdated --self-test
       # RPC capability filter (rpc-filter/AGENTS.md): policy drift, generated docs and
       # policy module in sync, probe payload lint, probe-safety guards.
       - name: RPC policy drift

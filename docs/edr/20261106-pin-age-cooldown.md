@@ -42,7 +42,15 @@ available rather than wait.
   - Dependabot has `cooldown: default-days: 7` for every ecosystem, and now also watches
     `broker/tools/attest` (pip and docker).
   - The weekly `deps outdated` report suggests only releases and moved tags at least 7 days
-    old.
+    old, and only a release published after the pinned one. Until 2026-11-09 a pin newer than
+    every release past the cooldown (`code-oss` 1.145.0) was reported with the older one as
+    "new"; `./seclab deps outdated --self-test` (ci-unit) covers that case.
+- **`deps-updates` never ran until 2026-11-09.** Its container mounts single files (review
+  EE-2), and `build/release-dates.ts`, imported by `deps-outdated.ts` for this rule, was never
+  added. The first scheduled run failed with `ERR_MODULE_NOT_FOUND`. The mount lists are now
+  named arrays in `seclab`, and `./seclab lint mounts` (ci-unit) fails when a list misses part
+  of its entry's import closure (`build/import-closure.ts`). The same applies to the image
+  verifier's mounts.
 - **Re-pinned 2026-11-06** to the newest builds at least 7 days old:
   - `golang:1.27.2-trixie`, which rebuilt gitleaks: binaries `6949cfae…` (arm64) and
     `e0e51d58…` (amd64), updated in `build/tools/tools.json` and tabd's scanner pin;

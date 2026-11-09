@@ -15,6 +15,57 @@ import { parseRef, Registry } from './registry.ts';
 import { ageDays, COOLDOWN_DAYS, imageDate } from './release-dates.ts';
 
 interface Dep { id: string; name: string; kind: string; pins: string[]; track?: { github?: string; version?: string } }
+interface Release { tag_name?: string; published_at?: string; draft?: boolean; prerelease?: boolean }
+const norm = (t: string) => t.replace(/^lychee-v|^v/, '');
+
+/**
+ * The release to suggest for a pin, if any: the newest one at least COOLDOWN_DAYS old (never one
+ * CFS still holds), and only if it was published after the pinned one. A pin newer than every
+ * release past the cooldown is not outdated. If the pinned release isn't listed, any other
+ * candidate is suggested (the report errs towards showing).
+ */
+export function pickRelease(releases: Release[], pinned: string, now = Date.now()): string | undefined {
+	const ok = releases.filter(x => !x.draft && !x.prerelease && x.published_at && ageDays(x.published_at, now) >= COOLDOWN_DAYS)
+		.sort((a, b) => Date.parse(b.published_at!) - Date.parse(a.published_at!));
+	if (!ok.length) {
+		throw new Error(`no release at least ${COOLDOWN_DAYS} days old among the latest 30`);
+	}
+	const tag = String(ok[0].tag_name ?? '');
+	if (norm(tag) === norm(pinned)) {
+		return undefined;
+	}
+	const mine = releases.find(x => norm(String(x.tag_name ?? '')) === norm(pinned) && x.published_at);
+	if (mine && Date.parse(mine.published_at!) >= Date.parse(ok[0].published_at!)) {
+		return undefined;
+	}
+	return tag;
+}
+
+function selfTest(): void {
+	const now = Date.parse('2026-11-09T00:00:00Z');
+	const rel = (tag: string, day: number): Release => ({ tag_name: tag, published_at: new Date(now - day * 86_400_000).toISOString() });
+	const list = [rel('1.145.0', 3), rel('1.144.0', 30), rel('1.143.0', 60)];
+	const cases: Array<[string, string, string | undefined]> = [
+		['pin newer than every release past the cooldown (2026-11-09 report)', '1.145.0', undefined],
+		['pin is the newest past the cooldown', '1.144.0', undefined],
+		['older pin', '1.143.0', '1.144.0'],
+		['unlisted pin', '1.100.0', '1.144.0'],
+		['v prefix', 'v1.143.0', '1.144.0'],
+	];
+	for (const [name, pinned, want] of cases) {
+		const got = pickRelease(list, pinned, now);
+		if (got !== want) {
+			throw new Error(`deps-outdated self-test: ${name}: got ${got}, want ${want}`);
+		}
+	}
+	console.log('deps-outdated self-test: ok');
+}
+
+if (process.argv[2] === '--self-test') {
+	selfTest();
+	process.exit(0);
+}
+
 const repo = path.resolve(import.meta.dirname, '..');
 const deps = (JSON.parse(fs.readFileSync(path.join(repo, 'deps/registry.json'), 'utf8')) as { deps: Dep[] }).deps;
 const safe = (s: string) => s.replace(/[^A-Za-z0-9._:/+-]/g, '?').slice(0, 120); // no `@` (mentions), always in code spans (EE-3)
@@ -46,14 +97,9 @@ for (const d of deps) {
 			if (!r.ok) {
 				throw new Error(`releases: HTTP ${r.status}`);
 			}
-			const releases = (await r.json()) as Array<{ tag_name?: string; published_at?: string; draft?: boolean; prerelease?: boolean }>;
-			const ok = releases.filter(x => !x.draft && !x.prerelease && x.published_at && ageDays(x.published_at) >= COOLDOWN_DAYS)
-				.sort((a, b) => Date.parse(b.published_at!) - Date.parse(a.published_at!));
-			if (!ok.length) {
-				throw new Error(`no release at least ${COOLDOWN_DAYS} days old among the latest 30`);
-			}
-			const tag = String(ok[0].tag_name ?? '');
-			if (tag.replace(/^v|^lychee-v/, '') !== (d.track.version ?? '').replace(/^v/, '')) {
+			const releases = (await r.json()) as Release[];
+			const tag = pickRelease(releases, d.track.version ?? '');
+			if (tag !== undefined) {
 				rows.push(`| ${d.id} | new release | \`${safe(d.track.version ?? '?')}\` | \`${safe(tag)}\` |`);
 			}
 		} catch (e) {
