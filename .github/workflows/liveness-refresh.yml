@@ -1,0 +1,40 @@
+name: liveness-refresh
+
+# Liveness evidence that is about to lapse (EDR liveness-gate). Actions runs are deleted at the
+# retention horizon; the required workflow-lint check only notes a run past day 75 and degrades a
+# deleted one to a note, so it never blocks a PR on age. This weekly job fails instead, listing
+# every entry due for refresh, so each is re-run and its register entry updated before day 85.
+# Not a required check. It runs on every push that changes it or the liveness code, so it is never
+# a dispatch-only workflow that nothing has run (the gate's own rule).
+on:
+  schedule:
+    - cron: '41 7 * * 1'
+  push:
+    paths:
+      - .github/workflows/liveness-refresh.yml
+      - build/liveness/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: liveness-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: refresh
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read # reads the Actions runs the register cites
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Liveness evidence due for refresh (register only; fails if any is due)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./seclab liveness verify-runs --refresh
