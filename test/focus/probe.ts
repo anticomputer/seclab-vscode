@@ -104,7 +104,11 @@ if (mode === 'prepare') {
 	// The editor's windows now, before the host steps change them: each must have been made
 	// click-through (review FFF-3), not just one.
 	const mainPid = editorPid(userData);
-	const windowsNow = mainPid ? editorWindows(mainPid).length : 0;
+	// Every sizeable window, at any layer, and the ones not one level below normal (LLL-3): a
+	// window above that level could cover the user's work without ever being the front process.
+	const winsNow = mainPid ? editorWindows(mainPid).filter(w => w.w > 50 && w.h > 50) : [];
+	const windowsNow = winsNow.length;
+	const raised = winsNow.filter(w => w.layer !== -1).map(w => `${w.id}@${w.layer}`);
 	const typeNow = mainPid ? appType(mainPid) : '';
 	if (!rest.includes('--no-host-steps') && renderers().length) {
 		hostMark('renderer-unresponsive');
@@ -162,7 +166,7 @@ if (mode === 'prepare') {
 	const clickThrough = (guardLog.match(/^\[background windows\] window \d+ is click-through$/gm) ?? []).length;
 	const belowNormal = (guardLog.match(/^\[background windows\] window \d+ is below normal windows$/gm) ?? []).length;
 	const notShown = guardLog.split('\n').filter(l => l.startsWith('[background windows] dialog not shown'));
-	console.log(`guard: app type ${typeNow || '(editor gone)'}; ${clickThrough} click-through and ${belowNormal} below-normal window(s) for ${windowsNow} editor window(s); ${notShown.length} dialog(s) not shown${notShown.length ? `\n  ${notShown.slice(0, 5).map(l => l.replace(/[\u0000-\u001f\u007f-\u009f]/g, '?').slice(0, 200)).join('\n  ')}` : ''}\n`);
+	console.log(`guard: app type ${typeNow || '(editor gone)'}; ${clickThrough} click-through and ${belowNormal} below-normal window(s) for ${windowsNow} editor window(s)${raised.length ? `; NOT below normal: ${raised.join(' ')}` : ''}; ${notShown.length} dialog(s) not shown${notShown.length ? `\n  ${notShown.slice(0, 5).map(l => l.replace(/[\u0000-\u001f\u007f-\u009f]/g, '?').slice(0, 200)).join('\n  ')}` : ''}\n`);
 	const gate = verifyTeardown(base);
 	for (const c of gate) {
 		console.log(`${c.ok ? 'OK  ' : 'FAIL'}  ${c.name}${c.ok || !c.detail ? '' : `  ${c.detail}`}`);
@@ -171,7 +175,7 @@ if (mode === 'prepare') {
 	if (gate.filter(c => !/took focus/.test(c.name)).every(c => c.ok)) {
 		fs.renameSync(path.join(base, 'run.json'), path.join(base, `run-checked-${Date.now()}.json`));
 	}
-	process.exit(!steals && completed && clickThrough > 0 && clickThrough >= windowsNow && belowNormal >= clickThrough && /^\[background windows\] activation policy: prohibited$/m.test(guardLog) && typeNow === 'BackgroundOnly' && gate.every(c => c.ok) ? 0 : 1);
+	process.exit(!steals && completed && clickThrough > 0 && clickThrough >= windowsNow && !raised.length && belowNormal >= clickThrough && /^\[background windows\] activation policy: prohibited$/m.test(guardLog) && typeNow === 'BackgroundOnly' && gate.every(c => c.ok) ? 0 : 1);
 } else {
 	console.error('usage: probe.ts prepare [--app PATH] | check');
 	process.exit(2);
