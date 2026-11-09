@@ -80,7 +80,7 @@ index cd1678b2..a8fe4089 100644
 +			// have obeyed the tab a moment later, i.e. it made an unfixed build look
 +			// contained. `ready` is a neutral setting the harness has the tab write, which
 +			// no patch fixes, so its arrival proves the layer is applied on either build.
-+			if (fields.ready !== undefined && String(this.configurationService.getValue('workbench.browser.maxHistoryEntries')) !== fields.ready) {
++			if (fields.ready !== undefined && String(this.configurationService.getValue('workbench.browser.newTabPlacement')) !== fields.ready) {
 +				seclabDriven = false;
 +				if (Date.now() > seclabDriveStarted + 120_000) {
 +					clearInterval(seclabDriveTick);
