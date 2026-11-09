@@ -161,9 +161,12 @@ if (mode === 'prepare') {
 		&& Array.isArray(rep.steps) && rep.steps.every((s: any) => typeof s?.name === 'string' && typeof s?.ok === 'boolean')
 		&& rep.schemes && typeof rep.schemes === 'object' && Object.entries(rep.schemes).every(([k, c]: [string, any]) => schemeOk(k) && ['open', 'change', 'close', 'snapshot'].every(f => isCount(c?.[f])))
 		&& Array.isArray(rep.hits) && rep.hits.every((h: any) => schemeOk(h?.scheme) && /^[0-9a-f]{64}$/.test(h?.sha256))
-		&& ['precreated', 'foreignSeen'].every(f => typeof rep.perf?.[f] === 'boolean')
+		&& ['precreated', 'foreignSeen'].every(f => typeof rep.perf?.[f] === 'boolean') && typeof rep.perf?.removedAt === 'string'
+		&& typeof rep.seeded === 'boolean' && typeof rep.untitledForeign === 'boolean'
 		&& ['editSaved', 'untitledTyped', 'tabUntitled', 'gitDoc', 'cellDoc'].every(f => typeof rep.controls?.[f] === 'boolean');
 	expect('report present and matches the schema', valid);
+	const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').match(/^arm=([0-9a-f]{32})$/m) ?? [])[1];
+	expect('report is from this run (arming nonce)', valid && !!armed && rep.arm === armed);
 	const byHash = new Map(CANARY_KINDS.map(k => [sha(canaries[k]), k]));
 	const hitKinds = valid ? (rep.hits as Array<{ scheme: string; sha256: string }>).map(h => ({ scheme: h.scheme, kind: byHash.get(h.sha256) ?? 'unknown' })) : [];
 	if (valid) {
@@ -174,16 +177,25 @@ if (mode === 'prepare') {
 			console.log(`  ${s.padEnd(28)} ${c.open}/${c.change}/${c.close}/${c.snapshot}`);
 		}
 		console.log(`canary hits: ${hitKinds.map(h => `${h.kind} via ${h.scheme}`).join(', ') || 'none'}`);
-		console.log(`perf pre-create: precreated=${rep.perf.precreated} foreignSeen=${rep.perf.foreignSeen}`);
-		console.log(`controls: ${JSON.stringify(rep.controls)}`);
-		console.log(`hijack: providers=${Number(rep.hijack?.providers) || 0} fsUserdata=${String(rep.hijack?.fsUserdata ?? '').replace(/[^\x20-\x7e]/g, '?').slice(0, 120)}\n`);
-		expect('every probe step ran', rep.done === true);
+		console.log(`perf pre-create: precreated=${rep.perf.precreated} foreignSeen=${rep.perf.foreignSeen} removedAt=${String(rep.perf.removedAt).replace(/[^a-z-]/g, '?').slice(0, 40) || '(never)'}`);
+		console.log(`controls: ${JSON.stringify(rep.controls)}; seeded=${rep.seeded}; untitledForeign=${rep.untitledForeign}`);
+		const clip = (v: unknown) => String(v ?? '').replace(/[^\x20-\x7e]/g, '?').slice(0, 120);
+		console.log(`hijack: providers=${Number(rep.hijack?.providers) || 0} fsUserdata=${clip(rep.hijack?.fsUserdata)} fsOutput=${clip(rep.hijack?.fsOutput)} untitledClaims=${Number(rep.hijack?.untitledClaims) || 0}\n`);
+		// Every step must have run and succeeded: a step that failed would pass the leak checks
+		// vacuously (review round 1, P1).
+		const failed = (rep.steps as Array<{ name: string; ok: boolean }>).filter(s => !s.ok).map(s => s.name.replace(/[^a-z-]/g, '?'));
+		expect('every probe step ran and succeeded', rep.done === true && failed.length === 0, failed.join(','));
+		expect('the window-log canary was seeded before the output step', rep.seeded === true);
 		for (const k of CANARY_KINDS) {
 			const via = hitKinds.filter(h => h.kind === k).map(h => h.scheme);
 			expect(`no ${k} canary in any tab document`, via.length === 0, via.join(','));
 		}
+		expect('hijack 1b: the tab registered a filesystem provider for `output`', rep.hijack?.fsOutput === 'registered');
 		expect('hijack 2: the tab pre-created perf:Startup Performance', rep.perf.precreated === true);
 		expect('hijack 2: no host content reached the tab through the pre-created model', rep.perf.foreignSeen === false);
+		// Proof the host did write into it: the write untagged the model, so the tab saw it removed.
+		expect('hijack 2: the host write removed the pre-created model from the tab', measure || rep.perf.removedAt === 'perfview-after-release', String(rep.perf.removedAt));
+		expect('no host-seeded untitled text reached the tab (claim by URI refused)', rep.untitledForeign === false);
 		for (const c of ['editSaved', 'untitledTyped', 'tabUntitled', 'gitDoc', 'cellDoc']) {
 			expect(`control: ${c}`, rep.controls[c] === true);
 		}

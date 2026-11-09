@@ -50,8 +50,9 @@ exports.activate = async function () {
 	const hostUri = vscode.Uri.from({ scheme: 'vscode-local', path: t.hostfile });
 	const report = {
 		schema: 'seclab-docsync-report/1', arm: t.arm, done: false, steps: [], schemes: {}, hits: [], uris: [],
-		perf: { precreated: false, foreignSeen: false, servedToTab: 0 },
-		hijack: { providers: 0, fsUserdata: 'not tried', hostSchemeAsks: 0 },
+		perf: { precreated: false, foreignSeen: false, servedToTab: 0, removedAt: '' },
+		hijack: { providers: 0, fsUserdata: 'not tried', fsOutput: 'not tried', hostSchemeAsks: 0, untitledClaims: 0 },
+		seeded: false, untitledForeign: false,
 		controls: { editSaved: false, untitledTyped: false, tabUntitled: false, gitDoc: false, cellDoc: false },
 	};
 	let step = 'start';
@@ -67,6 +68,9 @@ exports.activate = async function () {
 			report.uris.push(u);
 		}
 		if (kind === 'close') {
+			if (doc.uri.toString() === perfUri.toString() && !report.perf.removedAt) {
+				report.perf.removedAt = step;
+			}
 			return;
 		}
 		const text = doc.getText();
@@ -85,6 +89,10 @@ exports.activate = async function () {
 		}
 		if (s === 'untitled' && text.includes(TAB_UNTITLED)) {
 			report.controls.tabUntitled = true;
+		}
+		// Untitled text the probe neither typed nor created: host-seeded content.
+		if (s === 'untitled' && text.trim() && !text.includes(TYPED) && !text.includes(TAB_UNTITLED)) {
+			report.untitledForeign = true;
 		}
 		if (s === 'git') {
 			report.controls.gitDoc = true;
@@ -156,6 +164,20 @@ exports.activate = async function () {
 			for (let i = 0; i < 120 && !fs.existsSync(path.join(out, 'seeded')); i++) {
 				await sleep(1000);
 			}
+			report.seeded = fs.existsSync(path.join(out, 'seeded'));
+			await vscode.commands.executeCommand('workbench.action.showWindowLog');
+		}],
+		// Hijack 1b, after the host's output models exist: a filesystem provider for `output`, a host
+		// scheme that has none. The window accepts the registration; host output must still not sync.
+		['register-output-fs-provider', async () => {
+			const e = new vscode.EventEmitter();
+			vscode.workspace.registerFileSystemProvider('output', {
+				onDidChangeFile: e.event, watch: () => new vscode.Disposable(() => { }),
+				stat: () => { throw vscode.FileSystemError.FileNotFound(); }, readDirectory: () => [],
+				createDirectory: () => { }, readFile: () => new Uint8Array(), writeFile: () => { },
+				delete: () => { }, rename: () => { },
+			});
+			report.hijack.fsOutput = 'registered';
 			await vscode.commands.executeCommand('workbench.action.showWindowLog');
 		}],
 		// A host file. In the tab's extension host, `file:` is the tab's own disk; the window's
@@ -177,6 +199,18 @@ exports.activate = async function () {
 			}
 		}],
 		['tab-untitled', async () => { await vscode.workspace.openTextDocument({ content: TAB_UNTITLED }); }],
+		// A host-seeded untitled document (the keyboard-mapping dump), then the tab tries to claim
+		// existing untitled models by URI.
+		['host-seeded-untitled', async () => {
+			await vscode.commands.executeCommand('workbench.action.inspectKeyMappingsJSON');
+			await sleep(1500);
+			for (let n = 1; n <= 6; n++) {
+				try {
+					await vscode.workspace.openTextDocument(vscode.Uri.parse(`untitled:Untitled-${n}`));
+				} catch { /* refused */ }
+				report.hijack.untitledClaims++;
+			}
+		}],
 		['edit-and-save-tab-file', async () => {
 			const edit = new vscode.WorkspaceEdit();
 			edit.insert(tabUri, new vscode.Position(0, 0), `${EDITED}\n`);
