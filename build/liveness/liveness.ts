@@ -1084,8 +1084,11 @@ if (import.meta.main) {
 			}
 		}
 		report(await check(files.filter(f => !links.has(f)), read, { links }), 'liveness: ok (Actions runs are verified by verify-runs)');
-	} else if (cmd === 'verify-runs' && rest.length === 0) {
-		report(await verifyRuns(JSON.parse(read(REGISTER)) as Register, githubApi()), 'liveness: recorded Actions runs verified');
+	} else if (cmd === 'verify-runs' && (rest.length === 0 || (rest.length === 1 && rest[0] === '--refresh'))) {
+		// --refresh (the weekly liveness-refresh workflow): evidence near or past the retention
+		// horizon fails, so it's re-run before it lapses; the required check only notes it.
+		const r = await verifyRuns(JSON.parse(read(REGISTER)) as Register, githubApi());
+		report(rest[0] === '--refresh' ? { errors: [...r.errors, ...r.notes.map(n => `refresh due: ${n}`)], notes: [] } : r, 'liveness: recorded Actions runs verified');
 	} else if (cmd === 'marks' && rest.length === 2) {
 		const log = fs.existsSync(rest[1]) ? fs.readFileSync(rest[1], 'utf8') : undefined;
 		report({ errors: checkMarks(JSON.parse(read(REGISTER)) as Register, rest[0], log), notes: [] }, `liveness marks ${rest[0]}: ok`);

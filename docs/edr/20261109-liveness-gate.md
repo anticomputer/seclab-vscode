@@ -142,6 +142,12 @@ Reviews ask what code says. Nothing asked whether anything calls it.
   Main went red with no commit. Evidence now names a job, which lives as long as the run.
   Runs carry a note from day 75 and degrade to a note after 85 days (90 days is the default
   retention), so age never fails the required check.
+- **Lapsing evidence is caught weekly.** The `liveness-refresh` workflow (Mondays, and on any
+  push that changes it or `build/liveness/`) runs `verify-runs --refresh`. That turns every
+  day-75 and expired note into a failure, listing the entries to re-run before day 85. It is
+  not a required check. Because it runs on push, the gate counts it as live: its own runs are
+  its evidence. It can't be dispatch-only anyway, because a workflow can be dispatched only
+  once it is on main, where the gate would refuse it without a run on record.
 - Discovery depends on convention: fixtures live in a directory named `fixtures`, and test
   extensions have a `package.json` (AGENTS.md).
 - The analysis is lexical. It can miss a use, which fails the gate and is safe, or, rarely,
