@@ -99,4 +99,5 @@ Same rules as ADRs:
 | 2026-11-06 | [The 7-day rule: no pin newer than the feed's hold](20261106-pin-age-cooldown.md) | accepted |
 | 2026-11-06 | [RPC filter stamp in product.json](20261106-rpc-policy-stamp.md) | accepted |
 | 2026-11-06 | [Test build variants (containment, and agentic U/F)](20261106-test-build-variants.md) | accepted |
+| 2026-11-09 | [Liveness gate: everything that only matters if it runs names what runs it](20261109-liveness-gate.md) | accepted |
 <!-- index:end -->

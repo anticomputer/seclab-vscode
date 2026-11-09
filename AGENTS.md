@@ -226,6 +226,19 @@ RPC-lockdown session adds. Keep them consistent with this file.
   or the REH (`build/check-patch-reach.ts`; `patches/reach.json` pins specific targets for a
   security patch). Why: patch 0011 applied cleanly and passed every static gate while missing
   its imports and sitting in a web-only entry point.
+- **Nothing is done until something runs it, with evidence it ran.** Every exported value
+  (tabd, observability, the Tab Manager, the broker), in-tab program, test hook, fixture, test
+  extension and dispatch-only workflow names what runs it in `build/liveness/register.json`,
+  with evidence: an Actions run, a mark its CI runner records (`liveMark`, test/liveness.ts),
+  or a record naming its id. An exemption names the consumer that really uses it, or says
+  `consumer: null` and why. The required `workflow-lint` check runs `./seclab liveness`
+  ([EDR](docs/edr/20261109-liveness-gate.md)). A new scheduled or dispatch-only workflow
+  lands with a dispatch run on record. Prove a new gate by injecting the defect it claims to
+  catch, and when the control fails, establish whether the gate or its prover failed before
+  believing either. Why: five artefacts were complete except for the part that runs them: a
+  test hook "applied by the harness" that no harness applied, eight probes that never ran, a
+  decision listener with no listener behind a false exemption, an array nobody read, and a
+  weekly workflow whose first run failed because nothing had ever run it.
 - **Never steal focus from the user.** Editor windows for demos, screenshots and
   containment-editor runs open in the background on the current Space and stay
   behind the user's windows:

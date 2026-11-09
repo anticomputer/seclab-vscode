@@ -14,6 +14,7 @@ import { beaconPort, lockRun, NGINX_IMAGE, worktreeId } from '../harness.ts';
 import { brokerProxy, checkEvidence, readEvidence, report, type Check } from './assert.ts';
 import { armCampaignTab, disarmCampaign, runCampaign, setupCampaign } from './campaign.ts';
 import { exitedOrTimeout, materialiseFixture, teardownGate, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
+import { liveMark } from '../liveness.ts';
 
 const driver = process.argv[2] ?? 'sbx';
 if (driver !== 'sbx' && driver !== 'oci') {
@@ -151,6 +152,10 @@ for (const [vector, argv] of vectors) {
 	console.log(`trigger ${vector}`);
 	inTab(argv);
 	checks.push(...checkEvidence(readEvidence(wsA, vector, readInTab), vector, { marker, expectHostname, proxy: brokerProxy(driver) }));
+}
+// Every vector of the fixture left its in-tab evidence: the fixture ran.
+if (vectors.every(([vector]) => readEvidence(wsA, vector, readInTab) !== undefined)) {
+	liveMark('containment:malicious-workspace');
 }
 if (driver === 'sbx') {
 	// Write-back gate 2b, end to end through tabd: an ordinary edit syncs to the host, a

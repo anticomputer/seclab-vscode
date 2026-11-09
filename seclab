@@ -38,6 +38,9 @@ usage: ./seclab <command>
                                 with origin/main); also run by CI (lint) and the pre-push hook
   hooks install                 Use the repo's git hooks (build/hooks: pre-push runs lint secrets) in this clone
   deps outdated                 Report image tags that moved and tracked tools with newer releases
+  liveness --self-test | check [--verify-runs] | marks FILE.yml#JOB LOG
+                                Everything that only matters if something runs it names what runs it,
+                                with evidence it ran (build/liveness/register.json)
   tool NAME                     Verify and build a pinned tool image (cosign, actionlint, gitleaks, lychee;
                                 build/tools/tools.json); prints its local tag
   deps host                     Check the host prerequisites (recorded exception, EDR supply-chain-exceptions):
@@ -602,6 +605,28 @@ case "${1:-help}" in
 		printf '%s\n' "$hook" > "$hookdir/pre-push.tmp" && chmod 0755 "$hookdir/pre-push.tmp" && mv "$hookdir/pre-push.tmp" "$hookdir/pre-push"
 		git -C "$ROOT" config core.hooksPath "$hookdir"
 		echo "hooks: core.hooksPath=$hookdir (self-contained pre-push scan, gitleaks ${gl_id:7:12})" ;;
+	# Liveness gate (EDR liveness-gate): everything that only matters if something runs it names
+	# what runs it, with evidence it ran. Offline with no token, except --verify-runs, which reads
+	# the named Actions runs (network; GITHUB_TOKEN with actions: read, in CI).
+	liveness)
+		shift
+		case "${1:-}" in
+			--self-test) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/liveness/liveness.ts --self-test ;;
+			check)
+				if [[ "${2:-}" == --verify-runs ]]; then
+					git -C "$ROOT" ls-files -z | docker run -i --rm -e GITHUB_TOKEN -e GITHUB_REPOSITORY -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/liveness/liveness.ts check - --verify-runs
+				elif [[ -z "${2:-}" ]]; then
+					git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/liveness/liveness.ts check -
+				else
+					usage; exit 2
+				fi ;;
+			# No log file: nothing recorded a mark (mounting a missing path would create a directory).
+			marks) [[ $# -eq 3 ]] || { usage; exit 2; }
+				local_log=()
+				[[ -f "$3" ]] && local_log=(-v "$3:/liveness.log:ro")
+				docker run --rm --network none ${local_log[@]+"${local_log[@]}"} -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/liveness/liveness.ts marks "$2" /liveness.log ;;
+			*) usage; exit 2 ;;
+		esac ;;
 	# Dependency updates Dependabot can't see (ADR supply-chain provenance): report only.
 	deps)
 		shift

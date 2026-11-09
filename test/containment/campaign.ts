@@ -13,6 +13,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { Check } from './assert.ts';
 import { materialiseFixture } from './teardown.ts';
+import { liveMark } from '../liveness.ts';
 
 const FIXTURE = path.join(import.meta.dirname, 'fixtures', 'contagious-interview');
 const V = 'contagious';
@@ -97,6 +98,9 @@ export async function runCampaign(c: Campaign, tab: CampaignTab, marker: string)
 			}
 		} catch { /* not yet */ }
 		await new Promise(r => setTimeout(r, 1000));
+	}
+	if (ev) {
+		liveMark('containment:contagious-interview');
 	}
 	if (!ev) {
 		add('stage ran and recorded evidence', false, 'no evidence file');
