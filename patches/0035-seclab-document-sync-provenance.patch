@@ -1,11 +1,11 @@
 diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentContentProviders.ts b/src/vs/workbench/api/browser/mainThreadDocumentContentProviders.ts
 --- a/src/vs/workbench/api/browser/mainThreadDocumentContentProviders.ts	2026-11-09 15:56:04
-+++ b/src/vs/workbench/api/browser/mainThreadDocumentContentProviders.ts	2026-11-09 15:58:56
++++ b/src/vs/workbench/api/browser/mainThreadDocumentContentProviders.ts	2026-11-09 16:59:44
 @@ -16,6 +16,7 @@
  import { extHostNamedCustomer, IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
  import { ExtHostContext, ExtHostDocumentContentProvidersShape, MainContext, MainThreadDocumentContentProvidersShape } from '../common/extHost.protocol.js';
  import { CancellationTokenSource } from '../../../base/common/cancellation.js';
-+import { seclabAsProviderWrite, seclabTagProvidedModel } from './seclabDocumentOrigin.js';
++import { seclabProviderWrite, seclabTagProvidedModel } from './seclabDocumentOrigin.js';
  
  @extHostNamedCustomer(MainContext.MainThreadDocumentContentProviders)
  export class MainThreadDocumentContentProviders implements MainThreadDocumentContentProvidersShape {
@@ -41,13 +41,13 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentContentProviders.ts b
  			if (edits && edits.length > 0) {
  				// use the evil-edit as these models show in readonly-editor only
 -				model.applyEdits(edits.map(edit => EditOperation.replace(Range.lift(edit.range), edit.text)));
-+				seclabAsProviderWrite(this._extHostContext, model, () => model.applyEdits(edits.map(edit => EditOperation.replace(Range.lift(edit.range), edit.text))));
++				seclabProviderWrite(this._extHostContext, model, () => model.applyEdits(edits.map(edit => EditOperation.replace(Range.lift(edit.range), edit.text))));
  			}
  		} catch (error) {
  			onUnexpectedError(error);
 diff -ruN a/src/vs/workbench/api/browser/mainThreadDocuments.ts b/src/vs/workbench/api/browser/mainThreadDocuments.ts
 --- a/src/vs/workbench/api/browser/mainThreadDocuments.ts	2026-11-09 15:56:04
-+++ b/src/vs/workbench/api/browser/mainThreadDocuments.ts	2026-11-09 16:16:58
++++ b/src/vs/workbench/api/browser/mainThreadDocuments.ts	2026-11-09 16:59:44
 @@ -7,7 +7,7 @@
  import { IReference, dispose, Disposable } from '../../../base/common/lifecycle.js';
  import { Schemas } from '../../../base/common/network.js';
@@ -119,17 +119,28 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadDocuments.ts b/src/vs/workben
  	}
  
  	private _onModelModeChanged(event: { model: ITextModel; oldLanguageId: string }): void {
-@@ -305,6 +314,7 @@
+@@ -299,12 +308,18 @@
+ 	}
+ 
+ 	private async _doCreateUntitled(associatedResource?: URI, options?: { language?: string; content?: string; encoding?: string }): Promise<URI> {
++		let created: object | undefined;
++		const onCreate = this._textFileService.untitled.onDidCreate(m => created = m);
+ 		const model = this._textFileService.untitled.create({
+ 			associatedResource,
+ 			languageId: options?.language,
  			initialValue: options?.content,
  			encoding: options?.encoding
  		});
-+		seclabTagCreatedUntitled(this._extHostContext, model);
++		onCreate.dispose();
++		if (created === model) { // not an existing untitled model reopened by URI
++			seclabTagCreatedUntitled(this._extHostContext, model);
++		}
  		if (options?.encoding) {
  			await model.setEncoding(options.encoding);
  		}
 diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts
 --- a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-09 15:56:04
-+++ b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-09 16:16:51
++++ b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-09 16:59:44
 @@ -8,7 +8,7 @@
  import { ICodeEditor, isCodeEditor, isDiffEditor, IActiveCodeEditor } from '../../../editor/browser/editorBrowser.js';
  import { ICodeEditorService } from '../../../editor/browser/services/codeEditorService.js';
@@ -143,7 +154,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts b/src/
  import { ViewContainerLocation } from '../../common/views.js';
  import { IConfigurationService } from '../../../platform/configuration/common/configuration.js';
  import { IQuickDiffModelService } from '../../contrib/scm/browser/quickDiffModel.js';
-+import { seclabOrigin, seclabShouldSync } from './seclabDocumentOrigin.js';
++import { seclabIsFiltered, seclabOrigin, seclabShouldSync } from './seclabDocumentOrigin.js';
  
  
  class TextEditorSnapshot {
@@ -191,15 +202,16 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts b/src/
  				&& !model.isDisposed() // model disposed
  				&& Boolean(this._modelService.getModel(model.uri)) // model disposing, the flag didn't flip yet but the model service already removed it
  			) {
-@@ -302,6 +306,7 @@
+@@ -302,6 +306,8 @@
  		super();
  		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostDocumentsAndEditors);
  
++		seclabOrigin(extHostContext).filtered = seclabIsFiltered(extHostContext, environmentService.remoteAuthority);
 +		const shouldSync = (model: ITextModel) => seclabShouldSync(extHostContext, model, environmentService.remoteAuthority, fileService, this._textFileService);
  		this._mainThreadDocuments = this._register(new MainThreadDocuments(extHostContext, this._modelService, this._textFileService, fileService, textModelResolverService, environmentService, uriIdentityService, workingCopyFileService, pathService));
  		extHostContext.set(MainContext.MainThreadDocuments, this._mainThreadDocuments);
  
-@@ -309,7 +314,7 @@
+@@ -309,7 +315,7 @@
  		extHostContext.set(MainContext.MainThreadTextEditors, this._mainThreadEditors);
  
  		// It is expected that the ctor of the state computer calls our `_onDelta`.
@@ -248,20 +260,22 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadFileSystem.ts b/src/vs/workbe
  	$unregisterProvider(handle: number): void {
 diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts
 --- a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	1970-01-01 00:00:00
-+++ b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-09 15:58:56
-@@ -0,0 +1,99 @@
++++ b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-09 16:59:21
+@@ -0,0 +1,124 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab: which text models belong to a tab's extension host (patch 0035, EDR
 + *  document-sync-provenance). In a `seclab+` window a non-local extension host is sent a model only
-+ *  if the tab owns it: a file on this window's own tab authority, a model this host's own content
-+ *  provider created (tagged per model, never per scheme, and untagged by any other write), a file
-+ *  of a filesystem provider this host registered, or an untitled model this host created or that
-+ *  was empty when it appeared. Local hosts and other windows are unchanged.
++ *  if the tab owns it, decided per model, never per scheme:
++ *  - a file on this window's own tab authority;
++ *  - a model this host's own content provider created (untagged by any other write);
++ *  - a text file served, since the model appeared, by a filesystem provider this host registered;
++ *  - an untitled model this host created, or one that was empty when it appeared;
++ *  - a notebook cell of a notebook on this window's own tab authority.
++ *  Local hosts and other windows are unchanged.
 + *--------------------------------------------------------------------------------------------*/
 +
 +import { Emitter } from '../../../base/common/event.js';
 +import { Schemas } from '../../../base/common/network.js';
-+import { URI } from '../../../base/common/uri.js';
 +import { ITextModel, shouldSynchronizeModel } from '../../../editor/common/model.js';
 +import { IFileService, IFileSystemProvider } from '../../../platform/files/common/files.js';
 +import { IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
@@ -275,9 +289,13 @@ diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbe
 +	readonly fsProviders = new WeakSet<IFileSystemProvider>();
 +	readonly onDidChange = new Emitter<void>();
 +	writing: ITextModel | undefined;
++	/** Set by MainThreadDocumentsAndEditors: a non-local host in a `seclab+` window. */
++	filtered = false;
 +}
 +const origins = new WeakMap<IExtHostContext, SeclabOrigin>();
-+const bornEmpty = new WeakMap<ITextModel, boolean>();
++// What a model was when the window first saw it: every host's predicate records it, at birth (the
++// textfile manager registers its model before the async resolve creates the text model).
++const born = new WeakMap<ITextModel, { empty: boolean; provider: IFileSystemProvider | undefined; textFile: boolean }>();
 +
 +export function seclabOrigin(ctx: IExtHostContext): SeclabOrigin {
 +	let o = origins.get(ctx);
@@ -285,6 +303,10 @@ diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbe
 +		origins.set(ctx, o = new SeclabOrigin());
 +	}
 +	return o;
++}
++
++export function seclabIsFiltered(ctx: IExtHostContext, windowAuthority: string | undefined): boolean {
++	return ctx.extensionHostKind !== ExtensionHostKind.LocalProcess && !!windowAuthority?.startsWith('seclab+');
 +}
 +
 +/** Called right after this host's content provider created `model`. */
@@ -302,19 +324,22 @@ diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbe
 +	o.onDidChange.fire();
 +}
 +
-+/** Runs this host's own write (`$onVirtualDocumentChange`) to `model`; any other write untags it. */
-+export function seclabAsProviderWrite<T>(ctx: IExtHostContext, model: ITextModel, fn: () => T): T {
++/** `$onVirtualDocumentChange`: a filtered host may only write to models its own provider made. */
++export function seclabProviderWrite(ctx: IExtHostContext, model: ITextModel, write: () => void): void {
 +	const o = seclabOrigin(ctx);
++	if (o.filtered && !o.models.has(model)) {
++		return;
++	}
 +	const outer = o.writing;
 +	o.writing = model;
 +	try {
-+		return fn();
++		write();
 +	} finally {
 +		o.writing = outer;
 +	}
 +}
 +
-+/** Called when this host created an untitled model (`openTextDocument({ content })`, `untitled:` paths). */
++/** Called with an untitled model this host's call actually created (not one it reopened). */
 +export function seclabTagCreatedUntitled(ctx: IExtHostContext, untitled: object): void {
 +	seclabOrigin(ctx).untitled.add(untitled);
 +}
@@ -325,27 +350,39 @@ diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbe
 +}
 +
 +export function seclabShouldSync(ctx: IExtHostContext, model: ITextModel, windowAuthority: string | undefined, fileService: IFileService, textFileService: ITextFileService): boolean {
-+	if (model.uri.scheme === Schemas.untitled && !bornEmpty.has(model)) {
-+		bornEmpty.set(model, model.getValueLength() === 0 && !textFileService.untitled.get(model.uri)?.hasAssociatedFilePath);
++	let b = born.get(model);
++	if (!b) {
++		born.set(model, b = {
++			empty: model.getValueLength() === 0 && !textFileService.untitled.get(model.uri)?.hasAssociatedFilePath,
++			provider: fileService.getProvider(model.uri.scheme),
++			textFile: !!textFileService.files.get(model.uri),
++		});
 +	}
-+	if (!shouldSynchronizeModel(model) || ctx.extensionHostKind === ExtensionHostKind.LocalProcess || !windowAuthority?.startsWith('seclab+')) {
++	if (!shouldSynchronizeModel(model) || !seclabIsFiltered(ctx, windowAuthority)) {
 +		return shouldSynchronizeModel(model);
 +	}
 +	const o = seclabOrigin(ctx);
++	const uri = model.uri;
 +	if (o.models.has(model)) {
 +		return true;
 +	}
-+	if (model.uri.scheme === Schemas.untitled) {
-+		const untitled = textFileService.untitled.get(model.uri);
-+		return !!untitled && (o.untitled.has(untitled) || bornEmpty.get(model) === true);
++	if (uri.scheme === Schemas.vscodeRemote) {
++		return uri.authority === windowAuthority;
 +	}
-+	const resource: URI | undefined = model.uri.scheme === Schemas.vscodeNotebookCell ? CellUri.parse(model.uri)?.notebook : model.uri;
-+	if (!resource) {
-+		return false;
++	if (uri.scheme === Schemas.untitled) {
++		const untitled = textFileService.untitled.get(uri);
++		return !!untitled && (o.untitled.has(untitled) || b.empty);
 +	}
-+	if (resource.scheme === Schemas.vscodeRemote) {
-+		return resource.authority === windowAuthority;
++	if (uri.scheme === Schemas.vscodeNotebookCell) {
++		try {
++			const notebook = CellUri.parse(uri)?.notebook;
++			return notebook?.scheme === Schemas.vscodeRemote && notebook.authority === windowAuthority;
++		} catch {
++			return false;
++		}
 +	}
-+	const provider = fileService.getProvider(resource.scheme);
-+	return !!provider && o.fsProviders.has(provider);
++	// A text file born under this host's provider. A model born otherwise (host output, say) never
++	// qualifies, even if the tab later takes the scheme or a text file model wraps it.
++	const provider = fileService.getProvider(uri.scheme);
++	return b.textFile && !!provider && b.provider === provider && o.fsProviders.has(provider);
 +}
