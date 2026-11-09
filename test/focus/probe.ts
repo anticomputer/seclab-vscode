@@ -160,8 +160,9 @@ if (mode === 'prepare') {
 	// build without the click-through fix fails here even when nobody happened to click.
 	const guardLog = fs.existsSync(editorStderrLog(userData)) ? fs.readFileSync(editorStderrLog(userData), 'utf8') : '';
 	const clickThrough = (guardLog.match(/^\[background windows\] window \d+ is click-through$/gm) ?? []).length;
+	const belowNormal = (guardLog.match(/^\[background windows\] window \d+ is below normal windows$/gm) ?? []).length;
 	const notShown = guardLog.split('\n').filter(l => l.startsWith('[background windows] dialog not shown'));
-	console.log(`guard: app type ${typeNow || '(editor gone)'}; ${clickThrough} click-through window(s) for ${windowsNow} editor window(s); ${notShown.length} dialog(s) not shown${notShown.length ? `\n  ${notShown.slice(0, 5).map(l => l.replace(/[\u0000-\u001f\u007f-\u009f]/g, '?').slice(0, 200)).join('\n  ')}` : ''}\n`);
+	console.log(`guard: app type ${typeNow || '(editor gone)'}; ${clickThrough} click-through and ${belowNormal} below-normal window(s) for ${windowsNow} editor window(s); ${notShown.length} dialog(s) not shown${notShown.length ? `\n  ${notShown.slice(0, 5).map(l => l.replace(/[\u0000-\u001f\u007f-\u009f]/g, '?').slice(0, 200)).join('\n  ')}` : ''}\n`);
 	const gate = verifyTeardown(base);
 	for (const c of gate) {
 		console.log(`${c.ok ? 'OK  ' : 'FAIL'}  ${c.name}${c.ok || !c.detail ? '' : `  ${c.detail}`}`);
@@ -170,7 +171,7 @@ if (mode === 'prepare') {
 	if (gate.filter(c => !/took focus/.test(c.name)).every(c => c.ok)) {
 		fs.renameSync(path.join(base, 'run.json'), path.join(base, `run-checked-${Date.now()}.json`));
 	}
-	process.exit(!steals && completed && clickThrough > 0 && clickThrough >= windowsNow && /^\[background windows\] activation policy: accessory$/m.test(guardLog) && typeNow === 'UIElement' && gate.every(c => c.ok) ? 0 : 1);
+	process.exit(!steals && completed && clickThrough > 0 && clickThrough >= windowsNow && belowNormal >= clickThrough && /^\[background windows\] activation policy: prohibited$/m.test(guardLog) && typeNow === 'BackgroundOnly' && gate.every(c => c.ok) ? 0 : 1);
 } else {
 	console.error('usage: probe.ts prepare [--app PATH] | check');
 	process.exit(2);
