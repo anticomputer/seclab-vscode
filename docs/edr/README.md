@@ -99,6 +99,7 @@ Same rules as ADRs:
 | 2026-11-06 | [The 7-day rule: no pin newer than the feed's hold](20261106-pin-age-cooldown.md) | accepted |
 | 2026-11-06 | [RPC filter stamp in product.json](20261106-rpc-policy-stamp.md) | accepted |
 | 2026-11-06 | [Test build variants (containment, and agentic U/F)](20261106-test-build-variants.md) | accepted |
+| 2026-11-09 | [Host documents don't sync into a tab: per-model provenance for the document sync (patch 0035)](20261109-document-sync-provenance.md) | proposed |
 | 2026-11-09 | [Liveness gate: everything that only matters if it runs names what runs it](20261109-liveness-gate.md) | accepted |
 | 2026-11-09 | [Telling the user when a setting is withheld from a tab](20261109-settings-withheld-notice.md) | accepted |
 <!-- index:end -->

@@ -5,5 +5,18 @@
 			"src/vs/workbench/services/agentHost/browser/editorRemoteAgentHostServiceClient.ts": "seclabGate.transport(",
 			"src/vs/server/node/serverServices.ts": ""
 		}
+	},
+	"ExtHostContext.ExtHostDocumentsAndEditors": {
+		"why": "patch 0035 filters which text models reach a tab extension host inside MainThreadDocumentsAndEditors. A second window-side holder of this proxy could push host documents past the filter, and no runtime probe can show that none exists.",
+		"files": {
+			"src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts": "getProxy(ExtHostContext.ExtHostDocumentsAndEditors)",
+			"src/vs/workbench/api/common/extHost.api.impl.ts": "rpcProtocol.set("
+		}
+	},
+	"ExtHostContext.ExtHostDocuments)": {
+		"why": "patch 0035: model content changes and dirty, save and encoding events reach a tab only through MainThreadDocuments, whose ModelTracker and file events apply the same provenance filter. A second window-side getProxy of this shape would bypass it.",
+		"files": {
+			"src/vs/workbench/api/browser/mainThreadDocuments.ts": "getProxy(ExtHostContext.ExtHostDocuments)"
+		}
 	}
 }

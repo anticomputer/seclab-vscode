@@ -58,6 +58,18 @@ Current queue:
   `seclabAhpGate.log`. New files are edited in `agentic/patch-src` and synced with
   `node agentic/tools/sync-patch.ts --write`
   ([EDR](../docs/edr/20261106-agentic-probe-runner.md), [plan](../docs/plans/agentic-implementation.md) increment 1).
+- `0035-seclab-document-sync-provenance.patch`: in a `seclab+` window, a non-local extension host
+  is sent a text model only if it owns it:
+  - a file on the window's own tab authority;
+  - a model its own content provider created (tagged per model, untagged by any other write);
+  - a file of a filesystem provider it registered;
+  - an untitled document it created, or that the user typed;
+  - a notebook cell judged by its notebook.
+
+  Host settings, output and files opened in a tab window no longer reach the tab. Change, dirty,
+  saved and encoding events use the same filter
+  ([EDR](../docs/edr/20261109-document-sync-provenance.md)). (0030-0034 are reserved for the RPC
+  sessions.)
 
 `reach.json` requires targets per patch. `unreachable.json` lists modules, or `dir/` prefixes
 with explicit exceptions, that a target must not reach. Both are enforced by `build/check-patch-reach.ts` in the required `patch-build` check.

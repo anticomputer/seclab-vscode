@@ -524,6 +524,19 @@ Numbers 1 to 4 came out of the independent design review
    The scan reports candidate sites, not verdicts, and will drift in precision.
 9. **A denied call is a compatibility break**, surfacing as an error rather than
    a prompt. Which popular extensions this hits is unmeasured until Phase 3.
+10. **Window-to-tab pushes are outside this filter.** The window pushes state into
+    every extension host on its own initiative, so screening tab calls never sees it.
+    The document sync is closed by patch 0035: a tab's host receives only documents
+    it owns, judged per model
+    ([EDR](edr/20261109-document-sync-provenance.md)). Still open, each needing its
+    own push-side control:
+    - the configuration snapshot (every user setting value);
+    - notebook document sync (cells of host notebooks);
+    - the editor-tab model (host URIs and labels);
+    - ext-host init data (host telemetry ids);
+    - the terminal default profile and environment collections;
+    - workspace data;
+    - filesystem-scheme squatting by a tab provider.
 
 ## 8. Decisions taken
 
