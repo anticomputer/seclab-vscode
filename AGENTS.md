@@ -335,6 +335,11 @@ node test/builds/rogue-reh-arming.ts    # the hook arms only for a staged, unexp
 node test/focus/probe.ts prepare [--app .work/app-branch/seclab-vscode.app]   # then run the printed launch line
 node test/focus/probe.ts check                                                 # marks vs steals, then the teardown gate
 
+# Document sync (patch 0035): no host document reaches a tab, with both hijacks and positive controls
+node test/docsync/probe.ts prepare [--app PATH.app]   # then run the printed launch line
+node test/docsync/probe.ts seed                       # seeds the window-log canary when the probe asks
+node test/docsync/probe.ts check [--measure]          # ~5 min after launch; --measure prints scheme counts only
+
 # sbx inspection
 sbx ls; sbx policy ls --wide --json; sbx policy log <sandbox>; sbx secret ls --json
 sbx policy check network --sandbox <tab> --json <host:port>    # exits 1 when denied; JSON on stdout

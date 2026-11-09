@@ -102,7 +102,9 @@ second sender of document text fails `patch-build`.
   - an untitled document restored from a hot-exit backup, or one that existed before the tab's
     extension host restarted;
   - a tab-provided virtual document that something other than its provider edits (for example a
-    workspace edit by the tab on its own virtual document).
+    workspace edit by the tab on its own virtual document);
+  - the SCM commit input box (`vscode-scm`), so extensions get no language features there (its
+    text reaches the tab anyway, through the SCM API).
 - **Residual:** a host feature that creates an empty untitled document and then fills it with host
   data programmatically would sync. None was seen in the measurement below.
 - **Siblings** (other window-to-tab pushes of host data) aren't covered by this patch. They're
@@ -112,4 +114,36 @@ second sender of document text fails `patch-build`.
   scheme squatting.
 
 ## Evidence
-Measurement, proof and review: to be added once runs are complete.
+**Measurement and baseline** (main build `87efb67`, Actions run 42302662001, attested; sbx tab;
+`node test/docsync/probe.ts prepare|seed|check` with a background launch through
+`test/window.ts`). These are the documents the probe extension in the tab saw during ordinary use,
+by scheme. Counts are open/change/close/snapshot; names and counts only, never contents:
+
+| Scheme | Counts | What it was |
+|---|---|---|
+| `vscode-userdata` | 2/0/2/5 | user `settings.json` and `keybindings.json` (host) |
+| `output` | 1/7/0/9 | the window log channel (host) |
+| `vscode-local` | 1/0/1/2 | a host file, opened alone and in a diff (the tab side sees the window's `file:` as `vscode-local:`) |
+| `perf` | 2/1/1/12 | the startup performance view (host data), and the tab's pre-created model |
+| `chatSessionInput` | 0/14/0/15 | the chat input box (host-created, user-typed) |
+| `vscode-scm` | 1/0/0/15 | the SCM input box of the tab's git repository |
+| `file` | 1/4/0/7 | the tab's own file (the tab side sees `vscode-remote` as `file:`) |
+| `git` | 3/0/2/8 | the tab's git extension's content provider |
+| `vscode-notebook-cell` | 1/0/0/5 | the cell of a notebook in the tab |
+| `untitled` | 2/2/0/7 | one typed untitled document, and one the tab created |
+
+Canary hits on the baseline: the settings comment, settings value and keybindings comment (via
+`vscode-userdata`), the window log (via `output`), and the host file (via `vscode-local`). Hijack 2
+also leaked: the tab pre-created `perf:Startup Performance`, its window reference expired, the
+perf provider reused the model and its `setValue` reached the tab (`foreignSeen=true`).
+
+Decisions from the measurement:
+- **No rule for `vscode-scm`.** The input box URI's `rootUri` query carries the tab's form of the
+  path (`file:`), which can't be told apart from a host path. Its text already reaches the tab
+  through `$onInputBoxValueChange`, and the RPC series denies SCM registration in tabs. So it isn't
+  synced, and only language features on the commit box are lost.
+- **No rule for `chatSessionInput`:** a host input, and chat is off in tabs.
+- `git:`, cells and untitled are covered by rules 2, 6 and 5. Diff sides are separate models and
+  need no rule.
+
+**Proof on the patched build:** to be added.

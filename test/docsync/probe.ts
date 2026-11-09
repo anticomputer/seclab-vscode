@@ -117,7 +117,7 @@ if (mode === 'prepare') {
 	}
 	console.log(`\nprepared tab ${tab.metadata.name}. Launch in the BACKGROUND:\n`);
 	console.log(`  ${editorLaunchCommand(userData, `vscode-remote://seclab+${tab.metadata.name}${ws}`, {}, appArg)}\n`);
-	console.log('then:  node test/docsync/probe.ts seed   (waits for the probe), then about 2 minutes later:  node test/docsync/probe.ts check\n');
+	console.log('then:  node test/docsync/probe.ts seed   (waits for the probe), then about 5 minutes later (hijack 2 waits out a 3-minute reference):  node test/docsync/probe.ts check\n');
 } else if (mode === 'seed') {
 	// The window's own host log only exists once the window runs: wait for the probe to reach the
 	// output step, append one canary line to the newest window log, and tell the probe.
