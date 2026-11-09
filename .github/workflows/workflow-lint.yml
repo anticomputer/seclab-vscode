@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
+      actions: read # liveness gate: reads the Actions runs its register cites
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -47,3 +48,14 @@ jobs:
         # Both verified before use without a token: actionlint against its committed attestation
         # bundle, zizmor's image signature with our pinned cosign (build/tools/tool.sh).
         run: ./seclab lint workflows
+      # EDR liveness-gate: every exported value, in-tab program, test hook, fixture and
+      # dispatch-only workflow names what runs it, with evidence it ran. The self-test injects
+      # the five recorded failures first; the check runs offline, then reads the named runs.
+      - name: Liveness gate self-test
+        run: ./seclab liveness --self-test
+      - name: Liveness gate (offline)
+        run: ./seclab liveness check
+      - name: Liveness gate (the recorded Actions runs exist and succeeded)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./seclab liveness check --verify-runs

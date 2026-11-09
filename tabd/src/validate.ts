@@ -66,13 +66,6 @@ export function assertPolicyResource(v: unknown): string {
 	return v;
 }
 
-export function assertPort(v: unknown): number {
-	if (typeof v !== 'number' || !Number.isInteger(v) || v < 1024 || v > 65535) {
-		throw new ValidationError('invalid port');
-	}
-	return v;
-}
-
 export function assertImageRef(v: unknown): string {
 	if (typeof v !== 'string' || !IMAGE_REF_RE.test(v)) {
 		throw new ValidationError('invalid image reference');

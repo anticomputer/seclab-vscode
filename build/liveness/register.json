@@ -1,0 +1,57 @@
+{
+	"$comment": "Liveness register (EDR 20261109-liveness-gate; checked by build/liveness/liveness.ts in workflow-lint). `entry`: declarations a host calls, which are live and make what they reach live. `exempt`: exported values nothing that runs reaches, each naming the consumer that uses it (it must exist and use the symbol in code) or `consumer: null` with the reason (printed on every run). `subjects`: everything that only matters if something runs it (dispatch-only workflows, test hooks, fixtures, test extensions), each with what runs it and evidence it ran: a GitHub Actions `run` (verified in CI), a `ci` mark its runner records in the named job, or a `record` in a doc that names the subject id.",
+	"entry": [
+		{ "subject": "extensions/seclab-tab-manager/src/extension.ts#activate", "calledBy": "VS Code, on the extension's activation events", "declaredIn": "extensions/seclab-tab-manager/package.json" },
+		{ "subject": "extensions/seclab-tab-manager/src/extension.ts#deactivate", "calledBy": "VS Code, when the extension host stops", "declaredIn": "extensions/seclab-tab-manager/package.json" }
+	],
+	"exempt": [
+		{ "subject": "tabd/src/scan.ts#scannerProblem", "consumer": "tabd/test/unit.test.ts", "reason": "Test entry to checkScanner, which scanWorkspace runs before every mount. The supervisor called it until 0ae1eeb moved the check into scanWorkspace." },
+		{ "subject": "broker/seclab_broker/core.py#TAB_EVENTS", "consumer": null, "reason": "Leftover: tab.event kinds are validated at dispatch by the protocol schema (protocol.check), not by this tuple. Broker session to delete." },
+		{ "subject": "broker/seclab_broker/core.py#random_password", "consumer": null, "reason": "Leftover from the first broker commit (e0135e8); nothing calls it. Broker session to delete." }
+	],
+	"subjects": [
+		{
+			"id": "workflow:deps-updates",
+			"runBy": "schedule (Mondays 06:17 UTC) and workflow_dispatch: ./seclab deps outdated, then one tracking issue",
+			"evidence": [{ "run": 42649243164, "workflow": "deps-updates.yml" }]
+		},
+		{
+			"id": "hook:containment/rogue-reh",
+			"runBy": "build-macos.yml dispatched with test_variant=containment applies it (build/test-variant.sh); test/builds/rogue-reh-arming.ts arms it in a real OCI tab of that REH",
+			"evidence": [
+				{ "run": 42252088798, "workflow": "build-macos.yml", "artifact": "seclab-reh-linux-arm64-test-containment" },
+				{ "record": "docs/edr/20261109-liveness-gate.md" }
+			]
+		},
+		{
+			"id": "fixture:test/containment/fixtures/malicious-workspace",
+			"runBy": "./seclab test containment oci (test/containment/run.ts triggers each vector in the tab)",
+			"evidence": [{ "ci": "ci-linux.yml#oci", "mark": "containment:malicious-workspace" }]
+		},
+		{
+			"id": "fixture:test/containment/fixtures/contagious-interview",
+			"runBy": "./seclab test containment oci (test/containment/campaign.ts, its own tab)",
+			"evidence": [{ "ci": "ci-linux.yml#oci", "mark": "containment:contagious-interview" }]
+		},
+		{
+			"id": "fixture:test/observability/fixtures/loader-workspace",
+			"runBy": "./seclab test obs oci (test/observability/loader.ts assembles the loader inside the tab)",
+			"evidence": [{ "ci": "ci-linux.yml#oci", "mark": "obs:loader-workspace" }]
+		},
+		{
+			"id": "fixture:test/containment/rogue-extension",
+			"runBy": "test/containment/check-evidence.ts prepare|check, with the editor launched by test/window.ts (macOS, local only)",
+			"evidence": [{ "record": "docs/edr/20261109-liveness-gate.md" }]
+		},
+		{
+			"id": "fixture:test/focus/probe-extension",
+			"runBy": "test/focus/probe.ts prepare|check, with the editor launched by test/window.ts (macOS, local only)",
+			"evidence": [{ "record": "docs/edr/20261109-liveness-gate.md" }]
+		},
+		{
+			"id": "fixture:test/agentic/runner/mitm-extension",
+			"runBy": "test/agentic/runner/runner.ts (macOS editor, sbx tab, local only)",
+			"evidence": [{ "record": "docs/edr/20261109-liveness-gate.md" }]
+		}
+	]
+}

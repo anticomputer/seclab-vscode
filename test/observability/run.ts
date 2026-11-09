@@ -14,6 +14,7 @@ import { TabdClient } from '../../tabd/src/client.ts';
 import type { ObsEvent } from '../../tabd/src/obs/schema.ts';
 import { exitedOrTimeout, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
 import { lockRun } from '../harness.ts';
+import { liveMark } from '../liveness.ts';
 import { honeypots, LOADER_IN_TAB, loaderScript, TASK_COMMAND, writeStdinTo } from './loader.ts';
 
 const driver = process.argv[2] ?? 'sbx';
@@ -127,6 +128,9 @@ for (const r of want) {
 }
 const execs = events.filter(e => e.class === 'process.exec').map(e => (e.proc?.argv ?? []).join(' '));
 check('exec lineage: the task shell runs the loader', execs.some(a => a.includes(LOADER_IN_TAB)), execs.slice(0, 8).join(' | '));
+if (execs.some(a => a.includes(LOADER_IN_TAB))) {
+	liveMark('obs:loader-workspace');
+}
 const execNames = new Set(events.filter(ev => ev.class === 'process.exec').map(ev => path.basename(ev.proc?.exe ?? '')));
 check('exec: nohup, curl and node seen', ['nohup', 'curl', 'node'].every(n => execNames.has(n)), [...execNames].join(' '));
 const dropped = events.find(e => e.class === 'workspace.change' && e.file?.path === marker);

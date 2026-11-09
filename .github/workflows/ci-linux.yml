@@ -74,6 +74,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Liveness marks (EDR liveness-gate): runners record each fixture they saw run; the last
+      # step fails the job if one assigned to it left no mark.
+      - name: Liveness log for this job
+        run: echo "SECLAB_LIVENESS_LOG=$RUNNER_TEMP/liveness.log" >> "$GITHUB_ENV"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.22.1
@@ -110,6 +114,9 @@ jobs:
       # also checks the broker's verdicts from inside the tab. No token.
       - name: OCI tab with a real broker (deny, no direct route, allow, 407)
         run: ./seclab test e2e-broker seclab-broker:dev
+      # Last: every fixture the register assigns to this job left its mark (EDR liveness-gate).
+      - name: Liveness marks
+        run: ./seclab liveness marks ci-linux.yml#oci "$SECLAB_LIVENESS_LOG"
 
   # gitleaks gates a security control and its upstream publishes nothing signed, so we build it
   # from the pinned commit (build/tools/tools.json). This job rebuilds both arches on a fresh
