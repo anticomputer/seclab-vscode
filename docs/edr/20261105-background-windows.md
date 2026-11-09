@@ -209,8 +209,12 @@ Dialogs cancelled in background mode answer with their `cancelId`, which
     window anywhere, and the user sees it only through `node test/window.ts shot`.
 - **Harness:** a background launch must report `ApplicationType` `BackgroundOnly`, or it's
   killed. Accessory builds are refused too. The probe requires the
-  `activation policy: prohibited` record and a below-normal record for every window. The
-  window list includes layer -1.
+  `activation policy: prohibited` record and a below-normal record for every window. Every
+  sizeable window, at any layer, must be at layer -1.
+- **Review [LLL](../security-reviews/20261109-background-only-windows.md):** one medium and
+  four lows, all fixed:
+  - `setVisibleOnAllWorkspaces` (Electron's `DockShow`) and `setKiosk` are pinned;
+  - the Space probe runs no shell and checks that each switch happened.
 - **Probe:** `test/focus/spaces.ts` (run only with the user's agreement, since it moves their
   screen):
   - it switches to an empty Space and launches the editor there, so its window is alone;
