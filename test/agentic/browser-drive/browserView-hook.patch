@@ -1,5 +1,5 @@
 diff --git a/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts b/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
-index cd1678b2..8c676b69 100644
+index cd1678b2..a8fe4089 100644
 --- a/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
 +++ b/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
 @@ -35,6 +35,7 @@ import { ChatEditorInput } from '../../chat/browser/widgetHosts/editor/chatEdito
@@ -18,7 +18,7 @@ index cd1678b2..8c676b69 100644
  	) {
  		super();
  		const channel = mainProcessService.getChannel(ipcBrowserViewChannelName);
-@@ -241,6 +243,72 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
+@@ -241,6 +243,89 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
  		void this._browserViewsReady.p.catch(error => {
  			this.logService.error('[BrowserViewWorkbenchService] Failed to initialize browser view event stream.', error);
  		});
@@ -49,6 +49,7 @@ index cd1678b2..8c676b69 100644
 +		const seclabDriveMarker = '[SECLAB_TEST_ONLY:browser-drive-hook]';
 +		const seclabDriveFile = URI.joinPath(this.environmentService.userHome, '.seclab-test', 'browser-drive', 'targets');
 +		let seclabDriven = false;
++		const seclabDriveStarted = Date.now();
 +		const seclabDriveTick = setInterval(async () => {
 +			if (seclabDriven) {
 +				return;
@@ -72,6 +73,22 @@ index cd1678b2..8c676b69 100644
 +				seclabDriven = false;
 +				return;
 +			}
++			// WAIT FOR THE TAB'S REMOTE SETTINGS TO BE IN FORCE. The probe is a statement
++			// about what the window does with the tab's configuration, so measuring before
++			// the remote layer has loaded measures the registered defaults instead. That
++			// happened: the first run reported the tab's own network on a build that would
++			// have obeyed the tab a moment later, i.e. it made an unfixed build look
++			// contained. `ready` is a neutral setting the harness has the tab write, which
++			// no patch fixes, so its arrival proves the layer is applied on either build.
++			if (fields.ready !== undefined && String(this.configurationService.getValue('workbench.browser.maxHistoryEntries')) !== fields.ready) {
++				seclabDriven = false;
++				if (Date.now() > seclabDriveStarted + 120_000) {
++					clearInterval(seclabDriveTick);
++					this.logService.warn(`${seclabDriveMarker} ready=no: the tab's remote settings never arrived; this run is inconclusive`);
++				}
++				return;
++			}
++			this.logService.warn(`${seclabDriveMarker} ready=yes`);
 +			clearInterval(seclabDriveTick);
 +			try {
 +				const network = this.resolveNetwork({ type: 'agent', sessionId: fields.arm });
