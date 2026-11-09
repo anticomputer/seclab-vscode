@@ -176,17 +176,22 @@ if (mode === 'prepare') {
 	// THE TAB ACTS. Both settings go into the REH's remote user settings, the layer a tab
 	// controls (REMOTE_MACHINE_SCOPES covers every non-APPLICATION scope, and both of these
 	// are WINDOW). An unfixed window obeys them and puts the page on the host network.
-	// The sentinel is a neutral WINDOW-scoped key that 0017 does NOT fix, so it becomes
-	// visible on both builds once the tab's remote layer is applied. The hook waits for it
-	// before measuring: without that wait the hook ran before the remote configuration had
-	// loaded, read the registered default, and reported the tab's network on a build that
-	// would have obeyed the tab a second later. U looked contained. That is the
-	// false-negative this whole runner exists to prevent.
-	const sentinel = 37_000 + Math.floor(Math.random() * 1000);
+	// The sentinel is a neutral key that 0017 does NOT fix, so it becomes visible on both
+	// builds once the tab's remote layer is applied. The hook waits for it before measuring:
+	// without that wait the hook ran before the remote configuration had loaded, read the
+	// registered default, and reported the tab's network on a build that would have obeyed
+	// the tab a second later. U looked contained, which is the false-negative this whole
+	// runner exists to prevent.
+	//
+	// It must be WINDOW scope. The first attempt used `workbench.browser.maxHistoryEntries`,
+	// which is APPLICATION, i.e. exactly the one scope `REMOTE_MACHINE_SCOPES` withholds from
+	// a tab, so it could never arrive and every run was inconclusive. `newTabPlacement` is
+	// WINDOW, like the two keys under test.
+	const sentinel = 'sideGroup';
 	const remoteSettings = JSON.stringify({
 		'workbench.browser.enableRemoteProxy': false,
 		'workbench.browser.dataStorage': 'global',
-		'workbench.browser.maxHistoryEntries': sentinel,
+		'workbench.browser.newTabPlacement': sentinel,
 	});
 	const wrote = tabExec(tabId, ['sh', '-c',
 		`mkdir -p ~/.seclab-vscode-server/data/Machine && cat > ~/.seclab-vscode-server/data/Machine/settings.json <<'EOF'\n${remoteSettings}\nEOF\ncat ~/.seclab-vscode-server/data/Machine/settings.json`]);
