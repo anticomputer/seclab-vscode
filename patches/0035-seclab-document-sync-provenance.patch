@@ -1,0 +1,346 @@
+diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentContentProviders.ts b/src/vs/workbench/api/browser/mainThreadDocumentContentProviders.ts
+--- a/src/vs/workbench/api/browser/mainThreadDocumentContentProviders.ts	2026-11-09 15:56:04
++++ b/src/vs/workbench/api/browser/mainThreadDocumentContentProviders.ts	2026-11-09 15:58:56
+@@ -16,6 +16,7 @@
+ import { extHostNamedCustomer, IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
+ import { ExtHostContext, ExtHostDocumentContentProvidersShape, MainContext, MainThreadDocumentContentProvidersShape } from '../common/extHost.protocol.js';
+ import { CancellationTokenSource } from '../../../base/common/cancellation.js';
++import { seclabAsProviderWrite, seclabTagProvidedModel } from './seclabDocumentOrigin.js';
+ 
+ @extHostNamedCustomer(MainContext.MainThreadDocumentContentProviders)
+ export class MainThreadDocumentContentProviders implements MainThreadDocumentContentProvidersShape {
+@@ -25,13 +26,13 @@
+ 	private readonly _proxy: ExtHostDocumentContentProvidersShape;
+ 
+ 	constructor(
+-		extHostContext: IExtHostContext,
++		private readonly _extHostContext: IExtHostContext,
+ 		@ITextModelService private readonly _textModelResolverService: ITextModelService,
+ 		@ILanguageService private readonly _languageService: ILanguageService,
+ 		@IModelService private readonly _modelService: IModelService,
+ 		@IEditorWorkerService private readonly _editorWorkerService: IEditorWorkerService
+ 	) {
+-		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostDocumentContentProviders);
++		this._proxy = _extHostContext.getProxy(ExtHostContext.ExtHostDocumentContentProviders);
+ 	}
+ 
+ 	dispose(): void {
+@@ -46,7 +47,9 @@
+ 					if (typeof value === 'string') {
+ 						const firstLineText = value.substr(0, 1 + value.search(/\r?\n/));
+ 						const languageSelection = this._languageService.createByFilepathOrFirstLine(uri, firstLineText);
+-						return this._modelService.createModel(value, languageSelection, uri);
++						const model = this._modelService.createModel(value, languageSelection, uri);
++						seclabTagProvidedModel(this._extHostContext, model);
++						return model;
+ 					}
+ 					return null;
+ 				});
+@@ -90,7 +93,7 @@
+ 			}
+ 			if (edits && edits.length > 0) {
+ 				// use the evil-edit as these models show in readonly-editor only
+-				model.applyEdits(edits.map(edit => EditOperation.replace(Range.lift(edit.range), edit.text)));
++				seclabAsProviderWrite(this._extHostContext, model, () => model.applyEdits(edits.map(edit => EditOperation.replace(Range.lift(edit.range), edit.text))));
+ 			}
+ 		} catch (error) {
+ 			onUnexpectedError(error);
+diff -ruN a/src/vs/workbench/api/browser/mainThreadDocuments.ts b/src/vs/workbench/api/browser/mainThreadDocuments.ts
+--- a/src/vs/workbench/api/browser/mainThreadDocuments.ts	2026-11-09 15:56:04
++++ b/src/vs/workbench/api/browser/mainThreadDocuments.ts	2026-11-09 15:57:57
+@@ -24,6 +24,7 @@
+ import { IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
+ import { ErrorNoTelemetry, onUnexpectedError } from '../../../base/common/errors.js';
+ import { ISerializedModelContentChangedEvent } from '../../../editor/common/textModelEvents.js';
++import { seclabTagCreatedUntitled } from './seclabDocumentOrigin.js';
+ 
+ export class BoundModelReferenceCollection {
+ 
+@@ -92,11 +93,15 @@
+ 		private readonly _onIsCaughtUpWithContentChanges: Emitter<URI>,
+ 		private readonly _proxy: ExtHostDocumentsShape,
+ 		private readonly _textFileService: ITextFileService,
++		private readonly _shouldSync: (model: ITextModel) => boolean,
+ 	) {
+ 		super();
+ 		this._knownVersionId = this._model.getVersionId();
+ 		this._store.add(this._model.onDidChangeContent((e) => {
+ 			this._knownVersionId = e.versionId;
++			if (!this._shouldSync(this._model)) {
++				return; // seclab: a write that untagged the model never reaches the tab
++			}
+ 			if (e.detailedReasonsChangeLengths.length !== 1) {
+ 				onUnexpectedError(new Error(`Unexpected reasons: ${e.detailedReasons.map(r => r.toString())}`));
+ 			}
+@@ -131,6 +136,7 @@
+ 	private readonly _proxy: ExtHostDocumentsShape;
+ 	private readonly _modelTrackers = new ResourceMap<ModelTracker>();
+ 	private readonly _modelReferenceCollection: BoundModelReferenceCollection;
++	private readonly _extHostContext: IExtHostContext;
+ 
+ 	constructor(
+ 		extHostContext: IExtHostContext,
+@@ -141,9 +147,11 @@
+ 		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
+ 		@IUriIdentityService private readonly _uriIdentityService: IUriIdentityService,
+ 		@IWorkingCopyFileService workingCopyFileService: IWorkingCopyFileService,
+-		@IPathService private readonly _pathService: IPathService
++		@IPathService private readonly _pathService: IPathService,
++		private readonly _shouldSync: (model: ITextModel) => boolean = shouldSynchronizeModel,
+ 	) {
+ 		super();
++		this._extHostContext = extHostContext;
+ 
+ 		this._modelReferenceCollection = this._store.add(new BoundModelReferenceCollection(_uriIdentityService.extUri));
+ 
+@@ -199,16 +207,16 @@
+ 
+ 	private _shouldHandleFileEvent(resource: URI): boolean {
+ 		const model = this._modelService.getModel(resource);
+-		return !!model && shouldSynchronizeModel(model);
++		return !!model && this._shouldSync(model);
+ 	}
+ 
+ 	handleModelAdded(model: ITextModel): void {
+ 		// Same filter as in mainThreadEditorsTracker
+-		if (!shouldSynchronizeModel(model)) {
++		if (!this._shouldSync(model)) {
+ 			// don't synchronize too large models
+ 			return;
+ 		}
+-		this._modelTrackers.set(model.uri, new ModelTracker(model, this._onIsCaughtUpWithContentChanges, this._proxy, this._textFileService));
++		this._modelTrackers.set(model.uri, new ModelTracker(model, this._onIsCaughtUpWithContentChanges, this._proxy, this._textFileService, this._shouldSync));
+ 	}
+ 
+ 	private _onModelModeChanged(event: { model: ITextModel; oldLanguageId: string }): void {
+@@ -305,6 +313,7 @@
+ 			initialValue: options?.content,
+ 			encoding: options?.encoding
+ 		});
++		seclabTagCreatedUntitled(this._extHostContext, model);
+ 		if (options?.encoding) {
+ 			await model.setEncoding(options.encoding);
+ 		}
+diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts
+--- a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-09 15:56:04
++++ b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-09 15:57:27
+@@ -8,7 +8,7 @@
+ import { ICodeEditor, isCodeEditor, isDiffEditor, IActiveCodeEditor } from '../../../editor/browser/editorBrowser.js';
+ import { ICodeEditorService } from '../../../editor/browser/services/codeEditorService.js';
+ import { IEditor } from '../../../editor/common/editorCommon.js';
+-import { ITextModel, shouldSynchronizeModel } from '../../../editor/common/model.js';
++import { ITextModel } from '../../../editor/common/model.js';
+ import { IModelService } from '../../../editor/common/services/model.js';
+ import { ITextModelService } from '../../../editor/common/services/resolverService.js';
+ import { IFileService } from '../../../platform/files/common/files.js';
+@@ -33,6 +33,7 @@
+ import { ViewContainerLocation } from '../../common/views.js';
+ import { IConfigurationService } from '../../../platform/configuration/common/configuration.js';
+ import { IQuickDiffModelService } from '../../contrib/scm/browser/quickDiffModel.js';
++import { seclabOrigin, seclabShouldSync } from './seclabDocumentOrigin.js';
+ 
+ 
+ class TextEditorSnapshot {
+@@ -120,6 +121,8 @@
+ 
+ 	constructor(
+ 		private readonly _onDidChangeState: (delta: DocumentAndEditorStateDelta) => void,
++		private readonly _shouldSync: (model: ITextModel) => boolean,
++		onDidChangeOrigin: Event<void>,
+ 		@IModelService private readonly _modelService: IModelService,
+ 		@ICodeEditorService private readonly _codeEditorService: ICodeEditorService,
+ 		@IEditorService private readonly _editorService: IEditorService,
+@@ -136,6 +139,7 @@
+ 		Event.filter(this._paneCompositeService.onDidPaneCompositeOpen, event => event.viewContainerLocation === ViewContainerLocation.Panel)(_ => this._activeEditorOrder = ActiveEditorOrder.Panel, undefined, this._toDispose);
+ 		Event.filter(this._paneCompositeService.onDidPaneCompositeClose, event => event.viewContainerLocation === ViewContainerLocation.Panel)(_ => this._activeEditorOrder = ActiveEditorOrder.Editor, undefined, this._toDispose);
+ 		this._editorService.onDidVisibleEditorsChange(_ => this._activeEditorOrder = ActiveEditorOrder.Editor, undefined, this._toDispose);
++		onDidChangeOrigin(() => this._updateState(), this, this._toDispose);
+ 
+ 		this._updateState();
+ 	}
+@@ -163,7 +167,7 @@
+ 	}
+ 
+ 	private _updateStateOnModelAdd(model: ITextModel): void {
+-		if (!shouldSynchronizeModel(model)) {
++		if (!this._shouldSync(model)) {
+ 			// ignore
+ 			return;
+ 		}
+@@ -193,7 +197,7 @@
+ 		// models: ignore too large models
+ 		const models = new Set<ITextModel>();
+ 		for (const model of this._modelService.getModels()) {
+-			if (shouldSynchronizeModel(model)) {
++			if (this._shouldSync(model)) {
+ 				models.add(model);
+ 			}
+ 		}
+@@ -207,7 +211,7 @@
+ 				continue;
+ 			}
+ 			const model = editor.getModel();
+-			if (editor.hasModel() && model && shouldSynchronizeModel(model)
++			if (editor.hasModel() && model && this._shouldSync(model)
+ 				&& !model.isDisposed() // model disposed
+ 				&& Boolean(this._modelService.getModel(model.uri)) // model disposing, the flag didn't flip yet but the model service already removed it
+ 			) {
+@@ -302,14 +306,15 @@
+ 		super();
+ 		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostDocumentsAndEditors);
+ 
+-		this._mainThreadDocuments = this._register(new MainThreadDocuments(extHostContext, this._modelService, this._textFileService, fileService, textModelResolverService, environmentService, uriIdentityService, workingCopyFileService, pathService));
++		const shouldSync = (model: ITextModel) => seclabShouldSync(extHostContext, model, environmentService.remoteAuthority, fileService, this._textFileService);
++		this._mainThreadDocuments = this._register(new MainThreadDocuments(extHostContext, this._modelService, this._textFileService, fileService, textModelResolverService, environmentService, uriIdentityService, workingCopyFileService, pathService, shouldSync));
+ 		extHostContext.set(MainContext.MainThreadDocuments, this._mainThreadDocuments);
+ 
+ 		this._mainThreadEditors = this._register(new MainThreadTextEditors(this, extHostContext, codeEditorService, this._editorService, this._editorGroupService, configurationService, quickDiffModelService, uriIdentityService));
+ 		extHostContext.set(MainContext.MainThreadTextEditors, this._mainThreadEditors);
+ 
+ 		// It is expected that the ctor of the state computer calls our `_onDelta`.
+-		this._register(new MainThreadDocumentAndEditorStateComputer(delta => this._onDelta(delta), _modelService, codeEditorService, this._editorService, paneCompositeService));
++		this._register(new MainThreadDocumentAndEditorStateComputer(delta => this._onDelta(delta), shouldSync, seclabOrigin(extHostContext).onDidChange.event, _modelService, codeEditorService, this._editorService, paneCompositeService));
+ 	}
+ 
+ 	private _onDelta(delta: DocumentAndEditorStateDelta): void {
+diff -ruN a/src/vs/workbench/api/browser/mainThreadFileSystem.ts b/src/vs/workbench/api/browser/mainThreadFileSystem.ts
+--- a/src/vs/workbench/api/browser/mainThreadFileSystem.ts	2026-11-09 15:56:04
++++ b/src/vs/workbench/api/browser/mainThreadFileSystem.ts	2026-11-09 15:58:20
+@@ -11,6 +11,7 @@
+ import { ExtHostContext, ExtHostFileSystemShape, IFileChangeDto, MainContext, MainThreadFileSystemShape } from '../common/extHost.protocol.js';
+ import { VSBuffer } from '../../../base/common/buffer.js';
+ import { IMarkdownString } from '../../../base/common/htmlContent.js';
++import { seclabTagFsProvider } from './seclabDocumentOrigin.js';
+ 
+ @extHostNamedCustomer(MainContext.MainThreadFileSystem)
+ export class MainThreadFileSystem implements MainThreadFileSystemShape {
+@@ -20,12 +21,12 @@
+ 	private readonly _disposables = new DisposableStore();
+ 
+ 	constructor(
+-		extHostContext: IExtHostContext,
++		private readonly _extHostContext: IExtHostContext,
+ 		@IFileService private readonly _fileService: IFileService
+ 	) {
+-		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostFileSystem);
++		this._proxy = _extHostContext.getProxy(ExtHostContext.ExtHostFileSystem);
+ 
+-		const infoProxy = extHostContext.getProxy(ExtHostContext.ExtHostFileSystemInfo);
++		const infoProxy = _extHostContext.getProxy(ExtHostContext.ExtHostFileSystemInfo);
+ 
+ 		for (const entry of _fileService.listCapabilities()) {
+ 			infoProxy.$acceptProviderInfos(URI.from({ scheme: entry.scheme, path: '/dummy' }), entry.capabilities);
+@@ -40,7 +41,9 @@
+ 	}
+ 
+ 	async $registerFileSystemProvider(handle: number, scheme: string, capabilities: FileSystemProviderCapabilities, readonlyMessage?: IMarkdownString): Promise<void> {
+-		this._fileProvider.set(handle, new RemoteFileSystemProvider(this._fileService, scheme, capabilities, readonlyMessage, handle, this._proxy));
++		const provider = new RemoteFileSystemProvider(this._fileService, scheme, capabilities, readonlyMessage, handle, this._proxy);
++		this._fileProvider.set(handle, provider);
++		seclabTagFsProvider(this._extHostContext, provider);
+ 	}
+ 
+ 	$unregisterProvider(handle: number): void {
+diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts
+--- a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	1970-01-01 00:00:00
++++ b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-09 15:58:56
+@@ -0,0 +1,99 @@
++/*---------------------------------------------------------------------------------------------
++ *  seclab: which text models belong to a tab's extension host (patch 0035, EDR
++ *  document-sync-provenance). In a `seclab+` window a non-local extension host is sent a model only
++ *  if the tab owns it: a file on this window's own tab authority, a model this host's own content
++ *  provider created (tagged per model, never per scheme, and untagged by any other write), a file
++ *  of a filesystem provider this host registered, or an untitled model this host created or that
++ *  was empty when it appeared. Local hosts and other windows are unchanged.
++ *--------------------------------------------------------------------------------------------*/
++
++import { Emitter } from '../../../base/common/event.js';
++import { Schemas } from '../../../base/common/network.js';
++import { URI } from '../../../base/common/uri.js';
++import { ITextModel, shouldSynchronizeModel } from '../../../editor/common/model.js';
++import { IFileService, IFileSystemProvider } from '../../../platform/files/common/files.js';
++import { IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
++import { ExtensionHostKind } from '../../services/extensions/common/extensionHostKind.js';
++import { ITextFileService } from '../../services/textfile/common/textfiles.js';
++import { CellUri } from '../../contrib/notebook/common/notebookCommon.js';
++
++class SeclabOrigin {
++	readonly models = new WeakSet<ITextModel>();
++	readonly untitled = new WeakSet<object>();
++	readonly fsProviders = new WeakSet<IFileSystemProvider>();
++	readonly onDidChange = new Emitter<void>();
++	writing: ITextModel | undefined;
++}
++const origins = new WeakMap<IExtHostContext, SeclabOrigin>();
++const bornEmpty = new WeakMap<ITextModel, boolean>();
++
++export function seclabOrigin(ctx: IExtHostContext): SeclabOrigin {
++	let o = origins.get(ctx);
++	if (!o) {
++		origins.set(ctx, o = new SeclabOrigin());
++	}
++	return o;
++}
++
++/** Called right after this host's content provider created `model`. */
++export function seclabTagProvidedModel(ctx: IExtHostContext, model: ITextModel): void {
++	const o = seclabOrigin(ctx);
++	o.models.add(model);
++	// Registered before the model is synced, so it runs before MainThreadDocuments' ModelTracker.
++	const l = model.onDidChangeContent(() => {
++		if (o.writing !== model) {
++			o.models.delete(model);
++			l.dispose();
++			o.onDidChange.fire();
++		}
++	});
++	o.onDidChange.fire();
++}
++
++/** Runs this host's own write (`$onVirtualDocumentChange`) to `model`; any other write untags it. */
++export function seclabAsProviderWrite<T>(ctx: IExtHostContext, model: ITextModel, fn: () => T): T {
++	const o = seclabOrigin(ctx);
++	const outer = o.writing;
++	o.writing = model;
++	try {
++		return fn();
++	} finally {
++		o.writing = outer;
++	}
++}
++
++/** Called when this host created an untitled model (`openTextDocument({ content })`, `untitled:` paths). */
++export function seclabTagCreatedUntitled(ctx: IExtHostContext, untitled: object): void {
++	seclabOrigin(ctx).untitled.add(untitled);
++}
++
++/** Called when this host registered a filesystem provider (registration fails for a taken scheme). */
++export function seclabTagFsProvider(ctx: IExtHostContext, provider: IFileSystemProvider): void {
++	seclabOrigin(ctx).fsProviders.add(provider);
++}
++
++export function seclabShouldSync(ctx: IExtHostContext, model: ITextModel, windowAuthority: string | undefined, fileService: IFileService, textFileService: ITextFileService): boolean {
++	if (model.uri.scheme === Schemas.untitled && !bornEmpty.has(model)) {
++		bornEmpty.set(model, model.getValueLength() === 0 && !textFileService.untitled.get(model.uri)?.hasAssociatedFilePath);
++	}
++	if (!shouldSynchronizeModel(model) || ctx.extensionHostKind === ExtensionHostKind.LocalProcess || !windowAuthority?.startsWith('seclab+')) {
++		return shouldSynchronizeModel(model);
++	}
++	const o = seclabOrigin(ctx);
++	if (o.models.has(model)) {
++		return true;
++	}
++	if (model.uri.scheme === Schemas.untitled) {
++		const untitled = textFileService.untitled.get(model.uri);
++		return !!untitled && (o.untitled.has(untitled) || bornEmpty.get(model) === true);
++	}
++	const resource: URI | undefined = model.uri.scheme === Schemas.vscodeNotebookCell ? CellUri.parse(model.uri)?.notebook : model.uri;
++	if (!resource) {
++		return false;
++	}
++	if (resource.scheme === Schemas.vscodeRemote) {
++		return resource.authority === windowAuthority;
++	}
++	const provider = fileService.getProvider(resource.scheme);
++	return !!provider && o.fsProviders.has(provider);
++}

@@ -209,6 +209,8 @@ The sandboxed extension host talks back to the trusted workbench through `MainTh
 
 This is one patch, applied where the RPC protocol is wired up for an extension host. It works like Chrome's per-interface Mojo filtering, and it is the main piece of new security engineering in the project. We should develop it **test-first** against a rogue-extension fixture.
 
+**The other direction: window → tab pushes.** The filter screens calls from the tab. The window also pushes state into each extension host on its own initiative, and the filter never sees those pushes. The document sync used to send every text model in the window, so host settings, output or a host file opened in a tab window reached the tab in full. Patch 0035 sends a tab's extension host only the documents it owns: its own tab files, the models its own content providers made (tagged per model, untagged by any other write), files of filesystem providers it registered, and untitled documents it made or the user typed. Local hosts and other windows are unchanged ([EDR](edr/20261109-document-sync-provenance.md)). Other pushes still carry host data and need their own control, among them the configuration snapshot, notebook sync, the editor-tab model and the init data ([RPC lockdown §7](RPC-LOCKDOWN.md#7-residual-risks)).
+
 ### 4.7 Host-side residuals (from the code-execution catalogue)
 
 These are the vectors that would otherwise still run on the host, and how we handle each:
