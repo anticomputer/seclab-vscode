@@ -213,7 +213,7 @@ new file mode 100644
 index 0000000..02f6036
 --- /dev/null
 +++ b/src/vs/platform/windows/electron-main/backgroundWindowsGuard.ts
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,167 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -278,6 +278,14 @@ index 0000000..02f6036
 +			// macOS: below normal windows, and nothing can raise the level.
 +			if (process.platform === 'darwin' && (Object.prototype.hasOwnProperty.call(proto, 'setAlwaysOnTop') || proto === BaseWindow.prototype)) {
 +				replace(proto, 'setAlwaysOnTop', orig => function (this: BaseWindow) { return orig.call(this, true, 'normal', -1); });
++			}
++			// setVisibleOnAllWorkspaces turns the app into a regular one (Electron's DockShow,
++			// unless skipTransformProcessType) and setKiosk goes full screen past the setFullScreen
++			// pin: neither has a background use (review LLL-1).
++			for (const name of ['setVisibleOnAllWorkspaces', 'setKiosk']) {
++				if (Object.prototype.hasOwnProperty.call(proto, name) || proto === BaseWindow.prototype) {
++					replace(proto, name, () => function () { return undefined; });
++				}
 +			}
 +		}
 +		replace(app, 'focus', () => () => undefined);
@@ -365,7 +373,8 @@ index 0000000..02f6036
 +			});
 +		}
 +		replace(dialog, 'showErrorBox', () => (title: unknown, content: unknown) => {
-+			console.error(`[background windows] error box suppressed: ${String(title)}: ${String(content)}`);
++			// Foreign text (an uncaught exception's stack): one line, like the dialog line (LLL-4).
++			console.error(`[background windows] error box suppressed: ${`${String(title)}: ${String(content)}`.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, ' ').slice(0, 400)}`);
 +		});
 +	} catch (error) {
 +		console.error(String(error));
