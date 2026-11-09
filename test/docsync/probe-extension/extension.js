@@ -51,7 +51,7 @@ exports.activate = async function () {
 	const report = {
 		schema: 'seclab-docsync-report/1', arm: t.arm, done: false, steps: [], schemes: {}, hits: [], uris: [],
 		perf: { precreated: false, foreignSeen: false, servedToTab: 0, removedAt: '' },
-		hijack: { providers: 0, fsUserdata: 'not tried', fsOutput: 'not tried', hostSchemeAsks: 0, untitledClaims: 0 },
+		hijack: { providers: 0, fsUserdata: 'not tried', fsOutput: 'not tried', hostSchemeAsks: 0, untitledClaims: 0, hostUntitledSeen: 0 },
 		seeded: false, untitledForeign: false,
 		controls: { editSaved: false, untitledTyped: false, tabUntitled: false, gitDoc: false, cellDoc: false },
 	};
@@ -202,11 +202,18 @@ exports.activate = async function () {
 		// A host-seeded untitled document (the keyboard-mapping dump), then the tab tries to claim
 		// existing untitled models by URI.
 		['host-seeded-untitled', async () => {
+			const before = new Set(vscode.workspace.textDocuments.filter(d => d.uri.scheme === 'untitled').map(d => d.uri.toString()));
 			await vscode.commands.executeCommand('workbench.action.inspectKeyMappingsJSON');
 			await sleep(1500);
-			for (let n = 1; n <= 6; n++) {
+			// Editor tabs list every untitled editor in the window (a separate sibling push), so the
+			// probe can name the host's untitled model exactly rather than guess.
+			const hostUntitled = vscode.window.tabGroups.all.flatMap(g => g.tabs)
+				.map(tab => tab.input instanceof vscode.TabInputText ? tab.input.uri : undefined)
+				.filter(u => u && u.scheme === 'untitled' && !before.has(u.toString()));
+			report.hijack.hostUntitledSeen = hostUntitled.length;
+			for (const uri of hostUntitled) {
 				try {
-					await vscode.workspace.openTextDocument(vscode.Uri.parse(`untitled:Untitled-${n}`));
+					await vscode.workspace.openTextDocument(uri);
 				} catch { /* refused */ }
 				report.hijack.untitledClaims++;
 			}
