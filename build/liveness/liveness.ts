@@ -818,14 +818,17 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 				}
 			} else if (e.record !== undefined) {
 				// A structured line, as in the liveness EDR's "Evidence on record": a passing mention
-				// (even "never ran") doesn't count (KKK-5).
+				// (even "never ran") doesn't count (KKK-5). Dated, so the weekly refresh job can ask
+				// for a re-run of what CI can't run (Level B rotted unnoticed, 2026-11-09).
 				const line = new RegExp(`^- \\*\\*\`${escapeRe(s.id)}\`:\\*\\* \\S`, 'm');
 				if (!/^docs\/.+\.md$/.test(e.record) || !has.has(e.record)) {
 					errors.push(`subject ${s.id}: record ${e.record} is not a doc in docs/`);
 				} else if (!line.test(read(e.record))) {
 					errors.push(`subject ${s.id}: record ${e.record} has no "- **\`${s.id}\`:** …" evidence line`);
+				} else if (typeof e.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(e.date)) {
+					errors.push(`subject ${s.id}: record evidence needs the run's date (YYYY-MM-DD)`);
 				} else if (!s.evidence.some(x => x.run !== undefined || x.ci !== undefined)) {
-					notes.push(`record only: ${s.id} (${e.record})`);
+					notes.push(`record only: ${s.id} (${e.record}, ${e.date})`);
 				}
 			}
 		}
@@ -863,6 +866,13 @@ export async function verifyRuns(reg: Register, api: Api, now = Date.now()): Pro
 	const errors: string[] = [];
 	const notes: string[] = [];
 	for (const s of reg.subjects ?? []) {
+		// A record is a run CI can't do: older than 30 days, it is due again (a note here, a
+		// failure in the weekly refresh job).
+		for (const e of (s.evidence ?? []).filter(x => x.record !== undefined && typeof x.date === 'string')) {
+			if ((now - Date.parse(e.date!)) / 86_400_000 > 30) {
+				notes.push(`subject ${s.id}: record from ${e.date} (${e.record}); re-run: ${s.runBy}`);
+			}
+		}
 		for (const e of (s.evidence ?? []).filter(x => x.run !== undefined)) {
 			const at = `subject ${s.id}: run ${e.run}`;
 			if (!Number.isSafeInteger(e.run) || typeof e.sha !== 'string' || typeof e.date !== 'string' || typeof e.workflow !== 'string') {
@@ -967,7 +977,7 @@ async function selfTest(): Promise<void> {
 			],
 			subjects: [
 				{ id: 'workflow:weekly', runBy: 'schedule', evidence: [{ run: 1, workflow: 'weekly.yml', sha: 'a'.repeat(40), date: '2026-11-01' }] },
-				{ id: 'hook:v/h', runBy: 'harness', evidence: [{ record: 'docs/proof.md' }] },
+				{ id: 'hook:v/h', runBy: 'harness', evidence: [{ record: 'docs/proof.md', date: '2026-11-01' }] },
 				{ id: 'fixture:test/x/fixtures/evil', runBy: 'test/run.ts', evidence: [{ ci: 'ci.yml#oci', mark: 'evil-ran', runner: 'test/run.ts' }] },
 			],
 		}),
@@ -1092,7 +1102,25 @@ async function selfTest(): Promise<void> {
 			throw new Error(`self-test: verify-runs --refresh "${name}": ${refreshed.errors.length} error(s), want ${want === 'ok' ? 'none' : 'some'}`);
 		}
 	}
-	console.log(`liveness self-test: ok (control clean; ${injections.length} injections, ${marks.length + 1} mark cases and ${runCases.length} run cases caught)`);
+	// Records of runs CI can't do: due again after 30 days (a note; the weekly refresh fails).
+	const recordCases: Array<[string, string, 'ok' | 'note']> = [['fresh record', '2026-11-01', 'ok'], ['stale record', '2026-09-01', 'note']];
+	for (const [name, date, want] of recordCases) {
+		const reg1: Register = { exempt: [], subjects: [{ id: 'fixture:x', runBy: 'a local harness', evidence: [{ record: 'docs/proof.md', date }] }] };
+		const got = await verifyRuns(reg1, async () => ({ status: 404 }), now);
+		const kind = got.errors.length ? 'error' : got.notes.length ? 'note' : 'ok';
+		if (kind !== want || (refreshReport(got).errors.length > 0) !== (want === 'note')) {
+			throw new Error(`self-test: verify-runs "${name}": ${kind}, want ${want}`);
+		}
+	}
+	{ // an undated record is refused offline
+		const r = reg();
+		r.subjects = r.subjects.map(s => s.id === 'hook:v/h' ? { ...s, evidence: [{ record: 'docs/proof.md' }] } : s);
+		const got = await run(withReg(r));
+		if (!got.errors.some(e => /record evidence needs the run's date/.test(e))) {
+			throw new Error('self-test: an undated record was accepted');
+		}
+	}
+	console.log(`liveness self-test: ok (control clean; ${injections.length + 1} injections, ${marks.length + 1} mark cases, ${runCases.length} run and ${recordCases.length} record cases caught)`);
 }
 
 // ---- main ---------------------------------------------------------------------------------

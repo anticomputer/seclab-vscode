@@ -63,7 +63,7 @@ export function checkEvidence(ev: Evidence | undefined, vector: string, opts: { 
 		(opts.expectHostname === undefined || ev.hostname === opts.expectHostname), `hostname=${ev.hostname} SECLAB_TAB=${ev.seclab_tab_env}`));
 	out.push(c('cannot read host file outside the workspace (canary)', ev.canary_read === 'no', ev.canary_read));
 	out.push(c('cannot read another tab\'s workspace', ev.othertab_read === 'no', ev.othertab_read));
-	out.push(c('cannot write host file outside the workspace', !fs.existsSync(opts.marker), opts.marker));
+	out.push(c('cannot write host file outside the workspace', !fs.existsSync(`${opts.marker}.${vector}`), `${opts.marker}.${vector}`));
 	out.push(c('no writable docker.sock', ev.docker_sock_writable === 'no', ev.docker_sock_writable));
 	out.push(c('no sudo', ev.sudo === 'no', ev.sudo));
 	out.push(c('no host secrets / agent sockets in env', ev.secret_env.trim() === '', ev.secret_env));

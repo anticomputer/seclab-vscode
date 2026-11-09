@@ -14,9 +14,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
-import { beaconPort, checkUserDataDir, editorLaunchCommand, lockRun } from '../harness.ts';
+import { beaconPort, checkUserDataDir, editorLaunchCommand, editorPid, lockRun } from '../harness.ts';
 import { brokerProxy, checkEvidence, readEvidence, report, type Check } from './assert.ts';
-import { materialiseFixture, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
+import { materialiseFixture, readManifest, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
 const [mode, userDataArg, driverArg] = process.argv.slice(2);
 if ((mode !== 'prepare' && mode !== 'check') || !userDataArg) {
@@ -31,7 +31,13 @@ const base = path.resolve(process.env.SECLAB_EVIDENCE_DIR ?? path.join(repo, '.w
 lockRun(path.join(base, '..', `${path.basename(base)}.lock.d`));
 const ws = path.join(base, 'ws-editor');
 const canary = path.join(base, 'canary', 'secret.txt');
-const marker = path.join(base, 'PWNED');
+// probe.sh appends the vector (<marker>.task); the rogue extension's RPC probes write their own
+// markers under PWNED (probe-safety.js), so no marker can be credited to the wrong probe.
+const marker = path.join(base, 'probe-marker');
+const RPC_MARKERS: Array<[string, string]> = [
+	['host terminal (newLocal + sendSequence) writes no host file', path.join(base, 'PWNED')],
+	['host file write ($writeFile, file: scheme) writes no host file', path.join(base, 'PWNED.rpcwrite')],
+];
 const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
 
 if (mode === 'prepare') {
@@ -76,14 +82,11 @@ if (mode === 'prepare') {
 		// name a program plus arguments containing the run dir.
 		commandMarks: [`beacon.ts start ${path.join(base, 'beacon.log')}`],
 	});
-	// Git repo with a hostile core.fsmonitor. Only `init` and `config` run on the host;
-	// neither reads core.fsmonitor. Nothing here may run `git status` on the host.
-	execFileSync('git', ['-C', ws, 'init', '-q']);
-	execFileSync('git', ['-C', ws, 'config', 'core.fsmonitor', 'sh .seclab/probe.sh fsmonitor']);
-	// Disarm on EVERY exit, not just a clean `check`. An aborted or crashed
-	// prepare used to leave a host git repo whose core.fsmonitor runs probe.sh
-	// on the next `git status` -- from the user's own editor, a watcher or a
-	// grep. Probe safety review 2026-11-04, finding 5.
+	// The hostile git repo (core.fsmonitor) is armed inside the tab, after it starts: the
+	// editor's git extension polls `git status` there. Never on the host, where any tool's
+	// `git status` would run probe.sh (probe safety review 2026-11-04, finding 5). Only on sbx,
+	// whose write-back gate keeps .git/config in the tab; an OCI tab writes straight through.
+	// Defense in depth: remove any host .git on exit.
 	const disarm = (): void => {
 		try { fs.rmSync(path.join(ws, '.git'), { recursive: true, force: true }); } catch { /* best effort */ }
 	};
@@ -152,6 +155,13 @@ if (mode === 'prepare') {
 	const r = spawnSync(runtime, ['exec', ...user, name, '/opt/seclab/bin/seclab-tab-env',
 		'/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(vsixDir, 'rogue.vsix')], { encoding: 'utf8' });
 	console.log(r.stdout.trim(), r.stderr.trim());
+	if (driver === 'sbx') {
+		const g = spawnSync(runtime, ['exec', ...user, '-w', ws, name, 'sh', '-c', 'git init -q . && git config core.fsmonitor "sh .seclab/probe.sh fsmonitor"'], { encoding: 'utf8' });
+		if (g.status !== 0) {
+			console.error(`could not arm the fsmonitor repo in the tab: ${g.stderr.trim()}`);
+			process.exit(1);
+		}
+	}
 	client.dispose(); // stops the tab; the editor restarts it (extensions persist in the tab)
 	await new Promise(res => client.once('exit', res));
 	console.log(`\nprepared tab ${tab.metadata.name} for ${ws}`);
@@ -162,16 +172,59 @@ if (mode === 'prepare') {
 	})}`);
 } else {
 	const checks: Check[] = [];
-	for (const vector of ['task', 'fsmonitor', 'rogue-extension']) {
-		checks.push(...checkEvidence(readEvidence(ws, vector), vector, { marker, proxy: brokerProxy(driver) }));
+	// Evidence is read through the tab: on sbx the tab's writes stay in its write-back overlay and
+	// never reach the host checkout (the RPC proof reads the same way).
+	const tabId = (readManifest(base).tabs ?? [])[0];
+	const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
+	const inTabUser = driver === 'sbx' ? ['-u', 'agent'] : [];
+	const readInTab = (p: string): string | undefined => {
+		if (!tabId) {
+			return undefined;
+		}
+		const r = spawnSync(runtime, ['exec', ...inTabUser, `seclab-${tabId}`, 'cat', p], { encoding: 'utf8', timeout: 30_000 });
+		return r.status === 0 ? r.stdout : undefined;
+	};
+	const listInTab = (dir: string): string[] => {
+		const r = tabId ? spawnSync(runtime, ['exec', ...inTabUser, `seclab-${tabId}`, 'ls', '-1', dir], { encoding: 'utf8', timeout: 30_000 }) : undefined;
+		return r?.status === 0 ? r.stdout.split('\n').filter(f => /^[\w.-]+$/.test(f)) : [];
+	};
+	const json = (p: string): Record<string, unknown> | undefined => {
+		try {
+			const t = readInTab(p);
+			return t ? JSON.parse(t) as Record<string, unknown> : undefined;
+		} catch {
+			return undefined;
+		}
+	};
+	// The rogue extension deliberately never runs probe.sh (it can land host-side on an
+	// unpatched build): its own evidence is checked below, not a probe vector.
+	const vectors = driver === 'sbx' ? ['task', 'fsmonitor'] : ['task'];
+	for (const vector of vectors) {
+		checks.push(...checkEvidence(readEvidence(ws, vector, readInTab), vector, { marker, proxy: brokerProxy(driver) }));
 	}
-	const hostFile = path.join(ws, '.seclab-evidence', 'rogue-extension-host.json');
-	const host = fs.existsSync(hostFile) ? JSON.parse(fs.readFileSync(hostFile, 'utf8')) : undefined;
+	// The RPC escape probes' own host markers, one row each. Without the RPC capability filter
+	// (patch 0005, product.json seclabRpcPolicy) these paths are open on purpose: a known gap.
+	// With it, a marker is a failure.
+	const pid = editorPid(userData);
+	const exe = pid ? spawnSync('ps', ['-p', String(pid), '-o', 'comm='], { encoding: 'utf8' }).stdout.trim() : '';
+	const appRoot = /^(.*\.app)\/Contents\/MacOS\//.exec(exe)?.[1];
+	let filtered: boolean | undefined;
+	try {
+		filtered = appRoot ? 'seclabRpcPolicy' in (JSON.parse(fs.readFileSync(path.join(appRoot, 'Contents', 'Resources', 'app', 'product.json'), 'utf8')) as object) : undefined;
+	} catch {
+		filtered = undefined;
+	}
+	checks.push({ vector: 'rpc', name: 'the build under test is known (RPC filter present or not)', ok: filtered !== undefined, detail: exe || 'editor not running' });
+	for (const [name, p] of RPC_MARKERS) {
+		const hit = fs.existsSync(p);
+		checks.push({ vector: 'rpc', name, ok: !hit, detail: p, knownGap: hit && filtered === false ? 'open without the RPC capability filter (patch 0005), docs/RPC-LOCKDOWN.md' : undefined });
+	}
+	const evDir = path.join(ws, '.seclab-evidence');
+	const host = json(path.join(evDir, 'rogue-extension-host.json'));
 	checks.push({ vector: 'rogue-extension', name: 'ui-kind rogue extension was forced into the tab (remoteName=seclab)', ok: host?.remoteName === 'seclab' && host?.seclabTab === '1', detail: JSON.stringify(host) });
 	// No trusted-side extension agents in tab windows: the same ui-declared extension
 	// registered a chat participant and called vscode.lm, and that code ran in the tab.
-	const agentFile = path.join(ws, '.seclab-evidence', 'rogue-agent.json');
-	const agent = fs.existsSync(agentFile) ? JSON.parse(fs.readFileSync(agentFile, 'utf8')) as Record<string, unknown> : undefined;
+	const agent = json(path.join(evDir, 'rogue-agent.json'));
 	checks.push({ vector: 'rogue-extension', name: 'ui-declared chat participant / vscode.lm caller ran in the tab, not trusted-side', ok: agent?.ranIn === 'tab' && agent?.remoteName === 'seclab',
 		detail: JSON.stringify(agent ?? 'no rogue-agent.json') });
 	checks.push({ vector: 'host', name: 'canary intact', ok: fs.readFileSync(canary, 'utf8') === 'HOST-SECRET-CANARY\n', detail: '' });
@@ -179,15 +232,14 @@ if (mode === 'prepare') {
 	// API (env, configuration, clipboard, auth sessions, secrets) nor any evidence may
 	// contain an editor-side canary in any encoding.
 	const canaries = deserialize(fs.readFileSync(path.join(base, 'canaries.json'), 'utf8'));
-	const evDir = path.join(ws, '.seclab-evidence');
-	const observedOk = fs.existsSync(path.join(evDir, 'rogue-observed.json'));
-	checks.push({ vector: 'canary', name: 'rogue extension recorded its API observations', ok: observedOk, detail: '' });
+	const evFiles = listInTab(evDir);
+	checks.push({ vector: 'canary', name: 'rogue extension recorded its API observations', ok: evFiles.includes('rogue-observed.json'), detail: '' });
 	// Stores the rogue extension can still read through the extension API until the RPC
 	// capability filter (M4) lands: configuration (user settings) and the clipboard.
 	const M4 = 'M4 RPC capability filter (docs/adr/20261104-rpc-capability-filter.md)';
 	const knownUntilM4 = new Set(['user-settings', 'clipboard']);
-	for (const f of fs.existsSync(evDir) ? fs.readdirSync(evDir) : []) {
-		for (const h of scan(canaries, f, fs.readFileSync(path.join(evDir, f)))) {
+	for (const f of evFiles) {
+		for (const h of scan(canaries, f, Buffer.from(readInTab(path.join(evDir, f)) ?? ''))) {
 			checks.push({ vector: 'canary', name: `no ${h.store} canary in tab-observable data`, ok: false, detail: `${h.encoding} in ${h.source}`,
 				knownGap: knownUntilM4.has(h.store) ? M4 : undefined });
 		}
