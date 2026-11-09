@@ -825,8 +825,10 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 					errors.push(`subject ${s.id}: record ${e.record} is not a doc in docs/`);
 				} else if (!line.test(read(e.record))) {
 					errors.push(`subject ${s.id}: record ${e.record} has no "- **\`${s.id}\`:** …" evidence line`);
-				} else if (typeof e.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(e.date)) {
-					errors.push(`subject ${s.id}: record evidence needs the run's date (YYYY-MM-DD)`);
+				} else if (typeof e.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(e.date) || !Number.isFinite(Date.parse(e.date))
+					|| new Date(Date.parse(e.date)).toISOString().slice(0, 10) !== e.date || Date.parse(e.date) > Date.now()) {
+					// A date that doesn't parse, or one in the future, would switch off the 30-day rule (NNN-6).
+					errors.push(`subject ${s.id}: record evidence needs the run's date (a real, past YYYY-MM-DD)`);
 				} else if (!s.evidence.some(x => x.run !== undefined || x.ci !== undefined)) {
 					notes.push(`record only: ${s.id} (${e.record}, ${e.date})`);
 				}
@@ -1112,15 +1114,17 @@ async function selfTest(): Promise<void> {
 			throw new Error(`self-test: verify-runs "${name}": ${kind}, want ${want}`);
 		}
 	}
-	{ // an undated record is refused offline
-		const r = reg();
-		r.subjects = r.subjects.map(s => s.id === 'hook:v/h' ? { ...s, evidence: [{ record: 'docs/proof.md' }] } : s);
-		const got = await run(withReg(r));
-		if (!got.errors.some(e => /record evidence needs the run's date/.test(e))) {
-			throw new Error('self-test: an undated record was accepted');
+	{ // an undated, impossible or future record date is refused offline (NNN-6)
+		for (const date of [undefined, '2026-13-45', '2999-01-01']) {
+			const r = reg();
+			r.subjects = r.subjects.map(s => s.id === 'hook:v/h' ? { ...s, evidence: [{ record: 'docs/proof.md', ...(date ? { date } : {}) }] } : s);
+			const got = await run(withReg(r));
+			if (!got.errors.some(e => /record evidence needs the run's date/.test(e))) {
+				throw new Error(`self-test: a record dated ${date} was accepted`);
+			}
 		}
 	}
-	console.log(`liveness self-test: ok (control clean; ${injections.length + 1} injections, ${marks.length + 1} mark cases, ${runCases.length} run and ${recordCases.length} record cases caught)`);
+	console.log(`liveness self-test: ok (control clean; ${injections.length + 3} injections, ${marks.length + 1} mark cases, ${runCases.length} run and ${recordCases.length} record cases caught)`);
 }
 
 // ---- main ---------------------------------------------------------------------------------

@@ -96,10 +96,12 @@ Reviews ask what code says. Nothing asked whether anything calls it.
   against release build U on sbx, 2026-11-06
   ([agentic probe runner](20261106-agentic-probe-runner.md), "Measured, 2026-11-06").
 - **`fixture:test/containment/rogue-extension`:** `test/containment/check-evidence.ts` (Level
-  B) on branch build 42707557651 (`eff9437`), sbx, 2026-11-09, after its repair: 42 of 46
-  checks passed, 4 known gaps, teardown clean. The rogue extension was forced into the tab,
-  and its chat participant and `vscode.lm` caller ran there. Its RPC probe's host-terminal
-  marker is its own row: open without the RPC filter, as documented.
+  B) on branch build 42707557651 (`eff9437`), sbx, 2026-11-09, after its repair and review
+  NNN: 43 of 47 checks passed, 4 known gaps, teardown clean. The rogue extension was forced
+  into the tab, and its chat participant and `vscode.lm` caller ran there. Its RPC probes'
+  host effects are their own rows; the host-terminal one is open without the RPC filter, as
+  documented. One of three runs that day failed: the `http.proxyAuthorization` canary
+  reached the tab (findings below).
 
 ## Findings from the first run
 - **Dead exports:**
@@ -137,6 +139,18 @@ Reviews ask what code says. Nothing asked whether anything calls it.
   - Record evidence now carries its date. The weekly `liveness-refresh` job fails once a
     record is more than 30 days old, so Level B and the other local-only runs are asked for
     again instead of rotting.
+  - Review [NNN](../security-reviews/20261109-level-b-repair.md):
+    - the RPC host-effect rows are derived from the probes' expectations, and any
+      unattributed marker fails;
+    - a file the tab won't let the harness read fails;
+    - the build is identified from the launch record and the policy-stamp digest.
+- **Found by the repaired Level B:** in one of three runs on `eff9437` (2026-11-09), the
+  rogue extension's configuration dump in the tab contained the `http.proxyAuthorization`
+  canary, raw and URL-encoded. Upstream registers that setting at `APPLICATION` or `MACHINE`
+  scope depending on `http.useLocalProxyConfiguration`, at run time, which can race the
+  remote extension host's start. The harness keeps it a failure, not a known gap: it is a
+  credential. Patch 0036 (credential-looking settings withheld from tabs) is not on main yet.
+  The old harness never surfaced this.
 
 ## Consequences
 - A new export, fixture, hook or dispatch-only workflow fails `workflow-lint` until it names

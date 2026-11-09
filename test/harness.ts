@@ -311,7 +311,15 @@ export async function launchEditorInBackground(userData: string, folderUri: stri
 		killTree(pid);
 		fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${pid} is a ${appType(pid) || 'unknown'} app, not a background-only one: its build lacks the background-windows guard; killed it\n`);
 	}
+	// Which app this run launched, for checks that depend on the build (check-evidence.ts: is the
+	// RPC filter in it?). Inside the profile, removed with it.
+	fs.writeFileSync(editorLaunchRecord(userData), JSON.stringify({ app: path.resolve(app), pid }));
 	return { pid, windowId, stoleFocus: focusStolen(userData) };
+}
+
+/** The launch record: { app, pid } of the editor this run started (written by the launcher). */
+export function editorLaunchRecord(userData: string): string {
+	return path.join(userData, 'seclab-launch.json');
 }
 
 /** macOS application type of a process (Foreground, UIElement, BackgroundOnly), read-only. */
