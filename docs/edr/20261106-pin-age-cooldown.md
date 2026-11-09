@@ -50,6 +50,9 @@ available rather than wait.
   - `zizmor:1.31.1` (signature re-verified for both platforms; workflows clean).
 
   The broker session re-pins its own held pins (`docker:29-cli` and six pip pins).
+  On 2026-11-09 it bumped `fastjsonschema` to 2.22.3 and `platformdirs` to 4.14.3, the
+  newest CFS served; `dnspython`, `pypi-attestations` and `typing-inspection` had nothing
+  newer on CFS, and `docker:29.9.3-cli` was still under 7 days old.
 
 ## Consequences
 - **Security fixes are adopted a week late.** An urgent fix that must land sooner is a
