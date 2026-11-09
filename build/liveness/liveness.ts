@@ -21,7 +21,7 @@
 //            package.json under test/);
 //   each with what runs it and at least one piece of evidence:
 //     run    a GitHub Actions run of `workflow`; with --verify-runs (CI) it must exist, be a
-//            successful dispatch or scheduled run of that workflow, and carry `artifact` if named.
+//            successful dispatch or scheduled run of that workflow, with a successful `job` if named.
 //     ci     a CI job (`file.yml#job`) whose last step is `./seclab liveness marks` for that job,
 //            and a `mark` the runner records with liveMark (test/liveness.ts) when it saw the
 //            subject run. That step fails the job when a mark is missing.
@@ -39,7 +39,7 @@ import * as path from 'node:path';
 export interface Exempt { subject: string; consumer: string | null; reason: string }
 /** A declaration a host calls (VS Code calls `activate`): live, and so is what it reaches. */
 export interface Entry { subject: string; calledBy: string; declaredIn: string }
-export interface Evidence { run?: number; workflow?: string; artifact?: string; sha?: string; date?: string; ci?: string; mark?: string; runner?: string; record?: string }
+export interface Evidence { run?: number; workflow?: string; job?: string; sha?: string; date?: string; ci?: string; mark?: string; runner?: string; record?: string }
 export interface Subject { id: string; runBy: string; evidence: Evidence[] }
 export interface Register { entry?: Entry[]; exempt: Exempt[]; subjects: Subject[] }
 
@@ -828,7 +828,7 @@ type Api = (p: string) => Promise<{ status: number; body?: Record<string, unknow
 /**
  * The register's Actions runs (KKK-4: this needs only the register, so its networked, token-
  * holding container mounts nothing else). Each must be a successful dispatch or scheduled run
- * of the named workflow, at the recorded head sha and date, carrying `artifact` if named. A run
+ * of the named workflow, at the recorded head sha and date, with a successful `job` if named. A run
  * deleted at the retention horizon degrades to a note, so expiry can't block every PR (KKK-5).
  */
 export async function verifyRuns(reg: Register, api: Api, now = Date.now()): Promise<Report> {
@@ -861,12 +861,18 @@ export async function verifyRuns(reg: Register, api: Api, now = Date.now()): Pro
 				errors.push(`${at}: ${bad}`);
 				continue;
 			}
-			if (e.artifact) {
-				const a = await api(`${e.run}/artifacts?per_page=100`);
-				const names = (a.body as { artifacts?: Array<{ name?: string }> } | undefined)?.artifacts?.map(x => x.name) ?? [];
-				if (!names.includes(e.artifact)) {
-					errors.push(`${at}: has no artifact ${e.artifact}`);
+			if (e.job) {
+				// A job, not an artifact: artifacts expire within days, jobs live as long as the run.
+				const j = await api(`${e.run}/jobs?per_page=100`);
+				const jobs = (j.body as { jobs?: Array<{ name?: string; conclusion?: string }> } | undefined)?.jobs ?? [];
+				if (!jobs.some(x => x.name === e.job && x.conclusion === 'success')) {
+					errors.push(`${at}: has no successful job "${e.job}"`);
+					continue;
 				}
+			}
+			// Warn ahead of the retention horizon (90 days by default), never fail on age.
+			if ((now - Date.parse(e.date)) / 86_400_000 > 75) {
+				notes.push(`${at}: recorded ${e.date}, near the retention horizon; re-run and update the register`);
 			}
 		}
 	}
@@ -1017,11 +1023,13 @@ async function selfTest(): Promise<void> {
 	if (!checkMarks(r, 'ci.yml#other', 'x').length) {
 		throw new Error('self-test: a marks step for a job nobody names passed');
 	}
-	// verify-runs against a fake API: the good run passes; each mismatch fails; a deleted run
-	// is an error while recent and a note once past the retention horizon.
+	// verify-runs against a fake API: the good run passes; each mismatch fails; a missing job
+	// fails (artifacts are never consulted: they expire within days); an aging run is a note
+	// ahead of the retention horizon; a deleted run is an error while recent, a note once past it.
 	const now = Date.parse('2026-11-09T00:00:00Z');
 	const good = { path: '.github/workflows/weekly.yml', event: 'workflow_dispatch', conclusion: 'success', head_sha: 'a'.repeat(40), created_at: '2026-11-01T10:00:00Z' };
-	const runCases: Array<[string, Record<string, unknown> | undefined, string, 'ok' | 'error' | 'note']> = [
+	const jobsOk = { jobs: [{ name: 'reh (test variant)', conclusion: 'success' }] };
+	const runCases: Array<[string, Record<string, unknown> | undefined, string, 'ok' | 'error' | 'note', string?, Record<string, unknown>?]> = [
 		['good run', good, '2026-11-01', 'ok'],
 		['other workflow', { ...good, path: '.github/workflows/ci.yml' }, '2026-11-01', 'error'],
 		['push event', { ...good, event: 'push' }, '2026-11-01', 'error'],
@@ -1029,10 +1037,16 @@ async function selfTest(): Promise<void> {
 		['other sha', { ...good, head_sha: 'b'.repeat(40) }, '2026-11-01', 'error'],
 		['deleted, recent', undefined, '2026-11-01', 'error'],
 		['deleted, expired', undefined, '2026-07-01', 'note'],
+		['aging, still there', { ...good, created_at: '2026-08-15T10:00:00Z' }, '2026-08-15', 'note'],
+		['named job present', good, '2026-11-01', 'ok', 'reh (test variant)', jobsOk],
+		['named job missing', good, '2026-11-01', 'error', 'reh (test variant)', { jobs: [{ name: 'build', conclusion: 'success' }] }],
+		['named job failed', good, '2026-11-01', 'error', 'reh (test variant)', { jobs: [{ name: 'reh (test variant)', conclusion: 'failure' }] }],
 	];
-	for (const [name, body, date, want] of runCases) {
-		const reg1: Register = { exempt: [], subjects: [{ id: 'workflow:weekly', runBy: 'x', evidence: [{ run: 1, workflow: 'weekly.yml', sha: 'a'.repeat(40), date }] }] };
-		const got = await verifyRuns(reg1, async () => body ? { status: 200, body } : { status: 404 }, now);
+	for (const [name, body, date, want, job, jobs] of runCases) {
+		const reg1: Register = { exempt: [], subjects: [{ id: 'workflow:weekly', runBy: 'x', evidence: [{ run: 1, workflow: 'weekly.yml', sha: 'a'.repeat(40), date, ...(job ? { job } : {}) }] }] };
+		const got = await verifyRuns(reg1, async p => p.includes('/artifacts') ? { status: 200, body: { artifacts: [] } }
+			: p.includes('/jobs') ? { status: 200, body: jobs ?? { jobs: [] } }
+			: body ? { status: 200, body } : { status: 404 }, now);
 		const kind = got.errors.length ? 'error' : got.notes.length ? 'note' : 'ok';
 		if (kind !== want) {
 			throw new Error(`self-test: verify-runs "${name}": ${kind}, want ${want}`);

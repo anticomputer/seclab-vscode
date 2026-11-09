@@ -50,7 +50,8 @@ Reviews ask what code says. Nothing asked whether anything calls it.
   - **`run`:** an Actions run, pinned by its head `sha` and `date`. `./seclab liveness
     verify-runs` checks it in CI (`actions: read`), in a container that mounts only the
     register and the checker. The run must be a successful dispatch or scheduled run of
-    that workflow, at that sha and date, carrying `artifact` if named. A run deleted at the
+    that workflow, at that sha and date, with a successful `job` if named (not an artifact:
+    artifacts expire within days, which turned workflow-lint red on main once). A run deleted at the
     retention horizon (older than 85 days) becomes a printed note; it never blocks every PR.
   - **`ci`:** a job, a mark and the `runner` file. The runner calls `liveMark(mark)` in code
     (not in a comment or a string) where it has proof the subject ran: in-tab evidence read
@@ -136,6 +137,11 @@ Reviews ask what code says. Nothing asked whether anything calls it.
 - `run` evidence doesn't go stale when the workflow changes. deps-updates was re-dispatched
   by hand after its fix. Requiring a fresh run when a workflow's inputs change is a possible
   next step.
+- **Evidence must outlive its check.** The first version checked a test-variant run's artifact.
+  Artifacts are kept 3 days, and they were deleted between the branch's green run and main's.
+  Main went red with no commit. Evidence now names a job, which lives as long as the run.
+  Runs carry a note from day 75 and degrade to a note after 85 days (90 days is the default
+  retention), so age never fails the required check.
 - Discovery depends on convention: fixtures live in a directory named `fixtures`, and test
   extensions have a `package.json` (AGENTS.md).
 - The analysis is lexical. It can miss a use, which fails the gate and is safe, or, rarely,

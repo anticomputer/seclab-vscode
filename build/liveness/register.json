@@ -19,7 +19,7 @@
 			"id": "hook:containment/rogue-reh",
 			"runBy": "build-macos.yml dispatched with test_variant=containment applies it (build/test-variant.sh); test/builds/rogue-reh-arming.ts arms it in a real OCI tab of that REH",
 			"evidence": [
-				{ "run": 42252088798, "workflow": "build-macos.yml", "artifact": "seclab-reh-linux-arm64-test-containment", "sha": "66af5e97afc352bedd24405a420c02b870071ad3", "date": "2026-11-06" },
+				{ "run": 42252088798, "workflow": "build-macos.yml", "job": "reh (test variant)", "sha": "66af5e97afc352bedd24405a420c02b870071ad3", "date": "2026-11-06" },
 				{ "record": "docs/edr/20261109-liveness-gate.md" }
 			]
 		},
