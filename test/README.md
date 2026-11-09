@@ -8,6 +8,7 @@
 | Secrets | `./seclab test secrets sbx` | The pre-mount gitleaks gate: block, move to the vault, restore. |
 | Fixture lint | `./seclab lint fixtures` | The payloads themselves are host-safe ([EDR](../docs/edr/20261104-fixture-safety.md)). |
 | Teardown regression | `node test/containment/teardown.test.ts` | Teardown stops a run's editor process tree (orphans included) and its tab pods, and reports clean only after they're gone. |
+| Document sync | `node test/docsync/probe.ts prepare`, the printed background launch, `… seed`, then `… check` | No host document (settings, keybindings, output, host files) reaches a tab's extension host, including through a tab provider for a host scheme or a model the tab pre-created at a host URI; tab files, `git:`, cells and untitled still sync ([EDR](../docs/edr/20261109-document-sync-provenance.md)). |
 | Host sweep | `./seclab clean-host` (dry run), `--apply` | Lists or removes every seclab-vscode resource on this machine ([EDR](../docs/edr/20261104-harness-teardown.md)). |
 
 ## Rules that bite

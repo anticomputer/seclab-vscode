@@ -47,6 +47,7 @@ exports.activate = async function () {
 	const tabUri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, 'tracked.txt');
 	const nbUri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, 'nb.ipynb');
 	const perfUri = vscode.Uri.from({ scheme: 'perf', path: 'Startup Performance' });
+	const hostUri = vscode.Uri.from({ scheme: 'vscode-local', path: t.hostfile });
 	const report = {
 		schema: 'seclab-docsync-report/1', arm: t.arm, done: false, steps: [], schemes: {}, hits: [], uris: [],
 		perf: { precreated: false, foreignSeen: false, servedToTab: 0 },
@@ -54,6 +55,7 @@ exports.activate = async function () {
 		controls: { editSaved: false, untitledTyped: false, tabUntitled: false, gitDoc: false, cellDoc: false },
 	};
 	let step = 'start';
+	let perfAt = Date.now();
 	const hits = new Set();
 	const write = () => fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report, null, 1));
 	const observe = (doc, kind) => {
@@ -106,9 +108,12 @@ exports.activate = async function () {
 		// provider makes the model; only the tab's own first perf request gets tab content.
 		['register-host-scheme-providers', async () => {
 			const decline = { provideTextDocumentContent() { report.hijack.hostSchemeAsks++; return undefined; } };
-			for (const scheme of ['output', 'vscode-userdata', 'file']) {
-				vscode.workspace.registerTextDocumentContentProvider(scheme, decline);
-				report.hijack.providers++;
+			// `file` isn't here: the ext host refuses it, since it's taken by its own filesystem.
+			for (const scheme of ['output', 'vscode-userdata', 'vscode-local']) {
+				try {
+					vscode.workspace.registerTextDocumentContentProvider(scheme, decline);
+					report.hijack.providers++;
+				} catch { /* refused by the ext host itself */ }
 			}
 			vscode.workspace.registerTextDocumentContentProvider('perf', {
 				provideTextDocumentContent(uri) {
@@ -134,10 +139,15 @@ exports.activate = async function () {
 				report.hijack.fsUserdata = `refused: ${clean(err)}`;
 			}
 		}],
-		// Hijack 2: pre-create a model at a host URI the host later reuses (getModel || createModel).
+		// Hijack 2: pre-create a model at a host URI that host code reuses. The window keeps the
+		// tab's reference for at most 3 minutes (BoundModelReferenceCollection), and the model
+		// outlives it (TextResourceEditorModel never disposes a model it didn't create). The
+		// next open then asks the perf provider, which reuses the model (`getModel() ||
+		// createModel()`) and calls `setValue` with host data (perfviewEditor.ts).
 		['precreate-perf', async () => {
 			const doc = await vscode.workspace.openTextDocument(perfUri);
 			report.perf.precreated = doc.getText() === SENTINEL;
+			perfAt = Date.now();
 		}],
 		['open-user-settings', async () => { await vscode.commands.executeCommand('workbench.action.openSettingsJson'); }],
 		['open-keybindings', async () => { await vscode.commands.executeCommand('workbench.action.openGlobalKeybindingsFile'); }],
@@ -148,9 +158,10 @@ exports.activate = async function () {
 			}
 			await vscode.commands.executeCommand('workbench.action.showWindowLog');
 		}],
-		['open-host-file', async () => { await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(t.hostfile)); }],
-		['diff-host-file', async () => { await vscode.commands.executeCommand('vscode.diff', vscode.Uri.file(t.hostfile), tabUri, 'docsync diff'); }],
-		['perfview-show', async () => { await vscode.commands.executeCommand('perfview.show'); await sleep(4000); }],
+		// A host file. In the tab's extension host, `file:` is the tab's own disk; the window's
+		// `file:` (the host disk) is `vscode-local:` (base/common/uriTransformer.ts).
+		['open-host-file', async () => { await vscode.commands.executeCommand('vscode.open', hostUri); }],
+		['diff-host-file', async () => { await vscode.commands.executeCommand('vscode.diff', hostUri, tabUri, 'docsync diff'); }],
 		['git-open-change', async () => { await vscode.commands.executeCommand('git.openChange', tabUri); await sleep(2000); }],
 		['notebook', async () => {
 			const nb = await vscode.workspace.openNotebookDocument(nbUri);
@@ -173,6 +184,11 @@ exports.activate = async function () {
 			const doc = await vscode.workspace.openTextDocument(tabUri);
 			await doc.save();
 			report.controls.editSaved = doc.getText().startsWith(EDITED) && fs.readFileSync(tabUri.fsPath, 'utf8').startsWith(EDITED);
+		}],
+		['perfview-after-release', async () => {
+			await sleep(Math.max(0, perfAt + 200_000 - Date.now()));
+			await vscode.commands.executeCommand('perfview.show');
+			await sleep(8000);
 		}],
 	];
 	for (const [name, run] of steps) {
