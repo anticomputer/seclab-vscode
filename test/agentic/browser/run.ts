@@ -140,8 +140,10 @@ if (mode === 'prepare') {
 	fs.writeFileSync(path.join(ws, 'README.md'), '# agentic browser probe workspace\n\nInert: the probe is driven by the build hook, not by this folder.\n');
 
 	const arm = randomBytes(16).toString('hex');
-	// Created BEFORE the snapshot: it lives under the user's home, so a directory made after
-	// the baseline makes teardown report `~/` as changed.
+	// Created BEFORE the snapshot, parent included: both live under the user's home, so a
+	// directory made after the baseline makes teardown report `~/` as changed. The arming
+	// file cannot move into the run directory, because that is the workspace the tab mounts.
+	fs.mkdirSync(path.dirname(armDir), { recursive: true });
 	fs.rmSync(armDir, { recursive: true, force: true });
 	fs.mkdirSync(armDir, { recursive: true, mode: 0o700 });
 	const port = await beaconPort();
