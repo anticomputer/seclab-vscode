@@ -106,7 +106,7 @@ Reviews ask what code says. Nothing asked whether anything calls it.
   - `scannerProblem` (tabd): test-only since `0ae1eeb` moved the check into
     `scanWorkspace`. Exempted, naming its test.
   - `TAB_EVENTS` and `random_password` (broker): leftovers; the protocol schema validates
-    `tab.event`. Exempted with no consumer, for the broker session to delete.
+    `tab.event`. Deleted by the broker session on 2026-11-09.
 - **Level B (`check-evidence.ts`) has rotted.** Nothing runs it in CI. On `fd73500` three
   checks fail:
   - **`[task] cannot write host file outside the workspace`.** The file is the documented

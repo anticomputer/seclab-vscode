@@ -12,7 +12,6 @@ import hmac
 import json
 import logging
 import re
-import secrets
 import sys
 import time
 import uuid
@@ -39,7 +38,6 @@ _USER_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _PASS_RE = re.compile(r"^[A-Za-z0-9_-]{22,128}$")  # >= 128 bits as base64url
 _LABEL_RE = re.compile(r"^[A-Za-z0-9._:-]{1,96}$")
 _SOURCE_KINDS = ("workspace-scan", "password-input", "user", "host")
-TAB_EVENTS = ("opened", "userAction")
 
 
 def _hostile(flags: list[str]) -> bool:
@@ -720,7 +718,3 @@ CAPABILITIES = {
     "credentialBudget": True,
     "credentialRedirectFollow": True,
 }
-
-
-def random_password() -> str:
-    return secrets.token_urlsafe(16)
