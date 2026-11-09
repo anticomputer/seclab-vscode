@@ -37,6 +37,7 @@ A `detection` takes the weakest integrity of its causes.
 | `ahp-reverse` | `trusted` | AHP inner reverse-request layer in the trusted renderer. Reported over `tab.events.report`. |
 | `ahp-credential` | `trusted` | AHP authenticate module in the trusted renderer: sentinel issued, empty token for an unknown resource (never a value). Reported over `tab.events.report`. |
 | `agent-host` | `tab-reported` | The tab's agent host describing itself (sessions, turns, tool calls), relayed by the trusted renderer. Context only. |
+| `config-filter` | `trusted` | Configuration snapshot filter (patch 0036): a credential-looking host setting was withheld from the tab. Each claim is checked by the Tab Manager against the host's own settings and 0036's classifier before it is reported over `tab.events.report` (never a value). |
 | `sbx-collector` | `tab-vm-root` | `seclab-obs-collect` inside an sbx tab VM: strace, honeypot inotify, heartbeats. |
 | `falco` | `host-observed` | Falco modern_ebpf on the Docker host, filtered to tab containers. |
 | `detector` | weakest cause | tabd detection rules over the stream; integrity is the weakest of the causes. |
@@ -58,6 +59,7 @@ A `detection` takes the weakest integrity of its causes.
 | `agent.session` | 6002 | Agent host session started or ended (tab-reported). |
 | `agent.turn` | 6003 | Agent turn started or completed (tab-reported; never prompt text). |
 | `agent.tool` | 6003 | Agent tool call: tool name and a sha256 digest of its arguments (tab-reported; never the arguments). |
+| `config.withheld` | 6003 | A host user setting that looked like a credential (`detail.key`, tab-influenced; `detail.reason` credential-name or secret-value) was withheld from the tab's configuration snapshot. Never the value. |
 | `policy.log` | 4001 | sbx proxy allowed or blocked a destination (aggregated count delta). |
 | `workspace.change` | 1001 | A workspace file was created, changed or removed (host watcher). |
 | `workspace.gate` | 1001 | Write-back gate: a tab change to a workspace file was synced, held, approved or rejected (reserved for the gate). |

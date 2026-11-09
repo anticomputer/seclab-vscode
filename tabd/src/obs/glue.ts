@@ -54,6 +54,7 @@ const CLIENT_SOURCES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 	['rpc-filter', new Set(['rpc.decision'])], ['gate', new Set<string>()],
 	['ahp-gate', new Set(['ahp.decision'])], ['ahp-reverse', new Set(['ahp.decision'])], ['ahp-credential', new Set(['ahp.decision'])],
 	['agent-host', new Set(['agent.session', 'agent.turn', 'agent.tool'])],
+	['config-filter', new Set(['config.withheld'])],
 ]);
 
 export class ObsParamError extends Error { }

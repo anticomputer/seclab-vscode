@@ -263,6 +263,29 @@ Checked as sound:
   modally with quoted text, and tabd re-validates the host and port. A block only
   narrows that tab's own egress. The command is hidden from the palette.
 
+## Round 13: setting-withheld notice (EDR settings-withheld-notice)
+Scope:
+- `tabd/src/obs/withheld.ts` and the Tab Manager command handler `withheldSettings.ts`;
+- the `config-filter` source, `config.withheld` class and `config` bucket;
+- the notification template, `code()`, Open Settings;
+- the probe and its in-tab forger.
+
+One pass. No high or critical findings.
+
+| ID | Sev | Area | Finding | Status | Fix |
+|---|---|---|---|---|---|
+| CW-1 | Medium | suppression | Through `ICommandService`, a tab extension registering the same command id would win (no collision check in `$registerCommand`, newest first): the notice would be suppressed and the tab would see key names (never values). | Fixed in 0036 (lands with it) | 0036 calls `$executeContributedCommand` on the window's LocalProcess host's `ExtHostCommands` proxy, which resolves only the local host's commands; its first report precedes any tab extension's activation. The RPC filter's collision rule is a second control. |
+| CW-2 | Low | suppression | A key was marked reported even when tabd dropped its event under the rate limit, so it was never retried. | Fixed | Keys are marked only when tabd rejected none of the batch. |
+
+Checked as sound:
+- A forged claim can't be accepted: the tab comes from the window's authority, the key needs a
+  host `userLocal` value, and 0036's own classifier must agree. Prototype and dotted keys
+  resolve to nothing the classifier flags.
+- The key reaches the notification only through `code()`, and Open Settings only as a
+  `revealSetting` key. No value is in any event, notification, log or return value.
+- The 0036 marker literal is in no patch on main, so the bundle check can't pass by accident.
+- The forger is inert unless armed, calls one command, and writes only to the tab's `/tmp`.
+
 ## Accepted residuals (documented in the ADR)
 - `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.
 - Under OCI the privileged Falco sees every container on the Docker host. Only rules for the exact tab container ids are loaded, and its only output is stdout to tabd.

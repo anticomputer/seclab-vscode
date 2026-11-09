@@ -13,7 +13,7 @@ import { buildItem, NotificationGate, notifyKind, type NotifyAction, type Notify
 import type { ObsEvent } from '../tabd-src/obs/schema.ts';
 
 const LABEL: Readonly<Record<NotifyAction, string>> = {
-	'stop-tab': 'Stop Tab', 'open-activity': 'Open Activity', 'review-held': 'Review Held Changes', 'block-destination': 'Block Destination', 'dismiss': 'Dismiss',
+	'stop-tab': 'Stop Tab', 'open-activity': 'Open Activity', 'review-held': 'Review Held Changes', 'block-destination': 'Block Destination', 'open-settings': 'Open Settings', 'dismiss': 'Dismiss',
 };
 const LOG_MAX_BYTES = 1 << 20;
 
@@ -103,6 +103,12 @@ export class DetectionNotifier implements vscode.Disposable {
 					void vscode.window.showInformationMessage(it.destination.port !== undefined
 						? 'Blocked for this tab. The broker now refuses every request to that destination on that port.'
 						: 'Blocked for this tab. The broker now refuses every request to that destination.');
+				}
+				return;
+			case 'open-settings':
+				if (it.settingKey !== undefined) {
+					// The host's user settings.json (where the key was verified to be), at that key.
+					await vscode.commands.executeCommand('workbench.action.openSettingsJson', { revealSetting: { key: it.settingKey, edit: false } });
 				}
 				return;
 			case 'dismiss':

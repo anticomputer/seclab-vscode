@@ -53,8 +53,8 @@ export interface HubOptions {
  * (cheap denials, model denials, one finding) can only drop events of that same type, and
  * the drop is reported with its type. Findings (error or worse) get a lower rate.
  */
-type BucketName = 'sensor' | 'tabDriven' | 'client' | 'ahp' | 'ahpLife' | 'agent';
-const BUCKETS: readonly BucketName[] = ['sensor', 'tabDriven', 'client', 'ahp', 'ahpLife', 'agent'];
+type BucketName = 'sensor' | 'tabDriven' | 'client' | 'ahp' | 'ahpLife' | 'agent' | 'config';
+const BUCKETS: readonly BucketName[] = ['sensor', 'tabDriven', 'client', 'ahp', 'ahpLife', 'agent', 'config'];
 const FINDING_RATE = { rate: 20, burst: 200 };
 const BROKER_TYPE_RATE = { rate: 100, burst: 1000 };
 const MAX_BROKER_BUCKETS = 64;
@@ -66,6 +66,8 @@ const BUCKET_OF: Readonly<Record<string, BucketName | undefined>> = {
 	// never shared with the RPC filter, the workspace watcher or each other.
 	'ahp-gate': 'ahp', 'ahp-reverse': 'ahp', 'ahp-credential': 'ahp',
 	'agent-host': 'agent',
+	// Withheld settings: verified against host settings, so at most the user's real keys.
+	'config-filter': 'config',
 };
 
 export class ObsHub {
@@ -104,6 +106,7 @@ export class ObsHub {
 					ahp: { tokens: tr.burst, last: t, rate: tr.rate, burst: tr.burst, dropped: 0 },
 					ahpLife: { tokens: 200, last: t, rate: 20, burst: 200, dropped: 0 },
 					agent: { tokens: tr.burst, last: t, rate: tr.rate, burst: tr.burst, dropped: 0 },
+					config: { tokens: 256, last: t, rate: 10, burst: 256, dropped: 0 },
 				},
 				findings: new Map(),
 				observation: { state: 'unavailable', since: new Date(t).toISOString(), reason: 'no sensor attached' },

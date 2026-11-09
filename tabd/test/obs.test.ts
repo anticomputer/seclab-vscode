@@ -1101,3 +1101,73 @@ test('tab.detections.query: detections across tabs from persisted logs (stopped 
 	assert.throws(() => glue.handle('tab.detections.query', { tabIds: ['../etc'] }), /tab ids/);
 	await glue.shutdown();
 });
+
+test('settings withheld (0036): a tab-originated call can only produce a true notice; forged claims are refused', async () => {
+	const { verifyWithheld, withheldReport, WITHHELD_MARKER } = await import('../src/obs/withheld.ts');
+	const { buildItem, notifyKind, NotificationGate } = await import('../src/obs/notify.ts');
+	const { ObsGlue } = await import('../src/obs/glue.ts');
+	const tab = 't-abcdefghijklmnopqrstuvwxyz';
+	const authority = `seclab+${tab}`;
+	// The host's own user settings (userLocal), and a stand-in for 0036's shared classifier.
+	const host: Record<string, unknown> = { 'seclabProbe.apiToken': 'seclabcanary_withheld_probe', 'editor.fontSize': 13, 'x.y': 'seclabcanary_value' };
+	const classify = (key: string, value: unknown) => /token|secret|password/i.test(key) ? 'credential-name' as const : typeof value === 'string' && value.startsWith('seclabcanary_') ? 'secret-value' as const : undefined;
+	const ctx = { authority, hostValue: (k: string) => host[k], classify };
+	const call = (settings: unknown, o: Record<string, unknown> = {}) => verifyWithheld({ v: WITHHELD_MARKER, authority, settings, ...o }, ctx);
+
+	const real = call([{ key: 'seclabProbe.apiToken', reason: 'credential-name' }, { key: 'x.y', reason: 'secret-value' }]);
+	assert.equal(real.tabId, tab);
+	assert.deepEqual(real.accepted, [{ key: 'seclabProbe.apiToken', reason: 'credential-name' }, { key: 'x.y', reason: 'secret-value' }]);
+	// What a tab extension can send through executeCommand: each is refused.
+	const forged = call([
+		{ key: 'not.in.host.settings.token', reason: 'credential-name' }, // only in the tab's remote layer / workspace, or nowhere
+		{ key: 'editor.fontSize', reason: 'credential-name' }, // in host settings, but 0036 wouldn't withhold it
+		{ key: 'x.y', reason: 'credential-name' }, // real key, wrong reason
+		{ key: 'seclabProbe.apiToken', reason: 'credential-name' }, { key: 'seclabProbe.apiToken', reason: 'credential-name' }, // duplicate
+		{ key: 'k'.repeat(257), reason: 'credential-name' }, { key: '', reason: 'secret-value' }, { key: 'a', reason: 'other' }, 'junk',
+	]);
+	assert.deepEqual(forged.accepted.map(c => c.key), ['seclabProbe.apiToken']);
+	assert.equal(forged.refused, 8);
+	assert.equal(call([{ key: 'seclabProbe.apiToken', reason: 'credential-name' }], { authority: 'seclab+t-zzzzzzzzzzzzzzzzzzzzzzzzzz' }).ignored, 'another window\'s tab', 'the tab is the window\'s own; a payload naming another is ignored');
+	assert.ok(call([], { v: 'seclabSettingsWithheld:v2' }).ignored);
+	assert.ok(call(Array.from({ length: 65 }, () => ({ key: 'x.y', reason: 'secret-value' }))).ignored);
+	assert.ok(verifyWithheld({ v: WITHHELD_MARKER, authority: undefined, settings: [] }, { ...ctx, authority: undefined }).ignored, 'a local window has no tab');
+	assert.deepEqual(verifyWithheld({ v: WITHHELD_MARKER, authority, settings: [{ key: 'x.y', reason: 'secret-value' }] }, { ...ctx, classify: () => { throw new Error('boom'); } }).accepted, [], 'a classifier error refuses');
+
+	// tabd: config-filter may report only config.withheld; trusted by source; the key is tagged untrusted.
+	const dir = path.join(SCRATCH, 'withheld');
+	fs.rmSync(dir, { recursive: true, force: true });
+	const seen: ObsEvent[] = [];
+	const glue = new ObsGlue({ eventsDir: dir, notify: (m, p) => { if (m === 'tab.event') { seen.push((p as { event: ObsEvent }).event); } }, assertTab: t => String(t), isRunning: async () => true, owns: () => true });
+	glue.hub.own(tab);
+	await glue.handle('tab.events.subscribe', { tabId: tab, minPriority: 'debug' });
+	const hostile = `evil\u202e\u0007[click](command:seclab.tabs.stop)$(alert)${'z'.repeat(400)}`;
+	const rep = glue.handle('tab.events.report', { tabId: tab, events: [
+		withheldReport({ key: 'seclabProbe.apiToken', reason: 'credential-name' }),
+		withheldReport({ key: hostile, reason: 'credential-name' }),
+		{ ...withheldReport({ key: 'a', reason: 'secret-value' }), class: 'detection' },
+		{ ...withheldReport({ key: 'a', reason: 'secret-value' }), source: 'rpc-filter' },
+	] });
+	assert.deepEqual(rep, { accepted: 2, rejected: 2 });
+	const ev = seen.filter(e => e.class === 'config.withheld');
+	assert.equal(ev.length, 2);
+	assert.ok(ev.every(e => e.integrity === 'trusted' && e.untrusted.includes('detail.key')));
+	assert.ok(ev.every(e => !JSON.stringify(e).includes('seclabcanary_')), 'never a value');
+	assert.ok(String(ev[1].detail?.key).length <= 256);
+
+	// The notification: trusted wording, the key as code, defanged; Open Settings at that key.
+	const it = buildItem(ev[0], notifyKind(ev[0])!, { tabName: 'acme-app', heldChanges: 0, canBlock: false });
+	assert.equal(it.kind, 'config.withheld');
+	assert.match(it.message, /^Tab “acme-app”: A setting that looked like a credential was withheld from this tab\. Setting: `seclabProbe\.apiToken` \(its name looks like a credential\)\. .*Move the credential to the broker/);
+	assert.deepEqual(it.actions, ['open-settings', 'open-activity', 'dismiss']);
+	assert.equal(it.settingKey, 'seclabProbe.apiToken');
+	const bad = buildItem(ev[1], 'config.withheld', { tabName: 'acme-app', heldChanges: 0, canBlock: false });
+	assert.ok(!/[\u202e\u0007\[\]]|command:|\$\(/.test(bad.message), bad.message);
+	assert.ok(bad.message.length < 700);
+	// Per tab: many withheld keys at once are one notification plus a count.
+	const gate = new NotificationGate({ now: () => 0 });
+	assert.equal([...ev, ...ev, ...ev].flatMap(e => gate.offer(buildItem(e, 'config.withheld', { tabName: 't', heldChanges: 0, canBlock: false }))).length, 1);
+	// Untrusted or misattributed events never notify as config.withheld.
+	assert.equal(notifyKind({ ...ev[0], integrity: 'tab-reported' }), undefined);
+	assert.equal(notifyKind({ ...ev[0], source: 'agent-host' }), undefined);
+	await glue.shutdown();
+});
