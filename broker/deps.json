@@ -201,8 +201,8 @@
   },
   {
    "name": "fastjsonschema",
-   "version": "2.22.2",
-   "source": "https://pypi.org/project/fastjsonschema/2.22.2/",
+   "version": "2.22.3",
+   "source": "https://pypi.org/project/fastjsonschema/2.22.3/",
    "pin": "sha256 (pip --require-hashes)",
    "usedBy": [
     "broker runtime",
@@ -350,8 +350,8 @@
   },
   {
    "name": "platformdirs",
-   "version": "4.14.0",
-   "source": "https://pypi.org/project/platformdirs/4.14.0/",
+   "version": "4.14.3",
+   "source": "https://pypi.org/project/platformdirs/4.14.3/",
    "pin": "sha256 (pip --require-hashes)",
    "usedBy": [
     "attestation verifier (tool)"
