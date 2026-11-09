@@ -18,6 +18,7 @@ import { DetectionNotifier } from './notifications.ts';
 import { EgressPrompts } from './prompts.ts';
 import { PackageFeeds } from './packages.ts';
 import { WriteBackReview } from './writeback.ts';
+import { registerSettingsWithheld } from './withheldSettings.ts';
 
 const AUTHORITY_PREFIX = 'seclab';
 const TAB_ID_RE = /^t-[a-z2-7]{26}$/;
@@ -78,6 +79,9 @@ export function activate(context: vscode.ExtensionContext): void {
 		heldChanges: () => writeBack?.heldCount() ?? 0,
 		canBlock: tabId => blockable.has(tabId),
 	});
+	// Settings 0036 withheld from this window's tab (EDR settings-withheld-notice). The classifier
+	// is 0036's own (build/secret-rules); until it is bundled here, every claim is refused.
+	registerSettingsWithheld(context, getClient, undefined, log);
 	summary = new DetectionsSummary(context, getClient, async (tabId, hostPath) => {
 		if (tabId === currentTabId()) {
 			await vscode.commands.executeCommand('seclab.tabActivity.focus');

@@ -8,7 +8,7 @@
 import { chainOf } from './lineage.ts';
 import type { Integrity, ObsEvent } from './schema.ts';
 
-export type NotifyAction = 'stop-tab' | 'open-activity' | 'review-held' | 'block-destination' | 'dismiss';
+export type NotifyAction = 'stop-tab' | 'open-activity' | 'review-held' | 'block-destination' | 'open-settings' | 'dismiss';
 
 export interface NotifyItem {
 	/** Coalescing key: tab + kind. */
@@ -23,6 +23,8 @@ export interface NotifyItem {
 	actions: NotifyAction[];
 	/** For block-destination: the destination, as the broker reported it (display and action key only). */
 	destination?: { host: string; port?: number };
+	/** For open-settings: the setting key, verified to be in the host's user settings (action key only). */
+	settingKey?: string;
 	cause?: number;
 }
 
@@ -44,6 +46,7 @@ export const TEMPLATES: Readonly<Record<string, Template>> = {
 	'fence.failed': { severity: 'error', what: 'The tab\'s network fence failed verification and the tab was stopped', why: 'The fence keeps the tab\'s traffic going through its broker. Without it, the tab could reach the network directly.' },
 	'tab.quarantined': { severity: 'error', what: 'The tab was quarantined', why: 'tabd found it running without monitoring or with a broken fence, and stopped it.' },
 	'broker.failed': { severity: 'error', what: 'The tab lost its network broker', why: 'All of the tab\'s traffic goes through its broker. Requests now fail; the tab can\'t reach the network.' },
+	'config.withheld': { severity: 'warning', what: 'A setting that looked like a credential was withheld from this tab', why: 'Your settings are copied into each tab, but a credential must never enter one, so the tab\'s extensions don\'t get this setting. Move the credential to the broker, which gives the tab a placeholder instead.' },
 };
 
 const BIDI_AND_INVISIBLE = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2028\u2029\u2060-\u206f\ufeff\ufff9-\ufffb]/g;
@@ -53,6 +56,15 @@ const BIDI_AND_INVISIBLE = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-
  * characters removed; markdown link syntax, URL schemes and codicons broken; capped.
  */
 export function quote(s: unknown, max = 80): string {
+	return `“${clean(s, max).replace(/[“”]/g, '"')}”`;
+}
+
+/** Like `quote`, shown as code: a setting key or other identifier the tab may have chosen. */
+export function code(s: unknown, max = 80): string {
+	return `\`${clean(s, max).replace(/`/g, '\u02cb')}\``;
+}
+
+function clean(s: unknown, max: number): string {
 	let t = String(s ?? '').normalize('NFC').replace(BIDI_AND_INVISIBLE, ' ').replace(/\s+/g, ' ').trim();
 	// Notification text renders `[label](target)` as a link and `$(name)` as an icon: neither may
 	// come from a tab. Brackets become look-alikes; "://" and "command:" lose their meaning.
@@ -60,7 +72,7 @@ export function quote(s: unknown, max = 80): string {
 	if (t.length > max) {
 		t = `${t.slice(0, max - 1)}…`;
 	}
-	return `“${t.replace(/[“”]/g, '"')}”`;
+	return t;
 }
 
 export const INTEGRITY_WORDS: Readonly<Record<Integrity, string>> = {
@@ -100,6 +112,9 @@ export function notifyKind(e: ObsEvent): string | undefined {
 	if (e.source === 'broker' && e.priority === 'critical' && /^(?:sentinel\.misplaced|credential\.backstop_denied|credential\.backstop_exception_blocked|response\.blocked)$/.test(String(e.detail?.auditType ?? ''))) {
 		return 'broker.finding';
 	}
+	if (e.source === 'config-filter' && e.class === 'config.withheld' && typeof e.detail?.key === 'string') {
+		return 'config.withheld';
+	}
 	return undefined;
 }
 
@@ -131,8 +146,15 @@ export function buildItem(e: ObsEvent, kind: string, ctx: NotifyContext): Notify
 	if (typeof e.detail?.originLabel === 'string') {
 		facts.push(`The request claims to come from ${quote(e.detail.originLabel, 40)} (unverified).`);
 	}
+	const settingKey = kind === 'config.withheld' && typeof e.detail?.key === 'string' ? e.detail.key : undefined;
+	if (settingKey !== undefined) {
+		facts.push(`Setting: ${code(settingKey, 120)} (${e.detail?.reason === 'secret-value' ? 'its value looks like a secret' : 'its name looks like a credential'}).`);
+	}
 	const actions: NotifyAction[] = ['open-activity'];
-	if (kind !== 'tab.quarantined' && kind !== 'fence.failed') {
+	if (settingKey !== undefined) {
+		// Not malicious in itself: show the user where the setting is, not how to stop the tab.
+		actions.unshift('open-settings');
+	} else if (kind !== 'tab.quarantined' && kind !== 'fence.failed') {
 		actions.unshift('stop-tab');
 	}
 	if (ctx.heldChanges > 0 || kind === 'workspace.host-executable-write') {
@@ -147,6 +169,7 @@ export function buildItem(e: ObsEvent, kind: string, ctx: NotifyContext): Notify
 		key: `${e.tabId}\u0000${kind}`, tabId: e.tabId, kind, severity: t.severity, count: 1, actions, cause: e.seq,
 		message: [`Tab ${quote(ctx.tabName, 40)}: ${t.what}.`, ...facts, t.why].join(' '),
 		...(destination ? { destination } : {}),
+		...(settingKey !== undefined ? { settingKey } : {}),
 	};
 }
 

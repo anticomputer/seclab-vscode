@@ -48,6 +48,7 @@
 				"ahp-reverse",
 				"ahp-credential",
 				"agent-host",
+				"config-filter",
 				"sbx-collector",
 				"falco",
 				"detector"
@@ -77,6 +78,7 @@
 				"agent.session",
 				"agent.turn",
 				"agent.tool",
+				"config.withheld",
 				"policy.log",
 				"workspace.change",
 				"workspace.gate",
