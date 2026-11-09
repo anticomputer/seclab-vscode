@@ -55,7 +55,7 @@ jobs:
         run: ./seclab liveness --self-test
       - name: Liveness gate (offline)
         run: ./seclab liveness check
-      - name: Liveness gate (the recorded Actions runs exist and succeeded)
+      - name: Liveness gate (the recorded Actions runs exist and succeeded; register only, KKK-4)
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: ./seclab liveness check --verify-runs
+        run: ./seclab liveness verify-runs

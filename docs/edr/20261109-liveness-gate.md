@@ -47,14 +47,23 @@ Reviews ask what code says. Nothing asked whether anything calls it.
     under `test/`).
 
   Each names what runs it and has at least one piece of evidence:
-  - **`run`:** an Actions run. In CI (`--verify-runs`, `actions: read`) it must be a
-    successful dispatch or scheduled run of that workflow, carrying `artifact` if named.
-  - **`ci`:** a job and a mark. The runner calls `liveMark(mark)` where it has proof the
-    subject ran (in-tab evidence read back, an exec observed), not where it started it. The
-    job's last step, `./seclab liveness marks`, fails the job when a mark is missing. The gate
-    requires that step to be last, and the mark to appear in a runner's code.
-  - **`record`:** a doc naming the subject id, only for runs CI can't do (macOS editor, sbx).
-    These are listed on every run.
+  - **`run`:** an Actions run, pinned by its head `sha` and `date`. `./seclab liveness
+    verify-runs` checks it in CI (`actions: read`), in a container that mounts only the
+    register and the checker. The run must be a successful dispatch or scheduled run of
+    that workflow, at that sha and date, carrying `artifact` if named. A run deleted at the
+    retention horizon (older than 85 days) becomes a printed note; it never blocks every PR.
+  - **`ci`:** a job, a mark and the `runner` file. The runner calls `liveMark(mark)` in code
+    (not in a comment or a string) where it has proof the subject ran: in-tab evidence read
+    back, or an exec observed. It doesn't mark where it merely started the subject. The job
+    must run on push or pull_request, with no `if:` or `continue-on-error:`. Its last step
+    must be exactly `./seclab liveness marks <job> "$SECLAB_LIVENESS_LOG"`, unconditional,
+    which fails the job when a mark is missing.
+  - **`record`:** a doc line `- **\`<id>\`:** …` naming the evidence, only for runs CI can't
+    do (macOS editor, sbx). These are listed on every run.
+- **Entry points** are only a VS Code extension's `activate`/`deactivate`, in the module its
+  own `package.json` `main` names. They are listed on every run.
+- **Uses** are bindings: `x.name`, `{ name: … }` and `f(name=…)` don't count, except through
+  a module alias (`ns.fn`, Python `mod.fn`).
 - **The prover is checked first.** `--self-test` builds a clean synthetic tree, which must
   pass: a prover that fails everything is as broken as one that passes everything. It then
   injects each of the five failures alone into a fresh copy:
@@ -65,10 +74,14 @@ Reviews ask what code says. Nothing asked whether anything calls it.
   - a scheduled workflow with no run.
 
   Two more injections cover a CI job missing its marks step and a name that appears only
-  inside a string. Each must fail with its own message. The self-test was itself checked by
-  breaking the gate three ways: no dead exports reported, workflows not discovered, any marks
-  log accepted. Each broke the self-test: the first two through the control, the third
-  through the marks cases.
+  inside a string. Review [KKK](../security-reviews/20261109-liveness-gate.md) added one
+  injection per way the first version could be satisfied falsely, ten in all: a skipped job,
+  `|| true`, `continue-on-error`, a dispatch-only CI job, a push filtered off main, a mark in
+  a string or in another file, a passing mention as a record, a fake entry, and a key-only
+  use. It also added seven `verify-runs` cases against a fake API. Each must fail with its
+  own message. The self-test was itself checked by breaking the gate four ways: no dead
+  exports reported, workflows not discovered, any marks log accepted, module aliases
+  ignored. Each broke the self-test: three through the control, one through the marks cases.
 
 ## Evidence on record
 - **`hook:containment/rogue-reh`:** build-macos run 42252088798 (`66af5e9`) applied it, and
@@ -116,9 +129,15 @@ Reviews ask what code says. Nothing asked whether anything calls it.
 - Record evidence is the weakest kind: it proves a run happened once, not that the subject
   still works. It is allowed only where CI can't run the subject, and it is listed on every
   run.
+- A mark proves that a line was appended to the job's log, by the runner the register names.
+  Any host-side code in that job could append one. That includes the escape the containment
+  suite exists to detect, which would forge every mark at once. Tabs can't reach the log.
+  This is accepted in review KKK.
 - `run` evidence doesn't go stale when the workflow changes. deps-updates was re-dispatched
   by hand after its fix. Requiring a fresh run when a workflow's inputs change is a possible
   next step.
-- The analysis is lexical. It can miss a use (that fails the gate, so it's safe) and,
-  rarely, invent one through a name shared across an import edge. Upstream patch code is
+- Discovery depends on convention: fixtures live in a directory named `fixtures`, and test
+  extensions have a `package.json` (AGENTS.md).
+- The analysis is lexical. It can miss a use, which fails the gate and is safe, or, rarely,
+  invent one through a same-named binding across an import edge. Upstream patch code is
   covered by the RPC session's half.

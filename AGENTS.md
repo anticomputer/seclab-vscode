@@ -231,7 +231,9 @@ RPC-lockdown session adds. Keep them consistent with this file.
   extension and dispatch-only workflow names what runs it in `build/liveness/register.json`,
   with evidence: an Actions run, a mark its CI runner records (`liveMark`, test/liveness.ts),
   or a record naming its id. An exemption names the consumer that really uses it, or says
-  `consumer: null` and why. The required `workflow-lint` check runs `./seclab liveness`
+  `consumer: null` and why; an `entry` is only an extension's `activate`/`deactivate`.
+  Fixtures live in a directory named `fixtures`, and test extensions have a `package.json`,
+  so the gate finds them. The required `workflow-lint` check runs `./seclab liveness`
   ([EDR](docs/edr/20261109-liveness-gate.md)). A new scheduled or dispatch-only workflow
   lands with a dispatch run on record. Prove a new gate by injecting the defect it claims to
   catch, and when the control fails, establish whether the gate or its prover failed before
