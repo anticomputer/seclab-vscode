@@ -63,10 +63,15 @@ const runFacts = path.join(base, 'probe.json');
 /** The host-side file the browser-drive hook reads. Fixed path, never from the environment. */
 const armDir = path.join(os.homedir(), '.seclab-test', 'browser-drive');
 
-/** U is main without 0017; F is this branch with it. Both carry the `agentic-browser` hook. */
+/**
+ * U is main without 0017; F is this branch with it. Both carry the `agentic-browser` hook,
+ * and both are UNSAFE test builds: the app is renamed by the variant build and lands in the
+ * variant's own directory, never the release location.
+ */
+const VARIANT_APP = 'seclab-vscode UNSAFE TEST BUILD (agentic-browser).app';
 const APPS: Record<string, string> = {
-	u: path.join(repoRoot, '.work', 'ubranch', '.work', 'test-builds', 'agentic-browser', 'seclab-vscode.app'),
-	f: path.join(repoRoot, '.work', 'test-builds', 'agentic-browser', 'seclab-vscode.app'),
+	u: path.join(repoRoot, '.work', 'ubranch', '.work', 'test-builds', 'agentic-browser', VARIANT_APP),
+	f: path.join(repoRoot, '.work', 'test-builds', 'agentic-browser', VARIANT_APP),
 };
 
 function tabExec(name: string, args: string[]): { status: number | null; stdout: string; stderr: string } {
@@ -102,7 +107,7 @@ if (mode === 'prepare') {
 		process.exit(2);
 	}
 	const app = APPS[build];
-	const buildInfo = path.join(path.dirname(app), 'build-info.json');
+	const buildInfo = path.join(path.dirname(app), 'build-info-app.json');
 	if (!fs.existsSync(app) || !fs.existsSync(buildInfo)) {
 		console.error(`no app or build-info.json for build ${build} at ${app}\n` +
 			'fetch it first: ./seclab fetch macos-agentic-browser <run-id> (for u, run it from .work/ubranch)');
@@ -135,6 +140,10 @@ if (mode === 'prepare') {
 	fs.writeFileSync(path.join(ws, 'README.md'), '# agentic browser probe workspace\n\nInert: the probe is driven by the build hook, not by this folder.\n');
 
 	const arm = randomBytes(16).toString('hex');
+	// Created BEFORE the snapshot: it lives under the user's home, so a directory made after
+	// the baseline makes teardown report `~/` as changed.
+	fs.rmSync(armDir, { recursive: true, force: true });
+	fs.mkdirSync(armDir, { recursive: true, mode: 0o700 });
 	const port = await beaconPort();
 	const beacon = beaconSpawn(repoRoot, beaconLog, port);
 	spawn(process.execPath, beacon.argv, { detached: true, stdio: 'ignore' }).unref();
@@ -159,17 +168,25 @@ if (mode === 'prepare') {
 		env: { HOME: process.env.HOME, USER: process.env.USER },
 	});
 	await client.initialize('agentic-browser', '0');
-	const claimed = await client.request<{ tabId: string }>('tab.claim', { workspace: ws });
-	const tabId = claimed.tabId;
+	const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
+	const tabId = tab.metadata.name;
 	writeManifest(base, { tabs: [tabId] });
 	await client.request('tab.ensureRunning', { tabId });
 
 	// THE TAB ACTS. Both settings go into the REH's remote user settings, the layer a tab
 	// controls (REMOTE_MACHINE_SCOPES covers every non-APPLICATION scope, and both of these
 	// are WINDOW). An unfixed window obeys them and puts the page on the host network.
+	// The sentinel is a neutral WINDOW-scoped key that 0017 does NOT fix, so it becomes
+	// visible on both builds once the tab's remote layer is applied. The hook waits for it
+	// before measuring: without that wait the hook ran before the remote configuration had
+	// loaded, read the registered default, and reported the tab's network on a build that
+	// would have obeyed the tab a second later. U looked contained. That is the
+	// false-negative this whole runner exists to prevent.
+	const sentinel = 37_000 + Math.floor(Math.random() * 1000);
 	const remoteSettings = JSON.stringify({
 		'workbench.browser.enableRemoteProxy': false,
 		'workbench.browser.dataStorage': 'global',
+		'workbench.browser.maxHistoryEntries': sentinel,
 	});
 	const wrote = tabExec(tabId, ['sh', '-c',
 		`mkdir -p ~/.seclab-vscode-server/data/Machine && cat > ~/.seclab-vscode-server/data/Machine/settings.json <<'EOF'\n${remoteSettings}\nEOF\ncat ~/.seclab-vscode-server/data/Machine/settings.json`]);
@@ -181,11 +198,9 @@ if (mode === 'prepare') {
 
 	// Arm the build hook, on the HOST. `until` is epoch milliseconds; the hook fails closed
 	// on anything malformed.
-	fs.rmSync(armDir, { recursive: true, force: true });
-	fs.mkdirSync(armDir, { recursive: true, mode: 0o700 });
-	fs.writeFileSync(path.join(armDir, 'targets'), `arm=${arm}\nurl=${probeUrl}\nuntil=${Date.now() + 10 * 60_000}\n`, { mode: 0o600 });
+	fs.writeFileSync(path.join(armDir, 'targets'), `arm=${arm}\nurl=${probeUrl}\nready=${sentinel}\nuntil=${Date.now() + 10 * 60_000}\n`, { mode: 0o600 });
 
-	fs.writeFileSync(runFacts, JSON.stringify({ build, tabId, arm, probeUrl, beaconPort: port }, null, '\t'));
+	fs.writeFileSync(runFacts, JSON.stringify({ build, tabId, arm, probeUrl, beaconPort: port, sentinel }, null, '\t'));
 	client.dispose(); // stops the tab; the editor restarts it
 	await new Promise(res => client.once('exit', res));
 
@@ -219,6 +234,13 @@ const resolvedNetwork = /network=(\S+)/.exec(opened[opened.length - 1] ?? '')?.[
 checks.push({
 	vector: 'hook', name: 'the build hook drove a page open (otherwise the run is inconclusive)', ok: opened.length > 0,
 	detail: opened.length ? `${opened.length} open(s), last network=${resolvedNetwork}` : `no open line; ${hookLines.length} hook line(s) total`,
+});
+// The measurement is only about the tab's settings if the tab's settings were in force when
+// it happened. The hook waits for its sentinel and says so; a run that measured before the
+// remote layer landed is INCONCLUSIVE, not contained.
+checks.push({
+	vector: 'hook', name: "the tab's remote settings were in force when the page was opened", ok: hookLines.some(l => l.includes('ready=yes')),
+	detail: hookLines.filter(l => l.includes('ready=')).slice(-1)[0]?.slice(-80) ?? 'no readiness line',
 });
 
 // Fact 1: the host beacon. Reachable only from the host side.
@@ -264,6 +286,10 @@ fs.writeFileSync(path.join(base, `verdict-${phase}.json`), JSON.stringify({
 // The first phase leaves the run up so the restore phase can relaunch the same profile.
 if (phase === 'restore') {
 	fs.rmSync(armDir, { recursive: true, force: true });
-	process.exit(ok && teardownGate(base) ? 0 : 1);
+	// Evaluated FIRST and on its own line: `ok && teardownGate(base)` short-circuits, so a
+	// failing verdict skipped teardown entirely and left an editor running (observed, and
+	// exactly the hard rule teardown exists for).
+	const clean = teardownGate(base);
+	process.exit(ok && clean ? 0 : 1);
 }
 process.exit(ok ? 0 : 1);
