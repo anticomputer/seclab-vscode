@@ -7,7 +7,7 @@
 #
 # Fixture safety (AGENTS.md; EDR fixture-safety): inert unless armed by a harness run
 # (.seclab/targets with a per-run nonce, and this workspace inside that run's dir). Even
-# if containment failed it only reads harness-seeded canaries, writes one fixed marker
+# if containment failed it only reads harness-seeded canaries, writes one marker per vector
 # under the run's .work dir, and talks only to the run's loopback beacon or to
 # non-routable test addresses (RFC 5737, *.example.test).
 VECTOR="$(printf '%s' "${1:-unknown}" | tr -cd 'a-z0-9-')"
@@ -40,6 +40,9 @@ OTHERTAB="$(get othertab)"
 MARKER="$(get marker)"
 LOOPBACK="$(get loopback)"
 inrun "$CANARY" && inrun "$OTHERTAB" && inrun "$MARKER" || exit 0
+# One marker path per vector, so a host marker is never credited to the wrong probe (the
+# rogue extension's RPC probes write their own, under other names).
+[ -n "$MARKER" ] && MARKER="$MARKER.$VECTOR"
 case "$LOOPBACK" in ''|*[!0-9]*) LOOPBACK= ;; esac
 
 canary_read=no

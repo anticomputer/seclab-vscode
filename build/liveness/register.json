@@ -18,7 +18,7 @@
 			"runBy": "build-macos.yml dispatched with test_variant=containment applies it (build/test-variant.sh); test/builds/rogue-reh-arming.ts arms it in a real OCI tab of that REH",
 			"evidence": [
 				{ "run": 42252088798, "workflow": "build-macos.yml", "job": "reh (test variant)", "sha": "66af5e97afc352bedd24405a420c02b870071ad3", "date": "2026-11-06" },
-				{ "record": "docs/edr/20261109-liveness-gate.md" }
+				{ "record": "docs/edr/20261109-liveness-gate.md", "date": "2026-11-06" }
 			]
 		},
 		{
@@ -39,17 +39,17 @@
 		{
 			"id": "fixture:test/containment/rogue-extension",
 			"runBy": "test/containment/check-evidence.ts prepare|check, with the editor launched by test/window.ts (macOS, local only)",
-			"evidence": [{ "record": "docs/edr/20261109-liveness-gate.md" }]
+			"evidence": [{ "record": "docs/edr/20261109-liveness-gate.md", "date": "2026-11-09" }]
 		},
 		{
 			"id": "fixture:test/focus/probe-extension",
 			"runBy": "test/focus/probe.ts prepare|check, with the editor launched by test/window.ts (macOS, local only)",
-			"evidence": [{ "record": "docs/edr/20261109-liveness-gate.md" }]
+			"evidence": [{ "record": "docs/edr/20261109-liveness-gate.md", "date": "2026-11-09" }]
 		},
 		{
 			"id": "fixture:test/agentic/runner/mitm-extension",
 			"runBy": "test/agentic/runner/runner.ts (macOS editor, sbx tab, local only)",
-			"evidence": [{ "record": "docs/edr/20261109-liveness-gate.md" }]
+			"evidence": [{ "record": "docs/edr/20261109-liveness-gate.md", "date": "2026-11-06" }]
 		}
 	]
 }

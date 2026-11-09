@@ -89,16 +89,17 @@ Reviews ask what code says. Nothing asked whether anything calls it.
   `test/builds/rogue-reh-arming.ts` armed it once in a real OCI tab of that REH. A valid run
   loaded the payload once; no targets, an expired run and a malformed nonce left it disarmed
   ([test build variants](20261106-test-build-variants.md), Consequences).
-- **`fixture:test/focus/probe-extension`:** `test/focus/probe.ts` on branch build 42295175158
-  (`fd73500`), 2026-11-06. The battery ran from step 0 to `server-connection-lost`, with no
-  focus steal ([egress prompts](20261106-egress-prompts.md), B3c part 3).
+- **`fixture:test/focus/probe-extension`:** `test/focus/probe.ts` on branch build 42707557651
+  (`eff9437`), 2026-11-09. The battery ran every step with no focus steal
+  ([background windows](20261105-background-windows.md), path c).
 - **`fixture:test/agentic/runner/mitm-extension`:** seven runs of `test/agentic/runner/`
   against release build U on sbx, 2026-11-06
   ([agentic probe runner](20261106-agentic-probe-runner.md), "Measured, 2026-11-06").
-- **`fixture:test/containment/rogue-extension`:** `test/containment/check-evidence.ts` on
-  branch build 42295175158 (`fd73500`), sbx, 2026-11-09. The rogue extension ran in the tab:
-  it was forced into the tab (`remoteName=seclab`), and its chat participant and `vscode.lm`
-  caller ran there. The same run shows the Level B harness itself has rotted (findings below).
+- **`fixture:test/containment/rogue-extension`:** `test/containment/check-evidence.ts` (Level
+  B) on branch build 42707557651 (`eff9437`), sbx, 2026-11-09, after its repair: 42 of 46
+  checks passed, 4 known gaps, teardown clean. The rogue extension was forced into the tab,
+  and its chat participant and `vscode.lm` caller ran there. Its RPC probe's host-terminal
+  marker is its own row: open without the RPC filter, as documented.
 
 ## Findings from the first run
 - **Dead exports:**
@@ -118,9 +119,24 @@ Reviews ask what code says. Nothing asked whether anything calls it.
   - **`[fsmonitor] ran` and `[rogue-extension] ran`.** There is no evidence file on the
     host. The rogue extension deliberately no longer spawns `probe.sh`, and the harness
     reads evidence from the host checkout, which the write-back gate holds.
-  - The teardown gate also reported `~` changed, on a host shared with other sessions.
+  - The teardown gate also reported `~` changed: the editor wrote its data folders in the
+    home dir.
 
-  Reported to the coordinator; the RPC session owns the probes.
+  **Repaired (harness side only; `probe-safety.js` and `rpc-probes.js` are unchanged):**
+  - `probe.sh` writes one marker per vector (`<marker>.<vector>`). The RPC probes' markers
+    (`<run>/PWNED`, `PWNED.rpcwrite`) are their own rows, expected open without the RPC
+    filter (product.json `seclabRpcPolicy` absent) and failures with it.
+  - Evidence is read through the tab, as in Level A.
+  - The fsmonitor repo was disarmed when `prepare` exited, before the editor opened, so that
+    vector could never fire. It is now armed inside the tab (sbx only, behind the write-back
+    gate) and never exists on the host.
+  - The stale `rogue-extension` probe-evidence check is gone; the extension's own evidence
+    rows remain.
+  - Launches keep the editor's data in the run's profile (`VSCODE_PORTABLE`), so `~` is
+    untouched.
+  - Record evidence now carries its date. The weekly `liveness-refresh` job fails once a
+    record is more than 30 days old, so Level B and the other local-only runs are asked for
+    again instead of rotting.
 
 ## Consequences
 - A new export, fixture, hook or dispatch-only workflow fails `workflow-lint` until it names
