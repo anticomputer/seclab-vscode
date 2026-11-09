@@ -47,12 +47,21 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentContentProviders.ts b
  			onUnexpectedError(error);
 diff -ruN a/src/vs/workbench/api/browser/mainThreadDocuments.ts b/src/vs/workbench/api/browser/mainThreadDocuments.ts
 --- a/src/vs/workbench/api/browser/mainThreadDocuments.ts	2026-11-09 15:56:04
-+++ b/src/vs/workbench/api/browser/mainThreadDocuments.ts	2026-11-09 15:57:57
++++ b/src/vs/workbench/api/browser/mainThreadDocuments.ts	2026-11-09 16:16:58
+@@ -7,7 +7,7 @@
+ import { IReference, dispose, Disposable } from '../../../base/common/lifecycle.js';
+ import { Schemas } from '../../../base/common/network.js';
+ import { URI, UriComponents } from '../../../base/common/uri.js';
+-import { ITextModel, shouldSynchronizeModel } from '../../../editor/common/model.js';
++import { ITextModel } from '../../../editor/common/model.js';
+ import { IModelService } from '../../../editor/common/services/model.js';
+ import { ITextModelService } from '../../../editor/common/services/resolverService.js';
+ import { IFileService, FileOperation } from '../../../platform/files/common/files.js';
 @@ -24,6 +24,7 @@
  import { IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
  import { ErrorNoTelemetry, onUnexpectedError } from '../../../base/common/errors.js';
  import { ISerializedModelContentChangedEvent } from '../../../editor/common/textModelEvents.js';
-+import { seclabTagCreatedUntitled } from './seclabDocumentOrigin.js';
++import { seclabShouldSync, seclabTagCreatedUntitled } from './seclabDocumentOrigin.js';
  
  export class BoundModelReferenceCollection {
  
@@ -72,28 +81,25 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadDocuments.ts b/src/vs/workben
  			if (e.detailedReasonsChangeLengths.length !== 1) {
  				onUnexpectedError(new Error(`Unexpected reasons: ${e.detailedReasons.map(r => r.toString())}`));
  			}
-@@ -131,6 +136,7 @@
+@@ -131,6 +136,8 @@
  	private readonly _proxy: ExtHostDocumentsShape;
  	private readonly _modelTrackers = new ResourceMap<ModelTracker>();
  	private readonly _modelReferenceCollection: BoundModelReferenceCollection;
 +	private readonly _extHostContext: IExtHostContext;
++	private readonly _shouldSync: (model: ITextModel) => boolean;
  
  	constructor(
  		extHostContext: IExtHostContext,
-@@ -141,9 +147,11 @@
- 		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
- 		@IUriIdentityService private readonly _uriIdentityService: IUriIdentityService,
- 		@IWorkingCopyFileService workingCopyFileService: IWorkingCopyFileService,
--		@IPathService private readonly _pathService: IPathService
-+		@IPathService private readonly _pathService: IPathService,
-+		private readonly _shouldSync: (model: ITextModel) => boolean = shouldSynchronizeModel,
+@@ -144,6 +151,8 @@
+ 		@IPathService private readonly _pathService: IPathService
  	) {
  		super();
 +		this._extHostContext = extHostContext;
++		this._shouldSync = model => seclabShouldSync(extHostContext, model, _environmentService.remoteAuthority, _fileService, _textFileService);
  
  		this._modelReferenceCollection = this._store.add(new BoundModelReferenceCollection(_uriIdentityService.extUri));
  
-@@ -199,16 +207,16 @@
+@@ -199,16 +208,16 @@
  
  	private _shouldHandleFileEvent(resource: URI): boolean {
  		const model = this._modelService.getModel(resource);
@@ -113,7 +119,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadDocuments.ts b/src/vs/workben
  	}
  
  	private _onModelModeChanged(event: { model: ITextModel; oldLanguageId: string }): void {
-@@ -305,6 +313,7 @@
+@@ -305,6 +314,7 @@
  			initialValue: options?.content,
  			encoding: options?.encoding
  		});
@@ -123,7 +129,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadDocuments.ts b/src/vs/workben
  		}
 diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts
 --- a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-09 15:56:04
-+++ b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-09 15:57:27
++++ b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-09 16:16:51
 @@ -8,7 +8,7 @@
  import { ICodeEditor, isCodeEditor, isDiffEditor, IActiveCodeEditor } from '../../../editor/browser/editorBrowser.js';
  import { ICodeEditorService } from '../../../editor/browser/services/codeEditorService.js';
@@ -185,16 +191,15 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts b/src/
  				&& !model.isDisposed() // model disposed
  				&& Boolean(this._modelService.getModel(model.uri)) // model disposing, the flag didn't flip yet but the model service already removed it
  			) {
-@@ -302,14 +306,15 @@
+@@ -302,6 +306,7 @@
  		super();
  		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostDocumentsAndEditors);
  
--		this._mainThreadDocuments = this._register(new MainThreadDocuments(extHostContext, this._modelService, this._textFileService, fileService, textModelResolverService, environmentService, uriIdentityService, workingCopyFileService, pathService));
 +		const shouldSync = (model: ITextModel) => seclabShouldSync(extHostContext, model, environmentService.remoteAuthority, fileService, this._textFileService);
-+		this._mainThreadDocuments = this._register(new MainThreadDocuments(extHostContext, this._modelService, this._textFileService, fileService, textModelResolverService, environmentService, uriIdentityService, workingCopyFileService, pathService, shouldSync));
+ 		this._mainThreadDocuments = this._register(new MainThreadDocuments(extHostContext, this._modelService, this._textFileService, fileService, textModelResolverService, environmentService, uriIdentityService, workingCopyFileService, pathService));
  		extHostContext.set(MainContext.MainThreadDocuments, this._mainThreadDocuments);
  
- 		this._mainThreadEditors = this._register(new MainThreadTextEditors(this, extHostContext, codeEditorService, this._editorService, this._editorGroupService, configurationService, quickDiffModelService, uriIdentityService));
+@@ -309,7 +314,7 @@
  		extHostContext.set(MainContext.MainThreadTextEditors, this._mainThreadEditors);
  
  		// It is expected that the ctor of the state computer calls our `_onDelta`.
