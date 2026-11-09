@@ -11,9 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { TabdClient } from '../tabd-src/client.ts';
-import { type Classifier, verifyWithheld, WITHHELD_MARKER, withheldReport } from '../tabd-src/obs/withheld.ts';
-
-export const SETTINGS_WITHHELD_COMMAND = 'seclab.tabs.settingsWithheld';
+import { type Classifier, SETTINGS_WITHHELD_COMMAND, WITHHELD_MARKER, WithheldReceiver } from '../tabd-src/obs/withheld.ts';
 
 /** Streams a (large) file looking for an ASCII literal. */
 async function fileContains(file: string, needle: string): Promise<boolean> {
@@ -33,44 +31,16 @@ async function fileContains(file: string, needle: string): Promise<boolean> {
 }
 
 export function registerSettingsWithheld(context: vscode.ExtensionContext, getClient: () => Promise<TabdClient>, classify: Classifier | undefined, log: vscode.LogOutputChannel): void {
-	const reported = new Set<string>();
-	// 0036 in this build? Without it nothing was withheld, so every call would be forged.
-	// Checked once, on the first call (the bundle is large).
-	let shipped: Promise<boolean> | undefined;
-	let refusedLogged = 0;
+	const receiver = new WithheldReceiver({
+		classify,
+		// 0036 in this build? Without it nothing was withheld, so every call would be forged.
+		shipped: () => fileContains(path.join(vscode.env.appRoot, 'out', 'vs', 'workbench', 'workbench.desktop.main.js'), WITHHELD_MARKER),
+		authority: () => vscode.env.remoteAuthority,
+		hostValue: key => (vscode.workspace.getConfiguration().inspect(key) as { globalLocalValue?: unknown } | undefined)?.globalLocalValue,
+		report: async (tabId, events) => (await getClient()).request<{ accepted: number; rejected: number }>('tab.events.report', { tabId, events }),
+		warn: m => log.warn(m),
+	});
 	context.subscriptions.push(vscode.commands.registerCommand(SETTINGS_WITHHELD_COMMAND, async (arg: unknown): Promise<void> => {
-		shipped ??= fileContains(path.join(vscode.env.appRoot, 'out', 'vs', 'workbench', 'workbench.desktop.main.js'), WITHHELD_MARKER);
-		if (!classify || !(await shipped)) {
-			log.warn(`${SETTINGS_WITHHELD_COMMAND} ignored: ${classify ? 'this build does not withhold settings (0036 marker missing)' : 'no settings classifier in this build'}`);
-			return;
-		}
-		const r = verifyWithheld(arg, {
-			authority: vscode.env.remoteAuthority,
-			hostValue: key => (vscode.workspace.getConfiguration().inspect(key) as { globalLocalValue?: unknown } | undefined)?.globalLocalValue,
-			classify,
-		});
-		if (r.refused && refusedLogged < 20) {
-			refusedLogged++;
-			log.warn(`${SETTINGS_WITHHELD_COMMAND}: ${r.refused} claim(s) refused (not in your user settings, or not what 0036 withholds)`);
-		}
-		if (r.ignored || !r.tabId) {
-			log.warn(`${SETTINGS_WITHHELD_COMMAND} ignored: ${r.ignored ?? 'no tab'}`);
-			return;
-		}
-		const fresh = r.accepted.filter(c => !reported.has(c.key));
-		if (!fresh.length) {
-			return;
-		}
-		try {
-			const res = await (await getClient()).request<{ accepted: number; rejected: number }>('tab.events.report', { tabId: r.tabId, events: fresh.map(withheldReport) });
-			// Only keys tabd took are done; if any were dropped (rate limit), a later call retries them all.
-			if (res.rejected === 0) {
-				for (const c of fresh) {
-					reported.add(c.key);
-				}
-			}
-		} catch (e) {
-			log.warn(`could not report withheld settings: ${(e as Error).message}`);
-		}
+		await receiver.handle(arg);
 	}));
 }
