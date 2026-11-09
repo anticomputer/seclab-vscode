@@ -213,7 +213,7 @@ new file mode 100644
 index 0000000..02f6036
 --- /dev/null
 +++ b/src/vs/platform/windows/electron-main/backgroundWindowsGuard.ts
-@@ -0,0 +1,146 @@
+@@ -0,0 +1,158 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -275,28 +275,40 @@ index 0000000..02f6036
 +			if (Object.prototype.hasOwnProperty.call(proto, 'setIgnoreMouseEvents') || proto === BaseWindow.prototype) {
 +				replace(proto, 'setIgnoreMouseEvents', orig => function (this: BaseWindow, _ignore: unknown, options?: unknown) { return orig.call(this, true, options); });
 +			}
++			// macOS: below normal windows, and nothing can raise the level.
++			if (process.platform === 'darwin' && (Object.prototype.hasOwnProperty.call(proto, 'setAlwaysOnTop') || proto === BaseWindow.prototype)) {
++				replace(proto, 'setAlwaysOnTop', orig => function (this: BaseWindow) { return orig.call(this, true, 'normal', -1); });
++			}
 +		}
 +		replace(app, 'focus', () => () => undefined);
-+		// macOS: an accessory (UI-element) app. The system never hands it the front when another
-+		// app's window closes, which it did here twice while the user worked in another app
-+		// (WindowServer SetFrontProcess from a system connection, not from this app), and it has
-+		// no Dock icon to click. Set at ready, before any window, and kept: nothing may switch
-+		// it back to a regular app.
++		// macOS: a background-only app (activation policy "prohibited"). LaunchServices never makes
++		// such a process the front process, whatever asks: the user's click on its window (a),
++		// a system SetFrontProcess when another app's window closes (b), or a Space change, which
++		// activates the owner of the new Space's topmost window (c: 2026-11-09, unified log
++		// "SetManagedDisplayCurrentSpace ... Making ... the front process" while the window was
++		// topmost on its Space; an accessory app was still made front). Set at ready, before any
++		// window, and kept: nothing may switch it back. No Dock icon either.
 +		if (process.platform === 'darwin') {
 +			const setPolicy = app.setActivationPolicy.bind(app);
-+			replace(app, 'setActivationPolicy', () => () => setPolicy('accessory'));
++			replace(app, 'setActivationPolicy', () => () => setPolicy('prohibited'));
 +			replace(app.dock!, 'show', () => () => Promise.resolve());
 +			app.whenReady().then(() => {
-+				setPolicy('accessory');
-+				console.error('[background windows] activation policy: accessory');
++				setPolicy('prohibited');
++				console.error('[background windows] activation policy: prohibited');
 +			}, () => undefined);
 +		}
 +		// Every window (workbench and auxiliary) is click-through from creation, before it is
-+		// shown. The line on stderr is what the focus probe checks (test/focus/probe.ts).
++		// shown, and on macOS sits one level below normal windows, so it is never above the user's
++		// windows on any Space that has one. The lines on stderr are what the focus probe checks
++		// (test/focus/probe.ts).
 +		app.on('browser-window-created', (_event, win: BrowserWindow) => {
 +			try {
 +				win.setIgnoreMouseEvents(true);
 +				console.error(`[background windows] window ${win.id} is click-through`);
++				if (process.platform === 'darwin') {
++					win.setAlwaysOnTop(true, 'normal', -1);
++					console.error(`[background windows] window ${win.id} is below normal windows`);
++				}
 +			} catch (error) {
 +				console.error(String(error));
 +				app.exit(1);

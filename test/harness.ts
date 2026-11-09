@@ -279,12 +279,13 @@ export async function launchEditorInBackground(userData: string, folderUri: stri
 		killTree(pid);
 		fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${pid} was the frontmost app at launch; killed it and its processes\n`);
 	}
-	// A background editor must be an accessory (UI-element) app, which the system never makes
-	// frontmost on its own (patch 0012). A build without that can take focus whenever another
-	// app's window closes, so it isn't run at all.
-	if (!focusStolen(userData) && appType(pid) !== 'UIElement') {
+	// A background editor must be a background-only app (activation policy "prohibited"), which
+	// LaunchServices never makes the front process: not on a click, not when another app's
+	// window closes, not on a Space change (patch 0012). Any other build can take focus, so it
+	// isn't run at all (accessory builds included: a Space change made one front, 2026-11-09).
+	if (!focusStolen(userData) && appType(pid) !== 'BackgroundOnly') {
 		killTree(pid);
-		fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${pid} is a ${appType(pid) || 'unknown'} app, not a background (UIElement) one: its build lacks the background-windows guard; killed it\n`);
+		fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} editor pid ${pid} is a ${appType(pid) || 'unknown'} app, not a background-only one: its build lacks the background-windows guard; killed it\n`);
 	}
 	return { pid, windowId, stoleFocus: focusStolen(userData) };
 }
