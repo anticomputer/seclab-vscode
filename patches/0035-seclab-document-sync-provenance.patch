@@ -260,8 +260,8 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadFileSystem.ts b/src/vs/workbe
  	$unregisterProvider(handle: number): void {
 diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts
 --- a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	1970-01-01 00:00:00
-+++ b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-09 17:06:52
-@@ -0,0 +1,126 @@
++++ b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-09 17:13:00
+@@ -0,0 +1,143 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab: which text models belong to a tab's extension host (patch 0035, EDR
 + *  document-sync-provenance). In a `seclab+` window a non-local extension host is sent a model only
@@ -281,6 +281,7 @@ diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbe
 +import { IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
 +import { ExtensionHostKind } from '../../services/extensions/common/extensionHostKind.js';
 +import { ITextFileService } from '../../services/textfile/common/textfiles.js';
++import { TextFileEditorModel } from '../../services/textfile/common/textFileEditorModel.js';
 +import { CellUri } from '../../contrib/notebook/common/notebookCommon.js';
 +
 +class SeclabOrigin {
@@ -293,9 +294,12 @@ diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbe
 +	filtered = false;
 +}
 +const origins = new WeakMap<IExtHostContext, SeclabOrigin>();
-+// What a model was when the window first saw it: every host's predicate records it, at birth (the
-+// textfile manager registers its model before the async resolve creates the text model).
++// What a model was when the window first saw it: every host's predicate records it, at birth.
 +const born = new WeakMap<ITextModel, { empty: boolean; provider: IFileSystemProvider | undefined; textFile: boolean }>();
++// Text file models that took over a model born otherwise (BaseTextEditorModel reuses an existing
++// model at its URI). Their later text models never count as their own (review round 4).
++const tainted = new WeakSet<object>();
++const watched = new WeakSet<ITextFileService>();
 +
 +export function seclabOrigin(ctx: IExtHostContext): SeclabOrigin {
 +	let o = origins.get(ctx);
@@ -352,12 +356,25 @@ diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbe
 +}
 +
 +export function seclabShouldSync(ctx: IExtHostContext, model: ITextModel, windowAuthority: string | undefined, fileService: IFileService, textFileService: ITextFileService): boolean {
++	if (!watched.has(textFileService)) {
++		watched.add(textFileService);
++		textFileService.files.onDidResolve(e => {
++			const own = e.model.textEditorModel;
++			if (own && born.get(own)?.textFile === false) {
++				tainted.add(e.model);
++			}
++		});
++	}
 +	let b = born.get(model);
 +	if (!b) {
++		// A text file model makes its text model synchronously after reading the file
++		// (TextFileEditorModel.resolveFromContent: stat first, then the model). A model created at
++		// that URI while the read is still pending (a tab can stall its own provider) has no stat.
++		const textFile = textFileService.files.get(model.uri);
 +		born.set(model, b = {
 +			empty: model.getValueLength() === 0 && !textFileService.untitled.get(model.uri)?.hasAssociatedFilePath,
 +			provider: fileService.getProvider(model.uri.scheme),
-+			textFile: !!textFileService.files.get(model.uri),
++			textFile: textFile instanceof TextFileEditorModel && !!textFile.lastResolvedFileStat && !textFile.textEditorModel && !tainted.has(textFile),
 +		});
 +	}
 +	if (!shouldSynchronizeModel(model) || !seclabIsFiltered(ctx, windowAuthority)) {

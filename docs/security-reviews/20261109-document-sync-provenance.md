@@ -1,11 +1,11 @@
 # Security review: patch 0035, host documents don't sync into a tab
 
 - **Date:** 2026-11-09
-- **Scope:**
+- **Scope:** origin/main..branch head: patch 0035, `sole-consumer.json` and `test/docsync`, four rounds.
   - Round 1: `origin/main..a6c6a66`. Areas: patch 0035 (`seclabDocumentOrigin.ts`, and the
     document, content-provider and filesystem main-thread customers), `patches/sole-consumer.json`,
     and the `test/docsync` harness and probe extension.
-  - Round 2: `a6c6a66..6f3fdeb` (the round-1 fixes).
+  - Rounds 2-4: `a6c6a66..6f3fdeb`, `6f3fdeb..aed83e7` and the R2-1 fix (the fixes).
 - **Reviewer:** security-review agent (default model), triage by the document-sync session.
 - **Threat model:** a rogue extension owns the tab's extension host and sends any RPC. No host
   document text, and no host path, may reach it through the documents and editors sync. Local
@@ -24,8 +24,19 @@
 | P1 | medium | probe | A failed step, a failed seed or a hijack-2 step that does nothing would have passed the leak checks vacuously. | fixed (6f3fdeb) | Every step must succeed. `seeded` is asserted. Hijack 2 must show the tab losing the model at the host write. The run's nonce is checked. | the harness itself |
 | P2 | medium | probe | No step for F1 or F2. | fixed (6f3fdeb, round 2) | Added both steps, with an assertion that the host-seeded untitled existed. | as above |
 | P3 | info | probe | A change sent for a document the tab no longer holds is invisible to the extension API. | accepted | The revoking listener runs first and removes the document synchronously, and `ModelTracker` re-checks. Confirmed in round 2. | none |
-| R2-1 | low | filesystem rule | "Born as a text file" means a text file model exists for the URI. A tab that stalls its own provider's `readFile` could keep one pending while host code creates a model directly at that URI. | accepted | No host feature found that creates a model with host data directly at a URI under a tab's filesystem scheme. Output and perf models are created only through their content providers, which the resolver never reaches once the scheme is a filesystem. A stricter rule (sync only after the text file model resolves and created the model itself) is the follow-up if one appears. | none |
+| R2-1 | low | filesystem rule | "Born as a text file" meant only that a text file model existed for the URI. A tab that stalls its own provider's read could keep one pending while host code creates a model directly at that URI. That includes `inmemory`: the tab registers it as a filesystem, and anonymous host models get sequential `inmemory://model/<N>` URIs (`textModel.ts:322`), so it can pre-claim a range. Which host code creates such models with host data was not surveyed. | fixed (round 4) | "Born as a text file" now means the URI's `TextFileEditorModel` had read the file (`lastResolvedFileStat`) and had no text model yet. `resolveFromContent` sets the stat and creates the model synchronously, so a model created during a stalled read never qualifies. | code review; no probe (no predictable host creator to drive) |
+| R4-1 | low | filesystem rule | A text file model that reused an existing host model keeps its stat after that model is disposed and has no text model. That is the same state as a fresh resolve, so a model the host later creates directly at the URI, while a tab provider serves the scheme, would count as the text file's own. | fixed (round 4) | Text file models that reused a model born otherwise are tainted on `onDidResolve`. Their later text models never count as their own. | code review |
 
 ## Re-review
-Round 2, over `a6c6a66..6f3fdeb`, confirmed F1, F2, F3 and the cell fix, and found R2-1 (low). Open
-high or critical: none.
+- **Round 2** (`a6c6a66..6f3fdeb`) confirmed F1, F2, F3 and the cell fix, and found R2-1.
+- **Round 3** (`6f3fdeb..aed83e7`) confirmed two changes:
+  - provider writes fail closed on the tab's own remote authority;
+  - the probe names the host-seeded untitled through editor tabs, so that step can't pass without
+    making a claim.
+
+  It also asked that R2-1 name `inmemory`. That point made R2-1 worth fixing rather than accepting.
+- **Round 4** confirmed the R2-1 fix (no host code can run between the stat and the model's
+  creation; backups and reloads still qualify). It found R4-1, which was fixed with the taint it
+  suggested.
+
+Open high or critical: none.
