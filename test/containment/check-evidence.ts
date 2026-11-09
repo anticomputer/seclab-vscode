@@ -9,12 +9,12 @@
 //   node test/window.ts launch --env ... <dir> <printed folder uri>   (prepare prints the exact line)
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
-import { beaconPort, checkUserDataDir, editorLaunchCommand, editorPid, lockRun } from '../harness.ts';
+import { beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, lockRun } from '../harness.ts';
 import { brokerProxy, checkEvidence, readEvidence, report, type Check } from './assert.ts';
 import { materialiseFixture, readManifest, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
@@ -34,10 +34,6 @@ const canary = path.join(base, 'canary', 'secret.txt');
 // probe.sh appends the vector (<marker>.task); the rogue extension's RPC probes write their own
 // markers under PWNED (probe-safety.js), so no marker can be credited to the wrong probe.
 const marker = path.join(base, 'probe-marker');
-const RPC_MARKERS: Array<[string, string]> = [
-	['host terminal (newLocal + sendSequence) writes no host file', path.join(base, 'PWNED')],
-	['host file write ($writeFile, file: scheme) writes no host file', path.join(base, 'PWNED.rpcwrite')],
-];
 const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
 
 if (mode === 'prepare') {
@@ -172,6 +168,13 @@ if (mode === 'prepare') {
 	})}`);
 } else {
 	const checks: Check[] = [];
+	// Any host .git (an OCI tab writes straight through) is removed on every exit (NNN-3).
+	const disarm = (): void => {
+		try { fs.rmSync(path.join(ws, '.git'), { recursive: true, force: true }); } catch { /* best effort */ }
+	};
+	process.on('exit', disarm);
+	process.on('SIGINT', () => { disarm(); process.exit(130); });
+	process.on('SIGTERM', () => { disarm(); process.exit(143); });
 	// Evidence is read through the tab: on sbx the tab's writes stay in its write-back overlay and
 	// never reach the host checkout (the RPC proof reads the same way).
 	const tabId = (readManifest(base).tabs ?? [])[0];
@@ -181,12 +184,12 @@ if (mode === 'prepare') {
 		if (!tabId) {
 			return undefined;
 		}
-		const r = spawnSync(runtime, ['exec', ...inTabUser, `seclab-${tabId}`, 'cat', p], { encoding: 'utf8', timeout: 30_000 });
+		const r = spawnSync(runtime, ['exec', ...inTabUser, `seclab-${tabId}`, 'cat', p], { encoding: 'utf8', timeout: 30_000, maxBuffer: 64 << 20 });
 		return r.status === 0 ? r.stdout : undefined;
 	};
 	const listInTab = (dir: string): string[] => {
-		const r = tabId ? spawnSync(runtime, ['exec', ...inTabUser, `seclab-${tabId}`, 'ls', '-1', dir], { encoding: 'utf8', timeout: 30_000 }) : undefined;
-		return r?.status === 0 ? r.stdout.split('\n').filter(f => /^[\w.-]+$/.test(f)) : [];
+		const r = tabId ? spawnSync(runtime, ['exec', ...inTabUser, `seclab-${tabId}`, 'ls', '-1A', dir], { encoding: 'utf8', timeout: 30_000 }) : undefined;
+		return r?.status === 0 ? r.stdout.split('\n').filter(Boolean) : [];
 	};
 	const json = (p: string): Record<string, unknown> | undefined => {
 		try {
@@ -198,26 +201,57 @@ if (mode === 'prepare') {
 	};
 	// The rogue extension deliberately never runs probe.sh (it can land host-side on an
 	// unpatched build): its own evidence is checked below, not a probe vector.
-	const vectors = driver === 'sbx' ? ['task', 'fsmonitor'] : ['task'];
-	for (const vector of vectors) {
-		checks.push(...checkEvidence(readEvidence(ws, vector, readInTab), vector, { marker, proxy: brokerProxy(driver) }));
+	const expectHostname = driver === 'sbx' ? `seclab-${tabId}` : 'tab';
+	for (const vector of driver === 'sbx' ? ['task', 'fsmonitor'] : ['task']) {
+		checks.push(...checkEvidence(readEvidence(ws, vector, readInTab), vector, { marker, expectHostname, proxy: brokerProxy(driver) }));
 	}
-	// The RPC escape probes' own host markers, one row each. Without the RPC capability filter
-	// (patch 0005, product.json seclabRpcPolicy) these paths are open on purpose: a known gap.
-	// With it, a marker is a failure.
-	const pid = editorPid(userData);
-	const exe = pid ? spawnSync('ps', ['-p', String(pid), '-o', 'comm='], { encoding: 'utf8' }).stdout.trim() : '';
-	const appRoot = /^(.*\.app)\/Contents\/MacOS\//.exec(exe)?.[1];
+	if (driver !== 'sbx') {
+		checks.push({ vector: 'fsmonitor', name: 'ran (armed in the tab)', ok: false, detail: 'not armed on OCI',
+			knownGap: 'an OCI tab writes .git/config straight to the host checkout (no write-back gate, docs/adr/20261104-write-back-gate.md); Level A covers fsmonitor on OCI' });
+	}
+	// The RPC escape probes' host effects, one row each, from the probes' own expectations
+	// (rpc-filter/probes/expectations.json), plus the negative control. Without the RPC
+	// capability filter (patch 0005) these paths are open on purpose: a known gap. With it, a
+	// host effect is a failure. Which build ran comes from this run's launch record, and the
+	// product.json stamp must match the repo's policy table, or the build is unknown (a failure).
 	let filtered: boolean | undefined;
 	try {
-		filtered = appRoot ? 'seclabRpcPolicy' in (JSON.parse(fs.readFileSync(path.join(appRoot, 'Contents', 'Resources', 'app', 'product.json'), 'utf8')) as object) : undefined;
+		const launch = JSON.parse(fs.readFileSync(editorLaunchRecord(userData), 'utf8')) as { app?: unknown; pid?: unknown };
+		if (typeof launch.app === 'string' && launch.pid === editorPid(userData)) {
+			const product = JSON.parse(fs.readFileSync(path.join(launch.app, 'Contents', 'Resources', 'app', 'product.json'), 'utf8')) as { seclabRpcPolicy?: { sha256?: unknown } };
+			if (!product.seclabRpcPolicy) {
+				filtered = false;
+			} else {
+				const policy = path.join(repo, 'rpc-filter', 'patch-src', 'seclabPolicyData.ts');
+				const want = fs.existsSync(policy) ? createHash('sha256').update(fs.readFileSync(policy)).digest('hex') : undefined;
+				filtered = want !== undefined && product.seclabRpcPolicy.sha256 === want ? true : undefined;
+			}
+		}
 	} catch {
 		filtered = undefined;
 	}
-	checks.push({ vector: 'rpc', name: 'the build under test is known (RPC filter present or not)', ok: filtered !== undefined, detail: exe || 'editor not running' });
-	for (const [name, p] of RPC_MARKERS) {
+	checks.push({ vector: 'rpc', name: 'the build under test is known (launch record; RPC filter stamp absent, or matching the repo)', ok: filtered !== undefined, detail: String(filtered) });
+	const effects = new Map<string, string[]>([[path.join(base, 'PWNED.rpcwrite'), ['host-fs-write-file-scheme (negative control)']]]);
+	const expectations = JSON.parse(fs.readFileSync(path.join(repo, 'rpc-filter', 'probes', 'expectations.json'), 'utf8')) as { probes: Record<string, { hostEffect?: unknown; hostEffectAbsolute?: unknown }> };
+	for (const [id, p] of Object.entries(expectations.probes)) {
+		const rel = typeof p.hostEffect === 'string' ? /^marker(\.[a-z0-9-]+)?$/.exec(p.hostEffect) : null;
+		const abs = typeof p.hostEffectAbsolute === 'string' ? /^userDataDir:(\/[\w./-]+)$/.exec(p.hostEffectAbsolute) : null;
+		const at = rel ? path.join(base, `PWNED${rel[1] ?? ''}`) : abs && !abs[1].includes('..') ? path.join(userData, abs[1]) : undefined;
+		if (at) {
+			effects.set(at, [...(effects.get(at) ?? []), id]);
+		}
+	}
+	for (const [p, ids] of effects) {
 		const hit = fs.existsSync(p);
-		checks.push({ vector: 'rpc', name, ok: !hit, detail: p, knownGap: hit && filtered === false ? 'open without the RPC capability filter (patch 0005), docs/RPC-LOCKDOWN.md' : undefined });
+		checks.push({ vector: 'rpc', name: `${ids.join(' + ')}: no host effect`, ok: !hit, detail: p, knownGap: hit && filtered === false ? 'open without the RPC capability filter (patch 0005), docs/RPC-LOCKDOWN.md' : undefined });
+	}
+	// Anything marker-shaped in the run dir that no row above or below accounts for.
+	const vectorMarkers = new Set(['task', 'fsmonitor'].map(v => `${marker}.${v}`));
+	for (const f of fs.readdirSync(base).filter(n => /^(?:PWNED|probe-marker)/.test(n))) {
+		const p = path.join(base, f);
+		if (!effects.has(p) && !vectorMarkers.has(p)) {
+			checks.push({ vector: 'rpc', name: 'no unattributed host marker', ok: false, detail: p });
+		}
 	}
 	const evDir = path.join(ws, '.seclab-evidence');
 	const host = json(path.join(evDir, 'rogue-extension-host.json'));
@@ -239,7 +273,14 @@ if (mode === 'prepare') {
 	const M4 = 'M4 RPC capability filter (docs/adr/20261104-rpc-capability-filter.md)';
 	const knownUntilM4 = new Set(['user-settings', 'clipboard']);
 	for (const f of evFiles) {
-		for (const h of scan(canaries, f, Buffer.from(readInTab(path.join(evDir, f)) ?? ''))) {
+		// A file the tab lists but won't let us read (oversized, unreadable, odd name) is a
+		// failure, never a quiet skip: it could hide a canary (review NNN-1).
+		const text = /^[\w.-]+$/.test(f) ? readInTab(path.join(evDir, f)) : undefined;
+		if (text === undefined) {
+			checks.push({ vector: 'canary', name: 'every evidence file could be scanned', ok: false, detail: JSON.stringify(f).slice(0, 120) });
+			continue;
+		}
+		for (const h of scan(canaries, f, Buffer.from(text))) {
 			checks.push({ vector: 'canary', name: `no ${h.store} canary in tab-observable data`, ok: false, detail: `${h.encoding} in ${h.source}`,
 				knownGap: knownUntilM4.has(h.store) ? M4 : undefined });
 		}
