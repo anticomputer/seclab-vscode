@@ -175,7 +175,7 @@ const TAB_CHOSEN_NUMBERS = new Set(['clientPort']);
 // No '.' in detail keys: field paths ("detail.<key>") must stay unambiguous (review PI-L1).
 const DETAIL_KEY_RE = /^[a-zA-Z][a-zA-Z0-9_]{0,31}$/;
 const RULE_RE = /^[a-z][a-z0-9.-]{0,63}$/;
-const REF_RE = /^(?:rpc|cmd|chan):[\x21-\x7e]{1,1024}$/;
+const REF_RE = /^(?:rpc|cmd|chan|data):[\x21-\x7e]{1,1024}$/;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 
 function int(v: unknown, min: number, max: number): number | undefined {
@@ -279,11 +279,16 @@ export function normalizeDraft(input: unknown): EventDraft {
 				continue;
 			}
 			if (k === 'ref') {
-				// RPC-filter join key: exact or absent, never truncated.
-				if (typeof v !== 'string' || !REF_RE.test(v)) {
-					throw new EventError('invalid ref');
+				// RPC-filter join key: exact or absent, never truncated. A ref that doesn't fit (a
+				// tab-chosen command id with spaces or non-ASCII) keeps the event: rejecting it would
+				// let a tab hide its denials from the stream and the burst rule (review round 12).
+				if (typeof v === 'string' && REF_RE.test(v)) {
+					d.ref = v;
+				} else if (typeof v === 'string') {
+					d.refText = txt(v, LIMITS.detailValue);
+				} else {
+					continue;
 				}
-				d.ref = v;
 			} else if (typeof v === 'string') {
 				d[k] = txt(v, LIMITS.detailValue);
 			} else if (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) {

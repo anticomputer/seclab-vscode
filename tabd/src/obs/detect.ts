@@ -39,6 +39,7 @@ export const RULES: readonly RuleInfo[] = [
 	{ id: 'suspicious-content', priority: 'informational', desc: 'Text aimed at an AI agent (prompt injection: "ignore previous instructions", role markers, chat-template or tool-call syntax) in a command line, file name, path or hostname. Informational: the stream is data, never instructions.' },
 	{ id: 'ahp.ungated', priority: 'critical', desc: 'An agent-host connection was opened but its AHP gate never reported itself verified (`ahp-gate.opened` without `ahp-gate.verified` within 2 s): an ungated transport. Trusted: both signals come from the renderer.' },
 	{ id: 'ahp.deny-burst', priority: 'warning', desc: 'The AHP gate denied 20 or more agent-host messages or reverse requests from one tab within 60 s (probing the gate).' },
+	{ id: 'rpc.deny-burst', priority: 'warning', desc: 'The RPC capability filter denied 20 or more calls from one tab\'s extension host within 60 s (probing the filter).' },
 ];
 const RULE = new Map(RULES.map(r => [r.id, r]));
 
@@ -107,6 +108,8 @@ export class Detector {
 	private readonly beacons = new Map<string, Beacon>();
 	private readonly ahpDenies: number[] = [];
 	private ahpDenyReportedAt = -Infinity;
+	private readonly rpcDenies: number[] = [];
+	private rpcDenyReportedAt = -Infinity;
 	/** Broker timings only (review BA-3): sensor events, whatever their address text, never touch it. */
 	private readonly brokerBeacons = new Map<string, Beacon>();
 
@@ -207,6 +210,24 @@ export class Detector {
 					if (this.ahpDenies.length >= 20 && t - this.ahpDenyReportedAt >= 600_000) {
 						this.ahpDenyReportedAt = t;
 						hits.push({ id: 'ahp.deny-burst', summary: `${this.ahpDenies.length} AHP gate denials in ${Math.round((t - this.ahpDenies[0]) / 1000)} s` });
+					}
+				}
+				break;
+			case 'rpc.decision':
+				// Aggregated allows carry a count; only individual denials (and prompts, which fail
+				// closed until wired) count towards a burst.
+				if (e.integrity === 'trusted' && (e.detail?.verdict === 'deny' || e.detail?.verdict === 'prompt')) {
+					const t = Date.parse(e.time);
+					this.rpcDenies.push(t);
+					while (this.rpcDenies.length && t - this.rpcDenies[0] > 60_000) {
+						this.rpcDenies.shift();
+					}
+					if (this.rpcDenies.length > 20) {
+						this.rpcDenies.shift();
+					}
+					if (this.rpcDenies.length >= 20 && t - this.rpcDenyReportedAt >= 600_000) {
+						this.rpcDenyReportedAt = t;
+						hits.push({ id: 'rpc.deny-burst', summary: `${this.rpcDenies.length} RPC filter denials in ${Math.round((t - this.rpcDenies[0]) / 1000)} s` });
 					}
 				}
 				break;
