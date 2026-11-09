@@ -188,3 +188,39 @@ Dialogs cancelled in background mode answer with their `cancelId`, which
   editor is a regular app with a Dock icon. There are no windows yet for the system to
   promote, and LaunchServices' bring-forward is denied. Only a deliberate Dock click during
   startup remains.
+
+## Path c: a Space change (2026-11-09)
+- **Seen:** at 16:47:16Z a background editor (accessory build, pid 11464) became the front
+  process while the user worked in another app. The watcher killed it 140 ms later. Unified log:
+  Dock `provideVisibilityHintForSpace`, then WindowServer
+  `[SetManagedDisplayCurrentSpace] Making 0x0-0x10a30a2 the front process`, then
+  launchservicesd `SETFRONT: pid=11464 … foreground=0`.
+- **Cause:** when a Space becomes current, macOS activates the owner of its topmost window.
+  `showInactive` orders a window to the top of its Space without activating it, and the
+  accessory policy doesn't stop this activation.
+- **Fix (patch 0012):**
+  - Background mode uses activation policy `prohibited` (`BackgroundOnly`), which
+    LaunchServices never makes the front process. This closes paths a, b and c whatever
+    the window order.
+  - Every window also sits one level below normal windows; `setAlwaysOnTop` is pinned to
+    that level.
+  - Measured on branch build 42663670292: the window renders and `screencapture -l` captures
+    it, but it is not in the on-screen window list on any Space. It is never the topmost
+    window anywhere, and the user sees it only through `node test/window.ts shot`.
+- **Harness:** a background launch must report `ApplicationType` `BackgroundOnly`, or it's
+  killed. Accessory builds are refused too. The probe requires the
+  `activation policy: prohibited` record and a below-normal record for every window. The
+  window list includes layer -1.
+- **Probe:** `test/focus/spaces.ts` (run only with the user's agreement, since it moves their
+  screen):
+  - it switches to an empty Space and launches the editor there, so its window is alone;
+  - it switches away and back three times, then returns home;
+  - each switch is a host mark for `probe.ts check`.
+- **Result, branch build 42663670292 (`0a3c210`), 2026-11-09:**
+  - the Space run: launch on the empty Space, three round trips and the return home, no
+    steal, `BackgroundOnly`, every window click-through and below normal;
+  - the full battery: every step ran through `server-connection-lost`, plus the host
+    renderer steps, with no steal.
+
+  The accessory build's steal above is the control; it isn't reproduced on purpose, because
+  that would take the user's focus again.

@@ -245,12 +245,14 @@ RPC-lockdown session adds. Keep them consistent with this file.
   containment-editor runs open in the background on the current Space and stay
   behind the user's windows:
   - launch with `node test/window.ts launch …` (`open -g -n`, isolated profile,
-    `SECLAB_BACKGROUND_WINDOWS=1`, so the app shows windows inactive and never focuses
-    or activates: patch 0012); it exits 1 if the editor became the frontmost app.
+    `SECLAB_BACKGROUND_WINDOWS=1`, so the app is background-only (never the front process),
+    its windows sit below normal windows, and it never focuses or activates: patch 0012); it
+    exits 1 if the editor became the frontmost app or isn't background-only.
     A watcher started before the editor samples the frontmost app every 200 ms for the run's
     whole life and kills the editor's process tree on the first steal (fail closed). Report
     any steal; never work around it. `node test/focus/probe.ts` is the regression check for
-    the activation paths;
+    the activation paths, and `test/focus/spaces.ts` for Space changes (it moves the user's
+    screen: run it only when they agree);
   - capture with `node test/window.ts shot …` (`screencapture -o -l <windowid>`,
     which reads the covered window directly);
   - never call activate/frontmost APIs, `open` without `-g`, or the app's

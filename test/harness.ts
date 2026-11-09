@@ -229,7 +229,7 @@ export function editorPid(userData: string): number {
 const WINDOW_LIST_JXA = `ObjC.import('CoreGraphics');
 function run(argv) {
 	const all = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionAll, 0)));
-	return JSON.stringify(all.filter(w => w.kCGWindowOwnerPID === Number(argv[0]) && w.kCGWindowLayer === 0)
+	return JSON.stringify(all.filter(w => w.kCGWindowOwnerPID === Number(argv[0]) && (w.kCGWindowLayer === 0 || w.kCGWindowLayer === -1))
 		.map(w => ({ id: w.kCGWindowNumber, w: w.kCGWindowBounds.Width, h: w.kCGWindowBounds.Height })));
 }`;
 
@@ -240,7 +240,7 @@ export function editorWindowId(pid: number): number {
 	return wins.length && wins[0].w > 200 ? wins[0].id : 0;
 }
 
-/** The editor's normal-layer windows (read-only CGWindowList query). */
+/** The editor's normal-layer windows, and in background mode one layer below (patch 0012). Read-only CGWindowList query. */
 export function editorWindows(pid: number): Array<{ id: number; w: number; h: number }> {
 	const out = execFileSync('osascript', ['-l', 'JavaScript', '-e', WINDOW_LIST_JXA, String(pid)], { encoding: 'utf8' }); // fixture-lint: allow persistence -- read-only CGWindowList query (window ids for screencapture -l); no activation
 	return JSON.parse(out) as Array<{ id: number; w: number; h: number }>;
