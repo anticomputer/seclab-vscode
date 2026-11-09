@@ -491,9 +491,10 @@ export function deadExports(texts: Map<string, string>, entries: string[] = [], 
 
 /**
  * Trigger names of a workflow (`on:` as a map, a list or a scalar). A push or pull_request
- * trigger whose `branches` filter can't match main is left out (KKK-7): it never runs there.
+ * trigger that can't run on main is left out: a `branches` filter that excludes main (KKK-7),
+ * a `paths-ignore` of everything, or `paths` matching no tracked file (MMM-1, given `files`).
  */
-export function triggers(yml: string): string[] {
+export function triggers(yml: string, files?: string[]): string[] {
 	const lines = yml.split('\n');
 	const i = lines.findIndex(l => /^(?:on|"on"|'on'):/.test(l));
 	if (i < 0) {
@@ -505,7 +506,9 @@ export function triggers(yml: string): string[] {
 	}
 	const out: string[] = [];
 	let cur: string | undefined;
-	const branches = new Map<string, string>();
+	let key: string | undefined;
+	const filters = new Map<string, Map<string, string[]>>();
+	const unq = (s: string) => s.trim().replace(/^['"]|['"]$/g, '');
 	for (const l of lines.slice(i + 1)) {
 		if (/^\S/.test(l)) {
 			break;
@@ -514,24 +517,49 @@ export function triggers(yml: string): string[] {
 		if (m) {
 			out.push(m[1]);
 			cur = m[1];
+			key = undefined;
 			continue;
 		}
-		const b = /^ {4}(branches|branches-ignore):\s*(.*)$/.exec(l);
-		if (b && cur) {
-			branches.set(cur, `${b[1]}=${b[2].replace(/#.*/, '').trim()}`);
+		const k = /^ {4}(branches|branches-ignore|paths|paths-ignore):\s*(.*)$/.exec(l);
+		if (k && cur) {
+			key = k[1];
+			const v = k[2].replace(/#.*/, '').trim();
+			const f = filters.get(cur) ?? new Map<string, string[]>();
+			f.set(key, v ? v.replace(/^\[|\]$/g, '').split(',').map(unq).filter(Boolean) : []);
+			filters.set(cur, f);
+			continue;
+		}
+		const item = /^ {4,}- (.+)$/.exec(l);
+		if (item && cur && key) {
+			filters.get(cur)!.get(key)!.push(unq(item[1].replace(/#.*/, '')));
+		} else if (/^ {4}\S/.test(l)) {
+			key = undefined;
 		}
 	}
-	const reachesMain = (t: string) => {
-		const f = branches.get(t);
+	const glob = (g: string) => new RegExp(`^${g.split(/(\*\*\/?|\*)/).map(p => p === '**' || p === '**/' ? '.*' : p === '*' ? '[^/]*' : p.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('')}$`);
+	const runs = (t: string) => {
+		const f = filters.get(t);
 		if (!f) {
 			return true;
 		}
-		const [kind, list] = f.split('=');
-		const names = list.replace(/^\[|\]$/g, '').split(',').map(s => s.trim().replace(/^['"]|['"]$/g, ''));
-		const hit = names.some(n => n === 'main' || n === '**' || n === '*');
-		return kind === 'branches' ? hit : !hit;
+		const br = f.get('branches');
+		if (br && !br.some(n => n === 'main' || n === '**' || n === '*')) {
+			return false;
+		}
+		const bri = f.get('branches-ignore');
+		if (bri && bri.some(n => n === 'main' || n === '**' || n === '*')) {
+			return false;
+		}
+		if (f.get('paths-ignore')?.some(p => p === '**' || p === '**/*')) {
+			return false;
+		}
+		const ps = f.get('paths')?.filter(p => !p.startsWith('!'));
+		if (ps && files && !files.some(file => ps.some(p => glob(p).test(file)))) {
+			return false;
+		}
+		return true;
 	};
-	return out.filter(t => (t !== 'push' && t !== 'pull_request') || reachesMain(t));
+	return out.filter(t => (t !== 'push' && t !== 'pull_request') || runs(t));
 }
 
 export interface Step { run: string; if?: string; continueOnError?: string }
@@ -592,7 +620,7 @@ export function jobOf(yml: string, job: string): Job | undefined {
 export function discover(files: string[], read: (f: string) => string): Map<string, string> {
 	const out = new Map<string, string>();
 	for (const f of files.filter(f => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(f))) {
-		const t = triggers(read(f));
+		const t = triggers(read(f), files);
 		if (!t.includes('push') && !t.includes('pull_request')) {
 			out.set(`workflow:${path.posix.basename(f).replace(/\.ya?ml$/, '')}`, f);
 		}
@@ -768,7 +796,7 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 				if (!j || !yml) {
 					errors.push(`subject ${s.id}: ci evidence ${e.ci}: no such workflow job`);
 				} else {
-					const t = triggers(yml);
+					const t = triggers(yml, files);
 					if (!t.includes('push') && !t.includes('pull_request')) {
 						errors.push(`subject ${s.id}: ci job ${e.ci} must run on push or pull_request`);
 					}
@@ -877,6 +905,11 @@ export async function verifyRuns(reg: Register, api: Api, now = Date.now()): Pro
 		}
 	}
 	return { errors, notes };
+}
+
+/** --refresh: every note (due near or past the retention horizon) is an error. */
+export function refreshReport(r: Report): Report {
+	return { errors: [...r.errors, ...r.notes.map(n => `refresh due: ${n}`)], notes: [] };
 }
 
 function githubApi(): Api {
@@ -992,6 +1025,8 @@ async function selfTest(): Promise<void> {
 		['KKK-1 marks step continue-on-error', ciWith(`on:\n  push:\njobs:\n  oci:\n    steps:\n      - run: x\n${marksStep}        continue-on-error: true\n`), /must end with exactly/],
 		['KKK-1 dispatch-only ci job', ciWith(`on:\n  workflow_dispatch:\njobs:\n  oci:\n    steps:\n      - run: x\n${marksStep}`), /must run on push or pull_request/],
 		['KKK-7 push filtered off main', ciWith(`on:\n  push:\n    branches: [nope]\njobs:\n  oci:\n    steps:\n      - run: x\n${marksStep}`), /workflow:ci .* add it to/],
+		['MMM-1 paths matching no file', ciWith(`on:\n  push:\n    paths: [no/such/path/**]\njobs:\n  oci:\n    steps:\n      - run: x\n${marksStep}`), /workflow:ci .* add it to/],
+		['MMM-1 paths-ignore everything (block list)', ciWith(`on:\n  push:\n    paths-ignore:\n      - '**'\njobs:\n  oci:\n    steps:\n      - run: x\n${marksStep}`), /must run on push or pull_request/],
 		['KKK-2 mark only in a string', { ...base, 'test/run.ts': "import { liveMark } from './liveness.ts';\nconst s = \"liveMark('evil-ran')\";\n" }, /never calls liveMark\('evil-ran'\) in code/],
 		['KKK-2 mark in another file', { ...base, 'test/run.ts': '\n', 'test/other.ts': "import { liveMark } from './liveness.ts';\nliveMark('evil-ran');\n" }, /never calls liveMark\('evil-ran'\) in code/],
 		['KKK-5 record mentions the id in passing', { ...base, 'docs/proof.md': 'hook:v/h never ran\n' }, /has no "- \*\*`hook:v\/h`:\*\* …" evidence line/],
@@ -1051,6 +1086,11 @@ async function selfTest(): Promise<void> {
 		if (kind !== want) {
 			throw new Error(`self-test: verify-runs "${name}": ${kind}, want ${want}`);
 		}
+		// The weekly refresh fails on anything the required check only notes.
+		const refreshed = refreshReport(got);
+		if ((refreshed.errors.length > 0) !== (want !== 'ok') || refreshed.notes.length) {
+			throw new Error(`self-test: verify-runs --refresh "${name}": ${refreshed.errors.length} error(s), want ${want === 'ok' ? 'none' : 'some'}`);
+		}
 	}
 	console.log(`liveness self-test: ok (control clean; ${injections.length} injections, ${marks.length + 1} mark cases and ${runCases.length} run cases caught)`);
 }
@@ -1086,9 +1126,13 @@ if (import.meta.main) {
 		report(await check(files.filter(f => !links.has(f)), read, { links }), 'liveness: ok (Actions runs are verified by verify-runs)');
 	} else if (cmd === 'verify-runs' && (rest.length === 0 || (rest.length === 1 && rest[0] === '--refresh'))) {
 		// --refresh (the weekly liveness-refresh workflow): evidence near or past the retention
-		// horizon fails, so it's re-run before it lapses; the required check only notes it.
+		// horizon fails, so it's re-run before it lapses; the required check only notes it. The
+		// banner lets the workflow prove the flag arrived (MMM-2: a lost flag would fail open).
+		if (rest[0] === '--refresh') {
+			console.log('liveness: refresh mode');
+		}
 		const r = await verifyRuns(JSON.parse(read(REGISTER)) as Register, githubApi());
-		report(rest[0] === '--refresh' ? { errors: [...r.errors, ...r.notes.map(n => `refresh due: ${n}`)], notes: [] } : r, 'liveness: recorded Actions runs verified');
+		report(rest[0] === '--refresh' ? refreshReport(r) : r, 'liveness: recorded Actions runs verified');
 	} else if (cmd === 'marks' && rest.length === 2) {
 		const log = fs.existsSync(rest[1]) ? fs.readFileSync(rest[1], 'utf8') : undefined;
 		report({ errors: checkMarks(JSON.parse(read(REGISTER)) as Register, rest[0], log), notes: [] }, `liveness marks ${rest[0]}: ok`);

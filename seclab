@@ -621,6 +621,7 @@ case "${1:-help}" in
 			# The only networked, token-holding step: it sees the register and the checker, nothing
 			# else (KKK-4; `lint mounts` keeps the list exact).
 			verify-runs) mount_files "${LIVENESS_VERIFY_FILES[@]}" "${LIVENESS_VERIFY_DATA[@]}"
+				[[ $# -le 2 ]] || { usage; exit 2; }
 				case "${2:-}" in ""|--refresh) ;; *) usage; exit 2 ;; esac
 				docker run --rm -e GITHUB_TOKEN -e GITHUB_REPOSITORY "${MOUNTS[@]}" -w /d "$(node_image)" node build/liveness/liveness.ts verify-runs ${2:+"$2"} ;;
 			# No log file: nothing recorded a mark (mounting a missing path would create a directory).

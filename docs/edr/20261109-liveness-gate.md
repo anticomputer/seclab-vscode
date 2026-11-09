@@ -143,11 +143,14 @@ Reviews ask what code says. Nothing asked whether anything calls it.
   Runs carry a note from day 75 and degrade to a note after 85 days (90 days is the default
   retention), so age never fails the required check.
 - **Lapsing evidence is caught weekly.** The `liveness-refresh` workflow (Mondays, and on any
-  push that changes it or `build/liveness/`) runs `verify-runs --refresh`. That turns every
-  day-75 and expired note into a failure, listing the entries to re-run before day 85. It is
-  not a required check. Because it runs on push, the gate counts it as live: its own runs are
-  its evidence. It can't be dispatch-only anyway, because a workflow can be dispatched only
-  once it is on main, where the gate would refuse it without a run on record.
+  push that changes it, `build/liveness/` or `seclab`) runs `verify-runs --refresh`. That turns
+  every day-75 and expired note into a failure, listing the entries to re-run before day 85. It
+  must print `liveness: refresh mode`, so a lost flag can't pass. It is not a required check.
+  Because it runs on push, the gate counts it as live. It can't be dispatch-only anyway: a
+  workflow can be dispatched only once it is on main, where the gate would refuse it without a
+  run on record. Review [MMM](../security-reviews/20261109-liveness-refresh.md) also made
+  `paths` filters count: a push or pull_request that can match no tracked file, or ignores
+  everything, doesn't make a workflow live.
 - Discovery depends on convention: fixtures live in a directory named `fixtures`, and test
   extensions have a `package.json` (AGENTS.md).
 - The analysis is lexical. It can miss a use, which fails the gate and is safe, or, rarely,

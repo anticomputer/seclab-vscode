@@ -13,13 +13,14 @@ on:
     paths:
       - .github/workflows/liveness-refresh.yml
       - build/liveness/**
+      - seclab
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: liveness-refresh
+  group: liveness-refresh-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -35,6 +36,10 @@ jobs:
         with:
           persist-credentials: false
       - name: Liveness evidence due for refresh (register only; fails if any is due)
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: ./seclab liveness verify-runs --refresh
+        # The banner proves --refresh reached the checker; without it the job would pass on age (MMM-2).
+        run: |
+          ./seclab liveness verify-runs --refresh | tee "$RUNNER_TEMP/refresh.txt"
+          grep -qx 'liveness: refresh mode' "$RUNNER_TEMP/refresh.txt"
