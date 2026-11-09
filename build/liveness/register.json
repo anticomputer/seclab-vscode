@@ -5,9 +5,7 @@
 		{ "subject": "extensions/seclab-tab-manager/src/extension.ts#deactivate", "calledBy": "VS Code, when the extension host stops", "declaredIn": "extensions/seclab-tab-manager/package.json" }
 	],
 	"exempt": [
-		{ "subject": "tabd/src/scan.ts#scannerProblem", "consumer": "tabd/test/unit.test.ts", "reason": "Test entry to checkScanner, which scanWorkspace runs before every mount. The supervisor called it until 0ae1eeb moved the check into scanWorkspace." },
-		{ "subject": "broker/seclab_broker/core.py#TAB_EVENTS", "consumer": null, "reason": "Leftover: tab.event kinds are validated at dispatch by the protocol schema (protocol.check), not by this tuple. Broker session to delete." },
-		{ "subject": "broker/seclab_broker/core.py#random_password", "consumer": null, "reason": "Leftover from the first broker commit (e0135e8); nothing calls it. Broker session to delete." }
+		{ "subject": "tabd/src/scan.ts#scannerProblem", "consumer": "tabd/test/unit.test.ts", "reason": "Test entry to checkScanner, which scanWorkspace runs before every mount. The supervisor called it until 0ae1eeb moved the check into scanWorkspace." }
 	],
 	"subjects": [
 		{
