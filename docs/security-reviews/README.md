@@ -98,4 +98,5 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-06 | [RPC filter stamp in product.json](20261106-rpc-policy-stamp.md) | round DDD, b9af5e5 and its fixes: prepare.sh step 7, the RPC stamp check | see record |
 | 2026-11-06 | [test build variants, and the gitleaks build fail-closed fix](20261106-test-build-variants.md) | round CCC: | see record |
 | 2026-11-09 | [broker dependency bumps past the CFS hold (round 16)](20261109-broker-dependency-bumps.md) | - "broker: bump fastjsonschema to 2.22.3 and platformdirs to 4.14.3": the | see record |
+| 2026-11-09 | [deps-updates container mounts and the mount lint (round JJJ)](20261109-deps-updates-mounts.md) | round JJJ, 3b2416f and its fixes: | see record |
 <!-- index:end -->

@@ -69,12 +69,15 @@ ZIZMOR_IMAGE="ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf0
 # from pinned source. Prints the local image tag; fails closed.
 tool_image() { "$ROOT/build/tools/tool.sh" "$1"; }
 
-# Networked containers get single files, not the repo (reviews DD-4, EE-2). Each list must cover
-# its entry's import closure: `./seclab lint mounts` checks it (build/import-closure.ts).
+# Networked containers get single files, not the repo (reviews DD-4, EE-2). Each code list must
+# equal its entry's import closure, no more and no less: `./seclab lint mounts` checks it
+# (build/import-closure.ts). Data files are listed apart and reviewed by hand.
 VERIFY_IMAGE_FILES=(build/verify-image.ts build/registry.ts)
 DEPS_OUTDATED_FILES=(build/deps-outdated.ts build/registry.ts build/release-dates.ts)
-# Sets MOUNTS to -v flags mounting each listed file read-only at /d/<path> (bash 3.2: no mapfile).
-mount_files() { local f; MOUNTS=(); for f in "$@"; do MOUNTS+=(-v "$ROOT/$f:/d/$f:ro"); done; }
+DEPS_OUTDATED_DATA=(deps/registry.json)
+# Sets MOUNTS to -v flags mounting each listed file read-only at /d/<path> (bash 3.2: no mapfile;
+# an empty list would abort "${MOUNTS[@]}" under set -u there, so it is refused: JJJ-3).
+mount_files() { local f; [[ $# -gt 0 ]] || { echo "mount_files: empty list" >&2; return 1; }; MOUNTS=(); for f in "$@"; do MOUNTS+=(-v "$ROOT/$f:/d/$f:ro"); done; }
 
 # Workflow static analysis (EDR ci-hardening): actionlint, then zizmor, both offline with no
 # network and no credentials: they are third-party images (ADR supply-chain provenance).
@@ -604,12 +607,12 @@ case "${1:-help}" in
 		shift
 		case "${1:-}" in
 			# Only the listed scripts and the register: no repo content or run state in a networked container (EE-2).
-			outdated) mount_files "${DEPS_OUTDATED_FILES[@]}" deps/registry.json
-				if [[ "${2:-}" == --self-test ]]; then
-					docker run --rm --network none "${MOUNTS[@]}" -w /d "$(node_image)" node build/deps-outdated.ts --self-test
-				else
-					docker run --rm "${MOUNTS[@]}" -w /d "$(node_image)" node build/deps-outdated.ts
-				fi ;;
+			outdated) mount_files "${DEPS_OUTDATED_FILES[@]}" "${DEPS_OUTDATED_DATA[@]}"
+				case "${2:-}" in
+					--self-test) docker run --rm --network none "${MOUNTS[@]}" -w /d "$(node_image)" node build/deps-outdated.ts --self-test ;;
+					"") docker run --rm "${MOUNTS[@]}" -w /d "$(node_image)" node build/deps-outdated.ts ;;
+					*) usage; exit 2 ;;
+				esac ;;
 			host) deps_host ;;
 			*) usage; exit 2 ;;
 		esac ;;
