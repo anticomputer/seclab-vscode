@@ -355,6 +355,26 @@ for (const dir of [path.join(home, '.seclab-test'), '/Users/Shared/seclab-demo']
 	}
 }
 
+// ---- test-variant data folders in the home dir -----------------------------------------------
+// A test variant's app (dataFolderName .seclab-vscode-test-<variant>, build/test-variant.sh) put
+// argv.json and extensions here before launches went portable (test/harness.ts editorLaunchArgv).
+// Test-only by name; the release's ~/.seclab-vscode and ~/.seclab-vscode-shared may be the user's
+// own and are never touched.
+for (const e of (() => { try { return fs.readdirSync(home); } catch { return []; } })()) {
+	if (!/^\.seclab-vscode-test-[a-z0-9-]+$/.test(e)) {
+		continue;
+	}
+	const p = path.join(home, e);
+	const inUse = procs.some(x => x.args.includes(p));
+	items.push({
+		kind: 'directory', name: p, state: inUse ? 'in use' : '', remove: !inUse, why: inUse ? 'a running process uses it' : '',
+		del: () => {
+			fs.rmSync(p, { recursive: true, force: true });
+			return !fs.existsSync(p);
+		},
+	});
+}
+
 // ---- stale fixture copies in every worktree's .work/ (EDR fixture-safety) ---------------------
 // Hostile fixtures materialised on the host are what endpoint protection flags. Removed only
 // when provably a harness copy (SS-1): it carries materialiseFixture's marker, a run.json lists
