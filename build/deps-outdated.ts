@@ -21,21 +21,24 @@ const norm = (t: string) => t.replace(/^lychee-v|^v/, '');
 /**
  * The release to suggest for a pin, if any: the newest one at least COOLDOWN_DAYS old (never one
  * CFS still holds), and only if it was published after the pinned one. A pin newer than every
- * release past the cooldown is not outdated. If the pinned release isn't listed, any other
- * candidate is suggested (the report errs towards showing).
+ * release past the cooldown is not outdated. A pin not among the fetched releases can't be
+ * ordered against them, so it is an error, not a suggestion (JJJ-2: never advise a downgrade).
  */
 export function pickRelease(releases: Release[], pinned: string, now = Date.now()): string | undefined {
 	const ok = releases.filter(x => !x.draft && !x.prerelease && x.published_at && ageDays(x.published_at, now) >= COOLDOWN_DAYS)
 		.sort((a, b) => Date.parse(b.published_at!) - Date.parse(a.published_at!));
 	if (!ok.length) {
-		throw new Error(`no release at least ${COOLDOWN_DAYS} days old among the latest 30`);
+		throw new Error(`no release at least ${COOLDOWN_DAYS} days old among the latest ${releases.length}`);
 	}
 	const tag = String(ok[0].tag_name ?? '');
 	if (norm(tag) === norm(pinned)) {
 		return undefined;
 	}
 	const mine = releases.find(x => norm(String(x.tag_name ?? '')) === norm(pinned) && x.published_at);
-	if (mine && Date.parse(mine.published_at!) >= Date.parse(ok[0].published_at!)) {
+	if (!mine) {
+		throw new Error(`pinned ${pinned} is not among the latest ${releases.length} releases: compare by hand`);
+	}
+	if (Date.parse(mine.published_at!) >= Date.parse(ok[0].published_at!)) {
 		return undefined;
 	}
 	return tag;
@@ -49,11 +52,16 @@ function selfTest(): void {
 		['pin newer than every release past the cooldown (2026-11-09 report)', '1.145.0', undefined],
 		['pin is the newest past the cooldown', '1.144.0', undefined],
 		['older pin', '1.143.0', '1.144.0'],
-		['unlisted pin', '1.100.0', '1.144.0'],
+		['unlisted pin (JJJ-2)', '1.100.0', 'throws'],
 		['v prefix', 'v1.143.0', '1.144.0'],
 	];
 	for (const [name, pinned, want] of cases) {
-		const got = pickRelease(list, pinned, now);
+		let got: string | undefined;
+		try {
+			got = pickRelease(list, pinned, now);
+		} catch {
+			got = 'throws';
+		}
 		if (got !== want) {
 			throw new Error(`deps-outdated self-test: ${name}: got ${got}, want ${want}`);
 		}
