@@ -285,6 +285,9 @@ Checked as sound:
   `revealSetting` key. No value is in any event, notification, log or return value.
 - The 0036 marker literal is in no patch on main, so the bundle check can't pass by accident.
 - The forger is inert unless armed, calls one command, and writes only to the tab's `/tmp`.
+- After the round, the handler's logic moved unchanged into `WithheldReceiver` (pure, in
+  `withheld.ts`) so the forger's five calls are unit-tested end to end against a real
+  tabd hub; the Tab Manager keeps only the editor API wiring.
 
 ## Accepted residuals (documented in the ADR)
 - `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.

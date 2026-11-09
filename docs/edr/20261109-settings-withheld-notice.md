@@ -65,15 +65,25 @@ requirement is not to rely on that alone.
      **Open Activity**, **Dismiss**. No Stop Tab: the tab did nothing wrong;
    - rate: coalesced per tab (one notification per 5 minutes, then one "N more"), within
      the global per-minute budget.
-5. **Probe** (`test/observability/withheld-probe.ts`, needs a build with 0036):
-   - a canary `seclabProbe.apiToken: seclabcanary_…` goes in an isolated profile;
-   - a test extension installed in the tab (`test/observability/withheld-forger`, armed by
-     the run) forges the call five ways: a key not in host settings, a host key that isn't a
-     credential, another tab's authority, bidi and markdown text, and a 64-key flood. It also
-     records whether the canary is visible in the tab (yes or no, never the value);
-   - the probe asserts one notification naming the key, exactly one trusted
-     `config.withheld` event, no forged key anywhere, and the value in no notification or
-     event.
+5. **Forged calls are refused: what is proven now.** Unit tests (`tabd/test/obs.test.ts`,
+   "settings withheld (0036)") run the handler (`WithheldReceiver`, the command's whole
+   logic with the editor API injected) against a real tabd event hub:
+   - the in-tab forger's five calls, verbatim (a key not in host settings, a host key that
+     isn't a credential, another tab's authority, bidi and markdown text, a 64-key flood),
+     report nothing, return nothing, and are each logged as refused;
+   - in a build without 0036 or without its classifier, every call is ignored;
+   - the real claim produces one trusted event, a replay produces none, and a claim tabd
+     dropped under the rate limit is retried once.
+6. **Probe in a real editor** (`test/observability/withheld-probe.ts` with the in-tab
+   forger `test/observability/withheld-forger`; lands with its first run, which records the
+   liveness evidence). It puts a canary `seclabProbe.apiToken: seclabcanary_…` in an
+   isolated profile, and installs the forger, armed by the run, in the tab. The forger makes
+   the five calls above and records whether the canary is visible in the tab (yes or no,
+   never the value). The probe asserts one notification naming the key, exactly one trusted
+   `config.withheld` event, no forged key anywhere, and the value in no notification or
+   event. With `--forged-only`, on a build without 0036, it asserts that each forged call
+   reached the Tab Manager's handler (its log) and produced nothing. Not yet run: editor
+   launches are on hold until the Space-switch focus fix lands.
 
 ## Alternatives considered
 - **Trust the command, rely on the RPC filter:** a single control, and absent until the

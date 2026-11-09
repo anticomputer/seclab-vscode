@@ -92,3 +92,64 @@ export function verifyWithheld(arg: unknown, ctx: VerifyContext): VerifyResult {
 export function withheldReport(c: WithheldClaim): { source: string; class: string; priority: string; summary: string; detail: Record<string, string> } {
 	return { source: 'config-filter', class: 'config.withheld', priority: 'warning', summary: 'credential-looking setting withheld from the tab', detail: { key: c.key, reason: c.reason } };
 }
+
+export const SETTINGS_WITHHELD_COMMAND = 'seclab.tabs.settingsWithheld';
+
+export interface ReceiverDeps {
+	/** 0036's classifier, when the build bundles it. */
+	readonly classify: Classifier | undefined;
+	/** Whether the workbench bundle carries 0036 (asked once, on the first call). */
+	readonly shipped: () => Promise<boolean>;
+	readonly authority: () => string | undefined;
+	readonly hostValue: (key: string) => unknown;
+	readonly report: (tabId: string, events: Array<ReturnType<typeof withheldReport>>) => Promise<{ accepted: number; rejected: number }>;
+	readonly warn: (message: string) => void;
+}
+
+/**
+ * The command handler, editor API injected (unit-tested with tabd). Returns nothing to any
+ * caller. Each verified key is reported once per window, and again only if tabd dropped it.
+ */
+export class WithheldReceiver {
+	private readonly d: ReceiverDeps;
+	private readonly reported = new Set<string>();
+	private shipped: Promise<boolean> | undefined;
+	private refusedLogged = 0;
+
+	constructor(d: ReceiverDeps) {
+		this.d = d;
+	}
+
+	async handle(arg: unknown): Promise<void> {
+		this.shipped ??= this.d.shipped();
+		const classify = this.d.classify;
+		if (!classify || !(await this.shipped)) {
+			this.d.warn(`${SETTINGS_WITHHELD_COMMAND} ignored: ${classify ? 'this build does not withhold settings (0036 marker missing)' : 'no settings classifier in this build'}`);
+			return;
+		}
+		const r = verifyWithheld(arg, { authority: this.d.authority(), hostValue: this.d.hostValue, classify });
+		if (r.refused && this.refusedLogged < 20) {
+			this.refusedLogged++;
+			this.d.warn(`${SETTINGS_WITHHELD_COMMAND}: ${r.refused} claim(s) refused (not in your user settings, or not what 0036 withholds)`);
+		}
+		if (r.ignored || !r.tabId) {
+			this.d.warn(`${SETTINGS_WITHHELD_COMMAND} ignored: ${r.ignored ?? 'no tab'}`);
+			return;
+		}
+		const fresh = r.accepted.filter(c => !this.reported.has(c.key));
+		if (!fresh.length) {
+			return;
+		}
+		try {
+			const res = await this.d.report(r.tabId, fresh.map(withheldReport));
+			// Only keys tabd took are done; if any were dropped (rate limit), a later call retries them all.
+			if (res.rejected === 0) {
+				for (const c of fresh) {
+					this.reported.add(c.key);
+				}
+			}
+		} catch (e) {
+			this.d.warn(`could not report withheld settings: ${(e as Error).message}`);
+		}
+	}
+}

@@ -1171,3 +1171,66 @@ test('settings withheld (0036): a tab-originated call can only produce a true no
 	assert.equal(notifyKind({ ...ev[0], source: 'agent-host' }), undefined);
 	await glue.shutdown();
 });
+
+test('settings withheld (0036): the handler, fed the in-tab forger\'s five calls, reports nothing; only the real claim reaches tabd, once', async () => {
+	const { WithheldReceiver, WITHHELD_MARKER } = await import('../src/obs/withheld.ts');
+	const { ObsGlue } = await import('../src/obs/glue.ts');
+	const tab = 't-abcdefghijklmnopqrstuvwxyz';
+	const authority = `seclab+${tab}`;
+	const host: Record<string, unknown> = { 'seclabProbe.apiToken': 'seclabcanary_withheld_handler', 'workbench.startupEditor': 'none' };
+	const classify = (key: string, value: unknown) => /token/i.test(key) && typeof value === 'string' ? 'credential-name' as const : undefined;
+	const dir = path.join(SCRATCH, 'withheld-handler');
+	fs.rmSync(dir, { recursive: true, force: true });
+	const glue = new ObsGlue({ eventsDir: dir, notify: () => undefined, assertTab: t => String(t), isRunning: async () => true, owns: () => true });
+	glue.hub.own(tab);
+	let reports = 0;
+	const warnings: string[] = [];
+	const make = (o: { classify?: typeof classify; shipped?: boolean; reject?: () => boolean } = {}) => new WithheldReceiver({
+		classify: 'classify' in o ? o.classify : classify,
+		shipped: async () => o.shipped ?? true,
+		authority: () => authority,
+		hostValue: k => host[k],
+		report: async (tabId, events) => {
+			reports++;
+			const r = glue.handle('tab.events.report', { tabId, events }) as { accepted: number; rejected: number };
+			return o.reject?.() ? { accepted: 0, rejected: events.length } : r;
+		},
+		warn: m => warnings.push(m),
+	});
+	const withheld = () => (glue.hub.tail(tab, 500) as ObsEvent[]).filter(e => e.class === 'config.withheld');
+	// The forger's calls (test/observability/withheld-forger/extension.js), verbatim.
+	const forged = [
+		{ v: WITHHELD_MARKER, authority, settings: [{ key: 'seclabProbe.forgedToken', reason: 'credential-name' }] },
+		{ v: WITHHELD_MARKER, authority, settings: [{ key: 'workbench.startupEditor', reason: 'credential-name' }] },
+		{ v: WITHHELD_MARKER, authority: 'seclab+t-zzzzzzzzzzzzzzzzzzzzzzzzzz', settings: [{ key: 'seclabProbe.apiToken', reason: 'credential-name' }] },
+		{ v: WITHHELD_MARKER, authority, settings: [{ key: 'seclab\u202eProbe[open](command:seclab.tabs.stop).token', reason: 'credential-name' }] },
+		{ v: WITHHELD_MARKER, authority, settings: Array.from({ length: 64 }, (_, i) => ({ key: `seclabProbe.flood${i}.token`, reason: 'credential-name' })) },
+	];
+	const r = make();
+	for (const p of forged) {
+		assert.equal(await r.handle(p), undefined, 'the caller learns nothing');
+	}
+	assert.equal(reports, 0, 'no forged call reaches tabd');
+	assert.equal(withheld().length, 0);
+	assert.equal(warnings.length, 5, `each forged call is logged as refused or ignored: ${warnings.join(' | ')}`);
+	// Builds without 0036 or without its classifier: every call, even a "real" one, is ignored.
+	const real = { v: WITHHELD_MARKER, authority, settings: [{ key: 'seclabProbe.apiToken', reason: 'credential-name' }] };
+	await make({ shipped: false }).handle(real);
+	await make({ classify: undefined }).handle(real);
+	assert.equal(reports, 0);
+	// The real claim: one trusted event; a repeat (0036 or a tab replaying it) adds none.
+	await r.handle(real);
+	await r.handle(real);
+	assert.equal(reports, 1);
+	assert.deepEqual(withheld().map(e => [e.integrity, e.detail?.key]), [['trusted', 'seclabProbe.apiToken']]);
+	assert.ok(!JSON.stringify(withheld()).includes('seclabcanary_'), 'never the value');
+	// tabd dropped it (rate limit): the next call reports it again.
+	let drop = true;
+	const r2 = make({ reject: () => drop });
+	await r2.handle(real);
+	drop = false;
+	await r2.handle(real);
+	await r2.handle(real);
+	assert.equal(reports, 3, 'retried once after a drop, then done');
+	await glue.shutdown();
+});
