@@ -225,6 +225,12 @@ Dialogs cancelled in background mode answer with their `cancelId`, which
     steal, `BackgroundOnly`, every window click-through and below normal;
   - the full battery: every step ran through `server-connection-lost`, plus the host
     renderer steps, with no steal.
+- **Result, branch build 42707557651 (`eff9437`, with the LLL fixes):** the full battery ran
+  every step with no steal: `BackgroundOnly`, two windows, both click-through and both below
+  normal. The Space run stopped itself as invalid three times, because its keystrokes didn't
+  change the Space (the LLL-5 check). It didn't run on this build. The fixes since
+  `0a3c210` only pin APIs nothing calls and sanitise a log line; the activation policy and the
+  window level are unchanged.
 
   The accessory build's steal above is the control; it isn't reproduced on purpose, because
   that would take the user's focus again.
