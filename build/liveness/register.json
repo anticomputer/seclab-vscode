@@ -1,73 +1,192 @@
 {
 	"$comment": "Liveness register (EDR 20261109-liveness-gate; checked by build/liveness/liveness.ts in workflow-lint). `entry`: declarations a host calls, which are live and make what they reach live. `exempt`: exported values nothing that runs reaches, each naming the consumer that uses it (it must exist and use the symbol in code) or `consumer: null` with the reason (printed on every run). `subjects`: everything that only matters if something runs it (dispatch-only workflows, test hooks, fixtures, test extensions), each with what runs it and evidence it ran: a GitHub Actions `run` (verified in CI), a `ci` mark its runner records in the named job, or a `record` in a doc that names the subject id.",
 	"entry": [
-		{ "subject": "extensions/seclab-tab-manager/src/extension.ts#activate", "calledBy": "VS Code, on the extension's activation events", "declaredIn": "extensions/seclab-tab-manager/package.json" },
-		{ "subject": "extensions/seclab-tab-manager/src/extension.ts#deactivate", "calledBy": "VS Code, when the extension host stops", "declaredIn": "extensions/seclab-tab-manager/package.json" }
+		{
+			"subject": "extensions/seclab-tab-manager/src/extension.ts#activate",
+			"calledBy": "VS Code, on the extension's activation events",
+			"declaredIn": "extensions/seclab-tab-manager/package.json"
+		},
+		{
+			"subject": "extensions/seclab-tab-manager/src/extension.ts#deactivate",
+			"calledBy": "VS Code, when the extension host stops",
+			"declaredIn": "extensions/seclab-tab-manager/package.json"
+		}
 	],
 	"exempt": [
-		{ "subject": "tabd/src/scan.ts#scannerProblem", "consumer": "tabd/test/unit.test.ts", "reason": "Test entry to checkScanner, which scanWorkspace runs before every mount. The supervisor called it until 0ae1eeb moved the check into scanWorkspace." },
-		{ "subject": "tabd/src/cfs-config.ts#loadCfsConfig", "consumer": "build/cfs-config.ts", "reason": "The host CLI's check/get/write and every local CFS build (broker/tools/pybuild.sh) load the config through it; tabd's CFS policy will too (EDR cfs-config-outside-repo)." },
-		{ "subject": "tabd/src/cfs-config.ts#validateCfsConfig", "consumer": "build/cfs-config.ts", "reason": "The CLI validates what it writes and runs the shared vectors through it." },
-		{ "subject": "tabd/src/cfs-config.ts#cfsConfigPath", "consumer": "build/cfs-config.ts", "reason": "The CLI writes the config where the readers look." },
-		{ "subject": "tabd/src/cfs-config.ts#CfsConfigError", "consumer": "build/cfs-config.ts", "reason": "The CLI reports validator refusals by this type, and only their messages, which never carry a value." },
-		{ "subject": "tabd/src/cfs-config.ts#CFS_RULES", "consumer": "build/cfs-config.ts", "reason": "The CLI extracts the feed URLs from gh cfs output with the validator's own shapes." },
-		{ "subject": "tabd/src/cfs-config.ts#CFS_FIELDS", "consumer": "build/cfs-config.ts", "reason": "The CLI's `get FIELD` accepts only these fields." },
-		{ "subject": "tabd/src/cfs-config.ts#CFS_GUID", "consumer": "build/cfs-config.ts", "reason": "The CLI extracts the tenant from gh cfs output with it." },
-		{ "subject": "tabd/src/cfs-config.ts#CFS_HOST", "consumer": "build/cfs-config.ts", "reason": "The CLI refuses to write a feed on any other host." }
+		{
+			"subject": "tabd/src/scan.ts#scannerProblem",
+			"consumer": "tabd/test/unit.test.ts",
+			"reason": "Test entry to checkScanner, which scanWorkspace runs before every mount. The supervisor called it until 0ae1eeb moved the check into scanWorkspace."
+		},
+		{
+			"subject": "tabd/src/cfs-config.ts#loadCfsConfig",
+			"consumer": "build/cfs-config.ts",
+			"reason": "The host CLI's check/get/write and every local CFS build (broker/tools/pybuild.sh) load the config through it; tabd's CFS policy will too (EDR cfs-config-outside-repo)."
+		},
+		{
+			"subject": "tabd/src/cfs-config.ts#validateCfsConfig",
+			"consumer": "build/cfs-config.ts",
+			"reason": "The CLI validates what it writes and runs the shared vectors through it."
+		},
+		{
+			"subject": "tabd/src/cfs-config.ts#cfsConfigPath",
+			"consumer": "build/cfs-config.ts",
+			"reason": "The CLI writes the config where the readers look."
+		},
+		{
+			"subject": "tabd/src/cfs-config.ts#CfsConfigError",
+			"consumer": "build/cfs-config.ts",
+			"reason": "The CLI reports validator refusals by this type, and only their messages, which never carry a value."
+		},
+		{
+			"subject": "tabd/src/cfs-config.ts#CFS_RULES",
+			"consumer": "build/cfs-config.ts",
+			"reason": "The CLI extracts the feed URLs from gh cfs output with the validator's own shapes."
+		},
+		{
+			"subject": "tabd/src/cfs-config.ts#CFS_FIELDS",
+			"consumer": "build/cfs-config.ts",
+			"reason": "The CLI's `get FIELD` accepts only these fields."
+		},
+		{
+			"subject": "tabd/src/cfs-config.ts#CFS_GUID",
+			"consumer": "build/cfs-config.ts",
+			"reason": "The CLI extracts the tenant from gh cfs output with it."
+		},
+		{
+			"subject": "tabd/src/cfs-config.ts#CFS_HOST",
+			"consumer": "build/cfs-config.ts",
+			"reason": "The CLI refuses to write a feed on any other host."
+		}
 	],
 	"subjects": [
 		{
 			"id": "workflow:deps-updates",
 			"runBy": "schedule (Mondays 06:17 UTC) and workflow_dispatch: ./seclab deps outdated, then one tracking issue",
-			"evidence": [{ "run": 43247709454, "workflow": "deps-updates.yml", "sha": "5943146cbfc04c30158ba0079ede36a07246648e", "date": "2026-11-12" }]
+			"evidence": [
+				{
+					"run": 43247709454,
+					"workflow": "deps-updates.yml",
+					"sha": "5943146cbfc04c30158ba0079ede36a07246648e",
+					"date": "2026-11-12"
+				}
+			]
 		},
 		{
 			"id": "hook:containment/rogue-reh",
 			"runBy": "build-macos.yml dispatched with test_variant=containment applies it (build/test-variant.sh); test/builds/rogue-reh-arming.ts arms it in a real OCI tab of that REH",
 			"evidence": [
-				{ "run": 43247714332, "workflow": "build-macos.yml", "job": "reh (test variant)", "sha": "5943146cbfc04c30158ba0079ede36a07246648e", "date": "2026-11-12" },
-				{ "record": "docs/edr/20261109-liveness-gate.md", "date": "2026-11-06" }
+				{
+					"run": 43247714332,
+					"workflow": "build-macos.yml",
+					"job": "reh (test variant)",
+					"sha": "5943146cbfc04c30158ba0079ede36a07246648e",
+					"date": "2026-11-12"
+				},
+				{
+					"record": "docs/edr/20261109-liveness-gate.md",
+					"date": "2026-11-06"
+				}
 			]
 		},
 		{
 			"id": "fixture:test/containment/fixtures/malicious-workspace",
 			"runBy": "./seclab test containment oci (test/containment/run.ts triggers each vector in the tab)",
-			"evidence": [{ "ci": "ci-linux.yml#oci", "mark": "containment:malicious-workspace", "runner": "test/containment/run.ts" }]
+			"evidence": [
+				{
+					"ci": "ci-linux.yml#oci",
+					"mark": "containment:malicious-workspace",
+					"runner": "test/containment/run.ts"
+				}
+			]
 		},
 		{
 			"id": "fixture:test/containment/fixtures/contagious-interview",
 			"runBy": "./seclab test containment oci (test/containment/campaign.ts, its own tab)",
-			"evidence": [{ "ci": "ci-linux.yml#oci", "mark": "containment:contagious-interview", "runner": "test/containment/campaign.ts" }]
+			"evidence": [
+				{
+					"ci": "ci-linux.yml#oci",
+					"mark": "containment:contagious-interview",
+					"runner": "test/containment/campaign.ts"
+				}
+			]
 		},
 		{
 			"id": "fixture:test/observability/fixtures/loader-workspace",
 			"runBy": "./seclab test obs oci (test/observability/loader.ts assembles the loader inside the tab)",
-			"evidence": [{ "ci": "ci-linux.yml#oci", "mark": "obs:loader-workspace", "runner": "test/observability/run.ts" }]
+			"evidence": [
+				{
+					"ci": "ci-linux.yml#oci",
+					"mark": "obs:loader-workspace",
+					"runner": "test/observability/run.ts"
+				}
+			]
 		},
 		{
 			"id": "fixture:test/containment/rogue-extension",
 			"runBy": "test/containment/check-evidence.ts prepare|check, with the editor launched by test/window.ts (macOS, local only)",
-			"evidence": [{ "record": "docs/edr/20261109-liveness-gate.md", "date": "2026-11-09" }]
+			"evidence": [
+				{
+					"record": "docs/edr/20261109-liveness-gate.md",
+					"date": "2026-11-09"
+				}
+			]
 		},
 		{
 			"id": "fixture:test/focus/probe-extension",
 			"runBy": "test/focus/probe.ts prepare|check, with the editor launched by test/window.ts (macOS, local only)",
-			"evidence": [{ "record": "docs/edr/20261109-liveness-gate.md", "date": "2026-11-09" }]
+			"evidence": [
+				{
+					"record": "docs/edr/20261109-liveness-gate.md",
+					"date": "2026-11-09"
+				}
+			]
 		},
 		{
 			"id": "fixture:test/agentic/runner/mitm-extension",
 			"runBy": "test/agentic/runner/runner.ts (macOS editor, sbx tab, local only)",
-			"evidence": [{ "record": "docs/edr/20261109-liveness-gate.md", "date": "2026-11-06" }]
+			"evidence": [
+				{
+					"record": "docs/edr/20261109-liveness-gate.md",
+					"date": "2026-11-06"
+				}
+			]
 		},
 		{
 			"id": "fixture:test/observability/withheld-forger",
 			"runBy": "test/observability/withheld-probe.ts (macOS editor, sbx tab, local only; --forged-only without patch 0036)",
-			"evidence": [{ "record": "docs/edr/20261109-settings-withheld-notice.md", "date": "2026-11-10" }]
+			"evidence": [
+				{
+					"record": "docs/edr/20261109-settings-withheld-notice.md",
+					"date": "2026-11-10"
+				}
+			]
 		},
 		{
 			"id": "fixture:test/docsync/probe-extension",
 			"runBy": "test/docsync/probe.ts prepare|seed|check, with the editor launched by test/window.ts (macOS, sbx, local only)",
-			"evidence": [{ "record": "docs/edr/20261109-document-sync-provenance.md", "date": "2026-11-10" }]
+			"evidence": [
+				{
+					"record": "docs/edr/20261109-document-sync-provenance.md",
+					"date": "2026-11-10"
+				}
+			]
+		},
+		{
+			"id": "hook:agentic-browser/browser-drive",
+			"runBy": "build-macos.yml dispatched with test_variant=agentic-browser applies it (build/test-variant.sh); test/agentic/browser/run.ts arms it on the host and the window drives a browser view (macOS editor, sbx tab, local only)",
+			"evidence": [
+				{
+					"run": 42655057209,
+					"workflow": "build-macos.yml",
+					"job": "macos (test variant)",
+					"sha": "27e08a26054798f5a7f6bf6d961c4832659a7a8f",
+					"date": "2026-11-09"
+				},
+				{
+					"record": "docs/edr/20261106-increment-2-remote-proxy.md"
+				}
+			]
 		}
 	]
 }
