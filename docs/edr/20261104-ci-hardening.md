@@ -6,7 +6,7 @@
 - **Related:** [EDR docs-check](20261104-docs-check.md), [EDR patch series](20261104-patch-series.md), security review [CI hardening](../security-reviews/20261104-ci-hardening.md)
 
 ## Context
-CI builds the macOS app that the user runs unsigned, with quarantine cleared. It
+CI builds the unsigned macOS app that the user runs. It
 also gates `main` for three sessions. A compromised workflow, action, image or
 cache would therefore reach the user's machine directly. Already in place:
 - actions pinned to full SHAs;

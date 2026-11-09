@@ -27,3 +27,6 @@ test/agentic/ahp/ahp_inventory.py:non-test-host
 # The consented /copilot_internal/user field-name measurement (user-approved 2026-11-06): the
 # device-code sign-in endpoints of the editor's own GitHub app, used only with --real.
 test/agentic/ahp/user-fields.ts:non-test-host
+# The focus probe's Space switches (path c, user-approved 2026-11-09): System Events keystrokes
+# Ctrl+Left/Right only; no setting is read or changed.
+test/focus/spaces.ts:persistence

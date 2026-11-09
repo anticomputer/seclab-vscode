@@ -8,7 +8,7 @@
   - repo Actions settings;
   - `build/prepare.sh`: the automatic-tasks guard.
 - **Threat:** a compromised or unreviewed workflow, action, image, cache or commit
-  reaches the unsigned app that the user runs with quarantine cleared, or a PR gets a
+  reaches the unsigned app that the user runs, or a PR gets a
   token.
 - **Decision records:** [EDR ci-hardening](../edr/20261104-ci-hardening.md), [EDR automatic-tasks-off](../edr/20261104-automatic-tasks-off.md).
 - **Reviewer:** `security-review` agent.
