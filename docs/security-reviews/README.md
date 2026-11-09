@@ -100,7 +100,7 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-09 | [background-only windows (focus path c)](20261109-background-only-windows.md) | round LLL, c32e1c7, 0a3c210, 841b7a1 and their fixes: | see record |
 | 2026-11-09 | [broker dependency bumps past the CFS hold (round 16)](20261109-broker-dependency-bumps.md) | - "broker: bump fastjsonschema to 2.22.3 and platformdirs to 4.14.3": the | see record |
 | 2026-11-09 | [deps-updates container mounts and the mount lint (round JJJ)](20261109-deps-updates-mounts.md) | round JJJ, 3b2416f and its fixes: | see record |
-| 2026-11-09 | [patch 0035, host documents don't sync into a tab](20261109-document-sync-provenance.md) | - Round 1: origin/main..a6c6a66. Areas: patch 0035 (seclabDocumentOrigin.ts, and the | see record |
+| 2026-11-09 | [patch 0035, host documents don't sync into a tab](20261109-document-sync-provenance.md) | origin/main..branch head: patch 0035, sole-consumer.json and test/docsync, four rounds. | see record |
 | 2026-11-09 | [Level B repair and the portable data dir](20261109-level-b-repair.md) | round NNN, 8f1f030 and b042f94, and their fixes: | see record |
 | 2026-11-09 | [the liveness gate (round KKK)](20261109-liveness-gate.md) | round KKK, eab5cb8 (rebased as 991e818) and its fixes: | see record |
 | 2026-11-09 | [liveness-refresh workflow](20261109-liveness-refresh.md) | round MMM, 5cf2152 and its fixes: | see record |
