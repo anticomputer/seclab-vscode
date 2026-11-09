@@ -55,6 +55,11 @@
 			"id": "fixture:test/observability/withheld-forger",
 			"runBy": "test/observability/withheld-probe.ts (macOS editor, sbx tab, local only; --forged-only without patch 0036)",
 			"evidence": [{ "record": "docs/edr/20261109-settings-withheld-notice.md", "date": "2026-11-10" }]
+		},
+		{
+			"id": "fixture:test/docsync/probe-extension",
+			"runBy": "test/docsync/probe.ts prepare|seed|check, with the editor launched by test/window.ts (macOS, sbx, local only)",
+			"evidence": [{ "record": "docs/edr/20261109-document-sync-provenance.md", "date": "2026-11-10" }]
 		}
 	]
 }

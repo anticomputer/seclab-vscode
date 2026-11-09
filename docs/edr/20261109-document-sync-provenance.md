@@ -138,6 +138,10 @@ second sender of document text fails `patch-build`.
   scheme squatting.
 
 ## Evidence
+- **`fixture:test/docsync/probe-extension`:** `test/docsync/probe.ts` against main build
+  42302662001 (`87efb67`), 2026-11-09, three runs. The last run ran every step and failed as
+  designed on the baseline (below).
+
 **Measurement and baseline** (main build `87efb67`, Actions run 42302662001, attested; sbx tab;
 `node test/docsync/probe.ts prepare|seed|check` with a background launch through
 `test/window.ts`). These are the documents the probe extension in the tab saw during ordinary use,
