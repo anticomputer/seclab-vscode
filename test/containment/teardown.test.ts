@@ -14,8 +14,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { checkIsolatedProfile, NODE_IMAGE } from '../harness.ts';
-import { reapPreviousRun, runLeftovers, runProcesses, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
+import { checkIsolatedProfile, NODE_IMAGE, repoRoot } from '../harness.ts';
+import { reapPreviousRun, runLeftovers, runProcesses, strayHelpers, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
 
 const repo = path.resolve(import.meta.dirname, '../..');
 const base = path.join(repo, '.work', 'teardown-test');
@@ -219,6 +219,33 @@ for (const d of decoys) {
 	} catch { /* gone */ }
 }
 
+// THE LEAKED-HELPER REGRESSION. A beacon was spawned, its liveness probe failed, the runner
+// exited on that failure BEFORE `writeManifest`, and the listener survived with nothing
+// anywhere recording it. Teardown and clean-host both reported the host clean, because both
+// ask the manifest what to look for. The net must not depend on the manifest.
+{
+	const leakLog = path.join(runDir, 'leak.log');
+	const leak = spawn(process.execPath,
+		[path.join(repoRoot, 'test', 'containment', 'beacon.ts'), 'start', leakLog, '18231'],
+		{ detached: true, stdio: 'ignore' });
+	leak.unref();
+	const until = Date.now() + 8000;
+	while (!strayHelpers().some(p => p.pid === leak.pid) && Date.now() < until) {
+		spawnSync('sleep', ['0.2']);
+	}
+	check('a leaked helper with no manifest entry is still found', strayHelpers().some(p => p.pid === leak.pid),
+		`pid ${leak.pid}`);
+	try {
+		process.kill(leak.pid!, 'SIGKILL');
+	} catch { /* gone */ }
+	const gone = Date.now() + 8000;
+	while (strayHelpers().some(p => p.pid === leak.pid) && Date.now() < gone) {
+		spawnSync('sleep', ['0.2']);
+	}
+	// ...and not always-true: once it is dead it is no longer reported.
+	check('and a dead helper is not reported as a stray', !strayHelpers().some(p => p.pid === leak.pid));
+}
+
 for (const pid of [editor.pid!, helper]) {
 	try {
 		process.kill(pid, 'SIGKILL');
@@ -227,3 +254,4 @@ for (const pid of [editor.pid!, helper]) {
 fs.rmSync(base, { recursive: true, force: true });
 console.log(failures === 0 ? '\nteardown regression holds' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
+

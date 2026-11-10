@@ -281,6 +281,13 @@ if (mode === 'prepare') {
 	fs.mkdirSync(armDir, { recursive: true, mode: 0o700 });
 	const port = await beaconPort();
 	const beacon = beaconSpawn(repoRoot, beaconLog, port);
+	// RECORDED BEFORE IT IS SPAWNED. A helper that exists but is not in the manifest is
+	// invisible to teardown and to clean-host, and this is exactly how a beacon was once
+	// left running on the user's machine: it was spawned here, its liveness probe below
+	// failed, and the runner exited on that failure before the manifest was written. The
+	// snapshot and the rest of the manifest follow, but the mark goes down first.
+	writeSnapshot(base);
+	writeManifest(base, { driver, userDataDir: userData, stateDirs: [stateDir], commandMarks: [beacon.mark] });
 	spawn(process.execPath, beacon.argv, { detached: true, stdio: 'ignore' }).unref();
 	// LIVENESS, opening half. Without it a beacon that never bound produces exactly the
 	// evidence a contained build produces, so "no hit" would prove nothing.
@@ -293,11 +300,11 @@ if (mode === 'prepare') {
 	}
 	if (!live) {
 		console.error(`prepare: the host beacon never answered on 127.0.0.1:${port}; refusing to measure.`);
+		// Stop what we started before giving up: this exact path leaked a listener once.
+		teardownGate(base);
 		process.exit(1);
 	}
 	console.log(`prepare: host beacon live on 127.0.0.1:${port}`);
-	writeSnapshot(base);
-	writeManifest(base, { driver, userDataDir: userData, stateDirs: [stateDir], commandMarks: [beacon.mark] });
 
 	// The probe URL. Loopback, and unique to this run so a hit cannot be anything else.
 	// `127.0.0.1` resolves to a DIFFERENT machine depending on who fetches it: the host's
