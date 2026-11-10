@@ -6,24 +6,22 @@
 // is blocked, and it can fail while the request still went out. A beacon hit is
 // the evidence.
 //
-// Binds 127.0.0.1 by default. It is a test oracle, not a service.
+// Binds 127.0.0.1 only. It is a test oracle, not a service.
 //
-// A probe that runs INSIDE a tab cannot use a loopback beacon as evidence: from
-// inside the sbx, `127.0.0.1` is the guest's own loopback, so "no hit" is
-// ambiguous between "contained" and "the address never meant the host". Such a
-// probe passes an explicit bind address, which must be a PRIVATE (RFC 1918)
-// address of this host, so that it is reachable from the host side and denied by
-// a tab's fence, which allows the broker port alone. The guard below refuses
-// anything else, so a run can never point the oracle at a routable address.
+// A probe that runs INSIDE a tab cannot read this beacon's silence as evidence:
+// from inside the sbx, `127.0.0.1` is the GUEST's loopback, so "no hit" is
+// ambiguous between "contained" and "that address never meant this host". Such a
+// probe runs a second listener on the same port INSIDE the tab and requires
+// exactly one of the two to have been hit, which turns both outcomes into
+// positive evidence. See test/agentic/browser/run.ts.
 //
-//   node test/containment/beacon.ts start <logfile> [port] [bind]
+//   node test/containment/beacon.ts start <logfile> [port]
 //   node test/containment/beacon.ts hits  <logfile>
 
 import * as fs from 'node:fs';
 import * as http from 'node:http';
-import * as os from 'node:os';
 
-const [mode, logfile, portArg, bindArg] = process.argv.slice(2);
+const [mode, logfile, portArg] = process.argv.slice(2);
 if (!mode || !logfile) {
 	console.error('usage: beacon.ts start <logfile> [port] | hits <logfile>');
 	process.exit(2);
@@ -55,19 +53,6 @@ export function readHits(file: string): Hit[] {
 
 if (mode === 'start') {
 	const port = Number(portArg ?? 18099);
-	// Loopback, or a PRIVATE address this host actually holds. Anything else is
-	// refused: a test oracle must never be reachable from outside this machine,
-	// and a typo must not quietly publish one on a routable address.
-	const bind = bindArg ?? '127.0.0.1';
-	if (bind !== '127.0.0.1') {
-		const isPrivate = /^10\./.test(bind) || /^192\.168\./.test(bind) || /^172\.(1[6-9]|2[0-9]|3[01])\./.test(bind);
-		const held = Object.values(os.networkInterfaces()).flat()
-			.some(i => i && i.family === 'IPv4' && i.address === bind);
-		if (!isPrivate || !held) {
-			console.error(`beacon: refusing to bind ${bind}: not a private address held by this host`);
-			process.exit(2);
-		}
-	}
 	fs.writeFileSync(logfile, '');
 	const server = http.createServer((req, res) => {
 		const hit: Hit = {
@@ -87,8 +72,8 @@ if (mode === 'start') {
 		});
 		res.end('beacon\n');
 	});
-	server.listen(port, bind, () => {
-		console.log(`beacon on http://${bind}:${port} -> ${logfile}`);
+	server.listen(port, '127.0.0.1', () => {
+		console.log(`beacon on http://127.0.0.1:${port} -> ${logfile}`);
 	});
 	const stop = () => { server.close(); process.exit(0); };
 	process.on('SIGTERM', stop);

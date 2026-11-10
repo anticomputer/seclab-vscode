@@ -36,7 +36,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { TabdClient } from '../../../tabd/src/client.ts';
 import { browserProbeChecks } from './verdict.ts';
-import { beaconPort, beaconSelfHit, editorPid, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, lockRun, privateHostAddress, repoRoot } from '../../harness.ts';
+import { beaconPort, beaconSelfHit, editorPid, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, lockRun, repoRoot } from '../../harness.ts';
 import { report } from '../../containment/assert.ts';
 import { beaconSpawn } from '../runner/marks.ts';
 import { reapPreviousRun, teardownGate, writeManifest, writeSnapshot } from '../../containment/teardown.ts';
@@ -48,8 +48,8 @@ const opt = (name: string, fallback?: string): string | undefined => {
 	const i = argv.indexOf(`--${name}`);
 	return i >= 0 ? argv[i + 1] : fallback;
 };
-if ((mode !== 'prepare' && mode !== 'switch-build' && mode !== 'check') || !userDataArg) {
-	console.error('usage: run.ts prepare|switch-build|check <user-data-dir> [--build u|f] [--probe proxy|storage]\n       [--to u|f] [--driver sbx|oci] [--phase first|restore]');
+if ((mode !== 'prepare' && mode !== 'arm' && mode !== 'switch-build' && mode !== 'check') || !userDataArg) {
+	console.error('usage: run.ts prepare|arm|switch-build|check <user-data-dir> [--build u|f] [--probe proxy|storage]\n       [--to u|f] [--driver sbx|oci] [--phase first|restore]');
 	process.exit(2);
 }
 const userData = path.resolve(userDataArg);
@@ -199,6 +199,40 @@ if (mode === 'switch-build') {
 	process.exit(0);
 }
 
+// Start the tab-side listener and only THEN arm the hook. Ordering is the point: `prepare`
+// stops the tab so the editor can take it over, which kills anything running inside it, and
+// the hook polls for the arming file once a second. Arming last means the page is never
+// fetched before both listeners are confirmed live, so "the tab saw nothing" can only mean
+// the page did not go there.
+if (mode === 'arm') {
+	const facts0 = JSON.parse(fs.readFileSync(runFacts, 'utf8'));
+	let up = '';
+	for (let i = 0; i < 60 && !/^[1-9]/.test(up); i++) {
+		const r = tabExec(facts0.tabId, ['sh', '-c',
+			`cd ${ws} && (setsid /opt/seclab-reh/node .seclab-tab-beacon.mjs ${facts0.tabBeaconLog} ${facts0.beaconPort} ${facts0.arm} >> .seclab-tab-beacon.out 2>&1 &) ; ` +
+			`for j in $(seq 1 12); do curl -sS -m 2 -o /dev/null http://127.0.0.1:${facts0.beaconPort}/tab-live-arm-${facts0.arm} && break; sleep 0.25; done; ` +
+			`grep -c tab-live-arm-${facts0.arm} ${facts0.tabBeaconLog} 2>/dev/null || true`]);
+		up = r.stdout.trim();
+		if (!/^[1-9]/.test(up)) {
+			await new Promise(res => setTimeout(res, 2000));
+		}
+	}
+	if (!/^[1-9]/.test(up)) {
+		console.error('arm: the tab-side listener never answered inside the tab; refusing to arm.');
+		process.exit(1);
+	}
+	if (!await beaconSelfHit('127.0.0.1', facts0.beaconPort, `/beacon-live-arm-${facts0.arm}`)) {
+		console.error('arm: the host beacon stopped answering; refusing to arm.');
+		process.exit(1);
+	}
+	fs.mkdirSync(armDir, { recursive: true, mode: 0o700 });
+	fs.writeFileSync(path.join(armDir, 'targets'),
+		`arm=${facts0.arm}\nurl=${facts0.probeUrl}\nready=${facts0.sentinel}\nuntil=${Date.now() + 10 * 60_000}\n`, { mode: 0o600 });
+	console.log('arm: both listeners live, hook armed.');
+	console.log(`then, after about 45s:  node test/agentic/browser/run.ts check ${userData}`);
+	process.exit(0);
+}
+
 if (mode === 'prepare') {
 	const build = (opt('build') ?? '') as 'u' | 'f';
 	if (build !== 'u' && build !== 'f') {
@@ -246,41 +280,32 @@ if (mode === 'prepare') {
 	fs.rmSync(armDir, { recursive: true, force: true });
 	fs.mkdirSync(armDir, { recursive: true, mode: 0o700 });
 	const port = await beaconPort();
-	const beaconAddress = privateHostAddress();
-	if (!beaconAddress) {
-		console.error('prepare: this host has no private IPv4 address, so the beacon cannot be\n' +
-			'distinguished from the tab\'s own loopback. Refusing to run a probe that could not fail.');
-		process.exit(2);
-	}
-	const beacon = beaconSpawn(repoRoot, beaconLog, port, beaconAddress);
+	const beacon = beaconSpawn(repoRoot, beaconLog, port);
 	spawn(process.execPath, beacon.argv, { detached: true, stdio: 'ignore' }).unref();
 	// LIVENESS, opening half. Without it a beacon that never bound produces exactly the
-	// evidence a contained build produces, so "no hit" would prove nothing (security review
-	// round 8, finding 4). The check phase closes the bracket, so the measurement happens
-	// between two confirmed-live observations.
+	// evidence a contained build produces, so "no hit" would prove nothing.
 	let live = false;
 	for (let i = 0; i < 40 && !live; i++) {
-		live = await beaconSelfHit(beaconAddress, port, `/beacon-live-prepare-${arm}`);
+		live = await beaconSelfHit('127.0.0.1', port, `/beacon-live-prepare-${arm}`);
 		if (!live) {
 			await new Promise(res => setTimeout(res, 250));
 		}
 	}
 	if (!live) {
-		console.error(`prepare: the beacon never answered on ${beaconAddress}:${port}; refusing to measure.`);
+		console.error(`prepare: the host beacon never answered on 127.0.0.1:${port}; refusing to measure.`);
 		process.exit(1);
 	}
-	console.log(`prepare: beacon live on ${beaconAddress}:${port}`);
+	console.log(`prepare: host beacon live on 127.0.0.1:${port}`);
 	writeSnapshot(base);
 	writeManifest(base, { driver, userDataDir: userData, stateDirs: [stateDir], commandMarks: [beacon.mark] });
 
-	// The probe URL. A PRIVATE address this host holds, never loopback, and unique to this
-	// run so a hit cannot be anything else. Loopback is useless here: inside the tab
-	// `127.0.0.1` is the GUEST's loopback, so a quiet beacon would be ambiguous between
-	// "the fence contained it" and "that address never meant this host" (security review
-	// round 8, finding 5). A private host address is reachable from the host side and denied
-	// by the tab's fence, which allows the broker port alone. It is also what takes the probe
-	// INSIDE the hook's reviewed validity envelope, which covers non-localhost targets only.
-	const probeUrl = `http://${beaconAddress}:${port}/browser-probe-${arm}`;
+	// The probe URL. Loopback, and unique to this run so a hit cannot be anything else.
+	// `127.0.0.1` resolves to a DIFFERENT machine depending on who fetches it: the host's
+	// loopback for a page on the host network, the guest's for a page inside the tab. That
+	// was the ambiguity behind round 8's finding 5, and it is resolved by listening on BOTH
+	// sides and requiring exactly one of them to have been hit, rather than by trying to
+	// find an address only the host can reach.
+	const probeUrl = `http://127.0.0.1:${port}/browser-probe-${arm}`;
 	fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
 	fs.writeFileSync(path.join(userData, 'seclab-run-build.json'), JSON.stringify({ build, app, buildInfo: JSON.parse(fs.readFileSync(buildInfo, 'utf8')) }, null, '\t'));
 	// The HOST profile leaves both settings alone: the point is that the TAB sets them, and
@@ -352,11 +377,14 @@ if (mode === 'prepare') {
 	}
 	console.log(`prepare: the tab wrote ${wrote.stdout.trim()}`);
 
-	// Arm the build hook, on the HOST. `until` is epoch milliseconds; the hook fails closed
-	// on anything malformed.
-	fs.writeFileSync(path.join(armDir, 'targets'), `arm=${arm}\nurl=${probeUrl}\nready=${sentinel}\nuntil=${Date.now() + 10 * 60_000}\n`, { mode: 0o600 });
+	// The tab-side listener is NOT started here. `prepare` stops the tab (the editor restarts
+	// it), which kills anything running inside, so a listener started now is dead by the time
+	// the page is fetched -- observed, and caught only because its liveness check can fail.
+	// It is started by `arm`, after the editor has the tab up.
+	const tabBeaconLog = path.join(ws, '.seclab-tab-beacon.log');
+	fs.copyFileSync(path.join(repoRoot, 'test', 'agentic', 'browser', 'tab-beacon.mjs'), path.join(ws, '.seclab-tab-beacon.mjs'));
 
-	fs.writeFileSync(runFacts, JSON.stringify({ build, tabId, arm, probeUrl, beaconPort: port, beaconAddress, sentinel, probe }, null, '\t'));
+	fs.writeFileSync(runFacts, JSON.stringify({ build, tabId, arm, probeUrl, beaconPort: port, sentinel, probe, tabBeaconLog }, null, '\t'));
 	// This phase starts from an empty profile, but record the offsets anyway so every phase
 	// reads its own lines by the same rule.
 	fs.writeFileSync(path.join(base, 'offsets-first.json'), JSON.stringify(logFileSizes(userData)));
@@ -367,7 +395,7 @@ if (mode === 'prepare') {
 	console.log(`\nprepared tab ${tabId} for build ${build} (${app})\n`);
 	console.log('now launch the window in the BACKGROUND (never activated; AGENTS.md):\n');
 	console.log(`  ${editorLaunchCommand(userData, folderUri, {}, app)}\n`);
-	console.log(`then, after about 60s:  node test/agentic/browser/run.ts check ${userData}`);
+	console.log(`then, once the window is up:  node test/agentic/browser/run.ts arm ${userData}`);
 	process.exit(0);
 }
 
@@ -375,7 +403,7 @@ if (mode === 'prepare') {
 
 const facts = JSON.parse(fs.readFileSync(runFacts, 'utf8')) as {
 	build: 'u' | 'f'; tabId: string; arm: string; probeUrl: string; beaconPort: number;
-	beaconAddress: string; sentinel: string; probe: 'proxy' | 'storage';
+	sentinel: string; probe: 'proxy' | 'storage'; tabBeaconLog: string;
 };
 const phase = opt('phase', 'first')!;
 
@@ -397,15 +425,18 @@ const probeHits = beaconHits.filter(l => l.includes(`browser-probe-${facts.arm}`
 
 // LIVENESS, closing half: the beacon answered the HOST after the measurement, so a quiet
 // beacon is a statement about the page and not about a dead listener.
-const beaconLiveAfter = await beaconSelfHit(facts.beaconAddress, facts.beaconPort, `/beacon-live-check-${facts.arm}-${phase}`);
+const beaconLiveAfter = await beaconSelfHit('127.0.0.1', facts.beaconPort, `/beacon-live-check-${facts.arm}-${phase}`);
 
-// THE FENCE CONTROL, measured rather than asserted: the tab itself tries the beacon address.
-// It must fail and leave no hit, otherwise the address is bridged to the guest and a quiet
-// beacon would not distinguish "the host never fetched it" from "the tab fetched it".
-const tabControlPath = `/fence-control-${facts.arm}-${phase}`;
-const tabTry = tabExec(facts.tabId, ['curl', '-sS', '-m', '3', '-o', '/dev/null', '-w', '%{http_code}',
-	`http://${facts.beaconAddress}:${facts.beaconPort}${tabControlPath}`]);
-const beaconReachableFromTab = tabTry.status === 0 && /^2\d\d$/.test(tabTry.stdout.trim());
+// THE TAB SIDE. Its log lives in the workspace, which the sandbox mounts at the same
+// absolute path, so it is read directly. Liveness is confirmed the same way as the host's:
+// by a request made from the tab itself, so a listener that died mid-run cannot pass itself
+// off as containment.
+const tabBeaconLines = fs.existsSync(facts.tabBeaconLog)
+	? fs.readFileSync(facts.tabBeaconLog, 'utf8').trim().split('\n').filter(Boolean) : [];
+const tabProbeHits = tabBeaconLines.filter(l => l.includes(`browser-probe-${facts.arm}`)).length;
+const tabLive = tabExec(facts.tabId, ['sh', '-c',
+	`curl -sS -m 3 -o /dev/null http://127.0.0.1:${facts.beaconPort}/tab-live-check-${facts.arm}-${phase} && echo OK`]);
+const tabBeaconLiveAfter = /OK/.test(tabLive.stdout);
 
 // The verdict itself is a pure function with its own defect-injection test, which asserts
 // that each check below can go red ON ITS OWN. Keeping it there rather than inline is what
@@ -416,7 +447,7 @@ const checks = browserProbeChecks({
 	build: facts.build, phase: phase as 'first' | 'restore', probe: facts.probe, tabId: facts.tabId,
 	hookLines, phaseLines: phaseLines.length,
 	probeHits: probeHits.length, beaconHits: beaconHits.length, beaconLiveAfter,
-	beaconReachableFromTab, tabControlHits: readBeacon().filter(l => l.includes(tabControlPath)).length,
+	tabProbeHits, tabBeaconLiveAfter,
 	loggedCommit, expectedCommit: recorded.buildInfo.repoSha,
 });
 const lastResolved = hookLines.filter(l => l.includes(' resolved ')).slice(-1)[0] ?? '';

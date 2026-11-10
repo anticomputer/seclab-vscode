@@ -34,15 +34,41 @@ export type Evidence = {
 	beaconHits: number;
 	/** Whether the beacon answered the HOST after the measurement. */
 	beaconLiveAfter: boolean;
-	/** Whether the TAB could reach the beacon address. It must not be able to. */
-	beaconReachableFromTab: boolean;
-	/** Whether the tab's attempt left a hit, which would mean the address was not fenced. */
-	tabControlHits: number;
+	/** Hits on this run's probe URL recorded by the listener INSIDE the tab. */
+	tabProbeHits: number;
+	/** Whether the tab-side listener answered the tab after the measurement. */
+	tabBeaconLiveAfter: boolean;
 	/** The repo SHA the RUNNING BINARY reported, from its own log line. */
 	loggedCommit: string | undefined;
 	/** The repo SHA the requested build's `build-info-app.json` records. */
 	expectedCommit: string;
 };
+
+/**
+ * EXACTLY ONE SIDE. The probe URL is loopback, and `127.0.0.1` means a different machine
+ * depending on who fetches it, so the two listeners together say where the page ran:
+ *
+ *   host hit, tab quiet -> fetched on the HOST network
+ *   tab hit, host quiet -> fetched INSIDE the tab
+ *   both, or neither    -> inconclusive
+ *
+ * This is what removes absence-based reasoning from the proof. The old form asked only
+ * whether the host beacon was quiet, which a dead listener, a page that never loaded or a
+ * broken probe satisfies just as well as containment does.
+ */
+function sideCheck(e: Evidence, expected: 'host' | 'tab'): Check {
+	const detail = `host ${e.probeHits} hit(s), tab ${e.tabProbeHits} hit(s)`;
+	const exactlyOne = (e.probeHits > 0) !== (e.tabProbeHits > 0);
+	const ok = exactlyOne && (expected === 'host' ? e.probeHits > 0 : e.tabProbeHits > 0);
+	return {
+		vector: 'beacon',
+		name: expected === 'host'
+			? 'and the page was fetched on the HOST, and not inside the tab'
+			: 'and the page was fetched INSIDE THE TAB, and never on the host',
+		ok,
+		detail: exactlyOne ? detail : `${detail}: ${e.probeHits > 0 ? 'both sides saw it' : 'neither side saw it'}, so this run is inconclusive`,
+	};
+}
 
 export function browserProbeChecks(e: Evidence): Check[] {
 	const checks: Check[] = [];
@@ -86,32 +112,35 @@ export function browserProbeChecks(e: Evidence): Check[] {
 	// what made the storage check ride along on the proxy result and never fail on its own.
 	const wrote = e.probe === 'proxy' ? 'enableRemoteProxy=false' : 'dataStorage=global';
 	if (e.phase !== 'restore') {
-		// For the proxy probe, `network=none` on its own is NOT the setting's doing: it is
-		// also what you get when `resolveNetwork` returned nothing, or the authority reported
-		// that it cannot proxy. The hook logs what was REQUESTED, so require that the tab's
-		// network was available and then dropped.
-		const requestedNetwork = /\brequestedNetwork=(\S+)/.exec(e.hookLines.filter(l => l.includes(' opening ')).slice(-1)[0] ?? '')?.[1];
-		const proxyDropped = network === 'none' && requestedNetwork === `seclab+${e.tabId}`;
+		// `network=none` on its own is NOT proof the setting caused it: a missing resolver
+		// produces the same value. The first attempt at a discriminator required
+		// `requestedNetwork=seclab+<tab>` on U, which is UNSATISFIABLE: `resolveNetwork`
+		// returns undefined at the proxy gate itself, so with the proxy off there is no
+		// requested network to see. (Another check that could not pass; found by running it.)
+		// The effective SETTING VALUE, as the window read it, is the discriminator that
+		// works: it is the thing 0017 overrides, and it ties cause to effect directly.
+		const proxySetting = /\bproxySetting=(\S+)/.exec(last)?.[1];
+		const storageSetting = /\bstorageSetting=(\S+)/.exec(last)?.[1];
+		const proxyDropped = network === 'none' && proxySetting === 'false';
 		if (e.build === 'u') {
 			checks.push({
 				vector: 'U', name: `VULNERABLE: the tab's ${wrote} moved the page off the tab`,
-				ok: e.probe === 'proxy' ? proxyDropped : scope === 'global',
-				detail: `resolved scope=${scope} network=${network}, requestedNetwork=${requestedNetwork}`,
+				ok: e.probe === 'proxy' ? proxyDropped : (scope === 'global' && storageSetting === 'global'),
+				detail: `resolved scope=${scope} network=${network}, proxySetting=${proxySetting} storageSetting=${storageSetting}`,
 			});
-			checks.push({
-				vector: 'U', name: 'and the host beacon saw the fetch', ok: e.probeHits > 0,
-				detail: `${e.probeHits} hit(s) for this run's probe URL`,
-			});
+			checks.push(sideCheck(e, 'host'));
 		} else {
 			checks.push({
 				vector: 'F', name: `CONTAINED: 0017 overrode the tab's ${wrote}`,
-				ok: e.probe === 'proxy' ? network === `seclab+${e.tabId}` : scope === 'ephemeral',
-				detail: `resolved scope=${scope} network=${network}, expected ${e.probe === 'proxy' ? `network seclab+${e.tabId}` : 'scope ephemeral'}`,
+				// BOTH the override and its effect: the window must have read the fixed value
+				// despite the tab writing the hostile one, AND the view must have got the
+				// network or scope that value implies.
+				ok: e.probe === 'proxy'
+					? proxySetting === 'true' && network === `seclab+${e.tabId}`
+					: storageSetting === 'ephemeral' && scope === 'ephemeral',
+				detail: `resolved scope=${scope} network=${network}, proxySetting=${proxySetting} storageSetting=${storageSetting}`,
 			});
-			checks.push({
-				vector: 'F', name: 'and the host beacon saw nothing', ok: e.probeHits === 0,
-				detail: `${e.probeHits} hit(s); total beacon hits ${e.beaconHits}`,
-			});
+			checks.push(sideCheck(e, 'tab'));
 		}
 	}
 
@@ -139,11 +168,7 @@ export function browserProbeChecks(e: Evidence): Check[] {
 			ok: e.build === 'u' ? scope === 'global' : scope === 'ephemeral',
 			detail: `restored scope=${scope} network=${network}, host hits ${e.probeHits}`,
 		});
-		checks.push({
-			vector: 'restore', name: e.build === 'u' ? 'and the host beacon saw the restored fetch' : 'and the host beacon saw nothing',
-			ok: e.build === 'u' ? e.probeHits > 0 : e.probeHits === 0,
-			detail: `${e.probeHits} hit(s)`,
-		});
+		checks.push(sideCheck(e, e.build === 'u' ? 'host' : 'tab'));
 	}
 
 	// Liveness. Without it, a beacon that never bound produces exactly the evidence a
@@ -152,17 +177,9 @@ export function browserProbeChecks(e: Evidence): Check[] {
 		vector: 'beacon', name: 'the beacon was still listening after the measurement',
 		ok: e.beaconLiveAfter, detail: 'host-side self-hit',
 	});
-	// THE FENCE, MEASURED. Every "the beacon saw nothing" above means "the page was not
-	// fetched from the host" only if the tab could not have reached that address anyway.
-	// That was asserted in three places and measured in none; a beacon bound to a bridge or
-	// vmnet gateway IS reachable from the guest, which would reintroduce precisely the
-	// ambiguity the non-loopback address was chosen to remove.
 	checks.push({
-		vector: 'beacon', name: 'the TAB cannot reach the beacon address (so a quiet beacon means the host)',
-		ok: !e.beaconReachableFromTab && e.tabControlHits === 0,
-		detail: e.beaconReachableFromTab
-			? 'the tab reached it: this address is bridged to the guest, and the probe cannot distinguish host from tab'
-			: `tab denied, ${e.tabControlHits} hit(s) from the tab`,
+		vector: 'beacon', name: 'the tab-side listener was still listening after the measurement',
+		ok: e.tabBeaconLiveAfter, detail: 'tab-side self-hit',
 	});
 	return checks;
 }

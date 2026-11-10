@@ -344,15 +344,34 @@ that makes the corresponding check **able to fail**, and that property is itself
    would persist `ephemeral`, and then F's restore could not fail however broken 0017 was. The
    phase also asserts it really saw `requestedScope=global`, so a run where U failed to persist
    the hostile state is reported as inconclusive rather than as containment.
-6. **A non-loopback beacon, with liveness.** The probe target is now a **private** address
-   this host holds. Loopback cannot serve: inside the sbx, `127.0.0.1` is the guest's own
-   loopback, so a quiet beacon was ambiguous between containment and an address that never
-   referred to the host. The private address is reachable host-side and denied by the tab's
-   fence, which allows the broker port alone, and it also brings the probe inside the hook's
-   reviewed validity envelope, which covers non-localhost targets only. The beacon is probed
-   from the host before the measurement and again after it, so a listener that never bound
-   cannot masquerade as containment. `beacon.ts` refuses any bind address that is not
-   loopback or a private address of this host.
+6. **Two listeners, and exactly one may be hit.** The probe URL is loopback, and `127.0.0.1`
+   means a different machine depending on who fetches it: the host's loopback for a page on
+   the host network, the guest's for a page inside the tab. The first attempt at removing
+   that ambiguity bound the beacon to a private host address, which cannot work here: the
+   address binds, but nothing on the host can then reach it, and getting past that would mean
+   changing the user's host network settings. The ambiguity is instead **resolved** by running
+   a second listener on the same port INSIDE the tab, and requiring exactly one of the two to
+   have seen the probe:
+
+   | host beacon | tab listener | reading |
+   |---|---|---|
+   | hit | quiet | the page was fetched on the HOST network |
+   | quiet | hit | the page was fetched INSIDE the tab |
+   | both, or neither | | inconclusive, and the run says so |
+
+   This is strictly stronger than what it replaced, because it removes absence-based
+   reasoning from the proof altogether: F's result no longer rests on "the host beacon saw
+   nothing", which a dead listener or a page that never loaded satisfies equally well, but on
+   the tab's own listener having seen the fetch. Both listeners are liveness-probed from
+   their own side after the measurement, and each records only requests carrying this run's
+   nonce.
+
+   Ordering matters and was got wrong first: `prepare` stops the tab so the editor can take
+   it over, which kills anything running inside it, so a listener started there is dead by
+   the time the page is fetched. The hook is therefore armed by a separate `arm` step, after
+   the window is up and both listeners are confirmed live. The first real run caught this,
+   because the tab-side liveness check can fail.
+
 7. **The verdict is a pure function with a defect-injection test.** `browserProbeChecks` in
    `test/agentic/browser/verdict.ts` is what the runner calls, and
    `verdict.test.ts` injects each defect 0017 is meant to prevent, one at a time, asserting
@@ -391,3 +410,20 @@ The divergence pushes toward over-stating the vulnerability rather than toward a
 "contained", so it does not weaken the F result; but it is outside the faithfulness envelope
 recorded in the variant's own review, which described the inlined agent creation defaults.
 That document is corrected in the same change.
+
+### What the first real run of the corrected harness found (2026-11-10)
+Two defects, both caught by checks added in this round, before any claim was made:
+
+1. **The tab-side listener was dead during the measurement.** It was started in `prepare`,
+   which then stops the tab so the editor can take it over; that kills everything inside.
+   The host beacon saw the fetch and the tab listener saw nothing, which would have read as a
+   clean U result, but the tab-side liveness check failed and the run was refused. Arming now
+   happens in a separate `arm` step, after both listeners answer.
+2. **The `requestedNetwork` discriminator was unsatisfiable on U.** Round 9 finding 6
+   correctly said `network=none` is not specific to the setting, but the fix required
+   `requestedNetwork=seclab+<tab>` on the same launch — and `resolveNetwork` returns
+   `undefined` at the proxy gate itself, so with the proxy off there is no requested network
+   to see. Another check that could not pass, found only by running it. The discriminator is
+   now the **effective setting value as the window read it**, which the hook logs
+   (`proxySetting=`, `storageSetting=`): that is the thing 0017 overrides, so it ties cause
+   to effect directly. The F checks require both the override and its effect.

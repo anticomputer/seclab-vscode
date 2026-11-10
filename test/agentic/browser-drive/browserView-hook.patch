@@ -1,5 +1,5 @@
 diff --git a/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts b/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
-index cd1678b..fe079ad 100644
+index cd1678b..4010a81 100644
 --- a/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
 +++ b/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
 @@ -35,6 +35,8 @@ import { ChatEditorInput } from '../../chat/browser/widgetHosts/editor/chatEdito
@@ -132,7 +132,7 @@ index cd1678b..fe079ad 100644
  			const requested = createOptions?.session ?? this._resolveSessionRequest(owner, data.session);
  			data = { ...data, session: typeof requested === 'string' ? undefined : requested };
  			const cancellation = new CancellationTokenSource();
-@@ -619,7 +721,18 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
+@@ -619,7 +721,25 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
  				scope = BrowserViewStorageScope.Ephemeral;
  			}
  		}
@@ -147,7 +147,14 @@ index cd1678b..fe079ad 100644
 +		// before any arming file could be read, and harmless outside a run: it is a log line
 +		// in a build that is already marked unreleasable.
 +		const seclabResolved = toBrowserViewSessionOptions(scope, affinity, network);
-+		this.logService.warn(`[SECLAB_TEST_ONLY:browser-drive-hook] resolved scope=${seclabResolved.scope} network=${network?.authority ?? 'none'} requestedScope=${requested.scope} build=${(this.seclabProductService as unknown as { seclabTestBuild?: { repoSha?: string } }).seclabTestBuild?.repoSha ?? 'none'}`);
++		// The two settings AS THIS WINDOW READS THEM. This is the discriminator between "the
++		// setting caused this" and "something else did": `network=none` on its own is also
++		// what a missing resolver produces, and `resolveNetwork` returns undefined at the
++		// proxy gate itself, so the requested network cannot distinguish the two. The
++		// effective values can, and they are what patch 0017 overrides.
++		const seclabProxy = this.configurationService.getValue('workbench.browser.enableRemoteProxy');
++		const seclabStorage = this.configurationService.getValue('workbench.browser.dataStorage');
++		this.logService.warn(`[SECLAB_TEST_ONLY:browser-drive-hook] resolved scope=${seclabResolved.scope} network=${network?.authority ?? 'none'} requestedScope=${requested.scope} proxySetting=${String(seclabProxy)} storageSetting=${String(seclabStorage)} build=${(this.seclabProductService as unknown as { seclabTestBuild?: { repoSha?: string } }).seclabTestBuild?.repoSha ?? 'none'}`);
 +		return { session: seclabResolved, network };
  	}
  

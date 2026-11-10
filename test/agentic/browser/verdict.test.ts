@@ -28,7 +28,7 @@ function evidence(over: Partial<Evidence> = {}): Evidence {
 			resolved('ephemeral', `seclab+${TAB}`),
 		],
 		phaseLines: 40, probeHits: 0, beaconHits: 2, beaconLiveAfter: true,
-		beaconReachableFromTab: false, tabControlHits: 0,
+		tabProbeHits: 1, tabBeaconLiveAfter: true,
 		loggedCommit: SHA, expectedCommit: SHA,
 		...over,
 	};
@@ -41,7 +41,8 @@ function red(e: Evidence): string[] {
 
 /** A resolution line, as the hook emits it. */
 function resolved(scope: string, network: string, requestedScope = scope): string {
-	return `[SECLAB_TEST_ONLY:browser-drive-hook] resolved scope=${scope} network=${network} requestedScope=${requestedScope} build=${SHA}`;
+	const proxy = network === 'none' ? 'false' : 'true';
+	return `[SECLAB_TEST_ONLY:browser-drive-hook] resolved scope=${scope} network=${network} requestedScope=${requestedScope} proxySetting=${proxy} storageSetting=${scope === 'global' ? 'global' : 'ephemeral'} build=${SHA}`;
 }
 
 /** The saved-scope line, logged before patch 0017 can discard the persisted request. */
@@ -66,11 +67,11 @@ test('a clean F run is all green', () => {
 test('a clean U run is all green', () => {
 	// U is vulnerable, so for U "all green" means every vulnerability fired.
 	assert.deepEqual(red(evidence({
-		build: 'u', probe: 'proxy', probeHits: 1,
+		build: 'u', probe: 'proxy', probeHits: 1, tabProbeHits: 0,
 		hookLines: [...evidence().hookLines.slice(0, 2), resolved('workspace', 'none')],
 	})), []);
 	assert.deepEqual(red(evidence({
-		build: 'u', probe: 'storage', probeHits: 1,
+		build: 'u', probe: 'storage', probeHits: 1, tabProbeHits: 0,
 		hookLines: [...evidence().hookLines.slice(0, 2), resolved('global', `seclab+${TAB}`)],
 	})), []);
 });
@@ -112,11 +113,29 @@ test('the restore attributability check keys off the SAVED scope, not the resolv
 	assert.deepEqual(red(e), []);
 });
 
-test('defect: the beacon address is reachable from the tab -> only the fence control goes red', () => {
-	// If the address is bridged into the guest, a quiet beacon no longer distinguishes
-	// "the host never fetched it" from "the tab fetched it", so the run is not evidence.
-	assert.deepEqual(red(evidence({ beaconReachableFromTab: true })),
-		['the TAB cannot reach the beacon address (so a quiet beacon means the host)']);
+test('defect: the page escaped to the host -> only the side check goes red', () => {
+	assert.deepEqual(red(evidence({ probeHits: 1, tabProbeHits: 0 })),
+		['and the page was fetched INSIDE THE TAB, and never on the host']);
+});
+
+test('inconclusive: neither side saw the page -> the side check cannot pass', () => {
+	// The old form read this as containment. It is a page that never loaded, a dead
+	// listener, or a broken probe, and it must not be mistaken for evidence.
+	const names = red(evidence({ probeHits: 0, tabProbeHits: 0 }));
+	assert.ok(names.includes('and the page was fetched INSIDE THE TAB, and never on the host'));
+});
+
+test('inconclusive: both sides saw the page -> the side check cannot pass', () => {
+	assert.ok(red(evidence({ probeHits: 1, tabProbeHits: 1 }))
+		.includes('and the page was fetched INSIDE THE TAB, and never on the host'));
+	assert.ok(red(evidence({ build: 'u', probe: 'proxy', probeHits: 1, tabProbeHits: 1,
+		hookLines: [...evidence().hookLines.slice(0, 2), resolved('workspace', 'none')] }))
+		.includes('and the page was fetched on the HOST, and not inside the tab'));
+});
+
+test('defect: the tab-side listener died -> only its liveness check goes red', () => {
+	assert.deepEqual(red(evidence({ tabBeaconLiveAfter: false })),
+		['the tab-side listener was still listening after the measurement']);
 });
 
 test('defect: a different binary produced the lines -> only the build check goes red', () => {
@@ -124,22 +143,23 @@ test('defect: a different binary produced the lines -> only the build check goes
 	assert.deepEqual(red(evidence({ loggedCommit: undefined })), ['the binary that produced these lines is the requested build']);
 });
 
-test('defect: the proxy was never offered the tab network -> the U proxy claim does not stand', () => {
-	// `network=none` alone is also what a missing resolver or an unsupported authority
-	// produces, neither of which is the setting's doing.
+test('defect: the network was dropped but NOT by the setting -> the U proxy claim does not stand', () => {
+	// `network=none` alone is also what a missing resolver produces. The window must have
+	// actually read `false` for the claim to mean anything.
 	const e = evidence({
-		build: 'u', probe: 'proxy', probeHits: 1,
-		hookLines: [
-			'[SECLAB_TEST_ONLY:browser-drive-hook] ready=yes',
-			`[SECLAB_TEST_ONLY:browser-drive-hook] opening http://192.0.2.10:1/x requestedNetwork=none build=${SHA}`,
-			resolved('workspace', 'none'),
-		],
+		build: 'u', probe: 'proxy', probeHits: 1, tabProbeHits: 0,
+		hookLines: [...evidence().hookLines.slice(0, 2),
+			`[SECLAB_TEST_ONLY:browser-drive-hook] resolved scope=ephemeral network=none requestedScope=ephemeral proxySetting=true storageSetting=ephemeral build=${SHA}`],
 	});
 	assert.deepEqual(red(e), ["VULNERABLE: the tab's enableRemoteProxy=false moved the page off the tab"]);
 });
 
-test('defect: the page escapes to the host network -> only the beacon check goes red', () => {
-	assert.deepEqual(red(evidence({ probeHits: 1 })), ['and the host beacon saw nothing']);
+test('defect: F reads the fixed value but the view still lost the network -> the F proxy claim does not stand', () => {
+	const e = evidence({
+		hookLines: [...evidence().hookLines.slice(0, 2),
+			`[SECLAB_TEST_ONLY:browser-drive-hook] resolved scope=ephemeral network=none requestedScope=ephemeral proxySetting=true storageSetting=ephemeral build=${SHA}`],
+	});
+	assert.ok(red(e).includes("CONTAINED: 0017 overrode the tab's enableRemoteProxy=false"));
 });
 
 test('defect: the beacon was not listening -> only the liveness check goes red', () => {
