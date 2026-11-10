@@ -67,8 +67,7 @@ record() {
 	# record would make the presence check match the record instead of the hook's code.
 	hooks | while IFS=$'\t' read -r id patch marker bundle; do
 		jq -nc --arg id "$id" --arg p "$patch" --arg s "$(sha256 "$ROOT/$patch")" '{id: $id, patch: $p, sha256: $s}'
-	done | jq -sc --arg v "$variant" --arg t "$target" --arg sha "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)" \
-		'{variant: $v, target: $t, repoSha: $sha, hooks: .}'
+	done | jq -sc --arg v "$variant" --arg t "$target" '{variant: $v, target: $t, hooks: .}'
 }
 
 case "$cmd" in
@@ -87,8 +86,9 @@ apply)
 	# identity that can't be mistaken for the release or share its data: name, bundle id, data
 	# folder and URL scheme. The REH keeps its server names (tabd and the tab image use them).
 	tmp="$src/product.json.seclab-test"
-	jq --tab --argjson rec "$rec" --arg t "$target" --arg v "$variant" '
-		.seclabTestBuild = ($rec + {warning: "UNSAFE TEST BUILD: contains test-only hooks; never use as a release"})
+	jq --tab --argjson rec "$rec" --arg t "$target" --arg v "$variant" \
+		--arg sha "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)" '
+		.seclabTestBuild = ($rec + {repoSha: $sha, warning: "UNSAFE TEST BUILD: contains test-only hooks; never use as a release"})
 		| if $t == "desktop" then
 			.nameShort = "seclab-vscode-TEST-\($v)"
 			| .nameLong = "seclab-vscode UNSAFE TEST BUILD (\($v))"
