@@ -153,4 +153,5 @@ allow it for the tab, or deny it.
     from step 0 to `server-connection-lost`; before, it restarted at every step.
   - The `--skip server-connection-lost` variant: no steal. After `restart-extension-host` the
     window stays disconnected: the managed socket factory dies with the local extension host
-    ("No socket factory found for Managed(1)"). This is still open.
+    ("No socket factory found for Managed(1)"). Fixed by patch 0040
+    ([EDR](20261109-ext-host-restart-reresolve.md)).

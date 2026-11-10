@@ -11,6 +11,7 @@ PATCHES="${SECLAB_PATCHES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/
 DEST="${1:?usage: apply-patches.sh DEST|--check}"
 
 listed=""
+numbers=""
 while IFS= read -r line || [ -n "$line" ]; do
 	line="${line%%#*}"
 	line="$(printf '%s' "$line" | tr -d '[:space:]')"
@@ -20,6 +21,10 @@ while IFS= read -r line || [ -n "$line" ]; do
 		*) echo "apply-patches: bad entry in patches/series: $line" >&2; exit 1 ;;
 	esac
 	case " $listed " in *" $line "*) echo "apply-patches: duplicate entry in patches/series: $line" >&2; exit 1 ;; esac
+	# Numbers are reserved per session (header of patches/series): two patches may not share one.
+	num="${line%%-*}"
+	case " $numbers " in *" $num "*) echo "apply-patches: two patches share number $num: $line" >&2; exit 1 ;; esac
+	numbers="$numbers $num"
 	[ -f "$PATCHES/$line" ] || { echo "apply-patches: patches/series lists a missing patch: $line" >&2; exit 1; }
 	listed="$listed $line"
 done < "$PATCHES/series"

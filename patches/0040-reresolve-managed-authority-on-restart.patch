@@ -1,0 +1,45 @@
+diff --git a/src/vs/workbench/services/extensions/common/abstractExtensionService.ts b/src/vs/workbench/services/extensions/common/abstractExtensionService.ts
+index 30f356d..8f22bd6 100644
+--- a/src/vs/workbench/services/extensions/common/abstractExtensionService.ts
++++ b/src/vs/workbench/services/extensions/common/abstractExtensionService.ts
+@@ -30,7 +30,7 @@ import { INotificationService, Severity } from '../../../../platform/notificatio
+ import { NotificationTelemetryId, NotificationActionTelemetryId } from '../../../../platform/notification/common/notificationTelemetry.js';
+ import { IProductService } from '../../../../platform/product/common/productService.js';
+ import { Registry } from '../../../../platform/registry/common/platform.js';
+-import { IRemoteAuthorityResolverService, RemoteAuthorityResolverError, RemoteAuthorityResolverErrorCode, ResolverResult, getRemoteAuthorityPrefix } from '../../../../platform/remote/common/remoteAuthorityResolver.js';
++import { IRemoteAuthorityResolverService, RemoteAuthorityResolverError, RemoteAuthorityResolverErrorCode, RemoteConnectionType, ResolverResult, getRemoteAuthorityPrefix } from '../../../../platform/remote/common/remoteAuthorityResolver.js';
+ import { IRemoteExtensionsScannerService } from '../../../../platform/remote/common/remoteExtensionsScanner.js';
+ import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
+ import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+@@ -958,7 +958,15 @@ export abstract class AbstractExtensionService extends Disposable implements IEx
+ 	}
+ 
+ 	public async startExtensionHosts(updates?: { toAdd: IExtension[]; toRemove: string[] }): Promise<void> {
++		// seclab: a managed remote connection's socket factory lives in the local extension host
++		// that resolved the authority, and stops with it. Resolve again through the new local
++		// host before the remote one connects, or it fails with "No socket factory found".
++		const remoteAuthority = this._environmentService.remoteAuthority;
++		const managedAuthority = remoteAuthority && this._remoteAuthorityResolverService.getConnectionData(remoteAuthority)?.connectTo.type === RemoteConnectionType.Managed ? remoteAuthority : undefined;
+ 		await this._doStopExtensionHosts();
++		if (managedAuthority) {
++			this._remoteAuthorityResolverService._clearResolvedAuthority(managedAuthority);
++		}
+ 
+ 		if (updates) {
+ 			await this._handleDeltaExtensions(new DeltaExtensionsQueueItem(updates.toAdd, updates.toRemove));
+@@ -974,6 +982,15 @@ export abstract class AbstractExtensionService extends Disposable implements IEx
+ 		} finally {
+ 			lock.dispose();
+ 		}
++		if (managedAuthority) {
++			// Not _resolveAuthorityAgain: it clears again, cancelling the request the remote host awaits.
++			try {
++				const result = await this._resolveAuthorityWithLogging(managedAuthority);
++				this._remoteAuthorityResolverService._setResolvedAuthority(result.authority, result.options);
++			} catch (err) {
++				this._remoteAuthorityResolverService._setResolvedAuthorityError(managedAuthority, err);
++			}
++		}
+ 	}
+ 
+ 	private _startOnDemandExtensionHosts(): void {
