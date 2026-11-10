@@ -26,6 +26,9 @@ test('credential names are withheld whatever the value (weak passwords included)
 	assert.equal(withholdReason('probe.clientSecret', ''), 'credential-name');
 	assert.equal(withholdReason('terminal.integrated.env.linux', { PATH: '/usr/bin' }), 'credential-name');
 	assert.equal(withholdReason('http.headers', { Authorization: 'x' }), 'credential-name');
+	// Registered at run time with a changing scope upstream; the name alone must withhold it.
+	assert.equal(withholdReason('http.proxyAuthorization', 'Basic seclabcanary_x'), 'credential-name');
+	assert.equal(withholdReason('http.proxyAuthorization', null), 'credential-name');
 });
 
 test('secret-shaped strings are withheld under a neutral name', () => {
