@@ -31,7 +31,17 @@ jobs:
           test/safety/fixture-lint.sh --self-test
           ./seclab lint fixtures
       - name: Patch queue is exactly patches/series
-        run: build/apply-patches.sh --check
+        run: |
+          build/apply-patches.sh --check
+          # Injection: a second patch reusing a listed number must be refused.
+          d="$RUNNER_TEMP/dup-patches"; rm -rf "$d"; cp -R patches "$d"
+          first=$(grep -E '^[0-9]{4}-' patches/series | head -n 1)
+          cp "$d/$first" "$d/${first%%-*}-duplicate-number.patch"
+          echo "${first%%-*}-duplicate-number.patch" >> "$d/series"
+          if SECLAB_PATCHES_DIR="$d" build/apply-patches.sh --check 2> "$d.err"; then
+            echo "apply-patches accepted two patches numbered ${first%%-*}" >&2; exit 1
+          fi
+          grep -q "two patches share number ${first%%-*}" "$d.err"
       - name: Shipped sources have no test hooks (env/spawn review, dynamic loading)
         run: ./seclab lint source
       - name: Test build variants (EDR test-build-variants)

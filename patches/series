@@ -2,6 +2,14 @@
 # build/prepare.sh applies exactly these and fails on any other file in patches/
 # (EDR patch-series). A change here is a patch-queue change: security review + records.
 # Test-only hooks never go in patches/: they belong to the test harness.
+#
+# Reserved number ranges (one owner each; build/apply-patches.sh fails if two patches share a
+# number):
+#   0001-0004, 0012-0014   fork base
+#   0005-0011, 0030-0034   RPC capability filter
+#   0015-0029              secure agentic experiences
+#   0035-0039              document and config sync
+#   0040-0049              fork build
 0001-build-skip-copilot-shim-without-extension.patch
 0002-extensionkind-product-default.patch
 0003-no-workspace-extensions-in-local-windows.patch
@@ -15,3 +23,5 @@
 0015-seclab-ahp-gate.patch
 # 0030-0034 are reserved for the RPC sessions.
 0035-seclab-document-sync-provenance.patch
+# Fork build: Restart Extension Host re-resolves a managed (seclab+) authority (EDR ext-host-restart-reresolve).
+0040-reresolve-managed-authority-on-restart.patch
