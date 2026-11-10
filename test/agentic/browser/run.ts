@@ -236,12 +236,17 @@ if (mode === 'switch-build') {
 		hostHits: byteSize(beaconLog),
 		tabHits: byteSize(facts0.tabBeaconLog),
 	}));
+	// The listen watcher is a long-lived HOST helper, so it is recorded before the operator
+	// starts it; otherwise teardown reports it as a stray instead of stopping it. The mark
+	// must END with the run directory (teardown rule R-1), so the watcher is invoked with
+	// `--run-dir` last, exactly as the printed command does.
+	writeManifest(base, { commandMarks: [`${path.join(repoRoot, 'test', 'agentic', 'browser', 'run.ts')} listen ${userData} --run-dir ${base}`] });
 	fs.writeFileSync(runFacts, JSON.stringify({ ...facts0, build: to, seededBy: facts0.build }, null, '\t'));
 	fs.writeFileSync(path.join(userData, 'seclab-run-build.json'), JSON.stringify({ build: to, app, buildInfo: JSON.parse(fs.readFileSync(buildInfo, 'utf8')) }, null, '\t'));
 	const folderUri = `vscode-remote://seclab+${facts0.tabId}${ws}`;
 	console.log(`switched the run to build ${to} (${app}); the profile is untouched.\n`);
 	console.log('FIRST start the tab-side listener watcher, in the background:\n');
-	console.log(`  node test/agentic/browser/run.ts listen ${userData} &\n`);
+	console.log(`  node ${path.join(repoRoot, 'test', 'agentic', 'browser', 'run.ts')} listen ${userData} --run-dir ${base} &\n`);
 	console.log('then relaunch the SAME profile in the BACKGROUND:\n');
 	console.log(`  ${editorLaunchCommand(userData, folderUri, {}, app)}\n`);
 	console.log(`then:  node test/agentic/browser/run.ts check ${userData} --phase restore`);
@@ -514,14 +519,26 @@ const beaconLiveAfter = await beaconSelfHit('127.0.0.1', facts.beaconPort, `/bea
 // absolute path, so it is read directly. Liveness is confirmed the same way as the host's:
 // by a request made from the tab itself, so a listener that died mid-run cannot pass itself
 // off as containment.
+const lastResolved = hookLines.filter(l => l.includes(' resolved ')).slice(-1)[0] ?? '';
+const resolvedNetwork = /\bnetwork=(\S+)/.exec(lastResolved)?.[1];
+const resolvedScope = /\bscope=(\S+)/.exec(lastResolved)?.[1];
 const tabPhaseLines = hitsSince(facts.tabBeaconLog, offsets.tabHits);
 const tabProbeHits = tabPhaseLines.filter(l => l.includes(`browser-probe-${facts.arm}`)).length;
 // CONTINUITY, not two point samples: the listener must have beaten throughout the phase, as
 // ONE instance. A restart mid-phase, or a gap, means nothing can be concluded from its
 // silence (security review round 10).
-const beats = tabPhaseLines.map(l => { try { return JSON.parse(l) as { heartbeat?: number; pid?: number }; } catch { return {}; } })
-	.filter(b => b.heartbeat !== undefined);
-const tabBeaconContinuous = beats.length >= 2 && new Set(beats.map(b => b.pid)).size === 1;
+// CONTINUITY from the listener's OWN clock only. Comparing its heartbeats against the
+// window log's timestamps is not sound: the two come from different sources and the editor
+// logs local time while these are UTC, so the first version of this rejected correct runs.
+// Within one clock the question is answerable: were there heartbeats throughout this phase
+// with no gap big enough to hide a page load? A tab restart shows up as a gap, which is
+// exactly what should invalidate the phase.
+const beats = tabPhaseLines.map(l => { try { return JSON.parse(l) as { at?: string; heartbeat?: number }; } catch { return {}; } })
+	.filter((b): b is { at: string; heartbeat: number } => b.heartbeat !== undefined && !!b.at)
+	.map(b => Date.parse(b.at)).sort((x, y) => x - y);
+const HEARTBEAT_GAP_MS = 6_000; // three missed beats at the 2s interval
+const tabBeaconContinuous = beats.length >= 2
+	&& beats.every((t, i) => i === 0 || t - beats[i - 1] <= HEARTBEAT_GAP_MS);
 const tabLive = tabExec(facts.tabId, ['sh', '-c',
 	`curl -sS -m 3 -o /dev/null http://127.0.0.1:${facts.beaconPort}/tab-live-check-${facts.arm}-${phase} && echo OK`]);
 const tabBeaconLiveAfter = /OK/.test(tabLive.stdout);
@@ -538,9 +555,6 @@ const checks = browserProbeChecks({
 	tabProbeHits, tabBeaconLiveAfter: tabBeaconLiveAfter && tabBeaconContinuous,
 	loggedCommit, expectedCommit: recorded.buildInfo.repoSha,
 });
-const lastResolved = hookLines.filter(l => l.includes(' resolved ')).slice(-1)[0] ?? '';
-const resolvedNetwork = /\bnetwork=(\S+)/.exec(lastResolved)?.[1];
-const resolvedScope = /\bscope=(\S+)/.exec(lastResolved)?.[1];
 
 const ok = report(checks);
 fs.writeFileSync(path.join(base, `verdict-${phase}.json`), JSON.stringify({

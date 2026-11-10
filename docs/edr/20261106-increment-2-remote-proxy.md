@@ -538,3 +538,29 @@ Each would have produced a false "contained" or a false "vulnerable":
    listener logs are now read from a per-phase offset, as the window log already was.
 4. Stamping the repo SHA into the hook *record* broke `fetch` verification, which compares
    that record against the local checkout exactly; it goes into product.json at apply time.
+
+### The restore path, re-run under the corrected harness (2026-11-10)
+With the log truncation fixed, the restore phase was run again. It still shows:
+
+- `savedScope=global` — the restored view carried the hostile persisted scope, logged before
+  0017 can discard it;
+- `scope=ephemeral`, `network=seclab+<tab>` — 0017 rebuilt it under the fixed setting;
+- **and still no fetch on either side.**
+
+The remaining cause is now measured rather than guessed, and it is structural. The relaunch
+is what creates the tab, and the tab's listener dies with the old tab, so there is an
+unavoidable window at startup in which no listener exists inside the tab. The restored editor
+loads its page inside that window. The listener's own heartbeats show it: the gap across the
+relaunch exceeds the continuity threshold, which is why the phase correctly refuses to
+conclude anything from the silence.
+
+**So the restore path is proven at resolution and cannot be proven at the network by this
+design.** The resolution evidence is a genuine differential on byte-for-byte identical
+persisted state, and it is the layer 0017 acts on — the scope decides whether the view gets
+the host's shared session or the tab's. But it is not a network observation, and this record
+does not claim one. Closing it needs the page load gated on the listener, which means a hook
+that defers a restored view until an arming file appears: a larger change to the test build
+than this increment needs, and one that would itself have to be reviewed for faithfulness.
+
+The other four runs are unaffected: each gates its page load on arming, which happens only
+once both listeners answer, and each shows continuous heartbeats across its measurement.
