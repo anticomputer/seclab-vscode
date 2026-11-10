@@ -303,3 +303,66 @@ and both teardowns are clean. One host artefact does survive: `~/.seclab-test/`,
 is pre-created before the snapshot so changes beneath it are invisible to the "nothing outside
 the run directory changed" check; the arming file under it is removed only on the restore
 phase, so a run stopped after phase 1 leaves it armed until its ten-minute expiry.
+
+## The corrected proof (design, 2026-11-10)
+Round 8 did not find a defect in 0017; it found that the proof could not see two of the
+three things it claimed. Rather than re-run the same harness, each gap is closed by a change
+that makes the corresponding check **able to fail**, and that property is itself tested.
+
+1. **Attribution by byte offset, not by "the last line".** Each phase records the size of
+   every `.log` in the profile before its launch and reads only what was appended past those
+   offsets. A phase whose window produced nothing therefore reads as nothing and fails,
+   instead of silently inheriting the previous launch's evidence.
+2. **One key per run.** `--probe proxy` writes `enableRemoteProxy: false` with
+   `dataStorage: ephemeral`; `--probe storage` writes `dataStorage: global` with
+   `enableRemoteProxy: true`. Each writes the hostile value for one key and the contained
+   value for the other, so exactly one check decides the run. Writing both at once is what
+   let the storage result ride along on the proxy result: with the proxy off, the network is
+   dropped before the storage scope is consulted at all. `enableRemoteProxy` is written
+   explicitly in both, never left at its default, because that default is
+   `product.quality !== 'stable'` and would otherwise make the storage probe depend on how
+   the variant happened to be branded.
+3. **The hook no longer supplies a session.** Passing `{ scope: Agent }` is precisely what
+   stopped `workbench.browser.dataStorage` from ever being read, because upstream's
+   `_resolveSessionRequest` returns a request that already carries a scope without consulting
+   the configured storage. The hook now opens the way the tool does, and a second, authoritative
+   log line in `_resolveViewSession` records the scope and network upstream actually settled
+   on, after trust, proxy availability and storage isolation have had their say. The old
+   `opening` line recorded only what was asked for.
+4. **The storage result is read off the SCOPE, not the network.** A global scope keeps a
+   network value but hands the view the host's shared session;
+   `toBrowserViewSessionOptions` returns `{ scope }` with no network for `Global`, and
+   upstream documents it as "Browsers using global storage always use the local network". So
+   the network alone cannot distinguish the two keys, and the scope can.
+5. **The restore phase is cross-build, on one profile.** The unconditional log line fires for
+   views the hook never opened, including a browser editor restored from persisted state,
+   which is the only way to observe that path at runtime. Launch 1 runs **U**, which obeys the
+   tab and persists `global`; the relaunch runs **F** against byte-for-byte the same state. So
+   the only difference between the two observations is the patch. Running F's own first launch
+   would persist `ephemeral`, and then F's restore could not fail however broken 0017 was. The
+   phase also asserts it really saw `requestedScope=global`, so a run where U failed to persist
+   the hostile state is reported as inconclusive rather than as containment.
+6. **A non-loopback beacon, with liveness.** The probe target is now a **private** address
+   this host holds. Loopback cannot serve: inside the sbx, `127.0.0.1` is the guest's own
+   loopback, so a quiet beacon was ambiguous between containment and an address that never
+   referred to the host. The private address is reachable host-side and denied by the tab's
+   fence, which allows the broker port alone, and it also brings the probe inside the hook's
+   reviewed validity envelope, which covers non-localhost targets only. The beacon is probed
+   from the host before the measurement and again after it, so a listener that never bound
+   cannot masquerade as containment. `beacon.ts` refuses any bind address that is not
+   loopback or a private address of this host.
+7. **The verdict is a pure function with a defect-injection test.** `browserProbeChecks` in
+   `test/agentic/browser/verdict.ts` is what the runner calls, and
+   `verdict.test.ts` injects each defect 0017 is meant to prevent, one at a time, asserting
+   that **exactly one** check goes red: the proxy force removed, the storage scrub removed,
+   the persisted-request drop removed, a page escaping to the host, a dead beacon, a silent
+   launch, and a restore phase with no hostile saved state. This is the direct answer to
+   round 8: a check that cannot fail is not evidence, and the only way to show one can fail
+   is to make it fail on purpose.
+
+The arming file is now removed on every `check`, not only the last, so a run stopped after
+the first phase no longer leaves it armed until its expiry.
+
+**Status: the corrected harness is written and its own tests pass; the U and F variants have
+not yet been rebuilt against it, so the increment 2 claims above remain as round 8 left
+them.** Landing waits on that run.

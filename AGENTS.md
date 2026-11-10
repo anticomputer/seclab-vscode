@@ -87,8 +87,16 @@ RPC-lockdown session adds. Keep them consistent with this file.
     profiles, or other repos.
   - Use fake `seclabcanary_` values only, and isolated profiles under
     `~/.seclab-test/` or `.work/`.
-  - Network only to the run's loopback beacon, RFC 5737 addresses, `*.test` /
-    `*.invalid` names or the broker.
+  - Network only to the run's own beacon, RFC 5737 addresses, `*.test` /
+    `*.invalid` names or the broker. The beacon binds loopback by default. A
+    probe that runs **inside a tab** may instead bind it to a **private**
+    (RFC 1918) address this host already holds, because from inside the sbx
+    `127.0.0.1` is the guest's own loopback, so a loopback beacon cannot tell
+    "the fence contained it" from "that address never meant the host" and the
+    probe could not fail. `beacon.ts` refuses any address that is not loopback
+    or a private address of this host, so a typo cannot publish the oracle on a
+    routable one. Such a run is briefly reachable on the local network: keep it
+    to the run, and never put anything but the hit log behind it.
   - Fixtures act only when armed by a run's nonce. Teardown checks that watched
     host paths are unchanged.
   - **No file on the host may match an antivirus/EDR signature** for a live-malware

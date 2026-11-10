@@ -1,5 +1,5 @@
 diff --git a/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts b/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
-index cd1678b2..a8fe4089 100644
+index cd1678b..8ed2e3f 100644
 --- a/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
 +++ b/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
 @@ -35,6 +35,7 @@ import { ChatEditorInput } from '../../chat/browser/widgetHosts/editor/chatEdito
@@ -18,7 +18,7 @@ index cd1678b2..a8fe4089 100644
  	) {
  		super();
  		const channel = mainProcessService.getChannel(ipcBrowserViewChannelName);
-@@ -241,6 +243,89 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
+@@ -241,6 +243,97 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
  		void this._browserViewsReady.p.catch(error => {
  			this.logService.error('[BrowserViewWorkbenchService] Failed to initialize browser view event stream.', error);
  		});
@@ -92,11 +92,19 @@ index cd1678b2..a8fe4089 100644
 +			clearInterval(seclabDriveTick);
 +			try {
 +				const network = this.resolveNetwork({ type: 'agent', sessionId: fields.arm });
-+				this.logService.warn(`${seclabDriveMarker} opening ${fields.url} network=${network?.authority ?? 'none'}`);
++				this.logService.warn(`${seclabDriveMarker} opening ${fields.url} requestedNetwork=${network?.authority ?? 'none'}`);
++				// NO explicit `session`. The tool does not pass one either, and passing one
++				// is what made the first version of this probe measure nothing: upstream's
++				// `_resolveSessionRequest` returns a request that already carries a scope
++				// WITHOUT reading `workbench.browser.dataStorage`, so a hook that supplied
++				// `{ scope: Agent }` silently skipped the very setting the probe exists to
++				// measure (security review round 8, finding 2). Omitting it sends the open
++				// down the same path a model-driven open takes, where the configured storage
++				// scope decides the scope, and the scope decides whether the view keeps its
++				// network at all.
 +				await this.createBrowserView({
 +					owner: { type: 'agent', sessionId: fields.arm } as const,
 +					initialAudiences: [{ type: 'agent' }] as const,
-+					session: { scope: BrowserViewStorageScope.Agent, affinity: undefined, network } as const,
 +					initialUrl: fields.url,
 +					openSource: 'cdpCreated',
 +				}, { preserveFocus: true });
@@ -108,3 +116,23 @@ index cd1678b2..a8fe4089 100644
  	}
  
  	resolveNetwork(owner: IBrowserViewOwner): IBrowserViewNetwork | undefined {
+@@ -619,7 +712,18 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
+ 				scope = BrowserViewStorageScope.Ephemeral;
+ 			}
+ 		}
+-		return { session: toBrowserViewSessionOptions(scope, affinity, network), network };
++		// SECLAB_TEST_ONLY: browser-drive hook, second log point. This is the AUTHORITATIVE
++		// one: the `opening` line above records what the hook ASKED for, before upstream
++		// applies workspace trust, proxy availability and storage isolation, any of which
++		// can still drop the network. It also fires for views this hook did not open,
++		// including a browser editor RESTORED from a previous window, which is the only way
++		// to observe the restore path at runtime: that view is recreated from persisted
++		// state with no hook involvement at all. Unconditional, because a restore happens
++		// before any arming file could be read, and harmless outside a run: it is a log line
++		// in a build that is already marked unreleasable.
++		const seclabResolved = toBrowserViewSessionOptions(scope, affinity, network);
++		this.logService.warn(`[SECLAB_TEST_ONLY:browser-drive-hook] resolved scope=${seclabResolved.scope} network=${network?.authority ?? 'none'} requestedScope=${requested.scope}`);
++		return { session: seclabResolved, network };
+ 	}
+ 
+ 	/**
