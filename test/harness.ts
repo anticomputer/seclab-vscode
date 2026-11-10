@@ -35,25 +35,6 @@ export async function beaconPort(): Promise<number> {
 }
 
 /**
- * A PRIVATE address this host holds, for a beacon that must be distinguishable from inside
- * a tab. A loopback beacon cannot serve that purpose: inside the sbx, `127.0.0.1` is the
- * GUEST's loopback, so "no hit" would be ambiguous between "the fence contained it" and
- * "the address never referred to this host in the first place". A private host address is
- * reachable from the host side and denied by a tab's fence, which allows the broker port
- * alone, so the two outcomes are distinct.
- *
- * Returns `undefined` when the host has no private IPv4 (for example, fully offline), so a
- * caller can skip rather than silently fall back to loopback and re-introduce the ambiguity.
- */
-export function privateHostAddress(): string | undefined {
-	const candidates = Object.values(os.networkInterfaces()).flat()
-		.filter((i): i is os.NetworkInterfaceInfo => !!i && i.family === 'IPv4' && !i.internal)
-		.map(i => i.address)
-		.filter(a => /^10\./.test(a) || /^192\.168\./.test(a) || /^172\.(1[6-9]|2[0-9]|3[01])\./.test(a));
-	return candidates.sort()[0];
-}
-
-/**
  * One request to the beacon from the HOST side, used as a liveness control. Without it, a
  * beacon that failed to bind produces exactly the evidence a contained build produces, so a
  * "no hit" result would prove nothing. Callers bracket the measurement with these.

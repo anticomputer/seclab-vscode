@@ -18,8 +18,8 @@ export function markFor(argv: readonly string[]): string {
 	return argv.join(' ');
 }
 
-export function beaconSpawn(repoRoot: string, beaconLog: string, port: number, bind?: string): HelperSpawn {
-	const argv = [path.join(repoRoot, 'test', 'containment', 'beacon.ts'), 'start', beaconLog, String(port), ...(bind ? [bind] : [])];
+export function beaconSpawn(repoRoot: string, beaconLog: string, port: number): HelperSpawn {
+	const argv = [path.join(repoRoot, 'test', 'containment', 'beacon.ts'), 'start', beaconLog, String(port)];
 	return { argv, mark: markFor(argv) };
 }
 
