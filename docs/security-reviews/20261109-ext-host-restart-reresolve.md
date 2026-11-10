@@ -35,3 +35,17 @@ No medium or higher findings; two lows. Confirmed:
 | OOO-1 | Low | overlapping restarts | A second restart during the first's re-resolve saw the authority already cleared, so it skipped the re-resolve; the first then completed the second's request with a factory from a stopped host. Recovery needed a reload. | Fixed | The managed authority is remembered once seen, and each restart takes a generation number; a resolution whose generation is stale is dropped, so only the newest restart completes the request. |
 | OOO-2 | Low | tab-triggered restarts | Until the RPC filter lands, tab code can run `workbench.action.restartExtensionHost` (or the install/uninstall path) through `$executeCommand`. Each restart now re-runs the UI-side resolver, so a tab can repeat the Tab Manager's prompts. Prompt pressure, not a boundary crossing. | Deferred to the RPC filter | Recorded in the EDR as a requirement for the RPC series: deny that command and the extension install/uninstall commands to `seclab+` callers. |
 | — | Residual | reconnect overlap | Upstream's own `_resolveAuthorityAgain` on `onReconnecting` can interleave with a restart. It resolves through the current local host, and the window recovers by reload in the worst case. | Accepted | Upstream behaviour, unchanged by 0040. |
+
+## Round PPP
+`ci-linux`: the attestation-bundle download step (the job's only tokened step) now runs on
+`workflow_dispatch` as well as `push`. Before, every dispatched ci-linux failed in
+`verify-images` (run 42869487133); dispatch run 42871242844 passed with the change. No
+findings. Confirmed:
+- a dispatch needs repo write, like a push; no workflow here holds `actions: write`, and the
+  token stays `contents: read`; `pull_request` still gets no token;
+- the step is still before any repo fixture or privileged sensor (HH-1, XX-1);
+- `GH_TOKEN` is step-scoped and never written to `$GITHUB_ENV`, `$GITHUB_OUTPUT` or a file, and
+  checkout doesn't persist credentials; only public Sigstore bundles land in
+  `.work/attestations`, and `./seclab image oci` verifies them fail-closed;
+- `verify-images.sh --download` reads no event context, and every register value is
+  regex-constrained before it reaches `gh`.
