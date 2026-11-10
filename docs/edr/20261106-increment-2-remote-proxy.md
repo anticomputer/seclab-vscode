@@ -228,22 +228,23 @@ hook actually ran, not just that it was built.
 **The U-vs-F verdict is below, and it holds.**
 
 
-## MEASURED: the U-vs-F proof (2026-11-10)
+## MEASURED: the U-vs-F proof (2026-11-10), and what it does NOT show
+Security review round 8 cut this section down. The first version claimed four things; two are
+measured, two were not, and the review was right. What follows is only what the runs support.
+
 Both runs on the sbx driver, each window launched in the background through `test/window.ts`
-on a build at or after the Spaces focus fix, each ended by the shared teardown gate. The tab
-is hostile in both: before the window starts it writes `enableRemoteProxy: false` and
+on a build at or after the Spaces focus fix, each ended by the teardown gate. The tab is
+hostile in both: before the window starts it writes `enableRemoteProxy: false` and
 `dataStorage: global` into the REH's remote user settings, the layer a tab controls.
 
+### Proven: `enableRemoteProxy` is fixed, and it decides where the page is fetched
 | | U (main + variant, `18c2843`, **no 0017**) | F (branch, `bab99d0`, **with 0017**) |
 |---|---|---|
-| tab's remote settings in force | `ready=yes` | `ready=yes` |
-| network resolved for the page | **`none`** (the host) | **`seclab+t-co3ocz…`** (the tab) |
-| host beacon | **2 hits** | **0 hits** |
-| first phase | 5/5 | 6/6 |
-| with the restored editor | 6/6 | 7/7 |
+| tab's remote layer applied before measuring | `ready=yes` | `ready=yes` |
+| network the service resolved for the open call | **`none`** (the host) | **`seclab+t-co3ocz…`** (the tab) |
+| host beacon | **2 hits** | 0 hits |
 
-### What the host beacon recorded on U
-Host Chromium itself fetched the model-chosen URL, over the host network:
+On U the host beacon recorded the fetch, with the editor's own Chromium user agent:
 
 ```
 GET /browser-probe-<run-nonce>
@@ -251,23 +252,54 @@ ua: … seclab-vscode-TEST-agentic-browser/1.145.0 Chrome/150 Electron/43 …
 GET /favicon.ico
 ```
 
-The user agent is the editor's own Chromium, and the beacon binds `127.0.0.1` where the tab's
-fence allows only the broker port, so the fetch can only have come from the host side. That is
-the exposure increment 2 closes, demonstrated rather than argued.
+The page ran in **host** Chromium on the **host** network, so `127.0.0.1` was the host's
+loopback and the beacon saw it. On F the same probe with the same tab settings resolved the
+tab's authority, so `127.0.0.1` was the *tab's* loopback and the host beacon could not see it.
+The builds differ only by 0017 (same upstream SHA, same variant, same hook hash; the only
+src-affecting delta is the patch and its module), so the difference is attributable to 0017.
 
-On F the same probe, with the same hostile settings, resolved the **tab's** network and the
-beacon saw nothing; the page then failed with `ERR_EMPTY_RESPONSE`, which is the fence
-refusing a destination that is not the broker. Both halves of the EDR's requirement are met:
-the browser tool's model-chosen URL never loads on the host network, and the tab's
-`dataStorage: global` does not take the network away.
+`ready=yes` matters: upstream's registered default for the sentinel is `activeGroup`, so
+`sideGroup` can only have come from the tab's remote layer, which proves the tab's settings
+were in force when the measurement happened.
 
-### The restored-editor case
-Each build was relaunched against the same profile, so the browser editor was restored from
-its persisted session. Both resolved the same network as their first launch: U host, F tab.
-Without 0017's restore fix (round 7) a saved `global` scope would have carried past the pin;
-it does not.
+### NOT proven, and why
+1. **The `dataStorage` half is not exercised at all.** The hook opens with an explicit
+   `session: { scope: Agent, … }`, and upstream's `_resolveSessionRequest` returns a request
+   that already carries a scope **without reading** `workbench.browser.dataStorage`. So that
+   setting was never consulted on either build, and the tab could have omitted `global`
+   without changing a single number above. The F check "the tab's `dataStorage: global` did
+   not take the network away" is also implied by the check above it and cannot fail
+   independently. The pin is still justified by the source reading in the Decision; it is
+   simply not what these runs measured.
+2. **The restored-editor case measured nothing.** The harness reads every `.log` in the
+   profile and takes the last `opening` line, so the restore phase re-read the first launch's
+   lines. The retained artifacts show it: `verdict-first.json` and `verdict-restore.json`
+   report `hookLines: 3` for both phases, i.e. the relaunched window contributed none. Three
+   lines is exactly one window's sequence. The round 7 restore gap therefore remains
+   **unverified at runtime**. A fresh hook-driven open would not exercise it anyway: the
+   restore path is about a *persisted* session request, and the hook supplies its own.
+3. **`ERR_EMPTY_RESPONSE` is not evidence of the fence.** From inside the tab, `127.0.0.1` is
+   the guest's own loopback and never reaches the fence; a fence refusal would also be
+   `ERR_CONNECTION_REFUSED`. The earlier wording inferred a mechanism the run did not measure.
+4. **F has no positive control that its beacon was listening.** The beacon is spawned
+   detached with no readiness probe and no end-of-run self-hit, so a beacon that failed to
+   bind would produce F's evidence exactly. U's beacon worked, but that is a different
+   process, port and run.
+5. **The probe target is outside the hook's reviewed validity envelope.** The hook's own
+   review states it measures the browser tool faithfully only against a **non-localhost**
+   target, because it omits `rewriteRemoteLocalhostUrl`. The probe uses loopback, so this is a
+   measurement of `resolveNetwork`, not of the whole tool path.
+
+### Consequence
+Increment 2's `enableRemoteProxy` claim is proven at runtime, in the shipped shape, with
+host-side evidence and a working negative control. The `dataStorage` pin, the restored-editor
+gap and the full tool path are **not**, and are not claimed to be. Closing them needs a hook
+that opens without an explicit session, a restore phase that reads only lines the relaunched
+window produced, a beacon liveness control, and a non-loopback target.
 
 ### Neither run took focus, and neither left anything
 Both report `OK  the editor never took focus from the user during the run` on the fixed build,
-and both teardowns are clean: no surviving process, no runtime resource, nothing outside the
-run directory changed.
+and both teardowns are clean. One host artefact does survive: `~/.seclab-test/`, whose parent
+is pre-created before the snapshot so changes beneath it are invisible to the "nothing outside
+the run directory changed" check; the arming file under it is removed only on the restore
+phase, so a run stopped after phase 1 leaves it armed until its ten-minute expiry.

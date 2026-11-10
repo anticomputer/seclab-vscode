@@ -396,3 +396,53 @@ Four findings, all addressed.
    `build/check-sole-consumer.ts` from inside the check `patch-build` already runs. Verified
    by renaming the enum member in a scratch tree: the check fails. Two asserts that could not
    fail were also removed or made literal.
+
+## Round 8 (2026-11-10): the increment 2 U-vs-F proof
+Scope: `test/agentic/browser/run.ts`, `test/agentic/browser-drive/browserView-hook.patch` and
+the measured section of the increment 2 EDR. No prompt injection found.
+
+The reviewer confirmed the central comparison: U and F differ only by 0017 (same upstream SHA,
+same variant, same hook hash; the only src-affecting delta is the patch and its module), and
+the readiness sentinel is sound because upstream's registered default is `activeGroup`, so
+`sideGroup` can only come from the tab's remote layer.
+
+**Two HIGH findings, both of which invalidated claims I had already written down.** They are
+recorded rather than quietly fixed, because the EDR had been published with them.
+
+1. **HIGH: the restored-editor phase measured nothing.** `readWindowLog` concatenates every
+   log in the profile and takes the last `opening` line, so the restore phase re-read the
+   first launch's lines. The retained artifacts prove it: both phases report `hookLines: 3`,
+   one window's full sequence, so the relaunched window contributed none. The restore
+   assertion was also identical to the first-phase one, so it added no independent fact. The
+   round 7 restore gap is therefore **unverified at runtime**, and a fresh hook-driven open
+   would not verify it anyway, because the restore path is about a persisted session request
+   and the hook supplies its own.
+2. **HIGH: the `dataStorage` half is never exercised.** The hook opens with an explicit
+   `session: { scope: Agent, … }`, and upstream's `_resolveSessionRequest` returns early for a
+   request that already carries a scope, without reading `workbench.browser.dataStorage`. So
+   the setting was never consulted on either build, and the F check "`dataStorage: global` did
+   not take the network away" is implied by the check above it and cannot fail independently.
+   The pin remains justified by the source reading, but these runs do not measure it.
+
+Three more, all recorded in the EDR as limits rather than fixed in place:
+
+3. **MEDIUM: EDR overclaims.** "the network resolved **for the page**" is really the value
+   `resolveNetwork()` returned before `createBrowserView`, which `_resolveViewSession` can
+   still drop; and `ERR_EMPTY_RESPONSE` was read as the fence refusing, when from inside the
+   tab `127.0.0.1` is the guest's own loopback and never reaches the fence.
+4. **MEDIUM: F has no beacon liveness control.** The beacon is spawned detached with no
+   readiness probe and no end-of-run self-hit, so a beacon that failed to bind produces F's
+   evidence exactly. U's working beacon is a different process, port and run.
+5. **MEDIUM: the probe target is outside the hook's reviewed envelope.** The hook's own review
+   says it measures the tool faithfully only against a non-localhost target; the probe uses
+   loopback, so this measures `resolveNetwork`, not the whole tool path.
+6. **LOW: the arming file outlives a run stopped after phase 1**, because it is removed only
+   on the restore phase, and `~/.seclab-test/` is invisible to the teardown snapshot because
+   its parent is pre-created.
+
+**What stands.** The `enableRemoteProxy` claim is proven at runtime with host-side evidence
+and a working negative control: on U the host beacon recorded the fetch with the editor's own
+Chromium user agent, on F it did not, and the builds differ only by 0017. The EDR has been
+rewritten to claim that and nothing more. No high or critical issue remains **in patch 0017
+itself**; the two HIGH findings are defects in the proof, and the work they gate is listed in
+the EDR's Consequence section.
