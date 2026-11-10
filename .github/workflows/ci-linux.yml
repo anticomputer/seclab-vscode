@@ -84,8 +84,9 @@ jobs:
           package-manager-cache: false
       # The only step with a token (gh on the runner, download only; review HH-1), and first in
       # the job, before any hostile fixture or privileged sensor runs (review XX-1).
+      # Not on pull_request (a fork PR's token); a dispatch is a repo writer, like a push.
       - name: Download attestation bundles for the broker build
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           SECLAB_ATTESTATION_DIR: ${{ github.workspace }}/.work/attestations
