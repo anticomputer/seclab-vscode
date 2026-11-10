@@ -1,6 +1,6 @@
 # Host documents don't sync into a tab: per-model provenance for the document sync (patch 0035)
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-11-09
 - **Deciders:** coordinator (assignment: "close an open leak … the trusted window pushes host-side document contents into the sandboxed tab's extension host"; decision on review: "use per-model provenance … Correctness beats the 50-line target; a second file is fine if each part has one concern"). Document-sync session: implementation.
 - **Related:** [RPC lockdown](../RPC-LOCKDOWN.md) §2.6 and §7; [patch queue](../../patches/README.md); [threat model](../adr/20261104-threat-model-rogue-extension.md); [no real secret in a tab](../adr/20261104-no-real-secret-in-a-tab.md); [patch-build gate](20261105-patch-build-gate.md)
@@ -139,8 +139,9 @@ second sender of document text fails `patch-build`.
 
 ## Evidence
 - **`fixture:test/docsync/probe-extension`:** `test/docsync/probe.ts` against main build
-  42302662001 (`87efb67`), 2026-11-09, three runs. The last run ran every step and failed as
-  designed on the baseline (below).
+  42302662001 (`87efb67`), 2026-11-09, three runs, then main build 42715616101 (`3d22b25`) and
+  branch build 42717167663 (`9274f10`), 2026-11-10. Every step ran each time; the baselines failed
+  and the patched build passed (below).
 
 **Measurement and baseline** (main build `87efb67`, Actions run 42302662001, attested; sbx tab;
 `node test/docsync/probe.ts prepare|seed|check` with a background launch through
@@ -174,4 +175,21 @@ Decisions from the measurement:
 - `git:`, cells and untitled are covered by rules 2, 6 and 5. Diff sides are separate models and
   need no rule.
 
-**Proof on the patched build:** to be added.
+**Proof** (2026-11-10; sbx tab; background launch through `test/window.ts`, both builds include
+the background-only fix 3d22b25; the final harness from review round 2):
+
+| Build | Result |
+|---|---|
+| Baseline: main `3d22b25`, Actions run 42715616101, attested | `check` exits 1, as designed. The settings comment, settings value, keybindings comment, window log and host file canaries all reach the tab. Hijack 2 leaks host perf data (`foreignSeen=true`). The host's seeded untitled document is claimed by URI (`untitledForeign=true`). |
+| Patched: `9274f10` (this branch, 0035 on 3d22b25), Actions run 42717167663, attested | `check` exits 0. No canary in any tab document or tab-side output. Both hijacks registered (`output` filesystem provider, perf pre-create) and gained nothing: the host write removed the pre-created model from the tab, and no foreign content reached it. The host's untitled document existed, was claimed and stayed hidden. Every positive control held: the tab file was edited and saved, the typed and tab-created untitled documents, `git:` and the notebook cell all synced. No focus steal; the teardown gate passed. |
+
+Schemes the tab saw on the patched build: `file`, `git`, `perf` (only its own pre-created model,
+removed at the host write), `untitled` and `vscode-notebook-cell`. The baseline additionally showed
+`vscode-userdata`, `output`, `vscode-local`, `chatSessionInput` and `vscode-scm`.
+
+`removedAt=perfview-after-release` also holds on the baseline, where the perf view replaces the
+model, so it only proves the host write happened. `foreignSeen` is the assertion that tells the
+builds apart.
+
+The configuration sibling still reaches the tab on the patched build (a setting's value through
+`getConfiguration()`). That is expected: it's out of 0035's scope and covered by patch 0036.
