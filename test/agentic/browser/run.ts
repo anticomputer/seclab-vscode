@@ -36,7 +36,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { TabdClient } from '../../../tabd/src/client.ts';
 import { browserProbeChecks } from './verdict.ts';
-import { beaconPort, beaconSelfHit, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, lockRun, privateHostAddress, repoRoot } from '../../harness.ts';
+import { beaconPort, beaconSelfHit, editorPid, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, lockRun, privateHostAddress, repoRoot } from '../../harness.ts';
 import { report } from '../../containment/assert.ts';
 import { beaconSpawn } from '../runner/marks.ts';
 import { reapPreviousRun, teardownGate, writeManifest, writeSnapshot } from '../../containment/teardown.ts';
@@ -48,7 +48,7 @@ const opt = (name: string, fallback?: string): string | undefined => {
 	const i = argv.indexOf(`--${name}`);
 	return i >= 0 ? argv[i + 1] : fallback;
 };
-if ((mode !== 'prepare' && mode !== 'check') || !userDataArg) {
+if ((mode !== 'prepare' && mode !== 'switch-build' && mode !== 'check') || !userDataArg) {
 	console.error('usage: run.ts prepare|switch-build|check <user-data-dir> [--build u|f] [--probe proxy|storage]\n       [--to u|f] [--driver sbx|oci] [--phase first|restore]');
 	process.exit(2);
 }
@@ -117,21 +117,42 @@ function logFileSizes(dir: string): Record<string, number> {
  */
 function linesSince(dir: string, since: Record<string, number>): string[] {
 	const out: string[] = [];
-	for (const [file, size] of Object.entries(logFileSizes(dir))) {
+	for (const [file, size] of Object.entries(logFileSizes(dir)).sort(([a], [b]) => a < b ? -1 : 1)) {
 		const from = since[file] ?? 0;
-		if (size <= from) {
+		if (size < from) {
+			// Rotated or truncated. Skipping it would drop a phase's evidence silently, so
+			// this is a hard error for the phase instead.
+			throw new Error(`log ${file} shrank from ${from} to ${size}: this phase's evidence is incomplete`);
+		}
+		if (size === from) {
 			continue;
 		}
 		const fd = fs.openSync(file, 'r');
 		try {
 			const buf = Buffer.alloc(size - from);
 			fs.readSync(fd, buf, 0, buf.length, from);
-			out.push(...buf.toString('utf8').split('\n'));
+			let text = buf.toString('utf8');
+			if (from > 0) {
+				// The offset can land mid-line, so drop the leading fragment rather than
+				// letting half a line parse as a whole one.
+				const nl = text.indexOf('\n');
+				text = nl < 0 ? '' : text.slice(nl + 1);
+			}
+			out.push(...text.split('\n'));
 		} finally {
 			fs.closeSync(fd);
 		}
 	}
-	return out;
+	// CHRONOLOGICAL, not directory order. The lines come from several files, and
+	// `readdir` order is not time order, so taking "the last resolution" off an
+	// unsorted concatenation could pair one launch's scope with another's saved scope.
+	// Every line this hook writes is prefixed by the log service with an ISO timestamp,
+	// which sorts lexicographically; lines without one keep their relative position by
+	// virtue of a stable sort.
+	const stamp = (l: string) => /^\[?(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}\.\d+)/.exec(l)?.[1] ?? '';
+	return out.map((line, i) => ({ line, i, t: stamp(line) }))
+		.sort((a, b) => (a.t && b.t && a.t !== b.t) ? (a.t < b.t ? -1 : 1) : a.i - b.i)
+		.map(x => x.line);
 }
 
 // Point the SAME profile at the other build, for the cross-build restore phase. Nothing in
@@ -155,6 +176,19 @@ if (mode === 'switch-build') {
 		console.error(`switch-build: the run is already on build ${to}; the restore phase must read the OTHER build.`);
 		process.exit(2);
 	}
+	// The offsets for the restore phase are taken HERE, not at the end of the first check,
+	// and only once launch 1 is gone. Taken earlier they were snapshotted while that window
+	// was still alive, so everything it wrote afterwards (its shutdown, any further
+	// resolutions) was appended past them and attributed to the relaunch -- carrying exactly
+	// the `savedScope=global` lines the relaunch cannot produce itself. That would have been
+	// round 8's finding reintroduced from the other side.
+	const stillRunning = editorPid(userData);
+	if (stillRunning) {
+		console.error(`switch-build: the first launch is still running (pid ${stillRunning}).\n` +
+			'Close it before switching, or the relaunch inherits its log lines.');
+		process.exit(1);
+	}
+	fs.writeFileSync(path.join(base, 'offsets-restore.json'), JSON.stringify(logFileSizes(userData)));
 	fs.writeFileSync(runFacts, JSON.stringify({ ...facts0, build: to, seededBy: facts0.build }, null, '\t'));
 	fs.writeFileSync(path.join(userData, 'seclab-run-build.json'), JSON.stringify({ build: to, app, buildInfo: JSON.parse(fs.readFileSync(buildInfo, 'utf8')) }, null, '\t'));
 	const folderUri = `vscode-remote://seclab+${facts0.tabId}${ws}`;
@@ -357,22 +391,33 @@ if (!fs.existsSync(offsetsFile)) {
 const phaseLines = linesSince(userData, JSON.parse(fs.readFileSync(offsetsFile, 'utf8')));
 const hookLines = phaseLines.filter(l => l.includes('SECLAB_TEST_ONLY:browser-drive-hook'));
 
-const beaconHits = fs.existsSync(beaconLog) ? fs.readFileSync(beaconLog, 'utf8').trim().split('\n').filter(Boolean) : [];
+const readBeacon = () => fs.existsSync(beaconLog) ? fs.readFileSync(beaconLog, 'utf8').trim().split('\n').filter(Boolean) : [];
+const beaconHits = readBeacon();
 const probeHits = beaconHits.filter(l => l.includes(`browser-probe-${facts.arm}`));
 
 // LIVENESS, closing half: the beacon answered the HOST after the measurement, so a quiet
 // beacon is a statement about the page and not about a dead listener.
 const beaconLiveAfter = await beaconSelfHit(facts.beaconAddress, facts.beaconPort, `/beacon-live-check-${facts.arm}-${phase}`);
 
+// THE FENCE CONTROL, measured rather than asserted: the tab itself tries the beacon address.
+// It must fail and leave no hit, otherwise the address is bridged to the guest and a quiet
+// beacon would not distinguish "the host never fetched it" from "the tab fetched it".
+const tabControlPath = `/fence-control-${facts.arm}-${phase}`;
+const tabTry = tabExec(facts.tabId, ['curl', '-sS', '-m', '3', '-o', '/dev/null', '-w', '%{http_code}',
+	`http://${facts.beaconAddress}:${facts.beaconPort}${tabControlPath}`]);
+const beaconReachableFromTab = tabTry.status === 0 && /^2\d\d$/.test(tabTry.stdout.trim());
+
 // The verdict itself is a pure function with its own defect-injection test, which asserts
 // that each check below can go red ON ITS OWN. Keeping it there rather than inline is what
 // makes that test a test of the shipped logic instead of a copy of it.
+// The commit the RUNNING BINARY stamped into its own lines, not the harness's bookkeeping.
+const loggedCommit = /\bbuild=(\S+)/.exec(hookLines.filter(l => /\bbuild=/.test(l)).slice(-1)[0] ?? '')?.[1];
 const checks = browserProbeChecks({
 	build: facts.build, phase: phase as 'first' | 'restore', probe: facts.probe, tabId: facts.tabId,
 	hookLines, phaseLines: phaseLines.length,
 	probeHits: probeHits.length, beaconHits: beaconHits.length, beaconLiveAfter,
-	buildMatches: recorded.build === facts.build,
-	buildDetail: `${recorded.build} (repo ${recorded.buildInfo.repoSha.slice(0, 7)})`,
+	beaconReachableFromTab, tabControlHits: readBeacon().filter(l => l.includes(tabControlPath)).length,
+	loggedCommit, expectedCommit: recorded.buildInfo.repoSha,
 });
 const lastResolved = hookLines.filter(l => l.includes(' resolved ')).slice(-1)[0] ?? '';
 const resolvedNetwork = /\bnetwork=(\S+)/.exec(lastResolved)?.[1];
@@ -384,9 +429,6 @@ fs.writeFileSync(path.join(base, `verdict-${phase}.json`), JSON.stringify({
 	probeHits: probeHits.length, beaconHits: beaconHits.length,
 	hookLines: hookLines.length, phaseLines: phaseLines.length,
 }, null, '\t'));
-// Hand the next phase its starting offsets, so it can only ever read its own launch's lines.
-fs.writeFileSync(path.join(base, 'offsets-restore.json'), JSON.stringify(logFileSizes(userData)));
-
 // The arming file is removed on EVERY check, not only the last one: a run stopped after the
 // first phase used to leave it armed until its ten-minute expiry (security review round 8,
 // finding 6). Re-arming is a `prepare` away, so there is no cost to removing it early.

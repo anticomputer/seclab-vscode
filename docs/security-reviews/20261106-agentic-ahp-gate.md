@@ -446,3 +446,59 @@ Chromium user agent, on F it did not, and the builds differ only by 0017. The ED
 rewritten to claim that and nothing more. No high or critical issue remains **in patch 0017
 itself**; the two HIGH findings are defects in the proof, and the work they gate is listed in
 the EDR's Consequence section.
+
+## Round 9 (2026-11-10): the corrected increment 2 proof
+Scope: commit `a3b2666`, which was itself the fix for round 8. Eight findings, three HIGH, no
+prompt injection. Two of the HIGHs are the same class of defect round 8 found, so they are
+recorded in full rather than quietly fixed.
+
+1. **HIGH: the cross-build restore phase could not be run at all.** The `switch-build` mode
+   was written, reviewed and documented in the EDR's procedure, but the argument guard still
+   accepted only `prepare` and `check`, so it printed usage and exited. Dead code that a
+   record described as a working procedure. Fixed, and a test now parses the modes out of the
+   usage line and asserts each one gets past the guard; that test was confirmed to fail
+   against the real bug before being kept.
+2. **HIGH: the restore attributability check was unsatisfiable on F.** It keyed off
+   `requestedScope=global`, logged inside `_resolveViewSession` from the output of
+   `_resolveSessionRequest` — but patch 0017 discards the saved request at the TOP of that
+   method, so on a fixed build the line always reads `ephemeral`. A correct F run therefore
+   read as inconclusive, and the phase could only go green if lines leaked in from the other
+   launch: green exactly when attribution had been violated. Round 8's finding, inverted.
+   Fixed by logging `savedScope=` in `_getOrCreateLazy`, before 0017 can touch it, and by
+   adding the clean-F-restore test whose absence had hidden it.
+3. **HIGH: the restore offsets were taken while the first window was still alive.** Snapshotted
+   at the end of the first check, so that window's later writes were attributed to the
+   relaunch — carrying exactly the `savedScope=global` lines the relaunch cannot produce
+   itself. Moved into `switch-build`, which now refuses to proceed while the first editor is
+   running. Lines are also sorted by their own timestamps rather than by `readdir` order, so
+   a verdict cannot pair one launch's scope with another's saved scope.
+4. **MEDIUM: "ran the requested build" could not fail.** It compared two harness files written
+   from the same variable, i.e. it asserted the harness agreed with itself, while the whole
+   cross-build claim rests on which bundle the operator actually launched. The variant build
+   now stamps the repo SHA into `seclabTestBuild`, the hook logs it, and the check compares
+   what RAN with what was asked for. (`product.commit` is upstream's SHA and is identical in
+   both builds, so it could not serve.)
+5. **MEDIUM: the record overclaimed about the browser tool.** The hook no longer opens "the
+   way the tool does": the agent tool supplies its own session scope, so that path never reads
+   `dataStorage`. Corrected in the EDR and in the variant's review; no claim about the browser
+   tool may be made from the storage probe.
+6. **MEDIUM: `network=none` was not specific to the setting.** It is also what a missing
+   resolver or an unsupported authority produces. The U proxy check now additionally requires
+   `requestedNetwork=seclab+<tab>` on the same launch, so it means "the tab's network was
+   available and then dropped".
+7. **MEDIUM: the fence was asserted in three places and measured in none.** `privateHostAddress`
+   sorts lexicographically over every private IPv4, which on this host can include bridge and
+   vmnet gateways that the guest CAN reach; such an address would silently reintroduce the
+   ambiguity the non-loopback change was made to remove. The check phase now has the TAB try
+   the beacon address: it must fail and leave no hit, as a check that can go red.
+8. **LOW: `linesSince` failed quiet.** A rotated or truncated log was skipped silently, and an
+   offset landing mid-line could parse half a line. It now raises on a shrunken file and drops
+   the leading fragment.
+
+The reviewer also noted that F's `scope === 'ephemeral'` is satisfiable by upstream's
+workspace-trust downgrade. Trust is disabled host-side and U shows `global`, so the U control
+rules it out empirically for this harness, but the verdict does not record trust state. Left
+as a known limit rather than fixed, and noted here so a later profile change cannot turn that
+check green unnoticed.
+
+No finding in this round is a defect in patch 0017. All eight are defects in the proof.

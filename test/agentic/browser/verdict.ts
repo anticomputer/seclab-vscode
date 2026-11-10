@@ -34,15 +34,29 @@ export type Evidence = {
 	beaconHits: number;
 	/** Whether the beacon answered the HOST after the measurement. */
 	beaconLiveAfter: boolean;
-	/** Whether the recorded build matches the one the run asked for. */
-	buildMatches: boolean;
-	/** Free text describing the build, for the report only. */
-	buildDetail: string;
+	/** Whether the TAB could reach the beacon address. It must not be able to. */
+	beaconReachableFromTab: boolean;
+	/** Whether the tab's attempt left a hit, which would mean the address was not fenced. */
+	tabControlHits: number;
+	/** The repo SHA the RUNNING BINARY reported, from its own log line. */
+	loggedCommit: string | undefined;
+	/** The repo SHA the requested build's `build-info-app.json` records. */
+	expectedCommit: string;
 };
 
 export function browserProbeChecks(e: Evidence): Check[] {
 	const checks: Check[] = [];
-	checks.push({ vector: 'build', name: 'ran the requested build', ok: e.buildMatches, detail: e.buildDetail });
+	// BUILD IDENTITY FROM THE BINARY. Comparing the harness's two bookkeeping files only
+	// ever asserted that the harness agreed with itself, and the whole cross-build restore
+	// claim rests on which bundle the operator actually launched. The hook stamps the
+	// running product's repo SHA into its own log lines, so this compares what RAN against
+	// what was asked for. The product's `commit` is upstream's SHA and is identical in both
+	// builds, so it cannot tell them apart; the variant build stamps the repo SHA instead.
+	checks.push({
+		vector: 'build', name: 'the binary that produced these lines is the requested build',
+		ok: !!e.loggedCommit && e.loggedCommit === e.expectedCommit,
+		detail: `logged ${e.loggedCommit ?? 'none'}, expected ${e.expectedCommit}`,
+	});
 
 	// The AUTHORITATIVE line: what upstream settled on after workspace trust, proxy
 	// availability and storage isolation, rather than what the hook asked for.
@@ -72,11 +86,17 @@ export function browserProbeChecks(e: Evidence): Check[] {
 	// what made the storage check ride along on the proxy result and never fail on its own.
 	const wrote = e.probe === 'proxy' ? 'enableRemoteProxy=false' : 'dataStorage=global';
 	if (e.phase !== 'restore') {
+		// For the proxy probe, `network=none` on its own is NOT the setting's doing: it is
+		// also what you get when `resolveNetwork` returned nothing, or the authority reported
+		// that it cannot proxy. The hook logs what was REQUESTED, so require that the tab's
+		// network was available and then dropped.
+		const requestedNetwork = /\brequestedNetwork=(\S+)/.exec(e.hookLines.filter(l => l.includes(' opening ')).slice(-1)[0] ?? '')?.[1];
+		const proxyDropped = network === 'none' && requestedNetwork === `seclab+${e.tabId}`;
 		if (e.build === 'u') {
 			checks.push({
 				vector: 'U', name: `VULNERABLE: the tab's ${wrote} moved the page off the tab`,
-				ok: e.probe === 'proxy' ? network === 'none' : scope === 'global',
-				detail: `resolved scope=${scope} network=${network}`,
+				ok: e.probe === 'proxy' ? proxyDropped : scope === 'global',
+				detail: `resolved scope=${scope} network=${network}, requestedNetwork=${requestedNetwork}`,
 			});
 			checks.push({
 				vector: 'U', name: 'and the host beacon saw the fetch', ok: e.probeHits > 0,
@@ -101,10 +121,17 @@ export function browserProbeChecks(e: Evidence): Check[] {
 	// and the relaunch reads byte-for-byte the same state, so the only difference between the
 	// two observations is the patch.
 	if (e.phase === 'restore') {
+		// `savedScope` is logged in `_getOrCreateLazy`, BEFORE `_resolveSessionRequest` runs.
+		// It has to be: patch 0017 discards the saved request inside that method, so on a
+		// fixed build `requestedScope` has already been rebuilt to `ephemeral` by the time
+		// the resolution line is written. Keying this off `requestedScope` made the check
+		// unsatisfiable on F, so a correct F run read as inconclusive and the phase could
+		// only go green if lines leaked in from the other launch -- green exactly when
+		// attribution had been violated.
 		checks.push({
 			vector: 'restore', name: 'the restored view really did carry the hostile saved scope',
-			ok: e.hookLines.some(l => /requestedScope=global/.test(l)),
-			detail: `from ${resolvedLines.length} resolution(s) by this launch`,
+			ok: e.hookLines.some(l => /\bsavedScope=global\b/.test(l)),
+			detail: e.hookLines.filter(l => l.includes('savedScope=')).slice(-1)[0]?.slice(-90) ?? 'no savedScope line from this launch',
 		});
 		checks.push({
 			vector: 'restore',
@@ -124,6 +151,18 @@ export function browserProbeChecks(e: Evidence): Check[] {
 	checks.push({
 		vector: 'beacon', name: 'the beacon was still listening after the measurement',
 		ok: e.beaconLiveAfter, detail: 'host-side self-hit',
+	});
+	// THE FENCE, MEASURED. Every "the beacon saw nothing" above means "the page was not
+	// fetched from the host" only if the tab could not have reached that address anyway.
+	// That was asserted in three places and measured in none; a beacon bound to a bridge or
+	// vmnet gateway IS reachable from the guest, which would reintroduce precisely the
+	// ambiguity the non-loopback address was chosen to remove.
+	checks.push({
+		vector: 'beacon', name: 'the TAB cannot reach the beacon address (so a quiet beacon means the host)',
+		ok: !e.beaconReachableFromTab && e.tabControlHits === 0,
+		detail: e.beaconReachableFromTab
+			? 'the tab reached it: this address is bridged to the guest, and the probe cannot distinguish host from tab'
+			: `tab denied, ${e.tabControlHits} hit(s) from the tab`,
 	});
 	return checks;
 }

@@ -325,7 +325,9 @@ that makes the corresponding check **able to fail**, and that property is itself
 3. **The hook no longer supplies a session.** Passing `{ scope: Agent }` is precisely what
    stopped `workbench.browser.dataStorage` from ever being read, because upstream's
    `_resolveSessionRequest` returns a request that already carries a scope without consulting
-   the configured storage. The hook now opens the way the tool does, and a second, authoritative
+   the configured storage. (See the round 9 correction below: this makes the hook diverge
+   from the agent tool, which supplies a scope of its own, so the storage probe measures the
+   non-agent create path.) A second, authoritative
    log line in `_resolveViewSession` records the scope and network upstream actually settled
    on, after trust, proxy availability and storage isolation have had their say. The old
    `opening` line recorded only what was asked for.
@@ -366,3 +368,26 @@ the first phase no longer leaves it armed until its expiry.
 **Status: the corrected harness is written and its own tests pass; the U and F variants have
 not yet been rebuilt against it, so the increment 2 claims above remain as round 8 left
 them.** Landing waits on that run.
+
+### Correction (security review round 9): what the storage probe measures
+Round 9 found that §5.3 above, and the hook comment, were wrong to say the hook "opens the
+way the tool does". Upstream's `openBrowserTool._openNewPage` spreads
+`getAgentBrowserViewCreationDefaults(...)`, which **does** supply
+`session: { scope: Agent, … }`, and `_resolveSessionRequest` returns a request with a scope
+verbatim. So the agent tool path never reads `workbench.browser.dataStorage` at all.
+
+Round 8 observed that correctly; the fix inverted its meaning, by changing the hook to
+diverge from the tool instead of recording what the tool does. The consequence for the
+record:
+
+- the `--probe storage` run measures the **non-agent** create path, which is what a restored
+  editor and a user-opened view take, not the browser tool;
+- the `dataStorage` pin is still worth having for exactly those paths, and the restore phase
+  is its real demonstration;
+- for the agent tool specifically, the containment that matters is `enableRemoteProxy`, which
+  is the probe that was already proven.
+
+The divergence pushes toward over-stating the vulnerability rather than toward a false
+"contained", so it does not weaken the F result; but it is outside the faithfulness envelope
+recorded in the variant's own review, which described the inlined agent creation defaults.
+That document is corrected in the same change.
