@@ -34,7 +34,11 @@ if (!/^[0-9a-f]{8,64}$/.test(nonce)) {
 	process.exit(2);
 }
 
-fs.writeFileSync(logfile, '');
+// NEVER TRUNCATE. The host beacon is spawned once and can start its log clean; this one is
+// started by a watcher that may try again, and a second instance truncating the log destroyed
+// the restore phase's evidence: every probe line the live listener had recorded was erased
+// within a second or two, so the phase could only ever read "the tab saw nothing" (security
+// review round 10). Appending also means a restart cannot silently lose earlier hits.
 const server = http.createServer((req, res) => {
 	const url = req.url ?? '';
 	if (url.includes(nonce)) {
@@ -49,8 +53,21 @@ const server = http.createServer((req, res) => {
 	res.writeHead(200, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' });
 	res.end('tab-beacon\n');
 });
+// A duplicate must die without touching anything, rather than taking the process down with
+// an unhandled error after the log has already been opened.
+server.on('error', err => {
+	console.error(`tab-beacon: not starting: ${err instanceof Error ? err.message : String(err)}`);
+	process.exit(0);
+});
 server.listen(Number(portArg), '127.0.0.1', () => {
 	console.log(`tab-beacon on http://127.0.0.1:${portArg} -> ${logfile}`);
+	// A heartbeat, so a reader can tell the listener was live ACROSS the measurement rather
+	// than merely at two sampled moments. Carries this instance's pid, so a restart is
+	// visible as a change of identity instead of passing as continuous service.
+	let seq = 0;
+	setInterval(() => {
+		fs.appendFileSync(logfile, `${JSON.stringify({ at: new Date().toISOString(), side: 'tab', heartbeat: ++seq, pid: process.pid })}\n`);
+	}, 2000).unref?.();
 });
 const stop = () => { server.close(); process.exit(0); };
 process.on('SIGTERM', stop);

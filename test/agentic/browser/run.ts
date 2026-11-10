@@ -87,8 +87,37 @@ function readLines(file: string): string[] {
 	return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean) : [];
 }
 
-function countLines(file: string): number {
-	return readLines(file).length;
+function byteSize(file: string): number {
+	return fs.existsSync(file) ? fs.statSync(file).size : 0;
+}
+
+/**
+ * Lines appended to an append-only log past `from` BYTES. Byte offsets, not line counts, and
+ * a shrink is a hard error: `slice(n)` on a log that had been truncated silently returned no
+ * lines, and "that side saw nothing" is half of the containment verdict, so lost evidence
+ * would have been read as evidence (security review round 10).
+ */
+function hitsSince(file: string, from: number): string[] {
+	const size = byteSize(file);
+	if (size < from) {
+		throw new Error(`beacon log ${file} shrank from ${from} to ${size}: this phase's evidence is incomplete`);
+	}
+	if (size === from) {
+		return [];
+	}
+	const fd = fs.openSync(file, 'r');
+	try {
+		const buf = Buffer.alloc(size - from);
+		fs.readSync(fd, buf, 0, buf.length, from);
+		let text = buf.toString('utf8');
+		if (from > 0) {
+			const nl = text.indexOf('\n');
+			text = nl < 0 ? '' : text.slice(nl + 1);
+		}
+		return text.split('\n').filter(Boolean);
+	} finally {
+		fs.closeSync(fd);
+	}
 }
 
 /**
@@ -204,14 +233,16 @@ if (mode === 'switch-build') {
 		// restore phase reported a host hit that belonged to the first launch, and read as
 		// an escape on a build that had in fact contained the page. Same defect as the
 		// window-log one, in the other evidence source.
-		hostHits: countLines(beaconLog),
-		tabHits: countLines(facts0.tabBeaconLog),
+		hostHits: byteSize(beaconLog),
+		tabHits: byteSize(facts0.tabBeaconLog),
 	}));
 	fs.writeFileSync(runFacts, JSON.stringify({ ...facts0, build: to, seededBy: facts0.build }, null, '\t'));
 	fs.writeFileSync(path.join(userData, 'seclab-run-build.json'), JSON.stringify({ build: to, app, buildInfo: JSON.parse(fs.readFileSync(buildInfo, 'utf8')) }, null, '\t'));
 	const folderUri = `vscode-remote://seclab+${facts0.tabId}${ws}`;
 	console.log(`switched the run to build ${to} (${app}); the profile is untouched.\n`);
-	console.log('relaunch the SAME profile in the BACKGROUND:\n');
+	console.log('FIRST start the tab-side listener watcher, in the background:\n');
+	console.log(`  node test/agentic/browser/run.ts listen ${userData} &\n`);
+	console.log('then relaunch the SAME profile in the BACKGROUND:\n');
 	console.log(`  ${editorLaunchCommand(userData, folderUri, {}, app)}\n`);
 	console.log(`then:  node test/agentic/browser/run.ts check ${userData} --phase restore`);
 	process.exit(0);
@@ -231,9 +262,14 @@ if (mode === 'listen') {
 	const deadline = Date.now() + 5 * 60_000;
 	let announced = false;
 	while (Date.now() < deadline) {
+		// PROBE FIRST, start only if nothing answers. Spawning unconditionally on every tick
+		// meant a second instance raced the live one every 1.5 seconds; each one opened the
+		// log and the duplicate died on EADDRINUSE. That destroyed the restore phase's
+		// evidence (security review round 10).
 		const r = tabExec(facts0.tabId, ['sh', '-c',
-			`cd ${ws} && (setsid /opt/seclab-reh/node .seclab-tab-beacon.mjs ${facts0.tabBeaconLog} ${facts0.beaconPort} ${facts0.arm} >> .seclab-tab-beacon.out 2>&1 &) ; ` +
-			`for j in $(seq 1 8); do curl -sS -m 2 -o /dev/null http://127.0.0.1:${facts0.beaconPort}/tab-live-watch-${facts0.arm} && echo UP && break; sleep 0.25; done`]);
+			`cd ${ws} && if curl -sS -m 2 -o /dev/null http://127.0.0.1:${facts0.beaconPort}/tab-live-watch-${facts0.arm}; then echo UP; else ` +
+			`(setsid /opt/seclab-reh/node .seclab-tab-beacon.mjs ${facts0.tabBeaconLog} ${facts0.beaconPort} ${facts0.arm} >> .seclab-tab-beacon.out 2>&1 &) ; ` +
+			`for j in $(seq 1 8); do curl -sS -m 2 -o /dev/null http://127.0.0.1:${facts0.beaconPort}/tab-live-watch-${facts0.arm} && echo UP && break; sleep 0.25; done; fi`]);
 		if (/UP/.test(r.stdout) && !announced) {
 			console.log('listen: tab-side listener up');
 			announced = true;
@@ -467,7 +503,7 @@ const phaseLines = linesSince(userData, offsets.logs);
 const hookLines = phaseLines.filter(l => l.includes('SECLAB_TEST_ONLY:browser-drive-hook'));
 
 // Only the lines THIS phase appended, for the same reason the window log is read that way.
-const beaconHits = readLines(beaconLog).slice(offsets.hostHits);
+const beaconHits = hitsSince(beaconLog, offsets.hostHits);
 const probeHits = beaconHits.filter(l => l.includes(`browser-probe-${facts.arm}`));
 
 // LIVENESS, closing half: the beacon answered the HOST after the measurement, so a quiet
@@ -478,8 +514,14 @@ const beaconLiveAfter = await beaconSelfHit('127.0.0.1', facts.beaconPort, `/bea
 // absolute path, so it is read directly. Liveness is confirmed the same way as the host's:
 // by a request made from the tab itself, so a listener that died mid-run cannot pass itself
 // off as containment.
-const tabProbeHits = readLines(facts.tabBeaconLog).slice(offsets.tabHits)
-	.filter(l => l.includes(`browser-probe-${facts.arm}`)).length;
+const tabPhaseLines = hitsSince(facts.tabBeaconLog, offsets.tabHits);
+const tabProbeHits = tabPhaseLines.filter(l => l.includes(`browser-probe-${facts.arm}`)).length;
+// CONTINUITY, not two point samples: the listener must have beaten throughout the phase, as
+// ONE instance. A restart mid-phase, or a gap, means nothing can be concluded from its
+// silence (security review round 10).
+const beats = tabPhaseLines.map(l => { try { return JSON.parse(l) as { heartbeat?: number; pid?: number }; } catch { return {}; } })
+	.filter(b => b.heartbeat !== undefined);
+const tabBeaconContinuous = beats.length >= 2 && new Set(beats.map(b => b.pid)).size === 1;
 const tabLive = tabExec(facts.tabId, ['sh', '-c',
 	`curl -sS -m 3 -o /dev/null http://127.0.0.1:${facts.beaconPort}/tab-live-check-${facts.arm}-${phase} && echo OK`]);
 const tabBeaconLiveAfter = /OK/.test(tabLive.stdout);
@@ -493,7 +535,7 @@ const checks = browserProbeChecks({
 	build: facts.build, phase: phase as 'first' | 'restore', probe: facts.probe, tabId: facts.tabId,
 	hookLines, phaseLines: phaseLines.length,
 	probeHits: probeHits.length, beaconHits: beaconHits.length, beaconLiveAfter,
-	tabProbeHits, tabBeaconLiveAfter,
+	tabProbeHits, tabBeaconLiveAfter: tabBeaconLiveAfter && tabBeaconContinuous,
 	loggedCommit, expectedCommit: recorded.buildInfo.repoSha,
 });
 const lastResolved = hookLines.filter(l => l.includes(' resolved ')).slice(-1)[0] ?? '';

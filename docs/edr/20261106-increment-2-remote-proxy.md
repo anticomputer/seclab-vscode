@@ -505,11 +505,25 @@ state. It shows:
 
 That is the security-relevant difference, and it is a clean differential. But **neither
 listener saw a fetch** in that phase, so the run is reported as inconclusive at the network
-level and must not be read as containment. The cause is structural: in the other runs the page
-cannot load until the arming file appears, which the harness writes only once both listeners
-answer; a restored editor is loaded by the editor itself at startup, so there is no such gate
-and the tab's listener cannot reliably be up first. Closing it needs a gate on the restore
-path, not another run.
+level and must not be read as containment.
+
+**Correction (security review round 10): the cause recorded here first was wrong.** It was
+attributed to a missing arming gate on the restore path. The real cause was that the harness
+destroyed the evidence: the `listen` watcher respawned the tab listener every 1.5 seconds
+unconditionally, and the listener truncated its log on start, so every probe line the live
+instance recorded was erased within a second or two. The restore phase's network check could
+therefore never pass, whatever the build did — the same shape of defect as rounds 8 and 9, in
+the plumbing rather than the verdict. The `listen` loop now probes before starting anything
+and starts a listener only when nothing answers; the listener appends and never truncates, and
+a duplicate exits on `EADDRINUSE` without touching the log. The beacon logs are also read from
+BYTE offsets with the same shrink-is-an-error rule the window logs use, because `slice()` on a
+truncated log silently returned no hits, and "that side saw nothing" is half of a containment
+verdict.
+
+A missing restore-path gate remains a real second cause, since a restored editor is loaded by
+the editor itself with no point at which the listener can be guaranteed up first. The restore
+phase therefore still needs a re-run under the corrected harness before any network-level
+claim is made for it.
 
 ### Defects this round's own checks caught before any claim was made
 Each would have produced a false "contained" or a false "vulnerable":

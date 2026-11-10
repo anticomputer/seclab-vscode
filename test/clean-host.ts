@@ -155,7 +155,7 @@ const tabPolicy = (name: string, hint?: 'test'): { remove: boolean; why: string;
 const procs = lines('ps', ['-axo', 'pid=,ppid=,args=']).map(l => /^(\d+)\s+(\d+)\s+(.*)$/.exec(l)).filter((m): m is RegExpExecArray => !!m)
 	.map(m => ({ pid: Number(m[1]), ppid: Number(m[2]), args: m[3] }));
 /** Long-lived helpers a run starts on the host. Matched by absolute path, per worktree. */
-const HELPER_SCRIPTS = ['test/containment/beacon.ts'];
+const HELPER_SCRIPTS = ['test/containment/beacon.ts', 'test/agentic/browser/run.ts'];
 const optValue = (args: string, opt: string) => new RegExp(`(?:^|\\s)--${opt}(?:=|\\s+)(\\S+)`).exec(args)?.[1];
 for (const p of procs) {
 	if (p.pid === process.pid || p.pid === process.ppid) {
