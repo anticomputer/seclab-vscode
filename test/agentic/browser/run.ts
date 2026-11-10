@@ -35,8 +35,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { TabdClient } from '../../../tabd/src/client.ts';
-import { beaconPort, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, lockRun, repoRoot } from '../../harness.ts';
-import { report, type Check } from '../../containment/assert.ts';
+import { browserProbeChecks } from './verdict.ts';
+import { beaconPort, beaconSelfHit, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, lockRun, privateHostAddress, repoRoot } from '../../harness.ts';
+import { report } from '../../containment/assert.ts';
 import { beaconSpawn } from '../runner/marks.ts';
 import { reapPreviousRun, teardownGate, writeManifest, writeSnapshot } from '../../containment/teardown.ts';
 
@@ -48,7 +49,7 @@ const opt = (name: string, fallback?: string): string | undefined => {
 	return i >= 0 ? argv[i + 1] : fallback;
 };
 if ((mode !== 'prepare' && mode !== 'check') || !userDataArg) {
-	console.error('usage: run.ts prepare|check <user-data-dir> [--build u|f] [--driver sbx|oci] [--phase first|restore]');
+	console.error('usage: run.ts prepare|switch-build|check <user-data-dir> [--build u|f] [--probe proxy|storage]\n       [--to u|f] [--driver sbx|oci] [--phase first|restore]');
 	process.exit(2);
 }
 const userData = path.resolve(userDataArg);
@@ -81,9 +82,11 @@ function tabExec(name: string, args: string[]): { status: number | null; stdout:
 	return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
 
-/** Every line of the window's own logs. The hook writes through ILogService. */
-function readWindowLog(dir: string): string[] {
-	const out: string[] = [];
+/**
+ * Every `.log` file under the profile, with its current size. The unit of attribution.
+ */
+function logFileSizes(dir: string): Record<string, number> {
+	const out: Record<string, number> = {};
 	const logs = path.join(dir, 'logs');
 	const stack = fs.existsSync(logs) ? [logs] : [];
 	while (stack.length) {
@@ -93,11 +96,73 @@ function readWindowLog(dir: string): string[] {
 			if (e.isDirectory()) {
 				stack.push(p);
 			} else if (e.name.endsWith('.log')) {
-				out.push(...fs.readFileSync(p, 'utf8').split('\n'));
+				out[p] = fs.statSync(p).size;
 			}
 		}
 	}
 	return out;
+}
+
+/**
+ * Lines written to the profile's logs SINCE `since`, i.e. by this launch and no other.
+ *
+ * The first version of this read every log in the profile and took the last matching line,
+ * which is how the restore phase came to measure nothing: the relaunched window produced no
+ * hook output at all, so the check silently re-read the FIRST launch's lines and passed
+ * (security review round 8, finding 1). Attribution cannot rest on "the last line in the
+ * directory", because nothing ties that line to the window that is supposed to have written
+ * it. Here a phase declares the byte offsets it starts from, and sees only what was appended
+ * past them; a file that did not exist at the snapshot is read whole. A phase that produced
+ * nothing therefore reads as nothing, and its checks fail, which is the point.
+ */
+function linesSince(dir: string, since: Record<string, number>): string[] {
+	const out: string[] = [];
+	for (const [file, size] of Object.entries(logFileSizes(dir))) {
+		const from = since[file] ?? 0;
+		if (size <= from) {
+			continue;
+		}
+		const fd = fs.openSync(file, 'r');
+		try {
+			const buf = Buffer.alloc(size - from);
+			fs.readSync(fd, buf, 0, buf.length, from);
+			out.push(...buf.toString('utf8').split('\n'));
+		} finally {
+			fs.closeSync(fd);
+		}
+	}
+	return out;
+}
+
+// Point the SAME profile at the other build, for the cross-build restore phase. Nothing in
+// the profile is touched: that is the whole point, since the persisted browser editor state
+// written by launch 1 has to reach the relaunch byte-for-byte, so that the only difference
+// between the two observations is the patch under test.
+if (mode === 'switch-build') {
+	const to = (opt('to') ?? '') as 'u' | 'f';
+	if (to !== 'u' && to !== 'f') {
+		console.error('switch-build needs --to u|f');
+		process.exit(2);
+	}
+	const app = APPS[to];
+	const buildInfo = path.join(path.dirname(app), 'build-info-app.json');
+	if (!fs.existsSync(app) || !fs.existsSync(buildInfo)) {
+		console.error(`no app or build-info-app.json for build ${to} at ${app}`);
+		process.exit(2);
+	}
+	const facts0 = JSON.parse(fs.readFileSync(runFacts, 'utf8'));
+	if (facts0.build === to) {
+		console.error(`switch-build: the run is already on build ${to}; the restore phase must read the OTHER build.`);
+		process.exit(2);
+	}
+	fs.writeFileSync(runFacts, JSON.stringify({ ...facts0, build: to, seededBy: facts0.build }, null, '\t'));
+	fs.writeFileSync(path.join(userData, 'seclab-run-build.json'), JSON.stringify({ build: to, app, buildInfo: JSON.parse(fs.readFileSync(buildInfo, 'utf8')) }, null, '\t'));
+	const folderUri = `vscode-remote://seclab+${facts0.tabId}${ws}`;
+	console.log(`switched the run to build ${to} (${app}); the profile is untouched.\n`);
+	console.log('relaunch the SAME profile in the BACKGROUND:\n');
+	console.log(`  ${editorLaunchCommand(userData, folderUri, {}, app)}\n`);
+	console.log(`then:  node test/agentic/browser/run.ts check ${userData} --phase restore`);
+	process.exit(0);
 }
 
 if (mode === 'prepare') {
@@ -147,13 +212,41 @@ if (mode === 'prepare') {
 	fs.rmSync(armDir, { recursive: true, force: true });
 	fs.mkdirSync(armDir, { recursive: true, mode: 0o700 });
 	const port = await beaconPort();
-	const beacon = beaconSpawn(repoRoot, beaconLog, port);
+	const beaconAddress = privateHostAddress();
+	if (!beaconAddress) {
+		console.error('prepare: this host has no private IPv4 address, so the beacon cannot be\n' +
+			'distinguished from the tab\'s own loopback. Refusing to run a probe that could not fail.');
+		process.exit(2);
+	}
+	const beacon = beaconSpawn(repoRoot, beaconLog, port, beaconAddress);
 	spawn(process.execPath, beacon.argv, { detached: true, stdio: 'ignore' }).unref();
+	// LIVENESS, opening half. Without it a beacon that never bound produces exactly the
+	// evidence a contained build produces, so "no hit" would prove nothing (security review
+	// round 8, finding 4). The check phase closes the bracket, so the measurement happens
+	// between two confirmed-live observations.
+	let live = false;
+	for (let i = 0; i < 40 && !live; i++) {
+		live = await beaconSelfHit(beaconAddress, port, `/beacon-live-prepare-${arm}`);
+		if (!live) {
+			await new Promise(res => setTimeout(res, 250));
+		}
+	}
+	if (!live) {
+		console.error(`prepare: the beacon never answered on ${beaconAddress}:${port}; refusing to measure.`);
+		process.exit(1);
+	}
+	console.log(`prepare: beacon live on ${beaconAddress}:${port}`);
 	writeSnapshot(base);
 	writeManifest(base, { driver, userDataDir: userData, stateDirs: [stateDir], commandMarks: [beacon.mark] });
 
-	// The probe URL. Loopback only, and unique to this run so a hit cannot be anything else.
-	const probeUrl = `http://127.0.0.1:${port}/browser-probe-${arm}`;
+	// The probe URL. A PRIVATE address this host holds, never loopback, and unique to this
+	// run so a hit cannot be anything else. Loopback is useless here: inside the tab
+	// `127.0.0.1` is the GUEST's loopback, so a quiet beacon would be ambiguous between
+	// "the fence contained it" and "that address never meant this host" (security review
+	// round 8, finding 5). A private host address is reachable from the host side and denied
+	// by the tab's fence, which allows the broker port alone. It is also what takes the probe
+	// INSIDE the hook's reviewed validity envelope, which covers non-localhost targets only.
+	const probeUrl = `http://${beaconAddress}:${port}/browser-probe-${arm}`;
 	fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
 	fs.writeFileSync(path.join(userData, 'seclab-run-build.json'), JSON.stringify({ build, app, buildInfo: JSON.parse(fs.readFileSync(buildInfo, 'utf8')) }, null, '\t'));
 	// The HOST profile leaves both settings alone: the point is that the TAB sets them, and
@@ -190,9 +283,31 @@ if (mode === 'prepare') {
 	// a tab, so it could never arrive and every run was inconclusive. `newTabPlacement` is
 	// WINDOW, like the two keys under test.
 	const sentinel = 'sideGroup';
+	// WHICH SETTING THIS RUN IS ABOUT. The two keys are fixed for different reasons and
+	// fail in different places, so a run that writes BOTH cannot tell which one did the
+	// work: with the proxy off the network is dropped before the storage scope is even
+	// consulted, so the storage check rides along on the proxy result and cannot fail on
+	// its own (security review round 8, finding 2). Each probe therefore writes the hostile
+	// value for ONE key and the contained value for the other, so exactly one check decides.
+	//
+	//  proxy   : proxy OFF, storage ephemeral -> upstream drops the view's NETWORK.
+	//  storage : proxy ON,  storage GLOBAL    -> upstream keeps the network but gives the
+	//            view the GLOBAL session, which upstream documents as always using the
+	//            local network ("Browsers using global storage always use the local
+	//            network"), and `toBrowserViewSessionOptions` returns `{ scope }` with no
+	//            network for it. So the evidence here is the resolved SCOPE.
+	//
+	// `enableRemoteProxy` is written explicitly in both, never left at its default: that
+	// default is `product.quality !== 'stable'`, so leaving it out would make the storage
+	// probe depend on how the variant happened to be branded.
+	const probe = opt('probe', 'proxy') as 'proxy' | 'storage';
+	if (probe !== 'proxy' && probe !== 'storage') {
+		console.error('prepare: --probe must be proxy or storage');
+		process.exit(2);
+	}
 	const remoteSettings = JSON.stringify({
-		'workbench.browser.enableRemoteProxy': false,
-		'workbench.browser.dataStorage': 'global',
+		'workbench.browser.enableRemoteProxy': probe !== 'proxy',
+		'workbench.browser.dataStorage': probe === 'storage' ? 'global' : 'ephemeral',
 		'workbench.browser.newTabPlacement': sentinel,
 	});
 	const wrote = tabExec(tabId, ['sh', '-c',
@@ -207,7 +322,10 @@ if (mode === 'prepare') {
 	// on anything malformed.
 	fs.writeFileSync(path.join(armDir, 'targets'), `arm=${arm}\nurl=${probeUrl}\nready=${sentinel}\nuntil=${Date.now() + 10 * 60_000}\n`, { mode: 0o600 });
 
-	fs.writeFileSync(runFacts, JSON.stringify({ build, tabId, arm, probeUrl, beaconPort: port, sentinel }, null, '\t'));
+	fs.writeFileSync(runFacts, JSON.stringify({ build, tabId, arm, probeUrl, beaconPort: port, beaconAddress, sentinel, probe }, null, '\t'));
+	// This phase starts from an empty profile, but record the offsets anyway so every phase
+	// reads its own lines by the same rule.
+	fs.writeFileSync(path.join(base, 'offsets-first.json'), JSON.stringify(logFileSizes(userData)));
 	client.dispose(); // stops the tab; the editor restarts it
 	await new Promise(res => client.once('exit', res));
 
@@ -223,76 +341,59 @@ if (mode === 'prepare') {
 
 const facts = JSON.parse(fs.readFileSync(runFacts, 'utf8')) as {
 	build: 'u' | 'f'; tabId: string; arm: string; probeUrl: string; beaconPort: number;
+	beaconAddress: string; sentinel: string; probe: 'proxy' | 'storage';
 };
 const phase = opt('phase', 'first')!;
-const checks: Check[] = [];
 
 const recorded = JSON.parse(fs.readFileSync(path.join(userData, 'seclab-run-build.json'), 'utf8')) as { build: string; buildInfo: { repoSha: string } };
-checks.push({
-	vector: 'build', name: 'ran the requested build', ok: recorded.build === facts.build,
-	detail: `${recorded.build} (repo ${recorded.buildInfo.repoSha.slice(0, 7)})`,
-});
 
-// Fact 2, and the one that makes a quiet run mean anything: the network the browser service
-// resolved for the page, from the hook's own line in the window log.
-const hookLines = readWindowLog(userData).filter(l => l.includes('SECLAB_TEST_ONLY:browser-drive-hook'));
-const opened = hookLines.filter(l => l.includes(' opening '));
-const resolvedNetwork = /network=(\S+)/.exec(opened[opened.length - 1] ?? '')?.[1];
-checks.push({
-	vector: 'hook', name: 'the build hook drove a page open (otherwise the run is inconclusive)', ok: opened.length > 0,
-	detail: opened.length ? `${opened.length} open(s), last network=${resolvedNetwork}` : `no open line; ${hookLines.length} hook line(s) total`,
-});
-// The measurement is only about the tab's settings if the tab's settings were in force when
-// it happened. The hook waits for its sentinel and says so; a run that measured before the
-// remote layer landed is INCONCLUSIVE, not contained.
-checks.push({
-	vector: 'hook', name: "the tab's remote settings were in force when the page was opened", ok: hookLines.some(l => l.includes('ready=yes')),
-	detail: hookLines.filter(l => l.includes('ready=')).slice(-1)[0]?.slice(-80) ?? 'no readiness line',
-});
+// Read ONLY the lines this phase's launch appended, so a phase that produced nothing cannot
+// borrow an earlier launch's evidence (security review round 8, finding 1).
+const offsetsFile = path.join(base, `offsets-${phase}.json`);
+if (!fs.existsSync(offsetsFile)) {
+	console.error(`check: no ${path.basename(offsetsFile)}; run the previous phase first.`);
+	process.exit(2);
+}
+const phaseLines = linesSince(userData, JSON.parse(fs.readFileSync(offsetsFile, 'utf8')));
+const hookLines = phaseLines.filter(l => l.includes('SECLAB_TEST_ONLY:browser-drive-hook'));
 
-// Fact 1: the host beacon. Reachable only from the host side.
 const beaconHits = fs.existsSync(beaconLog) ? fs.readFileSync(beaconLog, 'utf8').trim().split('\n').filter(Boolean) : [];
 const probeHits = beaconHits.filter(l => l.includes(`browser-probe-${facts.arm}`));
 
-if (facts.build === 'u') {
-	checks.push({
-		vector: 'U', name: "VULNERABLE: the tab's settings put the page on the HOST network", ok: resolvedNetwork === 'none',
-		detail: `resolved network=${resolvedNetwork} (the tab asked for enableRemoteProxy=false, dataStorage=global)`,
-	});
-	checks.push({
-		vector: 'U', name: 'and the host beacon saw the fetch', ok: probeHits.length > 0,
-		detail: `${probeHits.length} hit(s) for this run's probe URL`,
-	});
-} else {
-	checks.push({
-		vector: 'F', name: "CONTAINED: the page resolved to the TAB's network despite the tab's settings", ok: resolvedNetwork === `seclab+${facts.tabId}`,
-		detail: `resolved network=${resolvedNetwork}, expected seclab+${facts.tabId}`,
-	});
-	checks.push({
-		vector: 'F', name: 'and the host beacon saw nothing', ok: probeHits.length === 0,
-		detail: `${probeHits.length} hit(s); total beacon hits ${beaconHits.length}`,
-	});
-	// The pair is one control: the proxy keeps the network, the storage scope stops the tab
-	// removing it. `global` would have dropped the network even with the proxy on.
-	checks.push({
-		vector: 'F', name: "the tab's `dataStorage: global` did not take the network away", ok: resolvedNetwork !== 'none',
-		detail: `the tab wrote global; resolved network=${resolvedNetwork}`,
-	});
-}
-if (phase === 'restore') {
-	checks.push({
-		vector: 'restore', name: 'the restored window resolved the same network as the first launch', ok: facts.build === 'u' ? resolvedNetwork === 'none' : resolvedNetwork === `seclab+${facts.tabId}`,
-		detail: `restored: resolved network=${resolvedNetwork}, host hits ${probeHits.length}`,
-	});
-}
+// LIVENESS, closing half: the beacon answered the HOST after the measurement, so a quiet
+// beacon is a statement about the page and not about a dead listener.
+const beaconLiveAfter = await beaconSelfHit(facts.beaconAddress, facts.beaconPort, `/beacon-live-check-${facts.arm}-${phase}`);
+
+// The verdict itself is a pure function with its own defect-injection test, which asserts
+// that each check below can go red ON ITS OWN. Keeping it there rather than inline is what
+// makes that test a test of the shipped logic instead of a copy of it.
+const checks = browserProbeChecks({
+	build: facts.build, phase: phase as 'first' | 'restore', probe: facts.probe, tabId: facts.tabId,
+	hookLines, phaseLines: phaseLines.length,
+	probeHits: probeHits.length, beaconHits: beaconHits.length, beaconLiveAfter,
+	buildMatches: recorded.build === facts.build,
+	buildDetail: `${recorded.build} (repo ${recorded.buildInfo.repoSha.slice(0, 7)})`,
+});
+const lastResolved = hookLines.filter(l => l.includes(' resolved ')).slice(-1)[0] ?? '';
+const resolvedNetwork = /\bnetwork=(\S+)/.exec(lastResolved)?.[1];
+const resolvedScope = /\bscope=(\S+)/.exec(lastResolved)?.[1];
 
 const ok = report(checks);
 fs.writeFileSync(path.join(base, `verdict-${phase}.json`), JSON.stringify({
-	build: facts.build, phase, ok, resolvedNetwork, probeHits: probeHits.length, beaconHits: beaconHits.length, hookLines: hookLines.length,
+	build: facts.build, phase, probe: facts.probe, ok, resolvedScope, resolvedNetwork,
+	probeHits: probeHits.length, beaconHits: beaconHits.length,
+	hookLines: hookLines.length, phaseLines: phaseLines.length,
 }, null, '\t'));
+// Hand the next phase its starting offsets, so it can only ever read its own launch's lines.
+fs.writeFileSync(path.join(base, 'offsets-restore.json'), JSON.stringify(logFileSizes(userData)));
+
+// The arming file is removed on EVERY check, not only the last one: a run stopped after the
+// first phase used to leave it armed until its ten-minute expiry (security review round 8,
+// finding 6). Re-arming is a `prepare` away, so there is no cost to removing it early.
+fs.rmSync(armDir, { recursive: true, force: true });
+
 // The first phase leaves the run up so the restore phase can relaunch the same profile.
 if (phase === 'restore') {
-	fs.rmSync(armDir, { recursive: true, force: true });
 	// Evaluated FIRST and on its own line: `ok && teardownGate(base)` short-circuits, so a
 	// failing verdict skipped teardown entirely and left an editor running (observed, and
 	// exactly the hard rule teardown exists for).
