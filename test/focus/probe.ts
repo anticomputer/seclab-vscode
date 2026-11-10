@@ -146,11 +146,11 @@ if (mode === 'prepare') {
 	// Tab-written text: no terminal control sequences reach the operator's terminal (AAA-6).
 	const marks = (raw + hostMarks).replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, '?').split('\n').filter(Boolean).sort().join('\n');
 	const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';
-	// The battery ends at "done", or at its first terminal step: since dialogs are never shown in
-	// background mode, a lost server connection or a restarted local extension host (which takes
-	// tabd with it) leaves the window disconnected for good. Cover the other terminal step with a
-	// second run: prepare --skip server-connection-lost.
-	const completed = / done$/m.test(marks) || / step \d+ (server-connection-lost|restart-extension-host)$/m.test(marks);
+	// The battery ends at "done", or at its one terminal step: since dialogs are never shown in
+	// background mode, a lost server connection leaves the window disconnected for good. Cover the
+	// steps after it with a second run: prepare --skip server-connection-lost. Restart Extension
+	// Host is not terminal (patch 0040): the window reconnects and the battery resumes to "done".
+	const completed = / done$/m.test(marks) || / step \d+ server-connection-lost$/m.test(marks);
 	console.log(`marks (in the tab):\n${marks.trim() || '(none)'}\n`);
 	if (steals) {
 		const at = Date.parse(steals.split(' ')[0]);

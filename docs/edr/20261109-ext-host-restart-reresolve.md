@@ -43,6 +43,10 @@ in `AbstractExtensionService.startExtensionHosts`:
   remote host is waiting on.
 - It deliberately does not call `_resolveAuthorityAgain`: that clears again first, which
   cancels the request the remote host is already waiting on.
+- Overlapping restarts (review [OOO-1](../security-reviews/20261109-ext-host-restart-reresolve.md)):
+  the managed authority is remembered once seen, so a second restart that finds it already
+  cleared still re-resolves. Each restart takes a generation number, and only the newest one
+  completes the request; an older resolution went through a stopped host and is dropped.
 
 After a restart the Tab Manager resolves the tab again: tabd restarts the tab, and the window
 reconnects to a new REH. Editor state that lives in the old REH (terminals, running tasks) is
@@ -70,3 +74,8 @@ still ask for it.
   two patches share a number. This runs in `patch-build` and in `prepare.sh`.
 - The proof is the focus battery's `restart-extension-host` step on a branch build: the window
   reconnects, and no "No socket factory" appears in the renderer log.
+- Requirement for the RPC series (review [OOO-2](../security-reviews/20261109-ext-host-restart-reresolve.md)):
+  until the filter lands, tab code can run `workbench.action.restartExtensionHost` and the
+  extension install/uninstall commands through `$executeCommand`. Each restart now runs the
+  Tab Manager's resolver again, so a tab could repeat its prompts. The filter should deny those
+  commands to `seclab+` callers.

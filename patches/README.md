@@ -58,7 +58,6 @@ Current queue:
   `seclabAhpGate.log`. New files are edited in `agentic/patch-src` and synced with
   `node agentic/tools/sync-patch.ts --write`
   ([EDR](../docs/edr/20261106-agentic-probe-runner.md), [plan](../docs/plans/agentic-implementation.md) increment 1).
-<<<<<<< HEAD
 - `0035-seclab-document-sync-provenance.patch`: in a `seclab+` window, a non-local extension host
   is sent a text model only if it owns it:
   - a file on the window's own tab authority;
