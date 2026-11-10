@@ -1,24 +1,26 @@
 diff --git a/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts b/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
-index cd1678b2..a8fe4089 100644
+index cd1678b..fe079ad 100644
 --- a/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
 +++ b/src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts
-@@ -35,6 +35,7 @@ import { ChatEditorInput } from '../../chat/browser/widgetHosts/editor/chatEdito
+@@ -35,6 +35,8 @@ import { ChatEditorInput } from '../../chat/browser/widgetHosts/editor/chatEdito
  import { IChatWidgetService } from '../../chat/browser/chat.js';
  import { IAccessibilityService } from '../../../../platform/accessibility/common/accessibility.js';
  import { URI } from '../../../../base/common/uri.js';
 +import { IFileService } from '../../../../platform/files/common/files.js';
++import { IProductService } from '../../../../platform/product/common/productService.js';
  import { isEqual } from '../../../../base/common/resources.js';
  import { Schemas } from '../../../../base/common/network.js';
  import { getCopilotRootPaths } from '../../../../platform/environment/common/copilotHome.js';
-@@ -161,6 +162,7 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
+@@ -161,6 +163,8 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
  		@IAccessibilityService private readonly accessibilityService: IAccessibilityService,
  		@INotificationService private readonly notificationService: INotificationService,
  		@ILabelService private readonly labelService: ILabelService,
 +		@IFileService private readonly seclabFileService: IFileService,
++		@IProductService private readonly seclabProductService: IProductService,
  	) {
  		super();
  		const channel = mainProcessService.getChannel(ipcBrowserViewChannelName);
-@@ -241,6 +243,89 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
+@@ -241,6 +245,97 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
  		void this._browserViewsReady.p.catch(error => {
  			this.logService.error('[BrowserViewWorkbenchService] Failed to initialize browser view event stream.', error);
  		});
@@ -92,11 +94,19 @@ index cd1678b2..a8fe4089 100644
 +			clearInterval(seclabDriveTick);
 +			try {
 +				const network = this.resolveNetwork({ type: 'agent', sessionId: fields.arm });
-+				this.logService.warn(`${seclabDriveMarker} opening ${fields.url} network=${network?.authority ?? 'none'}`);
++				this.logService.warn(`${seclabDriveMarker} opening ${fields.url} requestedNetwork=${network?.authority ?? 'none'} build=${(this.seclabProductService as unknown as { seclabTestBuild?: { repoSha?: string } }).seclabTestBuild?.repoSha ?? 'none'}`);
++				// NO explicit `session`. The tool does not pass one either, and passing one
++				// is what made the first version of this probe measure nothing: upstream's
++				// `_resolveSessionRequest` returns a request that already carries a scope
++				// WITHOUT reading `workbench.browser.dataStorage`, so a hook that supplied
++				// `{ scope: Agent }` silently skipped the very setting the probe exists to
++				// measure (security review round 8, finding 2). Omitting it sends the open
++				// down the same path a model-driven open takes, where the configured storage
++				// scope decides the scope, and the scope decides whether the view keeps its
++				// network at all.
 +				await this.createBrowserView({
 +					owner: { type: 'agent', sessionId: fields.arm } as const,
 +					initialAudiences: [{ type: 'agent' }] as const,
-+					session: { scope: BrowserViewStorageScope.Agent, affinity: undefined, network } as const,
 +					initialUrl: fields.url,
 +					openSource: 'cdpCreated',
 +				}, { preserveFocus: true });
@@ -108,3 +118,37 @@ index cd1678b2..a8fe4089 100644
  	}
  
  	resolveNetwork(owner: IBrowserViewOwner): IBrowserViewNetwork | undefined {
+@@ -526,6 +621,13 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
+ 		if (!this._known.has(id)) {
+ 			// Capture the opening context before any asynchronous work.
+ 			const owner = createOptions?.owner ?? { type: 'user' };
++			// SECLAB_TEST_ONLY: browser-drive hook. The scope that was PERSISTED, read before
++			// `_resolveSessionRequest` runs. It has to be logged here: patch 0017 discards the
++			// saved request inside that method, so by the time the resolution line is written
++			// the hostile value is gone and a check keyed off it could never pass on a fixed
++			// build. Logged for every input, including restored ones, which is the only way to
++			// show that the restore phase really did read hostile persisted state.
++			this.logService.warn(`[SECLAB_TEST_ONLY:browser-drive-hook] input id=${id} savedScope=${data.session && typeof data.session !== 'string' ? data.session.scope ?? 'none' : 'none'} explicitSession=${createOptions?.session ? 'yes' : 'no'}`);
+ 			const requested = createOptions?.session ?? this._resolveSessionRequest(owner, data.session);
+ 			data = { ...data, session: typeof requested === 'string' ? undefined : requested };
+ 			const cancellation = new CancellationTokenSource();
+@@ -619,7 +721,18 @@ export class BrowserViewWorkbenchService extends Disposable implements IBrowserV
+ 				scope = BrowserViewStorageScope.Ephemeral;
+ 			}
+ 		}
+-		return { session: toBrowserViewSessionOptions(scope, affinity, network), network };
++		// SECLAB_TEST_ONLY: browser-drive hook, second log point. This is the AUTHORITATIVE
++		// one: the `opening` line above records what the hook ASKED for, before upstream
++		// applies workspace trust, proxy availability and storage isolation, any of which
++		// can still drop the network. It also fires for views this hook did not open,
++		// including a browser editor RESTORED from a previous window, which is the only way
++		// to observe the restore path at runtime: that view is recreated from persisted
++		// state with no hook involvement at all. Unconditional, because a restore happens
++		// before any arming file could be read, and harmless outside a run: it is a log line
++		// in a build that is already marked unreleasable.
++		const seclabResolved = toBrowserViewSessionOptions(scope, affinity, network);
++		this.logService.warn(`[SECLAB_TEST_ONLY:browser-drive-hook] resolved scope=${seclabResolved.scope} network=${network?.authority ?? 'none'} requestedScope=${requested.scope} build=${(this.seclabProductService as unknown as { seclabTestBuild?: { repoSha?: string } }).seclabTestBuild?.repoSha ?? 'none'}`);
++		return { session: seclabResolved, network };
+ 	}
+ 
+ 	/**
