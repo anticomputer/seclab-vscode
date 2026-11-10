@@ -1,4 +1,12 @@
 {
+	"setSeclabChannelGuard": {
+		"why": "patch 0006: whoever calls the setter last decides the channel guard for the whole process. The workbench installs the real guard (seclabRpcFilter.ts, patch 0005); the REH, which runs inside the tab, installs an allow-all as the first statement of createServer. A third caller reachable from desktop could replace the workbench guard and silently reopen every chan: surface, and reach.json/unreachable.json would not notice.",
+		"files": {
+			"src/vs/base/parts/ipc/common/ipc.ts": "export function setSeclabChannelGuard(guard",
+			"src/vs/workbench/services/extensions/common/seclabRpcFilter.ts": "",
+			"src/vs/server/node/remoteExtensionHostAgentServer.ts": ""
+		}
+	},
 	"AgentHostIpcChannels.RemoteProxy": {
 		"why": "patch 0015 gates the agent-host transport by wrapping this channel inside EditorRemoteAgentHostServiceClient, so every caller that instantiates that client is gated (including patch 0010's selection in agentHostService.ts). A second renderer-side consumer would bypass the gate entirely, and no runtime probe can show that none exists.",
 		"files": {

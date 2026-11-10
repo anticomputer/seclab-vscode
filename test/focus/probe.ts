@@ -1,6 +1,6 @@
 // Focus probe: does a background editor window ever take focus, and on which path? (2026-11-06:
 // an agentic run on the release build took focus mid-run.) macOS, sbx, local only.
-//   node test/focus/probe.ts prepare [--app PATH] [--skip step,step]   # a benign tab with the probe extension; prints the launch line
+//   node test/focus/probe.ts prepare [--app PATH] [--image seclab-tab-oci:TAG] [--skip step,step]   # a benign tab with the probe extension; prints the launch line
 //   node test/window.ts launch [--app PATH] ...     # (the printed line) background launch; the watcher kills on a steal
 //   node test/focus/probe.ts check                  # marks vs steals, then the teardown gate
 // The probe extension (test/focus/probe-extension) steps through the paths one at a time and
@@ -30,6 +30,16 @@ const opt = (name: string) => {
 };
 const appArg = opt('--app') ? path.resolve(opt('--app')!) : undefined;
 const skipArg = opt('--skip');
+// A test-variant app pairs only with its own REH, which ships as an OCI image
+// (docs/edr/20261106-test-build-variants.md). `--image seclab-tab-oci:test-<v>` runs the tab on OCI.
+const imageArg = opt('--image');
+if (imageArg !== undefined && !/^seclab-tab-oci:[a-z0-9][a-z0-9._-]{0,63}$/.test(imageArg)) {
+	console.error(`--image must name a seclab-tab-oci image, got ${JSON.stringify(imageArg)}`);
+	process.exit(2);
+}
+const tabExec = (tabId: string, argv: string[]) => imageArg
+	? spawnSync('docker', ['exec', `seclab-${tabId}`, ...argv], { encoding: 'utf8' })
+	: spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId}`, ...argv], { encoding: 'utf8' });
 
 if (mode === 'prepare') {
 	checkUserDataDir(userData);
@@ -46,11 +56,12 @@ if (mode === 'prepare') {
 		fs.writeFileSync(path.join(ws, '.seclab-focus-skip'), skipArg.replace(/[^a-z,-]/g, '') + '\n');
 	}
 	writeSnapshot(base);
-	writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir] });
+	writeManifest(base, { driver: imageArg ? 'oci' : 'sbx', userDataDir: userData, stateDirs: [stateDir] });
 	fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
 	fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 		'security.workspace.trust.enabled': false,
-		'seclab.tabs.driver': 'sbx',
+		'seclab.tabs.driver': imageArg ? 'oci' : 'sbx',
+		...(imageArg ? { 'seclab.tabs.image': imageArg } : {}),
 		'seclab.tabs.allowedRoots': [base],
 		'window.restoreWindows': 'none',
 	}, null, '\t'));
@@ -62,7 +73,7 @@ if (mode === 'prepare') {
 		VSCE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/focus-probe.vsix'], { stdio: 'inherit' });
 	const client = new TabdClient({
 		command: process.execPath,
-		args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', 'sbx', '--allowed-root', base],
+		args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', imageArg ? 'oci' : 'sbx', ...(imageArg ? ['--image', imageArg] : []), '--allowed-root', base],
 		env: { HOME: process.env.HOME, USER: process.env.USER },
 	});
 	await client.initialize('focus-probe', '0');
@@ -71,8 +82,8 @@ if (mode === 'prepare') {
 	await client.request('tab.ensureRunning', { tabId: tab.metadata.name });
 	// The vsix is copied into the workspace for the install (the tab sees only the workspace).
 	fs.copyFileSync(path.join(vsixDir, 'focus-probe.vsix'), path.join(ws, '.focus-probe.vsix'));
-	const r = spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tab.metadata.name}`, '/opt/seclab/bin/seclab-tab-env',
-		'/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.focus-probe.vsix')], { encoding: 'utf8' });
+	const r = tabExec(tab.metadata.name, ['/opt/seclab/bin/seclab-tab-env',
+		'/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.focus-probe.vsix')]);
 	console.log(r.stdout.trim(), r.stderr.trim());
 	if (r.status !== 0) {
 		console.error('could not install the probe extension in the tab');
@@ -142,7 +153,7 @@ if (mode === 'prepare') {
 	const hostMarks = fs.existsSync(path.join(base, 'host-marks.log')) ? fs.readFileSync(path.join(base, 'host-marks.log'), 'utf8') : '';
 	const m = readManifest(base);
 	const tabId = (m.tabs ?? [])[0];
-	const raw = tabId ? spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId}`, 'cat', path.join(ws, '.seclab-focus', 'marks.log')], { encoding: 'utf8' }).stdout ?? '' : '';
+	const raw = tabId ? tabExec(tabId, ['cat', path.join(ws, '.seclab-focus', 'marks.log')]).stdout ?? '' : '';
 	// Tab-written text: no terminal control sequences reach the operator's terminal (AAA-6).
 	const marks = (raw + hostMarks).replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, '?').split('\n').filter(Boolean).sort().join('\n');
 	const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';

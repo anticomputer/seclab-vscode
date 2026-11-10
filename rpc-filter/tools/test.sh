@@ -3,7 +3,8 @@
 #
 #   rpc-filter/tools/test.sh [path-to-vscode-checkout]
 #
-# Covers the generator's determinism and constant resolution: the inventory
+# Covers the generator's determinism and constant resolution, the
+# server-initiated push sweep, and the enforcement gate: the inventory
 # must depend on the pinned source, not on the order the filesystem happened to
 # enumerate it in. A command's policy category is derived from its id, so
 # anything that can change an id can silently change a security classification.
@@ -27,7 +28,7 @@ if [ -d "$SRC/src/vs" ]; then
 		-v "$SRC_ABS":/src:ro \
 		-w /repo/rpc-filter/tools \
 		"$IMAGE" \
-		python3 test_generator.py
+		python3 -m unittest test_generator test_enforcement test_lint_probes
 fi
 
 echo "note: no upstream checkout at $SRC; running fixture tests only" >&2
@@ -36,4 +37,4 @@ exec docker run --rm \
 	-v "$REPO":/repo \
 	-w /repo/rpc-filter/tools \
 	"$IMAGE" \
-	python3 test_generator.py
+	python3 -m unittest test_generator test_enforcement test_lint_probes

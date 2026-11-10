@@ -14,14 +14,21 @@
 0002-extensionkind-product-default.patch
 0003-no-workspace-extensions-in-local-windows.patch
 0004-extension-description-computed-fields-win.patch
-# 0005-0011 are reserved for the RPC capability-filter series (anticomputer-rpc-filter-patches).
+0005-seclab-rpc-capability-filter.patch
+0006-seclab-channel-guard.patch
+0007-seclab-command-taint.patch
+0008-seclab-route-tab-commands.patch
+0009-seclab-no-builtin-chat-in-tabs.patch
+0010-seclab-no-agent-host-client-in-tabs.patch
 0012-background-windows-env.patch
 0013-no-local-agent-host.patch
 0014-build-desktop-without-copilot-runtime.patch
 # 0015 onwards: the secure-agentic-experiences series (plan section 10).
 # New files in 0015 are edited in agentic/patch-src (agentic/tools/sync-patch.ts).
 0015-seclab-ahp-gate.patch
-# 0030-0034 are reserved for the RPC sessions.
+# 0030-0034: RPC capability filter follow-ons. 0030-0031 are the held-back REH-push patches
+# (anticomputer-rpc-filter-patches); 0011 stays with the held-back remote agent-host dial lock.
+0032-seclab-partition-tab-extension-state.patch
 0035-seclab-document-sync-provenance.patch
 # Fork build: Restart Extension Host re-resolves a managed (seclab+) authority (EDR ext-host-restart-reresolve).
 0040-reresolve-managed-authority-on-restart.patch

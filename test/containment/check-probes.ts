@@ -28,6 +28,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { readHits } from './beacon.ts';
+import { partitionFindings, stateItems } from './state-db.ts';
 import { report, type Check } from './assert.ts';
 
 const argv = process.argv.slice(2);
@@ -39,7 +40,7 @@ const opt = (name: string): string | undefined => {
 };
 const noReh = argv.includes('--no-reh');
 if ((mode !== 'unpatched' && mode !== 'patched') || !evidenceArg) {
-	console.error('usage: check-probes.ts unpatched|patched <evidence-dir> [--beacon F] [--denials F] [--no-reh]');
+	console.error('usage: check-probes.ts unpatched|patched <evidence-dir> [--beacon F] [--denials F] [--user-data DIR --tab ID] [--no-reh]');
 	process.exit(2);
 }
 
@@ -54,6 +55,7 @@ interface Result { id: string; policyRef: string; outcome: string; detail: strin
 interface Spec {
 	required?: boolean; policyRef: string; why: string; beacon?: string;
 	patchedOutcome?: string; needsTestContribution?: boolean;
+	status?: string; blocked_on?: string;
 	hostEffect?: string; hostEffectAbsolute?: string;
 }
 
@@ -69,8 +71,22 @@ function hostEffectPath(effect: string): string | null {
 	if (effect.startsWith('marker.')) {
 		return path.join(runDir, `PWNED${effect.slice('marker'.length)}`);
 	}
+	if (!HOST_EFFECT_FILENAME.test(effect)) {
+		// Not a filename. The previous version joined whatever it was onto the
+		// run directory, so an English description of an effect -- "beacon hit
+		// from the host, or a marker written outside the tab" -- became a path
+		// that could never exist, and the absence of that file was reported as
+		// the host being unchanged. A probe that cannot fail is worse than no
+		// probe, so an unresolvable effect is an error rather than a pass.
+		throw new Error(
+			`hostEffect ${JSON.stringify(effect)} is not a filename. Use "marker", `
+			+ `"marker.<suffix>", a run-relative path, or hostEffectAbsolute.`);
+	}
 	return path.join(runDir, effect);
 }
+
+/** A plausible run-relative filename: no spaces, no prose. */
+const HOST_EFFECT_FILENAME = /^[A-Za-z0-9._\/-]+$/;
 
 const checks: Check[] = [];
 const c = (vector: string, ok: boolean, name: string, detail = ''): void => {
@@ -118,10 +134,25 @@ function load(file: string, label: string, required: boolean): void {
 	c('probes', true, `${label} evidence present (${file})`, `${run.results.length} results`);
 }
 load('rpc-probes.json', 'rogue extension', true);
-// The REH fixture reaches surfaces the extension host cannot. Skipping it
-// silently would leave chan:download, chan:mcpGatewayToolBroker and the raw-RPC
-// identity spoof with no baseline, which reads as containment.
-load('reh-probes.json', 'rogue REH', !noReh);
+// The REH fixture reaches surfaces the extension host cannot: chan:download,
+// chan:mcpGatewayToolBroker, the raw-RPC identity spoof and the terminal
+// pushes. Missing evidence is a failure unless the run says, in as many words,
+// that it is not testing them.
+//
+// Waiving it used to print `PASS  rogue REH evidence present`, which is a
+// false sentence: nothing was loaded and nothing was present. A green line
+// asserting the opposite of what happened is worse than no line, because it is
+// what gets quoted afterwards. The waiver is now reported as a waiver, names
+// the probes it drops, and is counted so the run summary cannot be read as
+// covering them.
+if (noReh) {
+	const dropped = Object.keys(expectations.rehProbes as Record<string, unknown>)
+		.filter(k => k !== 'note');
+	c('probes-waived', true, 'rogue REH evidence WAIVED by --no-reh',
+		`not tested: ${dropped.length} probes (${dropped.join(', ')})`);
+} else {
+	load('reh-probes.json', 'rogue REH', true);
+}
 
 const specs: Record<string, Spec> = {
 	...(expectations.probes as Record<string, Spec>),
@@ -175,13 +206,86 @@ const predicates: Record<string, (r: Result) => string | null> = {
 	},
 	'webview-egress': () =>
 		beaconPaths.has('/webview') ? 'webview still reached the host network' : null,
+	'state-claim-tab-manager-read': r =>
+		r.detail.includes('seclabcanary_') ? 'the Tab Manager\'s seeded globalState canary reached the tab' : null,
+	'state-claim-tab-manager-write': () => partitionReason(0, 1),
+	'secret-claim-tab-manager-write': () => partitionReason(2, 3),
+};
+
+/**
+ * The partition checks read the profile's state database (test/containment/state-db.ts), so they
+ * need the run's --user-data dir and --tab id. `escaped` is the finding that fails on an escape,
+ * `ran` the one that shows the write landed in the partition.
+ */
+function partitionReason(escaped: number, ran: number): string | null {
+	const userData = opt('--user-data');
+	const tab = opt('--tab');
+	if (!userData || !tab) {
+		return 'needs --user-data and --tab to read where the write landed';
+	}
+	const f = partitionFindings(stateItems(path.resolve(userData)), tab);
+	return !f[escaped].ok ? f[escaped].name.replace('did not', 'DID') : !f[ran].ok ? `${f[ran].name}: ${f[ran].detail}` : null;
+}
+
+// An unpatched run must show the escape itself, not just a return value: these probes
+// "succeed" on both builds, so the outcome alone proves nothing.
+const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
+	'state-claim-tab-manager-read': r =>
+		r.detail.includes('seclabcanary_') ? null : 'the read did not return the seeded canary, so the probe proves nothing',
+	'provider-completion-host-file': r => {
+		try { return JSON.parse(r.detail).sawHostContent === true ? null : 'no host file content came back'; } catch { return `unparseable detail: ${r.detail}`; }
+	},
+	'host-doc-open-userdata': r => {
+		try { return JSON.parse(r.detail).sawHostContent === true ? null : 'the host settings canary did not come back'; } catch { return `unparseable detail: ${r.detail}`; }
+	},
+	'host-doc-show-userdata': r => {
+		try { return JSON.parse(r.detail).sawHostContent === true ? null : 'the host settings canary did not come back'; } catch { return `unparseable detail: ${r.detail}`; }
+	},
+	'host-file-search-nested-uri': r => {
+		try { return JSON.parse(r.detail).sawHostResult === true ? null : 'no host resource in the search results'; } catch { return `unparseable detail: ${r.detail}`; }
+	},
+	// A restart is proven only by a new extension host process settling the attempt, never by
+	// an outcome that was simply not written (review round 14 alert 2).
+	'host-restart-extension-host': r => {
+		try {
+			const v = JSON.parse(r.detail) as { attemptPid?: unknown; newHostPid?: unknown; sameWindow?: unknown; settledMs?: unknown };
+			return Number.isSafeInteger(v.newHostPid) && Number.isSafeInteger(v.attemptPid) && v.newHostPid !== v.attemptPid
+				&& v.sameWindow === true && typeof v.settledMs === 'number' && v.settledMs <= 60000
+				? null : 'no new extension host in the same window, promptly after the attempt';
+		} catch { return `unparseable detail: ${r.detail}`; }
+	},
+	'state-claim-tab-manager-write': () => {
+		const userData = opt('--user-data');
+		if (!userData) { return 'needs --user-data'; }
+		const f = partitionFindings(stateItems(path.resolve(userData)), opt('--tab') ?? '');
+		return f[0].ok ? 'the write did not reach the Tab Manager\'s globalState' : null;
+	},
+	'secret-claim-tab-manager-write': () => {
+		const userData = opt('--user-data');
+		if (!userData) { return 'needs --user-data'; }
+		const f = partitionFindings(stateItems(path.resolve(userData)), opt('--tab') ?? '');
+		return f[2].ok ? 'the secret did not land under the Tab Manager\'s id' : null;
+	},
 };
 
 // ---------------------------------------------------------------- checks
 for (const [id, spec] of Object.entries(specs)) {
-	const known = spec.policyRef in (coverage.mapping as Record<string, string>)
+	const mapping = coverage.mapping as Record<string, string>;
+	// Surface (e) keys carry pinned attributes after the id --
+	// `ai-tool:<id>|host=…`, `ai-setting:<id>|scope=…|unreg=…|tab_writable=…` --
+	// so an exact lookup never matches. Match on the id prefix instead: the
+	// attributes are what the gate pins, not part of the surface's identity.
+	const composite = (ref: string): boolean =>
+		(ref.startsWith('ai-tool:') || ref.startsWith('ai-setting:'))
+		&& Object.keys(mapping).some(k => k === ref || k.startsWith(`${ref}|`));
+	// `chan:server_initiated` and `push:` used to be exempt here, and skipped
+	// by name in check_drift.py, so server-initiated surfaces were in neither
+	// the digest nor this check. A probe could name one and link to nothing.
+	// Both classes are now ordinary keys in coverage.json, so a probe that
+	// references a push the policy does not know about fails like any other.
+	const known = spec.policyRef in mapping
+		|| composite(spec.policyRef)
 		|| spec.policyRef.startsWith('data:')
-		|| spec.policyRef.startsWith('chan:server_initiated')
 		|| spec.needsTestContribution
 		|| spec.policyRef === 'rpc:raw';
 	c('probe-policy-link', known, `${id} references a real policy entry (${spec.policyRef})`,
@@ -189,6 +293,14 @@ for (const [id, spec] of Object.entries(specs)) {
 }
 
 for (const [id, spec] of Object.entries(specs)) {
+	if (spec.status === 'not-implemented') {
+		// Reported, never silently skipped. These are registered surfaces with
+		// no runner yet; counting them as passes would turn an absence of
+		// evidence into evidence of containment.
+		c('probes-pending', true, `${id} is registered but NOT IMPLEMENTED`,
+			spec.blocked_on ?? '');
+		continue;
+	}
 	const r = results.get(id);
 	if (!r) {
 		c('probes', !spec.required, `${id} ran`, 'no result recorded');
@@ -200,6 +312,11 @@ for (const [id, spec] of Object.entries(specs)) {
 		c('probes', r.outcome === 'succeeded' || !spec.required,
 			`${id} succeeds on the unpatched build (${spec.why})`,
 			`${r.outcome}: ${String(r.detail).slice(0, 200)}`);
+		const unpatchedPred = unpatchedPredicates[id];
+		if (unpatchedPred && spec.required) {
+			const reason = unpatchedPred(r);
+			c('predicate', reason === null, `${id} shows the escape itself on the unpatched build`, reason ?? '');
+		}
 		if (spec.beacon && spec.required) {
 			c('beacon', beaconPaths.has(spec.beacon),
 				`${id} actually reached the host network (${spec.beacon})`,

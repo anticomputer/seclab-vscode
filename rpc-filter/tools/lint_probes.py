@@ -111,12 +111,55 @@ ARMING_BAIL = re.compile(r"\b(?:continue|return)\b|\bif\s*\(\s*!")
 PRAGMA = re.compile(r"//\s*lint-allow:\s*(?P<id>[\w-]+)")
 ALLOWED_PRAGMAS = {"base64-canary-compare"}
 
+# Real user sources a probe may read only where the harness seeded a canary first: the
+# source expression must be preceded, within a few code lines, by a check of the seeding
+# fact that BAILS (throw/return) when it is absent. On 2026-11-09 clipboard-read read the
+# user's real clipboard on an unfiltered build because nothing tied the read to the run's
+# opt-in; this makes that tie structural rather than a convention.
+#   (id, source, guard, why)
+GUARDED_SOURCES = (
+    ("unseeded-clipboard",
+     re.compile(r"\bclipboard\.readText\s*\("),
+     re.compile(r"\b(?:targets|arm)\.clipboard\b"),
+     "reads the clipboard; only after checking the run seeded it (targets.clipboard / arm.clipboard) and bailing if not"),
+    ("unseeded-profile",
+     re.compile(r"""scheme:\s*['"]vscode-userdata['"]|['"`]vscode-userdata:"""),
+     re.compile(r"\.seclab-test"),
+     "names a host profile resource; only the isolated ~/.seclab-test profile the harness launched, checked before use"),
+    ("real-keychain",
+     re.compile(r"\bkeytar\b|SecKeychain|find-(?:generic|internet)-password|Keychains/"),
+     re.compile(r"(?!)"),
+     "reads the keychain; no harness seeds it, so no probe may read it"),
+)
+GUARD_LOOKBACK = 10
+GUARD_BAIL = re.compile(r"\bthrow\b|\breturn\b")
 
-def main() -> int:
+
+def guarded_source_violations(rel: str, code: list) -> list:
+    out = []
+    for i, (n, line) in enumerate(code):
+        for rid, source, guard, why in GUARDED_SOURCES:
+            if not source.search(line):
+                continue
+            window = [l for _, l in code[max(0, i - GUARD_LOOKBACK):i + 1]]
+            guarded = any(guard.search(l) for l in window) and any(GUARD_BAIL.search(l) for l in window)
+            if not guarded:
+                out.append((rel, n, rid, f"{why}\n      {line.strip()[:120]}"))
+    return out
+
+
+def main(argv: list | None = None) -> int:
+    # An optional root lints another copy of the tree (how a fixed rule is shown to
+    # catch the version it was written against).
+    args = sys.argv[1:] if argv is None else argv
+    root = os.path.abspath(args[0]) if args else REPO
     violations = []
-    payloads = payload_files(REPO)
+    payloads = payload_files(root)
+    if not payloads:
+        # A lint over nothing reports clean; that is a lint that cannot fail.
+        violations.append((root, 0, "no-payloads", "found no probe payloads to lint under this root"))
     for rel in payloads:
-        path = os.path.join(REPO, rel)
+        path = os.path.join(root, rel)
         if not os.path.isfile(path):
             violations.append((rel, 0, "missing", "payload file not found"))
             continue
@@ -138,6 +181,7 @@ def main() -> int:
         for rid, pattern, why in RULES:
             if pattern.search(flat) and not any(v[0] == rel and v[2] == rid for v in violations):
                 violations.append((rel, 0, rid, f"{why} (matched after joining lines)"))
+        violations.extend(guarded_source_violations(rel, code))
         for n, line in code:
             if "fromCharCode" in line or "'base64'" in line:
                 m = PRAGMA.search(line)
@@ -166,12 +210,12 @@ def main() -> int:
                                    "builds a shell command without safety.markerCommand()"))
 
     # Build-time copies of the guard must match the single source exactly.
-    src = os.path.join(REPO, "test/containment/probe-safety.js")
+    src = os.path.join(root, "test/containment/probe-safety.js")
     if os.path.isfile(src):
         with open(src, "rb") as fh:
             want = fh.read()
         for d in ("rogue-extension", "rogue-reh"):
-            copy = os.path.join(REPO, "test/containment", d, "probe-safety.js")
+            copy = os.path.join(root, "test/containment", d, "probe-safety.js")
             if os.path.isfile(copy):
                 with open(copy, "rb") as fh:
                     if fh.read() != want:

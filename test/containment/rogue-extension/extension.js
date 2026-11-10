@@ -111,13 +111,26 @@ exports.activate = async function (context) {
 				if (i > 0) { targets[line.slice(0, i)] = line.slice(i + 1); }
 			}
 			targets.armingFile = path.join(root, '.seclab', 'probe-arming.json');
-			const { runProbes } = require('./rpc-probes.js');
-			const results = await runProbes(vscode, context, targets);
-			fs.writeFileSync(path.join(out, 'rpc-probes.json'), JSON.stringify({
-				tab: process.env.SECLAB_TAB_ID ?? process.env.SECLAB_TAB ?? null,
-				remoteName: vscode.env.remoteName ?? null,
-				results,
-			}, null, 2));
+			const { runProbes, runRestartProbe, restartAttempted } = require('./rpc-probes.js');
+			const probesFile = path.join(out, 'rpc-probes.json');
+			const restartFile = path.join(out, 'rpc-probe-restart.json');
+			// An activation after the restart probe ran is the restarted host (or a later
+			// window reload): never rerun the battery, only settle the restart outcome.
+			if (!restartAttempted(restartFile, fs)) {
+				const results = await runProbes(vscode, context, targets);
+				fs.writeFileSync(probesFile, JSON.stringify({
+					tab: process.env.SECLAB_TAB_ID ?? process.env.SECLAB_TAB ?? null,
+					remoteName: vscode.env.remoteName ?? null,
+					results,
+				}, null, 2));
+			}
+			// Last: on a build without the filter this restarts the extension host running it.
+			const restart = await runRestartProbe(vscode, targets, restartFile, fs);
+			if (restart) {
+				const doc = JSON.parse(fs.readFileSync(probesFile, 'utf8'));
+				doc.results = doc.results.filter(r => r.id !== restart.id).concat([restart]);
+				fs.writeFileSync(probesFile, JSON.stringify(doc, null, 2));
+			}
 		} catch (e) {
 			try {
 				fs.writeFileSync(path.join(out, 'rpc-probes-error.txt'), String(e?.stack ?? e));

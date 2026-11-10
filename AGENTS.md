@@ -293,6 +293,12 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab test secrets sbx       # pre-mount gitleaks gate: block, move-to-vault + sentinel, restore, accept (also: oci)
 ./seclab test obs sbx           # tab observability: inert loader -> expected events/labels; sensor tampering -> gap (also: oci)
 ./seclab test probes            # AHP probes driven into the real upstream client (no window, no network): each must land where it claims, or the check fails
+./seclab test arg-validators    # the RPC filter's named argument validators, imported from the shipped module, each proved by an injected defect (also in ./seclab test rpc-filter)
+# One-pass RPC measurement of an ordinary session (unfiltered build, benign fixtures only):
+# prepare prints a `node test/window.ts launch --rpc-trace .work/...` line; check derives method
+# names and counts into .work/rpc-trace/derived.json, deletes the raw trace, then tears down.
+node test/containment/rpc-trace.ts prepare ~/.seclab-test/rt sbx
+node test/containment/rpc-trace.ts check ~/.seclab-test/rt
 ./seclab tab logs [-f] [--format text|json|falco] <tabId|all>   # read a tab's event log (--state-dir DIR for test runs)
 ./seclab lint fixtures          # fixture-safety lint (docker, no network); also: test/safety/fixture-lint.sh PATH...
 build/apply-patches.sh --check  # patch queue == patches/series (no unlisted patch can ship)
@@ -330,6 +336,9 @@ node test/builds/rogue-reh-arming.ts    # the hook arms only for a staged, unexp
 # Level B (editor-driven). The profile dir must be short (macOS 104-byte socket path) and isolated.
 ./seclab test evidence prepare ~/.seclab-test/ud sbx    # then run the printed `node test/window.ts launch ...` (background, never activated)
 ./seclab test evidence check ~/.seclab-test/ud sbx      # known M4 gaps (settings/clipboard canaries, git askpass) report as XFAIL
+# A test-variant app pairs only with its own REH (an OCI image): run the tab on it, and insert
+# `--app '<test app>'` after `launch` in the printed line. SECLAB_BENIGN_ONLY=1 leaves the rogue extension out.
+SECLAB_BENIGN_ONLY=1 SECLAB_TAB_IMAGE=seclab-tab-oci:test-containment node test/containment/check-evidence.ts prepare ~/.seclab-test/ud oci
 
 # Focus regression (activation paths: notification, dialogs, full screen, new window, reload, reconnect)
 node test/focus/probe.ts prepare [--app .work/app-branch/seclab-vscode.app]   # then run the printed launch line

@@ -15,8 +15,9 @@ import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
 import { beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, lockRun } from '../harness.ts';
-import { brokerProxy, checkEvidence, readEvidence, report, type Check } from './assert.ts';
+import { brokerProxy, checkEvidence, readEvidence, report, rpcDecisions, type Check } from './assert.ts';
 import { materialiseFixture, readManifest, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
+import { partitionFindings, seedTabManagerState, stateItems } from './state-db.ts';
 
 const [mode, userDataArg, driverArg] = process.argv.slice(2);
 if ((mode !== 'prepare' && mode !== 'check') || !userDataArg) {
@@ -24,6 +25,15 @@ if ((mode !== 'prepare' && mode !== 'check') || !userDataArg) {
 	process.exit(2);
 }
 const driver = driverArg ?? 'sbx';
+// A test-variant build pairs with its own REH, which only ships as an OCI image
+// (docs/edr/20261106-test-build-variants.md): SECLAB_TAB_IMAGE=seclab-tab-oci:test-containment.
+// Only our own tab images are accepted; the editor's Tab Manager gets the same image.
+const tabImage = process.env.SECLAB_TAB_IMAGE || undefined;
+if (tabImage !== undefined && !/^seclab-tab(-oci)?:[a-z0-9][a-z0-9._-]{0,63}$/.test(tabImage)) {
+	console.error(`SECLAB_TAB_IMAGE must name a seclab-tab image, got ${JSON.stringify(tabImage)}`);
+	process.exit(2);
+}
+const imageArgs = tabImage ? ['--image', tabImage] : [];
 const repo = path.resolve(import.meta.dirname, '../..');
 const userData = path.resolve(userDataArg);
 checkUserDataDir(userData);
@@ -42,7 +52,7 @@ if (mode === 'prepare') {
 	if (fs.existsSync(stateDir)) {
 		const old = new TabdClient({
 			command: process.execPath,
-			args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', driver, '--allowed-root', base],
+			args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', driver, ...imageArgs, '--allowed-root', base],
 			env: { HOME: process.env.HOME, USER: process.env.USER },
 		});
 		await old.initialize('containment-editor-cleanup', '0');
@@ -66,7 +76,7 @@ if (mode === 'prepare') {
 	// loudly rather than silently skip those checks.
 	fs.mkdirSync(base, { recursive: true });
 	fs.writeFileSync(path.join(base, '.seclab-probe-nonce'), arm);
-	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${canary}\nmarker=${marker}\nloopback=${port}\narm=${arm}\nrun=${base}\nuntil=${until}\n`
+	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${canary}\nmarker=${marker}\nloopback=${port}\narm=${arm}\nrun=${base}\nuntil=${until}\nuserdata=${userData}\n`
 		+ (process.env.SECLAB_CANARY_CLIPBOARD === '1' ? 'clipboard=1\n' : ''));
 	writeSnapshot(base);
 	// What this run owns, for teardown.ts: the editor and its tabd are found by the unique
@@ -96,13 +106,17 @@ if (mode === 'prepare') {
 	// (seeding it overwrites the user's real clipboard: SECLAB_CANARY_CLIPBOARD=1).
 	// The RPC escape probes are armed by the same arm=/run=/until= fields this
 	// harness already writes into .seclab/targets. One arming mechanism, not two.
-	const canaries = [mintCanary('user-settings'), mintCanary('user-settings-proxy-auth'), mintCanary('clipboard'), mintCanary('editor-env')];
+	const canaries = [mintCanary('user-settings'), mintCanary('user-settings-proxy-auth'), mintCanary('clipboard'), mintCanary('editor-env'), mintCanary('tab-manager-state')];
 	fs.writeFileSync(path.join(base, 'canaries.json'), serialize(canaries));
 	fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
+	// The Tab Manager's real globalState holds a canary, so a tab that can name its id
+	// (probe state-claim-tab-manager-read) shows up in the canary scan of its evidence.
+	seedTabManagerState(userData, { seclabProbeCanary: canaries[4].value });
 	fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 		'security.workspace.trust.enabled': false,
 		'task.allowAutomaticTasks': 'on',
 		'seclab.tabs.driver': driver,
+		...(tabImage ? { 'seclab.tabs.image': tabImage } : {}),
 		'seclab.tabs.allowedRoots': [base],
 		'seclab.test.canary': canaries[0].value,
 		'http.proxyAuthorization': `Basic ${canaries[1].value}`,
@@ -134,11 +148,23 @@ if (mode === 'prepare') {
 	if (spawnSync('docker', ['image', 'inspect', VSCE_IMAGE], { stdio: 'ignore' }).status !== 0) {
 		execFileSync('gh', ['cfs', '--', 'docker', 'build', '-q', '-t', VSCE_IMAGE, path.join(repo, 'build', 'vsce')], { stdio: 'inherit' });
 	}
-	execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`, '-v', `${path.join(import.meta.dirname, 'rogue-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
-		VSCE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/rogue.vsix'], { stdio: 'inherit' });
+	// The rogue extension, and the POSITIVE CONTROL beside it. A suite made only of
+	// "the bad thing did not happen" cannot tell containment from a broken editor: the
+	// first patched build denied the extension host's own error and activation plumbing,
+	// so nothing activated, no marker was written, and it read as success
+	// (docs/edr/20261106-rpc-core-proof-run.md). The benign extension must ACTIVATE AND
+	// WORK in the same window the rogue one is contained in.
+	// SECLAB_BENIGN_ONLY=1 leaves the rogue extension out, so a boot can be measured
+	// with nothing hostile in it. Never set for a proof run.
+	const benignOnly = process.env.SECLAB_BENIGN_ONLY === '1';
+	const bundles = (benignOnly ? [] : [['rogue-extension', 'rogue.vsix']]).concat([['benign-extension', 'benign.vsix']]);
+	for (const [dir, vsix] of bundles as ReadonlyArray<readonly [string, string]>) {
+		execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`, '-v', `${path.join(import.meta.dirname, dir)}:/ext:ro`, '-v', `${vsixDir}:/out`,
+			VSCE_IMAGE, 'sh', '-c', `cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/${vsix}`], { stdio: 'inherit' });
+	}
 	const client = new TabdClient({
 		command: process.execPath,
-		args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', driver, '--allowed-root', base],
+		args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', driver, ...imageArgs, '--allowed-root', base],
 		env: { HOME: process.env.HOME, USER: process.env.USER },
 	});
 	await client.initialize('containment-editor', '0');
@@ -148,9 +174,11 @@ if (mode === 'prepare') {
 	const name = `seclab-${tab.metadata.name}`;
 	const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
 	const user = driver === 'sbx' ? ['-u', 'agent'] : [];
-	const r = spawnSync(runtime, ['exec', ...user, name, '/opt/seclab/bin/seclab-tab-env',
-		'/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(vsixDir, 'rogue.vsix')], { encoding: 'utf8' });
-	console.log(r.stdout.trim(), r.stderr.trim());
+	for (const vsix of bundles.map(([, v]) => v)) {
+		const r = spawnSync(runtime, ['exec', ...user, name, '/opt/seclab/bin/seclab-tab-env',
+			'/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(vsixDir, vsix)], { encoding: 'utf8' });
+		console.log(r.stdout.trim(), r.stderr.trim());
+	}
 	if (driver === 'sbx') {
 		const g = spawnSync(runtime, ['exec', ...user, '-w', ws, name, 'sh', '-c', 'git init -q . && git config core.fsmonitor "sh .seclab/probe.sh fsmonitor"'], { encoding: 'utf8' });
 		if (g.status !== 0) {
@@ -236,7 +264,10 @@ if (mode === 'prepare') {
 	for (const [id, p] of Object.entries(expectations.probes)) {
 		const rel = typeof p.hostEffect === 'string' ? /^marker(\.[a-z0-9-]+)?$/.exec(p.hostEffect) : null;
 		const abs = typeof p.hostEffectAbsolute === 'string' ? /^userDataDir:(\/[\w./-]+)$/.exec(p.hostEffectAbsolute) : null;
-		const at = rel ? path.join(base, `PWNED${rel[1] ?? ''}`) : abs && !abs[1].includes('..') ? path.join(userData, abs[1]) : undefined;
+		// The RPC and REH probes name their own run-dir marker (probe-safety.js markerCommand
+		// suffixes): PWNED-newlocal, PWNED-resolvevars, PWNED-windowopen, ...
+		const own = [p.hostEffect, p.hostEffectAbsolute].find((v): v is string => typeof v === 'string' && /^PWNED-[a-z0-9-]+$/.test(v));
+		const at = rel ? path.join(base, `PWNED${rel[1] ?? ''}`) : abs && !abs[1].includes('..') ? path.join(userData, abs[1]) : own ? path.join(base, own) : undefined;
 		if (at) {
 			effects.set(at, [...(effects.get(at) ?? []), id]);
 		}
@@ -262,6 +293,67 @@ if (mode === 'prepare') {
 	checks.push({ vector: 'rogue-extension', name: 'ui-declared chat participant / vscode.lm caller ran in the tab, not trusted-side', ok: agent?.ranIn === 'tab' && agent?.remoteName === 'seclab',
 		detail: JSON.stringify(agent ?? 'no rogue-agent.json') });
 	checks.push({ vector: 'host', name: 'canary intact', ok: fs.readFileSync(canary, 'utf8') === 'HOST-SECRET-CANARY\n', detail: '' });
+	// POSITIVE CONTROL. Everything else in this file asserts that something did NOT
+	// happen, and a build whose extension host cannot start satisfies all of it. The
+	// benign extension must have activated in the tab and completed every ordinary
+	// operation a workspace extension performs. If this fails while the rogue checks
+	// pass, the filter has broken the editor, not contained it.
+	const benign = json(path.join(evDir, 'benign.json'));
+	const benignResults = benign?.results as Record<string, unknown> | undefined;
+	const benignWhere = (benignResults && typeof benignResults === 'object' ? benignResults.where : undefined) as { remoteName?: unknown; seclabTab?: unknown } | undefined;
+	checks.push({
+		vector: 'positive-control',
+		name: 'an ordinary workspace extension activated in the tab',
+		ok: benign?.activated === true && benignWhere?.remoteName === 'seclab' && benignWhere?.seclabTab === '1',
+		detail: benign === undefined ? 'no benign.json: the extension host could not run it' : JSON.stringify(benignWhere),
+	});
+	const benignFailed = Array.isArray(benign?.failed) ? benign.failed as unknown[] : undefined;
+	// Known, user-accepted failures (2026-11-10), each pinned to the exact way it fails AND to
+	// the host-side decision that causes it: benign.json is tab-written, so its error string
+	// alone is not evidence (review round 14). An unfiltered build has no decision log, so
+	// there the tolerance never applies. Residual until the search follow-up (round 15).
+	const decisions = rpcDecisions(userData);
+	const EXPECTED_BENIGN_FAILURES: Record<string, { error: string; deniedRef: string; reason: string }> = {
+		findFiles: {
+			error: 'timed out after 20000 ms: the call never settled',
+			deniedRef: 'rpc:MainThreadSearch.$registerFileSearchProvider',
+			reason: 'MainThreadSearch.$registerFileSearchProvider is denied: inside a tab the extension host registers its own file search provider for vscode-remote, so the search service waits forever for a provider and $startFileSearch never returns. First follow-up (docs/RPC-LOCKDOWN.md §7.1).',
+		},
+	};
+	const unexpected = (benignFailed ?? []).filter(k => {
+		const want = EXPECTED_BENIGN_FAILURES[String(k)];
+		const got = (benignResults?.[String(k)] as { error?: unknown } | undefined)?.error;
+		return !want || got !== want.error
+			|| !decisions.some(d => d.detail?.ref === want.deniedRef && d.detail?.verdict === 'deny');
+	});
+	const expectedSeen = (benignFailed ?? []).filter(k => !unexpected.includes(k));
+	checks.push({
+		vector: 'positive-control',
+		name: 'every ordinary extension operation succeeded in the tab (bar recorded, user-accepted losses)',
+		ok: benignFailed !== undefined && unexpected.length === 0,
+		detail: benignFailed === undefined ? 'no step results'
+			: `${unexpected.length} unexpected failure(s): ${unexpected.join(', ') || 'none'}`
+			+ (expectedSeen.length ? `; expected: ${expectedSeen.map(k => `${k} (${EXPECTED_BENIGN_FAILURES[String(k)].reason})`).join('; ')}` : '')
+			+ (unexpected.length ? ` | ${JSON.stringify(benign?.results).slice(0, 600)}` : ''),
+	});
+	// The denial is OBSERVED on the trusted side, not inferred from an absent marker: an
+	// absent marker alone is equally consistent with a probe that never ran. Only a filtered
+	// build writes the log, so this row applies only there.
+	if (filtered === true) {
+		const denied = decisions.filter(d => d.detail?.ref === 'cmd:workbench.action.terminal.newLocal' && d.detail?.verdict === 'deny');
+		checks.push({
+			vector: 'rpc',
+			name: 'the trusted side recorded the newLocal denial (seclabRpcFilter.log)',
+			ok: denied.length > 0,
+			detail: denied.length > 0 ? JSON.stringify(denied[0]) : `${decisions.length} decision line(s) in ${userData}/logs/**/seclabRpcFilter.log`,
+		});
+		// Per-tab state partition (patch 0032): the rogue probes wrote state and a secret under
+		// the Tab Manager's id. Where they landed is read from the profile's own database,
+		// host-side; the tab cannot write this file.
+		for (const f of partitionFindings(stateItems(userData), tabId ?? '')) {
+			checks.push({ vector: 'state-partition', name: f.name, ok: f.ok, detail: f.detail });
+		}
+	}
 	// Shared canary harness, editor side: nothing the rogue extension observed through the
 	// API (env, configuration, clipboard, auth sessions, secrets) nor any evidence may
 	// contain an editor-side canary in any encoding.

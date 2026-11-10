@@ -20,7 +20,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from seclab_inventory import channels, commands, rpc, tabdata  # noqa: E402
+from seclab_inventory import ai, channels, commands, pushes, rpc, tabdata  # noqa: E402
 from seclab_inventory.render import render_markdown  # noqa: E402
 from seclab_inventory.sources import SourceTree, read_pinned_sha  # noqa: E402
 
@@ -59,7 +59,9 @@ def main(argv=None) -> int:
             "a_mainthread_rpc": rpc.build(tree),
             "b_command_registry": commands.build(tree),
             "c_client_served_channels": channels.build(tree),
+            "c2_server_initiated_pushes": pushes.build(tree),
             "d_tab_supplied_data": tabdata.build(tree, REPO_ROOT),
+            "e_trusted_ai_surfaces": ai.build(tree),
         },
     }
 
@@ -77,16 +79,26 @@ def main(argv=None) -> int:
     b = inventory["surfaces"]["b_command_registry"]
     c = inventory["surfaces"]["c_client_served_channels"]
     d = inventory["surfaces"]["d_tab_supplied_data"]
+    e = inventory["surfaces"]["e_trusted_ai_surfaces"]
     print("upstream %s (from %s)" % (sha[:12], sha_origin))
     print("  (a) %d MainThread services, %d methods, %d undeclared-but-callable"
           % (a["service_count"], a["method_count"],
              sum(len(s["undeclared_methods"]) for s in a["services"])))
     print("  (b) %d commands, %d unresolved id expressions"
           % (b["command_count"], b["unresolved_count"]))
+    c2 = inventory["surfaces"]["c2_server_initiated_pushes"]
+    print("  (c2) %d server-initiated pushes (%d act), %d unresolved channels"
+          % (c2["server_initiated_push_count"], c2["acting_push_count"],
+             c2["unresolved_channel_count"]))
     print("  (c) %d client-served channels, %d server-initiated callbacks"
           % (c["client_served_channel_count"], c["server_initiated_callback_count"]))
     print("  (d) %d tab-data sink classes over %d sites"
           % (d["upstream_sink_count"], d["upstream_site_count"]))
+    print("  (e) %d AI tools (%d may reach the host, %d of those undeclared), "
+          "%d agent settings (%d tab-writable)"
+          % (e["tool_count"], e["may_reach_host_count"],
+             e["may_reach_host_undeclared_count"], e["setting_count"],
+             e["tab_writable_setting_count"]))
     print("wrote %s and %s" % (json_path, md_path))
     return 0
 

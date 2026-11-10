@@ -67,12 +67,14 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-04 | [M0 pipeline, seclab-tabd implementation, Tab Manager, containment suite](20261104-m0-tabd-code.md) | 296594c..7d7a1cf (round 2a), then the fixes and new code 7d7a1cf..2c07708 (round 2b), with | see record |
 | 2026-11-04 | [patch queue and release guard](20261104-patch-guard.md) | - 1aa8ccb: build/apply-patches.sh, patches/series, build/prepare.sh, | see record |
 | 2026-11-04 | [probe payload safety against the host (Phase 3, increment 2)](20261104-probe-safety.md) | see record | see record |
+| 2026-11-04 | [the RPC filter patches 0005–0007 (Phase 3, increment 3)](20261104-rpc-filter-patches.md) | see record | see record |
 | 2026-11-04 | [RPC lockdown design (Phase 2)](20261104-rpc-lockdown-design.md) | see record | see record |
 | 2026-11-04 | [RPC escape probes and rogue-REH fixture (Phase 3, increment 1)](20261104-rpc-probes-increment.md) | see record | see record |
 | 2026-11-04 | [supply-chain provenance and CI credential sweep](20261104-supply-chain.md) | - the dependency register (deps/registry.json, build/deps.ts, docs/DEPENDENCIES.md); | see record |
 | 2026-11-04 | [tab observability (one-way event stream, sbx collector, OCI Falco, Tab Activity view)](20261104-tab-observability.md) | - Round 1: origin/main..8b1df33 (pre-rebase), that is the whole layer: | see record |
 | 2026-11-04 | [seclab-tabd design (protocol and process model)](20261104-tabd-protocol-design.md) | design docs at 296594c plus the uncommitted drafts of docs/adr/20261104-tab-supervisor.md, | see record |
 | 2026-11-04 | [write-back gate, increment 1 (engine and policy)](20261104-write-back-engine.md) | - tabd/src/writeback.ts: the engine (classification, trusted host writer, conflicts, fail- | see record |
+| 2026-11-05 | [the agent-host patches 0009–0011 (Phase 3, increment 4)](20261105-agent-host-patches.md) | see record | see record |
 | 2026-11-05 | [agents-in-the-tab spike harness and findings](20261105-agents-in-tab-spike.md) | c6dfbf2..f2b9471 (rebased from f5a479a..44d11bc). That covers test/agentic/ahp/ (run.sh, b | see record |
 | 2026-11-05 | [backstop derive exemption and `GET /copilot_internal/user` exception](20261105-broker-backstop-exceptions.md) | round 8. | see record |
 | 2026-11-05 | [broker local builds through CFS](20261105-broker-cfs-builds.md) | - 440d80f: CFS local builds. | see record |
@@ -81,6 +83,8 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-05 | [broker re-pin to CFS-served versions, and the image snapshot](20261105-broker-repin-and-image-snapshot.md) | - 5f41596: broker/build.sh builds the broker image from a snapshot of | see record |
 | 2026-11-05 | [broker WebSocket credential opt-in](20261105-broker-websocket-opt-in.md) | - Round 6: b1558e9 and 83a00cf. | see record |
 | 2026-11-05 | [local npm installs through GitHub CFS](20261105-cfs-local-builds.md) | - Round YY: 42f1b81..5dc6ee7 (EDR [cfs-local-builds](../edr/20261105-cfs-local-builds.md)) | see record |
+| 2026-11-05 | [the rpc-core increment, patches 0005–0010](20261105-rpc-core-increment.md) | see record | see record |
+| 2026-11-05 | [Security re-review: patches 0006 and 0009–0011, and the surface-(e) tooling](20261105-rpc-filter-rereview.md) | see record | see record |
 | 2026-11-05 | [secure agentic experiences design (agents in the tab)](20261105-secure-agentic-experiences-design.md) | round 1: 40fa71d (rebased from 9f4ded7; design as first written: [plan](../plans/secure-ag | see record |
 | 2026-11-05 | [tabs wired to their broker (plan tabd-broker-wiring)](20261105-tab-broker.md) | - Round XX (B1, OCI tabs get a real broker): 7d1c94d..325097f, plus 32c3289 (the naming ru | see record |
 | 2026-11-06 | [patch 0015, the agent-host gate](20261106-agentic-ahp-gate.md) | patch 0015 (seclab-ahp-gate) and its sources under agentic/patch-src/: | see record |
@@ -95,6 +99,8 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-06 | [CFS package feeds in tabs, tabd side (B4)](20261106-cfs-feeds-tabd.md) | round EEE, 20fb5bb and its fixes: | see record |
 | 2026-11-06 | [egress prompts (B3a, B3b)](20261106-egress-prompts.md) | round BBB, 24fea4c..79dcbea: | see record |
 | 2026-11-06 | [idempotent ensureRunning on a running tab (B3c part 3)](20261106-reh-idempotent.md) | round III: | see record |
+| 2026-11-06 | [RPC core landing v2 (round 10)](20261106-rpc-core-landing-v2.md) | see record | see record |
+| 2026-11-06 | [the rpc-core landing set](20261106-rpc-core-landing.md) | see record | see record |
 | 2026-11-06 | [RPC filter stamp in product.json](20261106-rpc-policy-stamp.md) | round DDD, b9af5e5 and its fixes: prepare.sh step 7, the RPC stamp check | see record |
 | 2026-11-06 | [test build variants, and the gitleaks build fail-closed fix](20261106-test-build-variants.md) | round CCC: | see record |
 | 2026-11-09 | [background-only windows (focus path c)](20261109-background-only-windows.md) | round LLL, c32e1c7, 0a3c210, 841b7a1 and their fixes: | see record |

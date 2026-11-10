@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import hashlib
+import re
 import os
 import sys
 
@@ -50,9 +52,35 @@ export interface SeclabEntry {
 	readonly ref: string;
 	/** Named argument constraint, applied by the filter's validators. */
 	readonly constraint?: string;
+	/** The validator in seclabArgValidators.ts that enforces the constraint. */
+	readonly validator?: string;
+	/** The constraint IS the positional URI rule (no validator); anything else needs a validator. */
+	readonly uriRule?: boolean;
 }
 
 """
+
+
+def _entry(verdict: str, ref: str, entry: dict) -> dict:
+    return {"verdict": verdict, "ref": ref, "constraint": entry.get("constraint"),
+            "validator": entry.get("validator"),
+            "uriRule": entry.get("constraint_is_uri_rule") is True}
+
+
+def trusted_command_ids(policy: dict, inventory: dict | None) -> list:
+    """Command ids a tab may never register: the workbench's own and the trusted UI side's.
+
+    The workbench's are the inventory's ids registered only under `src/` (built-in
+    extensions' ids are registered by those extensions, which run in the tab). The UI-side
+    extensions' ids are listed in the policy with their reason.
+    """
+    ids = set(policy.get("commands", {}).get("trusted_registration_ids", {}).get("ids") or [])
+    for c in ((inventory or {}).get("surfaces", {}).get("b_command_registry", {})
+              .get("commands") or []):
+        files = c.get("files") or []
+        if files and all(f.startswith("src/") for f in files):
+            ids.add(c["id"])
+    return sorted(ids)
 
 
 def _load(path):
@@ -65,22 +93,15 @@ def build(policy: dict, inventory: dict | None = None) -> dict:
     rpc = {}
     for sid, service in policy.get("rpc", {}).items():
         for method, entry in (service.get("methods") or {}).items():
-            rpc["%s.%s" % (sid, method)] = {
-                "verdict": entry["verdict"],
-                "ref": "rpc:%s.%s" % (sid, method),
-                "constraint": entry.get("constraint"),
-            }
+            rpc["%s.%s" % (sid, method)] = _entry(
+                entry["verdict"], "rpc:%s.%s" % (sid, method), entry)
     service_defaults = {
         sid: service.get("service_default", policy["default_verdict"])
         for sid, service in policy.get("rpc", {}).items()
     }
     commands = {}
     for cid, entry in (policy.get("commands", {}).get("exact") or {}).items():
-        commands[cid] = {
-            "verdict": entry["verdict"],
-            "ref": "cmd:%s" % cid,
-            "constraint": entry.get("constraint"),
-        }
+        commands[cid] = _entry(entry["verdict"], "cmd:%s" % cid, entry)
     channels = {}
     for name, entry in (policy.get("channels") or {}).items():
         if name in ("note", "server_initiated") or not isinstance(entry, dict):
@@ -90,6 +111,11 @@ def build(policy: dict, inventory: dict | None = None) -> dict:
             "ref": "chan:%s" % name,
             "constraint": entry.get("constraint"),
         }
+    deny_prefixes = [
+        (r.get("match") or {}).get("prefix")
+        for r in (policy.get("commands", {}) or {}).get("rules") or []
+        if (r.get("match") or {}).get("prefix") and r.get("verdict") == "deny"
+    ]
     uri_args = {}
     for service in ((inventory or {}).get("surfaces", {})
                     .get("a_mainthread_rpc", {}).get("services", [])):
@@ -102,6 +128,8 @@ def build(policy: dict, inventory: dict | None = None) -> dict:
         "commands": commands,
         "channels": channels,
         "uriArgs": uri_args,
+        "commandDenyPrefixes": sorted(p for p in deny_prefixes if p),
+        "trustedCommandIds": trusted_command_ids(policy, inventory),
     }
 
 
@@ -117,6 +145,10 @@ def render(policy: dict, sha: str, inventory: dict | None = None) -> str:
             fields = "verdict: '%s', ref: '%s'" % (e["verdict"], e["ref"])
             if e.get("constraint"):
                 fields += ", constraint: '%s'" % e["constraint"].replace("'", "\\'")
+            if e.get("validator"):
+                fields += ", validator: '%s'" % e["validator"]
+            if e.get("uriRule"):
+                fields += ", uriRule: true"
             out.append("\t['%s', { %s }],\n" % (key, fields))
         out.append("]);\n\n")
 
@@ -149,11 +181,83 @@ def render(policy: dict, sha: str, inventory: dict | None = None) -> str:
         " * with no marker is revived by the consumer and invisible to a shape\n"
         " * search.\n"
         " */\n")
+    out.append(
+        "/**\n"
+        " * Command id prefixes denied before the table is consulted.\n"
+        " *\n"
+        " * `commands.exact` is resolved before rules, so a prefix rule alone can be\n"
+        " * overridden by an exact entry. Checking these first means the guarantee\n"
+        " * does not depend on the generated table staying correct.\n"
+        " */\n")
+    out.append("export const SECLAB_COMMAND_DENY_PREFIXES: readonly string[] = [\n")
+    for pfx in data["commandDenyPrefixes"]:
+        out.append("\t'%s',\n" % pfx)
+    out.append("];\n\n")
     out.append("export const SECLAB_URI_ARGS: ReadonlyMap<string, readonly number[]> = new Map([\n")
     for key in sorted(data["uriArgs"]):
         out.append("\t['%s', [%s]],\n" % (key, ", ".join(str(i) for i in data["uriArgs"][key])))
     out.append("]);\n\n")
+    out.append(
+        "/**\n"
+        " * Command ids the trusted side owns, which a tab may not register. The command\n"
+        " * registry is last-writer-wins, so a tab registering one of these before (or\n"
+        " * between) the trusted registrations would receive its invocations.\n"
+        " */\n")
+    out.append("export const SECLAB_TRUSTED_COMMAND_IDS: ReadonlySet<string> = new Set([\n")
+    for cid in data["trustedCommandIds"]:
+        out.append("\t'%s',\n" % cid.replace("\\", "\\\\").replace("'", "\\'"))
+    out.append("]);\n")
     return "".join(out)
+
+
+
+
+FILTER_SRC = os.path.join(REPO, "rpc-filter", "patch-src", "seclabRpcFilter.ts")
+# ONE folded literal, not a concatenation. main's build/check-release.sh scans the
+# built JS for `seclabRpcFilterEnforcing:<64 hex>` as a single string; if a bundler
+# declines to fold `'seclabRpcFilterEnforcing:' + SHA`, the marker is simply absent
+# from the artefact and the release check fails closed on a build that is in fact
+# correct. Generating the whole literal removes the dependency on constant folding.
+MARKER_PREFIX = "seclabRpcFilterEnforcing:"
+MARKER_LINE = re.compile(
+    r"^export const SECLAB_ENFORCING_MARKER = '"
+    + MARKER_PREFIX + r"(?P<sha>[0-9a-f]{64})';$", re.M)
+
+
+def _sync_policy_sha(policy_text: str, check: bool) -> list:
+    """Keep the enforcing marker's hash equal to sha256(seclabPolicyData.ts).
+
+    `build/prepare.sh` stamps `product.json` with the same hash, which shows the
+    table was applied. It cannot show anything reads it. The consumer requires
+    both, so the hash on the enforcing side must be generated rather than typed:
+    a hand-maintained copy would drift to whatever made the check pass.
+
+    Hashing a *different* file than the one carrying the marker is deliberate.
+    A marker inside the file whose hash it states is its own fixed point.
+    """
+    want = hashlib.sha256(policy_text.encode("utf-8")).hexdigest()
+    with open(FILTER_SRC, "r", encoding="utf-8") as fh:
+        src = fh.read()
+    m = MARKER_LINE.search(src)
+    if not m:
+        return ["%s has no `export const SECLAB_ENFORCING_MARKER = "
+                "'%s<64 hex>';` line, as ONE literal. The enforcing marker is "
+                "what proves the filter, not just the table, is in the build, "
+                "and check-release scans the built JS for the folded string."
+                % (os.path.relpath(FILTER_SRC, REPO), MARKER_PREFIX)]
+    if m.group("sha") == want:
+        return []
+    if check:
+        return ["%s records policy sha256 %s but the table hashes to %s; run "
+                "rpc-filter/tools/emit.sh"
+                % (os.path.relpath(FILTER_SRC, REPO), m.group("sha")[:12],
+                   want[:12])]
+    with open(FILTER_SRC, "w", encoding="utf-8") as fh:
+        fh.write(MARKER_LINE.sub(
+            "export const SECLAB_ENFORCING_MARKER = '%s%s';"
+            % (MARKER_PREFIX, want), src, count=1))
+    print("updated SECLAB_ENFORCING_MARKER -> %s" % want[:12])
+    return []
 
 
 def main(argv=None) -> int:
@@ -179,12 +283,22 @@ def main(argv=None) -> int:
             print("FAIL %s is stale; run rpc-filter/tools/emit.sh"
                   % os.path.relpath(args.out, REPO), file=sys.stderr)
             return 1
+        problems = _sync_policy_sha(text, check=True)
+        if problems:
+            for p in problems:
+                print("FAIL %s" % p, file=sys.stderr)
+            return 1
         print("policy module is in sync with the policy table")
         return 0
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as fh:
         fh.write(text)
+    problems = _sync_policy_sha(text, check=False)
+    if problems:
+        for p in problems:
+            print("FAIL %s" % p, file=sys.stderr)
+        return 1
     data = build(policy)
     print("wrote %s: %d rpc methods, %d commands, %d channels, default %s"
           % (os.path.relpath(args.out, REPO), len(data["rpc"]),
