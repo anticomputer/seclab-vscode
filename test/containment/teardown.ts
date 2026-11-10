@@ -597,8 +597,24 @@ export function printChecks(checks: TeardownCheck[]): boolean {
  * ours by construction: another session's worktree has a different path, so this can never
  * claim a process it did not create (AGENTS.md: found by unique path, never by program name).
  */
+/** Long-lived helpers a run starts on the HOST, as the printed procedures invoke them. */
+export const HOST_HELPERS = ['test/containment/beacon.ts', 'test/agentic/browser/run.ts'];
+
 export function strayHelpers(root: string = repoRoot): Proc[] {
-	const marker = `${path.resolve(root)}${path.sep}test${path.sep}`;
+	// Absolute AND relative forms. Every invocation the harness prints is relative
+	// (`node test/agentic/browser/run.ts listen …`), so matching only the absolute path left
+	// the one long-lived helper this design adds invisible to the net meant to catch it. The
+	// relative form is accepted only for a node process running one of OUR scripts, which
+	// keeps it from claiming another worktree's run: a relative argv has no worktree in it,
+	// so it is additionally required to be a known helper script path.
+	const abs = `${path.resolve(root)}${path.sep}test${path.sep}`;
+	const isOurs = (args: string): boolean => {
+		if (args.includes(abs)) {
+			return true;
+		}
+		return /(^|\/)node(\s|$)/.test(args)
+			&& HOST_HELPERS.some(rel => new RegExp(`(^|\\s)${rel.replace(/[./]/g, m => `\\${m}`)}(\\s|$)`).test(args));
+	};
 	const table = processTable();
 	const byPid = new Map(table.map(p => [p.pid, p]));
 	// Only OURSELVES and our ANCESTORS are spared, never our descendants. A helper we
@@ -611,7 +627,7 @@ export function strayHelpers(root: string = repoRoot): Proc[] {
 	for (let p = byPid.get(process.pid)?.ppid; p && !spare.has(p); p = byPid.get(p)?.ppid) {
 		spare.add(p);
 	}
-	return table.filter(p => !spare.has(p.pid) && p.args.includes(marker));
+	return table.filter(p => !spare.has(p.pid) && isOurs(p.args));
 }
 
 export function teardownGate(runDir: string): boolean {

@@ -225,9 +225,13 @@ for (const d of decoys) {
 // ask the manifest what to look for. The net must not depend on the manifest.
 {
 	const leakLog = path.join(runDir, 'leak.log');
+	// Spawned the way the harness actually invokes helpers: a RELATIVE script path, from the
+	// worktree root. The first version used an absolute path, so it validated the matcher
+	// against a shape no documented procedure produces, and a real leak would still have
+	// escaped (security review round 10).
 	const leak = spawn(process.execPath,
-		[path.join(repoRoot, 'test', 'containment', 'beacon.ts'), 'start', leakLog, '18231'],
-		{ detached: true, stdio: 'ignore' });
+		['test/containment/beacon.ts', 'start', leakLog, '18231'],
+		{ cwd: repoRoot, detached: true, stdio: 'ignore' });
 	leak.unref();
 	const until = Date.now() + 8000;
 	while (!strayHelpers().some(p => p.pid === leak.pid) && Date.now() < until) {
