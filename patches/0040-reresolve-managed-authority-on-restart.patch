@@ -1,5 +1,5 @@
 diff --git a/src/vs/workbench/services/extensions/common/abstractExtensionService.ts b/src/vs/workbench/services/extensions/common/abstractExtensionService.ts
-index 30f356d..8f22bd6 100644
+index 30f356d..9d8214f 100644
 --- a/src/vs/workbench/services/extensions/common/abstractExtensionService.ts
 +++ b/src/vs/workbench/services/extensions/common/abstractExtensionService.ts
 @@ -30,7 +30,7 @@ import { INotificationService, Severity } from '../../../../platform/notificatio
@@ -11,7 +11,18 @@ index 30f356d..8f22bd6 100644
  import { IRemoteExtensionsScannerService } from '../../../../platform/remote/common/remoteExtensionsScanner.js';
  import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
  import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
-@@ -958,7 +958,15 @@ export abstract class AbstractExtensionService extends Disposable implements IEx
+@@ -98,6 +98,10 @@ export abstract class AbstractExtensionService extends Disposable implements IEx
+ 	private readonly _extensionHostManagers = this._register(new ExtensionHostCollection());
+ 
+ 	private _resolveAuthorityAttempt: number = 0;
++	// seclab (patch 0040): the window's authority, once seen resolved to a managed connection, and
++	// the latest restart, so an overlapping restart's stale resolution is dropped.
++	private _seclabManagedAuthority: string | undefined;
++	private _seclabRestartGeneration: number = 0;
+ 
+ 	constructor(
+ 		options: { hasLocalProcess: boolean; allowRemoteExtensionsInLocalWebWorker: boolean },
+@@ -958,7 +962,20 @@ export abstract class AbstractExtensionService extends Disposable implements IEx
  	}
  
  	public async startExtensionHosts(updates?: { toAdd: IExtension[]; toRemove: string[] }): Promise<void> {
@@ -19,7 +30,12 @@ index 30f356d..8f22bd6 100644
 +		// that resolved the authority, and stops with it. Resolve again through the new local
 +		// host before the remote one connects, or it fails with "No socket factory found".
 +		const remoteAuthority = this._environmentService.remoteAuthority;
-+		const managedAuthority = remoteAuthority && this._remoteAuthorityResolverService.getConnectionData(remoteAuthority)?.connectTo.type === RemoteConnectionType.Managed ? remoteAuthority : undefined;
++		if (remoteAuthority && this._remoteAuthorityResolverService.getConnectionData(remoteAuthority)?.connectTo.type === RemoteConnectionType.Managed) {
++			this._seclabManagedAuthority = remoteAuthority;
++		}
++		// Remembered: an overlapping restart finds the resolution already cleared by the first.
++		const managedAuthority = remoteAuthority && this._seclabManagedAuthority === remoteAuthority ? remoteAuthority : undefined;
++		const generation = ++this._seclabRestartGeneration;
  		await this._doStopExtensionHosts();
 +		if (managedAuthority) {
 +			this._remoteAuthorityResolverService._clearResolvedAuthority(managedAuthority);
@@ -27,17 +43,22 @@ index 30f356d..8f22bd6 100644
  
  		if (updates) {
  			await this._handleDeltaExtensions(new DeltaExtensionsQueueItem(updates.toAdd, updates.toRemove));
-@@ -974,6 +982,15 @@ export abstract class AbstractExtensionService extends Disposable implements IEx
+@@ -974,6 +991,20 @@ export abstract class AbstractExtensionService extends Disposable implements IEx
  		} finally {
  			lock.dispose();
  		}
-+		if (managedAuthority) {
++		if (managedAuthority && generation === this._seclabRestartGeneration) {
 +			// Not _resolveAuthorityAgain: it clears again, cancelling the request the remote host awaits.
++			// A newer restart stopped the host this resolution went through, so its result is dropped.
 +			try {
 +				const result = await this._resolveAuthorityWithLogging(managedAuthority);
-+				this._remoteAuthorityResolverService._setResolvedAuthority(result.authority, result.options);
++				if (generation === this._seclabRestartGeneration) {
++					this._remoteAuthorityResolverService._setResolvedAuthority(result.authority, result.options);
++				}
 +			} catch (err) {
-+				this._remoteAuthorityResolverService._setResolvedAuthorityError(managedAuthority, err);
++				if (generation === this._seclabRestartGeneration) {
++					this._remoteAuthorityResolverService._setResolvedAuthorityError(managedAuthority, err);
++				}
 +			}
 +		}
  	}

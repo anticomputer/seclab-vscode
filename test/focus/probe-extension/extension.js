@@ -50,7 +50,8 @@ const steps = [
 	// The extension host's parent is the server: killing it drops the connection, so the window
 	// goes through its reconnect path (and, if that fails, its "reload" prompt).
 	['server-connection-lost', async () => { process.kill(process.ppid, 'SIGKILL'); }],
-	// Last: it restarts the local extension host too, and with it the Tab Manager's tabd.
+	// Last: it restarts the local extension host too, and with it the Tab Manager's tabd. The
+	// window resolves the tab again (patch 0040) and this host reactivates here, then marks "done".
 	['restart-extension-host', async () => { await vscode.commands.executeCommand('workbench.action.restartExtensionHost'); }],
 ];
 
