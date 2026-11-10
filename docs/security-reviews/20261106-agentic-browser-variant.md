@@ -65,3 +65,29 @@ sandbox restrictions, against a non-localhost target. Every divergence outside t
 pushes toward the host network, i.e. toward a false "not contained" rather than a false
 "contained". This is stated in the hook's own comment and in the variant's description, so a
 run outside that shape is not mistaken for a measurement of the tool.
+
+## Correction (security review round 9, 2026-11-10): the faithfulness envelope moved
+The hook no longer reproduces `openBrowserTool._openNewPage` exactly. It now opens **without**
+an explicit `session`, because supplying one (as the tool does, via
+`getAgentBrowserViewCreationDefaults`) short-circuits `_resolveSessionRequest` and means
+`workbench.browser.dataStorage` is never read, so the probe could not measure the setting it
+existed to measure (round 8, finding 2).
+
+The consequence, which the envelope above no longer stated correctly:
+
+- For the **network** (`enableRemoteProxy`), the hook is still faithful to the tool: that
+  resolution happens before any session is supplied.
+- For the **storage scope** (`dataStorage`), it is NOT: the agent tool always supplies its own
+  scope, so the tool path never consults the setting. The storage probe therefore measures the
+  non-agent create path, which is what a restored editor and a user-opened view take.
+
+The divergence pushes toward over-stating the vulnerability rather than toward a false
+"contained", so an F result remains sound; but no claim about the browser tool may be made
+from the storage probe.
+
+The hook also gained two log points: a `savedScope=` line in `_getOrCreateLazy` (before patch
+0017 can discard a persisted request, which is the only place the hostile restored state is
+still visible on a fixed build) and the resolved scope/network at the end of
+`_resolveViewSession`, which fires for views the hook never opened. Both are log lines in a
+build that is already unreleasable, and `IProductService` is injected so the hook can stamp
+which binary produced each line.

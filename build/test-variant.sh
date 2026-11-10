@@ -67,7 +67,8 @@ record() {
 	# record would make the presence check match the record instead of the hook's code.
 	hooks | while IFS=$'\t' read -r id patch marker bundle; do
 		jq -nc --arg id "$id" --arg p "$patch" --arg s "$(sha256 "$ROOT/$patch")" '{id: $id, patch: $p, sha256: $s}'
-	done | jq -sc --arg v "$variant" --arg t "$target" '{variant: $v, target: $t, hooks: .}'
+	done | jq -sc --arg v "$variant" --arg t "$target" --arg sha "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)" \
+		'{variant: $v, target: $t, repoSha: $sha, hooks: .}'
 }
 
 case "$cmd" in

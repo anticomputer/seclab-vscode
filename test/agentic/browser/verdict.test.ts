@@ -8,23 +8,28 @@
 // fails here rather than on a build nobody re-reads.
 
 import { strict as assert } from 'node:assert';
+import { spawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 import { browserProbeChecks } from './verdict.ts';
 import type { Evidence } from './verdict.ts';
 
 const TAB = 't-abc123';
+const SHA = 'deadbeefcafe0000111122223333444455556666';
 
 function evidence(over: Partial<Evidence> = {}): Evidence {
 	return {
 		build: 'f', phase: 'first', probe: 'proxy', tabId: TAB,
 		hookLines: [
 			'[SECLAB_TEST_ONLY:browser-drive-hook] ready=yes',
-			`[SECLAB_TEST_ONLY:browser-drive-hook] opening http://192.0.2.10:1/x requestedNetwork=seclab+${TAB}`,
-			`[SECLAB_TEST_ONLY:browser-drive-hook] resolved scope=ephemeral network=seclab+${TAB} requestedScope=ephemeral`,
+			`[SECLAB_TEST_ONLY:browser-drive-hook] opening http://192.0.2.10:1/x requestedNetwork=seclab+${TAB} build=${SHA}`,
+			resolved('ephemeral', `seclab+${TAB}`),
 		],
 		phaseLines: 40, probeHits: 0, beaconHits: 2, beaconLiveAfter: true,
-		buildMatches: true, buildDetail: 'f',
+		beaconReachableFromTab: false, tabControlHits: 0,
+		loggedCommit: SHA, expectedCommit: SHA,
 		...over,
 	};
 }
@@ -36,7 +41,21 @@ function red(e: Evidence): string[] {
 
 /** A resolution line, as the hook emits it. */
 function resolved(scope: string, network: string, requestedScope = scope): string {
-	return `[SECLAB_TEST_ONLY:browser-drive-hook] resolved scope=${scope} network=${network} requestedScope=${requestedScope}`;
+	return `[SECLAB_TEST_ONLY:browser-drive-hook] resolved scope=${scope} network=${network} requestedScope=${requestedScope} build=${SHA}`;
+}
+
+/** The saved-scope line, logged before patch 0017 can discard the persisted request. */
+function saved(scope: string): string {
+	return `[SECLAB_TEST_ONLY:browser-drive-hook] input id=v1 savedScope=${scope} explicitSession=no`;
+}
+
+/** A restore phase as a CORRECT F build produces it: 0017 drops the saved `global`. */
+function fRestore(over: Partial<Evidence> = {}): Evidence {
+	return evidence({
+		phase: 'restore', probe: 'storage',
+		hookLines: [saved('global'), resolved('ephemeral', `seclab+${TAB}`, 'ephemeral')],
+		...over,
+	});
 }
 
 test('a clean F run is all green', () => {
@@ -70,12 +89,53 @@ test('defect: 0017 stops scrubbing dataStorage -> only the storage check goes re
 	assert.deepEqual(red(e), ["CONTAINED: 0017 overrode the tab's dataStorage=global"]);
 });
 
+test('a clean F RESTORE is all green', () => {
+	// The case the previous version of this file never constructed, which is why it did not
+	// notice that the attributability check was unsatisfiable on F: 0017 discards the saved
+	// request before `requestedScope` is logged, so keying off that line made a CORRECT F
+	// run read as inconclusive, and the phase could only go green when lines leaked in from
+	// the other launch. `savedScope` is logged earlier, before 0017 can touch it.
+	assert.deepEqual(red(fRestore()), []);
+});
+
 test('defect: 0017 stops dropping the persisted request -> only the restore verdict goes red', () => {
-	const e = evidence({
-		phase: 'restore', probe: 'storage',
-		hookLines: [resolved('global', `seclab+${TAB}`, 'global')],
-	});
+	const e = fRestore({ hookLines: [saved('global'), resolved('global', `seclab+${TAB}`, 'global')] });
 	assert.deepEqual(red(e), ['CONTAINED: 0017 rebuilt the restored view under the fixed setting']);
+});
+
+test('the restore attributability check keys off the SAVED scope, not the resolved one', () => {
+	// A regression guard for exactly the inversion above: F resolves `ephemeral`, and that
+	// must not be read as "there was no hostile saved state".
+	const e = fRestore();
+	assert.ok(e.hookLines.some(l => l.includes('savedScope=global')));
+	assert.ok(!e.hookLines.some(l => l.includes('requestedScope=global')));
+	assert.deepEqual(red(e), []);
+});
+
+test('defect: the beacon address is reachable from the tab -> only the fence control goes red', () => {
+	// If the address is bridged into the guest, a quiet beacon no longer distinguishes
+	// "the host never fetched it" from "the tab fetched it", so the run is not evidence.
+	assert.deepEqual(red(evidence({ beaconReachableFromTab: true })),
+		['the TAB cannot reach the beacon address (so a quiet beacon means the host)']);
+});
+
+test('defect: a different binary produced the lines -> only the build check goes red', () => {
+	assert.deepEqual(red(evidence({ loggedCommit: 'f'.repeat(40) })), ['the binary that produced these lines is the requested build']);
+	assert.deepEqual(red(evidence({ loggedCommit: undefined })), ['the binary that produced these lines is the requested build']);
+});
+
+test('defect: the proxy was never offered the tab network -> the U proxy claim does not stand', () => {
+	// `network=none` alone is also what a missing resolver or an unsupported authority
+	// produces, neither of which is the setting's doing.
+	const e = evidence({
+		build: 'u', probe: 'proxy', probeHits: 1,
+		hookLines: [
+			'[SECLAB_TEST_ONLY:browser-drive-hook] ready=yes',
+			`[SECLAB_TEST_ONLY:browser-drive-hook] opening http://192.0.2.10:1/x requestedNetwork=none build=${SHA}`,
+			resolved('workspace', 'none'),
+		],
+	});
+	assert.deepEqual(red(e), ["VULNERABLE: the tab's enableRemoteProxy=false moved the page off the tab"]);
 });
 
 test('defect: the page escapes to the host network -> only the beacon check goes red', () => {
@@ -104,13 +164,27 @@ test('defect: the restore phase saw no hostile saved state -> the restore run is
 	assert.deepEqual(red(e), ['the restored view really did carry the hostile saved scope']);
 });
 
-test('the wrong build cannot be mistaken for a result', () => {
-	assert.deepEqual(red(evidence({ buildMatches: false, buildDetail: 'u' })), ['ran the requested build']);
-});
-
 test('a restore phase cannot borrow the first launch readiness line', () => {
 	// `ready=yes` is only meaningful for a hook-driven open, so the restore phase must not
 	// assert it at all; if it did, a relaunch that produced nothing could inherit it.
 	const names = browserProbeChecks(evidence({ phase: 'restore' })).map(c => c.name);
 	assert.ok(!names.some(n => n.includes('in force when the page was opened')));
+});
+
+// ---- the harness itself ----------------------------------------------------------------
+
+test('every mode the usage line documents actually reaches a handler', () => {
+	// Round 9 found `switch-build` was unreachable: it was written, reviewed and recorded in
+	// the EDR's procedure, but the argument guard still listed only `prepare` and `check`, so
+	// it printed usage and exited. A mode nobody can run is dead code, which is the exact
+	// failure this project keeps paying for. This parses the documented modes out of the
+	// usage line and checks each one gets past the guard.
+	const src = fs.readFileSync(new URL('./run.ts', import.meta.url), 'utf8');
+	const documented = /usage: run\.ts ([a-z|-]+) </.exec(src)?.[1]?.split('|') ?? [];
+	assert.ok(documented.length >= 3, `expected the usage line to list the modes, got ${documented.join(',')}`);
+	for (const mode of documented) {
+		const r = spawnSync(process.execPath, [fileURLToPath(new URL('./run.ts', import.meta.url)), mode, '/nonexistent-seclab-probe-dir'], { encoding: 'utf8' });
+		assert.ok(!(r.stderr ?? '').startsWith('usage: run.ts'),
+			`mode '${mode}' is documented but the argument guard rejects it as unknown`);
+	}
 });
