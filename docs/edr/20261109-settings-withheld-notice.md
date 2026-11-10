@@ -82,8 +82,8 @@ requirement is not to rely on that alone.
    never the value). The probe asserts one notification naming the key, exactly one trusted
    `config.withheld` event, no forged key anywhere, and the value in no notification or
    event. With `--forged-only`, on a build without 0036, it asserts that each forged call
-   reached the Tab Manager's handler (its log) and produced nothing. Not yet run: editor
-   launches are on hold until the Space-switch focus fix lands.
+   reached the Tab Manager's handler (its log) and produced nothing. See "Evidence on
+   record" for its run; the full run waits for a build with 0036.
 
 ## Alternatives considered
 - **Trust the command, rely on the RPC filter:** a single control, and absent until the
@@ -116,3 +116,15 @@ requirement is not to rely on that alone.
 - A shared classifier means the Tab Manager ships 0036's rule table (about 86 KB).
 - Until `build/secret-rules` is on main, the Tab Manager registers the command with no
   classifier and refuses every claim.
+
+## Evidence on record
+- **`fixture:test/observability/withheld-forger`:** `node test/observability/withheld-probe.ts
+  ~/.seclab-test/withheld --app .work/app/seclab-vscode.app --forged-only`, main build
+  42715616101 (`3d22b25`, no 0036, no RPC filter), sbx, 2026-11-10. The forger ran in the
+  tab (`remoteName` seclab) and sent all five forged calls through `executeCommand`; each
+  returned `undefined`. The Tab Manager logged five refusals ("ignored: no settings
+  classifier in this build"). tabd recorded no `config.withheld` event, no notification
+  was shown, and the canary value appeared nowhere. The editor ran in the background and
+  never took focus, and teardown was clean. This shows that a tab can reach the command
+  before the RPC filter and that this build refuses it. Refusal by verification (with the
+  classifier) is covered by the unit tests; the full run needs a build with 0036.

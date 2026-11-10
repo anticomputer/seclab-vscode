@@ -1,0 +1,14 @@
+{
+	"name": "seclab-withheld-forger",
+	"displayName": "seclab settings-withheld forger (test only)",
+	"description": "Test extension for the settings-withheld probe: from inside a tab, calls the Tab Manager's seclab.tabs.settingsWithheld command with forged claims. Does nothing unless armed by the run.",
+	"publisher": "seclab-test",
+	"version": "0.0.1",
+	"private": true,
+	"license": "MIT",
+	"engines": { "vscode": "^1.90.0" },
+	"main": "./extension.js",
+	"activationEvents": ["onStartupFinished"],
+	"extensionKind": ["workspace"],
+	"capabilities": { "untrustedWorkspaces": { "supported": true } }
+}
