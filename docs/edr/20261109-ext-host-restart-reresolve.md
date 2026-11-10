@@ -48,10 +48,12 @@ in `AbstractExtensionService.startExtensionHosts`:
   cleared still re-resolves. Each restart takes a generation number, and only the newest one
   completes the request; an older resolution went through a stopped host and is dropped.
 
-After a restart the Tab Manager resolves the tab again: tabd restarts the tab, and the window
-reconnects to a new REH. Editor state that lives in the old REH (terminals, running tasks) is
-lost. That matches what happens when the REH dies, and a window reload is the documented
-recovery if anything is left inconsistent.
+After a restart the Tab Manager resolves the tab again: tabd restarts the tab, and the remote
+extension host connects to the new REH, so extensions run in the tab again. The window's
+management connection still belongs to the old REH, which tabd stopped, so the window reports
+"Cannot reconnect. Please reload the window." Editor state that lived in the old REH (terminals,
+running tasks) is lost. This is the same as when the REH dies, and a window reload is the
+recovery. Option B is what would make this seamless.
 
 ## Considered for later: option B, a seamless handover
 
@@ -72,8 +74,12 @@ still ask for it.
   nothing for local windows (no remote authority).
 - `patches/series` now lists every reserved number range, and `build/apply-patches.sh` fails if
   two patches share a number. This runs in `patch-build` and in `prepare.sh`.
-- The proof is the focus battery's `restart-extension-host` step on a branch build: the window
-  reconnects, and no "No socket factory" appears in the renderer log.
+- Proof: the focus battery's `restart-extension-host` step, which is no longer terminal: the
+  battery must reach `done`, which only a remote extension host started after the restart can
+  mark. Branch build 42728084476 (`db27c77`), every other step skipped: `step 10
+  restart-extension-host`, then `activate at step 11` and `done` five seconds later, no focus
+  steal, and teardown clean. On build 42707557651, without the patch, the extension never came
+  back ([egress prompts](20261106-egress-prompts.md), B3c part 4).
 - Requirement for the RPC series (review [OOO-2](../security-reviews/20261109-ext-host-restart-reresolve.md)):
   until the filter lands, tab code can run `workbench.action.restartExtensionHost` and the
   extension install/uninstall commands through `$executeCommand`. Each restart now runs the
