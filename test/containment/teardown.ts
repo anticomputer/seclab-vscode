@@ -23,7 +23,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { checkIsolatedProfile, editorPortableDir, hostSnapshot, snapshotDiff, type Snapshot } from '../harness.ts';
+import { checkIsolatedProfile, editorPortableDir, hostSnapshot, repoRoot, snapshotDiff, type Snapshot } from '../harness.ts';
 import { avFindings } from '../safety/av-shape.ts';
 
 /** The profile's portable sibling (test/harness.ts editorPortableDir): checked as isolated, removed. */
@@ -584,13 +584,52 @@ export function printChecks(checks: TeardownCheck[]): boolean {
 }
 
 /** End-of-run gate for the suites: prints the checks, false if anything was left behind. */
+/**
+ * Helper processes still running from THIS worktree, found without consulting any manifest.
+ *
+ * The manifest is not a safety net, because a helper has to be spawned before it can be
+ * recorded, and anything that goes wrong in between leaves a process nothing knows about. That
+ * happened: a beacon was spawned, its liveness probe failed, the runner exited on that failure
+ * BEFORE `writeManifest`, and the listener survived with no record of it anywhere. Teardown and
+ * `clean-host` both reported the host clean, because both ask the manifest what to look for.
+ *
+ * So this asks the process table instead, keyed on this worktree's absolute path, which is
+ * ours by construction: another session's worktree has a different path, so this can never
+ * claim a process it did not create (AGENTS.md: found by unique path, never by program name).
+ */
+export function strayHelpers(root: string = repoRoot): Proc[] {
+	const marker = `${path.resolve(root)}${path.sep}test${path.sep}`;
+	const table = processTable();
+	const byPid = new Map(table.map(p => [p.pid, p]));
+	// Only OURSELVES and our ANCESTORS are spared, never our descendants. A helper we
+	// started is precisely what has to be reported here: by the time this runs the run is
+	// over, so a live child is a leak whether it has been reparented to init yet or not.
+	// Sparing descendants was the first version of this, and it made the regression test
+	// below pass while the real leak (a reparented beacon) would still have escaped a run
+	// that ended before reparenting.
+	const spare = new Set<number>([process.pid, process.ppid]);
+	for (let p = byPid.get(process.pid)?.ppid; p && !spare.has(p); p = byPid.get(p)?.ppid) {
+		spare.add(p);
+	}
+	return table.filter(p => !spare.has(p.pid) && p.args.includes(marker));
+}
+
 export function teardownGate(runDir: string): boolean {
 	if (process.env.KEEP === '1') {
 		// Not verified, so not a pass (T-5): the run's tabs and profile are still live.
 		console.log(`KEEP=1: teardown NOT verified, run resources kept; run \`node test/containment/teardown.ts verify ${runDir}\` when done`);
 		return false;
 	}
-	return printChecks(verifyTeardown(runDir));
+	const checks = verifyTeardown(runDir);
+	// The manifest-independent net, run LAST so it also covers anything the checks above
+	// started. A helper that outlived its run is a finding whatever the manifest says.
+	const strays = strayHelpers();
+	checks.push({
+		name: 'no helper from this worktree is still running (manifest or not)',
+		ok: strays.length === 0,
+		detail: strays.length ? strays.map(p => `${p.pid} ${p.args.slice(0, 140)}`).join('; ') : 'none',
+	});
+	return printChecks(checks);
 }
 
 /** Wait for a child (e.g. tabd) to exit, at most `ms`: teardown kills it anyway if it hangs. */

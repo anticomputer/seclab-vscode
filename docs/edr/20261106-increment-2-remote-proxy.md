@@ -427,3 +427,41 @@ Two defects, both caught by checks added in this round, before any claim was mad
    now the **effective setting value as the window read it**, which the hook logs
    (`proxySetting=`, `storageSetting=`): that is the thing 0017 overrides, so it ties cause
    to effect directly. The F checks require both the override and its effect.
+
+## Probe-safety incident: a leaked beacon (2026-11-10)
+**What happened.** A run's beacon was left running on the host after the run ended, and after
+this session had reported the host clean. It was found by the coordinator, not by our tooling,
+and it was bound to a non-loopback address, so it was reachable beyond this machine.
+
+**Why it escaped.** The beacon was spawned and only afterwards recorded in `run.json`. In
+between sat the new liveness probe, and when that probe failed the runner exited on the
+failure path — before `writeManifest`. The listener therefore existed with no record of it
+anywhere, and both `teardown.ts` and `clean-host` ask the manifest what to look for, so both
+reported the host clean while it was still running. `clean-host` compounded it by only ever
+looking for editor and tabd processes; no helper listener was in its vocabulary at all.
+
+**Why it mattered more than usual.** The non-loopback bind, added for the round 8 finding
+about loopback ambiguity, meant the leak was not confined to this machine's loopback. That
+design is gone: the ambiguity is now resolved with a second listener inside the tab, and
+`AGENTS.md` forbids binding a test oracle to anything but loopback.
+
+**Fixes, each proven by injecting the fault first.**
+1. The mark is written to the manifest **before** the helper is spawned, so no window exists
+   in which a live helper is unrecorded; and the liveness failure path now runs the teardown
+   gate before it exits.
+2. `teardownGate` gained a **manifest-independent** net: `strayHelpers()` scans the process
+   table for helpers running from this worktree's absolute path, which is ours by
+   construction and can never claim another session's process. A teardown with any such
+   survivor fails. The first version of it spared our own descendants, which made the
+   regression test pass while the real leak would still have escaped; only ourselves and our
+   ancestors are spared now.
+3. `clean-host` learned the `helper process` kind: helpers from this worktree are removed,
+   and the same script from another worktree is reported for review, never removed.
+4. `teardown.test.ts` injects a leaked beacon with no manifest entry, asserts it is found,
+   kills it and asserts it is no longer reported, so the check cannot silently become
+   always-true.
+
+**The general lesson,** which is the same one this whole increment keeps teaching: a safety
+check that depends on bookkeeping written by the thing being checked is not a safety check.
+Teardown's manifest is a list of what a run *meant* to start; the process table is what it
+*did* start.

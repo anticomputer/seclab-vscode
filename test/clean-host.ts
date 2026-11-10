@@ -24,6 +24,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { treeTexts } from './containment/teardown.ts';
+import { repoRoot } from './harness.ts';
 import { avFindings } from './safety/av-shape.ts';
 
 const args = new Set(process.argv.slice(2));
@@ -153,9 +154,49 @@ const tabPolicy = (name: string, hint?: 'test'): { remove: boolean; why: string;
 // location (T-6). Matched on option values, never on loose substrings.
 const procs = lines('ps', ['-axo', 'pid=,ppid=,args=']).map(l => /^(\d+)\s+(\d+)\s+(.*)$/.exec(l)).filter((m): m is RegExpExecArray => !!m)
 	.map(m => ({ pid: Number(m[1]), ppid: Number(m[2]), args: m[3] }));
+/** Long-lived helpers a run starts on the host. Matched by absolute path, per worktree. */
+const HELPER_SCRIPTS = ['test/containment/beacon.ts'];
 const optValue = (args: string, opt: string) => new RegExp(`(?:^|\\s)--${opt}(?:=|\\s+)(\\S+)`).exec(args)?.[1];
 for (const p of procs) {
 	if (p.pid === process.pid || p.pid === process.ppid) {
+		continue;
+	}
+	// HELPER LISTENERS. Editors and tabd were the only kinds looked for, so a leaked beacon
+	// was invisible here as well as to teardown, and this command reported the host clean
+	// while one was still running. A helper is identified by the absolute path of the
+	// worktree it was started from: ours by construction, since another session's worktree
+	// has a different path (AGENTS.md: unique path, never program name).
+	const helperOf = HELPER_SCRIPTS.map(rel => ({ rel, abs: path.join(repoRoot, rel) }))
+		.find(h => p.args.includes(h.abs));
+	if (helperOf) {
+		items.push({
+			kind: 'helper process', name: `${p.pid} ${p.args.slice(0, 100)}`, state: 'running',
+			remove: true, why: '',
+			del: () => {
+				try {
+					process.kill(p.pid, 'SIGTERM');
+				} catch { /* gone */ }
+				// Wait for it to go, as the editor and tabd items do: reporting the removal
+				// before the signal has taken effect reads as a failure when it worked.
+				for (let i = 0; i < 20 && ok('kill', ['-0', String(p.pid)]); i++) {
+					spawnSync('sleep', ['0.5']);
+				}
+				try {
+					process.kill(p.pid, 'SIGKILL');
+				} catch { /* gone */ }
+				return true;
+			},
+		});
+		continue;
+	}
+	// The same script from ANOTHER worktree: reported, never removed. Matched as a whole
+	// argument of a node process, so a shell whose command line merely mentions the path is
+	// not reported as a stray listener.
+	if (/(^|\/)node(\s|$)/.test(p.args) && HELPER_SCRIPTS.some(rel => new RegExp(`\\s/\\S*/${rel.replace(/[.]/g, '\\.')}(\\s|$)`).test(p.args))) {
+		items.push({
+			kind: 'helper process', name: `${p.pid} ${p.args.slice(0, 100)}`, state: 'running',
+			remove: false, why: 'started from another worktree: possibly ours, verify',
+		});
 		continue;
 	}
 	const udd = optValue(p.args, 'user-data-dir');
