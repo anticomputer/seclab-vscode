@@ -623,7 +623,14 @@ export function teardownGate(runDir: string): boolean {
 	const checks = verifyTeardown(runDir);
 	// The manifest-independent net, run LAST so it also covers anything the checks above
 	// started. A helper that outlived its run is a finding whatever the manifest says.
-	const strays = strayHelpers();
+	// A short grace first: this gate has just killed the run's processes, and a helper that
+	// watches the editor (test/window.ts) exits when the editor does, a moment later. Without
+	// it the gate reports a helper that is already on its way out.
+	let strays = strayHelpers();
+	for (let i = 0; i < 20 && strays.length; i++) {
+		spawnSync('sleep', ['0.5']);
+		strays = strayHelpers();
+	}
 	checks.push({
 		name: 'no helper from this worktree is still running (manifest or not)',
 		ok: strays.length === 0,

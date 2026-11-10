@@ -48,8 +48,8 @@ const opt = (name: string, fallback?: string): string | undefined => {
 	const i = argv.indexOf(`--${name}`);
 	return i >= 0 ? argv[i + 1] : fallback;
 };
-if ((mode !== 'prepare' && mode !== 'arm' && mode !== 'switch-build' && mode !== 'check') || !userDataArg) {
-	console.error('usage: run.ts prepare|arm|switch-build|check <user-data-dir> [--build u|f] [--probe proxy|storage]\n       [--to u|f] [--driver sbx|oci] [--phase first|restore]');
+if ((mode !== 'prepare' && mode !== 'arm' && mode !== 'listen' && mode !== 'switch-build' && mode !== 'check') || !userDataArg) {
+	console.error('usage: run.ts prepare|arm|listen|switch-build|check <user-data-dir> [--build u|f] [--probe proxy|storage]\n       [--to u|f] [--driver sbx|oci] [--phase first|restore]');
 	process.exit(2);
 }
 const userData = path.resolve(userDataArg);
@@ -80,6 +80,15 @@ function tabExec(name: string, args: string[]): { status: number | null; stdout:
 	const user = driver === 'sbx' ? ['-u', 'agent'] : [];
 	const r = spawnSync(runtime, ['exec', ...user, `seclab-${name}`, ...args], { encoding: 'utf8' });
 	return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+}
+
+/** Non-empty lines of a log, or none when it does not exist yet. */
+function readLines(file: string): string[] {
+	return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean) : [];
+}
+
+function countLines(file: string): number {
+	return readLines(file).length;
 }
 
 /**
@@ -188,7 +197,16 @@ if (mode === 'switch-build') {
 			'Close it before switching, or the relaunch inherits its log lines.');
 		process.exit(1);
 	}
-	fs.writeFileSync(path.join(base, 'offsets-restore.json'), JSON.stringify(logFileSizes(userData)));
+	fs.writeFileSync(path.join(base, 'offsets-restore.json'), JSON.stringify({
+		logs: logFileSizes(userData),
+		// The beacon logs are append-only and span the WHOLE run, so a phase that counted
+		// every line in them would inherit the previous phase's hits. That happened: the
+		// restore phase reported a host hit that belonged to the first launch, and read as
+		// an escape on a build that had in fact contained the page. Same defect as the
+		// window-log one, in the other evidence source.
+		hostHits: countLines(beaconLog),
+		tabHits: countLines(facts0.tabBeaconLog),
+	}));
 	fs.writeFileSync(runFacts, JSON.stringify({ ...facts0, build: to, seededBy: facts0.build }, null, '\t'));
 	fs.writeFileSync(path.join(userData, 'seclab-run-build.json'), JSON.stringify({ build: to, app, buildInfo: JSON.parse(fs.readFileSync(buildInfo, 'utf8')) }, null, '\t'));
 	const folderUri = `vscode-remote://seclab+${facts0.tabId}${ws}`;
@@ -204,6 +222,27 @@ if (mode === 'switch-build') {
 // the hook polls for the arming file once a second. Arming last means the page is never
 // fetched before both listeners are confirmed live, so "the tab saw nothing" can only mean
 // the page did not go there.
+// Start the tab-side listener as soon as the tab exists, and keep it up. Used for the
+// RESTORE phase, where the editor creates the tab itself and a restored browser editor
+// loads within seconds of the window appearing: there is no moment beforehand in which the
+// listener could be started by hand. Run in the background just before the relaunch.
+if (mode === 'listen') {
+	const facts0 = JSON.parse(fs.readFileSync(runFacts, 'utf8'));
+	const deadline = Date.now() + 5 * 60_000;
+	let announced = false;
+	while (Date.now() < deadline) {
+		const r = tabExec(facts0.tabId, ['sh', '-c',
+			`cd ${ws} && (setsid /opt/seclab-reh/node .seclab-tab-beacon.mjs ${facts0.tabBeaconLog} ${facts0.beaconPort} ${facts0.arm} >> .seclab-tab-beacon.out 2>&1 &) ; ` +
+			`for j in $(seq 1 8); do curl -sS -m 2 -o /dev/null http://127.0.0.1:${facts0.beaconPort}/tab-live-watch-${facts0.arm} && echo UP && break; sleep 0.25; done`]);
+		if (/UP/.test(r.stdout) && !announced) {
+			console.log('listen: tab-side listener up');
+			announced = true;
+		}
+		await new Promise(res => setTimeout(res, 1500));
+	}
+	process.exit(0);
+}
+
 if (mode === 'arm') {
 	const facts0 = JSON.parse(fs.readFileSync(runFacts, 'utf8'));
 	let up = '';
@@ -394,7 +433,7 @@ if (mode === 'prepare') {
 	fs.writeFileSync(runFacts, JSON.stringify({ build, tabId, arm, probeUrl, beaconPort: port, sentinel, probe, tabBeaconLog }, null, '\t'));
 	// This phase starts from an empty profile, but record the offsets anyway so every phase
 	// reads its own lines by the same rule.
-	fs.writeFileSync(path.join(base, 'offsets-first.json'), JSON.stringify(logFileSizes(userData)));
+	fs.writeFileSync(path.join(base, 'offsets-first.json'), JSON.stringify({ logs: logFileSizes(userData), hostHits: 0, tabHits: 0 }));
 	client.dispose(); // stops the tab; the editor restarts it
 	await new Promise(res => client.once('exit', res));
 
@@ -423,11 +462,12 @@ if (!fs.existsSync(offsetsFile)) {
 	console.error(`check: no ${path.basename(offsetsFile)}; run the previous phase first.`);
 	process.exit(2);
 }
-const phaseLines = linesSince(userData, JSON.parse(fs.readFileSync(offsetsFile, 'utf8')));
+const offsets = JSON.parse(fs.readFileSync(offsetsFile, 'utf8')) as { logs: Record<string, number>; hostHits: number; tabHits: number };
+const phaseLines = linesSince(userData, offsets.logs);
 const hookLines = phaseLines.filter(l => l.includes('SECLAB_TEST_ONLY:browser-drive-hook'));
 
-const readBeacon = () => fs.existsSync(beaconLog) ? fs.readFileSync(beaconLog, 'utf8').trim().split('\n').filter(Boolean) : [];
-const beaconHits = readBeacon();
+// Only the lines THIS phase appended, for the same reason the window log is read that way.
+const beaconHits = readLines(beaconLog).slice(offsets.hostHits);
 const probeHits = beaconHits.filter(l => l.includes(`browser-probe-${facts.arm}`));
 
 // LIVENESS, closing half: the beacon answered the HOST after the measurement, so a quiet
@@ -438,9 +478,8 @@ const beaconLiveAfter = await beaconSelfHit('127.0.0.1', facts.beaconPort, `/bea
 // absolute path, so it is read directly. Liveness is confirmed the same way as the host's:
 // by a request made from the tab itself, so a listener that died mid-run cannot pass itself
 // off as containment.
-const tabBeaconLines = fs.existsSync(facts.tabBeaconLog)
-	? fs.readFileSync(facts.tabBeaconLog, 'utf8').trim().split('\n').filter(Boolean) : [];
-const tabProbeHits = tabBeaconLines.filter(l => l.includes(`browser-probe-${facts.arm}`)).length;
+const tabProbeHits = readLines(facts.tabBeaconLog).slice(offsets.tabHits)
+	.filter(l => l.includes(`browser-probe-${facts.arm}`)).length;
 const tabLive = tabExec(facts.tabId, ['sh', '-c',
 	`curl -sS -m 3 -o /dev/null http://127.0.0.1:${facts.beaconPort}/tab-live-check-${facts.arm}-${phase} && echo OK`]);
 const tabBeaconLiveAfter = /OK/.test(tabLive.stdout);

@@ -465,3 +465,62 @@ design is gone: the ambiguity is now resolved with a second listener inside the 
 check that depends on bookkeeping written by the thing being checked is not a safety check.
 Teardown's manifest is a list of what a run *meant* to start; the process table is what it
 *did* start.
+
+## MEASURED: the two-sided U-vs-F proof (2026-11-10, second attempt)
+Builds: **U** = `b7bda15` (main's base + the variant, no 0017), **F** = `6f4cc62` (the same
+plus 0017). Same upstream `a717861`, same hook `c33b733a43`; the binaries stamp their own
+repo SHA and every run checks it, so the lines are known to come from the build claimed. Each
+run ends with the teardown gate, and every window was launched in the background and never
+took focus.
+
+Each run writes the hostile value for **one** key and the contained value for the other, so
+exactly one check decides it. Every verdict requires **exactly one** of the two listeners to
+have seen the page, so no result rests on silence.
+
+| run | tab wrote | resolved | host beacon | tab listener | verdict |
+|---|---|---|---|---|---|
+| U proxy | `enableRemoteProxy: false` | `network=none` | **1 hit** | 0 | **7/7 VULNERABLE** |
+| U storage | `dataStorage: global` (proxy **on**) | `scope=global` | **1 hit** | 0 | **7/7 VULNERABLE** |
+| F proxy | `enableRemoteProxy: false` | `network=seclab+<tab>` | 0 | **1 hit** | **7/7 CONTAINED** |
+| F storage | `dataStorage: global` (proxy **on**) | `scope=ephemeral`, `network=seclab+<tab>` | 0 | **1 hit** | **7/7 CONTAINED** |
+
+Both halves of increment 2 are now proven at runtime, independently of each other:
+
+- **`enableRemoteProxy`.** On U the tab's `false` was honoured and the page was fetched on the
+  HOST. On F the window read `true` despite the tab writing `false`, and the page was fetched
+  INSIDE THE TAB. Both directions are positive evidence from the listener on that side.
+- **`dataStorage`.** This is the half round 8 found was never exercised. With the proxy left
+  ON, so it cannot be the cause, the tab's `global` alone moved the page onto the host on U;
+  on F the window read `ephemeral` and the page stayed in the tab. The hook no longer supplies
+  a session, which is what lets the setting be read at all.
+
+### The restore path: proven at resolution, NOT at the network
+The cross-build restore phase ran on one profile: launch 1 on **U**, which honoured the tab
+and persisted the hostile scope, then a relaunch on **F** reading byte-for-byte the same
+state. It shows:
+
+- `savedScope=global` — the restored view really did carry the hostile persisted scope, logged
+  before 0017 can discard it, so this is not an assumption;
+- `scope=ephemeral`, `network=seclab+<tab>` — 0017 rebuilt it under the fixed setting.
+
+That is the security-relevant difference, and it is a clean differential. But **neither
+listener saw a fetch** in that phase, so the run is reported as inconclusive at the network
+level and must not be read as containment. The cause is structural: in the other runs the page
+cannot load until the arming file appears, which the harness writes only once both listeners
+answer; a restored editor is loaded by the editor itself at startup, so there is no such gate
+and the tab's listener cannot reliably be up first. Closing it needs a gate on the restore
+path, not another run.
+
+### Defects this round's own checks caught before any claim was made
+Each would have produced a false "contained" or a false "vulnerable":
+
+1. The tab-side listener was dead during the first measurement, because it was started in
+   `prepare`, which stops the tab so the editor can take it over. Caught by its liveness check.
+2. Round 9's `requestedNetwork` discriminator was unsatisfiable on U: `resolveNetwork` returns
+   `undefined` at the proxy gate itself. Replaced by the effective setting value the window
+   read, which the hook logs.
+3. The beacon hit counts were not phase-scoped, so the restore phase inherited the first
+   launch's host hit and reported an escape on a build that had contained the page. Both
+   listener logs are now read from a per-phase offset, as the window log already was.
+4. Stamping the repo SHA into the hook *record* broke `fetch` verification, which compares
+   that record against the local checkout exactly; it goes into product.json at apply time.
