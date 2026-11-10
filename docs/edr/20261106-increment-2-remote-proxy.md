@@ -225,7 +225,49 @@ hook actually ran, not just that it was built.
    the hard rule teardown exists for; and the arming directory was created after the host
    snapshot, so teardown reported `~/` as changed.
 
-**The U-vs-G verdict itself is still outstanding**, because both runs need an editor window
-and launches are held while a third focus-steal path is fixed (the system activates the owner
-of the topmost window when the user switches macOS Spaces). The harness, the hook and the two
-attested builds are ready; only the two runs remain.
+**The U-vs-F verdict is below, and it holds.**
+
+
+## MEASURED: the U-vs-F proof (2026-11-10)
+Both runs on the sbx driver, each window launched in the background through `test/window.ts`
+on a build at or after the Spaces focus fix, each ended by the shared teardown gate. The tab
+is hostile in both: before the window starts it writes `enableRemoteProxy: false` and
+`dataStorage: global` into the REH's remote user settings, the layer a tab controls.
+
+| | U (main + variant, `18c2843`, **no 0017**) | F (branch, `bab99d0`, **with 0017**) |
+|---|---|---|
+| tab's remote settings in force | `ready=yes` | `ready=yes` |
+| network resolved for the page | **`none`** (the host) | **`seclab+t-co3ocz…`** (the tab) |
+| host beacon | **2 hits** | **0 hits** |
+| first phase | 5/5 | 6/6 |
+| with the restored editor | 6/6 | 7/7 |
+
+### What the host beacon recorded on U
+Host Chromium itself fetched the model-chosen URL, over the host network:
+
+```
+GET /browser-probe-<run-nonce>
+ua: … seclab-vscode-TEST-agentic-browser/1.145.0 Chrome/150 Electron/43 …
+GET /favicon.ico
+```
+
+The user agent is the editor's own Chromium, and the beacon binds `127.0.0.1` where the tab's
+fence allows only the broker port, so the fetch can only have come from the host side. That is
+the exposure increment 2 closes, demonstrated rather than argued.
+
+On F the same probe, with the same hostile settings, resolved the **tab's** network and the
+beacon saw nothing; the page then failed with `ERR_EMPTY_RESPONSE`, which is the fence
+refusing a destination that is not the broker. Both halves of the EDR's requirement are met:
+the browser tool's model-chosen URL never loads on the host network, and the tab's
+`dataStorage: global` does not take the network away.
+
+### The restored-editor case
+Each build was relaunched against the same profile, so the browser editor was restored from
+its persisted session. Both resolved the same network as their first launch: U host, F tab.
+Without 0017's restore fix (round 7) a saved `global` scope would have carried past the pin;
+it does not.
+
+### Neither run took focus, and neither left anything
+Both report `OK  the editor never took focus from the user during the run` on the fixed build,
+and both teardowns are clean: no surviving process, no runtime resource, nothing outside the
+run directory changed.
