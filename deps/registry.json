@@ -433,6 +433,22 @@
       "bump": "Broker session; Dependabot (pip), then re-verify."
     },
     {
+      "id": "apt-xvfb",
+      "name": "Debian packages in the headless editor runner image",
+      "kind": "apt-set",
+      "publisher": "Debian (trixie archive)",
+      "official": true,
+      "purpose": "Xvfb and the Electron runtime libraries for driving the Linux editor headless in CI (test only; never shipped).",
+      "pins": ["apt:test/driver/xvfb/Dockerfile:fonts-dejavu-core,libasound2t64,libdrm2,libgbm1,libgtk-3-0t64,libnss3,libsecret-1-0,libxkbfile1,libxshmfence1,libxss1,libxtst6,xauth,xvfb"],
+      "used": ["test/driver/xvfb/Dockerfile"],
+      "provenance": "GPG-signed InRelease; per-package SHA-256 via Packages.",
+      "verify": "apt's default signature verification (debian-archive-keyring in the base image). Versions not pinned (ADR: live security updates over byte reproducibility).",
+      "bar": "signed-verified",
+      "record": "docs/edr/20261112-headless-driver.md",
+      "bump": "Follows the base image and the archive.",
+      "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "apt from Debian's signed archive without version pins", "covers": "Unpinned package versions from the live signed archive; replay of an older signed index (trixie InRelease has no Valid-Until)." }
+    },
+    {
       "id": "apt-builder",
       "name": "Debian packages in the Linux builder image",
       "kind": "apt-set",
