@@ -2,7 +2,7 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-06
-- **Deciders:** user ("forward the RPC-filter and gate denial logs to tabd"); coordinator (scope); RPC channel lockdown session (`seclabRpcFilter.log` shape and its trust dependencies); tab-observability session
+- **Deciders:** project owner (forward RPC-filter and AHP-gate decisions to tabd, 2026-11-06); coordinator (scope); RPC channel lockdown session (`seclabRpcFilter.log` shape and its trust dependencies); tab-observability session
 - **Related:** [ADR tab observability](../adr/20261104-tab-observability.md), [ADR agent events](../adr/20261105-agent-events-tab-reported.md), [ADR RPC filter enforcement points](../adr/20261104-rpc-filter-enforcement-points.md), patch 0015 (`seclabAhpGate.log`), [security review](../security-reviews/20261104-tab-observability.md) round 12
 
 ## Context
