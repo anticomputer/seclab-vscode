@@ -2,12 +2,12 @@
 
 - **Date:** 2026-11-12
 - **Scope:** rounds QQQ and RRR:
-  - `46d4102`: `test/host-caps.ts`, the Space probe's capability gate, removal of the
+  - "Tests must not need OS privacy permissions": `test/host-caps.ts`, the Space probe's capability gate, removal of the
     harness's host-clipboard seeding;
-  - `e42d8fc`, `7a25fca`: `test/driver/` (CDP over `--remote-debugging-pipe`, the launcher,
+  - "Headless editor driver" and its register follow-up: `test/driver/` (CDP over `--remote-debugging-pipe`, the launcher,
     screenshots, `shot.ts`, the Xvfb runner), patch 0012's bootstrap policy, the structural
     check in `check-release --desktop`, `headless-linux.yml`, `macos-focus-paths.yml`;
-  - `f723572`: patch 0042 (no automatic tasks in local windows), the accepted routing ADR.
+  - "Main-process routing accepted; interim patch 0042": patch 0042 (no automatic tasks in local windows), the accepted routing ADR.
 - **Threat model:** the harness must not need or ask for OS privacy permissions, must not read
   the host clipboard, and must not take focus; nothing but the launcher may drive the editor; a
   tab must gain nothing from the driver; a desktop build without the focus guarantees must not
@@ -17,7 +17,7 @@
   [ADR route-folder-opens-in-main](../adr/20261104-route-folder-opens-in-main.md).
 - **Prompt injection:** none found.
 
-## Round QQQ (`46d4102`, `e42d8fc`)
+## Round QQQ (the permissions and driver commits)
 Two mediums and one correctness bug. Confirmed:
 - no tab-reachable path to the CDP fds: the extension host, pty host and shared process are
   utility processes, which Chromium's launcher starts with only the descriptors it maps;
@@ -29,7 +29,7 @@ Two mediums and one correctness bug. Confirmed:
 - both workflows are `contents: read`, push or dispatch only, actions pinned by SHA;
 - no committed text describes anyone's OS permission settings.
 
-An earlier pass over `46d4102` alone found that the RPC probe still read the host clipboard
+An earlier pass over the permissions commit alone found that the RPC probe still read the host clipboard
 unconditionally and recorded the raw text. That is RPC core's to fix (an in-memory clipboard in
 the test variant, and records that hold no raw strings); the harness side, the opt-in that saved
 and restored the host clipboard, is removed here.
@@ -41,7 +41,7 @@ and restored the host clipboard, is removed here.
 | QQQ-3 | Low | `./seclab test driver` | `local` outside a function aborted the command under `set -e`. | Fixed | A plain variable. |
 | — | Residual | CDP frames | A process the editor's main process starts with `child_process` still inherits the fds. None does in a driven run once the login shell is off; utility processes don't inherit them. | Accepted | Recorded in the EDR. |
 
-## Round RRR (`f723572`, `7824d3c`)
+## Round RRR (patch 0042 and the round QQQ fixes)
 One medium, completing QQQ-1. Confirmed:
 - 0042: every `folderOpen` path (initial, reconnect-ready, trust change) goes through
   `_tryRunTasks`, and the guard is its first statement, before the trust check, the setting and
