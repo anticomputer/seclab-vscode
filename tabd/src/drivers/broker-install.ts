@@ -4,7 +4,7 @@
 // arrive on stdin, after validation here.
 
 import type { BrokerImage, BrokerImagePin } from '../broker-image.ts';
-import { CFS_HOST, CFS_NPM_PATH, CFS_PYPI_PATH, feedInstallLine } from '../cfs.ts';
+import { CFS_HOST, feedInstallLine, type CfsFeeds } from '../cfs.ts';
 import type { Runner } from '../run.ts';
 import type { BrokerSetup } from './types.ts';
 import { DriverError } from './types.ts';
@@ -86,20 +86,25 @@ const CHECK_DIR = `d=${BROKER_DIR}; mkdir -p "$d"
 [ ! -L "$d" ] && [ -d "$d" ] && [ "$(stat -c %u "$d")" = 0 ] && [ $(( 0$(stat -c %a "$d") & 022 )) = 0 ] || { echo "broker dir is not a root-owned, non-writable directory" >&2; exit 1; }`;
 
 /**
- * CFS package feeds (ADR cfs-package-feeds-in-tabs): from a `feed <sentinel> <base64>` or
- * `feed -` line, write (or remove) the tab's npm user config and pip index URL. The feed URLs
- * are fixed here, never from input; only the broker's sentinel goes in, never the token.
- * seclab-tab-env points npm (NPM_CONFIG_GLOBALCONFIG) and pip (PIP_INDEX_URL) at them.
+ * CFS package feeds (ADR cfs-package-feeds-in-tabs): from a `feed <sentinel> <base64> <npm path>
+ * <pypi path>` or `feed -` line, write (or remove) the tab's npm user config, its registry, and
+ * pip's index URL. The host and the path shapes are fixed here; the paths come from tabd (the
+ * host's CFS config, EDR cfs-config-outside-repo) and are checked again. Only the broker's
+ * sentinel goes in, never the token. seclab-tab-env points npm (NPM_CONFIG_GLOBALCONFIG,
+ * NPM_CONFIG_REGISTRY) and pip (PIP_INDEX_URL) at them.
  */
-const npmFeed = `https://${CFS_HOST}${CFS_NPM_PATH}`;
-const npmKey = `//${CFS_HOST}${CFS_NPM_PATH}`;
-const WRITE_FEED = `IFS=' ' read -r tag fs fb; [ "$tag" = feed ] || { echo "bad feed line" >&2; exit 1; }
-rm -f "$d/npmrc.new" "$d/pip-index-url.new"
-if [ "$fs" = - ]; then rm -f "$d/npmrc" "$d/pip-index-url"; else
+const WRITE_FEED = `IFS=' ' read -r tag fs fb np pp; [ "$tag" = feed ] || { echo "bad feed line" >&2; exit 1; }
+rm -f "$d/npmrc.new" "$d/pip-index-url.new" "$d/npm-registry.new"
+if [ "$fs" = - ]; then rm -f "$d/npmrc" "$d/pip-index-url" "$d/npm-registry"; else
 case "$fs$fb" in *[!A-Za-z0-9_.~=+/-]*|"") echo "bad feed sentinel" >&2; exit 1 ;; esac
-printf 'registry=${npmFeed}\\n${npmKey}:username=cfs\\n${npmKey}:_password=%s\\n${npmKey}:always-auth=true\\n' "$fb" > "$d/npmrc.new"
-printf 'https://cfs:%s@${CFS_HOST}${CFS_PYPI_PATH}simple/\\n' "$fs" > "$d/pip-index-url.new"
-mv "$d/npmrc.new" "$d/npmrc"; mv "$d/pip-index-url.new" "$d/pip-index-url"; fi`;
+case "$np$pp" in *[!A-Za-z0-9._/-]*|*/./*|*/../*) echo "bad feed path" >&2; exit 1 ;; esac
+case "$np" in /?*/?*/_packaging/?*/npm/registry/) ;; *) echo "bad npm feed path" >&2; exit 1 ;; esac
+case "$pp" in /?*/?*/_packaging/?*/pypi/) ;; *) echo "bad pypi feed path" >&2; exit 1 ;; esac
+k="//${CFS_HOST}$np"
+printf 'registry=https:%s\\n%s:username=cfs\\n%s:_password=%s\\n%s:always-auth=true\\n' "$k" "$k" "$k" "$fb" "$k" > "$d/npmrc.new"
+printf 'https:%s\\n' "$k" > "$d/npm-registry.new"
+printf 'https://cfs:%s@${CFS_HOST}%ssimple/\\n' "$fs" "$pp" > "$d/pip-index-url.new"
+mv "$d/npmrc.new" "$d/npmrc"; mv "$d/npm-registry.new" "$d/npm-registry"; mv "$d/pip-index-url.new" "$d/pip-index-url"; fi`;
 
 /**
  * Root script: line 1 of stdin is the proxy URL, line 2 the feed line, the rest the CA PEM.
@@ -125,14 +130,14 @@ export function brokerInstallInput(setup: BrokerSetup, proxyHost: string): strin
 		|| !/^(broker:8080|host\.docker\.internal:[0-9]{1,5})$/.test(proxyHost)) {
 		throw new DriverError(-32013, 'broker setup returned an invalid CA or proxy credential');
 	}
-	return `http://${setup.proxyUser}:${setup.proxyPassword}@${proxyHost}\n${feedLine(setup.feedSentinel)}\n${setup.caPem}`;
+	return `http://${setup.proxyUser}:${setup.proxyPassword}@${proxyHost}\n${feedLine(setup.feedSentinel, setup.feeds)}\n${setup.caPem}`;
 }
 
 /** The feed line for INSTALL_BROKER / INSTALL_FEED. */
-export function feedLine(sentinel: string | undefined): string {
+export function feedLine(sentinel: string | undefined, feeds?: CfsFeeds): string {
 	try {
-		return feedInstallLine(sentinel);
+		return feedInstallLine(sentinel, feeds);
 	} catch {
-		throw new DriverError(-32013, 'broker setup returned an invalid package feed sentinel');
+		throw new DriverError(-32013, 'broker setup returned an invalid package feed sentinel, or no feed config');
 	}
 }

@@ -22,22 +22,27 @@ if [ -n "$CA" ]; then
 	set -- env NODE_EXTRA_CA_CERTS="$B/ca.pem" SSL_CERT_FILE="$B/bundle.pem" REQUESTS_CA_BUNDLE="$B/bundle.pem" \
 		CURL_CA_BUNDLE="$B/bundle.pem" GIT_SSL_CAINFO="$B/bundle.pem" "$@"
 	# CFS package feeds (ADR cfs-package-feeds-in-tabs), when the user enabled them for this tab:
-	# tabd writes npm's config and pip's index URL here with the broker's sentinel (never the
-	# token). The registry in env outranks a workspace .npmrc. Anything unexpected: no feeds.
-	if [ -r "$B/npmrc" ] && [ -r "$B/pip-index-url" ]; then
+	# tabd writes npm's config, its registry and pip's index URL here with the broker's sentinel
+	# (never the token). The feed paths come from the host's CFS config, so here they are checked
+	# for shape only: the fixed host, the feed path layout, nothing else (review EEE-5). The
+	# registry in env outranks a workspace .npmrc. Anything unexpected: no feeds.
+	if [ -r "$B/npmrc" ] && [ -r "$B/pip-index-url" ] && [ -r "$B/npm-registry" ]; then
 		pip="$(head -c 600 "$B/pip-index-url" | head -n 1)"
-		# Exactly https://cfs:<sentinel>@<the fixed feed URL> (review EEE-5): the password part
-		# is cut out and checked on its own, and the rest must equal the fixed suffix.
+		reg="$(head -c 400 "$B/npm-registry" | head -n 1)"
+		# https://cfs:<sentinel>@pkgs.dev.azure.com/<org>/<project>/_packaging/<feed>/pypi/simple/:
+		# the password part is cut out and checked on its own, then the rest.
 		pw="${pip#https://cfs:}"; pw="${pw%%@*}"
 		case "$pw" in
 			seclab_cfs_*) case "$pw" in *[!A-Za-z0-9_-]*) pip="" ;; esac ;;
 			*) pip="" ;;
 		esac
-		[ "$pip" = "https://cfs:$pw@pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-pypi-feed/pypi/simple/" ] || pip=""
+		pp="${pip#https://cfs:$pw@pkgs.dev.azure.com}"
+		[ "$pp" != "$pip" ] || pip=""
+		case "$pp$reg" in *[!A-Za-z0-9._/:-]*|*/./*|*/../*) pip="" ;; esac
+		case "$pp" in /?*/?*/_packaging/?*/pypi/simple/) ;; *) pip="" ;; esac
+		case "$reg" in https://pkgs.dev.azure.com/?*/?*/_packaging/?*/npm/registry/) ;; *) pip="" ;; esac
 		if [ -n "$pip" ]; then
-			set -- env NPM_CONFIG_GLOBALCONFIG="$B/npmrc" \
-				NPM_CONFIG_REGISTRY=https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/ \
-				PIP_INDEX_URL="$pip" "$@"
+			set -- env NPM_CONFIG_GLOBALCONFIG="$B/npmrc" NPM_CONFIG_REGISTRY="$reg" PIP_INDEX_URL="$pip" "$@"
 		fi
 	fi
 fi

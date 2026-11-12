@@ -10,6 +10,7 @@ import type { UpperReader } from '../writeback-feed.ts';
 import type { BrokerImagePin } from '../broker-image.ts';
 import { brokerImageProblem, brokerInstallInput, dropBrokerFromOtherImage, feedLine, INSTALL_BROKER, INSTALL_FEED, pinnedBrokerImage } from './broker-install.ts';
 import { DriverError, type BrokerHooks, type BrokerSetup, type Driver, type DriverInfo, type FenceReport, type PolicyLogEntry, type SensorHooks, type TabRuntimeSpec } from './types.ts';
+import type { CfsFeeds } from '../cfs.ts';
 
 const MIN_VERSION = [0, 51, 0];
 const REH_CONNECT = '/opt/seclab/bin/seclab-reh-connect';
@@ -357,9 +358,9 @@ export class SbxDriver implements Driver {
 		return this.runner.spawnStream(this.opts.docker, ['exec', '-i', '--', this.brokerNames(spec).broker, 'seclab-broker', 'control']);
 	}
 
-	async installFeed(spec: TabRuntimeSpec, sentinel: string | undefined): Promise<void> {
+	async installFeed(spec: TabRuntimeSpec, sentinel: string | undefined, feeds?: CfsFeeds): Promise<void> {
 		checkSpec(spec);
-		const w = await this.runner.run(this.sbx, ['exec', '-i', '-u', 'root', '-w', '/', spec.sandboxName, 'sh', '-c', INSTALL_FEED], { input: `${feedLine(sentinel)}\n`, timeoutMs: 60_000 });
+		const w = await this.runner.run(this.sbx, ['exec', '-i', '-u', 'root', '-w', '/', spec.sandboxName, 'sh', '-c', INSTALL_FEED], { input: `${feedLine(sentinel, feeds)}\n`, timeoutMs: 60_000 });
 		if (w.code !== 0) {
 			throw new DriverError(-32013, `could not write the package feed config in the tab: ${tail(w.stderr)}`);
 		}

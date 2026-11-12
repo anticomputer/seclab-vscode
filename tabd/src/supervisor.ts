@@ -11,7 +11,7 @@ import { BrokerControl, connectBroker } from './broker-control.ts';
 import { BROKER_POLICY_SCHEMA } from './broker.ts';
 import { defaultPolicy } from './broker-policy.ts';
 import { Approvals, asJson, sanitizeApproval } from './approvals.ts';
-import { CFS_CREDENTIAL_ID, CFS_RULE_IDS, cfsAllowRules, cfsImportParams, isCfsSentinel, newCfsSentinel, type AzToken } from './cfs.ts';
+import { CFS_CREDENTIAL_ID, CFS_RULE_IDS, cfsAllowRules, cfsImportParams, isCfsSentinel, newCfsSentinel, type AzToken, type CfsFeeds } from './cfs.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { assertTabId, canonicalWorkspacePath, sandboxNameFor, TEMPLATE_NAME_RE, ValidationError, type PathPolicy } from './validate.ts';
 import { ObsGlue, ObsParamError } from './obs/glue.ts';
@@ -72,8 +72,8 @@ export interface SupervisorOptions {
 	 * directory, else deny-all). Throws on an invalid user policy, which fails the start.
 	 */
 	readonly brokerPolicy?: (tabId: string, opts: { prompts: boolean }) => Record<string, unknown>;
-	/** CFS package feeds (B4): the host's az token source; absent = feeds unavailable. */
-	readonly cfs?: { token(): Promise<AzToken> };
+	/** CFS package feeds (B4): the host's feeds and az token source; absent = feeds unavailable. */
+	readonly cfs?: { readonly feeds: CfsFeeds; token(): Promise<AzToken> };
 }
 
 interface Channel { tabId: string; child: ChildProcessWithoutNullStreams }
@@ -630,7 +630,7 @@ export class Supervisor {
 					}
 					const feedSentinel = this.attachBroker(r.tabId, c);
 					this.audit('broker.configure', 'ok', { tabId: r.tabId, policyRevision: typeof loaded?.revision === 'number' ? loaded.revision : null, caSha256: pemSha256 });
-					return { caPem: certPem, proxyUser: 'seclab', proxyPassword, ...(feedSentinel ? { feedSentinel } : {}) };
+					return { caPem: certPem, proxyUser: 'seclab', proxyPassword, ...(feedSentinel && this.o.cfs ? { feedSentinel, feeds: this.o.cfs.feeds } : {}) };
 				} catch (e) {
 					c.close();
 					this.audit('broker.configure', 'fail', { tabId: r.tabId, error: (e as Error).message });
@@ -778,7 +778,7 @@ export class Supervisor {
 	/** Import budgets on `credential.import` arrived in broker policy schema revision 7 (review EEE-1). */
 	private cfsSupported(): string | undefined {
 		if (!this.o.cfs) {
-			return 'package feeds are unavailable (no az token source)';
+			return 'package feeds are unavailable on this host (no valid CFS config: run ./seclab cfs config)';
 		}
 		return (BROKER_POLICY_SCHEMA.revision as number) >= 7 ? undefined : 'package feeds need broker policy schema revision 7 (budgets on imported credentials)';
 	}
@@ -817,9 +817,9 @@ export class Supervisor {
 		if (!this.cfsCurrent(tabId, c, sentinel)) {
 			return;
 		}
-		await c.request('credential.import', cfsImportParams(sentinel, token), 30_000);
+		await c.request('credential.import', cfsImportParams(this.o.cfs!.feeds, sentinel, token), 30_000);
 		await c.request('policy.update', { removeAllow: CFS_RULE_IDS }).catch(() => undefined);
-		await c.request('policy.update', { addAllow: cfsAllowRules() });
+		await c.request('policy.update', { addAllow: cfsAllowRules(this.o.cfs!.feeds) });
 		if (!this.cfsCurrent(tabId, c, sentinel)) {
 			await this.removeCfs(c);
 			return;
@@ -891,7 +891,7 @@ export class Supervisor {
 						this.attachCfsRefresh(r.tabId, c, sentinel);
 					}
 					await this.importCfs(r.tabId, c, sentinel);
-					await driver.installFeed?.(spec, sentinel);
+					await driver.installFeed?.(spec, sentinel, this.o.cfs?.feeds);
 				}
 			} else {
 				this.o.store.writeSide(r.tabId, 'packages', []);

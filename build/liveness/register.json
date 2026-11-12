@@ -6,14 +6,7 @@
 	],
 	"exempt": [
 		{ "subject": "tabd/src/scan.ts#scannerProblem", "consumer": "tabd/test/unit.test.ts", "reason": "Test entry to checkScanner, which scanWorkspace runs before every mount. The supervisor called it until 0ae1eeb moved the check into scanWorkspace." },
-		{ "subject": "tabd/src/cfs-config.ts#loadCfsConfig", "consumer": "build/cfs-config.ts", "reason": "The host CLI's check/get/write and every local CFS build (broker/tools/pybuild.sh) load the config through it; tabd's CFS policy will too (EDR cfs-config-outside-repo)." },
-		{ "subject": "tabd/src/cfs-config.ts#validateCfsConfig", "consumer": "build/cfs-config.ts", "reason": "The CLI validates what it writes and runs the shared vectors through it." },
-		{ "subject": "tabd/src/cfs-config.ts#cfsConfigPath", "consumer": "build/cfs-config.ts", "reason": "The CLI writes the config where the readers look." },
-		{ "subject": "tabd/src/cfs-config.ts#CfsConfigError", "consumer": "build/cfs-config.ts", "reason": "The CLI reports validator refusals by this type, and only their messages, which never carry a value." },
-		{ "subject": "tabd/src/cfs-config.ts#CFS_RULES", "consumer": "build/cfs-config.ts", "reason": "The CLI extracts the feed URLs from gh cfs output with the validator's own shapes." },
-		{ "subject": "tabd/src/cfs-config.ts#CFS_FIELDS", "consumer": "build/cfs-config.ts", "reason": "The CLI's `get FIELD` accepts only these fields." },
-		{ "subject": "tabd/src/cfs-config.ts#CFS_GUID", "consumer": "build/cfs-config.ts", "reason": "The CLI extracts the tenant from gh cfs output with it." },
-		{ "subject": "tabd/src/cfs-config.ts#CFS_HOST", "consumer": "build/cfs-config.ts", "reason": "The CLI refuses to write a feed on any other host." }
+		{ "subject": "tabd/src/cfs-config.ts#CFS_GUID", "consumer": "build/cfs-config.ts", "reason": "The CLI extracts the tenant from gh cfs output with it." }
 	],
 	"subjects": [
 		{

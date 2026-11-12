@@ -5,29 +5,45 @@
 // and given to the broker just in time (`credential.provide`). It is never written to disk.
 
 import { spawn } from 'node:child_process';
+import { CFS_HOST, loadCfsConfig, type CfsConfig } from './cfs-config.ts';
 
+export { CFS_HOST };
 export const CFS_CREDENTIAL_ID = 'cfs';
-export const CFS_HOST = 'pkgs.dev.azure.com';
-export const CFS_NPM_PATH = '/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/';
-export const CFS_PYPI_PATH = '/example-org/ExampleProject/_packaging/example-pypi-feed/pypi/';
-/**
- * Where the PyPI simple index links its files: the feed's GUID path (organisation and feed
- * GUIDs), not its name (measured 2026-11-06, tabd/test/e2e-cfs.ts). Downloads only.
- */
-export const CFS_PYPI_DOWNLOAD_PATH = '/example-org/00000000-0000-0000-0000-000000000001/_packaging/00000000-0000-0000-0000-000000000002/pypi/download/';
-export const CFS_TENANT = '00000000-0000-0000-0000-000000000003';
 export const CFS_RESOURCE = '499b84ac-1321-427f-aa17-267ca6975798';
 /** Re-mint when the cached token has less than this left. */
 const REFRESH_MARGIN_S = 300;
 /** Exactly what newCfsSentinel mints (base64url of 32 bytes), which seclab-tab-env also requires. */
 const SENTINEL_RE = /^seclab_cfs_[A-Za-z0-9_-]{43}$/;
 
-/** The two feed rules, GET only, on the exact feed paths (`policy.update addAllow`). */
-export function cfsAllowRules(): Record<string, unknown>[] {
+/**
+ * The feed paths and tenant, from the host-side config (tabd/src/cfs-config.ts, EDR
+ * cfs-config-outside-repo): never from the tree, never from a tab. The PyPI simple index links
+ * its files under the feed's GUID path (measured 2026-11-06, tabd/test/e2e-cfs.ts), so
+ * downloads have their own path.
+ */
+export interface CfsFeeds { readonly npmPath: string; readonly pypiPath: string; readonly pypiDownloadPath: string; readonly tenant: string }
+
+export function cfsFeeds(c: CfsConfig): CfsFeeds {
+	const p = (u: string) => new URL(u).pathname;
+	const index = p(c.pypiIndex);
+	return { npmPath: p(c.npmRegistry), pypiPath: index.slice(0, index.length - 'simple/'.length), pypiDownloadPath: p(c.pypiDownload), tenant: c.tenant };
+}
+
+/** The host's feeds, or why CFS is off (a missing or malformed config). Messages carry no value. */
+export function loadCfsFeeds(file?: string): { feeds: CfsFeeds } | { problem: string } {
+	try {
+		return { feeds: cfsFeeds(loadCfsConfig(file)) };
+	} catch (e) {
+		return { problem: (e as Error).message };
+	}
+}
+
+/** The feed rules, GET only, on the exact feed paths (`policy.update addAllow`). */
+export function cfsAllowRules(f: CfsFeeds): Record<string, unknown>[] {
 	return [
-		{ id: 'cfs-npm', host: CFS_HOST, methods: ['GET'], path: `${CFS_NPM_PATH}**` },
-		{ id: 'cfs-pypi', host: CFS_HOST, methods: ['GET'], path: `${CFS_PYPI_PATH}**` },
-		{ id: 'cfs-pypi-files', host: CFS_HOST, methods: ['GET'], path: `${CFS_PYPI_DOWNLOAD_PATH}**` },
+		{ id: 'cfs-npm', host: CFS_HOST, methods: ['GET'], path: `${f.npmPath}**` },
+		{ id: 'cfs-pypi', host: CFS_HOST, methods: ['GET'], path: `${f.pypiPath}**` },
+		{ id: 'cfs-pypi-files', host: CFS_HOST, methods: ['GET'], path: `${f.pypiDownloadPath}**` },
 	];
 }
 
@@ -41,7 +57,7 @@ export const CFS_RULE_IDS = ['cfs-npm', 'cfs-pypi', 'cfs-pypi-files'];
  * feed reads only, the azure-devops provider backstop, and a per-broker-start budget that bounds
  * ingestion under the user's identity. Confirmed bindings: never a first-use prompt.
  */
-export function cfsImportParams(sentinel: string, token: AzToken): Record<string, unknown> {
+export function cfsImportParams(f: CfsFeeds, sentinel: string, token: AzToken): Record<string, unknown> {
 	if (!SENTINEL_RE.test(sentinel)) {
 		throw new Error('cfs sentinel has an unexpected format');
 	}
@@ -52,9 +68,9 @@ export function cfsImportParams(sentinel: string, token: AzToken): Record<string
 		provider: 'azure-devops',
 		inject: { header: 'Authorization', fmt: 'Basic {base64:cfs:{value}}' },
 		bind: [
-			{ host: CFS_HOST, path: `${CFS_NPM_PATH}**`, methods: ['GET'] },
-			{ host: CFS_HOST, path: `${CFS_PYPI_PATH}**`, methods: ['GET'] },
-			{ host: CFS_HOST, path: `${CFS_PYPI_DOWNLOAD_PATH}**`, methods: ['GET'] },
+			{ host: CFS_HOST, path: `${f.npmPath}**`, methods: ['GET'] },
+			{ host: CFS_HOST, path: `${f.pypiPath}**`, methods: ['GET'] },
+			{ host: CFS_HOST, path: `${f.pypiDownloadPath}**`, methods: ['GET'] },
 		],
 		budget: { requests: 5000, bytes: 2 * 1024 ** 3 },
 		source: { kind: 'host', label: 'CFS package feeds (az)' },
@@ -76,14 +92,14 @@ export interface AzToken { value: string; expiresAt: number }
  * Parse `az account get-access-token -o json`: the tenant must be CFS's (as the CFS helper
  * checks), the token non-empty, and the expiry (epoch seconds) in the future.
  */
-export function parseAzToken(stdout: string, nowS = Date.now() / 1000): AzToken {
+export function parseAzToken(stdout: string, tenant: string, nowS = Date.now() / 1000): AzToken {
 	let j: Record<string, unknown>;
 	try {
 		j = JSON.parse(stdout) as Record<string, unknown>;
 	} catch {
 		throw new Error('az: output is not JSON');
 	}
-	if (j.tenant !== CFS_TENANT) {
+	if (j.tenant !== tenant) {
 		throw new Error('az: token is for another tenant');
 	}
 	const value = j.accessToken;
@@ -102,7 +118,9 @@ export class CfsTokenSource {
 	private cached: AzToken | undefined;
 	private inflight: Promise<AzToken> | undefined;
 	private readonly az: string;
-	constructor(az = '/opt/homebrew/bin/az') {
+	readonly feeds: CfsFeeds;
+	constructor(feeds: CfsFeeds, az = '/opt/homebrew/bin/az') {
+		this.feeds = feeds;
 		this.az = az;
 	}
 
@@ -123,7 +141,7 @@ export class CfsTokenSource {
 	private mint(): Promise<AzToken> {
 		return new Promise((resolve, reject) => {
 			// Fixed argv; the token arrives on stdout only and is never logged.
-			const p = spawn(this.az, ['account', 'get-access-token', '--tenant', CFS_TENANT, '--resource', CFS_RESOURCE, '--output', 'json'], { stdio: ['ignore', 'pipe', 'pipe'] });
+			const p = spawn(this.az, ['account', 'get-access-token', '--tenant', this.feeds.tenant, '--resource', CFS_RESOURCE, '--output', 'json'], { stdio: ['ignore', 'pipe', 'pipe'] });
 			let out = '';
 			let err = '';
 			p.stdout.on('data', (d: Buffer) => out += d.toString('utf8'));
@@ -141,7 +159,7 @@ export class CfsTokenSource {
 					return;
 				}
 				try {
-					resolve(parseAzToken(out));
+					resolve(parseAzToken(out, this.feeds.tenant));
 				} catch (e) {
 					reject(e as Error);
 				}
@@ -150,13 +168,19 @@ export class CfsTokenSource {
 	}
 }
 
-/** The tab's package configuration lines (install script input): npm user config and pip's index URL. */
-export function feedInstallLine(sentinel: string | undefined): string {
+/**
+ * The tab's package configuration line (install script input): `feed -`, or the sentinel, its
+ * base64 (npm's _password), and the npm and PyPI feed paths, which the root script checks again.
+ */
+export function feedInstallLine(sentinel: string | undefined, f?: CfsFeeds): string {
 	if (!sentinel) {
 		return 'feed -';
 	}
 	if (!SENTINEL_RE.test(sentinel)) {
 		throw new Error('cfs sentinel has an unexpected format');
 	}
-	return `feed ${sentinel} ${Buffer.from(sentinel).toString('base64')}`;
+	if (!f) {
+		throw new Error('cfs feeds are not configured');
+	}
+	return `feed ${sentinel} ${Buffer.from(sentinel).toString('base64')} ${f.npmPath} ${f.pypiPath}`;
 }
