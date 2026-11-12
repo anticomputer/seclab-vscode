@@ -52,6 +52,14 @@ jobs:
           path: .work/driver/selftest.png
           if-no-files-found: ignore
           retention-days: 7
+      - name: Keep the Linux editor build (short-lived; for local driver runs under Xvfb)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: seclab-vscode-linux-editor
+          path: .work/out/seclab-vscode-linux-*.tar.gz
+          if-no-files-found: ignore
+          retention-days: 2
       # Last: every fixture the register assigns to this job left its mark (EDR liveness-gate).
       - name: Liveness marks
         run: ./seclab liveness marks headless-linux.yml#driver "$SECLAB_LIVENESS_LOG"
