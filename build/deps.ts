@@ -389,13 +389,21 @@ const files = (arg ? fs.readFileSync(arg === '-' ? 0 : arg, 'utf8') : execFileSy
 	.split('\0').filter(Boolean)
 	.filter(f => !/\.(png|jpe?g|gif|svg)$/.test(f) && !f.includes('/fixtures/') && !f.startsWith('rpc-filter/inventory/') && f !== 'build/deps.ts' && f !== 'build/check-pins.ts' && f !== REGISTRY);
 const tree: TreePin[] = [];
+// A tracked file that can't be read is a problem, never a silent skip (GATE-7): its pins would
+// drop out of the check. A tracked symlink is skipped: its target is checked where it is tracked.
+const unreadable: string[] = [];
 for (const f of files) {
 	try {
+		if (fs.lstatSync(path.join(repo, f)).isSymbolicLink()) {
+			continue;
+		}
 		const text = fs.readFileSync(path.join(repo, f), 'utf8');
 		if (!text.includes('\0')) {
 			tree.push(...pinsIn(f, text));
 		}
-	} catch { /* deleted in the worktree */ }
+	} catch (e) {
+		unreadable.push(`${f}: tracked but unreadable (${(e as NodeJS.ErrnoException).code ?? 'error'}); deleted in the worktree? stage or restore it`);
+	}
 }
 const problems = validate(deps, tree, p => fs.existsSync(path.join(repo, p)), p => {
 	try {
@@ -404,6 +412,7 @@ const problems = validate(deps, tree, p => fs.existsSync(path.join(repo, p)), p 
 		return undefined;
 	}
 });
+problems.push(...unreadable);
 // Nothing under .work/ may be tracked: it holds verification caches and run state (DD-5).
 if (files.some(f => f.startsWith('.work/'))) {
 	problems.push('.work/ has tracked files (verification caches and run state must never be committed)');

@@ -161,19 +161,19 @@ test('check-patch-reach: a web-only file fails and a desktop file passes, in bot
 		write('tree/src/vs/desk.ts', `import './shared.js';\n`);
 		assert.equal(runReach(ok).status, 0, 'baseline: both files valid');
 		const cases: Array<[string, object | null, object | string | null, RegExp]> = [
-			['reach.json missing', null, DEFAULT_UNREACHABLE, /reach\.json is required/],
-			['reach.json unparseable', null, DEFAULT_UNREACHABLE, /reach\.json is required/],
-			['reach.json empty', {}, DEFAULT_UNREACHABLE, /reach\.json must be a non-empty JSON object/],
-			['reach.json with an emptied entry', { '0001-x.patch': [] }, DEFAULT_UNREACHABLE, /must list one or more known targets/],
-			['reach.json with an unknown target', { '0001-x.patch': ['desktpo'] }, DEFAULT_UNREACHABLE, /must list one or more known targets/],
-			['unreachable.json missing', DEFAULT_REACH, null, /unreachable\.json is required/],
-			['unreachable.json unparseable', DEFAULT_REACH, '{"desktop":', /unreachable\.json is required/],
-			['unreachable.json empty', DEFAULT_REACH, {}, /unreachable\.json must be a non-empty JSON object/],
-			['unreachable.json without desktop', DEFAULT_REACH, { server: { deny: ['src/vs/webonly.ts'] } }, /must deny at least one module for desktop/],
-			['unreachable.json with an empty desktop deny', DEFAULT_REACH, { desktop: { deny: [] } }, /must deny at least one module for desktop/],
+			['GATE-3: reach.json missing', null, DEFAULT_UNREACHABLE, /reach\.json is required/],
+			['GATE-3: reach.json unparseable', null, DEFAULT_UNREACHABLE, /reach\.json is required/],
+			['GATE-3: reach.json empty', {}, DEFAULT_UNREACHABLE, /reach\.json must be a non-empty JSON object/],
+			['SSS-3: reach.json with an emptied entry', { '0001-x.patch': [] }, DEFAULT_UNREACHABLE, /must list one or more known targets/],
+			['SSS-3: reach.json with an unknown target', { '0001-x.patch': ['desktpo'] }, DEFAULT_UNREACHABLE, /must list one or more known targets/],
+			['GATE-2: unreachable.json missing', DEFAULT_REACH, null, /unreachable\.json is required/],
+			['GATE-2: unreachable.json unparseable', DEFAULT_REACH, '{"desktop":', /unreachable\.json is required/],
+			['GATE-2: unreachable.json empty', DEFAULT_REACH, {}, /unreachable\.json must be a non-empty JSON object/],
+			['GATE-2: unreachable.json without desktop', DEFAULT_REACH, { server: { deny: ['src/vs/webonly.ts'] } }, /must deny at least one module for desktop/],
+			['GATE-2: unreachable.json with an empty desktop deny', DEFAULT_REACH, { desktop: { deny: [] } }, /must deny at least one module for desktop/],
 		];
 		for (const [what, reach, unreachable, want] of cases) {
-			const r = what === 'reach.json unparseable'
+			const r = what === 'GATE-3: reach.json unparseable'
 				? (() => { runReach(ok, null, unreachable); fs.writeFileSync(path.join(pdir, 'reach.json'), '{"0001-x.patch": ['); return spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-patch-reach.ts'), path.join(scratch, 'tree'), '--patches', pdir], { encoding: 'utf8' }); })()
 				: runReach(ok, reach, unreachable);
 			assert.equal(r.status, 1, `${what} must fail\n${r.stdout}${r.stderr}`);

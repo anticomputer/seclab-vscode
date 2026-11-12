@@ -40,6 +40,12 @@ test('check-pins: a listed file that can\'t be read is a finding (GATE-7)', () =
 	assert.match(r.stdout, /no\/such\/tracked-file\.yml: tracked but unreadable \(ENOENT\)/);
 });
 
+test('deps: a listed file that can\'t be read is a problem, so its pins never drop out silently (GATE-7, review UUU-1)', () => {
+	const r = run(['build/deps.ts', 'check', list('deps-missing', ['seclab', 'no/such/tracked-file.yml'])]);
+	assert.equal(r.status, 1, r.stdout + r.stderr);
+	assert.match(r.stdout + r.stderr, /no\/such\/tracked-file\.yml: tracked but unreadable \(ENOENT\)/);
+});
+
 test('fixture-lint --av: an empty, truncated or canary-only list fails; an unreadable file is a finding (GATE-5, GATE-7, SSS-1)', () => {
 	const empty = run(['test/safety/fixture-lint.ts', '--av', list('av-empty', [])]);
 	assert.equal(empty.status, 1, empty.stdout);
