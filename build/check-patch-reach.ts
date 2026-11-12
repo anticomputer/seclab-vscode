@@ -98,8 +98,22 @@ if (process.argv[3] === '--file') {
 	process.exit(0);
 }
 const series = fs.readFileSync(path.join(patchesDir, 'series'), 'utf8').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(Boolean);
-const reachFile = path.join(patchesDir, 'reach.json');
-const required: Record<string, string[]> = fs.existsSync(reachFile) ? JSON.parse(fs.readFileSync(reachFile, 'utf8')) : {};
+// The policy files are required (GATE-2, GATE-3): a missing, unreadable or empty one would
+// silently switch a security invariant off, so each fails the gate instead.
+function readPolicy<T>(name: string): Record<string, T> {
+	const file = path.join(patchesDir, name);
+	let v: unknown;
+	try {
+		v = JSON.parse(fs.readFileSync(file, 'utf8'));
+	} catch (e) {
+		return fail(`patches/${name} is required and could not be read: ${(e as Error).message}`);
+	}
+	if (!v || typeof v !== 'object' || Array.isArray(v) || Object.keys(v).length === 0) {
+		return fail(`patches/${name} must be a non-empty JSON object`);
+	}
+	return v as Record<string, T>;
+}
+const required = readPolicy<string[]>('reach.json');
 for (const p of Object.keys(required)) {
 	if (!series.includes(p)) {
 		fail(`patches/reach.json names ${p}, which is not in patches/series`);
@@ -143,8 +157,11 @@ for (const p of series) {
 // (review WW-6), so a new agent module is covered without anyone listing it; `except` names the
 // few under a denied prefix the target may reach. A listed file or directory that no longer
 // exists fails too, so an upstream rename can't silently retire the rule.
-const unreachFile = path.join(patchesDir, 'unreachable.json');
-const forbidden: Record<string, { deny: string[]; except?: string[] }> = fs.existsSync(unreachFile) ? JSON.parse(fs.readFileSync(unreachFile, 'utf8')) : {};
+const forbidden = readPolicy<{ deny: string[]; except?: string[] }>('unreachable.json');
+// I8 is about the desktop app: it must deny something there.
+if (!Array.isArray(forbidden.desktop?.deny) || forbidden.desktop.deny.length === 0) {
+	fail('patches/unreachable.json must deny at least one module for desktop (invariant I8)');
+}
 let forbiddenChecked = 0;
 for (const [t, rule] of Object.entries(forbidden)) {
 	if (!reached[t] || !Array.isArray(rule?.deny)) {
