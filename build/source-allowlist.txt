@@ -32,3 +32,6 @@ patches/0012-background-windows-env.patch:env:export const backgroundWindows = p
 patches/0015-seclab-ahp-gate.patch:env:export const seclabAgentsEnabled = process.env['SECLAB_AGENTS_ENABLED'] === '1';
 tabd/src/cfs.ts:process-spawn:import { spawn } from 'node:child_process';
 tabd/src/cfs.ts:process-spawn:const p = spawn(this.az, ['account', 'get-access-token', '--tenant', CFS_TENANT, '--resource', CFS_RESOURCE, '--output', 'json'], { stdio: ['ignore', 'pipe', 'pipe'] });
+# The host-side CFS feed config's location (EDR cfs-config-outside-repo, 2026-11-12): one fixed
+# key, SECLAB_CFS_CONFIG, read as a default parameter; the file it names is still validated.
+tabd/src/cfs-config.ts:env:export function cfsConfigPath(env: NodeJS.ProcessEnv = process.env): string {

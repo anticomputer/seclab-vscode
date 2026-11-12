@@ -8,14 +8,14 @@ ARG PIP_SOURCE
 USER root
 COPY tools/pip-fetch.py /opt/pipfetch/pip-fetch.py
 COPY requirements.txt /opt/pipfetch/requirements.txt
-RUN --mount=type=secret,id=cfs_feed_token,required=false --mount=type=tmpfs,target=/run/cfs-auth python3 -I /opt/pipfetch/pip-fetch.py /opt/pipfetch/requirements.txt
+RUN --mount=type=secret,id=cfs_feed_token,required=false --mount=type=secret,id=cfs_feed_index,required=false --mount=type=tmpfs,target=/run/cfs-auth python3 -I /opt/pipfetch/pip-fetch.py /opt/pipfetch/requirements.txt
 
 FROM mitmproxy/mitmproxy:12.3.1@sha256:2711066c855659b5af8b1dbb84494ed3eff69b42ece439c60b4fe09a2db829d4 AS wheels-test
 ARG PIP_SOURCE
 USER root
 COPY tools/pip-fetch.py /opt/pipfetch/pip-fetch.py
 COPY requirements-test.txt /opt/pipfetch/requirements-test.txt
-RUN --mount=type=secret,id=cfs_feed_token,required=false --mount=type=tmpfs,target=/run/cfs-auth python3 -I /opt/pipfetch/pip-fetch.py /opt/pipfetch/requirements-test.txt
+RUN --mount=type=secret,id=cfs_feed_token,required=false --mount=type=secret,id=cfs_feed_index,required=false --mount=type=tmpfs,target=/run/cfs-auth python3 -I /opt/pipfetch/pip-fetch.py /opt/pipfetch/requirements-test.txt
 
 FROM mitmproxy/mitmproxy:12.3.1@sha256:2711066c855659b5af8b1dbb84494ed3eff69b42ece439c60b4fe09a2db829d4 AS broker
 USER root
@@ -51,6 +51,7 @@ COPY requirements-test.txt /opt/seclab/requirements-test.txt
 RUN --mount=type=bind,from=wheels-test,source=/wheels,target=/opt/wheels pip install --no-cache-dir --no-deps --require-hashes --only-binary=:all: --no-index --find-links /opt/wheels -r /opt/seclab/requirements-test.txt
 COPY tests/unit /opt/seclab/tests/unit
 COPY examples /opt/seclab/examples
+COPY tools/pip-fetch.py tools/cfs-config.vectors.json /opt/seclab/tools/
 USER mitmproxy
 WORKDIR /opt/seclab
 ENTRYPOINT ["python", "-m", "pytest", "-p", "no:cacheprovider", "-q", "tests/unit"]

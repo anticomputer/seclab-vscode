@@ -1,0 +1,35 @@
+{
+ "$comment": "Shared test vectors for the host-side CFS feed config (build/cfs-config.ts). The TS validator (--self-test) and the broker's pip-fetch.py index check (broker unit tests) both run them, so the rule sets can't drift; `crossField` vectors break a rule across fields, which only the whole-config validator checks. Example values only: the real feed values live in the user's config file, never in the tree.",
+ "valid": [
+  {
+   "version": 1,
+   "npmRegistry": "https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/",
+   "pypiIndex": "https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-pypi-feed/pypi/simple/",
+   "pypiDownload": "https://pkgs.dev.azure.com/example-org/00000000-0000-0000-0000-000000000001/_packaging/00000000-0000-0000-0000-000000000002/pypi/download/",
+   "tenant": "00000000-0000-0000-0000-000000000003"
+  }
+ ],
+ "invalid": [
+  { "why": "version", "patch": { "version": 2 } },
+  { "why": "unknown key", "patch": { "extra": "x" } },
+  { "why": "missing field", "patch": { "tenant": null } },
+  { "why": "npmRegistry host", "patch": { "npmRegistry": "https://registry.example.test/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/" } },
+  { "why": "npmRegistry http", "patch": { "npmRegistry": "http://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/" } },
+  { "why": "npmRegistry userinfo", "patch": { "npmRegistry": "https://u:p@pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/" } },
+  { "why": "npmRegistry port", "patch": { "npmRegistry": "https://pkgs.dev.azure.com:8443/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/" } },
+  { "why": "npmRegistry dot segment", "patch": { "npmRegistry": "https://pkgs.dev.azure.com/example-org/../_packaging/example-npm-feed/npm/registry/" } },
+  { "why": "npmRegistry query", "patch": { "npmRegistry": "https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/?x=1" } },
+  { "why": "npmRegistry wrong kind", "patch": { "npmRegistry": "https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-npm-feed/pypi/simple/" } },
+  { "why": "npmRegistry trailing newline", "patch": { "npmRegistry": "https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/\n" } },
+  { "why": "npmRegistry wildcard", "patch": { "npmRegistry": "https://pkgs.dev.azure.com/example-org/*/_packaging/example-npm-feed/npm/registry/" } },
+  { "why": "pypiIndex no trailing slash", "patch": { "pypiIndex": "https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-pypi-feed/pypi/simple" } },
+  { "why": "pypiIndex wrong kind", "patch": { "pypiIndex": "https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-pypi-feed/npm/registry/" } },
+  { "why": "pypiIndex percent-encoding", "patch": { "pypiIndex": "https://pkgs.dev.azure.com/example-org/Example%2FProject/_packaging/example-pypi-feed/pypi/simple/" } },
+  { "why": "pypiIndex dot segment", "patch": { "pypiIndex": "https://pkgs.dev.azure.com/example-org/./_packaging/example-pypi-feed/pypi/simple/" } },
+  { "why": "pypiIndex non-ascii", "patch": { "pypiIndex": "https://pkgs.dev.azure.com/example-org/Exampl\u00e9/_packaging/example-pypi-feed/pypi/simple/" } },
+  { "why": "pypiDownload not GUIDs", "patch": { "pypiDownload": "https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-pypi-feed/pypi/download/" } },
+  { "why": "pypiDownload uppercase GUID", "patch": { "pypiDownload": "https://pkgs.dev.azure.com/example-org/00000000-0000-0000-0000-00000000000A/_packaging/00000000-0000-0000-0000-000000000002/pypi/download/" } },
+  { "why": "tenant not a GUID", "patch": { "tenant": "example-tenant" } },
+  { "why": "different organisations", "crossField": true, "patch": { "pypiIndex": "https://pkgs.dev.azure.com/other-org/ExampleProject/_packaging/example-pypi-feed/pypi/simple/" } }
+ ]
+}

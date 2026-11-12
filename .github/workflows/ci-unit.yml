@@ -59,6 +59,10 @@ jobs:
         run: |
           ./seclab lint mounts
           ./seclab deps outdated --self-test
+      - name: CFS feed config validator self-test (the shared vectors; the tree holds example values only)
+        run: ./seclab cfs --self-test
+      - name: Local CFS build path against a stub feed (pybuild wiring; pip-fetch with both secrets)
+        run: broker/tests/cfs-path/run.sh
       # RPC capability filter (rpc-filter/AGENTS.md): policy drift, generated docs and
       # policy module in sync, probe payload lint, probe-safety guards.
       - name: RPC policy drift

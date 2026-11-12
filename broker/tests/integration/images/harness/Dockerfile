@@ -8,7 +8,7 @@ FROM python:3.13-slim-trixie@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc5
 ARG PIP_SOURCE
 COPY tools/pip-fetch.py /opt/pipfetch/pip-fetch.py
 COPY tests/integration/images/harness/requirements.txt /opt/pipfetch/requirements.txt
-RUN --mount=type=secret,id=cfs_feed_token,required=false --mount=type=tmpfs,target=/run/cfs-auth python3 -I /opt/pipfetch/pip-fetch.py /opt/pipfetch/requirements.txt
+RUN --mount=type=secret,id=cfs_feed_token,required=false --mount=type=secret,id=cfs_feed_index,required=false --mount=type=tmpfs,target=/run/cfs-auth python3 -I /opt/pipfetch/pip-fetch.py /opt/pipfetch/requirements.txt
 
 FROM python:3.13-slim-trixie@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1
 COPY --from=cli /usr/local/bin/docker /usr/local/bin/docker

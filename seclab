@@ -38,6 +38,9 @@ usage: ./seclab <command>
                                 with origin/main); also run by CI (lint) and the pre-push hook
   hooks install                 Use the repo's git hooks (build/hooks: pre-push runs lint secrets) in this clone
   deps outdated                 Report image tags that moved and tracked tools with newer releases
+  cfs config | check | --self-test
+                                The host-side CFS feed config (outside the repo; the tree has example values):
+                                write it from gh cfs (host: gh, az, pip3), validate it, or run the shared vectors
   liveness --self-test | check | verify-runs | marks FILE.yml#JOB LOG
                                 Everything that only matters if something runs it names what runs it,
                                 with evidence it ran (build/liveness/register.json)
@@ -629,6 +632,17 @@ case "${1:-help}" in
 				local_log=()
 				[[ -f "$3" ]] && local_log=(-v "$3:/liveness.log:ro")
 				docker run --rm --network none ${local_log[@]+"${local_log[@]}"} -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/liveness/liveness.ts marks "$2" /liveness.log ;;
+			*) usage; exit 2 ;;
+		esac ;;
+	# CFS feed config (build/cfs-config.ts): the real feed URLs live only in a host-side file
+	# outside the repo; the tree holds example values. `config` writes it (host: gh, az, pip3).
+	cfs)
+		shift
+		case "${1:-}" in
+			config) "${SECLAB_NODE:-node}" "$ROOT/build/cfs-config.ts" write ;;
+			check) "${SECLAB_NODE:-node}" "$ROOT/build/cfs-config.ts" check ;;
+			--self-test) docker run --rm --network none -u "$(id -u):$(id -g)" -e HOME=/tmp/home -v "$ROOT:/repo:ro" -w /repo \
+				"$(node_image)" sh -c 'mkdir -p "$HOME" && node build/cfs-config.ts --self-test' ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	# Dependency updates Dependabot can't see (ADR supply-chain provenance): report only.

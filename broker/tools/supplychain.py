@@ -18,6 +18,7 @@ context `broker/`:
   * `RUN` flags only in the two forms below;
   * wheels are fetched only in a named stage, by exactly
       RUN --mount=type=secret,id=cfs_feed_token,required=false \\
+          --mount=type=secret,id=cfs_feed_index,required=false \\
           --mount=type=tmpfs,target=/run/cfs-auth python3 <pip-fetch.py> <path>
     where `<pip-fetch.py>` is a COPY of tools/pip-fetch.py and `<path>` a COPY of one
     checked requirements file (the token-holding stage; see tools/pip-fetch.py);
@@ -57,7 +58,8 @@ INSTALLER_RE = re.compile(r"(?<![\w-])(pip[0-9.]*|uv|pipx|poetry|pdm|easy_instal
 PIP_CONFIG_RE = re.compile(r"\bPIP_(?!SOURCE\b)[A-Z_]+|pip\.conf|pydistutils")
 CANONICAL = ["pip", "install", "--no-cache-dir", "--no-deps", "--require-hashes", "--only-binary=:all:",
              "--no-index", "--find-links", "/opt/wheels", "-r"]
-FETCH_FLAGS = ["--mount=type=secret,id=cfs_feed_token,required=false", "--mount=type=tmpfs,target=/run/cfs-auth"]
+FETCH_FLAGS = ["--mount=type=secret,id=cfs_feed_token,required=false", "--mount=type=secret,id=cfs_feed_index,required=false",
+               "--mount=type=tmpfs,target=/run/cfs-auth"]
 FETCH_SCRIPT = BROKER / "tools" / "pip-fetch.py"
 BIND_RE = re.compile(r"^--mount=type=bind,from=([A-Za-z0-9_.-]+),source=/wheels,target=/opt/wheels$")
 CONTROL = {"&&", "||", ";", "|", "&", ";;", "(", ")"}

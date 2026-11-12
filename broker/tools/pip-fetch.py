@@ -6,9 +6,10 @@
 
 The index is chosen explicitly by the build arg PIP_SOURCE, never by whether a secret is
 present, so a local build can't silently fall back to public PyPI:
-  cfs     GitHub's CFS PyPI feed. Needs the BuildKit secret `cfs_feed_token` (supplied by
-          `gh cfs -- docker build`) and a tmpfs at /run/cfs-auth. The token goes into a
-          0600 netrc on that tmpfs, never into argv, the environment of pip's index URL,
+  cfs     GitHub's CFS PyPI feed. Needs the BuildKit secrets `cfs_feed_token` (supplied by
+          `gh cfs -- docker build`) and `cfs_feed_index` (the feed URL, from the host-side
+          config; tools/pybuild.sh passes it), and a tmpfs at /run/cfs-auth. The token goes
+          into a 0600 netrc on that tmpfs, never into argv, the environment of pip's index URL,
           a layer or a log, and the build fails if it appears in a downloaded file.
   public  pypi.org (hosted CI, which can't use CFS). Same --require-hashes.
 Modelled on `gh cfs generate docker-helper` (gh-cfs v0.3.1) and the Fork-build session's
@@ -23,11 +24,22 @@ import re
 import subprocess
 import sys
 
-CFS_INDEX = "https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-pypi-feed/pypi/simple/"
+CFS_HOST = "pkgs.dev.azure.com"
+# The CFS index comes from the host-side config (build/cfs-config.ts `get pypiIndex`) as the
+# BuildKit secret `cfs_feed_index`: the real feed URL is never in the tree, and a secret never
+# lands in image history. Same rule as build/cfs-config.ts; both run
+# tools/cfs-config.vectors.json.
+_SEG = r"[A-Za-z0-9._-]{1,64}"
+CFS_INDEX_RULE = re.compile(rf"https://pkgs\.dev\.azure\.com/[A-Za-z0-9-]{{1,64}}/{_SEG}/_packaging/{_SEG}/pypi/simple/")
 PUBLIC_INDEX = "https://pypi.org/simple/"
 SECRET = pathlib.Path("/run/secrets/cfs_feed_token")
+INDEX_SECRET = pathlib.Path("/run/secrets/cfs_feed_index")
 AUTH_DIR = pathlib.Path("/run/cfs-auth")
 OUT = pathlib.Path("/wheels")
+
+
+def valid_cfs_index(url: str) -> bool:
+    return bool(CFS_INDEX_RULE.fullmatch(url)) and not any(s in (".", "..") for s in url.split("/"))
 
 
 def fail(msg: str) -> None:
@@ -69,13 +81,20 @@ def main() -> None:
         if not 0 < len(raw) <= 65536 or not re.fullmatch(rb"[A-Za-z0-9._~+/=\-]+", raw):
             fail("malformed cfs_feed_token secret")
         token = raw.decode("ascii")
+        try:
+            index = INDEX_SECRET.read_bytes()[:1025].decode("ascii").strip()
+        except (OSError, UnicodeDecodeError):
+            fail("PIP_SOURCE=cfs needs the cfs_feed_index secret: run ./seclab cfs config, then build "
+                 "through tools/pybuild.sh")
+        if not valid_cfs_index(index):
+            fail("malformed cfs_feed_index secret")
         old = os.umask(0o077)
         try:
-            netrc.write_text(f"machine pkgs.dev.azure.com\n  login cfs\n  password {token}\n")
+            netrc.write_text(f"machine {CFS_HOST}\n  login cfs\n  password {token}\n")
         finally:
             os.umask(old)
         env["NETRC"] = str(netrc)
-        cmd += ["--index-url", CFS_INDEX]
+        cmd += ["--index-url", index]
     elif source == "public":
         cmd += ["--index-url", PUBLIC_INDEX]
     else:
