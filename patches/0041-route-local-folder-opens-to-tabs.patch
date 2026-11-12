@@ -1,5 +1,5 @@
 diff --git a/src/vs/platform/windows/electron-main/windowsMainService.ts b/src/vs/platform/windows/electron-main/windowsMainService.ts
-index 52a7cb59..e02038ea 100644
+index 52a7cb59..41063fd8 100644
 --- a/src/vs/platform/windows/electron-main/windowsMainService.ts
 +++ b/src/vs/platform/windows/electron-main/windowsMainService.ts
 @@ -57,6 +57,7 @@ import { ILoggerMainService } from '../../log/electron-main/loggerService.js';
@@ -71,13 +71,13 @@ index 52a7cb59..e02038ea 100644
 +	/**
 +	 * When the product routes opens to tabs: every workspace file (multi-root isn't supported in a
 +	 * tab, and a workspace file's remoteAuthority and folders are its own claims: review VVV-1),
-+	 * and every folder that is local: no remote authority, or a `file:` folder that a caller
-+	 * paired with one.
++	 * and every folder that isn't remote-backed: no remote authority, or a scheme other than
++	 * vscode-remote paired with one (file:, or any locally backed scheme: review WWW-1).
 +	 */
 +	private seclabRoutes(path: { readonly workspace?: IAnyWorkspaceIdentifier; readonly remoteAuthority?: string }): boolean {
 +		const workspace = path.workspace;
 +		return !!seclabTabRouter && !!workspace && (isWorkspaceIdentifier(workspace) || !path.remoteAuthority
-+			|| (isSingleFolderWorkspaceIdentifier(workspace) && workspace.uri.scheme === Schemas.file));
++			|| (isSingleFolderWorkspaceIdentifier(workspace) && workspace.uri.scheme !== Schemas.vscodeRemote));
 +	}
 +
 +	/** Hand the routed paths to the Tab Manager in the empty window, once it is ready. */

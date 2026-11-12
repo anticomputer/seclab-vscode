@@ -109,6 +109,10 @@ if [ "${1:-}" = "--self-test" ]; then
 	bgfix; sed 's/"seclabTabRouter": "seclab.tab-manager",//' "$T/root/product.json" > "$T/pj" && mv "$T/pj" "$T/root/product.json"
 	run "$T/with5" fail "desktop whose product.json doesn't turn patch 0041's routing on (review VVV-2)" desktop
 	stamp "$hab"
+	# A vendored product.json is out of scope, as for the RPC stamp (review WWW-4).
+	bgfix; mkdir -p "$T/root/node_modules/x"; echo '{"nameShort":"vendored"}' > "$T/root/node_modules/x/product.json"
+	run "$T/with5" pass "desktop with a vendored product.json under node_modules" desktop
+	rm -rf "$T/root/node_modules"
 	bgfix
 	run "$T/with5" pass "desktop, 0005 listed, its enforcing marker" desktop
 	rm "$T/root/g.js" "$T/root/b.js" "$T/root/r.js"
@@ -237,7 +241,7 @@ EOF
 			done
 			# Both guards are off unless product.json names the Tab Manager as the router (VVV-2).
 			set +e
-			pjs=$(find "$d" -type f -name product.json 2>&1)
+			pjs=$(find "$d" -type f -name product.json -not -path "*/extensions/*" -not -path "*/node_modules/*" 2>&1)
 			prc=$?
 			set -e
 			[ "$prc" -eq 0 ] && [ -n "$pjs" ] || { echo "check-release: no product.json found in the desktop app"; bad=1; }
