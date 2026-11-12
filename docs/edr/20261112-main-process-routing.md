@@ -30,7 +30,9 @@ folders). A folder counts as local when it has no remote authority, or when it i
 folder that a caller paired with one.
 Untitled workspaces restored at startup
 ([#L411](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/windows/electron-main/windowsMainService.ts#L411))
-are filtered the same way. Tab windows (`seclab+` authority) are untouched. The empty window
+are filtered the same way. Single-folder tab opens (`vscode-remote://seclab+…`) are untouched;
+a folder with any other scheme is routed even when a caller pairs it with an authority (review
+WWW-1: a locally backed scheme such as `vscode-userdata:` is host content). The empty window
 follows the same reuse rules the folder would have.
 
 **Hand-over.** When the empty window is ready, main opens
@@ -82,4 +84,8 @@ The Tab Manager's extension-level routing stays as a fallback for a build withou
   folder offer it as a tab instead; several local folders arrive as one untitled workspace,
   which is unsupported; untitled workspaces aren't restored at startup; no window, tab or
   local, opens or becomes a multi-root workspace.
+- Residual (review WWW-2): in a tab window, Add Folder to Workspace now reloads the window (the
+  renderer stops the extension hosts before main refuses, and reloads a remote window on a
+  refusal), and the untitled workspace file it created stays under the profile's `Workspaces`.
+  Fail-closed; the tab reconnects (patch 0040).
 - Review: [round VVV](../security-reviews/20261112-main-process-routing.md).

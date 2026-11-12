@@ -12576,6 +12576,76 @@
 			"status": "fixed-untested",
 			"commit": "bbfcbe8",
 			"gap": "A test of the test; it now waits for the confirmation text itself."
+		},
+		{
+			"record": "20261112-main-process-routing.md",
+			"anchor": "WWW-1",
+			"round": "Round WWW",
+			"severity": "info",
+			"summary": "Patch 0041 routed a folder paired with an authority only for file:, not another locally backed scheme.",
+			"component": "patch 0041 (routing rule)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "cf734e5",
+			"gap": "Not reachable today (the RPC filter denies a tab's vscode.openFolder); the driven test covers file: only."
+		},
+		{
+			"record": "20261112-main-process-routing.md",
+			"anchor": "WWW-2",
+			"round": "Round WWW",
+			"severity": "low",
+			"summary": "Add Folder to Workspace in a tab window reloads the window when main refuses, and leaves the untitled workspace file it wrote.",
+			"component": "patch 0041 (enterWorkspace guard)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "Fail-closed; the tab reconnects (patch 0040).",
+			"ref": {
+				"file": "docs/security-reviews/20261112-main-process-routing.md",
+				"quote": "Fail-closed; the tab reconnects (patch 0040)."
+			}
+		},
+		{
+			"record": "20261112-main-process-routing.md",
+			"anchor": "WWW-3",
+			"round": "Round WWW",
+			"severity": "info",
+			"summary": "The Tab Manager's sameFolder keys on the platform, so a case-sensitive macOS volume keeps VVV-3's residual.",
+			"component": "Tab Manager (open request)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "Needs an existing tab and a link the user allowed; bounded by the allowed roots.",
+			"ref": {
+				"file": "docs/security-reviews/20261112-main-process-routing.md",
+				"quote": "Needs an existing tab and a link the user allowed"
+			}
+		},
+		{
+			"record": "20261112-main-process-routing.md",
+			"anchor": "WWW-4",
+			"round": "Round WWW",
+			"severity": "info",
+			"summary": "check-release's product.json loop scanned vendored copies, unlike the RPC stamp loop.",
+			"component": "build/check-release.sh",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "cf734e5",
+			"test": {
+				"file": "build/check-release.sh",
+				"name": "desktop with a vendored product.json under node_modules"
+			}
+		},
+		{
+			"record": "20261112-main-process-routing.md",
+			"anchor": "WWW-5",
+			"round": "Round WWW",
+			"severity": "info",
+			"summary": "The EDR's \"tab windows are untouched\" was stale.",
+			"component": "docs/edr/20261112-main-process-routing.md",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"gap": "Documentation only; nothing to test."
 		}
 	]
 }

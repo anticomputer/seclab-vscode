@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 7 | 62 | 148 | 167 | 17 | 401 |
-| fixed-untested | 3 | 18 | 55 | 150 | 47 | 273 |
-| accepted-residual | 0 | 1 | 12 | 64 | 18 | 95 |
+| fixed | 7 | 62 | 148 | 167 | 18 | 402 |
+| fixed-untested | 3 | 18 | 55 | 150 | 49 | 275 |
+| accepted-residual | 0 | 1 | 12 | 65 | 19 | 97 |
 | deferred | 6 | 5 | 18 | 10 | 3 | 42 |
 | open | 0 | 3 | 14 | 20 | 4 | 41 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 89 | 247 | 411 | 95 | 858 |
+| **all** | 16 | 89 | 247 | 412 | 99 | 863 |
 
 ## Baseline: open high and critical findings
 
@@ -392,6 +392,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261112-headless-driver](20261112-headless-driver.md) **RRR-4** | low | accepted-residual | patch 0042 (mixed workspaces) | Patch 0042's guard is per window, so a tab window whose workspace also held a file: folder would run that folder's automatic tasks locally. | accepted by an agent: The Tab Manager closes multi-root and workspace-file windows; noted for patch 0041's design. |
 | [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-3** | low | fixed-untested | Tab Manager (open request) | The Tab Manager's already-a-tab check, which skips the confirmation, compared paths case-insensitively, also on Linux. | No unit test drives the Tab Manager's sameFolder; it needs the extension host. |
 | [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-4** | low | fixed-untested | Tab Manager (open request) | One rejected open request poisoned the Tab Manager's request chain, so later opens were dropped silently. | No test injects a rejection into the chain. |
+| [20261112-main-process-routing](20261112-main-process-routing.md) **WWW-2** | low | accepted-residual | patch 0041 (enterWorkspace guard) | Add Folder to Workspace in a tab window reloads the window when main refuses, and leaves the untitled workspace file it wrote. | accepted by an agent: Fail-closed; the tab reconnects (patch 0040). |
 | [docs/adr/20261104-extension-placement-hardening.md](../../docs/adr/20261104-extension-placement-hardening.md) **ADR-EPH-1** | low | open | patch 0003 / extension placement | Installing an extension in an empty local window still writes it to the host extensions dir; blocking local installs needs a further shared-process patch. | Recorded only as an ADR open item: no patch blocks local installs, and no test covers the write-but-never-run behaviour (it is the same gap as m0 3-1's missing Level B case). |
 | [20261104-broker-folder-open-loaders](20261104-broker-folder-open-loaders.md) **5** | info | fixed-untested | tab.event contract (tabd / Tab Manager) | If the client counts Workspace Trust or "allow automatic tasks" as a user action, the gate is open when runOn: folderOpen fires. | The spec fix is in schema/protocol.v1.json and the Tab Manager only sends tab.userAction on keyboard/mouse selection changes, but no test asserts that consent interactions (Workspace Trust, automatic tasks, security dialogs) never produce userAction. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **L-2** | info | accepted-residual | campaign fixture arming | The stage's run-dir check accepts any path containing \`/.work/\`, not only this worktree's. | accepted by an agent: The marker is written with the \`wx\` flag, so the worst case is creating one new file in some other \`.work/\` directory. |
@@ -418,6 +419,9 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-5** | info | accepted-residual | patch 0041 (hand-over) | Upstream's URL router matches the hand-over's window id unanchored, so it could reach a window whose id starts with the same digits. | accepted by an agent: Host side only; the Tab Manager reuses a window only when it is empty with no editors. |
 | [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-6** | info | accepted-residual | patch 0041 (behaviour) | Behaviour changes: --add/--remove of a local folder offer a tab; several local folders arrive as one unsupported workspace; untitled workspaces aren't restored. | accepted by an agent: All fail closed; recorded in the EDR. |
 | [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-7** | info | fixed-untested | test/driver/cli-open.ts | The test's received-the-open check matched any toast naming the folder, including the Tab Manager's error. | A test of the test; it now waits for the confirmation text itself. |
+| [20261112-main-process-routing](20261112-main-process-routing.md) **WWW-1** | info | fixed-untested | patch 0041 (routing rule) | Patch 0041 routed a folder paired with an authority only for file:, not another locally backed scheme. | Not reachable today (the RPC filter denies a tab's vscode.openFolder); the driven test covers file: only. |
+| [20261112-main-process-routing](20261112-main-process-routing.md) **WWW-3** | info | accepted-residual | Tab Manager (open request) | The Tab Manager's sameFolder keys on the platform, so a case-sensitive macOS volume keeps VVV-3's residual. | accepted by an agent: Needs an existing tab and a link the user allowed; bounded by the allowed roots. |
+| [20261112-main-process-routing](20261112-main-process-routing.md) **WWW-5** | info | fixed-untested | docs/edr/20261112-main-process-routing.md | The EDR's "tab windows are untouched" was stale. | Documentation only; nothing to test. |
 
 ### RPC core landing v2
 
@@ -1777,6 +1781,11 @@ Every other commit the register cites is on main's history, or on the branch its
 | VVV-5 | info | accepted-residual | Upstream's URL router matches the hand-over's window id unanchored, so it could reach a window whose id starts with the same digits. | accepted by an agent: Host side only; the Tab Manager reuses a window only when it is empty with no editors. |
 | VVV-6 | info | accepted-residual | Behaviour changes: --add/--remove of a local folder offer a tab; several local folders arrive as one unsupported workspace; untitled workspaces aren't restored. | accepted by an agent: All fail closed; recorded in the EDR. |
 | VVV-7 | info | fixed-untested | The test's received-the-open check matched any toast naming the folder, including the Tab Manager's error. | A test of the test; it now waits for the confirmation text itself. |
+| WWW-1 | info | fixed-untested | Patch 0041 routed a folder paired with an authority only for file:, not another locally backed scheme. | Not reachable today (the RPC filter denies a tab's vscode.openFolder); the driven test covers file: only. |
+| WWW-2 | low | accepted-residual | Add Folder to Workspace in a tab window reloads the window when main refuses, and leaves the untitled workspace file it wrote. | accepted by an agent: Fail-closed; the tab reconnects (patch 0040). |
+| WWW-3 | info | accepted-residual | The Tab Manager's sameFolder keys on the platform, so a case-sensitive macOS volume keeps VVV-3's residual. | accepted by an agent: Needs an existing tab and a link the user allowed; bounded by the allowed roots. |
+| WWW-4 | info | fixed | check-release's product.json loop scanned vendored copies, unlike the RPC stamp loop. | cf734e5 · `build/check-release.sh` "desktop with a vendored product.json under node_modules" |
+| WWW-5 | info | fixed-untested | The EDR's "tab windows are untouched" was stale. | Documentation only; nothing to test. |
 
 ### [20261112-publish-gate](20261112-publish-gate.md)
 
