@@ -18,30 +18,38 @@ const run = (args: string[]) => spawnSync(process.execPath, args, { cwd: repo, e
 
 test.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
-test('check-pins: an empty or foreign file list fails, a real one passes (GATE-4)', () => {
+const PIN_ANCHORS = ['.github/workflows/ci-unit.yml', 'build/check-pins.ts', 'seclab', 'upstream.lock'];
+const AV_ANCHORS = ['.github/workflows/ci-unit.yml', 'seclab', 'test/safety/fixture-lint.ts', 'upstream.lock'];
+
+test('check-pins: an empty, foreign, truncated or canary-only list fails, a real one passes (GATE-4, SSS-1)', () => {
 	const empty = run(['build/check-pins.ts', list('empty', [])]);
 	assert.equal(empty.status, 1, empty.stdout);
-	assert.match(empty.stdout, /file list \(0 entries\) is empty or isn't this repository's/);
+	assert.match(empty.stdout, /file list \(0 entries\) is empty, truncated or isn't this repository's/);
 	const foreign = run(['build/check-pins.ts', list('foreign', ['README.md'])]);
 	assert.equal(foreign.status, 1, foreign.stdout);
-	const real = run(['build/check-pins.ts', list('real', ['build/check-pins.ts', 'README.md'])]);
+	const truncated = run(['build/check-pins.ts', list('truncated', PIN_ANCHORS.slice(0, 3))]);
+	assert.equal(truncated.status, 1, truncated.stdout);
+	assert.match(truncated.stdout, /lacks upstream\.lock/);
+	const real = run(['build/check-pins.ts', list('real', [...PIN_ANCHORS, 'README.md'])]);
 	assert.equal(real.status, 0, real.stdout);
 });
 
 test('check-pins: a listed file that can\'t be read is a finding (GATE-7)', () => {
-	const r = run(['build/check-pins.ts', list('missing', ['build/check-pins.ts', 'no/such/tracked-file.yml'])]);
+	const r = run(['build/check-pins.ts', list('missing', [...PIN_ANCHORS, 'no/such/tracked-file.yml'])]);
 	assert.equal(r.status, 1, r.stdout);
 	assert.match(r.stdout, /no\/such\/tracked-file\.yml: tracked but unreadable \(ENOENT\)/);
 });
 
-test('fixture-lint --av: an empty or foreign list fails; an unreadable file is a finding (GATE-5, GATE-7)', () => {
+test('fixture-lint --av: an empty, truncated or canary-only list fails; an unreadable file is a finding (GATE-5, GATE-7, SSS-1)', () => {
 	const empty = run(['test/safety/fixture-lint.ts', '--av', list('av-empty', [])]);
 	assert.equal(empty.status, 1, empty.stdout);
-	assert.match(empty.stdout, /is empty or isn't this repository's/);
-	const missing = run(['test/safety/fixture-lint.ts', '--av', list('av-missing', ['test/safety/fixture-lint.ts', 'no/such/file.ts'])]);
+	assert.match(empty.stdout, /is empty, truncated or isn't this repository's/);
+	const canary = run(['test/safety/fixture-lint.ts', '--av', list('av-canary', ['test/safety/fixture-lint.ts'])]);
+	assert.equal(canary.status, 1, canary.stdout);
+	const missing = run(['test/safety/fixture-lint.ts', '--av', list('av-missing', [...AV_ANCHORS, 'no/such/file.ts'])]);
 	assert.equal(missing.status, 1, missing.stdout);
 	assert.match(missing.stdout, /no\/such\/file\.ts: tracked but unreadable \(ENOENT\)/);
-	const real = run(['test/safety/fixture-lint.ts', '--av', list('av-real', ['test/safety/fixture-lint.ts', 'README.md'])]);
+	const real = run(['test/safety/fixture-lint.ts', '--av', list('av-real', [...AV_ANCHORS, 'README.md'])]);
 	assert.equal(real.status, 0, real.stdout);
 });
 

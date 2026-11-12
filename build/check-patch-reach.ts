@@ -118,6 +118,11 @@ for (const p of Object.keys(required)) {
 	if (!series.includes(p)) {
 		fail(`patches/reach.json names ${p}, which is not in patches/series`);
 	}
+	// An emptied entry would drop that patch's requirement silently (review SSS-3).
+	const ts = required[p];
+	if (!Array.isArray(ts) || ts.length === 0 || ts.some(t => !reached[t])) {
+		fail(`patches/reach.json: ${p} must list one or more known targets (${Object.keys(reached).join(', ')}), got ${JSON.stringify(ts)}`);
+	}
 }
 const problems: string[] = [];
 let checked = 0;

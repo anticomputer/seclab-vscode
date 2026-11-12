@@ -174,10 +174,16 @@ const listed = (process.argv[2] ? fs.readFileSync(process.argv[2] === '-' ? 0 : 
 const files = listed
 	.filter(f => !/\.(png|jpe?g|gif|svg|lock|patch)$/.test(f) && !f.includes('/fixtures/') && !['build/check-pins.ts', 'build/deps.ts', 'deps/registry.json', 'broker/tools/supplychain.py', 'docs/security-reviews/findings.json'].includes(f)); // rules and their samples (incl. the broker's supply-chain self-test), the register's names (its pins are checked by build/deps.ts), and the findings register (review prose quoted from records, never run)
 const findings: string[] = [];
-// An empty list, or one that isn't this repo's, checks nothing: fail rather than report clean
-// (GATE-4). This file is always tracked, so a real list names it.
-if (!listed.includes('build/check-pins.ts')) {
-	findings.push(`check-pins: the file list (${listed.length} entries) is empty or isn't this repository's: it doesn't name build/check-pins.ts`);
+// An empty, foreign or truncated list checks nothing or too little: fail rather than report clean
+// (GATE-4, review SSS-1). Anchors spread through `git ls-files` order, ending with the last
+// tracked file, so a list cut short anywhere misses one; and something must actually be scanned.
+const ANCHORS = ['.github/workflows/ci-unit.yml', 'build/check-pins.ts', 'seclab', 'upstream.lock'];
+const absent = ANCHORS.filter(a => !listed.includes(a));
+if (absent.length) {
+	findings.push(`check-pins: the file list (${listed.length} entries) is empty, truncated or isn't this repository's: it lacks ${absent.join(', ')}`);
+}
+if (!files.length) {
+	findings.push('check-pins: no file to scan');
 }
 // The broker's supply-chain checker is skipped as samples; it must stay a pure parser (GG-1):
 // if it ever executes anything, its image references need this check again.
