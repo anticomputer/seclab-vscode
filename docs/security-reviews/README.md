@@ -105,4 +105,5 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-09 | [Level B repair and the portable data dir](20261109-level-b-repair.md) | round NNN, 9fbd37f and a911c9c, and their fixes: | see record |
 | 2026-11-09 | [the liveness gate (round KKK)](20261109-liveness-gate.md) | round KKK, eab5cb8 (rebased as ea38de1) and its fixes: | see record |
 | 2026-11-09 | [liveness-refresh workflow](20261109-liveness-refresh.md) | round MMM, a05d6ed and its fixes: | see record |
+| 2026-11-12 | [CFS feed values from host-side config, and GATE-9 (round 17)](20261112-cfs-config-outside-repo.md) | - "CFS feed values come from host-side config, never the tree": the host file | see record |
 <!-- index:end -->

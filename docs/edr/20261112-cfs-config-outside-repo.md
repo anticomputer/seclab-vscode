@@ -41,6 +41,12 @@ need the real ones, so they must come from somewhere outside the tree.
   into the tab at creation; the tab-side script checks their shape only (Fork-build session).
 
 ## Consequences
+- **Proven end to end (2026-11-12):** with the feed values read from the host config, a
+  real `npm install --ignore-scripts is-number@7.0.0` and `pip install --no-deps
+  --require-hashes six==1.16.0` succeeded in a CFS-enabled tab (`tabd/test/e2e-cfs.ts`),
+  on the broker built from this change. The tab used only the sentinel; the broker followed
+  six download redirects and refused none; no signed storage URL or token appeared in the
+  tab or the broker logs. Security review: round 17.
 - **One setup step per host:** `./seclab cfs config` after `az login`.
 - **The reader runs from the working tree, not the broker build's snapshot.** It only chooses
   the index: every wheel is still hash-locked, so a modified reader can't change what is
