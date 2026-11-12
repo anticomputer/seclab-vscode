@@ -177,15 +177,15 @@
 			"runBy": "build-macos.yml dispatched with test_variant=agentic-browser applies it (build/test-variant.sh); test/agentic/browser/run.ts arms it on the host and the window drives a browser view (macOS editor, sbx tab, local only)",
 			"evidence": [
 				{
-					"run": 42878969500,
+					"run": 43281114684,
 					"workflow": "build-macos.yml",
 					"job": "build",
-					"sha": "6f4cc624c79e1d3b8f2ddf27f5445724fb7e593e",
-					"date": "2026-11-10"
+					"sha": "ea86d4bfe0fd9dce5d809debd8f161018b181d89",
+					"date": "2026-11-12"
 				},
 				{
 					"record": "docs/edr/20261106-increment-2-remote-proxy.md",
-					"date": "2026-11-10"
+					"date": "2026-11-12"
 				}
 			]
 		}

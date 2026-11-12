@@ -467,7 +467,9 @@ Teardown's manifest is a list of what a run *meant* to start; the process table 
 *did* start.
 
 ## MEASURED: the two-sided U-vs-F proof (2026-11-10, second attempt)
-Builds: **U** = `e2ce1c3` (main's base + the variant, no 0017), **F** = `e2ce1c3` (the same
+Builds (superseded; see "Re-run on the rewritten base" at the end of this record, which
+carries the identifiers that still resolve): **U** = the variant on main's base without 0017,
+**F** = the same
 plus 0017). Same upstream `a717861`, same hook `c33b733a43`; the binaries stamp their own
 repo SHA and every run checks it, so the lines are known to come from the build claimed. Each
 run ends with the teardown gate, and every window was launched in the background and never
@@ -582,3 +584,42 @@ Both are closed by the same action: rebuild the two variants on the rewritten ba
 proof, and replace the identifiers and the liveness evidence with the new runs. Until that
 happens the measured results above stand as findings about the *code*, which the rewrite did
 not change, but their build identifiers point at commits that no longer exist.
+
+## Re-run on the rewritten base (2026-11-12)
+The history rewrite invalidated every earlier build identifier, so both variants were rebuilt
+and the proof re-run from scratch. These are the identifiers that resolve today.
+
+| | U (no 0017) | F (with 0017) |
+|---|---|---|
+| branch | `anticomputer-agentic-browser-u` | `anticomputer-agentic-gate-0015-v3` |
+| commit | `abafd591` | `ea86d4bf` |
+| Actions run | 43281073241 | 43281114684 (job `build`, id 131402305657) |
+| upstream | `a717861` | `a717861` |
+| hook sha256 | `c33b733a43…` | `c33b733a43…` |
+
+Provenance was verified against `build-macos.yml` for both before use, and each app carries
+its own repo SHA in `product.json`, which every run checks against the build it asked for. The
+two builds share an upstream and a hook and differ only by patch 0017.
+
+### Results, unchanged from the pre-rewrite run
+| run | the tab wrote | resolved | host beacon | tab listener | verdict |
+|---|---|---|---|---|---|
+| U proxy | `enableRemoteProxy: false` | `network=none` | **1 hit** | 0 | **7/7 VULNERABLE** |
+| U storage | `dataStorage: global` (proxy **on**) | `scope=global` | **1 hit** | 0 | **7/7 VULNERABLE** |
+| F proxy | `enableRemoteProxy: false` | `network=seclab+<tab>` | 0 | **1 hit** | **7/7 CONTAINED** |
+| F storage | `dataStorage: global` (proxy **on**) | `scope=ephemeral` | 0 | **1 hit** | **7/7 CONTAINED** |
+
+Both halves reproduce independently of each other, each with positive evidence from the
+listener on the side where the page actually ran.
+
+### The restore path reproduces its limit too
+The cross-build restore phase (launch 1 on U, which persists the hostile scope, then a
+relaunch on F reading byte-for-byte the same profile) again shows `scope=ephemeral` and the
+tab's network — 0017 rebuilding the restored view under the fixed setting — and again **no
+fetch on either listener**, so it stays proven at resolution and not at the network. The cause
+is the one already recorded: the relaunch is what creates the tab, so the tab's listener
+cannot be up before the restored editor loads its page, and the listener's own heartbeats show
+that gap. This is a limit of the harness, not a finding about 0017, and closing it needs a
+hook that defers a restored view until armed.
+
+Every run ended through the teardown gate with nothing left behind, and none took focus.
