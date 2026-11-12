@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 6 | 58 | 137 | 163 | 17 | 381 |
-| fixed-untested | 4 | 19 | 53 | 144 | 44 | 264 |
+| fixed | 6 | 59 | 137 | 166 | 18 | 386 |
+| fixed-untested | 4 | 18 | 53 | 144 | 47 | 266 |
 | accepted-residual | 0 | 1 | 12 | 58 | 15 | 86 |
 | deferred | 6 | 5 | 18 | 10 | 3 | 42 |
 | open | 0 | 5 | 20 | 20 | 4 | 49 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 88 | 240 | 395 | 89 | 828 |
+| **all** | 16 | 88 | 240 | 398 | 93 | 835 |
 
 ## Baseline: open high and critical findings
 
@@ -78,7 +78,6 @@ leaves the list when it is fixed (with its test) or the user accepts it.
 | `20261106-rpc-core-landing-v2.md` (branch `anticomputer-rpc-core-landing-v2`) **1** | high | RPC core landing v2 | seclabArgValidators.ts (tabFileSearch) | fixed | 6858fdd · `test/containment/arg-validators.test.ts` "file search: a pattern may not choose the search roots (round 10 finding 1)" | tabFileSearch let expandPatterns with an absolute or ./ includePattern choose the search roots, so in a folderless tab window the roots became host file: URIs. |
 | [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md) **GATE-2** | high | Fork build and sandboxed tabs | patch-build: check-patch-reach.ts | open | Fail when the file is missing; an empty rule set must be an explicit {} in the tree. | A missing patches/unreachable.json reads as {}, so invariant I8 checks nothing and passes |
 | [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md) **GATE-3** | high | Fork build and sandboxed tabs | patch-build: check-patch-reach.ts | open | Fail when the file is missing, as GATE-2. | A missing patches/reach.json reads as {}, so per-patch target pinning silently stops |
-| [20261112-internal-identifier-scan](20261112-internal-identifier-scan.md) **1** | high | RPC core landing v2 | internal-identifier scan: denylist workflow | fixed-untested | Fixed by structure (a main-only environment read by a job that runs only on a push to main; round 18 confirmed). No test asserts that no branch-controlled code runs with the secret. | The secret was handed to a step running the head commit's own script on every push and same-repo PR, so a branch could leak the list |
 | [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **DOCSYNC-R1** | high | Document sync leak | window→tab pushes (configuration snapshot) | deferred | follow-up: Patch 0036 (configuration-snapshot filter with the shared credential classifier), WIP on branch \`anticomputer-config-snapshot\`; owner \`docsync\`. Its user-facing half is docs/edr/20261109-settings-withheld-notice.md (branch-only). | Window-to-tab push: the configuration snapshot still sends every host user setting value to a tab's extension host. |
 | `docs/edr/20261106-increment-2-remote-proxy.md` (branch `anticomputer-agentic-gate-0015-v3`) **INC-3** | high | Agentic gate (0015) v3 | probe harness teardown / clean-host | fixed | a81b403 · `test/containment/teardown.test.ts` "a leaked helper with no manifest entry is still found" | A run's beacon was left running on the host, bound to a non-loopback address, with no manifest entry so teardown and clean-host both reported clean |
 
@@ -443,7 +442,6 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | `20261105-agent-host-patches.md` (branch `anticomputer-rpc-core-landing-v2`) **4** | high | fixed-untested | containment probe checker | Free-text \`hostEffect\` values resolved to a filename, turning the patched-mode host-effect check into a guaranteed pass. | hostEffectPath now validates against a filename grammar and throws on anything else, and the six prose values were removed, but nothing automated runs check-probes.ts, so the throw is only proven by the reviewer's one-off injection. |
 | `20261105-rpc-filter-rereview.md` (branch `anticomputer-rpc-core-landing-v2`) **3** | high | deferred | patch 0011 (remote agent-host dialling) | 0011's rationale for overriding _reconcileConnections was wrong (the autorun runs inside the base constructor), so the guard was skipped by accident, one tidy away from fail-open. | follow-up: ADR 20261105-no-builtin-chat-in-tabs Correction 3 landed the documentation correction and states "The refusal is moving to \`_connectTo\` with a non-injected authority source"; the code change rides with the held-back 0011 (rpc session). |
 | `20261105-rpc-filter-rereview.md` (branch `anticomputer-rpc-core-landing-v2`) **4** | high | deferred | rpc-filter inventory (seclab_inventory/ai.py) | The surface-(e) tool scan still misses factory-built host tools (run_in_terminal, fetch_webpage) and still pins six unresolved expressions as tool ids, so the ADR's load-bearing count measures the wrong set. | follow-up: ADR 20261105-no-builtin-chat-in-tabs Correction 4: "The scan is being rebuilt to enumerate registration call sites and to **fail the gate on an unresolved id** rather than pin it." Owner: rpc session. |
-| [20261112-internal-identifier-scan](20261112-internal-identifier-scan.md) **1** | high | fixed-untested | internal-identifier scan: denylist workflow | The secret was handed to a step running the head commit's own script on every push and same-repo PR, so a branch could leak the list | Fixed by structure (a main-only environment read by a job that runs only on a push to main; round 18 confirmed). No test asserts that no branch-controlled code runs with the secret. |
 | [20261104-ci-hardening](20261104-ci-hardening.md) **R2-M4** | medium | deferred | RPC filter / automatic tasks | A rogue remote extension can write user settings ($updateConfigurationOption, USER) and turn task.allowAutomaticTasks on for every tab. | follow-up: Tracked with the RPC capability filter (rpc session, patches 0005-0011 on anticomputer-rpc-core-landing-v2); patches/series shows 0005-0011 are still only reserved on main. |
 | [20261104-probe-safety](20261104-probe-safety.md) **4#2** | medium | fixed-untested | check-probes | \`hostEffectAbsolute\` was read by nothing, and patched-mode hostEffect passed when SECLAB_PROBE_RUNDIR was unset, certifying 'did not change the host' on no evidence. | check-probes.ts resolves hostEffectAbsolute against the manifest's userDataDir and fails an unresolvable target in both modes, but it has no self-test; the both-ways check was a manual replay of archived evidence. |
 | [20261104-probe-safety](20261104-probe-safety.md) **6** | medium | accepted-residual | probe payloads / level B harness | A fully successful run left live host residue: keychain item, tunnel from asExternalUri, an open host terminal, an extra window and a real browser launch. | accepted by an agent: The keychain key is per-run and teardown now checks it; the openExternal browser launch is explicitly accepted for the proof run, and the tunnel and host terminal are closed only by ending the editor session, which the record states openly. |
@@ -516,6 +514,9 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261112-publish-gate](20261112-publish-gate.md) **R20-7** | info | fixed-untested | publish gate: docs | Two headers still described the dropped job | Documentation only; nothing to test. |
 | [20261112-publish-gate](20261112-publish-gate.md) **R20-8** | info | fixed-untested | publish gate: tags | An annotated tag with an empty message made its headers the scan unit | Fixed; no self-test case for an empty tag message. |
 | [20261112-publish-gate](20261112-publish-gate.md) **R21-6..8** | info | fixed-untested | publish gate: known-names matcher | Linear time and line attribution confirmed; one dead statement | Measurements and a dead statement removed; nothing to test. |
+| [20261112-publish-gate](20261112-publish-gate.md) **R22-5** | info | fixed-untested | publish gate: driver | A root invoker made the scan container root | The driver refuses uid 0; the refusal only runs as root, which no CI job or test does. |
+| [20261112-publish-gate](20261112-publish-gate.md) **R22-6** | info | fixed-untested | publish gate: mount test | The mount test proves nothing on a macOS engine | The test says so off Linux; CI's Linux run is the proof (its first run, before the fix, failed with the same error). |
+| [20261112-publish-gate](20261112-publish-gate.md) **R22-7** | info | fixed-untested | publish gate: driver | Nothing pinned the driver's container hardening flags | build/test-publish-mount.sh asserts the flags in CI, but a shell script outside a test path isn't a register-recognised test. |
 | `docs/RPC-LOCKDOWN.md` (branch `anticomputer-rpc-core-landing-v2`) **RPC-R3** | info | accepted-residual | rpc-filter policy coverage | Methods denied pending validators and the response-side control: SCM, tree views, output channels, status bar, decorations, tab-registered language features, tasks, debug, URI handlers. | accepted by an agent: Deny-by-default is the fork's chosen posture: these surfaces stay denied until a structural response-side control exists (RPC-R2), so the gap is visible loss of function rather than a containment hole. Extensions still activate, run their own commands, keep per-tab state and secrets, and read/write/search their own workspace. |
 
 ### Security findings register
@@ -1723,7 +1724,7 @@ Every other commit the register cites is on main's history, or on the branch its
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
-| 1 | high | fixed-untested | The secret was handed to a step running the head commit's own script on every push and same-repo PR, so a branch could leak the list | Fixed by structure (a main-only environment read by a job that runs only on a push to main; round 18 confirmed). No test asserts that no branch-controlled code runs with the secret. |
+| 1 | high | fixed | The secret was handed to a step running the head commit's own script on every push and same-repo PR, so a branch could leak the list | 731205f · `build/check-workflow-echo.ts` "S1: a secret job outside the denylist environment blocks" |
 | 2 | medium | fixed-untested | Only a push to main failed closed; other events without the secret went green unscanned | Fixed by structure (the job runs only where the secret must exist and fails closed when it is missing); no self-test case. |
 | 3 | medium | fixed | Skipped files were dropped silently, and compatibility forms and zero-width characters evaded the tokeniser | 80f4b5b · `build/check-denylist.ts` "fullwidth and zero-width forms fold to the entry" |
 
@@ -1756,6 +1757,13 @@ Every other commit the register cites is on main's history, or on the branch its
 | R21-4 | low | fixed | A one-word entry wrapped at a joiner across a line was missed | 80f4b5b · `build/check-denylist.ts` "R21-4: a word wrapped at a joiner" |
 | R21-5 | low | fixed | A NUL in a list entry made it silently inert | 80f4b5b · `build/check-denylist.ts` "R21-5: a control character in the list is refused" |
 | R21-6..8 | info | fixed-untested | Linear time and line attribution confirmed; one dead statement | Measurements and a dead statement removed; nothing to test. |
+| R22-1 | low | fixed | S1's line reader skipped jobs after a column-0 comment, quoted or flow-mapping jobs, odd indents | c693085 · `build/check-workflow-echo.ts` "R22-1: a column-0 comment does not end the jobs section" |
+| R22-2 | low | fixed | An unrecognised job's lines joined the previous job and inherited its compliant gate | c693085 · `build/check-workflow-echo.ts` "R22-2: a quoted job after a compliant one is its own job" |
+| R22-3 | low | fixed | Other spellings of a secret reference (SECRETS., index, toJSON) weren't seen | c693085 · `build/check-workflow-echo.ts` "R22-3: ${spelling} is a secret use" |
+| R22-4 | info | fixed | A workflow-level secret binding wasn't flagged | c693085 · `build/check-workflow-echo.ts` "R22-4: a workflow-level secret binding blocks" |
+| R22-5 | info | fixed-untested | A root invoker made the scan container root | The driver refuses uid 0; the refusal only runs as root, which no CI job or test does. |
+| R22-6 | info | fixed-untested | The mount test proves nothing on a macOS engine | The test says so off Linux; CI's Linux run is the proof (its first run, before the fix, failed with the same error). |
+| R22-7 | info | fixed-untested | Nothing pinned the driver's container hardening flags | build/test-publish-mount.sh asserts the flags in CI, but a shell script outside a test path isn't a register-recognised test. |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

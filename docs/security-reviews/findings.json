@@ -96,7 +96,6 @@
 		"20261106-rpc-core-landing-v2.md#1",
 		"20261112-gate-fail-open-audit.md#GATE-2",
 		"20261112-gate-fail-open-audit.md#GATE-3",
-		"20261112-internal-identifier-scan.md#1",
 		"register#DOCSYNC-R1",
 		"register#INC-3"
 	],
@@ -11712,8 +11711,12 @@
 			"summary": "The secret was handed to a step running the head commit's own script on every push and same-repo PR, so a branch could leak the list",
 			"component": "internal-identifier scan: denylist workflow",
 			"owner": "rpc",
-			"status": "fixed-untested",
-			"gap": "Fixed by structure (a main-only environment read by a job that runs only on a push to main; round 18 confirmed). No test asserts that no branch-controlled code runs with the secret."
+			"status": "fixed",
+			"commit": "731205f",
+			"test": {
+				"file": "build/check-workflow-echo.ts",
+				"name": "S1: a secret job outside the denylist environment blocks"
+			}
 		},
 		{
 			"record": "20261112-internal-identifier-scan.md",
@@ -12079,6 +12082,99 @@
 			"owner": "rpc",
 			"status": "fixed-untested",
 			"gap": "Measurements and a dead statement removed; nothing to test."
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R22-1",
+			"round": "Round 22",
+			"severity": "low",
+			"summary": "S1's line reader skipped jobs after a column-0 comment, quoted or flow-mapping jobs, odd indents",
+			"component": "workflow lint: secret scope (S1)",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "c693085",
+			"test": {
+				"file": "build/check-workflow-echo.ts",
+				"name": "R22-1: a column-0 comment does not end the jobs section"
+			}
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R22-2",
+			"round": "Round 22",
+			"severity": "low",
+			"summary": "An unrecognised job's lines joined the previous job and inherited its compliant gate",
+			"component": "workflow lint: secret scope (S1)",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "c693085",
+			"test": {
+				"file": "build/check-workflow-echo.ts",
+				"name": "R22-2: a quoted job after a compliant one is its own job"
+			}
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R22-3",
+			"round": "Round 22",
+			"severity": "low",
+			"summary": "Other spellings of a secret reference (SECRETS., index, toJSON) weren't seen",
+			"component": "workflow lint: secret scope (S1)",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "c693085",
+			"test": {
+				"file": "build/check-workflow-echo.ts",
+				"name": "R22-3: ${spelling} is a secret use"
+			}
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R22-4",
+			"round": "Round 22",
+			"severity": "info",
+			"summary": "A workflow-level secret binding wasn't flagged",
+			"component": "workflow lint: secret scope (S1)",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "c693085",
+			"test": {
+				"file": "build/check-workflow-echo.ts",
+				"name": "R22-4: a workflow-level secret binding blocks"
+			}
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R22-5",
+			"round": "Round 22",
+			"severity": "info",
+			"summary": "A root invoker made the scan container root",
+			"component": "publish gate: driver",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "The driver refuses uid 0; the refusal only runs as root, which no CI job or test does."
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R22-6",
+			"round": "Round 22",
+			"severity": "info",
+			"summary": "The mount test proves nothing on a macOS engine",
+			"component": "publish gate: mount test",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "The test says so off Linux; CI's Linux run is the proof (its first run, before the fix, failed with the same error)."
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R22-7",
+			"round": "Round 22",
+			"severity": "info",
+			"summary": "Nothing pinned the driver's container hardening flags",
+			"component": "publish gate: driver",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "build/test-publish-mount.sh asserts the flags in CI, but a shell script outside a test path isn't a register-recognised test."
 		},
 		{
 			"record": null,
