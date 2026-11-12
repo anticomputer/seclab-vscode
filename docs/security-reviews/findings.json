@@ -12177,6 +12177,110 @@
 			"gap": "build/test-publish-mount.sh asserts the flags in CI, but a shell script outside a test path isn't a register-recognised test."
 		},
 		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R23-1",
+			"round": "Round 23",
+			"severity": "medium",
+			"summary": "An installer that only repoints core.hooksPath bypassed the lock and the hook's self-check",
+			"component": "publish gate: hook downgrade protection",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "95408c3",
+			"test": {
+				"file": "test/hooks/hook-lock.test.sh",
+				"name": "hooks check: an installer that only repoints core.hooksPath is caught"
+			}
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R23-2",
+			"round": "Round 23",
+			"severity": "medium",
+			"summary": "Install reported success without reading back the hooks path git uses; a per-worktree value shadowed it",
+			"component": "publish gate: hook downgrade protection",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "95408c3",
+			"test": {
+				"file": "test/hooks/hook-lock.test.sh",
+				"name": "hooks check: a per-worktree core.hooksPath override is caught"
+			}
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R23-3",
+			"round": "Round 23",
+			"severity": "medium",
+			"summary": "An interrupted install left the hook directory unlocked",
+			"component": "publish gate: hook downgrade protection",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "A trap re-locks on exit, interrupt and termination; interrupting an install needs docker and the scanner images, which the test doesn't run. The unlocked state itself is caught by the hooks check case."
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R23-4",
+			"round": "Round 23",
+			"severity": "low",
+			"summary": "The install's lock helpers came from the checkout's working tree",
+			"component": "publish gate: hook downgrade protection",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "The chmods are now inline in seclab; nothing to inject."
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R23-5",
+			"round": "Round 23",
+			"severity": "low",
+			"summary": "A permission-bit lock doesn't stop root or a root container with the clone mounted",
+			"component": "publish gate: hook downgrade protection",
+			"owner": "rpc",
+			"status": "open",
+			"gap": "Stated as a limit in the EDR: accident protection, not adversary protection."
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R23-6",
+			"round": "Round 23",
+			"severity": "low",
+			"summary": "Installer and hook hashed with different tools; an empty marker hash could lock every push out",
+			"component": "publish gate: hook downgrade protection",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "95408c3",
+			"test": {
+				"file": "test/hooks/hook-lock.test.sh",
+				"name": "hooks check: the installed, locked gate hook is ok"
+			}
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R23-7",
+			"round": "Round 23",
+			"severity": "info",
+			"summary": "A ~ in core.hooksPath blocked every push",
+			"component": "publish gate: hook downgrade protection",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"gap": "Read path-typed; not exercised by the test."
+		},
+		{
+			"record": "20261112-publish-gate.md",
+			"anchor": "R23-8",
+			"round": "Round 23",
+			"severity": "info",
+			"summary": "hooks check misreported as root; removing a clone fails on the locked directory",
+			"component": "publish gate: hook downgrade protection",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "95408c3",
+			"test": {
+				"file": "test/hooks/hook-lock.test.sh",
+				"name": "hooks check: an unlocked directory is caught"
+			}
+		},
+		{
 			"record": null,
 			"anchor": "INC-4",
 			"severity": "medium",

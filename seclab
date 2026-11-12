@@ -500,7 +500,7 @@ hooks_warn() {
 	[[ -n "${CI:-}" ]] && return 0
 	local p
 	p="$(hooks_problems 2>/dev/null)"
-	[[ -z "$p" ]] || printf 'WARNING: pushes from here are not gated: %s. Reinstall with main'"'"'s code (AGENTS.md).\n' "$(echo "$p" | paste -sd';' -)" >&2
+	[[ -z "$p" ]] || printf 'WARNING: pushes from here may not be gated: %s. Reinstall with main'"'"'s code (AGENTS.md).\n' "$(echo "$p" | paste -sd';' -)" >&2
 }
 
 fetch_macos() {

@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 6 | 59 | 137 | 166 | 18 | 386 |
-| fixed-untested | 4 | 18 | 53 | 144 | 47 | 266 |
+| fixed | 6 | 59 | 139 | 167 | 19 | 390 |
+| fixed-untested | 4 | 18 | 54 | 145 | 48 | 269 |
 | accepted-residual | 0 | 1 | 12 | 58 | 15 | 86 |
 | deferred | 6 | 5 | 18 | 10 | 3 | 42 |
-| open | 0 | 5 | 20 | 20 | 4 | 49 |
+| open | 0 | 5 | 20 | 21 | 4 | 50 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 88 | 240 | 398 | 93 | 835 |
+| **all** | 16 | 88 | 243 | 401 | 95 | 843 |
 
 ## Baseline: open high and critical findings
 
@@ -475,6 +475,7 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261112-internal-identifier-scan](20261112-internal-identifier-scan.md) **2** | medium | fixed-untested | internal-identifier scan: ci-denylist | Only a push to main failed closed; other events without the secret went green unscanned | Fixed by structure (the job runs only where the secret must exist and fails closed when it is missing); no self-test case. |
 | [20261112-publish-gate](20261112-publish-gate.md) **R19-2** | medium | fixed-untested | publish gate: publish-gate workflow | A branch could suppress its own scan (\[skip ci\], or removing workflow-lint.yml) | Fixed by dropping the job; the docs no longer claim branches are scanned. Nothing left to test. |
 | [20261112-publish-gate](20261112-publish-gate.md) **R19-5** | medium | fixed-untested | publish gate: hooks install | The install pinned the working tree's engine, so a branch's gate became every worktree's | The install takes engine, driver and template from origin/main's objects; no self-test case injects a differing working tree. |
+| [20261112-publish-gate](20261112-publish-gate.md) **R23-3** | medium | fixed-untested | publish gate: hook downgrade protection | An interrupted install left the hook directory unlocked | A trap re-locks on exit, interrupt and termination; interrupting an install needs docker and the scanner images, which the test doesn't run. The unlocked state itself is caught by the hooks check case. |
 | [docs/edr/20261104-unpatched-proof-run.md](../../docs/edr/20261104-unpatched-proof-run.md) **INC-1** | medium | fixed-untested | probe payloads / level B harness | Incident: during the unpatched proof run the \`clipboard-read\` probe returned the developer's real host clipboard, and the value is in the committed run evidence. | Mitigated (clipboard canary opt-in via SECLAB_CANARY_CLIPBOARD=1; otherwise never read; the harness saves and restores the clipboard, 2b2881e), but there is no fixture-lint rule forbidding a clipboard read in a payload, no redaction of probe \`detail\` values, and rpc-filter/probes/runs/20261104-unpatched-a717861.json still carries the real clipboard string the probe captured. |
 | [docs/edr/20261112-history-rewrite.md](../../docs/edr/20261112-history-rewrite.md) **INC-4** | medium | fixed-untested | repository history: records, code constants, tests, a probe run record and commit messages | Incident: internal identifiers were committed to the public repository's history: internal package-feed identifiers (organisation, project and feed names, feed and tenant IDs including truncated forms, storage account names), names of non-public repositories, a value a probe captured from the host into a run record, an internal chat excerpt with colleagues' handles, local machine details, and prose stating internal policy and a non-public model identifier as fact. | No regression test on main yet. The guard is the RPC core landing's internal-identifier check, which reads the SECLAB_DENYLIST secret from the denylist environment (main only), plus a pre-push hook reading a local denylist file; the literals are never committed. Cite that check's test once it lands. |
 | `docs/RPC-LOCKDOWN.md` (branch `anticomputer-rpc-core-landing-v2`) **RPC-R1** | medium | deferred | command taint (seclabRpcFilter) / policy commands | Deferred laundering escapes the command taint: a tab-originated handler that defers an ICommandService call (setTimeout, unawaited promise, event subscription) runs with no origin and a zero counter. | follow-up: RPC-LOCKDOWN.md §7 residual 0: "Fixing the residual properly is the follow-up after this landing" (rpc session). Meanwhile check_drift.py::check_residuals fails the build if any command gets a verdict other than deny, except the recorded leaf exceptions (_setContext, _executeHoverProvider, _executeCompletionItemProvider), each validated and probed. |
@@ -508,6 +509,8 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261112-publish-gate](20261112-publish-gate.md) **R19-9** | low | fixed-untested | publish gate: ci-denylist | Tag pushes were scanned under a fabricated branch ref | Branch mode was removed; nothing left to test. |
 | [20261112-publish-gate](20261112-publish-gate.md) **R20-4** | low | fixed-untested | publish gate: hooks install | The install took the node image and the gitleaks pin from the working tree | Both come from origin/main; no self-test case injects a differing working tree. |
 | [20261112-publish-gate](20261112-publish-gate.md) **R20-5** | low | fixed-untested | publish gate: ci-denylist | A rejected base silently dropped the allowlist-commit check | A notice now says so; the notice has no self-test case. |
+| [20261112-publish-gate](20261112-publish-gate.md) **R23-4** | low | fixed-untested | publish gate: hook downgrade protection | The install's lock helpers came from the checkout's working tree | The chmods are now inline in seclab; nothing to inject. |
+| [20261112-publish-gate](20261112-publish-gate.md) **R23-5** | low | open | publish gate: hook downgrade protection | A permission-bit lock doesn't stop root or a root container with the clone mounted | Stated as a limit in the EDR: accident protection, not adversary protection. |
 | [20261104-rpc-probes-increment](20261104-rpc-probes-increment.md) **PR-M4** | info | open | containment probes (raw RPC) | The raw-RPC test hook does not exist, so the two raw-RPC probes report ERROR. | No test hook provides the raw main-thread RPC handle; the probes remain ERROR and the identity-spoof surface is unmeasured. |
 | [20261104-supply-chain](20261104-supply-chain.md) **info** | info | fixed-untested | rpc-filter/tools/test.sh | \`--platform linux/arm64\` was pinned in the RPC filter's test.sh while CI runs on x86. | The flag is gone (multi-arch digest), but nothing asserts that no platform override returns. |
 | [20261104-write-back-engine](20261104-write-back-engine.md) **note#2** | info | deferred | RPC capability filter (M4) | Until the M4 RPC filter enforces, a rogue extension can invoke seclab.reviewChanges/confirmDeletes to pop dialogs (a click is still needed). | follow-up: RPC capability filter series (patches 0005-0011 / 0030-0034, \`rpc\` session): \`seclab.*\` must stay outside the filter's allowed set. Not on main: patches/series has only the reserved ranges, no filter patch. |
@@ -517,6 +520,7 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261112-publish-gate](20261112-publish-gate.md) **R22-5** | info | fixed-untested | publish gate: driver | A root invoker made the scan container root | The driver refuses uid 0; the refusal only runs as root, which no CI job or test does. |
 | [20261112-publish-gate](20261112-publish-gate.md) **R22-6** | info | fixed-untested | publish gate: mount test | The mount test proves nothing on a macOS engine | The test says so off Linux; CI's Linux run is the proof (its first run, before the fix, failed with the same error). |
 | [20261112-publish-gate](20261112-publish-gate.md) **R22-7** | info | fixed-untested | publish gate: driver | Nothing pinned the driver's container hardening flags | build/test-publish-mount.sh asserts the flags in CI, but a shell script outside a test path isn't a register-recognised test. |
+| [20261112-publish-gate](20261112-publish-gate.md) **R23-7** | info | fixed-untested | publish gate: hook downgrade protection | A ~ in core.hooksPath blocked every push | Read path-typed; not exercised by the test. |
 | `docs/RPC-LOCKDOWN.md` (branch `anticomputer-rpc-core-landing-v2`) **RPC-R3** | info | accepted-residual | rpc-filter policy coverage | Methods denied pending validators and the response-side control: SCM, tree views, output channels, status bar, decorations, tab-registered language features, tasks, debug, URI handlers. | accepted by an agent: Deny-by-default is the fork's chosen posture: these surfaces stay denied until a structural response-side control exists (RPC-R2), so the gap is visible loss of function rather than a containment hole. Extensions still activate, run their own commands, keep per-tab state and secrets, and read/write/search their own workspace. |
 
 ### Security findings register
@@ -1764,6 +1768,14 @@ Every other commit the register cites is on main's history, or on the branch its
 | R22-5 | info | fixed-untested | A root invoker made the scan container root | The driver refuses uid 0; the refusal only runs as root, which no CI job or test does. |
 | R22-6 | info | fixed-untested | The mount test proves nothing on a macOS engine | The test says so off Linux; CI's Linux run is the proof (its first run, before the fix, failed with the same error). |
 | R22-7 | info | fixed-untested | Nothing pinned the driver's container hardening flags | build/test-publish-mount.sh asserts the flags in CI, but a shell script outside a test path isn't a register-recognised test. |
+| R23-1 | medium | fixed | An installer that only repoints core.hooksPath bypassed the lock and the hook's self-check | 95408c3 · `test/hooks/hook-lock.test.sh` "hooks check: an installer that only repoints core.hooksPath is caught" |
+| R23-2 | medium | fixed | Install reported success without reading back the hooks path git uses; a per-worktree value shadowed it | 95408c3 · `test/hooks/hook-lock.test.sh` "hooks check: a per-worktree core.hooksPath override is caught" |
+| R23-3 | medium | fixed-untested | An interrupted install left the hook directory unlocked | A trap re-locks on exit, interrupt and termination; interrupting an install needs docker and the scanner images, which the test doesn't run. The unlocked state itself is caught by the hooks check case. |
+| R23-4 | low | fixed-untested | The install's lock helpers came from the checkout's working tree | The chmods are now inline in seclab; nothing to inject. |
+| R23-5 | low | open | A permission-bit lock doesn't stop root or a root container with the clone mounted | Stated as a limit in the EDR: accident protection, not adversary protection. |
+| R23-6 | low | fixed | Installer and hook hashed with different tools; an empty marker hash could lock every push out | 95408c3 · `test/hooks/hook-lock.test.sh` "hooks check: the installed, locked gate hook is ok" |
+| R23-7 | info | fixed-untested | A ~ in core.hooksPath blocked every push | Read path-typed; not exercised by the test. |
+| R23-8 | info | fixed | hooks check misreported as root; removing a clone fails on the locked directory | 95408c3 · `test/hooks/hook-lock.test.sh` "hooks check: an unlocked directory is caught" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
