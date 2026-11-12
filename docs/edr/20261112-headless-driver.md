@@ -72,8 +72,8 @@ whose `out/mainImpl.js` lacks that string (minification keeps strings, not comme
 starts the focus watcher and still requires `BackgroundOnly`, like a LaunchServices launch.
 Measured 2026-11-12 on the arm64 macOS build from run 43262494433 (bootstrap string present),
 with the watcher: driver self-test 8/8, including the renderer screenshot and no other holder
-of fds 3 and 4; local-window test 13/13. In both runs the watcher's record shows it started,
-watched the editor and stopped, with no focus taken.
+of fds 3 and 4; local-window test 13/13, then 17/17 with review UUU's checks. In every run the
+watcher's record shows it started, watched the editor and stopped, with no focus taken.
 
 **Focus checks keep the watcher, which needs no permission.** It uses `lsappinfo front`,
 `lsappinfo info` and `find` (LaunchServices queries) and one `CGWindowListCopyWindowInfo` query
@@ -121,7 +121,7 @@ builds it, and keeps it for two days so a local Xvfb run can reuse it.
 | Space-switch probe (`spaces.ts`) | System Events keystrokes (Accessibility) | skips with the reason; structural check in check-release (self-tested); the hosted runner can't show a Space switch (run 43251392437) |
 | Focus battery (`probe.ts`), Level B, containment editor runs | no permission needed (watcher verified above) | unchanged |
 | Clipboard canary | read and restored the host clipboard | removed from the harness; RPC core's in-memory clipboard |
-| Local windows: no workspace or third-party extension runs; spoofed built-ins (m0#3-1, m0#4-1) | never written (record only) | `test/driver/local-window.ts`, in `headless-linux` CI: run 43260178015, 9/9; macOS build from run 43262494433, 13/13 (with review TTT-1's entry-point checks) |
+| Local windows: no workspace or third-party extension runs; spoofed built-ins (m0#3-1, m0#4-1) | never written (record only) | `test/driver/local-window.ts`, in `headless-linux` CI: run 43260178015, 9/9; macOS build from run 43262494433, 17/17 (with reviews TTT-1 and UUU-2's checks) |
 
 ## Consequences
 
