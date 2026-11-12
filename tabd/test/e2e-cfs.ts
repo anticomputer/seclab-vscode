@@ -16,7 +16,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../src/client.ts';
-import { CfsTokenSource } from '../src/cfs.ts';
+import { CfsTokenSource, loadCfsFeeds } from '../src/cfs.ts';
 import { teardownGate, writeManifest, writeSnapshot } from '../../test/containment/teardown.ts';
 
 const repo = path.resolve(import.meta.dirname, '../..');
@@ -72,7 +72,16 @@ const check = (name: string, fn: () => void) => {
 };
 /** A shell snippet in the tab, as the tab user, with the tab's own environment. */
 const inTab = (script: string, timeout = 120_000) => spawnSync('docker', ['exec', '-u', '1000:1000', '--', ctr, '/opt/seclab/bin/seclab-tab-env', 'sh', '-c', script], { encoding: 'utf8', timeout });
-const FEED = 'https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging';
+// The real feeds come from the host's CFS config (EDR cfs-config-outside-repo), never the tree.
+const cfsLoaded = loadCfsFeeds();
+if ('problem' in cfsLoaded) {
+	console.error(`e2e-cfs: ${cfsLoaded.problem}`);
+	process.exit(2);
+}
+const FEEDS = cfsLoaded.feeds;
+const NPM = `https://pkgs.dev.azure.com${FEEDS.npmPath}`;
+const PYPI_SIMPLE = `https://pkgs.dev.azure.com${FEEDS.pypiPath}simple/`;
+const ORG = FEEDS.npmPath.split('/')[1];
 try {
 	await client.request('tab.ensureRunning', { tabId });
 	await client.request('tab.packages.set', { tabId, cfs: true });
@@ -82,12 +91,12 @@ try {
 		const r = inTab(`${auth}; echo "$S"; echo "$NPM_CONFIG_REGISTRY"; test -n "$PIP_INDEX_URL" && echo pip-set`);
 		const [s, reg, pip] = r.stdout.trim().split('\n');
 		assert.match(s, /^seclab_cfs_[A-Za-z0-9_-]{43}$/, r.stderr);
-		assert.equal(reg, `${FEED}/example-npm-feed/npm/registry/`);
+		assert.equal(reg, NPM);
 		assert.equal(pip, 'pip-set');
 	});
 
 	// npm: packument, then the tarball, recording a redirect.
-	const pk = inTab(`${auth}; curl -sS --max-time 60 -u "cfs:$S" -o /tmp/pk.json -w '%{http_code}' ${FEED}/example-npm-feed/npm/registry/is-number; printf ' '; grep -o '"tarball":"[^"]*is-number-7\\.0\\.0\\.tgz"' /tmp/pk.json | head -1 | sed 's/^"tarball":"//; s/"$//'`);
+	const pk = inTab(`${auth}; curl -sS --max-time 60 -u "cfs:$S" -o /tmp/pk.json -w '%{http_code}' ${NPM}is-number; printf ' '; grep -o '"tarball":"[^"]*is-number-7\\.0\\.0\\.tgz"' /tmp/pk.json | head -1 | sed 's/^"tarball":"//; s/"$//'`);
 	const [pkCode, tarball] = pk.stdout.trim().split(' ');
 	check('npm packument through the broker (200)', () => assert.equal(pkCode, '200', pk.stderr));
 	const tb = inTab(`${auth}; curl -sS --max-time 60 -u "cfs:$S" -o /tmp/t.tgz -D /tmp/h -w '%{http_code} %{redirect_url}' '${tarball ?? ''}'; echo; grep -i '^location:' /tmp/h | head -1 | sed 's/[?].*/?…/'`);
@@ -119,12 +128,12 @@ try {
 	console.log(`     final: ${tbFinal.stdout.trim().split('\n')[0].replace(/[?]\S*/, '?…')}`);
 
 	// A real npm client, itself from CFS (the tab image has none), run with the REH's node.
-	const npm = inTab(`cd /tmp && ${auth} && curl -sS --max-time 120 -u "cfs:$S" -o npm.json -w '%{http_code}' ${FEED}/example-npm-feed/npm/registry/npm`, 300_000);
+	const npm = inTab(`cd /tmp && ${auth} && curl -sS --max-time 120 -u "cfs:$S" -o npm.json -w '%{http_code}' ${NPM}npm`, 300_000);
 	check('the npm packument (a large read) through the broker (200)', () => assert.equal(npm.stdout.trim(), '200', npm.stderr));
 	if (follow) {
 		const inst = inTab(`set -e; cd /tmp && ${auth}
 T=$(grep -o '"latest":"[^"]*"' npm.json | head -1 | sed 's/.*:"//; s/"$//')
-curl -sSf --max-time 300 -u "cfs:$S" -o npm.tgz "${FEED}/example-npm-feed/npm/registry/npm/-/npm-$T.tgz"
+curl -sSf --max-time 300 -u "cfs:$S" -o npm.tgz "${NPM}npm/-/npm-$T.tgz"
 rm -rf npmc proj && mkdir -p npmc proj && tar -xzf npm.tgz -C npmc
 export PATH=/opt/seclab-reh:$PATH
 cd proj && printf '{"name":"cfs-probe","version":"1.0.0","private":true}\\n' > package.json
@@ -134,15 +143,15 @@ test -f node_modules/is-number/package.json && grep -o '"version": "[^"]*"' node
 	}
 
 	// PyPI: simple index and one file.
-	const idx = inTab(`${auth}; curl -sS --max-time 60 -u "cfs:$S" -o /tmp/six.html -w '%{http_code}' ${FEED}/example-pypi-feed/pypi/simple/six/; echo; grep -o 'href="[^"]*six-1\\.16\\.0-py2\\.py3-none-any\\.whl[^"]*"' /tmp/six.html | head -1`);
+	const idx = inTab(`${auth}; curl -sS --max-time 60 -u "cfs:$S" -o /tmp/six.html -w '%{http_code}' ${PYPI_SIMPLE}six/; echo; grep -o 'href="[^"]*six-1\\.16\\.0-py2\\.py3-none-any\\.whl[^"]*"' /tmp/six.html | head -1`);
 	const [idxCode, hrefLine] = idx.stdout.trim().split('\n');
 	check('PyPI simple index (200)', () => assert.equal(idxCode, '200', idx.stderr));
 	const href = /href="([^"]+)"/.exec(hrefLine ?? '')?.[1];
-	const fileUrl = href ? new URL(href.replace(/&amp;/g, '&'), `${FEED}/example-pypi-feed/pypi/simple/six/`).toString() : '';
+	const fileUrl = href ? new URL(href.replace(/&amp;/g, '&'), `${PYPI_SIMPLE}six/`).toString() : '';
 	console.log(`     PyPI file link: ${fileUrl.replace(/[?#].*$/, '…')}`);
 	const pf = inTab(`${auth}; curl -sSL --max-time 120 -u "cfs:$S" -o /tmp/six.whl -w '%{http_code} %{url_effective} %{num_redirects}' '${fileUrl}'`);
 	check(`PyPI file: linked under the feed GUID download path, credentialed there, then ${follow ? 'followed by the broker (200, no redirect)' : '303 to a CFS storage host, refused there'}`, () => {
-		assert.ok(fileUrl.startsWith('https://pkgs.dev.azure.com/example-org/00000000-0000-0000-0000-000000000001/_packaging/00000000-0000-0000-0000-000000000002/pypi/download/'), fileUrl);
+		assert.ok(fileUrl.startsWith(`https://pkgs.dev.azure.com${FEEDS.pypiDownloadPath}`), 'the index links files under the configured download path');
 		const [code, effective, redirects] = pf.stdout.trim().split(' ');
 		if (follow) {
 			assert.deepEqual([code, redirects], ['200', '0'], pf.stdout + pf.stderr);
@@ -169,13 +178,13 @@ test -f /tmp/py/six.py && echo six-installed`, 600_000);
 	}
 
 	// Negatives: a write, and the sentinel sent to the REST API.
-	const post = inTab(`${auth}; curl -sS --max-time 30 -o /dev/null -w '%{http_code}' -u "cfs:$S" -X POST ${FEED}/example-npm-feed/npm/registry/is-number`);
+	const post = inTab(`${auth}; curl -sS --max-time 30 -o /dev/null -w '%{http_code}' -u "cfs:$S" -X POST ${NPM}is-number`);
 	check('a POST to a feed path is refused (403, or the connection closed)', () => assert.match(post.stdout.trim(), /^(403|000)$/, post.stdout));
-	const api = inTab(`${auth}; curl -sS --max-time 30 -o /dev/null -w '%{http_code}' -u "cfs:$S" https://pkgs.dev.azure.com/example-org/_apis/connectionData`);
+	const api = inTab(`${auth}; curl -sS --max-time 30 -o /dev/null -w '%{http_code}' -u "cfs:$S" https://pkgs.dev.azure.com/${ORG}/_apis/connectionData`);
 	check('the sentinel sent to _apis is refused', () => assert.match(api.stdout.trim(), /^403$/, api.stdout));
 
 	// The token appears nowhere in the tab (its config, its environment).
-	const token = (await new CfsTokenSource().token()).value;
+	const token = (await new CfsTokenSource(FEEDS).token()).value;
 	check('the token is not in the tab', () => {
 		const r = inTab('cat /run/seclab-broker/* 2>/dev/null; env');
 		assert.ok(r.stdout.length > 0);

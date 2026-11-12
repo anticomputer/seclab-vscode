@@ -2,6 +2,7 @@
 // See docs/adr/20261104-tab-supervisor.md.
 
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import type { CfsFeeds } from '../cfs.ts';
 import type { UpperReader } from '../writeback-feed.ts';
 
 export interface DriverCapabilities {
@@ -85,6 +86,8 @@ export interface BrokerSetup {
 	readonly proxyPassword: string;
 	/** CFS package feeds (B4): the tab's cfs sentinel when enabled; its npm/pip config is written with it. */
 	readonly feedSentinel?: string;
+	/** The host's feed paths (from its CFS config), with feedSentinel. */
+	readonly feeds?: CfsFeeds;
 }
 
 /**
@@ -117,7 +120,7 @@ export interface Driver {
 	/** Write-back gate (capability writeBack: gated): read the tab's upper layer, as root, directly. */
 	upperReader?(spec: TabRuntimeSpec): UpperReader;
 	/** CFS package feeds (B4) on a running tab: write (or remove, with no sentinel) its npm/pip config as root. */
-	installFeed?(spec: TabRuntimeSpec, sentinel: string | undefined): Promise<void>;
+	installFeed?(spec: TabRuntimeSpec, sentinel: string | undefined, feeds?: CfsFeeds): Promise<void>;
 	/** B3c: a control channel to a running tab's broker (adoption), with the same fixed argv as bring-up. */
 	openBrokerControl?(spec: TabRuntimeSpec): ChildProcessWithoutNullStreams;
 	/**

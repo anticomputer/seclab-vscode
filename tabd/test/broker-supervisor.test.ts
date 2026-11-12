@@ -17,12 +17,15 @@ import { BROKER_POLICY_SCHEMA, BROKER_PROTOCOL } from '../src/broker.ts';
 import type { BrokerHooks, BrokerSetup, Driver, FenceReport, SensorHooks, TabRuntimeSpec, TabTemplate } from '../src/drivers/types.ts';
 import { defaultPolicy, tabPolicy, USER_POLICY_FILE } from '../src/broker-policy.ts';
 import { approvalPromptText, DECISION_LABELS, sanitizeApproval } from '../src/approvals.ts';
-import { CFS_TENANT, feedInstallLine, parseAzToken, type AzToken } from '../src/cfs.ts';
+import { cfsAllowRules, cfsFeeds, feedInstallLine, parseAzToken, type AzToken, type CfsFeeds } from '../src/cfs.ts';
+import { validateCfsConfig } from '../src/cfs-config.ts';
 import { INSTALL_FEED } from '../src/drivers/broker-install.ts';
 import { spawnSync } from 'node:child_process';
 
 const SCRATCH = path.resolve(import.meta.dirname, '../../.work/test-scratch/broker-supervisor');
 const PEM = '-----BEGIN CERTIFICATE-----\nZXhhbXBsZSBvbmx5\n-----END CERTIFICATE-----\n';
+/** Example feeds from the shared vectors (example values only; real ones live in the host's config). */
+const FEEDS: CfsFeeds = cfsFeeds(validateCfsConfig(JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../broker/tools/cfs-config.vectors.json'), 'utf8')).valid[0]));
 
 /** Fake broker: records methods and params, answers like the real one. */
 function fakeBroker(tabId: string, log: Array<{ method: string; params?: Record<string, unknown> }>, opts: { badCa?: boolean; rejectPolicy?: boolean; tail?: unknown[]; denyRules?: boolean } = {}, onStdout?: (s: PassThrough) => void) {
@@ -90,7 +93,7 @@ class BrokerDriver implements Driver {
 	async remove() { /* */ }
 }
 
-function setup(name: string, policy?: (tabId: string) => Record<string, unknown>, cfs?: { token(): Promise<AzToken> }, reuse?: { driver: BrokerDriver }) {
+function setup(name: string, policy?: (tabId: string) => Record<string, unknown>, cfs?: { feeds: CfsFeeds; token(): Promise<AzToken> }, reuse?: { driver: BrokerDriver }) {
 	const dir = path.join(SCRATCH, name);
 	if (!reuse) {
 		fs.rmSync(dir, { recursive: true, force: true });
@@ -373,7 +376,7 @@ test('B3 prompt text: tab named first, tab text quoted (no links, icons, bidi), 
 test('B4 CFS feeds: off by default; enabling imports the sentinel credential GET-only with a budget, on a running tab and every start; refresh on credential.needed; disabling revokes', async t => {
 	let mints = 0;
 	let gate: Promise<void> = Promise.resolve();
-	const cfs = { token: async (): Promise<AzToken> => {
+	const cfs = { feeds: FEEDS, token: async (): Promise<AzToken> => {
 		await gate;
 		return { value: `tok-${++mints}-0123456789abcdef`, expiresAt: Math.floor(Date.now() / 1000) + 3600 };
 	} };
@@ -478,16 +481,20 @@ test('B4 CFS feeds: off by default; enabling imports the sentinel credential GET
 });
 
 test('B4 CFS token: tenant checked, expiry required; feed line validated; the install script and seclab-tab-env wire npm and pip to the sentinel only', () => {
-	const ok = { tenant: CFS_TENANT, accessToken: 'fake-token-for-tests-only', expires_on: 1793900000 };
-	assert.deepEqual(parseAzToken(JSON.stringify(ok), 1793800000), { value: ok.accessToken, expiresAt: 1793900000 });
-	assert.throws(() => parseAzToken(JSON.stringify({ ...ok, tenant: 'other' }), 1793800000), /another tenant/);
-	assert.throws(() => parseAzToken(JSON.stringify(ok), 1793900001), /expired/);
-	assert.throws(() => parseAzToken(JSON.stringify({ ...ok, accessToken: '' }), 1793800000), /no usable/);
-	assert.throws(() => parseAzToken('not json'), /not JSON/);
-	assert.equal(parseAzToken(JSON.stringify({ tenant: CFS_TENANT, accessToken: ok.accessToken, expiresOn: '2026-11-06 20:00:00.000000' }), 0).value, ok.accessToken);
+	const ok = { tenant: FEEDS.tenant, accessToken: 'fake-token-for-tests-only', expires_on: 1793900000 };
+	assert.deepEqual(parseAzToken(JSON.stringify(ok), FEEDS.tenant, 1793800000), { value: ok.accessToken, expiresAt: 1793900000 });
+	assert.throws(() => parseAzToken(JSON.stringify({ ...ok, tenant: 'other' }), FEEDS.tenant, 1793800000), /another tenant/);
+	assert.throws(() => parseAzToken(JSON.stringify(ok), FEEDS.tenant, 1793900001), /expired/);
+	assert.throws(() => parseAzToken(JSON.stringify({ ...ok, accessToken: '' }), FEEDS.tenant, 1793800000), /no usable/);
+	assert.throws(() => parseAzToken('not json', FEEDS.tenant), /not JSON/);
+	assert.equal(parseAzToken(JSON.stringify({ tenant: FEEDS.tenant, accessToken: ok.accessToken, expiresOn: '2026-11-06 20:00:00.000000' }), FEEDS.tenant, 0).value, ok.accessToken);
 	assert.equal(feedInstallLine(undefined), 'feed -');
-	assert.throws(() => feedInstallLine('short'), /format/);
-	assert.throws(() => feedInstallLine(`seclab_cfs_${'a'.repeat(40)} rm -rf`), /format/);
+	assert.throws(() => feedInstallLine('short', FEEDS), /format/);
+	assert.throws(() => feedInstallLine(`seclab_cfs_${'a'.repeat(40)} rm -rf`, FEEDS), /format/);
+	assert.throws(() => feedInstallLine(`seclab_cfs_${'A'.repeat(43)}`), /not configured/, 'no host config: no feed line');
+	// The paths come from the host config (cfsFeeds), never from the tree.
+	assert.deepEqual(cfsAllowRules(FEEDS).map(r => r.path), [`${FEEDS.npmPath}**`, `${FEEDS.pypiPath}**`, `${FEEDS.pypiDownloadPath}**`]);
+	assert.ok(FEEDS.pypiPath.endsWith('/pypi/') && FEEDS.npmPath.endsWith('/npm/registry/'));
 
 	// The shell side, where we can: as root, in the test container (./seclab test unit).
 	if (process.getuid?.() !== 0 || !fs.existsSync('/etc/ssl/certs/ca-certificates.crt')) {
@@ -496,24 +503,35 @@ test('B4 CFS token: tenant checked, expiry required; feed line validated; the in
 	const s = `seclab_cfs_${'A'.repeat(43)}`;
 	const run = (input: string) => spawnSync('sh', ['-c', INSTALL_FEED], { input, encoding: 'utf8' });
 	fs.rmSync('/run/seclab-broker', { recursive: true, force: true });
-	assert.equal(run(`${feedInstallLine(s)}\n`).status, 0);
+	assert.equal(run(`${feedInstallLine(s, FEEDS)}\n`).status, 0);
 	const npmrc = fs.readFileSync('/run/seclab-broker/npmrc', 'utf8');
-	assert.match(npmrc, /^registry=https:\/\/pkgs\.dev\.azure\.com\/example-org\/ExampleProject\/_packaging\/example-npm-feed\/npm\/registry\/$/m);
+	assert.ok(npmrc.startsWith(`registry=https://pkgs.dev.azure.com${FEEDS.npmPath}\n`), npmrc);
 	assert.ok(npmrc.includes(`:_password=${Buffer.from(s).toString('base64')}\n`));
-	assert.equal(fs.readFileSync('/run/seclab-broker/pip-index-url', 'utf8'), `https://cfs:${s}@pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-pypi-feed/pypi/simple/\n`);
+	assert.equal(fs.readFileSync('/run/seclab-broker/npm-registry', 'utf8'), `https://pkgs.dev.azure.com${FEEDS.npmPath}\n`);
+	assert.equal(fs.readFileSync('/run/seclab-broker/pip-index-url', 'utf8'), `https://cfs:${s}@pkgs.dev.azure.com${FEEDS.pypiPath}simple/\n`);
 	assert.notEqual(run('feed bad;sentinel x\n').status, 0, 'unexpected characters are refused');
 	assert.notEqual(run('nope -\n').status, 0);
-	// seclab-tab-env exports them only with a configured broker, and only the expected URL.
+	// The root script checks the paths' shape again: no dot segments, the right kind, both present.
+	const b64 = Buffer.from(s).toString('base64');
+	assert.notEqual(run(`feed ${s} ${b64} /o/p/_packaging/f/../npm/registry/ ${FEEDS.pypiPath}\n`).status, 0, 'dot segment');
+	assert.notEqual(run(`feed ${s} ${b64} ${FEEDS.pypiPath} ${FEEDS.pypiPath}\n`).status, 0, 'pypi path as npm');
+	assert.notEqual(run(`feed ${s} ${b64} ${FEEDS.npmPath}\n`).status, 0, 'missing pypi path');
+	run(`${feedInstallLine(s, FEEDS)}\n`);
+	// seclab-tab-env exports them only with a configured broker, and only well-formed URLs.
 	fs.writeFileSync('/run/seclab-broker/proxy-url', 'http://seclab:pw@broker:8080\n');
 	fs.writeFileSync('/run/seclab-broker/ca.pem', PEM);
 	fs.writeFileSync('/run/seclab-broker/bundle.pem', PEM);
 	const env = () => spawnSync('sh', [path.resolve(import.meta.dirname, '../../sandbox/rootfs/opt/seclab/bin/seclab-tab-env'), 'env'], { encoding: 'utf8' }).stdout;
 	assert.match(env(), /^NPM_CONFIG_GLOBALCONFIG=\/run\/seclab-broker\/npmrc$/m);
+	assert.ok(env().includes(`\nNPM_CONFIG_REGISTRY=https://pkgs.dev.azure.com${FEEDS.npmPath}\n`), 'npm registry from the written file');
 	assert.match(env(), new RegExp(`^PIP_INDEX_URL=https://cfs:${s}@pkgs\\.dev\\.azure\\.com/`, 'm'));
 	fs.writeFileSync('/run/seclab-broker/pip-index-url', 'https://cfs:x@evil.example/simple/\n');
 	assert.doesNotMatch(env(), /PIP_INDEX_URL|NPM_CONFIG_GLOBALCONFIG/, 'an unexpected index URL: no feeds');
+	run(`${feedInstallLine(s, FEEDS)}\n`);
+	fs.writeFileSync('/run/seclab-broker/npm-registry', 'https://registry.npmjs.org/\n');
+	assert.doesNotMatch(env(), /PIP_INDEX_URL|NPM_CONFIG_GLOBALCONFIG/, 'an unexpected npm registry: no feeds');
 	assert.equal(run('feed -\n').status, 0);
-	assert.ok(!fs.existsSync('/run/seclab-broker/npmrc') && !fs.existsSync('/run/seclab-broker/pip-index-url'), 'disabled: config removed');
+	assert.ok(!fs.existsSync('/run/seclab-broker/npmrc') && !fs.existsSync('/run/seclab-broker/pip-index-url') && !fs.existsSync('/run/seclab-broker/npm-registry'), 'disabled: config removed');
 	fs.rmSync('/run/seclab-broker', { recursive: true, force: true });
 });
 
