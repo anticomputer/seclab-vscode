@@ -82,8 +82,9 @@ Current queue:
   workspace. `WindowsMainService.open`, which every open path reaches (CLI, menus, recents,
   drag and drop, `<urlProtocol>://file` links, session restore), replaces each one with an empty
   window and hands it to the Tab Manager as a trusted `<urlProtocol>://seclab.tab-manager/open`
-  URL; the Tab Manager confirms, claims and opens it as a tab. A local window never enters a
-  workspace (Add Folder). Enabled by product.json `seclabTabRouter`, a build invariant
+  URL; the Tab Manager confirms, claims and opens it as a tab. Every workspace file is routed
+  (a tab doesn't support multi-root), and no window enters a workspace (Add Folder). Enabled by
+  product.json `seclabTabRouter`, a build invariant and a release check
   ([ADR](../docs/adr/20261104-route-folder-opens-in-main.md),
   [EDR](../docs/edr/20261112-main-process-routing.md)).
 - `0042-no-automatic-tasks-in-local-windows.patch` (interim): a window with no remote authority
