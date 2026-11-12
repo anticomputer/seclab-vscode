@@ -31,7 +31,7 @@ reached the stream, Tab Activity or the detections.
    - `priority` is `warning` for deny and prompt, `notice` for rewrite, `informational`
      for aggregated allows (with `count`).
    - Lines are at most 4 KiB, with `ref` cut to 1 KiB. A window writes at most 2 MB of
-     filter decisions (rpc-core `8be17a6`, counted in bytes written), then one
+     filter decisions (rpc-core `338134b`, counted in bytes written), then one
      `rpc:seclab.log-capped` deny, so the log fits one spdlog file (5 MB). The gate caps at
      2000 decisions per connection.
 3. **Each file may carry only its own sources:** `seclabAhpGate.log` carries `ahp-gate`,
@@ -72,7 +72,7 @@ The logs are written by the main process on the host. A tab could forge a line o
   limited to the tab's own `vscode-remote://seclab+<tab>` URIs, `untitled:` and its
   extensions' read-only resources; `$mkdir`, `$copy` and `$rename` are denied.
 
-The RPC session gates both facts in its build (`check_log_trust`, rpc-core `889cbf7`), so
+The RPC session gates both facts in its build (`check_log_trust`, rpc-core `a7f4fb1`), so
 the build fails if either weakens.
 
 **Merge order is enforced in code** (review round 12, HIGH before this fix). Before the
@@ -85,7 +85,7 @@ URIs. The Tab Manager forwards nothing, with a warning in its log, unless both o
   active";
 - the built workbench bundle (`out/vs/workbench/workbench.desktop.main.js`) contains
   `seclabRpcFilterEnforcing:<that sha256>`. The marker is generated into `seclabRpcFilter.ts`
-  (rpc-core `597b92c`, the same patch as the filter and its log), and `emit_policy.py --check`
+  (rpc-core `74a6d78`, the same patch as the filter and its log), and `emit_policy.py --check`
   fails on drift. The filter names it in the log's first line (`rpc:seclab.installed`), so
   tree-shaking can't drop it. A series with 0005 but without the enforcing code therefore
   forwards nothing.
