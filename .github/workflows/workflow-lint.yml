@@ -51,6 +51,8 @@ jobs:
         run: ./seclab lint denylist --self-test
       - name: Publish gate self-test (every layer injected)
         run: ./seclab lint publish --self-test
+      - name: Publish gate reads a mode-600 list through its real mount (fake list, runner uid)
+        run: ./seclab lint publish --mount-test
       - name: No pin younger than 7 days (CFS hold; EDR pin-age-cooldown)
         env:
           GITHUB_TOKEN: ${{ github.token }}

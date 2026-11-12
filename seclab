@@ -38,7 +38,9 @@ usage: ./seclab <command>
                                 with origin/main); also run by CI (lint) and the pre-push hook
   hooks install                 Use the repo's git hooks (build/hooks: pre-push runs lint secrets and the
                                 publish gate) in this clone; refused until main carries the gate
-  lint publish [--self-test]    Publish gate over HEAD's tree: only what can be shown to be public (EDR)
+  lint publish [--self-test|--mount-test]
+                                Publish gate over HEAD's tree: only what can be shown to be public (EDR);
+                                --mount-test: a fake mode-600 list through the real container mount
   scan-text                     The publish gate over stdin: run it on any text before posting it with gh
   deps outdated                 Report image tags that moved and tracked tools with newer releases
   cfs config | check | --self-test
@@ -806,6 +808,8 @@ case "${1:-help}" in
 			publish) shift
 				if [[ "${1:-}" == --self-test ]]; then
 					docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/publish-gate.ts --self-test
+				elif [[ "${1:-}" == --mount-test ]]; then
+					"$ROOT/build/test-publish-mount.sh"
 				else
 					docker image inspect "$(node_image)" >/dev/null 2>&1 || docker pull -q "$(node_image)" >/dev/null
 					# shellcheck source=build/hooks/publish-gate.sh
