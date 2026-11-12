@@ -56,3 +56,8 @@ No high or medium findings. Confirmed:
 | WWW-3 | Info | Tab Manager | `sameFolder` keys on the platform, so a case-sensitive volume on macOS keeps VVV-3's residual. | Accepted | Needs an existing tab and a link the user allowed; bounded by the allowed roots. |
 | WWW-4 | Info | check-release | The product.json loop scanned vendored `node_modules`/`extensions` copies, unlike the RPC stamp loop. | Fixed | Same scope; a self-test case with a vendored copy. |
 | WWW-5 | Info | EDR | "Tab windows are untouched" was stale. | Fixed | Reworded. |
+
+Follow-up to VVV-7 (CI): the CI container has no container runtime, so tabd can't start and the
+Tab Manager shows its error instead of the confirmation. The test accepts exactly that error
+(`Cannot open "<folder>" as a tab`), never any toast naming the folder, and also requires the
+Tab Manager's own log line for the request with the expected counts.
