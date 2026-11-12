@@ -11,8 +11,8 @@
 #                          a GitHub-hosted runner. Offline from GitHub's API: no token anywhere.
 # source: built from the pinned commit; gitleaks' binaries must match binarySha256 for both arches,
 # and the image build re-checks the one it ships.
-# A cached image is reused only if its tag (a hash of the pin, the Dockerfile, this script, the
-# verifier's lockfile and any committed bundle) matches. Fails closed.
+# The image is rebuilt on every use (no reuse by tag: review SSS-2); the build cache keeps it fast,
+# and a release artifact that still matches its pin isn't downloaded again. Fails closed.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOCK="$ROOT/build/tools/tools.json"
@@ -84,19 +84,24 @@ if jq -e --arg n "$NAME" '.[$n].sigstoreAttestation' "$LOCK" >/dev/null; then
 fi
 key="$( { jq -c --arg n "$NAME" '.[$n]' "$LOCK"; cat "$DOCKERFILE" "${BASH_SOURCE[0]}" "$ATTEST_REQ" ${bundle_file:+"$bundle_file"}; echo "$arch"; } | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-12)"
 tag="seclab-tool-$NAME:$ver-$key"
-if [[ -z "$bins_dir" ]] && docker image inspect "$tag" >/dev/null 2>&1; then
-	# The stable name always points at the image built from these pins (TT-2).
-	docker tag "$tag" "seclab-tool-$NAME:$ver"
-	echo "$tag"; exit 0
-fi
+# No reuse by tag (gate audit, review SSS-2): any local process can `docker tag` an image with a
+# name derived from public inputs. The image is rebuilt on every use from the verified inputs;
+# Docker's build cache keeps that fast, and its keys are the content (digest-pinned bases, the
+# Dockerfile, the artifact bytes), not a name.
 ctx="$ROOT/.work/tools/$NAME-$ver-$arch"
-rm -rf "$ctx" && mkdir -p "$ctx"
+mkdir -p "$ctx"
 
 case "$kind" in
 release)
 	url="$(pin .url)"; url="${url//\{arch\}/$arch}"
 	want="$(pin ".sha256.$arch")"
 	[[ "$url" == https://github.com/* && "$want" =~ ^[0-9a-f]{64}$ ]] || die "$NAME: bad pin"
+	if [[ -f "$ctx/artifact" && "$(sha256 "$ctx/artifact")" == "$want" ]]; then
+		# The committed sha256 pin is the integrity check; provenance was verified when these
+		# bytes were downloaded against the same pin.
+		log "$NAME $ver: downloaded artifact matches its sha256 pin"
+	else
+	rm -rf "$ctx" && mkdir -p "$ctx"
 	curl -fsSL --proto '=https' -o "$ctx/artifact" "$url"
 	[[ "$(sha256 "$ctx/artifact")" == "$want" ]] || die "$NAME: $url does not match its sha256 pin"
 	if jq -e --arg n "$NAME" '.[$n].sigstoreBundle' "$LOCK" >/dev/null; then
@@ -120,9 +125,11 @@ release)
 	else
 		die "$NAME: a release needs sigstoreBundle or sigstoreAttestation"
 	fi
+	fi
 	docker build -q --target "$NAME" -f "$DOCKERFILE" --build-arg SHA256="$want" -t "$tag" "$ctx" >/dev/null
 	;;
 source)
+	rm -rf "$ctx" && mkdir -p "$ctx"
 	git_url="$(pin .git)"; tg="$(pin .tag)"; commit="$(pin .commit)"
 	[[ "$git_url" == https://github.com/*.git && "$commit" =~ ^[0-9a-f]{40}$ ]] || die "$NAME: bad pin"
 	args=(--build-arg GIT="$git_url" --build-arg TAG="$tg" --build-arg COMMIT="$commit")

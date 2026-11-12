@@ -164,6 +164,8 @@ test('check-patch-reach: a web-only file fails and a desktop file passes, in bot
 			['reach.json missing', null, DEFAULT_UNREACHABLE, /reach\.json is required/],
 			['reach.json unparseable', null, DEFAULT_UNREACHABLE, /reach\.json is required/],
 			['reach.json empty', {}, DEFAULT_UNREACHABLE, /reach\.json must be a non-empty JSON object/],
+			['reach.json with an emptied entry', { '0001-x.patch': [] }, DEFAULT_UNREACHABLE, /must list one or more known targets/],
+			['reach.json with an unknown target', { '0001-x.patch': ['desktpo'] }, DEFAULT_UNREACHABLE, /must list one or more known targets/],
 			['unreachable.json missing', DEFAULT_REACH, null, /unreachable\.json is required/],
 			['unreachable.json unparseable', DEFAULT_REACH, '{"desktop":', /unreachable\.json is required/],
 			['unreachable.json empty', DEFAULT_REACH, {}, /unreachable\.json must be a non-empty JSON object/],

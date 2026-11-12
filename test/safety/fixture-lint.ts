@@ -155,9 +155,11 @@ if (process.argv[2] === '--av') {
 	const texts = new Map<string, string>();
 	let n = 0;
 	const listed = fs.readFileSync(process.argv[3] === '-' ? 0 : process.argv[3], 'utf8').split('\0').filter(Boolean);
-	// An empty list, or one that isn't this repo's, scans nothing: fail (GATE-5).
-	if (!listed.includes('test/safety/fixture-lint.ts')) {
-		out.push(`fixture-lint --av: the file list (${listed.length} entries) is empty or isn't this repository's: it doesn't name test/safety/fixture-lint.ts`);
+	// An empty, foreign or truncated list scans nothing or too little: fail (GATE-5, review SSS-1).
+	const ANCHORS = ['.github/workflows/ci-unit.yml', 'seclab', 'test/safety/fixture-lint.ts', 'upstream.lock'];
+	const absent = ANCHORS.filter(a => !listed.includes(a));
+	if (absent.length) {
+		out.push(`fixture-lint --av: the file list (${listed.length} entries) is empty, truncated or isn't this repository's: it lacks ${absent.join(', ')}`);
 	}
 	for (const rel of listed) {
 		if (AV_SELF.has(rel) || /\.(png|jpe?g|gif|ico|woff2?|zip|gz|tgz|vsix)$/.test(rel)) {
@@ -184,6 +186,9 @@ if (process.argv[2] === '--av') {
 		});
 	}
 	out.push(...avFindings(texts));
+	if (n === 0) {
+		out.push('fixture-lint --av: no file was scanned');
+	}
 	console.log(out.length ? `${out.join('\n')}\nfixture-lint --av: ${out.length} violation(s)` : `fixture-lint --av: clean (${n} tracked files)`);
 	process.exit(out.length ? 1 : 0);
 }

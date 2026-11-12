@@ -128,6 +128,7 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-10 | [the security findings register and its gate (rounds QQQ, RRR)](20261110-security-findings-register.md) | - round QQQ, the register and its gate as first written, without the workflow: build/docs/ | see record |
 | 2026-11-12 | [CFS feed values from host-side config, and GATE-9 (round 17)](20261112-cfs-config-outside-repo.md) | - "CFS feed values come from host-side config, never the tree": the host file | see record |
 | 2026-11-12 | [gates that pass when their config or input can't be read](20261112-gate-fail-open-audit.md) | every CI and local gate reached from seclab and .github/workflows/*.yml at | see record |
+| 2026-11-12 | [gate fail-open fixes (GATE-2 to GATE-8, GATE-10)](20261112-gate-fail-open.md) | round SSS, the fixes for the gate fail-open audit's fork-build findings and the | see record |
 | 2026-11-12 | [headless editor driver, OS-permission-free tests, interim patch 0042](20261112-headless-driver.md) | rounds QQQ and RRR: | see record |
 | 2026-11-12 | [internal-identifier scan and the generator-test gate (workflow changes)](20261112-internal-identifier-scan.md) | see record | see record |
 | 2026-11-12 | [the publish gate (pre-push hook, CI and posted text)](20261112-publish-gate.md) | see record | see record |

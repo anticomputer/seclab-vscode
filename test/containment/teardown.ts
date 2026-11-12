@@ -23,7 +23,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { checkIsolatedProfile, editorPortableDir, focusWatchProblem, hostSnapshot, snapshotDiff, type Snapshot } from '../harness.ts';
+import { checkIsolatedProfile, editorPortableDir, focusWatchLog, focusWatchProblem, hostSnapshot, snapshotDiff, type Snapshot } from '../harness.ts';
 import { avFindings } from '../safety/av-shape.ts';
 
 /** The profile's portable sibling (test/harness.ts editorPortableDir): checked as isolated, removed. */
@@ -525,6 +525,7 @@ export function verifyTeardown(runDir: string, opts: { snapshot?: boolean } = {}
 		// No steal log only means "clean" if the watcher watched the editor to the end (GATE-10).
 		const unwatched = focusWatchProblem(m.userDataDir);
 		add(!unwatched, 'the focus watcher watched the editor for its whole run', unwatched ?? '');
+		fs.rmSync(focusWatchLog(m.userDataDir), { force: true });
 	}
 	if (m.userDataDir && fs.existsSync(m.userDataDir)) {
 		fs.rmSync(m.userDataDir, { recursive: true, force: true });

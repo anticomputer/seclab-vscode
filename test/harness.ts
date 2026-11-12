@@ -403,9 +403,10 @@ export async function watchFocus(userData: string): Promise<void> {
 	}
 }
 
-/** The focus watcher's own record: started, each editor pid it watched, stopped (GATE-10). */
+/** The focus watcher's own record: started, each editor pid it watched, stopped (GATE-10). A
+ *  sibling of the profile, not inside it: the editor writes its profile (review SSS-4). */
 export function focusWatchLog(userData: string): string {
-	return path.join(userData, 'seclab-focus-watch.log');
+	return `${path.resolve(userData)}.focus-watch.log`;
 }
 
 /**
