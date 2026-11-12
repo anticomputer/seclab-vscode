@@ -78,6 +78,10 @@ Current queue:
   new local extension host before the remote one connects. Without it, the remote host reuses
   the old socket factory id and fails with "No socket factory found"
   ([EDR](../docs/edr/20261109-ext-host-restart-reresolve.md)).
+- `0042-no-automatic-tasks-in-local-windows.patch` (interim): a window with no remote authority
+  neither runs `folderOpen` tasks nor asks to allow them. A local folder window exists only for
+  the moment before the Tab Manager reopens it as a tab. Removed when 0041 routes folder opens
+  in the main process ([ADR](../docs/adr/20261104-route-folder-opens-in-main.md)).
 
 Number ranges are reserved per owner; the header of `series` lists them, and
 `build/apply-patches.sh` fails if two patches share a number.

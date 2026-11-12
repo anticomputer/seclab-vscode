@@ -25,3 +25,6 @@
 0035-seclab-document-sync-provenance.patch
 # Fork build: Restart Extension Host re-resolves a managed (seclab+) authority (EDR ext-host-restart-reresolve).
 0040-reresolve-managed-authority-on-restart.patch
+# Fork build, interim until 0041 (main-process routing, ADR route-folder-opens-in-main) lands: no
+# automatic tasks or their prompt in a local window.
+0042-no-automatic-tasks-in-local-windows.patch

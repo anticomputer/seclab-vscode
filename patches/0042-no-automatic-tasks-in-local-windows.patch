@@ -1,0 +1,35 @@
+diff --git a/src/vs/workbench/contrib/tasks/browser/runAutomaticTasks.ts b/src/vs/workbench/contrib/tasks/browser/runAutomaticTasks.ts
+index 19bcf87..2bd6894 100644
+--- a/src/vs/workbench/contrib/tasks/browser/runAutomaticTasks.ts
++++ b/src/vs/workbench/contrib/tasks/browser/runAutomaticTasks.ts
+@@ -20,6 +20,7 @@ import { IOpenerService } from '../../../../platform/opener/common/opener.js';
+ import { URI } from '../../../../base/common/uri.js';
+ import { Event } from '../../../../base/common/event.js';
+ import { ILogService } from '../../../../platform/log/common/log.js';
++import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
+ 
+ const HAS_PROMPTED_FOR_AUTOMATIC_TASKS = 'task.hasPromptedForAutomaticTasks.v2';
+ const ALLOW_AUTOMATIC_TASKS = 'task.allowAutomaticTasks';
+@@ -33,7 +34,8 @@ export class RunAutomaticTasks extends Disposable implements IWorkbenchContribut
+ 		@ILogService private readonly _logService: ILogService,
+ 		@IStorageService private readonly _storageService: IStorageService,
+ 		@INotificationService private readonly _notificationService: INotificationService,
+-		@IOpenerService private readonly _openerService: IOpenerService) {
++		@IOpenerService private readonly _openerService: IOpenerService,
++		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService) {
+ 		super();
+ 		if (this._taskService.isReconnected) {
+ 			this._tryRunTasks();
+@@ -44,6 +46,12 @@ export class RunAutomaticTasks extends Disposable implements IWorkbenchContribut
+ 	}
+ 
+ 	private async _tryRunTasks() {
++		// seclab (interim, until 0041 routes folder opens in main): a local folder window exists only
++		// for the moment before the Tab Manager reopens it as a tab. Nothing runs or prompts there.
++		if (!this._environmentService.remoteAuthority) {
++			this._logService.info('RunAutomaticTasks: not in a local window (seclab)');
++			return;
++		}
+ 		if (!this._workspaceTrustManagementService.isWorkspaceTrusted()) {
+ 			return;
+ 		}

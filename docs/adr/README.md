@@ -66,7 +66,7 @@ Good, bad, and follow-ups this creates.
 | 2026-11-04 | [Scan a folder for secrets before it is mounted into a tab](20261104-pre-mount-secret-scan.md) | accepted |
 | 2026-11-04 | [Move from a local-only repo to private anticomputer/seclab-vscode](20261104-private-github-repo.md) | accepted |
 | 2026-11-04 | [Reuse the remote extension host split via a built-in `seclab+` resolver](20261104-reuse-remote-extension-host.md) | accepted |
-| 2026-11-04 | [Route folder opens into tabs in the main process (before any window loads them)](20261104-route-folder-opens-in-main.md) | proposed |
+| 2026-11-04 | [Route folder opens into tabs in the main process (before any window loads them)](20261104-route-folder-opens-in-main.md) | accepted |
 | 2026-11-04 | [RPC capability filter is a required, default-deny boundary](20261104-rpc-capability-filter.md) | superseded-by [20261104-rpc-filter-enforcement-points](20261104-rpc-filter-enforcement-points.md) |
 | 2026-11-04 | [RPC capability filter: choke points, policy as data, and a build-time gate](20261104-rpc-filter-enforcement-points.md) | accepted |
 | 2026-11-04 | [One broker engine for every provider; sbx is only the outer fence](20261104-single-broker-sbx-fence.md) | accepted |

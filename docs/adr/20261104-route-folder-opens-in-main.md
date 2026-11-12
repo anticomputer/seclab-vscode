@@ -1,8 +1,9 @@
 # Route folder opens into tabs in the main process (before any window loads them)
 
-- **Status:** proposed
+- **Status:** accepted (2026-11-12, coordinator's decision: implement as patch 0041 once the
+  headless driver is green in CI; meanwhile the interim patch 0042)
 - **Date:** 2026-11-04
-- **Deciders:** fork-build session; needs coordinator and project owner approval (adds a core patch to M1)
+- **Deciders:** fork-build session (proposal); coordinator (accepted 2026-11-12)
 - **Related:** [security review round 2](../security-reviews/20261104-m0-tabd-code.md) finding New-1 (HIGH, open), [EDR Tab Manager routing](../edr/20261104-tab-manager-routing.md)
 - **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
@@ -14,6 +15,22 @@ it as a tab only seconds later. If the user previously trusted that folder,
 built-in extensions such as git run on the host in that moment. A tab can
 plant `core.fsmonitor` in its own (host-mounted) workspace, which turns that
 moment into host code execution.
+
+## Decision
+Accepted as proposed below (coordinator, 2026-11-12), given what has landed since:
+patch 0003 keeps every workspace extension (git and `core.fsmonitor`, eslint, interpreter
+settings) out of local windows, so only core features can act in the moment before the Tab
+Manager closes a local folder window. Automatic `folderOpen` tasks are the known one (default
+`task.allowAutomaticTasks: off`, but the prompt and a user's `on` remain). Routing in main
+removes that moment for every path, including ones nobody has listed.
+
+- Patch **0041** (fork-build range), after the headless driver is green in CI. Its test drives
+  the editor over the CDP pipe ([headless driver](../edr/20261112-headless-driver.md)): open a
+  `file:` folder through the CLI and assert that no window ever has it as its workspace, and that
+  the Tab Manager received the open. That test also covers the close-before-any-dialog finding
+  ([round 2](../security-reviews/20261104-m0-tabd-code.md) 3-2).
+- Interim, now: patch **0042**. A window with no remote authority neither runs automatic tasks
+  nor asks to allow them. It is removed when 0041 lands.
 
 ## Proposed decision
 Add a small electron-main patch in the `WindowsMainService` open path. When
