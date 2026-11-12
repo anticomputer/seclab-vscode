@@ -75,8 +75,8 @@ starts the focus watcher and still requires `BackgroundOnly`, like a LaunchServi
 **Focus checks keep the watcher, which needs no permission.** It uses `lsappinfo front`,
 `lsappinfo info` and `find` (LaunchServices queries) and one `CGWindowListCopyWindowInfo` query
 for window number, layer, bounds and owner pid. Window names and contents, the parts behind
-Screen Recording, aren't read. Measured 2026-11-12: both queries return data with no prompt, and
-the window entries carry no `kCGWindowName`.
+Screen Recording, aren't read: without that permission macOS withholds them, and with it the
+watcher still ignores them. Both queries return data without a prompt.
 
 **OS-level focus paths (Space switches).** `test/focus/spaces.ts` needs the `keystrokes` host
 capability (`test/host-caps.ts`) and otherwise skips with the reason. Its latest evidence stays
