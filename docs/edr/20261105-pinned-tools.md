@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** coordinator, from the user's bar ("make sure that any dependency we pull in has a strong security provenance"); fork-build session (implementation).
+- **Deciders:** coordinator, from the project owner's bar (every dependency the project pulls in must have strong security provenance); fork-build session (implementation).
 - **Related:** [ADR supply-chain provenance](../adr/20261104-supply-chain-provenance.md), [EDR supply-chain exceptions](20261105-supply-chain-exceptions.md), [review](../security-reviews/20261104-supply-chain.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 Four tools ran as third-party images pinned only by digest, below the bar:

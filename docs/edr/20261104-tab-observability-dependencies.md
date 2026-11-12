@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user: "make sure that any dependency we pull in has a strong security provenance"); coordinator (the provenance bar); tab-observability session
+- **Deciders:** Project owner (2026-11-04): every dependency the project pulls in must have strong security provenance; coordinator (the provenance bar); tab-observability session
 - **Related:** [ADR tab observability](../adr/20261104-tab-observability.md), [EDR sensor spike](20261104-tab-observability-sensor-spike.md), [security review](../security-reviews/20261104-tab-observability.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The observability layer pulls in third-party software that runs with privilege:

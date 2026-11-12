@@ -2,7 +2,8 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user decision: "Push to a private GitHub repo and build an unsigned macOS app on GitHub Actions macOS runners, fetched with gh; the editor runs natively and drives sbx directly with no bridge"); seclab-vscode coordinator
+- **Deciders:** Project owner (2026-11-04): push to a private GitHub repo and build an unsigned macOS app on GitHub Actions macOS runners, fetched with gh; the editor runs natively and drives sbx directly, with no bridge; seclab-vscode coordinator
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The original constraint was "nothing installed on the macOS host; all builds
@@ -46,4 +47,4 @@ container calls.
   provenance) and is in security-review scope.
 
 ## Evidence
-- User decisions relayed by the coordinator on 2026-11-04 (quoted above).
+- Project owner decisions relayed by the coordinator on 2026-11-04 (stated above).

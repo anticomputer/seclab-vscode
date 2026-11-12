@@ -2,13 +2,14 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** anticomputer (user). Verbatim: "Approve: host prerequisites as recorded exceptions, plus apt from Debian's signed archive without version pins". Coordinator: record each exception in the register with this EDR; verify gh with `gh attestation verify`.
+- **Deciders:** Project owner (2026-11-05): approved host prerequisites as recorded exceptions, plus apt from Debian's signed archive without version pins. Coordinator: record each exception in the register with this EDR; verify gh with `gh attestation verify`.
 - **Related:** [ADR supply-chain provenance](../adr/20261104-supply-chain-provenance.md), [EDR broker dependency provenance](20261104-broker-dependency-provenance.md), [review](../security-reviews/20261104-supply-chain.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The [provenance bar](../adr/20261104-supply-chain-provenance.md) admits a dependency that is
 signed and verified, pinned from its official source, or built by us from pinned source.
-Anything else needs a recorded, user-approved exception. Two groups fell short.
+Anything else needs a recorded exception approved by the project owner. Two groups fell short.
 
 **Host prerequisites.** sbx, Docker Desktop and gh run on the user's Mac. The user installs and
 updates them, so we can't pin them. Each is the root for something we do:
@@ -28,7 +29,7 @@ broker EDR had recorded that replay risk as a test-only exception.
 Both are recorded exceptions. Register entries covered: `host-sbx`, `host-docker-desktop`,
 `host-gh` (host prerequisites); `apt-builder`, `apt-tab`, `apt-broker-tests`, `apt-tools` (apt). In
 `deps/registry.json` each carries `exception {record, approved, covers}`. `./seclab lint deps`
-requires the record to be an existing EDR that quotes the approval verbatim and lists the
+requires the record to be an existing EDR that contains the recorded approval statement exactly and lists the
 entry's id, and requires the scope to be filled in. `docs/DEPENDENCIES.md` lists them under
 "Recorded exceptions".
 

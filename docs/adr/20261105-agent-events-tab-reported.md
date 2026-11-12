@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** coordinator ("Agent event classes for the secure-agentic work"); secure-agentic session (event shapes, sources); tab-observability session
+- **Deciders:** coordinator (assignment: agent event classes for the secure-agentic work); secure-agentic session (event shapes, sources); tab-observability session
 - **Related:** extends [ADR tab observability](20261104-tab-observability.md) (integrity labels, `tab.events.report`), [ADR agents run in the tab](20261105-agents-run-in-the-tab.md), [EDR broker audit in tab events](../edr/20261105-broker-audit-in-tab-events.md) (`model.call`), [event reference](../tabd/EVENTS.md), [security review](../security-reviews/20261104-tab-observability.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 Agents now run in the tab ([ADR](20261105-agents-run-in-the-tab.md)). The trusted renderer

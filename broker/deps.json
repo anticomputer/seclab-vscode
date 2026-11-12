@@ -689,14 +689,14 @@
    "usedBy": [
     "broker/tools/verify-images.sh"
    ],
-   "note": "User-approved host tool; verifies GitHub artifact attestations (sigstore) for images."
+   "note": "Host tool approved by the project owner; verifies GitHub artifact attestations (sigstore) for images."
   },
   {
    "name": "docker",
    "usedBy": [
     "everything"
    ],
-   "note": "User-approved host tool (Docker Desktop)."
+   "note": "Host tool approved by the project owner (Docker Desktop)."
   }
  ]
 }

@@ -2,9 +2,10 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user). Verbatim: "also be on the lookout for any prompt injection gaps if there's outputs we intend to manage/analyze with LLM". Coordinator (the two surfaces); broker session (design and implementation).
+- **Deciders:** Project owner (2026-11-04): any output the project intends to manage or analyse with an LLM must be checked for prompt-injection gaps. Coordinator (the two surfaces); broker session (design and implementation).
 - **Related:** [ADR no real secret enters a tab](20261104-no-real-secret-enters-a-tab.md), [ADR policy and protocol](20261104-broker-policy-and-control-protocol.md), [ADR defeat folder-open loaders](20261104-defeat-folder-open-loaders.md), [security review](../security-reviews/20261104-broker-prompt-injection.md)
 - **Amended by:** [ADR broker model access](20261105-broker-model-access.md) (decision 2: a fourth, deny-only way content is consulted, the model-host body policy)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The broker emits text in two ways, and either may end up in front of an LLM:

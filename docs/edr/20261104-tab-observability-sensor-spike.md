@@ -2,12 +2,13 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** tab-observability session (spike); coordinator; user (decisions recorded in [ADR tab observability](../adr/20261104-tab-observability.md))
+- **Deciders:** tab-observability session (spike); coordinator; project owner (decisions recorded in [ADR tab observability](../adr/20261104-tab-observability.md))
 - **Related:** [ADR tab observability](../adr/20261104-tab-observability.md), [ADR tab supervisor](../adr/20261104-tab-supervisor.md), [ADR threat model](../adr/20261104-threat-model-rogue-extension.md), [EDR sbx fence spike](20261104-sbx-fence-spike.md), [EDR sbx 0.51](20261104-sbx-upgrade-0-51.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
-The user asked for "a falco style mode that gives the host a full event log
-stream of anything happening in the sandbox". The brief was to reuse an
+The project owner requires a Falco-style mode that gives the host a full event-log
+stream of everything happening in the sandbox. The brief was to reuse an
 off-the-shelf sensor (Falco, Tetragon or Tracee) inside each tab, and to find
 out first whether the sbx guest kernel supports it, whether the tab user can
 blind it, and whether the OCI driver can host the sensor outside the tab.
@@ -100,7 +101,7 @@ mechanism (see Consequences).
   whose `TracerPid` is not the collector and report them as "unobserved".
 - strace's text output is hostile input (strace escapes quotes and newlines in
   strings); it needs a strict, bounded parser.
-- **Open user decisions** (to record in the follow-up ADR):
+- **Open project owner decisions** (to record in the follow-up ADR):
   1. Integrity labels: two (`trusted`, `tab-reported`), or three
      (`trusted`, `host-observed` for OCI Falco, `tab-vm-root` for sbx strace).
   2. Accept the strace collector and its exec overhead under sbx, or wait for

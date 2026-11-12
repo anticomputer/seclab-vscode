@@ -2,13 +2,14 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-09
-- **Deciders:** Coordinator (repo-wide half of the approved liveness gate; "don't wait for the
-  RPC EDR any longer"; scheduled workflows need a dispatch run on record). Fork-build session:
+- **Deciders:** Coordinator (2026-11-09: repo-wide half of the approved liveness gate, without
+  waiting any longer for the RPC EDR; scheduled workflows need a dispatch run on record). Fork-build session:
   implementation. The RPC session builds the rpc-filter and patch-queue half.
 - **Related:** [RPC core handoff](https://github.com/anticomputer/seclab-vscode/blob/7e8167dccb2ce59f12e942bdf71be1add7c27bd5/docs/edr/20261106-rpc-core-handoff.md)
   (the four instances and "check the prover before believing it"),
   [test build variants](20261106-test-build-variants.md),
   [pin-age cooldown](20261106-pin-age-cooldown.md) (the fifth instance)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 Five artefacts were complete except for the part that runs them:

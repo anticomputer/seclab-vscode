@@ -2,10 +2,11 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-09
-- **Deciders:** Coordinator (chose option A, "Fix 1 only, for now"; recorded B for later; patch
+- **Deciders:** Coordinator (2026-11-09: chose option A, fix 1 only for now; recorded B for later; patch
   number 0040 in the fork-build range). Fork-build session: diagnosis and implementation.
 - **Related:** [egress prompts](20261106-egress-prompts.md) (B3c part 4, where this was found),
   [ARCHITECTURE §4.2](../ARCHITECTURE.md) (the Tab Manager's managed resolver)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 

@@ -1,12 +1,12 @@
 # Broker model access: budgets, a fail-closed body policy, and trusted derivation
 
 - **Status:** accepted; amended 2026-11-05 (Amendment 1: measured Copilot traffic, D7
-  amended by the user)
+  amended by the project owner)
 - **Date:** 2026-11-05
-- **Deciders:** anticomputer (user), via the secure-agentic design: D2 (model calls stay
+- **Deciders:** Project owner (2026-11-05), via the secure-agentic design: D2 (model calls stay
   in the tab, through the broker) and D7 (derived Copilot token bound by path and
   method through a trusted provider table), both accepted 2026-11-05
-  ([plan §13](../plans/secure-agentic-experiences.md#13-decisions-for-the-user),
+  ([plan §13](../plans/secure-agentic-experiences.md#13-decisions-for-the-project-owner),
   [ADR agents run in the tab](20261105-agents-run-in-the-tab.md)). Broker session
   (design and implementation).
 - **Amends:**
@@ -16,6 +16,7 @@
     a derived credential can be bound beyond its parent, but only by a
     controller-declared rule.
 - **Related:** [plan §4](../plans/secure-agentic-experiences.md#4-model-and-credential-access), [EDR agents-in-tab spike](../edr/20261105-agents-in-tab-spike.md), [security review](../security-reviews/20261105-broker-model-access.md), [security review: backstop exceptions](../security-reviews/20261105-broker-backstop-exceptions.md), [security review: measured Copilot traffic](../security-reviews/20261105-broker-measured-copilot-traffic.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 Agents run inside the tab. Their model calls go out through the tab's broker,
@@ -188,7 +189,7 @@ withhold a real value from the tab; the widening of where the child may be
 used comes from the controller's rule, not from content. No broker decision
 grants access because of content.
 
-## Amendment 1 (2026-11-05): measured Copilot traffic and the user's decisions
+## Amendment 1 (2026-11-05): measured Copilot traffic and the project owner's decisions
 **Source.** The secure-agentic session ran the shipped agent host and Copilot
 runtime in a real sbx tab, behind its real broker. It used fake GitHub and
 CAPI upstreams and a fake GitHub credential imported with `bind` and
@@ -205,8 +206,8 @@ What it measured:
 - **Request shapes.** The body fields and tool types per endpoint are in the
   decisions below.
 
-**D7 amended** (user decision: "Accept: bind the GitHub token to the Copilot
-API model endpoints by exact path and method").
+**D7 amended** (project owner decision: bind the GitHub token to the Copilot
+API model endpoints by exact path and method).
 - The controller binds the GitHub credential to exactly `GET /models`,
   `POST /responses`, `POST /chat/completions` and `POST /v1/messages` on the
   CAPI hosts its provider table lists. Those hosts never come from a
@@ -223,8 +224,8 @@ API model endpoints by exact path and method").
   says "The GitHub user token IS the credential. There is no Copilot
   session-token mint", and that this mirrors the `@github/copilot` CLI.
 
-**Org-policy GETs** (user decision: "Allow exactly those three GETs, with the
-same strict checks as /user").
+**Org-policy GETs** (project owner decision: allow exactly those three GETs, with
+the same strict checks as `/user`).
 - They are `exceptions` in `providers/github.json`: exact method and path, no
   query, body or upgrade.
 - The response must be a strict JSON object with no credential-named key, no
@@ -285,7 +286,7 @@ It is stub-derived, not measured: the run used no real credential, by rule.
 The 2026-11-06 re-run confirmed the same limit: its `/user` response came from
 the fixture (its `servedKeys` are the stub's keys), so the allowlist can't be
 finalised from a spike. Measuring the real fields needs a real Copilot
-response, which needs a real credential; that is a decision for the user, not
+response, which needs a real credential; that is a decision for the project owner, not
 something a spike may do.
 The order matters:
 1. **The whole document is checked first,** unknown fields included. A

@@ -2,8 +2,9 @@
 
 - **Status:** accepted (broker policy schema revision 7 on main at 3a35b74; real-feed measurement pending)
 - **Date:** 2026-11-06
-- **Deciders:** Coordinator ("ok continue work" for B4). Broker session: revision 6, then 7 for import budgets. Fork-build session: implementation.
+- **Deciders:** Coordinator (2026-11-06: go-ahead for B4). Broker session: revision 6, then 7 for import budgets. Fork-build session: implementation.
 - **Related:** [ADR cfs-package-feeds-in-tabs](../adr/20261105-cfs-package-feeds-in-tabs.md), [egress prompts](20261106-egress-prompts.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The ADR puts GitHub's CFS npm and PyPI feeds inside tabs without the token ever entering the

@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-06
-- **Deciders:** coordinator ("Spike in a real tab. Run the §11.1 spike for real: agent host in an sbx tab, behind its broker, against a fake model endpoint, with no real credential anywhere. Measure the actual model-request fields and tool types"); secure-agentic-experiences session (spike).
+- **Deciders:** coordinator (assignment, 2026-11-06: run the §11.1 spike for real in a real tab, with the agent host in an sbx tab, behind its broker, against a fake model endpoint and with no real credential anywhere, and measure the actual model-request fields and tool types); secure-agentic-experiences session (spike).
 - **Related:** [EDR step 1-2](20261105-agents-in-tab-spike.md) (extended by this record), [plan §4.2 and §11.1](../plans/secure-agentic-experiences.md#42-the-authenticate-rewrite), [ADR broker model access](../adr/20261105-broker-model-access.md), [implementation plan](../plans/agentic-implementation.md), [security review](../security-reviews/20261106-agentic-real-tab-spike.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The first spike ran the shipped agent host offline in a container that stood in for a
@@ -108,7 +109,7 @@ none is a server-side tool.
 1. **The runtime never mints a Copilot token.** No request reached `v2/token`. Every CAPI
    call carried the GitHub credential itself. D7's derive rule did not fire, so the GitHub
    parent needs bindings on the Copilot API model endpoints. The tab still holds only a
-   sentinel. This contradicted the premise of accepted decision D7; the user amended D7
+   sentinel. This contradicted the premise of accepted decision D7; the project owner amended D7
    (Consequences).
 2. **Two GitHub API hosts.** The agent host uses `<ghe>/api/v3`
    (`deriveGitHubEndpoints`). The runtime uses `api.<ghe>` with no `/api/v3`, the
@@ -122,7 +123,7 @@ none is a server-side tool.
 4. **Org-policy endpoints are denied.** `managed_settings`, `team_customizations` and
    `content_exclusion` carry restrictions an enterprise places on Copilot. With them
    denied, turns still work, so content exclusions silently stop applying in tabs. This
-   was a policy regression, not a leak; the user accepted the three exceptions.
+   was a policy regression, not a leak; the project owner accepted the three exceptions.
 5. **The runtime calls GitHub's remote MCP server** (`/mcp/readonly`) with the GitHub
    credential: server-side tools acting on the user's GitHub. Decided: denied by default,
    with a per-tab Tier C grant.
@@ -144,7 +145,7 @@ none is a server-side tool.
 
 ## Consequences
 - The broker updates its draft provider (its own decisions).
-- The user decided the three points that changed accepted decisions (2026-11-06, through
+- The project owner decided the three points that changed accepted decisions (2026-11-06, through
   the coordinator); the broker session implements them:
   - **D7 amended.** The GitHub credential is bound to the Copilot API model endpoints by
     exact path and method.

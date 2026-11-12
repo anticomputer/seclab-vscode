@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (mirror-plus-verify decision); fork-build session (spike); coordinator
+- **Deciders:** Project owner (2026-11-04): mirror-plus-verify decision; fork-build session (spike); coordinator
 - **Related:** [ADR single broker](../adr/20261104-single-broker-sbx-fence.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The design puts our mitmproxy broker in front of every tab, with sbx's policy
@@ -17,10 +18,10 @@ traffic inside a proxy tunnel? What else is reachable?
 2. Add a per-sandbox rule `sbx policy allow network --sandbox T localhost:<P_T>`.
    **Use the resource `localhost:P`.** sbx normalises `host.docker.internal:P`
    to `localhost:P`, so a rule naming `host.docker.internal:P` never matches.
-3. **Mirror and verify, failing closed** (user decision: "Mirror plus verify:
-   add per-tab denies for every global allow, re-check the effective policy
-   whenever a tab connects or reconnects, and refuse to connect the tab on any
-   mismatch").
+3. **Mirror and verify, failing closed** (project owner decision: mirror plus
+   verify; add per-tab denies for every global allow, re-check the effective
+   policy whenever a tab connects or reconnects, and refuse to connect the tab
+   on any mismatch).
    - **At create:** read `sbx policy ls --wide --json`. For every network
      `allow` rule that applies to *T* (global, kit-scoped or sandbox-scoped),
      add a per-sandbox `deny` for each of its resources. Deny beats allow.
@@ -78,7 +79,7 @@ Pitfall seen while probing: `curl --noproxy "*"` also disables an explicit
 - **A per-tab policy profile (`sbx create --profile`)**: rejected. In 0.51
   `sbx policy profile` only lists profiles "provided by remote governance
   policies" (only `ls` exists), so profiles can't be defined locally.
-- **Mirror only, without verify**: rejected by the user. Drift would leave a
+- **Mirror only, without verify**: rejected by the project owner. Drift would leave a
   tab silently able to bypass the broker.
 
 ## Consequences

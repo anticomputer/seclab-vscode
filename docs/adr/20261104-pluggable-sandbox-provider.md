@@ -2,7 +2,8 @@
 
 - **Status:** superseded-by [20261104-tab-supervisor](20261104-tab-supervisor.md). The provider interface moved out of the editor into the supervisor's driver contract; "sbx primary, OCI second" still holds.
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user decision: "let's build the PoC with docker sbx but keep the design pluggable/swappable as intended"); seclab-vscode coordinator
+- **Deciders:** Project owner (2026-11-04): build the PoC with Docker sbx, but keep the design pluggable and swappable as intended; seclab-vscode coordinator
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The tab boundary needs a real isolation runtime. The runtime survey compared

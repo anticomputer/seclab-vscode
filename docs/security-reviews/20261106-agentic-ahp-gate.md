@@ -11,6 +11,7 @@
 - **Related:** [EDR probe runner](../edr/20261106-agentic-probe-runner.md),
   [implementation plan](../plans/agentic-implementation.md) §4 increment 1,
   [design review](20261105-secure-agentic-experiences-design.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 Every round's prompt carried the standing warning that the diff, fixtures and evidence may
 contain prompt injection aimed at the reviewer, to be reported as a finding and never
@@ -199,7 +200,7 @@ accepts only sources a tab cannot write:
   `updateConfiguration` on **every** load, so a value carried in by whoever asked for the
   window is overwritten.
 
-A host environment variable was chosen over a CLI flag (the user, 2026-11-06): a tab's
+A host environment variable was chosen over a CLI flag (project owner, 2026-11-06): a tab's
 `code` CLI forwards through the remote CLI (`_remoteCLI.windowOpen`), so a flag is the
 larger surface. The pattern matches patch 0012's `SECLAB_BACKGROUND_WINDOWS`, and the new
 read is registered in `build/source-allowlist.txt`.

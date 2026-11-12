@@ -2,7 +2,8 @@
 
 - **Status:** accepted. The attacker list is superseded by [20261104-threat-model-rogue-extension](20261104-threat-model-rogue-extension.md); the containment-unit decision stands.
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user); seclab-vscode coordinator
+- **Deciders:** Project owner (2026-11-04); seclab-vscode coordinator
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 VS Code runs extensions and workspace-triggered code (tasks, git hooks and

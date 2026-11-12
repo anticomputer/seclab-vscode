@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** anticomputer (user; requests: "make a plan to move chat into sandboxed tabs", "agentic experiences are central to vscode, but we want to implement them securely with limited blast radius"); secure-agentic-experiences session (design). Accepted 2026-11-05: "Accept the recommended options and start the first spike with a fake model endpoint and no real credentials" (D1, D2, D4 to D9), and for D3 "Allow the prebuilt runtimes as a recorded exception, hash-pinned, since they only ever run inside tabs" ([plan §13](../plans/secure-agentic-experiences.md#13-decisions-for-the-user)).
+- **Deciders:** Project owner (2026-11-05): requested a plan to move chat into sandboxed tabs, because agentic experiences are central to VS Code but must be implemented securely, with limited blast radius; secure-agentic-experiences session (design). Accepted by the project owner 2026-11-05: the recommended options, with the first spike against a fake model endpoint and no real credentials (D1, D2, D4 to D9); and for D3, the prebuilt runtimes as a recorded exception, hash-pinned, because they only run inside tabs ([plan §13](../plans/secure-agentic-experiences.md#13-decisions-for-the-project-owner)).
 - **Related:** [plan](../plans/secure-agentic-experiences.md), [agentic surfaces research](../research/agentic-surfaces.md), [prior art](../research/agentic-prior-art.md), [threat model](20261104-threat-model-rogue-extension.md), [no real secret enters a tab](20261104-no-real-secret-enters-a-tab.md), [broker output is data](20261104-broker-output-is-data.md), [RPC filter enforcement points](20261104-rpc-filter-enforcement-points.md), [write-back gate](20261104-write-back-gate.md), [tab observability](20261104-tab-observability.md), [security review](../security-reviews/20261105-secure-agentic-experiences-design.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 - Code-OSS 1.145.0's built-in chat runs in the trusted workbench, reads workspace
@@ -93,7 +94,7 @@ it and carries the user's input and decisions, and nothing else.** Concretely:
 ## Amendment 2026-11-06: credential binding measured
 The [real-tab spike](../edr/20261106-agents-in-real-tab-spike.md) ran the shipped agent host
 in an sbx tab behind its broker. The Copilot runtime never mints a Copilot token; it sends
-the GitHub credential to the Copilot API itself. Decided by the user through the
+the GitHub credential to the Copilot API itself. Decided by the project owner through the
 coordinator:
 - **D7 amended.** The GitHub credential, held by the broker, is bound to the Copilot API
   model endpoints by exact path and method, instead of a derived Copilot token. The tab

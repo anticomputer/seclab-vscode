@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer ("make sure our vuln examples are not actively malicious against our host"); fork-build session
+- **Deciders:** Project owner (2026-11-04): the vulnerability examples must not be actively malicious against the host; fork-build session
 - **Related:** [ADR rogue-extension threat model](../adr/README.md), [AGENTS.md hard rules](../../AGENTS.md), security review [fixture safety](../security-reviews/20261104-m0-tabd-code.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The containment and canary suites deliberately run hostile payloads:
@@ -99,7 +100,7 @@ Endpoint protection on the developer machine quarantined a faithful, inert
 Contagious-Interview `tasks.json`, within a second of
 it being written. Each detection raises a real security alert. It was never committed or pushed, on any branch.
 
-Rule (user decision: "Defang on disk"):
+Rule (decision, project owner: defang on disk):
 - **No file on the host may match an endpoint-protection signature for a live-malware
   pattern.** Signature-bearing content is stored as parts, for example
   `test/containment/fixtures/contagious-interview/.seclab/loader.parts.json`. The harness

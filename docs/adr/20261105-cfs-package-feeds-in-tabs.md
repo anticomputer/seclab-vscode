@@ -1,15 +1,16 @@
 # Package feeds through CFS: the tab holds a sentinel, the broker injects the Azure DevOps token
 
-- **Status:** accepted 2026-11-06 (the coordinator, relaying "ok continue work" for B4). The broker side is implemented in policy schema revision 6 (broker 0.6.0); the tabd side (prompt, `az` token source, tab configuration) follows in the Fork-build session.
+- **Status:** accepted 2026-11-06 (the coordinator relayed the go-ahead for B4). The broker side is implemented in policy schema revision 6 (broker 0.6.0); the tabd side (prompt, `az` token source, tab configuration) follows in the Fork-build session.
 - **Date:** 2026-11-05
 - **Deciders:**
-  - anticomputer (user) supplied the CFS context.
+  - The project owner supplied the CFS context.
   - The coordinator proposed the design and the default (off, per-tab prompt).
   - The broker session drafted it.
 - **Related:** [ADR no real secret enters a tab](20261104-no-real-secret-enters-a-tab.md), [ADR broker model access](20261105-broker-model-access.md), [policy reference](../broker-policy.md)
 - **Sources** (`example-org/internal-feed-docs` at `0000000000000000000000000000000000000000`; a private repository, so cited as paths rather than links):
   - `docs/package-feeds.md`: feed names and URLs, tenant, resource, roles;
   - `docs/local-feed-access.md`: how a laptop obtains the token, the npm and pip auth shapes, redirects, and the install-script warning.
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 Under the managed-endpoint policy, public npm and PyPI are blocked. Packages
@@ -167,7 +168,7 @@ using this host's `az` (`tabd/test/e2e-cfs.ts`, EDR `20261106-cfs-feeds-tabd`):
     to a provider-declared host pattern, with no credential;
   - (c) a new host-pattern form.
 
-  **Decided (user, 2026-11-06): (b), broker revision 8.** Anyone can create
+  **Decided (project owner, 2026-11-06): (b), broker revision 8.** Anyone can create
   a storage account, so (a) or (c) would give every process in the tab an
   exfiltration and payload channel. With (b) the target comes from the
   credentialed feed response, never from the tab, and the tab never reaches

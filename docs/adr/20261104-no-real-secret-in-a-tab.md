@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user: "a core design stipulation is that we never allow a sandboxed environment to obtain a real secret"); seclab-vscode coordinator
+- **Deciders:** Project owner (2026-11-04): a core design requirement is that a sandboxed environment never obtains a real secret; seclab-vscode coordinator
 - **Related:** [threat model ADR](20261104-threat-model-rogue-extension.md), [single broker ADR](20261104-single-broker-sbx-fence.md), [RPC filter ADR](20261104-rpc-capability-filter.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 A rogue extension controls its tab's extension host and REH server ([threat

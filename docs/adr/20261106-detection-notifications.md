@@ -2,13 +2,14 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-06
-- **Deciders:** anticomputer (user: "we're also surfacing unexpected/possibly-malicious events to the user right?"; decision: "Yes: add notifications with clear explanations and actions, plus a cross-tab summary"); coordinator (scope, severity list, anti-spoofing requirements); tab-observability session; broker session (deny rules)
+- **Deciders:** Project owner (2026-11-06): unexpected or possibly malicious events must be surfaced to the user, with notifications that carry clear explanations and actions, plus a cross-tab summary; coordinator (scope, severity list, anti-spoofing requirements); tab-observability session; broker session (deny rules)
 - **Related:** extends [ADR tab observability](20261104-tab-observability.md) §4 (consumers), [ADR agent events](20261105-agent-events-tab-reported.md), [EDR broker request lineage](../edr/20261105-broker-request-lineage.md), [ADR RPC capability filter](20261104-rpc-capability-filter.md), [ADR write-back gate](20261104-write-back-gate.md), [protocol](../tabd/PROTOCOL.md), [security review](../security-reviews/20261104-tab-observability.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 High-severity detections only badged the Tab Activity view and revealed it once, and an
 unobserved tab turned the status bar red. A user working in the editor could miss both.
-The user wants unexpected, possibly malicious events surfaced clearly, with actions, and
+The project owner requires unexpected, possibly malicious events to be surfaced clearly, with actions, and
 a view across tabs. Notifications are also a new attack surface: a hostile tab chooses
 much of the text an event carries (paths, commands, host names). It must not be able to
 word, forge, multiply or suppress what the user is told, or turn a notification into a

@@ -580,7 +580,7 @@
       "bar": "host-installed",
       "record": "docs/adr/20261104-supply-chain-provenance.md",
       "bump": "The user (host tool).",
-      "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "Approve: host prerequisites as recorded exceptions", "covers": "The sbx version the user installs (not pinned by us); verified as Docker's signed build." }
+      "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "host prerequisites as recorded exceptions", "covers": "The sbx version the user installs (not pinned by us); verified as Docker's signed build." }
     },
     {
       "id": "host-docker-desktop",
@@ -596,7 +596,7 @@
       "bar": "host-installed",
       "record": "docs/adr/20261104-supply-chain-provenance.md",
       "bump": "The user (host tool).",
-      "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "Approve: host prerequisites as recorded exceptions", "covers": "The Docker Desktop version the user installs (not pinned by us); verified as Docker's signed build." }
+      "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "host prerequisites as recorded exceptions", "covers": "The Docker Desktop version the user installs (not pinned by us); verified as Docker's signed build." }
     },
     {
       "id": "host-gh",
@@ -612,7 +612,7 @@
       "bar": "host-installed",
       "record": "docs/adr/20261104-supply-chain-provenance.md",
       "bump": "The user (host tool).",
-      "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "Approve: host prerequisites as recorded exceptions", "covers": "The gh version the user installs (not pinned by us). Self-verification: catches a substituted or different build, not a gh that lies about itself (GitHub's own Sigstore instance; no independent verifier)." }
+      "exception": { "record": "docs/edr/20261105-supply-chain-exceptions.md", "approved": "host prerequisites as recorded exceptions", "covers": "The gh version the user installs (not pinned by us). Self-verification: catches a substituted or different build, not a gh that lies about itself (GitHub's own Sigstore instance; no independent verifier)." }
     },
     {
       "id": "host-azure-cli",
@@ -628,7 +628,7 @@
       "bar": "host-installed",
       "record": "docs/edr/20261105-cfs-local-builds.md",
       "bump": "The user (host tool).",
-      "exception": { "record": "docs/edr/20261105-cfs-local-builds.md", "approved": "Install gh cfs: brew install azure-cli and gh extension install gh-cfs, then I'll run az login", "covers": "The az version the user installs. It holds the user's Azure login and mints the CFS token on the host; the token reaches only a BuildKit secret mount." }
+      "exception": { "record": "docs/edr/20261105-cfs-local-builds.md", "approved": "local package downloads through CFS, with azure-cli and the gh-cfs extension as host prerequisites", "covers": "The az version the user installs. It holds the user's Azure login and mints the CFS token on the host; the token reaches only a BuildKit secret mount." }
     },
     {
       "id": "host-gh-cfs",
@@ -644,7 +644,7 @@
       "bar": "host-installed",
       "record": "docs/edr/20261105-cfs-local-builds.md",
       "bump": "The user (host tool).",
-      "exception": { "record": "docs/edr/20261105-cfs-local-builds.md", "approved": "Install gh cfs: brew install azure-cli and gh extension install gh-cfs, then I'll run az login", "covers": "The gh-cfs version the user installs; it handles the token only on the host and hands it to docker build as a secret." }
+      "exception": { "record": "docs/edr/20261105-cfs-local-builds.md", "approved": "local package downloads through CFS, with azure-cli and the gh-cfs extension as host prerequisites", "covers": "The gh-cfs version the user installs; it handles the token only on the host and hands it to docker build as a secret." }
     },
     {
       "id": "transport-cfs",
@@ -660,7 +660,7 @@
       "bar": "exception",
       "record": "docs/edr/20261105-cfs-local-builds.md",
       "bump": "None (transport). New versions appear after the feed's 7-day hold.",
-      "exception": { "record": "docs/edr/20261105-cfs-local-builds.md", "approved": "Install gh cfs: brew install azure-cli and gh extension install gh-cfs, then I'll run az login", "covers": "Local package downloads only. Same pinned hashes as CI; no registry-signature audit locally." }
+      "exception": { "record": "docs/edr/20261105-cfs-local-builds.md", "approved": "local package downloads through CFS, with azure-cli and the gh-cfs extension as host prerequisites", "covers": "Local package downloads only. Same pinned hashes as CI; no registry-signature audit locally." }
     },
     {
       "id": "rt-copilot-sdk",
@@ -677,7 +677,7 @@
       "record": "docs/edr/20261105-agent-runtimes-exception.md",
       "bump": "Fork-build session, with code-oss: re-derive pins from the new lockfile and re-run the signature check.",
       "gap": "Fork-build to land: signature/attestation check, release check for the macOS app, probe A27.",
-      "exception": { "record": "docs/edr/20261105-agent-runtimes-exception.md", "approved": "Allow the prebuilt runtimes as a recorded exception, hash-pinned, since they only ever run inside tabs", "covers": "An opaque prebuilt runtime that we neither build nor (yet) verify by signature; hash-pinned, run only inside tabs. Residual: a bad runtime holds the tab's sentinels and model access, contained to the tab." }
+      "exception": { "record": "docs/edr/20261105-agent-runtimes-exception.md", "approved": "the prebuilt agent runtimes as a recorded exception, hash-pinned, because they only run inside tabs", "covers": "An opaque prebuilt runtime that we neither build nor (yet) verify by signature; hash-pinned, run only inside tabs. Residual: a bad runtime holds the tab's sentinels and model access, contained to the tab." }
     },
     {
       "id": "rt-claude-agent-sdk",
@@ -694,7 +694,7 @@
       "record": "docs/edr/20261105-agent-runtimes-exception.md",
       "bump": "Fork-build session, with code-oss: re-derive pins from the new lockfile and re-run the signature check.",
       "gap": "Not fetched or used by our build yet; fork-build to land the template-time fetch, the lock file, the download patch and probe A27 before any tab runs it.",
-      "exception": { "record": "docs/edr/20261105-agent-runtimes-exception.md", "approved": "Allow the prebuilt runtimes as a recorded exception, hash-pinned, since they only ever run inside tabs", "covers": "An opaque prebuilt runtime that we neither build nor (yet) verify by signature; hash-pinned, run only inside tabs, never downloaded at run time. Residual: a bad runtime holds the tab's sentinels and model access, contained to the tab." }
+      "exception": { "record": "docs/edr/20261105-agent-runtimes-exception.md", "approved": "the prebuilt agent runtimes as a recorded exception, hash-pinned, because they only run inside tabs", "covers": "An opaque prebuilt runtime that we neither build nor (yet) verify by signature; hash-pinned, run only inside tabs, never downloaded at run time. Residual: a bad runtime holds the tab's sentinels and model access, contained to the tab." }
     },
     {
       "id": "rt-codex",
@@ -711,7 +711,7 @@
       "record": "docs/edr/20261105-agent-runtimes-exception.md",
       "bump": "Fork-build session, with code-oss: re-derive pins from the new lockfile and re-run the signature check.",
       "gap": "Not fetched or used by our build yet; fork-build to land the template-time fetch, the lock file, the download patch and probe A27 before any tab runs it.",
-      "exception": { "record": "docs/edr/20261105-agent-runtimes-exception.md", "approved": "Allow the prebuilt runtimes as a recorded exception, hash-pinned, since they only ever run inside tabs", "covers": "An opaque prebuilt runtime that we neither build nor (yet) verify by signature; hash-pinned, run only inside tabs, never downloaded at run time. Residual: a bad runtime holds the tab's sentinels and model access, contained to the tab." }
+      "exception": { "record": "docs/edr/20261105-agent-runtimes-exception.md", "approved": "the prebuilt agent runtimes as a recorded exception, hash-pinned, because they only run inside tabs", "covers": "An opaque prebuilt runtime that we neither build nor (yet) verify by signature; hash-pinned, run only inside tabs, never downloaded at run time. Residual: a bad runtime holds the tab's sentinels and model access, contained to the tab." }
     }
   ]
 }

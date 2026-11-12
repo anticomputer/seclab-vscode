@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** anticomputer (user), approving the runtime exception: "Allow the prebuilt runtimes as a recorded exception, hash-pinned, since they only ever run inside tabs". Coordinator: "Remove `copilot-runtime` from the macOS app (invariant I8)", priority 1. Fork-build session: implementation.
+- **Deciders:** Project owner (2026-11-05), approving the runtime exception: the prebuilt agent runtimes as a recorded exception, hash-pinned, because they only run inside tabs. Coordinator: remove `copilot-runtime` from the macOS app (invariant I8), priority 1. Fork-build session: implementation.
 - **Related:** secure-agentic-experiences plan (I8, probe A27, §10 "No local agent host"); [patch queue](../../patches/README.md); [patch-build gate](20261105-patch-build-gate.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The runtime exception holds only if the opaque agent runtimes run inside tabs and nowhere
@@ -100,7 +101,7 @@ Two patches, one concern each:
     - the only module under `out/vs/platform/agentHost/node/` is `diffWorkerMain.js`.
 
     The runtime half (process table while a session runs) needs a launch of the downloaded
-    app, which the user approves.
+    app, which the project owner approves.
 - **Still to come:**
   - A27, the runtime probe on a built app: no agent-host process, no runtime in the bundle,
     no `agentSdks`.

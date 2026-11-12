@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** Coordinator: "Make local builds use a lockfile-verified cache that a failed `npm ci` can't destroy: install into a temp dir, then swap it in." Fork-build session: implementation.
+- **Deciders:** Coordinator (2026-11-05): local builds use a lockfile-verified cache that a failed `npm ci` can't destroy, installing into a temp dir and then swapping it in. Fork-build session: implementation.
 - **Related:** [pinned tools](20261105-pinned-tools.md) (`sig1-` stamp, TT-6), [patch-build gate](20261105-patch-build-gate.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 `build/linux/build.sh` reinstalls dependencies when the lockfile stamp changes. The `sig1-`

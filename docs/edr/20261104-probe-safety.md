@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** user; RPC-lockdown session
+- **Deciders:** Project owner (2026-11-04); RPC-lockdown session
 - **Related:** [EDR: escape probes](20261104-rpc-escape-probes.md), [review](../security-reviews/20261104-rpc-probes-increment.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 
@@ -13,8 +14,8 @@ every probe is supposed to succeed. That is the only way to know a probe works
 working exploit chain that executes on the user's own Mac: host terminal
 creation, host file read and write, credential access, and egress.
 
-The user's requirement, verbatim: *"of course make sure our vuln examples are
-not actively malicious against our host."*
+Requirement (project owner): the vulnerability examples must not be actively
+malicious against the host.
 
 The first draft was not. `host-terminal-sendsequence` built a shell string by
 interpolation; the rogue-REH MCP probe sent an arbitrary `command` argument to a

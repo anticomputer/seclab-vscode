@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** anticomputer (user). Verbatim: "Make the gitleaks-before-push rule mechanical." Coordinator: the requirements below. Fork-build session: implementation.
+- **Deciders:** Project owner (2026-11-05): the gitleaks-before-push rule must be mechanical. Coordinator: the requirements below. Fork-build session: implementation.
 - **Related:** [EDR pinned tools](20261105-pinned-tools.md) (the scanner), [review](../security-reviews/20261104-supply-chain.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 "Run gitleaks before a push" was a manual rule in AGENTS.md. A session pushed a test

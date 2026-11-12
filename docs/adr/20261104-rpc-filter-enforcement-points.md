@@ -1,11 +1,12 @@
 # RPC capability filter: choke points, policy as data, and a build-time gate
 
-- **Status:** accepted (user-approved; extended by [20261104-tab-command-taint.md](20261104-tab-command-taint.md))
+- **Status:** accepted (approved by the project owner; extended by [20261104-tab-command-taint.md](20261104-tab-command-taint.md))
 - **Date:** 2026-11-04
 - **Deciders:** RPC-lockdown session; seclab-vscode coordinator
 - **Supersedes:** [20261104-rpc-capability-filter.md](20261104-rpc-capability-filter.md)
 - **Full design:** [docs/RPC-LOCKDOWN.md](../RPC-LOCKDOWN.md)
 - **Review:** [20261104-rpc-lockdown-design.md](../security-reviews/20261104-rpc-lockdown-design.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 

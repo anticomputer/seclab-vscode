@@ -2,8 +2,9 @@
 
 - **Status:** proposed
 - **Date:** 2026-11-04
-- **Deciders:** fork-build session; needs coordinator/user approval (adds a core patch to M1)
+- **Deciders:** fork-build session; needs coordinator and project owner approval (adds a core patch to M1)
 - **Related:** [security review round 2](../security-reviews/20261104-m0-tabd-code.md) finding New-1 (HIGH, open), [EDR Tab Manager routing](../edr/20261104-tab-manager-routing.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 M1 routes opens from inside the Tab Manager extension. A `file://` folder

@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer ("we still have a stale seclab-vscode instance hanging around"; tab lifecycle choice below); fork-build session; teardown design from the RPC-lockdown session
+- **Deciders:** Project owner (2026-11-04): a stale seclab-vscode instance was found still running, which prompted this record; tab lifecycle choice below; fork-build session; teardown design from the RPC-lockdown session
 - **Related:** [EDR fixture safety](20261104-fixture-safety.md), [test/README.md](../../test/README.md), security review [harness teardown](../security-reviews/20261104-harness-teardown.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 Runs left state on the user's machine. An RPC-lockdown proof run left its editor
@@ -81,9 +82,9 @@ hours, and two test profiles. Nothing failed the run that leaked them.
      so it was tightened before any `--apply`.
    - The user's `copilot-*` sandboxes never match. `--self-test` pins positive
      and negative names and runs in CI.
-4. **Product tab lifecycle (user decision).** The coordinator proposed removing
+4. **Product tab lifecycle (project owner decision).** The coordinator proposed removing
    tabs on window close and on supervisor exit. That would wipe each workspace's
-   installed extensions and tab home on every close or reload. The user chose
+   installed extensions and tab home on every close or reload. The project owner decided
    instead to **keep stopped tabs, garbage-collect unused ones after N days, and
    add a "Remove tab" command plus `clean-host`**. Window close and supervisor
    exit stop the tab, as before. A crashed supervisor's tabs are stopped by the

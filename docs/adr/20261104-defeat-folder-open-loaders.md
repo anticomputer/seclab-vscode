@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user). Verbatim: "research https://www.jamf.com/blog/threat-actors-expand-abuse-of-visual-studio-code/ and make sure our threat model specifically protects against that" and "tasks.json abuse essentially". Coordinator (requirements); broker session (design and implementation).
+- **Deciders:** Project owner (2026-11-04): the threat model must specifically defeat the VS Code abuse campaign described at https://www.jamf.com/blog/threat-actors-expand-abuse-of-visual-studio-code/, which is essentially `tasks.json` abuse. Coordinator (requirements); broker session (design and implementation).
 - **Related:** [ADR tab is the containment unit](20261104-tab-is-the-containment-unit.md), [ADR no real secret enters a tab](20261104-no-real-secret-enters-a-tab.md), [ADR policy and protocol](20261104-broker-policy-and-control-protocol.md), [security review](../security-reviews/20261104-broker-folder-open-loaders.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The campaign works like this, according to

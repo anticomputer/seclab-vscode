@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** anticomputer (user). Decision: "Install gh cfs: brew install azure-cli and gh extension install gh-cfs, then I'll run az login". Coordinator: the requirements below. Fork-build session: implementation.
+- **Deciders:** Project owner (2026-11-05): approved local package downloads through CFS, with azure-cli and the gh-cfs extension as host prerequisites; the project owner signs in with `az login`. Coordinator: the requirements below. Fork-build session: implementation.
 - **Related:** [review](../security-reviews/20261105-cfs-local-builds.md), [local install cache](20261105-local-install-cache.md), [pinned tools](20261105-pinned-tools.md), [supply-chain exceptions](20261105-supply-chain-exceptions.md), example-org/internal-feed-docs `docs/package-feeds.md` and `docs/local-feed-access.md`, gh-cfs `docs/reference/docker.md` and `npm.md`
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 Since 2026-11-04 public npm, Yarn and PyPI downloads have been unavailable locally. That was the
@@ -70,7 +71,7 @@ token. Code-OSS's `npm ci` runs many install scripts.
 - **The token never reaches a tab.** It is minted on the host, handed only to `docker build`
   as a secret, and used only in the fetch `RUN`. That build has no install scripts and no tab
   in reach. The build volume, the cache image and the builder never see it.
-- **Register.** User-approved host prerequisites `host-azure-cli` and `host-gh-cfs`, and the
+- **Register.** Host prerequisites `host-azure-cli` and `host-gh-cfs`, approved by the project owner, and the
   transport `transport-cfs` (a new `transport` kind, which must be a recorded exception).
 
 ## Consequences

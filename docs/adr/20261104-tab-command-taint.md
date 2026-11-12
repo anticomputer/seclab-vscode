@@ -2,9 +2,10 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** user; RPC-lockdown session
+- **Deciders:** Project owner (2026-11-04); RPC-lockdown session
 - **Extends:** [20261104-rpc-filter-enforcement-points.md](20261104-rpc-filter-enforcement-points.md)
 - **Design:** [docs/RPC-LOCKDOWN.md](../RPC-LOCKDOWN.md) §2.5.2
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 
@@ -19,8 +20,8 @@ do not arrive from the tab.
 ([mainThreadCLICommands.ts L35-L41](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadCLICommands.ts#L35-L41)).
 Deny the inner id and the outer one still reaches it.
 
-The user decided: **"Taint the command context: anything a tab command triggers
-carries the tab's identity and goes through the filter."**
+Decision (project owner): **taint the command context, so that anything a tab
+command triggers carries the tab's identity and goes through the filter.**
 
 The question is how, given two constraints found in source:
 

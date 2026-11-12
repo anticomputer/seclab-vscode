@@ -2,8 +2,9 @@
 
 - **Status:** accepted (spike result; the design goes to an ADR)
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer ("Watch and warn: the supervisor flags any change a tab makes to files that run code … and requires approval before that file goes live in your real checkout"); fork-build session
+- **Deciders:** Project owner (2026-11-04): watch and warn; the supervisor flags any change a tab makes to files that run code, and requires approval before that file goes live in the real checkout; fork-build session
 - **Related:** [ADR defeat folder-open loaders](../adr/20261104-defeat-folder-open-loaders.md), [EDR automatic-tasks-off](20261104-automatic-tasks-off.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Question
 The tab mounts the workspace read-write, so a payload can plant host-executed code
@@ -35,7 +36,7 @@ checkout, not even briefly. Detect-and-revert is acceptable only as a documented
   - on approval, writes to the host;
   - on rejection, restores the host version into the tab view.
 - **Feasible, OCI on native Linux:** the same engine over a Docker `local` overlay volume (experiment 7). Docker Desktop needs `fuse-overlayfs` in a helper too (experiment 7's ownership issue); until then OCI on Desktop is a development driver without the gate.
-- **`sbx --clone`** (a private in-VM git clone, with commits pulled back from a `sandbox-<name>` remote) also keeps the host untouched. But unsaved and uncommitted edits never reach the host, which changes the editing UX the user chose to keep. It is rejected as the default and could be a "strict" mode.
+- **`sbx --clone`** (a private in-VM git clone, with commits pulled back from a `sandbox-<name>` remote) also keeps the host untouched. But unsaved and uncommitted edits never reach the host, which changes the editing UX the project owner chose to keep. It is rejected as the default and could be a "strict" mode.
 
 ## Costs and open questions (for the ADR)
 - **Host-side changes don't raise inotify events in the merged view.** A host `git pull` might not refresh the editor until the next access. This needs a measurement with `fuse-overlayfs`; the fallback is the REH's polling watcher for the workspace.

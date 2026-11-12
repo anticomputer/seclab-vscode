@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** anticomputer (user). Verbatim: "Allow the prebuilt runtimes as a recorded exception, hash-pinned, since they only ever run inside tabs". Coordinator: pin every runtime by hash; patch out the run-time downloads; verify npm provenance where it exists; make "runs only inside tabs" an invariant with a probe; record the residual. Secure-agentic-experiences session (record); fork-build session (build-time fetch, register pins, patch).
-- **Related:** [ADR supply-chain provenance](../adr/20261104-supply-chain-provenance.md), [ADR agents run in the tab](../adr/20261105-agents-run-in-the-tab.md), [plan §13 D3](../plans/secure-agentic-experiences.md#13-decisions-for-the-user), [agentic surfaces §14](../research/agentic-surfaces.md#14-supply-chain), [EDR supply-chain exceptions](20261105-supply-chain-exceptions.md)
+- **Deciders:** Project owner (2026-11-05): approved the prebuilt agent runtimes as a recorded exception, hash-pinned, because they only run inside tabs. Coordinator: pin every runtime by hash; patch out the run-time downloads; verify npm provenance where it exists; make "runs only inside tabs" an invariant with a probe; record the residual. Secure-agentic-experiences session (record); fork-build session (build-time fetch, register pins, patch).
+- **Related:** [ADR supply-chain provenance](../adr/20261104-supply-chain-provenance.md), [ADR agents run in the tab](../adr/20261105-agents-run-in-the-tab.md), [plan §13 D3](../plans/secure-agentic-experiences.md#13-decisions-for-the-project-owner), [agentic surfaces §14](../research/agentic-surfaces.md#14-supply-chain), [EDR supply-chain exceptions](20261105-supply-chain-exceptions.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The agent host runs provider harnesses whose runtimes are opaque prebuilt code:

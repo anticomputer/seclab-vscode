@@ -1,7 +1,7 @@
 # Security review: probe payload safety against the host (Phase 3, increment 2)
 
 - **Date:** 2026-11-04
-- **Round:** 3 (probe safety, requested by the user before any unpatched run)
+- **Round:** 3 (probe safety, requested by the project owner before any unpatched run)
 - **Reviewer:** independent `security-review` agent, an Opus-class model
 - **Subject:** commit `fd7eee2` — the probe payloads, the runtime guards, the
   payload lint, the guard unit tests, and the harness that installs and arms
@@ -10,14 +10,15 @@
 - **Status now:** critical and high findings in the guards and payloads fixed in
   `b1c4e0e`; harness-side findings remain open and are listed below. **Still
   no-go until those are closed.**
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Why this review existed
 
 The probe set is validated by running it against an **unpatched** build, where
 every probe is expected to succeed. That run happens on the user's own Mac. So
 the probe set is, by design, a working exploit chain against the machine it is
-validated on. The user's requirement, verbatim: *"of course make sure our vuln
-examples are not actively malicious against our host."*
+validated on. Requirement (project owner): the vulnerability examples must not
+be actively malicious against the host.
 
 The review was framed as the inverse of a normal one: assume the control is
 absent and every probe works, then ask what actually happens to the machine.

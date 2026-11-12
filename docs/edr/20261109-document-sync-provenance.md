@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-09
-- **Deciders:** coordinator (assignment: "close an open leak … the trusted window pushes host-side document contents into the sandboxed tab's extension host"; decision on review: "use per-model provenance … Correctness beats the 50-line target; a second file is fine if each part has one concern"). Document-sync session: implementation.
+- **Deciders:** coordinator (2026-11-09; assignment: close an open leak where the trusted window pushes host-side document contents into the sandboxed tab's extension host; decision on review: use per-model provenance, because correctness beats the 50-line target and a second file is fine if each part has one concern). Document-sync session: implementation.
 - **Related:** [RPC lockdown](../RPC-LOCKDOWN.md) §2.6 and §7; [patch queue](../../patches/README.md); [threat model](../adr/20261104-threat-model-rogue-extension.md); [no real secret in a tab](../adr/20261104-no-real-secret-in-a-tab.md); [patch-build gate](20261105-patch-build-gate.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 `MainThreadDocumentsAndEditors` sends every text model in the window to every extension host.

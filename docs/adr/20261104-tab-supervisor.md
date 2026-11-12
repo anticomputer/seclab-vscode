@@ -2,16 +2,17 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user: "keep in mind that we want our abstraction to ultimately be able to service other sandboxes as well, so perhaps we need a glue API in the middle?"); seclab-vscode coordinator; fork-build session
+- **Deciders:** Project owner (2026-11-04): the abstraction must ultimately be able to serve other sandboxes as well, which suggests a glue API in the middle; seclab-vscode coordinator; fork-build session
 - **Supersedes:** [Tab runtime is a pluggable SandboxProvider](20261104-pluggable-sandbox-provider.md) (the provider interface moves out of the editor into the supervisor's driver contract; sbx primary and OCI second still hold)
 - **Security review:** [20261104-tabd-protocol-design](../security-reviews/20261104-tabd-protocol-design.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The first design put a `SandboxProvider` interface **inside** the editor's Tab
 Manager extension. That couples tab lifecycle, fencing, broker wiring and
 runtime argument handling to VS Code. Other clients would need the same
 logic: our test harness, a CLI, other editors and agents, and later a remote or
-cloud control plane. The user asked for a glue API in the middle.
+cloud control plane. The project owner requires a glue API in the middle.
 
 ## Decision
 A standalone **tab supervisor**, `seclab-tabd`, sits between clients and

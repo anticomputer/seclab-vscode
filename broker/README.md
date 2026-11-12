@@ -208,7 +208,7 @@ check fails if a flag has no row, or if a named test doesn't exist.
    Sandbox model. A binding does not imply egress.
 4. **Placement-only injection, response scanning, minted-token handling,
    session stripping, the provider backstop and credential import** go beyond
-   §4.5. They come from the user's decision that no real **or derived** secret
+   §4.5. They come from the project owner's decision that no real **or derived** secret
    ever enters a tab ([ADR](../docs/adr/20261104-no-real-secret-enters-a-tab.md)).
 5. **Upstream address guard.** It is not in §4.4. It came from a security
    review: the broker never connects to non-public or broker-local addresses,

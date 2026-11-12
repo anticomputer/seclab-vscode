@@ -4,6 +4,7 @@
 - **Date:** 2026-11-04
 - **Deciders:** broker session (within ARCHITECTURE §4.5, which names mitmproxy as the first engine)
 - **Related:** [ADR policy and protocol](../adr/20261104-broker-policy-and-control-protocol.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The broker has to do several things:
@@ -14,7 +15,7 @@ The broker has to do several things:
 - scan and rewrite responses;
 - change policy live.
 
-The user asked us not to reinvent wheels.
+The project prefers proven components over new ones.
 
 ## Decision
 - **Base image.** We use the official `mitmproxy/mitmproxy:12.3.1` image,

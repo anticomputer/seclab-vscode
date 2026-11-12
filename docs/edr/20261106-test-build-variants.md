@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-06
-- **Deciders:** Coordinator (user requests "attested containment build variant" and "containment variant must fail loudly if the hook is absent"; shared with the agentic plan's U and F builds). Fork-build session: implementation.
+- **Deciders:** Coordinator (2026-11-06; project owner requirements: an attested containment build variant, and a containment variant that fails loudly if the hook is absent; shared with the agentic plan's U and F builds). Fork-build session: implementation.
 - **Related:** [branch test builds](20261106-branch-test-builds.md), [patch series](20261104-patch-series.md), [RPC escape probes](20261104-rpc-escape-probes.md), [agentic implementation plan §2](../plans/agentic-implementation.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The rogue-REH probes never ran: nothing applied the test-only hook

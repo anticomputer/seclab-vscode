@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** anticomputer (user). Verbatim: "Small env-gated fork patch: windows open inactive when the harness sets a flag, so screenshots stay real macOS". Coordinator: the requirements below. Fork-build session: implementation.
+- **Deciders:** Project owner (2026-11-05): a small env-gated fork patch, so windows open inactive when the harness sets a flag and screenshots stay real macOS. Coordinator: the requirements below. Fork-build session: implementation.
 - **Related:** AGENTS.md hard rule "Never steal focus from the user"; [patch queue](../../patches/README.md); [review](../security-reviews/20261104-fixture-safety.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The harness launched demo and Level B windows with `open -g -n` and checked afterwards

@@ -2,13 +2,14 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-06
-- **Deciders:** the user ("I'm not sitting here for a week doing nothing, use versions that are available instead"); the coordinator (policy, and exemptions 1A and 2A). Fork-build session: implementation.
+- **Deciders:** Project owner (2026-11-06): use versions that are available instead of waiting a week for the hold to pass; the coordinator (policy, and exemptions 1A and 2A). Fork-build session: implementation.
 - **Related:** [CFS local builds](20261105-cfs-local-builds.md), [ADR supply-chain provenance](../adr/20261104-supply-chain-provenance.md), [pinned tools](20261105-pinned-tools.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 GitHub CFS holds newly published npm and PyPI versions for 7 days. Local builds go through CFS,
 so a pin younger than that can't be fetched locally. On 2026-11-05 that blocked the broker image
-and the attestation verifier for days. The user's direction is to use versions that are
+and the attestation verifier for days. The project owner's direction is to use versions that are
 available rather than wait.
 
 ## Decision

@@ -2,7 +2,8 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user decision: "anticomputer/seclab-vscode (private)")
+- **Deciders:** Project owner (2026-11-04): the repo named in the title, private
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The repo was local-only. Building the native macOS editor ([ADR](20261104-native-editor-on-actions.md))

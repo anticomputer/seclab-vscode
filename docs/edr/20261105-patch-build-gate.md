@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** anticomputer (user). Verbatim: "New required CI gate: patched-tree compile". Coordinator: the requirements below. Fork-build session: implementation.
+- **Deciders:** Project owner (2026-11-05): a new required CI gate that compiles the patched tree. Coordinator: the requirements below. Fork-build session: implementation.
 - **Related:** [EDR patch series](20261104-patch-series.md), [patch queue](../../patches/README.md), [review](../security-reviews/20261104-supply-chain.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The RPC session's re-review found that patch 0011 had never been built. It was missing its

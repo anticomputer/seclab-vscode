@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer ("make sure our github workflows (ci/cd) also receive careful security review and follow best practices"); fork-build session
+- **Deciders:** Project owner (2026-11-04): the GitHub workflows (CI/CD) must also receive careful security review and follow best practices; fork-build session
 - **Related:** [EDR docs-check](20261104-docs-check.md), [EDR patch series](20261104-patch-series.md), security review [CI hardening](../security-reviews/20261104-ci-hardening.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 CI builds the unsigned macOS app that the user runs. It
@@ -33,7 +34,7 @@ cache would therefore reach the user's machine directly. Already in place:
      `--source-ref refs/heads/main`, `--source-digest <head SHA>` and
      `--deny-self-hosted-runners`. The download is re-hashed immediately before
      extraction, and only then moved to `.work/app`. Clearing quarantine stays a
-     separate, user-approved step.
+     separate step that needs the project owner's approval.
 2. **Everything third-party is pinned by digest or SHA.** Container images
    (node, alpine, nginx, debian, lychee, gitleaks, actionlint, zizmor, and the
    broker's) are written `tag@sha256:…`. Harness code takes them from
@@ -93,7 +94,7 @@ cache would therefore reach the user's machine directly. Already in place:
    review. Image digests in shell or TS, the linter pins and `upstream.lock` are
    bumped by hand; `lint pins` keeps them pinned. npm isn't covered, because our
    extensions declare no dependencies.
-9. **Branch protection.** A ruleset on `main`, approved by the user. It requires
+9. **Branch protection.** A ruleset on `main`, approved by the project owner. It requires
    the `unit`, `lint` and `docs` status checks on the pushed SHA, has no bypass
    actors, and blocks non-fast-forward pushes and deletion. History stays linear
    and no pull request is required. Sessions push their branch, wait for the

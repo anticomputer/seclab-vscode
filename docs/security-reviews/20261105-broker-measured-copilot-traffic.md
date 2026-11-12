@@ -1,13 +1,13 @@
-# Security review: measured Copilot traffic and the user's decisions (round 11)
+# Security review: measured Copilot traffic and the project owner's decisions (round 11)
 
 - **Date:** 2026-11-05
 - **Scope:**
-  - "broker: measured Copilot traffic and the user's decisions" (schema
+  - The broker change for measured Copilot traffic and the project owner's decisions (schema
     revision 4, broker 0.4.0). See
-    [ADR broker model access, Amendment 1](../adr/20261105-broker-model-access.md#amendment-1-2026-11-05-measured-copilot-traffic-and-the-users-decisions).
-    - D7 amended by the user: the GitHub token is bound to the CAPI model
+    [ADR broker model access, Amendment 1](../adr/20261105-broker-model-access.md#amendment-1-2026-11-05-measured-copilot-traffic-and-the-project-owners-decisions).
+    - D7 amended by the project owner: the GitHub token is bound to the CAPI model
       routes by exact path and method.
-    - The three org-policy GETs, approved by the user.
+    - The three org-policy GETs, approved by the project owner.
     - The `/copilot_internal/user` field allowlist.
     - `/mcp/readonly` behind a per-tab grant (coordinator decision).
     - The measured, per-endpoint `copilot` provider.
@@ -25,6 +25,7 @@
 - **Reviewer:** a general-purpose agent on an Opus-class model with long
   context. It probed the code directly in containers and ran the full suite
   (257 unit, 58 integration). Triage and fixes by the broker session.
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Findings
 | # | Severity | Area | Finding | Disposition | Fix / reason | Regression test |

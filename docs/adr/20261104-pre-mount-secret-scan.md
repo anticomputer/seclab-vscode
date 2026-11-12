@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user: "Scan before mounting: run gitleaks in a container when a folder opens; if secrets are found, block and offer to move them into the broker (the file then holds a sentinel), open anyway with a recorded exception, or cancel"); fork-build session
+- **Deciders:** Project owner (2026-11-04): scan before mounting; gitleaks runs in a container when a folder opens, and if secrets are found the open is blocked with three choices: move them into the broker (the file then holds a sentinel), open anyway with a recorded exception, or cancel; fork-build session
 - **Related:** [ADR no real secret in a tab](20261104-no-real-secret-in-a-tab.md); security review round 5 in [20261104-m0-tabd-code](../security-reviews/20261104-m0-tabd-code.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 "No real secret ever enters a tab" is broken by the user's own folder if it

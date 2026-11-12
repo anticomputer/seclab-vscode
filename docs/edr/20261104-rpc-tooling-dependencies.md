@@ -2,13 +2,14 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** user; RPC-lockdown session
+- **Deciders:** Project owner (2026-11-04); RPC-lockdown session
 - **Related:** the dependency register and CI provenance bar (fork-build session)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 
-The user's requirement: *"make sure that any dependency we pull in has a strong
-security provenance."* The bar is that every dependency must be signed or
+Requirement (project owner): every dependency the project pulls in must have
+strong security provenance. The bar is that every dependency must be signed or
 attested and verified at use time, pinned by digest or hash from the project's
 own official source, or built by us from pinned source.
 

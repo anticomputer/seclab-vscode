@@ -2,12 +2,13 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-06
-- **Deciders:** coordinator, forwarding the user's "Next phase for agentic experiences" ("write up the §10 patch series (0015 onward) and its probes as increments, with the transport gate (AHP) first. Coordinate with the RPC session"); secure-agentic-experiences session (plan). Accepted 2026-11-06 by the user: "Approve; build the probe runner and increment 1 (the agent connection gate) first". Runner and increment 1 findings: [EDR agentic probe runner](../edr/20261106-agentic-probe-runner.md) (U for increment 1 is main's release, which has no RPC filter; 0015 stands alone).
+- **Deciders:** coordinator, forwarding the project owner's request for the next phase of agentic experiences (write up the §10 patch series, 0015 onward, and its probes as increments, with the transport gate (AHP) first, coordinating with the RPC session); secure-agentic-experiences session (plan). Accepted 2026-11-06 by the project owner: build the probe runner and increment 1 (the agent connection gate) first. Runner and increment 1 findings: [EDR agentic probe runner](../edr/20261106-agentic-probe-runner.md) (U for increment 1 is main's release, which has no RPC filter; 0015 stands alone).
 - **Related:** [design plan](secure-agentic-experiences.md) (§3, §4, §10, §11), [ADR agents run in the tab](../adr/20261105-agents-run-in-the-tab.md), [spike EDR](../edr/20261105-agents-in-tab-spike.md), [real-tab spike EDR](../edr/20261106-agents-in-real-tab-spike.md), [patch-build gate](../edr/20261105-patch-build-gate.md), [patch queue](../../patches/README.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 This plan turns the design's §10 table into ordered increments. Each increment is one or
 more patches, a probe that fails on a stated baseline, and runtime evidence from the
-shipped build. Nothing here is built until the user approves.
+shipped build. Nothing here is built until the project owner approves.
 
 ## 1. Rules every increment is held to
 - **Done means executing.** A patch is done only when:
@@ -60,7 +61,7 @@ shipped build. Nothing here is built until the user approves.
   - The gate reads the setting again at each connection, not once at startup.
   - The probe runner sets it in the isolated test profile, so the probed build is the
     shipped build.
-  - Turning it on for the user is the user's decision at the Tier A exit.
+  - Turning it on for the user is the project owner's decision at the Tier A exit.
 - **Patch size.** Edits to upstream files stay within one concern and about 50 lines.
   Gate logic lives in new files, as `seclabRpcFilter.ts` does for 0005.
 - **No focus stealing.** Editor windows open only through `test/window.ts launch`
@@ -241,7 +242,7 @@ RPC-lockdown, which will wire A17, A18 and A23 behind it.
   fixed value: `workbench.browser.enableRemoteProxy` is `false`, and
   `chat.automations.enabled` and `chat.automations.cloud.enabled` are `false`. The setting
   lists are those in design §3.5.
-  - The user's decision on 0011 rules out global re-registration: lock tab windows,
+  - The project owner's decision on 0011 rules out global re-registration: lock tab windows,
     leave ordinary windows alone. So the patch overrides the read in tab windows; it does
     not change any registration.
   - `chat.agentHost.localFilePermissions` stays covered by 0011 and by the gate (reverse
@@ -358,7 +359,7 @@ RPC-lockdown, which will wire A17, A18 and A23 behind it.
 - Every Tier A probe passes on sbx and OCI against G, fails on U, and holds on v0. Every
   inner-layer probe also passes on F.
 - A security review with no open high or critical finding.
-- The user decides whether `seclab.agents.enabled` is turned on for them.
+- The project owner decides whether `seclab.agents.enabled` is turned on for the user.
 
 ## 5. Coordination
 

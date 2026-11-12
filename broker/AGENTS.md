@@ -13,7 +13,7 @@ file has been run. Anything not yet built is marked **TODO**.
   model is a rogue extension in full control of its tab. The broker's client is
   the host supervisor (`seclab-tabd`), which is trusted. It talks to the broker
   over `docker exec -i … seclab-broker control`.
-- **Invariant (user decision):** no real secret ever enters a tab, including
+- **Invariant (project owner decision):** no real secret ever enters a tab, including
   derived secrets. Real values live only in broker memory: never on disk, in
   env, argv, logs, audit events or error messages.
 - **Isolation domain.** Under sbx the tab is a microVM and the broker is in

@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user: scope, "don't reinvent wheels"); broker session; coordinator
+- **Deciders:** Project owner (2026-11-04): scope, and a preference for proven components over new ones; broker session; coordinator
 - **Related:** [ADR single broker, sbx fence](20261104-single-broker-sbx-fence.md), [ADR no real secret enters a tab](20261104-no-real-secret-enters-a-tab.md), [protocol](../broker-protocol.md), [security review](../security-reviews/20261104-broker-m2-m3.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 ARCHITECTURE.md §4.5 sketches a per-tab policy

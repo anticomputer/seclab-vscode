@@ -10,10 +10,11 @@
   today, with permalinks) and [prior art](../research/agentic-prior-art.md).
 - **Review:** [security review](../security-reviews/20261105-secure-agentic-experiences-design.md),
   two rounds; no high or critical finding open in the design.
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
-The user's requests: "make a plan to move chat into sandboxed tabs", and "agentic
-experiences are central to vscode, but we want to implement them securely with limited
-blast radius".
+Requests (project owner): a plan to move chat into sandboxed tabs, because agentic
+experiences are central to VS Code but must be implemented securely, with limited blast
+radius.
 
 ---
 
@@ -54,7 +55,7 @@ user approves. Tier C: opt-in grants that are scoped, time-boxed and revocable. 
 re-implemented there, 7 become safe outputs, 17 are dropped and 2 are display adapters
 (§5.4).
 
-**What the user decides** is listed in §13. The recommended first spike is in §11.1.
+**What the project owner decides** is listed in §13. The recommended first spike is in §11.1.
 
 ```mermaid
 flowchart LR
@@ -401,7 +402,7 @@ In a `seclab+` window the gate replaces that with:
   policy change (§13, D7);
 - whether the Copilot runtime honours the tab's proxy and CA is unmeasured (spike §11.1).
 
-**Amended 2026-11-06 (user decision, from the [real-tab spike](../edr/20261106-agents-in-real-tab-spike.md)).**
+**Amended 2026-11-06 (project owner decision, from the [real-tab spike](../edr/20261106-agents-in-real-tab-spike.md)).**
 The bullets above describe the design before the runtime was measured behind a real
 broker; where they conflict, this amendment wins.
 
@@ -785,7 +786,7 @@ or given a fixed value): the list in §3.5. Policy alone cannot pin them.
 The v0 null agent-host service in tab windows (RPC-lockdown session) is replaced by the
 gate hook when Tier A ships.
 
-**Upstream proposals (drafts only; never filed without the user):**
+**Upstream proposals (drafts only; never filed without the project owner's approval):**
 
 - **U1. Brokered credentials for remote agent hosts.** A workbench extension point that
   lets a remote resolver supply a credential broker. Tokens are never forwarded to an
@@ -917,12 +918,12 @@ UI.
 | R14 | The model API as a relay to attacker endpoints through server-side tools | Medium | Broker body policy (§4.4); new server-side tool types need the policy updated |
 | R15 | Upstream adds another agent-host connection path or reverse request | High if missed | Default deny in the gate, class (f) drift check over all connection providers and handlers (§3.3, §3.5) |
 
-## 13. Decisions for the user
+## 13. Decisions for the project owner
 
-**Decided 2026-11-05.** The user accepted the recommended option for D1, D2 and D4 to D9:
-"Accept the recommended options and start the first spike with a fake model endpoint and
-no real credentials". D3 was decided separately the same day: "Allow the prebuilt
-runtimes as a recorded exception, hash-pinned, since they only ever run inside tabs"
+**Decided 2026-11-05.** The project owner accepted the recommended option for D1, D2 and
+D4 to D9, with the first spike against a fake model endpoint and no real credentials. D3
+was decided separately the same day: the prebuilt runtimes as a recorded exception,
+hash-pinned, because they only run inside tabs
 ([EDR](../edr/20261105-agent-runtimes-exception.md)).
 
 1. **D1. Vehicle: accepted.** The upstream agent host in the tab; extension-hosted
@@ -943,10 +944,10 @@ runtimes as a recorded exception, hash-pinned, since they only ever run inside t
 7. **D7. Derived Copilot token: accepted.** Bound to the Copilot API hosts, by path and
    method, through the trusted provider table. This is a broker policy change for the
    broker session.
-   **Amended 2026-11-06** (user, after the [real-tab spike](../edr/20261106-agents-in-real-tab-spike.md)):
+   **Amended 2026-11-06** (project owner, after the [real-tab spike](../edr/20261106-agents-in-real-tab-spike.md)):
    the runtime sends the GitHub credential, not a minted token, so **the GitHub credential
    is bound to the Copilot API model endpoints by exact path and method** (§4.2
-   amendment). The user also accepted exempting the three org-policy `GET`s
+   amendment). The project owner also accepted exempting the three org-policy `GET`s
    (`managed_settings`, `team_customizations`, `content_exclusion`) with the same strict
    checks as `/copilot_internal/user`. The coordinator decided that the remote GitHub MCP
    server is denied by default, with a per-tab Tier C grant (§4.5).

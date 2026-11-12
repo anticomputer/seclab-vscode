@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user). Verbatim: "Watch and warn: the supervisor flags any change a tab makes to files that run code (git hooks and config, .vscode/*, .envrc, package.json scripts, Makefile and similar), shows the diff, and requires approval before that file goes live in your real checkout". Go-ahead on the fuse-overlayfs design, with the coordinator's hard requirements (below).
+- **Deciders:** Project owner (2026-11-04): watch and warn; the supervisor flags any change a tab makes to files that run code (git hooks and config, `.vscode/*`, `.envrc`, `package.json` scripts, Makefile and similar), shows the diff, and requires approval before that file goes live in the real checkout. Go-ahead on the fuse-overlayfs design, with the coordinator's hard requirements (below).
 - **Related:** [EDR write-back gate spike](../edr/20261104-write-back-gate-spike.md), [threat model, worked example step 8](20261104-threat-model-rogue-extension.md), [ADR defeat folder-open loaders](20261104-defeat-folder-open-loaders.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The tab mounts the workspace read-write. Code in the tab can therefore plant

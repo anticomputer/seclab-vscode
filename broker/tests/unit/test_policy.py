@@ -204,9 +204,9 @@ def test_backstop_exception_is_exact():
 
 @pytest.mark.parametrize("name", ["managed_settings", "team_customizations", "content_exclusion"])
 def test_org_policy_backstop_exceptions_are_exact(name):
-    """User-approved 2026-11-05 ('Allow exactly those three GETs, with the same strict checks
-    as /user'): GET only, exact case, no query, both path forms, any GitHub host by provider;
-    every other /copilot_internal path stays denied."""
+    """Approved by the project owner 2026-11-05 (exactly these three GETs, with the same strict
+    checks as /user): GET only, exact case, no query, both path forms, any GitHub host by
+    provider; every other /copilot_internal path stays denied."""
     from seclab_broker.policy import backstop_exception
     path = f"/copilot_internal/{name}"
     for host, p in (("api.github.com", path), ("ghe.corp.example", "/api/v3" + path), ("api.acme.ghe.example", path)):

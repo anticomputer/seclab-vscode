@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** anticomputer (user: "Accept the recommended options and start the first spike with a fake model endpoint and no real credentials"); secure-agentic-experiences session (spike). Coordinator constraints: probes must fail on an unmitigated baseline first with real evidence; string-aware extraction reusing RPC-lockdown's stripper; no editor window on the user's display.
+- **Deciders:** Project owner (2026-11-05): accepted the recommended options, with the first spike against a fake model endpoint and no real credentials; secure-agentic-experiences session (spike). Coordinator constraints: probes must fail on an unmitigated baseline first with real evidence; string-aware extraction reusing RPC-lockdown's stripper; no editor window on the user's display.
 - **Related:** [ADR agents run in the tab](../adr/20261105-agents-run-in-the-tab.md), [plan §11.1](../plans/secure-agentic-experiences.md#111-recommended-first-spike-an-agent-host-in-a-tab-rendered-with-no-credential), [agentic surfaces](../research/agentic-surfaces.md), [EDR agent runtimes exception](20261105-agent-runtimes-exception.md), [security review](../security-reviews/20261105-agents-in-tab-spike.md); extended by [the real-tab spike](20261106-agents-in-real-tab-spike.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The design rests on claims about upstream's agent-host client that, until now, came from

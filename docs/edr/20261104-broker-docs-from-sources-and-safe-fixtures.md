@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user). Verbatim: "make sure docs stay updated as we work, drift should be prevented where possible" and "make sure our vuln examples are not actively malicious against our host". Broker session (implementation); Fork-build session (CI hook).
+- **Deciders:** Project owner (2026-11-04): docs must stay current as work proceeds, with drift prevented where possible, and the vulnerability examples must not be actively malicious against the host. Broker session (implementation); Fork-build session (CI hook).
 - **Related:** [ADR policy and protocol](../adr/20261104-broker-policy-and-control-protocol.md), [security review](../security-reviews/20261104-broker-docs-drift-and-fixtures.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 - **Docs could drift from code.** The protocol doc, the capability matrix and
@@ -77,7 +78,7 @@ the shared `test/safety/fixture-lint.sh` when that lands.
 
 ## Alternatives considered
 - **Hand-written docs plus a reviewer checklist:** rejected. That is exactly
-  the drift the user asked us to prevent.
+  the drift the project requires us to prevent.
 - **Generating docs from Python type hints or dataclasses:** rejected. JSON
   Schema is language-neutral. The TypeScript supervisor (tabd) can validate
   against the same file, and the broker already depends on a validator.

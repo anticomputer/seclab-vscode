@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-06
-- **Deciders:** coordinator ("Use `clientPort` for exact OCI attribution. Keep the integrity label honest: the port is tab-influenced"); broker session (`clientPort` in request audits, broker 0.5.0); tab-observability session
+- **Deciders:** coordinator (2026-11-06: use `clientPort` for exact OCI attribution, and keep the integrity label honest, because the port is tab-influenced); broker session (`clientPort` in request audits, broker 0.5.0); tab-observability session
 - **Related:** extends [EDR broker request lineage](20261105-broker-request-lineage.md) (its "exact join on the client port" alternative), [ADR detection notifications](../adr/20261106-detection-notifications.md) (Block Destination), [security review](../security-reviews/20261104-tab-observability.md) round 11
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The time join in the lineage EDR is a guess: concurrent requests read as `ambiguous`,

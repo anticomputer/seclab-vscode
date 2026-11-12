@@ -14,6 +14,7 @@
 - **Question:** does the layer add any channel from a tab into the trusted side beyond a one-way, size-limited, schema-validated event stream? Can the tab user, or a rogue extension (not root in the VM), forge or hide events?
 - **Reviewer:** `security-review` agent (default model); triage by the tab-observability session.
 - **Related:** [ADR tab observability](../adr/20261104-tab-observability.md), [EDR sensor spike](../edr/20261104-tab-observability-sensor-spike.md), [events](../tabd/EVENTS.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Round 1
 | # | Sev | Area | Finding | Disposition | Fix | Regression |
@@ -46,8 +47,8 @@ containment suites pass. **No high or critical findings are open.**
 ## Round 4: prompt injection (events read by an LLM)
 - **Scope:** `b61a973` (field-level `untrusted` tags, `--format llm` renderer,
   `suspicious-content` rule) and `d69109e` (Tab Activity reveal-on-alert).
-- **Question (user):** "be on the lookout for any prompt injection gaps if there's outputs we
-  intend to manage/analyze with LLM".
+- **Question (project owner):** are there prompt-injection gaps in any output the project
+  intends to manage or analyse with an LLM?
 - **Result:** no high or critical findings.
 
 | # | Sev | Area | Finding | Disposition | Fix | Regression |

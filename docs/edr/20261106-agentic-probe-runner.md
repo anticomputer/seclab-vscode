@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-06
-- **Deciders:** anticomputer (user: "Approve; build the probe runner and increment 1 (the agent connection gate) first"); coordinator conditions: no test hook, host-side evidence only, background windows, unsafe builds never in the release location; secure-agentic-experiences session (design).
+- **Deciders:** Project owner (2026-11-06): approved building the probe runner and increment 1 (the agent connection gate) first; coordinator conditions: no test hook, host-side evidence only, background windows, unsafe builds never in the release location; secure-agentic-experiences session (design).
 - **Related:** [implementation plan](../plans/agentic-implementation.md) §2, §3, §4 (increment 1), [real-tab spike EDR](20261106-agents-in-real-tab-spike.md), [EDR fixture safety](20261104-fixture-safety.md), [EDR harness teardown](20261104-harness-teardown.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 Increment 0 needs the shipped workbench to face a hostile agent host in a real tab, with
@@ -180,7 +181,7 @@ Derived from the pinned source, for patch 0015:
   0016, not by 0015.
 - Main's current release is exposed in `seclab+` windows until 0015 or 0010 lands. This is
   reported to the coordinator.
-- Clearing quarantine on the fetched apps needs the user's approval (AGENTS.md).
+- Clearing quarantine on the fetched apps needs the project owner's approval (AGENTS.md).
 
 ## The in-tab takeover, as built and measured (2026-11-06)
 The takeover is an **extension** (`test/agentic/runner/mitm-extension/`), not a host-injected
@@ -383,8 +384,8 @@ Next step, in order:
 gate failed with three samples (`editor pid 60644 is the frontmost app`, ~22 s after launch),
 even though the window was started through `test/window.ts launch`, which exits 1 on a
 frontmost editor and did not. So the launch path's own check passes while the window becomes
-frontmost slightly later. This is the hard rule in AGENTS.md ("you keep popping up on top of
-my ongoing work") and it is reported rather than suppressed: the next session must find out
+frontmost slightly later. This breaks the hard rule in AGENTS.md (never steal focus from
+the user) and it is reported rather than suppressed: the next session must find out
 whether `SECLAB_BACKGROUND_WINDOWS=1` is reaching this build, or whether something after
 window creation (the `seclab+` resolver's progress UI is the first suspect) activates the app.
 No further editor windows should be launched until that is answered.
@@ -487,8 +488,8 @@ so the two differ in the way the run needs them to:
 | `ahp-gate.disabled`, `ahp-gate.reverse-request`, `seclabAhpGate` | present | absent |
 
 That is a static check: it shows the gate shipped, not that it executes, which is exactly
-the distinction the user held 0015 for ("review round 2 already showed that kind of evidence
-passing dead code"). The executing-in-the-shipped-build proof is still the U-then-G run.
+the distinction the project owner held 0015 for (review round 2 had already shown that kind of
+evidence passing dead code). The executing-in-the-shipped-build proof is still the U-then-G run.
 
 **Still blocked on one thing only.** Both runs need an editor window, and windows are held
 until the focus-steal regression recorded above is fixed (owned elsewhere). Everything that

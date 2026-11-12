@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** coordinator ("Broker events into the stream"); tab-observability session
+- **Deciders:** coordinator (assignment: broker events into the stream); tab-observability session
 - **Related:** [ADR tab observability](../adr/20261104-tab-observability.md), [broker protocol §4](../broker-protocol.md), [ADR broker output is data](../adr/20261104-broker-output-is-data.md), [plan tabd-broker-wiring](../plans/tabd-broker-wiring.md), [security review](../security-reviews/20261104-tab-observability.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 sbx and OCI tabs now run behind their broker (B1, B2), and tabd owns each broker's control

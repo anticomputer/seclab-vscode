@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer ("make sure that any dependency we pull in has a strong security provenance"); coordinator; fork-build session
+- **Deciders:** Project owner (2026-11-04): every dependency the project pulls in must have strong security provenance; coordinator; fork-build session
 - **Related:** [EDR ci-hardening](../edr/20261104-ci-hardening.md), [ADR vscodium-style fork](20261104-vscodium-style-fork.md), [register](../DEPENDENCIES.md), [EDR prompt-injection hygiene](../edr/20261104-prompt-injection-hygiene.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 We build the editor the user runs, unsigned, and every tab and CI job runs third-party
@@ -61,7 +62,7 @@ Research (2026-11-04, primary sources) on what publishers actually provide:
      URL download must check a hash we hold, or fetch through git and verify the commit.
    - **built-from-source:** built by us, in our CI, from pinned and verified source.
    - **exception:** none of the above. That needs an EDR with the reason, a replacement
-     plan, and the user's approval.
+     plan, and the project owner's approval.
 
    Where a publisher offers a signature or attestation, we verify it; a digest pin alone
    is not enough then. Prefer fewer dependencies. Never `curl | sh`.

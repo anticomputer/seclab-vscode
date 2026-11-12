@@ -50,8 +50,8 @@ RPC-lockdown session adds. Keep them consistent with this file.
 
 ## 3. Hard rules (non-negotiable)
 - **Never install tooling on the macOS host.** docker, gh, sbx, and for CFS azure-cli and
-  the gh-cfs extension, are allowed; anything else needs the user's approval. Why: host
-  hygiene is the user's explicit constraint. Builds run in containers or on Actions.
+  the gh-cfs extension, are allowed; anything else needs the project owner's approval. Why: host
+  hygiene is the project owner's explicit constraint. Builds run in containers or on Actions.
 - **Local npm and pip go through GitHub CFS (`gh cfs`); never bypass it** by pointing at a
   public registry, adding an extra index, or switching `replace-registry-host` to `always`.
   The CFS token is a real secret:
@@ -131,15 +131,15 @@ RPC-lockdown session adds. Keep them consistent with this file.
   Why: their licence is restricted to Microsoft builds. Build the REH from
   pinned Code-OSS.
 - **Stop and ask when a constraint leads to bad design**, rather than
-  working around it. Why: the user prefers to revise constraints (see the
+  working around it. Why: the project owner prefers to revise constraints (see the
   native-editor ADR).
-- **Never change sbx's global policy** without the user's consent. Why: it is
-  shared with their other sandboxes.
+- **Never change sbx's global policy** without the project owner's consent. Why: it is
+  shared with the owner's other sandboxes.
 - **Push to origin on every major iteration:** a milestone or sub-milestone
   working end to end, a new component or protocol, a patch-queue change, or a
   fixed review round. Each push needs its review recorded, the relevant tests
   passing, and the records updated. `main` always builds and passes. Why: the
-  user asked for it, and other sessions build on `main`.
+  project owner requires it, and other sessions build on `main`.
 - **How a change reaches `main`.** A ruleset enforces this
   ([EDR](docs/edr/20261104-ci-hardening.md)):
   1. Push your branch.
@@ -189,7 +189,7 @@ RPC-lockdown session adds. Keep them consistent with this file.
     verified before use, pinned to identity and issuer); **official-pinned** (a digest
     or hash from the project's own source, with checksums verified against a signed
     checksum file where one exists); **built-from-source** (by us, from pinned source).
-    Anything else is an **exception**: an EDR plus the user's approval.
+    Anything else is an **exception**: an EDR plus the project owner's approval.
   - Where a publisher signs, we verify; a digest alone isn't enough then. A pinned URL
     is not content-addressed: check a hash we hold, or fetch through git and verify the
     commit.
@@ -259,8 +259,8 @@ RPC-lockdown session adds. Keep them consistent with this file.
     `bin/code` CLI directly. `./seclab lint fixtures` (rule `focus-steal`)
     rejects these in harness and test code.
 
-  Why: the user, verbatim: "you keep popping up on top of my ongoing work".
-  Covered-window capture was confirmed fine by the user.
+  Why: windows that appear over ongoing work disrupt it.
+  Covered-window capture was confirmed fine by the project owner.
 
 ## 4. Common tasks
 CI runs these on every push and PR (`./seclab docs check --run-commands`); they must
@@ -421,7 +421,7 @@ Electron with `ELECTRON_RUN_AS_NODE=1`); nothing is installed.
   `--folder-uri vscode-remote://seclab+<tabId><path>`.
 - **sbx `browser.enabled` defaults true** (a sandbox can open URLs in the host
   browser). It is a global setting; we haven't changed it (it needs the
-  user's consent).
+  project owner's consent).
 - **Docker Desktop VM has 8 GB.** The Linux *editor* bundle OOMs; the REH is fine.
 - **1.145.0 local builds fail in the Copilot shim**; we remove the built-in
   Copilot extension (patch 0001, EDR).

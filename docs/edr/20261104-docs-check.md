@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer ("make sure docs stay updated as we work, drift should be prevented where possible"); fork-build session
+- **Deciders:** Project owner (2026-11-04): docs must stay current as work proceeds, with drift prevented where possible; fork-build session
 - **Related:** broker counterpart [EDR broker docs from sources](20261104-broker-docs-from-sources-and-safe-fixtures.md); [AGENTS.md](../../AGENTS.md) process rule
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 Three sessions write docs in parallel. The hand-maintained indexes had already drifted:

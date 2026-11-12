@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (tasks.json campaign: "make sure our threat model specifically protects against that"); fork-build session
+- **Deciders:** Project owner (2026-11-04): for the `tasks.json` campaign, the threat model must specifically protect against it; fork-build session
 - **Related:** [threat model ADR](../adr/20261104-threat-model-rogue-extension.md), [EDR ci-hardening](20261104-ci-hardening.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The DPRK "Contagious Interview" campaign

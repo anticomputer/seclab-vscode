@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** anticomputer; coordinator; tab-observability session
+- **Deciders:** Project owner (2026-11-05); coordinator; tab-observability session
 - **Related:** [EDR fixture safety, addendum](20261104-fixture-safety.md), [EDR observability sensor spike](20261104-tab-observability-sensor-spike.md), [ADR write-back gate](../adr/20261104-write-back-gate.md), [security review](../security-reviews/20261104-tab-observability.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The observability e2e and README demo ran an inert folder-open loader from

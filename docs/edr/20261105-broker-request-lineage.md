@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-05
-- **Deciders:** coordinator ("Verified lineage on prompts … label the integrity honestly"); tab-observability session
+- **Deciders:** coordinator (assignment: verified lineage on prompts, with the integrity labelled honestly); tab-observability session
 - **Related:** [ADR tab observability §5](../adr/20261104-tab-observability.md) (lineage hints), [EDR broker audit in tab events](20261105-broker-audit-in-tab-events.md), [plan tabd-broker-wiring](../plans/tabd-broker-wiring.md) B3 (prompts) and B6 (attribution), [security review](../security-reviews/20261104-tab-observability.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The broker sees requests but not processes. Its only process hint is the origin label in

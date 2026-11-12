@@ -2,9 +2,10 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user: "our threat model is that of someone installing a rogue extension"); seclab-vscode coordinator
+- **Deciders:** Project owner (2026-11-04): the threat model is someone installing a rogue extension; seclab-vscode coordinator
 - **Supersedes:** the threat-model portion of [the containment-unit ADR](20261104-tab-is-the-containment-unit.md) (attacker list) and of ARCHITECTURE.md §2 as of f36f759
 - **Related:** [no real secret ADR](20261104-no-real-secret-in-a-tab.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The earlier model listed malicious extensions, malicious workspaces and
@@ -38,7 +39,7 @@ prompt-injected agents as peers. The user narrowed and sharpened it.
   ([EDR extension persistence](../edr/20261104-extension-persistence.md)).
 
 ## Worked example: "Contagious Interview" (tasks.json abuse), 2026-11-04
-The user asked that the model specifically defeat this DPRK campaign
+The project owner requires that the model specifically defeat this DPRK campaign
 ([Jamf](https://www.jamf.com/blog/threat-actors-expand-abuse-of-visual-studio-code/),
 [OpenSourceMalware](https://opensourcemalware.com/blog/latest-contagious-interview-malware-campaign-abuses-microsoft-vscode-tasks)).
 A fake recruiter sends a take-home repo; opening and trusting it runs a hidden
@@ -61,7 +62,7 @@ because endpoint protection quarantines a faithful one; EDR fixture-safety).
 | 5 | Credential theft (wallets, browser profiles, solana, keychain) | Only the workspace is mounted; no real secret enters a tab ([ADR](20261104-no-real-secret-in-a-tab.md)) | `host credential-store canaries unreadable from the tab` |
 | 6 | Persistence in `~/.vscode`, `~/.n2` | Lands in the tab's own home, never the host's. Tabs persist, so the user-chosen **Reset tab** rebuilds the tab from its template | `persistence drops … exist only in the tab's home`, `Reset tab discards the persistence drops` |
 | 7 | Long-running backdoor | Dies with the tab | `the background stage … dies when the tab stops` |
-| 8 | Planting host-executed code in the repo (`.git/hooks`, `.envrc`) for the next host-side git or direnv run, and spreading | **Write-back gate** (user decision: watch and warn; [spike](../edr/20261104-write-back-gate-spike.md)). Code-running files a tab changes are held until approved | `planted … never live in the host checkout`: **XFAIL until the gate lands** |
+| 8 | Planting host-executed code in the repo (`.git/hooks`, `.envrc`) for the next host-side git or direnv run, and spreading | **Write-back gate** (project owner decision: watch and warn; [spike](../edr/20261104-write-back-gate-spike.md)). Code-running files a tab changes are held until approved | `planted … never live in the host checkout`: **XFAIL until the gate lands** |
 | 9 | Attribution of the blocked activity to the task | Tab–broker integration and tab observability | `denials are attributed to the folder-open task`: **XFAIL (M2/M3)** |
 
 Residual: step 8 is open until the write-back gate ships. A planted hook is inert in

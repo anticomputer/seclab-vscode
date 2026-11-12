@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer (user). Verbatim: "make sure that any dependency we pull in has a strong security provenance". Coordinator (the bar); broker session (implementation). The repo-wide register `deps/registry.json` is owned by the Fork-build session; `broker/deps.json` holds the broker's entries.
+- **Deciders:** Project owner (2026-11-04): every dependency the project pulls in must have strong security provenance. Coordinator (the bar); broker session (implementation). The repo-wide register `deps/registry.json` is owned by the Fork-build session; `broker/deps.json` holds the broker's entries.
 - **Related:** [EDR engine](20261104-broker-engine-mitmproxy.md), [security review](../security-reviews/20261104-broker-dependency-provenance.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 The project's bar: every dependency must meet one of these tiers. Anything else
@@ -130,7 +131,7 @@ two parts:
 
 Every broker **runtime** dependency meets the bar.
 
-**Exception (test-only, user-approved 2026-11-05): apt versions float and the
+**Exception (test-only, approved by the project owner, 2026-11-05): apt versions float and the
 index can be replayed.** The upstream and workspace test images run
 `apt-get install` from `http://deb.debian.org`. Signatures are verified, but:
 - versions are not pinned;
@@ -143,8 +144,8 @@ on `--internal` networks, against test-owned endpoints. A rolled-back package
 could at worst weaken a test, not a user's tab. Pinning through
 snapshot.debian.org was tried and rejected (see Alternatives). Revisit if a
 reliable snapshot mirror is available, or if any apt package enters a shipped
-image. Approved by the user via the coordinator on 2026-11-05 ("signed
-archive, versions not pinned"). It is registered as `apt-broker-tests` with
+image. Approved by the project owner via the coordinator on 2026-11-05 (signed
+archive, versions not pinned). It is registered as `apt-broker-tests` with
 bar `exception` in `deps/registry.json`.
 
 **The broker image's identity (XX-6, agreed with the Fork-build session,
@@ -213,9 +214,9 @@ local image it runs.
   younger than that can't build locally; CI is unaffected.
   - On 2026-11-05 seven pins were younger than that. At first they stayed,
     and the local images were blocked until the hold ended.
-  - The user then decided: "Pin back to the newest versions already past the
+  - Decision (project owner): pin back to the newest versions already past the
     7-day hold, and add a 7-day Dependabot cooldown so pins never get ahead
-    of CFS."
+    of CFS.
   - The re-pin and its exceptions are in the next point. The cooldown and a
     shared pin-age lint (`./seclab lint pin-age`) belong to the Fork-build
     session.
@@ -306,7 +307,7 @@ local image it runs.
 
 ## Consequences
 - **`broker/build.sh` and `broker/test.sh` now need network access and `gh`.**
-  Both are present in CI; locally, `gh` is a user-approved host tool. A PyPI or
+  Both are present in CI; locally, `gh` is a host tool approved by the project owner. A PyPI or
   GitHub outage fails the gate rather than skipping it.
 - **Adding or bumping a dependency** means updating the lock, then
   `broker/deps.json`. The tier and publisher come from `python

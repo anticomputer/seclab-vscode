@@ -5,8 +5,8 @@
   - `4ac288b`: `broker/build.sh` builds the broker image from a snapshot of
     `broker/`'s git-tracked files (review ZZ from the Fork-build session: an
     ignored file could ship under a clean revision label).
-  - "broker: re-pin to versions CFS serves": re-pin to the newest versions CFS serves, following the user's
-    decision: "Pin back to the newest versions already past the 7-day hold".
+  - "broker: re-pin to versions CFS serves": re-pin to the newest versions CFS serves, following the project owner's
+    decision to pin back to the newest versions already past the 7-day hold.
     - `fastjsonschema` 2.22.3 to 2.22.2, `dnspython` 2.9.2 to 2.9.1,
       `platformdirs` 4.14.5 to 4.14.0, `pypi-attestations` 0.0.31 to 0.0.30,
       `typing-inspection` 0.4.5 to 0.4.4;
@@ -28,6 +28,7 @@
   - It ran a differential of the two fastjsonschema versions over our real
     schemas.
   - It traced module loads during a real `provenance.py verify` run.
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Findings
 | # | Severity | Area | Finding | Disposition | Fix / reason | Regression test |

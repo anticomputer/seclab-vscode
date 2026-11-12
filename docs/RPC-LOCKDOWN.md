@@ -542,9 +542,9 @@ Numbers 1 to 4 came out of the independent design review
 
 All five are now settled; the design above reflects them.
 
-1. **Verdict laundering: taint the command context.** The user's decision, in
-   their words: *"anything a tab command triggers carries the tab's identity and
-   goes through the filter."* Mechanism and alternatives in §2.5.2 and
+1. **Verdict laundering: taint the command context.** Decision (project owner):
+   anything a tab command triggers carries the tab's identity and goes through
+   the filter. Mechanism and alternatives in §2.5.2 and
    [the ADR](adr/20261104-tab-command-taint.md). Taint is carried as a
    capability rather than ambient state, because the renderer has no
    `AsyncLocalStorage`.

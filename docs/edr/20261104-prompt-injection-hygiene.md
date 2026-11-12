@@ -2,8 +2,9 @@
 
 - **Status:** accepted
 - **Date:** 2026-11-04
-- **Deciders:** anticomputer ("also be on the lookout for any prompt injection gaps if there's outputs we intend to manage/analyze with LLM"); fork-build session
+- **Deciders:** Project owner (2026-11-04): any output the project intends to manage or analyse with an LLM must be checked for prompt-injection gaps; fork-build session
 - **Related:** [EDR fixture-safety](20261104-fixture-safety.md), [EDR ci-hardening](20261104-ci-hardening.md), [security-review process](../security-reviews/README.md)
+- **Editorial redaction (2026-11-12):** quotations of project conversations replaced with neutral statements; decisions unchanged.
 
 ## Context
 Agents build and review this project, and much of what they read is chosen by an
