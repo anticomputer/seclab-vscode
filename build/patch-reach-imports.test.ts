@@ -80,7 +80,10 @@ const write = (rel: string, text: string) => {
 	fs.mkdirSync(path.dirname(path.join(scratch, rel)), { recursive: true });
 	fs.writeFileSync(path.join(scratch, rel), text);
 };
-const runReach = (patch: string, reach?: object) => {
+// Both policy files are required (GATE-2/3); by default the helper writes minimal valid ones.
+const DEFAULT_REACH = { '0001-x.patch': ['desktop'] };
+const DEFAULT_UNREACHABLE = { desktop: { deny: ['src/vs/webonly.ts'] } };
+const runReach = (patch: string, reach: object | null = DEFAULT_REACH, unreachable: object | string | null = DEFAULT_UNREACHABLE) => {
 	const pdir = path.join(scratch, 'patches');
 	fs.rmSync(pdir, { recursive: true, force: true });
 	fs.mkdirSync(pdir, { recursive: true });
@@ -88,6 +91,9 @@ const runReach = (patch: string, reach?: object) => {
 	fs.writeFileSync(path.join(pdir, '0001-x.patch'), patch);
 	if (reach) {
 		fs.writeFileSync(path.join(pdir, 'reach.json'), JSON.stringify(reach));
+	}
+	if (unreachable !== null) {
+		fs.writeFileSync(path.join(pdir, 'unreachable.json'), typeof unreachable === 'string' ? unreachable : JSON.stringify(unreachable));
 	}
 	return spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-patch-reach.ts'), path.join(scratch, 'tree'), '--patches', pdir], { encoding: 'utf8' });
 };
@@ -150,6 +156,27 @@ test('check-patch-reach: a web-only file fails and a desktop file passes, in bot
 		assert.equal(missing.status, 1);
 		assert.match(missing.stderr, /renamed\/ does not exist/);
 		assert.equal(runWith({ desktop: ['src/vs/agent/a.ts'] }).status, 1, 'the old array format is refused');
+		// GATE-2/3: each policy file missing, unparseable or empty fails, never reads as "nothing
+		// to check"; unreachable.json must deny something for desktop (I8).
+		write('tree/src/vs/desk.ts', `import './shared.js';\n`);
+		assert.equal(runReach(ok).status, 0, 'baseline: both files valid');
+		const cases: Array<[string, object | null, object | string | null, RegExp]> = [
+			['reach.json missing', null, DEFAULT_UNREACHABLE, /reach\.json is required/],
+			['reach.json unparseable', null, DEFAULT_UNREACHABLE, /reach\.json is required/],
+			['reach.json empty', {}, DEFAULT_UNREACHABLE, /reach\.json must be a non-empty JSON object/],
+			['unreachable.json missing', DEFAULT_REACH, null, /unreachable\.json is required/],
+			['unreachable.json unparseable', DEFAULT_REACH, '{"desktop":', /unreachable\.json is required/],
+			['unreachable.json empty', DEFAULT_REACH, {}, /unreachable\.json must be a non-empty JSON object/],
+			['unreachable.json without desktop', DEFAULT_REACH, { server: { deny: ['src/vs/webonly.ts'] } }, /must deny at least one module for desktop/],
+			['unreachable.json with an empty desktop deny', DEFAULT_REACH, { desktop: { deny: [] } }, /must deny at least one module for desktop/],
+		];
+		for (const [what, reach, unreachable, want] of cases) {
+			const r = what === 'reach.json unparseable'
+				? (() => { runReach(ok, null, unreachable); fs.writeFileSync(path.join(pdir, 'reach.json'), '{"0001-x.patch": ['); return spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-patch-reach.ts'), path.join(scratch, 'tree'), '--patches', pdir], { encoding: 'utf8' }); })()
+				: runReach(ok, reach, unreachable);
+			assert.equal(r.status, 1, `${what} must fail\n${r.stdout}${r.stderr}`);
+			assert.match(r.stderr, want, what);
+		}
 	} finally {
 		fs.rmSync(scratch, { recursive: true, force: true });
 	}
