@@ -211,8 +211,32 @@ def self_test() -> int:
         missing.add(("extension-direction", str(ext["direction"])))
     if inv["problems"]:
         missing.add(("problems", "; ".join(inv["problems"])))
+    # GATE-11: the real run must FAIL on a scanner gap, not merely print one. Injected here
+    # rather than asserted in prose, so reverting the exit rule fails this self-test.
+    if exit_code(inv) != 0:
+        missing.add(("exit-code", "a clean inventory must exit 0"))
+    gap = {"problems": ["CommandMap not found"], "counts": {}, "surfaces": []}
+    if exit_code(gap) == 0:
+        missing.add(("exit-code", "a non-empty problems list must exit non-zero (GATE-11)"))
     print("ahp-inventory self-test:", "ok" if not missing else f"FAIL missing {sorted(missing)}")
     return 0 if not missing else 1
+
+
+def exit_code(inv: dict) -> int:
+    """FAIL CLOSED (GATE-11).
+
+    `problems` are scanner gaps: a CommandMap that is no longer found, an ActionType that
+    moved, a server->client request with no client handler. Every one of them SHRINKS the
+    inventory, and this inventory is what the agent-host attack surface is reasoned about
+    from, so printing them and returning 0 meant an upstream rename could quietly reduce the
+    surface to near-nothing while the command still reported success. The self-test already
+    treated a non-empty `problems` as failure; the real run now agrees with it.
+    """
+    if inv["problems"]:
+        print(f"ahp-inventory: {len(inv['problems'])} problem(s): the surface scan is incomplete",
+              file=sys.stderr)
+        return 1
+    return 0
 
 
 def main() -> int:
@@ -223,12 +247,21 @@ def main() -> int:
     a = ap.parse_args()
     if a.self_test:
         return self_test()
+    if not a.source or not a.out:
+        ap.error("--source and --out are required (GATE-11: a missing argument must not look like a clean run)")
     inv = extract(a.source)
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(inv, f, indent=1, sort_keys=True)
         f.write("\n")
     print(json.dumps({"counts": inv["counts"], "problems": inv["problems"]}, indent=1))
-    return 0
+    # FAIL CLOSED (GATE-11). `problems` are scanner gaps: a CommandMap that is no longer
+    # found, an ActionType that moved, a server->client request with no client handler. Each
+    # one SHRINKS the inventory, and this inventory is what the agent-host attack surface is
+    # reasoned about from, so printing them and returning 0 meant an upstream rename could
+    # quietly reduce the surface to near-nothing while the command still reported success.
+    # The self-test already treated a non-empty `problems` as failure; the real run now
+    # agrees with it.
+    return exit_code(inv)
 
 
 if __name__ == "__main__":

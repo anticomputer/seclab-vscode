@@ -579,3 +579,31 @@ problem. The one legitimate caller with no config is the synthetic tree in
 network, and the `dataStorage` pin rests on the source reading above rather than on a tool
 probe. Both are recorded as open in the baseline; the deferred-restore hook is a follow-up on
 top of the headless driver.
+
+## Gate fail-open audit: GATE-11 and GATE-1 (2026-11-12)
+Two entries from the gate fail-open audit, both in checks this session owns. Each fix is
+proven by reverting it and watching the test fail.
+
+**GATE-11 — `ahp_inventory.py` exited 0 with a non-empty `problems` list.** `extract` records
+scanner gaps as `problems`: a `CommandMap` that is no longer found, an `ActionType` that
+moved, a server->client request with no client handler case. Every one of them *shrinks* the
+inventory, and that inventory is what the agent-host attack surface is reasoned about from
+(the agents-in-tab spike). The self-test already treated a non-empty `problems` as failure,
+but the real run printed them and returned 0, so an upstream rename could reduce the surface
+to near-nothing while the command reported success. The decision is now `exit_code()`, which
+both the run and the self-test call, and the self-test injects a gap and asserts it exits
+non-zero. Reverting the rule makes the self-test fail with
+`a non-empty problems list must exit non-zero (GATE-11)`, and the exit code propagates through
+`inventory.sh`. The argument handling was tightened at the same time: `--source` or `--out`
+missing is now an argument error rather than a crash that could be mistaken for a bad tree.
+
+**GATE-1 — `soleConsumerProblems` returned "no problems" for a config it could not read.**
+Fixed in the previous change; it now has the regression test that makes it count as fixed.
+The test drives both a missing file and an empty path, requires exactly one problem naming
+the refusal, and then asserts that a readable config with no rules is still clean, so the
+check cannot become always-failing. Reverting the guard fails it.
+
+Worth stating plainly, because it is the same lesson as rounds 8 to 10: this fail-open was not
+found by reading the code, it was found when a check reported success for work that had not
+run. The first attempt to prove the patch-0017 upstream invariants could fail reported "no
+problems" purely because the config argument had been omitted.

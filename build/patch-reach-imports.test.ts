@@ -6,6 +6,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test } from 'node:test';
 import { patchedFiles, runtimeSpecs } from './patch-reach-imports.ts';
+import { soleConsumerProblems } from './check-sole-consumer.ts';
+import { repoRoot } from '../test/harness.ts';
 
 test('runtime imports are edges', () => {
 	assert.deepEqual(runtimeSpecs([
@@ -155,6 +157,30 @@ test('check-patch-reach: a web-only file fails and a desktop file passes, in bot
 		assert.equal(missing.status, 1);
 		assert.match(missing.stderr, /renamed\/ does not exist/);
 		assert.equal(runWith({ desktop: ['src/vs/agent/a.ts'] }).status, 1, 'the old array format is refused');
+	} finally {
+		fs.rmSync(scratch, { recursive: true, force: true });
+	}
+});
+
+test('sole-consumer: a config it cannot read is a problem, not a clean result (GATE-1)', () => {
+	// THE FAIL-OPEN. `soleConsumerProblems` used to return `[]` when the config was absent,
+	// so a wrong path, a renamed file or a missing argument passed the whole invariant gate
+	// while reporting success. It did exactly that in practice: the first attempt to prove
+	// the patch-0017 upstream invariants could fail reported "no problems" because the
+	// config argument had been omitted, and every invariant in the file was silently
+	// unchecked. A gate that cannot read its rules has not checked them.
+	const scratch = fs.mkdtempSync(path.join(repoRoot, '.work', 'sole-consumer-'));
+	try {
+		for (const [label, arg] of [['missing file', path.join(scratch, 'nope.json')], ['no path at all', '']] as const) {
+			const problems = soleConsumerProblems(scratch, arg);
+			assert.equal(problems.length, 1, `${label}: expected exactly one problem`);
+			assert.match(problems[0], /refusing to report "no problems" for a check that did not run/, label);
+		}
+		// ...and it is not simply always-failing: a readable config with no rules is clean,
+		// which is the shape the synthetic patch queue above relies on.
+		const empty = path.join(scratch, 'sole-consumer.json');
+		fs.writeFileSync(empty, '{}\n');
+		assert.deepEqual(soleConsumerProblems(scratch, empty), []);
 	} finally {
 		fs.rmSync(scratch, { recursive: true, force: true });
 	}
