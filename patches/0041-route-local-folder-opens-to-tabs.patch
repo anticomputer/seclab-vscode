@@ -1,0 +1,122 @@
+diff --git a/src/vs/platform/windows/electron-main/windowsMainService.ts b/src/vs/platform/windows/electron-main/windowsMainService.ts
+index 52a7cb59..6e27cbd9 100644
+--- a/src/vs/platform/windows/electron-main/windowsMainService.ts
++++ b/src/vs/platform/windows/electron-main/windowsMainService.ts
+@@ -57,6 +57,7 @@ import { ILoggerMainService } from '../../log/electron-main/loggerService.js';
+ import { IAuxiliaryWindowsMainService } from '../../auxiliaryWindow/electron-main/auxiliaryWindows.js';
+ import { IAuxiliaryWindow } from '../../auxiliaryWindow/electron-main/auxiliaryWindow.js';
+ import { ICSSDevelopmentService } from '../../cssDev/node/cssDevService.js';
++import { IURLService } from '../../url/common/url.js';
+ import { ResourceSet } from '../../../base/common/map.js';
+ import { VSBuffer } from '../../../base/common/buffer.js';
+ import { resolveAgentsWindowFolder, sendAgentsWindowOpenIntent } from './agentsWindow.js';
+@@ -164,6 +165,9 @@ interface IPathToOpen<T = IEditorOptions> extends IPath<T> {
+ 
+ const EMPTY_WINDOW: IPathToOpen = Object.create(null);
+ 
++// seclab (patch 0041): the extension that opens local folders as sandboxed tabs (product.json).
++const seclabTabRouter = (product as typeof product & { readonly seclabTabRouter?: string }).seclabTabRouter;
++
+ interface IWorkspacePathToOpen extends IPathToOpen {
+ 	readonly workspace: IWorkspaceIdentifier;
+ }
+@@ -236,7 +240,8 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
+ 		@IProtocolMainService private readonly protocolMainService: IProtocolMainService,
+ 		@IThemeMainService private readonly themeMainService: IThemeMainService,
+ 		@IAuxiliaryWindowsMainService private readonly auxiliaryWindowsMainService: IAuxiliaryWindowsMainService,
+-		@ICSSDevelopmentService private readonly cssDevelopmentService: ICSSDevelopmentService
++		@ICSSDevelopmentService private readonly cssDevelopmentService: ICSSDevelopmentService,
++		@IURLService private readonly urlService: IURLService
+ 	) {
+ 		super();
+ 
+@@ -357,7 +362,16 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
+ 		let maybeOpenEmptyWindow = false;
+ 
+ 		// Identify things to open from open config
+-		const pathsToOpen = await this.getPathsToOpen(openConfig);
++		// seclab (patch 0041): no window ever loads a local folder or workspace. Each is replaced by
++		// an empty window and handed to the Tab Manager, which opens it as a sandboxed tab.
++		const seclabRouted: IPathToOpen[] = [];
++		const pathsToOpen: IPathToOpen[] = [];
++		for (const path of await this.getPathsToOpen(openConfig)) {
++			(this.seclabRoutes(path) ? seclabRouted : pathsToOpen).push(path);
++		}
++		if (seclabRouted.length) {
++			pathsToOpen.push(EMPTY_WINDOW);
++		}
+ 		this.logService.trace('windowsManager#open pathsToOpen', pathsToOpen);
+ 		for (const path of pathsToOpen) {
+ 			if (isSingleFolderWorkspacePathToOpen(path)) {
+@@ -408,7 +422,7 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
+ 		if (openConfig.initialStartup) {
+ 
+ 			// Untitled workspaces are always restored
+-			untitledWorkspacesToRestore.push(...this.workspacesManagementMainService.getUntitledWorkspaces());
++			untitledWorkspacesToRestore.push(...this.workspacesManagementMainService.getUntitledWorkspaces().filter(workspace => !this.seclabRoutes(workspace)));
+ 			workspacesToOpen.push(...untitledWorkspacesToRestore);
+ 
+ 			// Empty windows with backups are always restored
+@@ -495,9 +509,36 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
+ 		// Handle `<app> chat`
+ 		this.handleChatRequest(openConfig, usedWindows);
+ 
++		if (seclabRouted.length) {
++			this.seclabHandOver(seclabRouted, usedWindows);
++		}
++
+ 		return usedWindows;
+ 	}
+ 
++	/** A local folder or workspace (no remote authority), when the product routes them to tabs. */
++	private seclabRoutes(path: { readonly workspace?: unknown; readonly remoteAuthority?: string }): boolean {
++		return !!seclabTabRouter && !!path.workspace && !path.remoteAuthority;
++	}
++
++	/** Hand the routed paths to the Tab Manager in the empty window, once it is ready. */
++	private seclabHandOver(routed: IPathToOpen[], usedWindows: ICodeWindow[]): void {
++		const query = new URLSearchParams();
++		for (const path of routed) {
++			const uri = isSingleFolderWorkspacePathToOpen(path) ? path.workspace.uri : undefined;
++			query.append(uri?.scheme === Schemas.file ? 'path' : 'unsupported', uri?.scheme === Schemas.file ? uri.fsPath : '1');
++		}
++		const target = usedWindows.find(window => !window.openedWorkspace && !window.remoteAuthority) ?? usedWindows.at(0) ?? this.getLastActiveWindow();
++		if (!target) {
++			this.logService.error(`[seclab] ${routed.length} local folder(s) or workspace(s) not opened: no window to hand them to`);
++			return;
++		}
++		query.set('windowId', String(target.id));
++		const uri = URI.from({ scheme: product.urlProtocol, authority: seclabTabRouter, path: '/open', query: query.toString() });
++		this.logService.info(`[seclab] routed ${routed.length} local folder(s) or workspace(s) to the Tab Manager in window ${target.id}`);
++		target.ready().then(() => this.urlService.open(uri, { trusted: true })).catch(error => this.logService.error('[seclab] hand-over to the Tab Manager failed', error));
++	}
++
+ 	private handleWaitMarkerFile(openConfig: IOpenConfiguration, usedWindows: ICodeWindow[]): void {
+ 
+ 		// If we got started with --wait from the CLI, we need to signal to the outside when the window
+diff --git a/src/vs/platform/workspaces/electron-main/workspacesManagementMainService.ts b/src/vs/platform/workspaces/electron-main/workspacesManagementMainService.ts
+index fc12eec6..f24ee262 100644
+--- a/src/vs/platform/workspaces/electron-main/workspacesManagementMainService.ts
++++ b/src/vs/platform/workspaces/electron-main/workspacesManagementMainService.ts
+@@ -19,6 +19,7 @@ import { IDialogMainService } from '../../dialogs/electron-main/dialogMainServic
+ import { IEnvironmentMainService } from '../../environment/electron-main/environmentMainService.js';
+ import { createDecorator } from '../../instantiation/common/instantiation.js';
+ import { ILogService } from '../../log/common/log.js';
++import product from '../../product/common/product.js';
+ import { IUserDataProfilesMainService } from '../../userDataProfile/electron-main/userDataProfile.js';
+ import { ICodeWindow } from '../../window/electron-main/window.js';
+ import { findWindowOnWorkspaceOrFolder } from '../../windows/electron-main/windowsFinder.js';
+@@ -249,6 +250,13 @@ export class WorkspacesManagementMainService extends Disposable implements IWork
+ 			return undefined; // return early if the window is not ready or disposed
+ 		}
+ 
++		// seclab (patch 0041): a local window never enters a workspace, which would load its folders
++		// locally; the Tab Manager opens folders as sandboxed tabs instead.
++		if (!window.remoteAuthority && (product as typeof product & { readonly seclabTabRouter?: string }).seclabTabRouter) {
++			this.logService.info('[seclab] a local window does not enter a workspace');
++			return undefined;
++		}
++
+ 		const isValid = await this.isValidTargetWorkspacePath(window, windows, path);
+ 		if (!isValid) {
+ 			return undefined; // return early if the workspace is not valid

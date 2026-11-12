@@ -107,5 +107,6 @@ Same rules as ADRs:
 | 2026-11-12 | [CFS feed values live in host-side config, not the tree](20261112-cfs-config-outside-repo.md) | accepted |
 | 2026-11-12 | [Headless editor driver: tests drive the editor from inside, never through the OS](20261112-headless-driver.md) | accepted |
 | 2026-11-12 | [History rewrite: internal identifiers removed from every branch](20261112-history-rewrite.md) | accepted |
+| 2026-11-12 | [Main-process routing: no window loads a local folder or workspace (patch 0041)](20261112-main-process-routing.md) | accepted |
 | 2026-11-12 | [Publish gate: only what can be shown to be public is published](20261112-publish-gate.md) | accepted |
 <!-- index:end -->

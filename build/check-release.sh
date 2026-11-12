@@ -94,16 +94,21 @@ if [ "${1:-}" = "--self-test" ]; then
 	echo "var m=\"seclabRpcFilterEnforcing:$hab\";" > "$T/root/m.js"
 	# Background windows (patch 0012): the bootstrap policy, the guard's policy and the window
 	# level must all be in the desktop app; each missing one fails.
-	bgfix() { printf 'var g="[background windows] activation policy: prohibited (guard)";var w="is below normal windows";\n' > "$T/root/g.js"; printf 'var b="[background windows] activation policy: prohibited (bootstrap)";\n' > "$T/root/b.js"; }
+	bgfix() { printf 'var g="[background windows] activation policy: prohibited (guard)";var w="is below normal windows";\n' > "$T/root/g.js"; printf 'var b="[background windows] activation policy: prohibited (bootstrap)";\n' > "$T/root/b.js"; printf 'var r=`[seclab] routed ${n} local folder(s)`;var e="[seclab] a local window does not enter a workspace";\n' > "$T/root/r.js"; }
 	bgfix; rm "$T/root/b.js"
 	run "$T/with5" fail "desktop without the bootstrap background policy" desktop
 	bgfix; printf 'var w="is below normal windows";\n' > "$T/root/g.js"
 	run "$T/with5" fail "desktop with the bootstrap policy but not the guard's (review QQQ-2)" desktop
 	bgfix; printf 'var g="[background windows] activation policy: prohibited (guard)";\n' > "$T/root/g.js"
 	run "$T/with5" fail "desktop without the below-normal window level" desktop
+	# Main-process routing (patch 0041): both of its guards must be in the desktop app.
+	bgfix; printf 'var e="[seclab] a local window does not enter a workspace";\n' > "$T/root/r.js"
+	run "$T/with5" fail "desktop without patch 0041's open routing" desktop
+	bgfix; printf 'var r=`[seclab] routed ${n} local folder(s)`;\n' > "$T/root/r.js"
+	run "$T/with5" fail "desktop without patch 0041's enterWorkspace guard" desktop
 	bgfix
 	run "$T/with5" pass "desktop, 0005 listed, its enforcing marker" desktop
-	rm "$T/root/g.js" "$T/root/b.js"
+	rm "$T/root/g.js" "$T/root/b.js" "$T/root/r.js"
 	echo '{"nameShort":"x"}' > "$T/root/product.json"
 	run "$T/no5" fail "an enforcing marker without 0005"
 	rm "$T/root/m.js"; stamp "$hab"
@@ -218,6 +223,14 @@ EOF
 				hit=$(find "$d" -type f \( -name "*.js" -o -name "*.mjs" \) -exec grep -lF -- "$m" {} + 2>/dev/null | head -1)
 				set -e
 				[ -n "$hit" ] || { echo "check-release: background-windows guard missing from the desktop app (no \"$m\")"; bad=1; }
+			done
+			# Main-process routing (patch 0041, ADR route-folder-opens-in-main): no window loads a local
+			# folder or workspace. A desktop app without either guard fails.
+			for m in '[seclab] routed ' '[seclab] a local window does not enter a workspace'; do
+				set +e
+				hit=$(find "$d" -type f \( -name "*.js" -o -name "*.mjs" \) -exec grep -lF -- "$m" {} + 2>/dev/null | head -1)
+				set -e
+				[ -n "$hit" ] || { echo "check-release: main-process folder routing missing from the desktop app (no \"$m\")"; bad=1; }
 			done
 		fi
 	done < "$WORK/roots"

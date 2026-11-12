@@ -44,6 +44,8 @@ jobs:
         run: ./seclab test driver
       - name: Local windows run no workspace extension; a spoofed built-in VSIX stays one (findings m0#3-1, m0#4-1)
         run: ./seclab test local-window
+      - name: A folder opened through the CLI never loads locally; main routes it to the Tab Manager (patch 0041; m0#2b-1, m0#3-2)
+        run: ./seclab test cli-open
       - name: Keep the self-test screenshot
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

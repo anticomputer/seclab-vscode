@@ -24,5 +24,6 @@
 	},
 	"extensionKind": {
 		"seclab.tab-manager": ["ui"]
-	}
+	},
+	"seclabTabRouter": "seclab.tab-manager"
 }

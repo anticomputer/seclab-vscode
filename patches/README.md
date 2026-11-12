@@ -78,6 +78,14 @@ Current queue:
   new local extension host before the remote one connects. Without it, the remote host reuses
   the old socket factory id and fails with "No socket factory found"
   ([EDR](../docs/edr/20261109-ext-host-restart-reresolve.md)).
+- `0041-route-local-folder-opens-to-tabs.patch`: no window ever loads a local folder or
+  workspace. `WindowsMainService.open`, which every open path reaches (CLI, menus, recents,
+  drag and drop, `<urlProtocol>://file` links, session restore), replaces each one with an empty
+  window and hands it to the Tab Manager as a trusted `<urlProtocol>://seclab.tab-manager/open`
+  URL; the Tab Manager confirms, claims and opens it as a tab. A local window never enters a
+  workspace (Add Folder). Enabled by product.json `seclabTabRouter`, a build invariant
+  ([ADR](../docs/adr/20261104-route-folder-opens-in-main.md),
+  [EDR](../docs/edr/20261112-main-process-routing.md)).
 - `0042-no-automatic-tasks-in-local-windows.patch` (interim): a window with no remote authority
   neither runs `folderOpen` tasks nor asks to allow them. A local folder window exists only for
   the moment before the Tab Manager reopens it as a tab. Removed when 0041 routes folder opens

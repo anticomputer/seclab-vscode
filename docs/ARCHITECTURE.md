@@ -20,7 +20,7 @@
 - **Folder-open loaders.** Config files that are executable code are defused before a folder is opened ([ADR](adr/20261104-defeat-folder-open-loaders.md)).
 - **Open items.**
   - Agents in tabs: the design is accepted ([ADR](adr/20261105-agents-run-in-the-tab.md), [plan](plans/secure-agentic-experiences.md)). Each tab's own agent host runs the agent, and the trusted editor only renders it through a gated connection. Agent runtimes are a hash-pinned exception that runs only inside tabs ([EDR](edr/20261105-agent-runtimes-exception.md)). Until Tier A ships, built-in chat, agent tools and agent-host connections are off in tab windows. The spikes are done: the shipped agent host has completed turns in a real sbx tab behind its broker with only sentinels ([EDR](edr/20261106-agents-in-real-tab-spike.md)). The Tier A increments are proposed in the [implementation plan](plans/agentic-implementation.md).
-  - Main-process routing is accepted ([ADR](adr/20261104-route-folder-opens-in-main.md)) as patch 0041, not yet written; until then a high-severity residual remains, narrowed by patch 0042 (no automatic tasks in local windows).
+  - Main-process routing ([ADR](adr/20261104-route-folder-opens-in-main.md)) is patch 0041 ([EDR](edr/20261112-main-process-routing.md)): no window loads a local folder or workspace; the Tab Manager opens it as a tab.
   - The REH server→client IPC filter (`download` channel, pty commands) is a critical item owned by M4 ([review](security-reviews/20261104-tabd-protocol-design.md)).
   - Under sbx, the broker runs as a separate Docker Desktop container, not a pod sidecar.
   - Under sbx there is no hold-and-resume: a request is denied, the user is prompted, then the tool retries.

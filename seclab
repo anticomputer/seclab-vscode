@@ -26,6 +26,7 @@ usage: ./seclab <command>
   test builds                   Test build variants: the harness's hook check (require-hooks) self-test
   test driver [TARBALL]         Headless driver self-test: the Linux editor under Xvfb, driven over its CDP pipe
   test local-window [TARBALL]   Local windows run no workspace extension, and a spoofed built-in stays one (headless)
+  test cli-open [TARBALL]       A folder opened through the CLI never loads locally; main routes it to a tab (headless)
   tab logs [-f] [--format text|json|falco] [--min PRIORITY] [--state-dir DIR] <tabId|all>
                                 Read a tab's observability log (default: the editor's state dir)
   test evidence prepare|check DIR [sbx|oci]
@@ -745,6 +746,18 @@ case "${1:-help}" in
 					sh -c 'rm -rf /repo/.work/driver/editor /repo/.work/driver/profile* && mkdir -p /repo/.work/driver/editor && tar -C /repo/.work/driver/editor -xzf /editor.tgz \
 						&& xvfb-run -a -s "-screen 0 1440x900x24" node test/driver/selftest.ts --app "$(ls -d /repo/.work/driver/editor/VSCode-linux-*)" \
 							--profile /repo/.work/driver/profile --shot /repo/.work/driver/selftest.png -- --no-sandbox' ;;
+			# A folder opened through the CLI never loads in a window; main routes it to the Tab Manager
+			# (patch 0041, ADR route-folder-opens-in-main). Same container as `driver`.
+			cli-open) shift
+				tgz="${1:-$OUT/seclab-vscode-linux-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/').tar.gz}"
+				[[ -f "$tgz" ]] || { echo "no Linux editor build at $tgz (./seclab build linux editor)" >&2; exit 2; }
+				docker build -q -t seclab-xvfb:local "$ROOT/test/driver/xvfb" >/dev/null
+				mkdir -p "$ROOT/.work/driver"
+				docker run --rm --network none -v "$ROOT:/repo:ro" -v "$ROOT/.work/driver:/repo/.work/driver" \
+					-v "$(cd "$(dirname "$tgz")" && pwd)/$(basename "$tgz"):/editor.tgz:ro" seclab-xvfb:local \
+					sh -c 'rm -rf /repo/.work/driver/editor /repo/.work/driver/co* && mkdir -p /repo/.work/driver/editor && tar -C /repo/.work/driver/editor -xzf /editor.tgz \
+						&& xvfb-run -a -s "-screen 0 1440x900x24" node test/driver/cli-open.ts --app "$(ls -d /repo/.work/driver/editor/VSCode-linux-*)" \
+							--profile /repo/.work/driver/co -- --no-sandbox' ;;
 			# Local-window fixtures (findings m0#3-1, m0#4-1): zipped as VSIXs in the runner container
 			# (python3 zipfile; VS Code reads only extension/package.json), then installed with the
 			# build's CLI and observed through the headless driver under Xvfb. No vsce, no network.
