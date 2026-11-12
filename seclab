@@ -36,7 +36,10 @@ usage: ./seclab <command>
                                 No register pin younger than 7 days (the feed's hold; EDR pin-age-cooldown). Network
   lint secrets [BASE]           gitleaks (built from pinned source) over git diff BASE..HEAD (default: merge base
                                 with origin/main); also run by CI (lint) and the pre-push hook
-  hooks install                 Use the repo's git hooks (build/hooks: pre-push runs lint secrets) in this clone
+  hooks install                 Use the repo's git hooks (build/hooks: pre-push runs lint secrets and the
+                                publish gate) in this clone; refused until main carries the gate
+  lint publish [--self-test]    Publish gate over HEAD's tree: only what can be shown to be public (EDR)
+  scan-text                     The publish gate over stdin: run it on any text before posting it with gh
   deps outdated                 Report image tags that moved and tracked tools with newer releases
   cfs config | check | --self-test
                                 The host-side CFS feed config (outside the repo; the tree has example values):
@@ -97,6 +100,8 @@ lint_workflows() {
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$actionlint" -no-color
 	verify_signed_image "$ZIZMOR_IMAGE" '^https://github\.com/docker/github-builder/\.github/workflows/build\.yml@' zizmorcore/zizmor refs/tags/v1.31.1
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ZIZMOR_IMAGE" --offline --no-progress --persona=regular .github/workflows
+	# Actions logs here are public: no workflow or CI script echoes env, secrets or host data.
+	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" sh -ec 'node build/check-workflow-echo.ts --self-test; node build/check-workflow-echo.ts'
 }
 
 # Publisher-signature check before use (ADR supply-chain provenance), for images whose
@@ -573,6 +578,35 @@ case "${1:-help}" in
 					git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/deps.ts check -
 				fi ;;
 			source) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-source.ts ;;
+			# Internal identifiers (build/check-denylist.ts): the whole tracked tree, plus any run-record
+			# dir passed with --extra. The list never lives in the repo: a private developer file
+			# (SECLAB_DENYLIST_FILE, default ~/.config/seclab/denylist.txt, chmod 600), mounted
+			# read-only; a missing or loose list fails closed. CI reads it from a secret
+			# (build/ci-denylist.sh). Matches print file:line, never text. `lint publish` runs this as
+			# its last layer.
+			denylist) shift
+				if [[ "${1:-}" == --self-test ]]; then
+					docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-denylist.ts --self-test
+				else
+					# shellcheck source=build/hooks/publish-gate.sh
+					. "$ROOT/build/hooks/publish-gate.sh"
+					list="$(publish_gate_list_path)"
+					publish_gate_list_ok "$list" || exit 1
+					git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" --mount "type=bind,src=$list,dst=/denylist.txt,readonly" -w /repo "$(node_image)" node build/check-denylist.ts check - --list /denylist.txt --require-list "$@"
+				fi ;;
+			# The publish gate (EDR publish-gate) over the whole committed tree at HEAD, with the
+			# live repository check; --self-test injects a hit for every layer (no network).
+			publish) shift
+				if [[ "${1:-}" == --self-test ]]; then
+					docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/publish-gate.ts --self-test
+				else
+					docker image inspect "$(node_image)" >/dev/null 2>&1 || docker pull -q "$(node_image)" >/dev/null
+					# shellcheck source=build/hooks/publish-gate.sh
+					. "$ROOT/build/hooks/publish-gate.sh"
+					publish_gate "$(node_image)" "$ROOT/build" "$(cd "$(git -C "$ROOT" rev-parse --git-common-dir)" && pwd -P)" \
+						"$(publish_gate_list_path)" '' -- \
+						git-tree --git-dir /git --ref "$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)" "$(git -C "$ROOT" rev-parse HEAD)"
+				fi ;;
 			# Single-file container mounts cover their entry's imports (build/import-closure.ts).
 			mounts) docker run --rm --network none --tmpfs /scratch -e SECLAB_SCRATCH=/scratch -v "$ROOT:/repo:ro" -w /repo "$(node_image)" sh -ec "
 				node build/import-closure.ts --self-test
@@ -602,15 +636,69 @@ case "${1:-help}" in
 		gl="$(tool_image gitleaks)" || { echo "hooks: no scanner (./seclab tool gitleaks)" >&2; exit 1; }
 		gl_id="$(docker image inspect -f '{{.Id}}' "$gl")"
 		gl_arch="$(docker image inspect -f '{{.Architecture}}' "$gl")"
-		gl_sha="$(awk -v a="\"$gl_arch\":" '/"gitleaks":/{g=1} g && $1==a {gsub(/[",]/,"",$2); print $2; exit}' "$ROOT/build/tools/tools.json")"
+		# The binary's pin comes from main (R20-4): the hook checks the image's gitleaks against it.
+		gl_sha="$(git -C "$ROOT" cat-file blob origin/main:build/tools/tools.json | awk -v a="\"$gl_arch\":" '/"gitleaks":/{g=1} g && $1==a {gsub(/[",]/,"",$2); print $2; exit}')"
 		[[ "$gl_id" == sha256:* && "$gl_sha" =~ ^[0-9a-f]{64}$ ]] || { echo "hooks: can't resolve the pinned scanner ($gl_arch)" >&2; exit 1; }
-		hook="$(<"$ROOT/build/hooks/pre-push")"
+		# The template, like the gate it runs, comes from main (R19-5).
+		hook="$(git -C "$ROOT" cat-file blob origin/main:build/hooks/pre-push)" \
+			|| { echo "hooks: origin/main has no build/hooks/pre-push" >&2; exit 1; }
+		[[ "$hook" == *@NODE_IMAGE@* ]] || { echo "hooks: origin/main's pre-push has no publish gate yet; land it first" >&2; exit 1; }
 		hook="${hook//@GITLEAKS_IMAGE@/$gl_id}"
 		hook="${hook//@GITLEAKS_SHA256@/$gl_sha}"
+		# The publish gate (EDR publish-gate): the engine and driver are copied next to the hook and
+		# pinned by sha256, so the hook runs no code from whichever checkout pushes. Every pushed
+		# tip must carry the allowlist, so refuse to install until main has it (AGENTS.md: never
+		# install a shared hook that depends on code that isn't on main yet).
+		git -C "$ROOT" cat-file -e "origin/main:build/publish-allow.json" 2>/dev/null \
+			|| { echo "hooks: origin/main has no build/publish-allow.json yet; land the publish gate first" >&2; exit 1; }
+		# The image the gate runs in is main's pin, not this checkout's (R20-4).
+		main_node="$(git -C "$ROOT" cat-file blob origin/main:seclab | sed -n 's/^[[:space:]]*echo "\(node:[^"]*@sha256:[0-9a-f]\{64\}\)"$/\1/p' | head -1)"
+		[[ -n "$main_node" ]] || { echo "hooks: can't read the node image pin from origin/main:seclab" >&2; exit 1; }
+		[[ "$main_node" == "$(node_image)" ]] || echo "hooks: note: this checkout's node image differs from origin/main's; installing main's" >&2
+		for f in seclab build/tools/tools.json build/tools/tool.sh; do
+			git -C "$ROOT" diff --quiet origin/main -- "$f" || echo "hooks: note: $f here differs from origin/main" >&2
+		done
+		docker image inspect "$main_node" >/dev/null 2>&1 || docker pull -q "$main_node" >/dev/null
+		node_id="$(docker image inspect -f '{{.Id}}' "$main_node")"
+		[[ "$node_id" == sha256:* ]] || { echo "hooks: can't resolve the node image" >&2; exit 1; }
+		mkdir -p "$hookdir/publish-gate.tmp"
+		# From main's objects, not the working tree (R19-5): a branch checked out for testing must
+		# not become every worktree's gate.
+		for f in build/publish-gate.ts build/check-denylist.ts build/hooks/publish-gate.sh; do
+			git -C "$ROOT" cat-file blob "origin/main:$f" >"$hookdir/publish-gate.tmp/${f##*/}" \
+				|| { echo "hooks: origin/main has no $f; land the publish gate first" >&2; exit 1; }
+			git -C "$ROOT" diff --quiet origin/main -- "$f" \
+				|| echo "hooks: note: $f here differs from origin/main; installing main's" >&2
+		done
+		sums="$(cd "$hookdir/publish-gate.tmp" && shasum -a 256 publish-gate.ts check-denylist.ts)"
+		driver_sha="$(shasum -a 256 <"$hookdir/publish-gate.tmp/publish-gate.sh" | cut -d' ' -f1)"
+		rm -rf "$hookdir/publish-gate" && mv "$hookdir/publish-gate.tmp" "$hookdir/publish-gate"
+		hook="${hook//@NODE_IMAGE@/$node_id}"
+		hook="${hook//@GATE_SUMS@/$sums}"
+		hook="${hook//@DRIVER_SHA256@/$driver_sha}"
 		mkdir -p "$hookdir"
 		printf '%s\n' "$hook" > "$hookdir/pre-push.tmp" && chmod 0755 "$hookdir/pre-push.tmp" && mv "$hookdir/pre-push.tmp" "$hookdir/pre-push"
 		git -C "$ROOT" config core.hooksPath "$hookdir"
-		echo "hooks: core.hooksPath=$hookdir (self-contained pre-push scan, gitleaks ${gl_id:7:12})" ;;
+		# shellcheck source=build/hooks/publish-gate.sh
+		. "$ROOT/build/hooks/publish-gate.sh"
+		publish_gate_list_ok "$(publish_gate_list_path)" 2>/dev/null \
+			|| echo "hooks: WARNING: no private known-names list at $(publish_gate_list_path) yet; every push will be refused until it exists (chmod 600; AGENTS.md)" >&2
+		echo "hooks: core.hooksPath=$hookdir (self-contained pre-push: gitleaks ${gl_id:7:12}, publish gate on node ${node_id:7:12})" ;;
+	# The publish gate by hand: the whole tree at HEAD, or text on stdin before it is posted to
+	# GitHub (AGENTS.md: run it on every PR/issue body, comment and release note first).
+	scan-text)
+		docker image inspect "$(node_image)" >/dev/null 2>&1 || docker pull -q "$(node_image)" >/dev/null
+		# shellcheck source=build/hooks/publish-gate.sh
+		. "$ROOT/build/hooks/publish-gate.sh"
+		rc=0
+		publish_gate "$(node_image)" "$ROOT/build" "$ROOT/build/publish-allow.json" "$(publish_gate_list_path)" '' -- text || rc=$?
+		case "$rc" in
+			0) echo "scan-text: clean; it may be posted" >&2 ;;
+			3) echo "scan-text: review the flagged lines (no quote, paraphrase or excerpt of a private conversation) before posting" >&2 ;;
+			*) echo "scan-text: do not post this text" >&2 ;;
+		esac
+		exit "$rc" ;;
+	print-node-image) node_image ;;
 	# Liveness gate (EDR liveness-gate): everything that only matters if something runs it names
 	# what runs it, with evidence it ran. Offline with no token, except --verify-runs, which reads
 	# the named Actions runs (network; GITHUB_TOKEN with actions: read, in CI).

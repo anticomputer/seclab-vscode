@@ -40,6 +40,17 @@ jobs:
         run: ./seclab lint pins --self-test
       - name: Every image and action is pinned by digest/SHA
         run: ./seclab lint pins
+      # The publish gate (EDR publish-gate): the known-names list lives only in the SECLAB_DENYLIST
+      # secret of the `denylist` environment, whose deployment-branch rule admits main only, and is
+      # read by the `denylist` job below on a push to main. Never in the repo, in clear or hashed.
+      # Branches are not scanned with it in CI: a scan of branch-controlled input would print which
+      # candidate names are listed (review round 19). This job runs branch code, so it never sees
+      # the secret (review round 17); it runs the self-tests, which inject a hit for every layer.
+      # Developers run the gate before every push (the pre-push hook, mandatory).
+      - name: Internal-identifier scan self-test
+        run: ./seclab lint denylist --self-test
+      - name: Publish gate self-test (every layer injected)
+        run: ./seclab lint publish --self-test
       - name: No pin younger than 7 days (CFS hold; EDR pin-age-cooldown)
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -59,3 +70,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: ./seclab liveness verify-runs
+
+  # The publish gate with the known-names list over main's whole tree. Runs only on a push to main
+  # and only in the `denylist` environment, whose deployment-branch rule admits main: the secret
+  # reaches no code a branch or pull request controls (review round 17). Fails closed without the
+  # secret. Findings print their location, never the matched text.
+  denylist:
+    name: denylist
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: denylist
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Only what can be shown to be public is on main
+        env:
+          DENYLIST: ${{ secrets.SECLAB_DENYLIST }}
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        run: build/ci-denylist.sh "$BEFORE"

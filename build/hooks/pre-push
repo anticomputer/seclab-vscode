@@ -1,17 +1,33 @@
 #!/usr/bin/env bash
 # pre-push (installed with `./seclab hooks install`; AGENTS.md): every commit being pushed is
-# scanned with the gitleaks built from pinned source before anything leaves the machine.
+# scanned with the gitleaks built from pinned source before anything leaves the machine, then
+# with the publish gate (EDR 20261112-publish-gate): only what can be shown to be public goes.
 # Self-contained (review VV-8): it runs no code from the pushing checkout, so it works from any
-# worktree, whatever its branch. The install bakes in the scanner's image ID and the pinned
-# binary sha256; a missing image or a mismatched binary blocks the push (re-run the install).
-# A hit, or a scan that can't run, blocks the push.
+# worktree, whatever its branch. The install bakes in the scanner images' IDs, the pinned
+# gitleaks binary sha256, and the sha256 of each publish-gate file it copied next to this hook;
+# a missing image or a mismatch blocks the push (re-run the install).
+# A hit, or a scan that can't run, blocks the push. Lines that may record a private conversation
+# block until reviewed: push again with SECLAB_PUBLISH_REVIEWED=<the pushed commit>.
 # git passes "<local ref> <local sha> <remote ref> <remote sha>" lines on stdin.
 set -euo pipefail
 IMAGE='@GITLEAKS_IMAGE@'
 BIN_SHA256='@GITLEAKS_SHA256@'
+NODE_IMAGE='@NODE_IMAGE@'
+GATE_SUMS='@GATE_SUMS@'
+DRIVER_SHA256='@DRIVER_SHA256@'
 fail() { echo "pre-push: $*" >&2; exit 1; }
 [[ "$IMAGE" == sha256:* && "$BIN_SHA256" =~ ^[0-9a-f]{64}$ ]] || fail "hook not installed with ./seclab hooks install"
+[[ "$NODE_IMAGE" == sha256:* && "$DRIVER_SHA256" =~ ^[0-9a-f]{64}$ && -n "$GATE_SUMS" ]] || fail "hook installed without the publish gate; re-run ./seclab hooks install"
 command -v docker >/dev/null || fail "no docker; the secret scan can't run"
+HOOKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+GATE_DIR="$HOOKDIR/publish-gate"
+driver_sha="$( (command -v sha256sum >/dev/null && sha256sum || shasum -a 256) <"$GATE_DIR/publish-gate.sh" | cut -d' ' -f1)"
+[[ "$driver_sha" == "$DRIVER_SHA256" ]] || fail "the installed publish gate driver does not match its pinned sha256; re-run ./seclab hooks install"
+# shellcheck source=build/hooks/publish-gate.sh
+. "$GATE_DIR/publish-gate.sh"
+LIST="$(publish_gate_list_path)"
+publish_gate_list_ok "$LIST" || fail "the publish gate is mandatory (AGENTS.md): get the known-names list from the repository owner, save it as $LIST (chmod 600), or set SECLAB_DENYLIST_FILE"
+GIT_COMMON="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"
 run() { docker run --rm -i --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user 65534:65534 --pull never "$@"; }
 got="$(run --entrypoint sha256sum "$IMAGE" /usr/bin/gitleaks </dev/null 2>/dev/null | cut -d' ' -f1)" \
 	|| fail "scanner image $IMAGE missing; run ./seclab hooks install from an up-to-date checkout"
@@ -19,7 +35,7 @@ got="$(run --entrypoint sha256sum "$IMAGE" /usr/bin/gitleaks </dev/null 2>/dev/n
 zero='^0+$'
 status=0
 refs=0
-while read -r _lref lsha _rref rsha; do
+while read -r _lref lsha rref rsha; do
 	refs=$((refs + 1))
 	[[ "$lsha" =~ $zero ]] && continue # a delete pushes no content
 	# A new remote ref (or one we don't have) scans from the merge base with origin/main.
@@ -36,6 +52,20 @@ while read -r _lref lsha _rref rsha; do
 	else
 		echo "pre-push: gitleaks found a secret, or the scan failed, in ${base:0:7}..${lsha:0:7}; push blocked" >&2
 		status=1
+	fi
+	# The publish gate over what this ref publishes (ref name, messages, paths, added lines).
+	gate=0
+	publish_gate "$NODE_IMAGE" "$GATE_DIR" "$GIT_COMMON" "$LIST" "$GATE_SUMS" -- git-push --git-dir /git --ref "$rref" --exclude-remotes "$lsha" "$base" || gate=$?
+	if [[ "$gate" -eq 3 && "${SECLAB_PUBLISH_REVIEWED:-}" == "$lsha" ]]; then
+		echo "pre-push: publish gate: review lines confirmed for ${lsha:0:12}"
+	elif [[ "$gate" -eq 3 ]]; then
+		echo "pre-push: publish gate: review the lines above (no quote, paraphrase or excerpt of a private conversation), then push with SECLAB_PUBLISH_REVIEWED=$lsha" >&2
+		status=1
+	elif [[ "$gate" -ne 0 ]]; then
+		echo "pre-push: publish gate blocked ${rref}; nothing that can't be shown to be public may be pushed" >&2
+		status=1
+	else
+		echo "pre-push: publish gate clean (${lsha:0:7})"
 	fi
 done
 echo "pre-push: $refs ref(s) checked"

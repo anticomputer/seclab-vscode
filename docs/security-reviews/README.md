@@ -106,4 +106,6 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-09 | [the liveness gate (round KKK)](20261109-liveness-gate.md) | round KKK, eab5cb8 (rebased as ea38de1) and its fixes: | see record |
 | 2026-11-09 | [liveness-refresh workflow](20261109-liveness-refresh.md) | round MMM, a05d6ed and its fixes: | see record |
 | 2026-11-12 | [CFS feed values from host-side config, and GATE-9 (round 17)](20261112-cfs-config-outside-repo.md) | - "CFS feed values come from host-side config, never the tree": the host file | see record |
+| 2026-11-12 | [internal-identifier scan and the generator-test gate (workflow changes)](20261112-internal-identifier-scan.md) | see record | see record |
+| 2026-11-12 | [the publish gate (pre-push hook, CI and posted text)](20261112-publish-gate.md) | see record | see record |
 <!-- index:end -->
