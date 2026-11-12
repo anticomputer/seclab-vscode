@@ -3,7 +3,9 @@
 Each row records a decision by the project owner to accept a finding's risk until its closing
 condition holds. Only the coordinator adds rows, on an explicit owner decision, each in its own
 commit, landed before the change that closes the finding. No row quotes or paraphrases a
-conversation, and the file holds no quotation marks.
+conversation. The findings register's gate (`build/docs/findings.ts`, EDR
+`docs/edr/20261110-security-findings-register.md`) checks the rows: the finding's full key, the
+date, the scope, the closing condition and the decision, and no quotation marks anywhere here.
 
 | Finding | Date | Scope | Closing condition | Decision |
 |---|---|---|---|---|

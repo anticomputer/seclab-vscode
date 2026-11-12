@@ -4,8 +4,10 @@ name: liveness-refresh
 # retention horizon; the required workflow-lint check only notes a run past day 75 and degrades a
 # deleted one to a note, so it never blocks a PR on age. This weekly job fails instead, listing
 # every entry due for refresh, so each is re-run and its register entry updated before day 85.
-# Not a required check. It runs on every push that changes it or the liveness code, so it is never
-# a dispatch-only workflow that nothing has run (the gate's own rule).
+# It also lists the security findings baseline (open highs the ratchet still allows) in the job
+# summary, so they stay visible every week.
+# Not a required check. It runs on every push that changes it, the liveness code or the findings
+# register, so it is never a dispatch-only workflow that nothing has run (the gate's own rule).
 on:
   schedule:
     - cron: '41 7 * * 1'
@@ -13,6 +15,8 @@ on:
     paths:
       - .github/workflows/liveness-refresh.yml
       - build/liveness/**
+      - build/docs/findings.ts
+      - docs/security-reviews/findings.json
       - seclab
   workflow_dispatch:
 
@@ -43,3 +47,24 @@ jobs:
         run: |
           ./seclab liveness verify-runs --refresh | tee "$RUNNER_TEMP/refresh.txt"
           grep -qx 'liveness: refresh mode' "$RUNNER_TEMP/refresh.txt"
+
+  # The findings baseline (EDR security-findings-register): every open high/critical the ratchet
+  # still allows, listed weekly so none goes quiet. Its own job (review RRR-1, RRR-4): no token, no
+  # actions: read, and a register problem can't stop the liveness listing above. It fails when a
+  # baseline key doesn't resolve (RRR-2), and the header check proves the listing ran.
+  findings-baseline:
+    name: findings baseline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Open high/critical findings still in the baseline (offline container)
+        shell: bash
+        run: |
+          ./seclab findings baseline | tee "$RUNNER_TEMP/baseline.md"
+          grep -q '^## Security findings baseline: [0-9][0-9]* open high/critical$' "$RUNNER_TEMP/baseline.md"
+          cat "$RUNNER_TEMP/baseline.md" >> "$GITHUB_STEP_SUMMARY"

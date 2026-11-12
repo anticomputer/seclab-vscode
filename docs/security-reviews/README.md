@@ -29,9 +29,28 @@ the process and the index.
    open.
 5. For every real finding, add a regression test to the containment suite.
 6. Record the round here, and link it from the related ADR or EDR.
+7. Add every finding to the register, `findings.json`, and run `./seclab docs write`
+   ([FINDINGS.md](FINDINGS.md), [EDR](../edr/20261110-security-findings-register.md)). A `fixed`
+   entry names its fix commit and its regression test: a test file (or a case in a checker's
+   `--self-test`) and an exact name of at least 12 characters that occurs once in it. Without a
+   test it is `fixed-untested`, which counts as open. A high or critical must end `fixed` on `main`
+   or accepted by the project owner: a row in `owner-acceptances.md` here (the
+   finding's full key, the date, the scope, the closing condition, "accepted by the project
+   owner"), written only by the coordinator on an explicit owner decision and landed in an earlier
+   change than the closure. No record quotes or paraphrases a conversation.
+   Every commit the register cites must be on `main`'s history (or its entry's branch): after a
+   rebase, squash or branch deletion, remap the register's citations of the old commits. The
+   records themselves keep the SHAs they were written with.
+   `./seclab docs check` enforces all of it.
 
 ## Record format
-File: `YYYYMMDD-short-slug.md`.
+File: `YYYYMMDD-short-slug.md`. Findings go in a table with a `Sev` column, one row per finding,
+with a unique explicit ID (`ROUND-n`, for example `QQQ-1`) in the first column and a severity word
+(Critical, High, Medium, Low, Info). The register's check extracts findings from these tables, and
+refuses a finding that is new since the merge base with `main` if it has a placeholder ID (`—`,
+`(self)`), a prose-only shape or no severity word, whatever the record's date or whether it's a new
+record or a round appended to an old one. A residual gets its own ID too. A record with no finding
+at all is listed under `noFindings` in `findings.json`.
 
 ```markdown
 # Security review: <scope title>
@@ -42,8 +61,9 @@ File: `YYYYMMDD-short-slug.md`.
 - **Related:** <ADR/EDR links>
 
 ## Findings
-| # | Severity | Area | Finding | Disposition | Fix / reason | Regression test |
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
 |---|---|---|---|---|---|---|
+| QQQ-1 | Medium | … | … | Fixed (abc1234) | … | `tabd/test/unit.test.ts` "…" |
 
 ## Re-review
 <range, result: "no open high/critical">
@@ -105,7 +125,9 @@ File: `YYYYMMDD-short-slug.md`.
 | 2026-11-09 | [Level B repair and the portable data dir](20261109-level-b-repair.md) | round NNN, 9fbd37f and a911c9c, and their fixes: | see record |
 | 2026-11-09 | [the liveness gate (round KKK)](20261109-liveness-gate.md) | round KKK, eab5cb8 (rebased as ea38de1) and its fixes: | see record |
 | 2026-11-09 | [liveness-refresh workflow](20261109-liveness-refresh.md) | round MMM, a05d6ed and its fixes: | see record |
+| 2026-11-10 | [the security findings register and its gate (rounds QQQ, RRR)](20261110-security-findings-register.md) | - round QQQ, the register and its gate as first written, without the workflow: build/docs/ | see record |
 | 2026-11-12 | [CFS feed values from host-side config, and GATE-9 (round 17)](20261112-cfs-config-outside-repo.md) | - "CFS feed values come from host-side config, never the tree": the host file | see record |
+| 2026-11-12 | [gates that pass when their config or input can't be read](20261112-gate-fail-open-audit.md) | every CI and local gate reached from seclab and .github/workflows/*.yml at | see record |
 | 2026-11-12 | [internal-identifier scan and the generator-test gate (workflow changes)](20261112-internal-identifier-scan.md) | see record | see record |
 | 2026-11-12 | [the publish gate (pre-push hook, CI and posted text)](20261112-publish-gate.md) | see record | see record |
 <!-- index:end -->

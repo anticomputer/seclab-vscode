@@ -51,8 +51,9 @@ function links(s: string): string[] {
 }
 function readRecords(kind: typeof KINDS[number]): Rec[] {
 	const dir = path.join(repo, 'docs', kind);
-	// owner-acceptances.md holds the project owner's decisions on findings; it isn't a review record.
-	return fs.readdirSync(dir).filter(f => f.endsWith('.md') && f !== 'README.md' && !(kind === 'security-reviews' && f === 'owner-acceptances.md')).sort().map(f => {
+	// FINDINGS.md is the generated findings register view, and owner-acceptances.md holds the project
+	// owner's decisions on findings (build/docs/findings.ts); neither is a review record.
+	return fs.readdirSync(dir).filter(f => f.endsWith('.md') && f !== 'README.md' && !(kind === 'security-reviews' && (f === 'FINDINGS.md' || f === 'owner-acceptances.md'))).sort().map(f => {
 		const where = `docs/${kind}/${f}`;
 		const text = fs.readFileSync(path.join(dir, f), 'utf8');
 		if (!/^\d{8}-[a-z0-9]+(-[a-z0-9]+)*\.md$/.test(f)) {

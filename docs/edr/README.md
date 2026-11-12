@@ -103,6 +103,7 @@ Same rules as ADRs:
 | 2026-11-09 | [Restart Extension Host re-resolves a managed (`seclab+`) authority](20261109-ext-host-restart-reresolve.md) | accepted |
 | 2026-11-09 | [Liveness gate: everything that only matters if it runs names what runs it](20261109-liveness-gate.md) | accepted |
 | 2026-11-09 | [Telling the user when a setting is withheld from a tab](20261109-settings-withheld-notice.md) | accepted |
+| 2026-11-10 | [Security findings register: one current-state view, enforced by the docs gate](20261110-security-findings-register.md) | accepted |
 | 2026-11-12 | [CFS feed values live in host-side config, not the tree](20261112-cfs-config-outside-repo.md) | accepted |
 | 2026-11-12 | [History rewrite: internal identifiers removed from every branch](20261112-history-rewrite.md) | accepted |
 | 2026-11-12 | [Publish gate: only what can be shown to be public is published](20261112-publish-gate.md) | accepted |

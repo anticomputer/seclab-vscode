@@ -52,12 +52,16 @@ usage: ./seclab <command>
   deps host                     Check the host prerequisites (recorded exception, EDR supply-chain-exceptions):
                                 gh is byte-identical to cli/cli's attested release; Docker Desktop and sbx
                                 carry Docker, Inc.'s Developer ID signature (macOS). Read-only.
-  docs write                    Regenerate the ADR/EDR/security-review indexes and docs/DEPENDENCIES.md
+  docs write                    Regenerate the ADR/EDR/security-review indexes, FINDINGS.md and docs/DEPENDENCIES.md
   docs check [--run-commands] [--online] [--paired]
                                 Docs drift gate: records, generated indexes, links, permalinks, ARCHITECTURE
-                                consistency; --run-commands runs <!-- ci: run --> blocks (and the broker's);
-                                --online resolves external links (lychee, cached); --paired enforces doc
-                                changes next to protocol/patch/provider/product changes vs origin/main
+                                consistency, the security findings register; --run-commands runs <!-- ci: run -->
+                                blocks (and the broker's); --online resolves external links (lychee, cached);
+                                --paired enforces doc changes next to protocol/patch/provider/product changes
+  findings --self-test | check | baseline
+                                Security findings register (docs/security-reviews/findings.json): every review
+                                finding registered, fixed ones with a regression test, no open high outside the
+                                shrinking baseline; `baseline` prints the open highs (markdown)
   fetch macos [RUN_ID]          Download the unsigned macOS app from Actions -> .work/app/
   fetch macos-branch RUN_ID     A dispatched non-main test build (attestation checked against its
                                 branch) -> .work/app-branch/ (never the release location)
@@ -214,6 +218,208 @@ lint_secrets() {
 	echo "lint secrets: clean ($(git -C "$ROOT" rev-parse --short "$base")..$(git -C "$ROOT" rev-parse --short "$tip"))"
 }
 
+# The security findings register (EDR security-findings-register). The offline check runs against
+# the register at the merge base with origin/main (new findings need explicit IDs; the baseline only
+# shrinks: review QQQ-5/6), then every landed `fixed` entry's commit must be on HEAD's history
+# (host git; CI's docs job has full history).
+findings_ancestry() { # stdin: "<key>\t<sha>" lines; fails on any SHA that isn't a commit on HEAD
+	local key sha bad=0
+	while IFS=$'\t' read -r key sha; do
+		[[ -z "$key" ]] && continue
+		if [[ ! "$sha" =~ ^[0-9a-f]{7,40}$ ]] || ! git -C "$ROOT" merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then
+			echo "findings: $key: fix commit $sha is not on this branch's history" >&2
+			bad=1
+		fi
+	done
+	return $bad
+}
+findings_base() { # REV OUT: the register at REV into OUT; empty when REV predates it; fails on any other error (SSS-2)
+	local rev="$1" out="$2" path=docs/security-reviews/findings.json listed
+	[[ "$rev" =~ ^[0-9a-f]{7,40}$ ]] && git -C "$ROOT" cat-file -e "$rev^{commit}" 2>/dev/null || { echo "findings: base $rev is not a commit here" >&2; return 1; }
+	listed="$(git -C "$ROOT" ls-tree "$rev" -- "$path")" || { echo "findings: can't read the tree at $rev" >&2; return 1; }
+	if [[ -n "$listed" ]]; then
+		git -C "$ROOT" show "$rev:$path" > "$out" || { echo "findings: can't read $path at $rev" >&2; return 1; }
+	else
+		: > "$out"
+	fi
+}
+findings_presence() { # HERE BASE MAIN (1/0 each): may this tree go without a register? (WWW-2)
+	[[ "$1" = 1 ]] && return 0
+	[[ "$2" = 0 && "$3" = 0 ]]
+}
+# Every commit the register cites (stdin from findings.ts shas: "<token>\t<0|1 upstream pin>\t<branch
+# or ->\t<use>") is a commit on HEAD's or main's history or, for an entry carrying `branch`, on
+# origin/<branch> (review YYY). The object is resolved by `rev-parse --disambiguate`, so no ref
+# named like a token can shadow it, and an ambiguous prefix is reported as such. An exempt token
+# (a prefix of the upstream pin) must not be a commit here. A branch entry whose branch no
+# longer holds its commit fails only a change that writes the register (the change that must remap
+# it); any other change lists it, so an unrelated landing isn't blocked (YYY-5).
+findings_resolve() { # TOKEN -> the full commit id; 1 unknown or not a commit, 2 ambiguous
+	local objs n
+	[[ "$1" =~ ^[0-9a-f]{7,40}$ ]] || return 1
+	objs="$(git -C "$ROOT" rev-parse --disambiguate="$1" 2>/dev/null)" || return 1
+	n="$(grep -c . <<<"$objs")"
+	[[ "$n" -gt 1 ]] && return 2
+	[[ "$n" -eq 1 && "$(git -C "$ROOT" cat-file -t "$objs" 2>/dev/null)" == commit ]] || return 1
+	echo "$objs"
+}
+findings_reachable() { # TOKEN BRANCH(- for none): 0 live, 1 not live, 2 ambiguous
+	local c rc=0 main
+	c="$(findings_resolve "$1")" || rc=$?
+	[[ $rc -ne 0 ]] && return $rc
+	git -C "$ROOT" merge-base --is-ancestor "$c" HEAD 2>/dev/null && return 0
+	main="$(git -C "$ROOT" rev-parse -q --verify refs/remotes/origin/main)" && git -C "$ROOT" merge-base --is-ancestor "$c" "$main" 2>/dev/null && return 0
+	[[ "$2" != - && "$2" =~ ^[A-Za-z0-9._/-]+$ && "$2" != *..* ]] || return 1
+	git -C "$ROOT" rev-parse -q --verify "refs/remotes/origin/$2" >/dev/null || return 1
+	git -C "$ROOT" merge-base --is-ancestor "$c" "refs/remotes/origin/$2" 2>/dev/null
+}
+findings_shas() { # WRITES_REGISTER (1/0)
+	local t up br use rc where bad=0 stale=0
+	while IFS=$'\t' read -r t up br use; do
+		[[ -z "$t" ]] && continue
+		rc=0; findings_reachable "$t" "$br" || rc=$?
+		if [[ $rc -eq 2 ]]; then
+			echo "findings: $use cites $t, which is an ambiguous prefix here; cite more characters" >&2; bad=1
+		elif [[ "$up" = 1 ]]; then
+			[[ $rc -eq 0 ]] && { echo "findings: $use cites $t as the upstream pin, but it is a commit here" >&2; bad=1; }
+		elif [[ $rc -ne 0 && "$br" != - && "$1" != 1 ]]; then
+			echo "findings: warning: $use cites $t, no longer on origin/$br or main; remap it in the next change to the register" >&2; stale=$((stale+1))
+		elif [[ $rc -ne 0 ]]; then
+			where="main's history"; [[ "$br" != - ]] && where+=" or origin/$br"
+			echo "findings: $use cites $t, which isn't a commit on $where: remap it to its equivalent commit" >&2; bad=1
+		fi
+	done
+	[[ $stale -gt 0 ]] && echo "findings: $stale branch-entry citation(s) to remap (listed above)" >&2
+	return $bad
+}
+# On main (HEAD is the merge base): what to compare with, given the push's previous head. Unset
+# (local runs): the first parent. Never HEAD itself. A previous head that isn't an ancestor (a
+# force-push) never narrows the comparison: its merge base with HEAD is older, so stricter; one
+# that isn't a commit here, or shares no history, fails (XXX-6).
+findings_main_base() { # PREVIOUS_HEAD
+	local prev="$1" head
+	head="$(git -C "$ROOT" rev-parse HEAD)"
+	if [[ -z "$prev" || "$prev" =~ ^0+$ || "$prev" == "$head" ]]; then
+		git -C "$ROOT" rev-parse -q --verify 'HEAD^1^{commit}' || { echo "findings: HEAD is main with no parent to compare with" >&2; return 1; }
+	elif [[ ! "$prev" =~ ^[0-9a-f]{40}$ ]] || ! git -C "$ROOT" cat-file -e "$prev^{commit}" 2>/dev/null; then
+		echo "findings: on main, the previous head ${prev:0:40} isn't a commit here (force-push?); refusing to compare with less" >&2
+		return 1
+	elif git -C "$ROOT" merge-base --is-ancestor "$prev" HEAD 2>/dev/null; then
+		echo "$prev"
+	else
+		git -C "$ROOT" merge-base "$prev" HEAD || { echo "findings: on main, the previous head $prev shares no history with HEAD; refusing to compare with less" >&2; return 1; }
+	fi
+}
+findings_check() {
+	local mb rev list main
+	mkdir -p "$ROOT/.work"
+	main="$(git -C "$ROOT" rev-parse --verify -q origin/main)" || { echo "findings: no origin/main (fetch it)" >&2; exit 1; }
+	mb="$(git -C "$ROOT" merge-base "$main" HEAD)" || { echo "findings: no merge base with origin/main" >&2; exit 1; }
+	rev="$mb"
+	# On main itself the merge base is HEAD: compare with the push's previous head instead
+	# (validated before git sees it: TTT-11), else the first parent (TTT-7). Never HEAD itself.
+	# A previous head that isn't an ancestor (a force-push) never narrows the comparison to one
+	# commit: use its merge base with HEAD (stricter), and fail if there is none (XXX-6).
+	if [[ "$mb" == "$(git -C "$ROOT" rev-parse HEAD)" ]]; then
+		rev="$(findings_main_base "${DOCS_BASE:-}")" || exit 1
+		echo "findings: on main; comparing with $rev"
+	fi
+	findings_base "$rev" "$ROOT/.work/findings-base.json" || exit 1
+	local base_had=1 main_has=0
+	[[ -s "$ROOT/.work/findings-base.json" ]] || base_had=0
+	git -C "$ROOT" cat-file -e "$main:docs/security-reviews/findings.json" 2>/dev/null && main_has=1
+	if [[ ! -f "$ROOT/docs/security-reviews/findings.json" ]]; then
+		# Gone while the base or main has it: fail (a removal, or a branch that must rebase to adopt
+		# the register before it can land). Skip only when neither ever had one (WWW-2).
+		if ! findings_presence 0 "$base_had" "$main_has"; then
+			echo "findings: docs/security-reviews/findings.json is missing, but ${rev:0:12} or origin/main has it; rebase onto main to adopt it" >&2
+			exit 1
+		fi
+		echo "findings: no register here or on origin/main; skipped"
+		return 0
+	fi
+	# A branch forked before the register landed, that has it now, is judged against main's
+	# register. Not on main itself, where that would compare the register with itself (UUU-6).
+	if [[ $base_had = 0 && "$mb" != "$(git -C "$ROOT" rev-parse HEAD)" ]]; then
+		findings_base "$main" "$ROOT/.work/findings-base.json" || exit 1
+	fi
+	# What this change writes, committed or not (VVV-6), and owner-acceptances.md as it was at the
+	# base: a high is closed by an owner row only once that row has landed (UUU-4, VVV-3).
+	{ git -C "$ROOT" diff --name-only "$rev" HEAD && git -C "$ROOT" diff --name-only HEAD && git -C "$ROOT" ls-files --others --exclude-standard; } \
+		| sort -u > "$ROOT/.work/findings-changed.txt" || { echo "findings: can't list the files changed since $rev" >&2; exit 1; }
+	rm -rf "$ROOT/.work/findings-before"
+	mkdir -p "$ROOT/.work/findings-before/docs/security-reviews"
+	# The owner file is a regular tracked file, so its path names its content (XXX-7).
+	local own=docs/security-reviews/owner-acceptances.md mode
+	if [[ -e "$ROOT/$own" || -L "$ROOT/$own" ]]; then
+		mode="$(git -C "$ROOT" ls-files -s -- "$own" | cut -d' ' -f1)"
+		if [[ -L "$ROOT/$own" || ! -f "$ROOT/$own" || ( -n "$mode" && "$mode" != 100644 ) ]]; then
+			echo "findings: $own must be a regular file (mode 100644)" >&2
+			exit 1
+		fi
+	fi
+	if git -C "$ROOT" cat-file -e "$rev:docs/security-reviews/owner-acceptances.md" 2>/dev/null; then
+		git -C "$ROOT" show "$rev:docs/security-reviews/owner-acceptances.md" > "$ROOT/.work/findings-before/docs/security-reviews/owner-acceptances.md" || exit 1
+	fi
+	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts check --base .work/findings-base.json --changed .work/findings-changed.txt --before .work/findings-before
+	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts commits)"
+	findings_ancestry <<<"$list" || exit 1
+	echo "findings: every fixed entry's commit is on HEAD's history"
+	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts shas)" || exit 1
+	local writes=0
+	grep -qx 'docs/security-reviews/findings.json' "$ROOT/.work/findings-changed.txt" && writes=1
+	findings_shas "$writes" <<<"$list" || exit 1
+	echo "findings: every commit the register cites is on main's history or its entry's branch"
+}
+# The host half's own injections (QQQ-9, SSS-9): ancestry (a non-ancestor SHA, an option-shaped
+# value, a control) and base resolution (a commit before the register, a non-commit, a control).
+findings_host_self_test() {
+	local head root out="$ROOT/.work/findings-base-selftest.json"
+	mkdir -p "$ROOT/.work"
+	head="$(git -C "$ROOT" rev-parse HEAD)"
+	printf 'control\t%s\n' "$head" | findings_ancestry || { echo "findings host self-test: the control (HEAD) failed" >&2; exit 1; }
+	if printf 'x\t%s\n' 0123456789abcdef0123456789abcdef01234567 | findings_ancestry 2>/dev/null; then echo "findings host self-test: a non-ancestor SHA passed" >&2; exit 1; fi
+	if printf 'x\t%s\n' '--upload-pack=x' | findings_ancestry 2>/dev/null; then echo "findings host self-test: an option-shaped SHA passed" >&2; exit 1; fi
+	root="$(git -C "$ROOT" rev-list --max-parents=0 HEAD | tail -1)"
+	findings_base "$root" "$out" && [[ ! -s "$out" ]] || { echo "findings host self-test: a commit before the register didn't give an empty base" >&2; exit 1; }
+	if findings_base 0123456789abcdef0123456789abcdef01234567 "$out" 2>/dev/null; then echo "findings host self-test: a missing base commit didn't fail" >&2; exit 1; fi
+	if [[ -f "$ROOT/docs/security-reviews/findings.json" ]] && git -C "$ROOT" ls-files --error-unmatch docs/security-reviews/findings.json >/dev/null 2>&1; then
+		findings_base "$head" "$out" && [[ -s "$out" ]] || { echo "findings host self-test: the control (HEAD's register) was empty" >&2; exit 1; }
+	fi
+	rm -f "$out"
+	# WWW-2: a tree without the register passes only when neither the base nor main ever had one.
+	if findings_presence 0 0 1; then echo "findings host self-test: a missing register passed while main has one (WWW-2)" >&2; exit 1; fi
+	if findings_presence 0 1 0; then echo "findings host self-test: a missing register passed while the base has one" >&2; exit 1; fi
+	findings_presence 0 0 0 || { echo "findings host self-test: the control (no register anywhere) failed" >&2; exit 1; }
+	# XXX-6: on main, a force-pushed previous head compares with its merge base, never with less.
+	local p1 got side
+	p1="$(git -C "$ROOT" rev-parse -q --verify 'HEAD^1^{commit}')" || { echo "findings host self-test: HEAD has no parent" >&2; exit 1; }
+	got="$(findings_main_base "")" && [[ "$got" == "$p1" ]] || { echo "findings host self-test: the control (no previous head) didn't give HEAD^1" >&2; exit 1; }
+	got="$(findings_main_base "$root")" && [[ "$got" == "$root" ]] || { echo "findings host self-test: the control (an ancestor) wasn't used as is" >&2; exit 1; }
+	side="$(GIT_AUTHOR_NAME=selftest GIT_AUTHOR_EMAIL=selftest@example.invalid GIT_COMMITTER_NAME=selftest GIT_COMMITTER_EMAIL=selftest@example.invalid git -C "$ROOT" commit-tree -p "$root" -m side "$(git -C "$ROOT" rev-parse "$root^{tree}")")" || { echo "findings host self-test: can't make a side commit" >&2; exit 1; }
+	got="$(findings_main_base "$side")" && [[ "$got" == "$root" ]] || { echo "findings host self-test: a force-pushed previous head didn't compare with its merge base (XXX-6)" >&2; exit 1; }
+	if findings_main_base 0123456789abcdef0123456789abcdef01234567 >/dev/null 2>&1; then echo "findings host self-test: a previous head that isn't a commit passed (XXX-6)" >&2; exit 1; fi
+	if findings_main_base '--upload-pack=x' >/dev/null 2>&1; then echo "findings host self-test: an option-shaped previous head passed" >&2; exit 1; fi
+	side="$(GIT_AUTHOR_NAME=selftest GIT_AUTHOR_EMAIL=selftest@example.invalid GIT_COMMITTER_NAME=selftest GIT_COMMITTER_EMAIL=selftest@example.invalid git -C "$ROOT" commit-tree -m orphan "$(git -C "$ROOT" rev-parse "$root^{tree}")")" || { echo "findings host self-test: can't make an orphan commit" >&2; exit 1; }
+	if findings_main_base "$side" >/dev/null 2>&1; then echo "findings host self-test: a previous head with no shared history passed (XXX-6)" >&2; exit 1; fi
+	# Commit citations: a dangling commit (the orphan above, on no ref) fails untolerated, and so
+	# does a non-commit token; a tolerated non-commit passes; a tolerated reachable commit fails.
+	printf '%s\t0\t-\tcontrol\n' "$head" | findings_shas 1 || { echo "findings host self-test: the control (HEAD cited) failed" >&2; exit 1; }
+	if printf '%s\t0\t-\tx\n' "$side" | findings_shas 1 2>/dev/null; then echo "findings host self-test: a dangling commit citation passed" >&2; exit 1; fi
+	if printf '%s\t0\t-\tx\n' "$side" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a dangling citation in a non-branch entry passed outside a register change (YYY-5)" >&2; exit 1; fi
+	if printf '%s\t0\tmain\tx\n' "$side" | findings_shas 1 2>/dev/null; then echo "findings host self-test: a branch entry's commit not on its branch passed in a register change" >&2; exit 1; fi
+	printf '%s\t0\tno-such-branch\tx\n' "$side" | findings_shas 0 2>/dev/null || { echo "findings host self-test: a stale branch-entry citation blocked a change that doesn't write the register (YYY-5)" >&2; exit 1; }
+	if printf 'abcdef0123456\t0\t-\tx\n' | findings_shas 1 2>/dev/null; then echo "findings host self-test: a non-commit token passed" >&2; exit 1; fi
+	printf 'abcdef0123456\t1\t-\tx\n' | findings_shas 1 || { echo "findings host self-test: the control (the upstream pin, not a commit here) failed" >&2; exit 1; }
+	if printf '%s\t1\t-\tx\n' "$head" | findings_shas 1 2>/dev/null; then echo "findings host self-test: an upstream-pin token that is a commit here passed" >&2; exit 1; fi
+	if printf -- '--all\t0\t-\tx\n' | findings_shas 1 2>/dev/null; then echo "findings host self-test: an option-shaped token passed" >&2; exit 1; fi
+	if printf '%s\t0\t../x\tx\n' "$side" | findings_shas 1 2>/dev/null; then echo "findings host self-test: a path-shaped branch passed" >&2; exit 1; fi
+	# YYY-4: a ref named like a token doesn't stand in for the object; resolution ignores refs.
+	[[ "$(findings_resolve "${head:0:12}")" == "$head" ]] || { echo "findings host self-test: the control (resolving HEAD's prefix) failed" >&2; exit 1; }
+	if findings_resolve "$(git -C "$ROOT" rev-parse HEAD^{tree})" >/dev/null 2>&1; then echo "findings host self-test: a tree object resolved as a commit" >&2; exit 1; fi
+	echo "findings host self-test: ok"
+}
+
 docs_check() {
 	local run=0 online=0 paired=0
 	for a in "$@"; do
@@ -223,6 +429,7 @@ docs_check() {
 		esac
 	done
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/docs-check.ts check
+	findings_check
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node tabd/tools/gen-obs-docs.ts check
 	git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/deps.ts check -
 	if [[ -d "$ROOT/broker" ]]; then
@@ -621,8 +828,18 @@ case "${1:-help}" in
 	docs)
 		shift
 		case "${1:-}" in
-			write) docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" sh -c 'node tabd/tools/gen-obs-docs.ts write && node build/docs/docs-check.ts write && node build/deps.ts write' ;;
+			write) docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" sh -c 'node tabd/tools/gen-obs-docs.ts write && node build/docs/findings.ts write && node build/docs/docs-check.ts write && node build/deps.ts write' ;;
 			check) shift; docs_check "$@" ;;
+			*) usage; exit 2 ;;
+		esac ;;
+	findings)
+		shift
+		[[ $# -eq 1 ]] || { usage; exit 2; }
+		case "$1" in
+			--self-test) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts --self-test
+				findings_host_self_test ;;
+			baseline) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts baseline ;;
+			check) findings_check ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	help|-h|--help) usage ;;
