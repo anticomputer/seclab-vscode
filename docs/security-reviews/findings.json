@@ -10467,7 +10467,7 @@
 			"component": "findings register: ratchet",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a severity lowered since the merge base fails, even if the record was edited too"
@@ -10482,7 +10482,7 @@
 			"component": "findings register: base resolution",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "seclab",
 				"name": "findings host self-test: a commit before the register didn't give an empty base"
@@ -10497,7 +10497,7 @@
 			"component": "findings register: test evidence",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a workflow that mentions --self-test is still not a test (SSS-3)"
@@ -10512,7 +10512,7 @@
 			"component": "findings register: acceptance",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an owner row for another finding does not close this one"
@@ -10527,7 +10527,7 @@
 			"component": "findings register: escape hatches",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a record with only manual entries must be listed under manualOnly (SSS-5)"
@@ -10542,7 +10542,7 @@
 			"component": "findings register: severity",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a legacy row with no severity word needs a severityNote (SSS-6)"
@@ -10557,7 +10557,7 @@
 			"component": "findings register: generated view",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a register cell stays one cell, backslash tricks included"
@@ -10572,7 +10572,7 @@
 			"component": "findings register: false failures",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "control: a dotfile under the reviews dir is ignored (SSS-8)"
@@ -10587,7 +10587,7 @@
 			"component": "findings register: self-test",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a stray file under the reviews dir fails (SSS-9)"
@@ -10602,7 +10602,7 @@
 			"component": "findings register: false positives",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a high false positive by an agent fails (TTT-1)"
@@ -10617,7 +10617,7 @@
 			"component": "findings register: acceptance binding",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a row for a sibling key does not close the shorter key (exact match)"
@@ -10632,7 +10632,7 @@
 			"component": "findings register: test evidence",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a name below a header mention of --self-test but outside the self-test fails (TTT-3)"
@@ -10647,7 +10647,7 @@
 			"component": "findings register: extraction",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "heading is a finding (TTT-4)"
@@ -10662,7 +10662,7 @@
 			"component": "findings register: weekly listing",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "baseline mode: an unresolved key is a problem"
@@ -10677,7 +10677,7 @@
 			"component": "findings register: conservation",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "control: a finding moved under wasKey is conserved"
@@ -10692,7 +10692,7 @@
 			"component": "findings register: base on main",
 			"owner": "register",
 			"status": "fixed-untested",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"gap": "A shell guard in seclab's findings_check; the host self-test covers base resolution but not this branch."
 		},
 		{
@@ -10704,7 +10704,7 @@
 			"component": "findings register: stray entries",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a dotted record name is an unexpected entry, not ignored (TTT-8)"
@@ -10719,7 +10719,7 @@
 			"component": "findings register: extraction",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a Sev-first table row is anchored by its next cell (TTT-9)"
@@ -10734,7 +10734,7 @@
 			"component": "findings register: generated view",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a bare URL in register text is not autolinked (TTT-10)"
@@ -10749,7 +10749,7 @@
 			"component": "findings register: DOCS_BASE",
 			"owner": "register",
 			"status": "fixed-untested",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"gap": "A shell guard in seclab's findings_check; the host self-test covers base resolution but not this branch."
 		},
 		{
@@ -10761,7 +10761,7 @@
 			"component": "findings register: user acceptance",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an owner acceptance with no row in owner-acceptances.md fails"
@@ -10776,7 +10776,7 @@
 			"component": "findings register: wasKey",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "launder a removal (UUU-2)"
@@ -10791,7 +10791,7 @@
 			"component": "findings register: ratchet",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "join the baseline via wasKey of a live baseline key (UUU-3)"
@@ -10806,7 +10806,7 @@
 			"component": "findings register: user acceptance",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an owner row added in this same change does not close it (UUU-4)"
@@ -10821,7 +10821,7 @@
 			"component": "findings register: test evidence",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a self-test start that never ends opens no region (UUU-5)"
@@ -10836,7 +10836,7 @@
 			"component": "findings register: base on main",
 			"owner": "register",
 			"status": "fixed-untested",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"gap": "A shell guard in seclab's findings_check; not covered by the host self-test."
 		},
 		{
@@ -10848,7 +10848,7 @@
 			"component": "findings register: CI reality",
 			"owner": "register",
 			"status": "fixed-untested",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"gap": "Documented in the EDR; nothing to test until the register is on main."
 		},
 		{
@@ -10860,7 +10860,7 @@
 			"component": "findings register: acceptance binding",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a row for a sibling key does not close the shorter key (exact match)"
@@ -10875,7 +10875,7 @@
 			"component": "findings register: wasKey",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "wasKey substitution by an unrelated entry fails (VVV-2)"
@@ -10890,7 +10890,7 @@
 			"component": "findings register: decision landing",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "control: a later unrelated edit to owner-acceptances.md keeps it closed (VVV-3)"
@@ -10905,7 +10905,7 @@
 			"component": "findings register: pre-register branches",
 			"owner": "register",
 			"status": "fixed-untested",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"gap": "Shell control flow in seclab's findings_check; not covered by the host self-test."
 		},
 		{
@@ -10917,7 +10917,7 @@
 			"component": "findings register: test evidence",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "inside a block comment opens no region (VVV-5)"
@@ -10932,7 +10932,7 @@
 			"component": "findings register: --changed",
 			"owner": "register",
 			"status": "fixed-untested",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"gap": "Shell control flow in seclab's findings_check; not covered by the host self-test."
 		},
 		{
@@ -10944,7 +10944,7 @@
 			"component": "findings register: docs",
 			"owner": "register",
 			"status": "fixed-untested",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"gap": "Documentation wording; nothing executes it."
 		},
 		{
@@ -10956,7 +10956,7 @@
 			"component": "findings register: acceptance binding",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an owner row for another finding does not close this one"
@@ -10971,7 +10971,7 @@
 			"component": "findings register: decision landing",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an owner row added in this same change does not close it (UUU-4)"
@@ -10986,7 +10986,7 @@
 			"component": "findings register: pre-register branches",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "seclab",
 				"name": "a missing register passed while main has one (WWW-2)"
@@ -11001,7 +11001,7 @@
 			"component": "findings register: ancestry",
 			"owner": "register",
 			"status": "fixed-untested",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"gap": "Enforced by the docs job's ancestry step over the remapped register, not by a self-test case."
 		},
 		{
@@ -11013,7 +11013,7 @@
 			"component": "findings register: test evidence",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a /* inside a string cannot blank a self-test end and stretch the region (WWW-4)"
@@ -11028,7 +11028,7 @@
 			"component": "findings register: --before",
 			"owner": "register",
 			"status": "fixed-untested",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"gap": "Resolved by design: only owner-acceptances.md needs a base copy; nothing to test."
 		},
 		{
@@ -11040,7 +11040,7 @@
 			"component": "findings register: CLI",
 			"owner": "register",
 			"status": "fixed-untested",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"gap": "A CLI argument check; not covered by the self-test."
 		},
 		{
@@ -11068,7 +11068,7 @@
 			"component": "findings register: owner file",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a row inside an HTML comment fails (XXX-1)"
@@ -11083,7 +11083,7 @@
 			"component": "findings register: quote scan",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "curly single quotes in a cell fail (XXX-3)"
@@ -11098,7 +11098,7 @@
 			"component": "findings register: keys",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an escaped pipe in a key reads as a pipe (XXX-4)"
@@ -11113,7 +11113,7 @@
 			"component": "findings register: rename",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "control: a renamed owner-accepted high keeps its landed row under wasKey (XXX-5)"
@@ -11128,7 +11128,7 @@
 			"component": "findings register: main base",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "seclab",
 				"name": "a force-pushed previous head didn't compare with its merge base (XXX-6)"
@@ -11143,7 +11143,7 @@
 			"component": "findings register: landing order",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a row whose file changed without being listed does not close it (XXX-7)"
@@ -11158,7 +11158,7 @@
 			"component": "findings register: docs",
 			"owner": "register",
 			"status": "fixed-untested",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"gap": "Documentation and comments only; nothing to test."
 		},
 		{
@@ -11202,7 +11202,7 @@
 			"component": "findings register: token shape",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a hex run over 40 characters fails (YYY-1)"
@@ -11217,7 +11217,7 @@
 			"component": "findings register: fix commits",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "control: shas mode sees fix commits (all-digit too)"
@@ -11232,7 +11232,7 @@
 			"component": "findings register: tolerance",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a fix commit is never exempt as the upstream pin"
@@ -11247,7 +11247,7 @@
 			"component": "findings register: liveness",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "seclab",
 				"name": "a branch entry's commit not on its branch passed in a register change"
@@ -11262,7 +11262,7 @@
 			"component": "findings register: operations",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "seclab",
 				"name": "a stale branch-entry citation blocked a change that doesn't write the register (YYY-5)"
@@ -11277,7 +11277,7 @@
 			"component": "findings register: scope",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "control: shas mode sees fix commits (all-digit too)"
@@ -11292,7 +11292,7 @@
 			"component": "findings register: self-test",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "citations carry its branch, and only those"
@@ -11307,7 +11307,7 @@
 			"component": "findings register: errors",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "seclab",
 				"name": "a tree object resolved as a commit"
@@ -11338,7 +11338,7 @@
 			"component": "findings register: branch entries",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a fixed high on a branch is not compliant"
@@ -11353,7 +11353,7 @@
 			"component": "findings register: user acceptance",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a ref to the register itself fails (self-citation)"
@@ -11368,7 +11368,7 @@
 			"component": "findings register: test evidence",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a test name too short to name one case fails"
@@ -11383,7 +11383,7 @@
 			"component": "findings register: extraction",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a record that yields no finding fails"
@@ -11398,7 +11398,7 @@
 			"component": "findings register: strict IDs",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a new placeholder ID fails against the base"
@@ -11413,7 +11413,7 @@
 			"component": "findings register: ratchet",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a key added to the baseline fails against the base (it only shrinks)"
@@ -11428,7 +11428,7 @@
 			"component": "findings register: severity",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a new finding with no severity word fails against the base"
@@ -11443,7 +11443,7 @@
 			"component": "findings register: generated view",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "the view has no live link from register text, backslash tricks included"
@@ -11458,7 +11458,7 @@
 			"component": "findings register: self-test",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "seclab",
 				"name": "findings host self-test: a non-ancestor SHA passed"
@@ -11473,7 +11473,7 @@
 			"component": "findings register: liveness-refresh workflow",
 			"owner": "register",
 			"status": "fixed-untested",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"gap": "Fixed by moving the listing into its own contents: read job; no check covers workflow job structure."
 		},
 		{
@@ -11485,7 +11485,7 @@
 			"component": "findings register: baseline mode",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "baseline mode: an unresolved key is a problem"
@@ -11500,7 +11500,7 @@
 			"component": "findings register: baseline mode",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "the view has no live link from register text, backslash tricks included"
@@ -11515,7 +11515,7 @@
 			"component": "findings register: liveness-refresh workflow",
 			"owner": "register",
 			"status": "fixed-untested",
-			"commit": "b0d3e8c",
+			"commit": "f5803ac",
 			"gap": "Fixed by moving the listing into its own contents: read job; no check covers workflow job structure."
 		},
 		{
