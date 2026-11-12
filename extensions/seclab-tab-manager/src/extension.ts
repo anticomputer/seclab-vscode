@@ -546,7 +546,7 @@ function routeOpenRequest(uri: vscode.Uri): Promise<void> {
 	const paths = query.getAll('path').filter(p => path.isAbsolute(p));
 	const unsupported = query.getAll('unsupported').length + query.getAll('path').length - paths.length;
 	log.info(`open request: ${paths.length} folder(s), ${unsupported} unsupported`);
-	routing = routing.then(async () => {
+	routing = routing.catch(() => undefined).then(async () => {
 		if (unsupported) {
 			void vscode.window.showWarningMessage(UNSUPPORTED_WORKSPACE);
 		}
@@ -555,16 +555,24 @@ function routeOpenRequest(uri: vscode.Uri): Promise<void> {
 		for (const [i, hostPath] of paths.entries()) {
 			await openAsTab(hostPath, reuse && i === paths.length - 1);
 		}
+	}).catch(e => {
+		log.error(`open request failed: ${safeText((e as Error).message)}`);
+		void vscode.window.showErrorMessage(`Cannot open the folder as a tab: ${safeText((e as Error).message)}`);
 	});
 	return routing;
+}
+
+/** Folder identity for "this folder already has a tab": case-insensitive only where the file system is. */
+function sameFolder(a: string, b: string): boolean {
+	const key = (p: string) => process.platform === 'linux' ? p.normalize('NFC') : p.normalize('NFC').toLowerCase();
+	return key(a) === key(b);
 }
 
 /** Confirm (for a folder with no tab yet), claim and open `hostPath` as a tab. */
 async function openAsTab(hostPath: string, reuseWindow: boolean): Promise<void> {
 	try {
 		const c = await getClient();
-		const known = (await c.request<{ tabs: TabView[] }>('tab.list')).tabs
-			.some(t => t.spec.workspace.hostPath.normalize('NFC').toLowerCase() === hostPath.normalize('NFC').toLowerCase());
+		const known = (await c.request<{ tabs: TabView[] }>('tab.list')).tabs.some(t => sameFolder(t.spec.workspace.hostPath, hostPath));
 		if (!known) {
 			const ok = await vscode.window.showWarningMessage(
 				`Open "${safeText(hostPath)}" in a sandboxed tab?`,
