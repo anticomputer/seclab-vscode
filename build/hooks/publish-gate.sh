@@ -113,6 +113,8 @@ publish_gate() {
 	# still has no network, no capabilities, no new privileges and a read-only root.
 	local user
 	user="$(id -u):$(id -g)"
+	# Never root in the container (R22-5): a root invoker isn't needed for anything here.
+	[[ "$(id -u)" != 0 ]] || { echo "publish-gate: refusing to run the scan as root; push as your own user" >&2; return 1; }
 	# A scan that could not run (exit 2) is retried: Docker Desktop's bind mounts can briefly miss
 	# a file git just replaced (HEAD after a checkout). Still blocked after three tries.
 	for attempt in 1 2 3; do

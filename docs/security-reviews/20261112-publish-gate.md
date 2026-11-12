@@ -79,3 +79,32 @@ three mediums and two lows, all fixed in the gate commit with a self-test each:
 Against the real list after the fixes: all 39 entries are found as written, uppercased, with
 joiners swapped, inside a URL and inside JSON; main's tree has no known-name match.
 `./seclab lint denylist --self-test` 43 cases.
+
+## Round 22 (the list unreadable in CI; secret-scope lint)
+After landing, main's `denylist` job failed closed on every push: `ci-denylist.sh` writes the
+secret to a mode-600 file owned by the runner user, and the scan container ran as `nobody`. Docker
+Desktop virtualises bind-mount ownership, so every local run, the hook included, passed. The gate
+failed closed as designed; main was red, nothing leaked.
+
+Fix: the scan runs as the invoking user (never root), keeping no network, a read-only root, no
+capabilities and no new privileges. `./seclab lint publish --mount-test`, run by the lint job,
+drives the real driver and mount with a fake list written as the CI job writes it, and asserts a
+listed name is found. Its first CI run, before the fix, failed with the same error. New rule S1 in
+`build/check-workflow-echo.ts` asserts that no branch-controlled code runs with a secret (review
+round 17, finding 1).
+
+Reviewer: independent `security-review` agent (an Opus-class model), the injection warning in
+its prompt; none found. It verified the secret is environment-scoped with a main-only
+deployment-branch policy. **No high or critical.** All fixed, each with a self-test:
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| R22-1 | low | S1's line reader skipped jobs after a column-0 comment, a quoted or flow-mapping job, an odd indent, or `jobs:` with a comment. | Comments don't end the section; anything in it that isn't a recognised job fails closed. |
+| R22-2 | low | An unrecognised job's lines joined the previous job, inheriting its compliant gate. | Same fix; each job is bounded by recognised heads or fails. |
+| R22-3 | low | `SECRETS.X`, `secrets['X']` and `toJSON(secrets)` weren't seen as secret uses. | Any `${{ … secrets … }}`, case-insensitive. |
+| R22-4 | info | A workflow-level secret binding wasn't flagged. | A secret outside a job is refused. |
+| R22-5 | info | A root invoker made the container root. | The driver refuses to run as root. |
+| R22-6 | info | The mount test proves nothing on a macOS engine. | It says so when run off Linux; CI's run is the proof. |
+| R22-7 | info | Nothing pinned the driver's hardening flags. | The mount test asserts them and refuses a root user. |
+
+`build/check-workflow-echo.ts --self-test` 46 cases.

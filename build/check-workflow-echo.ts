@@ -150,38 +150,64 @@ export function checkScript(file: string, text: string, secrets: Set<string>): F
 export function checkSecretScope(file: string, text: string): Finding[] {
 	const out: Finding[] = [];
 	const lines = text.split('\n');
+	// Any way a context expression can name secrets: case-insensitive, dot, index or toJSON (R22-3).
+	const SECRET = /\$\{\{[^}]*\bsecrets\b/i;
+	const comment = (l: string) => /^\s*(?:#.*)?$/.test(l);
 	lines.forEach((l, i) => {
-		if (/^\s*(?:-\s*)?(?:pull_request_target|workflow_run)\s*:?\s*(?:#.*)?$/.test(l) || /^on:\s*\[?.*\b(?:pull_request_target|workflow_run)\b/.test(l)) {
+		if (/^\s*(?:-\s*)?["']?(?:pull_request_target|workflow_run)["']?\s*:?\s*(?:#.*)?$/.test(l) || /\b(?:pull_request_target|workflow_run)\b\s*[:,\]}]/.test(l)) {
 			out.push({ file, line: i + 1, rule: 'S1' });
 		}
-		if (/^\s*secrets:\s*inherit\b/.test(l)) {
+		if (/\bsecrets:\s*inherit\b/.test(l)) {
 			out.push({ file, line: i + 1, rule: 'S1' });
 		}
 	});
-	const start = lines.findIndex(l => /^jobs:\s*$/.test(l));
-	if (start < 0) {
-		return out;
-	}
-	const heads: number[] = [];
-	for (let i = start + 1; i < lines.length && !/^\S/.test(lines[i]); i++) {
-		if (/^ {2}[A-Za-z0-9_-]+:\s*(?:#.*)?$/.test(lines[i])) {
-			heads.push(i);
+	const start = lines.findIndex(l => /^jobs:\s*(?:#.*)?$/.test(l));
+	// A secret named outside a recognised job (workflow-level env, a file with no readable jobs
+	// section) reaches every job: refused (R22-4).
+	const inJob = new Set<number>();
+	if (start >= 0) {
+		const heads: number[] = [];
+		let i = start + 1;
+		for (; i < lines.length; i++) {
+			const l = lines[i];
+			if (comment(l) || /^ {4,}\S/.test(l)) {
+				continue;
+			}
+			if (/^ {2}(?:[A-Za-z0-9_-]+|"[A-Za-z0-9_-]+"|'[A-Za-z0-9_-]+'):\s*(?:#.*)?$/.test(l)) {
+				heads.push(i);
+				continue;
+			}
+			if (/^\S/.test(l)) {
+				break; // the next top-level key
+			}
+			// Anything else in the jobs section (a flow mapping, an odd indent) is a job this lint
+			// can't read: fail closed (R22-1, R22-2).
+			out.push({ file, line: i + 1, rule: 'S1' });
 		}
+		const end = i;
+		heads.forEach((h, k) => {
+			const stop = k + 1 < heads.length ? heads[k + 1] : end;
+			for (let j = h; j < stop; j++) {
+				inJob.add(j);
+			}
+			const body = lines.slice(h + 1, stop);
+			const uses = body.findIndex(l => !comment(l) && SECRET.test(l));
+			if (uses < 0) {
+				return;
+			}
+			const cond = body.find(l => /^ {4}if:/.test(l)) ?? '';
+			const pushMain = /github\.event_name\s*==\s*'push'/.test(cond) && /github\.ref\s*==\s*'refs\/heads\/main'/.test(cond) && !/\|\||!\s*\(/.test(cond);
+			const env = body.some((l, j) => /^ {4}environment:\s*denylist\s*(?:#.*)?$/.test(l)
+				|| (/^ {4}environment:\s*$/.test(l) && /^ {6}name:\s*denylist\s*(?:#.*)?$/.test(body[j + 1] ?? '')));
+			const ref = body.some(l => /\bref:/.test(l));
+			if (!pushMain || !env || ref) {
+				out.push({ file, line: h + 2 + uses, rule: 'S1' });
+			}
+		});
 	}
-	heads.forEach((h, k) => {
-		const end = k + 1 < heads.length ? heads[k + 1] : lines.length;
-		const body = lines.slice(h + 1, end);
-		const uses = body.findIndex(l => !/^\s*#/.test(l) && /\$\{\{\s*secrets\./.test(l));
-		if (uses < 0) {
-			return;
-		}
-		const cond = body.find(l => /^ {4}if:/.test(l)) ?? '';
-		const pushMain = /github\.event_name\s*==\s*'push'/.test(cond) && /github\.ref\s*==\s*'refs\/heads\/main'/.test(cond) && !/\|\||!\s*\(/.test(cond);
-		const env = body.some((l, j) => /^ {4}environment:\s*denylist\s*(?:#.*)?$/.test(l)
-			|| (/^ {4}environment:\s*$/.test(l) && /^ {6}name:\s*denylist\s*(?:#.*)?$/.test(body[j + 1] ?? '')));
-		const ref = body.some(l => /^\s+ref:/.test(l));
-		if (!pushMain || !env || ref) {
-			out.push({ file, line: h + 2 + uses, rule: 'S1' });
+	lines.forEach((l, i) => {
+		if (!comment(l) && SECRET.test(l) && !inJob.has(i)) {
+			out.push({ file, line: i + 1, rule: 'S1' });
 		}
 	});
 	return out;
@@ -223,6 +249,18 @@ function selfTest(): number {
 	expect('S1: a workflow_run trigger blocks', s1(job(okCond, okEnv).replace('  pull_request:\n', '  workflow_run:\n')) === 1);
 	expect('S1: a pull_request_target trigger blocks', s1(job(okCond, okEnv).replace('  pull_request:\n', '  pull_request_target:\n')) === 1);
 	expect('S1: secrets: inherit blocks', s1(job(okCond, okEnv) + '  call:\n    uses: ./.github/workflows/x.yml\n    secrets: inherit\n') === 1);
+	// Round 22: shapes the line reader can't follow fail closed; other spellings are secrets too.
+	const evil = '  "evil":\n    runs-on: x\n    steps:\n      - env:\n          X: ${{ secrets.SECLAB_DENYLIST }}\n        run: tool\n';
+	expect('R22-2: a quoted job after a compliant one is its own job', s1(job(okCond, okEnv) + evil) === 1);
+	expect('R22-1: a column-0 comment does not end the jobs section', s1(job(okCond, okEnv) + '# ---- more jobs ----\n' + evil) === 1);
+	expect('R22-1: a flow-mapping job fails closed', s1(job(okCond, okEnv) + '  evil: { runs-on: x, steps: [] }\n') >= 1);
+	expect('R22-1: an odd job indent fails closed', s1(job(okCond, okEnv) + '   evil:\n     runs-on: x\n') >= 1);
+	expect('R22-1: jobs: with a trailing comment is read', s1(job('', okEnv).replace('jobs:\n', 'jobs: # all\n')) === 1);
+	for (const spelling of ['${{ SECRETS.SECLAB_DENYLIST }}', "${{ secrets['SECLAB_DENYLIST'] }}", '${{ toJSON(secrets) }}']) {
+		expect(`R22-3: ${spelling} is a secret use`, s1(job('', okEnv).replace('${{ secrets.SECLAB_DENYLIST }}', spelling)) === 1);
+	}
+	expect('R22-4: a workflow-level secret binding blocks', s1('on:\n  push:\nenv:\n  X: ${{ secrets.T }}\njobs:\n  a:\n    runs-on: x\n') === 1);
+	expect('R22-1: with: {ref: …} blocks', s1(job(okCond, okEnv).replace('        with:\n          persist-credentials: false\n', '        with: { ref: x }\n')) === 1);
 	// R19-7: taint follows assignments, here-string reads and the temp file the secret is written to.
 	const s = new Set(['DENYLIST']);
 	expect('taint: through an assignment', checkScript('s.sh', 'X="$DENYLIST"\necho "$X"\n', s).length === 1);

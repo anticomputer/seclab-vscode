@@ -25,6 +25,14 @@ mode="$(stat -c '%a' "$dir/list" 2>/dev/null || stat -f '%Lp' "$dir/list")"
 [[ "$mode" == 600 ]] || { echo "mount-test: the fake list is mode $mode, not 600" >&2; exit 1; }
 
 fail=0
+# The driver's container hardening stays in place (R22-7): the next permission fix must change
+# the user mapping, never these.
+for flag in '--network none' '--read-only' '--cap-drop ALL' '--security-opt no-new-privileges' '--user "$user"'; do
+	n="$(grep -cF -- "$flag" "$ROOT/build/hooks/publish-gate.sh")"
+	[[ "$n" -ge 2 ]] || { echo "FAIL the driver's docker runs lost '$flag' ($n of 2)"; fail=1; }
+done
+grep -qE -- '--user[= ]+"?0' "$ROOT/build/hooks/publish-gate.sh" && { echo "FAIL the driver runs the scan as root"; fail=1; }
+[[ "$(uname -s)" == Linux ]] || echo "note: not a Linux engine; bind-mount ownership is virtualised here, so only CI's run of this test proves the mount (R22-6)"
 check() { # name want-rc text
 	local rc=0
 	printf '%s\n' "$3" | publish_gate "$image" "$ROOT/build" "$ROOT/build/publish-allow.json" "$dir/list" '' -- text >"$dir/out" 2>&1 || rc=$?
