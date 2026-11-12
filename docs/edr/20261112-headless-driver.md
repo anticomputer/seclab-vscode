@@ -87,9 +87,10 @@ the 2026-11-09 run ([background windows](20261105-background-windows.md)). Two t
   click, window-close and Space-change activation paths impossible. Each has its own marker
   (`… prohibited (bootstrap)`, `… prohibited (guard)`, `is below normal windows`); the first
   two were a prefix of each other until review QQQ-2. Self-tested by removing each.
-- `macos-focus-paths.yml` measures whether a hosted macOS runner has more than one Space and
-  delivers a System Events keystroke. *Pending:* its first run. If it can, the Space probe moves
-  there against an empty local window; if not, the structural check and the recorded run stand.
+- `macos-focus-paths.yml` measures whether a hosted macOS runner can drive a Space switch.
+  First run, 43251392437 (macOS 15.8.2): the keystroke is accepted (exit 0), but the on-screen
+  window set doesn't change, so a switch can't be observed there. The Space path therefore
+  stays covered by the structural check and the recorded run.
 
 **Linux under Xvfb.** `./seclab test driver` runs the Linux editor build in a container
 (`test/driver/xvfb/`, same pinned base as the builder) with no network, driving it over the pipe:
@@ -104,7 +105,7 @@ first run is CI's. *Pending:* that run.
 | Probe | Before | After |
 |---|---|---|
 | `window.ts shot`, demo and `notify-e2e --shot` screenshots | `screencapture -l` (Screen Recording) | `test/driver/shot.ts` and the driven launch: renderer screenshot. *Pending:* first run |
-| Space-switch probe (`spaces.ts`) | System Events keystrokes (Accessibility) | skips with the reason; structural check in check-release (self-tested); runner measurement pending |
+| Space-switch probe (`spaces.ts`) | System Events keystrokes (Accessibility) | skips with the reason; structural check in check-release (self-tested); the hosted runner can't show a Space switch (run 43251392437) |
 | Focus battery (`probe.ts`), Level B, containment editor runs | no permission needed (watcher verified above) | unchanged |
 | Clipboard canary | read and restored the host clipboard | removed from the harness; RPC core's in-memory clipboard |
 
