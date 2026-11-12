@@ -31,7 +31,7 @@ import re
 import sys
 import tempfile
 
-from seclab_inventory.sources import strip_block_comments  # RPC-lockdown, fixed at 8d92392
+from seclab_inventory.sources import strip_block_comments  # RPC-lockdown; pinned by RPC_REF in inventory.sh
 
 PIN = "a717861c07586a53d83b80d742cd3f59b20a6273"
 MESSAGES = "src/vs/platform/agentHost/common/state/protocol/common/messages.ts"
