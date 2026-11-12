@@ -92,7 +92,16 @@ if [ "${1:-}" = "--self-test" ]; then
 	echo "var m=\"seclabRpcFilterEnforcing:$habn\";" > "$T/root/m.js"
 	run "$T/with5" fail "an enforcing marker naming another table" desktop
 	echo "var m=\"seclabRpcFilterEnforcing:$hab\";" > "$T/root/m.js"
+	# Background windows (patch 0012): the bootstrap policy, the guard's policy and the window
+	# level must all be in the desktop app; each missing one fails.
+	bgfix() { printf 'var g="[background windows] activation policy: prohibited";var w="is below normal windows";\n' > "$T/root/g.js"; printf 'var b="[background windows] activation policy: prohibited (bootstrap)";\n' > "$T/root/b.js"; }
+	bgfix; rm "$T/root/b.js"
+	run "$T/with5" fail "desktop without the bootstrap background policy" desktop
+	bgfix; printf 'var g="[background windows] activation policy: prohibited";\n' > "$T/root/g.js"
+	run "$T/with5" fail "desktop without the below-normal window level" desktop
+	bgfix
 	run "$T/with5" pass "desktop, 0005 listed, its enforcing marker" desktop
+	rm "$T/root/g.js" "$T/root/b.js"
 	echo '{"nameShort":"x"}' > "$T/root/product.json"
 	run "$T/no5" fail "an enforcing marker without 0005"
 	rm "$T/root/m.js"; stamp "$hab"
@@ -198,6 +207,16 @@ EOF
 			[ -z "$out" ] || { echo "check-release: agent runtime in the desktop app (I8):"; echo "$out" | head -20; bad=1; }
 			[ -z "$hdr" ] || { echo "check-release: agent runtime listed in an asar (I8):"; echo "$hdr" | sort -u | head -20; bad=1; }
 			[ -z "$prod" ] || { echo "check-release: product.json has agentSdks (runtime download path):"; echo "$prod"; bad=1; }
+			# Structural focus guarantee (patch 0012, EDR background-windows): background mode makes
+			# the app background-only at bootstrap and in the guard, and puts every window below
+			# normal ones. These are what make the OS-level activation paths (click, window close,
+			# Space change) impossible, so a desktop app without any of them fails.
+			for m in '[background windows] activation policy: prohibited (bootstrap)' '[background windows] activation policy: prohibited' 'is below normal windows'; do
+				set +e
+				hit=$(find "$d" -type f \( -name "*.js" -o -name "*.mjs" \) -exec grep -lF -- "$m" {} + 2>/dev/null | head -1)
+				set -e
+				[ -n "$hit" ] || { echo "check-release: background-windows guard missing from the desktop app (no \"$m\")"; bad=1; }
+			done
 		fi
 	done < "$WORK/roots"
 	[ "$bad" = 0 ] || exit 1

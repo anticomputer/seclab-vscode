@@ -282,8 +282,8 @@ RPC-lockdown session adds. Keep them consistent with this file.
     any steal; never work around it. `node test/focus/probe.ts` is the regression check for
     the activation paths, and `test/focus/spaces.ts` for Space changes (it needs the
     `keystrokes` host capability and skips without it);
-  - capture with `node test/window.ts shot …` (`screencapture -o -l <windowid>`,
-    which reads the covered window directly; `screen-capture` host capability, else it skips);
+  - screenshots with `node test/driver/shot.ts …` (from the window's own renderer through the
+    headless driver; no OS capture);
   - tests must not need OS privacy permissions: no Accessibility, Screen Recording or keystroke
     automation unless the host declares the capability (`SECLAB_HOST_CAPS`,
     `test/host-caps.ts`), never ask the user for them, and never read the host clipboard in any

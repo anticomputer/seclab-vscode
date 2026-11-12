@@ -1,12 +1,12 @@
-// Host capabilities a test can need but must never ask the operator for. A test that needs one
-// skips with the reason unless the host declares it:
-//   SECLAB_HOST_CAPS=keystrokes,screen-capture
+// Host capabilities a test can need but must never ask the operator for: tests must not need OS
+// privacy permissions. A test that needs one skips with the reason unless the host declares it:
+//   SECLAB_HOST_CAPS=keystrokes
 // Declare one only on a host where it is already available and expendable (a disposable VM or CI
 // runner), never by granting it for a run. Nothing here checks or requests an OS permission.
+// Editor tests don't need any: they use the headless driver (test/driver/).
 
 export const HOST_CAPS = {
 	'keystrokes': 'sends keystrokes to the window server (macOS: System Events, needs Accessibility)',
-	'screen-capture': 'captures window contents (macOS: screencapture, needs Screen Recording)',
 } as const;
 export type HostCap = keyof typeof HOST_CAPS;
 

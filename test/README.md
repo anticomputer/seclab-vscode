@@ -14,15 +14,15 @@
 ## Rules that bite
 - **Editor windows never take focus** (AGENTS.md hard rule). `test/window.ts launch`
   opens the editor in the background (`open -g -n`) and fails if it became frontmost;
-  `test/window.ts shot` captures the covered window by id (`screencapture -o -l`), only on a
-  host that declares the `screen-capture` capability; elsewhere it skips with the reason.
+  screenshots come from the window's own renderer through the headless driver
+  (`test/driver/shot.ts`), never from an OS capture.
   The `focus-steal` fixture-lint rule rejects activate calls, a foreground `open` and
   direct `bin/code` launches in test code.
 - **Tests must not need OS privacy permissions** (`test/host-caps.ts`): no Accessibility,
   Screen Recording or keystroke automation, and nothing asks for them. A test that needs
-  `keystrokes` or `screen-capture` skips with the reason unless `SECLAB_HOST_CAPS` names it;
-  declare one only on a host that already has it to spare (a disposable VM or runner). The
-  headless driver (`test/driver/`) replaces both for editor tests.
+  `keystrokes` (only the Space-switch probe) skips with the reason unless `SECLAB_HOST_CAPS`
+  names it; declare one only on a host that already has it to spare (a disposable VM or
+  runner). The headless driver (`test/driver/`) drives and captures the editor from inside.
 - **Nothing reads the host clipboard**, under any opt-in.
 - **Every run tears itself down, and fails if it can't** ([EDR](../docs/edr/20261104-harness-teardown.md)).
   A run records what it owns in `<run-dir>/run.json` before it starts anything:
@@ -67,10 +67,9 @@ the write-back gate holds them, so they never exist on the host).
   - Never `activate` the app or raise the window.
   - If the window still comes to the front, stop and report it. Don't work
     around it by raising the window.
-- **Capture the editor window only:** `node test/window.ts shot …`
-  (`screencapture -o -x -l <windowid>`). It captures a covered or off-screen window's own
-  contents, and needs the `screen-capture` host capability (macOS Screen Recording); without
-  it the screenshot step skips.
+- **Capture the editor window only:** `node test/driver/shot.ts …` launches the editor
+  with its CDP pipe, waits for the workbench, and takes the PNG from the window's own
+  renderer (`Page.captureScreenshot`); no OS capture or permission is involved.
 - **Check the image** shows only demo content, then close the window and run the
   teardown gate straight away.
 - **First-run UI:** the demo profile turns off the onboarding modal

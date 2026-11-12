@@ -4,9 +4,8 @@
 //   node test/observability/demo.ts teardown ~/.seclab-test/obs            # kills the editor tree, removes the tab, verifies
 // Fixture safety: same arming as the e2e (nonce, run dir, expiry); demo values are fake.
 // Never bring a demo window over the user's work: launch with test/window.ts (`open -g -n`; not
-// `bin/code`, whose hand-off to the main process forces focus), never activate it, and
-// capture by window id (`screencapture -o -l`), which works while the window is covered; the
-// capture needs the screen-capture host capability (test/host-caps.ts) and skips without it.
+// `bin/code`, whose hand-off to the main process forces focus), never activate it. The
+// screenshot comes from its own renderer through the headless driver (test/driver/shot.ts).
 
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -14,7 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { printChecks, removeRunResources, stopRunProcesses, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
-import { checkUserDataDir, editorLaunchCommand } from '../harness.ts';
+import { checkUserDataDir, EDITOR_APP, editorLaunchCommand } from '../harness.ts';
 import { folderOpenTasks, LOADER_IN_TAB, loaderScript, writeStdinTo } from './loader.ts';
 
 const [mode, userDataArg, driverArg] = process.argv.slice(2);
@@ -95,6 +94,6 @@ if (fs.existsSync(path.join(ws, '.vscode'))) {
 await client.request('shutdown', {}).catch(() => undefined);
 client.dispose();
 console.log(`prepared tab ${tab.metadata.name} for ${ws}`);
-console.log(`\n  ${editorLaunchCommand(userData, `vscode-remote://seclab+${tab.metadata.name}${ws}`)}\n`);
-console.log(`screenshot (window stays behind yours; needs SECLAB_HOST_CAPS=screen-capture): node test/window.ts shot ${userData} .work/shots/obs-demo.png`);
+console.log(`\nwindow launch (stays behind yours):\n  ${editorLaunchCommand(userData, `vscode-remote://seclab+${tab.metadata.name}${ws}`)}`);
+console.log(`or a screenshot from the renderer (launches, captures, quits; needs a build with patch 0012's bootstrap policy):\n  node test/driver/shot.ts --app ${EDITOR_APP} --profile ${userData} --folder-uri vscode-remote://seclab+${tab.metadata.name}${ws} --out .work/shots/obs-demo.png\n`);
 console.log(`then: node test/observability/demo.ts teardown ${userData}`);

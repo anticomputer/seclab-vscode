@@ -8,7 +8,6 @@ import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { hasHostCap, skipReason } from './host-caps.ts';
 
 export const repoRoot = path.resolve(import.meta.dirname, '..');
 
@@ -171,9 +170,8 @@ export function snapshotDiff(before: Snapshot, after: Snapshot): string[] {
 
 // ---- Editor windows never take focus (AGENTS.md hard rule; user: "you keep popping up on top
 // of my ongoing work"). Launch in the background with LaunchServices (`open -g -n`), never
-// activate, and capture the window by id while it stays covered on the current Space
-// (`screencapture -o -l`, which reads the window's own backing store; only on a host that
-// declares the screen-capture capability, test/host-caps.ts). `open -g` alone is not
+// activate. Screenshots come from the window's own renderer through the headless driver
+// (test/driver/), never from an OS capture. `open -g` alone is not
 // enough: Electron's macOS show() activates the app itself (a real launch stole
 // focus). So the launch sets SECLAB_BACKGROUND_WINDOWS=1, and patch 0012 makes the app show
 // windows inactive and never focus or activate. launchEditorInBackground still checks the
@@ -267,7 +265,7 @@ export function editorWindowId(pid: number): number {
 
 /** Every window of the editor, at any layer (read-only CGWindowList query). */
 export function editorWindows(pid: number): Array<{ id: number; layer: number; w: number; h: number }> {
-	const out = execFileSync('osascript', ['-l', 'JavaScript', '-e', WINDOW_LIST_JXA, String(pid)], { encoding: 'utf8' }); // fixture-lint: allow persistence -- read-only CGWindowList query (window ids for screencapture -l); no activation
+	const out = execFileSync('osascript', ['-l', 'JavaScript', '-e', WINDOW_LIST_JXA, String(pid)], { encoding: 'utf8' }); // fixture-lint: allow persistence -- read-only CGWindowList query (window ids, layers, sizes; no names or contents, so no permission); no activation
 	return JSON.parse(out) as Array<{ id: number; layer: number; w: number; h: number }>;
 }
 
@@ -335,15 +333,6 @@ export function appType(pid: number): string {
 
 function focusStolen(userData: string): boolean {
 	return fs.existsSync(focusStealLog(userData)) && fs.readFileSync(focusStealLog(userData), 'utf8').trim() !== '';
-}
-
-/** Capture one window by id, covered or not, without touching focus or z-order. */
-export function captureWindow(windowId: number, out: string): void {
-	if (!hasHostCap('screen-capture')) {
-		throw new Error(skipReason('screen-capture', 'window capture'));
-	}
-	fs.mkdirSync(path.dirname(out), { recursive: true });
-	execFileSync('screencapture', ['-o', '-x', '-l', String(windowId), out], { stdio: 'inherit' });
 }
 
 /** Where the focus watcher records steals; teardown fails the run if it isn't empty (UU-2). */

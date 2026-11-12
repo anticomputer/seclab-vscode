@@ -4,8 +4,9 @@
 //   node test/observability/notify-e2e.ts ~/.seclab-test/notify [--shot docs/media/notifications.png] [--keep]
 // sbx only: the hidden folder-open tasks.json is written inside the tab, where the write-back
 // gate holds it; it never exists on the host (EDR fixture-safety, AV rule). The editor window is
-// launched in the background and never takes focus; the screenshot captures it by window id
-// while it stays covered. The run ends with the shared teardown gate.
+// launched in the background and never takes focus; the screenshot comes from its own renderer
+// through the headless driver (test/driver/), never an OS capture. The run ends with the shared
+// teardown gate.
 
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -14,8 +15,8 @@ import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { armCampaignTab, loaderCommand, setupCampaign } from '../containment/campaign.ts';
 import { printChecks, removeRunResources, stopRunProcesses, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
-import { captureWindow, checkUserDataDir, launchEditorInBackground } from '../harness.ts';
-import { hasHostCap, skipReason } from '../host-caps.ts';
+import { checkUserDataDir, EDITOR_APP, launchEditorInBackground } from '../harness.ts';
+import { DrivenEditor, hasBootstrapPolicy } from '../driver/editor.ts';
 import { writeStdinTo } from './loader.ts';
 
 const args = process.argv.slice(2);
@@ -40,6 +41,7 @@ const notifications = path.join(userData, 'User', 'globalStorage', 'seclab.tab-m
 const EXPECTED = ['loader.pipe-to-interpreter'];
 
 let failures = 0;
+let driven: DrivenEditor | undefined;
 const check = (name: string, ok: boolean, detail = '') => {
 	console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok || !detail ? '' : `: ${detail}`}`);
 	failures += ok ? 0 : 1;
@@ -100,7 +102,17 @@ try {
 	await client.request('shutdown', {}).catch(() => undefined);
 	client.dispose();
 
-	const launch = await launchEditorInBackground(userData, `vscode-remote://seclab+${tabId}${ws}`, {}, 90_000, app);
+	// A screenshot comes from the renderer through the headless driver (no OS capture), which
+	// needs a build whose bootstrap is background-only; otherwise the run is unchanged and the
+	// screenshot step skips.
+	const drive = !!shot && hasBootstrapPolicy(app ?? EDITOR_APP);
+	let launch: { pid: number; stoleFocus: boolean };
+	if (drive) {
+		driven = await DrivenEditor.launch({ app: app ?? EDITOR_APP, userData, folderUri: `vscode-remote://seclab+${tabId}${ws}`, timeoutMs: 90_000 });
+		launch = { pid: driven.child.pid!, stoleFocus: false };
+	} else {
+		launch = await launchEditorInBackground(userData, `vscode-remote://seclab+${tabId}${ws}`, {}, 90_000, app);
+	}
 	check('editor launched in the background (no focus taken)', !launch.stoleFocus, `pid ${launch.pid}`);
 	if (launch.stoleFocus) {
 		throw new Error('focus stolen: stop (AGENTS rule)');
@@ -124,17 +136,18 @@ try {
 	check('rate-limited: a handful of notifications, not one per event', shown.length <= 6, String(shown.length));
 	const detail = shown.find(s => s.kind === 'loader.pipe-to-interpreter');
 	check('the loader notification explains itself with the chain and its integrity', !!detail && /Chain: “.*”/.test(detail.message) && /inside the tab's VM/.test(detail.message), detail?.message);
-	if (shot && !hasHostCap('screen-capture')) {
-		console.log(skipReason('screen-capture', `the screenshot ${shot}`));
-	} else if (shot) {
+	if (shot && !driven) {
+		console.log(`SKIPPED the screenshot ${shot}: needs a build whose bootstrap is background-only (patch 0012), for the headless driver`);
+	} else if (shot && driven) {
 		await sleep(1500);
-		captureWindow(launch.windowId, path.resolve(shot));
-		console.log(`captured window ${launch.windowId} -> ${shot}`);
+		const bytes = await driven.screenshot(path.resolve(shot));
+		console.log(`screenshot from the renderer (${bytes} bytes) -> ${shot}`);
 	}
 } catch (e) {
 	check('run', false, (e as Error).message);
 } finally {
 	client.dispose();
+	await driven?.close().catch(() => undefined);
 	if (keep) {
 		console.log(`KEEP: not torn down. Later: node test/containment/teardown.ts verify ${base}`);
 		failures++;

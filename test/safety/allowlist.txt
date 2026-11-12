@@ -15,8 +15,8 @@ test/containment/probe-safety.test.ts:host-secret-path
 # asserted to arrive escaped, tagged untrusted and flagged as suspicious-content.
 test/observability/run.ts:agent-injection
 
-# Background editor windows: one read-only CGWindowList query (JXA) for the window id that
-# screencapture -l needs. No activate/frontmost; focus-steal still applies.
+# Background editor windows: one read-only CGWindowList query (JXA) for window ids, layers and
+# sizes (no names or contents). No activate/frontmost; focus-steal still applies.
 test/harness.ts:persistence
 
 # Agents-in-the-tab spike: the GitHub resource and authorization-server identifiers the

@@ -57,7 +57,7 @@ const RULES: Rule[] = [
 	// Never steal focus (AGENTS.md hard rule): editor/demo windows launch in the background
 	// (test/window.ts: open -g -n) and are captured by window id while covered. Any activate or
 	// frontmost call, a foreground `open -a/-b`, or a direct exec of the app's CLI is a violation.
-	{ id: 'focus-steal', why: 'brings a window/app to the front (launch with test/window.ts, capture with screencapture -l)',
+	{ id: 'focus-steal', why: 'brings a window/app to the front (launch with test/window.ts or the headless driver, test/driver/)',
 		re: /\bto\s+activate\b|\bactivate\s+(application|app)\b|\.activate\(\s*\)|activateIgnoringOtherApps|activateWithOptions|\bset\s+frontmost\b|\bfrontmost\s*[:=]\s*true|\bfocus\(\s*\{\s*steal\b|\bopen\s+(?!(?:-[A-Za-z]+\s+|--env\s+\S+\s+)*(?:-[A-Za-z]*g[A-Za-z]*|--background)\b)(?:-[A-Za-z]+\s+|--env\s+\S+\s+)*(?:-[A-Za-z]*[ab][A-Za-z]*\s|\S+\.app\b)|['"]open['"]\s*,(?![^\n]*?['"]-[A-Za-z]*g[A-Za-z]*['"][^\n]*?['"]--args['"]|(?![^\n]*['"]--args['"])[^\n]*?['"]-[A-Za-z]*g[A-Za-z]*['"])[^\n]*?(?:['"]-[A-Za-z]*[ab][A-Za-z]*['"]|\.app['"])|Resources\/app\/bin\/code\b/ },
 ];
 
