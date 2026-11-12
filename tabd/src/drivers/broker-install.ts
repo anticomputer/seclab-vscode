@@ -96,7 +96,9 @@ const CHECK_DIR = `d=${BROKER_DIR}; mkdir -p "$d"
 const WRITE_FEED = `IFS=' ' read -r tag fs fb np pp; [ "$tag" = feed ] || { echo "bad feed line" >&2; exit 1; }
 rm -f "$d/npmrc.new" "$d/pip-index-url.new" "$d/npm-registry.new"
 if [ "$fs" = - ]; then rm -f "$d/npmrc" "$d/pip-index-url" "$d/npm-registry"; else
-case "$fs$fb" in *[!A-Za-z0-9_.~=+/-]*|"") echo "bad feed sentinel" >&2; exit 1 ;; esac
+case "$fs" in seclab_cfs_*) ;; *) echo "bad feed sentinel" >&2; exit 1 ;; esac
+case "$fs" in *[!A-Za-z0-9_-]*) echo "bad feed sentinel" >&2; exit 1 ;; esac
+case "$fb" in *[!A-Za-z0-9+/=]*|"") echo "bad feed sentinel" >&2; exit 1 ;; esac
 case "$np$pp" in *[!A-Za-z0-9._/-]*|*/./*|*/../*) echo "bad feed path" >&2; exit 1 ;; esac
 case "$np" in /?*/?*/_packaging/?*/npm/registry/) ;; *) echo "bad npm feed path" >&2; exit 1 ;; esac
 case "$pp" in /?*/?*/_packaging/?*/pypi/) ;; *) echo "bad pypi feed path" >&2; exit 1 ;; esac
