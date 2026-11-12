@@ -23,11 +23,11 @@ for (const p of args.length ? args : ['test', 'sandbox', 'broker/tests']) {
 	const abs = path.resolve(repo, p);
 	if (fs.existsSync(abs)) {
 		roots.push(abs);
-	} else if (args.length) {
+	} else {
+		// Explicit or default, a missing root fails: a wrong mount or -w must not lint nothing
+		// and report clean (GATE-6).
 		console.error(`fixture-lint: no such path: ${p}`);
 		process.exit(2);
-	} else {
-		console.log(`fixture-lint: default root absent, skipped: ${p}`);
 	}
 }
 let scanned = 0;
@@ -154,14 +154,24 @@ if (process.argv[2] === '--av') {
 	const out: string[] = [];
 	const texts = new Map<string, string>();
 	let n = 0;
-	for (const rel of fs.readFileSync(process.argv[3] === '-' ? 0 : process.argv[3], 'utf8').split('\0').filter(Boolean)) {
+	const listed = fs.readFileSync(process.argv[3] === '-' ? 0 : process.argv[3], 'utf8').split('\0').filter(Boolean);
+	// An empty list, or one that isn't this repo's, scans nothing: fail (GATE-5).
+	if (!listed.includes('test/safety/fixture-lint.ts')) {
+		out.push(`fixture-lint --av: the file list (${listed.length} entries) is empty or isn't this repository's: it doesn't name test/safety/fixture-lint.ts`);
+	}
+	for (const rel of listed) {
 		if (AV_SELF.has(rel) || /\.(png|jpe?g|gif|ico|woff2?|zip|gz|tgz|vsix)$/.test(rel)) {
 			continue;
 		}
+		// Unreadable is a finding (GATE-7); a tracked symlink is skipped (its target is listed).
 		let text: string;
 		try {
+			if (fs.lstatSync(path.join(repo, rel)).isSymbolicLink()) {
+				continue;
+			}
 			text = fs.readFileSync(path.join(repo, rel), 'utf8');
-		} catch {
+		} catch (e) {
+			out.push(`${rel}: tracked but unreadable (${(e as NodeJS.ErrnoException).code ?? 'error'})`);
 			continue;
 		}
 		n++;
@@ -253,6 +263,10 @@ function walk(p: string): void {
 }
 for (const r of roots) {
 	walk(r);
+}
+// Nothing scanned is a failure, never "clean (0 files)" (GATE-6).
+if (scanned === 0 && !selfTest) {
+	violations.push(`fixture-lint: no file was scanned under ${roots.map(r => path.relative(repo, r) || '.').join(', ')}`);
 }
 violations.push(...avFindings(lintedTexts));
 // Recorded evidence (probe runs and their outputs) holds strings a hostile tab chose. Only the

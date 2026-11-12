@@ -242,7 +242,7 @@
       "pins": ["ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9"],
       "used": ["seclab"],
       "provenance": "cosign keyless signature on each platform's BuildKit attestation manifest via docker/github-builder (workflow repository zizmorcore/zizmor, ref refs/tags/v1.31.1; issuer token.actions.githubusercontent.com).",
-      "verify": "./seclab lint workflows -> verify_signed_image: build/verify-image.ts walks the pinned index by digest and binds every platform image to an attestation whose in-toto subject names it; cosign verifies each attestation's keyless signature (identity docker/github-builder build.yml, workflow repository zizmorcore/zizmor, ref refs/tags/v1.31.1, issuer GitHub Actions). Cached per digest under .work/deps-verified. Runs offline, --network none, no credentials.",
+      "verify": "./seclab lint workflows -> verify_signed_image: build/verify-image.ts walks the pinned index by digest and binds every platform image to an attestation whose in-toto subject names it; cosign verifies each attestation's keyless signature (identity docker/github-builder build.yml, workflow repository zizmorcore/zizmor, ref refs/tags/v1.31.1, issuer GitHub Actions). Verified on every run (no local cache: GATE-8). Runs offline, --network none, no credentials.",
       "bar": "signed-verified",
       "verifiedBy": { "file": "seclab", "contains": "verify_signed_image \"$ZIZMOR_IMAGE\"" },
       "record": "docs/adr/20261104-supply-chain-provenance.md",

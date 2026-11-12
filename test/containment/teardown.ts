@@ -23,7 +23,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { checkIsolatedProfile, editorPortableDir, hostSnapshot, snapshotDiff, type Snapshot } from '../harness.ts';
+import { checkIsolatedProfile, editorPortableDir, focusWatchProblem, hostSnapshot, snapshotDiff, type Snapshot } from '../harness.ts';
 import { avFindings } from '../safety/av-shape.ts';
 
 /** The profile's portable sibling (test/harness.ts editorPortableDir): checked as isolated, removed. */
@@ -522,6 +522,9 @@ export function verifyTeardown(runDir: string, opts: { snapshot?: boolean } = {}
 		const steals = path.join(m.userDataDir, 'seclab-focus-steals.log');
 		const log = fs.existsSync(steals) ? fs.readFileSync(steals, 'utf8').trim() : '';
 		add(log === '', 'the editor never took focus from the user during the run', log.split('\n').slice(0, 3).join(' | '));
+		// No steal log only means "clean" if the watcher watched the editor to the end (GATE-10).
+		const unwatched = focusWatchProblem(m.userDataDir);
+		add(!unwatched, 'the focus watcher watched the editor for its whole run', unwatched ?? '');
 	}
 	if (m.userDataDir && fs.existsSync(m.userDataDir)) {
 		fs.rmSync(m.userDataDir, { recursive: true, force: true });

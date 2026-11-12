@@ -169,10 +169,16 @@ if (process.argv[2] === '--self-test') {
 
 // Everything tracked except binaries and generated patches; Markdown contributes only the
 // blocks CI executes (CI-2a). Fixture workspaces are hostile payloads (fixture-lint's job).
-const files = (process.argv[2] ? fs.readFileSync(process.argv[2] === '-' ? 0 : process.argv[2], 'utf8') : execFileSync('git', ['-C', repo, 'ls-files', '-z'], { encoding: 'utf8' }))
-	.split('\0').filter(Boolean)
+const listed = (process.argv[2] ? fs.readFileSync(process.argv[2] === '-' ? 0 : process.argv[2], 'utf8') : execFileSync('git', ['-C', repo, 'ls-files', '-z'], { encoding: 'utf8' }))
+	.split('\0').filter(Boolean);
+const files = listed
 	.filter(f => !/\.(png|jpe?g|gif|svg|lock|patch)$/.test(f) && !f.includes('/fixtures/') && !['build/check-pins.ts', 'build/deps.ts', 'deps/registry.json', 'broker/tools/supplychain.py', 'docs/security-reviews/findings.json'].includes(f)); // rules and their samples (incl. the broker's supply-chain self-test), the register's names (its pins are checked by build/deps.ts), and the findings register (review prose quoted from records, never run)
 const findings: string[] = [];
+// An empty list, or one that isn't this repo's, checks nothing: fail rather than report clean
+// (GATE-4). This file is always tracked, so a real list names it.
+if (!listed.includes('build/check-pins.ts')) {
+	findings.push(`check-pins: the file list (${listed.length} entries) is empty or isn't this repository's: it doesn't name build/check-pins.ts`);
+}
 // The broker's supply-chain checker is skipped as samples; it must stay a pure parser (GG-1):
 // if it ever executes anything, its image references need this check again.
 try {
@@ -181,10 +187,16 @@ try {
 	}
 } catch { /* absent */ }
 for (const f of files) {
+	// A tracked file that can't be read is a finding, never a silent skip (GATE-7). A tracked
+	// symlink is skipped: its target is checked where it is tracked.
 	let text: string;
 	try {
+		if (fs.lstatSync(path.join(repo, f)).isSymbolicLink()) {
+			continue;
+		}
 		text = fs.readFileSync(path.join(repo, f), 'utf8');
-	} catch {
+	} catch (e) {
+		findings.push(`${f}: tracked but unreadable (${(e as NodeJS.ErrnoException).code ?? 'error'}); deleted in the worktree? stage or restore it`);
 		continue;
 	}
 	if (!text.includes('\0')) {

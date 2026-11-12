@@ -354,7 +354,10 @@ const WATCH_SAMPLE_MS = 200;
  */
 export async function watchFocus(userData: string): Promise<void> {
 	const failed = (why: string) => fs.appendFileSync(focusStealLog(userData), `${new Date().toISOString()} focus watcher failed: ${why} (the run can't show it kept focus)\n`);
+	// Its own record, so teardown can tell "watched and clean" from "never watched" (GATE-10).
+	const note = (what: string) => fs.appendFileSync(focusWatchLog(userData), `${new Date().toISOString()} ${what}\n`);
 	try {
+		note(`started (watcher pid ${process.pid})`);
 		let pid = 0;
 		for (const until = Date.now() + 120_000; !pid && Date.now() < until;) {
 			await new Promise(r => setTimeout(r, WATCH_SAMPLE_MS));
@@ -364,7 +367,13 @@ export async function watchFocus(userData: string): Promise<void> {
 		// sampling error must fail the run, never silently stop the watch (review AAA-4).
 		let errors = 0;
 		let lastSeen = Date.now();
+		let watched = 0;
+		let samples = 0;
 		while (pid || Date.now() - lastSeen < 5000) {
+			if (pid && pid !== watched) {
+				note(`watching editor pid ${pid}`);
+				watched = pid;
+			}
 			try {
 				if (pid && frontmostPid() === pid) {
 					killTree(pid);
@@ -372,6 +381,7 @@ export async function watchFocus(userData: string): Promise<void> {
 					return;
 				}
 				errors = 0;
+				samples++;
 			} catch (e) {
 				if (++errors >= 5) {
 					failed((e as Error).message.slice(0, 200));
@@ -387,9 +397,41 @@ export async function watchFocus(userData: string): Promise<void> {
 				lastSeen = Date.now();
 			}
 		}
+		note(`stopped: no editor for 5 s, after ${samples} samples`);
 	} catch (e) {
 		failed((e as Error).message.slice(0, 200));
 	}
+}
+
+/** The focus watcher's own record: started, each editor pid it watched, stopped (GATE-10). */
+export function focusWatchLog(userData: string): string {
+	return path.join(userData, 'seclab-focus-watch.log');
+}
+
+/**
+ * Teardown's view of the watcher: an editor launched in this run (its launch record exists) must
+ * have been watched to the end, so a missing steal log means "clean", never "nobody looked".
+ * Waits up to `waitMs` for the watcher's stop line (it stops 5 s after the editor is gone).
+ */
+export function focusWatchProblem(userData: string, waitMs = 12_000, platform: string = process.platform): string | undefined {
+	if (platform !== 'darwin' || !fs.existsSync(editorLaunchRecord(userData))) {
+		return undefined;
+	}
+	const read = () => fs.existsSync(focusWatchLog(userData)) ? fs.readFileSync(focusWatchLog(userData), 'utf8') : '';
+	for (const until = Date.now() + waitMs; !/ stopped: /.test(read()) && Date.now() < until;) {
+		Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+	}
+	const log = read();
+	if (!/ started /.test(log)) {
+		return 'the focus watcher never started for this editor';
+	}
+	if (!/ watching editor pid \d+/.test(log)) {
+		return 'the focus watcher never saw the editor';
+	}
+	if (!/ stopped: /.test(log)) {
+		return 'the focus watcher did not run to the end of the editor (died, or still running)';
+	}
+	return undefined;
 }
 
 /**

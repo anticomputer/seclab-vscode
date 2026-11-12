@@ -116,15 +116,12 @@ lint_workflows() {
 # calling repository and tag. Cached per index digest; needs network once (registry, TUF root).
 # The verifier is cosign from build/tools (its own release signature verified by sigstore-python).
 verify_signed_image() {
-	local image="$1" identity="$2" wf_repo="$3" wf_ref="$4" digest marker repo line att key cosign
+	local image="$1" identity="$2" wf_repo="$3" wf_ref="$4" digest repo line att cosign
 	cosign="$(tool_image cosign)"
 	digest="${image##*@}"
 	repo="${image%%@*}"; repo="${repo%:*}"
-	# Keyed by digest AND the expected identity, so tightening the identity re-verifies (DD-5);
-	# CI always re-verifies (no cache there).
-	key="$(printf '%s\n' "$digest" "$identity" "$wf_repo" "$wf_ref" "$cosign" | shasum -a 256 | cut -c1-64)"
-	marker="$ROOT/.work/deps-verified/$key"
-	[[ -z "${CI:-}" && -f "$marker" ]] && return 0
+	# Verified on every run, locally too: a cache marker under .work/ was a file any local process
+	# could create to skip verification (GATE-8).
 	local pairs
 	# Only the listed scripts are mounted: the verifier sees no repo content or run state (DD-4).
 	mount_files "${VERIFY_IMAGE_FILES[@]}"
@@ -137,8 +134,6 @@ verify_signed_image() {
 			--certificate-github-workflow-ref "$wf_ref" "$repo@$att" >/dev/null 2>&1 \
 			|| { echo "verify: $image: signature on $att (${line%% *}) does not verify as $wf_repo@$wf_ref (refusing to run it)" >&2; return 1; }
 	done <<<"$pairs"
-	mkdir -p "$(dirname "$marker")"
-	printf '%s\n' "$pairs" > "$marker"
 	echo "verify: $image: publisher signature verified ($wf_repo@$wf_ref)" >&2
 }
 
@@ -717,7 +712,7 @@ case "${1:-help}" in
 			# Scratch dirs on a named volume: Docker Desktop's bind-mount inode numbers are not
 			# stable, which trips tabd's (dev, ino) workspace identity check.
 			unit) docker run --rm -v "$ROOT:/repo" -v seclab-test-scratch:/repo/.work/test-scratch -w /repo "$(node_image)" \
-				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts tabd/test/obs.test.ts tabd/test/writeback.test.ts tabd/test/writeback-feed.test.ts tabd/test/inspect.test.ts tabd/test/broker-control.test.ts tabd/test/broker-supervisor.test.ts tabd/test/broker-image.test.ts build/patch-reach-imports.test.ts test/agentic/gate/gate.test.ts test/agentic/gate/marks.test.ts build/linux/nm-keep.test.ts build/linux/lock-fill.test.ts test/driver/driver.test.ts' ;;
+				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts tabd/test/obs.test.ts tabd/test/writeback.test.ts tabd/test/writeback-feed.test.ts tabd/test/inspect.test.ts tabd/test/broker-control.test.ts tabd/test/broker-supervisor.test.ts tabd/test/broker-image.test.ts build/patch-reach-imports.test.ts test/agentic/gate/gate.test.ts test/agentic/gate/marks.test.ts build/linux/nm-keep.test.ts build/linux/lock-fill.test.ts test/driver/driver.test.ts test/safety/gate-inputs.test.ts' ;;
 			# e2e drives sbx/docker on the host, so it runs on the host. It uses the editor's own
 			# Node when SECLAB_NODE points at it, else an already-present node (nothing is installed).
 			e2e) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/test/e2e.ts" "${1:-sbx}" ;;
