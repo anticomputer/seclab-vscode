@@ -32,6 +32,7 @@
 0032-seclab-partition-tab-extension-state.patch
 0035-seclab-document-sync-provenance.patch
 # Fork build: Restart Extension Host re-resolves a managed (seclab+) authority (EDR ext-host-restart-reresolve).
+0036-seclab-tab-configuration-snapshot.patch
 0040-reresolve-managed-authority-on-restart.patch
 # Fork build: main-process routing (ADR route-folder-opens-in-main): no window ever loads a local
 # folder or workspace; the Tab Manager opens it as a sandboxed tab.
