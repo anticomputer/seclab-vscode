@@ -15,6 +15,7 @@ import { TabdClient } from '../../tabd/src/client.ts';
 import { armCampaignTab, loaderCommand, setupCampaign } from '../containment/campaign.ts';
 import { printChecks, removeRunResources, stopRunProcesses, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
 import { captureWindow, checkUserDataDir, launchEditorInBackground } from '../harness.ts';
+import { hasHostCap, skipReason } from '../host-caps.ts';
 import { writeStdinTo } from './loader.ts';
 
 const args = process.argv.slice(2);
@@ -123,7 +124,9 @@ try {
 	check('rate-limited: a handful of notifications, not one per event', shown.length <= 6, String(shown.length));
 	const detail = shown.find(s => s.kind === 'loader.pipe-to-interpreter');
 	check('the loader notification explains itself with the chain and its integrity', !!detail && /Chain: “.*”/.test(detail.message) && /inside the tab's VM/.test(detail.message), detail?.message);
-	if (shot) {
+	if (shot && !hasHostCap('screen-capture')) {
+		console.log(skipReason('screen-capture', `the screenshot ${shot}`));
+	} else if (shot) {
 		await sleep(1500);
 		captureWindow(launch.windowId, path.resolve(shot));
 		console.log(`captured window ${launch.windowId} -> ${shot}`);

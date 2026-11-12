@@ -280,10 +280,14 @@ RPC-lockdown session adds. Keep them consistent with this file.
     A watcher started before the editor samples the frontmost app every 200 ms for the run's
     whole life and kills the editor's process tree on the first steal (fail closed). Report
     any steal; never work around it. `node test/focus/probe.ts` is the regression check for
-    the activation paths, and `test/focus/spaces.ts` for Space changes (it moves the user's
-    screen: run it only when they agree);
+    the activation paths, and `test/focus/spaces.ts` for Space changes (it needs the
+    `keystrokes` host capability and skips without it);
   - capture with `node test/window.ts shot …` (`screencapture -o -l <windowid>`,
-    which reads the covered window directly);
+    which reads the covered window directly; `screen-capture` host capability, else it skips);
+  - tests must not need OS privacy permissions: no Accessibility, Screen Recording or keystroke
+    automation unless the host declares the capability (`SECLAB_HOST_CAPS`,
+    `test/host-caps.ts`), never ask the user for them, and never read the host clipboard in any
+    tool, under any opt-in;
   - never call activate/frontmost APIs, `open` without `-g`, or the app's
     `bin/code` CLI directly. `./seclab lint fixtures` (rule `focus-steal`)
     rejects these in harness and test code.

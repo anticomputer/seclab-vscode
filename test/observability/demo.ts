@@ -5,7 +5,8 @@
 // Fixture safety: same arming as the e2e (nonce, run dir, expiry); demo values are fake.
 // Never bring a demo window over the user's work: launch with test/window.ts (`open -g -n`; not
 // `bin/code`, whose hand-off to the main process forces focus), never activate it, and
-// capture by window id (`screencapture -o -l`), which works while the window is covered.
+// capture by window id (`screencapture -o -l`), which works while the window is covered; the
+// capture needs the screen-capture host capability (test/host-caps.ts) and skips without it.
 
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -95,5 +96,5 @@ await client.request('shutdown', {}).catch(() => undefined);
 client.dispose();
 console.log(`prepared tab ${tab.metadata.name} for ${ws}`);
 console.log(`\n  ${editorLaunchCommand(userData, `vscode-remote://seclab+${tab.metadata.name}${ws}`)}\n`);
-console.log(`screenshot (window stays behind yours): node test/window.ts shot ${userData} .work/shots/obs-demo.png`);
+console.log(`screenshot (window stays behind yours; needs SECLAB_HOST_CAPS=screen-capture): node test/window.ts shot ${userData} .work/shots/obs-demo.png`);
 console.log(`then: node test/observability/demo.ts teardown ${userData}`);

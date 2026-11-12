@@ -11,17 +11,20 @@
 // CGWindowList), or the run stops: an unbound shortcut would type into the user's app instead
 // (review LLL-5).
 // Needs: an empty Space immediately to the right of the current one, the default "Move right/left
-// a space" shortcuts (Ctrl+Arrow), and permission for the calling process to send keystrokes
-// through System Events. It moves the user's screen between Spaces for about a minute: run it only
-// when the user has agreed to that.
+// a space" shortcuts (Ctrl+Arrow), and the "keystrokes" host capability (test/host-caps.ts): it
+// sends them through System Events. Without that capability it skips with the reason; it never
+// asks for it. It moves the screen between Spaces for about a minute.
 //   node test/focus/probe.ts prepare [--app PATH] --skip <all steps>
-//   node test/focus/spaces.ts [--app PATH]
+//   SECLAB_HOST_CAPS=keystrokes node test/focus/spaces.ts [--app PATH]
 //   node test/focus/probe.ts check --no-host-steps
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { readManifest } from '../containment/teardown.ts';
+import { requireHostCap } from '../host-caps.ts';
+
+requireHostCap('keystrokes', 'the Space-switch focus probe');
 
 const repo = path.resolve(import.meta.dirname, '../..');
 const base = path.join(repo, '.work', 'focus-probe');

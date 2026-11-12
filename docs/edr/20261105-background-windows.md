@@ -216,11 +216,14 @@ Dialogs cancelled in background mode answer with their `cancelId`, which
   four lows, all fixed:
   - `setVisibleOnAllWorkspaces` (Electron's `DockShow`) and `setKiosk` are pinned;
   - the Space probe runs no shell and checks that each switch happened.
-- **Probe:** `test/focus/spaces.ts` (run only with the user's agreement, since it moves their
-  screen):
+- **Probe:** `test/focus/spaces.ts` (it moves the screen between Spaces):
   - it switches to an empty Space and launches the editor there, so its window is alone;
   - it switches away and back three times, then returns home;
   - each switch is a host mark for `probe.ts check`.
+  - Since 2026-11-12 (tests must not need OS privacy permissions) it
+    needs the `keystrokes` host capability (`test/host-caps.ts`) and otherwise skips with the
+    reason. **Its latest evidence is the run on branch build 42663670292 (`0a3c210`),
+    2026-11-09, below.**
 - **Result, branch build 42663670292 (`0a3c210`), 2026-11-09:**
   - the Space run: launch on the empty Space, three round trips and the return home, no
     steal, `BackgroundOnly`, every window click-through and below normal;

@@ -66,8 +66,7 @@ if (mode === 'prepare') {
 	// loudly rather than silently skip those checks.
 	fs.mkdirSync(base, { recursive: true });
 	fs.writeFileSync(path.join(base, '.seclab-probe-nonce'), arm);
-	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${canary}\nmarker=${marker}\nloopback=${port}\narm=${arm}\nrun=${base}\nuntil=${until}\n`
-		+ (process.env.SECLAB_CANARY_CLIPBOARD === '1' ? 'clipboard=1\n' : ''));
+	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${canary}\nmarker=${marker}\nloopback=${port}\narm=${arm}\nrun=${base}\nuntil=${until}\n`);
 	writeSnapshot(base);
 	// What this run owns, for teardown.ts: the editor and its tabd are found by the unique
 	// user-data-dir (never by program name), the tab by id.
@@ -92,8 +91,9 @@ if (mode === 'prepare') {
 	process.on('uncaughtException', err => { disarm(); console.error(err); process.exit(2); });
 	// Test profile: Workspace Trust off and automatic tasks on, i.e. the worst case for us
 	// (trust is UX, not a boundary). Plus editor-side canaries (shared canary harness):
-	// user settings (incl. a secret-bearing setting) and, only if opted in, the clipboard
-	// (seeding it overwrites the user's real clipboard: SECLAB_CANARY_CLIPBOARD=1).
+	// user settings (incl. a secret-bearing setting). Nothing here touches the host clipboard:
+	// nothing may read it under any opt-in. The clipboard canary is minted for the canary scan;
+	// seeding it is the test variant's in-memory clipboard (RPC core), never the host's.
 	// The RPC escape probes are armed by the same arm=/run=/until= fields this
 	// harness already writes into .seclab/targets. One arming mechanism, not two.
 	const canaries = [mintCanary('user-settings'), mintCanary('user-settings-proxy-auth'), mintCanary('clipboard'), mintCanary('editor-env')];
@@ -107,16 +107,6 @@ if (mode === 'prepare') {
 		'seclab.test.canary': canaries[0].value,
 		'http.proxyAuthorization': `Basic ${canaries[1].value}`,
 	}, null, '\t'));
-	if (process.env.SECLAB_CANARY_CLIPBOARD === '1') {
-		// Opt-in only, and put the user's clipboard back afterwards: it is
-		// commonly a password or token, which is exactly why clipboard-read is
-		// a probe at all (probe safety review, finding 7).
-		const savedClipboard = spawnSync('pbpaste', [], { encoding: 'utf8' }).stdout ?? '';
-		process.on('exit', () => {
-			try { spawnSync('pbcopy', [], { input: savedClipboard }); } catch { /* best effort */ }
-		});
-		spawnSync('pbcopy', [], { input: canaries[2].value });
-	}
 	// Package the rogue extension (vsce in a container) and preinstall it into the tab.
 	// The guards live in one place (test/containment/probe-safety.js) but must
 	// ship inside the .vsix: a require() reaching outside the extension root

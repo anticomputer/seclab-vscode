@@ -1,7 +1,7 @@
 // Editor windows for demos, screenshots and containment-editor runs, without ever taking focus
 // from the user (AGENTS.md hard rule). macOS only.
 //   node test/window.ts launch [--app PATH.app] [--env K=V]... USER_DATA_DIR FOLDER_URI   # background launch; exit 1 if it took focus
-//   node test/window.ts shot USER_DATA_DIR OUT.png                       # capture the (covered) window by id
+//   node test/window.ts shot USER_DATA_DIR OUT.png                       # capture the (covered) window by id (screen-capture host capability, else skips)
 //   (every background launch starts `window.ts watch USER_DATA_DIR -` first: it samples the
 //    frontmost app every 200 ms for the editor's whole life, and on the first sample in which the
 //    editor is frontmost it records the steal and kills the editor's process tree; teardown fails
@@ -11,6 +11,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { captureWindow, checkUserDataDir, editorPid, editorWindowId, focusStealLog, launchEditorInBackground, watchFocus } from './harness.ts';
+import { requireHostCap } from './host-caps.ts';
 
 const argv = process.argv.slice(2);
 const mode = argv.shift();
@@ -31,6 +32,9 @@ const [userDataArg, arg] = argv;
 if (process.platform !== 'darwin' || !['launch', 'shot', 'watch'].includes(mode ?? '') || !userDataArg || !arg || argv.length !== 2) {
 	console.error('usage (macOS): window.ts launch [--env K=V]... USER_DATA_DIR FOLDER_URI | window.ts shot USER_DATA_DIR OUT.png');
 	process.exit(2);
+}
+if (mode === 'shot') {
+	requireHostCap('screen-capture', 'window.ts shot');
 }
 const userData = path.resolve(userDataArg);
 checkUserDataDir(userData);
