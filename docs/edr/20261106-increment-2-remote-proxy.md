@@ -238,7 +238,7 @@ hostile in both: before the window starts it writes `enableRemoteProxy: false` a
 `dataStorage: global` into the REH's remote user settings, the layer a tab controls.
 
 ### Proven: `enableRemoteProxy` is fixed, and it decides where the page is fetched
-| | U (main + variant, `18c2843`, **no 0017**) | F (branch, `bab99d0`, **with 0017**) |
+| | U (main + variant, `198f256`, **no 0017**) | F (branch, `dc84573`, **with 0017**) |
 |---|---|---|
 | tab's remote layer applied before measuring | `ready=yes` | `ready=yes` |
 | network the service resolved for the open call | **`none`** (the host) | **`seclab+t-co3ocz…`** (the tab) |
@@ -467,7 +467,7 @@ Teardown's manifest is a list of what a run *meant* to start; the process table 
 *did* start.
 
 ## MEASURED: the two-sided U-vs-F proof (2026-11-10, second attempt)
-Builds: **U** = `b7bda15` (main's base + the variant, no 0017), **F** = `6f4cc62` (the same
+Builds: **U** = `e2ce1c3` (main's base + the variant, no 0017), **F** = `e2ce1c3` (the same
 plus 0017). Same upstream `a717861`, same hook `c33b733a43`; the binaries stamp their own
 repo SHA and every run checks it, so the lines are known to come from the build claimed. Each
 run ends with the teardown gate, and every window was launched in the background and never
@@ -564,3 +564,21 @@ than this increment needs, and one that would itself have to be reviewed for fai
 
 The other four runs are unaffected: each gates its page load on arming, which happens only
 once both listeners answer, and each shows continuous heartbeats across its measurement.
+
+### The history rewrite invalidates this record's build identifiers (2026-11-12)
+The 2026-11-12 rewrite changed every SHA. Citations in this record and in the gate review were
+remapped through the rewrite's commit map, but two classes could not be:
+
+1. **The `agentic-browser` liveness evidence.** Its `sha` fields
+   (`27e08a26…`, `66af5e97…`) are in no commit map and on no remote branch, so that evidence
+   can no longer be verified by SHA. The Actions run ids are still valid and immutable, but
+   the liveness gate's bar is a run pinned by SHA, so this entry is **weaker than it reads**
+   until re-evidenced.
+2. **The U and F build identifiers.** Both variants must be rebuilt regardless: each binary
+   stamps the repo SHA it was built from and every run checks that stamp against
+   `build-info-app.json`, so the existing apps would now fail their own build-identity check.
+
+Both are closed by the same action: rebuild the two variants on the rewritten base, re-run the
+proof, and replace the identifiers and the liveness evidence with the new runs. Until that
+happens the measured results above stand as findings about the *code*, which the rewrite did
+not change, but their build identifiers point at commits that no longer exist.
