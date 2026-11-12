@@ -45,7 +45,7 @@ getting it backwards would force the *less* contained behaviour.
 `chat.automations.cloud.enabled` to `false`, `workbench.browser.enableRemoteProxy` to
 `true`, and `workbench.browser.dataStorage` to `ephemeral`.**
 
-The user chose option 1 from the round 6 list (2026-11-06): force the proxy **on**, which is
+Decided by the project owner (2026-11-06), option 1 from the round 6 list: force the proxy **on**, which is
 the opposite of what the plan's increment 2 first said, and lock the storage scope so a tab
 cannot undo it. The reasoning and the measurement that got there are in the two superseded
 sections below and in "What round 6 found".
@@ -100,7 +100,7 @@ is what makes the pair a control rather than two independent settings.
 ### Superseded: the round 6 decision
 **0017 ships the two automations keys and NOT `workbench.browser.enableRemoteProxy`.**
 Round 6 found a third open path the original measurement had missed, and it reversed the
-conclusion for that one key, which was then held for the user's decision.
+conclusion for that one key, which was then held for a decision by the project owner.
 
 ### The original decision, superseded for `enableRemoteProxy`
 **0017 fixes the value to `false` in `seclab+` windows, as the plan says.** Finding 3 is why
