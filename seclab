@@ -37,7 +37,9 @@ usage: ./seclab <command>
   lint secrets [BASE]           gitleaks (built from pinned source) over git diff BASE..HEAD (default: merge base
                                 with origin/main); also run by CI (lint) and the pre-push hook
   hooks install                 Use the repo's git hooks (build/hooks: pre-push runs lint secrets and the
-                                publish gate) in this clone; refused until main carries the gate
+                                publish gate) in this clone; refused until main carries the gate. The hook
+                                directory is left read-only so an older installer can't downgrade it
+  hooks check                   Exit 1 unless the active hook is the locked gate hook the installer wrote
   lint publish [--self-test|--mount-test]
                                 Publish gate over HEAD's tree: only what can be shown to be public (EDR);
                                 --mount-test: a fake mode-600 list through the real container mount
@@ -852,7 +854,26 @@ case "${1:-help}" in
 	# Repo-provided git hooks (AGENTS.md). Installed into the clone's common git dir, outside every
 	# worktree, so a branch can't weaken or drop the hook by editing build/hooks (review VV-4);
 	# re-run after build/hooks changes. Shared by every worktree of this clone.
-	hooks) shift; [[ "${1:-}" == install ]] || { usage; exit 2; }
+	hooks) shift
+		if [[ "${1:-}" == check ]]; then
+			# Is the active hook the locked gate hook this clone's installer wrote? Exit 1 if not.
+			hookdir="$(cd "$(git -C "$ROOT" rev-parse --git-common-dir)" && pwd -P)/seclab-hooks"
+			active="$(git -C "$ROOT" config core.hooksPath 2>/dev/null || true)"
+			problems=()
+			[[ -n "$active" && "$(cd "$active" 2>/dev/null && pwd -P)" == "$hookdir" ]] || problems+=("core.hooksPath is not $hookdir")
+			grep -q publish_gate "$hookdir/pre-push" 2>/dev/null || problems+=("the pre-push hook has no publish gate")
+			[[ -f "$hookdir/.installed" && "$(sed -n 1p "$hookdir/.installed")" == "$(shasum -a 256 <"$hookdir/pre-push" 2>/dev/null | cut -d' ' -f1)" ]] \
+				|| problems+=("the pre-push hook is not the one the installer wrote")
+			[[ -d "$hookdir" && ! -w "$hookdir" ]] || problems+=("the hook directory is not locked read-only")
+			if [[ ${#problems[@]} -eq 0 ]]; then
+				echo "hooks: ok (gate hook from main $(sed -n 2p "$hookdir/.installed" | cut -c1-12), locked)"
+				exit 0
+			fi
+			printf 'hooks: %s\n' "${problems[@]}" >&2
+			echo "hooks: reinstall with main's code (AGENTS.md)" >&2
+			exit 1
+		fi
+		[[ "${1:-}" == install ]] || { usage; exit 2; }
 		hookdir="$(cd "$(git -C "$ROOT" rev-parse --git-common-dir)" && pwd -P)/seclab-hooks"
 		gl="$(tool_image gitleaks)" || { echo "hooks: no scanner (./seclab tool gitleaks)" >&2; exit 1; }
 		gl_id="$(docker image inspect -f '{{.Id}}' "$gl")"
@@ -882,6 +903,12 @@ case "${1:-help}" in
 		docker image inspect "$main_node" >/dev/null 2>&1 || docker pull -q "$main_node" >/dev/null
 		node_id="$(docker image inspect -f '{{.Id}}' "$main_node")"
 		[[ "$node_id" == sha256:* ]] || { echo "hooks: can't resolve the node image" >&2; exit 1; }
+		# The hook directory is kept read-only between installs, so an older installer (any branch
+		# before the gate, which writes pre-push.tmp there) fails instead of downgrading the
+		# shared hook for every worktree. Only this installer unlocks it.
+		# shellcheck source=build/hooks/publish-gate.sh
+		. "$ROOT/build/hooks/publish-gate.sh"
+		publish_gate_unlock_hooks "$hookdir"
 		mkdir -p "$hookdir/publish-gate.tmp"
 		# From main's objects, not the working tree (R19-5): a branch checked out for testing must
 		# not become every worktree's gate.
@@ -899,7 +926,10 @@ case "${1:-help}" in
 		hook="${hook//@DRIVER_SHA256@/$driver_sha}"
 		mkdir -p "$hookdir"
 		printf '%s\n' "$hook" > "$hookdir/pre-push.tmp" && chmod 0755 "$hookdir/pre-push.tmp" && mv "$hookdir/pre-push.tmp" "$hookdir/pre-push"
+		# The marker the hook checks itself against on every run: its own sha256, then main's commit.
+		printf '%s\n%s\n' "$(shasum -a 256 <"$hookdir/pre-push" | cut -d' ' -f1)" "$(git -C "$ROOT" rev-parse origin/main)" >"$hookdir/.installed"
 		git -C "$ROOT" config core.hooksPath "$hookdir"
+		publish_gate_lock_hooks "$hookdir"
 		# shellcheck source=build/hooks/publish-gate.sh
 		. "$ROOT/build/hooks/publish-gate.sh"
 		publish_gate_list_ok "$(publish_gate_list_path)" 2>/dev/null \

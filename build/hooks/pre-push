@@ -18,10 +18,19 @@ DRIVER_SHA256='@DRIVER_SHA256@'
 fail() { echo "pre-push: $*" >&2; exit 1; }
 [[ "$IMAGE" == sha256:* && "$BIN_SHA256" =~ ^[0-9a-f]{64}$ ]] || fail "hook not installed with ./seclab hooks install"
 [[ "$NODE_IMAGE" == sha256:* && "$DRIVER_SHA256" =~ ^[0-9a-f]{64}$ && -n "$GATE_SUMS" ]] || fail "hook installed without the publish gate; re-run ./seclab hooks install"
-command -v docker >/dev/null || fail "no docker; the secret scan can't run"
 HOOKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+sha256() { (command -v sha256sum >/dev/null && sha256sum || shasum -a 256) | cut -d' ' -f1; }
+# Still the hook ./seclab hooks install wrote (its marker holds this file's sha256), and still
+# the clone's active hooks path. Fails closed otherwise (EDR publish-gate, downgrade protection).
+[[ -f "$HOOKDIR/.installed" && "$(sed -n 1p "$HOOKDIR/.installed")" == "$(sha256 <"${BASH_SOURCE[0]}")" ]] \
+	|| fail "this hook is not the one ./seclab hooks install wrote; reinstall with main's code (AGENTS.md)"
+active="$(git config core.hooksPath 2>/dev/null || true)"
+[[ -n "$active" && "$(cd "$active" 2>/dev/null && pwd -P)" == "$HOOKDIR" ]] \
+	|| fail "core.hooksPath no longer points at the gate hook; reinstall with main's code (AGENTS.md)"
+command -v docker >/dev/null || fail "no docker; the secret scan can't run"
 GATE_DIR="$HOOKDIR/publish-gate"
-driver_sha="$( (command -v sha256sum >/dev/null && sha256sum || shasum -a 256) <"$GATE_DIR/publish-gate.sh" | cut -d' ' -f1)"
+[[ -f "$GATE_DIR/publish-gate.sh" ]] || fail "the publish gate is not installed next to the hook; re-run ./seclab hooks install"
+driver_sha="$(sha256 <"$GATE_DIR/publish-gate.sh")"
 [[ "$driver_sha" == "$DRIVER_SHA256" ]] || fail "the installed publish gate driver does not match its pinned sha256; re-run ./seclab hooks install"
 # shellcheck source=build/hooks/publish-gate.sh
 . "$GATE_DIR/publish-gate.sh"

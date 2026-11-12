@@ -53,6 +53,8 @@ jobs:
         run: ./seclab lint publish --self-test
       - name: Publish gate reads a mode-600 list through its real mount (fake list, runner uid)
         run: ./seclab lint publish --mount-test
+      - name: The shared hook can't be downgraded, and fails closed if edited or bypassed
+        run: test/hooks/hook-lock.test.sh
       - name: No pin younger than 7 days (CFS hold; EDR pin-age-cooldown)
         env:
           GITHUB_TOKEN: ${{ github.token }}

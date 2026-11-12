@@ -161,7 +161,11 @@ RPC-lockdown session adds. Keep them consistent with this file.
   can't run, blocks the push.
   **Never install a shared hook that depends on code that isn't on main yet:** every worktree
   of the clone runs it at once, and a hook calling a branch-only command blocked every other
-  session's pushes. The install refuses until main carries the publish gate.
+  session's pushes. The install refuses until main carries the publish gate. Install with main's
+  code (`git fetch origin && git worktree add --detach .work/main-hook origin/main &&
+  .work/main-hook/seclab hooks install && git worktree remove --force .work/main-hook`), never an
+  older branch's `seclab`; `./seclab hooks check` must say `ok`. The hook directory is left
+  read-only, so an older installer fails instead of downgrading the hook for every worktree.
   The required `lint` check scans every commit main doesn't have yet on every push and PR. Why: GitHub push
   protection, no real-looking secrets in history, and a manual rule got skipped once.
 - **Only what can be shown to be public is published**

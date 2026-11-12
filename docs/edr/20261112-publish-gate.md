@@ -66,6 +66,18 @@ capabilities, as the invoking user (so the private list is readable on a Linux e
 widening it), with the git directory and the list mounted read-only. It runs no code
 from the pushing checkout. The install refuses until main carries the gate.
 
+**Downgrade protection.** The hook is shared by every worktree of a clone, and an installer from a
+branch older than the gate copies its own gitleaks-only hook over it. That happened once, removing
+the gate for every session until it was noticed. A hook can't detect its own replacement, so:
+- `hooks install` leaves the hook directory read-only; every older installer writes a temp file
+  there first, so it fails and the gate hook survives. Only main's installer unlocks it.
+- The hook checks on every run that its sha256 matches the installer's marker and that
+  `core.hooksPath` still resolves to its own directory, and fails closed otherwise.
+- `./seclab hooks check` reports whether the active hook is the locked gate hook.
+
+`test/hooks/hook-lock.test.sh` (lint job) replays the older installers' exact writes against the
+locked directory, and runs the real hook edited and with `core.hooksPath` moved or unset.
+
 **Actions logs.** `build/check-workflow-echo.ts`, run by `./seclab lint workflows`, over every
 workflow, the CI scripts and the shell they source: no `secrets.*` inside `run:`, no environment
 dump or shell trace, no echo of a secret-derived value to the log (taint follows assignments,

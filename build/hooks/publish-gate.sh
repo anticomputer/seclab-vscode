@@ -19,6 +19,11 @@
 # 3 review needed (conversation text only).
 # Bash 3.2 compatible (macOS /bin/bash): no associative arrays.
 
+# The installed hook directory is read-only between installs: an older installer (any branch
+# before the gate) writes pre-push.tmp there and so fails instead of downgrading the shared hook.
+publish_gate_unlock_hooks() { [[ ! -d "$1" ]] || chmod -R u+w "$1"; }
+publish_gate_lock_hooks() { chmod -R a-w "$1"; }
+
 # The known-names list: one local secrets directory for the project (the broker keeps cfs.json
 # there too). Never in the repo.
 publish_gate_list_path() {
