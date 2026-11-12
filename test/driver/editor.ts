@@ -241,13 +241,18 @@ export class DrivenEditor {
 	/**
 	 * Processes other than the editor's main process that hold its CDP fds (3 and 4). Must be
 	 * empty: a holder could read the driver's commands and forge answers (reviews QQQ-1, RRR-1).
-	 * Linux: /proc fd links; macOS: lsof device addresses of the editor's descendants.
+	 * Linux: /proc fd links; macOS: lsof device addresses of the editor's descendants. If the
+	 * editor's own two fds can't be read, that is reported as a holder: no evidence isn't "none"
+	 * (review UUU-3).
 	 */
 	cdpFdHolders(): string[] {
 		const pid = this.child.pid!;
 		if (process.platform === 'linux') {
 			const link = (p: string, fd: number) => { try { return fs.readlinkSync(`/proc/${p}/fd/${fd}`); } catch { return ''; } };
 			const mine = new Set([link(String(pid), 3), link(String(pid), 4)].filter(Boolean));
+			if (mine.size !== 2) {
+				return [`unknown: the editor's fds 3 and 4 could not be read (${mine.size} found)`];
+			}
 			const holders: string[] = [];
 			for (const p of fs.readdirSync('/proc').filter(d => /^\d+$/.test(d) && d !== String(pid))) {
 				let fds: string[] = [];
@@ -274,6 +279,9 @@ export class DrivenEditor {
 			if (l.startsWith('d')) { byPid.get(cur)?.add(l.slice(1)); }
 		}
 		const mine = byPid.get(pid) ?? new Set<string>();
+		if (mine.size !== 2) {
+			return [`unknown: lsof didn't show the editor's fds 3 and 4 (${mine.size} found)`];
+		}
 		return [...byPid].filter(([p, d]) => p !== pid && [...d].some(x => mine.has(x))).map(([p]) => String(p));
 	}
 

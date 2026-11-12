@@ -58,6 +58,10 @@ for (const f of FIXTURES) {
 	const main = path.join(dir, JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).main ?? '');
 	const syntax = spawnSync(process.execPath, ['--check', main], { encoding: 'utf8' });
 	check(`${f.name}'s entry point exists and parses`, fs.existsSync(main) && syntax.status === 0, syntax.stderr.slice(0, 200));
+	// The run looks for this exact status text, so the fixture must show it on activation
+	// (review UUU-2): a renamed marker would make every "not active" check vacuous.
+	const src = fs.existsSync(main) ? fs.readFileSync(main, 'utf8') : '';
+	check(`${f.name} shows the marker the run looks for when it activates`, src.includes(`item.text = 'seclab-local-window: ${f.name} active';`) && src.includes('item.show();'));
 	const r = spawnSync(executable(app), [path.join(resources, 'out', 'cli.js'), '--user-data-dir', profile, '--install-extension', path.resolve(vsixDir, `${f.name}.vsix`), '--force'], { env, encoding: 'utf8', timeout: 120_000 });
 	const out = `${r.stdout}${r.stderr}`;
 	installed.set(f.name, r.status === 0);
@@ -73,10 +77,13 @@ try {
 	ed = await DrivenEditor.launch({ app, userData: profile, args: extra });
 	await ed.waitFor(`document.querySelector('.monaco-workbench .part.statusbar')`, 60_000);
 	const items = `[...document.querySelectorAll('.part.statusbar .statusbar-item')].map(e => e.id + ' ' + (e.innerText || '')).join('\\n')`;
-	// The control: the Tab Manager (a ui built-in) shows its item, so activation is visible.
+	// The control: the Tab Manager (a ui built-in) shows its item, so activation is visible. It
+	// must be seen through the same text the fixtures are matched on, so an empty innerText (a
+	// renderer change) fails here instead of making the fixture checks vacuous (review UUU-2).
 	// The fixtures then get the same time after it.
-	const control = await ed.waitFor(`(${items}).includes('seclab.tab-manager')`, 60_000).then(() => true, () => false);
-	check('control: a ui built-in (the Tab Manager) activates and shows in the status bar', control);
+	const controlSeen = `(${items}).split('\\n').some(l => l.split(' ')[0].includes('seclab.tab-manager') && l.slice(l.indexOf(' ') + 1).trim() !== '')`;
+	const control = await ed.waitFor(controlSeen, 60_000).then(() => true, () => false);
+	check('control: a ui built-in (the Tab Manager) activates and its status text is visible', control);
 	await new Promise(r => setTimeout(r, 10_000));
 	const seen = await ed.evaluate<string>(items);
 	for (const f of FIXTURES) {
