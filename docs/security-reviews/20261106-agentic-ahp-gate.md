@@ -448,7 +448,7 @@ itself**; the two HIGH findings are defects in the proof, and the work they gate
 the EDR's Consequence section.
 
 ## Round 9 (2026-11-10): the corrected increment 2 proof
-Scope: commit `a3b2666`, which was itself the fix for round 8. Eight findings, three HIGH, no
+Scope: commit `5f96aa8`, which was itself the fix for round 8. Eight findings, three HIGH, no
 prompt injection. Two of the HIGHs are the same class of defect round 8 found, so they are
 recorded in full rather than quietly fixed.
 
@@ -504,7 +504,7 @@ check green unnoticed.
 No finding in this round is a defect in patch 0017. All eight are defects in the proof.
 
 ## Round 10 (2026-11-10): the two-sided proof and the leak fixes
-Scope: `5161f6a..6ec8ede`. No prompt injection. The reviewer confirmed the "exactly one side"
+Scope: `f3b7872..24b0c71`. No prompt injection. The reviewer confirmed the "exactly one side"
 rule is sound, the build-identity stamp is trustworthy and fails closed, the cross-build
 restore ordering is correct, and host hygiene is clean. Five findings, all in the plumbing.
 
