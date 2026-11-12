@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
-import { beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, lockRun } from '../harness.ts';
+import { beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, ensureVsceImage, lockRun, VSCE_IMAGE } from '../harness.ts';
 import { brokerProxy, checkEvidence, readEvidence, report, rpcDecisions, type Check } from './assert.ts';
 import { materialiseFixture, readManifest, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 import { partitionFindings, seedTabManagerState, stateItems } from './state-db.ts';
@@ -159,10 +159,7 @@ if (mode === 'prepare') {
 	const vsixDir = path.join(ws, '.seclab');
 	// vsce comes from a local image whose npm fetch went through GitHub CFS (EDR cfs-local-builds);
 	// it packages with no token and no network.
-	const VSCE_IMAGE = 'seclab-vsce:3.9.2';
-	if (spawnSync('docker', ['image', 'inspect', VSCE_IMAGE], { stdio: 'ignore' }).status !== 0) {
-		execFileSync('gh', ['cfs', '--', 'docker', 'build', '-q', '-t', VSCE_IMAGE, path.join(repo, 'build', 'vsce')], { stdio: 'inherit' });
-	}
+	ensureVsceImage();
 	// The rogue extension, and the POSITIVE CONTROL beside it. A suite made only of
 	// "the bad thing did not happen" cannot tell containment from a broken editor: the
 	// first patched build denied the extension host's own error and activation plumbing,
