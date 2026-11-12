@@ -1,0 +1,1328 @@
+diff -ruN a/src/vs/workbench/api/browser/mainThreadConfiguration.ts b/src/vs/workbench/api/browser/mainThreadConfiguration.ts
+--- a/src/vs/workbench/api/browser/mainThreadConfiguration.ts	2026-11-09 19:23:22
++++ b/src/vs/workbench/api/browser/mainThreadConfiguration.ts	2026-11-09 19:48:02
+@@ -11,24 +11,44 @@
+ import { MainThreadConfigurationShape, MainContext, ExtHostContext, IConfigurationInitData } from '../common/extHost.protocol.js';
+ import { extHostNamedCustomer, IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
+ import { ConfigurationTarget, IConfigurationService, IConfigurationOverrides } from '../../../platform/configuration/common/configuration.js';
+-import { IEnvironmentService } from '../../../platform/environment/common/environment.js';
++import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
++import { IExtensionService } from '../../services/extensions/common/extensions.js';
++import { ExtensionHostKind } from '../../services/extensions/common/extensionHostKind.js';
++import { seclabIsFiltered } from './seclabDocumentOrigin.js';
++import { seclabSendWithheld, seclabSetWithheldSink, seclabTabConfiguration, seclabTabConfigurationChange, seclabWithheldSink } from './seclabConfigurationSnapshot.js';
++import { SECLAB_SETTINGS_WITHHELD_MARKER } from './seclabWithhold.js';
+ 
+ @extHostNamedCustomer(MainContext.MainThreadConfiguration)
+ export class MainThreadConfiguration implements MainThreadConfigurationShape {
+ 
+ 	private readonly _configurationListener: IDisposable;
++	/** seclab: a tab's extension host gets a cut-down snapshot (patch 0036). */
++	private readonly _seclabFiltered: boolean;
++	private _seclabLast: IConfigurationInitData | undefined;
++	private readonly _seclabReported = new Set<string>();
++	private readonly _seclabSink: ReturnType<typeof seclabWithheldSink>;
+ 
+ 	constructor(
+ 		extHostContext: IExtHostContext,
+ 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
+ 		@IConfigurationService private readonly configurationService: IConfigurationService,
+-		@IEnvironmentService private readonly _environmentService: IEnvironmentService,
++		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
++		@IExtensionService private readonly _extensionService: IExtensionService,
+ 	) {
+ 		const proxy = extHostContext.getProxy(ExtHostContext.ExtHostConfiguration);
++		this._seclabFiltered = seclabIsFiltered(extHostContext, _environmentService.remoteAuthority);
++		// In a tab window, the local host (the Tab Manager's) receives "setting withheld" reports.
++		this._seclabSink = undefined;
++		if (extHostContext.extensionHostKind === ExtensionHostKind.LocalProcess && _environmentService.remoteAuthority?.startsWith('seclab+')) {
++			this._seclabSink = extHostContext.getProxy(ExtHostContext.ExtHostCommands);
++			seclabSetWithheldSink(this._seclabSink);
++		}
+ 
+ 		proxy.$initializeConfiguration(this._getConfigurationData());
+ 		this._configurationListener = configurationService.onDidChangeConfiguration(e => {
+-			proxy.$acceptConfigurationChanged(this._getConfigurationData(), e.change);
++			const previous = this._seclabLast;
++			const data = this._getConfigurationData();
++			proxy.$acceptConfigurationChanged(data, this._seclabFiltered ? seclabTabConfigurationChange(e.change, previous, data) : e.change);
+ 		});
+ 	}
+ 
+@@ -38,11 +58,32 @@
+ 		if (!this._environmentService.isBuilt || this._environmentService.isExtensionDevelopment) {
+ 			configurationData.configurationScopes = getScopes();
+ 		}
+-		return configurationData;
++		if (!this._seclabFiltered) {
++			return configurationData;
++		}
++		const authority = this._environmentService.remoteAuthority!;
++		const inTab = (uri: URI | undefined) => uri?.scheme === 'vscode-remote' && uri.authority === authority;
++		const { data, withheld } = seclabTabConfiguration(configurationData, {
++			windowAuthority: authority,
++			tabExtensions: new Set(this._extensionService.extensions.filter(e => inTab(e.extensionLocation)).map(e => e.identifier.value.toLowerCase())),
++			workspaceInTab: (() => { const ws = this._workspaceContextService.getWorkspace(); return ws.configuration ? inTab(ws.configuration) : ws.folders.every(f => inTab(f.uri)); })(),
++		});
++		// Tell the user, by key name only, what looked like a credential. The Tab Manager checks each
++		// claim against host state before raising it (Tab observability, config.withheld).
++		const fresh = withheld.filter(w => w.key.length <= 256 && !this._seclabReported.has(w.key));
++		fresh.forEach(w => this._seclabReported.add(w.key));
++		for (let i = 0; i < fresh.length; i += 64) {
++			seclabSendWithheld({ v: SECLAB_SETTINGS_WITHHELD_MARKER, authority, settings: fresh.slice(i, i + 64) });
++		}
++		this._seclabLast = data;
++		return data;
+ 	}
+ 
+ 	public dispose(): void {
+ 		this._configurationListener.dispose();
++		if (this._seclabSink && seclabWithheldSink() === this._seclabSink) {
++			seclabSetWithheldSink(undefined);
++		}
+ 	}
+ 
+ 	$updateConfigurationOption(target: ConfigurationTarget | null, key: string, value: unknown, overrides: IConfigurationOverrides | undefined, scopeToLanguage: boolean | undefined): Promise<void> {
+diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts
+--- a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	1970-01-01 00:00:00
++++ b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	2026-11-10 00:08:57
+@@ -0,0 +1,151 @@
++/*---------------------------------------------------------------------------------------------
++ *  seclab: the configuration a tab's extension host receives (patch 0036, EDR
++ *  configuration-snapshot). Upstream sends every host the whole snapshot, the host user
++ *  settings.json included. For a non-local host in a `seclab+` window the snapshot is cut down:
++ *  - `application` is dropped (host-wide). The REH's `userRemote`, and workspace or folder settings
++ *    on the tab's own authority, pass unchanged (the tab already controls them).
++ *  - First, whatever the registry says, a key `withholdReason` calls a credential (by name, or by
++ *    gitleaks' rules on its strings) is withheld. Registration and scope can change at run time.
++ *  - Then `defaults`, `policy`, `userLocal` and local workspace or folder settings keep only keys
++ *    that are core-registered with a non-application, non-machine scope and not `restricted`, or
++ *    declared by an extension installed in this tab. Undeclared keys never cross.
++ *  The snapshot is rebuilt and refiltered for every `$acceptConfigurationChanged`.
++ *  Keys withheld from the top level of `userLocal` are reported by name, never value, for the Tab
++ *  Manager to verify and raise (other layers and `[lang]` sections are withheld silently).
++ *--------------------------------------------------------------------------------------------*/
++
++import { IStringDictionary } from '../../../base/common/collections.js';
++import { addToValueTree, getConfigurationValue, IConfigurationChange, IConfigurationModel } from '../../../platform/configuration/common/configuration.js';
++import { ConfigurationScope, Extensions, IConfigurationRegistry, OVERRIDE_PROPERTY_REGEX } from '../../../platform/configuration/common/configurationRegistry.js';
++import { Registry } from '../../../platform/registry/common/platform.js';
++import { ExtHostCommandsShape, IConfigurationInitData } from '../common/extHost.protocol.js';
++import { SeclabWithholdReason, withholdReason } from './seclabWithhold.js';
++
++const HOST_SCOPES = new Set([ConfigurationScope.APPLICATION, ConfigurationScope.MACHINE, ConfigurationScope.APPLICATION_MACHINE, ConfigurationScope.MACHINE_OVERRIDABLE]);
++
++export interface SeclabWithheld { readonly key: string; readonly reason: SeclabWithholdReason }
++
++export interface SeclabSnapshotScope {
++	/** Ids (lowercase) of the extensions installed in this tab. */
++	readonly tabExtensions: ReadonlySet<string>;
++	/** True if the workspace settings come from the tab's own authority. */
++	readonly workspaceInTab: boolean;
++	readonly windowAuthority: string;
++}
++
++/** Whether a registered `key` (not a `[lang]` section) may reach this tab at all. */
++function declaredForTab(key: string, scope: SeclabSnapshotScope): boolean {
++	const schema = Registry.as<IConfigurationRegistry>(Extensions.Configuration).getConfigurationProperties()[key];
++	if (!schema) {
++		return false;
++	}
++	const source = typeof schema.source === 'string' ? schema.source : schema.source?.id;
++	return source === undefined
++		? !HOST_SCOPES.has(schema.scope ?? ConfigurationScope.WINDOW) && !schema.restricted
++		: scope.tabExtensions.has(source.toLowerCase());
++}
++
++function filterContents(contents: IStringDictionary<unknown>, keys: readonly string[], scope: SeclabSnapshotScope, report: SeclabWithheld[] | undefined): { contents: IStringDictionary<unknown>; keys: string[] } {
++	const out: IStringDictionary<unknown> = {};
++	const kept: string[] = [];
++	for (const key of keys) {
++		if (OVERRIDE_PROPERTY_REGEX.test(key)) {
++			// A `[lang]` section: its own keys go through the same rule.
++			const section = contents[key];
++			const dict = section && typeof section === 'object' ? section as IStringDictionary<unknown> : {};
++			const inner = filterContents(dict, Object.keys(dict), scope, undefined);
++			if (inner.keys.length) {
++				out[key] = inner.contents;
++				kept.push(key);
++			}
++			continue;
++		}
++		// The credential rule comes first and never consults the registry: a setting's registration
++		// and scope can change at run time (http.proxyAuthorization is re-registered as APPLICATION
++		// or MACHINE when http.useLocalProxyConfiguration changes), and can race the tab host's start.
++		const value = getConfigurationValue(contents, key);
++		const reason = withholdReason(key, value);
++		if (reason) {
++			report?.push({ key, reason });
++			continue;
++		}
++		if (!declaredForTab(key, scope)) {
++			continue;
++		}
++		addToValueTree(out, key, value, () => { });
++		kept.push(key);
++	}
++	return { contents: out, keys: kept };
++}
++
++function filterModel(model: IConfigurationModel, scope: SeclabSnapshotScope, report?: SeclabWithheld[]): IConfigurationModel {
++	const top = filterContents(model.contents, model.keys, scope, report);
++	const overrides = model.overrides.map(o => {
++		const f = filterContents(o.contents, o.keys, scope, undefined);
++		return { identifiers: o.identifiers, contents: f.contents, keys: f.keys };
++	}).filter(o => o.keys.length);
++	return { contents: top.contents, keys: top.keys, overrides };
++}
++
++const EMPTY: IConfigurationModel = { contents: {}, keys: [], overrides: [] };
++
++/** The snapshot for a tab's extension host, and the `userLocal` keys withheld as credentials. */
++export function seclabTabConfiguration(data: IConfigurationInitData, scope: SeclabSnapshotScope): { data: IConfigurationInitData; withheld: SeclabWithheld[] } {
++	const withheld: SeclabWithheld[] = [];
++	const tabFolder = (uri: { scheme?: string; authority?: string }) => uri.scheme === 'vscode-remote' && uri.authority === scope.windowAuthority;
++	const result: IConfigurationInitData = {
++		...data,
++		defaults: filterModel(data.defaults, scope),
++		policy: filterModel(data.policy, scope),
++		application: EMPTY,
++		userLocal: filterModel(data.userLocal, scope, withheld),
++		userRemote: data.userRemote,
++		workspace: scope.workspaceInTab ? data.workspace : filterModel(data.workspace, scope),
++		folders: data.folders.map(([uri, model]) => [uri, tabFolder(uri) ? model : filterModel(model, scope)]),
++	};
++	return { data: result, withheld };
++}
++
++/** A change event's key list, cut to the keys this tab knew about before or knows about now. */
++export function seclabTabConfigurationChange(change: IConfigurationChange, ...snapshots: Array<IConfigurationInitData | undefined>): IConfigurationChange {
++	const known = new Set<string>();
++	for (const crossed of snapshots) {
++		if (!crossed) {
++			continue;
++		}
++		for (const m of [crossed.defaults, crossed.policy, crossed.userLocal, crossed.userRemote, crossed.workspace, ...crossed.folders.map(([, f]) => f)]) {
++			m.keys.forEach(k => known.add(k));
++			m.overrides.forEach(o => o.keys.forEach(k => known.add(k)));
++		}
++	}
++	return {
++		keys: change.keys.filter(k => known.has(k)),
++		overrides: change.overrides.map(([id, keys]) => [id, keys.filter(k => known.has(k))] as [string, string[]]).filter(([, keys]) => keys.length),
++	};
++}
++
++// Where "setting withheld" reports go: the window's own LocalProcess extension host (the Tab
++// Manager), called on that host's ExtHostCommands proxy. Never the global ICommandService, where a
++// tab could register the same command id and receive (or suppress) the report.
++let sink: ExtHostCommandsShape | undefined;
++const pending: unknown[] = [];
++export const SECLAB_SETTINGS_WITHHELD_COMMAND = 'seclab.tabs.settingsWithheld';
++
++export function seclabSetWithheldSink(proxy: ExtHostCommandsShape | undefined): void {
++	sink = proxy;
++	for (const p of proxy ? pending.splice(0) : []) {
++		seclabSendWithheld(p);
++	}
++}
++
++export function seclabWithheldSink(): ExtHostCommandsShape | undefined {
++	return sink;
++}
++
++export function seclabSendWithheld(payload: unknown): void {
++	if (sink) {
++		sink.$executeContributedCommand(SECLAB_SETTINGS_WITHHELD_COMMAND, payload).catch(() => { /* no Tab Manager */ });
++	} else if (pending.length < 16) {
++		pending.push(payload);
++	}
++}
+diff -ruN a/src/vs/workbench/api/browser/seclabSecretRules.ts b/src/vs/workbench/api/browser/seclabSecretRules.ts
+--- a/src/vs/workbench/api/browser/seclabSecretRules.ts	1970-01-01 00:00:00
++++ b/src/vs/workbench/api/browser/seclabSecretRules.ts	1970-01-01 00:00:00
+@@ -0,0 +1,923 @@
++/*---------------------------------------------------------------------------------------------
++ *  seclab: GENERATED by build/secret-rules/generate.ts from gitleaks v8.30.1 (83d9cd684c87d95d656c1458ef04895a7f1cbd8e)
++ *  config/gitleaks.toml (MIT). Do not edit. 217 rules; 5 path-bound rule(s) skipped (settings have no file name);
++ *  16 example token(s) left out of allowlists.
++ *  The table is base64 because a readable list of secret-scanner keywords trips secret scanners
++ *  (ours run on every push); gitleaks allowlists its own config by path for the same reason. Read
++ *  it with: node build/secret-rules/generate.ts --decode FILE
++ *--------------------------------------------------------------------------------------------*/
++
++export interface SeclabSecretRule {
++	readonly id: string;
++	readonly source: string;
++	readonly flags: string;
++	readonly group: number;
++	readonly entropy: number;
++	readonly keywords: readonly string[];
++	readonly allow: readonly { readonly target: string; readonly and: boolean; readonly regexes: readonly { readonly source: string; readonly flags: string }[]; readonly stopwords: readonly string[] }[];
++}
++
++const DATA = [
++	'eyJydWxlcyI6W3siaWQiOiIxcGFzc3dvcmQtc2VjcmV0LWtleSIsInNvdXJjZSI6IlxcYkEzLVtBLVowLTldezZ9LSg/Oig/',
++	'OltBLVowLTldezExfSl8KD86W0EtWjAtOV17Nn0tW0EtWjAtOV17NX0pKS1bQS1aMC05XXs1fS1bQS1aMC05XXs1fS1bQS1a',
++	'MC05XXs1fVxcYiIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMuOCwia2V5d29yZHMiOlsiYTMtIl0sImFsbG93',
++	'IjpbXX0seyJpZCI6IjFwYXNzd29yZC1zZXJ2aWNlLWFjY291bnQtdG9rZW4iLCJzb3VyY2UiOiJvcHNfZXlKW2EtekEtWjAt',
++	'OSsvXXsyNTAsfT17MCwzfSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjQsImtleXdvcmRzIjpbIm9wc18iXSwi',
++	'YWxsb3ciOltdfSx7ImlkIjoiYWRhZnJ1aXQtYXBpLWtleSIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86YWRhZnJ1aXQp',
++	'KD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4',
++	'NjAnXCJcXHM9XXswLDV9KFthLXowLTlfLV17MzJ9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJp',
++	'IiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImFkYWZydWl0Il0sImFsbG93IjpbXX0seyJpZCI6ImFkb2Jl',
++	'LWNsaWVudC1pZCIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86YWRvYmUpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydc',
++	'Il17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLWYwLTldezMy',
++	'fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjoyLCJrZXl3',
++	'b3JkcyI6WyJhZG9iZSJdLCJhbGxvdyI6W119LHsiaWQiOiJhZG9iZS1jbGllbnQtc2VjcmV0Iiwic291cmNlIjoiXFxiKHA4',
++	'ZS1bYS16MC05XXszMn0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50',
++	'cm9weSI6Miwia2V5d29yZHMiOlsicDhlLSJdLCJhbGxvdyI6W119LHsiaWQiOiJhZ2Utc2VjcmV0LWtleSIsInNvdXJjZSI6',
++	'IkFHRS1TRUNSRVQtS0VZLTFbUVBaUlk5WDhHRjJUVkRXMFMzSk41NEtIQ0U2TVVBN0xdezU4fSIsImZsYWdzIjoiIiwiZ3Jv',
++	'dXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImFnZS1zZWNyZXQta2V5LTEiXSwiYWxsb3ciOltdfSx7ImlkIjoiYWly',
++	'dGFibGUtYXBpLWtleSIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86YWlydGFibGUpKD86WyBcXHRcXHcuLV17MCwyMH0p',
++	'W1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLXow',
++	'LTldezE3fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5Ijow',
++	'LCJrZXl3b3JkcyI6WyJhaXJ0YWJsZSJdLCJhbGxvdyI6W119LHsiaWQiOiJhaXJ0YWJsZS1wZXJzb25uYWwtYWNjZXNzLXRv',
++	'a2VuIiwic291cmNlIjoiXFxiKHBhdFtBLVphLXowLTldezE0fVxcLlthLWYwLTldezY0fSlcXGIiLCJmbGFncyI6IiIsImdy',
++	'b3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJhaXJ0YWJsZSJdLCJhbGxvdyI6W119LHsiaWQiOiJhbGdvbGlhLWFw',
++	'aS1rZXkiLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OmFsZ29saWEpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17',
++	'MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLXowLTldezMyfSko',
++	'PzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3Jk',
++	'cyI6WyJhbGdvbGlhIl0sImFsbG93IjpbXX0seyJpZCI6ImFsaWJhYmEtYWNjZXNzLWtleS1pZCIsInNvdXJjZSI6IlxcYihM',
++	'VEFJW2EtejAtOV17MjB9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVu',
++	'dHJvcHkiOjIsImtleXdvcmRzIjpbImx0YWkiXSwiYWxsb3ciOltdfSx7ImlkIjoiYWxpYmFiYS1zZWNyZXQta2V5Iiwic291',
++	'cmNlIjoiW1xcdy4tXXswLDUwfT8oPzphbGliYWJhKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58',
++	'OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbYS16MC05XXszMH0pKD86W1xceDYwJ1wi',
++	'XFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29yZHMiOlsiYWxpYmFi',
++	'YSJdLCJhbGxvdyI6W119LHsiaWQiOiJhbnRocm9waWMtYWRtaW4tYXBpLWtleSIsInNvdXJjZSI6IlxcYihzay1hbnQtYWRt',
++	'aW4wMS1bYS16QS1aMC05X1xcLV17OTN9QUEpKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6IiIsImdy',
++	'b3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJzay1hbnQtYWRtaW4wMSJdLCJhbGxvdyI6W119LHsiaWQiOiJhbnRo',
++	'cm9waWMtYXBpLWtleSIsInNvdXJjZSI6IlxcYihzay1hbnQtYXBpMDMtW2EtekEtWjAtOV9cXC1dezkzfUFBKSg/OltcXHg2',
++	'MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsic2st',
++	'YW50LWFwaTAzIl0sImFsbG93IjpbXX0seyJpZCI6ImFydGlmYWN0b3J5LWFwaS1rZXkiLCJzb3VyY2UiOiJcXGJBS0NwW0Et',
++	'WmEtejAtOV17Njl9XFxiIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6NC41LCJrZXl3b3JkcyI6WyJha2NwIl0s',
++	'ImFsbG93IjpbXX0seyJpZCI6ImFydGlmYWN0b3J5LXJlZmVyZW5jZS10b2tlbiIsInNvdXJjZSI6IlxcYmNtVm1kW0EtWmEt',
++	'ejAtOV17NTl9XFxiIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6NC41LCJrZXl3b3JkcyI6WyJjbXZtZCJdLCJh',
++	'bGxvdyI6W119LHsiaWQiOiJhc2FuYS1jbGllbnQtaWQiLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OmFzYW5hKSg/Olsg',
++	'XFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wi',
++	'XFxzPV17MCw1fShbMC05XXsxNn0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6',
++	'MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsiYXNhbmEiXSwiYWxsb3ciOltdfSx7ImlkIjoiYXNhbmEtY2xpZW50LXNlY3Jl',
++	'dCIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86YXNhbmEpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/',
++	'Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLXowLTldezMyfSkoPzpbXFx4',
++	'NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJh',
++	'c2FuYSJdLCJhbGxvdyI6W119LHsiaWQiOiJhdGxhc3NpYW4tYXBpLXRva2VuIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8o',
++	'PzooPy1pOkFUTEFTU0lBTnxbQWFddGxhc3NpYW4pfCg/LWk6Q09ORkxVRU5DRXxbQ2Ndb25mbHVlbmNlKXwoPy1pOkpJUkF8',
++	'W0pqXWlyYSkpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxc',
++	'Pz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLXowLTldezIwfVthLWYwLTldezR9KSg/OltcXHg2MCdcIlxccztdfFxcXFxb',
++	'bnJdfCQpfFxcYihBVEFUVDNbQS1aYS16MC05X1xcLT1dezE4Nn0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJm',
++	'bGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6My41LCJrZXl3b3JkcyI6WyJhdGxhc3NpYW4iLCJjb25mbHVlbmNlIiwi',
++	'amlyYSIsImF0YXR0MyJdLCJhbGxvdyI6W119LHsiaWQiOiJhdXRocmVzcy1zZXJ2aWNlLWNsaWVudC1hY2Nlc3Mta2V5Iiwi',
++	'c291cmNlIjoiXFxiKCg/OnNjfGV4dHxzY2F1dGh8YXV0aHJlc3MpX1thLXowLTldezUsMzB9XFwuW2EtejAtOV17NCw2fVxc',
++	'Lig/LWk6YWNjKVtfLV1bYS16MC05LV17MTAsMzJ9XFwuW2EtejAtOSsvXz0tXXszMCwxMjB9KSg/OltcXHg2MCdcIlxccztd',
++	'fFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjIsImtleXdvcmRzIjpbInNjXyIsImV4dF8i',
++	'LCJzY2F1dGhfIiwiYXV0aHJlc3NfIl0sImFsbG93IjpbXX0seyJpZCI6ImF3cy1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJc',
++	'XGIoKD86QTNUW0EtWjAtOV18QUtJQXxBU0lBfEFCSUF8QUNDQSlbQS1aMi03XXsxNn0pXFxiIiwiZmxhZ3MiOiIiLCJncm91',
++	'cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsiYTN0IiwiYWtpYSIsImFzaWEiLCJhYmlhIiwiYWNjYSJdLCJhbGxvdyI6',
++	'W3sidGFyZ2V0Ijoic2VjcmV0IiwiYW5kIjpmYWxzZSwicmVnZXhlcyI6W3sic291cmNlIjoiLitFWEFNUExFJCIsImZsYWdz',
++	'IjoiIn1dLCJzdG9wd29yZHMiOltdfV19LHsiaWQiOiJhd3MtYW1hem9uLWJlZHJvY2stYXBpLWtleS1sb25nLWxpdmVkIiwi',
++	'c291cmNlIjoiXFxiKEFCU0tbQS1aYS16MC05Ky9dezEwOSwyNjl9PXswLDJ9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJd',
++	'fCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsiYWJzayJdLCJhbGxvdyI6W119LHsi',
++	'aWQiOiJhd3MtYW1hem9uLWJlZHJvY2stYXBpLWtleS1zaG9ydC1saXZlZCIsInNvdXJjZSI6ImJlZHJvY2tcXHgyZGFwaVxc',
++	'eDJka2V5XFx4MmRZbVZrY205amF5NWhiV0Y2YjI1aGQzTXVZMjl0IiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6',
++	'Mywia2V5d29yZHMiOlsiYmVkcm9jay1hcGkta2V5LSJdLCJhbGxvdyI6W119LHsiaWQiOiJhenVyZS1hZC1jbGllbnQtc2Vj',
++	'cmV0Iiwic291cmNlIjoiKD86XnxbXFxcXCdcIlxceDYwXFxzPj06KCwpXSkoW2EtekEtWjAtOV9+Ll17M31cXGRRflthLXpB',
++	'LVowLTlffi4tXXszMSwzNH0pKD86JHxbXFxcXCdcIlxceDYwXFxzPCksXSkiLCJmbGFncyI6IiIsImdyb3VwIjowLCJlbnRy',
++	'b3B5IjozLCJrZXl3b3JkcyI6WyJxfiJdLCJhbGxvdyI6W119LHsiaWQiOiJiZWFtZXItYXBpLXRva2VuIiwic291cmNlIjoi',
++	'W1xcdy4tXXswLDUwfT8oPzpiZWFtZXIpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309',
++	'fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KGJfW2EtejAtOT1fXFwtXXs0NH0pKD86W1xceDYwJ1wi',
++	'XFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsiYmVhbWVy',
++	'Il0sImFsbG93IjpbXX0seyJpZCI6ImJpdGJ1Y2tldC1jbGllbnQtaWQiLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OmJp',
++	'dGJ1Y2tldCkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/',
++	'PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtejAtOV17MzJ9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxh',
++	'Z3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImJpdGJ1Y2tldCJdLCJhbGxvdyI6W119LHsiaWQi',
++	'OiJiaXRidWNrZXQtY2xpZW50LXNlY3JldCIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86Yml0YnVja2V0KSg/OlsgXFx0',
++	'XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxz',
++	'PV17MCw1fShbYS16MC05PV9cXC1dezY0fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdy',
++	'b3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJiaXRidWNrZXQiXSwiYWxsb3ciOltdfSx7ImlkIjoiYml0dHJleC1h',
++	'Y2Nlc3Mta2V5Iiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzpiaXR0cmV4KSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMn',
++	'XCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbYS16MC05XXsz',
++	'Mn0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5',
++	'd29yZHMiOlsiYml0dHJleCJdLCJhbGxvdyI6W119LHsiaWQiOiJiaXR0cmV4LXNlY3JldC1rZXkiLCJzb3VyY2UiOiJbXFx3',
++	'Li1dezAsNTB9Pyg/OmJpdHRyZXgpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxc',
++	'fFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLXowLTldezMyfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxc',
++	'W25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJiaXR0cmV4Il0sImFsbG93',
++	'IjpbXX0seyJpZCI6ImNpc2NvLW1lcmFraS1hcGkta2V5Iiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oP2k6W1xcdy4tXXsw',
++	'LDUwfT8oPzooPy1pOltNbV1lcmFraXxNRVJBS0kpKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30pKD86PXw+',
++	'fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oWzAtOWEtZl17NDB9KSg/OltcXHg2MCdc',
++	'IlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsibWVyYWtp',
++	'Il0sImFsbG93IjpbXX0seyJpZCI6ImNsaWNraG91c2UtY2xvdWQtYXBpLXNlY3JldC1rZXkiLCJzb3VyY2UiOiJcXGIoNGIx',
++	'ZFtBLVphLXowLTldezM4fSlcXGIiLCJmbGFncyI6IiIsImdyb3VwIjowLCJlbnRyb3B5IjozLCJrZXl3b3JkcyI6WyI0YjFk',
++	'Il0sImFsbG93IjpbXX0seyJpZCI6ImNsb2phcnMtYXBpLXRva2VuIiwic291cmNlIjoiQ0xPSkFSU19bYS16MC05XXs2MH0i',
++	'LCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29yZHMiOlsiY2xvamFyc18iXSwiYWxsb3ciOltdfSx7',
++	'ImlkIjoiY2xvdWRmbGFyZS1hcGkta2V5Iiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzpjbG91ZGZsYXJlKSg/OlsgXFx0',
++	'XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxz',
++	'PV17MCw1fShbYS16MC05Xy1dezQwfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3Vw',
++	'IjowLCJlbnRyb3B5IjoyLCJrZXl3b3JkcyI6WyJjbG91ZGZsYXJlIl0sImFsbG93IjpbXX0seyJpZCI6ImNsb3VkZmxhcmUt',
++	'Z2xvYmFsLWFwaS1rZXkiLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OmNsb3VkZmxhcmUpKD86WyBcXHRcXHcuLV17MCwy',
++	'MH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFth',
++	'LWYwLTldezM3fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5',
++	'IjoyLCJrZXl3b3JkcyI6WyJjbG91ZGZsYXJlIl0sImFsbG93IjpbXX0seyJpZCI6ImNsb3VkZmxhcmUtb3JpZ2luLWNhLWtl',
++	'eSIsInNvdXJjZSI6IlxcYih2MVxcLjAtW2EtZjAtOV17MjR9LVthLWYwLTldezE0Nn0pKD86W1xceDYwJ1wiXFxzO118XFxc',
++	'XFtucl18JCkiLCJmbGFncyI6IiIsImdyb3VwIjowLCJlbnRyb3B5IjoyLCJrZXl3b3JkcyI6WyJjbG91ZGZsYXJlIiwidjEu',
++	'MC0iXSwiYWxsb3ciOltdfSx7ImlkIjoiY29kZWNvdi1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/',
++	'OmNvZGVjb3YpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxc',
++	'Pz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLXowLTldezMyfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZs',
++	'YWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJjb2RlY292Il0sImFsbG93IjpbXX0seyJpZCI6',
++	'ImNvaGVyZS1hcGktdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/aTpbXFx3Li1dezAsNTB9Pyg/OmNvaGVyZXxD',
++	'T19BUElfS0VZKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30pKD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58',
++	'XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtekEtWjAtOV17NDB9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQp',
++	'IiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6NCwia2V5d29yZHMiOlsiY29oZXJlIiwiY29fYXBpX2tleSJdLCJh',
++	'bGxvdyI6W119LHsiaWQiOiJjb2luYmFzZS1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OmNvaW5i',
++	'YXNlKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwp',
++	'W1xceDYwJ1wiXFxzPV17MCw1fShbYS16MC05Xy1dezY0fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdz',
++	'IjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJjb2luYmFzZSJdLCJhbGxvdyI6W119LHsiaWQiOiJj',
++	'b25mbHVlbnQtYWNjZXNzLXRva2VuIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzpjb25mbHVlbnQpKD86WyBcXHRcXHcu',
++	'LV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXsw',
++	'LDV9KFthLXowLTldezE2fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJl',
++	'bnRyb3B5IjowLCJrZXl3b3JkcyI6WyJjb25mbHVlbnQiXSwiYWxsb3ciOltdfSx7ImlkIjoiY29uZmx1ZW50LXNlY3JldC1r',
++	'ZXkiLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OmNvbmZsdWVudCkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXsw',
++	'LDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtejAtOV17NjR9KSg/',
++	'OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRz',
++	'IjpbImNvbmZsdWVudCJdLCJhbGxvdyI6W119LHsiaWQiOiJjb250ZW50ZnVsLWRlbGl2ZXJ5LWFwaS10b2tlbiIsInNvdXJj',
++	'ZSI6IltcXHcuLV17MCw1MH0/KD86Y29udGVudGZ1bCkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+',
++	'fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtejAtOT1fXFwtXXs0M30pKD86W1xc',
++	'eDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsi',
++	'Y29udGVudGZ1bCJdLCJhbGxvdyI6W119LHsiaWQiOiJjdXJsLWF1dGgtaGVhZGVyIiwic291cmNlIjoiXFxiY3VybFxcYig/',
++	'Oi4qP3wuKj8oPzpbXFxyXFxuXXsxLDJ9Lio/KXsxLDV9KVsgXFx0XFxuXFxyXSg/Oi1IfC0taGVhZGVyKSg/Oj18WyBcXHRd',
++	'ezAsNX0pKD86XCIoPzpBdXRob3JpemF0aW9uOlsgXFx0XXswLDV9KD86QmFzaWNbIFxcdF0oW2EtejAtOSsvXXs4LH09ezAs',
++	'M30pfCg/OkJlYXJlcnwoPzpBcGktKT9Ub2tlbilbIFxcdF0oW1xcdz1+QC4rLy1dezgsfSl8KFtcXHc9fkAuKy8tXXs4LH0p',
++	'KXwoPzooPzpYLSg/OlthLXpdKy0pPyk/KD86QXBpLT8pPyg/OktleXxUb2tlbikpOlsgXFx0XXswLDV9KFtcXHc9fkAuKy8t',
++	'XXs4LH0pKVwifCcoPzpBdXRob3JpemF0aW9uOlsgXFx0XXswLDV9KD86QmFzaWNbIFxcdF0oW2EtejAtOSsvXXs4LH09ezAs',
++	'M30pfCg/OkJlYXJlcnwoPzpBcGktKT9Ub2tlbilbIFxcdF0oW1xcdz1+QC4rLy1dezgsfSl8KFtcXHc9fkAuKy8tXXs4LH0p',
++	'KXwoPzooPzpYLSg/OlthLXpdKy0pPyk/KD86QXBpLT8pPyg/OktleXxUb2tlbikpOlsgXFx0XXswLDV9KFtcXHc9fkAuKy8t',
++	'XXs4LH0pKScpKD86XFxCfFxcc3wkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjoyLjc1LCJrZXl3b3JkcyI6',
++	'WyJjdXJsIl0sImFsbG93IjpbXX0seyJpZCI6ImN1cmwtYXV0aC11c2VyIiwic291cmNlIjoiXFxiY3VybFxcYig/Oi4qfC4q',
++	'KD86W1xcclxcbl17MSwyfS4qKXsxLDV9KVsgXFx0XFxuXFxyXSg/Oi11fC0tdXNlcikoPzo9fFsgXFx0XXswLDV9KShcIig6',
++	'W15cIl17Myx9fFteOlwiXXszLH06fFteOlwiXXszLH06W15cIl17Myx9KVwifCcoW146J117Myx9OlteJ117Myx9KSd8KCg/',
++	'OlwiW15cIl17Myx9XCJ8J1teJ117Myx9J3xbXFx3JEAuLV0rKTooPzpcIlteXCJdezMsfVwifCdbXiddezMsfSd8W1xcdyR7',
++	'fUAuLV0rKSkpKD86XFxzfCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29yZHMiOlsiY3VybCJd',
++	'LCJhbGxvdyI6W3sidGFyZ2V0Ijoic2VjcmV0IiwiYW5kIjpmYWxzZSwicmVnZXhlcyI6W3sic291cmNlIjoiW146XSs6KD86',
++	'Y2hhbmdlKD86aXR8bWUpfHBhc3MoPzp3b3JkKT98cHdkfHRlc3R8dG9rZW58XFwqK3x4KykiLCJmbGFncyI6IiJ9LHsic291',
++	'cmNlIjoiWydcIl0/PFtePl0rPlsnXCJdPzpbJ1wiXT88W14+XSs+fDxbXjpdKzpbXj5dKz5bJ1wiXT8iLCJmbGFncyI6IiJ9',
++	'LHsic291cmNlIjoiW146XSs6XFxbW15dXStdIiwiZmxhZ3MiOiIifSx7InNvdXJjZSI6IlsnXCJdP1teOl0rWydcIl0/Olsn',
++	'XCJdP1xcJCg/OlxcZHxcXHcrfFxceyg/OlxcZHxcXHcrKX0pWydcIl0/IiwiZmxhZ3MiOiIifSx7InNvdXJjZSI6IlxcJFxc',
++	'KFteKV0rXFwpOlxcJFxcKFteKV0rXFwpIiwiZmxhZ3MiOiIifSx7InNvdXJjZSI6IlsnXCJdP1xcJD97e1tefV0rfX1bJ1wi',
++	'XT86WydcIl0/XFwkP3t7W159XSt9fVsnXCJdPyIsImZsYWdzIjoiIn1dLCJzdG9wd29yZHMiOltdfV19LHsiaWQiOiJkYXRh',
++	'YnJpY2tzLWFwaS10b2tlbiIsInNvdXJjZSI6IlxcYihkYXBpW2EtZjAtOV17MzJ9KD86LVxcZCk/KSg/OltcXHg2MCdcIlxc',
++	'cztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsiZGFwaSJdLCJh',
++	'bGxvdyI6W119LHsiaWQiOiJkYXRhZG9nLWFjY2Vzcy10b2tlbiIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86ZGF0YWRv',
++	'ZykoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtc',
++	'XHg2MCdcIlxccz1dezAsNX0oW2EtejAtOV17NDB9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJp',
++	'IiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImRhdGFkb2ciXSwiYWxsb3ciOltdfSx7ImlkIjoiZGVmaW5l',
++	'ZC1uZXR3b3JraW5nLWFwaS10b2tlbiIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86ZG5rZXkpKD86WyBcXHRcXHcuLV17',
++	'MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9',
++	'KGRua2V5LVthLXowLTk9X1xcLV17MjZ9LVthLXowLTk9X1xcLV17NTJ9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQp',
++	'IiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImRua2V5Il0sImFsbG93IjpbXX0seyJp',
++	'ZCI6ImRpZ2l0YWxvY2Vhbi1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJcXGIoZG9vX3YxX1thLWYwLTldezY0fSkoPzpbXFx4',
++	'NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMsImtleXdvcmRzIjpbImRv',
++	'b192MV8iXSwiYWxsb3ciOltdfSx7ImlkIjoiZGlnaXRhbG9jZWFuLXBhdCIsInNvdXJjZSI6IlxcYihkb3BfdjFfW2EtZjAt',
++	'OV17NjR9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Mywi',
++	'a2V5d29yZHMiOlsiZG9wX3YxXyJdLCJhbGxvdyI6W119LHsiaWQiOiJkaWdpdGFsb2NlYW4tcmVmcmVzaC10b2tlbiIsInNv',
++	'dXJjZSI6IlxcYihkb3JfdjFfW2EtZjAtOV17NjR9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJp',
++	'IiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImRvcl92MV8iXSwiYWxsb3ciOltdfSx7ImlkIjoiZGlzY29y',
++	'ZC1hcGktdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OmRpc2NvcmQpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xc',
++	'cydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLWYwLTld',
++	'ezY0fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJr',
++	'ZXl3b3JkcyI6WyJkaXNjb3JkIl0sImFsbG93IjpbXX0seyJpZCI6ImRpc2NvcmQtY2xpZW50LWlkIiwic291cmNlIjoiW1xc',
++	'dy4tXXswLDUwfT8oPzpkaXNjb3JkKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxc',
++	'XHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbMC05XXsxOH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtu',
++	'cl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29yZHMiOlsiZGlzY29yZCJdLCJhbGxvdyI6',
++	'W119LHsiaWQiOiJkaXNjb3JkLWNsaWVudC1zZWNyZXQiLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OmRpc2NvcmQpKD86',
++	'WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAn',
++	'XCJcXHM9XXswLDV9KFthLXowLTk9X1xcLV17MzJ9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJp',
++	'IiwiZ3JvdXAiOjAsImVudHJvcHkiOjIsImtleXdvcmRzIjpbImRpc2NvcmQiXSwiYWxsb3ciOltdfSx7ImlkIjoiZG9wcGxl',
++	'ci1hcGktdG9rZW4iLCJzb3VyY2UiOiJkcFxcLnB0XFwuW2EtejAtOV17NDN9IiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVu',
++	'dHJvcHkiOjIsImtleXdvcmRzIjpbImRwLnB0LiJdLCJhbGxvdyI6W119LHsiaWQiOiJkcm9uZWNpLWFjY2Vzcy10b2tlbiIs',
++	'InNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86ZHJvbmVjaSkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86',
++	'PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtejAtOV17MzJ9KSg/OltcXHg2',
++	'MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImRy',
++	'b25lY2kiXSwiYWxsb3ciOltdfSx7ImlkIjoiZHJvcGJveC1hcGktdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/',
++	'OmRyb3Bib3gpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxc',
++	'Pz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLXowLTldezE1fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZs',
++	'YWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJkcm9wYm94Il0sImFsbG93IjpbXX0seyJpZCI6',
++	'ImRyb3Bib3gtbG9uZy1saXZlZC1hcGktdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OmRyb3Bib3gpKD86WyBc',
++	'XHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJc',
++	'XHM9XXswLDV9KFthLXowLTldezExfShBQUFBQUFBQUFBKVthLXowLTlcXC1fPV17NDN9KSg/OltcXHg2MCdcIlxccztdfFxc',
++	'XFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImRyb3Bib3giXSwiYWxs',
++	'b3ciOltdfSx7ImlkIjoiZHJvcGJveC1zaG9ydC1saXZlZC1hcGktdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/',
++	'OmRyb3Bib3gpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxc',
++	'Pz18LClbXFx4NjAnXCJcXHM9XXswLDV9KHNsXFwuW2EtejAtOVxcLT1fXXsxMzV9KSg/OltcXHg2MCdcIlxccztdfFxcXFxb',
++	'bnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImRyb3Bib3giXSwiYWxsb3ci',
++	'OltdfSx7ImlkIjoiZHVmZmVsLWFwaS10b2tlbiIsInNvdXJjZSI6ImR1ZmZlbF8oPzp0ZXN0fGxpdmUpX1thLXowLTlfXFwt',
++	'PV17NDN9IiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjIsImtleXdvcmRzIjpbImR1ZmZlbF8iXSwiYWxsb3ci',
++	'OltdfSx7ImlkIjoiZHluYXRyYWNlLWFwaS10b2tlbiIsInNvdXJjZSI6ImR0MGMwMVxcLlthLXowLTldezI0fVxcLlthLXow',
++	'LTldezY0fSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5Ijo0LCJrZXl3b3JkcyI6WyJkdDBjMDEuIl0sImFsbG93',
++	'IjpbXX0seyJpZCI6ImVhc3lwb3N0LWFwaS10b2tlbiIsInNvdXJjZSI6IlxcYkVaQUtbYS16MC05XXs1NH1cXGIiLCJmbGFn',
++	'cyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29yZHMiOlsiZXphayJdLCJhbGxvdyI6W119LHsiaWQiOiJlYXN5',
++	'cG9zdC10ZXN0LWFwaS10b2tlbiIsInNvdXJjZSI6IlxcYkVaVEtbYS16MC05XXs1NH1cXGIiLCJmbGFncyI6ImkiLCJncm91',
++	'cCI6MCwiZW50cm9weSI6Miwia2V5d29yZHMiOlsiZXp0ayJdLCJhbGxvdyI6W119LHsiaWQiOiJldHN5LWFjY2Vzcy10b2tl',
++	'biIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86KD8taTpFVFNZfFtFZV10c3kpKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtc',
++	'XHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbYS16MC05',
++	'XXsyNH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6Mywi',
++	'a2V5d29yZHMiOlsiZXRzeSJdLCJhbGxvdyI6W119LHsiaWQiOiJmYWNlYm9vay1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJc',
++	'XGIoXFxkezE1LDE2fShcXHx8JSlbMC05YS16XFwtX117MjcsNDB9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwi',
++	'ZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMsImtleXdvcmRzIjpbImZhY2Vib29rIl0sImFsbG93IjpbXX0seyJp',
++	'ZCI6ImZhY2Vib29rLXBhZ2UtYWNjZXNzLXRva2VuIiwic291cmNlIjoiXFxiKEVBQVtNQ11bYS16MC05XXsxMDAsfSkoPzpb',
++	'XFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5Ijo0LCJrZXl3b3JkcyI6',
++	'WyJlYWFtIiwiZWFhYyJdLCJhbGxvdyI6W119LHsiaWQiOiJmYWNlYm9vay1zZWNyZXQiLCJzb3VyY2UiOiJbXFx3Li1dezAs',
++	'NTB9Pyg/OmZhY2Vib29rKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8',
++	'Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbYS1mMC05XXszMn0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18',
++	'JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsiZmFjZWJvb2siXSwiYWxsb3ciOltd',
++	'fSx7ImlkIjoiZmFzdGx5LWFwaS10b2tlbiIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86ZmFzdGx5KSg/OlsgXFx0XFx3',
++	'Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17',
++	'MCw1fShbYS16MC05PV9cXC1dezMyfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3Vw',
++	'IjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJmYXN0bHkiXSwiYWxsb3ciOltdfSx7ImlkIjoiZmluaWNpdHktYXBpLXRv',
++	'a2VuIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzpmaW5pY2l0eSkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXsw',
++	'LDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtZjAtOV17MzJ9KSg/',
++	'OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRz',
++	'IjpbImZpbmljaXR5Il0sImFsbG93IjpbXX0seyJpZCI6ImZpbmljaXR5LWNsaWVudC1zZWNyZXQiLCJzb3VyY2UiOiJbXFx3',
++	'Li1dezAsNTB9Pyg/OmZpbmljaXR5KSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxc',
++	'XHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbYS16MC05XXsyMH0pKD86W1xceDYwJ1wiXFxzO118XFxc',
++	'XFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsiZmluaWNpdHkiXSwiYWxs',
++	'b3ciOltdfSx7ImlkIjoiZmlubmh1Yi1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OmZpbm5odWIp',
++	'KD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4',
++	'NjAnXCJcXHM9XXswLDV9KFthLXowLTldezIwfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIs',
++	'Imdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJmaW5uaHViIl0sImFsbG93IjpbXX0seyJpZCI6ImZsaWNrci1h',
++	'Y2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OmZsaWNrcikoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxz',
++	'J1wiXXswLDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtejAtOV17',
++	'MzJ9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtl',
++	'eXdvcmRzIjpbImZsaWNrciJdLCJhbGxvdyI6W119LHsiaWQiOiJmbHV0dGVyd2F2ZS1lbmNyeXB0aW9uLWtleSIsInNvdXJj',
++	'ZSI6IkZMV1NFQ0tfVEVTVC1bYS1oMC05XXsxMn0iLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29y',
++	'ZHMiOlsiZmx3c2Vja190ZXN0Il0sImFsbG93IjpbXX0seyJpZCI6ImZsdXR0ZXJ3YXZlLXB1YmxpYy1rZXkiLCJzb3VyY2Ui',
++	'OiJGTFdQVUJLX1RFU1QtW2EtaDAtOV17MzJ9LVgiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29y',
++	'ZHMiOlsiZmx3cHVia190ZXN0Il0sImFsbG93IjpbXX0seyJpZCI6ImZsdXR0ZXJ3YXZlLXNlY3JldC1rZXkiLCJzb3VyY2Ui',
++	'OiJGTFdTRUNLX1RFU1QtW2EtaDAtOV17MzJ9LVgiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29y',
++	'ZHMiOlsiZmx3c2Vja190ZXN0Il0sImFsbG93IjpbXX0seyJpZCI6ImZseWlvLWFjY2Vzcy10b2tlbiIsInNvdXJjZSI6Ilxc',
++	'YigoPzpmbzFfW1xcdy1dezQzfXxmbTFbYXJdX1thLXpBLVowLTkrXFwvXXsxMDAsfT17MCwzfXxmbTJfW2EtekEtWjAtOStc',
++	'XC9dezEwMCx9PXswLDN9KSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVu',
++	'dHJvcHkiOjQsImtleXdvcmRzIjpbImZvMV8iLCJmbTEiLCJmbTJfIl0sImFsbG93IjpbXX0seyJpZCI6ImZyYW1laW8tYXBp',
++	'LXRva2VuIiwic291cmNlIjoiZmlvLXUtW2EtejAtOVxcLV89XXs2NH0iLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9w',
++	'eSI6MCwia2V5d29yZHMiOlsiZmlvLXUtIl0sImFsbG93IjpbXX0seyJpZCI6ImZyZXNoYm9va3MtYWNjZXNzLXRva2VuIiwi',
++	'c291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzpmcmVzaGJvb2tzKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30o',
++	'Pzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbYS16MC05XXs2NH0pKD86W1xc',
++	'eDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsi',
++	'ZnJlc2hib29rcyJdLCJhbGxvdyI6W119LHsiaWQiOiJnY3AtYXBpLWtleSIsInNvdXJjZSI6IlxcYihBSXphW1xcdy1dezM1',
++	'fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjQsImtleXdv',
++	'cmRzIjpbImFpemEiXSwiYWxsb3ciOltdfSx7ImlkIjoiZ2VuZXJpYy1hcGkta2V5Iiwic291cmNlIjoiW1xcdy4tXXswLDUw',
++	'fT8oPzphY2Nlc3N8YXV0aHwoPy1pOltBYV1waXxBUEkpfGNyZWRlbnRpYWx8Y3JlZHN8a2V5fHBhc3N3KD86b3IpP2R8c2Vj',
++	'cmV0fHRva2VuKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9Pnxc',
++	'XD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbXFx3Lj0tXXsxMCwxNTB9fFthLXowLTldW2EtejAtOSsvXXsxMSx9PXswLDN9',
++	'KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMuNSwia2V5',
++	'd29yZHMiOlsiYWNjZXNzIiwiYXBpIiwiYXV0aCIsImtleSIsImNyZWRlbnRpYWwiLCJjcmVkcyIsInBhc3N3ZCIsInBhc3N3',
++	'b3JkIiwic2VjcmV0IiwidG9rZW4iXSwiYWxsb3ciOlt7InRhcmdldCI6InNlY3JldCIsImFuZCI6ZmFsc2UsInJlZ2V4ZXMi',
++	'Olt7InNvdXJjZSI6Il5bYS16QS1aXy4tXSskIiwiZmxhZ3MiOiIifV0sInN0b3B3b3JkcyI6W119LHsidGFyZ2V0IjoibWF0',
++	'Y2giLCJhbmQiOmZhbHNlLCJyZWdleGVzIjpbeyJzb3VyY2UiOiIoPzphY2Nlc3MoPzppYmlsaXR5fG9yKXxhY2Nlc3NbXy4t',
++	'XT9pZHxyYW5kb21bXy4tXT9hY2Nlc3N8YXBpW18uLV0/KD86aWR8bmFtZXx2ZXJzaW9uKXxyYXBpZHxjYXBpdGFsfFthLXow',
++	'LTktXSo/YXBpW2EtejAtOS1dKj86amFyOnxhdXRob3J8WC1NUy1FeGNoYW5nZS1Pcmdhbml6YXRpb24tQXV0aHxBdXRoZW50',
++	'aWNhdGlvbi1SZXN1bHRzfCg/OmNyZWRlbnRpYWxzP1tfLi1dP2lkfHdpdGhDcmVkZW50aWFscyl8KD86YnVja2V0fGZvcmVp',
++	'Z258aG90fGlkeHxuYXR1cmFsfHByaW1hcnl8cHViKD86bGljKT98c2NoZW1hfHNlcXVlbmNlKVtfLi1dP2tleXwoPzp0dXJr',
++	'ZXkpfGtleVtfLi1dPyg/OmFsaWFzfGJvYXJkfGNvZGV8ZnJhbWV8aWR8bGVuZ3RofG1lc2h8bmFtZXxwYWlyfHByZXNzKD86',
++	'ZWQpP3xyaW5nfHNlbGVjdG9yfHNpZ25hdHVyZXxzaXplfHN0b25lfHN0b3JldHlwZXx3b3JkfHVwfGRvd258bGVmdHxyaWdo',
++	'dCl8a2V5W18uLV0/dmF1bHRbXy4tXT8oPzppZHxuYW1lKXxrZXlWYXVsdFRvU3RvcmVTZWNyZXRzfGtleSg/OnN0b3JlfHRh',
++	'YilbXy4tXT8oPzpmaWxlfHBhdGgpfGlzc3VlcmtleWhhc2h8KD8taTpbRGRNbV1vbmtleXxbRE1dT05LRVkpfGtleWluZ3wo',
++	'PzpzZWNyZXQpW18uLV0/KD86bGVuZ3RofG5hbWV8c2l6ZSl8VXNlclNlY3JldHNJZHwoPzpjc3JmKVtfLi1dP3Rva2VufCg/',
++	'OmlvXFwuanNvbndlYnRva2VuWyBcXHRdPzpbIFxcdF0/W1xcdy1dKyl8KD86YXBpfGNyZWRlbnRpYWxzfHRva2VuKVtfLi1d',
++	'Pyg/OmVuZHBvaW50fHVyW2lsXSl8cHVibGljW18uLV0/dG9rZW58KD86a2V5fHRva2VuKVtfLi1dP2ZpbGV8KD8taTooPzpb',
++	'QS1aX10rPVxcbltBLVpfXSs9fFthLXpfXSs9XFxuW2Etel9dKz0pKD86XFxufCQpKXwoPy1pOig/OltBLVouXSs9XFxuW0Et',
++	'Wi5dKz18W2Etei5dKz1cXG5bYS16Ll0rPSkoPzpcXG58JCkpKSIsImZsYWdzIjoiaSJ9XSwic3RvcHdvcmRzIjpbIjAwMDAw',
++	'MCIsIjZmZTQ0NzZlZTVhMTgzMjg4MmUzMjZiNTA2ZDE0MTI2IiwiX2VjMl8iLCJhYWFhYWEiLCJhYm91dCIsImFic3RyYWN0',
++	'IiwiYWNhZGVteSIsImFjY2VzIiwiYWNjb3VudCIsImFjdC0iLCJhY3QuIiwiYWN0XyIsImFjdGlvbiIsImFjdGl2ZSIsImFj',
++	'dGl2ZWx5IiwiYWN0aXZpdHkiLCJhZGFwdGVyIiwiYWRkLSIsImFkZC1vbiIsImFkZC4iLCJhZGRfIiwiYWRkb24iLCJhZGRy',
++	'ZXMiLCJhZG1pbiIsImFkb2JlIiwiYWR2YW5jZWQiLCJhZHZlbnR1cmUiLCJhZ2VudCIsImFnaWxlIiwiYWlyLSIsImFpci4i',
++	'LCJhaXJfIiwiYWpheCIsImFra2EiLCJhbGVydCIsImFsZnJlZCIsImFsZ29yaXRobSIsImFsbC0iLCJhbGwuIiwiYWxsXyIs',
++	'ImFsbG95IiwiYWxwaGEiLCJhbWF6b24iLCJhbXFwIiwiYW5hbHlzaSIsImFuYWx5dGljIiwiYW5hbHl6ZXIiLCJhbmRyb2lk',
++	'IiwiYW5ndWxhciIsImFuZ3VsYXJqIiwiYW5pbWF0ZSIsImFuaW1hdGlvbiIsImFub3RoZXIiLCJhbnNpYmxlIiwiYW5zd2Vy',
++	'IiwiYW50LSIsImFudC4iLCJhbnRfIiwiYW55LSIsImFueS4iLCJhbnlfIiwiYXBhY2hlIiwiYXBwLSIsImFwcC4iLCJhcHBf',
++	'IiwiYXBwbGUiLCJhcmNoIiwiYXJjaGl2ZSIsImFyY2hpdmVkIiwiYXJkdWlubyIsImFycmF5IiwiYXJ0LSIsImFydC4iLCJh',
++	'cnRfIiwiYXJ0aWNsZSIsImFzcC0iLCJhc3AuIiwiYXNwXyIsImFzc2V0IiwiYXN5bmMiLCJhdG9tIiwiYXR0ZW50aW9uIiwi',
++	'YXVkaW8iLCJhdWRpdCIsImF1cmEiLCJhdXRoIiwiYXV0aG9yIiwiYXV0aG9yaXplIiwiYXV0byIsImF1dG9tYXRlZCIsImF1',
++	'dG9tYXRpYyIsImF3ZXNvbWUiLCJhd3NfIiwiYXp1cmUiLCJiYWNrIiwiYmFja2JvbmUiLCJiYWNrZW5kIiwiYmFja3VwIiwi',
++	'YmFyLSIsImJhci4iLCJiYXJfIiwiYmFzZSIsImJhc2VkIiwiYmFzaCIsImJhc2ljIiwiYmF0Y2giLCJiZWVuIiwiYmVlciIs',
++	'ImJlaGF2aW9yIiwiYmVpbmciLCJiZW5jaG1hcmsiLCJiZXN0IiwiYmV0YSIsImJldHRlciIsImJpZy0iLCJiaWcuIiwiYmln',
++	'XyIsImJpbmFyeSIsImJpbmRpbmciLCJiaXQtIiwiYml0LiIsImJpdF8iLCJiaXRjb2luIiwiYmxvY2siLCJibG9nIiwiYm9h',
++	'cmQiLCJib29rIiwiYm9va21hcmsiLCJib29zdCIsImJvb3QiLCJib290c3RyYXAiLCJib3NoIiwiYm90LSIsImJvdC4iLCJi',
++	'b3RfIiwiYm93ZXIiLCJib3gtIiwiYm94LiIsImJveF8iLCJib3hlbiIsImJyYWNrZXQiLCJicmFuY2giLCJicmlkZ2UiLCJi',
++	'cm93c2VyIiwiYnJ1bmNoIiwiYnVmZmVyIiwiYnVnLSIsImJ1Zy4iLCJidWdfIiwiYnVpbGQiLCJidWlsZGVyIiwiYnVpbGRp',
++	'bmciLCJidWlsZG91dCIsImJ1aWxkcGFjayIsImJ1aWx0IiwiYnVuZGxlIiwiYnVzaW5lcyIsImJ1dC0iLCJidXQuIiwiYnV0',
++	'XyIsImJ1dHRvbiIsImNhY2hlIiwiY2FjaGluZyIsImNha2VwaHAiLCJjYWxlbmRhciIsImNhbGwiLCJjYW1lcmEiLCJjYW1w',
++	'ZmlyZSIsImNhbi0iLCJjYW4uIiwiY2FuXyIsImNhbnZhIiwiY2FwdGNoYSIsImNhcHR1cmUiLCJjYXJkIiwiY2Fyb3VzZWwi',
++	'LCJjYXNlIiwiY2Fzc2FuZHJhIiwiY2F0LSIsImNhdC4iLCJjYXRfIiwiY2F0ZWdvcnkiLCJjZW50ZXIiLCJjZW50byIsImNo',
++	'YWxsZW5nZSIsImNoYW5nZSIsImNoYW5nZWxvZyIsImNoYW5uZWwiLCJjaGFydCIsImNoYXQiLCJjaGVhdCIsImNoZWNrIiwi',
++	'Y2hlY2tlciIsImNoZWYiLCJjaGVzIiwiY2hpbmVzZSIsImNob3NlbiIsImNocm9tZSIsImNrZWRpdG9yIiwiY2xhcyIsImNs',
++	'YXNzZSIsImNsYXNzaWMiLCJjbGVhbiIsImNsaS0iLCJjbGkuIiwiY2xpXyIsImNsaWVudCIsImNsb2p1cmUiLCJjbG9uZSIs',
++	'ImNsb3N1cmUiLCJjbG91ZCIsImNsdWIiLCJjbHVzdGVyIiwiY21zLSIsImNtc18iLCJjb2NvIiwiY29kZSIsImNvZGluZyIs',
++	'ImNvZmZlZSIsImNvbG9yIiwiY29tYmluYXRpb24iLCJjb21ibyIsImNvbW1hbmQiLCJjb21tYW5kZXIiLCJjb21tZW50Iiwi',
++	'Y29tbWl0IiwiY29tbW9uIiwiY29tbXVuaXR5IiwiY29tcGFzIiwiY29tcGlsZXIiLCJjb21wbGV0ZSIsImNvbXBvbmVudCIs',
++	'ImNvbXBvc2VyIiwiY29tcHV0ZXIiLCJjb21wdXRpbmciLCJjb24tIiwiY29uLiIsImNvbl8iLCJjb25jZXB0IiwiY29uZiIs',
++	'ImNvbmZpZyIsImNvbm5lY3QiLCJjb25uZWN0b3IiLCJjb25zb2xlIiwiY29udGFjdCIsImNvbnRhaW5lciIsImNvbnRhbyIs',
++	'ImNvbnRlbnQiLCJjb250ZXN0IiwiY29udGV4dCIsImNvbnRyb2wiLCJjb252ZXJ0IiwiY29udmVydGVyIiwiY29ud2F5JyIs',
++	'ImNvb2tib29rIiwiY29va2llIiwiY29vbCIsImNvcHkiLCJjb3Jkb3ZhIiwiY29yZSIsImNvdWNoYmFzZSIsImNvdWNoZGIi',
++	'LCJjb3VudGRvd24iLCJjb3VudGVyIiwiY291cnNlIiwiY3JhZnQiLCJjcmF3bGVyIiwiY3JlYXRlIiwiY3JlYXRpbmciLCJj',
++	'cmVhdG9yIiwiY3JlZGVudGlhbCIsImNybS0iLCJjcm0uIiwiY3JtXyIsImNyb3MiLCJjcnVkIiwiY3N2LSIsImNzdi4iLCJj',
++	'c3ZfIiwiY3ViZSIsImN1Y3VtYmVyIiwiY3VkYSIsImN1cnJlbnQiLCJjdXJyZW50bHkiLCJjdXN0b20iLCJkYWVtb24iLCJk',
++	'YXJrIiwiZGFydCIsImRhc2giLCJkYXNoYm9hcmQiLCJkYXRhIiwiZGF0YWJhc2UiLCJkYXRlIiwiZGF5LSIsImRheS4iLCJk',
++	'YXlfIiwiZGVhZCIsImRlYmlhbiIsImRlYnVnIiwiZGVidWdnZXIiLCJkZWNrIiwiZGVmaW5lIiwiZGVsLSIsImRlbC4iLCJk',
++	'ZWxfIiwiZGVsZXRlIiwiZGVtbyIsImRlcGxveSIsImRlc2lnbiIsImRlc2lnbmVyIiwiZGVza3RvcCIsImRldGVjdGlvbiIs',
++	'ImRldGVjdG9yIiwiZGV2LSIsImRldi4iLCJkZXZfIiwiZGV2ZWxvcCIsImRldmVsb3BlciIsImRldmljZSIsImRldmlzZSIs',
++	'ImRpZmYiLCJkaWdpdGFsIiwiZGlyZWN0aXZlIiwiZGlyZWN0b3J5IiwiZGlzY292ZXJ5IiwiZGlzcGxheSIsImRqYW5nbyIs',
++	'ImRucy0iLCJkbnNfIiwiZG9jLSIsImRvYy4iLCJkb2NfIiwiZG9ja2VyIiwiZG9jcGFkIiwiZG9jdHJpbmUiLCJkb2N1bWVu',
++	'dCIsImRvZS0iLCJkb2UuIiwiZG9lXyIsImRvam8iLCJkb20tIiwiZG9tLiIsImRvbV8iLCJkb21haW4iLCJkb24ndCIsImRv',
++	'bmUiLCJkb3QtIiwiZG90LiIsImRvdF8iLCJkb3RmaWxlIiwiZG93bmxvYWQiLCJkcmFmdCIsImRyYWciLCJkcmlsbCIsImRy',
++	'aXZlIiwiZHJpdmVuIiwiZHJpdmVyIiwiZHJvcCIsImRyb3Bib3giLCJkcnVwYWwiLCJkc2wtIiwiZHNsLiIsImRzbF8iLCJk',
++	'eW5hbWljIiwiZWFzeSIsImVjZHNhIiwiZWNsaXBzZSIsImVkaXQiLCJlZGl0aW5nIiwiZWRpdGlvbiIsImVkaXRvciIsImVs',
++	'ZW1lbnQiLCJlbWFjIiwiZW1haWwiLCJlbWJlZCIsImVtYmVkZGVkIiwiZW1iZXIiLCJlbWl0dGVyIiwiZW11bGF0b3IiLCJl',
++	'bmNvZGluZyIsImVuZHBvaW50IiwiZW5naW5lIiwiZW5nbGlzaCIsImVuaGFuY2VkIiwiZW50aXR5IiwiZW50cnkiLCJlbnZf',
++	'IiwiZXBpc29kZSIsImVybGFuZyIsImVycm9yIiwiZXNwcmVzc28iLCJldmVudCIsImV2ZW50ZWQiLCJleGFtcGxlIiwiZXhj',
++	'aGFuZ2UiLCJleGVyY2lzZSIsImV4cGVyaW1lbnQiLCJleHBpcmUiLCJleHBsb2l0IiwiZXhwbG9yZXIiLCJleHBvcnQiLCJl',
++	'eHBvcnRlciIsImV4cHJlcyIsImV4dC0iLCJleHQuIiwiZXh0XyIsImV4dGVuZGVkIiwiZXh0ZW5zaW9uIiwiZXh0ZXJuYWwi',
++	'LCJleHRyYSIsImV4dHJhY3RvciIsImZhYnJpYyIsImZhY2Vib29rIiwiZmFjdG9yeSIsImZha2UiLCJmYXN0IiwiZmVhdHVy',
++	'ZSIsImZlZWQiLCJmZXdmd2VmIiwiZmZtcGVnIiwiZmllbGQiLCJmaWxlIiwiZmlsdGVyIiwiZmluZCIsImZpbmRlciIsImZp',
++	'cmVmb3giLCJmaXJtd2FyZSIsImZpcnN0IiwiZmlzaCIsImZpeC0iLCJmaXhfIiwiZmxhc2giLCJmbGFzayIsImZsYXQiLCJm',
++	'bGV4IiwiZmxleGlibGUiLCJmbGlja3IiLCJmbG93IiwiZmx1ZW50IiwiZmx1ZW50ZCIsImZsdWlkIiwiZm9sZGVyIiwiZm9u',
++	'dCIsImZvcmNlIiwiZm9yZW1hbiIsImZvcmsiLCJmb3JtIiwiZm9ybWF0IiwiZm9ybWF0dGVyIiwiZm9ydW0iLCJmb3VuZHJ5',
++	'IiwiZnJhbWV3b3JrIiwiZnJlZSIsImZyaWVuZCIsImZyaWVuZGx5IiwiZnJvbnQtZW5kIiwiZnJvbnRlbmQiLCJmdHAtIiwi',
++	'ZnRwLiIsImZ0cF8iLCJmdWVsIiwiZnVsbCIsImZ1bi0iLCJmdW4uIiwiZnVuXyIsImZ1bmMiLCJmdXR1cmUiLCJnYWlhIiwi',
++	'Z2FsbGVyeSIsImdhbWUiLCJnYXRld2F5IiwiZ2VtLSIsImdlbS4iLCJnZW1fIiwiZ2VuLSIsImdlbi4iLCJnZW5fIiwiZ2Vu',
++	'ZXJhbCIsImdlbmVyYXRvciIsImdlbmVyaWMiLCJnZW5ldGljIiwiZ2V0LSIsImdldC4iLCJnZXRfIiwiZ2V0ZW52IiwiZ2V0',
++	'dGluZyIsImdob3N0IiwiZ2lzdCIsImdpdC0iLCJnaXQuIiwiZ2l0XyIsImdpdGh1YiIsImdpdGlnbm9yZSIsImdpdGxhYiIs',
++	'ImdsYXMiLCJnbWFpbCIsImdub21lIiwiZ251LSIsImdudS4iLCJnbnVfIiwiZ29hbCIsImdvbGFuZyIsImdvbGx1bSIsImdv',
++	'b2QiLCJnb29nbGUiLCJncHUtIiwiZ3B1LiIsImdwdV8iLCJncmFkbGUiLCJncmFpbCIsImdyYXBoIiwiZ3JhcGhpYyIsImdy',
++	'ZWF0IiwiZ3JpZCIsImdyb292eSIsImdyb3VwIiwiZ3J1bnQiLCJndWFyZCIsImd1aS0iLCJndWkuIiwiZ3VpXyIsImd1aWRl',
++	'IiwiZ3VpZGVsaW5lIiwiZ3VscCIsImd3dC0iLCJnd3QuIiwiZ3d0XyIsImhhY2siLCJoYWNrYXRob24iLCJoYWNrZXIiLCJo',
++	'YWNraW5nIiwiaGFkb29wIiwiaGFtbCIsImhhbmRsZXIiLCJoYXJkd2FyZSIsImhhcy0iLCJoYXNfIiwiaGFzaCIsImhhc2tl',
++	'bGwiLCJoYXZlIiwiaGF4ZSIsImhlbGxvIiwiaGVscCIsImhlbHBlciIsImhlcmUiLCJoZXJvIiwiaGVyb2t1IiwiaGlnaCIs',
++	'ImhpcGNoYXQiLCJoaXN0b3J5IiwiaG9tZSIsImhvbWVicmV3IiwiaG9tZXBhZ2UiLCJob29rIiwiaG9zdCIsImhvc3Rpbmci',
++	'LCJob3QtIiwiaG90LiIsImhvdF8iLCJob3VzZSIsImhvdy0iLCJob3cuIiwiaG93XyIsImh0bWwiLCJodHRwIiwiaHViLSIs',
++	'Imh1Yi4iLCJodWJfIiwiaHVib3QiLCJodW1hbiIsImljb24iLCJpZGUtIiwiaWRlLiIsImlkZV8iLCJpZGVhIiwiaWRlbnRp',
++	'dHkiLCJpZGlvbWF0aWMiLCJpbWFnZSIsImltcGFjdCIsImltcG9ydCIsImltcG9ydGFudCIsImltcG9ydGVyIiwiaW1wcmVz',
++	'IiwiaW5kZXgiLCJpbmZpbml0ZSIsImluZm8iLCJpbmplY3Rpb24iLCJpbmxpbmUiLCJpbnB1dCIsImluc2lkZSIsImluc3Bl',
++	'Y3RvciIsImluc3RhZ3JhbSIsImluc3RhbGwiLCJpbnN0YWxsZXIiLCJpbnN0YW50IiwiaW50ZWxsaWoiLCJpbnRlcmZhY2Ui',
++	'LCJpbnRlcm5ldCIsImludGVydmlldyIsImludG8iLCJpbnRybyIsImlvbmljIiwiaXBob25lIiwiaXB5dGhvbiIsImlyYy0i',
++	'LCJpcmNfIiwiaXNvLSIsImlzby4iLCJpc29fIiwiaXNzdWUiLCJqYWRlIiwiamFzbWluZSIsImphdmEiLCJqYm9zIiwiamVr',
++	'eWxsIiwiamVua2luIiwiamV0YnJhaW5zIiwiam9iLSIsImpvYi4iLCJqb2JfIiwiam9vbWxhIiwianBhLSIsImpwYS4iLCJq',
++	'cGFfIiwianF1ZXJ5IiwianNvbiIsImp1c3QiLCJrYWZrYSIsImthcm1hIiwia2F0YSIsImtlcm5lbCIsImtleWJvYXJkIiwi',
++	'a2luZGxlIiwia2l0LSIsImtpdC4iLCJraXRfIiwia2l0Y2hlbiIsImtuaWZlIiwia29hbiIsImtvaGFuYSIsImxhYi0iLCJs',
++	'YWIuIiwibGFiXyIsImxhbWJkYSIsImxhbXAiLCJsYW5ndWFnZSIsImxhcmF2ZWwiLCJsYXN0IiwibGF0ZXN0IiwibGF0ZXgi',
++	'LCJsYXVuY2hlciIsImxheWVyIiwibGF5b3V0IiwibGF6eSIsImxkYXAiLCJsZWFmbGV0IiwibGVhZ3VlIiwibGVhcm4iLCJs',
++	'ZWFybmluZyIsImxlZC0iLCJsZWQuIiwibGVkXyIsImxlZXRjb2RlIiwibGVzLSIsImxlcy4iLCJsZXNfIiwibGV2ZWwiLCJs',
++	'ZXZlbGRiIiwibGliLSIsImxpYi4iLCJsaWJfIiwibGlicmFyaWUiLCJsaWJyYXJ5IiwibGljZW5zZSIsImxpZmUiLCJsaWZl',
++	'cmF5IiwibGlnaHQiLCJsaWdodGJveCIsImxpa2UiLCJsaW5lIiwibGluayIsImxpbmtlZCIsImxpbmtlZGluIiwibGludXgi',
++	'LCJsaXNwIiwibGlzdCIsImxpdGUiLCJsaXR0bGUiLCJsb2FkIiwibG9hZGVyIiwibG9jYWwiLCJsb2NhdGlvbiIsImxvY2si',
++	'LCJsb2ctIiwibG9nLiIsImxvZ18iLCJsb2dnZXIiLCJsb2dnaW5nIiwibG9naWMiLCJsb2dpbiIsImxvZ3N0YXNoIiwibG9u',
++	'Z2VyIiwibG9vayIsImxvdmUiLCJsdWEtIiwibHVhLiIsImx1YV8iLCJtYWMtIiwibWFjLiIsIm1hY18iLCJtYWNoaW5lIiwi',
++	'bWFkZSIsIm1hZ2VudG8iLCJtYWdpYyIsIm1haWwiLCJtYWtlIiwibWFrZXIiLCJtYWtpbmciLCJtYW4tIiwibWFuLiIsIm1h',
++	'bl8iLCJtYW5hZ2UiLCJtYW5hZ2VyIiwibWFuaWZlc3QiLCJtYW51YWwiLCJtYXAtIiwibWFwLiIsIm1hcF8iLCJtYXBwZXIi',
++	'LCJtYXBwaW5nIiwibWFya2Rvd24iLCJtYXJrdXAiLCJtYXN0ZXIiLCJtYXRoIiwibWF0cml4IiwibWF2ZW4iLCJtZDUiLCJt',
++	'ZWFuIiwibWVkaWEiLCJtZWRpYXdpa2kiLCJtZWV0dXAiLCJtZW1jYWNoZWQiLCJtZW1vcnkiLCJtZW51IiwibWVyY2hhbnQi',
++	'LCJtZXNzYWdlIiwibWVzc2FnaW5nIiwibWV0YSIsIm1ldGFkYXRhIiwibWV0ZW9yIiwibWV0aG9kIiwibWV0cmljIiwibWlj',
++	'cm8iLCJtaWRkbGVtYW4iLCJtaWdyYXRpb24iLCJtaW5lY3JhZnQiLCJtaW5lciIsIm1pbmkiLCJtaW5pbWFsIiwibWlycm9y',
++	'IiwibWl0LSIsIm1pdC4iLCJtaXRfIiwibW9iaWxlIiwibW9jaGEiLCJtb2NrIiwibW9kLSIsIm1vZC4iLCJtb2RfIiwibW9k',
++	'ZSIsIm1vZGVsIiwibW9kZXJuIiwibW9kdWxhciIsIm1vZHVsZSIsIm1vZHgiLCJtb25leSIsIm1vbmdvIiwibW9uZ29kYiIs',
++	'Im1vbmdvaWQiLCJtb25nb29zZSIsIm1vbml0b3IiLCJtb25rZXkiLCJtb3JlIiwibW90aW9uIiwibW92ZWQiLCJtb3ZpZSIs',
++	'Im1vemlsbGEiLCJtcXR0IiwibXVsZSIsIm11bHRpIiwibXVsdGlwbGUiLCJtdXNpYyIsIm11c3RhY2hlIiwibXZjLSIsIm12',
++	'Yy4iLCJtdmNfIiwibXlzcWwiLCJuYWdpbyIsIm5hbWUiLCJuYXRpdmUiLCJuZWVkIiwibmVvLSIsIm5lby4iLCJuZW9fIiwi',
++	'bmVzdCIsIm5lc3RlZCIsIm5ldC0iLCJuZXQuIiwibmV0XyIsIm5ldHRlIiwibmV0d29yayIsIm5ldy0iLCJuZXcuIiwibmV3',
++	'XyIsIm5leHQiLCJuZ2lueCIsIm5pbmphIiwibmxwLSIsIm5scC4iLCJubHBfIiwibm9kZSIsIm5vZGVqIiwibm9zcWwiLCJu',
++	'b3QtIiwibm90LiIsIm5vdF8iLCJub3RlIiwibm90ZWJvb2siLCJub3RlcGFkIiwibm90aWNlIiwibm90aWZpZXIiLCJub3ct',
++	'Iiwibm93LiIsIm5vd18iLCJudW1iZXIiLCJvYXV0aCIsIm9iamVjdCIsIm9iamVjdGl2ZSIsIm9ic29sZXRlIiwib2NhbWwi',
++	'LCJvY3RvcHJlcyIsIm9mZmljaWFsIiwib2xkLSIsIm9sZC4iLCJvbGRfIiwib25ib2FyZCIsIm9ubGluZSIsIm9ubHkiLCJv',
++	'cGVuIiwib3BlbmN2Iiwib3BlbmdsIiwib3BlbnNoaWZ0Iiwib3BlbndydCIsIm9wdGlvbiIsIm9yYWNsZSIsIm9yZy0iLCJv',
++	'cmcuIiwib3JnXyIsIm9yaWdpbiIsIm9yaWdpbmFsIiwib3JtLSIsIm9ybS4iLCJvcm1fIiwib3N4LSIsIm9zeF8iLCJvdXIt',
++	'Iiwib3VyLiIsIm91cl8iLCJvdXQtIiwib3V0LiIsIm91dF8iLCJvdXRwdXQiLCJvdmVyIiwib3ZlcnZpZXciLCJvd24tIiwi',
++	'b3duLiIsIm93bl8iLCJwYWNrIiwicGFja2FnZSIsInBhY2tldCIsInBhZ2UiLCJwYW5lbCIsInBhcGVyIiwicGFwZXJjbGlw',
++	'IiwicGFyYSIsInBhcmFsbGF4IiwicGFyYWxsZWwiLCJwYXJzZSIsInBhcnNlciIsInBhcnNpbmciLCJwYXJ0aWNsZSIsInBh',
++	'cnR5IiwicGFzc3dvcmQiLCJwYXRjaCIsInBhdGgiLCJwYXR0ZXJuIiwicGF5bWVudCIsInBheXBhbCIsInBkZi0iLCJwZGYu',
++	'IiwicGRmXyIsInBlYmJsZSIsInBlb3BsZSIsInBlcmwiLCJwZXJzb25hbCIsInBoYWxjb24iLCJwaG9lbml4IiwicGhvbmUi',
++	'LCJwaG9uZWdhcCIsInBob3RvIiwicGhwLSIsInBocC4iLCJwaHBfIiwicGh5c2ljIiwicGlja2VyIiwicGlwZWxpbmUiLCJw',
++	'bGF0Zm9ybSIsInBsYXkiLCJwbGF5ZXIiLCJwbGVhc2UiLCJwbHUtIiwicGx1LiIsInBsdV8iLCJwbHVnLWluIiwicGx1Z2lu',
++	'IiwicGx1cGxvYWQiLCJwbmctIiwicG5nLiIsInBuZ18iLCJwb2tlciIsInBvbHlmaWxsIiwicG9seW1lciIsInBvb2wiLCJw',
++	'b3AtIiwicG9wLiIsInBvcF8iLCJwb3Bjb3JuIiwicG9wdXAiLCJwb3J0IiwicG9ydGFibGUiLCJwb3J0YWwiLCJwb3J0Zm9s',
++	'aW8iLCJwb3N0IiwicG93ZXIiLCJwb3dlcmVkIiwicG93ZXJmdWwiLCJwcmVsdWRlIiwicHJldHR5IiwicHJldmlldyIsInBy',
++	'aW5jaXBsZSIsInByaW50IiwicHJvLSIsInByby4iLCJwcm9fIiwicHJvYmxlbSIsInByb2MiLCJwcm9kdWN0IiwicHJvZmls',
++	'ZSIsInByb2ZpbGVyIiwicHJvZ3JhbSIsInByb2dyZXMiLCJwcm9qZWN0IiwicHJvdG9jb2wiLCJwcm90b3R5cGUiLCJwcm92',
++	'aWRlciIsInByb3h5IiwicHVibGljIiwicHVsbCIsInB1cHBldCIsInB1cmUiLCJwdXJwb3NlIiwicHVzaCIsInB1c2hlciIs',
++	'InB5cmFtaWQiLCJweXRob24iLCJxdWFsaXR5IiwicXVlcnkiLCJxdWV1ZSIsInF1aWNrIiwicmFiYml0bXEiLCJyYWNrIiwi',
++	'cmFkaW8iLCJyYWlsIiwicmFpbHNjYXN0IiwicmFuZG9tIiwicmFuZ2UiLCJyYXNwYmVycnkiLCJyZGYtIiwicmRmLiIsInJk',
++	'Zl8iLCJyZWFjdCIsInJlYWN0aXZlIiwicmVhZCIsInJlYWRlciIsInJlYWRtZSIsInJlYWR5IiwicmVhbCIsInJlYWwtdGlt',
++	'ZSIsInJlYWxpdHkiLCJyZWFsdGltZSIsInJlY2lwZSIsInJlY29yZGVyIiwicmVkLSIsInJlZC4iLCJyZWRfIiwicmVkZGl0',
++	'IiwicmVkaSIsInJlZG1pbmUiLCJyZWZlcmVuY2UiLCJyZWZpbmVyeSIsInJlZnJlc2giLCJyZWdpc3RyeSIsInJlbGF0ZWQi',
++	'LCJyZWxlYXNlIiwicmVtb3RlIiwicmVuZGVyaW5nIiwicmVwbyIsInJlcG9ydCIsInJlcXVlc3QiLCJyZXF1aXJlIiwicmVx',
++	'dWlyZWQiLCJyZXF1aXJlaiIsInJlc2VhcmNoIiwicmVzb3VyY2UiLCJyZXNwb25zZSIsInJlc3F1ZSIsInJlc3QiLCJyZXN0',
++	'ZnVsIiwicmVzdW1lIiwicmV2ZWFsIiwicmV2ZXJzZSIsInJldmlldyIsInJpYWsiLCJyaWNoIiwicmlnaHQiLCJyaW5nIiwi',
++	'cm9ib3QiLCJyb2xlIiwicm9vbSIsInJvdXRlciIsInJvdXRpbmciLCJycGMtIiwicnBjLiIsInJwY18iLCJycGctIiwicnBn',
++	'LiIsInJwZ18iLCJyc3BlYyIsInJ1YnktIiwicnVieS4iLCJydWJ5XyIsInJ1bGUiLCJydW4tIiwicnVuLiIsInJ1bl8iLCJy',
++	'dW5uZXIiLCJydW5uaW5nIiwicnVudGltZSIsInJ1c3QiLCJydm0tIiwicnZtLiIsInJ2bV8iLCJzYWx0Iiwic2FtcGxlIiwi',
++	'c2FuZGJveCIsInNhcy0iLCJzYXMuIiwic2FzXyIsInNidC0iLCJzYnQuIiwic2J0XyIsInNjYWxhIiwic2NhbGFibGUiLCJz',
++	'Y2FubmVyIiwic2NoZW1hIiwic2NoZW1lIiwic2Nob29sIiwic2NpZW5jZSIsInNjcmFwZXIiLCJzY3JhdGNoIiwic2NyZWVu',
++	'Iiwic2NyaXB0Iiwic2Nyb2xsIiwic2NzLSIsInNjcy4iLCJzY3NfIiwic2RrLSIsInNkay4iLCJzZGtfIiwic2RsLSIsInNk',
++	'bC4iLCJzZGxfIiwic2VhcmNoIiwic2VjdXJlIiwic2VjdXJpdHkiLCJzZWUtIiwic2VlLiIsInNlZV8iLCJzZWVkIiwic2Vs',
++	'ZWN0Iiwic2VsZWN0b3IiLCJzZWxlbml1bSIsInNlbWFudGljIiwic2VuY2hhIiwic2VuZCIsInNlbnRpbWVudCIsInNlcmll',
++	'Iiwic2VydmVyIiwic2VydmljZSIsInNlc3Npb24iLCJzZXQtIiwic2V0LiIsInNldF8iLCJzZXR0aW5nIiwic2V0dXAiLCJz',
++	'aGExIiwic2hhMiIsInNoYTI1NiIsInNoYXJlIiwic2hhcmVkIiwic2hhcmluZyIsInNoZWV0Iiwic2hlbGwiLCJzaGllbGQi',
++	'LCJzaGlwcGluZyIsInNob3AiLCJzaG9waWZ5Iiwic2hvcnRlbmVyIiwic2hvdWxkIiwic2hvdyIsInNob3djYXNlIiwic2lk',
++	'ZSIsInNpbGV4Iiwic2ltcGxlIiwic2ltdWxhdG9yIiwic2luZ2xlIiwic2l0ZSIsInNrZWxldG9uIiwic2tldGNoIiwic2tp',
++	'biIsInNsYWNrIiwic2xpZGUiLCJzbGlkZXIiLCJzbGltIiwic21hbGwiLCJzbWFydCIsInNtdHAiLCJzbmFrZSIsInNuYXBz',
++	'aG90Iiwic25pcHBldCIsInNvYXAiLCJzb2NpYWwiLCJzb2NrZXQiLCJzb2Z0d2FyZSIsInNvbGFyaXplZCIsInNvbHIiLCJz',
++	'b2x1dGlvbiIsInNvbHZlciIsInNvbWUiLCJzb29uIiwic291cmNlIiwic3BhY2UiLCJzcGFyayIsInNwYXRpYWwiLCJzcGVj',
++	'Iiwic3BoaW54Iiwic3BpbmUiLCJzcG90aWZ5Iiwic3ByZWUiLCJzcHJpbmciLCJzcHJpdGUiLCJzcWwtIiwic3FsLiIsInNx',
++	'bF8iLCJzcWxpdGUiLCJzc2gtIiwic3NoLiIsInNzaF8iLCJzdGFjayIsInN0YWdpbmciLCJzdGFuZGFyZCIsInN0YW5mb3Jk',
++	'Iiwic3RhcnQiLCJzdGFydGVkIiwic3RhcnRlciIsInN0YXJ0dXAiLCJzdGF0Iiwic3RhdGFtaWMiLCJzdGF0ZSIsInN0YXRp',
++	'YyIsInN0YXRpc3RpYyIsInN0YXRzZCIsInN0YXR1Iiwic3RlYW0iLCJzdGVwIiwic3RpbGwiLCJzdG0tIiwic3RtLiIsInN0',
++	'bV8iLCJzdG9yYWdlIiwic3RvcmUiLCJzdG9ybSIsInN0b3J5Iiwic3RyYXRlZ3kiLCJzdHJlYW0iLCJzdHJlYW1pbmciLCJz',
++	'dHJpbmciLCJzdHJpcGUiLCJzdHJ1Y3R1cmUiLCJzdHVkaW8iLCJzdHVkeSIsInN0dWZmIiwic3R5bGUiLCJzdWJsaW1lIiwi',
++	'c3VnYXIiLCJzdWl0ZSIsInN1bW1hcnkiLCJzdXBlciIsInN1cHBvcnQiLCJzdXBwb3J0ZWQiLCJzdmctIiwic3ZnLiIsInN2',
++	'Z18iLCJzdm4tIiwic3ZuLiIsInN2bl8iLCJzd2FnZ2VyIiwic3dpZnQiLCJzd2l0Y2giLCJzd2l0Y2hlciIsInN5bWZvbnki',
++	'LCJzeW1waG9ueSIsInN5bmMiLCJzeW5vcHNpIiwic3ludGF4Iiwic3lzdGVtIiwidGFiLSIsInRhYi4iLCJ0YWJfIiwidGFi',
++	'bGUiLCJ0YWctIiwidGFnLiIsInRhZ18iLCJ0YWxrIiwidGFyZ2V0IiwidGFzayIsInRjcC0iLCJ0Y3AuIiwidGNwXyIsInRk',
++	'ZC0iLCJ0ZGQuIiwidGRkXyIsInRlYW0iLCJ0ZWNoIiwidGVtcGxhdGUiLCJ0ZXJtIiwidGVybWluYWwiLCJ0ZXN0aW5nIiwi',
++	'dGV0cmkiLCJ0ZXh0IiwidGV4dG1hdGUiLCJ0aGVtZSIsInRoZW9yeSIsInRocmVlIiwidGhyaWZ0IiwidGltZSIsInRpbWVs',
++	'aW5lIiwidGltZXIiLCJ0aW55IiwidGlueW1jZSIsInRpcC0iLCJ0aXAuIiwidGlwXyIsInRpdGxlIiwidG9kbyIsInRvZG9t',
++	'dmMiLCJ0b2tlbiIsInRvb2wiLCJ0b29sYm94IiwidG9vbGtpdCIsInRvcC0iLCJ0b3AuIiwidG9wXyIsInRvcm5hZG8iLCJ0',
++	'b3VjaCIsInRvd2VyIiwidHJhY2tlciIsInRyYWNraW5nIiwidHJhZmZpYyIsInRyYWluaW5nIiwidHJhbnNmZXIiLCJ0cmFu',
++	'c2xhdGUiLCJ0cmFuc3BvcnQiLCJ0cmVlIiwidHJlbGxvIiwidHJ5LSIsInRyeS4iLCJ0cnlfIiwidHVtYmxyIiwidHV0LSIs',
++	'InR1dC4iLCJ0dXRfIiwidHV0b3JpYWwiLCJ0d2VldCIsInR3aWciLCJ0d2l0dGVyIiwidHlwZSIsInR5cG8iLCJ1YnVudHUi',
++	'LCJ1aXZpZXciLCJ1bHRpbWF0ZSIsInVuZGVyIiwidW5pdCIsInVuaXR5IiwidW5pdmVyc2FsIiwidW5peCIsInVwZGF0ZSIs',
++	'InVwZGF0ZWQiLCJ1cGdyYWRlIiwidXBsb2FkIiwidXBsb2FkZXIiLCJ1cmktIiwidXJpLiIsInVyaV8iLCJ1cmwtIiwidXJs',
++	'LiIsInVybF8iLCJ1c2FnZSIsInVzYi0iLCJ1c2IuIiwidXNiXyIsInVzZS0iLCJ1c2UuIiwidXNlXyIsInVzZWQiLCJ1c2Vm',
++	'dWwiLCJ1c2VyIiwidXNpbmciLCJ1dGlsIiwidXRpbGl0aWUiLCJ1dGlsaXR5IiwidmFncmFudCIsInZhbGlkYXRvciIsInZh',
++	'bHVlIiwidmFyaW91IiwidmFybmlzaCIsInZlcnNpb24iLCJ2aWEtIiwidmlhLiIsInZpYV8iLCJ2aWRlbyIsInZpZXciLCJ2',
++	'aWV3ZXIiLCJ2aW0tIiwidmltLiIsInZpbV8iLCJ2aW1yYyIsInZpcnR1YWwiLCJ2aXNpb24iLCJ2aXN1YWwiLCJ2cG4iLCJ3',
++	'YW50Iiwid2FybmluZyIsIndhdGNoIiwid2F0Y2hlciIsIndhdmUiLCJ3YXktIiwid2F5LiIsIndheV8iLCJ3ZWF0aGVyIiwi',
++	'd2ViLSIsIndlYl8iLCJ3ZWJhcHAiLCJ3ZWJnbCIsIndlYmhvb2siLCJ3ZWJraXQiLCJ3ZWJydGMiLCJ3ZWJzaXRlIiwid2Vi',
++	'c29ja2V0Iiwid2VsY29tZSIsIndoYXQiLCJ3aGF0JyIsIndoZW4iLCJ3aGVyZSIsIndoaWNoIiwid2h5LSIsIndoeS4iLCJ3',
++	'aHlfIiwid2lkZ2V0Iiwid2lmaSIsIndpa2kiLCJ3aW4tIiwid2luLiIsIndpbl8iLCJ3aW5kb3ciLCJ3aXAtIiwid2lwLiIs',
++	'IndpcF8iLCJ3aXRoaW4iLCJ3aXRob3V0Iiwid2l6YXJkIiwid29yZCIsIndvcmRwcmVzIiwid29yayIsIndvcmtlciIsIndv',
++	'cmtmbG93Iiwid29ya2luZyIsIndvcmtzaG9wIiwid29ybGQiLCJ3cmFwcGVyIiwid3JpdGUiLCJ3cml0ZXIiLCJ3cml0aW5n',
++	'Iiwid3JpdHRlbiIsInd3dy0iLCJ3d3cuIiwid3d3XyIsInhhbWFyaW4iLCJ4Y29kZSIsInhtbC0iLCJ4bWwuIiwieG1sXyIs',
++	'InhtcHAiLCJ4eHh4eHgiLCJ5YWhvbyIsInlhbWwiLCJ5YW5kZXgiLCJ5ZW9tYW4iLCJ5ZXQtIiwieWV0LiIsInlldF8iLCJ5',
++	'aWktIiwieWlpLiIsInlpaV8iLCJ5b3V0dWJlIiwieXVpLSIsInl1aS4iLCJ5dWlfIiwiemVuZCIsInplcm8iLCJ6aXAtIiwi',
++	'emlwLiIsInppcF8iLCJ6c2gtIiwienNoLiIsInpzaF8iXX0seyJ0YXJnZXQiOiJsaW5lIiwiYW5kIjpmYWxzZSwicmVnZXhl',
++	'cyI6W3sic291cmNlIjoiLS1tb3VudD10eXBlPXNlY3JldCwiLCJmbGFncyI6IiJ9LHsic291cmNlIjoiaW1wb3J0WyBcXHRd',
++	'K3tbIFxcdFxcdyxdK31bIFxcdF0rZnJvbVsgXFx0XStbJ1wiXVteJ1wiXStbJ1wiXSIsImZsYWdzIjoiIn1dLCJzdG9wd29y',
++	'ZHMiOltdfV19LHsiaWQiOiJnaXRodWItYXBwLXRva2VuIiwic291cmNlIjoiKD86Z2h1fGdocylfWzAtOWEtekEtWl17MzZ9',
++	'IiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsiZ2h1XyIsImdoc18iXSwiYWxsb3ciOltd',
++	'fSx7ImlkIjoiZ2l0aHViLWZpbmUtZ3JhaW5lZC1wYXQiLCJzb3VyY2UiOiJnaXRodWJfcGF0X1xcd3s4Mn0iLCJmbGFncyI6',
++	'IiIsImdyb3VwIjowLCJlbnRyb3B5IjozLCJrZXl3b3JkcyI6WyJnaXRodWJfcGF0XyJdLCJhbGxvdyI6W119LHsiaWQiOiJn',
++	'aXRodWItb2F1dGgiLCJzb3VyY2UiOiJnaG9fWzAtOWEtekEtWl17MzZ9IiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9w',
++	'eSI6Mywia2V5d29yZHMiOlsiZ2hvXyJdLCJhbGxvdyI6W119LHsiaWQiOiJnaXRodWItcGF0Iiwic291cmNlIjoiZ2hwX1sw',
++	'LTlhLXpBLVpdezM2fSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMsImtleXdvcmRzIjpbImdocF8iXSwiYWxs',
++	'b3ciOltdfSx7ImlkIjoiZ2l0aHViLXJlZnJlc2gtdG9rZW4iLCJzb3VyY2UiOiJnaHJfWzAtOWEtekEtWl17MzZ9IiwiZmxh',
++	'Z3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsiZ2hyXyJdLCJhbGxvdyI6W119LHsiaWQiOiJnaXRs',
++	'YWItY2ljZC1qb2ItdG9rZW4iLCJzb3VyY2UiOiJnbGNidC1bMC05YS16QS1aXXsxLDV9X1swLTlhLXpBLVpfLV17MjB9Iiwi',
++	'ZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsiZ2xjYnQtIl0sImFsbG93IjpbXX0seyJpZCI6',
++	'ImdpdGxhYi1kZXBsb3ktdG9rZW4iLCJzb3VyY2UiOiJnbGR0LVswLTlhLXpBLVpfXFwtXXsyMH0iLCJmbGFncyI6IiIsImdy',
++	'b3VwIjowLCJlbnRyb3B5IjozLCJrZXl3b3JkcyI6WyJnbGR0LSJdLCJhbGxvdyI6W119LHsiaWQiOiJnaXRsYWItZmVhdHVy',
++	'ZS1mbGFnLWNsaWVudC10b2tlbiIsInNvdXJjZSI6ImdsZmZjdC1bMC05YS16QS1aX1xcLV17MjB9IiwiZmxhZ3MiOiIiLCJn',
++	'cm91cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsiZ2xmZmN0LSJdLCJhbGxvdyI6W119LHsiaWQiOiJnaXRsYWItZmVl',
++	'ZC10b2tlbiIsInNvdXJjZSI6ImdsZnQtWzAtOWEtekEtWl9cXC1dezIwfSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJv',
++	'cHkiOjMsImtleXdvcmRzIjpbImdsZnQtIl0sImFsbG93IjpbXX0seyJpZCI6ImdpdGxhYi1pbmNvbWluZy1tYWlsLXRva2Vu',
++	'Iiwic291cmNlIjoiZ2xpbXQtWzAtOWEtekEtWl9cXC1dezI1fSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMs',
++	'ImtleXdvcmRzIjpbImdsaW10LSJdLCJhbGxvdyI6W119LHsiaWQiOiJnaXRsYWIta3ViZXJuZXRlcy1hZ2VudC10b2tlbiIs',
++	'InNvdXJjZSI6ImdsYWdlbnQtWzAtOWEtekEtWl9cXC1dezUwfSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMs',
++	'ImtleXdvcmRzIjpbImdsYWdlbnQtIl0sImFsbG93IjpbXX0seyJpZCI6ImdpdGxhYi1vYXV0aC1hcHAtc2VjcmV0Iiwic291',
++	'cmNlIjoiZ2xvYXMtWzAtOWEtekEtWl9cXC1dezY0fSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMsImtleXdv',
++	'cmRzIjpbImdsb2FzLSJdLCJhbGxvdyI6W119LHsiaWQiOiJnaXRsYWItcGF0Iiwic291cmNlIjoiZ2xwYXQtW1xcdy1dezIw',
++	'fSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMsImtleXdvcmRzIjpbImdscGF0LSJdLCJhbGxvdyI6W119LHsi',
++	'aWQiOiJnaXRsYWItcGF0LXJvdXRhYmxlIiwic291cmNlIjoiXFxiZ2xwYXQtWzAtOWEtekEtWl8tXXsyNywzMDB9XFwuWzAt',
++	'OWEtel17Mn1bMC05YS16XXs3fVxcYiIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjQsImtleXdvcmRzIjpbImds',
++	'cGF0LSJdLCJhbGxvdyI6W119LHsiaWQiOiJnaXRsYWItcHR0Iiwic291cmNlIjoiZ2xwdHQtWzAtOWEtZl17NDB9IiwiZmxh',
++	'Z3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsiZ2xwdHQtIl0sImFsbG93IjpbXX0seyJpZCI6Imdp',
++	'dGxhYi1ycnQiLCJzb3VyY2UiOiJHUjEzNDg5NDFbXFx3LV17MjB9IiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6',
++	'Mywia2V5d29yZHMiOlsiZ3IxMzQ4OTQxIl0sImFsbG93IjpbXX0seyJpZCI6ImdpdGxhYi1ydW5uZXItYXV0aGVudGljYXRp',
++	'b24tdG9rZW4iLCJzb3VyY2UiOiJnbHJ0LVswLTlhLXpBLVpfXFwtXXsyMH0iLCJmbGFncyI6IiIsImdyb3VwIjowLCJlbnRy',
++	'b3B5IjozLCJrZXl3b3JkcyI6WyJnbHJ0LSJdLCJhbGxvdyI6W119LHsiaWQiOiJnaXRsYWItcnVubmVyLWF1dGhlbnRpY2F0',
++	'aW9uLXRva2VuLXJvdXRhYmxlIiwic291cmNlIjoiXFxiZ2xydC10XFxkX1swLTlhLXpBLVpfXFwtXXsyNywzMDB9XFwuWzAt',
++	'OWEtel17Mn1bMC05YS16XXs3fVxcYiIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjQsImtleXdvcmRzIjpbImds',
++	'cnQtIl0sImFsbG93IjpbXX0seyJpZCI6ImdpdGxhYi1zY2ltLXRva2VuIiwic291cmNlIjoiZ2xzb2F0LVswLTlhLXpBLVpf',
++	'XFwtXXsyMH0iLCJmbGFncyI6IiIsImdyb3VwIjowLCJlbnRyb3B5IjozLCJrZXl3b3JkcyI6WyJnbHNvYXQtIl0sImFsbG93',
++	'IjpbXX0seyJpZCI6ImdpdGxhYi1zZXNzaW9uLWNvb2tpZSIsInNvdXJjZSI6Il9naXRsYWJfc2Vzc2lvbj1bMC05YS16XXsz',
++	'Mn0iLCJmbGFncyI6IiIsImdyb3VwIjowLCJlbnRyb3B5IjozLCJrZXl3b3JkcyI6WyJfZ2l0bGFiX3Nlc3Npb249Il0sImFs',
++	'bG93IjpbXX0seyJpZCI6ImdpdHRlci1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OmdpdHRlciko',
++	'PzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2',
++	'MCdcIlxccz1dezAsNX0oW2EtejAtOV8tXXs0MH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6Imki',
++	'LCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsiZ2l0dGVyIl0sImFsbG93IjpbXX0seyJpZCI6ImdvY2FyZGxl',
++	'c3MtYXBpLXRva2VuIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzpnb2NhcmRsZXNzKSg/OlsgXFx0XFx3Li1dezAsMjB9',
++	'KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShsaXZl',
++	'X1thLXowLTlcXC1fPV17NDB9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAs',
++	'ImVudHJvcHkiOjAsImtleXdvcmRzIjpbImxpdmVfIiwiZ29jYXJkbGVzcyJdLCJhbGxvdyI6W119LHsiaWQiOiJncmFmYW5h',
++	'LWFwaS1rZXkiLCJzb3VyY2UiOiJcXGIoZXlKcklqb2lbQS1aYS16MC05XXs3MCw0MDB9PXswLDN9KSg/OltcXHg2MCdcIlxc',
++	'cztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMsImtleXdvcmRzIjpbImV5anJpam9p',
++	'Il0sImFsbG93IjpbXX0seyJpZCI6ImdyYWZhbmEtY2xvdWQtYXBpLXRva2VuIiwic291cmNlIjoiXFxiKGdsY19bQS1aYS16',
++	'MC05Ky9dezMyLDQwMH09ezAsM30pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6',
++	'MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsiZ2xjXyJdLCJhbGxvdyI6W119LHsiaWQiOiJncmFmYW5hLXNlcnZpY2UtYWNj',
++	'b3VudC10b2tlbiIsInNvdXJjZSI6IlxcYihnbHNhX1tBLVphLXowLTldezMyfV9bQS1GYS1mMC05XXs4fSkoPzpbXFx4NjAn',
++	'XCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjozLCJrZXl3b3JkcyI6WyJnbHNh',
++	'XyJdLCJhbGxvdyI6W119LHsiaWQiOiJoYXJuZXNzLWFwaS1rZXkiLCJzb3VyY2UiOiIoPzpwYXR8c2F0KVxcLlthLXpBLVow',
++	'LTlfLV17MjJ9XFwuW2EtekEtWjAtOV17MjR9XFwuW2EtekEtWjAtOV17MjB9IiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50',
++	'cm9weSI6MCwia2V5d29yZHMiOlsicGF0LiIsInNhdC4iXSwiYWxsb3ciOltdfSx7ImlkIjoiaGFzaGljb3JwLXRmLWFwaS10',
++	'b2tlbiIsInNvdXJjZSI6IlthLXowLTldezE0fVxcLig/LWk6YXRsYXN2MSlcXC5bYS16MC05XFwtXz1dezYwLDcwfSIsImZs',
++	'YWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjozLjUsImtleXdvcmRzIjpbImF0bGFzdjEiXSwiYWxsb3ciOltdfSx7Imlk',
++	'IjoiaGVyb2t1LWFwaS1rZXkiLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/Omhlcm9rdSkoPzpbIFxcdFxcdy4tXXswLDIw',
++	'fSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oWzAt',
++	'OWEtZl17OH0tWzAtOWEtZl17NH0tWzAtOWEtZl17NH0tWzAtOWEtZl17NH0tWzAtOWEtZl17MTJ9KSg/OltcXHg2MCdcIlxc',
++	'cztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImhlcm9rdSJd',
++	'LCJhbGxvdyI6W119LHsiaWQiOiJoZXJva3UtYXBpLWtleS12MiIsInNvdXJjZSI6IlxcYigoSFJLVS1BQVswLTlhLXpBLVpf',
++	'LV17NTh9KSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjQs',
++	'ImtleXdvcmRzIjpbImhya3UtYWEiXSwiYWxsb3ciOltdfSx7ImlkIjoiaHVic3BvdC1hcGkta2V5Iiwic291cmNlIjoiW1xc',
++	'dy4tXXswLDUwfT8oPzpodWJzcG90KSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxc',
++	'XHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbMC05QS1GXXs4fS1bMC05QS1GXXs0fS1bMC05QS1GXXs0',
++	'fS1bMC05QS1GXXs0fS1bMC05QS1GXXsxMn0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJn',
++	'cm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsiaHVic3BvdCJdLCJhbGxvdyI6W119LHsiaWQiOiJodWdnaW5nZmFj',
++	'ZS1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJcXGIoaGZfKD9pOlthLXpdezM0fSkpKD86W1xceDYwJ1wiXFxzO118XFxcXFtu',
++	'cl18JCkiLCJmbGFncyI6IiIsImdyb3VwIjowLCJlbnRyb3B5IjoyLCJrZXl3b3JkcyI6WyJoZl8iXSwiYWxsb3ciOltdfSx7',
++	'ImlkIjoiaHVnZ2luZ2ZhY2Utb3JnYW5pemF0aW9uLWFwaS10b2tlbiIsInNvdXJjZSI6IlxcYihhcGlfb3JnXyg/aTpbYS16',
++	'XXszNH0pKSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Miwi',
++	'a2V5d29yZHMiOlsiYXBpX29yZ18iXSwiYWxsb3ciOltdfSx7ImlkIjoiaW5mcmFjb3N0LWFwaS10b2tlbiIsInNvdXJjZSI6',
++	'IlxcYihpY28tW2EtekEtWjAtOV17MzJ9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiIiLCJncm91',
++	'cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsiaWNvLSJdLCJhbGxvdyI6W119LHsiaWQiOiJpbnRlcmNvbS1hcGkta2V5',
++	'Iiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzppbnRlcmNvbSkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9',
++	'KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtejAtOT1fXFwtXXs2MH0p',
++	'KD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29y',
++	'ZHMiOlsiaW50ZXJjb20iXSwiYWxsb3ciOltdfSx7ImlkIjoiaW50cmE0Mi1jbGllbnQtc2VjcmV0Iiwic291cmNlIjoiXFxi',
++	'KHMtczR0Mig/OnVkfGFmKS1bYWJjZGVmMDEyMzQ1Njc4OV17NjR9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwi',
++	'ZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMsImtleXdvcmRzIjpbImludHJhIiwicy1zNHQydWQtIiwicy1zNHQy',
++	'YWYtIl0sImFsbG93IjpbXX0seyJpZCI6Impmcm9nLWFwaS1rZXkiLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/Ompmcm9n',
++	'fGFydGlmYWN0b3J5fGJpbnRyYXl8eHJheSkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7MSwz',
++	'fT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtejAtOV17NzN9KSg/OltcXHg2MCdcIlxccztd',
++	'fFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImpmcm9nIiwiYXJ0',
++	'aWZhY3RvcnkiLCJiaW50cmF5IiwieHJheSJdLCJhbGxvdyI6W119LHsiaWQiOiJqZnJvZy1pZGVudGl0eS10b2tlbiIsInNv',
++	'dXJjZSI6IltcXHcuLV17MCw1MH0/KD86amZyb2d8YXJ0aWZhY3Rvcnl8YmludHJheXx4cmF5KSg/OlsgXFx0XFx3Li1dezAs',
++	'MjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShb',
++	'YS16MC05XXs2NH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9w',
++	'eSI6MCwia2V5d29yZHMiOlsiamZyb2ciLCJhcnRpZmFjdG9yeSIsImJpbnRyYXkiLCJ4cmF5Il0sImFsbG93IjpbXX0seyJp',
++	'ZCI6Imp3dCIsInNvdXJjZSI6IlxcYihleVthLXpBLVowLTldezE3LH1cXC5leVthLXpBLVowLTlcXC9cXFxcXy1dezE3LH1c',
++	'XC4oPzpbYS16QS1aMC05XFwvXFxcXF8tXXsxMCx9PXswLDJ9KT8pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJm',
++	'bGFncyI6IiIsImdyb3VwIjowLCJlbnRyb3B5IjozLCJrZXl3b3JkcyI6WyJleSJdLCJhbGxvdyI6W119LHsiaWQiOiJqd3Qt',
++	'YmFzZTY0Iiwic291cmNlIjoiXFxiWlhsSyg/Oig/PGFsZz5hR0pIWTJsUGFVKXwoPzxhcHU+YUdOSVZXbFBhVSl8KD88YXB2',
++	'PmFHTklXV2xQYVUpfCg/PGF1ZD5hR1JYVVdsUGFVKXwoPzxiNjQ+YVU1cVVXbFApfCg/PGNyaXQ+YW1OdGJEQkphbkJpKXwo',
++	'PzxjdHk+YW1SSWEybFBhVSl8KD88ZXBrPmJHTkhjMmxQYm4pfCg/PGVuYz5iR0p0VFdsUGFVKXwoPzxqa3U+Y1dFelZXbFBh',
++	'VSl8KD88andrPmNXUXljMmxQYil8KD88aXNzPmNHTXpUV2xQYVUpfCg/PGl2PmNHUnBTVFpKKXwoPzxraWQ+Y21GWFVXbFAp',
++	'fCg/PGtleV9vcHM+Y2xwWWJHWmlNMEo2U1dwd1kpfCg/PGt0eT5jbVJJYTJsUGFVcCl8KD88bm9uY2U+ZFdJeU5XcGFVMGsy',
++	'KXwoPzxwMmM+ZDAxdFRXbFApfCg/PHAycz5kMDF1VFdsUGFVKXwoPzxwcHQ+ZDJOSVVXbFBhVSl8KD88c3ViPmVtUlhTV2xQ',
++	'YVUpfCg/PHN2dD5lbVJ1VVdsUCl8KD88dGFnPk1GbFhZMmxQYVUpfCg/PHR5cD5NR1ZZUVdsUGFVcCl8KD88dXJsPk1XTnRk',
++	'MmwpfCg/PHVzZT5NV015VldsUGFVcCl8KD88dmVyPk1scFlTV2xQYVUpfCg/PHZlcnNpb24+TWxwWVNucGhWemwxU1dwdil8',
++	'KD88eD5ORWxxYjIpfCg/PHg1Yz5ORTVYVFdsUCl8KD88eDV0Pk5FNVlVV2xQYVUpfCg/PHg1dHMyNTY+TkU1WVVXcFZla2t4',
++	'VG1sSk5rbCl8KD88eDV1Pk5FNVlWV2xQYVUpfCg/PHppcD5ObUZZUVdsUGFVKSlbYS16QS1aMC05XFwvXFxcXF8rXFwtXFxy',
++	'XFxuXXs0MCx9PXswLDJ9IiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29yZHMiOlsienhsayJdLCJh',
++	'bGxvdyI6W119LHsiaWQiOiJrcmFrZW4tYWNjZXNzLXRva2VuIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzprcmFrZW4p',
++	'KD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4',
++	'NjAnXCJcXHM9XXswLDV9KFthLXowLTlcXC89X1xcK1xcLV17ODAsOTB9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQp',
++	'IiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImtyYWtlbiJdLCJhbGxvdyI6W119LHsi',
++	'aWQiOiJrdWNvaW4tYWNjZXNzLXRva2VuIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzprdWNvaW4pKD86WyBcXHRcXHcu',
++	'LV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXsw',
++	'LDV9KFthLWYwLTldezI0fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJl',
++	'bnRyb3B5IjowLCJrZXl3b3JkcyI6WyJrdWNvaW4iXSwiYWxsb3ciOltdfSx7ImlkIjoia3Vjb2luLXNlY3JldC1rZXkiLCJz',
++	'b3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/Omt1Y29pbikoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+',
++	'fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oWzAtOWEtZl17OH0tWzAtOWEtZl17NH0t',
++	'WzAtOWEtZl17NH0tWzAtOWEtZl17NH0tWzAtOWEtZl17MTJ9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxh',
++	'Z3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImt1Y29pbiJdLCJhbGxvdyI6W119LHsiaWQiOiJs',
++	'YXVuY2hkYXJrbHktYWNjZXNzLXRva2VuIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzpsYXVuY2hkYXJrbHkpKD86WyBc',
++	'XHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJc',
++	'XHM9XXswLDV9KFthLXowLTk9X1xcLV17NDB9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwi',
++	'Z3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImxhdW5jaGRhcmtseSJdLCJhbGxvdyI6W119LHsiaWQiOiJsaW5l',
++	'YXItYXBpLWtleSIsInNvdXJjZSI6Imxpbl9hcGlfW2EtejAtOV17NDB9IiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJv',
++	'cHkiOjIsImtleXdvcmRzIjpbImxpbl9hcGlfIl0sImFsbG93IjpbXX0seyJpZCI6ImxpbmVhci1jbGllbnQtc2VjcmV0Iiwi',
++	'c291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzpsaW5lYXIpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18',
++	'Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLWYwLTldezMyfSkoPzpbXFx4NjAn',
++	'XCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjoyLCJrZXl3b3JkcyI6WyJsaW5l',
++	'YXIiXSwiYWxsb3ciOltdfSx7ImlkIjoibGlua2VkaW4tY2xpZW50LWlkIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzps',
++	'aW5rZWRbXy1dP2luKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9',
++	'PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbYS16MC05XXsxNH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCki',
++	'LCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29yZHMiOlsibGlua2VkaW4iLCJsaW5rZWRfaW4iLCJs',
++	'aW5rZWQtaW4iXSwiYWxsb3ciOltdfSx7ImlkIjoibGlua2VkaW4tY2xpZW50LXNlY3JldCIsInNvdXJjZSI6IltcXHcuLV17',
++	'MCw1MH0/KD86bGlua2VkW18tXT9pbikoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7MSwzfT18',
++	'XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtejAtOV17MTZ9KSg/OltcXHg2MCdcIlxccztdfFxc',
++	'XFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjIsImtleXdvcmRzIjpbImxpbmtlZGluIiwibGlu',
++	'a2VkX2luIiwibGlua2VkLWluIl0sImFsbG93IjpbXX0seyJpZCI6ImxvYi1hcGkta2V5Iiwic291cmNlIjoiW1xcdy4tXXsw',
++	'LDUwfT8oPzpsb2IpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+',
++	'fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KChsaXZlfHRlc3QpX1thLWYwLTldezM1fSkoPzpbXFx4NjAnXCJcXHM7XXxc',
++	'XFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJ0ZXN0XyIsImxpdmVf',
++	'Il0sImFsbG93IjpbXX0seyJpZCI6ImxvYi1wdWItYXBpLWtleSIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86bG9iKSg/',
++	'OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYw',
++	'J1wiXFxzPV17MCw1fSgodGVzdHxsaXZlKV9wdWJfW2EtZjAtOV17MzF9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQp',
++	'IiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbInRlc3RfcHViIiwibGl2ZV9wdWIiLCJf',
++	'cHViIl0sImFsbG93IjpbXX0seyJpZCI6Imxvb2tlci1jbGllbnQtaWQiLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/Omxv',
++	'b2tlcikoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXws',
++	'KVtcXHg2MCdcIlxccz1dezAsNX0oW2EtejAtOV17MjB9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3Mi',
++	'OiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbImxvb2tlciJdLCJhbGxvdyI6W119LHsiaWQiOiJsb29r',
++	'ZXItY2xpZW50LXNlY3JldCIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86bG9va2VyKSg/OlsgXFx0XFx3Li1dezAsMjB9',
++	'KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbYS16',
++	'MC05XXsyNH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6',
++	'MCwia2V5d29yZHMiOlsibG9va2VyIl0sImFsbG93IjpbXX0seyJpZCI6Im1haWxjaGltcC1hcGkta2V5Iiwic291cmNlIjoi',
++	'W1xcdy4tXXswLDUwfT8oPzpNYWlsY2hpbXBTREsuaW5pdGlhbGl6ZXxtYWlsY2hpbXApKD86WyBcXHRcXHcuLV17MCwyMH0p',
++	'W1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLWYw',
++	'LTldezMyfS11c1xcZFxcZCkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJl',
++	'bnRyb3B5IjowLCJrZXl3b3JkcyI6WyJtYWlsY2hpbXAiXSwiYWxsb3ciOltdfSx7ImlkIjoibWFpbGd1bi1wcml2YXRlLWFw',
++	'aS10b2tlbiIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86bWFpbGd1bikoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wi',
++	'XXswLDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oa2V5LVthLWYwLTld',
++	'ezMyfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJr',
++	'ZXl3b3JkcyI6WyJtYWlsZ3VuIl0sImFsbG93IjpbXX0seyJpZCI6Im1haWxndW4tcHViLWtleSIsInNvdXJjZSI6IltcXHcu',
++	'LV17MCw1MH0/KD86bWFpbGd1bikoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7MSwzfT18XFx8',
++	'XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0ocHVia2V5LVthLWYwLTldezMyfSkoPzpbXFx4NjAnXCJcXHM7',
++	'XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJtYWlsZ3VuIl0s',
++	'ImFsbG93IjpbXX0seyJpZCI6Im1haWxndW4tc2lnbmluZy1rZXkiLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/Om1haWxn',
++	'dW4pKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClb',
++	'XFx4NjAnXCJcXHM9XXswLDV9KFthLWgwLTldezMyfS1bYS1oMC05XXs4fS1bYS1oMC05XXs4fSkoPzpbXFx4NjAnXCJcXHM7',
++	'XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJtYWlsZ3VuIl0s',
++	'ImFsbG93IjpbXX0seyJpZCI6Im1hcGJveC1hcGktdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/Om1hcGJveCko',
++	'PzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2',
++	'MCdcIlxccz1dezAsNX0ocGtcXC5bYS16MC05XXs2MH1cXC5bYS16MC05XXsyMn0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtu',
++	'cl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsibWFwYm94Il0sImFsbG93Ijpb',
++	'XX0seyJpZCI6Im1hdHRlcm1vc3QtYWNjZXNzLXRva2VuIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzptYXR0ZXJtb3N0',
++	'KSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xc',
++	'eDYwJ1wiXFxzPV17MCw1fShbYS16MC05XXsyNn0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6Imki',
++	'LCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsibWF0dGVybW9zdCJdLCJhbGxvdyI6W119LHsiaWQiOiJtYXht',
++	'aW5kLWxpY2Vuc2Uta2V5Iiwic291cmNlIjoiXFxiKFtBLVphLXowLTldezZ9X1tBLVphLXowLTldezI5fV9tbWspKD86W1xc',
++	'eDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6IiIsImdyb3VwIjowLCJlbnRyb3B5Ijo0LCJrZXl3b3JkcyI6WyJf',
++	'bW1rIl0sImFsbG93IjpbXX0seyJpZCI6Im1lc3NhZ2ViaXJkLWFwaS10b2tlbiIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/',
++	'KD86bWVzc2FnZVtfLV0/YmlyZCkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7MSwzfT18XFx8',
++	'XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtejAtOV17MjV9KSg/OltcXHg2MCdcIlxccztdfFxcXFxb',
++	'bnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbIm1lc3NhZ2ViaXJkIiwibWVz',
++	'c2FnZS1iaXJkIiwibWVzc2FnZV9iaXJkIl0sImFsbG93IjpbXX0seyJpZCI6Im1lc3NhZ2ViaXJkLWNsaWVudC1pZCIsInNv',
++	'dXJjZSI6IltcXHcuLV17MCw1MH0/KD86bWVzc2FnZVtfLV0/YmlyZCkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXsw',
++	'LDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oWzAtOWEtZl17OH0tWzAt',
++	'OWEtZl17NH0tWzAtOWEtZl17NH0tWzAtOWEtZl17NH0tWzAtOWEtZl17MTJ9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJd',
++	'fCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbIm1lc3NhZ2ViaXJkIiwibWVzc2Fn',
++	'ZS1iaXJkIiwibWVzc2FnZV9iaXJkIl0sImFsbG93IjpbXX0seyJpZCI6Im1pY3Jvc29mdC10ZWFtcy13ZWJob29rIiwic291',
++	'cmNlIjoiaHR0cHM6Ly9bYS16MC05XStcXC53ZWJob29rXFwub2ZmaWNlXFwuY29tL3dlYmhvb2tiMi9bYS16MC05XXs4fS0o',
++	'W2EtejAtOV17NH0tKXszfVthLXowLTldezEyfUBbYS16MC05XXs4fS0oW2EtejAtOV17NH0tKXszfVthLXowLTldezEyfS9J',
++	'bmNvbWluZ1dlYmhvb2svW2EtejAtOV17MzJ9L1thLXowLTldezh9LShbYS16MC05XXs0fS0pezN9W2EtejAtOV17MTJ9Iiwi',
++	'ZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsid2ViaG9vay5vZmZpY2UuY29tIiwid2ViaG9v',
++	'a2IyIiwiaW5jb21pbmd3ZWJob29rIl0sImFsbG93IjpbXX0seyJpZCI6Im5ldGxpZnktYWNjZXNzLXRva2VuIiwic291cmNl',
++	'IjoiW1xcdy4tXXswLDUwfT8oPzpuZXRsaWZ5KSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58Onsx',
++	'LDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbYS16MC05PV9cXC1dezQwLDQ2fSkoPzpbXFx4',
++	'NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJu',
++	'ZXRsaWZ5Il0sImFsbG93IjpbXX0seyJpZCI6Im5ldy1yZWxpYy1icm93c2VyLWFwaS10b2tlbiIsInNvdXJjZSI6IltcXHcu',
++	'LV17MCw1MH0/KD86bmV3LXJlbGljfG5ld3JlbGljfG5ld19yZWxpYykoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXsw',
++	'LDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oTlJKUy1bYS1mMC05XXsx',
++	'OX0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5',
++	'd29yZHMiOlsibnJqcy0iXSwiYWxsb3ciOltdfSx7ImlkIjoibmV3LXJlbGljLWluc2VydC1rZXkiLCJzb3VyY2UiOiJbXFx3',
++	'Li1dezAsNTB9Pyg/Om5ldy1yZWxpY3xuZXdyZWxpY3xuZXdfcmVsaWMpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17',
++	'MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KE5SSUktW2EtejAtOS1d',
++	'ezMyfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJr',
++	'ZXl3b3JkcyI6WyJucmlpLSJdLCJhbGxvdyI6W119LHsiaWQiOiJuZXctcmVsaWMtdXNlci1hcGktaWQiLCJzb3VyY2UiOiJb',
++	'XFx3Li1dezAsNTB9Pyg/Om5ldy1yZWxpY3xuZXdyZWxpY3xuZXdfcmVsaWMpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydc',
++	'Il17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLXowLTldezY0',
++	'fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3',
++	'b3JkcyI6WyJuZXctcmVsaWMiLCJuZXdyZWxpYyIsIm5ld19yZWxpYyJdLCJhbGxvdyI6W119LHsiaWQiOiJuZXctcmVsaWMt',
++	'dXNlci1hcGkta2V5Iiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzpuZXctcmVsaWN8bmV3cmVsaWN8bmV3X3JlbGljKSg/',
++	'OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYw',
++	'J1wiXFxzPV17MCw1fShOUkFLLVthLXowLTldezI3fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoi',
++	'aSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJucmFrIl0sImFsbG93IjpbXX0seyJpZCI6Im5vdGlvbi1h',
++	'cGktdG9rZW4iLCJzb3VyY2UiOiJcXGIobnRuX1swLTldezExfVtBLVphLXowLTldezMyfVtBLVphLXowLTldezN9KSg/Oltc',
++	'XHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6NCwia2V5d29yZHMiOlsi',
++	'bnRuXyJdLCJhbGxvdyI6W119LHsiaWQiOiJucG0tYWNjZXNzLXRva2VuIiwic291cmNlIjoiXFxiKG5wbV9bYS16MC05XXsz',
++	'Nn0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5',
++	'd29yZHMiOlsibnBtXyJdLCJhbGxvdyI6W119LHsiaWQiOiJueXRpbWVzLWFjY2Vzcy10b2tlbiIsInNvdXJjZSI6IltcXHcu',
++	'LV17MCw1MH0/KD86bnl0aW1lc3xuZXcteW9yay10aW1lcyx8bmV3eW9ya3RpbWVzKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtc',
++	'XHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbYS16MC05',
++	'PV9cXC1dezMyfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5',
++	'IjowLCJrZXl3b3JkcyI6WyJueXRpbWVzIiwibmV3LXlvcmstdGltZXMiLCJuZXd5b3JrdGltZXMiXSwiYWxsb3ciOltdfSx7',
++	'ImlkIjoib2N0b3B1cy1kZXBsb3ktYXBpLWtleSIsInNvdXJjZSI6IlxcYihBUEktW0EtWjAtOV17MjZ9KSg/OltcXHg2MCdc',
++	'IlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsiYXBpLSJd',
++	'LCJhbGxvdyI6W119LHsiaWQiOiJva3RhLWFjY2Vzcy10b2tlbiIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD9pOltcXHcu',
++	'LV17MCw1MH0/KD86KD8taTpbT29da3RhfE9LVEEpKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30pKD86PXw+',
++	'fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oMDBbXFx3PVxcLV17NDB9KSg/OltcXHg2',
++	'MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6NCwia2V5d29yZHMiOlsib2t0',
++	'YSJdLCJhbGxvdyI6W119LHsiaWQiOiJvcGVuYWktYXBpLWtleSIsInNvdXJjZSI6IlxcYihzay0oPzpwcm9qfHN2Y2FjY3R8',
++	'YWRtaW4pLSg/OltBLVphLXowLTlfLV17NzR9fFtBLVphLXowLTlfLV17NTh9KVQzQmxia0ZKKD86W0EtWmEtejAtOV8tXXs3',
++	'NH18W0EtWmEtejAtOV8tXXs1OH0pXFxifHNrLVthLXpBLVowLTldezIwfVQzQmxia0ZKW2EtekEtWjAtOV17MjB9KSg/Oltc',
++	'XHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsi',
++	'dDNibGJrZmoiXSwiYWxsb3ciOltdfSx7ImlkIjoib3BlbnNoaWZ0LXVzZXItdG9rZW4iLCJzb3VyY2UiOiJcXGIoc2hhMjU2',
++	'fltcXHctXXs0M30pKD86W15cXHctXXwkKSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMuNSwia2V5d29yZHMi',
++	'Olsic2hhMjU2fiJdLCJhbGxvdyI6W119LHsiaWQiOiJwZXJwbGV4aXR5LWFwaS1rZXkiLCJzb3VyY2UiOiJcXGIocHBseC1b',
++	'YS16QS1aMC05XXs0OH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JHxcXGIpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwi',
++	'ZW50cm9weSI6NCwia2V5d29yZHMiOlsicHBseC0iXSwiYWxsb3ciOltdfSx7ImlkIjoicGxhaWQtYXBpLXRva2VuIiwic291',
++	'cmNlIjoiW1xcdy4tXXswLDUwfT8oPzpwbGFpZCkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7',
++	'MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oYWNjZXNzLSg/OnNhbmRib3h8ZGV2ZWxvcG1l',
++	'bnR8cHJvZHVjdGlvbiktWzAtOWEtZl17OH0tWzAtOWEtZl17NH0tWzAtOWEtZl17NH0tWzAtOWEtZl17NH0tWzAtOWEtZl17',
++	'MTJ9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtl',
++	'eXdvcmRzIjpbInBsYWlkIl0sImFsbG93IjpbXX0seyJpZCI6InBsYWlkLWNsaWVudC1pZCIsInNvdXJjZSI6IltcXHcuLV17',
++	'MCw1MH0/KD86cGxhaWQpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6',
++	'fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLXowLTldezI0fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwk',
++	'KSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjozLjUsImtleXdvcmRzIjpbInBsYWlkIl0sImFsbG93IjpbXX0s',
++	'eyJpZCI6InBsYWlkLXNlY3JldC1rZXkiLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OnBsYWlkKSg/OlsgXFx0XFx3Li1d',
++	'ezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1',
++	'fShbYS16MC05XXszMH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50',
++	'cm9weSI6My41LCJrZXl3b3JkcyI6WyJwbGFpZCJdLCJhbGxvdyI6W119LHsiaWQiOiJwbGFuZXRzY2FsZS1hcGktdG9rZW4i',
++	'LCJzb3VyY2UiOiJcXGIocHNjYWxlX3Rrbl9bXFx3PVxcLi1dezMyLDY0fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwk',
++	'KSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjozLCJrZXl3b3JkcyI6WyJwc2NhbGVfdGtuXyJdLCJhbGxvdyI6',
++	'W119LHsiaWQiOiJwbGFuZXRzY2FsZS1vYXV0aC10b2tlbiIsInNvdXJjZSI6IlxcYihwc2NhbGVfb2F1dGhfW1xcdz1cXC4t',
++	'XXszMiw2NH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6IiIsImdyb3VwIjowLCJlbnRyb3B5Ijoz',
++	'LCJrZXl3b3JkcyI6WyJwc2NhbGVfb2F1dGhfIl0sImFsbG93IjpbXX0seyJpZCI6InBsYW5ldHNjYWxlLXBhc3N3b3JkIiwi',
++	'c291cmNlIjoiXFxiKHBzY2FsZV9wd19bXFx3PVxcLi1dezMyLDY0fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIs',
++	'ImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjozLCJrZXl3b3JkcyI6WyJwc2NhbGVfcHdfIl0sImFsbG93IjpbXX0s',
++	'eyJpZCI6InBvc3RtYW4tYXBpLXRva2VuIiwic291cmNlIjoiXFxiKFBNQUstW2EtZjAtOV17MjR9XFwtW2EtZjAtOV17MzR9',
++	'KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMsImtleXdv',
++	'cmRzIjpbInBtYWstIl0sImFsbG93IjpbXX0seyJpZCI6InByZWZlY3QtYXBpLXRva2VuIiwic291cmNlIjoiXFxiKHBudV9b',
++	'YS16QS1aMC05XXszNn0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6IiIsImdyb3VwIjowLCJlbnRy',
++	'b3B5IjoyLCJrZXl3b3JkcyI6WyJwbnVfIl0sImFsbG93IjpbXX0seyJpZCI6InByaXZhdGUta2V5Iiwic291cmNlIjoiLS0t',
++	'LS1CRUdJTlsgQS1aMC05Xy1dezAsMTAwfVBSSVZBVEUgS0VZKD86IEJMT0NLKT8tLS0tLVtcXHNcXFMtXXs2NCx9P0tFWSg/',
++	'OiBCTE9DSyk/LS0tLS0iLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsiLS0tLS1iZWdp',
++	'biJdLCJhbGxvdyI6W119LHsiaWQiOiJwcml2YXRlYWktYXBpLXRva2VuIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oP2k6',
++	'W1xcdy4tXXswLDUwfT8oPzpwcml2YXRlW18tXT9haSkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KSg/Oj18',
++	'Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFthLXowLTldezMyfSkoPzpbXFx4NjAn',
++	'XCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMsImtleXdvcmRzIjpbInByaXZh',
++	'dGVhaSIsInByaXZhdGVfYWkiLCJwcml2YXRlLWFpIl0sImFsbG93IjpbXX0seyJpZCI6InB1bHVtaS1hcGktdG9rZW4iLCJz',
++	'b3VyY2UiOiJcXGIocHVsLVthLWYwLTldezQwfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiIiwi',
++	'Z3JvdXAiOjAsImVudHJvcHkiOjIsImtleXdvcmRzIjpbInB1bC0iXSwiYWxsb3ciOltdfSx7ImlkIjoicHlwaS11cGxvYWQt',
++	'dG9rZW4iLCJzb3VyY2UiOiJweXBpLUFnRUljSGx3YVM1dmNtY1tcXHctXXs1MCwxMDAwfSIsImZsYWdzIjoiIiwiZ3JvdXAi',
++	'OjAsImVudHJvcHkiOjMsImtleXdvcmRzIjpbInB5cGktYWdlaWNobHdhczV2Y21jIl0sImFsbG93IjpbXX0seyJpZCI6InJh',
++	'cGlkYXBpLWFjY2Vzcy10b2tlbiIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86cmFwaWRhcGkpKD86WyBcXHRcXHcuLV17',
++	'MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9',
++	'KFthLXowLTlfLV17NTB9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVu',
++	'dHJvcHkiOjAsImtleXdvcmRzIjpbInJhcGlkYXBpIl0sImFsbG93IjpbXX0seyJpZCI6InJlYWRtZS1hcGktdG9rZW4iLCJz',
++	'b3VyY2UiOiJcXGIocmRtZV9bYS16MC05XXs3MH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6IiIs',
++	'Imdyb3VwIjowLCJlbnRyb3B5IjoyLCJrZXl3b3JkcyI6WyJyZG1lXyJdLCJhbGxvdyI6W119LHsiaWQiOiJydWJ5Z2Vtcy1h',
++	'cGktdG9rZW4iLCJzb3VyY2UiOiJcXGIocnVieWdlbXNfW2EtZjAtOV17NDh9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJd',
++	'fCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29yZHMiOlsicnVieWdlbXNfIl0sImFsbG93Ijpb',
++	'XX0seyJpZCI6InNjYWxpbmdvLWFwaS10b2tlbiIsInNvdXJjZSI6IlxcYih0ay11cy1bXFx3LV17NDh9KSg/OltcXHg2MCdc',
++	'IlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29yZHMiOlsidGstdXMt',
++	'Il0sImFsbG93IjpbXX0seyJpZCI6InNlbmRiaXJkLWFjY2Vzcy1pZCIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86c2Vu',
++	'ZGJpcmQpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18',
++	'LClbXFx4NjAnXCJcXHM9XXswLDV9KFswLTlhLWZdezh9LVswLTlhLWZdezR9LVswLTlhLWZdezR9LVswLTlhLWZdezR9LVsw',
++	'LTlhLWZdezEyfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5',
++	'IjowLCJrZXl3b3JkcyI6WyJzZW5kYmlyZCJdLCJhbGxvdyI6W119LHsiaWQiOiJzZW5kYmlyZC1hY2Nlc3MtdG9rZW4iLCJz',
++	'b3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OnNlbmRiaXJkKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9',
++	'fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbYS1mMC05XXs0MH0pKD86W1xceDYw',
++	'J1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsic2Vu',
++	'ZGJpcmQiXSwiYWxsb3ciOltdfSx7ImlkIjoic2VuZGdyaWQtYXBpLXRva2VuIiwic291cmNlIjoiXFxiKFNHXFwuW2EtejAt',
++	'OT1fXFwtXFwuXXs2Nn0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50',
++	'cm9weSI6Miwia2V5d29yZHMiOlsic2cuIl0sImFsbG93IjpbXX0seyJpZCI6InNlbmRpbmJsdWUtYXBpLXRva2VuIiwic291',
++	'cmNlIjoiXFxiKHhrZXlzaWItW2EtZjAtOV17NjR9XFwtW2EtejAtOV17MTZ9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJd',
++	'fCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjIsImtleXdvcmRzIjpbInhrZXlzaWItIl0sImFsbG93Ijpb',
++	'XX0seyJpZCI6InNlbnRyeS1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OnNlbnRyeSkoPzpbIFxc',
++	'dFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxc',
++	'cz1dezAsNX0oW2EtZjAtOV17NjR9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAi',
++	'OjAsImVudHJvcHkiOjMsImtleXdvcmRzIjpbInNlbnRyeSJdLCJhbGxvdyI6W119LHsiaWQiOiJzZW50cnktb3JnLXRva2Vu',
++	'Iiwic291cmNlIjoiXFxic250cnlzX2V5SnBZWFFpT1thLXpBLVowLTkrL117MTAsMjAwfSg/OkxDSnlaV2RwYjI1ZmRYSnN8',
++	'SW5KbFoybHZibDkxY213aXxjbVZuYVc5dVgzVnliQ0k2KVthLXpBLVowLTkrL117MTAsMjAwfT17MCwyfV9bYS16QS1aMC05',
++	'Ky9dezQzfSg/OlteYS16QS1aMC05Ky9dfCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6NC41LCJrZXl3b3Jk',
++	'cyI6WyJzbnRyeXNfZXlqcHl4cWlvIl0sImFsbG93IjpbXX0seyJpZCI6InNlbnRyeS11c2VyLXRva2VuIiwic291cmNlIjoi',
++	'XFxiKHNudHJ5dV9bYS1mMC05XXs2NH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6IiIsImdyb3Vw',
++	'IjowLCJlbnRyb3B5IjozLjUsImtleXdvcmRzIjpbInNudHJ5dV8iXSwiYWxsb3ciOltdfSx7ImlkIjoic2V0dGxlbWludC1h',
++	'cHBsaWNhdGlvbi1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJcXGIoc21fYWF0X1thLXpBLVowLTldezE2fSkoPzpbXFx4NjAn',
++	'XCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMsImtleXdvcmRzIjpbInNtX2Fh',
++	'dCJdLCJhbGxvdyI6W119LHsiaWQiOiJzZXR0bGVtaW50LXBlcnNvbmFsLWFjY2Vzcy10b2tlbiIsInNvdXJjZSI6IlxcYihz',
++	'bV9wYXRfW2EtekEtWjAtOV17MTZ9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiIiLCJncm91cCI6',
++	'MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsic21fcGF0Il0sImFsbG93IjpbXX0seyJpZCI6InNldHRsZW1pbnQtc2Vydmlj',
++	'ZS1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJcXGIoc21fc2F0X1thLXpBLVowLTldezE2fSkoPzpbXFx4NjAnXCJcXHM7XXxc',
++	'XFxcW25yXXwkKSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMsImtleXdvcmRzIjpbInNtX3NhdCJdLCJhbGxv',
++	'dyI6W119LHsiaWQiOiJzaGlwcG8tYXBpLXRva2VuIiwic291cmNlIjoiXFxiKHNoaXBwb18oPzpsaXZlfHRlc3QpX1thLWZB',
++	'LUYwLTldezQwfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHki',
++	'OjIsImtleXdvcmRzIjpbInNoaXBwb18iXSwiYWxsb3ciOltdfSx7ImlkIjoic2hvcGlmeS1hY2Nlc3MtdG9rZW4iLCJzb3Vy',
++	'Y2UiOiJzaHBhdF9bYS1mQS1GMC05XXszMn0iLCJmbGFncyI6IiIsImdyb3VwIjowLCJlbnRyb3B5IjoyLCJrZXl3b3JkcyI6',
++	'WyJzaHBhdF8iXSwiYWxsb3ciOltdfSx7ImlkIjoic2hvcGlmeS1jdXN0b20tYWNjZXNzLXRva2VuIiwic291cmNlIjoic2hw',
++	'Y2FfW2EtZkEtRjAtOV17MzJ9IiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29yZHMiOlsic2hwY2Ff',
++	'Il0sImFsbG93IjpbXX0seyJpZCI6InNob3BpZnktcHJpdmF0ZS1hcHAtYWNjZXNzLXRva2VuIiwic291cmNlIjoic2hwcGFf',
++	'W2EtZkEtRjAtOV17MzJ9IiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29yZHMiOlsic2hwcGFfIl0s',
++	'ImFsbG93IjpbXX0seyJpZCI6InNob3BpZnktc2hhcmVkLXNlY3JldCIsInNvdXJjZSI6InNocHNzX1thLWZBLUYwLTldezMy',
++	'fSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjIsImtleXdvcmRzIjpbInNocHNzXyJdLCJhbGxvdyI6W119LHsi',
++	'aWQiOiJzaWRla2lxLXNlY3JldCIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86QlVORExFX0VOVEVSUFJJU0VfX0NPTlRS',
++	'SUJTWVNfX0NPTXxCVU5ETEVfR0VNU19fQ09OVFJJQlNZU19fQ09NKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAs',
++	'M30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbYS1mMC05XXs4fTpbYS1m',
++	'MC05XXs4fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5Ijow',
++	'LCJrZXl3b3JkcyI6WyJidW5kbGVfZW50ZXJwcmlzZV9fY29udHJpYnN5c19fY29tIiwiYnVuZGxlX2dlbXNfX2NvbnRyaWJz',
++	'eXNfX2NvbSJdLCJhbGxvdyI6W119LHsiaWQiOiJzaWRla2lxLXNlbnNpdGl2ZS11cmwiLCJzb3VyY2UiOiJcXGJodHRwcz86',
++	'Ly8oW2EtZjAtOV17OH06W2EtZjAtOV17OH0pQCg/OmdlbXMuY29udHJpYnN5cy5jb218ZW50ZXJwcmlzZS5jb250cmlic3lz',
++	'LmNvbSkoPzpbXFwvfFxcI3xcXD98Ol18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMi',
++	'OlsiZ2Vtcy5jb250cmlic3lzLmNvbSIsImVudGVycHJpc2UuY29udHJpYnN5cy5jb20iXSwiYWxsb3ciOltdfSx7ImlkIjoi',
++	'c2xhY2stYXBwLXRva2VuIiwic291cmNlIjoieGFwcC1cXGQtW0EtWjAtOV0rLVxcZCstW2EtejAtOV0rIiwiZmxhZ3MiOiJp',
++	'IiwiZ3JvdXAiOjAsImVudHJvcHkiOjIsImtleXdvcmRzIjpbInhhcHAiXSwiYWxsb3ciOltdfSx7ImlkIjoic2xhY2stYm90',
++	'LXRva2VuIiwic291cmNlIjoieG94Yi1bMC05XXsxMCwxM30tWzAtOV17MTAsMTN9W2EtekEtWjAtOS1dKiIsImZsYWdzIjoi',
++	'IiwiZ3JvdXAiOjAsImVudHJvcHkiOjMsImtleXdvcmRzIjpbInhveGIiXSwiYWxsb3ciOltdfSx7ImlkIjoic2xhY2stY29u',
++	'ZmlnLWFjY2Vzcy10b2tlbiIsInNvdXJjZSI6InhveGUueG94W2JwXS1cXGQtW0EtWjAtOV17MTYzLDE2Nn0iLCJmbGFncyI6',
++	'ImkiLCJncm91cCI6MCwiZW50cm9weSI6Miwia2V5d29yZHMiOlsieG94ZS54b3hiLSIsInhveGUueG94cC0iXSwiYWxsb3ci',
++	'OltdfSx7ImlkIjoic2xhY2stY29uZmlnLXJlZnJlc2gtdG9rZW4iLCJzb3VyY2UiOiJ4b3hlLVxcZC1bQS1aMC05XXsxNDZ9',
++	'IiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjIsImtleXdvcmRzIjpbInhveGUtIl0sImFsbG93IjpbXX0seyJp',
++	'ZCI6InNsYWNrLWxlZ2FjeS1ib3QtdG9rZW4iLCJzb3VyY2UiOiJ4b3hiLVswLTldezgsMTR9LVthLXpBLVowLTldezE4LDI2',
++	'fSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjIsImtleXdvcmRzIjpbInhveGIiXSwiYWxsb3ciOltdfSx7Imlk',
++	'Ijoic2xhY2stbGVnYWN5LXRva2VuIiwic291cmNlIjoieG94W29zXS1cXGQrLVxcZCstXFxkKy1bYS1mQS1GXFxkXSsiLCJm',
++	'bGFncyI6IiIsImdyb3VwIjowLCJlbnRyb3B5IjoyLCJrZXl3b3JkcyI6WyJ4b3hvIiwieG94cyJdLCJhbGxvdyI6W119LHsi',
++	'aWQiOiJzbGFjay1sZWdhY3ktd29ya3NwYWNlLXRva2VuIiwic291cmNlIjoieG94W2FyXS0oPzpcXGQtKT9bMC05YS16QS1a',
++	'XXs4LDQ4fSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjIsImtleXdvcmRzIjpbInhveGEiLCJ4b3hyIl0sImFs',
++	'bG93IjpbXX0seyJpZCI6InNsYWNrLXVzZXItdG9rZW4iLCJzb3VyY2UiOiJ4b3hbcGVdKD86LVswLTldezEwLDEzfSl7M30t',
++	'W2EtekEtWjAtOS1dezI4LDM0fSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjIsImtleXdvcmRzIjpbInhveHAt',
++	'IiwieG94ZS0iXSwiYWxsb3ciOltdfSx7ImlkIjoic2xhY2std2ViaG9vay11cmwiLCJzb3VyY2UiOiIoPzpodHRwcz86Ly8p',
++	'P2hvb2tzLnNsYWNrLmNvbS8oPzpzZXJ2aWNlc3x3b3JrZmxvd3N8dHJpZ2dlcnMpL1tBLVphLXowLTkrL117NDMsNTZ9Iiwi',
++	'ZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsiaG9va3Muc2xhY2suY29tIl0sImFsbG93Ijpb',
++	'XX0seyJpZCI6InNueWstYXBpLXRva2VuIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzpzbnlrW18uLV0/KD86KD86YXBp',
++	'fG9hdXRoKVtfLi1dPyk/KD86a2V5fHRva2VuKSkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7',
++	'MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oWzAtOWEtZl17OH0tWzAtOWEtZl17NH0tWzAt',
++	'OWEtZl17NH0tWzAtOWEtZl17NH0tWzAtOWEtZl17MTJ9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3Mi',
++	'OiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbInNueWsiXSwiYWxsb3ciOltdfSx7ImlkIjoic29uYXIt',
++	'YXBpLXRva2VuIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzpzb25hcltfLi1dPyhsb2dpbnx0b2tlbikpKD86WyBcXHRc',
++	'XHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9',
++	'XXswLDV9KCg/OnNxdV98c3FwX3xzcWFfKT9bYS16MC05PV9cXC1dezQwfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwk',
++	'KSIsImZsYWdzIjoiaSIsImdyb3VwIjoyLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJzb25hciJdLCJhbGxvdyI6W119LHsi',
++	'aWQiOiJzb3VyY2VncmFwaC1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJcXGIoXFxiKHNncF8oPzpbYS1mQS1GMC05XXsxNn18',
++	'bG9jYWwpX1thLWZBLUYwLTldezQwfXxzZ3BfW2EtZkEtRjAtOV17NDB9fFthLWZBLUYwLTldezQwfSlcXGIpKD86W1xceDYw',
++	'J1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsic2dw',
++	'XyIsInNvdXJjZWdyYXBoIl0sImFsbG93IjpbXX0seyJpZCI6InNxdWFyZS1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJcXGIo',
++	'KD86RUFBQXxzcTBhdHAtKVtcXHctXXsyMiw2MH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6IiIs',
++	'Imdyb3VwIjowLCJlbnRyb3B5IjoyLCJrZXl3b3JkcyI6WyJzcTBhdHAtIiwiZWFhYSJdLCJhbGxvdyI6W119LHsiaWQiOiJz',
++	'cXVhcmVzcGFjZS1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OnNxdWFyZXNwYWNlKSg/OlsgXFx0',
++	'XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxz',
++	'PV17MCw1fShbMC05YS1mXXs4fS1bMC05YS1mXXs0fS1bMC05YS1mXXs0fS1bMC05YS1mXXs0fS1bMC05YS1mXXsxMn0pKD86',
++	'W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMi',
++	'Olsic3F1YXJlc3BhY2UiXSwiYWxsb3ciOltdfSx7ImlkIjoic3RyaXBlLWFjY2Vzcy10b2tlbiIsInNvdXJjZSI6IlxcYigo',
++	'Pzpza3xyaylfKD86dGVzdHxsaXZlfHByb2QpX1thLXpBLVowLTldezEwLDk5fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25y',
++	'XXwkKSIsImZsYWdzIjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjIsImtleXdvcmRzIjpbInNrX3Rlc3QiLCJza19saXZlIiwi',
++	'c2tfcHJvZCIsInJrX3Rlc3QiLCJya19saXZlIiwicmtfcHJvZCJdLCJhbGxvdyI6W119LHsiaWQiOiJzdW1vbG9naWMtYWNj',
++	'ZXNzLWlkIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oP2k6W1xcdy4tXXswLDUwfT8oPzooPy1pOltTc111bW98U1VNTykp',
++	'KD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSkoPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xc',
++	'eDYwJ1wiXFxzPV17MCw1fShzdVthLXpBLVowLTldezEyfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdz',
++	'IjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMsImtleXdvcmRzIjpbInN1bW8iXSwiYWxsb3ciOltdfSx7ImlkIjoic3Vtb2xv',
++	'Z2ljLWFjY2Vzcy10b2tlbiIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86KD8taTpbU3NddW1vfFNVTU8pKSg/OlsgXFx0',
++	'XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxz',
++	'PV17MCw1fShbYS16MC05XXs2NH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6',
++	'MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsic3VtbyJdLCJhbGxvdyI6W119LHsiaWQiOiJ0ZWxlZ3JhbS1ib3QtYXBpLXRv',
++	'a2VuIiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzp0ZWxlZ3IpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwz',
++	'fSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFswLTldezUsMTZ9Oig/LWk6',
++	'QSlbYS16MC05X1xcLV17MzR9KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAs',
++	'ImVudHJvcHkiOjAsImtleXdvcmRzIjpbInRlbGVnciJdLCJhbGxvdyI6W119LHsiaWQiOiJ0cmF2aXNjaS1hY2Nlc3MtdG9r',
++	'ZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OnRyYXZpcykoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9',
++	'KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtejAtOV17MjJ9KSg/Oltc',
++	'XHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpb',
++	'InRyYXZpcyJdLCJhbGxvdyI6W119LHsiaWQiOiJ0d2lsaW8tYXBpLWtleSIsInNvdXJjZSI6IlNLWzAtOWEtZkEtRl17MzJ9',
++	'IiwiZmxhZ3MiOiIiLCJncm91cCI6MCwiZW50cm9weSI6Mywia2V5d29yZHMiOlsic2siXSwiYWxsb3ciOltdfSx7ImlkIjoi',
++	'dHdpdGNoLWFwaS10b2tlbiIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86dHdpdGNoKSg/OlsgXFx0XFx3Li1dezAsMjB9',
++	'KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fShbYS16',
++	'MC05XXszMH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6',
++	'MCwia2V5d29yZHMiOlsidHdpdGNoIl0sImFsbG93IjpbXX0seyJpZCI6InR3aXR0ZXItYWNjZXNzLXNlY3JldCIsInNvdXJj',
++	'ZSI6IltcXHcuLV17MCw1MH0/KD86dHdpdHRlcikoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7',
++	'MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtejAtOV17NDV9KSg/OltcXHg2MCdcIlxc',
++	'cztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdvcmRzIjpbInR3aXR0ZXIi',
++	'XSwiYWxsb3ciOltdfSx7ImlkIjoidHdpdHRlci1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OnR3',
++	'aXR0ZXIpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18',
++	'LClbXFx4NjAnXCJcXHM9XXswLDV9KFswLTldezE1LDI1fS1bYS16QS1aMC05XXsyMCw0MH0pKD86W1xceDYwJ1wiXFxzO118',
++	'XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsidHdpdHRlciJdLCJh',
++	'bGxvdyI6W119LHsiaWQiOiJ0d2l0dGVyLWFwaS1rZXkiLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/OnR3aXR0ZXIpKD86',
++	'WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6fD0+fFxcPz18LClbXFx4NjAn',
++	'XCJcXHM9XXswLDV9KFthLXowLTldezI1fSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdy',
++	'b3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJ0d2l0dGVyIl0sImFsbG93IjpbXX0seyJpZCI6InR3aXR0ZXItYXBp',
++	'LXNlY3JldCIsInNvdXJjZSI6IltcXHcuLV17MCw1MH0/KD86dHdpdHRlcikoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wi',
++	'XXswLDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oW2EtejAtOV17NTB9',
++	'KSg/OltcXHg2MCdcIlxccztdfFxcXFxbbnJdfCQpIiwiZmxhZ3MiOiJpIiwiZ3JvdXAiOjAsImVudHJvcHkiOjAsImtleXdv',
++	'cmRzIjpbInR3aXR0ZXIiXSwiYWxsb3ciOltdfSx7ImlkIjoidHdpdHRlci1iZWFyZXItdG9rZW4iLCJzb3VyY2UiOiJbXFx3',
++	'Li1dezAsNTB9Pyg/OnR3aXR0ZXIpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxc',
++	'fFxcfHw6fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KEF7MjJ9W2EtekEtWjAtOSVdezgwLDEwMH0pKD86W1xceDYw',
++	'J1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsidHdp',
++	'dHRlciJdLCJhbGxvdyI6W119LHsiaWQiOiJ0eXBlZm9ybS1hcGktdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9Pyg/',
++	'OnR5cGVmb3JtKSg/OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9Pnxc',
++	'XD89fCwpW1xceDYwJ1wiXFxzPV17MCw1fSh0ZnBfW2EtejAtOVxcLV9cXC49XXs1OX0pKD86W1xceDYwJ1wiXFxzO118XFxc',
++	'XFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsidGZwXyJdLCJhbGxvdyI6',
++	'W119LHsiaWQiOiJ2YXVsdC1iYXRjaC10b2tlbiIsInNvdXJjZSI6IlxcYihodmJcXC5bXFx3LV17MTM4LDMwMH0pKD86W1xc',
++	'eDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6IiIsImdyb3VwIjowLCJlbnRyb3B5Ijo0LCJrZXl3b3JkcyI6WyJo',
++	'dmIuIl0sImFsbG93IjpbXX0seyJpZCI6InZhdWx0LXNlcnZpY2UtdG9rZW4iLCJzb3VyY2UiOiJcXGIoKD86aHZzXFwuW1xc',
++	'dy1dezkwLDEyMH18c1xcLig/aTpbYS16MC05XXsyNH0pKSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdz',
++	'IjoiIiwiZ3JvdXAiOjAsImVudHJvcHkiOjMuNSwia2V5d29yZHMiOlsiaHZzLiIsInMuIl0sImFsbG93IjpbeyJ0YXJnZXQi',
++	'OiJzZWNyZXQiLCJhbmQiOmZhbHNlLCJyZWdleGVzIjpbeyJzb3VyY2UiOiJzXFwuW0EtWmEtel17MjR9IiwiZmxhZ3MiOiIi',
++	'fV0sInN0b3B3b3JkcyI6W119XX0seyJpZCI6InlhbmRleC1hY2Nlc3MtdG9rZW4iLCJzb3VyY2UiOiJbXFx3Li1dezAsNTB9',
++	'Pyg/OnlhbmRleCkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7MSwzfT18XFx8XFx8fDp8PT58',
++	'XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0odDFcXC5bQS1aMC05YS16Xy1dK1s9XXswLDJ9XFwuW0EtWjAtOWEtel8tXXs4',
++	'Nn1bPV17MCwyfSkoPzpbXFx4NjAnXCJcXHM7XXxcXFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5',
++	'IjowLCJrZXl3b3JkcyI6WyJ5YW5kZXgiXSwiYWxsb3ciOltdfSx7ImlkIjoieWFuZGV4LWFwaS1rZXkiLCJzb3VyY2UiOiJb',
++	'XFx3Li1dezAsNTB9Pyg/OnlhbmRleCkoPzpbIFxcdFxcdy4tXXswLDIwfSlbXFxzJ1wiXXswLDN9KD86PXw+fDp7MSwzfT18',
++	'XFx8XFx8fDp8PT58XFw/PXwsKVtcXHg2MCdcIlxccz1dezAsNX0oQVFWTltBLVphLXowLTlfXFwtXXszNSwzOH0pKD86W1xc',
++	'eDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJncm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsi',
++	'eWFuZGV4Il0sImFsbG93IjpbXX0seyJpZCI6InlhbmRleC1hd3MtYWNjZXNzLXRva2VuIiwic291cmNlIjoiW1xcdy4tXXsw',
++	'LDUwfT8oPzp5YW5kZXgpKD86WyBcXHRcXHcuLV17MCwyMH0pW1xccydcIl17MCwzfSg/Oj18Pnw6ezEsM309fFxcfFxcfHw6',
++	'fD0+fFxcPz18LClbXFx4NjAnXCJcXHM9XXswLDV9KFlDW2EtekEtWjAtOV9cXC1dezM4fSkoPzpbXFx4NjAnXCJcXHM7XXxc',
++	'XFxcW25yXXwkKSIsImZsYWdzIjoiaSIsImdyb3VwIjowLCJlbnRyb3B5IjowLCJrZXl3b3JkcyI6WyJ5YW5kZXgiXSwiYWxs',
++	'b3ciOltdfSx7ImlkIjoiemVuZGVzay1zZWNyZXQta2V5Iiwic291cmNlIjoiW1xcdy4tXXswLDUwfT8oPzp6ZW5kZXNrKSg/',
++	'OlsgXFx0XFx3Li1dezAsMjB9KVtcXHMnXCJdezAsM30oPzo9fD58OnsxLDN9PXxcXHxcXHx8Onw9PnxcXD89fCwpW1xceDYw',
++	'J1wiXFxzPV17MCw1fShbYS16MC05XXs0MH0pKD86W1xceDYwJ1wiXFxzO118XFxcXFtucl18JCkiLCJmbGFncyI6ImkiLCJn',
++	'cm91cCI6MCwiZW50cm9weSI6MCwia2V5d29yZHMiOlsiemVuZGVzayJdLCJhbGxvdyI6W119XSwiZ2xvYmFsIjp7InJlZ2V4',
++	'ZXMiOlt7InNvdXJjZSI6Il50cnVlfGZhbHNlfG51bGwkIiwiZmxhZ3MiOiJpIn0seyJzb3VyY2UiOiJeKD9pOmErfGIrfGMr',
++	'fGQrfGUrfGYrfGcrfGgrfGkrfGorfGsrfGwrfG0rfG4rfG8rfHArfHErfHIrfHMrfHQrfHUrfHYrfHcrfHgrfHkrfHorfFxc',
++	'Kit8XFwuKykkIiwiZmxhZ3MiOiIifSx7InNvdXJjZSI6Il5cXCQoPzpcXGQrfHtcXGQrfSkkIiwiZmxhZ3MiOiIifSx7InNv',
++	'dXJjZSI6Il5cXCQoPzpbQS1aX10rfFthLXpfXSspJCIsImZsYWdzIjoiIn0seyJzb3VyY2UiOiJeXFwkeyg/OltBLVpfXSt8',
++	'W2Etel9dKyl9JCIsImZsYWdzIjoiIn0seyJzb3VyY2UiOiJeXFx7XFx7WyBcXHRdKltcXHcgKCkufF0rWyBcXHRdKn19JCIs',
++	'ImZsYWdzIjoiIn0seyJzb3VyY2UiOiJeXFwkXFx7XFx7WyBcXHRdKig/Oig/OmVudnxnaXRodWJ8c2VjcmV0c3x2YXJzKSg/',
++	'OlxcLltBLVphLXpdXFx3KykrW1xcdyBcIicmLi89fF0qKVsgXFx0XSp9fSQiLCJmbGFncyI6IiJ9LHsic291cmNlIjoiXiUo',
++	'PzpbQS1aX10rfFthLXpfXSspJSQiLCJmbGFncyI6IiJ9LHsic291cmNlIjoiXiVbK1xcLSMgMF0/W2JjZGVFZkZnR29PcHFz',
++	'dFRVdnhYXSQiLCJmbGFncyI6IiJ9LHsic291cmNlIjoiXlxce1xcZHswLDJ9fSQiLCJmbGFncyI6IiJ9LHsic291cmNlIjoi',
++	'XkAoPzpbQS1aX10rfFthLXpfXSspQCQiLCJmbGFncyI6IiJ9LHsic291cmNlIjoiXi9Vc2Vycy9bYS16MC05XSsvW1xcdyAu',
++	'LS9dKyQiLCJmbGFncyI6ImkifSx7InNvdXJjZSI6Il4vKD86YmlufGV0Y3xob21lfG9wdHx0bXB8dXNyfHZhcikvW1xcdyAu',
++	'Ly1dKyQiLCJmbGFncyI6IiJ9XSwic3RvcHdvcmRzIjpbIjAxNGRmNTE3LTM5ZDEtNDQ1My1iN2IzLTk5MzBjNTYzNjI3YyIs',
++	'ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6Il19fQ==',
++].join('');
++
++const table: { rules: SeclabSecretRule[]; global: { regexes: { source: string; flags: string }[]; stopwords: string[] } } =
++	JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(DATA), c => c.charCodeAt(0))));
++
++export const SECLAB_SECRET_RULES: readonly SeclabSecretRule[] = table.rules;
++
++export const SECLAB_SECRET_GLOBAL_ALLOW: { readonly regexes: readonly { readonly source: string; readonly flags: string }[]; readonly stopwords: readonly string[] } = table.global;
+diff -ruN a/src/vs/workbench/api/browser/seclabSecretScan.ts b/src/vs/workbench/api/browser/seclabSecretScan.ts
+--- a/src/vs/workbench/api/browser/seclabSecretScan.ts	1970-01-01 00:00:00
++++ b/src/vs/workbench/api/browser/seclabSecretScan.ts	1970-01-01 00:00:00
+@@ -0,0 +1,93 @@
++/*---------------------------------------------------------------------------------------------
++ *  seclab: does a string hold a secret by gitleaks' default rules? (patch 0036, EDR
++ *  configuration-snapshot). A port of gitleaks' per-rule decision (detect/detect.go detectRule,
++ *  checkFindingAllowed; utils.go shannonEntropy) over the rule table generated from its pinned
++ *  config. Paths and commits don't exist here, so path allowlists never allow anything.
++ *  Shared, dependency-free code (source of truth build/secret-rules/src/, synced into the patch).
++ *--------------------------------------------------------------------------------------------*/
++
++import { SECLAB_SECRET_GLOBAL_ALLOW, SECLAB_SECRET_RULES } from './seclabSecretRules.js';
++import type { SeclabSecretRule } from './seclabSecretRules.js';
++
++interface Allow { readonly target: string; readonly and: boolean; readonly regexes: RegExp[]; readonly stopwords: readonly string[] }
++interface Compiled { readonly rule: SeclabSecretRule; readonly re: RegExp; readonly once: RegExp; readonly allow: Allow[] }
++
++let compiled: { rules: Compiled[]; global: Allow } | undefined;
++function compile(): { rules: Compiled[]; global: Allow } {
++	compiled ??= {
++		rules: SECLAB_SECRET_RULES.map(rule => ({
++			rule,
++			re: new RegExp(rule.source, rule.flags + 'g'),
++			once: new RegExp(rule.source, rule.flags),
++			allow: rule.allow.map(a => ({ target: a.target, and: a.and, stopwords: a.stopwords, regexes: a.regexes.map(r => new RegExp(r.source, r.flags)) })),
++		})),
++		global: { target: 'secret', and: false, stopwords: SECLAB_SECRET_GLOBAL_ALLOW.stopwords, regexes: SECLAB_SECRET_GLOBAL_ALLOW.regexes.map(r => new RegExp(r.source, r.flags)) },
++	};
++	return compiled;
++}
++
++const encoder = new TextEncoder();
++function entropy(s: string): number {
++	const bytes = encoder.encode(s).length;
++	if (!bytes) {
++		return 0;
++	}
++	const counts = new Map<string, number>();
++	for (const ch of s) {
++		counts.set(ch, (counts.get(ch) ?? 0) + 1);
++	}
++	let e = 0;
++	for (const n of counts.values()) {
++		const f = n / bytes;
++		e -= f * Math.log2(f);
++	}
++	return e;
++}
++
++function allowed(a: Allow, secret: string, match: string, line: string): boolean {
++	const target = a.target === 'match' ? match : a.target === 'line' ? line : secret;
++	const regex = a.regexes.some(r => r.test(target));
++	const lower = secret.toLowerCase();
++	const stop = a.stopwords.some(w => lower.includes(w));
++	if (a.and) {
++		const checks = [...(a.regexes.length ? [regex] : []), ...(a.stopwords.length ? [stop] : [])];
++		return checks.length > 0 && checks.every(Boolean);
++	}
++	return regex || stop;
++}
++
++/** The id of the first gitleaks default rule that finds a secret in `line`, or undefined. */
++export function seclabSecretRuleHit(line: string): string | undefined {
++	const { rules, global } = compile();
++	const lower = line.toLowerCase();
++	for (const c of rules) {
++		if (c.rule.keywords.length && !c.rule.keywords.some(k => lower.includes(k))) {
++			continue;
++		}
++		c.re.lastIndex = 0;
++		for (const m of line.matchAll(c.re)) {
++			const match = m[0].replace(/^\n+|\n+$/g, '');
++			let secret = match;
++			// gitleaks takes the groups from the pattern applied again to the trimmed match.
++			const groups = c.once.exec(match);
++			if (groups && groups.length >= 2) {
++				if (c.rule.group > 0) {
++					if (groups.length <= c.rule.group) {
++						continue;
++					}
++					secret = groups[c.rule.group] ?? '';
++				} else {
++					secret = groups.slice(1).find(g => !!g) ?? secret;
++				}
++			}
++			if (c.rule.entropy !== 0 && entropy(secret) <= c.rule.entropy) {
++				continue;
++			}
++			if (allowed(global, secret, match, line) || c.allow.some(a => allowed(a, secret, match, line))) {
++				continue;
++			}
++			return c.rule.id;
++		}
++	}
++	return undefined;
++}
+diff -ruN a/src/vs/workbench/api/browser/seclabWithhold.ts b/src/vs/workbench/api/browser/seclabWithhold.ts
+--- a/src/vs/workbench/api/browser/seclabWithhold.ts	1970-01-01 00:00:00
++++ b/src/vs/workbench/api/browser/seclabWithhold.ts	1970-01-01 00:00:00
+@@ -0,0 +1,60 @@
++/*---------------------------------------------------------------------------------------------
++ *  seclab: would a setting be withheld from a tab as a credential? (patch 0036, EDR
++ *  configuration-snapshot). Shared, dependency-free code: the workbench's tab configuration filter
++ *  and the Tab Manager (which checks a "setting withheld" notice before raising it) run this same
++ *  file. Source of truth: build/secret-rules/src/, synced into the patch by
++ *  build/secret-rules/sync-patch.ts.
++ *--------------------------------------------------------------------------------------------*/
++
++import { seclabSecretRuleHit } from './seclabSecretScan.js';
++
++/** In the workbench bundle wherever the filter installs; the Tab Manager requires it (obs v1). */
++export const SECLAB_SETTINGS_WITHHELD_MARKER = 'seclabSettingsWithheld:v1';
++
++/**
++ * Names that mean "credential" whatever the value looks like (scanners miss weak passwords), plus
++ * environment maps such as `terminal.integrated.env.*`.
++ */
++const CREDENTIAL_NAME = /token|passw|pwd|secret|auth|api[_-]?key|credential|private[_-]?key|(?:^|\.)env(?:\.|$)/i;
++
++export type SeclabWithholdReason = 'credential-name' | 'secret-value';
++
++function names(value: unknown, out: string[]): void {
++	if (value && typeof value === 'object') {
++		for (const [k, v] of Object.entries(value)) {
++			out.push(k);
++			names(v, out);
++		}
++	}
++}
++
++function leaves(value: unknown, path: string, out: Array<[string, string]>): void {
++	if (typeof value === 'string') {
++		out.push([path, value]);
++	} else if (value && typeof value === 'object') {
++		for (const [k, v] of Object.entries(value)) {
++			leaves(v, `${path}.${k}`, out);
++		}
++	}
++}
++
++/**
++ * Why `key` with `value` must not reach a tab, or undefined if nothing about it looks like a
++ * credential:
++ * - `credential-name`: the key, or any key name inside the value, names a credential;
++ * - `secret-value`: a string in the value is a secret by gitleaks' default rules, checked as the
++ *   line `"<key path>": "<string>"`.
++ */
++export function withholdReason(key: string, value: unknown): SeclabWithholdReason | undefined {
++	const all = [key];
++	names(value, all);
++	if (all.some(n => CREDENTIAL_NAME.test(n))) {
++		return 'credential-name';
++	}
++	const strings: Array<[string, string]> = [];
++	leaves(value, key, strings);
++	if (strings.some(([p, v]) => seclabSecretRuleHit(`${JSON.stringify(p)}: ${JSON.stringify(v)}`) !== undefined)) {
++		return 'secret-value';
++	}
++	return undefined;
++}

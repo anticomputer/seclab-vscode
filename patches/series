@@ -24,4 +24,5 @@
 # 0030-0034 are reserved for the RPC sessions.
 0035-seclab-document-sync-provenance.patch
 # Fork build: Restart Extension Host re-resolves a managed (seclab+) authority (EDR ext-host-restart-reresolve).
+0036-seclab-tab-configuration-snapshot.patch
 0040-reresolve-managed-authority-on-restart.patch

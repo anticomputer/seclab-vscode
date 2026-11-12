@@ -1,7 +1,20 @@
 {
-	"0012-background-windows-env.patch": ["desktop"],
-	"0013-no-local-agent-host.patch": ["desktop"],
-	"0015-seclab-ahp-gate.patch": ["desktop"],
-	"0035-seclab-document-sync-provenance.patch": ["desktop"],
-	"0040-reresolve-managed-authority-on-restart.patch": ["desktop"]
+	"0012-background-windows-env.patch": [
+		"desktop"
+	],
+	"0013-no-local-agent-host.patch": [
+		"desktop"
+	],
+	"0015-seclab-ahp-gate.patch": [
+		"desktop"
+	],
+	"0035-seclab-document-sync-provenance.patch": [
+		"desktop"
+	],
+	"0040-reresolve-managed-authority-on-restart.patch": [
+		"desktop"
+	],
+	"0036-seclab-tab-configuration-snapshot.patch": [
+		"desktop"
+	]
 }
