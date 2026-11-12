@@ -9,7 +9,7 @@
 # publish_gate IMAGE GATE_DIR DATA LIST SUMS -- SCANNER-ARGS...
 #   DATA is the git directory for git-push/git-tree, the allowlist file for text.
 #   Runs the scanner in IMAGE (by ID or pinned ref) with no network, a read-only root, no
-#   capabilities, as nobody, with GATE_DIR, DATA and the LIST file mounted read-only. If SUMS
+#   capabilities, as the invoking user, with GATE_DIR, DATA and the LIST file mounted read-only. If SUMS
 #   is set (sha256sum lines for GATE_DIR's files) the container checks them before running.
 #   Then every repository reference it lists is checked live with
 #   `gh api repos/<owner>/<name> --jq .visibility`: only `public` passes; private, internal, not
@@ -108,18 +108,23 @@ publish_gate() {
 	fi
 	rc=0
 	local attempt
+	# The scan runs as the invoking user, so the private list (mode 600, owned by that user) is
+	# readable through the bind mount on a Linux engine too; never widen the list instead. It
+	# still has no network, no capabilities, no new privileges and a read-only root.
+	local user
+	user="$(id -u):$(id -g)"
 	# A scan that could not run (exit 2) is retried: Docker Desktop's bind mounts can briefly miss
 	# a file git just replaced (HEAD after a checkout). Still blocked after three tries.
 	for attempt in 1 2 3; do
 		rc=0
 		if [[ "$mode" == text ]]; then
 			out="$(docker run --rm -i --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
-				--user 65534:65534 --pull never "${mounts[@]}" -e "SUMS=$sums" -w /gate "$image" \
+				--user "$user" --pull never "${mounts[@]}" -e "SUMS=$sums" -w /gate "$image" \
 				sh -c "$PUBLISH_GATE_ENTRY" sh "${args[@]}" --list /list)" || rc=$?
 			break # stdin is consumed; never replay it
 		fi
 		out="$(docker run --rm --network none --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
-			--user 65534:65534 --pull never "${mounts[@]}" -e "SUMS=$sums" -w /gate "$image" \
+			--user "$user" --pull never "${mounts[@]}" -e "SUMS=$sums" -w /gate "$image" \
 			sh -c "$PUBLISH_GATE_ENTRY" sh "${args[@]}" --list /list </dev/null)" || rc=$?
 		[[ "$rc" -eq 2 ]] || break
 		[[ "$attempt" -lt 3 ]] && { echo "publish-gate: the scan could not run; retrying" >&2; sleep "$attempt"; }

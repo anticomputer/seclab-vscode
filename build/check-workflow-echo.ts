@@ -7,7 +7,11 @@
 //       script, to a secret anywhere in .github/workflows), except `::add-mask::`
 //   E4  no host-data commands: whoami, hostname, uname -a, ifconfig, ip a/addr, docker info,
 //       cat /etc/{hosts,resolv.conf,passwd}
-// A line may carry `# lint-allow: echo <reason>`; the reason is required.
+//   S1  no branch-controlled code runs with a repository secret (review round 17, finding 1): a
+//       job that reads `secrets.*` must run only on a push to main (`if:` naming both), in the
+//       `denylist` environment, with no `ref:` override on its checkout; no workflow has a
+//       `pull_request_target` or `workflow_run` trigger; `secrets: inherit` is refused.
+// A line may carry `# lint-allow: echo <reason>`; the reason is required (E rules only).
 //   node build/check-workflow-echo.ts [--self-test]
 
 import * as fs from 'node:fs';
@@ -136,6 +140,53 @@ export function checkScript(file: string, text: string, secrets: Set<string>): F
 	return checkLines(file, text.split('\n'), () => true, secrets);
 }
 
+/**
+ * S1: no branch-controlled code runs with a repository secret. Jobs are the two-space keys under
+ * `jobs:`; a job that reads `secrets.*` must be gated to a push to main by its own `if:` (both
+ * conditions, no `||`), run in the `denylist` environment (whose deployment-branch rule admits
+ * main only), and check out the pushed ref (no `ref:` override). Triggers that run branch input
+ * with secrets, and `secrets: inherit`, are refused anywhere.
+ */
+export function checkSecretScope(file: string, text: string): Finding[] {
+	const out: Finding[] = [];
+	const lines = text.split('\n');
+	lines.forEach((l, i) => {
+		if (/^\s*(?:-\s*)?(?:pull_request_target|workflow_run)\s*:?\s*(?:#.*)?$/.test(l) || /^on:\s*\[?.*\b(?:pull_request_target|workflow_run)\b/.test(l)) {
+			out.push({ file, line: i + 1, rule: 'S1' });
+		}
+		if (/^\s*secrets:\s*inherit\b/.test(l)) {
+			out.push({ file, line: i + 1, rule: 'S1' });
+		}
+	});
+	const start = lines.findIndex(l => /^jobs:\s*$/.test(l));
+	if (start < 0) {
+		return out;
+	}
+	const heads: number[] = [];
+	for (let i = start + 1; i < lines.length && !/^\S/.test(lines[i]); i++) {
+		if (/^ {2}[A-Za-z0-9_-]+:\s*(?:#.*)?$/.test(lines[i])) {
+			heads.push(i);
+		}
+	}
+	heads.forEach((h, k) => {
+		const end = k + 1 < heads.length ? heads[k + 1] : lines.length;
+		const body = lines.slice(h + 1, end);
+		const uses = body.findIndex(l => !/^\s*#/.test(l) && /\$\{\{\s*secrets\./.test(l));
+		if (uses < 0) {
+			return;
+		}
+		const cond = body.find(l => /^ {4}if:/.test(l)) ?? '';
+		const pushMain = /github\.event_name\s*==\s*'push'/.test(cond) && /github\.ref\s*==\s*'refs\/heads\/main'/.test(cond) && !/\|\||!\s*\(/.test(cond);
+		const env = body.some((l, j) => /^ {4}environment:\s*denylist\s*(?:#.*)?$/.test(l)
+			|| (/^ {4}environment:\s*$/.test(l) && /^ {6}name:\s*denylist\s*(?:#.*)?$/.test(body[j + 1] ?? '')));
+		const ref = body.some(l => /^\s+ref:/.test(l));
+		if (!pushMain || !env || ref) {
+			out.push({ file, line: h + 2 + uses, rule: 'S1' });
+		}
+	});
+	return out;
+}
+
 function selfTest(): number {
 	const bad: string[] = [];
 	let cases = 0;
@@ -157,6 +208,21 @@ function selfTest(): number {
 	expect('outside run: blocks nothing is checked', checkWorkflow('w.yml', 'name: env\non:\n  push:\n').length === 0);
 	expect('a one-line run: is checked', rules('jobs:\n  j:\n    steps:\n      - run: printenv\n') === 'E2');
 	expect('scripts: a secret var echoed', checkScript('s.sh', 'echo "$DENYLIST"\n', new Set(['DENYLIST'])).length === 1);
+	// S1 (round 17, finding 1): the shape that holds, then each way branch code could reach a secret.
+	const job = (cond: string, env: string, extra = '') => `on:\n  push:\n  pull_request:\njobs:\n  lint:\n    runs-on: x\n    steps:\n      - run: ./seclab lint\n  denylist:\n${cond}${env}    runs-on: x\n    steps:\n      - uses: actions/checkout@abc\n        with:\n          persist-credentials: false\n${extra}      - env:\n          DENYLIST: \${{ secrets.SECLAB_DENYLIST }}\n        run: build/ci-denylist.sh\n`;
+	const okCond = "    if: github.event_name == 'push' && github.ref == 'refs/heads/main'\n";
+	const okEnv = '    environment: denylist\n';
+	const s1 = (t: string) => checkSecretScope('w.yml', t).length;
+	expect('S1: a main-only push job in the denylist environment passes', s1(job(okCond, okEnv)) === 0);
+	expect('S1: the environment as a name block passes', s1(job(okCond, '    environment:\n      name: denylist\n')) === 0);
+	expect('S1: a secret job with no if blocks', s1(job('', okEnv)) === 1);
+	expect('S1: a secret job gated to push only (any branch) blocks', s1(job("    if: github.event_name == 'push'\n", okEnv)) === 1);
+	expect('S1: an or-widened condition blocks', s1(job("    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'pull_request'\n", okEnv)) === 1);
+	expect('S1: a secret job outside the denylist environment blocks', s1(job(okCond, '')) === 1);
+	expect('S1: a checkout of another ref blocks', s1(job(okCond, okEnv, '          ref: ${{ github.head_ref }}\n')) === 1);
+	expect('S1: a workflow_run trigger blocks', s1(job(okCond, okEnv).replace('  pull_request:\n', '  workflow_run:\n')) === 1);
+	expect('S1: a pull_request_target trigger blocks', s1(job(okCond, okEnv).replace('  pull_request:\n', '  pull_request_target:\n')) === 1);
+	expect('S1: secrets: inherit blocks', s1(job(okCond, okEnv) + '  call:\n    uses: ./.github/workflows/x.yml\n    secrets: inherit\n') === 1);
 	// R19-7: taint follows assignments, here-string reads and the temp file the secret is written to.
 	const s = new Set(['DENYLIST']);
 	expect('taint: through an assignment', checkScript('s.sh', 'X="$DENYLIST"\necho "$X"\n', s).length === 1);
@@ -182,7 +248,7 @@ function main(): number {
 	for (const f of fs.readdirSync(wfDir).filter(f => /\.ya?ml$/.test(f)).sort()) {
 		const text = fs.readFileSync(path.join(wfDir, f), 'utf8');
 		secretVars(text).forEach(v => secrets.add(v));
-		findings.push(...checkWorkflow(`.github/workflows/${f}`, text));
+		findings.push(...checkWorkflow(`.github/workflows/${f}`, text), ...checkSecretScope(`.github/workflows/${f}`, text));
 	}
 	// CI scripts and the shell they source in a secret-bearing job (R19-7).
 	const scripts = [

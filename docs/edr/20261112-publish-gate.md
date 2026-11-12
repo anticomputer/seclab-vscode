@@ -62,7 +62,8 @@ the user with no group or other permission bits. Anything else fails closed. In 
 main's objects, never the working tree, so a branch checked out for testing can't become every
 worktree's gate; it notes any local difference. It bakes in their sha256 and the node image ID.
 The hook checks them, then runs the engine in that image with no network, a read-only root, no
-capabilities, as nobody, with the git directory and the list mounted read-only. It runs no code
+capabilities, as the invoking user (so the private list is readable on a Linux engine without
+widening it), with the git directory and the list mounted read-only. It runs no code
 from the pushing checkout. The install refuses until main carries the gate.
 
 **Actions logs.** `build/check-workflow-echo.ts`, run by `./seclab lint workflows`, over every
