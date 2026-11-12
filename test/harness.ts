@@ -192,6 +192,22 @@ export function editorLaunchArgv(userData: string, folderUri: string, env: Recor
 	return ['open', '-g', '-n', ...envArgs, '--stderr', editorStderrLog(userData), '-a', app, '--args', '--user-data-dir', userData, '--folder-uri', folderUri];
 }
 
+/** The local vsce image that packages test fixtures (build/vsce, EDR cfs-local-builds). */
+export const VSCE_IMAGE = 'seclab-vsce:3.9.2';
+
+/**
+ * Build the vsce image once, through GitHub CFS. The registry is a BuildKit secret read from the
+ * host-side CFS config, never the tree (EDR cfs-config-outside-repo); `gh cfs` supplies the token.
+ */
+export function ensureVsceImage(): void {
+	if (spawnSync('docker', ['image', 'inspect', VSCE_IMAGE], { stdio: 'ignore' }).status === 0) {
+		return;
+	}
+	const registry = execFileSync(process.execPath, [path.join(repoRoot, 'build', 'cfs-config.ts'), 'get', 'npmRegistry'], { encoding: 'utf8' }).trim();
+	execFileSync('gh', ['cfs', '--', 'docker', 'build', '-q', '--secret', 'id=cfs_npm_registry,env=SECLAB_CFS_NPM_REGISTRY', '-t', VSCE_IMAGE, path.join(repoRoot, 'build', 'vsce')],
+		{ stdio: 'inherit', env: { ...process.env, SECLAB_CFS_NPM_REGISTRY: registry } });
+}
+
 /** Where the editor's main-process stderr goes (inside the run's profile, removed at teardown). */
 export function editorStderrLog(userData: string): string {
 	return path.join(userData, 'editor-stderr.log');

@@ -22,7 +22,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../../tabd/src/client.ts';
-import { beaconPort, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, lockRun, repoRoot } from '../../harness.ts';
+import { beaconPort, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, ensureVsceImage, lockRun, repoRoot, VSCE_IMAGE } from '../../harness.ts';
 import { report, type Check } from '../../containment/assert.ts';
 import { beaconSpawn } from './marks.ts';
 import { readManifest, reapPreviousRun, teardownGate, writeManifest, writeSnapshot } from '../../containment/teardown.ts';
@@ -221,10 +221,7 @@ if (mode === 'prepare') {
 	// else in the run directory is simply not there as far as the REH is concerned.
 	const vsixDir = path.join(ws, '.seclab');
 	fs.mkdirSync(vsixDir, { recursive: true });
-	const VSCE_IMAGE = 'seclab-vsce:3.9.2';
-	if (spawnSync('docker', ['image', 'inspect', VSCE_IMAGE], { stdio: 'ignore' }).status !== 0) {
-		execFileSync('gh', ['cfs', '--', 'docker', 'build', '-q', '-t', VSCE_IMAGE, path.join(repoRoot, 'build', 'vsce')], { stdio: 'inherit' });
-	}
+	ensureVsceImage();
 	execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`,
 		'-v', `${extBuild}:/ext:ro`, '-v', `${vsixDir}:/out`, VSCE_IMAGE,
 		'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/takeover.vsix'], { stdio: 'inherit' });

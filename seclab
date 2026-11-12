@@ -621,12 +621,16 @@ build_linux() {
 	if [[ -z "${CI:-}" ]]; then
 		npm_fetch_cfs "$vol"
 		offline=1
+		# The offline install rewrites to the same CFS registry so npm's cache keys match; the
+		# value comes from the host-side config (EDR cfs-config-outside-repo), never the tree.
+		SECLAB_CFS_NPM_REGISTRY="$("${SECLAB_NODE:-node}" "$ROOT/build/cfs-config.ts" get npmRegistry)" || { echo "build: no CFS config: run ./seclab cfs config" >&2; exit 1; }
+		export SECLAB_CFS_NPM_REGISTRY
 	fi
 	docker run --rm \
 		-v "$ROOT:/repo:ro" \
 		-v "$vol:/work" \
 		-v "$out:/out" \
-		-e TARGETS="$targets" -e ARCH -e MAX_OLD_SPACE_SIZE -e GOGC -e SECLAB_NPM_OFFLINE="$offline" \
+		-e TARGETS="$targets" -e ARCH -e MAX_OLD_SPACE_SIZE -e GOGC -e SECLAB_NPM_OFFLINE="$offline" -e SECLAB_CFS_NPM_REGISTRY \
 		-e SECLAB_TEST_VARIANT="$variant" -e GITHUB_SHA -e GITHUB_RUN_ID \
 		seclab-builder:local bash /repo/build/linux/build.sh
 }
@@ -647,11 +651,15 @@ npm_fetch_cfs() {
 	img="seclab-npm-cache:$key"
 	if ! docker image inspect "$img" >/dev/null 2>&1; then
 		gh cfs doctor --auth >/dev/null 2>&1 || { echo "build: GitHub CFS authentication failed; run 'az login', then 'gh cfs doctor --auth'" >&2; exit 1; }
+		# The real registry comes from the host-side config, never the tree; a BuildKit secret, so
+		# it isn't in the image's history (EDR cfs-config-outside-repo).
+		SECLAB_CFS_NPM_REGISTRY="$("${SECLAB_NODE:-node}" "$ROOT/build/cfs-config.ts" get npmRegistry)" || { echo "build: no CFS config: run ./seclab cfs config" >&2; exit 1; }
+		export SECLAB_CFS_NPM_REGISTRY
 		echo "build: fetching npm packages through GitHub CFS ($img)" >&2
 		mkdir -p "$ROOT/.work/logs"
 		# Plain progress to a log (the RUN's own messages never print the token); on failure,
 		# show only the step's output lines.
-		if ! gh cfs -- docker build --progress plain -t "$img" -f "$ROOT/build/linux/Dockerfile.npm-fetch" "$locks" > "$ROOT/.work/logs/npm-fetch.log" 2>&1; then
+		if ! gh cfs -- docker build --progress plain --secret id=cfs_npm_registry,env=SECLAB_CFS_NPM_REGISTRY -t "$img" -f "$ROOT/build/linux/Dockerfile.npm-fetch" "$locks" > "$ROOT/.work/logs/npm-fetch.log" 2>&1; then
 			grep -E '^#[0-9]+ [0-9]+\.[0-9]+ ' "$ROOT/.work/logs/npm-fetch.log" | tail -15 >&2
 			echo "build: CFS fetch failed (full log: .work/logs/npm-fetch.log)" >&2
 			exit 1

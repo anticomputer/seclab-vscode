@@ -41,8 +41,12 @@ export npm_config_cache=/work/.npm-cache
 audit=(/repo/build/npm-audit-signatures.sh)
 stamp_kind=sig1
 if [[ "${SECLAB_NPM_OFFLINE:-}" == 1 ]]; then
+	case "${SECLAB_CFS_NPM_REGISTRY:-}" in
+		https://pkgs.dev.azure.com/*/_packaging/*/npm/registry/) ;;
+		*) echo "build: offline CFS install needs SECLAB_CFS_NPM_REGISTRY (./seclab cfs config)" >&2; exit 1 ;;
+	esac
 	export npm_config_offline=true npm_config_replace_registry_host=npmjs \
-		npm_config_registry=https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/
+		npm_config_registry="$SECLAB_CFS_NPM_REGISTRY"
 	# Registry-origin check only: signatures can't be audited through CFS (review YY-1).
 	audit=(/repo/build/npm-audit-signatures.sh --origin-only)
 	stamp_kind=cfs1

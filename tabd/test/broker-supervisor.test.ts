@@ -528,7 +528,7 @@ test('B4 CFS token: tenant checked, expiry required; feed line validated; the in
 	fs.writeFileSync('/run/seclab-broker/pip-index-url', 'https://cfs:x@evil.example/simple/\n');
 	assert.doesNotMatch(env(), /PIP_INDEX_URL|NPM_CONFIG_GLOBALCONFIG/, 'an unexpected index URL: no feeds');
 	run(`${feedInstallLine(s, FEEDS)}\n`);
-	fs.writeFileSync('/run/seclab-broker/npm-registry', 'https://registry.npmjs.org/\n');
+	fs.writeFileSync('/run/seclab-broker/npm-registry', 'https://registry.npmjs.org/\n'); // public-registry: a value the tab must refuse, never fetched
 	assert.doesNotMatch(env(), /PIP_INDEX_URL|NPM_CONFIG_GLOBALCONFIG/, 'an unexpected npm registry: no feeds');
 	assert.equal(run('feed -\n').status, 0);
 	assert.ok(!fs.existsSync('/run/seclab-broker/npmrc') && !fs.existsSync('/run/seclab-broker/pip-index-url') && !fs.existsSync('/run/seclab-broker/npm-registry'), 'disabled: config removed');

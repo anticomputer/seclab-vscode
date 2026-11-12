@@ -6,11 +6,13 @@
 # final image with no token and no network.
 FROM node:24.22.1-trixie@sha256:f1e034976f948cf212ef1f659c12e5dd58ac7eab947831813e81a62401ca38be AS fetch
 RUN --mount=type=secret,id=cfs_feed_token,required=true \
+    --mount=type=secret,id=cfs_npm_registry,required=true \
     --mount=type=tmpfs,target=/run/cfs-auth \
     set +x; set -eu; umask 077; \
     token="$(cat /run/secrets/cfs_feed_token)"; test -n "$token"; \
-    registry=https://pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-npm-feed/npm/registry/; \
-    auth_path=//pkgs.dev.azure.com/example-org/ExampleProject/_packaging/example-npm-feed/npm; \
+    registry="$(cat /run/secrets/cfs_npm_registry)"; \
+    case "$registry" in https://pkgs.dev.azure.com/*/_packaging/*/npm/registry/) ;; *) echo "bad CFS npm registry" >&2; exit 1 ;; esac; \
+    auth_path="${registry#https:}"; auth_path="${auth_path%registry/}"; auth_path="${auth_path%/}"; \
     printf 'registry=%s\nreplace-registry-host=npmjs\n%s/registry/:_authToken=%s\n%s/:_authToken=%s\n' "$registry" "$auth_path" "$token" "$auth_path" "$token" > /run/cfs-auth/npmrc; \
     : > /run/cfs-auth/global-npmrc; \
     export NPM_CONFIG_USERCONFIG=/run/cfs-auth/npmrc NPM_CONFIG_GLOBALCONFIG=/run/cfs-auth/global-npmrc \

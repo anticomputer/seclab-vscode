@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
-import { beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, lockRun } from '../harness.ts';
+import { beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, ensureVsceImage, lockRun, VSCE_IMAGE } from '../harness.ts';
 import { brokerProxy, checkEvidence, readEvidence, report, type Check } from './assert.ts';
 import { materialiseFixture, readManifest, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
@@ -120,10 +120,7 @@ if (mode === 'prepare') {
 	const vsixDir = path.join(ws, '.seclab');
 	// vsce comes from a local image whose npm fetch went through GitHub CFS (EDR cfs-local-builds);
 	// it packages with no token and no network.
-	const VSCE_IMAGE = 'seclab-vsce:3.9.2';
-	if (spawnSync('docker', ['image', 'inspect', VSCE_IMAGE], { stdio: 'ignore' }).status !== 0) {
-		execFileSync('gh', ['cfs', '--', 'docker', 'build', '-q', '-t', VSCE_IMAGE, path.join(repo, 'build', 'vsce')], { stdio: 'inherit' });
-	}
+	ensureVsceImage();
 	execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`, '-v', `${path.join(import.meta.dirname, 'rogue-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
 		VSCE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/rogue.vsix'], { stdio: 'inherit' });
 	const client = new TabdClient({
