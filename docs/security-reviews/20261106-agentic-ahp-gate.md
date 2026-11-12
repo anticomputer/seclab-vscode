@@ -538,3 +538,44 @@ known limit.
 
 No finding is a defect in patch 0017. The U and F first-phase results stand; the restore phase
 needs a re-run under the corrected harness.
+
+## Findings-baseline follow-up (2026-11-12): the live-only rules now have tests
+Three findings in the baseline were `fixed-untested` or `open` because the rule they describe
+was witnessed only by a live U/G or U/F run, which cannot run in CI. Nothing failed if the fix
+were reverted. Each now has a test that injects the defect the rule exists to catch.
+
+1. **The canary salt rule** (`the "unforgeable" evidence rule was forgeable`). The takeover's
+   config ships into the tab inside the vsix, so a plaintext canary there is something in-tab
+   code could echo back without the window ever having sent it, and the verdict could not tell
+   a replay from a real leak. `takeoverCanaryConfig` and `plaintextCanariesIn` are now in
+   `test/agentic/runner/verdict.ts`, which `runner.ts` calls, and `verdict.test.ts` fails if a
+   plaintext value is added anywhere in the payload, nested included. It also pins that a
+   canary *path* may ship, because the read probe asks the window to fetch a path, not a
+   secret.
+2. **The two silent-pass paths on the G side** (`fixed-untested`). The configuration mirror is
+   the vector that actually leaks on U and it is recorded as a `strip`, not a `deny`, so
+   counting only `:deny` left "contained" resting on absence. `proofChecks` now holds every
+   G-side rule and the tests inject each defect separately: the strip decision missing, the
+   canaries never recorded, a canary not armed where the window reads it, a gate that never
+   ran, an opened-but-unverified connection, a positive control that failed, and a quiet U
+   baseline. Fourteen tests, each asserting the matching check goes red.
+3. **The `dataStorage` half is never exercised** (`open`). This one cannot be closed by a
+   probe, because the agent tool supplies its own session scope and upstream returns a scoped
+   request verbatim, so that path never reads the setting at all. The source reading it rests
+   on is pinned instead, as two `__upstreamInvariants` rules checked over the patched tree by
+   `patch-build`: `getAgentBrowserViewCreationDefaults` supplying
+   `scope: BrowserViewStorageScope.Agent`, and `_resolveSessionRequest` returning early for a
+   scoped request while still reading `workbench.browser.dataStorage` by that exact id in the
+   other branch. Verified by injecting the upstream change and confirming the gate fails.
+
+**A fail-open found while doing it.** `soleConsumerProblems` returned "no problems" when it
+could not read its config, so a wrong path, a renamed file or a missing argument silently
+passed the whole invariant gate — and it did: the first attempt to prove the new invariants
+could fail reported success because the config argument was omitted. It now reports that as a
+problem. The one legitimate caller with no config is the synthetic tree in
+`patch-reach-imports.test.ts`, which supplies an explicit empty rule set.
+
+**Still open, by design:** the restore path remains proven at resolution and not at the
+network, and the `dataStorage` pin rests on the source reading above rather than on a tool
+probe. Both are recorded as open in the baseline; the deferred-restore hook is a follow-up on
+top of the headless driver.
