@@ -351,7 +351,7 @@ It now asserts the keys literally.
 No high or critical issue remains in 0017 as it now stands. The held-back key is a decision,
 not a defect.
 
-## Round 7 (2026-11-06): 0017's browser keys, after the user chose `true`
+## Round 7 (2026-11-06): 0017's browser keys, after the decision to force `true`
 Scope: the change that forces `workbench.browser.enableRemoteProxy` to `true` and
 `workbench.browser.dataStorage` to `ephemeral`. No prompt injection found.
 
