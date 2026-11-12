@@ -187,3 +187,16 @@ Reviews ask what code says. Nothing asked whether anything calls it.
 - The analysis is lexical. It can miss a use, which fails the gate and is safe, or, rarely,
   invent one through a same-named binding across an import edge. Upstream patch code is
   covered by the RPC session's half.
+
+## Addendum (2026-11-12): run evidence and `verify-runs`
+- **A run's `sha` is evidence, not a citation.** It is the head SHA GitHub recorded for that
+  run, and `verify-runs` compares it with the run itself. A history rewrite or SHA remap must
+  leave it alone (EDR [history-rewrite](20261112-history-rewrite.md) excludes the register).
+  To move evidence onto new commits, re-run the workflow and record the new run, with its own
+  head SHA and date.
+- **The offline check doesn't read runs.** `./seclab liveness check` only checks the shape of
+  run evidence. Only `verify-runs` reads the runs, and it refuses to start without
+  `GITHUB_REPOSITORY` and `GITHUB_TOKEN`, so it is easy to skip locally. Run it before claiming
+  evidence is valid:
+  `GITHUB_REPOSITORY=anticomputer/seclab-vscode GITHUB_TOKEN=$(gh auth token) ./seclab liveness verify-runs`.
+  CI runs it in `workflow-lint` and in `liveness-refresh`.
