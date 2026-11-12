@@ -71,7 +71,11 @@ export function editorEnv(opts: Pick<DriveOptions, 'env' | 'userData'>): NodeJS.
 			env[k] = process.env[k];
 		}
 	}
-	return { ...env, ...opts.env, SECLAB_BACKGROUND_WINDOWS: '1', VSCODE_PORTABLE: editorPortableDir(opts.userData) };
+	return { ...env, ...opts.env, SECLAB_BACKGROUND_WINDOWS: '1', VSCODE_PORTABLE: editorPortableDir(opts.userData),
+		// As the real `code` launcher sets it: every shell-environment resolution in the main
+		// process is skipped, including the pty service's, which ignores --force-disable-user-env
+		// (review RRR-1). No login shell runs, so none can inherit the CDP fds.
+		VSCODE_CLI: '1' };
 }
 
 export class DrivenEditor {
@@ -106,9 +110,8 @@ export class DrivenEditor {
 			'--user-data-dir', userData,
 			...(opts.folderUri ? ['--folder-uri', opts.folderUri] : ['--new-window']),
 			'--remote-debugging-pipe',
-			// The CDP fds are inheritable: any process the main process starts with child_process
-			// holds them. The one it always starts is the user's login shell, to resolve its
-			// environment; the driven editor has a clean one on purpose (review QQQ-1).
+			// The CDP fds are inheritable. Belt and braces with VSCODE_CLI=1 (editorEnv), which also
+			// covers the pty service's shell resolution that ignores this flag (RRR-1).
 			'--force-disable-user-env',
 			...(opts.smokeDriver ? ['--enable-smoke-test-driver'] : []),
 			...(opts.args ?? []),
@@ -217,6 +220,45 @@ export class DrivenEditor {
 		fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
 		fs.writeFileSync(out, png);
 		return png.length;
+	}
+
+	/**
+	 * Processes other than the editor's main process that hold its CDP fds (3 and 4). Must be
+	 * empty: a holder could read the driver's commands and forge answers (reviews QQQ-1, RRR-1).
+	 * Linux: /proc fd links; macOS: lsof device addresses of the editor's descendants.
+	 */
+	cdpFdHolders(): string[] {
+		const pid = this.child.pid!;
+		if (process.platform === 'linux') {
+			const link = (p: string, fd: number) => { try { return fs.readlinkSync(`/proc/${p}/fd/${fd}`); } catch { return ''; } };
+			const mine = new Set([link(String(pid), 3), link(String(pid), 4)].filter(Boolean));
+			const holders: string[] = [];
+			for (const p of fs.readdirSync('/proc').filter(d => /^\d+$/.test(d) && d !== String(pid))) {
+				let fds: string[] = [];
+				try { fds = fs.readdirSync(`/proc/${p}/fd`); } catch { continue; }
+				if (fds.some(fd => mine.has(link(p, Number(fd))))) {
+					holders.push(`${p}: ${fs.readFileSync(`/proc/${p}/cmdline`, 'utf8').replace(/\0/g, ' ').slice(0, 120)}`);
+				}
+			}
+			return holders;
+		}
+		const ps = spawnSync('ps', ['-axo', 'pid=,ppid='], { encoding: 'utf8' }).stdout.trim().split('\n').map(l => l.trim().split(/\s+/).map(Number));
+		const tree = new Set([pid]);
+		for (let grew = true; grew;) {
+			grew = false;
+			for (const [p, pp] of ps) {
+				if (!tree.has(p) && tree.has(pp)) { tree.add(p); grew = true; }
+			}
+		}
+		const out = spawnSync('lsof', ['-nP', '-a', '-p', [...tree].join(','), '-d', '3,4', '-F', 'pd'], { encoding: 'utf8' }).stdout;
+		const byPid = new Map<number, Set<string>>();
+		let cur = 0;
+		for (const l of out.split('\n')) {
+			if (l.startsWith('p')) { cur = Number(l.slice(1)); byPid.set(cur, new Set()); }
+			if (l.startsWith('d')) { byPid.get(cur)?.add(l.slice(1)); }
+		}
+		const mine = byPid.get(pid) ?? new Set<string>();
+		return [...byPid].filter(([p, d]) => p !== pid && [...d].some(x => mine.has(x))).map(([p]) => String(p));
 	}
 
 	/** Quit through CDP (Browser.close), then make sure the process tree is gone. */

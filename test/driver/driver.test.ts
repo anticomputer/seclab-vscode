@@ -84,6 +84,7 @@ test('the editor gets a clean environment, never the launcher\'s secrets', () =>
 	assert.equal(env.FOO, 'bar');
 	assert.equal(env.SECLAB_BACKGROUND_WINDOWS, '1');
 	assert.equal(env.VSCODE_PORTABLE, '/x/profile-portable');
+	assert.equal(env.VSCODE_CLI, '1', 'no shell-environment resolution, so no login shell (RRR-1)');
 });
 
 test('a build is exec-safe only if its bootstrap carries the policy mark; Linux reads the binary from product.json', () => {

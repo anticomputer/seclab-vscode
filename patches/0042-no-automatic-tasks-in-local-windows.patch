@@ -1,5 +1,5 @@
 diff --git a/src/vs/workbench/contrib/tasks/browser/runAutomaticTasks.ts b/src/vs/workbench/contrib/tasks/browser/runAutomaticTasks.ts
-index 19bcf87..2bd6894 100644
+index 19bcf87..a40e37b 100644
 --- a/src/vs/workbench/contrib/tasks/browser/runAutomaticTasks.ts
 +++ b/src/vs/workbench/contrib/tasks/browser/runAutomaticTasks.ts
 @@ -20,6 +20,7 @@ import { IOpenerService } from '../../../../platform/opener/common/opener.js';
@@ -27,7 +27,7 @@ index 19bcf87..2bd6894 100644
 +		// seclab (interim, until 0041 routes folder opens in main): a local folder window exists only
 +		// for the moment before the Tab Manager reopens it as a tab. Nothing runs or prompts there.
 +		if (!this._environmentService.remoteAuthority) {
-+			this._logService.info('RunAutomaticTasks: not in a local window (seclab)');
++			this._logService.info('RunAutomaticTasks: skipped in a local window (seclab)');
 +			return;
 +		}
  		if (!this._workspaceTrustManagementService.isWorkspaceTrusted()) {
