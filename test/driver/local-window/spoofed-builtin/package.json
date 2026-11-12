@@ -1,0 +1,11 @@
+{
+	"name": "simple-browser",
+	"publisher": "vscode",
+	"version": "99.0.0",
+	"isBuiltin": true,
+	"description": "Headless driver fixture (m0#4-1): a user-installed VSIX that claims to be the ui-allowlisted built-in vscode.simple-browser. Patches 0002/0004 keep it a workspace extension, so it must not activate in a local window.",
+	"engines": { "vscode": "^1.80.0" },
+	"main": "./extension.js",
+	"activationEvents": ["*"],
+	"extensionKind": ["ui"]
+}

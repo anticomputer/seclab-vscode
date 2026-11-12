@@ -736,6 +736,26 @@ case "${1:-help}" in
 					sh -c 'rm -rf /repo/.work/driver/editor /repo/.work/driver/profile* && mkdir -p /repo/.work/driver/editor && tar -C /repo/.work/driver/editor -xzf /editor.tgz \
 						&& xvfb-run -a -s "-screen 0 1440x900x24" node test/driver/selftest.ts --app "$(ls -d /repo/.work/driver/editor/VSCode-linux-*)" \
 							--profile /repo/.work/driver/profile --shot /repo/.work/driver/selftest.png -- --no-sandbox' ;;
+			# Local-window fixtures (findings m0#3-1, m0#4-1): packaged with the local vsce image
+			# (CFS), then run against an editor with the headless driver (macOS: directly,
+			# node test/driver/local-window.ts; Linux: test local-window, under Xvfb).
+			local-window-pack)
+				mkdir -p "$ROOT/.work/driver/vsix"
+				for x in ui-control workspace-ext spoofed-builtin; do
+					docker run --rm --network none -v "$ROOT/test/driver/local-window/$x:/ext:ro" -v "$ROOT/.work/driver/vsix:/out" seclab-vsce:3.9.2 \
+						sh -c "cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/$x.vsix" >/dev/null
+				done
+				ls "$ROOT/.work/driver/vsix" ;;
+			local-window) shift
+				tgz="${1:-$OUT/seclab-vscode-linux-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/').tar.gz}"
+				[[ -f "$tgz" ]] || { echo "no Linux editor build at $tgz (./seclab build linux editor)" >&2; exit 2; }
+				[[ -f "$ROOT/.work/driver/vsix/spoofed-builtin.vsix" ]] || { echo "no fixtures: ./seclab test local-window-pack" >&2; exit 2; }
+				docker build -q -t seclab-xvfb:local "$ROOT/test/driver/xvfb" >/dev/null
+				docker run --rm --network none -v "$ROOT:/repo:ro" -v "$ROOT/.work/driver:/repo/.work/driver" \
+					-v "$(cd "$(dirname "$tgz")" && pwd)/$(basename "$tgz"):/editor.tgz:ro" seclab-xvfb:local \
+					sh -c 'rm -rf /repo/.work/driver/editor /repo/.work/driver/lw* && mkdir -p /repo/.work/driver/editor && tar -C /repo/.work/driver/editor -xzf /editor.tgz \
+						&& xvfb-run -a -s "-screen 0 1440x900x24" node test/driver/local-window.ts --app "$(ls -d /repo/.work/driver/editor/VSCode-linux-*)" \
+							--profile /repo/.work/driver/lw --vsix-dir /repo/.work/driver/vsix' ;;
 			# RPC filter: generated UriComponents argument positions are constrained (pure; no network).
 			uri-constraint) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/uri-constraint.test.ts ;;
 			canary) shift; "${SECLAB_NODE:-node}" "$ROOT/test/canary/run.ts" "${1:-sbx}" ;;
