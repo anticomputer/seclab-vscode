@@ -2,7 +2,7 @@
 const vscode = require('vscode');
 exports.activate = context => {
 	const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
-	item.text = 'seclab-local-window: ui-control active';
+	item.text = 'seclab-local-window: third-party-ui active';
 	item.show();
 	context.subscriptions.push(item);
 };

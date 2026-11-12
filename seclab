@@ -761,7 +761,7 @@ case "${1:-help}" in
 				docker run --rm --network none -v "$ROOT:/repo:ro" -v "$ROOT/.work/driver:/repo/.work/driver" "${live[@]}" \
 					-v "$(cd "$(dirname "$tgz")" && pwd)/$(basename "$tgz"):/editor.tgz:ro" seclab-xvfb:local \
 					sh -c 'set -e; d=/repo/.work/driver; rm -rf "$d/editor" "$d"/lw* "$d/vsix" && mkdir -p "$d/editor" "$d/vsix" && tar -C "$d/editor" -xzf /editor.tgz
-						for x in ui-control workspace-ext spoofed-builtin; do
+						for x in workspace-ext third-party-ui spoofed-isbuiltin spoofed-builtin; do
 							python3 -c "import sys, zipfile, pathlib; src = pathlib.Path(sys.argv[1]); z = zipfile.ZipFile(sys.argv[2], \"w\"); [z.write(p, \"extension/\" + p.relative_to(src).as_posix()) for p in sorted(src.rglob(\"*\")) if p.is_file()]; z.close()" \
 								"test/driver/local-window/$x" "$d/vsix/$x.vsix"
 						done

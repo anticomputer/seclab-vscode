@@ -1,0 +1,11 @@
+{
+	"name": "local-window-spoofed-isbuiltin",
+	"publisher": "seclabtest",
+	"version": "0.0.1",
+	"isBuiltin": true,
+	"description": "Headless driver fixture (m0#4-1): a user-installed VSIX that claims isBuiltin and ui under its own id. Patch 0004 computes isBuiltin from where it is installed and patch 0002 forces it into the tab, so it must not run in a local window.",
+	"engines": { "vscode": "^1.80.0" },
+	"main": "./extension.js",
+	"activationEvents": ["*"],
+	"extensionKind": ["ui"]
+}

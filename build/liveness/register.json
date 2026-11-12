@@ -23,9 +23,14 @@
 			]
 		},
 		{
-			"id": "fixture:test/driver/local-window/ui-control",
-			"runBy": "./seclab test local-window (test/driver/local-window.ts installs it in an empty local window and reads its status bar item over the CDP pipe)",
-			"evidence": [{ "ci": "headless-linux.yml#driver", "mark": "driver:local-window/ui-control", "runner": "test/driver/local-window.ts" }]
+			"id": "fixture:test/driver/local-window/third-party-ui",
+			"runBy": "./seclab test local-window (test/driver/local-window.ts installs it in an empty local window and reads the status bar over the CDP pipe; it must not run there)",
+			"evidence": [{ "ci": "headless-linux.yml#driver", "mark": "driver:local-window/third-party-ui", "runner": "test/driver/local-window.ts" }]
+		},
+		{
+			"id": "fixture:test/driver/local-window/spoofed-isbuiltin",
+			"runBy": "./seclab test local-window (claims isBuiltin and ui under its own id; must not run in a local window: finding m0#4-1)",
+			"evidence": [{ "ci": "headless-linux.yml#driver", "mark": "driver:local-window/spoofed-isbuiltin", "runner": "test/driver/local-window.ts" }]
 		},
 		{
 			"id": "fixture:test/driver/local-window/workspace-ext",
@@ -34,7 +39,7 @@
 		},
 		{
 			"id": "fixture:test/driver/local-window/spoofed-builtin",
-			"runBy": "./seclab test local-window (a VSIX claiming isBuiltin and a ui-allowlisted id must not activate: finding m0#4-1)",
+			"runBy": "./seclab test local-window (a VSIX claiming the ui-allowlisted built-in id vscode.simple-browser must be refused at install: finding m0#4-1)",
 			"evidence": [{ "ci": "headless-linux.yml#driver", "mark": "driver:local-window/spoofed-builtin", "runner": "test/driver/local-window.ts" }]
 		},
 		{
