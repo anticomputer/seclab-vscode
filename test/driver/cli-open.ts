@@ -91,20 +91,27 @@ const onPipe = async (cdp: DrivenEditor['cdp']) => {
 	await cdp.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true });
 };
 
-// Each case launches the editor with one local path on its command line, in a fresh profile.
+// Each case launches the editor with one local path on its command line, in a fresh profile. The
+// Tab Manager must log the request with these counts, and show what it does with it: for the
+// folder, its confirmation, or (where tabd can't start: the CI container has no container
+// runtime) its error naming the folder; never just any toast mentioning the path (VVV-7).
 const CASES = [
 	{
-		name: 'folder', arg: folder, profile,
-		// The confirmation itself (VVV-7): an error toast naming the folder isn't the Tab Manager asking.
-		received: `[...document.querySelectorAll('.monaco-dialog-box')].some(n => n.innerText.includes(${JSON.stringify(`Open "${folder}" in a sandboxed tab?`)}))`,
-		what: 'the Tab Manager received the open and asked about the folder',
+		name: 'folder', arg: folder, profile, request: 'open request: 1 folder(s), 0 unsupported',
+		received: `[...document.querySelectorAll('.monaco-dialog-box')].some(n => n.innerText.includes(${JSON.stringify(`Open "${folder}" in a sandboxed tab?`)}))
+			|| [...document.querySelectorAll('.notifications-toasts')].some(n => n.innerText.includes(${JSON.stringify(`Cannot open "${folder}" as a tab`)}))`,
+		what: 'the Tab Manager received the open: it asked about the folder, or said why it can\'t open it',
 	},
 	{
-		name: 'workspace file claiming a tab authority (VVV-1)', arg: workspaceFile, profile: `${profile}-ws`,
+		name: 'workspace file claiming a tab authority (VVV-1)', arg: workspaceFile, profile: `${profile}-ws`, request: 'open request: 0 folder(s), 1 unsupported',
 		received: `[...document.querySelectorAll('.notifications-toasts')].some(n => n.innerText.includes('cannot be opened as sandboxed tabs yet'))`,
 		what: 'the Tab Manager received the open and said the workspace is unsupported',
 	},
 ];
+// Text of every log file under `dir` whose path matches `re`.
+function logsUnder(dir: string, re: RegExp): string {
+	return fs.existsSync(dir) ? (fs.readdirSync(dir, { recursive: true }) as string[]).filter(f => re.test(f)).map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n') : '';
+}
 for (const c of CASES) {
 	console.log(`-- ${c.name}`);
 	prepareProfile(c.profile);
@@ -115,14 +122,16 @@ for (const c of CASES) {
 		ed = await DrivenEditor.launch({ app, userData: c.profile, args: [...extra, c.arg], onPipe });
 		await ed.waitFor(`document.querySelector('.monaco-workbench .part.statusbar')`, 60_000);
 		const received = await ed.waitFor(c.received, 60_000).then(() => true, () => false);
+		const onScreen = received ? '' : await ed.evaluate<string>(`[...document.querySelectorAll('.monaco-dialog-box, .notifications-toasts')].map(n => n.innerText).join(' | ')`).catch(() => '');
 		// A moment more: the open must not be followed by a local load.
 		await new Promise(r => setTimeout(r, 3_000));
 		const withWorkspace = reports.filter(r => r.workspace || r.unresolved);
 		check('every window document reported its configuration from its first script', reports.length > 0 && setupErrors.length === 0, `${reports.length} report(s); ${setupErrors.join('; ').slice(0, 200)}`);
 		check(`${c.name}: no window ever had a workspace, not even before a dialog (m0#2b-1, m0#3-2)`, withWorkspace.length === 0, JSON.stringify(withWorkspace).slice(0, 300));
-		check(c.what, received);
+		check(c.what, received, `on screen: ${onScreen.replace(/\s+/g, ' ').slice(0, 300)}`);
 		const logs = path.join(c.profile, 'logs');
-		const mainLog = fs.existsSync(logs) ? fs.readdirSync(logs).map(d => path.join(logs, d, 'main.log')).filter(f => fs.existsSync(f)).map(f => fs.readFileSync(f, 'utf8')).join('\n') : '';
+		check(`${c.name}: the Tab Manager logged the request (${c.request})`, logsUnder(logs, /seclab\.tab-manager.*\.log$/).includes(c.request));
+		const mainLog = logsUnder(logs, /(^|\/)main\.log$/);
 		check(`${c.name}: the main process routed it (patch 0041), not the Tab Manager's fallback`, /\[seclab\] routed 1 local folder\(s\) or workspace\(s\) to the Tab Manager/.test(mainLog));
 		// Decline: nothing is claimed, and nothing loads.
 		const before = reports.length;
