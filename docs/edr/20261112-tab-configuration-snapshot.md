@@ -90,5 +90,19 @@ credential names withheld whatever the value, `http.proxyAuthorization` by name 
 secret-shaped strings under neutral names, ordinary settings crossing, the marker, and the patch
 in sync with its source.
 
-**Runtime proof.** To be added: `test/configsync/probe.ts` on a main build and on this branch's
-build, at least 10 runs each.
+**Runtime proof** (2026-11-12; sbx tab; background launch through `test/window.ts`; attested
+builds: main `607873da`, run 43264609543, and this branch at `af36452`, run 43273392338).
+- **`fixture:test/configsync/probe-extension`:** `test/configsync/probe.ts`, 10 runs on each
+  build, first version of the harness (five canaries: undeclared, proxyAuth, password,
+  secretValue, changed).
+  - Main: 10 of 10 runs fail as designed. Four canaries reach the tab every run: undeclared,
+    `http.proxyAuthorization`, the low-entropy password and the secret-shaped value, in the
+    initial snapshot and again after the host change.
+  - Patched: 10 of 10 pass. No canary reaches the tab, and the controls hold: `editor.tabSize`, a
+    tab extension's own setting, and the change itself all arrive. No focus steal; the teardown
+    gate passed every run.
+
+Review round 1 then hardened the harness. It now activates on `*` and scans from the first
+moment, a canary in the tab's own workspace settings must be seen (proving detection works on the
+build under test), and canaries cover an env-style map and nested-form settings under a
+tab-declared key. Results for the hardened harness: to be added.

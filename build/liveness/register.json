@@ -234,6 +234,16 @@
 					"date": "2026-11-12"
 				}
 			]
+		},
+		{
+			"id": "fixture:test/configsync/probe-extension",
+			"runBy": "test/configsync/probe.ts prepare|seed|check, with the editor launched by test/window.ts (macOS, sbx, local only)",
+			"evidence": [
+				{
+					"record": "docs/edr/20261112-tab-configuration-snapshot.md",
+					"date": "2026-11-12"
+				}
+			]
 		}
 	]
 }

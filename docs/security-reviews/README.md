@@ -142,4 +142,5 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-12 | [main-process routing (patch 0041)](20261112-main-process-routing.md) | round VVV, by an Opus-class model: | see record |
 | 2026-11-12 | [canary clipboard, fact-only run records, no screen automation](20261112-probe-records-canary-clipboard.md) | see record | see record |
 | 2026-11-12 | [the publish gate (pre-push hook, CI and posted text)](20261112-publish-gate.md) | see record | see record |
+| 2026-11-12 | [patch 0036, the tab configuration snapshot](20261112-tab-configuration-snapshot.md) | origin/main..branch head: patch 0036, build/secret-rules and test/configsync. | see record |
 <!-- index:end -->

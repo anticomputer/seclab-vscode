@@ -1,0 +1,54 @@
+{
+	"name": "seclab-configsync-probe",
+	"displayName": "seclab configuration-snapshot probe (test only)",
+	"publisher": "seclab-test",
+	"version": "0.0.1",
+	"private": true,
+	"engines": {
+		"vscode": "^1.90.0"
+	},
+	"main": "./extension.js",
+	"activationEvents": [
+		"*"
+	],
+	"extensionKind": [
+		"workspace"
+	],
+	"contributes": {
+		"configuration": {
+			"title": "seclab configsync probe",
+			"properties": {
+				"seclabProbe.password": {
+					"type": "string",
+					"default": "",
+					"description": "Credential-named key declared by a tab extension (withheld by name)."
+				},
+				"seclabProbe.endpointValue": {
+					"type": "string",
+					"default": "",
+					"description": "Neutral name; its value is secret-shaped (withheld by the scanner)."
+				},
+				"seclabProbe.color": {
+					"type": "string",
+					"default": "",
+					"description": "Positive control: an ordinary setting of a tab extension."
+				},
+				"seclabProbe.detect": {
+					"type": "string",
+					"default": "",
+					"description": "Positive detection control: set in the tab's own workspace settings, must be seen."
+				},
+				"seclabProbe.toolsEnv": {
+					"type": "object",
+					"default": {},
+					"description": "Env-style map declared by a tab extension (review 0036 A1)."
+				},
+				"remote": {
+					"type": "object",
+					"default": {},
+					"description": "A prefix of core keys declared by a tab extension (review 0036 A3)."
+				}
+			}
+		}
+	}
+}
