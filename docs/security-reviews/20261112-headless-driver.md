@@ -57,3 +57,21 @@ One medium, completing QQQ-1. Confirmed:
 | RRR-2 | Low | 0042 log | The guard's log line read "not in a local window" when it fires in one. | Fixed | "skipped in a local window". |
 | — | Residual | task reconnection | `_reconnectTasks` reruns saved persistent tasks on a window reload, outside 0042's guard. It needs persistent tasks already saved for that local workspace, which 0042 now stops being started automatically. | Accepted until 0041 | 0041 removes local folder windows. |
 | — | Residual | mixed workspaces | The guard is per window: a tab window whose workspace also held a `file:` folder would run that folder's automatic tasks locally. The Tab Manager closes multi-root and workspace-file windows; noted for 0041's design. | Accepted | |
+
+## Round TTT (host CFS config, tabd and build side; driver focus emulation and default profile)
+No medium or higher findings. Confirmed:
+- a tab can't influence the feed paths, the tenant, the allow rules or the bindings: they come
+  only from the validated host config; `tab.packages.set` takes a boolean, and the sentinel is
+  host-minted and re-validated;
+- without a config, CFS is off everywhere, and a tab that had it on gets `feed -`, which removes
+  its npm and pip config;
+- the root install script refuses metacharacters, extra or missing fields, dot segments and
+  printf-format tricks, and the host stays fixed; the tab can't write `/run/seclab-broker`;
+- `seclab-tab-env` refuses a foreign host, a lookalike host, userinfo, a port and dot segments;
+- the registry is a BuildKit secret in both images, shape-checked, never echoed;
+- focus emulation is renderer-only, and the macOS background gate still runs after it.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| TTT-a | Low | local-window test | A fixture that could never activate (a missing or broken entry point) would pass. | Fixed | Each fixture's entry point must exist and parse before the run. |
+| TTT-b | Low | install script | The sentinel's charset allowed `/ = + ~`, wider than what tabd mints. | Fixed | The sentinel must have the `seclab_cfs_` prefix and `[A-Za-z0-9_-]` only; its base64 `[A-Za-z0-9+/=]`. |

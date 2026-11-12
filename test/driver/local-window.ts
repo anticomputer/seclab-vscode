@@ -52,6 +52,12 @@ fs.mkdirSync(profile, { recursive: true });
 preparePortable(path.resolve(profile)); // the CLI installs into the same portable dir the editor uses
 const installed = new Map<string, boolean>();
 for (const f of FIXTURES) {
+	// A fixture that could never activate would pass vacuously (review TTT-a): its entry point
+	// must exist and parse.
+	const dir = path.join(import.meta.dirname, 'local-window', f.name);
+	const main = path.join(dir, JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).main ?? '');
+	const syntax = spawnSync(process.execPath, ['--check', main], { encoding: 'utf8' });
+	check(`${f.name}'s entry point exists and parses`, fs.existsSync(main) && syntax.status === 0, syntax.stderr.slice(0, 200));
 	const r = spawnSync(executable(app), [path.join(resources, 'out', 'cli.js'), '--user-data-dir', profile, '--install-extension', path.resolve(vsixDir, `${f.name}.vsix`), '--force'], { env, encoding: 'utf8', timeout: 120_000 });
 	const out = `${r.stdout}${r.stderr}`;
 	installed.set(f.name, r.status === 0);
