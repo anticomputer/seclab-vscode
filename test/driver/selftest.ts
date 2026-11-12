@@ -49,6 +49,8 @@ try {
 	const inner = await ed.evaluate<{ w: number; h: number }>('({ w: innerWidth, h: innerHeight })');
 	check('screenshot from the renderer (PNG, window-sized)', isPng && bytes > 10_000 && Math.abs(w / (inner.w || 1) - Math.round(w / (inner.w || 1))) < 0.01 && h > 0,
 		`${bytes} bytes, ${w}x${h}, viewport ${inner.w}x${inner.h}`);
+	const holders = ed.cdpFdHolders();
+	check('no other process holds the CDP pipe (no login shell, no inheriting child)', holders.length === 0, holders.join(' | '));
 	const pid = ed.child.pid;
 	await ed.close();
 	check('quits through CDP (Browser.close)', ed.child.exitCode !== null || ed.child.signalCode !== null, `pid ${pid}`);

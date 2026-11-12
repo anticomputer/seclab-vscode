@@ -27,11 +27,16 @@ pipe closes
 CDP is read on fd 3 and written on fd 4, NUL-delimited. There is no port, so no other process,
 and no tab, can open a connection. The fds are inheritable socketpair ends, though: a process
 the editor's main process starts through `child_process` holds them and could read or forge
-frames (not drive the editor). The one it always starts is the user's login shell, to resolve
-its environment, so the driver passes `--force-disable-user-env` (the editor's environment is
-deliberately clean anyway). Electron's utility processes (extension host, pty host, shared
-process) go through Chromium's launcher, which closes descriptors it wasn't told to pass
-(review [QQQ-1](../security-reviews/20261112-headless-driver.md)). VS Code's own smoke
+frames (not drive the editor). On Linux, libuv's fork passes them to such a child; on macOS,
+Node's `posix_spawn` closes them (measured). The child the main process starts on its own is the
+user's login shell, to resolve its environment: once from the app with the parsed arguments,
+and once from the pty service with empty ones, which ignore `--force-disable-user-env`. So the
+driver sets `VSCODE_CLI=1`, as the real `code` launcher does, which skips every such
+resolution, and passes the flag as well. The self-test then checks that no other process holds
+the editor's fds 3 and 4 (`cdpFdHolders`: `/proc` on Linux, `lsof` on macOS). Electron's utility
+processes (extension host, pty host, shared process) go through Chromium's launcher, which
+closes descriptors it wasn't told to pass (reviews
+[QQQ-1 and RRR-1](../security-reviews/20261112-headless-driver.md)). VS Code's own smoke
 tests reach the same renderer through Playwright over a loopback debugging port; we keep their
 driver and drop the port.
 
