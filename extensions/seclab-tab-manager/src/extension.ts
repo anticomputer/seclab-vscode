@@ -91,9 +91,12 @@ export function activate(context: vscode.ExtensionContext): void {
 	});
 
 	// Route local folder windows into tabs (no core patch; see docs/edr/20261104-tab-manager-routing.md).
+	// With patch 0041 no local folder window loads; this stays as a fallback.
 	if (vscode.env.remoteName === undefined) {
 		void routeLocalWindow();
 	}
+	// Local folder and workspace opens the main process routes here (patch 0041).
+	context.subscriptions.push(vscode.window.registerUriHandler({ handleUri: uri => routeOpenRequest(uri) }));
 }
 
 export function deactivate(): void {
@@ -491,17 +494,16 @@ async function openFolderWithDialog(): Promise<void> {
 }
 
 /**
- * A local (unsandboxed) window was opened with a folder or workspace: CLI, recents,
- * File > Open, Finder, a link. Close it FIRST (before any dialog, so the local folder
- * window lives as briefly as possible), carrying the request to the now-empty window,
- * which then confirms, claims and re-opens it as a tab. With patch 0003 no workspace-kind
- * extension (built-in git included) runs in a local window at all; the residual is core
- * auto-tasks in a previously trusted folder during the moment before closeFolder.
- * The full fix is main-process routing (ADR 20261104-route-folder-opens-in-main, proposed).
+ * A local (unsandboxed) window was opened with a folder or workspace. With patch 0041 the main
+ * process never loads one (it routes the open to routeOpenRequest); this is the fallback for a
+ * build without it. Close it FIRST (before any dialog, so the local folder window lives as briefly
+ * as possible), carrying the request to the now-empty window, which then confirms, claims and
+ * re-opens it as a tab. With patch 0003 no workspace-kind extension runs in a local window.
  */
 const PENDING_KEY = 'seclab.pendingRoute';
 const PENDING_TTL_MS = 60_000;
 interface PendingRoute { readonly hostPath?: string; readonly unsupported?: boolean; readonly at: number }
+const UNSUPPORTED_WORKSPACE = 'Multi-root and non-file workspaces cannot be opened as sandboxed tabs yet, so it was not opened. Open each folder with "seclab: Open Folder in New Tab…".';
 
 async function routeLocalWindow(): Promise<void> {
 	const folders = vscode.workspace.workspaceFolders ?? [];
@@ -522,17 +524,50 @@ async function routeLocalWindow(): Promise<void> {
 		return;
 	}
 	if (pending.unsupported || !pending.hostPath) {
-		void vscode.window.showWarningMessage('Multi-root and non-file workspaces cannot be opened as sandboxed tabs yet, so it was closed. Open each folder with "seclab: Open Folder in New Tab…".');
+		void vscode.window.showWarningMessage(UNSUPPORTED_WORKSPACE);
 		return;
 	}
-	const hostPath = pending.hostPath;
+	await openAsTab(pending.hostPath, true);
+}
+
+/**
+ * `<urlProtocol>://seclab.tab-manager/open?path=P&…&unsupported=1&windowId=N`: local opens the main
+ * process routed here (patch 0041), or a link the user allowed. Every path is confirmed before it
+ * is claimed, as for any other open. Requests are handled one at a time; an empty local window
+ * with no editors is reused for the last folder, the others open in new windows.
+ */
+let routing: Promise<void> = Promise.resolve();
+function routeOpenRequest(uri: vscode.Uri): Promise<void> {
+	if (uri.path !== '/open') {
+		log.warn(`ignored a URI for an unknown action: ${safeText(uri.path, 40)}`);
+		return routing;
+	}
+	const query = new URLSearchParams(uri.query);
+	const paths = query.getAll('path').filter(p => path.isAbsolute(p));
+	const unsupported = query.getAll('unsupported').length + query.getAll('path').length - paths.length;
+	log.info(`open request: ${paths.length} folder(s), ${unsupported} unsupported`);
+	routing = routing.then(async () => {
+		if (unsupported) {
+			void vscode.window.showWarningMessage(UNSUPPORTED_WORKSPACE);
+		}
+		const reuse = vscode.env.remoteName === undefined && !vscode.workspace.workspaceFolders?.length && !vscode.workspace.workspaceFile
+			&& vscode.window.tabGroups.all.every(g => g.tabs.length === 0);
+		for (const [i, hostPath] of paths.entries()) {
+			await openAsTab(hostPath, reuse && i === paths.length - 1);
+		}
+	});
+	return routing;
+}
+
+/** Confirm (for a folder with no tab yet), claim and open `hostPath` as a tab. */
+async function openAsTab(hostPath: string, reuseWindow: boolean): Promise<void> {
 	try {
 		const c = await getClient();
 		const known = (await c.request<{ tabs: TabView[] }>('tab.list')).tabs
 			.some(t => t.spec.workspace.hostPath.normalize('NFC').toLowerCase() === hostPath.normalize('NFC').toLowerCase());
 		if (!known) {
 			const ok = await vscode.window.showWarningMessage(
-				`Open "${hostPath}" in a sandboxed tab?`,
+				`Open "${safeText(hostPath)}" in a sandboxed tab?`,
 				{ modal: true, detail: 'Extensions, terminals and tasks for this folder will run in an isolated sandbox with only this folder mounted.' },
 				'Open in Sandboxed Tab');
 			if (ok !== 'Open in Sandboxed Tab') {
@@ -540,9 +575,9 @@ async function routeLocalWindow(): Promise<void> {
 			}
 		}
 		const tab = await claim(hostPath);
-		await vscode.commands.executeCommand('vscode.openFolder', tabUri(tab.metadata.name, tab.spec.workspace.hostPath), { forceReuseWindow: true });
+		await vscode.commands.executeCommand('vscode.openFolder', tabUri(tab.metadata.name, tab.spec.workspace.hostPath), reuseWindow ? { forceReuseWindow: true } : { forceNewWindow: true });
 	} catch (e) {
-		void vscode.window.showErrorMessage(`Cannot open as a tab: ${(e as Error).message}`);
+		void vscode.window.showErrorMessage(`Cannot open "${safeText(hostPath)}" as a tab: ${safeText((e as Error).message)}`);
 	}
 }
 

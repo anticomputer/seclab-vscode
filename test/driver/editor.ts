@@ -30,6 +30,8 @@ export interface DriveOptions {
 	smokeDriver?: boolean;           // --enable-smoke-test-driver (window.driver); changes some behaviour
 	args?: string[];
 	timeoutMs?: number;
+	/** Called with the CDP pipe before any window exists, e.g. to subscribe to target events. */
+	onPipe?: (cdp: CdpPipe) => Promise<void>;
 }
 
 function appResources(app: string): string {
@@ -133,6 +135,7 @@ export class DrivenEditor {
 		fs.closeSync(stderr);
 		const cdp = new CdpPipe(child.stdio[3] as Writable, child.stdio[4] as Readable);
 		fs.writeFileSync(editorLaunchRecord(userData), JSON.stringify({ app, pid: child.pid, driven: true }));
+		await opts.onPipe?.(cdp);
 		const deadline = Date.now() + (opts.timeoutMs ?? 120_000);
 		let target: { targetId: string } | undefined;
 		while (!target && Date.now() < deadline) {
