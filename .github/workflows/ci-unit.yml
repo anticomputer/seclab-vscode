@@ -63,6 +63,8 @@ jobs:
         run: ./seclab cfs --self-test
       - name: Local CFS build path against a stub feed (pybuild wiring; pip-fetch with both secrets)
         run: broker/tests/cfs-path/run.sh
+      - name: Broker snapshot writer review probes (dash and bash --posix, GNU ln; findings 10b-1..3)
+        run: broker/tests/snapshot/run.sh
       # RPC capability filter (rpc-filter/AGENTS.md): policy drift, generated docs and
       # policy module in sync, probe payload lint, probe-safety guards.
       - name: RPC policy drift
