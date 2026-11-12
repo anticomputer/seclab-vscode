@@ -1,6 +1,6 @@
 # Headless editor driver: tests drive the editor from inside, never through the OS
 
-- **Status:** accepted (measurements marked *pending* run once CI is available)
+- **Status:** accepted
 - **Date:** 2026-11-12
 - **Deciders:** Coordinator (direction: drive the editor from inside, no TCP port, screenshots
   from the renderer, permission-free focus checks, OS-level paths on a hosted runner or a
@@ -49,10 +49,10 @@ driver and drop the port.
 - **Screenshots** are CDP `Page.captureScreenshot` on the workbench page: the renderer's own
   output, so no OS capture. `test/driver/shot.ts` replaces `window.ts shot`, which is removed
   along with `captureWindow`. `webContents.capturePage()` is the main-process equivalent; CDP
-  reaches the renderer without a main-process hook. *Pending:* whether a below-normal,
-  never-on-screen macOS window still produces frames (Chromium can stop rendering an occluded
-  window). If it doesn't, the fallback is a test-variant main-process hook calling
-  `capturePage({ stayHidden: true })`.
+  reaches the renderer without a main-process hook. Measured on macOS (see below): a
+  below-normal window that never comes on screen still renders, and the capture is the full,
+  window-sized workbench, so the fallback (a test-variant main-process hook calling
+  `capturePage({ stayHidden: true })`) isn't needed.
 - **No app-side hook, so no marker.** The driver uses only Chromium's switch and upstream's
   smoke driver, both present in every build; there is nothing test-only in the app for
   check-release to refuse or for a nonce to arm. The guarantee that matters is that no other
@@ -70,7 +70,10 @@ runs before AppKit finishes launching, and logs
 `[background windows] activation policy: prohibited (bootstrap)`. The driver refuses an app
 whose `out/mainImpl.js` lacks that string (minification keeps strings, not comments). It still
 starts the focus watcher and still requires `BackgroundOnly`, like a LaunchServices launch.
-*Pending:* a driven launch on a build with the bootstrap policy, with the watcher.
+Measured 2026-11-12 on the arm64 macOS build from run 43262494433 (bootstrap string present),
+with the watcher: driver self-test 8/8, including the renderer screenshot and no other holder
+of fds 3 and 4; local-window test 13/13. In both runs the watcher's record shows it started,
+watched the editor and stopped, with no focus taken.
 
 **Focus checks keep the watcher, which needs no permission.** It uses `lsappinfo front`,
 `lsappinfo info` and `find` (LaunchServices queries) and one `CGWindowListCopyWindowInfo` query
@@ -114,11 +117,11 @@ builds it, and keeps it for two days so a local Xvfb run can reuse it.
 
 | Probe | Before | After |
 |---|---|---|
-| `window.ts shot`, demo and `notify-e2e --shot` screenshots | `screencapture -l` (Screen Recording) | `test/driver/shot.ts` and the driven launch: renderer screenshot. Linux: run 43260178015. macOS: *pending* (needs a build with the bootstrap policy) |
+| `window.ts shot`, demo and `notify-e2e --shot` screenshots | `screencapture -l` (Screen Recording) | `test/driver/shot.ts` and the driven launch: renderer screenshot. Linux: run 43260178015. macOS: the build from run 43262494433, below-normal window captured |
 | Space-switch probe (`spaces.ts`) | System Events keystrokes (Accessibility) | skips with the reason; structural check in check-release (self-tested); the hosted runner can't show a Space switch (run 43251392437) |
 | Focus battery (`probe.ts`), Level B, containment editor runs | no permission needed (watcher verified above) | unchanged |
 | Clipboard canary | read and restored the host clipboard | removed from the harness; RPC core's in-memory clipboard |
-| Local windows: no workspace or third-party extension runs; spoofed built-ins (m0#3-1, m0#4-1) | never written (record only) | `test/driver/local-window.ts`, in `headless-linux` CI: run 43260178015, 9/9 |
+| Local windows: no workspace or third-party extension runs; spoofed built-ins (m0#3-1, m0#4-1) | never written (record only) | `test/driver/local-window.ts`, in `headless-linux` CI: run 43260178015, 9/9; macOS build from run 43262494433, 13/13 (with review TTT-1's entry-point checks) |
 
 ## Consequences
 
