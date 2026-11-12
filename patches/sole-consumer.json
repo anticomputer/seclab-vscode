@@ -30,6 +30,22 @@
 					"case BrowserViewStorageScope.Ephemeral:\n\t\t\treturn { scope, ...networkOption };"
 				],
 				"why": "patch 0017 pins workbench.browser.dataStorage to 'ephemeral' precisely because upstream drops the browser view's network for the global scope and keeps it for ephemeral. If either branch changes, the pinned value must be re-derived before it can still be trusted."
+			},
+			{
+				"file": "src/vs/platform/browserView/common/browserView.ts",
+				"mustContain": [
+					"export function getAgentBrowserViewCreationDefaults(sessionId: string, storageAffinity?: string, network?: IBrowserViewNetwork) {",
+					"session: { scope: BrowserViewStorageScope.Agent, affinity: storageAffinity, network } as const,"
+				],
+				"why": "the browser TOOL supplies its own session scope, so `workbench.browser.dataStorage` is never consulted on the agent-tool path at all: `_resolveSessionRequest` returns a request verbatim when it already carries a scope. The U-vs-F proof therefore measures that key on the non-agent create path (a restored editor, a user-opened view), and no claim about the browser tool may be drawn from it. Recorded because this is the whole reason the dataStorage half is pinned by source reading rather than by the tool probe (security review rounds 8 and 9, finding `the dataStorage half is never exercised`). If upstream stops supplying a scope here, the tool path starts reading the setting and the probe's scope becomes the stronger evidence -- a change we must notice."
+			},
+			{
+				"file": "src/vs/workbench/contrib/browserView/electron-browser/browserViewWorkbenchService.ts",
+				"mustContain": [
+					"if (request?.scope !== undefined) {\n\t\t\treturn request;\n\t\t}",
+					"const configured = this.configurationService.getValue<BrowserViewStorageScope | 'default'>('workbench.browser.dataStorage') ?? 'default';"
+				],
+				"why": "the early return is what makes the invariant above load-bearing: a session request that already carries a scope is returned verbatim, WITHOUT reading `workbench.browser.dataStorage`. Patch 0017 also relies on the configured-storage branch still existing and still reading that exact setting id, since the patch fixes the value the window reads there. If either half changes, the 0017 security argument and the increment 2 proof both need rereading."
 			}
 		]
 	}

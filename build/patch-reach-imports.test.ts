@@ -86,6 +86,11 @@ const runReach = (patch: string, reach?: object) => {
 	fs.mkdirSync(pdir, { recursive: true });
 	fs.writeFileSync(path.join(pdir, 'series'), '0001-x.patch\n');
 	fs.writeFileSync(path.join(pdir, '0001-x.patch'), patch);
+	// A real patch queue always carries this file, and the checker now refuses to report
+	// "no problems" for a config it could not read -- a missing path used to pass the whole
+	// invariant gate silently. This fixture is about patch reachability, so it supplies an
+	// explicit EMPTY rule set rather than leaving the checker with nothing to read.
+	fs.writeFileSync(path.join(pdir, 'sole-consumer.json'), '{}\n');
 	if (reach) {
 		fs.writeFileSync(path.join(pdir, 'reach.json'), JSON.stringify(reach));
 	}

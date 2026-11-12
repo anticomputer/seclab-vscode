@@ -27,8 +27,12 @@ interface UpstreamInvariants { why: string; rules: { file: string; mustContain: 
 
 /** Returns the problems found; empty means the invariants hold. */
 export function soleConsumerProblems(src: string, configFile: string): string[] {
-	if (!fs.existsSync(configFile)) {
-		return [];
+	// FAIL LOUD. Returning no problems for a config that is not there means a wrong path, a
+	// renamed file or a missing argument silently passes the whole gate, and every invariant
+	// below stops being checked without anything saying so. The caller's job is to point at
+	// a real file; if it cannot, that is the finding.
+	if (!configFile || !fs.existsSync(configFile)) {
+		return [`sole-consumer: no config at ${configFile || '(no path given)'}: refusing to report "no problems" for a check that did not run`];
 	}
 	const parsed = JSON.parse(fs.readFileSync(configFile, 'utf8')) as Record<string, Rule | UpstreamInvariants>;
 	const problems: string[] = [];
