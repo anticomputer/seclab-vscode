@@ -1,0 +1,10 @@
+{
+	"name": "local-window-workspace",
+	"publisher": "seclabtest",
+	"version": "0.0.1",
+	"description": "Headless driver fixture (m0#3-1): a workspace extension; patch 0003 keeps it from activating in a local window.",
+	"engines": { "vscode": "^1.80.0" },
+	"main": "./extension.js",
+	"activationEvents": ["*"],
+	"extensionKind": ["workspace"]
+}

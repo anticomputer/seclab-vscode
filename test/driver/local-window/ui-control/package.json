@@ -1,0 +1,10 @@
+{
+	"name": "local-window-ui-control",
+	"publisher": "seclabtest",
+	"version": "0.0.1",
+	"description": "Headless driver fixture (m0#3-1): a ui extension; it must activate in a local window, which proves the harness sees activation.",
+	"engines": { "vscode": "^1.80.0" },
+	"main": "./extension.js",
+	"activationEvents": ["*"],
+	"extensionKind": ["ui"]
+}
