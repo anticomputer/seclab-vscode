@@ -1,7 +1,8 @@
 // Chrome DevTools Protocol over Electron's --remote-debugging-pipe (EDR headless-driver).
-// The editor reads CDP on fd 3 and writes on fd 4, NUL-delimited JSON; only the process that
-// launched it holds those pipes, so no port exists for any other local process (or a tab) to
-// reach. Closing the pipe quits the editor (Electron's on_disconnect).
+// The editor reads CDP on fd 3 and writes on fd 4, NUL-delimited JSON. There is no port, so no
+// other process (or a tab) can open a connection. The fds are inheritable, though: a process the
+// editor's main process starts with child_process holds them, so the launcher passes
+// --force-disable-user-env (no login shell). Closing the pipe quits the editor.
 
 import type { Readable, Writable } from 'node:stream';
 

@@ -94,10 +94,12 @@ if [ "${1:-}" = "--self-test" ]; then
 	echo "var m=\"seclabRpcFilterEnforcing:$hab\";" > "$T/root/m.js"
 	# Background windows (patch 0012): the bootstrap policy, the guard's policy and the window
 	# level must all be in the desktop app; each missing one fails.
-	bgfix() { printf 'var g="[background windows] activation policy: prohibited";var w="is below normal windows";\n' > "$T/root/g.js"; printf 'var b="[background windows] activation policy: prohibited (bootstrap)";\n' > "$T/root/b.js"; }
+	bgfix() { printf 'var g="[background windows] activation policy: prohibited (guard)";var w="is below normal windows";\n' > "$T/root/g.js"; printf 'var b="[background windows] activation policy: prohibited (bootstrap)";\n' > "$T/root/b.js"; }
 	bgfix; rm "$T/root/b.js"
 	run "$T/with5" fail "desktop without the bootstrap background policy" desktop
-	bgfix; printf 'var g="[background windows] activation policy: prohibited";\n' > "$T/root/g.js"
+	bgfix; printf 'var w="is below normal windows";\n' > "$T/root/g.js"
+	run "$T/with5" fail "desktop with the bootstrap policy but not the guard's (review QQQ-2)" desktop
+	bgfix; printf 'var g="[background windows] activation policy: prohibited (guard)";\n' > "$T/root/g.js"
 	run "$T/with5" fail "desktop without the below-normal window level" desktop
 	bgfix
 	run "$T/with5" pass "desktop, 0005 listed, its enforcing marker" desktop
@@ -211,7 +213,7 @@ EOF
 			# the app background-only at bootstrap and in the guard, and puts every window below
 			# normal ones. These are what make the OS-level activation paths (click, window close,
 			# Space change) impossible, so a desktop app without any of them fails.
-			for m in '[background windows] activation policy: prohibited (bootstrap)' '[background windows] activation policy: prohibited' 'is below normal windows'; do
+			for m in '[background windows] activation policy: prohibited (bootstrap)' '[background windows] activation policy: prohibited (guard)' 'is below normal windows'; do
 				set +e
 				hit=$(find "$d" -type f \( -name "*.js" -o -name "*.mjs" \) -exec grep -lF -- "$m" {} + 2>/dev/null | head -1)
 				set -e
