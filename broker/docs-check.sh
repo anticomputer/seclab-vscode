@@ -22,6 +22,7 @@ dock() {
     seclab-broker-unit:docs /repo/broker/tools/docs.py "$@"
 }
 dock "$mode"
+dock commands --self-test
 # broker/build.sh refuses any tracked path git would quote (non-ASCII, control characters,
 # `"`, `\`); catch one here first. Only tracked paths matter: they are what it snapshots.
 quoted=$(git -C "$repo" -c core.quotePath=true ls-files -- broker | grep '^"' || true)
@@ -36,7 +37,9 @@ docker run --rm --network none -u "$(id -u):$(id -g)" -v "$repo:/repo:ro" \
   -e PYTHONDONTWRITEBYTECODE=1 --entrypoint sh \
   seclab-broker-unit:docs -c 'python /repo/broker/tools/pin_check.py --self-test && python /repo/broker/tools/pin_check.py'
 if [ "${1:-}" = "--run-commands" ]; then
+  # Fails (set -e) when docs.py finds a missing doc or no block: never a pass that ran nothing.
   script=$(dock commands)
+  [ -n "$script" ] || { echo "docs-check: no commands to run" >&2; exit 1; }
   cd "$repo"
   printf '%s\n' "$script" | bash
 fi
