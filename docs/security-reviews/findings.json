@@ -63,7 +63,6 @@
 		"20261104-rpc-lockdown-design.md#1",
 		"20261104-rpc-lockdown-design.md#2",
 		"20261104-rpc-lockdown-design.md#3",
-		"20261104-rpc-lockdown-design.md#4",
 		"20261104-rpc-probes-increment.md#1",
 		"20261104-rpc-probes-increment.md#2",
 		"20261104-rpc-probes-increment.md#3",
@@ -2800,13 +2799,8 @@
 			"component": "command verdicts / taint",
 			"owner": "rpc",
 			"status": "accepted-residual",
-			"acceptedBy": "agent",
-			"rationale": "Recorded as residual risk 1 in the design doc; the taint (patch 0007/0008, ADR 20261104-tab-command-taint) is the named mitigation, with two escapes still disclosed.",
-			"ref": {
-				"file": "docs/RPC-LOCKDOWN.md",
-				"quote": "**Verdict laundering through nested commands.** Addressed by the command taint"
-			},
-			"note": "The project owner accepted this on 2026-11-12 until the response-side control lands. Its row in owner-acceptances.md lands in the same push as this register; the closure (acceptedBy owner, out of the baseline) comes in a later change, once that row is on main."
+			"acceptedBy": "owner",
+			"rationale": "Accepted by the project owner until the response-side control lands: probes must show a trusted-side denial where an unpatched baseline succeeds."
 		},
 		{
 			"record": "20261104-rpc-lockdown-design.md",
