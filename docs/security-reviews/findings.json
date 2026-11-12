@@ -49,9 +49,7 @@
 	},
 	"baseline": [
 		"20261104-m0-tabd-code.md#2b-1",
-		"20261104-m0-tabd-code.md#3-1",
 		"20261104-m0-tabd-code.md#3-2",
-		"20261104-m0-tabd-code.md#4-1",
 		"20261104-probe-safety.md#3#2",
 		"20261104-probe-safety.md#4",
 		"20261104-probe-safety.md#5",
@@ -94,8 +92,6 @@
 		"20261106-agentic-ahp-gate.md#HIGH: the restore offsets were taken while the first window was still alive.",
 		"20261106-agentic-ahp-gate.md#HIGH: the restored-editor phase measured nothing.",
 		"20261106-rpc-core-landing-v2.md#1",
-		"20261112-gate-fail-open-audit.md#GATE-2",
-		"20261112-gate-fail-open-audit.md#GATE-3",
 		"20261112-internal-identifier-scan.md#1",
 		"register#DOCSYNC-R1",
 		"register#INC-3"
@@ -1884,8 +1880,7 @@
 			"component": "Tab Manager routing / core main process",
 			"owner": "fork-build",
 			"status": "open",
-			"gap": "Main-process routing is still only a proposed ADR (20261104-route-folder-opens-in-main, Status: proposed); no patch is in patches/series and the editor-level regression test the record asks for does not exist. Mitigations landed (multi-root/workspace-file/non-file windows closed; declined routing closes the folder; patch 0003 makes local windows inert), leaving core auto-tasks in the pre-close moment.",
-			"note": "ARCHITECTURE.md still lists it: \"Main-process routing is proposed ...; a high-severity residual remains.\""
+			"gap": "Main-process routing is accepted (ADR 20261104-route-folder-opens-in-main, coordinator's decision of 2026-11-12) as patch 0041, not yet written; its driven CLI-open test closes this finding and 3-2. Interim: patch 0042 stops automatic tasks and their prompt in local windows. Earlier mitigations: multi-root/workspace-file/non-file windows closed; declined routing closes the folder; patch 0003 makes local windows inert."
 		},
 		{
 			"record": "20261104-m0-tabd-code.md",
@@ -1938,9 +1933,13 @@
 			"summary": "In a window with no remote, upstream ran workspace-kind extensions locally, so an extension installed in an empty window ran on the host.",
 			"component": "patch 0003 (local windows run ui only)",
 			"owner": "fork-build",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "7207391",
-			"gap": "The record's Level B case (install an extension in an empty local window and assert it never activates) was never written; patch 0003 is covered only by the patch-build typecheck/reach gate and by tab-window evidence, not by an empty-window case."
+			"test": {
+				"file": "test/driver/local-window.ts",
+				"name": "a workspace extension does not run in a local window (m0#3-1, patch 0003)"
+			},
+			"note": "The driven local-window test (CI headless-linux, job driver) installs the fixture into the empty local window of the built editor and asserts it never activates, against the Tab Manager's own status item as the control."
 		},
 		{
 			"record": "20261104-m0-tabd-code.md",
@@ -1989,10 +1988,13 @@
 			"summary": "`isBuiltin` was attacker-controllable (manifest spread last), so a VSIX reusing a ui-allowlisted ID ran on the host.",
 			"component": "patches 0004 / 0002 v3",
 			"owner": "fork-build",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "5d04be4",
-			"gap": "The record's level B \"spoofed built-in VSIX\" case was never written; the rogue fixture declares extensionKind ui but never claims `isBuiltin` or a ui-allowlisted ID. Patch 0004's second site landed in d46f216.",
-			"note": "Only the patch-build typecheck/reach gate covers patch 0004 mechanically."
+			"test": {
+				"file": "test/driver/local-window.ts",
+				"name": "a VSIX claiming isBuiltin and ui under its own id does not run in a local window"
+			},
+			"note": "The same test also checks that a VSIX claiming a ui-allowlisted built-in id is refused at install. Patch 0004's second site landed in d46f216."
 		},
 		{
 			"record": "20261104-m0-tabd-code.md",
@@ -11536,8 +11538,13 @@
 			"summary": "A missing patches/unreachable.json reads as {}, so invariant I8 checks nothing and passes",
 			"component": "patch-build: check-patch-reach.ts",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "Fail when the file is missing; an empty rule set must be an explicit {} in the tree."
+			"status": "fixed",
+			"commit": "662f6d7",
+			"test": {
+				"file": "build/patch-reach-imports.test.ts",
+				"name": "['unreachable.json missing'"
+			},
+			"note": "The same test injects an unparseable and an empty unreachable.json, one without desktop, and one with an empty desktop deny; apply-patches still skips both policy files as non-patches, which is now safe."
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -11547,8 +11554,13 @@
 			"summary": "A missing patches/reach.json reads as {}, so per-patch target pinning silently stops",
 			"component": "patch-build: check-patch-reach.ts",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "Fail when the file is missing, as GATE-2."
+			"status": "fixed",
+			"commit": "662f6d7",
+			"test": {
+				"file": "build/patch-reach-imports.test.ts",
+				"name": "['reach.json missing'"
+			},
+			"note": "The same test injects an unparseable and an empty reach.json; review SSS-3 added the emptied-entry and unknown-target cases."
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -11558,8 +11570,12 @@
 			"summary": "Reports clean (0 files) on an empty or truncated file list",
 			"component": "lint pins: check-pins.ts",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "Fail on an empty list; cross-check that known pinned files were scanned."
+			"status": "fixed",
+			"commit": "89bd97e",
+			"test": {
+				"file": "test/safety/gate-inputs.test.ts",
+				"name": "check-pins: an empty, foreign, truncated or canary-only list fails"
+			}
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -11569,8 +11585,12 @@
 			"summary": "Reports clean (0 tracked files) on an empty list",
 			"component": "fixture lint --av",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "Fail on an empty list."
+			"status": "fixed",
+			"commit": "89bd97e",
+			"test": {
+				"file": "test/safety/gate-inputs.test.ts",
+				"name": "fixture-lint --av: an empty, truncated or canary-only list fails"
+			}
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -11580,8 +11600,12 @@
 			"summary": "With every default root absent it scans nothing and reports clean",
 			"component": "fixture lint roots",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "Fail when nothing was scanned."
+			"status": "fixed",
+			"commit": "89bd97e",
+			"test": {
+				"file": "test/safety/gate-inputs.test.ts",
+				"name": "fixture-lint: a missing root fails, and a root with nothing to scan fails"
+			}
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -11591,8 +11615,13 @@
 			"summary": "Tracked files that can't be read are skipped without a record",
 			"component": "check-pins, deps, fixture-lint",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "Report unreadable tracked files as problems."
+			"status": "fixed",
+			"commit": "89bd97e",
+			"test": {
+				"file": "test/safety/gate-inputs.test.ts",
+				"name": "check-pins: a listed file that can"
+			},
+			"note": "fixture-lint's unreadable-file case is in the --av test; build/deps.ts reports an unreadable listed file the same way, without an injected case."
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -11602,8 +11631,9 @@
 			"summary": "Locally, an existing .work/deps-verified marker skips cosign and attestation verification",
 			"component": "seclab verify_signed_image",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "Bind the marker to the verified result, or re-verify."
+			"status": "fixed-untested",
+			"commit": "89bd97e",
+			"gap": "The marker is gone: verify_signed_image verifies on every use, and review SSS-2 removed tool reuse by tag. No test drives the seclab shell function with a forged marker or tag."
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -11624,8 +11654,12 @@
 			"summary": "A missing focus-steal log reads as never took focus; nothing proves the watcher lived",
 			"component": "focus harness (teardown, window.ts)",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "Require a watcher heartbeat or start marker at teardown."
+			"status": "fixed",
+			"commit": "89bd97e",
+			"test": {
+				"file": "test/safety/gate-inputs.test.ts",
+				"name": "teardown: no steal log means clean only if the watcher watched the editor to the end"
+			}
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -12109,6 +12143,241 @@
 			"ref": {
 				"file": "docs/edr/20261112-history-rewrite.md",
 				"quote": "These are accepted residuals; there is no purge request"
+			}
+		},
+		{
+			"record": "20261112-gate-fail-open.md",
+			"anchor": "SSS-1",
+			"round": "Round SSS",
+			"severity": "medium",
+			"summary": "A file list naming only the gate's canary, or cut early in sort order, still reported clean.",
+			"component": "list-driven gates (check-pins, fixture-lint)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "a55fc62",
+			"test": {
+				"file": "test/safety/gate-inputs.test.ts",
+				"name": "canary-only list fails; an unreadable file is a finding"
+			},
+			"note": "check-pins' canary-only and truncated cases are in its own test in the same file."
+		},
+		{
+			"record": "20261112-gate-fail-open.md",
+			"anchor": "SSS-2",
+			"round": "Round SSS",
+			"severity": "medium",
+			"summary": "Tool images were reused by content tag, which any local process could point at another image, replacing the verifier.",
+			"component": "build/tools/tool.sh",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "a55fc62",
+			"gap": "The image is rebuilt from cache on every use; no test retags a tool image and checks it is rebuilt."
+		},
+		{
+			"record": "20261112-gate-fail-open.md",
+			"anchor": "SSS-3",
+			"round": "Round SSS",
+			"severity": "low",
+			"summary": "A reach.json entry emptied to [] or naming no known target dropped that patch's requirement.",
+			"component": "patch-build: check-patch-reach.ts",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "a55fc62",
+			"test": {
+				"file": "build/patch-reach-imports.test.ts",
+				"name": "reach.json with an emptied entry"
+			}
+		},
+		{
+			"record": "20261112-gate-fail-open.md",
+			"anchor": "SSS-4",
+			"round": "Round SSS",
+			"severity": "low",
+			"summary": "The focus watcher's record lived in the editor's own profile, which the editor writes.",
+			"component": "focus harness (watcher record)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "a55fc62",
+			"gap": "The record is now a sibling of the profile; no test asserts its location."
+		},
+		{
+			"record": "20261112-gate-fail-open.md",
+			"anchor": "SSS-5",
+			"round": "Round SSS",
+			"severity": "low",
+			"summary": "The launch record that turns the watcher check on is still in the profile.",
+			"component": "focus harness (launch record)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "Removing it needs host-side code; tab code can't reach the host profile.",
+			"ref": {
+				"file": "docs/security-reviews/20261112-gate-fail-open.md",
+				"quote": "The launch record that turns the watcher check on is still in the profile."
+			}
+		},
+		{
+			"record": "20261112-gate-fail-open.md",
+			"anchor": "SSS-6",
+			"round": "Round SSS",
+			"severity": "low",
+			"summary": "A process with Docker access controls the image store and build cache, outside these gates.",
+			"component": "local Docker store",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "That access is root on the Docker VM; no gate can defend against it.",
+			"ref": {
+				"file": "docs/security-reviews/20261112-gate-fail-open.md",
+				"quote": "A process with Docker access controls the image store and build cache."
+			}
+		},
+		{
+			"record": "20261112-headless-driver.md",
+			"anchor": "QQQ-1",
+			"round": "Round QQQ",
+			"severity": "medium",
+			"summary": "The CDP pipe's fds were inheritable, and the editor's login shell inherited them, so it could read or forge driver frames.",
+			"component": "headless driver (CDP pipe)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "e060e1a",
+			"test": {
+				"file": "test/driver/selftest.ts",
+				"name": "no other process holds the CDP pipe (no login shell, no inheriting child)"
+			},
+			"note": "Completed in RRR-1, whose commit this cites."
+		},
+		{
+			"record": "20261112-headless-driver.md",
+			"anchor": "QQQ-2",
+			"round": "Round QQQ",
+			"severity": "medium",
+			"summary": "The guard's marker was a prefix of the bootstrap's, so a build without the guard passed the structural check.",
+			"component": "check-release --desktop",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "9795020",
+			"test": {
+				"file": "build/check-release.sh",
+				"name": "desktop with the bootstrap policy but not the guard's (review QQQ-2)"
+			}
+		},
+		{
+			"record": "20261112-headless-driver.md",
+			"anchor": "QQQ-3",
+			"round": "Round QQQ",
+			"severity": "low",
+			"summary": "`local` outside a function aborted `./seclab test driver` under set -e.",
+			"component": "seclab test driver",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "9795020",
+			"gap": "Exercised by every CI run of the command, but no test targets the shell construct."
+		},
+		{
+			"record": "20261112-headless-driver.md",
+			"anchor": "QQQ-4",
+			"round": "Round QQQ",
+			"severity": "low",
+			"summary": "A process the editor's main process starts with child_process would still inherit the CDP fds.",
+			"component": "headless driver (CDP pipe)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "None does in a driven run once the login shell is off, and the self-test checks that no other process holds the fds.",
+			"ref": {
+				"file": "docs/security-reviews/20261112-headless-driver.md",
+				"quote": "None does in a driven run once the login shell is off"
+			}
+		},
+		{
+			"record": "20261112-headless-driver.md",
+			"anchor": "RRR-1",
+			"round": "Round RRR",
+			"severity": "medium",
+			"summary": "--force-disable-user-env doesn't reach the pty service's shell-environment resolution, so a login shell still started.",
+			"component": "headless driver (editor environment)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "e060e1a",
+			"test": {
+				"file": "test/driver/driver.test.ts",
+				"name": "no shell-environment resolution, so no login shell (RRR-1)"
+			}
+		},
+		{
+			"record": "20261112-headless-driver.md",
+			"anchor": "RRR-2",
+			"round": "Round RRR",
+			"severity": "low",
+			"summary": "Patch 0042's log line said the opposite of when it fires.",
+			"component": "patch 0042",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "e060e1a",
+			"gap": "Log wording only; nothing to test."
+		},
+		{
+			"record": "20261112-headless-driver.md",
+			"anchor": "RRR-3",
+			"round": "Round RRR",
+			"severity": "low",
+			"summary": "Saved persistent tasks are reconnected on a window reload, outside patch 0042's guard.",
+			"component": "patch 0042 (task reconnection)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "It needs persistent tasks already saved for that local workspace, which 0042 stops being started automatically; patch 0041 removes local folder windows.",
+			"ref": {
+				"file": "docs/security-reviews/20261112-headless-driver.md",
+				"quote": "reruns saved persistent tasks on a window reload"
+			}
+		},
+		{
+			"record": "20261112-headless-driver.md",
+			"anchor": "RRR-4",
+			"round": "Round RRR",
+			"severity": "low",
+			"summary": "Patch 0042's guard is per window, so a tab window whose workspace also held a file: folder would run that folder's automatic tasks locally.",
+			"component": "patch 0042 (mixed workspaces)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "The Tab Manager closes multi-root and workspace-file windows; noted for patch 0041's design.",
+			"ref": {
+				"file": "docs/security-reviews/20261112-headless-driver.md",
+				"quote": "The guard is per window"
+			}
+		},
+		{
+			"record": "20261112-headless-driver.md",
+			"anchor": "TTT-1",
+			"round": "Round TTT",
+			"severity": "low",
+			"summary": "A local-window fixture that could never activate would pass vacuously.",
+			"component": "local-window test",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "54a428e",
+			"test": {
+				"file": "test/driver/local-window.ts",
+				"name": "entry point exists and parses"
+			}
+		},
+		{
+			"record": "20261112-headless-driver.md",
+			"anchor": "TTT-2",
+			"round": "Round TTT",
+			"severity": "low",
+			"summary": "The feed install script accepted a sentinel charset wider than tabd mints.",
+			"component": "tab feed install script",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "54a428e",
+			"test": {
+				"file": "tabd/test/broker-supervisor.test.ts",
+				"name": "a sentinel outside the shape tabd mints is refused (TTT-2)"
 			}
 		}
 	]

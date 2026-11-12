@@ -39,7 +39,7 @@ and restored the host clipboard, is removed here.
 | QQQ-1 | Medium | CDP fds | fds 3/4 are inheritable socketpair ends, and the main process always spawns the user's login shell (to resolve its environment), which inherited them and could read or forge CDP frames. The code and EDR claimed only the launcher held them. | Fixed (completed in RRR-1) | The driver passes `--force-disable-user-env`; the claims now say what the pipe gives: no other process can open a connection. |
 | QQQ-2 | Medium | structural check | The guard's marker was a prefix of the bootstrap's, so a build with the bootstrap policy but without the guard's passed. | Fixed | The guard logs `… prohibited (guard)`; check-release requires it; a self-test case has the bootstrap and the window level but no guard, and fails. The focus probe accepts the guard line in either form. |
 | QQQ-3 | Low | `./seclab test driver` | `local` outside a function aborted the command under `set -e`. | Fixed | A plain variable. |
-| — | Residual | CDP frames | A process the editor's main process starts with `child_process` still inherits the fds. None does in a driven run once the login shell is off; utility processes don't inherit them. | Accepted | Recorded in the EDR. |
+| QQQ-4 | Low | CDP frames | A process the editor's main process starts with `child_process` still inherits the fds. None does in a driven run once the login shell is off; utility processes don't inherit them. | Accepted | Recorded in the EDR. |
 
 ## Round RRR (patch 0042 and the round QQQ fixes)
 One medium, completing QQQ-1. Confirmed:
@@ -55,8 +55,8 @@ One medium, completing QQQ-1. Confirmed:
 |---|---|---|---|---|---|
 | RRR-1 | Medium | CDP fds | `--force-disable-user-env` doesn't reach the pty service, which resolves the shell environment in the main process with empty arguments, so a login shell still started (and on Linux inherits fds 3/4). | Fixed | `VSCODE_CLI=1` in the editor's environment (as the real `code` launcher sets) skips every resolution; the self-test checks that no other process holds the editor's fds 3 and 4 (`/proc` on Linux, `lsof` on macOS). On macOS, Node's `posix_spawn` closes them anyway (measured). |
 | RRR-2 | Low | 0042 log | The guard's log line read "not in a local window" when it fires in one. | Fixed | "skipped in a local window". |
-| — | Residual | task reconnection | `_reconnectTasks` reruns saved persistent tasks on a window reload, outside 0042's guard. It needs persistent tasks already saved for that local workspace, which 0042 now stops being started automatically. | Accepted until 0041 | 0041 removes local folder windows. |
-| — | Residual | mixed workspaces | The guard is per window: a tab window whose workspace also held a `file:` folder would run that folder's automatic tasks locally. The Tab Manager closes multi-root and workspace-file windows; noted for 0041's design. | Accepted | |
+| RRR-3 | Low | task reconnection | `_reconnectTasks` reruns saved persistent tasks on a window reload, outside 0042's guard. It needs persistent tasks already saved for that local workspace, which 0042 now stops being started automatically. | Accepted until 0041 | 0041 removes local folder windows. |
+| RRR-4 | Low | mixed workspaces | The guard is per window: a tab window whose workspace also held a `file:` folder would run that folder's automatic tasks locally. The Tab Manager closes multi-root and workspace-file windows; noted for 0041's design. | Accepted | |
 
 ## Round TTT (host CFS config, tabd and build side; driver focus emulation and default profile)
 No medium or higher findings. Confirmed:
@@ -73,5 +73,5 @@ No medium or higher findings. Confirmed:
 
 | # | Sev | Area | Finding | Disposition | Fix |
 |---|---|---|---|---|---|
-| TTT-a | Low | local-window test | A fixture that could never activate (a missing or broken entry point) would pass. | Fixed | Each fixture's entry point must exist and parse before the run. |
-| TTT-b | Low | install script | The sentinel's charset allowed `/ = + ~`, wider than what tabd mints. | Fixed | The sentinel must have the `seclab_cfs_` prefix and `[A-Za-z0-9_-]` only; its base64 `[A-Za-z0-9+/=]`. |
+| TTT-1 | Low | local-window test | A fixture that could never activate (a missing or broken entry point) would pass. | Fixed | Each fixture's entry point must exist and parse before the run. |
+| TTT-2 | Low | install script | The sentinel's charset allowed `/ = + ~`, wider than what tabd mints. | Fixed | The sentinel must have the `seclab_cfs_` prefix and `[A-Za-z0-9_-]` only; its base64 `[A-Za-z0-9+/=]`. |

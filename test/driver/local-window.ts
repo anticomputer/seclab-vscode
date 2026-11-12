@@ -52,7 +52,7 @@ fs.mkdirSync(profile, { recursive: true });
 preparePortable(path.resolve(profile)); // the CLI installs into the same portable dir the editor uses
 const installed = new Map<string, boolean>();
 for (const f of FIXTURES) {
-	// A fixture that could never activate would pass vacuously (review TTT-a): its entry point
+	// A fixture that could never activate would pass vacuously (review TTT-1): its entry point
 	// must exist and parse.
 	const dir = path.join(import.meta.dirname, 'local-window', f.name);
 	const main = path.join(dir, JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).main ?? '');
