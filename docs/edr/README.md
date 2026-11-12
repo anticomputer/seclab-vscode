@@ -117,4 +117,5 @@ Same rules as ADRs:
 | 2026-11-12 | [Main-process routing: no window loads a local folder or workspace (patch 0041)](20261112-main-process-routing.md) | accepted |
 | 2026-11-12 | [Probe records hold facts, the clipboard is a canary, and nothing internal enters the repo](20261112-probe-records-canary-clipboard.md) | accepted |
 | 2026-11-12 | [Publish gate: only what can be shown to be public is published](20261112-publish-gate.md) | accepted |
+| 2026-11-12 | [A tab receives only its own settings: the configuration snapshot filter (patch 0036)](20261112-tab-configuration-snapshot.md) | proposed |
 <!-- index:end -->
