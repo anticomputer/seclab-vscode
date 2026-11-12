@@ -55,6 +55,25 @@ echo gitleaks only'
 # The gate's first installers wrote publish-gate.tmp before the hook.
 ( set +e; mkdir -p "$hookdir/publish-gate.tmp" ) 2>/dev/null
 [[ ! -e "$hookdir/publish-gate.tmp" ]] && ok 'an unlocking-unaware gate installer cannot write either' || bad 'publish-gate.tmp was written into the locked directory'
+# The installers before those (review VV) used install(1).
+( set +e; printf '#!/bin/sh\necho old\n' >"$work/old-hook"; install -m 0755 "$work/old-hook" "$hookdir/pre-push" ) 2>/dev/null
+[[ "$(sha256 <"$hookdir/pre-push")" == "$before" ]] && ok 'an install(1) installer cannot replace the locked hook' || bad 'install(1) replaced the locked hook'
+
+# The pointer (R23-1, R23-2): the real hooks_problems from seclab, run against this scratch repo.
+eval "$(sed -n -e '/^hooks_dir() /p' -e '/^sha256_of() /p' -e '/^hooks_problems() {/,/^}/p' "$ROOT/seclab")"
+hp() { ( ROOT="$work/repo"; hooks_problems ); }
+[[ -z "$(hp)" ]] && ok 'hooks check: the installed, locked gate hook is ok' || { bad 'hooks check rejected the installed hook'; hp; }
+git config core.hooksPath build/hooks # the oldest installer: a pointer into the worktree, no write
+[[ "$(hp)" == *'core.hooksPath here is not'* ]] && ok 'hooks check: an installer that only repoints core.hooksPath is caught' || bad 'a repointed core.hooksPath went unnoticed'
+git config core.hooksPath "$hookdir"
+git config extensions.worktreeConfig true
+git config --worktree core.hooksPath "$work/elsewhere"
+[[ "$(hp)" == *'core.hooksPath here is not'* ]] && ok 'hooks check: a per-worktree core.hooksPath override is caught' || bad 'a per-worktree override went unnoticed'
+git config --worktree --unset core.hooksPath
+git config --unset extensions.worktreeConfig
+publish_gate_unlock_hooks "$hookdir"
+[[ "$(hp)" == *'not locked read-only'* ]] && ok 'hooks check: an unlocked directory is caught' || bad 'an unlocked directory went unnoticed'
+publish_gate_lock_hooks "$hookdir"
 
 out="$(run_hook)"
 [[ "$out" == *'the publish gate is not installed next to the hook'* || "$out" == *'no docker'* ]] \

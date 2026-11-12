@@ -69,14 +69,24 @@ from the pushing checkout. The install refuses until main carries the gate.
 **Downgrade protection.** The hook is shared by every worktree of a clone, and an installer from a
 branch older than the gate copies its own gitleaks-only hook over it. That happened once, removing
 the gate for every session until it was noticed. A hook can't detect its own replacement, so:
-- `hooks install` leaves the hook directory read-only; every older installer writes a temp file
-  there first, so it fails and the gate hook survives. Only main's installer unlocks it.
+- `hooks install` leaves the hook directory read-only (re-locked however the install ends). Every
+  installer that writes there, whether `install(1)`, a temp file, or the gate's first `.tmp`
+  directory, fails, and the gate hook survives. That protects the file.
+- The pointer is checked where something runs. The oldest installer only repoints
+  `core.hooksPath` into the worktree, and a per-worktree config can shadow the shared one; then
+  the gate hook never runs. `hooks install` reads back the path git will use here and fails if it
+  isn't the gate; every `./seclab` command warns (outside CI) when pushes from the worktree aren't
+  gated; `./seclab hooks check` exits 1.
 - The hook checks on every run that its sha256 matches the installer's marker and that
   `core.hooksPath` still resolves to its own directory, and fails closed otherwise.
-- `./seclab hooks check` reports whether the active hook is the locked gate hook.
+
+This protects against accidents, not adversaries. The lock is a permission bit: root, or a root
+container with the clone mounted read-write, can unlock it, and anyone who can write the hook can
+write its marker. Removing a clone needs `chmod -R u+w .git/seclab-hooks` first.
 
 `test/hooks/hook-lock.test.sh` (lint job) replays the older installers' exact writes against the
-locked directory, and runs the real hook edited and with `core.hooksPath` moved or unset.
+locked directory, runs the pointer check on a repointed, shadowed and unlocked setup, and runs the
+real hook edited and with `core.hooksPath` moved or unset.
 
 **Actions logs.** `build/check-workflow-echo.ts`, run by `./seclab lint workflows`, over every
 workflow, the CI scripts and the shell they source: no `secrets.*` inside `run:`, no environment

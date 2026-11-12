@@ -478,6 +478,31 @@ node_image() {
 	echo "node:24.22.1-trixie@sha256:f1e034976f948cf212ef1f659c12e5dd58ac7eab947831813e81a62401ca38be"
 }
 
+# The shared pre-push hook (EDR publish-gate, downgrade protection).
+hooks_dir() { echo "$(cd "$(git -C "$ROOT" rev-parse --git-common-dir)" && pwd -P)/seclab-hooks"; }
+sha256_of() { (command -v sha256sum >/dev/null && sha256sum "$1" || shasum -a 256 "$1") 2>/dev/null | cut -d' ' -f1; }
+# One line per problem; empty when this worktree pushes through the locked gate hook. Checks the
+# pointer git will actually use here (path-typed, per-worktree config included), not just the file.
+hooks_problems() {
+	local dir active mode
+	dir="$(hooks_dir)"
+	active="$(git -C "$ROOT" config --type=path core.hooksPath 2>/dev/null || true)"
+	[[ "$active" != /* && -n "$active" ]] && active="$(git -C "$ROOT" rev-parse --show-toplevel)/$active"
+	[[ -n "$active" && "$(cd "$active" 2>/dev/null && pwd -P)" == "$dir" ]] || echo "core.hooksPath here is not $dir"
+	grep -q publish_gate "$dir/pre-push" 2>/dev/null || echo "the pre-push hook has no publish gate"
+	[[ -f "$dir/.installed" && "$(sed -n 1p "$dir/.installed")" =~ ^[0-9a-f]{64}$ && "$(sed -n 1p "$dir/.installed")" == "$(sha256_of "$dir/pre-push")" ]] \
+		|| echo "the pre-push hook is not the one the installer wrote"
+	mode="$(stat -c '%a' "$dir" 2>/dev/null || stat -f '%Lp' "$dir" 2>/dev/null)"
+	[[ "$mode" =~ ^[0-7]*[0-5][0-5][0-5]$ ]] || echo "the hook directory is not locked read-only"
+}
+# A loud warning, outside CI, when this worktree isn't pushing through the gate (R23-1).
+hooks_warn() {
+	[[ -n "${CI:-}" ]] && return 0
+	local p
+	p="$(hooks_problems 2>/dev/null)"
+	[[ -z "$p" ]] || printf 'WARNING: pushes from here are not gated: %s. Reinstall with main'"'"'s code (AGENTS.md).\n' "$(echo "$p" | paste -sd';' -)" >&2
+}
+
 fetch_macos() {
 	local run="${1:-}"
 	local dest="$ROOT/.work/app"
@@ -701,6 +726,8 @@ lint_pin_age() {
 		node build/pin-age.ts "$@" ${dates:+--npm-dates /npm-dates.json} -
 }
 
+# Every command but the hook's own warns when this worktree isn't pushing through the gate (R23-1).
+[[ "${1:-}" == hooks ]] || hooks_warn
 case "${1:-help}" in
 	build)
 		shift
@@ -857,19 +884,12 @@ case "${1:-help}" in
 	hooks) shift
 		if [[ "${1:-}" == check ]]; then
 			# Is the active hook the locked gate hook this clone's installer wrote? Exit 1 if not.
-			hookdir="$(cd "$(git -C "$ROOT" rev-parse --git-common-dir)" && pwd -P)/seclab-hooks"
-			active="$(git -C "$ROOT" config core.hooksPath 2>/dev/null || true)"
-			problems=()
-			[[ -n "$active" && "$(cd "$active" 2>/dev/null && pwd -P)" == "$hookdir" ]] || problems+=("core.hooksPath is not $hookdir")
-			grep -q publish_gate "$hookdir/pre-push" 2>/dev/null || problems+=("the pre-push hook has no publish gate")
-			[[ -f "$hookdir/.installed" && "$(sed -n 1p "$hookdir/.installed")" == "$(shasum -a 256 <"$hookdir/pre-push" 2>/dev/null | cut -d' ' -f1)" ]] \
-				|| problems+=("the pre-push hook is not the one the installer wrote")
-			[[ -d "$hookdir" && ! -w "$hookdir" ]] || problems+=("the hook directory is not locked read-only")
-			if [[ ${#problems[@]} -eq 0 ]]; then
-				echo "hooks: ok (gate hook from main $(sed -n 2p "$hookdir/.installed" | cut -c1-12), locked)"
+			problems="$(hooks_problems)"
+			if [[ -z "$problems" ]]; then
+				echo "hooks: ok (gate hook from main $(sed -n 2p "$(hooks_dir)/.installed" | cut -c1-12), locked)"
 				exit 0
 			fi
-			printf 'hooks: %s\n' "${problems[@]}" >&2
+			printf 'hooks: %s\n' "$problems" >&2
 			echo "hooks: reinstall with main's code (AGENTS.md)" >&2
 			exit 1
 		fi
@@ -903,12 +923,12 @@ case "${1:-help}" in
 		docker image inspect "$main_node" >/dev/null 2>&1 || docker pull -q "$main_node" >/dev/null
 		node_id="$(docker image inspect -f '{{.Id}}' "$main_node")"
 		[[ "$node_id" == sha256:* ]] || { echo "hooks: can't resolve the node image" >&2; exit 1; }
-		# The hook directory is kept read-only between installs, so an older installer (any branch
-		# before the gate, which writes pre-push.tmp there) fails instead of downgrading the
-		# shared hook for every worktree. Only this installer unlocks it.
-		# shellcheck source=build/hooks/publish-gate.sh
-		. "$ROOT/build/hooks/publish-gate.sh"
-		publish_gate_unlock_hooks "$hookdir"
+		# The hook directory is kept read-only between installs, so an installer that writes there
+		# (every one since the hook moved into the git dir) fails instead of downgrading the shared
+		# hook for every worktree. The chmods are inline, not sourced from this checkout (R23-4), and
+		# the directory is re-locked however the install ends (R23-3).
+		[[ ! -d "$hookdir" ]] || chmod -R u+w "$hookdir"
+		trap '[[ -d "$hookdir" ]] && chmod -R a-w "$hookdir"' EXIT INT TERM
 		mkdir -p "$hookdir/publish-gate.tmp"
 		# From main's objects, not the working tree (R19-5): a branch checked out for testing must
 		# not become every worktree's gate.
@@ -927,14 +947,19 @@ case "${1:-help}" in
 		mkdir -p "$hookdir"
 		printf '%s\n' "$hook" > "$hookdir/pre-push.tmp" && chmod 0755 "$hookdir/pre-push.tmp" && mv "$hookdir/pre-push.tmp" "$hookdir/pre-push"
 		# The marker the hook checks itself against on every run: its own sha256, then main's commit.
-		printf '%s\n%s\n' "$(shasum -a 256 <"$hookdir/pre-push" | cut -d' ' -f1)" "$(git -C "$ROOT" rev-parse origin/main)" >"$hookdir/.installed"
+		marker_sha="$(sha256_of "$hookdir/pre-push")"
+		[[ "$marker_sha" =~ ^[0-9a-f]{64}$ ]] || { echo "hooks: can't hash the hook (sha256sum or shasum needed)" >&2; exit 1; }
+		printf '%s\n%s\n' "$marker_sha" "$(git -C "$ROOT" rev-parse origin/main)" >"$hookdir/.installed"
 		git -C "$ROOT" config core.hooksPath "$hookdir"
-		publish_gate_lock_hooks "$hookdir"
+		chmod -R a-w "$hookdir"
 		# shellcheck source=build/hooks/publish-gate.sh
 		. "$ROOT/build/hooks/publish-gate.sh"
 		publish_gate_list_ok "$(publish_gate_list_path)" 2>/dev/null \
 			|| echo "hooks: WARNING: no private known-names list at $(publish_gate_list_path) yet; every push will be refused until it exists (chmod 600; AGENTS.md)" >&2
-		echo "hooks: core.hooksPath=$hookdir (self-contained pre-push: gitleaks ${gl_id:7:12}, publish gate on node ${node_id:7:12})" ;;
+		# Read back what git will use here: a per-worktree core.hooksPath shadows the shared one (R23-2).
+		problems="$(hooks_problems)"
+		[[ -z "$problems" ]] || { printf 'hooks: installed, but pushes from here are not gated: %s\n' "$problems" >&2; exit 1; }
+		echo "hooks: core.hooksPath=$hookdir (self-contained pre-push: gitleaks ${gl_id:7:12}, publish gate on node ${node_id:7:12}; locked)" ;;
 	# The publish gate by hand: the whole tree at HEAD, or text on stdin before it is posted to
 	# GitHub (AGENTS.md: run it on every PR/issue body, comment and release note first).
 	scan-text)

@@ -108,3 +108,26 @@ deployment-branch policy. **No high or critical.** All fixed, each with a self-t
 | R22-7 | info | Nothing pinned the driver's hardening flags. | The mount test asserts them and refuses a root user. |
 
 `build/check-workflow-echo.ts --self-test` 46 cases.
+
+## Round 23 (downgrade protection for the shared hook)
+After the gate landed, a session ran an older installer, which put a gitleaks-only hook over the
+shared gate hook for every worktree; it was reinstalled by hand. The change: the installer locks
+the hook directory read-only, the hook checks its own marker and `core.hooksPath` on every run,
+and `./seclab hooks check` reports the state.
+
+Reviewer: independent `security-review` agent (an Opus-class model), the injection warning in
+its prompt; none found. It replayed every historical installer against the locked directory.
+**No high or critical.** All fixed except where noted:
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| R23-1 | medium | The oldest installer only repoints `core.hooksPath` into the worktree, so the lock never sees it and the gate hook never runs; the EDR overstated the protection. | The pointer is checked where something runs: the install's read-back, a warning from every `./seclab` command outside CI, `hooks check`. EDR and AGENTS.md reworded. |
+| R23-2 | medium | Install reported success without reading back the path git uses; a per-worktree `core.hooksPath` shadowed it. | The install reads it back (path-typed, per-worktree included) and fails if pushes from here aren't gated. |
+| R23-3 | medium | An interrupted install left the directory unlocked. | A trap re-locks it however the install ends. |
+| R23-4 | low | The lock helpers came from the checkout's working tree. | The install's chmods are inline. |
+| R23-5 | low | "Only main's installer unlocks it" overstated a permission bit: root, or a root container with the clone mounted, can. | Stated as a limit in the EDR (accident protection, not adversary protection). |
+| R23-6 | low | The installer always used `shasum` while the hook preferred `sha256sum`; an empty hash could lock every push out. | One portable helper; the marker must be 64 hex. |
+| R23-7 | info | A `~` in `core.hooksPath` blocked every push. | Read path-typed. |
+| R23-8 | info | `hooks check` misreported as root; removing a clone fails on the locked directory. | The check reads the mode; AGENTS.md says to unlock before removing. |
+
+`test/hooks/hook-lock.test.sh` 11 cases.
