@@ -97,17 +97,28 @@ the 2026-11-09 run ([background windows](20261105-background-windows.md)). Two t
 launch, workbench restored, DOM and title read, a palette command toggling the status bar,
 screenshot, quit. `--no-sandbox` there because the container grants no user namespaces; the
 container is the boundary. CI: `headless-linux.yml` builds the editor and runs it. The local
-editor build doesn't fit 8 GB of Docker memory (esbuild is killed while bundling, twice), so the
-first run is CI's. *Pending:* that run.
+editor build doesn't fit 8 GB of Docker memory (esbuild is killed while bundling, twice), so CI
+builds it, and keeps it for two days so a local Xvfb run can reuse it.
+
+- Measured on the CI build: the page needs CDP focus emulation (`Emulation.setFocusEmulationEnabled`,
+  renderer only, as Playwright sets it) before key events reach the workbench, and a first-run
+  profile's onboarding modal holds focus. Driven profiles therefore start with onboarding and
+  the welcome page off, unless the run brings its own settings.
+- Run 43260178015: driver self-test 8/8 and the local-window test 9/9 (findings m0#3-1 and
+  m0#4-1). Those findings' cases: no workspace extension and no third-party extension (ui or
+  not) runs in a local window; a VSIX claiming `isBuiltin` and ui under its own id doesn't
+  either; a VSIX claiming the ui-allowlisted built-in id `vscode.simple-browser` is refused at
+  install. The control is the Tab Manager's own status item, a ui built-in.
 
 ## Probes, before and after
 
 | Probe | Before | After |
 |---|---|---|
-| `window.ts shot`, demo and `notify-e2e --shot` screenshots | `screencapture -l` (Screen Recording) | `test/driver/shot.ts` and the driven launch: renderer screenshot. *Pending:* first run |
+| `window.ts shot`, demo and `notify-e2e --shot` screenshots | `screencapture -l` (Screen Recording) | `test/driver/shot.ts` and the driven launch: renderer screenshot. Linux: run 43260178015. macOS: *pending* (needs a build with the bootstrap policy) |
 | Space-switch probe (`spaces.ts`) | System Events keystrokes (Accessibility) | skips with the reason; structural check in check-release (self-tested); the hosted runner can't show a Space switch (run 43251392437) |
 | Focus battery (`probe.ts`), Level B, containment editor runs | no permission needed (watcher verified above) | unchanged |
 | Clipboard canary | read and restored the host clipboard | removed from the harness; RPC core's in-memory clipboard |
+| Local windows: no workspace or third-party extension runs; spoofed built-ins (m0#3-1, m0#4-1) | never written (record only) | `test/driver/local-window.ts`, in `headless-linux` CI: run 43260178015, 9/9 |
 
 ## Consequences
 
