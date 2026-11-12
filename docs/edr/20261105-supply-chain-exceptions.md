@@ -27,7 +27,8 @@ broker EDR had recorded that replay risk as a test-only exception.
 
 ## Decision
 Both are recorded exceptions. Register entries covered: `host-sbx`, `host-docker-desktop`,
-`host-gh` (host prerequisites); `apt-builder`, `apt-tab`, `apt-broker-tests`, `apt-tools` (apt). In
+`host-gh` (host prerequisites); `apt-builder`, `apt-tab`, `apt-broker-tests`, `apt-tools`,
+`apt-xvfb` (apt; `apt-xvfb` added 2026-11-12, the headless editor runner, same terms). In
 `deps/registry.json` each carries `exception {record, approved, covers}`. `./seclab lint deps`
 requires the record to be an existing EDR that contains the recorded approval statement exactly and lists the
 entry's id, and requires the scope to be filled in. `docs/DEPENDENCIES.md` lists them under
