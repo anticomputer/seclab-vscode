@@ -732,7 +732,7 @@ case "${1:-help}" in
 			# pipe; no network, no host display. --no-sandbox: Chromium's sandbox needs user
 			# namespaces the container doesn't grant; the container is the boundary here.
 			driver) shift
-				local tgz="${1:-$OUT/seclab-vscode-linux-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/').tar.gz}"
+				tgz="${1:-$OUT/seclab-vscode-linux-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/').tar.gz}"
 				[[ -f "$tgz" ]] || { echo "no Linux editor build at $tgz (./seclab build linux editor)" >&2; exit 2; }
 				docker build -q -t seclab-xvfb:local "$ROOT/test/driver/xvfb" >/dev/null
 				mkdir -p "$ROOT/.work/driver"

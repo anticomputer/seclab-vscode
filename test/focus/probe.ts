@@ -175,7 +175,7 @@ if (mode === 'prepare') {
 	if (gate.filter(c => !/took focus/.test(c.name)).every(c => c.ok)) {
 		fs.renameSync(path.join(base, 'run.json'), path.join(base, `run-checked-${Date.now()}.json`));
 	}
-	process.exit(!steals && completed && clickThrough > 0 && clickThrough >= windowsNow && !raised.length && belowNormal >= clickThrough && /^\[background windows\] activation policy: prohibited$/m.test(guardLog) && typeNow === 'BackgroundOnly' && gate.every(c => c.ok) ? 0 : 1);
+	process.exit(!steals && completed && clickThrough > 0 && clickThrough >= windowsNow && !raised.length && belowNormal >= clickThrough && /^\[background windows\] activation policy: prohibited( \(guard\))?$/m.test(guardLog) && typeNow === 'BackgroundOnly' && gate.every(c => c.ok) ? 0 : 1);
 } else {
 	console.error('usage: probe.ts prepare [--app PATH] | check');
 	process.exit(2);

@@ -24,8 +24,14 @@ done from inside the editor.
 version upstream 1.145.0 pins, starts Chromium's pipe handler for that switch and quits when the
 pipe closes
 ([`electron_browser_main_parts.cc`](https://github.com/electron/electron/blob/1c0ee213f150fc4a0d06304dcedabd9b2e8ce0f7/shell/browser/electron_browser_main_parts.cc#L610-L621), tag v43.8.3).
-CDP is read on fd 3 and written on fd 4, NUL-delimited. Only the launching process holds those
-fds, so there is no port for another local process, or a tab, to reach. VS Code's own smoke
+CDP is read on fd 3 and written on fd 4, NUL-delimited. There is no port, so no other process,
+and no tab, can open a connection. The fds are inheritable socketpair ends, though: a process
+the editor's main process starts through `child_process` holds them and could read or forge
+frames (not drive the editor). The one it always starts is the user's login shell, to resolve
+its environment, so the driver passes `--force-disable-user-env` (the editor's environment is
+deliberately clean anyway). Electron's utility processes (extension host, pty host, shared
+process) go through Chromium's launcher, which closes descriptors it wasn't told to pass
+(review [QQQ-1](../security-reviews/20261112-headless-driver.md)). VS Code's own smoke
 tests reach the same renderer through Playwright over a loopback debugging port; we keep their
 driver and drop the port.
 
@@ -44,8 +50,8 @@ driver and drop the port.
   `capturePage({ stayHidden: true })`.
 - **No app-side hook, so no marker.** The driver uses only Chromium's switch and upstream's
   smoke driver, both present in every build; there is nothing test-only in the app for
-  check-release to refuse or for a nonce to arm. The guarantee that matters is that nothing but
-  the launcher can reach it, which the pipe gives. Launching the editor with a switch already
+  check-release to refuse or for a nonce to arm. The guarantee that matters is that no other
+  process can open a connection, which the pipe gives. Launching the editor with a switch already
   takes code execution as the user; a tab can't pass Chromium switches to the host editor.
 - **The editor gets a clean environment** (what LaunchServices would give it, plus the run's
   own variables), never the launcher's, which may hold tokens. Unit-tested.
@@ -73,8 +79,9 @@ the 2026-11-09 run ([background windows](20261105-background-windows.md)). Two t
 
 - A structural check: `check-release --desktop` fails a desktop app that lacks the bootstrap
   policy, the guard's policy or the below-normal window level, the three things that make the
-  click, window-close and Space-change activation paths impossible. Self-tested by removing
-  each.
+  click, window-close and Space-change activation paths impossible. Each has its own marker
+  (`… prohibited (bootstrap)`, `… prohibited (guard)`, `is below normal windows`); the first
+  two were a prefix of each other until review QQQ-2. Self-tested by removing each.
 - `macos-focus-paths.yml` measures whether a hosted macOS runner has more than one Space and
   delivers a System Events keystroke. *Pending:* its first run. If it can, the Space probe moves
   there against an empty local window; if not, the structural check and the recorded run stand.

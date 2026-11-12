@@ -302,7 +302,7 @@ index 0000000..02f6036
 +			replace(app.dock!, 'show', () => () => Promise.resolve());
 +			app.whenReady().then(() => {
 +				setPolicy('prohibited');
-+				console.error('[background windows] activation policy: prohibited');
++				console.error('[background windows] activation policy: prohibited (guard)');
 +			}, () => undefined);
 +		}
 +		// Every window (workbench and auxiliary) is click-through from creation, before it is

@@ -106,6 +106,10 @@ export class DrivenEditor {
 			'--user-data-dir', userData,
 			...(opts.folderUri ? ['--folder-uri', opts.folderUri] : ['--new-window']),
 			'--remote-debugging-pipe',
+			// The CDP fds are inheritable: any process the main process starts with child_process
+			// holds them. The one it always starts is the user's login shell, to resolve its
+			// environment; the driven editor has a clean one on purpose (review QQQ-1).
+			'--force-disable-user-env',
 			...(opts.smokeDriver ? ['--enable-smoke-test-driver'] : []),
 			...(opts.args ?? []),
 		];
