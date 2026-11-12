@@ -107,4 +107,5 @@ Same rules as ADRs:
 | 2026-11-12 | [CFS feed values live in host-side config, not the tree](20261112-cfs-config-outside-repo.md) | accepted |
 | 2026-11-12 | [History rewrite: internal identifiers removed from every branch](20261112-history-rewrite.md) | accepted |
 | 2026-11-12 | [Publish gate: only what can be shown to be public is published](20261112-publish-gate.md) | accepted |
+| 2026-11-12 | [A tab receives only its own settings: the configuration snapshot filter (patch 0036)](20261112-tab-configuration-snapshot.md) | proposed |
 <!-- index:end -->

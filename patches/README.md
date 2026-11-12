@@ -70,6 +70,19 @@ Current queue:
   saved and encoding events use the same filter
   ([EDR](../docs/edr/20261109-document-sync-provenance.md)). (0030-0034 are reserved for the RPC
   sessions.)
+- `0036-seclab-tab-configuration-snapshot.patch`: in a `seclab+` window, a non-local extension host
+  receives a cut-down configuration snapshot:
+  - host-wide `application` settings never cross;
+  - a key whose name, or any key name inside its value, names a credential, or whose strings
+    gitleaks' pinned default rules call a secret, is withheld whatever the registry says;
+  - of the rest, host user, policy, default and local-workspace settings cross only for keys
+    registered by core (not application, machine or `restricted`) or declared by an extension
+    installed in that tab.
+
+  Every change event is refiltered. Withheld user-settings keys are reported by name to the Tab
+  Manager over the window's local extension host. The shared classifier and rule table are edited
+  in `build/secret-rules/src` and synced with `node build/secret-rules/sync-patch.ts --write`
+  ([EDR](../docs/edr/20261112-tab-configuration-snapshot.md)).
 - `0040-reresolve-managed-authority-on-restart.patch`: after Restart Extension Host, a window
   whose authority resolved to a managed connection (`seclab+`) resolves it again through the
   new local extension host before the remote one connects. Without it, the remote host reuses
