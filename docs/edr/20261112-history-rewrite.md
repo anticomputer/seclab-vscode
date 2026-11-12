@@ -83,9 +83,10 @@ Rewrite all history, covering everything a full sweep found. It took two passes.
 - **Every rewritten commit has a new SHA.** Sessions hard-reset onto the rewritten branches; a
   branch that was never pushed is rebased using the commit maps. Commit signatures don't
   survive a rewrite, and attestations made over old SHAs don't carry over.
-- **Residuals.** Closed pull requests keep `refs/pull/*/head` refs to pre-rewrite commits, and
-  GitHub may serve cached views of old commits. A request for GitHub Support to purge them is
-  drafted for the project owner to send.
+- **Residuals.** Closed pull requests keep `refs/pull/*/head` refs to pre-rewrite commits, a
+  few orphaned commits are no longer on any ref, and GitHub may serve cached views of old
+  commits. These are accepted residuals; there is no purge request (project owner,
+  2026-11-12).
 - **Local CFS builds** now carry example feed values. Real feed URLs come from local
   configuration at run time; the egress and credential broker session owns that. CI uses the
   public registries and is unaffected.
