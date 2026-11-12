@@ -138,6 +138,9 @@ export class DrivenEditor {
 			throw new Error('no workbench window appeared');
 		}
 		const { sessionId } = await cdp.send<{ sessionId: string }>('Target.attachToTarget', { targetId: target.targetId, flatten: true });
+		// The page behaves as focused (as Playwright does), so key events reach the workbench.
+		// Renderer-only: the OS window is never focused or raised.
+		await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }, sessionId);
 		const ed = new DrivenEditor(child, cdp, sessionId, userData);
 		if (process.platform === 'darwin') {
 			await ed.checkBackground();
