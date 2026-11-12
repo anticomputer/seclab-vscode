@@ -93,7 +93,7 @@ Two patches, one concern each:
   - **Release check.** `check-release.sh --desktop` on the whole current main `.app` fails
     only on the runtime: `copilot-sdk-darwin-arm64/**`, `copilot-runtime`, `copilot-sdk` and
     `runtime.node`. Release mode on the same app is clean.
-  - **A27, static half, on the shipped app.** Main's macOS build (`7d1c94d`, run 42107504062):
+  - **A27, static half, on the shipped app.** Main's macOS build (`bb6d256`, run 42107504062):
     - `check-release --desktop` is clean over the whole `.app`;
     - `product.json` has no `agentSdks`;
     - `node_modules.asar.unpacked` has no `@github`;

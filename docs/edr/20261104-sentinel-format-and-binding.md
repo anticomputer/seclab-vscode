@@ -15,7 +15,7 @@ confuse the two), and must be detectable wherever the tab puts it.
 ## Decision
 - **Format.** Broker-minted sentinels are `SECLAB_SNTL_` followed by 43 base62
   characters from `secrets.choice`, which is about 256 bits
-  ([`new_sentinel`](https://github.com/anticomputer/seclab-vscode/blob/b34dfb907f2550e1eae792253a4086cf844b2bae/broker/seclab_broker/credentials.py#L29)).
+  ([`new_sentinel`](https://github.com/anticomputer/seclab-vscode/blob/b398fedca43f78e5152a26bec0b3d5e9de7a579f/broker/seclab_broker/credentials.py#L29)).
   - A policy may set a different prefix (`sentinelPrefix`, up to 16
     characters) for clients that check a format.
   - A host-supplied sentinel (`credential.import`) must be 32 to 256
@@ -34,7 +34,7 @@ confuse the two), and must be detectable wherever the tab puts it.
   for git is `Basic {base64:x-access-token:{value}}`.
 - **Detection.** We look for every sentinel in the raw bytes and in its
   base64 cores, at all three alignments and in both the standard and URL-safe
-  alphabets ([`b64_cores`](https://github.com/anticomputer/seclab-vscode/blob/b34dfb907f2550e1eae792253a4086cf844b2bae/broker/seclab_broker/credentials.py)).
+  alphabets ([`b64_cores`](https://github.com/anticomputer/seclab-vscode/blob/b398fedca43f78e5152a26bec0b3d5e9de7a579f/broker/seclab_broker/credentials.py)).
   We search headers, the URL, raw and decoded bodies, trailers and WebSocket
   frames. Any occurrence that is not a valid placement is *misplaced*.
 - **Inferring an inject spec for imported credentials.** On first use, the

@@ -21,7 +21,7 @@ with `proxyDNS=false` when the sandbox has no gateway
 - **Rely on the topology for name resolution.** The tab resolves nothing
   external; the broker resolves names itself.
 - **Make the behaviour a regression test** instead of trusting the advisory:
-  [`test_no_dns_exfiltration_via_embedded_resolver`](https://github.com/anticomputer/seclab-vscode/blob/b34dfb907f2550e1eae792253a4086cf844b2bae/broker/tests/integration/test_network.py).
+  [`test_no_dns_exfiltration_via_embedded_resolver`](https://github.com/anticomputer/seclab-vscode/blob/b398fedca43f78e5152a26bec0b3d5e9de7a579f/broker/tests/integration/test_network.py).
   It runs every time the suite runs.
 
 ## Test design
@@ -59,5 +59,5 @@ proxy policy` for `api.example.test` and `example.com`.
   covered by the sbx validation script.
 
 ## Evidence
-- `broker/test.sh` at `b34dfb9`: `test_no_dns_exfiltration_via_embedded_resolver
+- `broker/test.sh` at `b398fed`: `test_no_dns_exfiltration_via_embedded_resolver
   PASSED`, `test_proxy_unaware_clients_fail_closed PASSED`.

@@ -2,8 +2,8 @@
 
 - **Date:** 2026-11-05
 - **Scope:**
-  - Round XX (B1, OCI tabs get a real broker): `7d1c94d..325097f`, plus `32c3289` (the naming rule and the `clean-host` report).
-  - Round ZZ (B2, sbx tabs get a real broker): the B2 commit on `a139cdc`.
+  - Round XX (B1, OCI tabs get a real broker): `bb6d256..325097f`, plus `32c3289` (the naming rule and the `clean-host` report).
+  - Round ZZ (B2, sbx tabs get a real broker): the B2 commit on `a0bfa3d`.
   - Threat model: a rogue extension in full control of its tab, trying to reach the network
     other than through its broker, to tamper with what tabd installs into the tab, or to read
     the tab's proxy credential from the host. A compromised broker (it parses tab traffic)
@@ -31,7 +31,7 @@ Nothing medium or higher. The review answered six questions:
 | note | Info | tabd | The `ca.get` sha256 check is the broker vouching for itself. | Recorded | Described as a format check. The control is `PEM_RE` (exactly one certificate), written only to the tab's tmpfs. |
 | note | Info | clean-host | Register images include Docker Official images, so a user's own containers from them are reported as "possibly ours". | Accepted | Report only, as the coordinator specified. |
 
-## Round XX, part 2: the OCI broker becomes the default (`3b7a9db..40d6025`)
+## Round XX, part 2: the OCI broker becomes the default (`6ca82fb..ad6992c`)
 Nothing medium or higher, and nothing fails open: a missing image, a placeholder container
 left over from older tabs, or a wrong schema revision all refuse the start.
 

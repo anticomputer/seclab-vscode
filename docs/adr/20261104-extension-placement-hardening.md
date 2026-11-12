@@ -70,7 +70,7 @@ The decision is unchanged; this records a check of it against extension agents.
   - The `ui`-kind allowlist is first-party only: `seclab.tab-manager`,
     `vscode.github-authentication`, `vscode.microsoft-authentication`, `vscode.handlebars`,
     `vscode.simple-browser`. No Copilot Chat, agent or model provider is on it.
-- **By probe (Level B, 2026-11-05, macOS app from main `7d1c94d`, sbx).** The rogue extension
+- **By probe (Level B, 2026-11-05, macOS app from main `bb6d256`, sbx).** The rogue extension
   declares `extensionKind: ["ui"]`, contributes a chat participant, registers it with
   `vscode.chat.createChatParticipant`, and calls `vscode.lm.selectChatModels` and
   `vscode.lm.tools`. Its evidence shows that code ran in the tab: `ranIn: tab`,

@@ -4,7 +4,7 @@
 - **Scope:** round III:
   - `seclab-reh-start` liveness through `/proc` and `--check`; `Driver.rehAlive` (sbx, OCI);
     the `Supervisor.ensureRunning` fast path; tests;
-  - `1435784`: the e2e REH kill as the tab user, test only;
+  - `cf40cf9`: the e2e REH kill as the tab user, test only;
   - their fixes.
 - **Threat model:** the tab controls `/run/user/<uid>/seclab` (`reh.pid`, `token`, socket) and
   everything that runs as the tab user. The fast path must not skip a security step, run
@@ -21,7 +21,7 @@ One medium. Confirmed:
 - the token arrives on stdin and is already in the tab's own `$RUN/token`;
 - a reused process ID is handled by the command-line match;
 - an OCI user mismatch falls through to the full path;
-- the `1435784` e2e kill runs as the OCI tab user and must kill at least one process.
+- the `cf40cf9` e2e kill runs as the OCI tab user and must kill at least one process.
 
 | # | Sev | Area | Finding | Disposition | Fix |
 |---|---|---|---|---|---|

@@ -1,7 +1,7 @@
 # Security review: the liveness gate (round KKK)
 
 - **Date:** 2026-11-09
-- **Scope:** round KKK, `eab5cb8` (rebased as `991e818`) and its fixes:
+- **Scope:** round KKK, `eab5cb8` (rebased as `ea38de1`) and its fixes:
   - `build/liveness/liveness.ts`: lexer, import resolution, liveness propagation, entries,
     the in-tab program check, exemptions, discovery, workflow parsing, the evidence checks,
     `verify-runs`, `marks`, the self-test;

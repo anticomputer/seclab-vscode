@@ -55,54 +55,54 @@ File: `YYYYMMDD-short-slug.md`.
 | Date | Review | Scope | Open high/critical |
 |---|---|---|---|
 | 2026-11-04 | [broker dependency provenance gate](20261104-broker-dependency-provenance.md) | - Round 4: 6fa796a (the dependency register, tools/pin_check.py, | see record |
-| 2026-11-04 | [broker docs-drift tooling, protocol enforcement and fixture safety](20261104-broker-docs-drift-and-fixtures.md) | 1bcae4b..e6fdfe7, plus the follow-up in this commit. Areas given explicit attention: | see record |
+| 2026-11-04 | [broker docs-drift tooling, protocol enforcement and fixture safety](20261104-broker-docs-drift-and-fixtures.md) | d5acbce..e6fdfe7, plus the follow-up in this commit. Areas given explicit attention: | see record |
 | 2026-11-04 | [broker defences against folder-open loaders and beacons (tasks.json campaign)](20261104-broker-folder-open-loaders.md) | fd70ed5..564d2e6 plus the fixes in the following commit. This | see record |
-| 2026-11-04 | [broker M2 and M3 (egress and credential broker)](20261104-broker-m2-m3.md) | - Round 1: 296594c..1e9084c (all of broker/). | see record |
+| 2026-11-04 | [broker M2 and M3 (egress and credential broker)](20261104-broker-m2-m3.md) | - Round 1: f36f759..f6b3bea (all of broker/). | see record |
 | 2026-11-04 | [broker prompt-injection hardening](20261104-broker-prompt-injection.md) | - Round 5: 42327fb, prompt-injection hardening: | see record |
 | 2026-11-04 | [Contagious-Interview fixture and AV-signature lint](20261104-campaign-fixture.md) | - the inert campaign fixture (test/containment/fixtures/contagious-interview) and its harn | see record |
 | 2026-11-04 | [CI/CD hardening](20261104-ci-hardening.md) | - workflows build-macos, ci-linux, ci-unit, docs-check, workflow-lint, and dependabot.yml; | see record |
-| 2026-11-04 | [docs-check gate (CI workflow and checker)](20261104-docs-check.md) | a3d19d2..47d768d: .github/workflows/docs-check.yml, build/docs/docs-check.ts, ./seclab doc | none |
-| 2026-11-04 | [test fixtures are host-safe](20261104-fixture-safety.md) | - d02dec5..cf6738e; | see record |
+| 2026-11-04 | [docs-check gate (CI workflow and checker)](20261104-docs-check.md) | ef69476..0d30388: .github/workflows/docs-check.yml, build/docs/docs-check.ts, ./seclab doc | none |
+| 2026-11-04 | [test fixtures are host-safe](20261104-fixture-safety.md) | - f640a77..76c5e6c; | see record |
 | 2026-11-04 | [harness teardown, clean-host, tab GC/reset](20261104-harness-teardown.md) | - test/containment/teardown.ts (shared teardown, adopted from the RPC-lockdown | see record |
-| 2026-11-04 | [M0 pipeline, seclab-tabd implementation, Tab Manager, containment suite](20261104-m0-tabd-code.md) | 296594c..7d7a1cf (round 2a), then the fixes and new code 7d7a1cf..2c07708 (round 2b), with | see record |
-| 2026-11-04 | [patch queue and release guard](20261104-patch-guard.md) | - 1aa8ccb: build/apply-patches.sh, patches/series, build/prepare.sh, | see record |
+| 2026-11-04 | [M0 pipeline, seclab-tabd implementation, Tab Manager, containment suite](20261104-m0-tabd-code.md) | f36f759..089af60 (round 2a), then the fixes and new code 089af60..1f80c80 (round 2b), with | see record |
+| 2026-11-04 | [patch queue and release guard](20261104-patch-guard.md) | - 71644bb: build/apply-patches.sh, patches/series, build/prepare.sh, | see record |
 | 2026-11-04 | [probe payload safety against the host (Phase 3, increment 2)](20261104-probe-safety.md) | see record | see record |
 | 2026-11-04 | [RPC lockdown design (Phase 2)](20261104-rpc-lockdown-design.md) | see record | see record |
 | 2026-11-04 | [RPC escape probes and rogue-REH fixture (Phase 3, increment 1)](20261104-rpc-probes-increment.md) | see record | see record |
 | 2026-11-04 | [supply-chain provenance and CI credential sweep](20261104-supply-chain.md) | - the dependency register (deps/registry.json, build/deps.ts, docs/DEPENDENCIES.md); | see record |
 | 2026-11-04 | [tab observability (one-way event stream, sbx collector, OCI Falco, Tab Activity view)](20261104-tab-observability.md) | - Round 1: origin/main..8b1df33 (pre-rebase), that is the whole layer: | see record |
-| 2026-11-04 | [seclab-tabd design (protocol and process model)](20261104-tabd-protocol-design.md) | design docs at 296594c plus the uncommitted drafts of docs/adr/20261104-tab-supervisor.md, | see record |
+| 2026-11-04 | [seclab-tabd design (protocol and process model)](20261104-tabd-protocol-design.md) | design docs at f36f759 plus the uncommitted drafts of docs/adr/20261104-tab-supervisor.md, | see record |
 | 2026-11-04 | [write-back gate, increment 1 (engine and policy)](20261104-write-back-engine.md) | - tabd/src/writeback.ts: the engine (classification, trusted host writer, conflicts, fail- | see record |
-| 2026-11-05 | [agents-in-the-tab spike harness and findings](20261105-agents-in-tab-spike.md) | c6dfbf2..f2b9471 (rebased from f5a479a..44d11bc). That covers test/agentic/ahp/ (run.sh, b | see record |
+| 2026-11-05 | [agents-in-the-tab spike harness and findings](20261105-agents-in-tab-spike.md) | 5d8ddc0..26f14b5 (rebased from f5a479a..44d11bc). That covers test/agentic/ahp/ (run.sh, b | see record |
 | 2026-11-05 | [backstop derive exemption and `GET /copilot_internal/user` exception](20261105-broker-backstop-exceptions.md) | round 8. | see record |
 | 2026-11-05 | [broker local builds through CFS](20261105-broker-cfs-builds.md) | - 440d80f: CFS local builds. | see record |
 | 2026-11-05 | [measured Copilot traffic and the user's decisions (round 11)](20261105-broker-measured-copilot-traffic.md) | - "broker: measured Copilot traffic and the user's decisions" (schema | see record |
 | 2026-11-05 | [broker model access (body policy, budgets, trusted derivation)](20261105-broker-model-access.md) | - Round 7: dcda94b, which adds: | see record |
-| 2026-11-05 | [broker re-pin to CFS-served versions, and the image snapshot](20261105-broker-repin-and-image-snapshot.md) | - 5f41596: broker/build.sh builds the broker image from a snapshot of | see record |
+| 2026-11-05 | [broker re-pin to CFS-served versions, and the image snapshot](20261105-broker-repin-and-image-snapshot.md) | - 4ac288b: broker/build.sh builds the broker image from a snapshot of | see record |
 | 2026-11-05 | [broker WebSocket credential opt-in](20261105-broker-websocket-opt-in.md) | - Round 6: b1558e9 and 83a00cf. | see record |
-| 2026-11-05 | [local npm installs through GitHub CFS](20261105-cfs-local-builds.md) | - Round YY: 42f1b81..5dc6ee7 (EDR [cfs-local-builds](../edr/20261105-cfs-local-builds.md)) | see record |
-| 2026-11-05 | [secure agentic experiences design (agents in the tab)](20261105-secure-agentic-experiences-design.md) | round 1: 40fa71d (rebased from 9f4ded7; design as first written: [plan](../plans/secure-ag | see record |
-| 2026-11-05 | [tabs wired to their broker (plan tabd-broker-wiring)](20261105-tab-broker.md) | - Round XX (B1, OCI tabs get a real broker): 7d1c94d..325097f, plus 32c3289 (the naming ru | see record |
+| 2026-11-05 | [local npm installs through GitHub CFS](20261105-cfs-local-builds.md) | - Round YY: 91e7b2c..87f56e0 (EDR [cfs-local-builds](../edr/20261105-cfs-local-builds.md)) | see record |
+| 2026-11-05 | [secure agentic experiences design (agents in the tab)](20261105-secure-agentic-experiences-design.md) | round 1: 141cd99 (rebased from 9f4ded7; design as first written: [plan](../plans/secure-ag | see record |
+| 2026-11-05 | [tabs wired to their broker (plan tabd-broker-wiring)](20261105-tab-broker.md) | - Round XX (B1, OCI tabs get a real broker): bb6d256..325097f, plus 32c3289 (the naming ru | see record |
 | 2026-11-06 | [patch 0015, the agent-host gate](20261106-agentic-ahp-gate.md) | patch 0015 (seclab-ahp-gate) and its sources under agentic/patch-src/: | see record |
-| 2026-11-06 | [the real-tab spike, D7 amendment and the agentic implementation plan](20261106-agentic-real-tab-spike.md) | 0f8ac0d.. this branch. That covers: | see record |
+| 2026-11-06 | [the real-tab spike, D7 amendment and the agentic implementation plan](20261106-agentic-real-tab-spike.md) | bf448c8.. this branch. That covers: | see record |
 | 2026-11-06 | [background windows are click-through; dialogs never shown](20261106-background-windows-click-through.md) | round FFF, 9fa5f9f and its fixes: patch 0012's guard (click-through windows, no | see record |
-| 2026-11-06 | [background windows guard (focus steal)](20261106-background-windows-guard.md) | round AAA, 5c18c5f..0567ef3: | see record |
+| 2026-11-06 | [background windows guard (focus steal)](20261106-background-windows-guard.md) | round AAA, f96cdc7..fb5979c: | see record |
 | 2026-11-06 | [CFS package feeds in tabs, broker side (round 13)](20261106-broker-cfs-feeds.md) | "broker: B4 CFS package feeds in tabs, broker side" (policy schema | see record |
 | 2026-11-06 | [deny rules and clientPort (round 12)](20261106-broker-deny-rules.md) | "broker: deny rules and clientPort" (policy schema revision 5, | see record |
 | 2026-11-06 | [budget on credential.import, and names-only field audits (round 14)](20261106-broker-import-budget.md) | three commits on the broker branch, and the round 14 fix commit. | see record |
 | 2026-11-06 | [adopted tabs reconnect broker control (B3c), and the CFS install e2e](20261106-broker-reattach.md) | round HHH: | see record |
 | 2026-11-06 | [broker-followed CFS download redirects (round 15)](20261106-broker-redirect-follow.md) | "broker: broker-followed CFS download redirects" (policy schema | see record |
 | 2026-11-06 | [CFS package feeds in tabs, tabd side (B4)](20261106-cfs-feeds-tabd.md) | round EEE, 20fb5bb and its fixes: | see record |
-| 2026-11-06 | [egress prompts (B3a, B3b)](20261106-egress-prompts.md) | round BBB, 24fea4c..79dcbea: | see record |
+| 2026-11-06 | [egress prompts (B3a, B3b)](20261106-egress-prompts.md) | round BBB, ec43825..79dcbea: | see record |
 | 2026-11-06 | [idempotent ensureRunning on a running tab (B3c part 3)](20261106-reh-idempotent.md) | round III: | see record |
-| 2026-11-06 | [RPC filter stamp in product.json](20261106-rpc-policy-stamp.md) | round DDD, b9af5e5 and its fixes: prepare.sh step 7, the RPC stamp check | see record |
+| 2026-11-06 | [RPC filter stamp in product.json](20261106-rpc-policy-stamp.md) | round DDD, 6da00c8 and its fixes: prepare.sh step 7, the RPC stamp check | see record |
 | 2026-11-06 | [test build variants, and the gitleaks build fail-closed fix](20261106-test-build-variants.md) | round CCC: | see record |
 | 2026-11-09 | [background-only windows (focus path c)](20261109-background-only-windows.md) | round LLL, c32e1c7, 0a3c210, 841b7a1 and their fixes: | see record |
 | 2026-11-09 | [broker dependency bumps past the CFS hold (round 16)](20261109-broker-dependency-bumps.md) | - "broker: bump fastjsonschema to 2.22.3 and platformdirs to 4.14.3": the | see record |
 | 2026-11-09 | [deps-updates container mounts and the mount lint (round JJJ)](20261109-deps-updates-mounts.md) | round JJJ, 3b2416f and its fixes: | see record |
 | 2026-11-09 | [patch 0035, host documents don't sync into a tab](20261109-document-sync-provenance.md) | origin/main..branch head: patch 0035, sole-consumer.json and test/docsync, four rounds. | see record |
 | 2026-11-09 | [patch 0040, Restart Extension Host re-resolves a managed authority](20261109-ext-host-restart-reresolve.md) | round OOO, da4bad4 and its fix: | see record |
-| 2026-11-09 | [Level B repair and the portable data dir](20261109-level-b-repair.md) | round NNN, 8f1f030 and b042f94, and their fixes: | see record |
-| 2026-11-09 | [the liveness gate (round KKK)](20261109-liveness-gate.md) | round KKK, eab5cb8 (rebased as 991e818) and its fixes: | see record |
-| 2026-11-09 | [liveness-refresh workflow](20261109-liveness-refresh.md) | round MMM, 5cf2152 and its fixes: | see record |
+| 2026-11-09 | [Level B repair and the portable data dir](20261109-level-b-repair.md) | round NNN, 9fbd37f and a911c9c, and their fixes: | see record |
+| 2026-11-09 | [the liveness gate (round KKK)](20261109-liveness-gate.md) | round KKK, eab5cb8 (rebased as ea38de1) and its fixes: | see record |
+| 2026-11-09 | [liveness-refresh workflow](20261109-liveness-refresh.md) | round MMM, a05d6ed and its fixes: | see record |
 <!-- index:end -->

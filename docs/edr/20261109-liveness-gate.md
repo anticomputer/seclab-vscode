@@ -5,7 +5,7 @@
 - **Deciders:** Coordinator (repo-wide half of the approved liveness gate; "don't wait for the
   RPC EDR any longer"; scheduled workflows need a dispatch run on record). Fork-build session:
   implementation. The RPC session builds the rpc-filter and patch-queue half.
-- **Related:** [RPC core handoff](https://github.com/anticomputer/seclab-vscode/blob/5652f9f0c760049e1bc5da143433c0beac6f77d0/docs/edr/20261106-rpc-core-handoff.md)
+- **Related:** [RPC core handoff](https://github.com/anticomputer/seclab-vscode/blob/7e8167dccb2ce59f12e942bdf71be1add7c27bd5/docs/edr/20261106-rpc-core-handoff.md)
   (the four instances and "check the prover before believing it"),
   [test build variants](20261106-test-build-variants.md),
   [pin-age cooldown](20261106-pin-age-cooldown.md) (the fifth instance)
@@ -106,11 +106,11 @@ Reviews ask what code says. Nothing asked whether anything calls it.
 ## Findings from the first run
 - **Dead exports:**
   - `assertPort` (tabd): deleted.
-  - `scannerProblem` (tabd): test-only since `0ae1eeb` moved the check into
+  - `scannerProblem` (tabd): test-only since `5cd79f6` moved the check into
     `scanWorkspace`. Exempted, naming its test.
   - `TAB_EVENTS` and `random_password` (broker): leftovers; the protocol schema validates
     `tab.event`. Deleted by the broker session on 2026-11-09.
-- **Level B (`check-evidence.ts`) has rotted.** Nothing runs it in CI. On `fd73500` three
+- **Level B (`check-evidence.ts`) has rotted.** Nothing runs it in CI. On `486f2d6` three
   checks fail:
   - **`[task] cannot write host file outside the workspace`.** The file is the documented
     open host-terminal hole (`workbench.action.terminal.newLocal` + `sendSequence`, closed

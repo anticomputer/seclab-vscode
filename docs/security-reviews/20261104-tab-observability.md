@@ -9,7 +9,7 @@
     - `tabd/tools/*`;
     - `extensions/seclab-tab-manager/src/activity.ts`;
     - the tests.
-  - Round 2: the round-1 fixes in `80c98bb`, after the linear rebase onto `10415e3`.
+  - Round 2: the round-1 fixes in `80c98bb`, after the linear rebase onto `e838eb4`.
   - Round 3: the round-2 fixes in this commit.
 - **Question:** does the layer add any channel from a tab into the trusted side beyond a one-way, size-limited, schema-validated event stream? Can the tab user, or a rogue extension (not root in the VM), forge or hide events?
 - **Reviewer:** `security-review` agent (default model); triage by the tab-observability session.
@@ -44,8 +44,8 @@ Fixes for OR-5, OR-6, OR-L3 and OR-L4 are in this commit, with the regressions a
 containment suites pass. **No high or critical findings are open.**
 
 ## Round 4: prompt injection (events read by an LLM)
-- **Scope:** `cafe3ee` (field-level `untrusted` tags, `--format llm` renderer,
-  `suspicious-content` rule) and `e225714` (Tab Activity reveal-on-alert).
+- **Scope:** `b61a973` (field-level `untrusted` tags, `--format llm` renderer,
+  `suspicious-content` rule) and `d69109e` (Tab Activity reveal-on-alert).
 - **Question (user):** "be on the lookout for any prompt injection gaps if there's outputs we
   intend to manage/analyze with LLM".
 - **Result:** no high or critical findings.
@@ -63,7 +63,7 @@ JSON-encoded values can't break out, reveal-on-alert fires at most once per tab
 (application-scoped setting), and the CLI text format re-escapes `summary`.
 
 ## Round 5: README screenshot, demo harness, `fetch macos` fix
-Scope: `origin/main..HEAD` at 9e5e926 (the screenshot and its alt text, the demo
+Scope: `origin/main..HEAD` at 0e87b69 (the screenshot and its alt text, the demo
 profile settings and background launch, `fetch_macos` parsing `UPSTREAM_SHA`
 instead of sourcing `upstream.lock`, and the dependency EDR addendum).
 

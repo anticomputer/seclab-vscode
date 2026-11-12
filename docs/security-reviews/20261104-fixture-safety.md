@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-04
 - **Scope:**
-  - `d02dec5..cf6738e`;
+  - `f640a77..76c5e6c`;
   - all of `test/containment/fixtures/`, `test/containment/rogue-extension/`,
     `test/canary/`, `test/secrets/`, `test/harness.ts` and `test/safety/`.
 - **Threat:** our own hostile payloads harming the developer's Mac if containment fails.
@@ -21,7 +21,7 @@
 
 Result: one medium finding (FS-1), fixed. Re-review: see round 2.
 
-## Round 2 (`cf6738e..c0b4436`)
+## Round 2 (`76c5e6c..c1900eb`)
 - FS-1 fixed, FS-2 fixed, FS-3 fixed, FS-4 fixed, FS-6 fixed.
 - FS-5 partly fixed; accepted as a tripwire. Variable hosts and `net.connect`/`getent` aren't linted; code review covers them.
 - The low residuals the reviewer listed are all fixed in the follow-up commit:
@@ -32,7 +32,7 @@ Result: one medium finding (FS-1), fixed. Re-review: see round 2.
 **No medium-or-higher findings remain.**
 
 ## Round SS (2026-11-05): focus rule, supply-chain exceptions, AV-signature fixture safety
-Scope: `feb5331` (background editor launch, `focus-steal` lint), `0c89f88` (recorded
+Scope: `6655551` (background editor launch, `focus-steal` lint), `0c89f88` (recorded
 exceptions, `./seclab deps host`), `388ec4d` (workspace-level AV-shape lint,
 `materialiseFixture`, clean-host fixture sweep). No prompt injection was found in the diff,
 the fixtures or the evidence.
@@ -49,7 +49,7 @@ the fixtures or the evidence.
 | SS-8 | Low | harness | The AV check skipped symlinks, big files and anything past 4,000 files, and the copy didn't. | Fixed | The copy filter matches the check (no symlinks, `node_modules`, `.git`, or files ≥2 MiB), and the walk refuses past its cap. |
 
 ## Round UU (2026-11-05): patch 0012 background windows; TT fixes confirmed
-Scope: `922c34f` (patch 0012, harness, EDR [background windows](../edr/20261105-background-windows.md)),
+Scope: `9d73372` (patch 0012, harness, EDR [background windows](../edr/20261105-background-windows.md)),
 plus the round-TT fixes. Requirements 2 (host launch env only, read once, not a setting) and 3
 (only the harness sets it) hold; without the flag the patch is a no-op. TT-1..6 confirmed closed.
 No prompt injection found.

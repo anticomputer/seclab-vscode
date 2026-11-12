@@ -1,7 +1,7 @@
 # Security review: RPC filter stamp in product.json
 
 - **Date:** 2026-11-06
-- **Scope:** round DDD, `b9af5e5` and its fixes: `prepare.sh` step 7, the RPC stamp check
+- **Scope:** round DDD, `6da00c8` and its fixes: `prepare.sh` step 7, the RPC stamp check
   in `check-release.sh`, and its self-test.
 - **Threat model:** a build without the RPC filter must not pass as one with it, and the stamp
   must not lie about the policy table in the build.

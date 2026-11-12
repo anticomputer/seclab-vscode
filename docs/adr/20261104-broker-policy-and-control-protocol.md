@@ -72,9 +72,9 @@ Policy must change at runtime. Nothing may listen on the host.
   [broker/AGENTS.md](../../broker/AGENTS.md)).
 
 ## Evidence
-- Implementation: [`policy.py`](https://github.com/anticomputer/seclab-vscode/blob/b34dfb907f2550e1eae792253a4086cf844b2bae/broker/seclab_broker/policy.py), [`core.py`](https://github.com/anticomputer/seclab-vscode/blob/b34dfb907f2550e1eae792253a4086cf844b2bae/broker/seclab_broker/core.py), [`control.py`](https://github.com/anticomputer/seclab-vscode/blob/b34dfb907f2550e1eae792253a4086cf844b2bae/broker/seclab_broker/control.py).
+- Implementation: [`policy.py`](https://github.com/anticomputer/seclab-vscode/blob/b398fedca43f78e5152a26bec0b3d5e9de7a579f/broker/seclab_broker/policy.py), [`core.py`](https://github.com/anticomputer/seclab-vscode/blob/b398fedca43f78e5152a26bec0b3d5e9de7a579f/broker/seclab_broker/core.py), [`control.py`](https://github.com/anticomputer/seclab-vscode/blob/b398fedca43f78e5152a26bec0b3d5e9de7a579f/broker/seclab_broker/control.py).
 - Tests (`broker/test.sh`): 128 unit and 38 integration tests passing at
-  `b34dfb9`, including protocol error handling (`test_control_protocol_errors`).
+  `b398fed`, including protocol error handling (`test_control_protocol_errors`).
 - mitmproxy hold and resume: `Flow.intercept/resume/wait_for_resume`
   ([flow.py](https://github.com/mitmproxy/mitmproxy/blob/51c1d6b2d8d3367a773411eb7a3eeccec82b3ea7/mitmproxy/flow.py)).
   The proxy server awaits `wait_for_resume` after each hook

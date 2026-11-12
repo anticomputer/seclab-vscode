@@ -80,7 +80,7 @@ AA-1 to AA-3 and the workflow change's B-1 verified. **Nothing medium or higher 
 ## Workflow change: RPC filter CI jobs (commit 4306096)
 Reviewed under the workflow-review rule. Permissions are `contents: read` with `persist-credentials: false`; no `${{ }}` in `run:`; every tool container runs with `--network none`; pins are unchanged digests. B-1 (low: `git diff` misses untracked inventory files) is fixed with a `git status --porcelain` check. No medium or higher.
 
-## Increment 2a: sbx overlay (b9ba0e2 and fixes)
+## Increment 2a: sbx overlay (8214117 and fixes)
 Threat: tab code (agent uid in the VM, owns /dev/fuse) writes the host checkout around the overlay,
 or gains root in the VM (a gate bypass since 2a).
 
@@ -95,7 +95,7 @@ or gains root in the VM (a gate bypass since 2a).
 Note for 2b (from this round): read the upper layer directly (`/var/lib/seclab/wb/upper`, init mount
 namespace), never through the overlay or `/proc/<pid>/root`.
 
-### Increment 2a, re-review (6e5886e)
+### Increment 2a, re-review (d3ec718)
 JJ-1, JJ-4 and JJ-5 verified closed; JJ-2's filter verified, with one bypass:
 
 | # | Sev | Area | Finding | Disposition | Fix |
@@ -104,7 +104,7 @@ JJ-1, JJ-4 and JJ-5 verified closed; JJ-2's filter verified, with one bypass:
 | KK-2 | Low | Post-mount check | fd in flight, fork during the scan, a second mount of the share. | Fixed (in part) | Rescan until the pid set is stable; refuse a second mount of the lower device. In-flight `SCM_RIGHTS` remains theoretical (no tab code runs before the mount). |
 | KK-3 | Info | Exemption | Exempt fuse-overlayfs by owner of /proc/<pid>. | Fixed | All four uids 0 from `status`. |
 
-### Increment 2a, second re-review (5a13d35)
+### Increment 2a, second re-review (2bef2f7)
 KK-1, KK-2 and KK-3 verified closed; the Landlock scopes break nothing the REH, collector or relay
 uses (all pathname sockets; collector and strace are outside the domain). **Nothing medium or higher remains.**
 
@@ -112,7 +112,7 @@ uses (all pathname sockets; collector and strace are outside the domain). **Noth
 |---|---|---|---|---|---|
 | LL-1 | Low | sbx kit | `clipboard-bridge` (agent uid, unguarded) is still reachable over the pathname socket `/run/user/1000/wayland-0`; a parser bug there would be execution outside the guard. | Fixed (2026-11-05) | seclab never uses the sbx clipboard: the collector stops it (TERM, then KILL, matched by exe path) and removes its socket before the REH starts, failing closed if it survives; nothing respawns it. Containment regression (`LL-1`), negative-controlled on the old template. |
 
-## Increment 2b: sync loop (9b60205 and fixes)
+## Increment 2b: sync loop (b0b9dbd and fixes)
 Threat: everything the in-VM feed returns (names, content, modes, counts, timing) is tab-controlled.
 
 | # | Sev | Area | Finding | Disposition | Fix |
@@ -125,7 +125,7 @@ Threat: everything the in-VM feed returns (names, content, modes, counts, timing
 Also from this increment: the root `.git` auto set applies only into an existing host repository (a tab's
 `git init` had made a plain host folder a repo); a workspace that an enclosing repo ignores is outside it.
 
-### Increment 2b, re-review (ccd0464)
+### Increment 2b, re-review (3a4ab91)
 MM-1 to MM-4 verified closed. **Nothing medium or higher remains.**
 
 | # | Sev | Area | Finding | Disposition | Fix |
@@ -134,7 +134,7 @@ MM-1 to MM-4 verified closed. **Nothing medium or higher remains.**
 | NN-2 | Low | Feed | A child whose lstat failed was omitted silently. | Fixed | `err` record (no deletions or forgetting from that listing). |
 | NN-3 | Low | Stop | A tick abandoned by the 15 s stop deadline could save stale state later. | Fixed | Engines are closed on stop/discard; a closed engine never saves or applies. |
 
-## Increment 3: review prompt (432e08b and fixes)
+## Increment 3: review prompt (d24311b and fixes)
 Threat: the tab controls every path, byte, link target and timing shown, and wants an approval of
 something other than what the user saw.
 
@@ -148,7 +148,7 @@ something other than what the user saw.
 | OO-6 | Low | confirmDeletes | Release not bound to what was shown. | Fixed | Modal shows count and sample; tabd refuses unless the held count matches. Toasts rate-limited (one a minute). |
 | note | Info | RPC filter (M4) | Until the filter enforces, a rogue extension could invoke `seclab.reviewChanges`/`seclab.confirmDeletes` to pop dialogs (a click is still needed). | Tracked | `seclab.*` must stay outside the filter's allowed set (raised with the RPC session). |
 
-### Increment 3, re-review (80db076)
+### Increment 3, re-review (b73bca7)
 OO-1 and OO-3..OO-6 verified closed; OO-2 closed for truncation and binary, not for long lines:
 
 | # | Sev | Area | Finding | Disposition | Fix |
@@ -156,7 +156,7 @@ OO-1 and OO-3..OO-6 verified closed; OO-2 closed for truncation and binary, not 
 | PP-1 | **Medium** | Display | Wrapping counted characters, not display columns: tabs, wide blanks, or 90 spaces under 160 characters still pushed a payload off-screen. | Fixed | Runs of 8+ blanks (any Unicode space or tab) become a visible `⟨N blanks⟩`, tabs `→`, other non-ASCII spaces `·`, `\r` escaped; lines wrap at 80 display columns with wide characters counted as 2. |
 | PP-2 | Low | confirmDeletes | Bound to the count, not the set. | Fixed | Bound to a digest of the sorted held-deletion paths (`massDeleteDigest`). |
 
-### Increment 3, second re-review (5ab2fb7)
+### Increment 3, second re-review (7819404)
 PP-1 and PP-2 verified closed. **Nothing medium or higher remains.** Lows fixed:
 
 | # | Sev | Area | Finding | Disposition | Fix |
@@ -165,7 +165,7 @@ PP-1 and PP-2 verified closed. **Nothing medium or higher remains.** Lows fixed:
 | QQ-2 | Low | Display | Some glyphs wider than counted. | Fixed | Any non-ASCII that isn't a letter, mark, digit or punctuation counts as width 2. |
 | QQ-3 | Low | Display | Content could forge the renderer's markers. | Fixed | Marker characters in content are escaped. |
 
-## Pre-open workspace summary, `tab.inspect` (f7d115e and fixes)
+## Pre-open workspace summary, `tab.inspect` (c2c91a5 and fixes)
 Nothing medium or higher. Lows fixed:
 
 | # | Sev | Area | Finding | Disposition | Fix |

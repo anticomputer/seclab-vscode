@@ -1,6 +1,6 @@
 # CFS package feeds in tabs: the tabd side (plan increment B4)
 
-- **Status:** accepted (broker policy schema revision 7 on main at 47ccdc6; real-feed measurement pending)
+- **Status:** accepted (broker policy schema revision 7 on main at 3a35b74; real-feed measurement pending)
 - **Date:** 2026-11-06
 - **Deciders:** Coordinator ("ok continue work" for B4). Broker session: revision 6, then 7 for import budgets. Fork-build session: implementation.
 - **Related:** [ADR cfs-package-feeds-in-tabs](../adr/20261105-cfs-package-feeds-in-tabs.md), [egress prompts](20261106-egress-prompts.md)

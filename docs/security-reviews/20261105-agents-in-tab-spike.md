@@ -1,7 +1,7 @@
 # Security review: agents-in-the-tab spike harness and findings
 
 - **Date:** 2026-11-05
-- **Scope:** c6dfbf2..f2b9471 (rebased from f5a479a..44d11bc). That covers `test/agentic/ahp/` (`run.sh`, `bundle.mjs`, `runner.ts`, `rogue-agent-host.ts`, `verdict.mjs`, `in-tab.sh`, `in-tab.ts`, `proxy-recorder.mjs`, `ahp_inventory.py`, `inventory.sh`), `test/safety/allowlist.txt`, [EDR agents-in-tab spike](../edr/20261105-agents-in-tab-spike.md), and the run evidence under `.work/agentic/runs/`. The fixes are in the commit that adds this record.
+- **Scope:** 5d8ddc0..26f14b5 (rebased from f5a479a..44d11bc). That covers `test/agentic/ahp/` (`run.sh`, `bundle.mjs`, `runner.ts`, `rogue-agent-host.ts`, `verdict.mjs`, `in-tab.sh`, `in-tab.ts`, `proxy-recorder.mjs`, `ahp_inventory.py`, `inventory.sh`), `test/safety/allowlist.txt`, [EDR agents-in-tab spike](../edr/20261105-agents-in-tab-spike.md), and the run evidence under `.work/agentic/runs/`. The fixes are in the commit that adds this record.
 - **Reviewer:** security-review agent (default model); triage by the secure-agentic-experiences session.
 - **Related:** [EDR agents-in-tab spike](../edr/20261105-agents-in-tab-spike.md), [EDR agent runtimes exception](../edr/20261105-agent-runtimes-exception.md), [EDR fixture safety](../edr/20261104-fixture-safety.md)
 

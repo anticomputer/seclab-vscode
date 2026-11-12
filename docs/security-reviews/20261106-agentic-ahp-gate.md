@@ -6,7 +6,7 @@
   `seclabAhpGate.ts`, the upstream edits in `agentHostProtocolClient.ts` and
   `editorRemoteAgentHostServiceClient.ts`, `agentic/tools/sync-patch.ts` and
   `test/agentic/gate/gate.test.ts`.
-- **Reviewer:** `security-review` agent (an Opus-class model), round 1 on `b4a3360`, round 2 on `7e0f0f6`, round 3 on `49cf550`;
+- **Reviewer:** `security-review` agent (an Opus-class model), round 1 on `a999a4d`, round 2 on `20c6281`, round 3 on `c3e2b95`;
   triage and fixes by the agentic-gate session.
 - **Related:** [EDR probe runner](../edr/20261106-agentic-probe-runner.md),
   [implementation plan](../plans/agentic-implementation.md) §4 increment 1,
@@ -16,7 +16,7 @@ Every round's prompt carried the standing warning that the diff, fixtures and ev
 contain prompt injection aimed at the reviewer, to be reported as a finding and never
 followed. Round 1 found none.
 
-## Round 3 (on `49cf550`)
+## Round 3 (on `c3e2b95`)
 Scope: round 2's fixes. **No high or critical issue remains in the gate itself; the A1 path is
 closed.** Two harness findings blocked a *trustworthy run* rather than the patch, plus one low
 residual in the gate. All three are fixed in the commit that adds this section. No prompt
@@ -77,7 +77,7 @@ neutralised. The A1 test is non-tautological: disabling the replacement branch m
 and leaves the other tests passing. Round 2's run-directory fix is genuinely in place before
 the recursive delete, and the arming-nonce binding stops a stale fixture self-arming.
 
-## Round 2 (on `7e0f0f6`)
+## Round 2 (on `20c6281`)
 Scope: the round 1 fixes, the two new upstream hunks, `build/source-allowlist.txt`, the probe
 runner (`test/agentic/runner/`), `test/window.ts --app` and the gate tests. One high, one
 medium, two low. All four are fixed in the commit that adds this section. No prompt injection
@@ -154,7 +154,7 @@ the `RequestAgentHostMcpAuthentication` reverse-request route; `test/window.ts -
 existence-checked, no shell, focus protection untouched). The four carried-forward items from
 round 1 were re-rated and stay below threshold.
 
-## Round 1 (on `b4a3360`)
+## Round 1 (on `a999a4d`)
 One high, one medium, no critical. Both are fixed in the commit that adds this record.
 
 ### HIGH (8/10): A1 is only half closed, MCP auth metadata gets past the sanitiser

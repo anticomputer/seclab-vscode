@@ -13,7 +13,7 @@ the code as it stands were checked. All upstream lines are at
 `a717861c07586a53d83b80d742cd3f59b20a6273`.
 
 ## Findings
-1. **Main ships no RPC filter.** `patches/series` on `main` (`7a84d01`) is 0001–0004 and
+1. **Main ships no RPC filter.** `patches/series` on `main` (`3ca053b`) is 0001–0004 and
    0012–0014. Patches 0005–0011, including 0009 (no built-in chat in tabs) and 0010 (no
    agent-host client in tabs), exist only on `rpc-core`, whose own review is marked
    DO-NOT-LAND (`fd3d1b5`).
@@ -167,7 +167,7 @@ Derived from the pinned source, for patch 0015:
   stamps onto the window configuration on every load. It never calls `getValue`, which merges
   the user, remote and workspace layers that `$updateConfigurationOption` can reach (A23).
 - **Log lines** use the shape `tab.events.report` accepts today (`tabd/src/obs/glue.ts`
-  on `f19cf49`), so the Tab Manager can forward them unchanged:
+  on `f77ea3e`), so the Tab Manager can forward them unchanged:
   `{source:'ahp-gate', class:'ahp.decision', priority, summary, detail}` with `detail`
   flat, at most 16 scalar keys, `detail.gateRule` the rule id, `detail.connection` an
   integer per transport, and `detail.verdict` one of `allow`, `deny`, `strip`. The
@@ -293,7 +293,7 @@ nothing to do with the gate. Each is a false-negative source of exactly the clas
 
 ## Measured, 2026-11-06 (increment 0, first runs)
 Seven runs of `test/agentic/runner/` against the attested release build U
-(`.work/app`, main `f19cf49`) on the sbx driver. What they established, with the evidence:
+(`.work/app`, main `f77ea3e`) on the sbx driver. What they established, with the evidence:
 
 1. **A `seclab+` window on main connects to its tab's agent host with no user action.** The
    REH log in the tab shows, within two seconds of the window opening:
@@ -350,7 +350,7 @@ runtime evidence to collect once the runner is finished.
   backoff, is to be measured with the runner.
 
 ## Superseded: where this stopped (2026-11-06, end of the first session)
-Branch `anticomputer-agentic-gate-0015-v3`, rebased onto `main` (`f669584`). 0015 is still
+Branch `anticomputer-agentic-gate-0015-v3`, rebased onto `main` (`896c45a`). 0015 is still
 **HELD**: the probes are fixed and the reason the old ones could not land is now understood
 and recorded (findings 9–14), but **no U run has yet shown a host effect**, so there is still
 no runtime proof in the shipped build.
@@ -481,7 +481,7 @@ build provenance attestation verified against `build-macos.yml` on this branch a
 SHA. Every gate rule is present in the shipped desktop bundle and absent from the U build,
 so the two differ in the way the run needs them to:
 
-| string in `workbench.desktop.main.js` | G (`bb37621`) | U (main `b46b208`) |
+| string in `workbench.desktop.main.js` | G (`bb37621`) | U (main `e846913`) |
 |---|---|---|
 | `ahp-gate.opened`, `ahp-gate.verified`, `ahp-gate.refused` | present | absent |
 | `ahp-gate.disabled`, `ahp-gate.reverse-request`, `seclabAhpGate` | present | absent |
@@ -502,7 +502,7 @@ Both runs are on the sbx driver, each launched in the background through `test/w
 each ended by the shared teardown gate. **U is vulnerable, G is contained**, so 0015 is
 proved to execute in the shipped build.
 
-| | U (main `24fea4c`, attested, no gate) | G (branch `26137e9`, attested) |
+| | U (main `ec43825`, attested, no gate) | G (branch `26137e9`, attested) |
 |---|---|---|
 | takeover | took the REH agent-host socket, window connected | same |
 | probes injected | 17 | 17 |

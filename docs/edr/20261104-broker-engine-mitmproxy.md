@@ -23,7 +23,7 @@ The user asked us not to reinvent wheels.
 - **Dependencies.** The only extra runtime dependency is `fastjsonschema`,
   hash-pinned.
 - **Engine-specific code** is confined to
-  [`engine_mitmproxy.py`](https://github.com/anticomputer/seclab-vscode/blob/b34dfb907f2550e1eae792253a4086cf844b2bae/broker/seclab_broker/engine_mitmproxy.py).
+  [`engine_mitmproxy.py`](https://github.com/anticomputer/seclab-vscode/blob/b398fedca43f78e5152a26bec0b3d5e9de7a579f/broker/seclab_broker/engine_mitmproxy.py).
 - **Options that matter:**
   - `connection_strategy=lazy`: no upstream connection before the policy
     decision.

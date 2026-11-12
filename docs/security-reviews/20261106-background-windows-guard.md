@@ -1,7 +1,7 @@
 # Security review: background windows guard (focus steal)
 
 - **Date:** 2026-11-06
-- **Scope:** round AAA, `5c18c5f..0567ef3`:
+- **Scope:** round AAA, `f96cdc7..fb5979c`:
   - patch 0012's main-process guard (`backgroundWindowsGuard.ts`);
   - the focus watcher in `test/harness.ts`;
   - the focus probe (`test/focus/`);

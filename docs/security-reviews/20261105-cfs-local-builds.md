@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-05
 - **Scope:**
-  - Round YY: `42f1b81..5dc6ee7` (EDR [cfs-local-builds](../edr/20261105-cfs-local-builds.md)), plus the vsce image (`build/vsce`).
+  - Round YY: `91e7b2c..87f56e0` (EDR [cfs-local-builds](../edr/20261105-cfs-local-builds.md)), plus the vsce image (`build/vsce`).
   - Threat model:
     - the CFS token (a real Azure DevOps credential) leaking into images, logs, argv, the build volume, or anything a tab or REH can reach;
     - upstream content (lockfiles, `.npmrc`, packages) running code or steering npm while the token is present;

@@ -74,7 +74,7 @@ All 15 checks passed (`.work/broker/sbx-validation/results.txt`):
   proxy. In production the per-tab mirrored denies close that path.
 
 ## Evidence
-- Script: [`broker/tests/sbx/validate.sh`](https://github.com/anticomputer/seclab-vscode/blob/1e83fdc951ffccab6a2ae645f5ee90c441d178dd/broker/tests/sbx/validate.sh)
+- Script: [`broker/tests/sbx/validate.sh`](https://github.com/anticomputer/seclab-vscode/blob/fa461e2f882996e012388dc4e87342aff6090d16/broker/tests/sbx/validate.sh)
   (run 2026-11-04; all PASS).
 - sbx CLI help (`sbx policy allow network --help`, `sbx exec --help`) on v0.51.0.
 

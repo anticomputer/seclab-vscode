@@ -1,7 +1,7 @@
 # Security review: liveness-refresh workflow
 
 - **Date:** 2026-11-09
-- **Scope:** round MMM, `5cf2152` and its fixes:
+- **Scope:** round MMM, `a05d6ed` and its fixes:
   - `.github/workflows/liveness-refresh.yml`: weekly schedule, paths-filtered `push`,
     `workflow_dispatch`; `contents: read` + `actions: read`; one token-bearing step running
     `./seclab liveness verify-runs --refresh`;

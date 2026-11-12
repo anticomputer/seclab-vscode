@@ -52,7 +52,7 @@ Measure in a real tab, with every network peer a fixture we own.
 ## Results
 Run `20261106T034456Z` (the committed result; re-run after the review fixes as
 `20261106T041229Z`, with the same outcome); template `seclab-tab:local`; broker
-`seclab-broker:dev` as on main `0f8ac0d`; agent host from the shipped REH
+`seclab-broker:dev` as on main `bf448c8`; agent host from the shipped REH
 (`copilot/1.0.103-unstable`).
 
 **Phase A (plain allow).** All three model endpoints completed a turn. Each turn ran the

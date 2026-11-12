@@ -1,7 +1,7 @@
 # Security review: the real-tab spike, D7 amendment and the agentic implementation plan
 
 - **Date:** 2026-11-06
-- **Scope:** `0f8ac0d..` this branch. That covers:
+- **Scope:** `bf448c8..` this branch. That covers:
   - `test/agentic/ahp/tab-spike.ts`, `fake-capi.mjs`, `tab-driver.mjs` and
     `results/20261106-tab-spike.measured.json`;
   - the clean-host image pattern in `test/clean-host.ts`;

@@ -1,7 +1,7 @@
 # Security review: seclab-tabd design (protocol and process model)
 
 - **Date:** 2026-11-04
-- **Scope:** design docs at 296594c plus the uncommitted drafts of `docs/adr/20261104-tab-supervisor.md`,
+- **Scope:** design docs at f36f759 plus the uncommitted drafts of `docs/adr/20261104-tab-supervisor.md`,
   `docs/tabd/PROTOCOL.md` and `docs/edr/20261104-tabd-implementation-language.md`, reviewed before any
   tabd code existed, against the threat model in ARCHITECTURE.md §2.
 - **Reviewer:** security-review agent (default model); triage by the fork-build session.

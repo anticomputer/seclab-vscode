@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-04
 - **Scope:**
-  - `1aa8ccb`: `build/apply-patches.sh`, `patches/series`, `build/prepare.sh`,
+  - `71644bb`: `build/apply-patches.sh`, `patches/series`, `build/prepare.sh`,
     `build/check-release.sh`, CI wiring;
   - the follow-up fixes (this record).
 - **Threat:** a test-only hook, for example an env-gated rogue REH, ships in a release build.

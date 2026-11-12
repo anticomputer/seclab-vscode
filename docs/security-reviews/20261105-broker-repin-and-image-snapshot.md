@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-05
 - **Scope:**
-  - `5f41596`: `broker/build.sh` builds the broker image from a snapshot of
+  - `4ac288b`: `broker/build.sh` builds the broker image from a snapshot of
     `broker/`'s git-tracked files (review ZZ from the Fork-build session: an
     ignored file could ship under a clean revision label).
   - "broker: re-pin to versions CFS serves": re-pin to the newest versions CFS serves, following the user's

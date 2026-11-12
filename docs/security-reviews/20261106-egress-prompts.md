@@ -1,7 +1,7 @@
 # Security review: egress prompts (B3a, B3b)
 
 - **Date:** 2026-11-06
-- **Scope:** round BBB, `24fea4c..79dcbea`:
+- **Scope:** round BBB, `ec43825..79dcbea`:
   - tabd's approval relay (`tabd/src/approvals.ts`, `supervisor.ts`);
   - the Tab Manager prompt (`extensions/seclab-tab-manager/src/prompts.ts`);
   - the prompts capability (`initialize`, `broker-policy.ts`).

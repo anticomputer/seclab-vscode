@@ -137,7 +137,7 @@ The broker enforces all of the following. Each item has a regression test.
 
 ## Evidence
 - Canary tests:
-  [`test_canary_sweep`](https://github.com/anticomputer/seclab-vscode/blob/b34dfb907f2550e1eae792253a4086cf844b2bae/broker/tests/integration/test_zz_custody.py)
+  [`test_canary_sweep`](https://github.com/anticomputer/seclab-vscode/blob/b398fedca43f78e5152a26bec0b3d5e9de7a579f/broker/tests/integration/test_zz_custody.py)
   checks every tab output, the audit log, notifications, broker logs and the
   tab environment for each canary in every encoding.
   `test_reflection_in_other_encodings_blocked`,

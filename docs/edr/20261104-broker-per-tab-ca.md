@@ -13,7 +13,7 @@ be long-lived.
 
 ## Decision
 - **One CA per broker start.** `make_ca`
-  ([__main__.py](https://github.com/anticomputer/seclab-vscode/blob/b34dfb907f2550e1eae792253a4086cf844b2bae/broker/seclab_broker/__main__.py#L29))
+  ([__main__.py](https://github.com/anticomputer/seclab-vscode/blob/b398fedca43f78e5152a26bec0b3d5e9de7a579f/broker/seclab_broker/__main__.py#L29))
   calls mitmproxy's `CertStore.create_store`: RSA-2048, `CN=seclab-vscode tab
   CA <tabId>`, `O=seclab-vscode broker`.
 - **Key storage.** The key is written to `/run/seclab/ca/mitmproxy-ca.pem`,

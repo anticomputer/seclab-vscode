@@ -120,7 +120,7 @@ requirement is not to rely on that alone.
 ## Evidence on record
 - **`fixture:test/observability/withheld-forger`:** `node test/observability/withheld-probe.ts
   ~/.seclab-test/withheld --app .work/app/seclab-vscode.app --forged-only`, main build
-  42715616101 (`3d22b25`, no 0036, no RPC filter), sbx, 2026-11-10. The forger ran in the
+  42715616101 (`3b7fe70`, no 0036, no RPC filter), sbx, 2026-11-10. The forger ran in the
   tab (`remoteName` seclab) and sent all five forged calls through `executeCommand`; each
   returned `undefined`. The Tab Manager logged five refusals ("ignored: no settings
   classifier in this build"). tabd recorded no `config.withheld` event, no notification

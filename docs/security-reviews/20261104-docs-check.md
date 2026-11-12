@@ -1,7 +1,7 @@
 # Security review: docs-check gate (CI workflow and checker)
 
 - **Date:** 2026-11-04
-- **Scope:** `a3d19d2..47d768d`: `.github/workflows/docs-check.yml`, `build/docs/docs-check.ts`, `./seclab docs`; and the fixes in this commit
+- **Scope:** `ef69476..0d30388`: `.github/workflows/docs-check.yml`, `build/docs/docs-check.ts`, `./seclab docs`; and the fixes in this commit
 - **Open high/critical:** none
 - **Reviewer:** `security-review` agent
 

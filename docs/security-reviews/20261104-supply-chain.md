@@ -43,7 +43,7 @@ DD-1 to DD-8 verified closed. **No medium or higher remains.**
 | info | — | rpc-filter/tools/test.sh | `--platform linux/arm64` on x86 runners. | Fixed | Removed (multi-arch digest). |
 | — | Residual | rpc-filter | A local `.work/upstream` tree could be modified by containers that mount the repo read-write. | Accepted | Local only; CI clones fresh. |
 
-## Round 4: observability suite in ci-linux (c0fb442)
+## Round 4: observability suite in ci-linux (784ff2e)
 Nothing medium or higher. The privileged Falco container runs `--network none`, with no secrets
 or `docker.sock` and read-only host mounts, from the cosign-verified digest. On a hosted runner
 every step is already root, and the job holds only a read-only, job-lifetime token.
@@ -52,7 +52,7 @@ every step is already root, and the job holds only a read-only, job-lifetime tok
 |---|---|---|---|---|---|
 | FF-1 | Info | register | `act-cache.used` listed ci-linux, which has no cache step. | Fixed | Dropped. |
 
-## Round 5: uri-constraint step, check-pins skip, docs-check token (5a6ca41, a2087a6, 02a9f31)
+## Round 5: uri-constraint step, check-pins skip, docs-check token (8a709bc, 7ee4a60, 980a16a)
 Nothing medium or higher.
 
 | # | Sev | Area | Finding | Disposition | Fix |
@@ -61,7 +61,7 @@ Nothing medium or higher.
 | HH-1 | Low | docs-check | The read-only job token reaches every `ci: run` command (and anything with the docker socket), though only `gh` needs it. | Open (broker session) | Split: a token-only step downloads the attestation bundle; `verify-images.sh` verifies offline with `--bundle`; the docs gate runs tokenless. |
 | HH-2 | Low | docs-check | PR runs have no token, so `broker/build.sh` fails closed and `docs` is red on PRs. | Accepted | Changes land by branch push and fast-forward (AGENTS push flow); the `docs` check is push-only in practice until HH-1. |
 
-## Round 6: attestation download split (broker 21979ca, 45be740)
+## Round 6: attestation download split (broker 21979ca, 4185c4c)
 HH-1 verified closed: only `gh` gets the token, in a download-only step on pushes; the docs gate is
 tokenless. A planted or replaced bundle can't weaken the check (digest-named, subject-checked,
 Sigstore-rooted, identity-pinned); deleting it forces a tokenless online check that fails closed.
@@ -71,7 +71,7 @@ Sigstore-rooted, identity-pinned); deleting it forces a tokenless online check t
 | II-1 | Low | verify-images | Locally, a cached bundle never re-checks revocation. | Open (broker session) | Re-download outside CI when older than N days, or use `--bundle` only in CI. |
 
 ## Round TT (2026-11-05): pinned tools, sbx fence kit allows, broker.hello gate
-Scope: `ca20ca0..3f97fb8` (EDR [pinned tools](../edr/20261105-pinned-tools.md)). No prompt
+Scope: `dcb2656..3f97fb8` (EDR [pinned tools](../edr/20261105-pinned-tools.md)). No prompt
 injection found. The fence change, the broker gate and the download/verify/build flow (the
 in-build sha256 recheck closes TOCTOU) hold.
 
@@ -85,7 +85,7 @@ in-build sha256 recheck closes TOCTOU) hold.
 | TT-6 | Low | npm | Off-registry packages are skipped silently by `npm audit signatures`; an old stamp skipped the audit; it runs after install scripts. | Fixed / accepted | Off-registry `resolved` entries fail; the stamp is versioned (`sig1-`). Running after install scripts is accepted (upstream's postinstall needs them) and stated in the EDR. |
 
 ## Round VV (2026-11-05): ripgrep seeding, patch-build gate, mechanical secret scan
-Scope: `0ae1eeb..ba65194` (EDRs [patch-build gate](../edr/20261105-patch-build-gate.md),
+Scope: `5cd79f6..ba65194` (EDRs [patch-build gate](../edr/20261105-patch-build-gate.md),
 [mechanical secret scan](../edr/20261105-mechanical-secret-scan.md)). No prompt injection found.
 
 | # | Sev | Area | Finding | Disposition | Fix |
@@ -106,7 +106,7 @@ own script, checksum from the pinned tree, no token). Two new lows:
 | VV-8 | Low | hook | The installed hook ran the pushing checkout's `./seclab` (the VV-4 residual). | Fixed | The hook is self-contained: image ID and binary hash baked in at install, the hash checked before each scan, the scan inlined. Own testing caught a fail-open in the first version (the hash check's `docker run -i` consumed the ref list, so nothing was scanned); fixed, and the hook prints the refs it checked. This also unblocked other sessions, whose checkouts lacked `lint secrets`. |
 
 ## Round WW (2026-11-05): invariant I8, no agent runtime on the host
-Scope: `ec914ea..72bc035` (patches 0013 and 0014, `check-release --desktop`; EDR
+Scope: `26fd980..72bc035` (patches 0013 and 0014, `check-release --desktop`; EDR
 [no agent runtime on the host](../edr/20261105-no-agent-runtime-on-host.md)). No prompt
 injection found.
 

@@ -1,7 +1,7 @@
 # Security review: broker docs-drift tooling, protocol enforcement and fixture safety
 
 - **Date:** 2026-11-04
-- **Scope:** `1bcae4b..e6fdfe7`, plus the follow-up in this commit. Areas given explicit attention:
+- **Scope:** `d5acbce..e6fdfe7`, plus the follow-up in this commit. Areas given explicit attention:
   - params validation in `core.dispatch` against `protocol.v1.json`: bypasses,
     semantic drift from the handlers, defaults injection, error-message echo,
     remote `$ref`, ReDoS;
@@ -40,7 +40,7 @@ What the reviewer confirmed has **no issues**:
   container.
 
 ## Re-review
-- **Result:** no high or critical findings in `1bcae4b..e6fdfe7`. Items 4 and
+- **Result:** no high or critical findings in `d5acbce..e6fdfe7`. Items 4 and
   5 were fixed in this commit (a script assertion and a missing file).
 - **Tests:** `broker/test.sh` passes, with docs-check, the unit tests and the
   integration tests.

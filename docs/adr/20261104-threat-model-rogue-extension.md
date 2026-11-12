@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-11-04
 - **Deciders:** anticomputer (user: "our threat model is that of someone installing a rogue extension"); seclab-vscode coordinator
-- **Supersedes:** the threat-model portion of [the containment-unit ADR](20261104-tab-is-the-containment-unit.md) (attacker list) and of ARCHITECTURE.md §2 as of 296594c
+- **Supersedes:** the threat-model portion of [the containment-unit ADR](20261104-tab-is-the-containment-unit.md) (attacker list) and of ARCHITECTURE.md §2 as of f36f759
 - **Related:** [no real secret ADR](20261104-no-real-secret-in-a-tab.md)
 
 ## Context

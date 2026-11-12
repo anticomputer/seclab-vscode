@@ -139,11 +139,11 @@ second sender of document text fails `patch-build`.
 
 ## Evidence
 - **`fixture:test/docsync/probe-extension`:** `test/docsync/probe.ts` against main build
-  42302662001 (`87efb67`), 2026-11-09, three runs, then main build 42715616101 (`3d22b25`) and
-  branch build 42717167663 (`9274f10`), 2026-11-10. Every step ran each time; the baselines failed
+  42302662001 (`fda81c9`), 2026-11-09, three runs, then main build 42715616101 (`3b7fe70`) and
+  branch build 42717167663 (`2150af1`), 2026-11-10. Every step ran each time; the baselines failed
   and the patched build passed (below).
 
-**Measurement and baseline** (main build `87efb67`, Actions run 42302662001, attested; sbx tab;
+**Measurement and baseline** (main build `fda81c9`, Actions run 42302662001, attested; sbx tab;
 `node test/docsync/probe.ts prepare|seed|check` with a background launch through
 `test/window.ts`). These are the documents the probe extension in the tab saw during ordinary use,
 by scheme. Counts are open/change/close/snapshot; names and counts only, never contents:
@@ -176,12 +176,12 @@ Decisions from the measurement:
   need no rule.
 
 **Proof** (2026-11-10; sbx tab; background launch through `test/window.ts`, both builds include
-the background-only fix 3d22b25; the final harness from review round 2):
+the background-only fix 3b7fe70; the final harness from review round 2):
 
 | Build | Result |
 |---|---|
-| Baseline: main `3d22b25`, Actions run 42715616101, attested | `check` exits 1, as designed. The settings comment, settings value, keybindings comment, window log and host file canaries all reach the tab. Hijack 2 leaks host perf data (`foreignSeen=true`). The host's seeded untitled document is claimed by URI (`untitledForeign=true`). |
-| Patched: `9274f10` (this branch, 0035 on 3d22b25), Actions run 42717167663, attested | `check` exits 0. No canary in any tab document or tab-side output. Both hijacks registered (`output` filesystem provider, perf pre-create) and gained nothing: the host write removed the pre-created model from the tab, and no foreign content reached it. The host's untitled document existed, was claimed and stayed hidden. Every positive control held: the tab file was edited and saved, the typed and tab-created untitled documents, `git:` and the notebook cell all synced. No focus steal; the teardown gate passed. |
+| Baseline: main `3b7fe70`, Actions run 42715616101, attested | `check` exits 1, as designed. The settings comment, settings value, keybindings comment, window log and host file canaries all reach the tab. Hijack 2 leaks host perf data (`foreignSeen=true`). The host's seeded untitled document is claimed by URI (`untitledForeign=true`). |
+| Patched: `2150af1` (this branch, 0035 on 3b7fe70), Actions run 42717167663, attested | `check` exits 0. No canary in any tab document or tab-side output. Both hijacks registered (`output` filesystem provider, perf pre-create) and gained nothing: the host write removed the pre-created model from the tab, and no foreign content reached it. The host's untitled document existed, was claimed and stayed hidden. Every positive control held: the tab file was edited and saved, the typed and tab-created untitled documents, `git:` and the notebook cell all synced. No focus steal; the teardown gate passed. |
 
 Schemes the tab saw on the patched build: `file`, `git`, `perf` (only its own pre-created model,
 removed at the host write), `untitled` and `vscode-notebook-cell`. The baseline additionally showed

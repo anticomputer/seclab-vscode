@@ -47,7 +47,7 @@ available rather than wait.
     "new"; `./seclab deps outdated --self-test` (ci-unit) covers that case.
 - **`deps-updates` never ran until 2026-11-09.** Its container mounts single files (review
   EE-2), and `build/release-dates.ts`, imported by `deps-outdated.ts` for this rule, was never
-  added. The first scheduled run failed with `ERR_MODULE_NOT_FOUND`; `22c021e` added the
+  added. The first scheduled run failed with `ERR_MODULE_NOT_FOUND`; `391c0d3` added the
   mount. To catch the next one, the mount lists are now named arrays in `seclab`, and
   `./seclab lint mounts` (ci-unit) fails when a list differs from its entry's import closure
   (`build/import-closure.ts`). The same applies to the image verifier's mounts.

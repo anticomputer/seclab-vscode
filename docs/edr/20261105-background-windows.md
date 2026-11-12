@@ -101,11 +101,11 @@ If the guard can't be installed, the process exits rather than run unguarded.
 that steps through: a notification, a quick pick, focus commands, full screen, a modal dialog,
 a new window, a reload, killing the server (the reconnect path), and an extension-host restart.
 Each step is timestamped, and the kill-on-steal watcher is armed throughout.
-- **Release build** (main `5c18c5f`, run 42185096401): the editor took focus 0.7 s into
+- **Release build** (main `f96cdc7`, run 42185096401): the editor took focus 0.7 s into
   `toggleFullScreen` (Electron's `setFullScreen` activates the app) and was killed within one
   sample. With full screen skipped, every other step stayed in the background, modal dialogs
   included (sheets don't activate).
-- **Branch build with the guard** (`751c6c7`, run 42231186243, fetched with
+- **Branch build with the guard** (`2567b32`, run 42231186243, fetched with
   `./seclab fetch macos-branch`): no step took focus, full screen included. The
   extension-host restart, run alone, recorded no steal either. It restarts the local
   extension host and with it the Tab Manager's tabd, which stops the tab, so the step's
@@ -135,7 +135,7 @@ Dialogs cancelled in background mode answer with their `cancelId`, which
 
 ## Addendum 2026-11-06 (evening): the user's own clicks
 - **Finding:** the RPC core landing session's proof run (85ca160) was killed for focus about
-  3m48s after launch. Here, main's release (a986b9d) and the 24fea4c guard build were both
+  3m48s after launch. Here, main's release (c16421e) and the ec43825 guard build were both
   killed within about 2.5 s of launch, but only while the user was working in another app
   (Microsoft Teams frontmost); the same builds ran clean minutes earlier.
 - **Cause, from the unified log:**

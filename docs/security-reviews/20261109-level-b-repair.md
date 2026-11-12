@@ -1,7 +1,7 @@
 # Security review: Level B repair and the portable data dir
 
 - **Date:** 2026-11-09
-- **Scope:** round NNN, `8f1f030` and `b042f94`, and their fixes:
+- **Scope:** round NNN, `9fbd37f` and `a911c9c`, and their fixes:
   - `probe.sh`: one marker per vector; `assert.ts`: the host-write row on `<marker>.<vector>`;
   - `check-evidence.ts`: evidence read through the tab, the `[rpc]` rows, the canary scan,
     fsmonitor armed in the tab;
