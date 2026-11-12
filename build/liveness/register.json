@@ -11,13 +11,13 @@
 		{
 			"id": "workflow:deps-updates",
 			"runBy": "schedule (Mondays 06:17 UTC) and workflow_dispatch: ./seclab deps outdated, then one tracking issue",
-			"evidence": [{ "run": 42653627676, "workflow": "deps-updates.yml", "sha": "362dcc321657a4938683ab042b9fb094b9b19238", "date": "2026-11-09" }]
+			"evidence": [{ "run": 43247709454, "workflow": "deps-updates.yml", "sha": "5943146cbfc04c30158ba0079ede36a07246648e", "date": "2026-11-12" }]
 		},
 		{
 			"id": "hook:containment/rogue-reh",
 			"runBy": "build-macos.yml dispatched with test_variant=containment applies it (build/test-variant.sh); test/builds/rogue-reh-arming.ts arms it in a real OCI tab of that REH",
 			"evidence": [
-				{ "run": 42252088798, "workflow": "build-macos.yml", "job": "reh (test variant)", "sha": "66af5e97afc352bedd24405a420c02b870071ad3", "date": "2026-11-06" },
+				{ "run": 43247714332, "workflow": "build-macos.yml", "job": "reh (test variant)", "sha": "5943146cbfc04c30158ba0079ede36a07246648e", "date": "2026-11-12" },
 				{ "record": "docs/edr/20261109-liveness-gate.md", "date": "2026-11-06" }
 			]
 		},
