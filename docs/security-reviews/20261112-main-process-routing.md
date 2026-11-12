@@ -38,3 +38,21 @@ One high, one medium. Confirmed:
 | VVV-5 | Info | hand-over | Upstream's URL router matches `window:<id>` unanchored, so the hand-over could reach a window whose id starts with the same digits. Host side only. | Accepted | The Tab Manager reuses a window only when it is empty with no editors. |
 | VVV-6 | Info | behaviour | `--add`/`--remove` with a local folder now offer a tab; several local folders arrive as one untitled workspace (unsupported); local untitled workspaces are not restored. All fail closed. | Accepted | Recorded in the EDR. |
 | VVV-7 | Info | test | "Received the open" matched any toast naming the folder, including the Tab Manager's error. | Fixed | It waits for the confirmation text itself. |
+
+## Round WWW (re-review of the round VVV fixes)
+No high or medium findings. Confirmed:
+- VVV-1 stays closed for local and remote workspace files, untitled workspaces, hot-exit
+  backups (they reach only empty windows) and reloads (window configurations aren't persisted,
+  and restore goes through the filter);
+- single-folder tab opens, their reload, Restart Extension Host and session restore are not
+  routed;
+- the check-release loop fails closed on a `find` error, an empty result and paths with spaces;
+- the records match the code.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| WWW-1 | Info | routing rule | A folder paired with an authority was routed only for `file:`; another locally backed scheme (`vscode-userdata:`) would not be. Not reachable today: the RPC filter denies a tab's `vscode.openFolder`. | Fixed | Routed unless its scheme is `vscode-remote`. |
+| WWW-2 | Low | Add Folder in a tab | The renderer stops the extension hosts before main refuses `enterWorkspace`, then reloads a remote window; the untitled workspace file it wrote stays in the profile. | Accepted | Fail-closed; the tab reconnects (patch 0040). Recorded in the EDR. |
+| WWW-3 | Info | Tab Manager | `sameFolder` keys on the platform, so a case-sensitive volume on macOS keeps VVV-3's residual. | Accepted | Needs an existing tab and a link the user allowed; bounded by the allowed roots. |
+| WWW-4 | Info | check-release | The product.json loop scanned vendored `node_modules`/`extensions` copies, unlike the RPC stamp loop. | Fixed | Same scope; a self-test case with a vendored copy. |
+| WWW-5 | Info | EDR | "Tab windows are untouched" was stale. | Fixed | Reworded. |
