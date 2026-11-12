@@ -86,11 +86,8 @@ Current queue:
   (a tab doesn't support multi-root), and no window enters a workspace (Add Folder). Enabled by
   product.json `seclabTabRouter`, a build invariant and a release check
   ([ADR](../docs/adr/20261104-route-folder-opens-in-main.md),
-  [EDR](../docs/edr/20261112-main-process-routing.md)).
-- `0042-no-automatic-tasks-in-local-windows.patch` (interim): a window with no remote authority
-  neither runs `folderOpen` tasks nor asks to allow them. A local folder window exists only for
-  the moment before the Tab Manager reopens it as a tab. Removed when 0041 routes folder opens
-  in the main process ([ADR](../docs/adr/20261104-route-folder-opens-in-main.md)).
+  [EDR](../docs/edr/20261112-main-process-routing.md)). It replaced the interim patch 0042 (no
+  automatic tasks in a local window), which is removed: no local window has a folder.
 
 Number ranges are reserved per owner; the header of `series` lists them, and
 `build/apply-patches.sh` fails if two patches share a number.

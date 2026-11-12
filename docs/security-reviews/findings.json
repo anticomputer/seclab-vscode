@@ -48,8 +48,6 @@
 		}
 	},
 	"baseline": [
-		"20261104-m0-tabd-code.md#2b-1",
-		"20261104-m0-tabd-code.md#3-2",
 		"20261104-probe-safety.md#3#2",
 		"20261104-probe-safety.md#4",
 		"20261104-probe-safety.md#5",
@@ -1879,8 +1877,13 @@
 			"summary": "A previously trusted `file://` folder still loads in a local window before the Tab Manager reroutes it.",
 			"component": "Tab Manager routing / core main process",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "Main-process routing is accepted (ADR 20261104-route-folder-opens-in-main, coordinator's decision of 2026-11-12) as patch 0041, not yet written; its driven CLI-open test closes this finding and 3-2. Interim: patch 0042 stops automatic tasks and their prompt in local windows. Earlier mitigations: multi-root/workspace-file/non-file windows closed; declined routing closes the folder; patch 0003 makes local windows inert."
+			"status": "fixed",
+			"commit": "a492fd2",
+			"test": {
+				"file": "test/driver/cli-open.ts",
+				"name": "no window ever had a workspace, not even before a dialog (m0#2b-1, m0#3-2)"
+			},
+			"note": "Patch 0041 (ADR route-folder-opens-in-main, EDR main-process-routing): no window loads a local folder or a workspace file; main hands it to the Tab Manager. The driven test passed in headless-linux CI (run id in the EDR); the macOS build without 0041 fails it. Interim patch 0042 is removed."
 		},
 		{
 			"record": "20261104-m0-tabd-code.md",
@@ -1949,9 +1952,13 @@
 			"summary": "The local folder window stayed live while a modal waited, and the harness opened the hostile fixture locally.",
 			"component": "Tab Manager routing (close-first)",
 			"owner": "fork-build",
-			"status": "fixed-untested",
-			"commit": "7233035",
-			"gap": "No automated test asserts the folder is closed before any dialog; Level B only opens `--folder-uri vscode-remote://seclab+…`. The remaining race is tracked under 2b-1."
+			"status": "fixed",
+			"commit": "a492fd2",
+			"test": {
+				"file": "test/driver/cli-open.ts",
+				"name": "no window ever had a workspace, not even before a dialog (m0#2b-1, m0#3-2)"
+			},
+			"note": "With patch 0041 no local folder window exists to stay live: the Tab Manager asks in an empty window, and the driven test reads every window document's configuration from its first script, including while the dialog is up."
 		},
 		{
 			"record": "20261104-m0-tabd-code.md",

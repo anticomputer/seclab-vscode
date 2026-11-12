@@ -1,6 +1,6 @@
 # Main-process routing: no window loads a local folder or workspace (patch 0041)
 
-- **Status:** accepted (CI proof pending: the driven CLI-open test runs in `headless-linux`)
+- **Status:** accepted
 - **Date:** 2026-11-12
 - **Deciders:** Coordinator (2026-11-12: implement the accepted ADR as patch 0041 once the
   headless driver is green in CI). Fork-build session: implementation and test.
@@ -61,9 +61,11 @@ key in its product.json (self-tested by removing each).
 editor with a local path as its CLI argument, twice: a folder, and a local `.code-workspace`
 that claims a tab's authority. Every page is auto-attached paused, before its first
 script, and a reporter sends each document's window configuration back over a CDP binding; no
-document may hold a workspace, and the run fails without reports. The Tab Manager must show the
-folder's confirmation (or say the workspace is unsupported), and the main log must show main
-routed it. The run then declines.
+document may hold a workspace, and the run fails without reports. The Tab Manager must log the
+request with the expected counts and show what it did: the folder's confirmation, or, where
+tabd can't start (the CI container has no container runtime), its error naming the folder; for
+the workspace, that it is unsupported. The main log must show main routed it. The run then
+declines.
 Measured on the macOS build without 0041: both cases fail the workspace check (the folder
 window's configuration holds the folder before the fallback closes it; the workspace file loads
 under the claimed authority, and the fallback, which runs only in local windows, misses it), and
@@ -74,8 +76,9 @@ The Tab Manager's extension-level routing stays as a fallback for a build withou
 
 ## Consequences
 
-- Closes m0#2b-1 and m0#3-2 once the test is green on a 0041 build; then interim patch 0042 is
-  removed.
+- Closes m0#2b-1 and m0#3-2: the test passed in `headless-linux` (run 43290060144, 5/5, before
+  the VVV-1 case was added) and on that CI build locally under Xvfb with both cases (12/12).
+  Interim patch 0042 is removed.
 - One more upstream file pair to rebase (two hunks in `windowsMainService.ts`, one in
   `workspacesManagementMainService.ts`).
 - The agents window, which opens a local workspace, is routed too and so doesn't open locally;

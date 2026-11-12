@@ -4,6 +4,5 @@
 	"0015-seclab-ahp-gate.patch": ["desktop"],
 	"0035-seclab-document-sync-provenance.patch": ["desktop"],
 	"0040-reresolve-managed-authority-on-restart.patch": ["desktop"],
-	"0041-route-local-folder-opens-to-tabs.patch": ["desktop"],
-	"0042-no-automatic-tasks-in-local-windows.patch": ["desktop"]
+	"0041-route-local-folder-opens-to-tabs.patch": ["desktop"]
 }
