@@ -37,6 +37,7 @@ EXEMPT = (
     "test/containment/probe-safety.js",
     "test/containment/rogue-extension/probe-safety.js",
     "test/containment/rogue-reh/probe-safety.js",
+    "test/containment/benign-extension/probe-safety.js",
 )
 
 
@@ -109,14 +110,263 @@ ARMING_BAIL = re.compile(r"\b(?:continue|return)\b|\bif\s*\(\s*!")
 # Opt out on the exact line with a pragma:
 #     const decoded = Buffer.from(t, 'base64');  // lint-allow: base64-canary-compare
 PRAGMA = re.compile(r"//\s*lint-allow:\s*(?P<id>[\w-]+)")
-ALLOWED_PRAGMAS = {"base64-canary-compare"}
+ALLOWED_PRAGMAS = {"base64-canary-compare", "lit-probe-head"}
+
+# Real user sources a probe may read only where the harness seeded a canary first: the
+# source expression must be preceded, within a few code lines, by a check of the seeding
+# fact that BAILS (throw/return) when it is absent.
+#   (id, source, guard, why)
+GUARDED_SOURCES = (
+    ("unseeded-profile",
+     re.compile(r"""scheme:\s*['"]vscode-userdata['"]|['"`]vscode-userdata:"""),
+     re.compile(r"\.seclab-test"),
+     "names a host profile resource; only the isolated ~/.seclab-test profile the harness launched, checked before use"),
+    ("real-keychain",
+     re.compile(r"\bkeytar\b|SecKeychain|find-(?:generic|internet)-password|Keychains/"),
+     re.compile(r"(?!)"),
+     "reads the keychain; no harness seeds it, so no probe may read it"),
+)
+GUARD_LOOKBACK = 10
+GUARD_BAIL = re.compile(r"\bthrow\b|\breturn\b")
+
+# The clipboard is read only through the test build's in-memory canary clipboard. Inverted: in
+# a payload's CODE (strings and comments blanked, template substitutions kept) the identifier
+# `clipboard` may appear only inside the argument list of `safety.withCanaryClipboard(...)`,
+# which refuses unless the harness verified the app under test has it and returns only canary
+# tokens. Paste actions, page-side clipboard APIs and dynamic property access on the API
+# surface (`vscode.env[...]`, `Reflect.get(`, `globalThis[`) are refused outright (review
+# rounds 16 and 18). A lint cannot follow every computed name; it complements the runtime
+# guards (the canary store in the test build, withCanaryClipboard, the window.ts refusal).
+CLIPBOARD_IDENT = re.compile(r"\bclipboard\b|\$readText\b")
+PASTE_ACTION = re.compile(r"clipboardPasteAction|\bexecCommand\(\s*['\"`]paste|\bnavigator\.clipboard\b|\.paste\(\s*\)"
+                          r"|\bvscode\.env\s*\[|\bReflect\.get\s*\(|\bglobalThis\s*\[")
+CANARY_CLIPBOARD_CALL = re.compile(r"\bwithCanaryClipboard\s*\(")
+
+# Run records hold facts, never values (test/containment/probe-safety.js, run records). In
+# these files every file write's data must be `safety.recordJson(...)` (optionally inside
+# enc.encode / Buffer.from) or a plain string literal.
+RECORD_WRITERS = (
+    "test/containment/rogue-extension/extension.js",
+    "test/containment/rogue-extension/rpc-probes.js",
+    "test/containment/rogue-reh/probes.js",
+    "test/containment/benign-extension/extension.js",
+)
+WRITE_CALL = re.compile(r"\b(?:fs\.(?:writeFileSync|writeFile|appendFileSync|appendFile)|workspace\.fs\.writeFile)\s*\(")
+RECORD_DATA = re.compile(r"""^(?:(?:enc\.encode|Buffer\.from)\(\s*)?(?:safety\.recordJson\(|(['"])(?:(?!\1)[^\\\n]|\\.)*\1\s*\)?$)""")
+LIT_CALL = re.compile(r"\bsafety\.lit\s*\(")
+STRING_LITERAL = re.compile(r"""^(['"])(?:(?!\1)[^\\\n]|\\.)*\1$""")
+PROBE_CALL = re.compile(r"(?<!function )\b(?:probe|inconclusive)\s*\(\s*results\s*,")
+PLAIN_REF = re.compile(r"^(?:v\.id|[A-Z][A-Z0-9_]*)$")
+# A computed key in a record (`{ [x]: ... }`) could carry a host string as the key itself.
+COMPUTED_KEY = re.compile(r"[{,]\s*\[[^\]\n]+\]\s*:")
+
+# The system pasteboard is never used by any harness, tool or probe, in any form. Scanned
+# over the whole harness tree, not only the payloads.
+PASTEBOARD = re.compile(r"\bpbpaste\b|\bpbcopy\b|\bNSPasteboard\b|\b(?:get|set|return)\s+\(?the\s+clipboard\b|\bthe\s+clipboard\s+as\b|\bclipboard\s+info\b|\bUIPasteboard\b")
+HARNESS_ROOTS = ("test", "build", "tabd", "sandbox", "broker", "extensions", "rpc-filter", "agentic", "patches", "seclab")
+HARNESS_SUFFIXES = (".ts", ".js", ".mjs", ".cjs", ".py", ".sh", ".jxa", ".applescript", ".scpt", ".json", ".patch", "")
+# The lint and its tests name the patterns in order to refuse them.
+PASTEBOARD_EXEMPT = ("rpc-filter/tools/lint_probes.py", "rpc-filter/tools/test_lint_probes.py")
 
 
-def main() -> int:
+def _call_args(text: str, open_paren: int) -> list:
+    """The top-level argument texts of the call whose '(' is at open_paren (strings skipped)."""
+    args, depth, cur, i, quote = [], 0, [], open_paren + 1, None
+    while i < len(text):
+        ch = text[i]
+        if quote:
+            cur.append(ch)
+            if ch == "\\":
+                cur.append(text[i + 1] if i + 1 < len(text) else "")
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+            i += 1
+            continue
+        if ch in "'\"`":
+            quote = ch
+            cur.append(ch)
+        elif ch in "([{":
+            depth += 1
+            cur.append(ch)
+        elif ch in ")]}":
+            if depth == 0:
+                args.append("".join(cur).strip())
+                return args
+            depth -= 1
+            cur.append(ch)
+        elif ch == "," and depth == 0:
+            args.append("".join(cur).strip())
+            cur = []
+        else:
+            cur.append(ch)
+        i += 1
+    return args
+
+
+def _call_span(text: str, open_paren: int) -> int:
+    """Index just past the ')' that closes the '(' at open_paren."""
+    depth, i, quote = 0, open_paren, None
+    while i < len(text):
+        ch = text[i]
+        if quote:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+        elif ch in "'\"`":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return len(text)
+
+
+def _line_of(text: str, pos: int) -> int:
+    return text.count("\n", 0, pos) + 1
+
+
+def _code_only(text: str) -> str:
+    """The text with string literals and comments blanked to spaces (positions and newlines kept)."""
+    out, i, n = list(text), 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == "/" and i + 1 < n and text[i + 1] == "/":
+            while i < n and text[i] != "\n":
+                out[i] = " "
+                i += 1
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            while i < n and not (text[i] == "*" and i + 1 < n and text[i + 1] == "/"):
+                if text[i] != "\n":
+                    out[i] = " "
+                i += 1
+            for j in (i, i + 1):
+                if j < n:
+                    out[j] = " "
+            i += 2
+            continue
+        if ch in "'\"`":
+            quote, i = ch, i + 1
+            while i < n and text[i] != quote:
+                if text[i] == "\\":
+                    out[i] = " "
+                    i += 1
+                elif quote == "`" and text[i] == "$" and i + 1 < n and text[i + 1] == "{":
+                    # A template substitution is code: keep it, up to its matching brace.
+                    depth, i = 1, i + 2
+                    while i < n and depth:
+                        depth += {"{": 1, "}": -1}.get(text[i], 0)
+                        i += 1
+                    continue
+                if i < n and text[i] != "\n":
+                    out[i] = " "
+                i += 1
+            i += 1
+            continue
+        i += 1
+    return "".join(out)
+
+
+def clipboard_violations(rel: str, text: str) -> list:
+    spans = [(m.end() - 1, _call_span(text, m.end() - 1)) for m in CANARY_CLIPBOARD_CALL.finditer(text)]
+    out = []
+    for m in CLIPBOARD_IDENT.finditer(_code_only(text)):
+        if not any(a < m.start() < b for a, b in spans):
+            out.append((rel, _line_of(text, m.start()), "clipboard-outside-canary",
+                        "touches the clipboard outside safety.withCanaryClipboard(); only the test "
+                        "build's in-memory canary clipboard may be read, never the system clipboard"))
+    for m in PASTE_ACTION.finditer(text):
+        out.append((rel, _line_of(text, m.start()), "clipboard-outside-canary",
+                    "a paste action or page-side clipboard API; no probe pastes or reads a clipboard that way"))
+    return out
+
+
+def record_violations(rel: str, text: str, lines: list) -> list:
+    out = []
+    pragma_lines = {n for n, l in enumerate(lines, start=1) if (m := PRAGMA.search(l)) and m.group("id") == "lit-probe-head"}
+    for m in WRITE_CALL.finditer(text):
+        args = _call_args(text, m.end() - 1)
+        data = args[1] if len(args) > 1 else ""
+        if not RECORD_DATA.match(data):
+            out.append((rel, _line_of(text, m.start()), "raw-record",
+                        "writes data that is neither safety.recordJson(...) nor a string literal; a run "
+                        f"record holds facts, never values\n      data: {data[:100]}"))
+    for m in LIT_CALL.finditer(text):
+        args = _call_args(text, m.end() - 1)
+        n = _line_of(text, m.start())
+        if not (len(args) == 1 and STRING_LITERAL.match(args[0])) and n not in pragma_lines:
+            out.append((rel, n, "lit-not-literal",
+                        "safety.lit() takes a string literal only; anything else could carry a host value"))
+    for m in PROBE_CALL.finditer(text):
+        args = _call_args(text, text.index("(", m.start()))
+        for a in args[1:3]:
+            if not (STRING_LITERAL.match(a) or PLAIN_REF.match(a)):
+                out.append((rel, _line_of(text, m.start()), "probe-id-not-literal",
+                            f"a probe id or policy ref must be a string literal (or v.id / a CONSTANT), got {a[:60]}"))
+    for m in COMPUTED_KEY.finditer(_code_only(text)):
+        out.append((rel, _line_of(text, m.start()), "computed-record-key",
+                    "a computed object key; a record's keys are written in the source, never computed"))
+    return out
+
+
+def pasteboard_violations(root: str) -> list:
+    out = []
+    for top in HARNESS_ROOTS:
+        base = os.path.join(root, top)
+        paths = [base] if os.path.isfile(base) else []
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = sorted(d for d in dirnames if d not in ("node_modules", ".git"))
+            paths.extend(os.path.join(dirpath, f) for f in sorted(filenames))
+        for p in paths:
+            rel = os.path.relpath(p, root)
+            if rel in PASTEBOARD_EXEMPT or not os.path.splitext(p)[1] in HARNESS_SUFFIXES:
+                continue
+            if rel.endswith(".md"):
+                continue
+            try:
+                with open(p, "r", encoding="utf-8") as fh:
+                    for n, line in enumerate(fh, start=1):
+                        if PASTEBOARD.search(line):
+                            out.append((rel, n, "pasteboard",
+                                        "uses the system pasteboard; no harness, tool or probe reads or "
+                                        f"writes the user's clipboard\n      {line.strip()[:120]}"))
+            except (UnicodeDecodeError, OSError):
+                continue
+    return out
+
+
+def guarded_source_violations(rel: str, code: list) -> list:
+    out = []
+    for i, (n, line) in enumerate(code):
+        for rid, source, guard, why in GUARDED_SOURCES:
+            if not source.search(line):
+                continue
+            window = [l for _, l in code[max(0, i - GUARD_LOOKBACK):i + 1]]
+            guarded = any(guard.search(l) for l in window) and any(GUARD_BAIL.search(l) for l in window)
+            if not guarded:
+                out.append((rel, n, rid, f"{why}\n      {line.strip()[:120]}"))
+    return out
+
+
+def main(argv: list | None = None) -> int:
+    # An optional root lints another copy of the tree (how a fixed rule is shown to
+    # catch the version it was written against).
+    args = sys.argv[1:] if argv is None else argv
+    root = os.path.abspath(args[0]) if args else REPO
     violations = []
-    payloads = payload_files(REPO)
+    payloads = payload_files(root)
+    if not payloads:
+        # A lint over nothing reports clean; that is a lint that cannot fail.
+        violations.append((root, 0, "no-payloads", "found no probe payloads to lint under this root"))
     for rel in payloads:
-        path = os.path.join(REPO, rel)
+        path = os.path.join(root, rel)
         if not os.path.isfile(path):
             violations.append((rel, 0, "missing", "payload file not found"))
             continue
@@ -138,6 +388,11 @@ def main() -> int:
         for rid, pattern, why in RULES:
             if pattern.search(flat) and not any(v[0] == rel and v[2] == rid for v in violations):
                 violations.append((rel, 0, rid, f"{why} (matched after joining lines)"))
+        violations.extend(guarded_source_violations(rel, code))
+        text = "\n".join(l if not (l.strip().startswith("//") or l.strip().startswith("*")) else "" for l in lines)
+        violations.extend(clipboard_violations(rel, text))
+        if rel in RECORD_WRITERS:
+            violations.extend(record_violations(rel, text, lines))
         for n, line in code:
             if "fromCharCode" in line or "'base64'" in line:
                 m = PRAGMA.search(line)
@@ -165,13 +420,20 @@ def main() -> int:
                 violations.append((rel, n, "raw-shell-command",
                                    "builds a shell command without safety.markerCommand()"))
 
+    # Every record writer must still be there: a renamed or deleted writer would otherwise drop
+    # out of the record rule without a trace.
+    for rel in RECORD_WRITERS:
+        if not os.path.isfile(os.path.join(root, rel)):
+            violations.append((rel, 0, "missing", "record writer not found; update RECORD_WRITERS"))
+    violations.extend(pasteboard_violations(root))
+
     # Build-time copies of the guard must match the single source exactly.
-    src = os.path.join(REPO, "test/containment/probe-safety.js")
+    src = os.path.join(root, "test/containment/probe-safety.js")
     if os.path.isfile(src):
         with open(src, "rb") as fh:
             want = fh.read()
-        for d in ("rogue-extension", "rogue-reh"):
-            copy = os.path.join(REPO, "test/containment", d, "probe-safety.js")
+        for d in ("rogue-extension", "rogue-reh", "benign-extension"):
+            copy = os.path.join(root, "test/containment", d, "probe-safety.js")
             if os.path.isfile(copy):
                 with open(copy, "rb") as fh:
                     if fh.read() != want:
@@ -180,7 +442,8 @@ def main() -> int:
                                            "differs from test/containment/probe-safety.js"))
 
     if not violations:
-        print("probe payloads clean: %d files, %d rules" % (len(payloads), len(RULES)))
+        print("probe payloads clean: %d files, %d content rules + clipboard, record, lit, probe-id, pasteboard"
+              % (len(payloads), len(RULES)))
         return 0
 
     for rel, n, rid, why in violations:

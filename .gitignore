@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 test/containment/rogue-extension/probe-safety.js
 test/containment/rogue-reh/probe-safety.js
+test/containment/benign-extension/probe-safety.js

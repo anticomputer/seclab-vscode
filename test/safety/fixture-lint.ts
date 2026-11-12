@@ -55,10 +55,15 @@ const RULES: Rule[] = [
 	{ id: 'agent-injection', why: 'instruction-like text aimed at an AI agent (prompt injection)',
 		re: /\b(ignore|disregard|forget|override)\s+(all\s+|any\s+|the\s+|your\s+)*(previous|prior|above|earlier|system|original)\s+(instructions?|prompts?|rules|messages?|context)\b|\b(you\s+are\s+now|from\s+now\s+on,?\s+you)\b[^\n]{0,40}\b(assistant|agent|ai|model|llm|reviewer|mode)\b|\b(note|message|instructions?)\s+(to|for)\s+(the\s+)?(ai|llm|agent|assistant|reviewer|copilot|claude|model)\b|<\/?\s*(system|assistant|tool_call|function_calls|invoke|antml:[a-z_]+)\s*>|\[\/?(INST|SYS)\]|\b(new|updated|real)\s+system\s+prompt\b|\b(do\s+not|don'?t)\s+(tell|inform|alert|report\s+to)\s+the\s+(user|human|reviewer)\b/i },
 	// Never steal focus (AGENTS.md hard rule): editor/demo windows launch in the background
-	// (test/window.ts: open -g -n) and are captured by window id while covered. Any activate or
-	// frontmost call, a foreground `open -a/-b`, or a direct exec of the app's CLI is a violation.
-	{ id: 'focus-steal', why: 'brings a window/app to the front (launch with test/window.ts, capture with screencapture -l)',
+	// (test/window.ts: open -g -n). Any activate or frontmost call, a foreground `open -a/-b`,
+	// or a direct exec of the app's CLI is a violation.
+	{ id: 'focus-steal', why: 'brings a window/app to the front (launch with test/window.ts)',
 		re: /\bto\s+activate\b|\bactivate\s+(application|app)\b|\.activate\(\s*\)|activateIgnoringOtherApps|activateWithOptions|\bset\s+frontmost\b|\bfrontmost\s*[:=]\s*true|\bfocus\(\s*\{\s*steal\b|\bopen\s+(?!(?:-[A-Za-z]+\s+|--env\s+\S+\s+)*(?:-[A-Za-z]*g[A-Za-z]*|--background)\b)(?:-[A-Za-z]+\s+|--env\s+\S+\s+)*(?:-[A-Za-z]*[ab][A-Za-z]*\s|\S+\.app\b)|['"]open['"]\s*,(?![^\n]*?['"]-[A-Za-z]*g[A-Za-z]*['"][^\n]*?['"]--args['"]|(?![^\n]*['"]--args['"])[^\n]*?['"]-[A-Za-z]*g[A-Za-z]*['"])[^\n]*?(?:['"]-[A-Za-z]*[ab][A-Za-z]*['"]|\.app['"])|Resources\/app\/bin\/code\b/ },
+	// No test or demo captures the screen, drives the UI through accessibility, or synthesises
+	// input: evidence comes from files and logs. These are the APIs that would need a privacy
+	// grant from the user, so none of them is ever called.
+	{ id: 'screen-automation', why: 'screen capture, accessibility or keystroke automation (never used by tests or demos)',
+		re: /\bscreencapture\b|CGWindowListCreateImage|CGDisplayCreateImage|\bScreenCaptureKit\b|\bSCStream\b|\bSCShareableContent\b|\bdesktopCapturer\b|System Events|\bkeystroke\b|\bkey\s+code\s+\d|\bAXUIElement\w*|\bAXIsProcessTrusted\w*|\bCGEventPost\b|\bCGEventCreate(?:Keyboard|Mouse)Event\b|\btccutil\b/ },
 ];
 
 // Network: every URL host must be a test-owned target. IPs are validated as literal IPs
@@ -200,6 +205,10 @@ if (selfTest) {
 		// SS-7: combined flags, a bare .app, -g only after --args
 		['open -na .work/app/X.app', 1], ['open /Applications/X.app', 1], ['open -n -a X --args -g', 1], ['open -gna X', 0], ['open --background -a X', 0],
 		["spawn('open', ['-n', '-a', app, '--args', '-g'])", 1],
+		// screen-automation (assembled): capture, accessibility, synthetic input
+		[`execFileSync('${'screen' + 'capture'}', ['-o', '-l', id, out])`, 1], [`tell application "${'System' + ' Events'}" to key code 124`, 1],
+		[`${'AXUI' + 'Element'}CreateApplication(pid)`, 1], [`${'CGEvent' + 'Post'}(tap, ev)`, 1], [`${'tcc' + 'util'} reset All`, 1],
+		['the screen is never captured; evidence comes from logs', 0], ['a keyboard shortcut in the docs', 0],
 	];
 	const bad = cases.filter(([l, n]) => lintLine('self-test', l, 1).length !== n).map(([l, n]) => `expected ${n}: ${l} -> ${JSON.stringify(lintLine('self-test', l, 1))}`);
 	// Workspace-level AV shapes (av-shape.ts): single-file, split-file, host file, and exemptions.

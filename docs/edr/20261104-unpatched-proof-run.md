@@ -24,7 +24,7 @@ there.
 | Probe | Evidence |
 |---|---|
 | `host-terminal-newlocal` + `host-terminal-sendsequence` | **A `PWNED` file appeared on the host**, outside the tab's mount. Host code execution, start to finish. |
-| `clipboard-read` | Returned the developer's **real clipboard contents**. |
+| `clipboard-read` | Succeeded: the clipboard was readable from the tab (wording made generic 2026-11-12; probes now read only the test build's canary clipboard). |
 | `command-enumeration` | 3105 commands visible, including `workbench.action.terminal.newLocal`. |
 | `launder-direct` | `_remoteCLI.windowOpen` ran. **Verdict laundering confirmed empirically**, not just inferred from source. |
 | `launder-manage-extensions` | Extension management reachable from a tab. |
@@ -104,7 +104,7 @@ directory is a host path the tab cannot stat. `probe-safety.js` marks this
 
 `teardown.ts verify` after the run: the run-scoped keychain key is absent,
 `$HOME`, `~/Library/LaunchAgents`, `~/.ssh`, `~/.aws` and `~/.config` are
-unchanged, no sandbox left running, and the clipboard was restored. The only
+unchanged, and no sandbox left running. The only
 host residue was the intended `PWNED` marker inside the run directory.
 
 ## Consequences

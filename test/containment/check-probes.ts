@@ -28,6 +28,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { readHits } from './beacon.ts';
+import { partitionFindings, stateItems } from './state-db.ts';
 import { report, type Check } from './assert.ts';
 
 const argv = process.argv.slice(2);
@@ -39,21 +40,38 @@ const opt = (name: string): string | undefined => {
 };
 const noReh = argv.includes('--no-reh');
 if ((mode !== 'unpatched' && mode !== 'patched') || !evidenceArg) {
-	console.error('usage: check-probes.ts unpatched|patched <evidence-dir> [--beacon F] [--denials F] [--no-reh]');
+	console.error('usage: check-probes.ts unpatched|patched <evidence-dir> [--beacon F] [--denials F] [--user-data DIR --tab ID] [--no-reh]');
 	process.exit(2);
 }
 
 const repo = path.resolve(import.meta.dirname, '../..');
 const evidence = path.resolve(evidenceArg);
+// --expectations: the self-test (check-probes.test.ts) drives the checker with synthetic
+// expectations. Only with SECLAB_PROBE_SELFTEST=1, and the report says so: a proof run always
+// reads the registry, and a transcript must show which it was (review round 18).
+const syntheticExpectations = opt('--expectations');
+if (syntheticExpectations !== undefined && process.env.SECLAB_PROBE_SELFTEST !== '1') {
+	console.error('check-probes: --expectations is for the self-test only (SECLAB_PROBE_SELFTEST=1)');
+	process.exit(2);
+}
+if (syntheticExpectations !== undefined) {
+	console.log(`SYNTHETIC EXPECTATIONS (self-test): ${syntheticExpectations}; this is not a proof run`);
+}
 const expectations = JSON.parse(
-	fs.readFileSync(path.join(repo, 'rpc-filter/probes/expectations.json'), 'utf8'));
+	fs.readFileSync(syntheticExpectations ? path.resolve(syntheticExpectations) : path.join(repo, 'rpc-filter/probes/expectations.json'), 'utf8'));
 const coverage = JSON.parse(
 	fs.readFileSync(path.join(repo, 'rpc-filter/policy/coverage.json'), 'utf8'));
 
-interface Result { id: string; policyRef: string; outcome: string; detail: string }
+/** A probe result as the payloads record it: facts only, never a value (probe-safety.js). */
+interface Result { id: string; policyRef: string; outcome: string; facts?: Record<string, unknown> | null; error?: string }
+/** What a result says, for a report line: the failure kind, or its facts. */
+const said = (r: Result): string => r.error ?? JSON.stringify(r.facts ?? null).slice(0, 200);
+const fact = (r: Result, k: string): unknown => (r.facts && typeof r.facts === 'object' ? r.facts[k] : undefined);
+const tokens = (r: Result): string[] => { const t = fact(r, 'canaryTokens'); return Array.isArray(t) ? t.map(String) : []; };
 interface Spec {
 	required?: boolean; policyRef: string; why: string; beacon?: string;
 	patchedOutcome?: string; needsTestContribution?: boolean;
+	status?: string; blocked_on?: string;
 	hostEffect?: string; hostEffectAbsolute?: string;
 }
 
@@ -69,8 +87,22 @@ function hostEffectPath(effect: string): string | null {
 	if (effect.startsWith('marker.')) {
 		return path.join(runDir, `PWNED${effect.slice('marker'.length)}`);
 	}
+	if (!HOST_EFFECT_FILENAME.test(effect)) {
+		// Not a filename. The previous version joined whatever it was onto the
+		// run directory, so an English description of an effect -- "beacon hit
+		// from the host, or a marker written outside the tab" -- became a path
+		// that could never exist, and the absence of that file was reported as
+		// the host being unchanged. A probe that cannot fail is worse than no
+		// probe, so an unresolvable effect is an error rather than a pass.
+		throw new Error(
+			`hostEffect ${JSON.stringify(effect)} is not a filename. Use "marker", `
+			+ `"marker.<suffix>", a run-relative path, or hostEffectAbsolute.`);
+	}
 	return path.join(runDir, effect);
 }
+
+/** A plausible run-relative filename: no spaces, no prose. */
+const HOST_EFFECT_FILENAME = /^[A-Za-z0-9._\/-]+$/;
 
 const checks: Check[] = [];
 const c = (vector: string, ok: boolean, name: string, detail = ''): void => {
@@ -118,10 +150,38 @@ function load(file: string, label: string, required: boolean): void {
 	c('probes', true, `${label} evidence present (${file})`, `${run.results.length} results`);
 }
 load('rpc-probes.json', 'rogue extension', true);
-// The REH fixture reaches surfaces the extension host cannot. Skipping it
-// silently would leave chan:download, chan:mcpGatewayToolBroker and the raw-RPC
-// identity spoof with no baseline, which reads as containment.
-load('reh-probes.json', 'rogue REH', !noReh);
+// The restart probe runs last, once, in its own record (it can restart the extension host
+// that runs it). An attempt that no new host settled has no outcome: inconclusive, never a pass.
+{
+	const p = path.join(evidence, 'rpc-probe-restart.json');
+	if (fs.existsSync(p)) {
+		try {
+			const r = JSON.parse(fs.readFileSync(p, 'utf8')) as Result;
+			if (r && r.id === 'host-restart-extension-host') {
+				results.set(r.id, r.outcome ? r : { ...r, outcome: 'error', error: 'awaiting-new-host' });
+			}
+		} catch { /* unreadable: the probe reports "no result recorded" */ }
+	}
+}
+// The REH fixture reaches surfaces the extension host cannot: chan:download,
+// chan:mcpGatewayToolBroker, the raw-RPC identity spoof and the terminal
+// pushes. Missing evidence is a failure unless the run says, in as many words,
+// that it is not testing them.
+//
+// Waiving it used to print `PASS  rogue REH evidence present`, which is a
+// false sentence: nothing was loaded and nothing was present. A green line
+// asserting the opposite of what happened is worse than no line, because it is
+// what gets quoted afterwards. The waiver is now reported as a waiver, names
+// the probes it drops, and is counted so the run summary cannot be read as
+// covering them.
+if (noReh) {
+	const dropped = Object.keys(expectations.rehProbes as Record<string, unknown>)
+		.filter(k => k !== 'note');
+	c('probes-waived', true, 'rogue REH evidence WAIVED by --no-reh',
+		`not tested: ${dropped.length} probes (${dropped.join(', ')})`);
+} else {
+	load('reh-probes.json', 'rogue REH', true);
+}
 
 const specs: Record<string, Spec> = {
 	...(expectations.probes as Record<string, Spec>),
@@ -153,35 +213,103 @@ const deniedRefs = new Set(denials.map(d => d.policyRef ?? ''));
 // in particular would have passed while handing a live token to the tab.
 const predicates: Record<string, (r: Result) => string | null> = {
 	'auth-get-session': r => {
-		if (r.outcome !== 'succeeded') { return null; }
-		let v: { tokenLength?: number } | null = null;
-		try { v = JSON.parse(r.detail); } catch { return `unparseable detail: ${r.detail}`; }
-		if (!v) { return null; }
-		const len = Number(v.tokenLength ?? 0);
+		if (r.outcome !== 'succeeded' || fact(r, 'present') !== true) { return null; }
+		const len = Number(fact(r, 'tokenLength') ?? 0);
 		const sentinel = Number(process.env.SECLAB_SENTINEL_LEN ?? 64);
 		return len > 0 && len !== sentinel ? `accessToken length ${len} is not a sentinel` : null;
 	},
 	'command-enumeration': r => {
 		if (r.outcome !== 'succeeded') { return null; }
-		let v: { dangerousVisible?: string[] } | null = null;
-		try { v = JSON.parse(r.detail); } catch { return `unparseable detail: ${r.detail}`; }
-		const vis = v?.dangerousVisible ?? [];
-		return vis.length ? `registry still exposes ${vis.join(', ')}` : null;
+		const remoteCli = Number(fact(r, 'remoteCliVisible') ?? 0);
+		return fact(r, 'newLocalVisible') === true || remoteCli > 0
+			? `registry still exposes newLocal=${String(fact(r, 'newLocalVisible'))}, _remoteCLI.*=${remoteCli}` : null;
 	},
 	'secret-read-cross-tab': r => {
 		if (r.outcome !== 'succeeded') { return null; }
-		const other = process.env.SECLAB_OTHER_TAB_ID;
-		return other && r.detail.includes(other) ? `read the other tab's value (${other})` : null;
+		const other = String(process.env.SECLAB_OTHER_TAB_ID ?? '').replace(/[^A-Za-z0-9]/g, '').slice(0, 64);
+		return other && tokens(r).includes(`seclabcanary_probe_secret_${other}`) ? `read the other tab's value (${other})` : null;
 	},
 	'webview-egress': () =>
 		beaconPaths.has('/webview') ? 'webview still reached the host network' : null,
+	'state-claim-tab-manager-read': r =>
+		tokens(r).length > 0 ? 'the Tab Manager\'s seeded globalState canary reached the tab' : null,
+	'state-claim-tab-manager-write': () => partitionReason(0, 1),
+	'secret-claim-tab-manager-write': () => partitionReason(2, 3),
+};
+
+/**
+ * The partition checks read the profile's state database (test/containment/state-db.ts), so they
+ * need the run's --user-data dir and --tab id. `escaped` is the finding that fails on an escape,
+ * `ran` the one that shows the write landed in the partition.
+ */
+function partitionReason(escaped: number, ran: number): string | null {
+	const userData = opt('--user-data');
+	const tab = opt('--tab');
+	if (!userData || !tab) {
+		return 'needs --user-data and --tab to read where the write landed';
+	}
+	const f = partitionFindings(stateItems(path.resolve(userData)), tab);
+	return !f[escaped].ok ? f[escaped].name.replace('did not', 'DID') : !f[ran].ok ? `${f[ran].name}: ${f[ran].detail}` : null;
+}
+
+// An unpatched run must show the escape itself, not just a return value: these probes
+// "succeed" on both builds, so the outcome alone proves nothing.
+const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
+	'state-claim-tab-manager-read': r =>
+		tokens(r).length > 0 ? null : 'the read did not return the seeded canary, so the probe proves nothing',
+	'provider-completion-host-file': r =>
+		fact(r, 'sawHostContent') === true ? null : 'no host file content came back',
+	'host-doc-open-userdata': r =>
+		fact(r, 'sawHostContent') === true ? null : 'the host settings canary did not come back',
+	'host-doc-show-userdata': r =>
+		fact(r, 'sawHostContent') === true ? null : 'the host settings canary did not come back',
+	'host-file-search-nested-uri': r =>
+		fact(r, 'sawHostResult') === true ? null : 'no host resource in the search results',
+	// The canary clipboard (a test build's in-memory store) must return this run's canary.
+	'clipboard-read': r =>
+		fact(r, 'sawCanary') === true ? null : 'the canary clipboard did not return the run\'s canary',
+	// A restart is proven only by a new extension host process settling the attempt, never by
+	// an outcome that was simply not written (review rounds 14 and 15).
+	'host-restart-extension-host': r => {
+		const newPid = fact(r, 'newHostPid');
+		const oldPid = fact(r, 'attemptPid');
+		const settledMs = fact(r, 'settledMs');
+		return Number.isSafeInteger(newPid) && Number.isSafeInteger(oldPid) && newPid !== oldPid
+			&& fact(r, 'sameWindow') === true && typeof settledMs === 'number' && settledMs <= 60000
+			? null : 'no new extension host in the same window, promptly after the attempt';
+	},
+	'state-claim-tab-manager-write': () => {
+		const userData = opt('--user-data');
+		if (!userData) { return 'needs --user-data'; }
+		const f = partitionFindings(stateItems(path.resolve(userData)), opt('--tab') ?? '');
+		return f[0].ok ? 'the write did not reach the Tab Manager\'s globalState' : null;
+	},
+	'secret-claim-tab-manager-write': () => {
+		const userData = opt('--user-data');
+		if (!userData) { return 'needs --user-data'; }
+		const f = partitionFindings(stateItems(path.resolve(userData)), opt('--tab') ?? '');
+		return f[2].ok ? 'the secret did not land under the Tab Manager\'s id' : null;
+	},
 };
 
 // ---------------------------------------------------------------- checks
 for (const [id, spec] of Object.entries(specs)) {
-	const known = spec.policyRef in (coverage.mapping as Record<string, string>)
+	const mapping = coverage.mapping as Record<string, string>;
+	// Surface (e) keys carry pinned attributes after the id --
+	// `ai-tool:<id>|host=…`, `ai-setting:<id>|scope=…|unreg=…|tab_writable=…` --
+	// so an exact lookup never matches. Match on the id prefix instead: the
+	// attributes are what the gate pins, not part of the surface's identity.
+	const composite = (ref: string): boolean =>
+		(ref.startsWith('ai-tool:') || ref.startsWith('ai-setting:'))
+		&& Object.keys(mapping).some(k => k === ref || k.startsWith(`${ref}|`));
+	// `chan:server_initiated` and `push:` used to be exempt here, and skipped
+	// by name in check_drift.py, so server-initiated surfaces were in neither
+	// the digest nor this check. A probe could name one and link to nothing.
+	// Both classes are now ordinary keys in coverage.json, so a probe that
+	// references a push the policy does not know about fails like any other.
+	const known = spec.policyRef in mapping
+		|| composite(spec.policyRef)
 		|| spec.policyRef.startsWith('data:')
-		|| spec.policyRef.startsWith('chan:server_initiated')
 		|| spec.needsTestContribution
 		|| spec.policyRef === 'rpc:raw';
 	c('probe-policy-link', known, `${id} references a real policy entry (${spec.policyRef})`,
@@ -189,6 +317,14 @@ for (const [id, spec] of Object.entries(specs)) {
 }
 
 for (const [id, spec] of Object.entries(specs)) {
+	if (spec.status === 'not-implemented') {
+		// Reported, never silently skipped. These are registered surfaces with
+		// no runner yet; counting them as passes would turn an absence of
+		// evidence into evidence of containment.
+		c('probes-pending', true, `${id} is registered but NOT IMPLEMENTED`,
+			spec.blocked_on ?? '');
+		continue;
+	}
 	const r = results.get(id);
 	if (!r) {
 		c('probes', !spec.required, `${id} ran`, 'no result recorded');
@@ -199,7 +335,12 @@ for (const [id, spec] of Object.entries(specs)) {
 		// ERROR is not a pass: that is the whole reason this run exists.
 		c('probes', r.outcome === 'succeeded' || !spec.required,
 			`${id} succeeds on the unpatched build (${spec.why})`,
-			`${r.outcome}: ${String(r.detail).slice(0, 200)}`);
+			`${r.outcome}: ${said(r)}`);
+		const unpatchedPred = unpatchedPredicates[id];
+		if (unpatchedPred && spec.required) {
+			const reason = unpatchedPred(r);
+			c('predicate', reason === null, `${id} shows the escape itself on the unpatched build`, reason ?? '');
+		}
 		if (spec.beacon && spec.required) {
 			c('beacon', beaconPaths.has(spec.beacon),
 				`${id} actually reached the host network (${spec.beacon})`,
@@ -224,7 +365,7 @@ for (const [id, spec] of Object.entries(specs)) {
 	if (want === 'denied') {
 		c('probes', r.outcome !== 'succeeded' || !spec.required,
 			`${id} did not succeed on the patched build`,
-			`${r.outcome}: ${String(r.detail).slice(0, 200)}`);
+			`${r.outcome}: ${said(r)}`);
 		// Corroborate with the host-side log rather than the tab-visible error,
 		// which is deliberately indistinguishable from an unsupported operation.
 		c('denial-log', deniedRefs.has(spec.policyRef) || !spec.required,
@@ -234,7 +375,7 @@ for (const [id, spec] of Object.entries(specs)) {
 	} else {
 		c('probes', r.outcome === want || !spec.required,
 			`${id} is ${want} on the patched build`,
-			`${r.outcome}: ${String(r.detail).slice(0, 200)}`);
+			`${r.outcome}: ${said(r)}`);
 		const pred = predicates[id];
 		c('predicate', !!pred, `${id} has an executable patched predicate`,
 			pred ? '' : 'patchedOutcome is not "denied" but nothing checks the claim');

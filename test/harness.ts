@@ -169,9 +169,9 @@ export function snapshotDiff(before: Snapshot, after: Snapshot): string[] {
 
 
 // ---- Editor windows never take focus (AGENTS.md hard rule; user: "you keep popping up on top
-// of my ongoing work"). Launch in the background with LaunchServices (`open -g -n`), never
-// activate, and capture the window by id while it stays covered on the current Space
-// (`screencapture -o -l`, which reads the window's own backing store). `open -g` alone is not
+// of my ongoing work"). Launch in the background with LaunchServices (`open -g -n`) and never
+// activate. No screen capture, UI automation or synthetic input: evidence comes from
+// files and logs. `open -g` alone is not
 // enough: Electron's macOS show() activates the app itself (a real launch stole
 // focus). So the launch sets SECLAB_BACKGROUND_WINDOWS=1, and patch 0012 makes the app show
 // windows inactive and never focus or activate. launchEditorInBackground still checks the
@@ -182,14 +182,31 @@ export const EDITOR_APP = path.join(repoRoot, '.work', 'app', 'seclab-vscode.app
 
 /** argv that opens an isolated-profile editor window without activating it. SECLAB_BACKGROUND_WINDOWS
  *  (patch 0012) makes the app itself show windows inactive and never focus or activate. */
-export function editorLaunchArgv(userData: string, folderUri: string, env: Record<string, string> = {}, app = EDITOR_APP): string[] {
+export function editorLaunchArgv(userData: string, folderUri: string, env: Record<string, string> = {}, app = EDITOR_APP, rpcTrace?: string): string[] {
 	// VSCODE_PORTABLE keeps argv.json, extensions and shared data in the run's portable dir (a
 	// sibling of the profile, removed with it). Without it the app creates ~/<dataFolderName> and
 	// ~/<sharedDataFolderName> (e.g. ~/.seclab-vscode-test-containment) in the user's home.
 	const envArgs = Object.entries({ ...env, SECLAB_BACKGROUND_WINDOWS: '1', VSCODE_PORTABLE: editorPortableDir(userData) }).flatMap(([k, v]) => ['--env', `${k}=${v}`]);
 	// The main process's stderr carries the background-windows guard's record (click-through
 	// windows, dialogs not shown), which the focus probe checks.
-	return ['open', '-g', '-n', ...envArgs, '--stderr', editorStderrLog(userData), '-a', app, '--args', '--user-data-dir', userData, '--folder-uri', folderUri];
+	return ['open', '-g', '-n', ...envArgs, '--stderr', editorStderrLog(userData), '-a', app, '--args', '--user-data-dir', userData, '--folder-uri', folderUri,
+		...(rpcTrace ? rpcTraceArgs(rpcTrace) : [])];
+}
+
+/**
+ * Upstream's own extension-host RPC logger (`--logExtensionHostCommunication`, RPCLogger in
+ * extensionHostManager.ts) writes every Ext -> Win call to the renderer console; Chromium's
+ * file logging puts that console in `logFile`. Measurement only (test/containment/rpc-trace.ts):
+ * the raw log carries argument values, so it must live in this checkout's `.work/` and is
+ * deleted once the method list is derived.
+ */
+export function rpcTraceArgs(logFile: string): string[] {
+	const abs = path.resolve(logFile);
+	const work = path.join(repoRoot, '.work') + path.sep;
+	if (!abs.startsWith(work) || /[\s'"]/.test(abs)) {
+		throw new Error(`an RPC trace log must be a plain path under ${work}: ${abs}`);
+	}
+	return ['--logExtensionHostCommunication', '--enable-logging=file', `--log-file=${abs}`];
 }
 
 /** Where the editor's main-process stderr goes (inside the run's profile, removed at teardown). */
@@ -218,9 +235,9 @@ export function preparePortable(userData: string): void {
 }
 
 /** The same, as one copy-pasteable shell line (for "prepare" steps that print the command). */
-export function editorLaunchCommand(userData: string, folderUri: string, env: Record<string, string> = {}, app?: string): string {
+export function editorLaunchCommand(userData: string, folderUri: string, env: Record<string, string> = {}, app?: string, rpcTrace?: string): string {
 	const envArgs = Object.entries(env).map(([k, v]) => ` --env ${shq(`${k}=${v}`)}`).join('');
-	return `node test/window.ts launch${app ? ` --app ${shq(app)}` : ''}${envArgs} ${shq(userData)} ${shq(folderUri)}`;
+	return `node test/window.ts launch${app ? ` --app ${shq(app)}` : ''}${rpcTrace ? ` --rpc-trace ${shq(rpcTrace)}` : ''}${envArgs} ${shq(userData)} ${shq(folderUri)}`;
 }
 
 function shq(s: string): string {
@@ -265,7 +282,7 @@ export function editorWindowId(pid: number): number {
 
 /** Every window of the editor, at any layer (read-only CGWindowList query). */
 export function editorWindows(pid: number): Array<{ id: number; layer: number; w: number; h: number }> {
-	const out = execFileSync('osascript', ['-l', 'JavaScript', '-e', WINDOW_LIST_JXA, String(pid)], { encoding: 'utf8' }); // fixture-lint: allow persistence -- read-only CGWindowList query (window ids for screencapture -l); no activation
+	const out = execFileSync('osascript', ['-l', 'JavaScript', '-e', WINDOW_LIST_JXA, String(pid)], { encoding: 'utf8' }); // fixture-lint: allow persistence -- read-only CGWindowList query (window ids and owner pids); no activation, no capture
 	return JSON.parse(out) as Array<{ id: number; layer: number; w: number; h: number }>;
 }
 
@@ -274,14 +291,14 @@ export interface BackgroundLaunch { pid: number; windowId: number; stoleFocus: b
 /** Launch without activating; wait for the window; report whether the editor took focus. The focus
  *  watcher starts before the editor does and runs for its whole life: the first sample in which the
  *  editor is the frontmost app is recorded and the editor's process tree is killed (fail closed). */
-export async function launchEditorInBackground(userData: string, folderUri: string, env: Record<string, string> = {}, timeoutMs = 90_000, app = EDITOR_APP): Promise<BackgroundLaunch> {
+export async function launchEditorInBackground(userData: string, folderUri: string, env: Record<string, string> = {}, timeoutMs = 90_000, app = EDITOR_APP, rpcTrace?: string): Promise<BackgroundLaunch> {
 	if (editorPid(userData)) {
 		throw new Error(`an editor already runs with ${userData}; tear it down first`);
 	}
 	startFocusWatch(userData);
 	fs.mkdirSync(userData, { recursive: true });
 	preparePortable(userData);
-	const argv = editorLaunchArgv(userData, folderUri, env, app);
+	const argv = editorLaunchArgv(userData, folderUri, env, app, rpcTrace);
 	execFileSync(argv[0], argv.slice(1), { stdio: 'ignore' });
 	const deadline = Date.now() + timeoutMs;
 	let pid = 0;
@@ -335,10 +352,23 @@ function focusStolen(userData: string): boolean {
 	return fs.existsSync(focusStealLog(userData)) && fs.readFileSync(focusStealLog(userData), 'utf8').trim() !== '';
 }
 
-/** Capture one window by id, covered or not, without touching focus or z-order. */
-export function captureWindow(windowId: number, out: string): void {
-	fs.mkdirSync(path.dirname(out), { recursive: true });
-	execFileSync('screencapture', ['-o', '-x', '-l', String(windowId), out], { stdio: 'inherit' });
+/**
+ * Does this app carry the canary clipboard (the `canary-clipboard` test hook in
+ * test/builds/variants.json: an in-memory clipboard seeded with the run's canary)? Read from
+ * the hook's marker in its built bundle. Runs that read the clipboard need it.
+ */
+export function appHasCanaryClipboard(app: string): boolean {
+	try {
+		const variants = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'builds', 'variants.json'), 'utf8')) as Record<string, { hooks?: Array<{ id?: string; target?: string; marker?: string; bundle?: string }> }>;
+		const hook = Object.values(variants).flatMap(v => Array.isArray(v?.hooks) ? v.hooks : [])
+			.find(h => h.id === 'canary-clipboard' && h.target === 'desktop');
+		if (!hook?.marker || !hook.bundle || hook.bundle.includes('..')) {
+			return false;
+		}
+		return fs.readFileSync(path.join(app, 'Contents', 'Resources', 'app', hook.bundle), 'utf8').includes(hook.marker);
+	} catch {
+		return false;
+	}
 }
 
 /** Where the focus watcher records steals; teardown fails the run if it isn't empty (UU-2). */

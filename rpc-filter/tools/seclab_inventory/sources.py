@@ -91,6 +91,61 @@ def read_pinned_sha(repo_root: str, fallback: str) -> tuple:
 
 
 def strip_block_comments(text: str) -> str:
-    """Remove /* */ and // comments so declarations in comments are not matched."""
-    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
-    return re.sub(r"(?m)^\s*//.*$", "", text)
+    """Blank out `/* */` and `//` comments, leaving everything else in place.
+
+    String-aware, and length-preserving.
+
+    The previous implementation was ``re.sub(r"/\\*.*?\\*/", "", text,
+    flags=re.S)``, which has no idea what a string literal is. A perfectly
+    ordinary glob such as ``'**/*plan*.md'`` contains ``/*``, so it opened a
+    "comment" that ran to the next ``*/`` anywhere in the file and deleted
+    everything between. In ``chat.shared.contribution.ts`` that removed 105,915
+    of 205,567 characters -- over half the file, taking ``chat.agent.enabled``
+    and ``chat.disableAIFeatures`` with it -- and repo-wide **3321 of 10014
+    files lost more than a quarter of their content**. Every surface in the
+    inventory is extracted from this output, so the whole inventory was built
+    on mutilated source, and the drift gate faithfully pinned the result.
+
+    Comments are replaced with spaces rather than removed so that offsets and
+    line numbers still match the original file. The old version shifted them,
+    which means the permalinks it produced could point at the wrong line.
+
+    Known limit: a regular-expression literal containing a quote or a comment
+    marker (``/"/`` or ``/\\/\\*/``) can still confuse the scanner. That is rare
+    and, unlike the previous bug, fails in small local ways rather than
+    deleting the rest of the file.
+    """
+    out = list(text)
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch in "'\"`":
+            quote = ch
+            i += 1
+            while i < n:
+                c = text[i]
+                if c == "\\":
+                    i += 2
+                    continue
+                if c == quote:
+                    i += 1
+                    break
+                i += 1
+            continue
+        if ch == "/" and i + 1 < n:
+            nxt = text[i + 1]
+            if nxt == "/":
+                while i < n and text[i] != "\n":
+                    out[i] = " "
+                    i += 1
+                continue
+            if nxt == "*":
+                end = text.find("*/", i + 2)
+                end = n if end == -1 else end + 2
+                for j in range(i, end):
+                    if out[j] != "\n":
+                        out[j] = " "
+                i = end
+                continue
+        i += 1
+    return "".join(out)

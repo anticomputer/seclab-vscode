@@ -46,6 +46,15 @@ REPO_ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 INVENTORY = os.path.join(REPO_ROOT, "rpc-filter", "inventory", "inventory.json")
 POLICY = os.path.join(REPO_ROOT, "rpc-filter", "policy", "policy.json")
 COVERAGE = os.path.join(REPO_ROOT, "rpc-filter", "policy", "coverage.json")
+VALIDATORS_SRC = os.path.join(REPO_ROOT, "rpc-filter", "patch-src", "seclabArgValidators.ts")
+
+
+def _read(path: str) -> str:
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read()
+    except OSError:
+        return ""
 
 REACHABLE = ("allow", "allow_with_constraint", "prompt")
 CREDENTIAL_IMPACTS = ("credential-access",)
@@ -116,10 +125,61 @@ def build_mapping(inv: dict, policy: dict) -> dict:
         entry = channels.get(name)
         record("chan:%s" % name,
                entry["verdict"] if entry else policy["default_verdict"], entry)
+    # (c2) Server-initiated pushes. These were previously skipped by name --
+    # the mapping ignored anything starting with `chan:` and the probe checker
+    # blanket-exempted the prefix -- so the deny verdict on
+    # remoteTerminal.onExecuteCommand sat in the policy, outside the digest,
+    # with nothing enforcing it. A verdict that no gate can see is a comment.
+    push_policy = policy.get("pushes") or {}
+    for push in inv["surfaces"]["c2_server_initiated_pushes"]["server_initiated_pushes"]:
+        entry = push_policy.get(push["key"])
+        record(push["key"],
+               entry["verdict"] if entry else policy["default_verdict"], entry)
+
     for sink in inv["surfaces"]["d_tab_supplied_data"]["upstream_sinks"]:
         entry = (policy.get("tab_data") or {}).get(sink["surface"])
         record("data:%s" % sink["surface"],
                entry["verdict"] if entry else policy["default_verdict"], entry)
+
+    # (e) Trusted-side AI surfaces. These are not reachable *through* the
+    # filter -- the agent runs in the trusted workbench, so a tab steering it
+    # through instruction files produces a host effect with no RPC crossing the
+    # boundary. They are pinned here anyway so the gate notices upstream adding
+    # a tool, or a setting's scope changing to one a workspace can write. An
+    # inventory nothing checks is the failure this project keeps repeating.
+    ai = inv["surfaces"].get("e_trusted_ai_surfaces") or {}
+    policy_ai = policy.get("trusted_ai") or {}
+    for tool in ai.get("tools", []):
+        key = "ai-tool:%s" % (tool.get("id") or tool.get("id_expression"))
+        entry = (policy_ai.get("tools") or {}).get(key.split(":", 1)[1])
+        verdict = entry["verdict"] if entry else policy_ai.get(
+            "default_verdict", policy["default_verdict"])
+        # The reachability that matters for this surface is not the filter's
+        # verdict but whether the tool can touch the host, so it is part of the
+        # pinned value: a tool that stops declaring runsInWorkspace must
+        # resurface for review.
+        record("%s|host=%s" % (key, tool.get("may_reach_host_in_remote_window")),
+               verdict, entry)
+    for setting in ai.get("settings", []):
+        entry = (policy_ai.get("settings") or {}).get(setting["id"])
+        verdict = entry["verdict"] if entry else policy_ai.get(
+            "default_verdict", policy["default_verdict"])
+        # Both the scope and the conclusion drawn from it are pinned. Scope
+        # alone is not enough: when the rule for reading a scope was corrected
+        # -- APPLICATION_MACHINE turned out to be tab-writable, because a
+        # remote window reads remote user settings from a REH-supplied path
+        # with REMOTE_MACHINE_SCOPES -- every scope string stayed the same and
+        # the gate said nothing. A change in what we believe a surface can do
+        # has to surface in review, not only a change upstream made.
+        # `unreg` is pinned separately from scope because it *overrides*
+        # scope: a setting registered only in the Agents window has no scope at
+        # all where editor windows read it, so an APPLICATION-scoped setting is
+        # still tab-writable there. A new one appearing has to fail the check.
+        record("ai-setting:%s|scope=%s|unreg=%s|tab_writable=%s"
+               % (setting["id"], setting["scope"],
+                  setting.get("unregistered_where_read"),
+                  setting.get("tab_writable")),
+               verdict, entry)
     return mapping
 
 
@@ -148,7 +208,7 @@ def check_keys(inv: dict, policy: dict) -> list:
     known_channels = {c["channel"] for c
                       in inv["surfaces"]["c_client_served_channels"]["client_served_channels"]}
     for name in policy.get("channels", {}):
-        if name in ("note", "server_initiated"):
+        if name == "note":
             continue
         if name not in known_channels:
             errors.append("policy.channels['%s'] matches no channel in the inventory." % name)
@@ -279,8 +339,9 @@ def check_invariants(inv: dict, policy: dict) -> list:
                 errors.append(
                     "%s.%s claims reduced residual impact but names no constraint."
                     % (sid, method))
-    for name, entry in (policy.get("channels") or {}).items():
-        if name in ("note", "server_initiated") or not isinstance(entry, dict):
+    for name, entry in list((policy.get("channels") or {}).items()) \
+            + list((policy.get("pushes") or {}).items()):
+        if name == "note" or not isinstance(entry, dict):
             continue
         if any(i in CREDENTIAL_IMPACTS for i in _residual(entry)) \
                 and entry.get("verdict") in REACHABLE:
@@ -298,6 +359,18 @@ def check_invariants(inv: dict, policy: dict) -> list:
                     "if it is an agreement enforced elsewhere, say so explicitly."
                     % (entry.get("id", "<unnamed>"), field))
     errors.extend(check_citations(policy))
+
+    # commands.exact is resolved before rules, so the `seclab.` deny rule can be
+    # overridden by an exact entry. The rule states the intent; this is what
+    # makes it hold.
+    for cid, entry in ((policy.get("commands", {}) or {}).get("exact") or {}).items():
+        if cid.startswith("seclab.") and entry.get("verdict") in REACHABLE:
+            errors.append(
+                "invariant no-seclab-commands-from-tabs: command '%s' is reachable "
+                "('%s') through commands.exact, which is resolved before the deny "
+                "rule on the 'seclab.' prefix. The fork's own commands exist to ask "
+                "the user to approve what a tab may not do itself; a tab that can "
+                "raise them supplies the prompt." % (cid, entry.get("verdict")))
 
     # Every surface that is actually reachable must have been reviewed as an
     # individual entry carrying an impact assessment. Checking only the entries
@@ -345,6 +418,286 @@ def check_undeclared(inv: dict, policy: dict) -> list:
     return errors
 
 
+def check_enforcement(mapping: dict, policy: dict, repo_root: str) -> list:
+    """Every deny verdict must name code that refuses it, and that code must exist.
+
+    A verdict is a claim about runtime behaviour. Written down and checked by
+    nothing, it reads as assurance while changing no behaviour at all -- which
+    is exactly what happened to ``remoteTerminal.onExecuteCommand``: denied in
+    the policy, skipped by a name-based exemption in this file, and enforced
+    nowhere, while the increment claimed a tab could not execute host code.
+
+    Three things are checked, because each of the three failed independently at
+    some point in this project:
+
+    1. every key prefix carrying a ``deny`` has an entry in ``enforcement``;
+    2. the patch it names is in ``patches/series``, so it is actually applied;
+    3. the symbol it names appears in that patch, so the entry still points at
+       live code after a rewrite rather than at a function that was renamed.
+
+    It deliberately does not try to prove the code *runs*. That is what the
+    runtime probes are for; a static gate that claimed it would be one more
+    check that passes without asking the question.
+    """
+    errors = []
+    enforcement = policy.get("enforcement") or {}
+    prefixes = sorted((k for k in enforcement if k != "note"),
+                      key=len, reverse=True)
+
+    # Classes whose enforcement is inherently per-surface. A prefix entry can
+    # never stand in for these, and `whole_class` must not be able to buy the
+    # exemption: when this rule lived in a flag, injecting the review's own
+    # finding back into the policy passed, because the injection simply set the
+    # flag. A control the policy file can switch off is not a control.
+    PER_KEY_CLASSES = ("push:",)
+    for prefix in PER_KEY_CLASSES:
+        entry = enforcement.get(prefix)
+        if isinstance(entry, dict) and entry.get("whole_class"):
+            errors.append(
+                "enforcement['%s'] claims whole_class, but this class is "
+                "refused one subscription at a time, so a single entry cannot "
+                "vouch for its keys. Give each denied key its own entry."
+                % prefix)
+
+    denied_prefixes = set()
+    for key, value in mapping.items():
+        if _verdict_of(value) != "deny":
+            continue
+        # An exact entry always wins. A prefix entry stands in for its keys
+        # only when it is a genuine whole-class control -- one mechanism that
+        # covers everything under it. Server-initiated pushes are not like
+        # that: each denied push is refused by not registering its own
+        # subscription, so a single `push:` entry naming one patch vouched for
+        # 18 keys of which exactly one was enforced. That is the finding this
+        # gate was written to prevent, reproduced by the gate itself.
+        if key in enforcement:
+            match = key
+        else:
+            match = next((p for p in prefixes
+                          if key.startswith(p)
+                          and enforcement[p].get("whole_class")
+                          and not any(key.startswith(c)
+                                      for c in PER_KEY_CLASSES)), None)
+        if match is None:
+            errors.append(
+                "no enforcement point for denied surface '%s': add the prefix to "
+                "policy.enforcement naming the patch and symbol that refuses it."
+                % key)
+        else:
+            denied_prefixes.add(match)
+
+    series_path = os.path.join(repo_root, "patches", "series")
+    series = ""
+    if os.path.exists(series_path):
+        with open(series_path, encoding="utf-8") as fh:
+            series = fh.read()
+
+    for prefix in sorted(denied_prefixes):
+        entry = enforcement[prefix]
+        if entry.get("unenforced_accepted"):
+            # Explicitly accepted as unenforced. Not a pass for the surface --
+            # it is a denied capability with nothing refusing it -- but it is
+            # recorded and counted rather than hidden, which is the whole
+            # difference between a known gap and the silent one this gate
+            # exists to catch.
+            continue
+        patch, symbol = entry.get("patch"), entry.get("symbol")
+        if not patch or not symbol:
+            errors.append("enforcement['%s'] must name both a patch and a symbol."
+                          % prefix)
+            continue
+        if patch not in series:
+            errors.append(
+                "enforcement['%s'] names patch '%s', which is not in patches/series, "
+                "so nothing applies it." % (prefix, patch))
+            continue
+        patch_path = os.path.join(repo_root, "patches", patch)
+        if not os.path.exists(patch_path):
+            errors.append("enforcement['%s'] names patch '%s', which does not exist."
+                          % (prefix, patch))
+            continue
+        with open(patch_path, encoding="utf-8", errors="replace") as fh:
+            body = fh.read()
+        if symbol not in body:
+            errors.append(
+                "enforcement['%s'] names symbol '%s', which does not appear in %s. "
+                "Either the enforcement moved and the entry is stale, or it was "
+                "removed and the deny verdict is now unenforced."
+                % (prefix, symbol, patch))
+    return errors
+
+
+def check_log_trust(mapping: dict) -> list:
+    """Hold the two facts the decision log's trustworthiness rests on.
+
+    The Tab Manager forwards `seclabRpcFilter.log` to tabd as *trusted*. That
+    is only sound while a tab can neither forge lines nor write the file, and
+    both are policy decisions that could be relaxed by someone who has no idea
+    a log depends on them. Stated in a comment, the dependency would be found
+    again only after it stopped holding.
+    """
+    errors = []
+    for key, value in mapping.items():
+        if key.startswith("rpc:MainThreadLogger.") \
+                and _verdict_of(value) != "deny":
+            errors.append(
+                "invariant rpc-filter-log-is-trustworthy: %s is not denied, so "
+                "a tab could forge lines in the filter's decision log." % key)
+    writes = ("rpc:MainThreadFileSystem.$writeFile",
+              "rpc:MainThreadFileSystem.$mkdir",
+              "rpc:MainThreadFileSystem.$copy",
+              "rpc:MainThreadFileSystem.$rename")
+    for key in writes:
+        value = mapping.get(key)
+        if value is None:
+            continue
+        verdict = _verdict_of(value)
+        if key.endswith("$writeFile"):
+            if verdict not in ("deny", "allow_with_constraint"):
+                errors.append(
+                    "invariant rpc-filter-log-is-trustworthy: %s is '%s'. It "
+                    "must stay denied or URI-constrained, or a tab can write "
+                    "the window logs directory directly." % (key, verdict))
+        elif verdict != "deny":
+            errors.append(
+                "invariant rpc-filter-log-is-trustworthy: %s is not denied, "
+                "which reopens a create-then-rename route into the window "
+                "logs directory." % key)
+    return errors
+
+
+def _leaf_problem(cid: str, entry: dict, exceptions: set) -> str | None:
+    """Why a reachable command is not an acceptable leaf exception, or None."""
+    if cid not in exceptions:
+        return "it is not one of the residual's recorded leaf_exceptions"
+    if entry.get("verdict") != "allow_with_constraint":
+        return "a leaf exception must be allow_with_constraint, with its arguments validated"
+    if entry.get("leaf") is not True:
+        return "its entry does not claim leaf: true"
+    if not entry.get("leaf_evidence"):
+        return "its entry gives no leaf_evidence that the handler never reaches ICommandService"
+    if not entry.get("validator"):
+        return "its entry names no argument validator"
+    return None
+
+
+def check_residuals(mapping: dict, policy: dict) -> list:
+    """Hold the conditions a recorded residual says it depends on.
+
+    A residual risk written only in prose is forgotten exactly when it stops
+    being true. ``deferred-laundering`` is safe only while no reachable command
+    can launder: with every command denied, a laundered call is refused for
+    being denied rather than for being laundered. The moment someone allows a
+    command -- a reasonable thing to want, and the obvious next compatibility
+    fix -- the gap becomes reachable, and nothing in review would connect that
+    change to a paragraph in section 7.
+
+    So the dependency is checked rather than described. While the residual is
+    open, a command may be reachable only as a recorded **leaf exception**: its
+    handler is shown (``leaf_evidence``) never to reach ICommandService, so there
+    is nothing to launder, and its arguments are validated (``validator``),
+    because a leaf can still leak or spoof host state on its own. Any other
+    reachable command fails the build until the residual is marked fixed.
+    """
+    errors = []
+    residuals = policy.get("residuals") or {}
+    entry = residuals.get("deferred-laundering")
+    if isinstance(entry, dict) and not entry.get("fixed"):
+        exceptions = set(entry.get("leaf_exceptions") or [])
+        exact = (policy.get("commands", {}) or {}).get("exact") or {}
+        reachable = sorted(
+            key for key, value in mapping.items()
+            if key.startswith("cmd:") and _verdict_of(value) != "deny")
+        offenders = []
+        for key in reachable:
+            why = _leaf_problem(key[4:], exact.get(key[4:]) or {}, exceptions)
+            if why:
+                offenders.append((key, why))
+        for key, why in offenders[:20]:
+            errors.append(
+                "%s is not denied, but the deferred-laundering residual is "
+                "unfixed: a handler that defers a global executeCommand "
+                "escapes both the taint and the backstop, and %s. Fix the "
+                "residual and set residuals['deferred-laundering'].fixed, or "
+                "keep the verdict at deny." % (key, why))
+        if len(offenders) > 20:
+            errors.append("... and %d more non-denied commands."
+                          % (len(offenders) - 20))
+        for cid in sorted(exceptions - {k[4:] for k in reachable}):
+            errors.append(
+                "residuals['deferred-laundering'].leaf_exceptions names %s, "
+                "which is not reachable. A stale exception is a pre-approved "
+                "allow waiting for someone to flip the verdict; remove it." % cid)
+    return errors
+
+
+def _uri_positions(inv: dict) -> dict:
+    """`<sid>.<method>` -> declared UriComponents positions, as emit_policy emits them."""
+    out = {}
+    for service in inv["surfaces"]["a_mainthread_rpc"]["services"]:
+        for method, positions in (service.get("uri_arg_positions") or {}).items():
+            if positions:
+                out["%s.%s" % (service["sid"], method)] = list(positions)
+    return out
+
+
+# Constrained entries enforced by dedicated code rather than a named validator.
+CONSTRAINED_ELSEWHERE = {
+    "rpc:MainThreadCommands.$executeCommand":
+        "the commands table and each command's own validator (_constrain's $executeCommand branch)",
+}
+
+
+def check_validators(policy: dict, source: str, uri_positions: dict | None = None) -> list:
+    """Every named validator exists, is used, and sits on a verdict that runs it.
+
+    A validator name the filter cannot find denies at run time, which is the
+    safe direction but breaks the surface silently; a validator nothing names is
+    dead code that reads as protection. Both fail here.
+    """
+    errors = []
+    m = re.search(r"SECLAB_VALIDATORS[^=]*=\s*new Map\(\[(.*?)\]\);", source, re.S)
+    defined = set(re.findall(r"\[\s*'(\w+)'\s*,", m.group(1))) if m else set()
+    if not defined:
+        return ["seclabArgValidators.ts defines no SECLAB_VALIDATORS map"]
+    used = set()
+    entries = []
+    for sid, service in (policy.get("rpc") or {}).items():
+        for method, e in (service.get("methods") or {}).items():
+            entries.append(("rpc:%s.%s" % (sid, method), e))
+    for cid, e in ((policy.get("commands", {}) or {}).get("exact") or {}).items():
+        entries.append(("cmd:%s" % cid, e))
+    for ref, e in entries:
+        name = e.get("validator")
+        if name is None:
+            # A named constraint needs code behind it: a validator, or the
+            # positional URI rule when the entry says that IS its constraint
+            # (and there are positions for it to apply to). Otherwise the filter
+            # denies every call, and the policy claims a reachability that does
+            # not exist (round 10, finding 3).
+            if e.get("verdict") == "allow_with_constraint" and ref not in CONSTRAINED_ELSEWHERE:
+                if not e.get("constraint_is_uri_rule"):
+                    errors.append("%s is allow_with_constraint but names no validator; "
+                                  "its constraint would deny every call" % ref)
+                elif ref.startswith("cmd:") or ref[4:] not in (uri_positions or {}):
+                    errors.append("%s says its constraint is the positional URI rule, but "
+                                  "the inventory declares no URI positions for it" % ref)
+            continue
+        if e.get("constraint_is_uri_rule"):
+            errors.append("%s names validator '%s' and also claims the URI rule as its "
+                          "whole constraint; pick one" % (ref, name))
+        used.add(name)
+        if name not in defined:
+            errors.append("%s names validator '%s', which seclabArgValidators.ts "
+                          "does not define" % (ref, name))
+        if e.get("verdict") not in ("allow_with_constraint", "rewrite"):
+            errors.append("%s names validator '%s' but its verdict '%s' never runs it"
+                          % (ref, name, e.get("verdict")))
+    for name in sorted(defined - used):
+        errors.append("validator '%s' is defined but no policy entry names it" % name)
+    return errors
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--accept", action="store_true",
@@ -382,10 +735,24 @@ def main(argv=None) -> int:
     for name, check in (("keys", lambda: check_keys(inv, policy)),
                         ("undeclared", lambda: check_undeclared(inv, policy)),
                         ("invariants", lambda: check_invariants(inv, policy)),
-                        ("coverage", lambda: check_coverage(mapping))):
+                        ("coverage", lambda: check_coverage(mapping)),
+                        ("enforcement",
+                         lambda: check_enforcement(mapping, policy, REPO_ROOT)),
+                        ("residuals",
+                         lambda: check_residuals(mapping, policy)),
+                        ("validators", lambda: check_validators(policy, _read(VALIDATORS_SRC), _uri_positions(inv))),
+                        ("log-trust", lambda: check_log_trust(mapping))):
         errors = check()
         if errors:
             failures.append((name, errors))
+
+    accepted = sorted(k for k, v in (policy.get("enforcement") or {}).items()
+                      if isinstance(v, dict) and v.get("unenforced_accepted"))
+    if accepted:
+        print("WARNING: %d denied surfaces are accepted-unenforced (no code "
+              "refuses them):" % len(accepted))
+        for k in accepted:
+            print("  %s" % k)
 
     if not failures:
         reachable = sum(1 for v in mapping.values() if _verdict_of(v) in REACHABLE)

@@ -94,9 +94,15 @@ Same rules as ADRs:
 | 2026-11-06 | [Agents-in-the-tab spike, step 3: the shipped agent host in a real sbx tab behind its broker](20261106-agents-in-real-tab-spike.md) | accepted |
 | 2026-11-06 | [Branch test builds of the macOS app](20261106-branch-test-builds.md) | accepted |
 | 2026-11-06 | [CFS package feeds in tabs: the tabd side (plan increment B4)](20261106-cfs-feeds-tabd.md) | accepted |
+| 2026-11-06 | [The containment proof reads the tab, not the host checkout](20261106-containment-proof-reads-the-tab.md) | accepted |
+| 2026-11-06 | [The decision log cannot be silenced, and four gates that could not fail](20261106-decision-log-and-four-gates.md) | accepted |
 | 2026-11-06 | [Egress prompts through the Tab Manager (plan increment B3)](20261106-egress-prompts.md) | accepted |
 | 2026-11-06 | [Exact request lineage on OCI via the broker's client port](20261106-exact-lineage-client-port.md) | accepted |
+| 2026-11-06 | [The extension host's own plumbing is not a capability](20261106-extension-host-plumbing.md) | accepted |
+| 2026-11-06 | [Measure an ordinary session's RPC calls once, then classify them by name](20261106-ordinary-session-rpc-trace.md) | accepted |
 | 2026-11-06 | [The 7-day rule: no pin newer than the feed's hold](20261106-pin-age-cooldown.md) | accepted |
+| 2026-11-06 | [RPC core increment: state, and what runs next](20261106-rpc-core-handoff.md) | accepted |
+| 2026-11-06 | [The rpc-core proof run: DO NOT LAND](20261106-rpc-core-proof-run.md) | accepted |
 | 2026-11-06 | [RPC filter stamp in product.json](20261106-rpc-policy-stamp.md) | accepted |
 | 2026-11-06 | [Test build variants (containment, and agentic U/F)](20261106-test-build-variants.md) | accepted |
 | 2026-11-09 | [Host documents don't sync into a tab: per-model provenance for the document sync (patch 0035)](20261109-document-sync-provenance.md) | accepted |
@@ -106,5 +112,6 @@ Same rules as ADRs:
 | 2026-11-10 | [Security findings register: one current-state view, enforced by the docs gate](20261110-security-findings-register.md) | accepted |
 | 2026-11-12 | [CFS feed values live in host-side config, not the tree](20261112-cfs-config-outside-repo.md) | accepted |
 | 2026-11-12 | [History rewrite: internal identifiers removed from every branch](20261112-history-rewrite.md) | accepted |
+| 2026-11-12 | [Probe records hold facts, the clipboard is a canary, and nothing internal enters the repo](20261112-probe-records-canary-clipboard.md) | accepted |
 | 2026-11-12 | [Publish gate: only what can be shown to be public is published](20261112-publish-gate.md) | accepted |
 <!-- index:end -->

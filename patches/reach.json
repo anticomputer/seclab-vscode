@@ -1,4 +1,6 @@
 {
+	"0006-seclab-channel-guard.patch": ["server"],
+	"0032-seclab-partition-tab-extension-state.patch": ["desktop"],
 	"0012-background-windows-env.patch": ["desktop"],
 	"0013-no-local-agent-host.patch": ["desktop"],
 	"0015-seclab-ahp-gate.patch": ["desktop"],

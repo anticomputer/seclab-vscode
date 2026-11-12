@@ -95,14 +95,25 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 <!-- seclab:begin probes -->
 | Probe | Fixture | Policy entry | Patched expectation |
 |---|---|---|---|
+| `ai-agent-host-autoapprove-setting` | rogue extension | `ai-tool:run_in_terminal` | denied |
+| `ai-agent-host-token-push` | rogue extension | `push:agentHostProxy` | denied |
+| `ai-disable-ai-features-reenable` | rogue extension | `ai-setting:chat.disableAIFeatures` | denied |
+| `ai-instructions-tool-call` | rogue extension | `ai-tool:fetch_webpage` | denied |
+| `ai-remote-agent-host-dial` | rogue extension | `ai-setting:chat.workspaceRemoteAgentHosts` | denied |
+| `ai-settings-reenable` | rogue extension | `ai-setting:chat.agent.enabled` | denied |
 | `as-external-uri` | rogue extension | `rpc:MainThreadWindow.$asExternalUri` | denied |
 | `auth-get-session` | rogue extension | `rpc:MainThreadAuthentication.$getSession` | succeeded |
 | `clipboard-read` | rogue extension | `rpc:MainThreadClipboard.$readText` | denied |
-| `command-enumeration` | rogue extension | `rpc:MainThreadCommands.$getCommands` | succeeded |
+| `command-enumeration` | rogue extension | `rpc:MainThreadCommands.$getCommands` | denied |
+| `host-doc-open-userdata` | rogue extension | `rpc:MainThreadDocuments.$tryOpenDocument` | denied |
+| `host-doc-show-userdata` | rogue extension | `rpc:MainThreadTextEditors.$tryShowTextDocument` | denied |
+| `host-file-search-nested-uri` | rogue extension | `rpc:MainThreadWorkspace.$startFileSearch` | denied |
+| `host-fs-activation-scheme` | rogue extension | `rpc:MainThreadFileSystem.$ensureActivation` | denied |
 | `host-fs-read-file-scheme` | rogue extension | `rpc:MainThreadFileSystem.$readFile` | denied |
 | `host-fs-read-userdata` | rogue extension | `rpc:MainThreadFileSystem.$readFile` | denied |
 | `host-fs-write-file-scheme` | rogue extension | `rpc:MainThreadFileSystem.$writeFile` | denied |
 | `host-fs-write-userdata` | rogue extension | `rpc:MainThreadFileSystem.$writeFile` | denied |
+| `host-restart-extension-host` | rogue extension | `cmd:workbench.action.restartExtensionHost` | denied |
 | `host-terminal-newlocal` | rogue extension | `cmd:workbench.action.terminal.newLocal` | denied |
 | `host-terminal-sendsequence` | rogue extension | `cmd:workbench.action.terminal.sendSequence` | denied |
 | `launder-await` | rogue extension | `cmd:_seclabTest.launder` | denied |
@@ -113,16 +124,30 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 | `launder-open-external` | rogue extension | `cmd:_remoteCLI.openExternal` | denied |
 | `launder-timer` | rogue extension | `cmd:_seclabTest.launder` | denied |
 | `open-external-silent` | rogue extension | `rpc:MainThreadWindow.$openUri` | denied |
+| `provider-completion-host-file` | rogue extension | `cmd:_executeCompletionItemProvider` | denied |
+| `provider-hover-host-file` | rogue extension | `cmd:_executeHoverProvider` | denied |
+| `reh-onexecutecommand-manageextensions` | rogue extension | `push:remoteterminal:$onExecuteCommand` | denied |
+| `reh-onexecutecommand-openexternal` | rogue extension | `push:remoteterminal:$onExecuteCommand` | denied |
+| `reh-onexecutecommand-windowopen` | rogue extension | `push:remoteterminal:$onExecuteCommand` | denied |
+| `reh-resolve-variables-host-env` | rogue extension | `push:remoteterminal:$onPtyHostRequestResolveVariablesEvent` | denied |
+| `secret-claim-tab-manager-write` | rogue extension | `rpc:MainThreadSecretState.$setPassword` | succeeded |
 | `secret-read-cross-tab` | rogue extension | `rpc:MainThreadSecretState.$getPassword` | succeeded |
 | `secret-write-own` | rogue extension | `rpc:MainThreadSecretState.$setPassword` | denied |
+| `setcontext-core-key` | rogue extension | `cmd:_setContext` | denied |
+| `state-claim-tab-manager-read` | rogue extension | `rpc:MainThreadStorage.$initializeExtensionStorage` | succeeded |
+| `state-claim-tab-manager-write` | rogue extension | `rpc:MainThreadStorage.$setValue` | succeeded |
 | `webview-egress` | rogue extension | `data:webview-content` | succeeded |
 | `channel-download-host-read` | rogue REH | `chan:download` | denied |
 | `channel-download-host-write` | rogue REH | `chan:download` | denied |
 | `channel-mcp-call-tool` | rogue REH | `chan:mcpGatewayToolBroker` | denied |
 | `channel-mcp-list-servers` | rogue REH | `chan:mcpGatewayToolBroker` | denied |
+| `harness` | rogue REH | `rpc:raw` | denied |
+| `reh-onexecutecommand-manageextensions` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
+| `reh-onexecutecommand-openexternal` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
+| `reh-onexecutecommand-windowopen` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
+| `reh-resolve-variables-host-env` | rogue REH | `push:remoteterminal:$onPtyHostRequestResolveVariablesEvent` | denied |
 | `rpc-proxy-auth` | rogue REH | `rpc:MainThreadWorkspace.$lookupAuthorization` | denied |
 | `rpc-secret-identity-spoof` | rogue REH | `rpc:MainThreadSecretState.$getKeys` | denied |
-| `terminal-onexecutecommand` | rogue REH | `chan:server_initiated.remoteTerminal.onExecuteCommand` | denied |
 <!-- seclab:end probes -->
 
 ## 6. Adding a probe (Phase 3)
@@ -179,7 +204,18 @@ These are enforced three ways: `probe-safety.js` at runtime,
 2. **Reads touch only harness-seeded canaries.** Never `~/.ssh`, `~/.aws`, the
    keychain, real editor or browser profiles, or other repos. Every path goes
    through `safety.safePath()`, which resolves symlinks and refuses anything
-   outside the run directory.
+   outside the run directory. A real user source is read only after the harness
+   seeded a canary there, and the read sits behind a check of that seeding that
+   bails without it: a host profile resource behind the isolated `~/.seclab-test`
+   profile, the keychain never. The clipboard is never the system clipboard: the
+   containment test build's clipboard is an in-memory store seeded with the run's
+   canary (hook `canary-clipboard`), and a probe reads it only through
+   `safety.withCanaryClipboard`, which returns canary tokens, never text.
+   `lint_probes.py` enforces all of it (`clipboard-outside-canary`, `pasteboard`,
+   `unseeded-profile`, `real-keychain`).
+   Run records hold facts, never values: booleans, numbers, canary tokens and source
+   literals, written only through `safety.recordJson` (`raw-record`, `lit-not-literal`,
+   `probe-id-not-literal`).
 3. **Fake credentials only**, in the isolated user-data-dir. Never the user's
    real GitHub or Microsoft sessions. Seeded keychain entries are namespaced
    per run and removed in teardown, including on failure.
@@ -204,6 +240,18 @@ These are enforced three ways: `probe-safety.js` at runtime,
    `verify` is a tripwire over `$HOME`, `~/Library/LaunchAgents`, `~/.ssh`,
    `~/.aws` and `~/.config`, plus the run-scoped keychain key and any sandbox
    left running. It is not a guarantee; it is the thing that notices.
+
+8. **A run never takes the user's screen.** Launch the editor with
+   `open -g -n` (or a direct background exec), never activate or focus it, and
+   tear it down as soon as the run ends. `-g` keeps it out of the foreground;
+   `-n` forces a new instance so the run cannot attach to a window the user
+   already has open.
+
+   This is a safety rule, not a courtesy. A probe run drives a *hostile*
+   workspace, so a window that steals focus can take a keystroke meant for the
+   user's own work, and an orphaned one leaves an armed rogue extension sitting
+   on the desktop — which has already happened once, and the user found it
+   before teardown did.
 
 A safety refusal throws `SafetyError`, which is tagged so `classify()` records
 it as `ERROR`. It must never be scored as a denial: a mis-targeted probe would

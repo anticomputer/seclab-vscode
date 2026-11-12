@@ -855,7 +855,7 @@ case "${1:-help}" in
 			# Scratch dirs on a named volume: Docker Desktop's bind-mount inode numbers are not
 			# stable, which trips tabd's (dev, ino) workspace identity check.
 			unit) docker run --rm -v "$ROOT:/repo" -v seclab-test-scratch:/repo/.work/test-scratch -w /repo "$(node_image)" \
-				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts tabd/test/obs.test.ts tabd/test/writeback.test.ts tabd/test/writeback-feed.test.ts tabd/test/inspect.test.ts tabd/test/broker-control.test.ts tabd/test/broker-supervisor.test.ts tabd/test/broker-image.test.ts build/patch-reach-imports.test.ts test/agentic/gate/gate.test.ts test/agentic/gate/marks.test.ts build/linux/nm-keep.test.ts build/linux/lock-fill.test.ts' ;;
+				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts tabd/test/obs.test.ts tabd/test/writeback.test.ts tabd/test/writeback-feed.test.ts tabd/test/inspect.test.ts tabd/test/broker-control.test.ts tabd/test/broker-supervisor.test.ts tabd/test/broker-image.test.ts build/patch-reach-imports.test.ts build/check-sole-consumer.test.ts test/agentic/gate/gate.test.ts test/agentic/gate/marks.test.ts build/linux/nm-keep.test.ts build/linux/lock-fill.test.ts' ;;
 			# e2e drives sbx/docker on the host, so it runs on the host. It uses the editor's own
 			# Node when SECLAB_NODE points at it, else an already-present node (nothing is installed).
 			e2e) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/test/e2e.ts" "${1:-sbx}" ;;
@@ -868,6 +868,35 @@ case "${1:-help}" in
 			builds) docker run --rm --network none -v "$ROOT:/repo:ro" -v seclab-test-scratch:/scratch -e SECLAB_SCRATCH=/scratch -w /repo "$(node_image)" node test/builds/require-hooks.ts --self-test ;;
 			# RPC filter: generated UriComponents argument positions are constrained (pure; no network).
 			uri-constraint) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/uri-constraint.test.ts ;;
+			# RPC filter: the channel guard refuses what the policy denies (pure; no network).
+			channel-guard) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/channel-guard.test.ts ;;
+			# The probe checker over synthetic evidence, each fix reverted as a mutant (scratch on tmpfs).
+			check-probes) docker run --rm --network none --tmpfs /scratch -e SECLAB_SCRATCH=/scratch -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/check-probes.test.ts ;;
+			# RPC filter: policy invariants hold over the generated mapping (pure; no network).
+			policy-invariants) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/policy-invariants.test.ts ;;
+			# RPC filter: tab-originated commands cannot launder through a global
+			# ICommandService. These three had no runner at all: they were written,
+			# committed, and never executed by any workflow or subcommand, which is
+			# the same "cannot fail" shape as a probe with no assertion.
+			command-taint) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/command-taint.test.ts ;;
+			# RPC filter: the trusted-side decision log has a strict reader, so proof
+			# condition 2 ("the denial is observed, not inferred") can actually fail.
+			decision-log) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/decision-log.test.ts ;;
+			# RPC filter: the decision log cannot be silenced by a flood or by boot noise.
+			log-throttle) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/log-throttle.test.ts ;;
+			# Containment harness: hostile evidence fails a check, and never throws out of
+			# the run before its own teardown.
+			evidence-shape) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/evidence-shape.test.ts ;;
+			# RPC filter: the named argument validators, imported from the shipped module.
+			arg-validators) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/arg-validators.test.ts ;;
+			# RPC filter: the shipped decision-log line formatter always writes JSON that parses.
+			decision-line) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/decision-line.test.ts ;;
+			# Every pure RPC-filter suite, so adding one to CI is a single edit.
+			rpc-filter)
+				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators decision-line check-probes; do
+					printf '\n=== %s\n' "$t"
+					"$0" test "$t" || exit 1
+				done ;;
 			canary) shift; "${SECLAB_NODE:-node}" "$ROOT/test/canary/run.ts" "${1:-sbx}" ;;
 			secrets) shift; "${SECLAB_NODE:-node}" "$ROOT/test/secrets/run.ts" "${1:-sbx}" ;;
 			evidence) shift; "${SECLAB_NODE:-node}" "$ROOT/test/containment/check-evidence.ts" "$@" ;;

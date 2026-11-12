@@ -1,11 +1,11 @@
 // Detection notifications end to end (ADR detection notifications): the inert Contagious-Interview
 // fixture opened as a sandboxed tab in the real editor, its folder-open loader run by the editor
 // as a real task, and the Tab Manager's notifications checked from its record of what it showed.
-//   node test/observability/notify-e2e.ts ~/.seclab-test/notify [--shot docs/media/notifications.png] [--keep]
+//   node test/observability/notify-e2e.ts ~/.seclab-test/notify [--keep]
 // sbx only: the hidden folder-open tasks.json is written inside the tab, where the write-back
 // gate holds it; it never exists on the host (EDR fixture-safety, AV rule). The editor window is
-// launched in the background and never takes focus; the screenshot captures it by window id
-// while it stays covered. The run ends with the shared teardown gate.
+// launched in the background and never takes focus; nothing is captured from the screen. The
+// run ends with the shared teardown gate.
 
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -14,17 +14,16 @@ import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { armCampaignTab, loaderCommand, setupCampaign } from '../containment/campaign.ts';
 import { printChecks, removeRunResources, stopRunProcesses, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
-import { captureWindow, checkUserDataDir, launchEditorInBackground } from '../harness.ts';
+import { checkUserDataDir, launchEditorInBackground } from '../harness.ts';
 import { writeStdinTo } from './loader.ts';
 
 const args = process.argv.slice(2);
-const userDataArg = args.find((a, i) => !a.startsWith('--') && !['--shot', '--app'].includes(args[i - 1]));
-const shot = args.includes('--shot') ? args[args.indexOf('--shot') + 1] : undefined;
+const userDataArg = args.find((a, i) => !a.startsWith('--') && !['--app'].includes(args[i - 1]));
 const keep = args.includes('--keep');
 /** A branch test build (./seclab fetch macos-branch) when given, else the main build. */
 const app = args.includes('--app') ? path.resolve(args[args.indexOf('--app') + 1]) : undefined;
 if (!userDataArg) {
-	console.error('usage: notify-e2e.ts USER_DATA_DIR [--app PATH.app] [--shot OUT.png] [--keep]');
+	console.error('usage: notify-e2e.ts USER_DATA_DIR [--app PATH.app] [--keep]');
 	process.exit(2);
 }
 const repo = path.resolve(import.meta.dirname, '../..');
@@ -123,11 +122,6 @@ try {
 	check('rate-limited: a handful of notifications, not one per event', shown.length <= 6, String(shown.length));
 	const detail = shown.find(s => s.kind === 'loader.pipe-to-interpreter');
 	check('the loader notification explains itself with the chain and its integrity', !!detail && /Chain: “.*”/.test(detail.message) && /inside the tab's VM/.test(detail.message), detail?.message);
-	if (shot) {
-		await sleep(1500);
-		captureWindow(launch.windowId, path.resolve(shot));
-		console.log(`captured window ${launch.windowId} -> ${shot}`);
-	}
 } catch (e) {
 	check('run', false, (e as Error).message);
 } finally {

@@ -13,10 +13,18 @@
 
 ## Rules that bite
 - **Editor windows never take focus** (AGENTS.md hard rule). `test/window.ts launch`
-  opens the editor in the background (`open -g -n`) and fails if it became frontmost;
-  `test/window.ts shot` captures the covered window by id (`screencapture -o -l`).
+  opens the editor in the background (`open -g -n`) and fails if it became frontmost.
   The `focus-steal` fixture-lint rule rejects activate calls, a foreground `open` and
   direct `bin/code` launches in test code.
+- **No screen capture, UI automation or synthetic input** in any test or demo: a run's
+  evidence is read from files and logs. The `screen-automation` fixture-lint rule rejects
+  them.
+- **No run reads or writes the system clipboard.** The containment test build's clipboard is
+  an in-memory store seeded with the run's canary (hook `canary-clipboard`); probes read it
+  only through `safety.withCanaryClipboard`, and `lint_probes.py` rejects any other read and
+  any pasteboard use in the harness.
+- **Run records hold facts, never values:** booleans, numbers, canary tokens and source
+  literals (`test/containment/probe-safety.js`, `recordJson`).
 - **Every run tears itself down, and fails if it can't** ([EDR](../docs/edr/20261104-harness-teardown.md)).
   A run records what it owns in `<run-dir>/run.json` before it starts anything:
   its user-data-dir, tabd state dirs, tab ids and helper containers.
@@ -59,12 +67,9 @@ the write-back gate holds them, so they never exist on the host).
   - Never `activate` the app or raise the window.
   - If the window still comes to the front, stop and report it. Don't work
     around it by raising the window.
-- **Capture the editor window only:** `screencapture -o -x -l <windowid>`. It
-  captures a covered or off-screen window's own contents. The calling app needs
-  macOS Screen Recording permission (otherwise: "could not create image from
-  window").
-- **Check the image** shows only demo content, then close the window and run the
-  teardown gate straight away.
+- **No screenshots.** Nothing is captured from the screen; a demo's result is read
+  from its logs and records.
+- Close the window and run the teardown gate straight away.
 - **First-run UI:** the demo profile turns off the onboarding modal
   (`workbench.welcomePage.experimentalOnboarding`), AI features and the
   secondary side bar, so they don't cover the view.

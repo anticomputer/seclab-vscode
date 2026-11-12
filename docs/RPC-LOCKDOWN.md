@@ -39,9 +39,9 @@ So the surface is four things, not one:
 | | Surface | Size at this pin |
 |---|---|---|
 | (a) | `MainThread*` RPC the extension host calls | 89 services, 546 methods |
-| (b) | The command registry reachable via `$executeCommand` | 3199 ids |
+| (b) | The command registry reachable via `$executeCommand` | 3226 ids |
 | (c) | Channels the client serves to the server, and server-initiated callbacks | 2 channels, 20 callback sites |
-| (d) | Tab-supplied data the trusted side interprets with authority | 15 sink classes over 474 sites |
+| (d) | Tab-supplied data the trusted side interprets with authority | 15 sink classes over 475 sites |
 <!-- seclab:end surface-counts -->
 
 ## 2. Enforcement points
@@ -313,7 +313,11 @@ The invariants the table is checked against, from `policy.json`:
 2. **identity-never-from-arguments** — Caller identity (tab, extension) is bound to the connection and is never read from call arguments.
 3. **default-deny** — Any surface with no explicit verdict is denied.
 4. **key-on-wire-sid** — RPC policy is keyed on the createProxyIdentifier sid string, never the MainContext property name and never the numeric nid.
-5. **no-real-secret-in-tab.sentinel-derivation** — A token minted for the tab reaches it only as a sentinel, bound to no more than its parent's bindings.
+5. **no-real-secret-in-tab.sentinel-derivation** — A token minted for the tab reaches it only as a sentinel, bound to no more than its parent's bindings, or to the bindings of a derivation rule the controller declared for that exact route.
+6. **no-seclab-commands-from-tabs** — No command whose id begins 'seclab.' is reachable from a sandboxed host.
+7. **every-deny-has-an-enforcement-point** — Every surface class carrying a deny verdict must name the code that refuses it, and that code must exist in the patch series.
+8. **no-allowed-command-while-laundering-is-deferred** — No command may be given a verdict other than deny until the deferred-laundering residual is fixed, except the residual's recorded leaf exceptions, each validated.
+9. **rpc-filter-log-is-trustworthy** — The filter's decision log may only be treated as trusted evidence while a tab can neither forge lines in it nor write the file.
 <!-- seclab:end invariants -->
 
 ### 3.2 Categories may withhold authority; they may not grant it
@@ -414,7 +418,7 @@ Two properties of the digest matter:
   build over a stale surface. **Open work**, noted in §7.
 
 <!-- seclab:begin baseline -->
-Current baseline at `a717861c0758`: **3762 surfaces, 3741 denied, 21 not denied** (1 allow, 9 allow_with_constraint, 4 prompt, 7 rewrite).
+Current baseline at `a717861c0758`: **4239 surfaces, 4188 denied, 51 not denied** (22 allow, 16 allow_with_constraint, 4 prompt, 9 rewrite).
 <!-- seclab:end baseline -->
 
 ### 4.1 What is reachable right now
@@ -426,27 +430,57 @@ any becomes reachable without one.
 
 | Surface | Verdict |
 |---|---|
+| `cmd:_executeCompletionItemProvider` | allow_with_constraint |
+| `cmd:_executeHoverProvider` | allow_with_constraint |
+| `cmd:_setContext` | allow_with_constraint |
 | `data:mcp-server-definition` | rewrite |
 | `data:quick-input-password` | rewrite |
 | `data:terminal-osc-sequence` | allow_with_constraint |
 | `data:uri-handler` | prompt |
 | `data:webview-content` | allow_with_constraint |
 | `data:workspace-configuration` | allow_with_constraint |
+| `push:remoteFilesystem:fileChange` | allow |
+| `push:remoteFilesystem:readFileStream` | allow |
+| `push:remoteterminal:$onDidChangeProperty` | allow |
+| `push:remoteterminal:$onDidRequestDetach` | allow |
+| `push:remoteterminal:$onProcessDataEvent` | allow |
+| `push:remoteterminal:$onProcessExitEvent` | allow |
+| `push:remoteterminal:$onProcessOrphanQuestion` | allow |
+| `push:remoteterminal:$onProcessReadyEvent` | allow |
+| `push:remoteterminal:$onProcessReplayEvent` | allow |
+| `push:remoteterminal:$onPtyHostExitEvent` | allow |
+| `push:remoteterminal:$onPtyHostResponsiveEvent` | allow |
+| `push:remoteterminal:$onPtyHostStartEvent` | allow |
+| `push:remoteterminal:$onPtyHostUnresponsiveEvent` | allow |
 | `rpc:MainThreadAuthentication.$getSession` | rewrite |
 | `rpc:MainThreadClipboard.$writeText` | allow |
 | `rpc:MainThreadCommands.$executeCommand` | allow_with_constraint |
-| `rpc:MainThreadCommands.$getCommands` | allow_with_constraint |
 | `rpc:MainThreadCommands.$registerCommand` | allow_with_constraint |
 | `rpc:MainThreadCommands.$unregisterCommand` | allow_with_constraint |
+| `rpc:MainThreadConsole.$logExtensionHostMessage` | allow |
+| `rpc:MainThreadDocuments.$tryOpenDocument` | allow_with_constraint |
+| `rpc:MainThreadErrors.$onUnexpectedError` | allow |
+| `rpc:MainThreadExtensionService.$onDidActivateExtension` | allow |
+| `rpc:MainThreadExtensionService.$onExtensionActivationError` | allow_with_constraint |
+| `rpc:MainThreadExtensionService.$onExtensionRuntimeError` | allow |
+| `rpc:MainThreadExtensionService.$onWillActivateExtension` | allow |
+| `rpc:MainThreadExtensionService.$setPerformanceMarks` | allow |
+| `rpc:MainThreadFileSystem.$ensureActivation` | allow_with_constraint |
 | `rpc:MainThreadFileSystem.$readFile` | allow_with_constraint |
 | `rpc:MainThreadFileSystem.$writeFile` | allow_with_constraint |
+| `rpc:MainThreadLanguageFeatures.$unregister` | allow |
 | `rpc:MainThreadSecretState.$deletePassword` | rewrite |
 | `rpc:MainThreadSecretState.$getKeys` | rewrite |
 | `rpc:MainThreadSecretState.$getPassword` | rewrite |
 | `rpc:MainThreadSecretState.$setPassword` | rewrite |
+| `rpc:MainThreadStorage.$initializeExtensionStorage` | rewrite |
+| `rpc:MainThreadStorage.$setValue` | rewrite |
+| `rpc:MainThreadTextEditors.$tryShowTextDocument` | allow_with_constraint |
 | `rpc:MainThreadTunnelService.$openTunnel` | prompt |
 | `rpc:MainThreadWindow.$asExternalUri` | prompt |
+| `rpc:MainThreadWindow.$getInitialState` | allow |
 | `rpc:MainThreadWindow.$openUri` | prompt |
+| `rpc:MainThreadWorkspace.$startFileSearch` | allow_with_constraint |
 <!-- seclab:end reachable -->
 
 ## 5. Integration with the broker
@@ -486,11 +520,138 @@ The policy table, the inventory and the checks are **not** patches. They live in
 table rather than the diff. That is the property that makes the bump cheap: a
 new upstream method is a JSON edit plus a review, not a rebase conflict.
 
+## 6a. Surface (e): trusted-side AI surfaces are **not** covered by this filter
+
+The chat agent runs in the **trusted workbench**, not in the tab. When it reads
+a tab's files and invokes a trusted-side tool, **no RPC crosses the sandbox
+boundary**, so the enforcement points in §2 never see it. A tab does not need a
+confused deputy over RPC if it can write text that a trusted agent obeys:
+`.github/instructions/` is located in workspace root folders, auto-attached
+when `applyTo` is `**`, and the generated system prompt tells the model to
+follow it.
+
+**This filter does not contain that class, and nothing here should be read as
+if it did.** For v0 the feature is **turned off** in `seclab+` windows
+(patches 0009–0011, [ADR](adr/20261105-no-builtin-chat-in-tabs.md)) — a
+withdrawal, not containment.
+
+> **Two server-initiated push paths stay open on main (2026-11-06).** The REH
+> can still reach the trusted side through `remoteTerminal`:
+>
+> * **`$onExecuteCommand`** — the server names a command and the workbench runs
+>   it, against a four-entry `_remoteCLI` allow list. **Host code execution.**
+> * **`$onPtyHostRequestResolveVariablesEvent`** — the server names strings the
+>   workbench resolves over `shellEnvironmentService.getShellEnv()`, so
+>   `${env:X}` returns the host user's shell environment. **Host credential
+>   exfiltration**, and unlike the above it needs no live pty.
+>
+> Patches that refuse both exist, on the RPC-filter follow-up branch. They are
+> **held back deliberately.** Both are rogue-REH surfaces, and the rogue-REH
+> fixture has never been runnable: nothing applies its hook, so there is no
+> runtime proof that either refusal works. A patch whose effect has never been
+> observed is not containment, it is an untested claim, and this increment's
+> scope is exactly what its probes demonstrate. Both are recorded as
+> accepted-unenforced in `policy.json`, so the gate prints them on every run.
+>
+> They land once the attested containment build variant exists and each probe
+> is shown going from succeeding on a baseline build to denied on a patched
+> one.
+
+> **The agent-host dial path is still open (2026-11-05).** Patch 0011, which
+> closes it, is **not in this increment**. It is on a follow-up branch, held
+> back so the core RPC filter can land first: host code execution from a tab
+> via `workbench.action.terminal.newLocal` and `sendSequence` is reproducible
+> on main today, and 0007/0008 close that. Until 0011 lands, a workspace
+> setting can still make the host dial an attacker's agent host outside the
+> broker. 0009 and 0010 are in this increment and are independent of it. The vulnerable architecture is unchanged; we have
+stopped using it in tab windows. Containing it is a separate workstream.
+
+The surface *is* enumerated and pinned by the drift gate, so a new tool or a
+setting whose scope becomes tab-writable fails the build. But its probes are
+**not implemented**: there is no runner, and **nothing has been proven against
+an unpatched baseline**. Until that changes, surface (e) has an inventory and a
+gate, and no evidence. Those are different things, and the probe registry says
+`"status": "not-implemented"` for each so the suite cannot report them as
+passes.
+
 ## 7. Residual risks
 
 Stated plainly, because each one is a thing this design does **not** stop.
 Numbers 1 to 4 came out of the independent design review
 ([`docs/security-reviews/20261104-rpc-lockdown-design.md`](security-reviews/20261104-rpc-lockdown-design.md)).
+
+0. **Deferred laundering escapes the command taint.** A tab-originated handler
+   that *defers* a global `ICommandService` call — `setTimeout`, an unawaited
+   promise, an event subscription — runs after `seclabInFlight` has unwound, so
+   it has neither an origin nor a non-zero counter and escapes both the taint
+   and the backstop. The taint is scoped to the synchronous and awaited call
+   tree, because the counter tracks the *call's duration* rather than the
+   handler's lifetime; the candidate fix is to carry the origin in the
+   invoker's disposable scope instead.
+
+   This is safe only while no reachable command can launder. That dependency is
+   **checked, not described**: `check_drift.py::check_residuals` fails the build
+   if any command is given a verdict other than `deny` while
+   `residuals['deferred-laundering'].fixed` is false, unless it is one of the
+   residual's recorded **leaf exceptions** (`_setContext`,
+   `_executeHoverProvider`, `_executeCompletionItemProvider`): a handler shown
+   never to reach `ICommandService`, with an argument validator, because a leaf
+   can still leak or spoof host state on its own
+   ([EDR](edr/20261106-ordinary-session-rpc-trace.md)). Fixing the residual
+   properly is the follow-up after this landing.
+
+10. **Every text model in the window is synced to the tab's extension host.**
+    `MainThreadDocumentsAndEditors` filters models only by
+    `shouldSynchronizeModel` (size and simple-widget), with no scheme check. A
+    user who opens their settings (`vscode-userdata:`) or an output channel in a
+    tab window hands its content to the tab. This is a Win → Ext push, so this
+    filter never sees it. Open on main; needs its own push-side control.
+11. **Responses are not filtered.** The filter screens requests, never what a
+    tab returns. Any tab-provided item that carries a command, a `command:` link,
+    trusted markdown or a remote image would put tab-chosen actions or fetches
+    into trusted UI, executed by the global `ICommandService` on a user gesture.
+    So every provider, tree, SCM, status bar, decoration and notification
+    registration stays denied until one structural response-side control exists
+    (taint by origin for commands and links; neutralise trusted markdown and
+    remote images from tab data). The ordinary-session classification drafts for
+    them are kept, not enforced, in
+    [`rpc-filter/policy/drafts/`](../rpc-filter/policy/drafts/20261106-ordinary-session.json).
+12. **Nested URIs.** `SECLAB_URI_ARGS` covers parameters typed exactly
+    `UriComponents`; a URI inside an options object or a union type is invisible
+    to it. Every allowed method with nested URIs has a named validator
+    (`$startFileSearch` today); the drafts list the rest.
+
+### 7.1 What a tab's extensions cannot do yet
+
+Denied until the response-side control above lands, so these are visible
+losses, not bugs:
+- source control (the git extension's SCM view, quick diff, timeline);
+- tree views, output channels, status bar items and decorations;
+- language features registered by the tab (hover, completion, code actions,
+  code lens, links, folding), so a language extension in a tab activates but
+  contributes nothing to the editor;
+- debugging, terminal environment contributions, URI handlers, quick
+  fixes, workspace trust requests;
+- **Tasks don't run in tabs yet.** The tab's extension host is denied
+  `MainThreadTask.$registerTaskSystem`, `$registerSupportedExecutions` and
+  `$registerTaskProvider`, so the workbench never learns it can run shell or process
+  tasks there. The editor-driven run's `[task]` check is an expected failure on a
+  filtered build for this reason, and must still pass without the filter. The
+  follow-up comes after patch 0031: the task-system info a tab sends shapes how
+  the trusted side resolves task variables, which is what 0031 bounds.
+- **Quick Open file search and the Search view don't work in tabs yet.** Inside a
+  tab the extension host serves search itself, registering its file and text
+  search providers for `vscode-remote`. Those registrations are denied, so the
+  search service waits forever for a provider: `workspace.findFiles`, Quick Open
+  file search and the Search view never return. The benign control records
+  `findFiles` as its one expected failure. First follow-up, as designed:
+  `$registerFileSearchProvider` and `$registerTextSearchProvider` for exactly
+  `vscode-remote`; `$handleFileMatch` result URIs canonical `vscode-remote` on
+  this tab's authority; `$handleTextMatch` with a validator for the nested
+  `resource`; `$unregisterProvider` limited to this connection's providers.
+
+Extensions activate, run their commands, keep per-tab state and secrets, and
+read, write and open their own workspace files.
 
 1. **Verdict laundering through nested commands.** Addressed by the command taint (§2.5.2, [ADR](adr/20261104-tab-command-taint.md)), but two escapes remain: a handler using a constructor-injected or imported `ICommandService` rather than its accessor, and services that run commands for a caller such as `IOpenerService` for `command:` URIs. The global-service backstop catches the denied subset; the allowed subset is unfiltered. Probed, not assumed.
 2. **A verdict is pinned to an id, not to behaviour.** The digest covers policy

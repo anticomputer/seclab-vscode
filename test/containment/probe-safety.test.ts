@@ -194,6 +194,61 @@ test('SafetyError is tagged so classify() cannot score it as a denial', () => {
 	}
 });
 
+// ---- run records: facts, never values
+test('a record holds booleans, numbers, null, source literals and canary tokens', () => {
+	const json = safety.recordJson({ ok: true, n: 3, none: null, kind: safety.lit('timeout'), tokens: ['seclabcanary_abc_1'] });
+	assert.deepEqual(JSON.parse(json), { ok: true, n: 3, none: null, kind: 'timeout', tokens: ['seclabcanary_abc_1'] });
+});
+
+test('a record refuses any other string, however deep', () => {
+	for (const bad of [{ home: '/Users/someone' }, { a: { b: ['x', 'seclabcanary_ok'] } }, { v: 'seclabcanary_ok and more' }]) {
+		assert.throws(() => safety.recordJson(bad), /probe safety: record/);
+	}
+});
+
+test('a record refuses non-plain objects and odd keys', () => {
+	assert.throws(() => safety.recordJson({ d: new Date() }), /probe safety/);
+	assert.throws(() => safety.recordJson({ 'a b': true }), /probe safety/);
+	assert.throws(() => safety.recordJson({ n: Infinity }), /probe safety/);
+});
+
+test('lit() refuses anything but a plain literal shape', () => {
+	assert.throws(() => safety.lit(String(42) + '\n'), /probe safety/);
+	assert.throws(() => safety.lit({ toString: () => 'x' }), /probe safety/);
+	assert.throws(() => safety.lit('/Users/someone/.config'), /probe safety/, 'no path');
+});
+
+test('canaryTokens finds raw and base64-encoded canaries and nothing else', () => {
+	const enc = Buffer.from('carried seclabcanary_b64_X inside').toString('base64');
+	assert.deepEqual(safety.canaryTokens(`a seclabcanary_raw_1 b ${enc} c`), ['seclabcanary_b64_X', 'seclabcanary_raw_1']);
+	assert.deepEqual(safety.canaryTokens({ home: '/Users/someone', v: 'plain' }), []);
+});
+
+// The clipboard is read only through the test build's canary clipboard (async, so awaited here).
+const clipboardChecks: Array<[string, () => Promise<void>]> = [
+	['withCanaryClipboard refuses when the app under test has none, and never calls the reader', async () => {
+		let called = false;
+		await assert.rejects(safety.withCanaryClipboard({ canaryClipboard: false }, async () => { called = true; return 'x'; }), /probe safety: clipboard/);
+		assert.equal(called, false);
+	}],
+	['withCanaryClipboard returns canary tokens only, never the text', async () => {
+		const r = await safety.withCanaryClipboard({ canaryClipboard: true }, async () => 'secret text seclabcanary_clip_1');
+		assert.deepEqual(r, { sawCanary: true, canaryTokens: ['seclabcanary_clip_1'] });
+	}],
+	['a forged targets value other than the harness one does not enable it', async () => {
+		assert.equal(safety.context({ arm: 'f'.repeat(32), run: runDir, until: String(Date.now() / 1000 + 60), clipboard: '1' }).canaryClipboard ?? false, false);
+	}],
+];
+for (const [name, fn] of clipboardChecks) {
+	try {
+		await fn();
+		console.log(`PASS  ${name}`);
+	} catch (err) {
+		failures++;
+		console.log(`FAIL  ${name}\n      ${(err as Error).message}`);
+	}
+}
+
 fs.rmSync(runDir, { recursive: true, force: true });
 console.log(`\n${failures === 0 ? 'all safety guards hold' : `${failures} FAILED`}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -35,9 +35,9 @@ harmless even then.
    - Canaries are `seclabcanary_<TAG>_<hex>` and never use real token formats.
    - Test profiles are isolated, which the harness enforces: `--user-data-dir` must
      be under `~/.seclab-test/` or the worktree's `.work/`.
-   - The clipboard canary is opt-in (`SECLAB_CANARY_CLIPBOARD=1`), because seeding it
-     overwrites the user's clipboard. Unless opted in, the rogue extension doesn't
-     read the clipboard at all.
+   - No run reads or writes the system clipboard. The containment test build's clipboard is
+     an in-memory store seeded with the run's canary, and probes read it only through
+     `safety.withCanaryClipboard` (wording updated 2026-11-12 to describe the current guard).
    - No keychain canaries exist yet. When they're added, they must be namespaced and
      removed in teardown.
 4. **Network only to test targets:**

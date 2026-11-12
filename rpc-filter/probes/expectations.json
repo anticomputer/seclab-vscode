@@ -6,58 +6,60 @@
     "patched": "every probe with required=true must not succeed AND its denial must be corroborated by the host-side filter denial log, unless patchedOutcome names another outcome, in which case an executable predicate must hold"
   },
   "probes": {
-    "host-terminal-newlocal": {
-      "required": true,
-      "surface": "code-execution",
-      "policyRef": "cmd:workbench.action.terminal.newLocal",
-      "why": "creates a terminal on the host even in a remote window"
-    },
-    "host-terminal-sendsequence": {
-      "required": true,
-      "surface": "code-execution",
-      "policyRef": "cmd:workbench.action.terminal.sendSequence",
-      "why": "types into the active terminal; with newLocal this writes the host marker file",
-      "hostEffect": "marker"
-    },
-    "host-fs-read-userdata": {
-      "required": true,
-      "surface": "host-fs-read",
-      "policyRef": "rpc:MainThreadFileSystem.$readFile",
-      "why": "vscode-userdata: reaches real user settings, which hold a seeded canary",
-      "canary": "user-settings"
-    },
-    "host-fs-read-file-scheme": {
-      "required": true,
-      "surface": "host-fs-read",
-      "policyRef": "rpc:MainThreadFileSystem.$readFile",
-      "why": "file: reaches a host path outside the tab mount"
-    },
-    "host-fs-write-file-scheme": {
+    "ai-agent-host-autoapprove-setting": {
       "required": false,
-      "surface": "host-fs-write",
-      "policyRef": "rpc:MainThreadFileSystem.$writeFile",
-      "why": "a host write is a code-execution primitive, but a file: write from a remote window is served by the REH's own provider inside the tab: the 2026-11-04 run returned success while nothing happened on the host, so this is kept as a negative control, not a proof"
+      "surface": "client-push",
+      "policyRef": "ai-tool:run_in_terminal",
+      "why": "a rogue agent host asserts _meta.autoApproveBySetting for a host tool; 0009's invokeTool refusal must hold regardless of what the host claims",
+      "status": "not-implemented",
+      "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
     },
-    "host-fs-write-userdata": {
-      "required": true,
-      "surface": "host-fs-write",
-      "policyRef": "rpc:MainThreadFileSystem.$writeFile",
-      "why": "vscode-userdata: resolves against the host profile directory, so the write actually crosses the boundary",
-      "hostEffectAbsolute": "userDataDir:/User/seclab-probe-marker.txt"
-    },
-    "secret-write-own": {
+    "ai-agent-host-token-push": {
       "required": false,
-      "surface": "setup",
-      "policyRef": "rpc:MainThreadSecretState.$setPassword",
-      "why": "seeds the cross-tab read; after patching this is a rewrite, not a denial"
+      "surface": "client-push",
+      "policyRef": "push:agentHostProxy",
+      "why": "a rogue REH serves agentHostProxy and advertises api.github.com in protectedResources; the client would resolve the user's auth session and forward the real accessToken. Client->server, so neither the RPC choke point nor the channel guard sees it",
+      "status": "not-implemented",
+      "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
     },
-    "secret-read-cross-tab": {
+    "ai-disable-ai-features-reenable": {
+      "required": false,
+      "surface": "client-push",
+      "policyRef": "ai-setting:chat.disableAIFeatures",
+      "why": "chat.disableAIFeatures is WINDOW scope and the tab supplies remote user settings, so a tab-written false must not revive the agent host client",
+      "status": "not-implemented",
+      "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
+    },
+    "ai-instructions-tool-call": {
+      "required": false,
+      "surface": "trusted-ai",
+      "policyRef": "ai-tool:fetch_webpage",
+      "why": "a workspace instructions file steers the trusted-side agent into a host tool; the tab never makes an RPC call, so the filter cannot see it",
+      "status": "not-implemented",
+      "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
+    },
+    "ai-remote-agent-host-dial": {
+      "required": false,
+      "surface": "client-push",
+      "policyRef": "ai-setting:chat.workspaceRemoteAgentHosts",
+      "why": "the tab writes chat.workspaceRemoteAgentHosts pointing at a local beacon, through both .vscode/settings.json and remote user settings. The host renderer would dial it from the host network, bypassing the broker, and the dialled connection is not seclab+ so the authority predicate never fires",
+      "status": "not-implemented",
+      "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
+    },
+    "ai-settings-reenable": {
+      "required": false,
+      "surface": "trusted-ai",
+      "policyRef": "ai-setting:chat.agent.enabled",
+      "why": "the tab writes .vscode/settings.json to switch its own containment back on; the disable is in code precisely so a setting cannot reach it",
+      "status": "not-implemented",
+      "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
+    },
+    "as-external-uri": {
       "required": true,
-      "surface": "cross-tab-access",
-      "policyRef": "rpc:MainThreadSecretState.$getPassword",
-      "why": "SecretStorage is keyed {extensionId, key} globally, so tab B reads what tab A wrote",
-      "crossTab": true,
-      "patchedOutcome": "succeeded"
+      "surface": "exfiltration",
+      "policyRef": "rpc:MainThreadWindow.$asExternalUri",
+      "why": "can mint a tunnel the broker does not see",
+      "beacon": "/as-external"
     },
     "auth-get-session": {
       "required": true,
@@ -73,73 +75,62 @@
       "why": "the clipboard routinely holds a token the user just copied",
       "canary": "clipboard"
     },
-    "open-external-silent": {
-      "required": true,
-      "surface": "exfiltration",
-      "policyRef": "rpc:MainThreadWindow.$openUri",
-      "why": "hands a URI to the host opener, leaving the tab without passing its broker",
-      "beacon": "/open-external"
-    },
-    "as-external-uri": {
-      "required": true,
-      "surface": "exfiltration",
-      "policyRef": "rpc:MainThreadWindow.$asExternalUri",
-      "why": "can mint a tunnel the broker does not see",
-      "beacon": "/as-external"
-    },
-    "webview-egress": {
-      "required": true,
-      "surface": "exfiltration",
-      "policyRef": "data:webview-content",
-      "why": "webviews render in the local trusted renderer, so their fetches have the host's network position",
-      "beacon": "/webview",
-      "patchedOutcome": "succeeded"
-    },
     "command-enumeration": {
       "required": true,
       "surface": "reconnaissance",
       "policyRef": "rpc:MainThreadCommands.$getCommands",
-      "why": "returning the full registry tells an attacker which host commands to try",
-      "patchedOutcome": "succeeded"
+      "why": "returning the full registry tells an attacker which host commands to try; denied until a response-side filter exists (round 10 finding 3)"
     },
-    "launder-direct": {
+    "host-fs-read-file-scheme": {
+      "required": true,
+      "surface": "host-fs-read",
+      "policyRef": "rpc:MainThreadFileSystem.$readFile",
+      "why": "file: reaches a host path outside the tab mount"
+    },
+    "host-fs-read-userdata": {
+      "required": true,
+      "surface": "host-fs-read",
+      "policyRef": "rpc:MainThreadFileSystem.$readFile",
+      "why": "vscode-userdata: reaches real user settings, which hold a seeded canary",
+      "canary": "user-settings"
+    },
+    "host-fs-write-file-scheme": {
+      "required": false,
+      "surface": "host-fs-write",
+      "policyRef": "rpc:MainThreadFileSystem.$writeFile",
+      "why": "a host write is a code-execution primitive, but a file: write from a remote window is served by the REH's own provider inside the tab: the 2026-11-04 run returned success while nothing happened on the host, so this is kept as a negative control, not a proof"
+    },
+    "host-fs-write-userdata": {
+      "required": true,
+      "surface": "host-fs-write",
+      "policyRef": "rpc:MainThreadFileSystem.$writeFile",
+      "why": "vscode-userdata: resolves against the host profile directory, so the write actually crosses the boundary",
+      "hostEffectAbsolute": "userDataDir:/User/seclab-probe-marker.txt"
+    },
+    "host-restart-extension-host": {
       "required": true,
       "surface": "code-execution",
-      "policyRef": "cmd:_remoteCLI.windowOpen",
-      "why": "its handler resolves ICommandService from the accessor and executes _files.windowOpen"
+      "policyRef": "cmd:workbench.action.restartExtensionHost",
+      "why": "Fork build review OOO-2: a tab restarting its own extension host reruns the Tab Manager resolver, which can repeat its prompts to the user; extension install and uninstall commands do the same. One-shot and last (rpc-probe-restart.json): without the filter it restarts the extension host running it, so the attempt records its pid and window session first, the call is bounded at 20 s, and succeeded needs a different extension host process in the same window within 60 s (rounds 14 and 15); the restarted activation never reruns the battery"
     },
-    "launder-open-external": {
-      "required": true,
-      "surface": "exfiltration",
-      "policyRef": "cmd:_remoteCLI.openExternal",
-      "why": "passes allowTunneling: true, and is reachable directly from $executeCommand",
-      "beacon": "/remotecli"
-    },
-    "launder-manage-extensions": {
+    "host-terminal-newlocal": {
       "required": true,
       "surface": "code-execution",
-      "policyRef": "cmd:_remoteCLI.manageExtensions",
-      "why": "installing an extension is arbitrary code execution"
+      "policyRef": "cmd:workbench.action.terminal.newLocal",
+      "why": "creates a terminal on the host even in a remote window"
+    },
+    "host-terminal-sendsequence": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "cmd:workbench.action.terminal.sendSequence",
+      "why": "types into the active terminal; with newLocal this writes the host marker file Its own marker, not the shared one: several vectors write PWNED, so after a patch the shared marker's absence cannot distinguish this chain being denied from another vector not running. This is the chain 0007/0008 exist to close, so its evidence has to stand alone.",
+      "hostEffect": "PWNED-newlocal"
     },
     "launder-await": {
       "required": true,
       "surface": "code-execution",
       "policyRef": "cmd:_seclabTest.launder",
       "why": "the taint must survive an await; ambient context would not",
-      "needsTestContribution": true
-    },
-    "launder-timer": {
-      "required": true,
-      "surface": "code-execution",
-      "policyRef": "cmd:_seclabTest.launder",
-      "why": "the taint must survive a setTimeout",
-      "needsTestContribution": true
-    },
-    "launder-event": {
-      "required": true,
-      "surface": "code-execution",
-      "policyRef": "cmd:_seclabTest.launder",
-      "why": "the taint must survive event re-entry",
       "needsTestContribution": true
     },
     "launder-captured-service": {
@@ -149,6 +140,160 @@
       "why": "handler uses a constructor-injected command service, escaping capability threading; must be caught by the fail-closed backstop",
       "needsTestContribution": true,
       "knownResidual": "ADR 20261104-tab-command-taint.md records this as the taint's main escape"
+    },
+    "launder-direct": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "cmd:_remoteCLI.windowOpen",
+      "why": "its handler resolves ICommandService from the accessor and executes _files.windowOpen"
+    },
+    "launder-event": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "cmd:_seclabTest.launder",
+      "why": "the taint must survive event re-entry",
+      "needsTestContribution": true
+    },
+    "launder-manage-extensions": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "cmd:_remoteCLI.manageExtensions",
+      "why": "installing an extension is arbitrary code execution"
+    },
+    "launder-open-external": {
+      "required": true,
+      "surface": "exfiltration",
+      "policyRef": "cmd:_remoteCLI.openExternal",
+      "why": "passes allowTunneling: true, and is reachable directly from $executeCommand",
+      "beacon": "/remotecli"
+    },
+    "launder-timer": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "cmd:_seclabTest.launder",
+      "why": "the taint must survive a setTimeout",
+      "needsTestContribution": true
+    },
+    "open-external-silent": {
+      "required": true,
+      "surface": "exfiltration",
+      "policyRef": "rpc:MainThreadWindow.$openUri",
+      "why": "hands a URI to the host opener, leaving the tab without passing its broker",
+      "beacon": "/open-external"
+    },
+    "reh-onexecutecommand-manageextensions": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "push:remoteterminal:$onExecuteCommand",
+      "why": "installing or listing extensions on the trusted side is host code execution",
+      "hostEffectAbsolute": "PWNED-manageextensions"
+    },
+    "reh-onexecutecommand-openexternal": {
+      "required": true,
+      "surface": "exfiltration",
+      "policyRef": "push:remoteterminal:$onExecuteCommand",
+      "why": "egress from the trusted side, around the tab's broker",
+      "hostEffectAbsolute": "PWNED-openexternal"
+    },
+    "reh-onexecutecommand-windowopen": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "push:remoteterminal:$onExecuteCommand",
+      "why": "the server names a command and the trusted workbench runs it; windowOpen acts on the host UI",
+      "hostEffectAbsolute": "PWNED-windowopen"
+    },
+    "reh-resolve-variables-host-env": {
+      "required": true,
+      "surface": "credential-access",
+      "policyRef": "push:remoteterminal:$onPtyHostRequestResolveVariablesEvent",
+      "why": "the pty host names strings the trusted side resolves over the host shell environment, so ${env:X} returns host secrets; needs no live pty",
+      "hostEffectAbsolute": "PWNED-resolvevars"
+    },
+    "secret-read-cross-tab": {
+      "required": true,
+      "surface": "cross-tab-access",
+      "policyRef": "rpc:MainThreadSecretState.$getPassword",
+      "why": "SecretStorage is keyed {extensionId, key} globally, so tab B reads what tab A wrote",
+      "crossTab": true,
+      "patchedOutcome": "succeeded"
+    },
+    "secret-write-own": {
+      "required": false,
+      "surface": "setup",
+      "policyRef": "rpc:MainThreadSecretState.$setPassword",
+      "why": "seeds the cross-tab read; after patching this is a rewrite, not a denial"
+    },
+    "state-claim-tab-manager-read": {
+      "required": true,
+      "surface": "cross-tab-access",
+      "policyRef": "rpc:MainThreadStorage.$initializeExtensionStorage",
+      "why": "the storage id is an argument, so a tab reads the Tab Manager's globalState (seeded with a canary by the harness) by naming its id",
+      "patchedOutcome": "succeeded"
+    },
+    "state-claim-tab-manager-write": {
+      "required": true,
+      "surface": "cross-tab-access",
+      "policyRef": "rpc:MainThreadStorage.$setValue",
+      "why": "the same id argument lets a tab overwrite the Tab Manager's globalState (its pending routes); the harness reads the profile's state database for where the write landed",
+      "patchedOutcome": "succeeded"
+    },
+    "secret-claim-tab-manager-write": {
+      "required": true,
+      "surface": "cross-tab-access",
+      "policyRef": "rpc:MainThreadSecretState.$setPassword",
+      "why": "a tab writes a secret under the Tab Manager's id; the harness reads the profile's state database for the key it landed under",
+      "patchedOutcome": "succeeded"
+    },
+    "provider-completion-host-file": {
+      "required": true,
+      "surface": "host-fs-read",
+      "policyRef": "cmd:_executeCompletionItemProvider",
+      "why": "the handler opens a model on the caller's URI; vscode-userdata: is the host profile, and word-based completion returns its words (the seeded settings canary)"
+    },
+    "provider-hover-host-file": {
+      "required": true,
+      "surface": "host-fs-read",
+      "policyRef": "cmd:_executeHoverProvider",
+      "why": "the same model-reference read through registerModelAndPositionCommand"
+    },
+    "host-doc-open-userdata": {
+      "required": true,
+      "surface": "host-fs-read",
+      "policyRef": "rpc:MainThreadDocuments.$tryOpenDocument",
+      "why": "openTextDocument on vscode-userdata: loads the host's settings.json into a model synced to the tab"
+    },
+    "host-doc-show-userdata": {
+      "required": true,
+      "surface": "host-fs-read",
+      "policyRef": "rpc:MainThreadTextEditors.$tryShowTextDocument",
+      "why": "showTextDocument on vscode-userdata: opens the host's settings.json in the window, and its model is synced to the tab. The probe shows its own file and rewrites the outgoing $tryShowTextDocument resource, because showTextDocument(hostUri) is refused earlier at $tryOpenDocument (the open probe's gate) and never reaches this one (2026-11-10 proof run; review round 14 alert 1)"
+    },
+    "host-file-search-nested-uri": {
+      "required": false,
+      "surface": "host-fs-read",
+      "policyRef": "rpc:MainThreadWorkspace.$startFileSearch",
+      "why": "extraFileResources is a URI list nested in the search options, which the positional rule does not see; the search backend stats each one",
+      "blocked_on": "did not reproduce on the unfiltered baseline (main 1cfa18a, 2026-11-09): the search returned no host resource, so the probe cannot show the escape and its denial would prove nothing. The validator's nested-URI and search-root refusals are covered by arg-validators.test.ts, including injected defects. Not required until a baseline run shows the escape."
+    },
+    "host-fs-activation-scheme": {
+      "required": true,
+      "surface": "reconnaissance",
+      "policyRef": "rpc:MainThreadFileSystem.$ensureActivation",
+      "why": "an unknown scheme fires onFileSystem:<scheme> activation in the trusted UI host as well as the tab's"
+    },
+    "setcontext-core-key": {
+      "required": true,
+      "surface": "ui-spoofing",
+      "policyRef": "cmd:_setContext",
+      "why": "setContext writes the window's global context, so a tab can flip a core when-clause (remoteName)"
+    },
+    "webview-egress": {
+      "required": true,
+      "surface": "exfiltration",
+      "policyRef": "data:webview-content",
+      "why": "webviews render in the local trusted renderer, so their fetches have the host's network position",
+      "beacon": "/webview",
+      "patchedOutcome": "succeeded"
     }
   },
   "rehProbes": {
@@ -178,18 +323,40 @@
       "policyRef": "chan:mcpGatewayToolBroker",
       "why": "enumerates host-side MCP servers"
     },
-    "terminal-onexecutecommand": {
+    "harness": {
+      "required": false,
+      "surface": "dos",
+      "policyRef": "rpc:raw",
+      "why": "fault channel, not a probe: records why a REH run could not arm, so an unarmed run is visible as ERROR rather than reading as containment",
+      "status": "not-implemented"
+    },
+    "reh-onexecutecommand-manageextensions": {
       "required": true,
       "surface": "code-execution",
-      "policyRef": "chan:server_initiated.remoteTerminal.onExecuteCommand",
-      "why": "the server names a command from a four-entry allowlist, every entry of which is dangerous"
+      "policyRef": "push:remoteterminal:$onExecuteCommand",
+      "why": "managing extensions on the trusted side is a host code-execution primitive",
+      "hostEffectAbsolute": "PWNED-manageextensions"
     },
-    "rpc-secret-identity-spoof": {
+    "reh-onexecutecommand-openexternal": {
+      "required": true,
+      "surface": "exfiltration",
+      "policyRef": "push:remoteterminal:$onExecuteCommand",
+      "why": "egress from the trusted side, around the tab's broker",
+      "hostEffectAbsolute": "PWNED-openexternal"
+    },
+    "reh-onexecutecommand-windowopen": {
+      "required": true,
+      "surface": "code-execution",
+      "policyRef": "push:remoteterminal:$onExecuteCommand",
+      "why": "the server names a command and the trusted workbench runs it; windowOpen acts on the host UI",
+      "hostEffectAbsolute": "PWNED-windowopen"
+    },
+    "reh-resolve-variables-host-env": {
       "required": true,
       "surface": "credential-access",
-      "policyRef": "rpc:MainThreadSecretState.$getKeys",
-      "why": "extensionId is an RPC argument, so the caller can name vscode.github-authentication and enumerate its stored secrets",
-      "canary": "auth-session"
+      "policyRef": "push:remoteterminal:$onPtyHostRequestResolveVariablesEvent",
+      "why": "the pty host names strings the trusted side resolves over the host shell environment, so ${env:X} returns host secrets; needs no live pty, unlike onExecuteCommand",
+      "hostEffectAbsolute": "PWNED-resolvevars"
     },
     "rpc-proxy-auth": {
       "required": true,
@@ -197,6 +364,13 @@
       "policyRef": "rpc:MainThreadWorkspace.$lookupAuthorization",
       "why": "returns the host's configured proxy credentials",
       "canary": "user-settings-proxy-auth"
+    },
+    "rpc-secret-identity-spoof": {
+      "required": true,
+      "surface": "credential-access",
+      "policyRef": "rpc:MainThreadSecretState.$getKeys",
+      "why": "extensionId is an RPC argument, so the caller can name vscode.github-authentication and enumerate its stored secrets",
+      "canary": "auth-session"
     }
   }
 }

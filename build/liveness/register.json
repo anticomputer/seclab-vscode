@@ -30,6 +30,14 @@
 			]
 		},
 		{
+			"id": "hook:containment/canary-clipboard",
+			"runBy": "build-macos.yml dispatched with test_variant=containment applies it to the app (build/test-variant.sh); test/containment/check-evidence.ts verifies it in the app before seeding the run's canary, and the clipboard-read probe reads only that canary",
+			"evidence": [
+				{ "run": 43270392840, "workflow": "build-macos.yml", "job": "build", "sha": "6858fdd5d69cf20b446e0f9c79ffc451ef816c96", "date": "2026-11-12" },
+				{ "record": "docs/edr/20261106-ordinary-session-rpc-trace.md", "date": "2026-11-12" }
+			]
+		},
+		{
 			"id": "fixture:test/containment/fixtures/malicious-workspace",
 			"runBy": "./seclab test containment oci (test/containment/run.ts triggers each vector in the tab)",
 			"evidence": [{ "ci": "ci-linux.yml#oci", "mark": "containment:malicious-workspace", "runner": "test/containment/run.ts" }]
@@ -68,6 +76,16 @@
 			"id": "fixture:test/docsync/probe-extension",
 			"runBy": "test/docsync/probe.ts prepare|seed|check, with the editor launched by test/window.ts (macOS, sbx, local only)",
 			"evidence": [{ "record": "docs/edr/20261109-document-sync-provenance.md", "date": "2026-11-10" }]
+		},
+		{
+			"id": "fixture:test/containment/benign-extension",
+			"runBy": "test/containment/check-evidence.ts prepare|check (the positive control beside the rogue extension, or alone with SECLAB_BENIGN_ONLY=1) and test/containment/rpc-trace.ts, with the editor launched by test/window.ts (macOS, local only)",
+			"evidence": [{ "record": "docs/edr/20261106-ordinary-session-rpc-trace.md", "date": "2026-11-10" }]
+		},
+		{
+			"id": "fixture:test/containment/fixtures/trace-workspace",
+			"runBy": "test/containment/rpc-trace.ts prepare|check, with the editor launched by test/window.ts --rpc-trace (macOS, local only; unfiltered builds, benign fixtures only)",
+			"evidence": [{ "record": "docs/edr/20261106-ordinary-session-rpc-trace.md", "date": "2026-11-06" }]
 		}
 	]
 }

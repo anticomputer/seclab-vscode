@@ -1,0 +1,135 @@
+diff -ruN a/src/vs/base/parts/ipc/common/ipc.ts b/src/vs/base/parts/ipc/common/ipc.ts
+--- a/src/vs/base/parts/ipc/common/ipc.ts	2026-11-10 12:12:28
++++ b/src/vs/base/parts/ipc/common/ipc.ts	2026-11-10 12:12:47
+@@ -329,6 +329,67 @@
+ 	timeoutTimer: Timeout;
+ }
+ 
++/**
++ * seclab: guard for channels the CLIENT serves to a remote server.
++ *
++ * Under our threat model the REH server process runs inside the tab and is
++ * hostile. It calls these channels directly over the remote connection, so they
++ * never pass through RPCProtocol and a MainThread*-only filter does not see
++ * them at all (docs/RPC-LOCKDOWN.md section 2.4).
++ *
++ * The guard lives on ChannelServer rather than on a convenience wrapper such as
++ * AbstractRemoteAgentService.registerChannel, because that wrapper is a
++ * convention a caller can bypass: anything holding the connection can register
++ * straight on the channelServer, as upstream already does elsewhere. Guarding
++ * the mechanism makes it an invariant instead.
++ *
++ * Installed by the workbench; `ipc.ts` is base-layer and must not import it.
++ */
++export type SeclabChannelGuard = (ctx: unknown, channelName: string, method: string) => Error | undefined;
++
++let seclabChannelGuard: SeclabChannelGuard | undefined;
++
++export function setSeclabChannelGuard(guard: SeclabChannelGuard | undefined): void {
++	seclabChannelGuard = guard;
++}
++
++/**
++ * seclab: is this channel being served to a tab?
++ *
++ * ipc.ts is base-layer and cannot import the workbench, so the test is on the
++ * context the connection supplies: the authority string itself, or an object
++ * carrying `remoteAuthority` (what the management connection passes).
++ */
++function seclabIsTabContext(ctx: unknown): boolean {
++	const a = typeof ctx === 'string'
++		? ctx
++		: (ctx && typeof ctx === 'object' && typeof (ctx as { remoteAuthority?: unknown }).remoteAuthority === 'string')
++			? (ctx as { remoteAuthority: string }).remoteAuthority
++			: '';
++	return a.startsWith('seclab+');
++}
++
++/**
++ * seclab: the verdict when NO guard is installed.
++ *
++ * Previously `undefined`, i.e. allow. The guard is installed by a top-level
++ * side effect in the workbench, which runs only once something imports that
++ * module, so "installed before the hostile server's first channel call" was an
++ * assumption about bundle evaluation order rather than an enforced property --
++ * and the REH inside the tab chooses when to make that call (review round 9
++ * alert 5). A tab context with no guard is now refused.
++ *
++ * Only tab contexts: the trusted side serves channels over this same class
++ * before any tab exists, and refusing those would brick the window. The REH,
++ * which runs inside the tab, opts out explicitly in createServer
++ * (remoteExtensionHostAgentServer.ts, unreachable from desktop).
++ */
++function seclabRefuseUnguarded(...ctxs: unknown[]): Error | undefined {
++	return seclabChannelGuard === undefined && ctxs.some(seclabIsTabContext)
++		? new Error('Unsupported operation')
++		: undefined;
++}
++
+ export class ChannelServer<TContext = string> implements IChannelServer<TContext>, IDisposable {
+ 
+ 	private channels = new Map<string, IServerChannel<TContext>>();
+@@ -345,7 +406,38 @@
+ 	}
+ 
+ 	registerChannel(channelName: string, channel: IServerChannel<TContext>): void {
+-		this.channels.set(channelName, channel);
++		// seclab: wrap unconditionally, and read the guard at *call* time.
++		//
++		// An earlier version captured `seclabChannelGuard` here and only wrapped
++		// when one was already installed. Registration order then decided
++		// enforcement: a channel registered before the workbench installed the
++		// guard was stored unwrapped and stayed unguarded for the life of the
++		// connection. Wrapping always, and looking the guard up per call,
++		// removes the ordering question entirely rather than relying on module
++		// load order to come out the right way.
++		const ctx = this.ctx;
++		this.channels.set(channelName, {
++			call(c: TContext, command: string, arg?: any, cancellationToken?: any): Promise<any> {
++				const refused = seclabRefuseUnguarded(c, ctx) ?? seclabChannelGuard?.(ctx, channelName, command);
++				return refused ? Promise.reject(refused) : channel.call(c, command, arg, cancellationToken);
++			},
++			listen(c: TContext, event: string, arg?: any): Event<any> {
++				const refused = seclabRefuseUnguarded(c, ctx) ?? seclabChannelGuard?.(ctx, channelName, event);
++				if (refused) {
++					// Return an event that never fires, rather than throwing.
++					// `onPromise` wraps `channel.call` in try/catch, so a throw
++					// there becomes a rejected promise; `onEventListen` has no
++					// try/catch, so a throw would escape into the message
++					// handler and break the connection instead of refusing one
++					// capability. The caller gets a valid disposable and no
++					// events, which is also what an unsupported event looks
++					// like -- the denial is recorded host-side, not signalled
++					// to the tab.
++					return Event.None;
++				}
++				return channel.listen(c, event, arg);
++			},
++		});
+ 
+ 		// https://github.com/microsoft/vscode/issues/72531
+ 		setTimeout(() => this.flushPendingRequests(channelName), 0);
+diff -ruN a/src/vs/server/node/remoteExtensionHostAgentServer.ts b/src/vs/server/node/remoteExtensionHostAgentServer.ts
+--- a/src/vs/server/node/remoteExtensionHostAgentServer.ts	2026-11-10 12:12:28
++++ b/src/vs/server/node/remoteExtensionHostAgentServer.ts	2026-11-10 12:12:40
+@@ -23,6 +23,7 @@
+ import { getOSReleaseInfo } from '../../base/node/osReleaseInfo.js';
+ import { findFreePort } from '../../base/node/ports.js';
+ import { addUNCHostToAllowlist, disableUNCAccessRestrictions } from '../../base/node/unc.js';
++import { setSeclabChannelGuard } from '../../base/parts/ipc/common/ipc.js';
+ import { PersistentProtocol } from '../../base/parts/ipc/common/ipc.net.js';
+ import { NodeSocket, upgradeToISocket, WebSocketNodeSocket } from '../../base/parts/ipc/node/ipc.net.js';
+ import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
+@@ -610,6 +611,12 @@
+ }
+ 
+ export async function createServer(address: string | net.AddressInfo | null, args: ServerParsedArgs, REMOTE_DATA_FOLDER: string, agentHostBridgeConnectionToken: string | undefined): Promise<IServerAPI> {
++
++	// seclab: this server runs inside the tab and serves the trusted client, so
++	// there is nothing here for the channel guard to protect. Without an
++	// explicit guard ipc.ts refuses every call from a seclab+ connection and
++	// the window gets no environment. Desktop must never reach this module.
++	setSeclabChannelGuard(() => undefined);
+ 
+ 	const connectionToken = await determineServerConnectionToken(args);
+ 	if (connectionToken instanceof ServerConnectionTokenParseError) {

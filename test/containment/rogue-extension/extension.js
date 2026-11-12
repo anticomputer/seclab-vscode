@@ -3,125 +3,133 @@
 // about that host. Only ever run against our own local builds.
 // Fixture safety (EDR fixture-safety): inert unless the workspace was armed by a harness
 // run (per-run nonce in .seclab/targets, workspace inside that run's dir); reads only
-// what the isolated test profile holds, and the clipboard only when the run opted in.
-const { execFile } = require('node:child_process');
+// what the isolated test profile holds, and the clipboard only through the test build's
+// in-memory canary clipboard. Every record it writes holds facts, never values
+// (probe-safety.js, run records).
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const vscode = require('vscode');
+const safety = require('./probe-safety.js');
 
-function armed(root) {
+function readTargets(root) {
 	let t = '';
 	try { t = fs.readFileSync(path.join(root, '.seclab', 'targets'), 'utf8'); } catch { return undefined; }
-	const get = k => (t.match(new RegExp(`^${k}=(.*)$`, 'm')) ?? [])[1] ?? '';
-	const run = get('run');
-	const until = Number(get('until'));
-	if (!/^[0-9a-f]{32}$/.test(get('arm')) || !run.startsWith('/') || !(root + path.sep).startsWith(run + path.sep)
-		|| !(until > Date.now() / 1000)) {
-		return undefined;
+	const targets = {};
+	for (const line of t.split('\n')) {
+		const i = line.indexOf('=');
+		if (i > 0) { targets[line.slice(0, i)] = line.slice(i + 1); }
 	}
-	return { clipboard: get('clipboard') === '1' };
+	return targets;
+}
+
+function armed(root, targets) {
+	const run = String(targets.run || '');
+	const until = Number(targets.until);
+	return /^[0-9a-f]{32}$/.test(String(targets.arm || '')) && run.startsWith('/') && (root + path.sep).startsWith(run + path.sep)
+		&& until > Date.now() / 1000;
 }
 
 exports.activate = async function (context) {
 	for (const folder of vscode.workspace.workspaceFolders ?? []) {
 		const root = folder.uri.fsPath;
-		const arm = armed(root);
-		if (!arm) {
+		const targets = readTargets(root);
+		if (!targets || !armed(root, targets)) {
 			continue;
 		}
-		const probe = path.join(root, '.seclab', 'probe.sh');
+		const ctx = safety.context(targets);
+		if (!ctx.armed) {
+			continue;
+		}
 		const out = path.join(root, '.seclab-evidence');
-		try {
-			fs.mkdirSync(out, { recursive: true });
-			fs.writeFileSync(path.join(out, 'rogue-extension-host.json'), JSON.stringify({
-				remoteName: vscode.env.remoteName ?? null,
-				extensionHostHostname: os.hostname(),
-				seclabTab: process.env.SECLAB_TAB ?? null,
-				platform: process.platform,
-				uid: process.getuid?.(),
-				home: os.homedir(),
-			}, null, 2));
-		} catch { /* evidence is best effort */ }
+		const inTab = vscode.env.remoteName === 'seclab' && process.env.SECLAB_TAB === '1';
+		const write = (name, value) => {
+			try {
+				fs.mkdirSync(out, { recursive: true });
+				fs.writeFileSync(path.join(out, name), safety.recordJson(value));
+			} catch { /* evidence is best effort; an unrecordable value writes nothing */ }
+		};
+		// Where it ran, as facts. Never the hostname, home or environment: if containment
+		// failed this runs on the host and those are the user's.
+		write('rogue-extension-host.json', {
+			remoteNameIsSeclab: vscode.env.remoteName === 'seclab',
+			seclabTab: process.env.SECLAB_TAB === '1',
+			linux: process.platform === 'linux',
+			uid: typeof process.getuid === 'function' ? process.getuid() : null,
+		});
 		// NOTE: probe.sh is deliberately not spawned from here. It makes external
 		// network calls and writes an unconstrained marker, and on an unpatched
 		// build this extension can land host-side. The Level-A runner triggers it
 		// inside the tab, which is where it belongs.
-		// Everything this extension can observe through the API, for the canary harness.
-		// Values are recorded only when it really runs in a tab (clean env, isolated test
-		// profile). If containment failed and it runs on the host, the env and settings are
-		// the developer's real ones: record names/presence only, never values (FS-1).
-		const inTab = vscode.env.remoteName === 'seclab' && process.env.SECLAB_TAB === '1';
-		const observed = inTab ? { inTab, env: process.env } : { inTab, ranOnHost: true, envNames: Object.keys(process.env).sort() };
-		const tryGet = async (k, f) => { try { observed[k] = await f(); } catch (e) { observed[k] = `error: ${e?.message ?? e}`; } };
-		// Auth sessions: never a raw token, in or out of a tab; only whether one exists and
-		// whether it carries a (fake) canary, raw or base64.
+		// What this extension can observe through the API, for the canary harness: per
+		// source, whether it was readable and which canary tokens it held. Never a value.
+		const observed = { inTab };
+		const observe = async (k, f) => {
+			try {
+				const v = await f();
+				observed[k] = { readable: true, canaryTokens: safety.canaryTokens(v === undefined ? null : v) };
+			} catch {
+				observed[k] = { readable: false };
+			}
+		};
 		const session = async (id, scopes) => {
 			const s = await vscode.authentication.getSession(id, scopes, { silent: true });
-			if (!s) {
-				return null;
-			}
-			const t = String(s.accessToken ?? '');
-			let decoded = '';
-			try { decoded = Buffer.from(t, 'base64').toString('latin1'); } catch { /* not base64 */ } // lint-allow: base64-canary-compare
-			return { present: true, account: inTab ? s.account?.label : undefined, tokenLength: t.length, carriesCanary: /seclabcanary_/.test(t) || /seclabcanary_/.test(decoded) };
+			return s ? String(s.accessToken || '') : null;
 		};
-		if (inTab) {
-			await tryGet('configuration', () => JSON.parse(JSON.stringify(vscode.workspace.getConfiguration())));
-			if (arm.clipboard) {
-				await tryGet('clipboard', () => vscode.env.clipboard.readText());
+		await observe('env', () => process.env);
+		await observe('configuration', () => vscode.workspace.getConfiguration());
+		if (ctx.canaryClipboard) {
+			try {
+				observed.canaryClipboard = { readable: true, ...await safety.withCanaryClipboard(ctx, () => vscode.env.clipboard.readText()) };
+			} catch {
+				observed.canaryClipboard = { readable: false };
 			}
-			await tryGet('ownSecret', () => context.secrets.get('anything'));
 		}
-		if (inTab) {
-			await tryGet('githubSession', () => session('github', ['repo']));
-			await tryGet('microsoftSession', () => session('microsoft', ['openid']));
-		}
-		await tryGet('shellEnv', () => vscode.env.shell);
-		try {
-			fs.writeFileSync(path.join(out, 'rogue-observed.json'), JSON.stringify(observed, null, 2));
-		} catch { /* best effort */ }
+		await observe('ownSecret', () => context.secrets.get('anything'));
+		await observe('githubSession', () => session('github', ['repo']));
+		await observe('microsoftSession', () => session('microsoft', ['openid']));
+		await observe('shellEnv', () => vscode.env.shell);
+		write('rogue-observed.json', observed);
 
 		// Agent surfaces (no trusted-side extension agents in tab windows): this ui-declared
 		// extension registers a chat participant and calls vscode.lm. Placement is decided
 		// before activation (product extensionKind '*' -> workspace), so this code must be
-		// running in the tab. Structured facts only: counts and outcomes, never content.
-		const agent = { ranIn: inTab ? 'tab' : 'host', remoteName: vscode.env.remoteName ?? null };
-		const outcome = async (f) => { try { return await f(); } catch (e) { return `error: ${String(e?.message ?? e).slice(0, 120)}`; } };
-		agent.chatParticipant = await outcome(() => {
-			if (!vscode.chat?.createChatParticipant) {
-				return 'unavailable';
-			}
-			context.subscriptions.push(vscode.chat.createChatParticipant('seclab-test.rogue-agent', () => ({})));
-			return 'registered';
-		});
-		agent.lmModels = await outcome(async () => vscode.lm?.selectChatModels ? (await vscode.lm.selectChatModels({})).length : 'unavailable');
-		agent.lmTools = await outcome(() => Array.isArray(vscode.lm?.tools) ? vscode.lm.tools.length : 'unavailable');
+		// running in the tab. Facts only: counts and outcomes.
+		const agent = { ranInTab: inTab, remoteNameIsSeclab: vscode.env.remoteName === 'seclab' };
 		try {
-			fs.writeFileSync(path.join(out, 'rogue-agent.json'), JSON.stringify(agent, null, 2));
-		} catch { /* best effort */ }
+			if (vscode.chat && vscode.chat.createChatParticipant) {
+				context.subscriptions.push(vscode.chat.createChatParticipant('seclab-test.rogue-agent', () => ({})));
+				agent.chatParticipant = safety.lit('registered');
+			} else {
+				agent.chatParticipant = safety.lit('unavailable');
+			}
+		} catch {
+			agent.chatParticipant = safety.lit('error');
+		}
+		try {
+			agent.lmModels = vscode.lm && vscode.lm.selectChatModels ? (await vscode.lm.selectChatModels({})).length : null;
+		} catch {
+			agent.lmModels = null;
+		}
+		agent.lmTools = vscode.lm && Array.isArray(vscode.lm.tools) ? vscode.lm.tools.length : null;
+		write('rogue-agent.json', agent);
 
 		// RPC escape probes. Separate file and separate evidence, because these
 		// have a per-build expected outcome (succeed unpatched, denied patched)
 		// rather than a fixed assertion.
 		try {
-			const targets = {};
-			for (const line of fs.readFileSync(path.join(root, '.seclab', 'targets'), 'utf8').split('\n')) {
-				const i = line.indexOf('=');
-				if (i > 0) { targets[line.slice(0, i)] = line.slice(i + 1); }
-			}
 			targets.armingFile = path.join(root, '.seclab', 'probe-arming.json');
-			const { runProbes } = require('./rpc-probes.js');
-			const results = await runProbes(vscode, context, targets);
-			fs.writeFileSync(path.join(out, 'rpc-probes.json'), JSON.stringify({
-				tab: process.env.SECLAB_TAB_ID ?? process.env.SECLAB_TAB ?? null,
-				remoteName: vscode.env.remoteName ?? null,
-				results,
-			}, null, 2));
-		} catch (e) {
-			try {
-				fs.writeFileSync(path.join(out, 'rpc-probes-error.txt'), String(e?.stack ?? e));
-			} catch { /* best effort */ }
+			const { runProbes, runRestartProbe, restartAttempted } = require('./rpc-probes.js');
+			const restartFile = path.join(out, 'rpc-probe-restart.json');
+			// An activation after the restart probe ran is the restarted host (or a later
+			// window reload): never rerun the battery, only settle the restart outcome.
+			if (!restartAttempted(restartFile, fs)) {
+				write('rpc-probes.json', { inTab, results: await runProbes(vscode, context, targets) });
+			}
+			// Last, in its own record (check-probes merges it): on a build without the
+			// filter this restarts the extension host running it.
+			await runRestartProbe(vscode, targets, restartFile, fs);
+		} catch {
+			write('rpc-probes-error.json', { error: safety.lit('the probe runner threw') });
 		}
 	}
 };

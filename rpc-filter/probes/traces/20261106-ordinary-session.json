@@ -1,0 +1,424 @@
+{
+	"$comment": "Derived by test/containment/rpc-trace.ts from an unfiltered build: method names, counts and command ids only. The verdict column is the policy table at derivation time.",
+	"build": "main 1cfa18a run 42288509087",
+	"benignActivated": true,
+	"lines": 12491,
+	"requests": 2677,
+	"remote": [
+		{
+			"kind": "remote",
+			"ref": "cmd:_executeCompletionItemProvider",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "cmd:_executeHoverProvider",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "cmd:_setContext",
+			"count": 129,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "cmd:workbench.action.reloadWindow",
+			"count": 1,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadChatSkills.$getTools",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadCommands.$fireCommandActivationEvent",
+			"count": 137,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadCommands.$registerCommand",
+			"count": 510,
+			"verdict": "allow_with_constraint (the id must not collide with an existing…)"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadDebugService.$registerDebugTypes",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadDecorations.$onDidChange",
+			"count": 10,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadDecorations.$registerDecorationProvider",
+			"count": 8,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadDocumentContentProviders.$registerTextContentProvider",
+			"count": 6,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadDocuments.$tryOpenDocument",
+			"count": 9,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadExtensionService.$onDidActivateExtension",
+			"count": 15,
+			"verdict": "allow"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadExtensionService.$onWillActivateExtension",
+			"count": 16,
+			"verdict": "allow"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadExtensionService.$setPerformanceMarks",
+			"count": 2,
+			"verdict": "allow"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadFileSystem.$ensureActivation",
+			"count": 20,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadFileSystem.$registerFileSystemProvider",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadFileSystemEventService.$watch",
+			"count": 4,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadLanguageFeatures.$registerCodeActionSupport",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadLanguageFeatures.$registerCodeLensSupport",
+			"count": 4,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadLanguageFeatures.$registerCompletionsProvider",
+			"count": 34,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadLanguageFeatures.$registerDocumentLinkProvider",
+			"count": 4,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadLanguageFeatures.$registerFoldingRangeProvider",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadLanguageFeatures.$registerHoverProvider",
+			"count": 6,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadLogger.$registerLogger",
+			"count": 10,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadOutputService.$register",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadProgress.$progressEnd",
+			"count": 4,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadProgress.$startProgress",
+			"count": 4,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSCM.$onDidChangeArtifacts",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSCM.$onDidChangeHistoryProviderCurrentHistoryItemRefs",
+			"count": 4,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSCM.$onDidChangeHistoryProviderHistoryItemRefs",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSCM.$registerGroups",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSCM.$registerSourceControl",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSCM.$setInputBoxPlaceholder",
+			"count": 6,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSCM.$setValidationProviderIsEnabled",
+			"count": 6,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSCM.$spliceResourceStates",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSCM.$updateGroup",
+			"count": 6,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSCM.$updateSourceControl",
+			"count": 26,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSearch.$handleFileMatch",
+			"count": 4,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSearch.$registerFileSearchProvider",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSearch.$registerTextSearchProvider",
+			"count": 4,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSecretState.$getPassword",
+			"count": 2,
+			"verdict": "rewrite (extensionId is discarded and replaced wi…)"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadSecretState.$setPassword",
+			"count": 2,
+			"verdict": "rewrite (same rebinding as $getPassword…)"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadStatusBar.$disposeEntry",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadStatusBar.$setEntry",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadStorage.$initializeExtensionStorage",
+			"count": 32,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadStorage.$registerExtensionStorageKeysToSync",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadStorage.$setValue",
+			"count": 11,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTask.$registerSupportedExecutions",
+			"count": 4,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTask.$registerTaskProvider",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTask.$registerTaskSystem",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTelemetry.$publicLog2",
+			"count": 41,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTerminalService.$registerProcessSupport",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTerminalService.$registerQuickFixProvider",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTerminalService.$setEnvironmentVariableCollection",
+			"count": 14,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTextEditors.$registerTextEditorDecorationType",
+			"count": 14,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTextEditors.$tryShowTextDocument",
+			"count": 6,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTimeline.$emitTimelineChangeEvent",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTimeline.$emitWorkspaceTimelineChangeEvent",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTimeline.$registerTimelineProvider",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTimeline.$registerWorkspaceTimelineProvider",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTreeViews.$registerTreeViewDataProvider",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadTunnelService.$setRemoteTunnelService",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadUrls.$registerUriHandler",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadWindow.$getInitialState",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadWorkspace.$registerCanonicalUriProvider",
+			"count": 6,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadWorkspace.$registerEditSessionIdentityProvider",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadWorkspace.$requestResourceTrust",
+			"count": 2,
+			"verdict": "deny"
+		},
+		{
+			"kind": "remote",
+			"ref": "rpc:MainThreadWorkspace.$startFileSearch",
+			"count": 4,
+			"verdict": "deny"
+		}
+	],
+	"localKinds": 31
+}

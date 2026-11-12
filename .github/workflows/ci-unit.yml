@@ -17,7 +17,7 @@ jobs:
   unit:
     name: unit
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -73,9 +73,12 @@ jobs:
         run: rpc-filter/tools/emit.sh --check
       - name: RPC probe payload lint
         run: rpc-filter/tools/lint.sh
+      # The generator tests need the pinned upstream: test.sh fails without it and fails on any
+      # skipped test, so the upstream double-run cannot drop out silently (gate audit GATE-12).
+      - name: Fetch pinned upstream (verifies tag -> SHA)
+        # Outside the workspace: earlier container steps leave .work owned by root.
+        run: build/fetch-upstream.sh "$RUNNER_TEMP/upstream/vscode"
       - name: RPC generator tests (order-independence, import-scoped resolution, ambiguity)
-        run: rpc-filter/tools/test.sh
-      - name: RPC probe-safety guards
-        run: ./seclab test probe-safety
-      - name: RPC URI-argument constraint (generated positions)
-        run: ./seclab test uri-constraint
+        run: rpc-filter/tools/test.sh "$RUNNER_TEMP/upstream/vscode"
+      - name: RPC filter suites (probe-safety, URI constraint, channel guard, policy invariants, command taint)
+        run: ./seclab test rpc-filter

@@ -251,6 +251,10 @@ function context(targets) {
 		advisory: armed.advisory,
 		beaconPort: process.env.SECLAB_PROBE_BEACON_PORT
 			? Number(process.env.SECLAB_PROBE_BEACON_PORT) : null,
+		// Set only when the harness verified that the app under test is a test build
+		// whose clipboard is an in-memory store seeded with this run's canary
+		// (test/builds/variants.json hook `canary-clipboard`). See withCanaryClipboard().
+		canaryClipboard: Boolean(targets && targets.clipboard === CANARY_CLIPBOARD),
 		artefacts: [],
 		// Per-run so teardown can delete exactly what this run created.
 		secretKey: `seclab-probe-${String(armed.nonce || 'run').slice(0, 16)}`,
@@ -260,7 +264,114 @@ function context(targets) {
 	return ctx;
 }
 
+// ---------------------------------------------------------------- run records
+//
+// A run record (any evidence file a probe or fixture writes) holds facts, never
+// values: booleans, finite numbers, null, canary tokens the harness minted, and
+// string literals from this source tree (lit()). Any other string, wherever it
+// came from, makes the write throw. A probe that reads something reports
+// whether a canary crossed, not what it read. rpc-filter/tools/lint_probes.py
+// requires every evidence write in a payload to go through recordJson() and
+// every lit() argument to be a string literal, so a record cannot carry text
+// sourced from the host.
+
+/** The targets value the harness writes once it has verified the canary clipboard. */
+const CANARY_CLIPBOARD = 'variant';
+const LITERAL = Symbol('seclab.literal');
+const CANARY_TOKEN = /seclabcanary_[A-Za-z0-9_]{1,128}/g;
+const CANARY_EXACT = /^seclabcanary_[A-Za-z0-9_]{1,128}$/;
+
+/** A string a record may carry: a literal from this source tree (lint: literal argument only). No '/', so not a path. */
+function lit(s) {
+	if (typeof s !== 'string' || !/^[A-Za-z0-9 ._:$|=+#-]{0,160}$/.test(s)) {
+		throw new SafetyError('lit: only plain source literals');
+	}
+	return { [LITERAL]: s };
+}
+
+/**
+ * The canary tokens in a value: the only thing a record may say about text it observed.
+ * Raw, and inside base64 runs (an auth token or a header often carries a canary encoded).
+ */
+function canaryTokens(value) {
+	let text;
+	try { text = typeof value === 'string' ? value : JSON.stringify(value === undefined ? null : value); } catch { text = ''; }
+	text = String(text);
+	const found = new Set(text.match(CANARY_TOKEN) || []);
+	for (const run of text.match(/[A-Za-z0-9+/]{24,}={0,2}/g) || []) {
+		let decoded = '';
+		try { decoded = Buffer.from(run, 'base64').toString('latin1'); } catch { /* not base64 */ } // lint-allow: base64-canary-compare
+		for (const t of decoded.match(CANARY_TOKEN) || []) {
+			found.add(t);
+		}
+	}
+	return [...found].sort().slice(0, 16);
+}
+
+/** Validates a record and returns its plain JSON form. Throws SafetyError on any other string. */
+function record(value, depth = 0) {
+	if (depth > 8) {
+		throw new SafetyError('record: nested too deep');
+	}
+	if (value === null || typeof value === 'boolean') {
+		return value;
+	}
+	if (typeof value === 'number') {
+		if (!Number.isFinite(value)) {
+			throw new SafetyError('record: non-finite number');
+		}
+		return value;
+	}
+	if (typeof value === 'string') {
+		if (CANARY_EXACT.test(value)) {
+			return value;
+		}
+		throw new SafetyError('record: a raw string may not be recorded; use lit() for a source literal or canaryTokens()');
+	}
+	if (value && typeof value === 'object' && LITERAL in value) {
+		return value[LITERAL];
+	}
+	if (Array.isArray(value)) {
+		if (value.length > 256) {
+			throw new SafetyError('record: array too long');
+		}
+		return value.map(v => record(v, depth + 1));
+	}
+	if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+		const out = {};
+		for (const [k, v] of Object.entries(value)) {
+			if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(k)) {
+				throw new SafetyError('record: keys are plain identifiers');
+			}
+			if (v !== undefined) {
+				out[k] = record(v, depth + 1);
+			}
+		}
+		return out;
+	}
+	throw new SafetyError(`record: ${typeof value} values may not be recorded`);
+}
+
+/** The only way a payload serialises a run record. */
+function recordJson(value) {
+	return JSON.stringify(record(value), null, 2);
+}
+
+/**
+ * The only way a payload reads the clipboard. Refuses unless the harness verified the app
+ * under test has the in-memory canary clipboard (the real clipboard is never read), and
+ * returns only the canary tokens it saw, never the text.
+ */
+async function withCanaryClipboard(ctx, read) {
+	if (!ctx || !ctx.canaryClipboard) {
+		throw new SafetyError('clipboard: the app under test has no canary clipboard; the real clipboard is never read');
+	}
+	const tokens = canaryTokens(await read());
+	return { sawCanary: tokens.length > 0, canaryTokens: tokens };
+}
+
 module.exports = {
 	SafetyError, context, safePath, safeWrite, safeUrl, markerCommand, runPath, note,
-	FORBIDDEN, MARKER_BASENAME, CANARY_BASENAME, NONCE_FILE,
+	lit, canaryTokens, record, recordJson, withCanaryClipboard,
+	FORBIDDEN, MARKER_BASENAME, CANARY_BASENAME, NONCE_FILE, CANARY_CLIPBOARD,
 };

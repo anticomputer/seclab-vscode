@@ -1,0 +1,55 @@
+diff -ruN a/src/vs/platform/native/electron-main/nativeHostMainService.ts b/src/vs/platform/native/electron-main/nativeHostMainService.ts
+--- a/src/vs/platform/native/electron-main/nativeHostMainService.ts	2026-11-12 09:25:10
++++ b/src/vs/platform/native/electron-main/nativeHostMainService.ts	2026-11-12 09:25:27
+@@ -5,7 +5,7 @@
+ 
+ import * as fs from 'fs';
+ import { exec } from 'child_process';
+-import { app, BrowserWindow, clipboard, contentTracing, desktopCapturer, Display, Menu, MessageBoxOptions, MessageBoxReturnValue, nativeImage, Notification, OpenDevToolsOptions, OpenDialogOptions, OpenDialogReturnValue, powerMonitor, powerSaveBlocker, SaveDialogOptions, SaveDialogReturnValue, screen, shell, systemPreferences, webContents } from 'electron';
++import { app, BrowserWindow, contentTracing, desktopCapturer, Display, Menu, MessageBoxOptions, MessageBoxReturnValue, nativeImage, Notification, OpenDevToolsOptions, OpenDialogOptions, OpenDialogReturnValue, powerMonitor, powerSaveBlocker, SaveDialogOptions, SaveDialogReturnValue, screen, shell, systemPreferences, webContents } from 'electron';
+ import { arch, cpus, freemem, loadavg, platform, release, totalmem, type } from 'os';
+ import { promisify } from 'util';
+ import { memoize } from '../../../base/common/decorators.js';
+@@ -57,6 +57,31 @@
+ 
+ export interface INativeHostMainService extends AddFirstParameterToFunctions<ICommonNativeHostService, Promise<unknown> /* only methods, not events */, number | undefined /* window ID */> { }
+ 
++// SECLAB_TEST_ONLY: canary-clipboard hook. Applied only to the `containment` test build
++// variant (test/builds/variants.json), never by patches/series; check-release fails any
++// artifact containing it. Every clipboard call the renderer can make lands here, and in this
++// build none of them touches the system clipboard: they use an in-memory store, seeded with
++// the run's canary (SECLAB_TEST_CLIPBOARD_CANARY, a seclabcanary_ token) when the harness
++// sets one. So a probe that reads the clipboard can only ever see the canary.
++const clipboard = (() => {
++	const seed = process.env['SECLAB_TEST_CLIPBOARD_CANARY'];
++	let text = typeof seed === 'string' && /^seclabcanary_[A-Za-z0-9_]{8,128}$/.test(seed) ? seed : '';
++	let findText = '';
++	const buffers = new Map<string, Buffer>();
++	return {
++		marker: 'SECLAB_TEST_ONLY:canary-clipboard',
++		readText: (_type?: 'selection' | 'clipboard') => text,
++		writeText: (value: string, _type?: 'selection' | 'clipboard') => { text = String(value); },
++		readFindText: () => findText,
++		writeFindText: (value: string) => { findText = String(value); },
++		readImage: () => nativeImage.createEmpty(),
++		writeImage: (_image: unknown) => { },
++		writeBuffer: (format: string, buffer: Buffer, _type?: 'selection' | 'clipboard') => { buffers.set(format, Buffer.from(buffer)); },
++		readBuffer: (format: string) => buffers.get(format) ?? Buffer.alloc(0),
++		has: (format: string, _type?: 'selection' | 'clipboard') => buffers.has(format) || (format === 'text/plain' && text !== ''),
++	};
++})();
++
+ export const INativeHostMainService = createDecorator<INativeHostMainService>('nativeHostMainService');
+ export class NativeHostMainService extends Disposable implements INativeHostMainService {
+ 
+@@ -1095,8 +1120,8 @@
+ 
+ 	async triggerPaste(windowId: number | undefined, options?: INativeHostOptions): Promise<void> {
+ 		this.logService.trace(`Triggering paste in window ${windowId} with options:`, options);
+-		const window = this.windowById(options?.targetWindowId, windowId);
+-		return window?.win?.webContents.paste() ?? Promise.resolve();
++		// SECLAB_TEST_ONLY: canary-clipboard. A native paste reads the system clipboard.
++		return Promise.resolve();
+ 	}
+ 
+ 	async readImage(): Promise<Uint8Array> {

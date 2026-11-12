@@ -82,12 +82,43 @@ Number ranges are reserved per owner; the header of `series` lists them, and
 `reach.json` requires targets per patch. `unreachable.json` lists modules, or `dir/` prefixes
 with explicit exceptions, that a target must not reach. Both are enforced by `build/check-patch-reach.ts` in the required `patch-build` check.
 
+- `0005-seclab-rpc-capability-filter.patch`: the RPC choke point in
+  `rpcProtocol.ts` plus the filter module and its generated policy. The module
+  carries the logic for all three enforcement points; 0006 and 0007 only wire
+  the other two in, so each core file is touched by exactly one patch
+  ([ADR](../docs/adr/20261104-rpc-filter-enforcement-points.md)).
+- `0006-seclab-channel-guard.patch`: `ipc.ts`, plus one line in the REH's `createServer`.
+  Guards the channels the client serves to a hostile REH, on `ChannelServer` rather than a
+  wrapper a caller can bypass, and refuses a tab context while no guard is installed. The
+  REH serves the trusted client over the same class with the same `seclab+` context, and runs
+  inside the tab where there is nothing to guard, so it installs an explicit allow-all guard
+  first thing; without it a patched REH refused every management call and no tab got an
+  extension host. `reach.json` pins the patch to the REH (`server`), and desktop may not reach
+  `src/vs/server/` (`unreachable.json`).
+- `0007-seclab-command-taint.patch`: `commandService.ts` only. Tab-originated
+  commands carry the tab identity into everything they trigger
+  ([ADR](../docs/adr/20261104-tab-command-taint.md)).
+- `0032-seclab-partition-tab-extension-state.patch`: `mainThreadStorage.ts` and
+  `mainThreadSecretState.ts`. A tab's `globalState`, `workspaceState` and `SecretStorage` live
+  in a partition keyed on the tab's stable id from the connection (`seclab-tab:<tabId>/<id>`,
+  `{seclabTab, extensionId, key}`), storage migration is off for tab hosts, and each customer
+  registers its rewrite with the filter, which permits those methods only once registered.
+  Whatever extension id a tab claims, it addresses only its own partition
+  ([ADR addendum](../docs/adr/20261106-tab-state-partition.md)).
+
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
 builds. The rogue-REH hook lives at
-`test/containment/rogue-reh/serverServices-hook.patch` and is applied by the
-containment harness for a dedicated probe build
-([EDR](../docs/edr/20261104-rpc-escape-probes.md)).
+`test/containment/rogue-reh/serverServices-hook.patch`.
+
+**It is applied by nothing today (2026-11-06).** This file previously said it
+was "applied by the containment harness for a dedicated probe build". That
+mechanism does not exist: no build script, workflow, harness or `seclab`
+subcommand applies the patch or sets `SECLAB_ROGUE_REH`. The rogue-REH probes
+have therefore never executed, and `check-probes.ts` skips the whole bucket
+when their evidence file is absent. A dedicated containment build variant is
+being added; until it lands, treat every `rehProbes` entry as a specification
+and not as a result ([EDR](../docs/edr/20261104-rpc-escape-probes.md)).
 
 Expected later patches (M4): the RPC capability filter, auth mediation,
 partitioning, webview egress, and main-process folder routing (proposed).
