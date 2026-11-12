@@ -131,4 +131,5 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-12 | [gates that pass when their config or input can't be read](20261112-gate-fail-open-audit.md) | every CI and local gate reached from seclab and .github/workflows/*.yml at | see record |
 | 2026-11-12 | [internal-identifier scan and the generator-test gate (workflow changes)](20261112-internal-identifier-scan.md) | see record | see record |
 | 2026-11-12 | [the publish gate (pre-push hook, CI and posted text)](20261112-publish-gate.md) | see record | see record |
+| 2026-11-12 | [patch 0036, the tab configuration snapshot](20261112-tab-configuration-snapshot.md) | origin/main..branch head: patch 0036, build/secret-rules and test/configsync. | see record |
 <!-- index:end -->

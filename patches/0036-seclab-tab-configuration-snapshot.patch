@@ -1,7 +1,7 @@
 diff -ruN a/src/vs/workbench/api/browser/mainThreadConfiguration.ts b/src/vs/workbench/api/browser/mainThreadConfiguration.ts
 --- a/src/vs/workbench/api/browser/mainThreadConfiguration.ts	2026-11-09 19:23:22
-+++ b/src/vs/workbench/api/browser/mainThreadConfiguration.ts	2026-11-09 19:48:02
-@@ -11,24 +11,44 @@
++++ b/src/vs/workbench/api/browser/mainThreadConfiguration.ts	2026-11-12 19:01:19
+@@ -11,38 +11,107 @@
  import { MainThreadConfigurationShape, MainContext, ExtHostContext, IConfigurationInitData } from '../common/extHost.protocol.js';
  import { extHostNamedCustomer, IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
  import { ConfigurationTarget, IConfigurationService, IConfigurationOverrides } from '../../../platform/configuration/common/configuration.js';
@@ -10,7 +10,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadConfiguration.ts b/src/vs/wor
 +import { IExtensionService } from '../../services/extensions/common/extensions.js';
 +import { ExtensionHostKind } from '../../services/extensions/common/extensionHostKind.js';
 +import { seclabIsFiltered } from './seclabDocumentOrigin.js';
-+import { seclabSendWithheld, seclabSetWithheldSink, seclabTabConfiguration, seclabTabConfigurationChange, seclabWithheldSink } from './seclabConfigurationSnapshot.js';
++import { SeclabTabConfiguration, seclabSendWithheld, seclabSetWithheldSink, seclabTabConfiguration, seclabTabConfigurationChange, seclabWithheldSink } from './seclabConfigurationSnapshot.js';
 +import { SECLAB_SETTINGS_WITHHELD_MARKER } from './seclabWithhold.js';
  
  @extHostNamedCustomer(MainContext.MainThreadConfiguration)
@@ -19,9 +19,10 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadConfiguration.ts b/src/vs/wor
  	private readonly _configurationListener: IDisposable;
 +	/** seclab: a tab's extension host gets a cut-down snapshot (patch 0036). */
 +	private readonly _seclabFiltered: boolean;
-+	private _seclabLast: IConfigurationInitData | undefined;
++	private _seclabLast: SeclabTabConfiguration | undefined;
 +	private readonly _seclabReported = new Set<string>();
 +	private readonly _seclabSink: ReturnType<typeof seclabWithheldSink>;
++	private _seclabRetries = 0;
  
  	constructor(
  		extHostContext: IExtHostContext,
@@ -45,11 +46,26 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadConfiguration.ts b/src/vs/wor
 -			proxy.$acceptConfigurationChanged(this._getConfigurationData(), e.change);
 +			const previous = this._seclabLast;
 +			const data = this._getConfigurationData();
-+			proxy.$acceptConfigurationChanged(data, this._seclabFiltered ? seclabTabConfigurationChange(e.change, previous, data) : e.change);
++			if (!this._seclabFiltered || !this._seclabLast) {
++				proxy.$acceptConfigurationChanged(data, e.change);
++				return;
++			}
++			const tabLayer = e.source === ConfigurationTarget.USER_REMOTE
++				|| ((e.source === ConfigurationTarget.WORKSPACE || e.source === ConfigurationTarget.WORKSPACE_FOLDER) && this._seclabWorkspaceInTab());
++			proxy.$acceptConfigurationChanged(data, seclabTabConfigurationChange(e.change, tabLayer, previous, this._seclabLast));
  		});
  	}
  
-@@ -38,11 +58,32 @@
++	private _seclabWorkspaceInTab(): boolean {
++		const authority = this._environmentService.remoteAuthority;
++		const inTab = (uri: URI) => uri.scheme === 'vscode-remote' && uri.authority === authority;
++		const ws = this._workspaceContextService.getWorkspace();
++		return ws.configuration ? inTab(ws.configuration) : ws.folders.every(f => inTab(f.uri));
++	}
++
+ 	private _getConfigurationData(): IConfigurationInitData {
+ 		const configurationData: IConfigurationInitData = { ...(this.configurationService.getConfigurationData()!), configurationScopes: [] };
+ 		// Send configurations scopes only in development mode.
  		if (!this._environmentService.isBuilt || this._environmentService.isExtensionDevelopment) {
  			configurationData.configurationScopes = getScopes();
  		}
@@ -59,22 +75,36 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadConfiguration.ts b/src/vs/wor
 +		}
 +		const authority = this._environmentService.remoteAuthority!;
 +		const inTab = (uri: URI | undefined) => uri?.scheme === 'vscode-remote' && uri.authority === authority;
-+		const { data, withheld } = seclabTabConfiguration(configurationData, {
++		const snapshot = seclabTabConfiguration(configurationData, {
 +			windowAuthority: authority,
 +			tabExtensions: new Set(this._extensionService.extensions.filter(e => inTab(e.extensionLocation)).map(e => e.identifier.value.toLowerCase())),
-+			workspaceInTab: (() => { const ws = this._workspaceContextService.getWorkspace(); return ws.configuration ? inTab(ws.configuration) : ws.folders.every(f => inTab(f.uri)); })(),
++			workspaceInTab: this._seclabWorkspaceInTab(),
 +		});
-+		// Tell the user, by key name only, what looked like a credential. The Tab Manager checks each
-+		// claim against host state before raising it (Tab observability, config.withheld).
++		this._seclabReport(authority, snapshot.withheld);
++		this._seclabLast = snapshot;
++		return snapshot.data;
+ 	}
+ 
++	/**
++	 * Tell the user, by key name only, what looked like a credential. The Tab Manager checks each
++	 * claim against host state before raising it (Tab observability, config.withheld). A key counts
++	 * as reported only once the Tab Manager took it; a refused call (its command not registered
++	 * yet) is retried a few times.
++	 */
++	private _seclabReport(authority: string, withheld: readonly { key: string; reason: string }[]): void {
 +		const fresh = withheld.filter(w => w.key.length <= 256 && !this._seclabReported.has(w.key));
 +		fresh.forEach(w => this._seclabReported.add(w.key));
 +		for (let i = 0; i < fresh.length; i += 64) {
-+			seclabSendWithheld({ v: SECLAB_SETTINGS_WITHHELD_MARKER, authority, settings: fresh.slice(i, i + 64) });
++			const batch = fresh.slice(i, i + 64);
++			seclabSendWithheld({ v: SECLAB_SETTINGS_WITHHELD_MARKER, authority, settings: batch }).catch(() => {
++				batch.forEach(w => this._seclabReported.delete(w.key));
++				if (this._seclabRetries++ < 5) {
++					setTimeout(() => this._seclabReport(authority, batch), 3000 * this._seclabRetries);
++				}
++			});
 +		}
-+		this._seclabLast = data;
-+		return data;
- 	}
- 
++	}
++
  	public dispose(): void {
  		this._configurationListener.dispose();
 +		if (this._seclabSink && seclabWithheldSink() === this._seclabSink) {
@@ -85,8 +115,8 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadConfiguration.ts b/src/vs/wor
  	$updateConfigurationOption(target: ConfigurationTarget | null, key: string, value: unknown, overrides: IConfigurationOverrides | undefined, scopeToLanguage: boolean | undefined): Promise<void> {
 diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts
 --- a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	1970-01-01 00:00:00
-+++ b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	2026-11-10 00:08:57
-@@ -0,0 +1,151 @@
++++ b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	2026-11-12 19:01:08
+@@ -0,0 +1,203 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab: the configuration a tab's extension host receives (patch 0036, EDR
 + *  configuration-snapshot). Upstream sends every host the whole snapshot, the host user
@@ -122,27 +152,41 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +	readonly windowAuthority: string;
 +}
 +
++const props = () => Registry.as<IConfigurationRegistry>(Extensions.Configuration).getConfigurationProperties();
++const sourceOf = (key: string) => {
++	const s = Object.hasOwn(props(), key) ? props()[key].source : undefined;
++	return typeof s === 'string' ? s : s?.id;
++};
++/** Segments that reach an object's prototype in `addToValueTree` (review 0036 A2). */
++const UNSAFE_SEGMENT = /(?:^|\.)(?:__proto__|constructor|prototype)(?:\.|$)/;
++
 +/** Whether a registered `key` (not a `[lang]` section) may reach this tab at all. */
 +function declaredForTab(key: string, scope: SeclabSnapshotScope): boolean {
-+	const schema = Registry.as<IConfigurationRegistry>(Extensions.Configuration).getConfigurationProperties()[key];
-+	if (!schema) {
++	if (UNSAFE_SEGMENT.test(key) || !Object.hasOwn(props(), key)) {
 +		return false;
 +	}
-+	const source = typeof schema.source === 'string' ? schema.source : schema.source?.id;
-+	return source === undefined
-+		? !HOST_SCOPES.has(schema.scope ?? ConfigurationScope.WINDOW) && !schema.restricted
-+		: scope.tabExtensions.has(source.toLowerCase());
++	const schema = props()[key];
++	const source = sourceOf(key);
++	if (source === undefined) {
++		return !HOST_SCOPES.has(schema.scope ?? ConfigurationScope.WINDOW) && !schema.restricted;
++	}
++	if (!scope.tabExtensions.has(source.toLowerCase())) {
++		return false;
++	}
++	// A tab extension declaring a prefix of someone else's keys (say `http`) would receive the
++	// user's nested-form settings for them (`"http": { "proxy": … }`) (review 0036 A3).
++	return !Object.keys(props()).some(k => k.startsWith(`${key}.`) && sourceOf(k) !== source);
 +}
 +
-+function filterContents(contents: IStringDictionary<unknown>, keys: readonly string[], scope: SeclabSnapshotScope, report: SeclabWithheld[] | undefined): { contents: IStringDictionary<unknown>; keys: string[] } {
-+	const out: IStringDictionary<unknown> = {};
++function filterContents(contents: IStringDictionary<unknown>, keys: readonly string[], scope: SeclabSnapshotScope, report: SeclabWithheld[] | undefined, all: SeclabWithheld[]): { contents: IStringDictionary<unknown>; keys: string[] } {
++	const out: IStringDictionary<unknown> = Object.create(null);
 +	const kept: string[] = [];
 +	for (const key of keys) {
 +		if (OVERRIDE_PROPERTY_REGEX.test(key)) {
 +			// A `[lang]` section: its own keys go through the same rule.
-+			const section = contents[key];
++			const section = Object.hasOwn(contents, key) ? contents[key] : undefined;
 +			const dict = section && typeof section === 'object' ? section as IStringDictionary<unknown> : {};
-+			const inner = filterContents(dict, Object.keys(dict), scope, undefined);
++			const inner = filterContents(dict, Object.keys(dict), scope, undefined, all);
 +			if (inner.keys.length) {
 +				out[key] = inner.contents;
 +				kept.push(key);
@@ -156,6 +200,7 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +		const reason = withholdReason(key, value);
 +		if (reason) {
 +			report?.push({ key, reason });
++			all.push({ key, reason });
 +			continue;
 +		}
 +		if (!declaredForTab(key, scope)) {
@@ -167,10 +212,10 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +	return { contents: out, keys: kept };
 +}
 +
-+function filterModel(model: IConfigurationModel, scope: SeclabSnapshotScope, report?: SeclabWithheld[]): IConfigurationModel {
-+	const top = filterContents(model.contents, model.keys, scope, report);
++function filterModel(model: IConfigurationModel, scope: SeclabSnapshotScope, report: SeclabWithheld[] | undefined, all: SeclabWithheld[]): IConfigurationModel {
++	const top = filterContents(model.contents, model.keys, scope, report, all);
 +	const overrides = model.overrides.map(o => {
-+		const f = filterContents(o.contents, o.keys, scope, undefined);
++		const f = filterContents(o.contents, o.keys, scope, undefined, all);
 +		return { identifiers: o.identifiers, contents: f.contents, keys: f.keys };
 +	}).filter(o => o.keys.length);
 +	return { contents: top.contents, keys: top.keys, overrides };
@@ -178,33 +223,67 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +
 +const EMPTY: IConfigurationModel = { contents: {}, keys: [], overrides: [] };
 +
-+/** The snapshot for a tab's extension host, and the `userLocal` keys withheld as credentials. */
-+export function seclabTabConfiguration(data: IConfigurationInitData, scope: SeclabSnapshotScope): { data: IConfigurationInitData; withheld: SeclabWithheld[] } {
-+	const withheld: SeclabWithheld[] = [];
-+	const tabFolder = (uri: { scheme?: string; authority?: string }) => uri.scheme === 'vscode-remote' && uri.authority === scope.windowAuthority;
-+	const result: IConfigurationInitData = {
-+		...data,
-+		defaults: filterModel(data.defaults, scope),
-+		policy: filterModel(data.policy, scope),
-+		application: EMPTY,
-+		userLocal: filterModel(data.userLocal, scope, withheld),
-+		userRemote: data.userRemote,
-+		workspace: scope.workspaceInTab ? data.workspace : filterModel(data.workspace, scope),
-+		folders: data.folders.map(([uri, model]) => [uri, tabFolder(uri) ? model : filterModel(model, scope)]),
-+	};
-+	return { data: result, withheld };
++export interface SeclabTabConfiguration {
++	readonly data: IConfigurationInitData;
++	/** `userLocal` keys withheld as credentials (reported to the Tab Manager by name). */
++	readonly withheld: SeclabWithheld[];
++	/** Keys that crossed from host-owned layers, and every key withheld as a credential now. */
++	readonly hostKeys: ReadonlySet<string>;
++	readonly withheldNow: ReadonlySet<string>;
++	/** Keys of the layers the tab owns (its remote user settings, a workspace on its authority). */
++	readonly tabKeys: ReadonlySet<string>;
 +}
 +
-+/** A change event's key list, cut to the keys this tab knew about before or knows about now. */
-+export function seclabTabConfigurationChange(change: IConfigurationChange, ...snapshots: Array<IConfigurationInitData | undefined>): IConfigurationChange {
++function keysOf(models: IConfigurationModel[]): Set<string> {
++	const out = new Set<string>();
++	for (const m of models) {
++		m.keys.forEach(k => out.add(k));
++		m.overrides.forEach(o => o.keys.forEach(k => out.add(k)));
++	}
++	return out;
++}
++
++/** The snapshot for a tab's extension host. */
++export function seclabTabConfiguration(data: IConfigurationInitData, scope: SeclabSnapshotScope): SeclabTabConfiguration {
++	const withheld: SeclabWithheld[] = [];
++	const silent: SeclabWithheld[] = [];
++	const tabFolder = (uri: { scheme?: string; authority?: string }) => uri.scheme === 'vscode-remote' && uri.authority === scope.windowAuthority;
++	const host: IConfigurationModel[] = [];
++	const tab: IConfigurationModel[] = [data.userRemote];
++	const filtered = (m: IConfigurationModel, report?: SeclabWithheld[]) => {
++		const f = filterModel(m, scope, report, silent);
++		host.push(f);
++		return f;
++	};
++	const result: IConfigurationInitData = {
++		...data,
++		defaults: filtered(data.defaults),
++		policy: filtered(data.policy),
++		application: EMPTY,
++		userLocal: filtered(data.userLocal, withheld),
++		userRemote: data.userRemote,
++		workspace: scope.workspaceInTab ? (tab.push(data.workspace), data.workspace) : filtered(data.workspace),
++		folders: data.folders.map(([uri, model]) => [uri, tabFolder(uri) ? (tab.push(model), model) : filtered(model)]),
++	};
++	return {
++		data: result, withheld, hostKeys: keysOf(host), tabKeys: keysOf(tab),
++		withheldNow: new Set(silent.map(w => w.key)),
++	};
++}
++
++/**
++ * A change event's key list, cut to what this tab may know (review 0036, change path). A change
++ * to a layer the tab owns names that layer's keys. Any other change names only keys that crossed
++ * from host layers before or now, and never a key withheld as a credential now: that a host key
++ * just became credential-looking is itself not for the tab.
++ */
++export function seclabTabConfigurationChange(change: IConfigurationChange, tabLayer: boolean, previous: SeclabTabConfiguration | undefined, current: SeclabTabConfiguration): IConfigurationChange {
 +	const known = new Set<string>();
-+	for (const crossed of snapshots) {
-+		if (!crossed) {
-+			continue;
-+		}
-+		for (const m of [crossed.defaults, crossed.policy, crossed.userLocal, crossed.userRemote, crossed.workspace, ...crossed.folders.map(([, f]) => f)]) {
-+			m.keys.forEach(k => known.add(k));
-+			m.overrides.forEach(o => o.keys.forEach(k => known.add(k)));
++	for (const s of [previous, current]) {
++		for (const k of (tabLayer ? s?.tabKeys : s?.hostKeys) ?? []) {
++			if (tabLayer || !current.withheldNow.has(k)) {
++				known.add(k);
++			}
 +		}
 +	}
 +	return {
@@ -217,13 +296,13 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +// Manager), called on that host's ExtHostCommands proxy. Never the global ICommandService, where a
 +// tab could register the same command id and receive (or suppress) the report.
 +let sink: ExtHostCommandsShape | undefined;
-+const pending: unknown[] = [];
++const pending: Array<{ payload: unknown; done: (p: Promise<unknown>) => void }> = [];
 +export const SECLAB_SETTINGS_WITHHELD_COMMAND = 'seclab.tabs.settingsWithheld';
 +
 +export function seclabSetWithheldSink(proxy: ExtHostCommandsShape | undefined): void {
 +	sink = proxy;
 +	for (const p of proxy ? pending.splice(0) : []) {
-+		seclabSendWithheld(p);
++		p.done(seclabSendWithheld(p.payload));
 +	}
 +}
 +
@@ -231,12 +310,15 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +	return sink;
 +}
 +
-+export function seclabSendWithheld(payload: unknown): void {
++/** Settles when the Tab Manager took the report; rejects if it couldn't (or the queue is full). */
++export function seclabSendWithheld(payload: unknown): Promise<unknown> {
 +	if (sink) {
-+		sink.$executeContributedCommand(SECLAB_SETTINGS_WITHHELD_COMMAND, payload).catch(() => { /* no Tab Manager */ });
-+	} else if (pending.length < 16) {
-+		pending.push(payload);
++		return sink.$executeContributedCommand(SECLAB_SETTINGS_WITHHELD_COMMAND, payload);
 +	}
++	if (pending.length >= 16) {
++		return Promise.reject(new Error('seclab: report queue full'));
++	}
++	return new Promise<Promise<unknown>>(resolve => pending.push({ payload, done: resolve })).then(p => p);
 +}
 diff -ruN a/src/vs/workbench/api/browser/seclabSecretRules.ts b/src/vs/workbench/api/browser/seclabSecretRules.ts
 --- a/src/vs/workbench/api/browser/seclabSecretRules.ts	1970-01-01 00:00:00
