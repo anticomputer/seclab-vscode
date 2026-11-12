@@ -172,11 +172,12 @@ export class DrivenEditor {
 		return r.result?.value as T;
 	}
 
-	/** Upstream's smoke-test window driver (needs smokeDriver: true). */
-	driver<T = unknown>(method: string, ...args: unknown[]): Promise<T> {
+	/** Upstream's smoke-test window driver (needs smokeDriver: true); waits for it to register. */
+	async driver<T = unknown>(method: string, ...args: unknown[]): Promise<T> {
 		if (!/^[a-zA-Z]+$/.test(method)) {
 			throw new Error(`bad driver method ${method}`);
 		}
+		await this.waitFor('window.driver', 60_000);
 		return this.evaluate<T>(`window.driver.${method}(...${JSON.stringify(args)})`);
 	}
 
