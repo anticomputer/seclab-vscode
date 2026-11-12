@@ -513,6 +513,9 @@ test('B4 CFS token: tenant checked, expiry required; feed line validated; the in
 	assert.notEqual(run('nope -\n').status, 0);
 	// The root script checks the paths' shape again: no dot segments, the right kind, both present.
 	const b64 = Buffer.from(s).toString('base64');
+	for (const bad of [`seclab_cfs_${'A'.repeat(42)}+`, `other_cfs_${'A'.repeat(43)}`]) {
+		assert.notEqual(run(`feed ${bad} ${Buffer.from(bad).toString('base64')} ${FEEDS.npmPath} ${FEEDS.pypiPath}\n`).status, 0, `a sentinel outside the shape tabd mints is refused (TTT-2): ${bad}`);
+	}
 	assert.notEqual(run(`feed ${s} ${b64} /o/p/_packaging/f/../npm/registry/ ${FEEDS.pypiPath}\n`).status, 0, 'dot segment');
 	assert.notEqual(run(`feed ${s} ${b64} ${FEEDS.pypiPath} ${FEEDS.pypiPath}\n`).status, 0, 'pypi path as npm');
 	assert.notEqual(run(`feed ${s} ${b64} ${FEEDS.npmPath}\n`).status, 0, 'missing pypi path');
