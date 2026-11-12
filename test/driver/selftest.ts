@@ -41,6 +41,7 @@ try {
 	await ed.waitFor(before ? `!${statusBarShown}` : statusBarShown, 10_000).then(() => true, () => false).then(ok =>
 		check('runs a command through the palette (status bar toggled)', ok, `status bar shown before: ${before}`));
 	await ed.command('View: Toggle Status Bar Visibility');
+	await ed.waitFor(statusBarShown, 10_000).catch(() => undefined);
 	const bytes = await ed.screenshot(shot);
 	const png = fs.readFileSync(shot);
 	const isPng = png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));

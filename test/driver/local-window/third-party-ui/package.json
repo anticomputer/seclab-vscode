@@ -1,0 +1,10 @@
+{
+	"name": "local-window-third-party-ui",
+	"publisher": "seclabtest",
+	"version": "0.0.1",
+	"description": "Headless driver fixture: a third-party extension that declares ui. product.json forces every non-built-in extension into the tab, so it must not run in a local window either.",
+	"engines": { "vscode": "^1.80.0" },
+	"main": "./extension.js",
+	"activationEvents": ["*"],
+	"extensionKind": ["ui"]
+}

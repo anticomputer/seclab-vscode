@@ -1,7 +1,8 @@
-// Local windows run no workspace extension, and a VSIX can't make itself a ui built-in
+// Local windows run no extension that isn't a ui built-in, and a VSIX can't make itself one
 // (findings m0#3-1 and m0#4-1; patches 0002, 0003, 0004). Headless: the editor is driven over its
-// CDP pipe and each fixture reports activation through a status bar message the driver reads.
-//   node test/driver/local-window.ts --app APP --profile DIR --vsix-dir DIR
+// CDP pipe and each fixture shows its activation as its own status bar item, which the driver
+// reads. The control is the Tab Manager's own item (a ui built-in): it proves activation shows.
+//   node test/driver/local-window.ts --app APP --profile DIR --vsix-dir DIR [-- EXTRA_EDITOR_ARGS]
 // The VSIXs are zipped from test/driver/local-window/* in the runner container (VS Code reads only
 // extension/package.json from a VSIX: extensionManagementUtil.getManifest), so no vsce and no
 // registry; they're installed with the build's own CLI (cli.js under ELECTRON_RUN_AS_NODE).
@@ -24,16 +25,19 @@ if (!app || !profile || !vsixDir) {
 	console.error('usage: local-window.ts --app APP --profile DIR --vsix-dir DIR [-- EXTRA_EDITOR_ARGS]');
 	process.exit(2);
 }
-const FIXTURES = [
-	{ vsix: 'ui-control.vsix', mark: 'ui-control active', mustActivate: true, why: 'a ui extension runs in a local window (the harness sees activation)' },
-	{ vsix: 'workspace-ext.vsix', mark: 'workspace-ext active', mustActivate: false, why: 'no workspace extension activates in a local window (m0#3-1, patch 0003)' },
-	{ vsix: 'spoofed-builtin.vsix', mark: 'spoofed-builtin active', mustActivate: false, why: 'a VSIX claiming isBuiltin and a ui-allowlisted id stays a workspace extension (m0#4-1, patches 0002/0004)' },
+// installRefused: the install itself must fail with this reason (the attack stops there).
+const FIXTURES: Array<{ name: string; why: string; installRefused?: RegExp }> = [
+	{ name: 'workspace-ext', why: 'a workspace extension does not run in a local window (m0#3-1, patch 0003)' },
+	{ name: 'third-party-ui', why: 'a third-party extension that declares ui does not run in a local window either (product.json forces it into the tab)' },
+	{ name: 'spoofed-isbuiltin', why: 'a VSIX claiming isBuiltin and ui under its own id does not run in a local window (m0#4-1, patches 0002/0004)' },
+	{ name: 'spoofed-builtin', why: 'a VSIX claiming a ui-allowlisted built-in id is refused at install (m0#4-1)', installRefused: /built-in extension and not allowed to be updated/ },
 ];
 // Literal marks, one per fixture (the liveness gate reads them from the code).
 const LIVE: Record<string, () => void> = {
-	'ui-control.vsix': () => liveMark('driver:local-window/ui-control'),
-	'workspace-ext.vsix': () => liveMark('driver:local-window/workspace-ext'),
-	'spoofed-builtin.vsix': () => liveMark('driver:local-window/spoofed-builtin'),
+	'workspace-ext': () => liveMark('driver:local-window/workspace-ext'),
+	'third-party-ui': () => liveMark('driver:local-window/third-party-ui'),
+	'spoofed-isbuiltin': () => liveMark('driver:local-window/spoofed-isbuiltin'),
+	'spoofed-builtin': () => liveMark('driver:local-window/spoofed-builtin'),
 };
 const results: Array<{ ok: boolean; name: string; detail: string }> = [];
 const check = (name: string, ok: boolean, detail = '') => {
@@ -46,25 +50,38 @@ const env = { ...editorEnv({ userData: profile }), ELECTRON_RUN_AS_NODE: '1' };
 checkUserDataDir(path.resolve(profile));
 fs.mkdirSync(profile, { recursive: true });
 preparePortable(path.resolve(profile)); // the CLI installs into the same portable dir the editor uses
+const installed = new Map<string, boolean>();
 for (const f of FIXTURES) {
-	const r = spawnSync(executable(app), [path.join(resources, 'out', 'cli.js'), '--user-data-dir', profile, '--install-extension', path.resolve(vsixDir, f.vsix), '--force'], { env, encoding: 'utf8', timeout: 120_000 });
-	check(`installed ${f.vsix}`, r.status === 0, `${r.status}: ${(r.stderr || r.stdout).trim().slice(0, 300)}`);
+	const r = spawnSync(executable(app), [path.join(resources, 'out', 'cli.js'), '--user-data-dir', profile, '--install-extension', path.resolve(vsixDir, `${f.name}.vsix`), '--force'], { env, encoding: 'utf8', timeout: 120_000 });
+	const out = `${r.stdout}${r.stderr}`;
+	installed.set(f.name, r.status === 0);
+	if (f.installRefused) {
+		check(f.why, r.status !== 0 && f.installRefused.test(out), `${r.status}: ${out.trim().slice(0, 300)}`);
+	} else {
+		check(`installed ${f.name}`, r.status === 0, `${r.status}: ${out.trim().slice(0, 300)}`);
+	}
 }
 
 let ed: DrivenEditor | undefined;
 try {
 	ed = await DrivenEditor.launch({ app, userData: profile, args: extra });
 	await ed.waitFor(`document.querySelector('.monaco-workbench .part.statusbar')`, 60_000);
-	const text = `document.querySelector('.part.statusbar')?.textContent ?? ''`;
-	// The control proves activation is visible; the others get the same time after it.
-	await ed.waitFor(`(${text}).includes('seclab-local-window: ui-control active')`, 60_000).catch(() => undefined);
+	const items = `[...document.querySelectorAll('.part.statusbar .statusbar-item')].map(e => e.id + ' ' + (e.innerText || '')).join('\\n')`;
+	// The control: the Tab Manager (a ui built-in) shows its item, so activation is visible.
+	// The fixtures then get the same time after it.
+	const control = await ed.waitFor(`(${items}).includes('seclab.tab-manager')`, 60_000).then(() => true, () => false);
+	check('control: a ui built-in (the Tab Manager) activates and shows in the status bar', control);
 	await new Promise(r => setTimeout(r, 10_000));
-	const seen = await ed.evaluate<string>(text);
+	const seen = await ed.evaluate<string>(items);
 	for (const f of FIXTURES) {
-		const active = seen.includes(`seclab-local-window: ${f.mark}`);
-		check(f.why, active === f.mustActivate, `status bar: ${JSON.stringify(seen.slice(0, 200))}`);
-		// Liveness (EDR liveness-gate): this fixture was installed and observed in a driven window.
-		LIVE[f.vsix]();
+		const active = seen.includes(`seclab-local-window: ${f.name} active`);
+		if (!f.installRefused) {
+			check(f.why, control && installed.get(f.name) === true && !active, active ? 'it activated' : '');
+		} else {
+			check(`${f.name} is not active either`, !active);
+		}
+		// Liveness (EDR liveness-gate): this fixture was installed (or refused) and observed.
+		LIVE[f.name]();
 	}
 	await ed.close();
 } catch (e) {

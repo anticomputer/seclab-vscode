@@ -103,6 +103,18 @@ export class DrivenEditor {
 		}
 		fs.mkdirSync(userData, { recursive: true });
 		preparePortable(userData);
+		// A quiet first run, unless the run brought its own settings: the onboarding modal takes
+		// focus and keys, and the welcome page covers the view.
+		const settings = path.join(userData, 'User', 'settings.json');
+		if (!fs.existsSync(settings)) {
+			fs.mkdirSync(path.dirname(settings), { recursive: true });
+			fs.writeFileSync(settings, JSON.stringify({
+				'workbench.welcomePage.experimentalOnboarding': false,
+				'workbench.startupEditor': 'none',
+				'workbench.tips.enabled': false,
+				'chat.disableAIFeatures': true,
+			}, null, '\t'));
+		}
 		if (process.platform === 'darwin') {
 			startFocusWatch(userData);
 		}
