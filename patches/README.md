@@ -36,6 +36,9 @@ Current queue:
   can't override computed description fields such as `isBuiltin`.
 - `0012-background-windows-env.patch`: with `SECLAB_BACKGROUND_WINDOWS=1` in the main
   process's launch environment, windows open inactive and nothing focuses or activates the app:
+  the bootstrap (`mainImpl.ts`) makes the app background-only before AppKit finishes launching,
+  so even a directly exec'd launch (the headless driver's) never activates
+  ([EDR](../docs/edr/20261112-headless-driver.md));
   guarded call sites, plus a main-process guard over Electron's own activating paths (`show`,
   `focus`, `webContents.focus`, parentless dialogs)
   ([EDR](../docs/edr/20261105-background-windows.md)). It grants nothing; it only withholds

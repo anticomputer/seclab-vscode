@@ -1,0 +1,46 @@
+name: macos-focus-paths
+
+# Measurement (EDR headless-driver, item 4): can a hosted macOS runner drive the OS-level focus
+# paths that tests on a developer's Mac must not (Space switches through System Events
+# keystrokes)? It reports whether the runner has more than one Space and whether a keystroke is
+# delivered and changes the on-screen window set. Nothing here launches the editor. If the
+# runner can't, the Space path stays covered by the latest recorded run plus the structural
+# check in check-release --desktop.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/macos-focus-paths.yml
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: measure
+    runs-on: macos-15
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Spaces and keystroke delivery
+        run: |
+          set +e
+          onscreen() { osascript -l JavaScript -e 'ObjC.import("CoreGraphics"); function run() { const a = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly, 0))); return JSON.stringify(a.filter(w => w.kCGWindowLayer === 0).map(w => w.kCGWindowNumber).sort()); }'; }
+          sw_vers
+          spaces=$(defaults read com.apple.spaces SpacesDisplayConfiguration 2>/dev/null | grep -c ManagedSpaceID)
+          echo "managed Spaces: ${spaces:-0}"
+          before=$(onscreen)
+          out=$(osascript -e 'tell application "System Events" to key code 124 using control down' 2>&1); rc=$?
+          sleep 3
+          after=$(onscreen)
+          osascript -e 'tell application "System Events" to key code 123 using control down' >/dev/null 2>&1
+          changed=no; [ "$before" != "$after" ] && changed=yes
+          {
+            echo "## macOS runner: OS-level focus paths"
+            echo "- managed Spaces: ${spaces:-0}"
+            echo "- System Events keystroke: exit $rc ${out:+(\`$(printf '%s' "$out" | head -c 200)\`)}"
+            echo "- on-screen window set changed by Ctrl+Right: $changed"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$GITHUB_STEP_SUMMARY"

@@ -55,9 +55,9 @@ const RULES: Rule[] = [
 	{ id: 'agent-injection', why: 'instruction-like text aimed at an AI agent (prompt injection)',
 		re: /\b(ignore|disregard|forget|override)\s+(all\s+|any\s+|the\s+|your\s+)*(previous|prior|above|earlier|system|original)\s+(instructions?|prompts?|rules|messages?|context)\b|\b(you\s+are\s+now|from\s+now\s+on,?\s+you)\b[^\n]{0,40}\b(assistant|agent|ai|model|llm|reviewer|mode)\b|\b(note|message|instructions?)\s+(to|for)\s+(the\s+)?(ai|llm|agent|assistant|reviewer|copilot|claude|model)\b|<\/?\s*(system|assistant|tool_call|function_calls|invoke|antml:[a-z_]+)\s*>|\[\/?(INST|SYS)\]|\b(new|updated|real)\s+system\s+prompt\b|\b(do\s+not|don'?t)\s+(tell|inform|alert|report\s+to)\s+the\s+(user|human|reviewer)\b/i },
 	// Never steal focus (AGENTS.md hard rule): editor/demo windows launch in the background
-	// (test/window.ts: open -g -n). Any activate or frontmost call, a foreground `open -a/-b`,
-	// or a direct exec of the app's CLI is a violation.
-	{ id: 'focus-steal', why: 'brings a window/app to the front (launch with test/window.ts)',
+	// (test/window.ts: open -g -n) or are driven headless (test/driver/). Any activate or
+	// frontmost call, a foreground `open -a/-b`, or a direct exec of the app's CLI is a violation.
+	{ id: 'focus-steal', why: 'brings a window/app to the front (launch with test/window.ts or the headless driver, test/driver/)',
 		re: /\bto\s+activate\b|\bactivate\s+(application|app)\b|\.activate\(\s*\)|activateIgnoringOtherApps|activateWithOptions|\bset\s+frontmost\b|\bfrontmost\s*[:=]\s*true|\bfocus\(\s*\{\s*steal\b|\bopen\s+(?!(?:-[A-Za-z]+\s+|--env\s+\S+\s+)*(?:-[A-Za-z]*g[A-Za-z]*|--background)\b)(?:-[A-Za-z]+\s+|--env\s+\S+\s+)*(?:-[A-Za-z]*[ab][A-Za-z]*\s|\S+\.app\b)|['"]open['"]\s*,(?![^\n]*?['"]-[A-Za-z]*g[A-Za-z]*['"][^\n]*?['"]--args['"]|(?![^\n]*['"]--args['"])[^\n]*?['"]-[A-Za-z]*g[A-Za-z]*['"])[^\n]*?(?:['"]-[A-Za-z]*[ab][A-Za-z]*['"]|\.app['"])|Resources\/app\/bin\/code\b/ },
 	// No test or demo captures the screen, drives the UI through accessibility, or synthesises
 	// input: evidence comes from files and logs. These are the APIs that would need a privacy

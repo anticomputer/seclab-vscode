@@ -295,7 +295,9 @@ RPC-lockdown session adds. Keep them consistent with this file.
     the activation paths;
   - no screen capture, accessibility or keystroke automation in any test or demo: evidence
     comes from files and logs, never from the screen. `./seclab lint fixtures` (rule
-    `screen-automation`) rejects them;
+    `screen-automation`) rejects them. An editor screenshot comes from the window's own
+    renderer through the headless driver (`node test/driver/shot.ts …`; CDP over a pipe, no
+    OS capture or permission);
   - never call activate/frontmost APIs, `open` without `-g`, or the app's
     `bin/code` CLI directly. `./seclab lint fixtures` (rule `focus-steal`)
     rejects these in harness and test code.

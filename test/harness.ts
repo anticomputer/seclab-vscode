@@ -171,7 +171,8 @@ export function snapshotDiff(before: Snapshot, after: Snapshot): string[] {
 // ---- Editor windows never take focus (AGENTS.md hard rule; user: "you keep popping up on top
 // of my ongoing work"). Launch in the background with LaunchServices (`open -g -n`) and never
 // activate. No screen capture, UI automation or synthetic input: evidence comes from
-// files and logs. `open -g` alone is not
+// files and logs, and editor screenshots from the window's own renderer through the headless
+// driver (test/driver/). `open -g` alone is not
 // enough: Electron's macOS show() activates the app itself (a real launch stole
 // focus). So the launch sets SECLAB_BACKGROUND_WINDOWS=1, and patch 0012 makes the app show
 // windows inactive and never focus or activate. launchEditorInBackground still checks the

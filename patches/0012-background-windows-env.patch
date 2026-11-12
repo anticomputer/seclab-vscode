@@ -381,3 +381,23 @@ index 0000000..02f6036
 +		app.exit(1);
 +	}
 +}
+diff --git a/src/mainImpl.ts b/src/mainImpl.ts
+index c23a61b..1f76718 100644
+--- a/src/mainImpl.ts
++++ b/src/mainImpl.ts
+@@ -22,6 +22,15 @@ import { NativeParsedArgs } from './vs/platform/environment/common/argv.js';
+ 
+ perf.mark('code/didStartMain');
+ 
++// seclab: in background mode the app is background-only (activation policy "prohibited") before
++// AppKit finishes launching, so a launch that doesn't go through LaunchServices' `open -g` (the
++// headless test driver execs the binary to hand it a CDP pipe) never activates either. The
++// background-windows guard keeps the policy once electron-main loads.
++if (process.platform === 'darwin' && process.env['SECLAB_BACKGROUND_WINDOWS'] === '1') {
++	app.setActivationPolicy('prohibited');
++	console.error('[background windows] activation policy: prohibited (bootstrap)');
++}
++
+ perf.mark('code/willLoadMainBundle', {
+ 	// When built, the main bundle is a single JS file with all
+ 	// dependencies inlined. As such, we mark `willLoadMainBundle`

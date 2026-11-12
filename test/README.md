@@ -18,7 +18,8 @@
   direct `bin/code` launches in test code.
 - **No screen capture, UI automation or synthetic input** in any test or demo: a run's
   evidence is read from files and logs. The `screen-automation` fixture-lint rule rejects
-  them.
+  them. The headless driver (`test/driver/`) drives the editor from inside, over its CDP
+  pipe, and takes screenshots from the window's own renderer (`test/driver/shot.ts`).
 - **No run reads or writes the system clipboard.** The containment test build's clipboard is
   an in-memory store seeded with the run's canary (hook `canary-clipboard`); probes read it
   only through `safety.withCanaryClipboard`, and `lint_probes.py` rejects any other read and
@@ -67,8 +68,11 @@ the write-back gate holds them, so they never exist on the host).
   - Never `activate` the app or raise the window.
   - If the window still comes to the front, stop and report it. Don't work
     around it by raising the window.
-- **No screenshots.** Nothing is captured from the screen; a demo's result is read
-  from its logs and records.
+- **No screen capture.** A demo's result is read from its logs and records. An editor
+  screenshot, when one is wanted, comes from `node test/driver/shot.ts …`: it launches the
+  editor with its CDP pipe, waits for the workbench and takes the PNG from the window's own
+  renderer (`Page.captureScreenshot`); no OS capture or permission is involved. Check the
+  image shows only demo content.
 - Close the window and run the teardown gate straight away.
 - **First-run UI:** the demo profile turns off the onboarding modal
   (`workbench.welcomePage.experimentalOnboarding`), AI features and the

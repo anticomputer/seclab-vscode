@@ -202,7 +202,10 @@ Dialogs cancelled in background mode answer with their `cancelId`, which
 - **Fix (patch 0012):**
   - Background mode uses activation policy `prohibited` (`BackgroundOnly`), which
     LaunchServices never makes the front process. This closes paths a, b and c whatever
-    the window order.
+    the window order. Since 2026-11-12 the bootstrap (`mainImpl.ts`) sets it too, before
+    AppKit finishes launching, so a directly exec'd launch is background-only from the start
+    ([headless driver](20261112-headless-driver.md)); `check-release --desktop` fails an app
+    without the bootstrap policy, the guard's policy or the below-normal window level.
   - Every window also sits one level below normal windows; `setAlwaysOnTop` is pinned to
     that level.
   - Measured on branch build 42663670292: the window renders and `screencapture -l` captures
