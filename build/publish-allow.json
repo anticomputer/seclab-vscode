@@ -174,6 +174,7 @@
 		"00000000-0000-0000-0000-00000000000a",
 		"0123456789abcdef",
 		"0123456789abcdef0123",
+		"0123456789abcdef0123456789abcdef",
 		"0123abcd-0000-4000-8000-000000000001",
 		"01ab8ac9400c4e429b23",
 		"0c1d2e3f405162738495a6b7c8d9e0f1",
@@ -199,11 +200,13 @@
 		"vscode"
 	],
 	"homeNames": [
+		"...",
 		"agent",
 		"dev",
 		"me",
 		"shared",
-		"someone"
+		"someone",
+		"victim"
 	],
 	"watchedOwners": [
 		"anticomputer",
@@ -217,6 +220,10 @@
 		{
 			"path": "rpc-filter/probes/runs/20261104-unpatched-a717861.json",
 			"blob": "b6bb22f0d4b893a829fc04571ba32674bf81305a"
+		},
+		{
+			"path": "rpc-filter/probes/traces/20261106-ordinary-session.json",
+			"blob": "65d5f495fb36155f9e6a193308eaccb4f0e124c5"
 		},
 		{
 			"path": "test/agentic/ahp/results/20261106-tab-spike.measured.json",
