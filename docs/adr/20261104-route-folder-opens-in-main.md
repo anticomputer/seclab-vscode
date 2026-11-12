@@ -2,7 +2,7 @@
 
 - **Status:** accepted (2026-11-12, coordinator's decision: implement as patch 0041 once the
   headless driver is green in CI; meanwhile the interim patch 0042). Implemented as patch 0041
-  ([EDR](../edr/20261112-main-process-routing.md)).
+  ([EDR](../edr/20261112-main-process-routing.md)); 0042 removed with it.
 - **Date:** 2026-11-04
 - **Deciders:** fork-build session (proposal); coordinator (accepted 2026-11-12)
 - **Related:** [security review round 2](../security-reviews/20261104-m0-tabd-code.md) finding New-1 (HIGH, open), [EDR Tab Manager routing](../edr/20261104-tab-manager-routing.md)
