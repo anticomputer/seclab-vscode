@@ -12477,6 +12477,105 @@
 				"file": "docs/security-reviews/20261112-gate-fail-open.md",
 				"quote": "Register keys are record-qualified"
 			}
+		},
+		{
+			"record": "20261112-main-process-routing.md",
+			"anchor": "VVV-1",
+			"round": "Round VVV",
+			"severity": "high",
+			"summary": "A local .code-workspace that declared a remoteAuthority in its own contents wasn't routed by patch 0041 and loaded its local folders in a window, with the local-window guards off.",
+			"component": "patch 0041 (routing rule)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "bbfcbe8",
+			"test": {
+				"file": "test/driver/cli-open.ts",
+				"name": "workspace file claiming a tab authority (VVV-1)"
+			},
+			"note": "Runs in headless-linux (./seclab test cli-open). Every workspace file is routed and no window enters a workspace. Measured: the macOS build without 0041 fails this case."
+		},
+		{
+			"record": "20261112-main-process-routing.md",
+			"anchor": "VVV-2",
+			"round": "Round VVV",
+			"severity": "medium",
+			"summary": "check-release --desktop checked patch 0041's log strings but not product.json's seclabTabRouter, without which both guards are off.",
+			"component": "build/check-release.sh",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "bbfcbe8",
+			"test": {
+				"file": "build/check-release.sh",
+				"name": "desktop whose product.json doesn't turn patch 0041's routing on (review VVV-2)"
+			}
+		},
+		{
+			"record": "20261112-main-process-routing.md",
+			"anchor": "VVV-3",
+			"round": "Round VVV",
+			"severity": "low",
+			"summary": "The Tab Manager's already-a-tab check, which skips the confirmation, compared paths case-insensitively, also on Linux.",
+			"component": "Tab Manager (open request)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "bbfcbe8",
+			"gap": "No unit test drives the Tab Manager's sameFolder; it needs the extension host."
+		},
+		{
+			"record": "20261112-main-process-routing.md",
+			"anchor": "VVV-4",
+			"round": "Round VVV",
+			"severity": "low",
+			"summary": "One rejected open request poisoned the Tab Manager's request chain, so later opens were dropped silently.",
+			"component": "Tab Manager (open request)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "bbfcbe8",
+			"gap": "No test injects a rejection into the chain."
+		},
+		{
+			"record": "20261112-main-process-routing.md",
+			"anchor": "VVV-5",
+			"round": "Round VVV",
+			"severity": "info",
+			"summary": "Upstream's URL router matches the hand-over's window id unanchored, so it could reach a window whose id starts with the same digits.",
+			"component": "patch 0041 (hand-over)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "Host side only; the Tab Manager reuses a window only when it is empty with no editors.",
+			"ref": {
+				"file": "docs/security-reviews/20261112-main-process-routing.md",
+				"quote": "The Tab Manager reuses a window only when it is empty with no editors."
+			}
+		},
+		{
+			"record": "20261112-main-process-routing.md",
+			"anchor": "VVV-6",
+			"round": "Round VVV",
+			"severity": "info",
+			"summary": "Behaviour changes: --add/--remove of a local folder offer a tab; several local folders arrive as one unsupported workspace; untitled workspaces aren't restored.",
+			"component": "patch 0041 (behaviour)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "All fail closed; recorded in the EDR.",
+			"ref": {
+				"file": "docs/edr/20261112-main-process-routing.md",
+				"quote": "Behaviour changes, all failing closed"
+			}
+		},
+		{
+			"record": "20261112-main-process-routing.md",
+			"anchor": "VVV-7",
+			"round": "Round VVV",
+			"severity": "info",
+			"summary": "The test's received-the-open check matched any toast naming the folder, including the Tab Manager's error.",
+			"component": "test/driver/cli-open.ts",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "bbfcbe8",
+			"gap": "A test of the test; it now waits for the confirmation text itself."
 		}
 	]
 }

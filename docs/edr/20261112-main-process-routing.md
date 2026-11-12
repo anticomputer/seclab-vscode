@@ -22,9 +22,13 @@ ADR decided to route opens in the main process instead.
 ([windowsMainService.ts#L337](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/windows/electron-main/windowsMainService.ts#L337)):
 the CLI and second-instance launches, File menus and recents, drag and drop,
 `<urlProtocol>://file/…` links, session restore and extension development windows. With
-product.json `seclabTabRouter` set, 0041 takes every resolved path that has a workspace (a
-folder or a `.code-workspace`) and no remote authority out of the open, and opens an empty
-window instead. Untitled workspaces restored at startup
+product.json `seclabTabRouter` set, 0041 takes out of the open every workspace file, local or
+remote, and every local folder, and opens an empty window instead. Workspace files go because a
+tab doesn't support multi-root, and a workspace file's `remoteAuthority` and folders are the
+file's own claims (review VVV-1: a local file claiming a tab's authority loaded its local
+folders). A folder counts as local when it has no remote authority, or when it is a `file:`
+folder that a caller paired with one.
+Untitled workspaces restored at startup
 ([#L411](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/windows/electron-main/windowsMainService.ts#L411))
 are filtered the same way. Tab windows (`seclab+` authority) are untouched. The empty window
 follows the same reuse rules the folder would have.
@@ -42,23 +46,27 @@ says so. The Tab Manager's handler confirms a folder that has no tab yet, claims
 it, reusing the empty window when it has no editors. A link from outside (a web page) reaches
 the same handler only after upstream's prompt, and still gets the confirmation.
 
-**Add Folder.** A local window never enters a workspace
+**Add Folder.** No window enters a workspace
 ([workspacesManagementMainService.ts#L247](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/workspaces/electron-main/workspacesManagementMainService.ts#L247)),
 which is how an empty window would otherwise become a local multi-root workspace without
-going through `open`.
+going through `open`, and how a tab could add a host folder to its own window.
 
 **Enforced.** `product.jq` fails the build unless `seclabTabRouter` names the Tab Manager, and
-`check-release --desktop` fails a desktop app without either guard's log string (self-tested by
-removing each).
+`check-release --desktop` fails a desktop app without either guard's log string or without the
+key in its product.json (self-tested by removing each).
 
 **Test.** `test/driver/cli-open.ts` (`./seclab test cli-open`, in `headless-linux`) launches the
-editor with a folder as its CLI argument. Every page is auto-attached paused, before its first
+editor with a local path as its CLI argument, twice: a folder, and a local `.code-workspace`
+that claims a tab's authority. Every page is auto-attached paused, before its first
 script, and a reporter sends each document's window configuration back over a CDP binding; no
 document may hold a workspace, and the run fails without reports. The Tab Manager must show the
-folder in its confirmation, and the main log must show main routed it. The run then declines.
-Measured on the macOS build without 0041: the check fails (the window's configuration holds the
-folder before the fallback closes it), and the routing check fails. Polling or title events
-missed that window: the fallback reloads it within about a second.
+folder's confirmation (or say the workspace is unsupported), and the main log must show main
+routed it. The run then declines.
+Measured on the macOS build without 0041: both cases fail the workspace check (the folder
+window's configuration holds the folder before the fallback closes it; the workspace file loads
+under the claimed authority, and the fallback, which runs only in local windows, misses it), and
+the routing check. Polling or title events missed the folder window: the fallback reloads it
+within about a second.
 
 The Tab Manager's extension-level routing stays as a fallback for a build without 0041.
 
@@ -70,3 +78,8 @@ The Tab Manager's extension-level routing stays as a fallback for a build withou
   `workspacesManagementMainService.ts`).
 - The agents window, which opens a local workspace, is routed too and so doesn't open locally;
   agents run in tabs.
+- Behaviour changes, all failing closed (review VVV-6): `--add` and `--remove` with a local
+  folder offer it as a tab instead; several local folders arrive as one untitled workspace,
+  which is unsupported; untitled workspaces aren't restored at startup; no window, tab or
+  local, opens or becomes a multi-root workspace.
+- Review: [round VVV](../security-reviews/20261112-main-process-routing.md).

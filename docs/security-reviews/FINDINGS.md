@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 7 | 61 | 147 | 167 | 17 | 399 |
-| fixed-untested | 3 | 18 | 55 | 148 | 46 | 270 |
-| accepted-residual | 0 | 1 | 12 | 64 | 16 | 93 |
+| fixed | 7 | 62 | 148 | 167 | 17 | 401 |
+| fixed-untested | 3 | 18 | 55 | 150 | 47 | 273 |
+| accepted-residual | 0 | 1 | 12 | 64 | 18 | 95 |
 | deferred | 6 | 5 | 18 | 10 | 3 | 42 |
 | open | 0 | 3 | 14 | 20 | 4 | 41 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 88 | 246 | 409 | 92 | 851 |
+| **all** | 16 | 89 | 247 | 411 | 95 | 858 |
 
 ## Baseline: open high and critical findings
 
@@ -390,6 +390,8 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261112-headless-driver](20261112-headless-driver.md) **RRR-2** | low | fixed-untested | patch 0042 | Patch 0042's log line said the opposite of when it fires. | Log wording only; nothing to test. |
 | [20261112-headless-driver](20261112-headless-driver.md) **RRR-3** | low | accepted-residual | patch 0042 (task reconnection) | Saved persistent tasks are reconnected on a window reload, outside patch 0042's guard. | accepted by an agent: It needs persistent tasks already saved for that local workspace, which 0042 stops being started automatically; patch 0041 removes local folder windows. |
 | [20261112-headless-driver](20261112-headless-driver.md) **RRR-4** | low | accepted-residual | patch 0042 (mixed workspaces) | Patch 0042's guard is per window, so a tab window whose workspace also held a file: folder would run that folder's automatic tasks locally. | accepted by an agent: The Tab Manager closes multi-root and workspace-file windows; noted for patch 0041's design. |
+| [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-3** | low | fixed-untested | Tab Manager (open request) | The Tab Manager's already-a-tab check, which skips the confirmation, compared paths case-insensitively, also on Linux. | No unit test drives the Tab Manager's sameFolder; it needs the extension host. |
+| [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-4** | low | fixed-untested | Tab Manager (open request) | One rejected open request poisoned the Tab Manager's request chain, so later opens were dropped silently. | No test injects a rejection into the chain. |
 | [docs/adr/20261104-extension-placement-hardening.md](../../docs/adr/20261104-extension-placement-hardening.md) **ADR-EPH-1** | low | open | patch 0003 / extension placement | Installing an extension in an empty local window still writes it to the host extensions dir; blocking local installs needs a further shared-process patch. | Recorded only as an ADR open item: no patch blocks local installs, and no test covers the write-but-never-run behaviour (it is the same gap as m0 3-1's missing Level B case). |
 | [20261104-broker-folder-open-loaders](20261104-broker-folder-open-loaders.md) **5** | info | fixed-untested | tab.event contract (tabd / Tab Manager) | If the client counts Workspace Trust or "allow automatic tasks" as a user action, the gate is open when runOn: folderOpen fires. | The spec fix is in schema/protocol.v1.json and the Tab Manager only sends tab.userAction on keyboard/mouse selection changes, but no test asserts that consent interactions (Workspace Trust, automatic tasks, security dialogs) never produce userAction. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **L-2** | info | accepted-residual | campaign fixture arming | The stage's run-dir check accepts any path containing \`/.work/\`, not only this worktree's. | accepted by an agent: The marker is written with the \`wx\` flag, so the worst case is creating one new file in some other \`.work/\` directory. |
@@ -413,6 +415,9 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261112-gate-fail-open](20261112-gate-fail-open.md) **UUU-5** | info | fixed-untested | findings register citations | Three register entries cited fragments of a case table rather than whole test names. | Citation wording; the register check itself verifies each name occurs once. |
 | [20261112-gate-fail-open](20261112-gate-fail-open.md) **UUU-6** | info | fixed-untested | docs/ARCHITECTURE.md | ARCHITECTURE.md still said main-process routing was proposed. | Documentation only; nothing to test. |
 | [20261112-gate-fail-open](20261112-gate-fail-open.md) **UUU-7** | info | accepted-residual | review round labels | Round labels QQQ to TTT also exist in the register's own record with other meanings, so bare labels in code comments are ambiguous. | accepted by an agent: Register keys are record-qualified; new comments name the record when it matters. |
+| [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-5** | info | accepted-residual | patch 0041 (hand-over) | Upstream's URL router matches the hand-over's window id unanchored, so it could reach a window whose id starts with the same digits. | accepted by an agent: Host side only; the Tab Manager reuses a window only when it is empty with no editors. |
+| [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-6** | info | accepted-residual | patch 0041 (behaviour) | Behaviour changes: --add/--remove of a local folder offer a tab; several local folders arrive as one unsupported workspace; untitled workspaces aren't restored. | accepted by an agent: All fail closed; recorded in the EDR. |
+| [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-7** | info | fixed-untested | test/driver/cli-open.ts | The test's received-the-open check matched any toast naming the folder, including the Tab Manager's error. | A test of the test; it now waits for the confirmation text itself. |
 
 ### RPC core landing v2
 
@@ -1760,6 +1765,18 @@ Every other commit the register cites is on main's history, or on the branch its
 | 1 | high | fixed-untested | The secret was handed to a step running the head commit's own script on every push and same-repo PR, so a branch could leak the list | Fixed by structure (a main-only environment read by a job that runs only on a push to main; round 18 confirmed). No test asserts that no branch-controlled code runs with the secret. |
 | 2 | medium | fixed-untested | Only a push to main failed closed; other events without the secret went green unscanned | Fixed by structure (the job runs only where the secret must exist and fails closed when it is missing); no self-test case. |
 | 3 | medium | fixed | Skipped files were dropped silently, and compatibility forms and zero-width characters evaded the tokeniser | 80f4b5b · `build/check-denylist.ts` "fullwidth and zero-width forms fold to the entry" |
+
+### [20261112-main-process-routing](20261112-main-process-routing.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| VVV-1 | high | fixed | A local .code-workspace that declared a remoteAuthority in its own contents wasn't routed by patch 0041 and loaded its local folders in a window, with the local-window guards off. | bbfcbe8 · `test/driver/cli-open.ts` "workspace file claiming a tab authority (VVV-1)" |
+| VVV-2 | medium | fixed | check-release --desktop checked patch 0041's log strings but not product.json's seclabTabRouter, without which both guards are off. | bbfcbe8 · `build/check-release.sh` "desktop whose product.json doesn't turn patch 0041's routing on (review VVV-2)" |
+| VVV-3 | low | fixed-untested | The Tab Manager's already-a-tab check, which skips the confirmation, compared paths case-insensitively, also on Linux. | No unit test drives the Tab Manager's sameFolder; it needs the extension host. |
+| VVV-4 | low | fixed-untested | One rejected open request poisoned the Tab Manager's request chain, so later opens were dropped silently. | No test injects a rejection into the chain. |
+| VVV-5 | info | accepted-residual | Upstream's URL router matches the hand-over's window id unanchored, so it could reach a window whose id starts with the same digits. | accepted by an agent: Host side only; the Tab Manager reuses a window only when it is empty with no editors. |
+| VVV-6 | info | accepted-residual | Behaviour changes: --add/--remove of a local folder offer a tab; several local folders arrive as one unsupported workspace; untitled workspaces aren't restored. | accepted by an agent: All fail closed; recorded in the EDR. |
+| VVV-7 | info | fixed-untested | The test's received-the-open check matched any toast naming the folder, including the Tab Manager's error. | A test of the test; it now waits for the confirmation text itself. |
 
 ### [20261112-publish-gate](20261112-publish-gate.md)
 

@@ -131,5 +131,6 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-12 | [gate fail-open fixes (GATE-2 to GATE-8, GATE-10)](20261112-gate-fail-open.md) | round SSS, the fixes for the gate fail-open audit's fork-build findings and the | see record |
 | 2026-11-12 | [headless editor driver, OS-permission-free tests, interim patch 0042](20261112-headless-driver.md) | rounds QQQ and RRR: | see record |
 | 2026-11-12 | [internal-identifier scan and the generator-test gate (workflow changes)](20261112-internal-identifier-scan.md) | see record | see record |
+| 2026-11-12 | [main-process routing (patch 0041)](20261112-main-process-routing.md) | round VVV, by an Opus-class model: | see record |
 | 2026-11-12 | [the publish gate (pre-push hook, CI and posted text)](20261112-publish-gate.md) | see record | see record |
 <!-- index:end -->
