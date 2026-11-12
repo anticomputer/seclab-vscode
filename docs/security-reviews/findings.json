@@ -11542,7 +11542,7 @@
 			"commit": "662f6d7",
 			"test": {
 				"file": "build/patch-reach-imports.test.ts",
-				"name": "['unreachable.json missing'"
+				"name": "GATE-2: unreachable.json missing"
 			},
 			"note": "The same test injects an unparseable and an empty unreachable.json, one without desktop, and one with an empty desktop deny; apply-patches still skips both policy files as non-patches, which is now safe."
 		},
@@ -11558,7 +11558,7 @@
 			"commit": "662f6d7",
 			"test": {
 				"file": "build/patch-reach-imports.test.ts",
-				"name": "['reach.json missing'"
+				"name": "GATE-3: reach.json missing"
 			},
 			"note": "The same test injects an unparseable and an empty reach.json; review SSS-3 added the emptied-entry and unknown-target cases."
 		},
@@ -11616,12 +11616,12 @@
 			"component": "check-pins, deps, fixture-lint",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "89bd97e",
+			"commit": "d60ee0f",
 			"test": {
 				"file": "test/safety/gate-inputs.test.ts",
-				"name": "check-pins: a listed file that can"
+				"name": "so its pins never drop out silently (GATE-7, review UUU-1)"
 			},
-			"note": "fixture-lint's unreadable-file case is in the --av test; build/deps.ts reports an unreadable listed file the same way, without an injected case."
+			"note": "check-pins (89bd97e) and fixture-lint have their own unreadable-file cases in the same file; build/deps.ts was fixed after review UUU-1, which this test covers."
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -12185,7 +12185,7 @@
 			"commit": "a55fc62",
 			"test": {
 				"file": "build/patch-reach-imports.test.ts",
-				"name": "reach.json with an emptied entry"
+				"name": "SSS-3: reach.json with an emptied entry"
 			}
 		},
 		{
@@ -12378,6 +12378,104 @@
 			"test": {
 				"file": "tabd/test/broker-supervisor.test.ts",
 				"name": "a sentinel outside the shape tabd mints is refused (TTT-2)"
+			}
+		},
+		{
+			"record": "20261112-gate-fail-open.md",
+			"anchor": "UUU-1",
+			"round": "Round UUU",
+			"severity": "medium",
+			"summary": "GATE-7 was registered fixed while build/deps.ts still skipped a tracked file it couldn't read, dropping its pins from the check.",
+			"component": "build/deps.ts",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "d60ee0f",
+			"test": {
+				"file": "test/safety/gate-inputs.test.ts",
+				"name": "so its pins never drop out silently (GATE-7, review UUU-1)"
+			}
+		},
+		{
+			"record": "20261112-gate-fail-open.md",
+			"anchor": "UUU-2",
+			"round": "Round UUU",
+			"severity": "low",
+			"summary": "The local-window control was matched on the element id and the fixtures on status text, with only negative fixture checks, so an empty innerText or a renamed marker would pass them all.",
+			"component": "local-window test",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "d60ee0f",
+			"test": {
+				"file": "test/driver/local-window.ts",
+				"name": "shows the marker the run looks for when it activates"
+			},
+			"note": "The control must also show status text through the same path the fixtures are matched on."
+		},
+		{
+			"record": "20261112-gate-fail-open.md",
+			"anchor": "UUU-3",
+			"round": "Round UUU",
+			"severity": "low",
+			"summary": "cdpFdHolders returned no holders when the editor's own fds couldn't be read, so the self-test passed without evidence.",
+			"component": "headless driver (CDP pipe)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "d60ee0f",
+			"gap": "It reports unknown unless it found both fds; the self-test exercises the normal path (macOS 8/8), but no case makes the fds unreadable."
+		},
+		{
+			"record": "20261112-gate-fail-open.md",
+			"anchor": "UUU-4",
+			"round": "Round UUU",
+			"severity": "low",
+			"summary": "The focus-steal log, like the launch record (SSS-5), is inside the editor's profile, so deleting either there turns unwatched or focus-taking runs into clean.",
+			"component": "focus harness (in-profile evidence)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "Only host code writes the profile; tab code can't reach it, and local windows run only ui built-ins.",
+			"ref": {
+				"file": "docs/security-reviews/20261112-gate-fail-open.md",
+				"quote": "Only host code writes the profile; tab code can't reach it"
+			}
+		},
+		{
+			"record": "20261112-gate-fail-open.md",
+			"anchor": "UUU-5",
+			"round": "Round UUU",
+			"severity": "info",
+			"summary": "Three register entries cited fragments of a case table rather than whole test names.",
+			"component": "findings register citations",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "d60ee0f",
+			"gap": "Citation wording; the register check itself verifies each name occurs once."
+		},
+		{
+			"record": "20261112-gate-fail-open.md",
+			"anchor": "UUU-6",
+			"round": "Round UUU",
+			"severity": "info",
+			"summary": "ARCHITECTURE.md still said main-process routing was proposed.",
+			"component": "docs/ARCHITECTURE.md",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"gap": "Documentation only; nothing to test."
+		},
+		{
+			"record": "20261112-gate-fail-open.md",
+			"anchor": "UUU-7",
+			"round": "Round UUU",
+			"severity": "info",
+			"summary": "Round labels QQQ to TTT also exist in the register's own record with other meanings, so bare labels in code comments are ambiguous.",
+			"component": "review round labels",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "Register keys are record-qualified; new comments name the record when it matters.",
+			"ref": {
+				"file": "docs/security-reviews/20261112-gate-fail-open.md",
+				"quote": "Register keys are record-qualified"
 			}
 		}
 	]

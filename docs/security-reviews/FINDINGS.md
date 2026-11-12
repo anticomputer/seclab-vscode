@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 7 | 61 | 146 | 166 | 17 | 397 |
-| fixed-untested | 3 | 18 | 55 | 147 | 44 | 267 |
-| accepted-residual | 0 | 1 | 12 | 63 | 15 | 91 |
+| fixed | 7 | 61 | 147 | 167 | 17 | 399 |
+| fixed-untested | 3 | 18 | 55 | 148 | 46 | 270 |
+| accepted-residual | 0 | 1 | 12 | 64 | 16 | 93 |
 | deferred | 6 | 5 | 18 | 10 | 3 | 42 |
 | open | 0 | 3 | 14 | 20 | 4 | 41 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 88 | 245 | 406 | 89 | 844 |
+| **all** | 16 | 88 | 246 | 409 | 92 | 851 |
 
 ## Baseline: open high and critical findings
 
@@ -383,6 +383,8 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261112-gate-fail-open](20261112-gate-fail-open.md) **SSS-4** | low | fixed-untested | focus harness (watcher record) | The focus watcher's record lived in the editor's own profile, which the editor writes. | The record is now a sibling of the profile; no test asserts its location. |
 | [20261112-gate-fail-open](20261112-gate-fail-open.md) **SSS-5** | low | accepted-residual | focus harness (launch record) | The launch record that turns the watcher check on is still in the profile. | accepted by an agent: Removing it needs host-side code; tab code can't reach the host profile. |
 | [20261112-gate-fail-open](20261112-gate-fail-open.md) **SSS-6** | low | accepted-residual | local Docker store | A process with Docker access controls the image store and build cache, outside these gates. | accepted by an agent: That access is root on the Docker VM; no gate can defend against it. |
+| [20261112-gate-fail-open](20261112-gate-fail-open.md) **UUU-3** | low | fixed-untested | headless driver (CDP pipe) | cdpFdHolders returned no holders when the editor's own fds couldn't be read, so the self-test passed without evidence. | It reports unknown unless it found both fds; the self-test exercises the normal path (macOS 8/8), but no case makes the fds unreadable. |
+| [20261112-gate-fail-open](20261112-gate-fail-open.md) **UUU-4** | low | accepted-residual | focus harness (in-profile evidence) | The focus-steal log, like the launch record (SSS-5), is inside the editor's profile, so deleting either there turns unwatched or focus-taking runs into clean. | accepted by an agent: Only host code writes the profile; tab code can't reach it, and local windows run only ui built-ins. |
 | [20261112-headless-driver](20261112-headless-driver.md) **QQQ-3** | low | fixed-untested | seclab test driver | \`local\` outside a function aborted \`./seclab test driver\` under set -e. | Exercised by every CI run of the command, but no test targets the shell construct. |
 | [20261112-headless-driver](20261112-headless-driver.md) **QQQ-4** | low | accepted-residual | headless driver (CDP pipe) | A process the editor's main process starts with child_process would still inherit the CDP fds. | accepted by an agent: None does in a driven run once the login shell is off, and the self-test checks that no other process holds the fds. |
 | [20261112-headless-driver](20261112-headless-driver.md) **RRR-2** | low | fixed-untested | patch 0042 | Patch 0042's log line said the opposite of when it fires. | Log wording only; nothing to test. |
@@ -408,6 +410,9 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261109-deps-updates-mounts](20261109-deps-updates-mounts.md) **JJJ-5** | info | fixed-untested | seclab deps outdated | An unknown argument to \`./seclab deps outdated\` silently took the networked branch. | Unknown arguments now print usage and exit 2, but no test drives seclab's argument handling. |
 | [20261109-level-b-repair](20261109-level-b-repair.md) **—#3** | info | accepted-residual | containment harness (portable profile dir) | A teardown that fails to remove \`&lt;profile&gt;-portable\` leaves a dangling link and the next launch fails with \`EEXIST\`. | accepted by an agent: It fails closed: the next launch refuses to start and teardown reports the removal failure. |
 | [20261109-liveness-gate](20261109-liveness-gate.md) **KKK-8** | info | fixed-untested | liveness gate (regexes) | Lazy regex spans over repo files and unescaped interpolations in the analyser's patterns. | Interpolations go through \`escapeRe\` and the ci step is compared as a string, but there is no self-test case for a register id containing regex metacharacters. |
+| [20261112-gate-fail-open](20261112-gate-fail-open.md) **UUU-5** | info | fixed-untested | findings register citations | Three register entries cited fragments of a case table rather than whole test names. | Citation wording; the register check itself verifies each name occurs once. |
+| [20261112-gate-fail-open](20261112-gate-fail-open.md) **UUU-6** | info | fixed-untested | docs/ARCHITECTURE.md | ARCHITECTURE.md still said main-process routing was proposed. | Documentation only; nothing to test. |
+| [20261112-gate-fail-open](20261112-gate-fail-open.md) **UUU-7** | info | accepted-residual | review round labels | Round labels QQQ to TTT also exist in the register's own record with other meanings, so bare labels in code comments are ambiguous. | accepted by an agent: Register keys are record-qualified; new comments name the record when it matters. |
 
 ### RPC core landing v2
 
@@ -1698,12 +1703,12 @@ Every other commit the register cites is on main's history, or on the branch its
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
-| GATE-2 | high | fixed | A missing patches/unreachable.json reads as {}, so invariant I8 checks nothing and passes | 662f6d7 · `build/patch-reach-imports.test.ts` "\['unreachable.json missing'" |
-| GATE-3 | high | fixed | A missing patches/reach.json reads as {}, so per-patch target pinning silently stops | 662f6d7 · `build/patch-reach-imports.test.ts` "\['reach.json missing'" |
+| GATE-2 | high | fixed | A missing patches/unreachable.json reads as {}, so invariant I8 checks nothing and passes | 662f6d7 · `build/patch-reach-imports.test.ts` "GATE-2: unreachable.json missing" |
+| GATE-3 | high | fixed | A missing patches/reach.json reads as {}, so per-patch target pinning silently stops | 662f6d7 · `build/patch-reach-imports.test.ts` "GATE-3: reach.json missing" |
 | GATE-4 | medium | fixed | Reports clean (0 files) on an empty or truncated file list | 89bd97e · `test/safety/gate-inputs.test.ts` "check-pins: an empty, foreign, truncated or canary-only list fails" |
 | GATE-5 | medium | fixed | Reports clean (0 tracked files) on an empty list | 89bd97e · `test/safety/gate-inputs.test.ts` "fixture-lint --av: an empty, truncated or canary-only list fails" |
 | GATE-6 | medium | fixed | With every default root absent it scans nothing and reports clean | 89bd97e · `test/safety/gate-inputs.test.ts` "fixture-lint: a missing root fails, and a root with nothing to scan fails" |
-| GATE-7 | medium | fixed | Tracked files that can't be read are skipped without a record | 89bd97e · `test/safety/gate-inputs.test.ts` "check-pins: a listed file that can" |
+| GATE-7 | medium | fixed | Tracked files that can't be read are skipped without a record | d60ee0f · `test/safety/gate-inputs.test.ts` "so its pins never drop out silently (GATE-7, review UUU-1)" |
 | GATE-8 | medium | fixed-untested | Locally, an existing .work/deps-verified marker skips cosign and attestation verification | The marker is gone: verify_signed_image verifies on every use, and review SSS-2 removed tool reuse by tag. No test drives the seclab shell function with a forged marker or tag. |
 | GATE-9 | medium | fixed-untested | --run-commands passes on an empty script when a doc lost its ci: run blocks | Fixed on main (d1153f2): broker/tools/docs.py commands_self_test injects a missing doc and zero blocks, run by broker/docs-check.sh. Its cases are unnamed, outside a function the register recognises as a self-test, so no case can be cited. |
 | GATE-10 | medium | fixed | A missing focus-steal log reads as never took focus; nothing proves the watcher lived | 89bd97e · `test/safety/gate-inputs.test.ts` "teardown: no steal log means clean only if the watcher watched the editor to the end" |
@@ -1721,10 +1726,17 @@ Every other commit the register cites is on main's history, or on the branch its
 |---|---|---|---|---|
 | SSS-1 | medium | fixed | A file list naming only the gate's canary, or cut early in sort order, still reported clean. | a55fc62 · `test/safety/gate-inputs.test.ts` "canary-only list fails; an unreadable file is a finding" |
 | SSS-2 | medium | fixed-untested | Tool images were reused by content tag, which any local process could point at another image, replacing the verifier. | The image is rebuilt from cache on every use; no test retags a tool image and checks it is rebuilt. |
-| SSS-3 | low | fixed | A reach.json entry emptied to \[\] or naming no known target dropped that patch's requirement. | a55fc62 · `build/patch-reach-imports.test.ts` "reach.json with an emptied entry" |
+| SSS-3 | low | fixed | A reach.json entry emptied to \[\] or naming no known target dropped that patch's requirement. | a55fc62 · `build/patch-reach-imports.test.ts` "SSS-3: reach.json with an emptied entry" |
 | SSS-4 | low | fixed-untested | The focus watcher's record lived in the editor's own profile, which the editor writes. | The record is now a sibling of the profile; no test asserts its location. |
 | SSS-5 | low | accepted-residual | The launch record that turns the watcher check on is still in the profile. | accepted by an agent: Removing it needs host-side code; tab code can't reach the host profile. |
 | SSS-6 | low | accepted-residual | A process with Docker access controls the image store and build cache, outside these gates. | accepted by an agent: That access is root on the Docker VM; no gate can defend against it. |
+| UUU-1 | medium | fixed | GATE-7 was registered fixed while build/deps.ts still skipped a tracked file it couldn't read, dropping its pins from the check. | d60ee0f · `test/safety/gate-inputs.test.ts` "so its pins never drop out silently (GATE-7, review UUU-1)" |
+| UUU-2 | low | fixed | The local-window control was matched on the element id and the fixtures on status text, with only negative fixture checks, so an empty innerText or a renamed marker would pass them all. | d60ee0f · `test/driver/local-window.ts` "shows the marker the run looks for when it activates" |
+| UUU-3 | low | fixed-untested | cdpFdHolders returned no holders when the editor's own fds couldn't be read, so the self-test passed without evidence. | It reports unknown unless it found both fds; the self-test exercises the normal path (macOS 8/8), but no case makes the fds unreadable. |
+| UUU-4 | low | accepted-residual | The focus-steal log, like the launch record (SSS-5), is inside the editor's profile, so deleting either there turns unwatched or focus-taking runs into clean. | accepted by an agent: Only host code writes the profile; tab code can't reach it, and local windows run only ui built-ins. |
+| UUU-5 | info | fixed-untested | Three register entries cited fragments of a case table rather than whole test names. | Citation wording; the register check itself verifies each name occurs once. |
+| UUU-6 | info | fixed-untested | ARCHITECTURE.md still said main-process routing was proposed. | Documentation only; nothing to test. |
+| UUU-7 | info | accepted-residual | Round labels QQQ to TTT also exist in the register's own record with other meanings, so bare labels in code comments are ambiguous. | accepted by an agent: Register keys are record-qualified; new comments name the record when it matters. |
 
 ### [20261112-headless-driver](20261112-headless-driver.md)
 
