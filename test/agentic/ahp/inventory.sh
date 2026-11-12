@@ -6,7 +6,12 @@
 #   test/agentic/ahp/inventory.sh [--self-test]
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-RPC_REF="${RPC_REF:-5104309}"   # anticomputer-rpc-filter-patches; stripper fixed at 8d92392
+RPC_REF="${RPC_REF:-17d9f51}"   # anticomputer-rpc-filter-patches; repinned after the 2026-11-12 history rewrite
+# The old pin (5104309, stripper fixed at 8d92392) is unreachable from every remote branch
+# now and is not in the rewrite's commit map, so `git archive` for it fails on a fresh clone
+# even though the objects linger in an older local one. The new pin's
+# `rpc-filter/tools/seclab_inventory` tree is byte-identical to the old pin's
+# (019c70f61e3730d57e0813fa465d3ba760a16029), so this changes the SHA and nothing else.
 IMG='python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30'
 TOOLS="$ROOT/.work/agentic/rpc-tools-$RPC_REF"
 if [[ ! -d "$TOOLS" ]]; then
