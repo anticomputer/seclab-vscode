@@ -63,7 +63,7 @@ if [ "${1:-}" = "--self-test" ]; then
 	mk5 "$T/two" ''; printf '0001-a.patch\n0005-rpc.patch\n0006-b.patch\n' > "$T/two/series"; printf '+++ b/%s\n' "$RPC_POLICY_REL" > "$T/two/0006-b.patch"
 	hab=$(printf 'a\nb\n' | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | cut -c1-64)
 	habn=$(printf 'a\nb' | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | cut -c1-64)
-	stamp() { printf '{\n\t"nameShort": "x",\n\t"seclabRpcPolicy": {\n\t\t"sha256": "%s",\n\t\t"file": "%s"\n\t}\n}\n' "$1" "$RPC_POLICY_REL" > "$T/root/product.json"; }
+	stamp() { printf '{\n\t"nameShort": "x",\n\t"seclabTabRouter": "seclab.tab-manager",\n\t"seclabRpcPolicy": {\n\t\t"sha256": "%s",\n\t\t"file": "%s"\n\t}\n}\n' "$1" "$RPC_POLICY_REL" > "$T/root/product.json"; }
 	run() { # $1 patches dir, $2 expect pass|fail, $3 what, $4 mode (default release)
 		if SECLAB_PATCHES="$1" sh "$SELF" --inner "$T/w" "${4:-release}" "$T/root" >"$T/out" 2>&1; then r=pass; else r=fail; fi
 		rm -rf "$T/w"
@@ -94,7 +94,7 @@ if [ "${1:-}" = "--self-test" ]; then
 	echo "var m=\"seclabRpcFilterEnforcing:$hab\";" > "$T/root/m.js"
 	# Background windows (patch 0012): the bootstrap policy, the guard's policy and the window
 	# level must all be in the desktop app; each missing one fails.
-	bgfix() { printf 'var g="[background windows] activation policy: prohibited (guard)";var w="is below normal windows";\n' > "$T/root/g.js"; printf 'var b="[background windows] activation policy: prohibited (bootstrap)";\n' > "$T/root/b.js"; printf 'var r=`[seclab] routed ${n} local folder(s)`;var e="[seclab] a local window does not enter a workspace";\n' > "$T/root/r.js"; }
+	bgfix() { printf 'var g="[background windows] activation policy: prohibited (guard)";var w="is below normal windows";\n' > "$T/root/g.js"; printf 'var b="[background windows] activation policy: prohibited (bootstrap)";\n' > "$T/root/b.js"; printf 'var r=`[seclab] routed ${n} local folder(s)`;var e="[seclab] a window does not enter a workspace";\n' > "$T/root/r.js"; }
 	bgfix; rm "$T/root/b.js"
 	run "$T/with5" fail "desktop without the bootstrap background policy" desktop
 	bgfix; printf 'var w="is below normal windows";\n' > "$T/root/g.js"
@@ -102,10 +102,13 @@ if [ "${1:-}" = "--self-test" ]; then
 	bgfix; printf 'var g="[background windows] activation policy: prohibited (guard)";\n' > "$T/root/g.js"
 	run "$T/with5" fail "desktop without the below-normal window level" desktop
 	# Main-process routing (patch 0041): both of its guards must be in the desktop app.
-	bgfix; printf 'var e="[seclab] a local window does not enter a workspace";\n' > "$T/root/r.js"
+	bgfix; printf 'var e="[seclab] a window does not enter a workspace";\n' > "$T/root/r.js"
 	run "$T/with5" fail "desktop without patch 0041's open routing" desktop
 	bgfix; printf 'var r=`[seclab] routed ${n} local folder(s)`;\n' > "$T/root/r.js"
 	run "$T/with5" fail "desktop without patch 0041's enterWorkspace guard" desktop
+	bgfix; sed 's/"seclabTabRouter": "seclab.tab-manager",//' "$T/root/product.json" > "$T/pj" && mv "$T/pj" "$T/root/product.json"
+	run "$T/with5" fail "desktop whose product.json doesn't turn patch 0041's routing on (review VVV-2)" desktop
+	stamp "$hab"
 	bgfix
 	run "$T/with5" pass "desktop, 0005 listed, its enforcing marker" desktop
 	rm "$T/root/g.js" "$T/root/b.js" "$T/root/r.js"
@@ -226,12 +229,24 @@ EOF
 			done
 			# Main-process routing (patch 0041, ADR route-folder-opens-in-main): no window loads a local
 			# folder or workspace. A desktop app without either guard fails.
-			for m in '[seclab] routed ' '[seclab] a local window does not enter a workspace'; do
+			for m in '[seclab] routed ' '[seclab] a window does not enter a workspace'; do
 				set +e
 				hit=$(find "$d" -type f \( -name "*.js" -o -name "*.mjs" \) -exec grep -lF -- "$m" {} + 2>/dev/null | head -1)
 				set -e
 				[ -n "$hit" ] || { echo "check-release: main-process folder routing missing from the desktop app (no \"$m\")"; bad=1; }
 			done
+			# Both guards are off unless product.json names the Tab Manager as the router (VVV-2).
+			set +e
+			pjs=$(find "$d" -type f -name product.json 2>&1)
+			prc=$?
+			set -e
+			[ "$prc" -eq 0 ] && [ -n "$pjs" ] || { echo "check-release: no product.json found in the desktop app"; bad=1; }
+			while IFS= read -r pj; do
+				[ -z "$pj" ] || grep -qE '"seclabTabRouter"[[:space:]]*:[[:space:]]*"seclab\.tab-manager"' "$pj" \
+					|| { echo "check-release: $pj doesn't route local folder opens to the Tab Manager (seclabTabRouter, patch 0041)"; bad=1; }
+			done <<EOF
+$pjs
+EOF
 		fi
 	done < "$WORK/roots"
 	[ "$bad" = 0 ] || exit 1

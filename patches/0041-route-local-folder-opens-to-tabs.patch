@@ -1,5 +1,5 @@
 diff --git a/src/vs/platform/windows/electron-main/windowsMainService.ts b/src/vs/platform/windows/electron-main/windowsMainService.ts
-index 52a7cb59..6e27cbd9 100644
+index 52a7cb59..e02038ea 100644
 --- a/src/vs/platform/windows/electron-main/windowsMainService.ts
 +++ b/src/vs/platform/windows/electron-main/windowsMainService.ts
 @@ -57,6 +57,7 @@ import { ILoggerMainService } from '../../log/electron-main/loggerService.js';
@@ -35,8 +35,8 @@ index 52a7cb59..6e27cbd9 100644
  
  		// Identify things to open from open config
 -		const pathsToOpen = await this.getPathsToOpen(openConfig);
-+		// seclab (patch 0041): no window ever loads a local folder or workspace. Each is replaced by
-+		// an empty window and handed to the Tab Manager, which opens it as a sandboxed tab.
++		// seclab (patch 0041): no window ever loads a local folder or a workspace file. Each is
++		// replaced by an empty window and handed to the Tab Manager, which opens it as a sandboxed tab.
 +		const seclabRouted: IPathToOpen[] = [];
 +		const pathsToOpen: IPathToOpen[] = [];
 +		for (const path of await this.getPathsToOpen(openConfig)) {
@@ -57,7 +57,7 @@ index 52a7cb59..6e27cbd9 100644
  			workspacesToOpen.push(...untitledWorkspacesToRestore);
  
  			// Empty windows with backups are always restored
-@@ -495,9 +509,36 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
+@@ -495,9 +509,43 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
  		// Handle `<app> chat`
  		this.handleChatRequest(openConfig, usedWindows);
  
@@ -68,9 +68,16 @@ index 52a7cb59..6e27cbd9 100644
  		return usedWindows;
  	}
  
-+	/** A local folder or workspace (no remote authority), when the product routes them to tabs. */
-+	private seclabRoutes(path: { readonly workspace?: unknown; readonly remoteAuthority?: string }): boolean {
-+		return !!seclabTabRouter && !!path.workspace && !path.remoteAuthority;
++	/**
++	 * When the product routes opens to tabs: every workspace file (multi-root isn't supported in a
++	 * tab, and a workspace file's remoteAuthority and folders are its own claims: review VVV-1),
++	 * and every folder that is local: no remote authority, or a `file:` folder that a caller
++	 * paired with one.
++	 */
++	private seclabRoutes(path: { readonly workspace?: IAnyWorkspaceIdentifier; readonly remoteAuthority?: string }): boolean {
++		const workspace = path.workspace;
++		return !!seclabTabRouter && !!workspace && (isWorkspaceIdentifier(workspace) || !path.remoteAuthority
++			|| (isSingleFolderWorkspaceIdentifier(workspace) && workspace.uri.scheme === Schemas.file));
 +	}
 +
 +	/** Hand the routed paths to the Tab Manager in the empty window, once it is ready. */
@@ -95,7 +102,7 @@ index 52a7cb59..6e27cbd9 100644
  
  		// If we got started with --wait from the CLI, we need to signal to the outside when the window
 diff --git a/src/vs/platform/workspaces/electron-main/workspacesManagementMainService.ts b/src/vs/platform/workspaces/electron-main/workspacesManagementMainService.ts
-index fc12eec6..f24ee262 100644
+index fc12eec6..ef6c61bb 100644
 --- a/src/vs/platform/workspaces/electron-main/workspacesManagementMainService.ts
 +++ b/src/vs/platform/workspaces/electron-main/workspacesManagementMainService.ts
 @@ -19,6 +19,7 @@ import { IDialogMainService } from '../../dialogs/electron-main/dialogMainServic
@@ -106,14 +113,15 @@ index fc12eec6..f24ee262 100644
  import { IUserDataProfilesMainService } from '../../userDataProfile/electron-main/userDataProfile.js';
  import { ICodeWindow } from '../../window/electron-main/window.js';
  import { findWindowOnWorkspaceOrFolder } from '../../windows/electron-main/windowsFinder.js';
-@@ -249,6 +250,13 @@ export class WorkspacesManagementMainService extends Disposable implements IWork
+@@ -249,6 +250,14 @@ export class WorkspacesManagementMainService extends Disposable implements IWork
  			return undefined; // return early if the window is not ready or disposed
  		}
  
-+		// seclab (patch 0041): a local window never enters a workspace, which would load its folders
-+		// locally; the Tab Manager opens folders as sandboxed tabs instead.
-+		if (!window.remoteAuthority && (product as typeof product & { readonly seclabTabRouter?: string }).seclabTabRouter) {
-+			this.logService.info('[seclab] a local window does not enter a workspace');
++		// seclab (patch 0041): no window enters a workspace. A local window would load its folders
++		// locally, and a tab doesn't support multi-root (its folders could be local); the Tab Manager
++		// opens each folder as a sandboxed tab instead.
++		if ((product as typeof product & { readonly seclabTabRouter?: string }).seclabTabRouter) {
++			this.logService.info('[seclab] a window does not enter a workspace');
 +			return undefined;
 +		}
 +
