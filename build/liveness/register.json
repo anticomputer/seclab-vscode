@@ -5,7 +5,7 @@
 		{ "subject": "extensions/seclab-tab-manager/src/extension.ts#deactivate", "calledBy": "VS Code, when the extension host stops", "declaredIn": "extensions/seclab-tab-manager/package.json" }
 	],
 	"exempt": [
-		{ "subject": "tabd/src/scan.ts#scannerProblem", "consumer": "tabd/test/unit.test.ts", "reason": "Test entry to checkScanner, which scanWorkspace runs before every mount. The supervisor called it until 0ae1eeb moved the check into scanWorkspace." },
+		{ "subject": "tabd/src/scan.ts#scannerProblem", "consumer": "tabd/test/unit.test.ts", "reason": "Test entry to checkScanner, which scanWorkspace runs before every mount. The supervisor called it until 5cd79f6 moved the check into scanWorkspace." },
 		{ "subject": "tabd/src/cfs-config.ts#CFS_GUID", "consumer": "build/cfs-config.ts", "reason": "The CLI extracts the tenant from gh cfs output with it." }
 	],
 	"subjects": [
@@ -21,6 +21,21 @@
 				{ "run": 43247714332, "workflow": "build-macos.yml", "job": "reh (test variant)", "sha": "5943146cbfc04c30158ba0079ede36a07246648e", "date": "2026-11-12" },
 				{ "record": "docs/edr/20261109-liveness-gate.md", "date": "2026-11-06" }
 			]
+		},
+		{
+			"id": "fixture:test/driver/local-window/ui-control",
+			"runBy": "./seclab test local-window (test/driver/local-window.ts installs it in an empty local window and reads its status bar item over the CDP pipe)",
+			"evidence": [{ "ci": "headless-linux.yml#driver", "mark": "driver:local-window/ui-control", "runner": "test/driver/local-window.ts" }]
+		},
+		{
+			"id": "fixture:test/driver/local-window/workspace-ext",
+			"runBy": "./seclab test local-window (must not activate in a local window: finding m0#3-1)",
+			"evidence": [{ "ci": "headless-linux.yml#driver", "mark": "driver:local-window/workspace-ext", "runner": "test/driver/local-window.ts" }]
+		},
+		{
+			"id": "fixture:test/driver/local-window/spoofed-builtin",
+			"runBy": "./seclab test local-window (a VSIX claiming isBuiltin and a ui-allowlisted id must not activate: finding m0#4-1)",
+			"evidence": [{ "ci": "headless-linux.yml#driver", "mark": "driver:local-window/spoofed-builtin", "runner": "test/driver/local-window.ts" }]
 		},
 		{
 			"id": "fixture:test/containment/fixtures/malicious-workspace",

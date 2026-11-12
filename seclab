@@ -25,6 +25,7 @@ usage: ./seclab <command>
   test probes                   AHP probes against the real upstream client (no window, no network): each must land where it claims
   test builds                   Test build variants: the harness's hook check (require-hooks) self-test
   test driver [TARBALL]         Headless driver self-test: the Linux editor under Xvfb, driven over its CDP pipe
+  test local-window [TARBALL]   Local windows run no workspace extension, and a spoofed built-in stays one (headless)
   tab logs [-f] [--format text|json|falco] [--min PRIORITY] [--state-dir DIR] <tabId|all>
                                 Read a tab's observability log (default: the editor's state dir)
   test evidence prepare|check DIR [sbx|oci]
@@ -744,26 +745,28 @@ case "${1:-help}" in
 					sh -c 'rm -rf /repo/.work/driver/editor /repo/.work/driver/profile* && mkdir -p /repo/.work/driver/editor && tar -C /repo/.work/driver/editor -xzf /editor.tgz \
 						&& xvfb-run -a -s "-screen 0 1440x900x24" node test/driver/selftest.ts --app "$(ls -d /repo/.work/driver/editor/VSCode-linux-*)" \
 							--profile /repo/.work/driver/profile --shot /repo/.work/driver/selftest.png -- --no-sandbox' ;;
-			# Local-window fixtures (findings m0#3-1, m0#4-1): packaged with the local vsce image
-			# (CFS), then run against an editor with the headless driver (macOS: directly,
-			# node test/driver/local-window.ts; Linux: test local-window, under Xvfb).
-			local-window-pack)
-				mkdir -p "$ROOT/.work/driver/vsix"
-				for x in ui-control workspace-ext spoofed-builtin; do
-					docker run --rm --network none -v "$ROOT/test/driver/local-window/$x:/ext:ro" -v "$ROOT/.work/driver/vsix:/out" seclab-vsce:3.9.2 \
-						sh -c "cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/$x.vsix" >/dev/null
-				done
-				ls "$ROOT/.work/driver/vsix" ;;
+			# Local-window fixtures (findings m0#3-1, m0#4-1): zipped as VSIXs in the runner container
+			# (python3 zipfile; VS Code reads only extension/package.json), then installed with the
+			# build's CLI and observed through the headless driver under Xvfb. No vsce, no network.
 			local-window) shift
 				tgz="${1:-$OUT/seclab-vscode-linux-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/').tar.gz}"
 				[[ -f "$tgz" ]] || { echo "no Linux editor build at $tgz (./seclab build linux editor)" >&2; exit 2; }
-				[[ -f "$ROOT/.work/driver/vsix/spoofed-builtin.vsix" ]] || { echo "no fixtures: ./seclab test local-window-pack" >&2; exit 2; }
 				docker build -q -t seclab-xvfb:local "$ROOT/test/driver/xvfb" >/dev/null
-				docker run --rm --network none -v "$ROOT:/repo:ro" -v "$ROOT/.work/driver:/repo/.work/driver" \
+				mkdir -p "$ROOT/.work/driver"
+				live=()
+				if [[ -n "${SECLAB_LIVENESS_LOG:-}" ]]; then
+					touch "$SECLAB_LIVENESS_LOG"
+					live=(-v "$SECLAB_LIVENESS_LOG:/liveness.log" -e SECLAB_LIVENESS_LOG=/liveness.log)
+				fi
+				docker run --rm --network none -v "$ROOT:/repo:ro" -v "$ROOT/.work/driver:/repo/.work/driver" "${live[@]}" \
 					-v "$(cd "$(dirname "$tgz")" && pwd)/$(basename "$tgz"):/editor.tgz:ro" seclab-xvfb:local \
-					sh -c 'rm -rf /repo/.work/driver/editor /repo/.work/driver/lw* && mkdir -p /repo/.work/driver/editor && tar -C /repo/.work/driver/editor -xzf /editor.tgz \
-						&& xvfb-run -a -s "-screen 0 1440x900x24" node test/driver/local-window.ts --app "$(ls -d /repo/.work/driver/editor/VSCode-linux-*)" \
-							--profile /repo/.work/driver/lw --vsix-dir /repo/.work/driver/vsix' ;;
+					sh -c 'set -e; d=/repo/.work/driver; rm -rf "$d/editor" "$d"/lw* "$d/vsix" && mkdir -p "$d/editor" "$d/vsix" && tar -C "$d/editor" -xzf /editor.tgz
+						for x in ui-control workspace-ext spoofed-builtin; do
+							python3 -c "import sys, zipfile, pathlib; src = pathlib.Path(sys.argv[1]); z = zipfile.ZipFile(sys.argv[2], \"w\"); [z.write(p, \"extension/\" + p.relative_to(src).as_posix()) for p in sorted(src.rglob(\"*\")) if p.is_file()]; z.close()" \
+								"test/driver/local-window/$x" "$d/vsix/$x.vsix"
+						done
+						xvfb-run -a -s "-screen 0 1440x900x24" node test/driver/local-window.ts --app "$(ls -d "$d"/editor/VSCode-linux-*)" \
+							--profile "$d/lw" --vsix-dir "$d/vsix" -- --no-sandbox' ;;
 			# RPC filter: generated UriComponents argument positions are constrained (pure; no network).
 			uri-constraint) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/uri-constraint.test.ts ;;
 			canary) shift; "${SECLAB_NODE:-node}" "$ROOT/test/canary/run.ts" "${1:-sbx}" ;;

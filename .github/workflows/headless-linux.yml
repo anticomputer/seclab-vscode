@@ -35,10 +35,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Liveness marks (EDR liveness-gate): the last step fails if a fixture assigned here left none.
+      - name: Liveness log for this job
+        run: echo "SECLAB_LIVENESS_LOG=$RUNNER_TEMP/liveness.log" >> "$GITHUB_ENV"
       - name: Build the Linux editor (container, pinned upstream; runs check-release --desktop)
         run: ./seclab build linux editor
       - name: Driver self-test under Xvfb (CDP pipe; no network)
         run: ./seclab test driver
+      - name: Local windows run no workspace extension; a spoofed built-in VSIX stays one (findings m0#3-1, m0#4-1)
+        run: ./seclab test local-window
       - name: Keep the self-test screenshot
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -47,3 +52,6 @@ jobs:
           path: .work/driver/selftest.png
           if-no-files-found: ignore
           retention-days: 7
+      # Last: every fixture the register assigns to this job left its mark (EDR liveness-gate).
+      - name: Liveness marks
+        run: ./seclab liveness marks headless-linux.yml#driver "$SECLAB_LIVENESS_LOG"
