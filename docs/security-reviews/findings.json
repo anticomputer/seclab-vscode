@@ -12312,6 +12312,26 @@
 				"file": "docs/edr/20261112-history-rewrite.md",
 				"quote": "These are accepted residuals; there is no purge request"
 			}
+		},
+		{
+			"record": null,
+			"anchor": "INC-5",
+			"severity": "medium",
+			"severityNote": "Not a review-table finding; rated medium by the coordinator: for a short window pushes were scanned by gitleaks only, and a real-list scan of every commit pushed since found no hits.",
+			"summary": "Incident: the shared pre-push hook (one per clone, run by every worktree) was downgraded when its installer ran from a branch that predates the publish gate, so for a short window pushes were scanned by gitleaks only. A real-list scan of every commit pushed since found no hits.",
+			"component": "pre-push hook install (seclab hooks install, build/hooks)",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "ac14332",
+			"test": {
+				"file": "test/hooks/hook-lock.test.sh",
+				"name": "an installer that predates the gate cannot replace the locked hook"
+			},
+			"note": "Mitigation: install only from main's code, with a per-push check that the gate is present. Fixed by the locked hook directory, the hook's self-check and ./seclab hooks check (ac14332, round 23 fixes 95408c3); the test replays the older installers' writes and runs in the lint job.",
+			"ref": {
+				"file": "AGENTS.md",
+				"quote": "install a shared hook that depends on code that isn't on main yet"
+			}
 		}
 	]
 }

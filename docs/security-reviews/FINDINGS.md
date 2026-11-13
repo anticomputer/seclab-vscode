@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 6 | 60 | 139 | 167 | 19 | 391 |
+| fixed | 6 | 60 | 140 | 167 | 19 | 392 |
 | fixed-untested | 4 | 18 | 54 | 145 | 48 | 269 |
 | accepted-residual | 0 | 1 | 12 | 58 | 15 | 86 |
 | deferred | 6 | 4 | 18 | 10 | 3 | 41 |
 | open | 0 | 5 | 20 | 21 | 4 | 50 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 88 | 243 | 401 | 95 | 843 |
+| **all** | 16 | 88 | 244 | 401 | 95 | 844 |
 
 ## Baseline: open high and critical findings
 
@@ -1803,3 +1803,4 @@ Every other commit the register cites is on main's history, or on the branch its
 | DOCSYNC-R8 | low | accepted-residual | A host feature that creates an empty untitled document and then fills it with host data programmatically would still sync into a tab. | accepted by an agent: The untitled rule treats an empty, path-less model first seen by the window as user-typed; no such host feature was seen in the EDR's measurement of the real editor. |
 | INC-4 | medium | fixed-untested | Incident: internal identifiers were committed to the public repository's history: internal package-feed identifiers (organisation, project and feed names, feed and tenant IDs including truncated forms, storage account names), names of non-public repositories, a value a probe captured from the host into a run record, an internal chat excerpt with colleagues' handles, local machine details, and prose stating internal policy and a non-public model identifier as fact. | No regression test on main yet. The guard is the RPC core landing's internal-identifier check, which reads the SECLAB_DENYLIST secret from the denylist environment (main only), plus a pre-push hook reading a local denylist file; the literals are never committed. Cite that check's test once it lands. |
 | INC-4-R1 | low | accepted-residual | Residual of INC-4: closed pull requests #1, #2, #4, #5 and #6 keep refs to pre-rewrite commits, a few orphaned commits are no longer on any ref, and GitHub may serve cached views of them. | accepted by the project owner (owner-acceptances.md): Accepted by the project owner on 2026-11-12, with no purge request; recorded in owner-acceptances.md. |
+| INC-5 | medium | fixed | Incident: the shared pre-push hook (one per clone, run by every worktree) was downgraded when its installer ran from a branch that predates the publish gate, so for a short window pushes were scanned by gitleaks only. A real-list scan of every commit pushed since found no hits. | ac14332 · `test/hooks/hook-lock.test.sh` "an installer that predates the gate cannot replace the locked hook" |
