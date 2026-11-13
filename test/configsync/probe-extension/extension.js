@@ -12,7 +12,7 @@ const path = require('node:path');
 const vscode = require('vscode');
 
 const CANARY = /seclabcanary_cf_[0-9a-f]{16,64}/g;
-const KEYS = ['seclabProbe.undeclared', 'http.proxyAuthorization', 'seclabProbe.password', 'seclabProbe.endpointValue', 'seclabProbe.color', 'editor.tabSize', 'seclabProbe.detect', 'seclabProbe.toolsEnv', 'remote', 'seclabProbe.label'];
+const KEYS = ['seclabProbe.undeclared', 'http.proxyAuthorization', 'seclabProbe.password', 'seclabProbe.endpointValue', 'seclabProbe.color', 'editor.tabSize', 'seclabProbe.detect', 'seclabProbe.toolsEnv', 'remote', 'seclabProbe.label', 'launch'];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function armed(root) {
