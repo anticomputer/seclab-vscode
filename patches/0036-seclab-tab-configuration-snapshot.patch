@@ -113,8 +113,8 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadConfiguration.ts b/src/vs/wor
  	$updateConfigurationOption(target: ConfigurationTarget | null, key: string, value: unknown, overrides: IConfigurationOverrides | undefined, scopeToLanguage: boolean | undefined): Promise<void> {
 diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts
 --- a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	1970-01-01 00:00:00
-+++ b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	2026-11-13 23:21:43
-@@ -0,0 +1,222 @@
++++ b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	2026-11-13 23:26:11
+@@ -0,0 +1,224 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab: the configuration a tab's extension host receives (patch 0036, EDR
 + *  configuration-snapshot). Upstream sends every host the whole snapshot, the host user
@@ -170,7 +170,9 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +	if (!value || typeof value !== 'object') {
 +		return false;
 +	}
-+	const walk = (v: unknown): boolean => typeof v === 'string' || (!!v && typeof v === 'object' && Object.values(v).some(walk));
++	// Map keys can carry URLs too (a URL pattern with userinfo as a key): a key with a scheme or `@` counts as text.
++	const walk = (v: unknown): boolean => typeof v === 'string'
++		|| (!!v && typeof v === 'object' && (Object.keys(v).some(k => /:\/\/|@/.test(k)) || Object.values(v).some(walk)));
 +	return walk(value);
 +}
 +
