@@ -11537,7 +11537,7 @@
 			"summary": "Touched compared only an entry's JSON, so retargeting an owner's branch or the upstream pin voided citations of untouched entries",
 			"component": "findings register: touched rule",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "16504ad",
 			"status": "fixed",
 			"test": {
 				"file": "build/docs/findings.ts",
@@ -11552,7 +11552,7 @@
 			"summary": "The host treated any touched value but 1 as untouched, so a malformed citation line failed open",
 			"component": "findings register: host contract",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "16504ad",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -11567,7 +11567,7 @@
 			"summary": "A rotted round-label citation was reported as remapped though remap never rewrites round labels",
 			"component": "findings register: remap",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "16504ad",
 			"status": "fixed-untested",
 			"gap": "Fixed in findings_remap; no self-test drives the remap wiring end to end."
 		},
@@ -11579,7 +11579,7 @@
 			"summary": "Register text in the weekly summary's fenced block could break out of it",
 			"component": "findings register: weekly summary",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "16504ad",
 			"status": "fixed-untested",
 			"gap": "Fixed in the workflow step; workflow output has no test."
 		},
@@ -11591,7 +11591,7 @@
 			"summary": "An ambiguous prefix of the upstream pin was skipped silently",
 			"component": "findings register: exemption",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "16504ad",
 			"status": "fixed-untested",
 			"gap": "Fixed; the self-test can't construct an ambiguous seven-character prefix."
 		},

@@ -1703,8 +1703,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | RRR-3 | low | fixed | evidence() interpolated test.file unescaped into step output | f5803ac · `build/docs/findings.ts` "the view has no live link from register text, backslash tricks included" |
 | RRR-4 | info | fixed-untested | The listing ran in the job holding actions: read and a token | Fixed by moving the listing into its own contents: read job; no check covers workflow job structure. |
 | RRR-5 | info | accepted-residual | The public repo lists the open highs weekly in run summaries | accepted by an agent: No new detail: the records and FINDINGS.md already hold it. |
-| ZZZ-1 | medium | fixed | Touched compared only an entry's JSON, so retargeting an owner's branch or the upstream pin voided citations of untouched entries | 0000000 · `build/docs/findings.ts` "branch change touches the entries that inherit it (ZZZ-1)" |
-| ZZZ-2 | medium | fixed | The host treated any touched value but 1 as untouched, so a malformed citation line failed open | 0000000 · `seclab` "a four-column citation line passed (ZZZ-2)" |
+| ZZZ-1 | medium | fixed | Touched compared only an entry's JSON, so retargeting an owner's branch or the upstream pin voided citations of untouched entries | 16504ad · `build/docs/findings.ts` "branch change touches the entries that inherit it (ZZZ-1)" |
+| ZZZ-2 | medium | fixed | The host treated any touched value but 1 as untouched, so a malformed citation line failed open | 16504ad · `seclab` "a four-column citation line passed (ZZZ-2)" |
 | ZZZ-3 | low | fixed-untested | A rotted round-label citation was reported as remapped though remap never rewrites round labels | Fixed in findings_remap; no self-test drives the remap wiring end to end. |
 | ZZZ-4 | low | fixed-untested | Register text in the weekly summary's fenced block could break out of it | Fixed in the workflow step; workflow output has no test. |
 | ZZZ-5 | low | fixed-untested | An ambiguous prefix of the upstream pin was skipped silently | Fixed; the self-test can't construct an ambiguous seven-character prefix. |
