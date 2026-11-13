@@ -7736,7 +7736,7 @@
 			"status": "fixed-untested",
 			"commit": "051e773",
 			"gap": "the tab now gets only a per-run salt and salted hashes and the vsix is removed after install, but nothing asserts that rule outside a live U/G run",
-			"note": "Branch anticomputer-agentic-gate-0015-v3 commit ec78cef (unpushed) adds tests for this; it stays in the baseline until they land on main."
+			"note": "Branch anticomputer-agentic-gate-0015-v3 commit 3596740 (unpushed) adds tests for this; it stays in the baseline until they land on main."
 		},
 		{
 			"record": "20261106-agentic-ahp-gate.md",
@@ -7749,7 +7749,7 @@
 			"status": "fixed-untested",
 			"commit": "051e773",
 			"gap": "prepare records canaries.json and check requires an ahp-gate.root-config:strip decision on G, but both assertions run only in a live U/G run; no unit test covers them",
-			"note": "Branch anticomputer-agentic-gate-0015-v3 commit ec78cef (unpushed) adds tests for this; it stays in the baseline until they land on main."
+			"note": "Branch anticomputer-agentic-gate-0015-v3 commit 3596740 (unpushed) adds tests for this; it stays in the baseline until they land on main."
 		},
 		{
 			"record": "20261106-agentic-ahp-gate.md",
@@ -7853,7 +7853,7 @@
 			"component": "fixed tab settings (patch 0017) records",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "1345773",
+			"commit": "e0b13ce",
 			"gap": "the claim was corrected in the patch comment and the EDR, but nothing checks that a later fence widening does not silently make the record wrong again"
 		},
 		{
@@ -7865,7 +7865,7 @@
 			"component": "fixed tab settings (patch 0017), browser view restore",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "1345773",
+			"commit": "e0b13ce",
 			"gap": "the fix lives in the upstream hunk (_resolveSessionRequest drops the saved request in a seclab+ window), which no unit test can reach; verdict.test.ts only exercises the verdict logic and the corrected restore run has not been performed against rebuilt U/F variants"
 		},
 		{
@@ -7877,7 +7877,7 @@
 			"component": "increment 2 EDR",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "1345773",
+			"commit": "e0b13ce",
 			"gap": "documentation correction; no check enforces record/decision consistency"
 		},
 		{
@@ -7889,7 +7889,7 @@
 			"component": "patch-build upstream invariants",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "1345773",
+			"commit": "e0b13ce",
 			"note": "Enforced over the patched tree by build/check-sole-consumer.ts inside the required patch-build check; verified by renaming the enum member in a scratch tree.",
 			"gap": "The invariant is pinned in patches/sole-consumer.json and checked over the patched tree by patch-build, which is a gate rather than a regression test: no unit test fails if the rule is removed, because the unit container has no upstream checkout to check it against."
 		},
@@ -7915,7 +7915,7 @@
 			"owner": "agentic",
 			"status": "open",
 			"gap": "round 9 confirmed the agent tool path never reads dataStorage at all; the --probe storage run measures only the non-agent create path, and the restore phase that would demonstrate the pin has not been run. The pin rests on the source reading plus the sole-consumer invariant",
-			"note": "Branch anticomputer-agentic-gate-0015-v3 commit ec78cef (unpushed) adds tests for this; it stays in the baseline until they land on main."
+			"note": "Branch anticomputer-agentic-gate-0015-v3 commit 3596740 (unpushed) adds tests for this; it stays in the baseline until they land on main."
 		},
 		{
 			"record": "20261106-agentic-ahp-gate.md",
@@ -7926,7 +7926,7 @@
 			"component": "increment 2 EDR",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "50e8d25",
+			"commit": "ebfbbba",
 			"gap": "documentation correction recorded as an explicit limit; no check enforces it"
 		},
 		{
@@ -7970,7 +7970,7 @@
 			"component": "increment 2 proof harness teardown",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "7595789",
+			"commit": "5f92cd7",
 			"gap": "run.ts now removes the arming file on every check, but no test asserts it"
 		},
 		{
@@ -8132,7 +8132,7 @@
 				"file": "build/patch-reach-imports.test.ts",
 				"name": "sole-consumer: a config it cannot read is a problem, not a clean result (GATE-1)"
 			},
-			"note": "Fix in ec78cef, regression test in 198fde4, both on the branch (unpushed). It stays in the baseline until they land on main; then drop branch."
+			"note": "Fix in 3596740, regression test in 198fde4, both on the branch (unpushed). It stays in the baseline until they land on main; then drop branch."
 		},
 		{
 			"record": "20261106-agentic-browser-variant.md",
@@ -8144,7 +8144,7 @@
 			"component": "agentic-browser test build variant (browserView-hook.patch)",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "0cf51ed",
+			"commit": "6a6abee",
 			"gap": "The hook is now written against the series without 0017 and its import is placed away from 0017's hunk, verified by applying it to a tree with and without 0017 \u2014 but that was a manual check; nothing in the repo applies the hook to both trees, so only a dispatched `build-macos` run of each baseline would catch a regression.",
 			"manual": {
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
@@ -8161,7 +8161,7 @@
 			"component": "agentic-browser test build variant (browserView-hook.patch)",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "0cf51ed",
+			"commit": "6a6abee",
 			"gap": "Removed by inlining `getAgentBrowserViewCreationDefaults`; only a dispatched variant build compiles the hooked tree, so nothing in CI on this branch would catch a reintroduced duplicate import.",
 			"manual": {
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
@@ -8178,7 +8178,7 @@
 			"component": "agentic-browser hook arming",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "0cf51ed",
+			"commit": "6a6abee",
 			"gap": "Inverted to `Number(fields.until) > Date.now()` (fails closed), but there is no arming test for the browser-drive hook, unlike `test/builds/rogue-reh-arming.ts` for the rogue-REH hook.",
 			"manual": {
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
@@ -8195,7 +8195,7 @@
 			"component": "agentic-browser hook arming",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "0cf51ed",
+			"commit": "6a6abee",
 			"gap": "It now requires `/^[0-9a-f]{32}$/` as the rogue-REH hook does, but no arming test exercises a bad nonce for this hook.",
 			"manual": {
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
@@ -8212,7 +8212,7 @@
 			"component": "agentic-browser hook (drive tick)",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "0cf51ed",
+			"commit": "6a6abee",
 			"gap": "The latch is now set before the await and released only on a miss, but no test drives two ticks concurrently to prove one page is opened.",
 			"manual": {
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
@@ -8229,7 +8229,7 @@
 			"component": "test/builds/variants.json",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "0cf51ed",
+			"commit": "6a6abee",
 			"gap": "`variants.json` now points at this record, but no check validates that a variant's `review` field names a record that actually reviews it (build/test-variant.sh does not read the field).",
 			"manual": {
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
