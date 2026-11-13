@@ -17,7 +17,8 @@
 //   toolsEnv       a credential URL in an env-style map under a tab-declared key (review 0036 A1);
 //   nested         nested-form settings under a tab-declared prefix of core keys (`remote`, A3);
 //   label          a plain value under a tab-declared key: no extension-declared key receives a
-//                  host value (A1, option 1). toolsEnv and label both evade the classifier.
+//                  host value (A1, option 1). toolsEnv and label both evade the classifier;
+//   launchArgs     a credential URL in a core debug configuration's args (CFG-8).
 // A detection canary in the tab's own workspace settings passes unchanged and must be seen.
 // Positive controls: editor.tabSize (core, host value) arrives and changes; a tab extension's own
 // setting arrives from the tab's workspace settings (its host value, `host-value`, must not win).
@@ -45,7 +46,7 @@ const SBX = '/opt/homebrew/bin/sbx';
 const VSCE_IMAGE = 'seclab-vsce:3.9.2';
 const [mode, ...rest] = process.argv.slice(2);
 const appArg = rest.includes('--app') ? path.resolve(rest[rest.indexOf('--app') + 1]) : undefined;
-const KINDS = ['undeclared', 'proxyAuth', 'password', 'secretValue', 'changed', 'toolsEnv', 'nested', 'label'] as const;
+const KINDS = ['undeclared', 'proxyAuth', 'password', 'secretValue', 'changed', 'toolsEnv', 'nested', 'label', 'launchArgs'] as const;
 // Seeded in the tab's own workspace settings, which pass unchanged: proves detection works on the build.
 const DETECT = 'detect';
 type Canaries = Record<typeof KINDS[number] | typeof DETECT, string>;
@@ -69,6 +70,8 @@ const settings = (c: Canaries, tabSize: number, proxyCanary: string) => JSON.str
 	// tab-declared prefix of core keys (A3).
 	'seclabProbe.toolsEnv': { DATABASE_URL: `postgres://app:${c.toolsEnv}@db.invalid/prod` },
 	remote: { seclabProbeNested: c.nested },
+	// A core free-form setting: a debug configuration's args with a credential URL (CFG-8).
+	launch: { configurations: [{ type: 'node', request: 'launch', name: 'probe', args: ['--db', `postgres://admin:${c.launchArgs}@db.invalid/prod`] }] },
 }, null, '\t');
 
 if (mode === 'prepare') {
@@ -90,6 +93,7 @@ if (mode === 'prepare') {
 		toolsEnv: `seclabcanary_cf_${hex()}`,
 		nested: `seclabcanary_cf_${hex()}`,
 		label: `seclabcanary_cf_${hex()}`,
+		launchArgs: `seclabcanary_cf_${hex()}`,
 		detect: `seclabcanary_cf_${hex()}`,
 	};
 	fs.writeFileSync(canaryFile, JSON.stringify(c));
@@ -173,8 +177,8 @@ if (mode === 'prepare') {
 		expect('the probe finished', rep.done === true);
 		expect('CFG-6 detection works on this build: the tab-owned canary was seen', hits.some(h => h.startsWith(`${DETECT}@`)));
 		const seen = (k: string) => hits.some(h => h.startsWith(`${k}@`));
-		expect('CFG-1 an extension-declared key receives no host value (env-map URL, plain value)', !seen('toolsEnv') && !seen('label'));
-		expect('CFG-3 nested-form settings under a tab-declared prefix stay on the host', !seen('nested'));
+		expect('CFG-1 an extension-declared key receives no host value (env-map URL, plain value, nested form)', !seen('toolsEnv') && !seen('label') && !seen('nested'));
+		expect('CFG-8 a core free-form setting brings no host text (launch args)', !seen('launchArgs'));
 		for (const k of KINDS) {
 			const at = hits.filter(h => h.startsWith(`${k}@`));
 			expect(`no ${k} canary reached the tab`, at.length === 0, at.join(','));
