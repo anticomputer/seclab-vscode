@@ -15,9 +15,12 @@
 //   secretValue    a secret-shaped value under a neutral tab-declared name: the gitleaks rules;
 //   changed        a second proxy credential written by `seed` while the tab runs: the change path;
 //   toolsEnv       a credential URL in an env-style map under a tab-declared key (review 0036 A1);
-//   nested         nested-form settings under a tab-declared prefix of core keys (`remote`, A3).
+//   nested         nested-form settings under a tab-declared prefix of core keys (`remote`, A3);
+//   label          a plain value under a tab-declared key: no extension-declared key receives a
+//                  host value (A1, option 1). toolsEnv and label both evade the classifier.
 // A detection canary in the tab's own workspace settings passes unchanged and must be seen.
-// Positive controls: editor.tabSize and a tab extension's own setting arrive, and a change arrives.
+// Positive controls: editor.tabSize (core, host value) arrives and changes; a tab extension's own
+// setting arrives from the tab's workspace settings (its host value, `host-value`, must not win).
 // The probe reports hashes and setting names only, never values; its report is tab-controlled data,
 // read through a fixed schema.
 
@@ -42,7 +45,7 @@ const SBX = '/opt/homebrew/bin/sbx';
 const VSCE_IMAGE = 'seclab-vsce:3.9.2';
 const [mode, ...rest] = process.argv.slice(2);
 const appArg = rest.includes('--app') ? path.resolve(rest[rest.indexOf('--app') + 1]) : undefined;
-const KINDS = ['undeclared', 'proxyAuth', 'password', 'secretValue', 'changed', 'toolsEnv', 'nested'] as const;
+const KINDS = ['undeclared', 'proxyAuth', 'password', 'secretValue', 'changed', 'toolsEnv', 'nested', 'label'] as const;
 // Seeded in the tab's own workspace settings, which pass unchanged: proves detection works on the build.
 const DETECT = 'detect';
 type Canaries = Record<typeof KINDS[number] | typeof DETECT, string>;
@@ -60,7 +63,8 @@ const settings = (c: Canaries, tabSize: number, proxyCanary: string) => JSON.str
 	'http.proxyAuthorization': basic(proxyCanary),
 	'seclabProbe.password': c.password,
 	'seclabProbe.endpointValue': `apikey=${c.secretValue}`,
-	'seclabProbe.color': 'teal',
+	'seclabProbe.color': 'host-value',
+	'seclabProbe.label': c.label,
 	// An env-style map under a tab-declared key (review 0036 A1), and nested-form settings under a
 	// tab-declared prefix of core keys (A3).
 	'seclabProbe.toolsEnv': { DATABASE_URL: `postgres://app:${c.toolsEnv}@db.invalid/prod` },
@@ -85,6 +89,7 @@ if (mode === 'prepare') {
 		changed: `seclabcanary_cf_${hex()}`,
 		toolsEnv: `seclabcanary_cf_${hex()}`,
 		nested: `seclabcanary_cf_${hex()}`,
+		label: `seclabcanary_cf_${hex()}`,
 		detect: `seclabcanary_cf_${hex()}`,
 	};
 	fs.writeFileSync(canaryFile, JSON.stringify(c));
@@ -92,7 +97,7 @@ if (mode === 'prepare') {
 	writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir] });
 	fs.writeFileSync(path.join(ws, 'README.md'), '# configsync probe workspace\n');
 	fs.mkdirSync(path.join(ws, '.vscode'), { recursive: true });
-	fs.writeFileSync(path.join(ws, '.vscode', 'settings.json'), JSON.stringify({ 'seclabProbe.detect': c.detect }));
+	fs.writeFileSync(path.join(ws, '.vscode', 'settings.json'), JSON.stringify({ 'seclabProbe.detect': c.detect, 'seclabProbe.color': 'teal' }));
 	fs.mkdirSync(path.dirname(settingsFile), { recursive: true });
 	fs.writeFileSync(settingsFile, settings(c, 7, c.proxyAuth));
 	const until = Math.floor(Date.now() / 1000) + 2 * 3600;

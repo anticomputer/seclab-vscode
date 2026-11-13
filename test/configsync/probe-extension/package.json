@@ -31,7 +31,7 @@
 				"seclabProbe.color": {
 					"type": "string",
 					"default": "",
-					"description": "Positive control: an ordinary setting of a tab extension."
+					"description": "Positive control: a tab extension's own setting, set in the tab's workspace settings."
 				},
 				"seclabProbe.detect": {
 					"type": "string",
@@ -47,6 +47,11 @@
 					"type": "object",
 					"default": {},
 					"description": "A prefix of core keys declared by a tab extension (review 0036 A3)."
+				},
+				"seclabProbe.label": {
+					"type": "string",
+					"default": "",
+					"description": "Plain value under a key a tab extension declares: under option 1 a host value never crosses."
 				}
 			}
 		}
