@@ -37,12 +37,16 @@ only (0035's predicate). The local host and other windows get the snapshot as up
    gaps (a URL with userinfo inside an env map, a passphrase, a cookie, a numeric PIN). Extensions
    in a tab read their settings from the tab's own remote and workspace settings. `defaults`
    (registry defaults, not user values) also keeps the keys of extensions installed in this tab.
-   Undeclared keys never cross, and neither do keys with a `__proto__`, `constructor` or
-   `prototype` segment.
+   A core value that is an object or array crosses from those layers only if it holds no strings
+   (review round 2, CFG-8): free-form settings such as `launch` carry `args` and connection strings
+   the classifier can't recognise. Scalar strings are still scanned. Undeclared keys never cross,
+   and neither do keys with a `__proto__`, `constructor` or `prototype` segment.
 3. **Layers.** `application` is dropped. `userRemote` (the REH's own) and workspace or folder
    settings on the tab's own authority pass unchanged: the tab already controls them.
-4. **Changes.** Every `$acceptConfigurationChanged` rebuilds and refilters the snapshot, and the
-   change's key list names only keys the tab knew before or knows now.
+4. **Changes.** Every `$acceptConfigurationChanged` rebuilds and refilters the snapshot. The change's
+   key list names a key only if it crossed from a host layer before or now and isn't withheld now,
+   or if its value in a layer the tab owns changed. The event's source isn't trusted: upstream tags
+   multi-layer reloads as a workspace change (review round 2, CFG-9).
 5. **Report.** Keys withheld from the top level of `userLocal` are reported by name and reason,
    never value, at most 64 per call and 256 characters per key, once per window, with the marker
    `seclabSettingsWithheld:v1` and the window's own authority. The report goes directly to the
@@ -80,7 +84,9 @@ the Tab Manager imports the same directory.
 - A tab never receives an extension setting from the host user settings, policy or a local
   workspace file, or anything that looks like a credential. **User-visible:** an extension in a
   tab only sees what the tab's own remote or workspace settings say; settings for it in the host
-  `settings.json` don't follow it into tabs (ARCHITECTURE §4.8). Core editor settings still do.
+  `settings.json` don't follow it into tabs (ARCHITECTURE §4.8). Core editor settings still do,
+  except object or array settings that contain text (for example global `launch` configurations or
+  `editor.quickSuggestions`), which must be set in the tab.
 - An extension that needs a credential gets nothing until the user moves it to the broker, and the
   Tab Manager names the withheld key.
 - **Follow-up:** a per-extension opt-in to receive host values, as its own reviewed change.
@@ -88,7 +94,10 @@ the Tab Manager imports the same directory.
 - **Residuals:**
   - the scanner doesn't decode base64, hex or percent-encoded segments as gitleaks can;
   - withholdings from policy, defaults, local workspace settings and `[lang]` sections are silent;
-  - the tab's own `userRemote` and tab-authority workspace settings are not filtered.
+  - the tab's own `userRemote` and tab-authority workspace settings are not filtered;
+  - object keys inside a structured core value (glob patterns in `files.exclude`) still cross; only
+    the name rule checks them;
+  - a change confined to a `[lang]` section of a tab-owned layer isn't named in the change event.
 
 ## Evidence
 **Port vs pinned gitleaks.** `node build/secret-rules/differential.ts build/secret-rules/src`
