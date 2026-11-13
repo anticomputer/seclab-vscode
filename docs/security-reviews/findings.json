@@ -12408,7 +12408,7 @@
 			"severity": "high",
 			"summary": "A tab extension could declare any setting key and receive the host user value for it; the credential rules miss some shapes (URL userinfo in an env map, passphrases, cookies, numeric PINs).",
 			"status": "fixed",
-			"commit": "01f8eede",
+			"commit": "6e821e60",
 			"test": {
 				"file": "test/configsync/probe.ts",
 				"name": "CFG-1 an extension-declared key receives no host value (env-map URL, plain value, nested form)"
@@ -12424,7 +12424,7 @@
 			"severity": "medium",
 			"summary": "A tab-declared `__proto__.<x>` key reached addToValueTree on a plain object (prototype write in the renderer); inherited registry lookups for keys like `constructor`.",
 			"status": "fixed-untested",
-			"commit": "45f735c6",
+			"commit": "f7e8a732",
 			"gap": "No runtime test: unsafe segments are refused, the output tree has a null prototype and lookups use Object.hasOwn. Upstream DefaultConfiguration has the same sink (not fixed here)."
 		},
 		{
@@ -12436,7 +12436,7 @@
 			"severity": "low",
 			"summary": "A tab extension declaring a prefix key (`http`, `remote`) received the user's nested-form settings for other sources' keys.",
 			"status": "fixed",
-			"commit": "45f735c6",
+			"commit": "f7e8a732",
 			"test": {
 				"file": "test/configsync/probe.ts",
 				"name": "CFG-1 an extension-declared key receives no host value (env-map URL, plain value, nested form)"
@@ -12452,7 +12452,7 @@
 			"severity": "info",
 			"summary": "The change key list named a key once more after it became withheld, and keys the tab planted in its own layer revealed host edits.",
 			"status": "fixed-untested",
-			"commit": "45f735c6",
+			"commit": "f7e8a732",
 			"gap": "No runtime test for change-event key lists."
 		},
 		{
@@ -12464,7 +12464,7 @@
 			"severity": "info",
 			"summary": "A withheld-setting report refused before the Tab Manager registered its command was counted as sent.",
 			"status": "fixed-untested",
-			"commit": "45f735c6",
+			"commit": "f7e8a732",
 			"gap": "No runtime test for report retry."
 		},
 		{
@@ -12476,7 +12476,7 @@
 			"severity": "info",
 			"summary": "The configsync probe could pass vacuously: it scanned late and nothing proved detection worked on the build.",
 			"status": "fixed",
-			"commit": "45f735c6",
+			"commit": "f7e8a732",
 			"test": {
 				"file": "test/configsync/probe.ts",
 				"name": "CFG-6 detection works on this build: the tab-owned canary was seen"
@@ -12502,7 +12502,7 @@
 			"severity": "medium",
 			"summary": "Core `launch` (WINDOW scope, not restricted) carried the user's debug configurations to the tab; args and connection strings can hold credentials the classifier misses.",
 			"status": "fixed",
-			"commit": "06c95467",
+			"commit": "9a9a937d",
 			"test": {
 				"file": "test/configsync/probe.ts",
 				"name": "CFG-8 a core free-form setting brings no host text (launch args)"
@@ -12517,7 +12517,7 @@
 			"severity": "low",
 			"summary": "The change-event key classification trusted `e.source`, which upstream sets to WORKSPACE for multi-layer reloads, so host key names were checked against tab keys only.",
 			"status": "fixed-untested",
-			"commit": "06c95467",
+			"commit": "9a9a937d",
 			"gap": "No runtime test for change-event key lists after a profile switch or reload."
 		},
 		{
@@ -12529,7 +12529,7 @@
 			"severity": "info",
 			"summary": "The CFG-3 harness assertion became vacuous after the CFG-1 change, and no canary covered core free-form settings.",
 			"status": "fixed",
-			"commit": "06c95467",
+			"commit": "9a9a937d",
 			"test": {
 				"file": "test/configsync/probe.ts",
 				"name": "CFG-8 a core free-form setting brings no host text (launch args)"

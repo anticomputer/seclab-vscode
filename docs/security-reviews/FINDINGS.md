@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 6 | 61 | 142 | 168 | 20 | 397 |
-| fixed-untested | 4 | 18 | 55 | 148 | 50 | 275 |
+| fixed | 6 | 61 | 143 | 168 | 21 | 399 |
+| fixed-untested | 4 | 18 | 55 | 149 | 50 | 276 |
 | accepted-residual | 0 | 1 | 12 | 58 | 15 | 86 |
 | deferred | 6 | 4 | 18 | 10 | 3 | 41 |
 | open | 0 | 5 | 20 | 21 | 5 | 51 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 89 | 247 | 405 | 99 | 856 |
+| **all** | 16 | 89 | 248 | 406 | 100 | 859 |
 
 ## Baseline: open high and critical findings
 
@@ -163,6 +163,7 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **F3** | low | fixed-untested | patch 0035 document sync | \`$onVirtualDocumentChange\` could replace the text of any loaded model, host settings included (pre-existing; line touched). | A filtered host now writes only models its own provider made (hardened again in 3848f6d), but the record records "code review; no probe" — driving it needs the user settings path inside the tab. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **R2-1** | low | fixed-untested | patch 0035 document sync | "Born as a text file" meant only that a text file model existed, so a tab stalling its provider's read could pre-claim a host URI. | Birth now requires a finished read (lastResolvedFileStat) with no text model yet, but the record records "code review; no probe" — there is no predictable host creator to drive. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **R4-1** | low | fixed-untested | patch 0035 document sync | A text file model that reused an existing host model kept its stat after that model was disposed, so a later host-created model would count as its own. | Reused models are tainted on onDidResolve so their later text models never count, but the record records "code review" only — no probe. |
+| [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-9** | low | fixed-untested | patch 0036 configuration snapshot | The change-event key classification trusted \`e.source\`, which upstream sets to WORKSPACE for multi-layer reloads, so host key names were checked against tab keys only. | No runtime test for change-event key lists after a profile switch or reload. |
 | [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **DOCSYNC-R3** | low | open | window→tab pushes (editor tabs) | Window-to-tab push: the editor-tab model still exposes host URIs and labels to a tab's extension host. | No push-side control for the editor-tab model; reported to the coordinator as a 0035 sibling. |
 | [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **DOCSYNC-R4** | low | open | window→tab pushes (ext-host init data) | Window-to-tab push: ext-host init data still carries host telemetry ids into a tab's extension host. | No push-side control for init data; reported to the coordinator as a 0035 sibling. |
 | [docs/edr/20261109-document-sync-provenance.md](../../docs/edr/20261109-document-sync-provenance.md) **DOCSYNC-R8** | low | accepted-residual | patch 0035 document sync (untitled rule) | A host feature that creates an empty untitled document and then fills it with host data programmatically would still sync into a tab. | accepted by an agent: The untitled rule treats an empty, path-less model first seen by the window as user-typed; no such host feature was seen in the EDR's measurement of the real editor. |
@@ -1791,13 +1792,16 @@ Every other commit the register cites is on main's history, or on the branch its
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
-| CFG-1 | high | fixed | A tab extension could declare any setting key and receive the host user value for it; the credential rules miss some shapes (URL userinfo in an env map, passphrases, cookies, numeric PINs). | d602ec8 · `test/configsync/probe.ts` "CFG-1 an extension-declared key receives no host value (env-map URL, plain value)" |
+| CFG-1 | high | fixed | A tab extension could declare any setting key and receive the host user value for it; the credential rules miss some shapes (URL userinfo in an env map, passphrases, cookies, numeric PINs). | 6e821e60 · `test/configsync/probe.ts` "CFG-1 an extension-declared key receives no host value (env-map URL, plain value, nested form)" |
 | CFG-2 | medium | fixed-untested | A tab-declared \`__proto__.&lt;x&gt;\` key reached addToValueTree on a plain object (prototype write in the renderer); inherited registry lookups for keys like \`constructor\`. | No runtime test: unsafe segments are refused, the output tree has a null prototype and lookups use Object.hasOwn. Upstream DefaultConfiguration has the same sink (not fixed here). |
-| CFG-3 | low | fixed | A tab extension declaring a prefix key (\`http\`, \`remote\`) received the user's nested-form settings for other sources' keys. | 1442c1cf · `test/configsync/probe.ts` "CFG-3 nested-form settings under a tab-declared prefix stay on the host" |
+| CFG-3 | low | fixed | A tab extension declaring a prefix key (\`http\`, \`remote\`) received the user's nested-form settings for other sources' keys. | f7e8a732 · `test/configsync/probe.ts` "CFG-1 an extension-declared key receives no host value (env-map URL, plain value, nested form)" |
 | CFG-4 | info | fixed-untested | The change key list named a key once more after it became withheld, and keys the tab planted in its own layer revealed host edits. | No runtime test for change-event key lists. |
 | CFG-5 | info | fixed-untested | A withheld-setting report refused before the Tab Manager registered its command was counted as sent. | No runtime test for report retry. |
-| CFG-6 | info | fixed | The configsync probe could pass vacuously: it scanned late and nothing proved detection worked on the build. | 1442c1cf · `test/configsync/probe.ts` "CFG-6 detection works on this build: the tab-owned canary was seen" |
+| CFG-6 | info | fixed | The configsync probe could pass vacuously: it scanned late and nothing proved detection worked on the build. | f7e8a732 · `test/configsync/probe.ts` "CFG-6 detection works on this build: the tab-owned canary was seen" |
 | CFG-7 | info | open | \`${config:…}\` in a tab-owned tasks.json or launch.json resolves in the renderer against the unfiltered configuration. | A sibling of the snapshot filter: resolve config variables for tab tasks against the tab's filtered view. |
+| CFG-8 | medium | fixed | Core \`launch\` (WINDOW scope, not restricted) carried the user's debug configurations to the tab; args and connection strings can hold credentials the classifier misses. | 9a9a937d · `test/configsync/probe.ts` "CFG-8 a core free-form setting brings no host text (launch args)" |
+| CFG-9 | low | fixed-untested | The change-event key classification trusted \`e.source\`, which upstream sets to WORKSPACE for multi-layer reloads, so host key names were checked against tab keys only. | No runtime test for change-event key lists after a profile switch or reload. |
+| CFG-10 | info | fixed | The CFG-3 harness assertion became vacuous after the CFG-1 change, and no canary covered core free-form settings. | 9a9a937d · `test/configsync/probe.ts` "CFG-8 a core free-form setting brings no host text (launch args)" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
