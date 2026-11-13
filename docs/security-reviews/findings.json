@@ -56,8 +56,6 @@
 		"20261104-probe-safety.md#4",
 		"20261104-probe-safety.md#5",
 		"20261104-rpc-filter-patches.md#1",
-		"20261104-rpc-filter-patches.md#2",
-		"20261104-rpc-filter-patches.md#3",
 		"20261104-rpc-filter-patches.md#4",
 		"20261104-rpc-filter-patches.md#5",
 		"20261104-rpc-lockdown-design.md#1",
@@ -70,13 +68,11 @@
 		"20261104-supply-chain.md#WW-4",
 		"20261104-tab-observability.md#WL-1",
 		"20261104-tabd-protocol-design.md#1",
-		"20261105-agent-host-patches.md#1",
 		"20261105-agent-host-patches.md#2",
 		"20261105-agent-host-patches.md#3",
 		"20261105-agent-host-patches.md#4",
 		"20261105-broker-repin-and-image-snapshot.md#10b-1",
 		"20261105-rpc-core-increment.md#1",
-		"20261105-rpc-core-increment.md#2",
 		"20261105-rpc-filter-rereview.md#1",
 		"20261105-rpc-filter-rereview.md#2",
 		"20261105-rpc-filter-rereview.md#3",
@@ -92,7 +88,6 @@
 		"20261106-agentic-ahp-gate.md#HIGH: the restore attributability check was unsatisfiable on F.",
 		"20261106-agentic-ahp-gate.md#HIGH: the restore offsets were taken while the first window was still alive.",
 		"20261106-agentic-ahp-gate.md#HIGH: the restored-editor phase measured nothing.",
-		"20261106-rpc-core-landing-v2.md#1",
 		"20261112-gate-fail-open-audit.md#GATE-2",
 		"20261112-gate-fail-open-audit.md#GATE-3",
 		"register#DOCSYNC-R1",
@@ -128,14 +123,17 @@
 			"summary": "Incident: during the unpatched proof run the `clipboard-read` probe returned the developer's real host clipboard, and the value is in the committed run evidence.",
 			"component": "probe payloads / level B harness",
 			"owner": "rpc",
-			"status": "fixed-untested",
-			"commit": "f8bf16a",
-			"gap": "Mitigated (clipboard canary opt-in via SECLAB_CANARY_CLIPBOARD=1; otherwise never read; the harness saves and restores the clipboard, 2b2881e), but there is no fixture-lint rule forbidding a clipboard read in a payload, no redaction of probe `detail` values, and rpc-filter/probes/runs/20261104-unpatched-a717861.json still carries the real clipboard string the probe captured.",
+			"status": "fixed",
+			"commit": "cc51fa7",
 			"ref": {
 				"file": "docs/edr/20261104-unpatched-proof-run.md",
-				"quote": "Returned the developer's **real clipboard contents**."
+				"quote": "Succeeded: the clipboard was readable from the tab"
 			},
-			"note": "The captured value was removed from the repository's history by the history rewrite (register#INC-4)."
+			"note": "The captured value was removed from the repository's history by the history rewrite (register#INC-4). Probes now read only the test build's in-memory canary clipboard (safety.withCanaryClipboard); rpc-filter/tools/lint.sh fails any other clipboard or pasteboard read and any free-text run record (EDR 20261112-probe-records-canary-clipboard).",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_a_clipboard_read_outside_the_canary_clipboard_fails"
+			}
 		},
 		{
 			"record": null,
@@ -269,7 +267,6 @@
 		{
 			"record": null,
 			"anchor": "RPC-R1",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"severity": "medium",
 			"severityNote": "Written down as a residual rather than a review finding, so no severity word; judged medium because it is a real hole in the command taint, held shut only by every command being denied.",
 			"summary": "Deferred laundering escapes the command taint: a tab-originated handler that defers an ICommandService call (setTimeout, unawaited promise, event subscription) runs with no origin and a zero counter.",
@@ -286,7 +283,6 @@
 		{
 			"record": null,
 			"anchor": "RPC-R2",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"severity": "medium",
 			"severityNote": "Residual, no severity word; judged medium: it is a structural boundary gap (tab-chosen host-side execution on a user gesture), mitigated today only by denying the whole response surface.",
 			"summary": "No response-side sanitiser: anything a tab returns that carries a command, a `command:` link, trusted markdown or a remote image would put tab-chosen actions into trusted UI, run by the global ICommandService.",
@@ -303,7 +299,6 @@
 		{
 			"record": null,
 			"anchor": "RPC-R3",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"severity": "info",
 			"severityNote": "Not a vulnerability: a deliberate functionality gap that is safe by default. Recorded so the loss is not mistaken for a bug or quietly reverted.",
 			"summary": "Methods denied pending validators and the response-side control: SCM, tree views, output channels, status bar, decorations, tab-registered language features, tasks, debug, URI handlers.",
@@ -2662,27 +2657,25 @@
 		{
 			"record": "20261104-rpc-filter-patches.md",
 			"anchor": "1",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 5 (core enforcement patches)",
 			"severity": "critical",
 			"summary": "A `rewrite` verdict permitted the call while no rewriting existed, so $getSession and the $getPassword family passed through unmodified.",
 			"component": "patch 0005 / seclabRpcFilter checkRpc",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"gap": "checkRpc now denies a rewrite unless seclabRegisterRewrite has recorded an implementation ('rewrite not implemented; failing closed'), and checkChannel refuses rewrite outright, but no unit test or recorded probe run exercises the rewrite ladder; round 9 confirmed it by reading only."
 		},
 		{
 			"record": "20261104-rpc-filter-patches.md",
 			"anchor": "2",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 5 (core enforcement patches)",
 			"severity": "critical",
 			"summary": "The argument walker could be made to disagree with URI.revive, so a marker-less file: URI reached MainThreadFileSystem.$readFile (host file read).",
 			"component": "patch 0005 / URI argument constraint",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"test": {
 				"file": "test/containment/uri-constraint.test.ts",
 				"name": "marker-less components defeated the old shape walk"
@@ -2692,14 +2685,13 @@
 		{
 			"record": "20261104-rpc-filter-patches.md",
 			"anchor": "3",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 5 (core enforcement patches)",
 			"severity": "critical",
 			"summary": "Same bypass in the write direction: $writeFile and the destination argument of $copy/$rename.",
 			"component": "patch 0005 / URI argument constraint",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"test": {
 				"file": "test/containment/uri-constraint.test.ts",
 				"name": "marker-less components are refused on every URI position"
@@ -2709,40 +2701,37 @@
 		{
 			"record": "20261104-rpc-filter-patches.md",
 			"anchor": "4",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 5 (core enforcement patches)",
 			"severity": "high",
 			"summary": "`seclabRegisterTab` had no caller, so seclabFilterFor threw for every seclab+ host: a mechanism that type-checked and never ran.",
 			"component": "patch 0005 / tab identity",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"gap": "The registry is removed and seclabResolveTabId derives the tab id from the connection authority, but nothing imports or tests those functions outside the patch; the dead-entry-point gate (sync_patch.check_callers) is the only control and has no self-test."
 		},
 		{
 			"record": "20261104-rpc-filter-patches.md",
 			"anchor": "5",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 5 (core enforcement patches)",
 			"severity": "high",
 			"summary": "The taint in 0007 was dead code: $executeCommand was never routed to seclabExecuteFromTab, so the launder probes would report green for the wrong reason.",
 			"component": "patches 0007/0008 command taint",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"gap": "Patch 0008 routes $executeCommand through seclabExecuteCommandFromTab with the origin from extHostContext.remoteAuthority and fails closed if the helper is absent, but no test pins 0008's routing: command-taint.test.ts only asserts 0007's in-flight counting, and no probe run demonstrates the routed path."
 		},
 		{
 			"record": "20261104-rpc-filter-patches.md",
 			"anchor": "6",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 5 (core enforcement patches)",
 			"severity": "medium",
 			"summary": "The channel guard bound at registration time, so a channel registered before the filter module loaded escaped it, and a throwing listen broke the connection.",
 			"component": "patch 0006 channel guard",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"test": {
 				"file": "test/containment/channel-guard.test.ts",
 				"name": "control: the old version left that channel unguarded forever"
@@ -5418,37 +5407,34 @@
 		{
 			"record": "20261105-agent-host-patches.md",
 			"anchor": "1",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 6 (trusted-side AI surfaces)",
 			"severity": "critical",
 			"summary": "The scanner's non-string-aware comment stripper deleted half the file registering chat/mcp settings, hiding 134 tab-writable settings from the gate.",
 			"component": "rpc-filter inventory generator (sources.py)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"test": {
-				"file": ".github/workflows/ci-linux.yml",
-				"name": "Regenerate the inventory from it; fail on any diff"
+				"file": "rpc-filter/tools/test_generator.py",
+				"name": "test_a_comment_marker_inside_a_string_does_not_open_a_comment"
 			},
-			"note": "strip_block_comments is now a string-aware, length-preserving scanner; setting_count went 146 -> 358. Round 7 finding 8 (low, B10's record) notes the unit regression test asked for still does not exist, so a revert surfaces only as an inventory diff."
+			"note": "strip_block_comments is now a string-aware, length-preserving scanner; setting_count went 146 -> 358. Its unit regression (StripBlockComments in test_generator.py) fails with the old regex stripper."
 		},
 		{
 			"record": "20261105-agent-host-patches.md",
 			"anchor": "2",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 6 (trusted-side AI surfaces)",
 			"severity": "high",
 			"summary": "0009 gated only registerTool, so registerToolData/Implementation still registered the host-shell tool and every tab-contributed tool in a tab window.",
 			"component": "patch 0009 (no built-in chat in tabs)",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"gap": "0009 now gates registerToolData and registerToolImplementation (the primitives that write _tools) plus invokeTool, verified by reading the patch; no test or probe exercises the registration refusal, and the six AI probes that would measure it are unimplemented (finding 3)."
 		},
 		{
 			"record": "20261105-agent-host-patches.md",
 			"anchor": "3",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 6 (trusted-side AI surfaces)",
 			"severity": "high",
 			"summary": "All six AI probes were declared required and none existed; their policyRefs could not match coverage.json by construction.",
@@ -5460,7 +5446,6 @@
 		{
 			"record": "20261105-agent-host-patches.md",
 			"anchor": "4",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 6 (trusted-side AI surfaces)",
 			"severity": "high",
 			"summary": "Free-text `hostEffect` values resolved to a filename, turning the patched-mode host-effect check into a guaranteed pass.",
@@ -5473,7 +5458,6 @@
 		{
 			"record": "20261105-agent-host-patches.md",
 			"anchor": "5",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 6 (trusted-side AI surfaces)",
 			"severity": "medium",
 			"summary": "0011's token-forwarding backstop covers one of six entry points into forwardAuthenticationToken.",
@@ -5486,7 +5470,6 @@
 		{
 			"record": "20261105-agent-host-patches.md",
 			"anchor": "6",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 6 (trusted-side AI surfaces)",
 			"severity": "medium",
 			"summary": "0011 silently clobbered upstream's chat.agentHost.localFilePermissions schema in the Agents window via a duplicate registration.",
@@ -5498,7 +5481,6 @@
 		{
 			"record": "20261105-agent-host-patches.md",
 			"anchor": "7",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 6 (trusted-side AI surfaces)",
 			"severity": "medium",
 			"summary": "Pinning chat.workspaceRemoteAgentHosts to APPLICATION in every window removed the setting's documented per-workspace purpose, undiscussed.",
@@ -5510,7 +5492,6 @@
 		{
 			"record": "20261105-agent-host-patches.md",
 			"anchor": "8",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 6 (trusted-side AI surfaces)",
 			"severity": "medium",
 			"summary": "ai.py cannot see a chat/mcp setting registered nowhere (the maximally permissive case) and its unregistered_where_read rule is one-directional.",
@@ -5522,7 +5503,6 @@
 		{
 			"record": "20261105-agent-host-patches.md",
 			"anchor": "9",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 6 (trusted-side AI surfaces)",
 			"severity": "low",
 			"summary": "_read_sites infers window membership from directory and matches only string literals, producing false tab_writable hits and missing constant reads.",
@@ -5534,7 +5514,6 @@
 		{
 			"record": "20261105-agent-host-patches.md",
 			"anchor": "10",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 6 (trusted-side AI surfaces)",
 			"severity": "low",
 			"summary": "The ADR's setting arithmetic does not match the inventory it cites.",
@@ -5546,7 +5525,6 @@
 		{
 			"record": "20261105-agent-host-patches.md",
 			"anchor": "AH-M1",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"manual": {
 				"file": "docs/security-reviews/20261105-agent-host-patches.md",
 				"quote": "Whether `.vscode/mcp.json` in a tab's workspace can launch a server process"
@@ -5563,7 +5541,6 @@
 		{
 			"record": "20261105-agent-host-patches.md",
 			"anchor": "AH-M2",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"manual": {
 				"file": "docs/security-reviews/20261105-agent-host-patches.md",
 				"quote": "**The Agents window operating on a tab's workspace.**"
@@ -5580,7 +5557,6 @@
 		{
 			"record": "20261105-agent-host-patches.md",
 			"anchor": "AH-M3",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"manual": {
 				"file": "docs/security-reviews/20261105-agent-host-patches.md",
 				"quote": "**Whether the `invokeTool` refusal is observed by every caller**"
@@ -6518,7 +6494,6 @@
 		{
 			"record": "20261105-rpc-core-increment.md",
 			"anchor": "1",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 8 (core RPC filter)",
 			"severity": "critical",
 			"summary": "Host code execution from a tab via the server-initiated remoteTerminal.onExecuteCommand callback, which the policy denies and no patch enforces.",
@@ -6531,14 +6506,13 @@
 		{
 			"record": "20261105-rpc-core-increment.md",
 			"anchor": "2",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 8 (core RPC filter)",
 			"severity": "high",
 			"summary": "The taint's fail-closed backstop was armed only at depth >= 2, so the depth-1 global-ICommandService escape it was written for was open.",
 			"component": "patch 0007 command taint backstop",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"test": {
 				"file": "test/containment/command-taint.test.ts",
 				"name": "a laundered depth-1 command is refused"
@@ -6548,7 +6522,6 @@
 		{
 			"record": "20261105-rpc-core-increment.md",
 			"anchor": "3",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 8 (core RPC filter)",
 			"severity": "medium",
 			"summary": "A tab-supplied extension manifest can bind a host-authority command id into trusted menus/keybindings, and the surface was in no inventory.",
@@ -6566,24 +6539,19 @@
 		{
 			"record": "20261105-rpc-core-increment.md",
 			"anchor": "4",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 8 (core RPC filter)",
 			"severity": "medium",
 			"summary": "channel-guard and policy-invariants had no runner: no workflow or seclab subcommand executed them.",
 			"component": "containment test runners / CI",
 			"owner": "rpc",
-			"status": "fixed",
-			"commit": "6858fdd",
-			"test": {
-				"file": ".github/workflows/ci-unit.yml",
-				"name": "./seclab test rpc-filter"
-			},
-			"note": "`seclab test rpc-filter` runs probe-safety, uri-constraint, channel-guard, policy-invariants, command-taint, decision-log, log-throttle, evidence-shape, arg-validators and decision-line, and ci-unit invokes it."
+			"status": "fixed-untested",
+			"commit": "cc51fa7",
+			"note": "`seclab test rpc-filter` runs probe-safety, uri-constraint, channel-guard, policy-invariants, command-taint, decision-log, log-throttle, evidence-shape, arg-validators and decision-line, and ci-unit invokes it.",
+			"gap": "Fixed by wiring: ci-unit runs ./seclab test rpc-filter, which runs each of these tests. Nothing yet fails when a new test file under test/containment has no runner."
 		},
 		{
 			"record": "20261105-rpc-core-increment.md",
 			"anchor": "5",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 8 (core RPC filter)",
 			"severity": "medium",
 			"summary": "0009's chat refusal is on the ChatServiceImpl.sendRequest wrapper, not on the _sendRequestAsync funnel every path enters.",
@@ -6595,7 +6563,6 @@
 		{
 			"record": "20261105-rpc-core-increment.md",
 			"anchor": "6",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 8 (core RPC filter)",
 			"severity": "low",
 			"summary": "A non-required probe with no result still prints a green `PASS [probes] <id> ran`.",
@@ -6607,14 +6574,13 @@
 		{
 			"record": "20261105-rpc-core-increment.md",
 			"anchor": "7",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 8 (core RPC filter)",
 			"severity": "low",
 			"summary": "Server-initiated callbacks were skipped by name in the drift gate, the invariant checker and the probe-link check, so their verdicts were in no digest.",
 			"component": "rpc-filter drift gate (check_drift)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"test": {
 				"file": "rpc-filter/tools/test_enforcement.py",
 				"name": "test_server_initiated_pushes_are_in_the_digest"
@@ -6624,7 +6590,6 @@
 		{
 			"record": "20261105-rpc-core-increment.md",
 			"anchor": "8",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 8 (core RPC filter)",
 			"severity": "info",
 			"summary": "Prompt-injection payloads encountered in the fixtures (ai-probes.js instruction file, malicious-workspace tasks.json); read as data, not defects.",
@@ -6640,7 +6605,6 @@
 		{
 			"record": "20261105-rpc-filter-rereview.md",
 			"anchor": "1",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "critical",
 			"summary": "Patch 0011's remote agent-host dial lock was registered only in workbench.web.main.ts, which no shipped build loads, so the broker-bypassing dial path stays open.",
@@ -6653,7 +6617,6 @@
 		{
 			"record": "20261105-rpc-filter-rereview.md",
 			"anchor": "2",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "critical",
 			"summary": "The same 0011 patch did not compile: the new service used five DI decorators the patch never imported, and no gate type-checked it.",
@@ -6666,7 +6629,6 @@
 		{
 			"record": "20261105-rpc-filter-rereview.md",
 			"anchor": "3",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "high",
 			"summary": "0011's rationale for overriding _reconcileConnections was wrong (the autorun runs inside the base constructor), so the guard was skipped by accident, one tidy away from fail-open.",
@@ -6679,7 +6641,6 @@
 		{
 			"record": "20261105-rpc-filter-rereview.md",
 			"anchor": "4",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "high",
 			"summary": "The surface-(e) tool scan still misses factory-built host tools (run_in_terminal, fetch_webpage) and still pins six unresolved expressions as tool ids, so the ADR's load-bearing count measures the wrong set.",
@@ -6692,7 +6653,6 @@
 		{
 			"record": "20261105-rpc-filter-rereview.md",
 			"anchor": "5",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "medium",
 			"summary": "check-probes.ts still fails its own policy-link gate: three probe refs resolve to nothing in coverage.json, so the checker exits non-zero on this branch.",
@@ -6705,7 +6665,6 @@
 		{
 			"record": "20261105-rpc-filter-rereview.md",
 			"anchor": "6",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "medium",
 			"summary": "0009's chat refusal is still on the ChatServiceImpl.sendRequest wrapper, not on the _sendRequestAsync funnel every path enters.",
@@ -6717,7 +6676,6 @@
 		{
 			"record": "20261105-rpc-filter-rereview.md",
 			"anchor": "7",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "medium",
 			"summary": "The settings scan still cannot see a chat./mcp. setting that is read in an editor window but registered nowhere — the maximally permissive case.",
@@ -6729,7 +6687,6 @@
 		{
 			"record": "20261105-rpc-filter-rereview.md",
 			"anchor": "8",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "low",
 			"summary": "No regression test for strip_block_comments; the generator's own suite still passes with the round-6 critical defect reinstated.",
@@ -6741,7 +6698,6 @@
 		{
 			"record": "20261105-rpc-filter-rereview.md",
 			"anchor": "9",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "low",
 			"summary": "The ADR's settings arithmetic still does not match the inventory it cites.",
@@ -6753,7 +6709,6 @@
 		{
 			"record": "20261105-rpc-filter-rereview.md",
 			"anchor": "10",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "info",
 			"summary": "Prompt-injection payload in the rogue extension's AI probe fixture: the review read it as data and classed it as the attack under test, not a defect.",
@@ -6770,7 +6725,6 @@
 		{
 			"record": "20261105-rpc-filter-rereview.md",
 			"anchor": "R7-M1",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "medium",
 			"severityNote": "Prose finding with no severity word; judged medium: a second, public dialling entry point that the chosen override does not cover, in the same credential-bearing path as findings 1-3.",
@@ -6788,7 +6742,6 @@
 		{
 			"record": "20261105-rpc-filter-rereview.md",
 			"anchor": "R7-M2",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "medium",
 			"severityNote": "Undetermined item under \"What I could not determine\", no severity word; judged medium because if it holds, the full instruction-file confused-deputy path is available with none of 0009's gates.",
@@ -6805,7 +6758,6 @@
 		{
 			"record": "20261105-rpc-filter-rereview.md",
 			"anchor": "R7-M3",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "medium",
 			"severityNote": "Undetermined item, no severity word; judged medium: a tab-writable workspace file that may spawn a host process is a direct boundary question, not a note.",
@@ -9320,14 +9272,13 @@
 		{
 			"record": "20261106-rpc-core-landing-v2.md",
 			"anchor": "1",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 10 (landing v2)",
 			"severity": "high",
 			"summary": "tabFileSearch let expandPatterns with an absolute or ./ includePattern choose the search roots, so in a folderless tab window the roots became host file: URIs.",
 			"component": "seclabArgValidators.ts (tabFileSearch)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"test": {
 				"file": "test/containment/arg-validators.test.ts",
 				"name": "file search: a pattern may not choose the search roots (round 10 finding 1)"
@@ -9337,14 +9288,13 @@
 		{
 			"record": "20261106-rpc-core-landing-v2.md",
 			"anchor": "2",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 10 (landing v2)",
 			"severity": "medium",
 			"summary": "The decision log's 4096-byte cap sliced the serialized line, so a tab could make its own denial records invalid JSON and every consumer dropped them.",
 			"component": "seclabRpcFilter.ts (decision log)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"test": {
 				"file": "test/containment/decision-line.test.ts",
 				"name": "a 64 KB tab-chosen reason still produces a line that parses, with the decision intact"
@@ -9354,14 +9304,13 @@
 		{
 			"record": "20261106-rpc-core-landing-v2.md",
 			"anchor": "3",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 10 (landing v2)",
 			"severity": "medium",
 			"summary": "A validator was required only for cmd: entries and a positional URI argument discharged a named constraint, so dropping a validator from a URI-bearing rpc entry widened the surface silently.",
 			"component": "check_drift.py (check_validators); seclabRpcFilter._constrain",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"test": {
 				"file": "rpc-filter/tools/test_enforcement.py",
 				"name": "test_a_constrained_rpc_method_without_a_validator_fails"
@@ -9371,59 +9320,54 @@
 		{
 			"record": "20261106-rpc-core-landing-v2.md",
 			"anchor": "4",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 10 (landing v2)",
 			"severity": "low",
 			"summary": "UI-side extensions' programmatically registered command ids are not in the trusted list, so $registerCommand can shadow them; the list is hand-written.",
 			"component": "policy.json (trusted_registration_ids); emit_policy.py",
 			"owner": "rpc",
 			"status": "deferred",
-			"followUp": "interim fix only (simpleBrowser.api.open added in 6858fdd, vscode-testresolver.newWindowWithError in 6858fdd). The proper fix, a scanner for UI-side extensions' registerCommand('<literal>') calls gating the derived set, stays a follow-up for the rpc session; policy.json's own note says \"Hand-checked, not generated\".",
+			"followUp": "interim fix only (simpleBrowser.api.open added in cc51fa7, vscode-testresolver.newWindowWithError in cc51fa7). The proper fix, a scanner for UI-side extensions' registerCommand('<literal>') calls gating the derived set, stays a follow-up for the rpc session; policy.json's own note says \"Hand-checked, not generated\".",
 			"note": "Round 11 found a second missed id, which is the failure mode the hand-written list has."
 		},
 		{
 			"record": "20261106-rpc-core-landing-v2.md",
 			"anchor": "5",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 10 (landing v2)",
 			"severity": "low",
 			"summary": "A stale CALLER_EXEMPT entry claimed seclabRegisterRewrite had no shipping caller, which patch 0032 made false, and no gate could notice an exemption that had become live.",
 			"component": "rpc-filter/tools/sync_patch.py (CALLER_EXEMPT)",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"gap": "Verified on the branch: the seclabRegisterRewrite exemption is gone from CALLER_EXEMPT and check_callers now errors with \"CALLER_EXEMPT[%s] is stale: %s now has a caller\". No automated test covers that rule — sync_patch.py has no test file — so the stale-exemption gate is itself unproven after the fact."
 		},
 		{
 			"record": "20261106-rpc-core-landing-v2.md",
 			"anchor": "1#2",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 11 (re-review of the fixes, 2026-11-09)",
 			"severity": "low",
 			"summary": "vscode-testresolver.newWindowWithError is another UI-side command id registered in code and not contributed, so it was missing from the trusted list.",
 			"component": "policy.json (trusted_registration_ids)",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"gap": "The id is present on the branch in policy.json and the generated seclabPolicyData.ts, and emit_policy.py --check keeps the two in step, but nothing derives or verifies the set against the UI-side extensions' sources; the missed-id class is only closed by the deferred scanner (anchor 4)."
 		},
 		{
 			"record": "20261106-rpc-core-landing-v2.md",
 			"anchor": "2#2",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 11 (re-review of the fixes, 2026-11-09)",
 			"severity": "low",
 			"summary": "$startFileSearch's recorded constraint text did not state the new search-root rule, so the published claim was weaker than the code.",
 			"component": "policy.json ($startFileSearch)",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"gap": "The constraint on the branch now spells out the root rule (\"expandPatterns is absent or false, and no includePattern or excludePattern segment is one QueryBuilder.parseSearchPaths would make a search root\"), but no gate compares constraint prose with what the named validator enforces, so the two can drift apart again."
 		},
 		{
 			"record": "20261106-rpc-core-landing-v2.md",
 			"anchor": "1#3",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 12 (the validator delta after the first patched run, 2026-11-09)",
 			"severity": "low",
 			"summary": "tabFileSystemActivation also allows 'file', and $ensureActivation('file') is not a no-op: activateProvider fires onFileSystem:file activation in the trusted UI host before its existing-provider check.",
@@ -9441,7 +9385,6 @@
 		{
 			"record": "20261106-rpc-core-landing-v2.md",
 			"anchor": "2#3",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 12 (the validator delta after the first patched run, 2026-11-09)",
 			"severity": "low",
 			"summary": "host-file-search-nested-uri is no longer a required probe, so the nested-URI denial is asserted only by the unit suite, not at runtime.",
@@ -9454,31 +9397,29 @@
 		{
 			"record": "20261106-rpc-core-landing-v2.md",
 			"anchor": "1#4",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 13 (patch 0006's REH opt-out, 2026-11-10)",
 			"severity": "low",
 			"summary": "setSeclabChannelGuard became a two-caller, last-writer-wins API, so a later desktop-reachable caller could replace the workbench guard and reopen every chan: surface unnoticed.",
 			"component": "patch 0006, patches/sole-consumer.json",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"test": {
-				"file": "build/check-sole-consumer.ts",
-				"name": "unexpected consumer ${rel} (${rule.why})"
+				"file": "build/check-sole-consumer.test.ts",
+				"name": "a third caller of the channel-guard setter fails as an unexpected consumer"
 			},
 			"note": "sole-consumer.json now names the only three files that may mention the setter (ipc.ts for the definition, seclabRpcFilter.ts, remoteExtensionHostAgentServer.ts); soleConsumerProblems runs inside check-patch-reach.ts, which is the required patch-build check, and fails on a fourth caller or a stale entry."
 		},
 		{
 			"record": "20261106-rpc-core-landing.md",
 			"anchor": "1",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 9 (the landing attempt)",
 			"severity": "medium",
 			"summary": "The decision log could be silenced permanently (a latching byte cap, unaggregated denies), measured latching in 666 ms of ordinary startup.",
 			"component": "seclabRpcFilter decision log",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"test": {
 				"file": "test/containment/log-throttle.test.ts",
 				"name": "startup noise cannot silence the window (the measured failure)"
@@ -9488,14 +9429,13 @@
 		{
 			"record": "20261106-rpc-core-landing.md",
 			"anchor": "2",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 9 (the landing attempt)",
 			"severity": "medium",
 			"summary": "Tab-authored evidence bytes were JSON.parsed and dereferenced with no guard, and a throw in the check branch skipped disarm and teardown, leaving the armed rogue extension live on the host.",
 			"component": "test/containment check-evidence + assert",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"test": {
 				"file": "test/containment/evidence-shape.test.ts",
 				"name": "readEvidence returns undefined for non-JSON, a JSON array and a JSON scalar"
@@ -9505,40 +9445,37 @@
 		{
 			"record": "20261106-rpc-core-landing.md",
 			"anchor": "3",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 9 (the landing attempt)",
 			"severity": "medium",
 			"summary": "checkChannel was fail-open for prompt, rewrite and allow_with_constraint while checkRpc was fail-closed for exactly those, and logged them as honoured.",
 			"component": "seclabRpcFilter.checkChannel",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"gap": "The code now has the same fail-closed ladder (seclabRpcFilter.ts checkChannel denies prompt/rewrite/allow_with_constraint), but no test exercises it: no test file on the branch references checkChannel, and no gate restricts the channel schema to allow/deny, so a future `\"verdict\": \"prompt\"` channel entry is refused only by code nothing pins."
 		},
 		{
 			"record": "20261106-rpc-core-landing.md",
 			"anchor": "4",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 9 (the landing attempt)",
 			"severity": "medium",
 			"summary": "The dead-entry-point gate was satisfied by a comment: the only match for seclabOnDecision was prose describing the very history the gate was written to catch.",
 			"component": "rpc-filter/tools/sync_patch.py (check_callers)",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"gap": "sync_patch.py now strips comments (_without_comments) and computes liveness from out-of-file seeds, and the EDR records \"deleting the real `seclabOnDecision(...)` subscription now fails the gate\" — but that was a manual injection. There is no test file for sync_patch.py on the branch (only test_enforcement.py, test_generator.py, test_lint_probes.py), so nothing re-proves the gate can fail."
 		},
 		{
 			"record": "20261106-rpc-core-landing.md",
 			"anchor": "5",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 9 (the landing attempt)",
 			"severity": "medium",
 			"summary": "The channel guard's uninstalled state was allow, and a test pinned that as intended, so a build where the guard never installs could not be noticed.",
 			"component": "patch 0006 channel guard / ipc.ts",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "6858fdd",
+			"commit": "cc51fa7",
 			"test": {
 				"file": "test/containment/channel-guard.test.ts",
 				"name": "with no guard installed, a channel served to a tab is REFUSED"
@@ -9548,7 +9485,6 @@
 		{
 			"record": "20261106-rpc-core-landing.md",
 			"anchor": "6",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 9 (the landing attempt)",
 			"severity": "low",
 			"summary": "Push effects are still derived from a flat 600-character window after the subscription, with no handler boundary, so effect tags can come from unrelated code.",
@@ -9560,7 +9496,6 @@
 		{
 			"record": "20261106-rpc-core-landing.md",
 			"anchor": "7",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 9 (the landing attempt)",
 			"severity": "low",
 			"summary": "A non-required probe with no result still prints a green PASS \"<id> ran\" instead of being reported as pending or skipped.",
@@ -9572,14 +9507,13 @@
 		{
 			"record": "20261106-rpc-core-landing.md",
 			"anchor": "8",
-			"branch": "anticomputer-rpc-core-landing-v2",
 			"round": "Round 9 (the landing attempt)",
 			"severity": "low",
 			"summary": "Documentation claims contradict the code: RPC-LOCKDOWN.md still reads \"Not implemented\" and shows a filter call signature the shipped patch does not use.",
 			"component": "docs/RPC-LOCKDOWN.md, patches/series",
 			"owner": "rpc",
 			"status": "open",
-			"gap": "The patches/series half is fixed — the held-back REH-push patches were renumbered to 0030/0031 in 6858fdd, so no two patches share 0015. Still contradicting the code on the branch: docs/RPC-LOCKDOWN.md:3 \"**Status:** design for review (Phase 2). Not implemented.\" while 0005-0010 ship, and its sample at ~:113-124 shows `seclabFilterFor(this._extensionHost.remoteAuthority, this.kind)` where patch 0005 passes `seclabResolveTabId`."
+			"gap": "The patches/series half is fixed — the held-back REH-push patches were renumbered to 0030/0031 in cc51fa7, so no two patches share 0015. Still contradicting the code on the branch: docs/RPC-LOCKDOWN.md:3 \"**Status:** design for review (Phase 2). Not implemented.\" while 0005-0010 ship, and its sample at ~:113-124 shows `seclabFilterFor(this._extensionHost.remoteAuthority, this.kind)` where patch 0005 passes `seclabResolveTabId`."
 		},
 		{
 			"record": "20261106-rpc-policy-stamp.md",
@@ -9739,13 +9673,10 @@
 			"summary": "With the Space shortcut unbound the keystroke went to the user's app and the Space-change run passed falsely.",
 			"component": "focus/spaces probe",
 			"owner": "fork-build",
-			"status": "fixed",
+			"status": "fixed-untested",
 			"commit": "332adf9",
-			"test": {
-				"file": "test/focus/spaces.ts",
-				"name": "the Space did not change (shortcut unbound, or no empty Space to the right): run invalid"
-			},
-			"note": "Each switch must change the on-screen CGWindowList or the run stops as invalid (manual, user-consent probe)."
+			"note": "Each switch must change the on-screen CGWindowList or the run stops as invalid (manual, user-consent probe).",
+			"gap": "The live Space probe (test/focus/spaces.ts) is removed: tests must not need OS privacy permissions. LLL-5 rests on check-release --desktop's structural check (bootstrap and guard policy, below-normal window level; self-tested) and the recorded 2026-11-09 run."
 		},
 		{
 			"record": "20261109-background-only-windows.md",
@@ -12397,6 +12328,139 @@
 			"ref": {
 				"file": "AGENTS.md",
 				"quote": "install a shared hook that depends on code that isn't on main yet"
+			}
+		},
+		{
+			"record": "20261106-rpc-core-landing-v2.md",
+			"anchor": "RCL14-1",
+			"round": "Round 14 (harness and probes after the proof, 2026-11-10)",
+			"severity": "medium",
+			"summary": "The show-userdata probe was corroborated against a denial the open-userdata probe already produced, so the deny set could not tell the two gates apart.",
+			"component": "rpc-filter/probes/expectations.json, test/containment/check-probes.ts",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "cc51fa7",
+			"test": {
+				"file": "test/containment/check-probes.test.ts",
+				"name": "an uncorroborated denial fails: the tab saying \"denied\" is not evidence"
+			},
+			"note": "deniedAt is removed: each probe is corroborated only by a decision line for its own policy ref, and the show probe now reaches $tryShowTextDocument itself."
+		},
+		{
+			"record": "20261106-rpc-core-landing-v2.md",
+			"anchor": "RCL14-2",
+			"round": "Round 14 (harness and probes after the proof, 2026-11-10)",
+			"severity": "medium",
+			"summary": "The restart probe inferred success from a missing outcome, so a hang, crash or reload read as a restart.",
+			"component": "test/containment/rogue-extension/rpc-probes.js",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "cc51fa7",
+			"gap": "Verified in proof run 3 and the landing proof only; no unit case feeds check-probes a restart record with a missing outcome."
+		},
+		{
+			"record": "20261106-rpc-core-landing-v2.md",
+			"anchor": "RCL14-3",
+			"round": "Round 14 (harness and probes after the proof, 2026-11-10)",
+			"severity": "medium",
+			"summary": "The findFiles tolerance keyed only on a tab-written error string, so a build whose search hangs for another reason would pass the positive control.",
+			"component": "test/containment/check-evidence.ts",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "cc51fa7",
+			"gap": "Verified on the proof runs only; no unit case drives check-evidence with a findFiles timeout and no host-side search-provider denial."
+		},
+		{
+			"record": "20261106-rpc-core-landing-v2.md",
+			"anchor": "RCL15-1",
+			"round": "Round 15 (re-review of the round-14 fixes, 2026-11-10)",
+			"severity": "medium",
+			"summary": "The host-side condition added for the findFiles tolerance is near-constant on a filtered build, so it shows the cause is possible, not that it happened.",
+			"component": "test/containment/check-evidence.ts",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "cc51fa7",
+			"gap": "Verified on the proof runs only; no unit case for the tolerance predicate."
+		},
+		{
+			"record": "20261106-rpc-core-landing-v2.md",
+			"anchor": "RCL15-2",
+			"round": "Round 15 (re-review of the round-14 fixes, 2026-11-10)",
+			"severity": "medium",
+			"summary": "A new extension host pid proves a different host, not a restart: a reload or crash-restart would also settle the attempt.",
+			"component": "test/containment/rogue-extension/rpc-probes.js, test/containment/check-probes.ts",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "cc51fa7",
+			"gap": "Verified on the proof runs only; no unit case for the restart predicate in check-probes."
+		},
+		{
+			"record": "20261106-rpc-core-landing-v2.md",
+			"anchor": "RCL15-3",
+			"round": "Round 15 (re-review of the round-14 fixes, 2026-11-10)",
+			"severity": "low",
+			"summary": "The EDR left out the third run's id and called three runs \"both proof runs\"; one expectation kept a stale why.",
+			"component": "docs/edr/20261106-ordinary-session-rpc-trace.md, rpc-filter/probes/expectations.json",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "cc51fa7",
+			"gap": "Documentation fix; nothing to test."
+		},
+		{
+			"record": "20261112-probe-records-canary-clipboard.md",
+			"anchor": "CCB-1",
+			"round": "Review (canary clipboard and fact-only records, 2026-11-12)",
+			"severity": "medium",
+			"summary": "The launch guard parsed only vscode-remote folder arguments, so a file URI or plain path could launch a canary-clipboard workspace against a stock app.",
+			"component": "test/window.ts",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "cc51fa7",
+			"gap": "The guard refuses any folder argument that is not a vscode-remote URI, file URI or absolute path, and checks all three; no unit test drives window.ts launch with each shape."
+		},
+		{
+			"record": "20261112-probe-records-canary-clipboard.md",
+			"anchor": "CCB-2",
+			"round": "Review (canary clipboard and fact-only records, 2026-11-12)",
+			"severity": "low",
+			"summary": "The clipboard rule matched literal spellings, so aliasing, computed access or destructuring would dodge it.",
+			"component": "rpc-filter/tools/lint_probes.py",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "cc51fa7",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_aliasing_and_computed_access_fail"
+			}
+		},
+		{
+			"record": "20261112-probe-records-canary-clipboard.md",
+			"anchor": "CCB-3",
+			"round": "Review (canary clipboard and fact-only records, 2026-11-12)",
+			"severity": "low",
+			"summary": "AppleScript clipboard reads were not matched, and the harness roots left out patches/ and most of rpc-filter/.",
+			"component": "rpc-filter/tools/lint_probes.py",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "cc51fa7",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_pbpaste_anywhere_in_the_harness_fails"
+			}
+		},
+		{
+			"record": "20261112-probe-records-canary-clipboard.md",
+			"anchor": "CCB-4",
+			"round": "Review (canary clipboard and fact-only records, 2026-11-12)",
+			"severity": "low",
+			"summary": "A computed object key, or a probe id taken from a member expression, could carry a host string into a run record.",
+			"component": "test/containment/probe-safety.js, rpc-filter/tools/lint_probes.py",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "cc51fa7",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_a_computed_record_key_fails"
 			}
 		}
 	]
