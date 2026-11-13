@@ -13,7 +13,7 @@ import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
-import { browserProbeChecks } from './verdict.ts';
+import { browserProbeChecks, HEARTBEAT_GAP_MS, heartbeatsContinuous } from './verdict.ts';
 import type { Evidence } from './verdict.ts';
 
 const TAB = 't-abc123';
@@ -207,4 +207,43 @@ test('every mode the usage line documents actually reaches a handler', () => {
 		assert.ok(!(r.stderr ?? '').startsWith('usage: run.ts'),
 			`mode '${mode}' is documented but the argument guard rejects it as unknown`);
 	}
+});
+
+// ---- R10-2: liveness must be continuity, not two point samples ---------------------------
+
+function beats(...offsetsSec: number[]): string[] {
+	const t0 = Date.parse('2026-11-12T10:00:00.000Z');
+	return offsetsSec.map((s, i) => JSON.stringify({ at: new Date(t0 + s * 1000).toISOString(), side: 'tab', heartbeat: i + 1, pid: 7 }));
+}
+
+test('R10-2: a continuous heartbeat sequence is accepted', () => {
+	assert.equal(heartbeatsContinuous(beats(0, 2, 4, 6, 8)), true);
+});
+
+test('R10-2 defect: a mid-phase gap is NOT continuity', () => {
+	// The failure the rule exists for: the listener died and was resurrected, and the page
+	// load it was meant to witness happened in the gap. Two point samples either side would
+	// both have passed.
+	assert.equal(heartbeatsContinuous(beats(0, 2, 4, 30, 32)), false);
+	// A gap just over the threshold still fails: the bound is the rule, not a vibe.
+	assert.equal(heartbeatsContinuous(beats(0, 2, 2 + HEARTBEAT_GAP_MS / 1000 + 1)), false);
+	assert.equal(heartbeatsContinuous(beats(0, 2, 2 + HEARTBEAT_GAP_MS / 1000)), true);
+});
+
+test('R10-2 defect: too few beats cannot establish continuity', () => {
+	// One beat says the listener was alive once, which is the point-sample failure again.
+	assert.equal(heartbeatsContinuous(beats(0)), false);
+	assert.equal(heartbeatsContinuous([]), false);
+});
+
+test('R10-2: probe hits and malformed lines are not mistaken for beats', () => {
+	const noise = [
+		JSON.stringify({ at: '2026-11-12T10:00:01.000Z', side: 'tab', method: 'GET', url: '/browser-probe-x' }),
+		'not json at all',
+		JSON.stringify({ at: 'not-a-date', side: 'tab', heartbeat: 99, pid: 7 }),
+	];
+	// Those three carry no usable beat, so on their own they cannot establish continuity...
+	assert.equal(heartbeatsContinuous(noise), false);
+	// ...and mixed in with real beats they neither break nor pad the sequence.
+	assert.equal(heartbeatsContinuous([...noise, ...beats(0, 2, 4)]), true);
 });
