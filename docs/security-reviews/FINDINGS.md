@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 6 | 60 | 140 | 167 | 19 | 392 |
-| fixed-untested | 4 | 18 | 54 | 145 | 48 | 269 |
+| fixed | 6 | 60 | 142 | 167 | 19 | 394 |
+| fixed-untested | 4 | 18 | 54 | 148 | 48 | 272 |
 | accepted-residual | 0 | 1 | 12 | 58 | 15 | 86 |
 | deferred | 6 | 4 | 18 | 10 | 3 | 41 |
 | open | 0 | 5 | 20 | 21 | 4 | 50 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 88 | 244 | 401 | 95 | 844 |
+| **all** | 16 | 88 | 246 | 404 | 95 | 849 |
 
 ## Baseline: open high and critical findings
 
@@ -538,6 +538,9 @@ The findings register and its gate.
 | [20261110-security-findings-register](20261110-security-findings-register.md) **VVV-7** | low | fixed-untested | findings register: docs | The EDR consequences and review README still allowed review records for user acceptances | Documentation wording; nothing executes it. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **WWW-5** | low | accepted-residual | findings register: wasKey | The wasKey identity rule compares strings the same agent copies; it forces a copy, not a proof | accepted by an agent: A moved finding keeps its text, severity and baseline obligation; only its record link can move, in a reviewed change. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **WWW-6** | low | fixed-untested | findings register: --before | A renamed ADR or EDR had no base copy, so its acceptances read as new | Resolved by design: only owner-acceptances.md needs a base copy; nothing to test. |
+| [20261110-security-findings-register](20261110-security-findings-register.md) **ZZZ-3** | low | fixed-untested | findings register: remap | A rotted round-label citation was reported as remapped though remap never rewrites round labels | Fixed in findings_remap; no self-test drives the remap wiring end to end. |
+| [20261110-security-findings-register](20261110-security-findings-register.md) **ZZZ-4** | low | fixed-untested | findings register: weekly summary | Register text in the weekly summary's fenced block could break out of it | Fixed in the workflow step; workflow output has no test. |
+| [20261110-security-findings-register](20261110-security-findings-register.md) **ZZZ-5** | low | fixed-untested | findings register: exemption | An ambiguous prefix of the upstream pin was skipped silently | Fixed; the self-test can't construct an ambiguous seven-character prefix. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **RRR-4** | info | fixed-untested | findings register: liveness-refresh workflow | The listing ran in the job holding actions: read and a token | Fixed by moving the listing into its own contents: read job; no check covers workflow job structure. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **RRR-5** | info | accepted-residual | findings register: disclosure | The public repo lists the open highs weekly in run summaries | accepted by an agent: No new detail: the records and FINDINGS.md already hold it. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **TTT-11** | info | fixed-untested | findings register: DOCS_BASE | DOCS_BASE reached git before any shape check | A shell guard in seclab's findings_check; the host self-test covers base resolution but not this branch. |
@@ -1700,6 +1703,11 @@ Every other commit the register cites is on main's history, or on the branch its
 | RRR-3 | low | fixed | evidence() interpolated test.file unescaped into step output | f5803ac · `build/docs/findings.ts` "the view has no live link from register text, backslash tricks included" |
 | RRR-4 | info | fixed-untested | The listing ran in the job holding actions: read and a token | Fixed by moving the listing into its own contents: read job; no check covers workflow job structure. |
 | RRR-5 | info | accepted-residual | The public repo lists the open highs weekly in run summaries | accepted by an agent: No new detail: the records and FINDINGS.md already hold it. |
+| ZZZ-1 | medium | fixed | Touched compared only an entry's JSON, so retargeting an owner's branch or the upstream pin voided citations of untouched entries | 0000000 · `build/docs/findings.ts` "branch change touches the entries that inherit it (ZZZ-1)" |
+| ZZZ-2 | medium | fixed | The host treated any touched value but 1 as untouched, so a malformed citation line failed open | 0000000 · `seclab` "a four-column citation line passed (ZZZ-2)" |
+| ZZZ-3 | low | fixed-untested | A rotted round-label citation was reported as remapped though remap never rewrites round labels | Fixed in findings_remap; no self-test drives the remap wiring end to end. |
+| ZZZ-4 | low | fixed-untested | Register text in the weekly summary's fenced block could break out of it | Fixed in the workflow step; workflow output has no test. |
+| ZZZ-5 | low | fixed-untested | An ambiguous prefix of the upstream pin was skipped silently | Fixed; the self-test can't construct an ambiguous seven-character prefix. |
 
 ### [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md)
 

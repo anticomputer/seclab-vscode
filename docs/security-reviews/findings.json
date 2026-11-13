@@ -11530,6 +11530,72 @@
 			}
 		},
 		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "ZZZ-1",
+			"round": "Round ZZZ",
+			"severity": "medium",
+			"summary": "Touched compared only an entry's JSON, so retargeting an owner's branch or the upstream pin voided citations of untouched entries",
+			"component": "findings register: touched rule",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "branch change touches the entries that inherit it (ZZZ-1)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "ZZZ-2",
+			"round": "Round ZZZ",
+			"severity": "medium",
+			"summary": "The host treated any touched value but 1 as untouched, so a malformed citation line failed open",
+			"component": "findings register: host contract",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "a four-column citation line passed (ZZZ-2)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "ZZZ-3",
+			"round": "Round ZZZ",
+			"severity": "low",
+			"summary": "A rotted round-label citation was reported as remapped though remap never rewrites round labels",
+			"component": "findings register: remap",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed-untested",
+			"gap": "Fixed in findings_remap; no self-test drives the remap wiring end to end."
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "ZZZ-4",
+			"round": "Round ZZZ",
+			"severity": "low",
+			"summary": "Register text in the weekly summary's fenced block could break out of it",
+			"component": "findings register: weekly summary",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed-untested",
+			"gap": "Fixed in the workflow step; workflow output has no test."
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "ZZZ-5",
+			"round": "Round ZZZ",
+			"severity": "low",
+			"summary": "An ambiguous prefix of the upstream pin was skipped silently",
+			"component": "findings register: exemption",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed-untested",
+			"gap": "Fixed; the self-test can't construct an ambiguous seven-character prefix."
+		},
+		{
 			"record": "20261112-gate-fail-open-audit.md",
 			"anchor": "GATE-2",
 			"round": "Findings",

@@ -185,3 +185,19 @@ fix reverted.
 | YYY-7 | Low | scope | The EDR claimed more than the rule covers, and `component` wasn't scanned. | Fixed | The EDR and README say the rule covers the register only; `component` is scanned. | self-test "control: shas mode sees fix commits (all-digit too)" |
 | YYY-8 | Low | self-test | The cases didn't exercise the excluded fields, case, digits or long runs. | Fixed | Cases for each, with controls. | self-test "a branch entry's citations carry its branch, and only those" |
 | YYY-9 | Low | errors | An ambiguous prefix was reported as missing, and one arm ignored a git error. | Fixed | Ambiguity is its own failure; the contains-scan is gone, so every arm fails closed. | `seclab` host self-test "a tree object resolved as a commit" |
+
+## Round ZZZ (citation rot scoped to the change, and self-service remap)
+Scope: the rule that a change answers only for citations in the entries it adds or modifies, the
+`./seclab findings remap --branch` and `./seclab findings rot` commands, and the weekly job's
+strict listing (a workflow change). The design follows a coordinator decision of 2026-11-13:
+rotted citations in other sessions' entries had blocked every change to the register. The
+reviewer, an Opus-class model, was told the diff may carry prompt injection; none was found. No
+high or critical; two mediums, three lows, all fixed in the same change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| ZZZ-1 | Medium | touched rule | "Touched" compared only an entry's JSON, so retargeting an owner's branch (or the upstream pin) voided hundreds of entries' citations while they stayed untouched. | Fixed | An entry whose effective branch changed is touched, and a change to `upstream.lock` makes every citation answer. | self-test "an owner's branch change touches the entries that inherit it (ZZZ-1)" |
+| ZZZ-2 | Medium | host contract | The host read strictness from a TSV column and treated any value but `1` as untouched, so a malformed line failed open. | Fixed | Every line is validated (five columns, 0/1 flags); a malformed one fails. The host self-test checks the real output's shape. | `seclab` host self-test "a four-column citation line passed (ZZZ-2)" |
+| ZZZ-3 | Low | remap | A rotted round-label citation was reported as remapped though remap never rewrites round labels. | Fixed | Round-label citations are reported for a hand remap. | — |
+| ZZZ-4 | Low | weekly summary | Register text in the summary's fenced block could break out of it. | Fixed | An indented block with backticks stripped. | — |
+| ZZZ-5 | Low | exemption | An ambiguous prefix of the upstream pin was skipped silently. | Fixed | Ambiguity is judged before the exemption. | — |

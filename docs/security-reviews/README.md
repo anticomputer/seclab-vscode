@@ -38,9 +38,10 @@ the process and the index.
    finding's full key, the date, the scope, the closing condition, "accepted by the project
    owner"), written only by the coordinator on an explicit owner decision and landed in an earlier
    change than the closure. No record quotes or paraphrases a conversation.
-   Every commit the register cites must be on `main`'s history (or its entry's branch): after a
-   rebase, squash or branch deletion, remap the register's citations of the old commits. The
-   records themselves keep the SHAs they were written with.
+   Every commit an entry you add or modify cites must be on `main`'s history (or its entry's
+   branch). After rebasing, squashing or deleting a branch the register names, run
+   `./seclab findings remap --branch <name>`; it reports anything it can't follow. The records
+   themselves keep the SHAs they were written with.
    `./seclab docs check` enforces all of it.
 
 ## Record format

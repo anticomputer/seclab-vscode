@@ -4,8 +4,8 @@ name: liveness-refresh
 # retention horizon; the required workflow-lint check only notes a run past day 75 and degrades a
 # deleted one to a note, so it never blocks a PR on age. This weekly job fails instead, listing
 # every entry due for refresh, so each is re-run and its register entry updated before day 85.
-# It also lists the security findings baseline (open highs the ratchet still allows) in the job
-# summary, so they stay visible every week.
+# It also lists the security findings baseline (open highs the ratchet still allows) and every
+# register citation that no longer resolves in the job summary, so they stay visible every week.
 # Not a required check. It runs on every push that changes it, the liveness code or the findings
 # register, so it is never a dispatch-only workflow that nothing has run (the gate's own rule).
 on:
@@ -59,12 +59,26 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Full history and every branch: the citation listing resolves commits on origin/* (review ZZZ).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Open high/critical findings still in the baseline (offline container)
         shell: bash
         run: |
           ./seclab findings baseline | tee "$RUNNER_TEMP/baseline.md"
           grep -q '^## Security findings baseline: [0-9][0-9]* open high/critical$' "$RUNNER_TEMP/baseline.md"
           cat "$RUNNER_TEMP/baseline.md" >> "$GITHUB_STEP_SUMMARY"
+      # The strict view (review ZZZ): every register citation that no longer resolves, touched or
+      # not. A change only answers for the entries it touches, so rot left by a rebased branch is
+      # listed here; the weekly and dispatched runs fail on it, a push run only lists it.
+      - name: Register citations that no longer resolve
+        if: always()
+        shell: bash
+        run: |
+          rc=0
+          ./seclab findings rot 2>&1 | tee "$RUNNER_TEMP/rot.txt" || rc=$?
+          # An indented block with backticks stripped: register text can't break out of it (ZZZ-4).
+          { echo '## Register citations that no longer resolve'; echo; grep -E 'cites|no rotted' "$RUNNER_TEMP/rot.txt" | tr -d '`' | sed 's/^/    /' || true; } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$GITHUB_EVENT_NAME" != push ]]; then exit "$rc"; fi

@@ -249,28 +249,47 @@ const FP_REF = /^docs\/security-reviews\/\d{8}-[a-z0-9-]+\.md$/;
 const SHA_PROSE = ['note', 'gap', 'followUp', 'rationale', 'summary', 'severityNote', 'component'] as const;
 const HEX_RUN = /(?<![0-9A-Za-z_])[0-9A-Fa-f]{7,}(?![0-9A-Za-z_])/g;
 const DATE8 = /^20\d\d(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/;
-interface Citation { token: string; tolerated: boolean; branch: string | null; use: string }
+interface Citation { token: string; tolerated: boolean; branch: string | null; touched: boolean; use: string }
 interface Citations { cite: Citation[]; historical: Array<{ token: string; use: string }>; problems: string[] }
 function upstreamSha(tree: Tree): string | undefined {
 	const m = tree.exists('upstream.lock') ? /^UPSTREAM_SHA=([0-9a-f]{40})\s*$/m.exec(tree.read('upstream.lock')) : null;
 	return m?.[1];
 }
-function citations(tree: Tree, reg: Register): Citations {
+// The branch an entry's work lives on until it lands: its own, else its owner's declared one.
+const entryBranch = (reg: Register, f: Finding): string | null => f.branch ?? reg.owners[f.owner]?.branch ?? null;
+// An entry this change adds or modifies, relative to the base register (no base: every entry).
+// Only such an entry's citations must resolve; a citation that rotted in an untouched entry, when
+// another session's branch rebased, is a warning, not this change's failure (review ZZZ).
+// An entry's resolution scope counts as part of it: an owner's branch that changed touches every
+// entry inheriting it (ZZZ-1).
+function touchedKeys(reg: Register, base?: Register): Set<string> {
+	const was = new Map((base?.findings ?? []).map(f => [keyOf(f), f]));
+	return new Set(reg.findings.filter(f => {
+		const w = base ? was.get(keyOf(f)) : undefined;
+		return !base || !w || JSON.stringify(w) !== JSON.stringify(f) || entryBranch(base, w) !== entryBranch(reg, f);
+	}).map(keyOf));
+}
+function citations(tree: Tree, reg: Register, base?: Register): Citations {
 	const out: Citations = { cite: [], historical: [], problems: [] };
 	const up = upstreamSha(tree);
-	const seen = new Set<string>();
+	const touched = touchedKeys(reg, base);
+	const seen = new Map<string, Citation>();
 	const add = (c: Citation) => {
 		const k = `${c.token}\t${c.tolerated}\t${c.branch}`;
-		if (!seen.has(k)) {
-			seen.add(k);
+		const had = seen.get(k);
+		if (!had) {
+			seen.set(k, c);
 			out.cite.push(c);
+		} else if (c.touched && !had.touched) {
+			had.touched = true;
+			had.use = c.use;
 		}
 	};
 	for (const f of reg.findings) {
-		// The branch its work lives on until it lands: the entry's own, else its owner's declared one.
-		const branch = f.branch ?? reg.owners[f.owner]?.branch ?? null;
+		const branch = entryBranch(reg, f);
+		const t0 = touched.has(keyOf(f));
 		if (typeof f.commit === 'string') {
-			add({ token: f.commit.toLowerCase(), tolerated: false, branch, use: `${keyOf(f)} commit` });
+			add({ token: f.commit.toLowerCase(), tolerated: false, branch, touched: t0, use: `${keyOf(f)} commit` });
 		}
 		const recText = f.record && tree.exists(`${REVIEWS}/${f.record}`) ? tree.read(`${REVIEWS}/${f.record}`) : undefined;
 		for (const k of ['round', ...SHA_PROSE] as const) {
@@ -285,12 +304,36 @@ function citations(tree: Tree, reg: Register): Citations {
 				} else if (k === 'round' && recText !== undefined && new RegExp(`(?<![0-9A-Za-z_])${raw}(?![0-9A-Za-z_])`).test(recText)) {
 					out.historical.push({ token: t, use });
 				} else {
-					add({ token: t, tolerated: !!up && up.startsWith(t), branch, use });
+					add({ token: t, tolerated: !!up && up.startsWith(t), branch, touched: t0, use });
 				}
 			}
 		}
 	}
 	return out;
+}
+
+// `./seclab findings remap --branch B`: the host finds each rotted citation's equivalent on B and
+// passes "<old>\t<new>" pairs; only B's entries are rewritten (fix commits and prose, never a
+// round label, which is its record's own), and each old token must be a whole hex run.
+function remapBranch(reg: Register, branch: string, pairs: Array<[string, string]>): { reg: Register; changed: string[] } {
+	const changed: string[] = [];
+	const ok = (t: string) => /^[0-9a-f]{7,40}$/.test(t);
+	const map = new Map(pairs.filter(([o, n]) => ok(o) && ok(n)));
+	const swap = (v: string) => v.replace(HEX_RUN, m => map.get(m.toLowerCase()) ?? m);
+	for (const f of reg.findings) {
+		if (entryBranch(reg, f) !== branch) {
+			continue;
+		}
+		for (const k of ['commit', ...SHA_PROSE] as const) {
+			const rec = f as unknown as Record<string, unknown>;
+			const v = rec[k];
+			if (typeof v === 'string' && swap(v) !== v) {
+				rec[k] = swap(v);
+				changed.push(`${keyOf(f)} ${k}`);
+			}
+		}
+	}
+	return { reg, changed };
 }
 
 function schemaProblems(reg: Register): string[] {
@@ -1153,6 +1196,31 @@ function selfTest(): number {
 		const nob = reg();
 		nob.owners.o.branch = null;
 		expect('citations carry its branch, and only those: the entry\'s, else its owner\'s declared one', bc?.branch === 'some-branch' && citations(mkTree(files), reg()).cite.every(x => x.branch === 'b') && citations(mkTree(files), nob).cite.every(x => x.branch === null) ? [] : ['wrong branch scope'], null);
+		// ZZZ: only an entry this change adds or modifies must have live citations.
+		const tb = reg();
+		tb.findings[0].note = 'see 0ddba11';
+		const ta = JSON.parse(JSON.stringify(tb)) as Register;
+		const untouched = citations(mkTree(files), ta, tb).cite.find(x => x.token === '0ddba11');
+		expect('control: an entry unchanged since the base is not touched (ZZZ)', untouched && !untouched.touched ? [] : ['touched'], null);
+		ta.findings[0].note = 'see 0ddba11 again';
+		const edited = citations(mkTree(files), ta, tb).cite.find(x => x.token === '0ddba11');
+		expect('an entry this change edits is touched (ZZZ)', edited?.touched ? [] : ['not touched'], null);
+		const added = reg();
+		added.findings.push({ record: null, anchor: 'INC-9', severity: 'low', summary: 's', component: 'c', owner: 'o', status: 'open', gap: 'g', note: 'see 0ddba11', ref: { file: EDR, quote: 'only on main' } });
+		const both = citations(mkTree(files), added, tb).cite.find(x => x.token === '0ddba11');
+		expect('a token an added entry shares with an untouched one is touched (ZZZ)', both?.touched && both.use.startsWith('register#INC-9') ? [] : [`got ${JSON.stringify(both)}`], null);
+		const ob = JSON.parse(JSON.stringify(tb)) as Register;
+		ob.owners.o.branch = 'elsewhere';
+		expect('an owner\'s branch change touches the entries that inherit it (ZZZ-1)', citations(mkTree(files), ob, tb).cite.every(x => x.touched) ? [] : ['untouched'], null);
+		expect('no base: every entry is touched (ZZZ)', citations(mkTree(files), ta).cite.every(x => x.touched) ? [] : ['untouched'], null);
+		// ZZZ: remap rewrites only the named branch's entries, never a round label.
+		const rm = reg();
+		rm.findings[0].branch = 'br-a';
+		Object.assign(rm.findings[0], { commit: 'abcdef1', note: 'see ABCDEF1 and 1234567', round: 'Round A (abcdef1)' });
+		rm.findings[1].note = 'see abcdef1';
+		const res = remapBranch(rm, 'br-a', [['abcdef1', 'fedcba9'], ['--x', 'fedcba9']]);
+		expect('remap rewrites the branch entry\'s commit and prose (ZZZ)', rm.findings[0].commit === 'fedcba9' && rm.findings[0].note === 'see fedcba9 and 1234567' && res.changed.length === 2 ? [] : [`got ${JSON.stringify(rm.findings[0])}`], null);
+		expect('remap leaves round labels and other branches alone (ZZZ)', rm.findings[0].round === 'Round A (abcdef1)' && rm.findings[1].note === 'see abcdef1' ? [] : ['rewrote'], null);
 		const long = reg();
 		long.findings[0].note = `digest ${'ab12'.repeat(11)}`;
 		expect('a hex run over 40 characters fails (YYY-1)', run(base(), long), /a hex run of 44 characters isn't a commit citation/);
@@ -1496,14 +1564,33 @@ function main(): number {
 		process.stdout.write(lines.join(''));
 		return sp.length ? 1 : 0;
 	}
-	if (mode === 'shas') { // every commit citation: "<token>\t<0|1 upstream>\t<branch or ->\t<use>"
+	if (mode === 'shas') { // "<token>\t<0|1 upstream>\t<branch or ->\t<0|1 touched>\t<use>"; [--base FILE]
 		sp.forEach(x => console.error(x));
-		const c = sp.length ? undefined : citations(tree, reg);
-		process.stdout.write((c?.cite ?? []).map(x => `${x.token}\t${x.tolerated ? 1 : 0}\t${x.branch ?? '-'}\t${x.use.replace(/[\t\n]/g, ' ')}\n`).join(''));
+		const bf = arg === '--base' ? process.argv[4] : undefined;
+		if (arg !== undefined && (arg !== '--base' || !bf || process.argv.length > 5)) {
+			console.error('usage: findings.ts shas [--base FILE]');
+			return 2;
+		}
+		const btext = bf ? fs.readFileSync(path.resolve(repo, bf), 'utf8') : '';
+		const c = sp.length ? undefined : citations(tree, reg, btext.trim() ? JSON.parse(btext) as Register : undefined);
+		process.stdout.write((c?.cite ?? []).map(x => `${x.token}\t${x.tolerated ? 1 : 0}\t${x.branch ?? '-'}\t${x.touched ? 1 : 0}\t${x.use.replace(/[\t\n]/g, ' ')}\n`).join(''));
 		if (c) {
 			console.error(`findings: ${c.historical.length} round-label citations are their records' own (append-only, listed in FINDINGS.md)`);
 		}
 		return sp.length || c?.problems.length ? 1 : 0;
+	}
+	if (mode === 'remap') { // remap BRANCH PAIRS_FILE: rewrites the register in place
+		const pairsFile = process.argv[4];
+		if (sp.length || !arg || !/^[A-Za-z0-9._/-]+$/.test(arg) || arg.includes('..') || !pairsFile) {
+			sp.forEach(x => console.error(x));
+			console.error('usage: findings.ts remap BRANCH PAIRS_FILE');
+			return 2;
+		}
+		const pairs = fs.readFileSync(path.resolve(repo, pairsFile), 'utf8').split('\n').filter(Boolean).map(l => l.split('\t') as [string, string]);
+		const { changed } = remapBranch(reg, arg, pairs);
+		fs.writeFileSync(path.join(repo, REGISTER), `${JSON.stringify(reg, null, '\t')}\n`);
+		console.log(`findings: remapped ${changed.length} field(s) in ${arg}'s entries`);
+		return 0;
 	}
 	if (mode === 'baseline') {
 		sp.forEach(x => console.error(x));

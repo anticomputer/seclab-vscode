@@ -62,7 +62,7 @@ usage: ./seclab <command>
                                 consistency, the security findings register; --run-commands runs <!-- ci: run -->
                                 blocks (and the broker's); --online resolves external links (lychee, cached);
                                 --paired enforces doc changes next to protocol/patch/provider/product changes
-  findings --self-test | check | baseline
+  findings --self-test | check | baseline | rot | remap --branch B
                                 Security findings register (docs/security-reviews/findings.json): every review
                                 finding registered, fixed ones with a regression test, no open high outside the
                                 shrinking baseline; `baseline` prints the open highs (markdown)
@@ -277,24 +277,94 @@ findings_reachable() { # TOKEN BRANCH(- for none): 0 live, 1 not live, 2 ambiguo
 	git -C "$ROOT" rev-parse -q --verify "refs/remotes/origin/$2" >/dev/null || return 1
 	git -C "$ROOT" merge-base --is-ancestor "$c" "refs/remotes/origin/$2" 2>/dev/null
 }
-findings_shas() { # WRITES_REGISTER (1/0)
-	local t up br use rc where bad=0 stale=0
-	while IFS=$'\t' read -r t up br use; do
-		[[ -z "$t" ]] && continue
+findings_shas() { # STRICT (1: every citation; 0: only touched entries'). stdin: findings.ts shas
+	local t up br touched use extra rc where hint bad=0 stale=0 hard
+	while IFS=$'\t' read -r t up br touched use extra; do
+		[[ -z "$t$up$br$touched$use$extra" ]] && continue
+		# The two halves' contract is checked, never assumed: a malformed line fails (ZZZ-2).
+		if [[ ! "$up" =~ ^[01]$ || ! "$touched" =~ ^[01]$ || -z "$br" || -z "$use" || -n "$extra" ]]; then
+			echo "findings: malformed citation line from findings.ts shas; refusing to judge it" >&2; bad=1; continue
+		fi
+		hard=0; [[ "$1" = 1 || "$touched" = 1 ]] && hard=1
 		rc=0; findings_reachable "$t" "$br" || rc=$?
-		if [[ $rc -eq 2 ]]; then
-			echo "findings: $use cites $t, which is an ambiguous prefix here; cite more characters" >&2; bad=1
-		elif [[ "$up" = 1 ]]; then
-			[[ $rc -eq 0 ]] && { echo "findings: $use cites $t as the upstream pin, but it is a commit here" >&2; bad=1; }
-		elif [[ $rc -ne 0 && "$br" != - && "$1" != 1 ]]; then
-			echo "findings: warning: $use cites $t, no longer on origin/$br or main; remap it in the next change to the register" >&2; stale=$((stale+1))
-		elif [[ $rc -ne 0 ]]; then
-			where="main's history"; [[ "$br" != - ]] && where+=" or origin/$br"
-			echo "findings: $use cites $t, which isn't a commit on $where: remap it to its equivalent commit" >&2; bad=1
+		if [[ $rc -eq 2 ]]; then # an ambiguous prefix, exempt or not (ZZZ-5)
+			if [[ $hard = 1 ]]; then echo "findings: $use cites $t, which is an ambiguous prefix here; cite more characters" >&2; bad=1
+			else echo "findings: warning: $use cites $t, an ambiguous prefix here, in an entry this change doesn't touch" >&2; stale=$((stale+1)); fi
+			continue
+		fi
+		if [[ "$up" = 1 ]]; then
+			[[ $rc -eq 0 ]] || continue
+			echo "findings: $use cites $t as the upstream pin, but it is a commit here" >&2; bad=1
+			continue
+		fi
+		[[ $rc -eq 0 ]] && continue
+		where="main's history" hint=""
+		[[ "$br" != - ]] && { where+=" or origin/$br"; hint=" (./seclab findings remap --branch $br)"; }
+		if [[ $hard = 0 ]]; then
+			echo "findings: warning: $use cites $t, no longer on $where, in an entry this change doesn't touch$hint" >&2
+			stale=$((stale+1))
+		else
+			echo "findings: $use cites $t, which isn't a commit on $where: remap it to its equivalent commit$hint" >&2; bad=1
 		fi
 	done
-	[[ $stale -gt 0 ]] && echo "findings: $stale branch-entry citation(s) to remap (listed above)" >&2
+	[[ $stale -gt 0 ]] && echo "findings: $stale rotted citation(s) in entries this change doesn't touch (warnings above)" >&2
 	return $bad
+}
+# Self-service remap (review ZZZ): a rebased branch's register citations follow it. The old commit
+# must still be a local object; its equivalent is the one commit in the branch's history (main's
+# included) with the same patch-id, else the one with the same subject and file list. Anything
+# else is reported, never guessed.
+findings_pids() { # TIP: "<patch-id> <commit>" for its recent history
+	git -C "$ROOT" log -p --no-merges --max-count=3000 "$1" | git -C "$ROOT" patch-id --stable
+}
+findings_equiv() { # OLD TIP PIDFILE -> "<new>\t<method>"; 1 none, 2 ambiguous, 3 old not a commit here
+	local c pid hits n files cand
+	c="$(findings_resolve "$1")" || return 3
+	if git -C "$ROOT" merge-base --is-ancestor "$c" "$2" 2>/dev/null; then printf '%s\tunchanged\n' "$c"; return 0; fi
+	pid="$(git -C "$ROOT" show "$c" | git -C "$ROOT" patch-id --stable | cut -d' ' -f1)"
+	if [[ -n "$pid" ]]; then
+		hits="$(awk -v p="$pid" '$1 == p { print $2 }' "$3" | sort -u)"
+		n="$(grep -c . <<<"$hits" || true)"
+		[[ "$n" -gt 1 ]] && return 2
+		[[ "$n" -eq 1 ]] && { printf '%s\tpatch-id\n' "$hits"; return 0; }
+	fi
+	files="$(git -C "$ROOT" show --format= --name-only "$c" | sort)"
+	hits=""
+	while IFS= read -r cand; do
+		[[ "$(git -C "$ROOT" show --format= --name-only "$cand" | sort)" == "$files" ]] && hits+="$cand"$'\n'
+	done < <(git -C "$ROOT" log --no-merges --max-count=3000 --format=$'%H\t%s' "$2" | S="$(git -C "$ROOT" log -1 --format=%s "$c")" awk -F'\t' 'ENVIRON["S"] == $2 { print $1 }')
+	n="$(grep -c . <<<"$hits" || true)"
+	[[ "$n" -gt 1 ]] && return 2
+	[[ "$n" -eq 1 ]] || return 1
+	printf '%s\tsubject and files\n' "${hits%$'\n'}"
+}
+findings_remap() { # BRANCH
+	local br="$1" tip list t up b touched use rc out pairs="$ROOT/.work/findings-remap.tsv" pids="$ROOT/.work/findings-pids.txt" left=0 n=0
+	[[ "$br" =~ ^[A-Za-z0-9._/-]+$ && "$br" != *..* && "$br" != -* ]] || { echo "findings remap: bad branch name" >&2; return 2; }
+	tip="$(git -C "$ROOT" rev-parse -q --verify "refs/remotes/origin/$br^{commit}")" || { echo "findings remap: no origin/$br here (git fetch origin)" >&2; return 1; }
+	mkdir -p "$ROOT/.work"; : > "$pairs"
+	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts shas)" || return 1
+	findings_pids "$tip" > "$pids" || return 1
+	while IFS=$'\t' read -r t up b touched use; do
+		[[ -z "$t" || "$b" != "$br" || "$up" = 1 ]] && continue
+		findings_reachable "$t" "$b" && continue
+		# A round label is its record's text: remap never rewrites one, so never claims it (ZZZ-3).
+		if [[ "$use" == *" round" ]]; then echo "findings remap: $use: $t is in a round label; remap it by hand" >&2; left=$((left+1)); continue; fi
+		rc=0; out="$(findings_equiv "$t" "$tip" "$pids")" || rc=$?
+		case $rc in
+			0) printf '%s\t%s\n' "$t" "${out%%$'\t'*}" >> "$pairs"; n=$((n+1)); echo "findings remap: $use: $t -> ${out:0:7} (${out#*$'\t'})" ;;
+			1) echo "findings remap: $use: $t has no equivalent on origin/$br; remap it by hand" >&2; left=$((left+1)) ;;
+			2) echo "findings remap: $use: $t has several candidates on origin/$br; remap it by hand" >&2; left=$((left+1)) ;;
+			*) echo "findings remap: $use: $t is not a commit here (fetch the old commits, or remap it by hand)" >&2; left=$((left+1)) ;;
+		esac
+	done <<<"$list"
+	sort -u -o "$pairs" "$pairs"
+	if [[ $n -gt 0 ]]; then
+		docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" node build/docs/findings.ts remap "$br" .work/findings-remap.tsv || return 1
+		docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" node build/docs/findings.ts write || return 1
+	fi
+	echo "findings remap: $n citation(s) remapped, $left left to remap by hand"
+	[[ $left -eq 0 ]]
 }
 # On main (HEAD is the merge base): what to compare with, given the push's previous head. Unset
 # (local runs): the first parent. Never HEAD itself. A previous head that isn't an ancestor (a
@@ -369,11 +439,12 @@ findings_check() {
 	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts commits)"
 	findings_ancestry <<<"$list" || exit 1
 	echo "findings: every fixed entry's commit is on HEAD's history"
-	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts shas)" || exit 1
-	local writes=0
-	grep -qx 'docs/security-reviews/findings.json' "$ROOT/.work/findings-changed.txt" && writes=1
-	findings_shas "$writes" <<<"$list" || exit 1
-	echo "findings: every commit the register cites is on main's history or its entry's branch"
+	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts shas --base .work/findings-base.json)" || exit 1
+	# A new upstream pin changes which tokens are exempt, so every citation answers (ZZZ-1).
+	local strict=0
+	grep -qx 'upstream.lock' "$ROOT/.work/findings-changed.txt" && strict=1
+	findings_shas "$strict" <<<"$list" || exit 1
+	echo "findings: every commit an entry this change adds or modifies cites is on main's history or its entry's branch"
 }
 # The host half's own injections (QQQ-9, SSS-9): ancestry (a non-ancestor SHA, an option-shaped
 # value, a control) and base resolution (a commit before the register, a non-commit, a control).
@@ -408,16 +479,53 @@ findings_host_self_test() {
 	if findings_main_base "$side" >/dev/null 2>&1; then echo "findings host self-test: a previous head with no shared history passed (XXX-6)" >&2; exit 1; fi
 	# Commit citations: a dangling commit (the orphan above, on no ref) fails untolerated, and so
 	# does a non-commit token; a tolerated non-commit passes; a tolerated reachable commit fails.
-	printf '%s\t0\t-\tcontrol\n' "$head" | findings_shas 1 || { echo "findings host self-test: the control (HEAD cited) failed" >&2; exit 1; }
-	if printf '%s\t0\t-\tx\n' "$side" | findings_shas 1 2>/dev/null; then echo "findings host self-test: a dangling commit citation passed" >&2; exit 1; fi
-	if printf '%s\t0\t-\tx\n' "$side" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a dangling citation in a non-branch entry passed outside a register change (YYY-5)" >&2; exit 1; fi
-	if printf '%s\t0\tmain\tx\n' "$side" | findings_shas 1 2>/dev/null; then echo "findings host self-test: a branch entry's commit not on its branch passed in a register change" >&2; exit 1; fi
-	printf '%s\t0\tno-such-branch\tx\n' "$side" | findings_shas 0 2>/dev/null || { echo "findings host self-test: a stale branch-entry citation blocked a change that doesn't write the register (YYY-5)" >&2; exit 1; }
-	if printf 'abcdef0123456\t0\t-\tx\n' | findings_shas 1 2>/dev/null; then echo "findings host self-test: a non-commit token passed" >&2; exit 1; fi
-	printf 'abcdef0123456\t1\t-\tx\n' | findings_shas 1 || { echo "findings host self-test: the control (the upstream pin, not a commit here) failed" >&2; exit 1; }
-	if printf '%s\t1\t-\tx\n' "$head" | findings_shas 1 2>/dev/null; then echo "findings host self-test: an upstream-pin token that is a commit here passed" >&2; exit 1; fi
-	if printf -- '--all\t0\t-\tx\n' | findings_shas 1 2>/dev/null; then echo "findings host self-test: an option-shaped token passed" >&2; exit 1; fi
-	if printf '%s\t0\t../x\tx\n' "$side" | findings_shas 1 2>/dev/null; then echo "findings host self-test: a path-shaped branch passed" >&2; exit 1; fi
+	printf '%s\t0\t-\t1\tcontrol\n' "$head" | findings_shas 0 || { echo "findings host self-test: the control (HEAD cited) failed" >&2; exit 1; }
+	if printf '%s\t0\t-\t1\tx\n' "$side" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a dangling commit citation passed" >&2; exit 1; fi
+	printf '%s\t0\t-\t0\tx\n' "$side" | findings_shas 0 2>/dev/null || { echo "findings host self-test: a rotted citation in an untouched entry blocked the change (ZZZ)" >&2; exit 1; }
+	if printf '%s\t0\t-\t0\tx\n' "$side" | findings_shas 1 2>/dev/null; then echo "findings host self-test: a rotted citation in an untouched entry passed the strict listing (ZZZ)" >&2; exit 1; fi
+	if printf '%s\t0\tmain\t1\tx\n' "$side" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a branch entry's commit not on its branch passed in a register change" >&2; exit 1; fi
+	printf '%s\t0\tno-such-branch\t0\tx\n' "$side" | findings_shas 0 2>/dev/null || { echo "findings host self-test: a stale branch-entry citation blocked a change that doesn't write the register (YYY-5)" >&2; exit 1; }
+	if printf 'abcdef0123456\t0\t-\t1\tx\n' | findings_shas 0 2>/dev/null; then echo "findings host self-test: a non-commit token passed" >&2; exit 1; fi
+	printf 'abcdef0123456\t1\t-\t1\tx\n' | findings_shas 1 || { echo "findings host self-test: the control (the upstream pin, not a commit here) failed" >&2; exit 1; }
+	if printf '%s\t1\t-\t0\tx\n' "$head" | findings_shas 0 2>/dev/null; then echo "findings host self-test: an upstream-pin token that is a commit here passed" >&2; exit 1; fi
+	if printf -- '--all\t0\t-\t1\tx\n' | findings_shas 0 2>/dev/null; then echo "findings host self-test: an option-shaped token passed" >&2; exit 1; fi
+	if printf '%s\t0\t../x\t1\tx\n' "$side" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a path-shaped branch passed" >&2; exit 1; fi
+	# ZZZ-2: a malformed line fails, never reads as untouched; the real shas output parses.
+	if printf '%s\t0\t-\tx\n' "$side" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a four-column citation line passed (ZZZ-2)" >&2; exit 1; fi
+	if printf '%s\t0\t-\tyes\tx\n' "$side" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a non-0/1 touched column passed (ZZZ-2)" >&2; exit 1; fi
+	if printf '%s\t0\t-\t0\tx\textra\n' "$side" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a six-column citation line passed (ZZZ-2)" >&2; exit 1; fi
+	if [[ -f "$ROOT/docs/security-reviews/findings.json" ]]; then
+		docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts shas 2>/dev/null \
+			| awk -F'\t' 'NF != 5 || ($2 != 0 && $2 != 1) || ($4 != 0 && $4 != 1) { bad = 1 } END { exit bad }' \
+			|| { echo "findings host self-test: findings.ts shas output breaks the five-column contract (ZZZ-2)" >&2; exit 1; }
+	fi
+	# ZZZ: findings_equiv follows a rebased commit by patch-id, else subject and files, and
+	# refuses to guess. Unreferenced objects only: no ref is written.
+	local idx="$ROOT/.work/findings-selftest.index" pids="$ROOT/.work/findings-selftest.pids" t0 t1 t2 t3 s2 a a2 c a3 d d2 e got
+	export GIT_AUTHOR_NAME=selftest GIT_AUTHOR_EMAIL=selftest@example.invalid GIT_COMMITTER_NAME=selftest GIT_COMMITTER_EMAIL=selftest@example.invalid
+	findings_st_tree() { # CONTENT -> root's tree plus selftest-equiv.txt holding CONTENT
+		local blob; blob="$(printf '%s\n' "$1" | git -C "$ROOT" hash-object -w --stdin)"
+		GIT_INDEX_FILE="$idx" git -C "$ROOT" read-tree "$root" && GIT_INDEX_FILE="$idx" git -C "$ROOT" update-index --add --cacheinfo "100644,$blob,selftest-equiv.txt" && GIT_INDEX_FILE="$idx" git -C "$ROOT" write-tree
+	}
+	t0="$(git -C "$ROOT" rev-parse "$root^{tree}")"; t1="$(findings_st_tree a)"; t2="$(findings_st_tree b)"; t3="$(findings_st_tree b-amended)"
+	s2="$(git -C "$ROOT" commit-tree -p "$root" -m 'selftest: base' "$t0")"
+	a="$(git -C "$ROOT" commit-tree -p "$root" -m 'selftest: equiv' "$t1")"
+	a2="$(git -C "$ROOT" commit-tree -p "$s2" -m 'selftest: equiv' "$t1")"
+	findings_pids "$a2" > "$pids"
+	got="$(findings_equiv "$a" "$a2" "$pids")" && [[ "$got" == "$a2"$'\t'patch-id ]] || { echo "findings host self-test: a rebased commit wasn't followed by patch-id (ZZZ)" >&2; exit 1; }
+	got="$(findings_equiv "$a2" "$a2" "$pids")" && [[ "$got" == "$a2"$'\t'unchanged ]] || { echo "findings host self-test: the control (a commit still on the branch) failed" >&2; exit 1; }
+	c="$(git -C "$ROOT" commit-tree -p "$a2" -m 'selftest: revert' "$t0")"; a3="$(git -C "$ROOT" commit-tree -p "$c" -m 'selftest: again' "$t1")"
+	findings_pids "$a3" > "$pids"
+	if findings_equiv "$a" "$a3" "$pids" >/dev/null; then echo "findings host self-test: two commits with the same patch-id didn't count as ambiguous (ZZZ)" >&2; exit 1; fi
+	d="$(git -C "$ROOT" commit-tree -p "$root" -m 'selftest: amended' "$t2")"; d2="$(git -C "$ROOT" commit-tree -p "$s2" -m 'selftest: amended' "$t3")"
+	findings_pids "$d2" > "$pids"
+	got="$(findings_equiv "$d" "$d2" "$pids")" && [[ "$got" == "$d2"$'\t'"subject and files" ]] || { echo "findings host self-test: an amended commit wasn't followed by subject and files (ZZZ)" >&2; exit 1; }
+	e="$(git -C "$ROOT" commit-tree -p "$root" -m 'selftest: lonely' "$t2")"
+	rc=0; findings_equiv "$e" "$a2" "$pids" >/dev/null || rc=$?
+	[[ $rc -eq 1 ]] || { echo "findings host self-test: a commit with no equivalent wasn't reported as such (ZZZ)" >&2; exit 1; }
+	rc=0; findings_equiv "$t0" "$a2" "$pids" >/dev/null || rc=$?
+	[[ $rc -eq 3 ]] || { echo "findings host self-test: a non-commit old token wasn't refused (ZZZ)" >&2; exit 1; }
+	rm -f "$idx" "$pids"
 	# YYY-4: a ref named like a token doesn't stand in for the object; resolution ignores refs.
 	[[ "$(findings_resolve "${head:0:12}")" == "$head" ]] || { echo "findings host self-test: the control (resolving HEAD's prefix) failed" >&2; exit 1; }
 	if findings_resolve "$(git -C "$ROOT" rev-parse HEAD^{tree})" >/dev/null 2>&1; then echo "findings host self-test: a tree object resolved as a commit" >&2; exit 1; fi
@@ -867,8 +975,15 @@ case "${1:-help}" in
 		esac ;;
 	findings)
 		shift
+		if [[ "${1:-}" == remap ]]; then
+			[[ $# -eq 3 && "$2" == --branch ]] || { usage; exit 2; }
+			findings_remap "$3"; exit $?
+		fi
 		[[ $# -eq 1 ]] || { usage; exit 2; }
 		case "$1" in
+			# Every rotted citation, touched or not (the weekly listing's strict view).
+			rot) list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts shas)" || exit 1
+				findings_shas 1 <<<"$list" && echo "findings: no rotted citation" ;;
 			--self-test) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts --self-test
 				findings_host_self_test ;;
 			baseline) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts baseline ;;

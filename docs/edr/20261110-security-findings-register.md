@@ -64,8 +64,8 @@ by nobody: a record saying "Fixed" was the only evidence.
      yields;
    - a `fixed` entry's test is missing, ambiguous or not a test, or its commit isn't on HEAD's
      history;
-   - a commit the register cites isn't a commit on `main`'s history or on the one origin branch
-     its entry names (its `branch`, else its owner's declared branch). Cited means every fix commit, whatever its shape, and any
+   - a commit cited by an entry this change adds or modifies (compared with the base register)
+     isn't a commit on `main`'s history or on the one origin branch its entry names (its `branch`, else its owner's declared branch). Cited means every fix commit, whatever its shape, and any
      hex run in the entry's own prose (round, note, gap, follow-up, rationale, summary, severity
      note, component), in any case, all-digit runs included unless they're dates; a run over 40
      characters fails. The host resolves the object itself, so a ref named like a token can't
@@ -146,13 +146,17 @@ script run by a required job: what runs it is the docs job, and its evidence is 
 - Branch sessions inherit the register when they rebase. A branch that adds a round, or lands a
   record the register lists with `branch`, must update the register in the same change. A high
   fixed only on a branch stays in the baseline until it lands.
-- The register's commit citations never dangle silently. When a branch is rebased, squashed or
-  deleted, its entries are remapped to the equivalent commit (same subject and change; the
-  history-rewrite remap matched 17 by patch-id or file-for-file). A branch entry whose branch
-  no longer holds its commit fails any change that writes the register and is listed as a
-  warning in every other run, so an unrelated landing isn't blocked by another session's
-  branch. The rule covers the register only: review records and EDRs are append-only and keep
-  the SHAs they were written with, some of them now historical (review YYY-7).
+- The register's commit citations never dangle silently, and another session's rebase never
+  blocks a change (review ZZZ). A change answers only for the entries it adds or modifies; a
+  citation that rotted in an entry it doesn't touch is a warning naming the fix. The owning
+  session (or whoever touches the entry next) runs `./seclab findings remap --branch B`, which
+  follows each rotted citation of B's entries to the one commit in B's history (main's included)
+  with the same patch-id, else the one with the same subject and file list, rewrites those entries,
+  and reports anything with no equivalent or several, for a hand remap; it never guesses. The
+  strict view is `./seclab findings rot`, every rotted citation touched or not, which the weekly
+  `liveness-refresh` job lists in its summary and fails on (a push run only lists it). The rule
+  covers the register only: review records and EDRs are append-only and keep the SHAs they were
+  written with, some of them now historical (review YYY-7).
 - The repo is public, so FINDINGS.md and the weekly listing publish the open findings with their
   gaps. The register adds no detail the records didn't already hold (review RRR-5).
 
