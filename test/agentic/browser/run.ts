@@ -35,7 +35,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { TabdClient } from '../../../tabd/src/client.ts';
-import { browserProbeChecks } from './verdict.ts';
+import { browserProbeChecks, heartbeatsContinuous } from './verdict.ts';
 import { beaconPort, beaconSelfHit, editorPid, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, lockRun, repoRoot } from '../../harness.ts';
 import { report } from '../../containment/assert.ts';
 import { beaconSpawn } from '../runner/marks.ts';
@@ -533,12 +533,7 @@ const tabProbeHits = tabPhaseLines.filter(l => l.includes(`browser-probe-${facts
 // Within one clock the question is answerable: were there heartbeats throughout this phase
 // with no gap big enough to hide a page load? A tab restart shows up as a gap, which is
 // exactly what should invalidate the phase.
-const beats = tabPhaseLines.map(l => { try { return JSON.parse(l) as { at?: string; heartbeat?: number }; } catch { return {}; } })
-	.filter((b): b is { at: string; heartbeat: number } => b.heartbeat !== undefined && !!b.at)
-	.map(b => Date.parse(b.at)).sort((x, y) => x - y);
-const HEARTBEAT_GAP_MS = 6_000; // three missed beats at the 2s interval
-const tabBeaconContinuous = beats.length >= 2
-	&& beats.every((t, i) => i === 0 || t - beats[i - 1] <= HEARTBEAT_GAP_MS);
+const tabBeaconContinuous = heartbeatsContinuous(tabPhaseLines);
 const tabLive = tabExec(facts.tabId, ['sh', '-c',
 	`curl -sS -m 3 -o /dev/null http://127.0.0.1:${facts.beaconPort}/tab-live-check-${facts.arm}-${phase} && echo OK`]);
 const tabBeaconLiveAfter = /OK/.test(tabLive.stdout);

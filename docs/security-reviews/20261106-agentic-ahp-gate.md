@@ -508,23 +508,31 @@ Scope: `f3b7872..24b0c71`. No prompt injection. The reviewer confirmed the "exac
 rule is sound, the build-identity stamp is trustworthy and fails closed, the cross-build
 restore ordering is correct, and host hygiene is clean. Five findings, all in the plumbing.
 
-1. **HIGH: the harness destroyed the restore phase's evidence.** `listen` respawned the tab
+| ID | Sev | Finding |
+|---|---|---|
+| R10-1 | high | The harness destroyed the restore phase's evidence: `listen` respawned the tab listener unconditionally and the listener truncated its log, so the restore network check could never pass |
+| R10-2 | high | Tab-listener liveness was two point samples, not continuity, so a listener that died and was resurrected mid-phase passed |
+| R10-3 | medium | The beacon logs were phase-scoped by line count with no shrink guard, so a truncated log read as "that side saw nothing" |
+| R10-4 | medium | `switch-build` never printed the `listen` step, so the documented restore procedure ran with no tab-side listener started |
+| R10-5 | medium | The stray-helper net matched only absolute worktree paths, while every printed invocation is relative, so a backgrounded `listen` was invisible to teardown and clean-host |
+
+1. **R10-1 HIGH: the harness destroyed the restore phase's evidence.** `listen` respawned the tab
    listener every 1.5 s unconditionally, and the listener truncated its log on start, so every
    probe line the live instance recorded was erased within a second or two and the restore
    network check could never pass. Worse, the EDR had already attributed that result to a
    missing arming gate, so the record stated the wrong cause. Fixed: probe before starting,
    start only when nothing answers, append and never truncate, and exit cleanly on
    `EADDRINUSE`. The EDR carries an explicit correction.
-2. **HIGH: tab-listener liveness was two point samples, not continuity.** A listener that died
+2. **R10-2 HIGH: tab-listener liveness was two point samples, not continuity.** A listener that died
    and was resurrected mid-phase passed the check. The listener now emits a heartbeat carrying
    its pid, and a phase is only accepted when heartbeats span it from a single instance.
-3. **MEDIUM: the beacon logs were phase-scoped by line count with no shrink guard**, so a
+3. **R10-3 MEDIUM: the beacon logs were phase-scoped by line count with no shrink guard**, so a
    truncated log silently yielded "that side saw nothing" — evidence loss converted into
    evidence. They now use byte offsets and the same hard error as the window logs.
-4. **MEDIUM: `switch-build` never told the operator to start `listen`.** Round 9's "a mode
+4. **R10-4 MEDIUM: `switch-build` never told the operator to start `listen`.** Round 9's "a mode
    nobody can run", in a new shape: the mode existed and was reachable, but no printed
    procedure invoked it. The command is now printed before the relaunch.
-5. **MEDIUM: the stray-helper net missed the one helper this design adds.** It matched the
+5. **R10-5 MEDIUM: the stray-helper net missed the one helper this design adds.** It matched the
    absolute worktree path, while every printed invocation is relative, so a backgrounded
    `listen` was invisible to both `teardown` and `clean-host` — and the regression test passed
    only because it spawned its decoy with an absolute path, validating the matcher against a

@@ -10,6 +10,17 @@
 - **Related:** [increment 2 EDR](../edr/20261106-increment-2-remote-proxy.md),
   [the AHP gate rounds](20261106-agentic-ahp-gate.md) (0017 itself, rounds 6 and 7).
 
+| ID | Sev | Finding |
+|---|---|---|
+| BV-1 | low | The browser-drive hook could not apply on `main`: its context was generated against a tree including 0017, whose hunk touches the same import block |
+| BV-2 | info | The hook duplicated an import of a module the file already imports |
+| BV-3 | low | The hook's expiry check failed open: `Date.now() > Number(until)` is false for a non-numeric `until`, so a malformed arming file counted as unexpired |
+| BV-4 | low | The hook's nonce was unvalidated: any non-empty string armed it |
+| BV-5 | low | An async latch race could open two pages for one run: the latch was set after the awaited read |
+| BV-6 | info | The variant's `review` field named a record that did not cover the variant |
+| BV-L1 | low | The hook omits the tool's URL handling and `storageAffinity`, so it measures the browser tool only in a seclab+ tab window, unrestricted, against a non-localhost target |
+| R9-1 | medium | The storage probe no longer measures the browser tool's path: the agent tool always supplies its own scope, so `workbench.browser.dataStorage` is never read there |
+
 ## Why the hook exists
 Patch 0017 fixes `workbench.browser.enableRemoteProxy` to `true` and
 `workbench.browser.dataStorage` to `ephemeral` in a tab window, so a browser view's traffic

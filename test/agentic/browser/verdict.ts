@@ -70,6 +70,29 @@ function sideCheck(e: Evidence, expected: 'host' | 'tab'): Check {
 	};
 }
 
+/** Three missed beats at the listener's 2s interval. */
+export const HEARTBEAT_GAP_MS = 6_000;
+
+/**
+ * Whether the tab-side listener beat continuously across a phase.
+ *
+ * Liveness used to be two point samples, one before arming and one at check time, so a
+ * listener that died and was resurrected mid-phase passed while the page load it was meant to
+ * witness happened in the gap (round 10, R10-2). A restart shows up here as a gap, which is
+ * exactly what must invalidate the phase. Timestamps come from the listener's own clock only:
+ * comparing them against the window log, which is local time while these are UTC, rejected
+ * correct runs.
+ */
+export function heartbeatsContinuous(lines: string[], gapMs: number = HEARTBEAT_GAP_MS): boolean {
+	const beats = lines
+		.map(l => { try { return JSON.parse(l) as { at?: string; heartbeat?: number }; } catch { return {}; } })
+		.filter((b): b is { at: string; heartbeat: number } => b.heartbeat !== undefined && !!b.at)
+		.map(b => Date.parse(b.at))
+		.filter(t => !Number.isNaN(t))
+		.sort((x, y) => x - y);
+	return beats.length >= 2 && beats.every((t, i) => i === 0 || t - beats[i - 1] <= gapMs);
+}
+
 export function browserProbeChecks(e: Evidence): Check[] {
 	const checks: Check[] = [];
 	// BUILD IDENTITY FROM THE BINARY. Comparing the harness's two bookkeeping files only
