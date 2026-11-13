@@ -36,5 +36,10 @@ registry, manifest and product values, no user values.
 | CFG-9 | Low | change path | The change classification trusted `e.source`, which upstream sets to WORKSPACE for multi-layer reloads (profile switch, reload), so host key names were checked against tab keys only. | fixed (fad0bbee) | The source is ignored: a key is named if it crossed from a host layer and isn't withheld now, or if its value in a tab-owned layer changed. | code review |
 | CFG-10 | Info | harness | The CFG-3 assertion became vacuous once CFG-1 refused the prefix key, and no canary covered core free-form settings. | fixed (fad0bbee) | Folded into the CFG-1 assertion; the CFG-8 canary was added. | test/configsync/probe.ts: CFG-8 assertion |
 
+## Round 3
+Confirmed CFG-8, CFG-9 and CFG-10. The reviewer noted, below the reporting bar, that object keys inside
+a structured value weren't checked (a URL pattern with userinfo as a map key). Closed in the same
+change: a map key with a scheme or `@` counts as text.
+
 ## Re-review
-Round 2: no high or critical open. Round 3 (the CFG-8 and CFG-9 fixes): pending.
+Round 3: no high or critical open.

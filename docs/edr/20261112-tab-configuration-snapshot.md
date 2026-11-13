@@ -95,8 +95,8 @@ the Tab Manager imports the same directory.
   - the scanner doesn't decode base64, hex or percent-encoded segments as gitleaks can;
   - withholdings from policy, defaults, local workspace settings and `[lang]` sections are silent;
   - the tab's own `userRemote` and tab-authority workspace settings are not filtered;
-  - object keys inside a structured core value (glob patterns in `files.exclude`) still cross; only
-    the name rule checks them;
+  - object keys inside a structured core value (glob patterns in `files.exclude`) still cross,
+    unless they contain a scheme or `@`; otherwise only the name rule checks them;
   - a change confined to a `[lang]` section of a tab-owned layer isn't named in the change event.
 
 ## Evidence
