@@ -12398,6 +12398,99 @@
 				"file": "AGENTS.md",
 				"quote": "install a shared hook that depends on code that isn't on main yet"
 			}
+		},
+		{
+			"record": "20261112-tab-configuration-snapshot.md",
+			"round": "Findings",
+			"component": "patch 0036 configuration snapshot",
+			"owner": "docsync",
+			"anchor": "CFG-1",
+			"severity": "high",
+			"summary": "A tab extension could declare any setting key and receive the host user value for it; the credential rules miss some shapes (URL userinfo in an env map, passphrases, cookies, numeric PINs).",
+			"status": "fixed",
+			"commit": "d602ec8",
+			"test": {
+				"file": "test/configsync/probe.ts",
+				"name": "CFG-1 an extension-declared key receives no host value (env-map URL, plain value)"
+			},
+			"note": "Design change, project owner 2026-11-13: extension-declared keys never receive host user, policy or local-workspace values. Per-extension opt-in is a follow-up."
+		},
+		{
+			"record": "20261112-tab-configuration-snapshot.md",
+			"round": "Findings",
+			"component": "patch 0036 configuration snapshot",
+			"owner": "docsync",
+			"anchor": "CFG-2",
+			"severity": "medium",
+			"summary": "A tab-declared `__proto__.<x>` key reached addToValueTree on a plain object (prototype write in the renderer); inherited registry lookups for keys like `constructor`.",
+			"status": "fixed-untested",
+			"commit": "1442c1cf",
+			"gap": "No runtime test: unsafe segments are refused, the output tree has a null prototype and lookups use Object.hasOwn. Upstream DefaultConfiguration has the same sink (not fixed here)."
+		},
+		{
+			"record": "20261112-tab-configuration-snapshot.md",
+			"round": "Findings",
+			"component": "patch 0036 configuration snapshot",
+			"owner": "docsync",
+			"anchor": "CFG-3",
+			"severity": "low",
+			"summary": "A tab extension declaring a prefix key (`http`, `remote`) received the user's nested-form settings for other sources' keys.",
+			"status": "fixed",
+			"commit": "1442c1cf",
+			"test": {
+				"file": "test/configsync/probe.ts",
+				"name": "CFG-3 nested-form settings under a tab-declared prefix stay on the host"
+			}
+		},
+		{
+			"record": "20261112-tab-configuration-snapshot.md",
+			"round": "Findings",
+			"component": "patch 0036 configuration snapshot",
+			"owner": "docsync",
+			"anchor": "CFG-4",
+			"severity": "info",
+			"summary": "The change key list named a key once more after it became withheld, and keys the tab planted in its own layer revealed host edits.",
+			"status": "fixed-untested",
+			"commit": "1442c1cf",
+			"gap": "No runtime test for change-event key lists."
+		},
+		{
+			"record": "20261112-tab-configuration-snapshot.md",
+			"round": "Findings",
+			"component": "patch 0036 configuration snapshot",
+			"owner": "docsync",
+			"anchor": "CFG-5",
+			"severity": "info",
+			"summary": "A withheld-setting report refused before the Tab Manager registered its command was counted as sent.",
+			"status": "fixed-untested",
+			"commit": "1442c1cf",
+			"gap": "No runtime test for report retry."
+		},
+		{
+			"record": "20261112-tab-configuration-snapshot.md",
+			"round": "Findings",
+			"component": "patch 0036 configuration snapshot",
+			"owner": "docsync",
+			"anchor": "CFG-6",
+			"severity": "info",
+			"summary": "The configsync probe could pass vacuously: it scanned late and nothing proved detection worked on the build.",
+			"status": "fixed",
+			"commit": "1442c1cf",
+			"test": {
+				"file": "test/configsync/probe.ts",
+				"name": "CFG-6 detection works on this build: the tab-owned canary was seen"
+			}
+		},
+		{
+			"record": "20261112-tab-configuration-snapshot.md",
+			"round": "Findings",
+			"component": "variable resolution (outside 0036)",
+			"owner": "docsync",
+			"anchor": "CFG-7",
+			"severity": "info",
+			"summary": "`${config:…}` in a tab-owned tasks.json or launch.json resolves in the renderer against the unfiltered configuration.",
+			"status": "open",
+			"gap": "A sibling of the snapshot filter: resolve config variables for tab tasks against the tab's filtered view."
 		}
 	]
 }
