@@ -2,7 +2,7 @@
 
 - **Status:** proposed
 - **Date:** 2026-11-12
-- **Deciders:** coordinator, 2026-11-09 (scope; drop rather than sentinel for now; policy filtered like user settings; core keys allowed by scope with `restricted` and credential-named keys excluded, no editor allowlist; each withheld key reported by name for the user to move to the broker). Tab observability session, 2026-11-09 (the report's shape and its verification on the Tab Manager side). Document-sync session: implementation.
+- **Deciders:** coordinator, 2026-11-09 (scope; drop rather than sentinel for now; policy filtered like user settings; core keys allowed by scope with `restricted` and credential-named keys excluded, no editor allowlist; each withheld key reported by name for the user to move to the broker). Tab observability session, 2026-11-09 (the report's shape and its verification on the Tab Manager side). Project owner, 2026-11-13 (extension-declared keys never receive host user, policy or local-workspace values; a per-extension opt-in is a follow-up). Document-sync session: implementation.
 - **Related:** [document sync provenance](20261109-document-sync-provenance.md) (0035); [settings withheld notice](20261109-settings-withheld-notice.md); [RPC lockdown](../RPC-LOCKDOWN.md) §7; [no real secret in a tab](../adr/20261104-no-real-secret-in-a-tab.md); [pre-mount secret scan](../adr/20261104-pre-mount-secret-scan.md)
 
 ## Context
@@ -29,10 +29,16 @@ only (0035's predicate). The local host and other windows get the snapshot as up
    `secret`, `auth`, `api key`, `credential`, `private key`, and `env` maps), or if any string in it
    is a secret by gitleaks' default rules. This runs before any registry lookup, in every layer that
    is filtered, `[lang]` sections included. Names catch low-entropy passwords that scanners miss.
-2. **Then declaration.** `defaults`, `policy`, `userLocal` and local workspace or folder settings
-   keep only keys registered by core with a scope other than `APPLICATION`, `MACHINE`,
-   `APPLICATION_MACHINE` or `MACHINE_OVERRIDABLE` and not `restricted`, or declared by an extension
-   installed in this tab. Undeclared keys never cross.
+2. **Then declaration.** `policy`, `userLocal` and local workspace or folder settings (values the
+   host user, policy or a local workspace set) keep only keys registered by core with a scope other
+   than `APPLICATION`, `MACHINE`, `APPLICATION_MACHINE` or `MACHINE_OVERRIDABLE` and not
+   `restricted`. A key an extension declares never receives a host value there (review round 1,
+   A1): the tab chooses which keys its extensions declare, so any credential denylist would have
+   gaps (a URL with userinfo inside an env map, a passphrase, a cookie, a numeric PIN). Extensions
+   in a tab read their settings from the tab's own remote and workspace settings. `defaults`
+   (registry defaults, not user values) also keeps the keys of extensions installed in this tab.
+   Undeclared keys never cross, and neither do keys with a `__proto__`, `constructor` or
+   `prototype` segment.
 3. **Layers.** `application` is dropped. `userRemote` (the REH's own) and workspace or folder
    settings on the tab's own authority pass unchanged: the tab already controls them.
 4. **Changes.** Every `$acceptConfigurationChanged` rebuilds and refilters the snapshot, and the
@@ -64,19 +70,24 @@ the Tab Manager imports the same directory.
   rule, and the measured list of core keys that cross is recorded so drift shows in review.
 - **A sentinel instead of dropping:** deferred. The broker has no import path for setting values
   yet. Dropping, plus a notice naming the key, is the first step.
+- **Let tab-declared keys receive host values, behind the credential rule** (the first design):
+  rejected after review round 1. The tab picks the keys, and the rule can't recognise every
+  credential shape.
 - **Run gitleaks itself:** a native binary in the renderer is not an option. The port is checked
   against the pinned binary instead.
 
 ## Consequences
-- A tab never receives host user settings it has no declared use for, or anything that looks like
-  a credential. An extension that needs a credential setting gets nothing until the user moves the
-  credential to the broker, and the Tab Manager tells them which key.
+- A tab never receives an extension setting from the host user settings, policy or a local
+  workspace file, or anything that looks like a credential. **User-visible:** an extension in a
+  tab only sees what the tab's own remote or workspace settings say; settings for it in the host
+  `settings.json` don't follow it into tabs (ARCHITECTURE §4.8). Core editor settings still do.
+- An extension that needs a credential gets nothing until the user moves it to the broker, and the
+  Tab Manager names the withheld key.
+- **Follow-up:** a per-extension opt-in to receive host values, as its own reviewed change.
 - Core settings the tab does receive are listed in the evidence below, for review on upstream bumps.
 - **Residuals:**
   - the scanner doesn't decode base64, hex or percent-encoded segments as gitleaks can;
   - withholdings from policy, defaults, local workspace settings and `[lang]` sections are silent;
-  - a tab extension can declare a setting key another extension owns (the registry keeps the
-    first), and then receives that key's non-credential value;
   - the tab's own `userRemote` and tab-authority workspace settings are not filtered.
 
 ## Evidence

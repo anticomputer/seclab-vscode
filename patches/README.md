@@ -75,9 +75,9 @@ Current queue:
   - host-wide `application` settings never cross;
   - a key whose name, or any key name inside its value, names a credential, or whose strings
     gitleaks' pinned default rules call a secret, is withheld whatever the registry says;
-  - of the rest, host user, policy, default and local-workspace settings cross only for keys
-    registered by core (not application, machine or `restricted`) or declared by an extension
-    installed in that tab.
+  - of the rest, host user, policy and local-workspace settings cross only for keys registered by
+    core (not application, machine or `restricted`); a key an extension declares never receives a
+    host value, so extensions in a tab read their settings from the tab's own settings.
 
   Every change event is refiltered. Withheld user-settings keys are reported by name to the Tab
   Manager over the window's local extension host. The shared classifier and rule table are edited

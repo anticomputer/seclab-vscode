@@ -232,6 +232,20 @@ Everything else in the catalogue runs inside the tab sandbox, so it is **contain
 - MCP stdio servers
 - Jupyter kernels
 
+### 4.8 Tab limitations (what behaves differently inside a tab)
+
+User-visible consequences of containment, so they read as design rather than bugs:
+- **Host documents don't reach tab extensions.** Settings, keybindings, output channels and host
+  files opened in a tab window are hidden from the tab's extensions, so language features and
+  extension commands don't work on them (patch 0035, [EDR](edr/20261109-document-sync-provenance.md)).
+- **Extension settings come only from the tab.** A setting an extension declares receives no
+  value from the host user settings, policy or a local workspace file. Set it in the tab's own
+  remote or workspace settings instead. Core editor settings still follow the host (patch 0036,
+  [EDR](edr/20261112-tab-configuration-snapshot.md)). A per-extension opt-in is planned.
+- **Credential-looking settings are withheld.** A host setting whose name or value looks like a
+  credential never reaches a tab. The Tab Manager names the key so the user can move the secret to
+  the broker (same EDR).
+
 ## 5. Local vs cloud
 
 The unit is a **pod**: workspace sandbox plus broker sidecar. Locally it runs on Docker or Podman (later VM-per-tab). In the cloud it is a literal Kubernetes pod with a gVisor or Kata RuntimeClass.

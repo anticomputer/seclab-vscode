@@ -115,8 +115,8 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadConfiguration.ts b/src/vs/wor
  	$updateConfigurationOption(target: ConfigurationTarget | null, key: string, value: unknown, overrides: IConfigurationOverrides | undefined, scopeToLanguage: boolean | undefined): Promise<void> {
 diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts
 --- a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	1970-01-01 00:00:00
-+++ b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	2026-11-12 19:01:08
-@@ -0,0 +1,203 @@
++++ b/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts	2026-11-13 23:03:32
+@@ -0,0 +1,210 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab: the configuration a tab's extension host receives (patch 0036, EDR
 + *  configuration-snapshot). Upstream sends every host the whole snapshot, the host user
@@ -125,9 +125,13 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 + *    on the tab's own authority, pass unchanged (the tab already controls them).
 + *  - First, whatever the registry says, a key `withholdReason` calls a credential (by name, or by
 + *    gitleaks' rules on its strings) is withheld. Registration and scope can change at run time.
-+ *  - Then `defaults`, `policy`, `userLocal` and local workspace or folder settings keep only keys
-+ *    that are core-registered with a non-application, non-machine scope and not `restricted`, or
-+ *    declared by an extension installed in this tab. Undeclared keys never cross.
++ *  - Then `policy`, `userLocal` and local workspace or folder settings (host-owned values) keep
++ *    only keys core registers with a non-application, non-machine scope and not `restricted`. A
++ *    key an extension declares never receives a host value: the tab chooses what it declares, so
++ *    a credential denylist would always have gaps (review 0036 A1; project owner, 2026-11-13).
++ *    Extensions in a tab read their settings from the tab's own remote and workspace settings.
++ *    `defaults` (registry defaults) also keeps the keys of extensions installed in this tab.
++ *    Undeclared keys never cross.
 + *  The snapshot is rebuilt and refiltered for every `$acceptConfigurationChanged`.
 + *  Keys withheld from the top level of `userLocal` are reported by name, never value, for the Tab
 + *  Manager to verify and raise (other layers and `[lang]` sections are withheld silently).
@@ -160,8 +164,11 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +/** Segments that reach an object's prototype in `addToValueTree` (review 0036 A2). */
 +const UNSAFE_SEGMENT = /(?:^|\.)(?:__proto__|constructor|prototype)(?:\.|$)/;
 +
-+/** Whether a registered `key` (not a `[lang]` section) may reach this tab at all. */
-+function declaredForTab(key: string, scope: SeclabSnapshotScope): boolean {
++/**
++ * Whether a registered `key` (not a `[lang]` section) may reach this tab from a filtered layer.
++ * `hostValues`: the layer holds values the host user, policy or a local workspace set.
++ */
++function declaredForTab(key: string, scope: SeclabSnapshotScope, hostValues: boolean): boolean {
 +	if (UNSAFE_SEGMENT.test(key) || !Object.hasOwn(props(), key)) {
 +		return false;
 +	}
@@ -170,7 +177,7 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +	if (source === undefined) {
 +		return !HOST_SCOPES.has(schema.scope ?? ConfigurationScope.WINDOW) && !schema.restricted;
 +	}
-+	if (!scope.tabExtensions.has(source.toLowerCase())) {
++	if (hostValues || !scope.tabExtensions.has(source.toLowerCase())) {
 +		return false;
 +	}
 +	// A tab extension declaring a prefix of someone else's keys (say `http`) would receive the
@@ -178,7 +185,7 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +	return !Object.keys(props()).some(k => k.startsWith(`${key}.`) && sourceOf(k) !== source);
 +}
 +
-+function filterContents(contents: IStringDictionary<unknown>, keys: readonly string[], scope: SeclabSnapshotScope, report: SeclabWithheld[] | undefined, all: SeclabWithheld[]): { contents: IStringDictionary<unknown>; keys: string[] } {
++function filterContents(contents: IStringDictionary<unknown>, keys: readonly string[], scope: SeclabSnapshotScope, hostValues: boolean, report: SeclabWithheld[] | undefined, all: SeclabWithheld[]): { contents: IStringDictionary<unknown>; keys: string[] } {
 +	const out: IStringDictionary<unknown> = Object.create(null);
 +	const kept: string[] = [];
 +	for (const key of keys) {
@@ -186,7 +193,7 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +			// A `[lang]` section: its own keys go through the same rule.
 +			const section = Object.hasOwn(contents, key) ? contents[key] : undefined;
 +			const dict = section && typeof section === 'object' ? section as IStringDictionary<unknown> : {};
-+			const inner = filterContents(dict, Object.keys(dict), scope, undefined, all);
++			const inner = filterContents(dict, Object.keys(dict), scope, hostValues, undefined, all);
 +			if (inner.keys.length) {
 +				out[key] = inner.contents;
 +				kept.push(key);
@@ -203,7 +210,7 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +			all.push({ key, reason });
 +			continue;
 +		}
-+		if (!declaredForTab(key, scope)) {
++		if (!declaredForTab(key, scope, hostValues)) {
 +			continue;
 +		}
 +		addToValueTree(out, key, value, () => { });
@@ -212,10 +219,10 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +	return { contents: out, keys: kept };
 +}
 +
-+function filterModel(model: IConfigurationModel, scope: SeclabSnapshotScope, report: SeclabWithheld[] | undefined, all: SeclabWithheld[]): IConfigurationModel {
-+	const top = filterContents(model.contents, model.keys, scope, report, all);
++function filterModel(model: IConfigurationModel, scope: SeclabSnapshotScope, hostValues: boolean, report: SeclabWithheld[] | undefined, all: SeclabWithheld[]): IConfigurationModel {
++	const top = filterContents(model.contents, model.keys, scope, hostValues, report, all);
 +	const overrides = model.overrides.map(o => {
-+		const f = filterContents(o.contents, o.keys, scope, undefined, all);
++		const f = filterContents(o.contents, o.keys, scope, hostValues, undefined, all);
 +		return { identifiers: o.identifiers, contents: f.contents, keys: f.keys };
 +	}).filter(o => o.keys.length);
 +	return { contents: top.contents, keys: top.keys, overrides };
@@ -250,14 +257,14 @@ diff -ruN a/src/vs/workbench/api/browser/seclabConfigurationSnapshot.ts b/src/vs
 +	const tabFolder = (uri: { scheme?: string; authority?: string }) => uri.scheme === 'vscode-remote' && uri.authority === scope.windowAuthority;
 +	const host: IConfigurationModel[] = [];
 +	const tab: IConfigurationModel[] = [data.userRemote];
-+	const filtered = (m: IConfigurationModel, report?: SeclabWithheld[]) => {
-+		const f = filterModel(m, scope, report, silent);
++	const filtered = (m: IConfigurationModel, report?: SeclabWithheld[], hostValues = true) => {
++		const f = filterModel(m, scope, hostValues, report, silent);
 +		host.push(f);
 +		return f;
 +	};
 +	const result: IConfigurationInitData = {
 +		...data,
-+		defaults: filtered(data.defaults),
++		defaults: filtered(data.defaults, undefined, false),
 +		policy: filtered(data.policy),
 +		application: EMPTY,
 +		userLocal: filtered(data.userLocal, withheld),
