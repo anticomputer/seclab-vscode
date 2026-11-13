@@ -171,7 +171,10 @@ if (mode === 'prepare') {
 		console.log(`canary hits: ${hits.join(', ') || 'none'}`);
 		console.log(`controls: ${JSON.stringify(rep.controls)}; ${rep.keys.length} setting names reached the tab`);
 		expect('the probe finished', rep.done === true);
-		expect('detection works on this build: the tab-owned canary was seen', hits.some(h => h.startsWith(`${DETECT}@`)));
+		expect('CFG-6 detection works on this build: the tab-owned canary was seen', hits.some(h => h.startsWith(`${DETECT}@`)));
+		const seen = (k: string) => hits.some(h => h.startsWith(`${k}@`));
+		expect('CFG-1 an extension-declared key receives no host value (env-map URL, plain value)', !seen('toolsEnv') && !seen('label'));
+		expect('CFG-3 nested-form settings under a tab-declared prefix stay on the host', !seen('nested'));
 		for (const k of KINDS) {
 			const at = hits.filter(h => h.startsWith(`${k}@`));
 			expect(`no ${k} canary reached the tab`, at.length === 0, at.join(','));
