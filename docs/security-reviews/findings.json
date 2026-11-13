@@ -83,7 +83,6 @@
 		"20261105-rpc-filter-rereview.md#4",
 		"20261105-secure-agentic-experiences-design.md#2",
 		"20261105-secure-agentic-experiences-design.md#3",
-		"20261105-secure-agentic-experiences-design.md#7",
 		"20261106-agentic-ahp-gate.md#GATE-1",
 		"20261106-agentic-ahp-gate.md#HIGH, forcing enableRemoteProxy false would have made one path worse.",
 		"20261106-agentic-ahp-gate.md#HIGH, the \"unforgeable\" evidence rule was forgeable.",
@@ -330,7 +329,7 @@
 			"component": "probe harness teardown / clean-host",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "a81b403",
+			"commit": "59f9b26",
 			"test": {
 				"file": "test/containment/teardown.test.ts",
 				"name": "a leaked helper with no manifest entry is still found"
@@ -4168,7 +4167,7 @@
 			"component": "obs schema / window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "74fe165",
+			"commit": "23d6a98",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "a ref that fails the pattern keeps the event"
@@ -4184,7 +4183,7 @@
 			"component": "obs window decision logs / Tab Manager",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "74fe165",
+			"commit": "23d6a98",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "forwarding needs the policy stamp AND the enforcing code"
@@ -4200,7 +4199,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "74fe165",
+			"commit": "23d6a98",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "spdlog rotation by rename (a.log -> a.1.log -> a.2.log)"
@@ -4216,7 +4215,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed-untested",
-			"commit": "74fe165",
+			"commit": "23d6a98",
 			"gap": "windowlog.ts caps work at BATCHES_PER_TICK = 4 per file and lists the gate log first, but the forwarder test delivers only 3 batches from one file, so neither the cap nor the gate-first ordering is asserted."
 		},
 		{
@@ -6917,9 +6916,12 @@
 			"summary": "Model APIs accept server-side tools that fetch caller-chosen URLs, relaying workspace data past host/path/method bindings",
 			"component": "broker body policy for model hosts",
 			"owner": "broker",
-			"status": "deferred",
-			"gap": "no broker body policy for model hosts exists yet",
-			"followUp": "broker session: fail-closed body allowlist for model hosts (plan §4.4, Tier C exception R14), needed by increment 5"
+			"status": "fixed",
+			"commit": "bbc375d",
+			"test": {
+				"file": "broker/tests/unit/test_models.py",
+				"name": "test_body_policy_denials"
+			}
 		},
 		{
 			"record": "20261105-secure-agentic-experiences-design.md",
@@ -7742,7 +7744,7 @@
 			"status": "fixed-untested",
 			"commit": "051e773",
 			"gap": "the tab now gets only a per-run salt and salted hashes and the vsix is removed after install, but nothing asserts that rule outside a live U/G run",
-			"note": "Branch anticomputer-agentic-gate-0015-v3 commit a710f84 (unpushed) adds tests for this; it stays in the baseline until they land on main."
+			"note": "Branch anticomputer-agentic-gate-0015-v3 commit ec78cef (unpushed) adds tests for this; it stays in the baseline until they land on main."
 		},
 		{
 			"record": "20261106-agentic-ahp-gate.md",
@@ -7755,7 +7757,7 @@
 			"status": "fixed-untested",
 			"commit": "051e773",
 			"gap": "prepare records canaries.json and check requires an ahp-gate.root-config:strip decision on G, but both assertions run only in a live U/G run; no unit test covers them",
-			"note": "Branch anticomputer-agentic-gate-0015-v3 commit a710f84 (unpushed) adds tests for this; it stays in the baseline until they land on main."
+			"note": "Branch anticomputer-agentic-gate-0015-v3 commit ec78cef (unpushed) adds tests for this; it stays in the baseline until they land on main."
 		},
 		{
 			"record": "20261106-agentic-ahp-gate.md",
@@ -7779,12 +7781,12 @@
 			"component": "fixed tab settings (patch 0017), browser view network",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "305601a",
+			"commit": "5f579d0",
 			"test": {
 				"file": "test/agentic/gate/fixed-settings.test.ts",
 				"name": "a tab cannot take the network away through either browser key"
 			},
-			"note": "The key was first removed from 0017 (15286b6) and then, once `true` was decided, forced to true with dataStorage pinned to ephemeral (305601a); reviewed again in round 7."
+			"note": "The key was first removed from 0017 (07e79c7) and then, once `true` was decided, forced to true with dataStorage pinned to ephemeral (5f579d0); reviewed again in round 7."
 		},
 		{
 			"record": "20261106-agentic-ahp-gate.md",
@@ -7796,7 +7798,7 @@
 			"component": "fixed tab settings (patch 0017)",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "15286b6",
+			"commit": "07e79c7",
 			"test": {
 				"file": "test/agentic/gate/fixed-settings.test.ts",
 				"name": "inspect keeps its per-layer getters when it reports a fixed value"
@@ -7812,7 +7814,7 @@
 			"component": "fixed tab settings (patch 0017)",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "15286b6",
+			"commit": "07e79c7",
 			"test": {
 				"file": "test/agentic/gate/fixed-settings.test.ts",
 				"name": "the extension-host snapshot is scrubbed layer by layer"
@@ -7828,7 +7830,7 @@
 			"component": "fixed tab settings (patch 0017)",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "15286b6",
+			"commit": "07e79c7",
 			"test": {
 				"file": "test/agentic/gate/fixed-settings.test.ts",
 				"name": "0017 and 0015 decide \"is this a tab window\" from the same prefix"
@@ -7849,7 +7851,7 @@
 			"component": "fixed tab settings tests (patch 0017)",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "15286b6",
+			"commit": "07e79c7",
 			"test": {
 				"file": "test/agentic/gate/fixed-settings.test.ts",
 				"name": "a tab window fixes exactly the declared keys, and nothing else"
@@ -7865,7 +7867,7 @@
 			"component": "fixed tab settings (patch 0017) records",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "e5c5cef",
+			"commit": "1345773",
 			"gap": "the claim was corrected in the patch comment and the EDR, but nothing checks that a later fence widening does not silently make the record wrong again"
 		},
 		{
@@ -7878,7 +7880,7 @@
 			"component": "fixed tab settings (patch 0017), browser view restore",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "e5c5cef",
+			"commit": "1345773",
 			"gap": "the fix lives in the upstream hunk (_resolveSessionRequest drops the saved request in a seclab+ window), which no unit test can reach; verdict.test.ts only exercises the verdict logic and the corrected restore run has not been performed against rebuilt U/F variants"
 		},
 		{
@@ -7891,7 +7893,7 @@
 			"component": "increment 2 EDR",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "e5c5cef",
+			"commit": "1345773",
 			"gap": "documentation correction; no check enforces record/decision consistency"
 		},
 		{
@@ -7904,7 +7906,7 @@
 			"component": "patch-build upstream invariants",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "e5c5cef",
+			"commit": "1345773",
 			"test": {
 				"file": "patches/sole-consumer.json",
 				"name": "patch 0017 pins workbench.browser.dataStorage to 'ephemeral' precisely because upstream drops the browser view's network for the global scope"
@@ -7921,7 +7923,7 @@
 			"component": "increment 2 U-vs-F proof harness",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "0b0e30f",
+			"commit": "f3cc2ae",
 			"gap": "the harness is corrected (offsets taken in switch-build with the first editor refused while alive, lines sorted by their own timestamps, restore tests added) but the U and F variants have not been rebuilt and re-run, so the round 7 restore gap is still unverified at runtime"
 		},
 		{
@@ -7935,7 +7937,7 @@
 			"owner": "agentic",
 			"status": "open",
 			"gap": "round 9 confirmed the agent tool path never reads dataStorage at all; the --probe storage run measures only the non-agent create path, and the restore phase that would demonstrate the pin has not been run. The pin rests on the source reading plus the sole-consumer invariant",
-			"note": "Branch anticomputer-agentic-gate-0015-v3 commit a710f84 (unpushed) adds tests for this; it stays in the baseline until they land on main."
+			"note": "Branch anticomputer-agentic-gate-0015-v3 commit ec78cef (unpushed) adds tests for this; it stays in the baseline until they land on main."
 		},
 		{
 			"record": "20261106-agentic-ahp-gate.md",
@@ -7947,7 +7949,7 @@
 			"component": "increment 2 EDR",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "30537f1",
+			"commit": "50e8d25",
 			"gap": "documentation correction recorded as an explicit limit; no check enforces it"
 		},
 		{
@@ -7960,12 +7962,12 @@
 			"component": "increment 2 U-vs-F proof verdict",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "0b0e30f",
+			"commit": "f3cc2ae",
 			"test": {
 				"file": "test/agentic/browser/verdict.test.ts",
 				"name": "defect: the beacon was not listening -> only the liveness check goes red"
 			},
-			"note": "Both listeners are now liveness-probed from their own side (06b882e added the tab-side one)."
+			"note": "Both listeners are now liveness-probed from their own side (88b4943 added the tab-side one)."
 		},
 		{
 			"record": "20261106-agentic-ahp-gate.md",
@@ -7978,7 +7980,7 @@
 			"owner": "agentic",
 			"status": "accepted-residual",
 			"acceptedBy": "agent",
-			"rationale": "Round 9's non-loopback fix was abandoned (06b882e: a private address binds but nothing on the host can reach it without changing the user's network) and replaced by two listeners with exactly one allowed hit; the envelope limit is recorded as a limit of the measurement, and the divergence over-states the vulnerability rather than producing a false \"contained\".",
+			"rationale": "Round 9's non-loopback fix was abandoned (88b4943: a private address binds but nothing on the host can reach it without changing the user's network) and replaced by two listeners with exactly one allowed hit; the envelope limit is recorded as a limit of the measurement, and the divergence over-states the vulnerability rather than producing a false \"contained\".",
 			"ref": {
 				"file": "docs/edr/20261106-increment-2-remote-proxy.md",
 				"quote": "measurement of `resolveNetwork`, not of the whole tool path."
@@ -7994,7 +7996,7 @@
 			"component": "increment 2 proof harness teardown",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "96e4c5a",
+			"commit": "7595789",
 			"gap": "run.ts now removes the arming file on every check, but no test asserts it"
 		},
 		{
@@ -8007,7 +8009,7 @@
 			"component": "increment 2 proof harness",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "0b0e30f",
+			"commit": "f3cc2ae",
 			"test": {
 				"file": "test/agentic/browser/verdict.test.ts",
 				"name": "every mode the usage line documents actually reaches a handler"
@@ -8023,7 +8025,7 @@
 			"component": "increment 2 proof verdict",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "0b0e30f",
+			"commit": "f3cc2ae",
 			"test": {
 				"file": "test/agentic/browser/verdict.test.ts",
 				"name": "the restore attributability check keys off the SAVED scope, not the resolved one"
@@ -8040,7 +8042,7 @@
 			"component": "increment 2 proof harness",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "0b0e30f",
+			"commit": "f3cc2ae",
 			"test": {
 				"file": "test/agentic/browser/verdict.test.ts",
 				"name": "a restore phase cannot borrow the first launch readiness line"
@@ -8057,7 +8059,7 @@
 			"component": "increment 2 proof verdict",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "0b0e30f",
+			"commit": "f3cc2ae",
 			"test": {
 				"file": "test/agentic/browser/verdict.test.ts",
 				"name": "defect: a different binary produced the lines -> only the build check goes red"
@@ -8074,7 +8076,7 @@
 			"component": "increment 2 EDR and agentic-browser variant review",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "0b0e30f",
+			"commit": "f3cc2ae",
 			"gap": "documentation correction in the EDR and the variant's review; no check enforces the faithfulness envelope"
 		},
 		{
@@ -8087,12 +8089,12 @@
 			"component": "increment 2 proof verdict",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "06b882e",
+			"commit": "88b4943",
 			"test": {
 				"file": "test/agentic/browser/verdict.test.ts",
 				"name": "defect: the network was dropped but NOT by the setting -> the U proxy claim does not stand"
 			},
-			"note": "Round 9's own fix (requestedNetwork=seclab+<tab>) proved unsatisfiable on U and was replaced in 06b882e by the effective setting value the window read, after the review round."
+			"note": "Round 9's own fix (requestedNetwork=seclab+<tab>) proved unsatisfiable on U and was replaced in 88b4943 by the effective setting value the window read, after the review round."
 		},
 		{
 			"record": "20261106-agentic-ahp-gate.md",
@@ -8104,7 +8106,7 @@
 			"component": "increment 2 proof verdict",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "06b882e",
+			"commit": "88b4943",
 			"test": {
 				"file": "test/agentic/browser/verdict.test.ts",
 				"name": "inconclusive: neither side saw the page -> the side check cannot pass"
@@ -8121,7 +8123,7 @@
 			"component": "increment 2 proof harness",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "0b0e30f",
+			"commit": "f3cc2ae",
 			"gap": "linesSince now raises on a shrunken file and drops the leading fragment, but no test covers either path"
 		},
 		{
@@ -8161,12 +8163,12 @@
 			"component": "build/check-sole-consumer.ts: every patch-queue invariant (sole-consumer and __upstreamInvariants rules) in the patch-build gate",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "6353682",
+			"commit": "8913891",
 			"test": {
 				"file": "build/patch-reach-imports.test.ts",
 				"name": "sole-consumer: a config it cannot read is a problem, not a clean result (GATE-1)"
 			},
-			"note": "Fix in a710f84, regression test in 6353682, both on the branch (unpushed). It stays in the baseline until they land on main; then drop branch."
+			"note": "Fix in ec78cef, regression test in 8913891, both on the branch (unpushed). It stays in the baseline until they land on main; then drop branch."
 		},
 		{
 			"record": "20261106-agentic-browser-variant.md",
@@ -8179,7 +8181,7 @@
 			"component": "agentic-browser test build variant (browserView-hook.patch)",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "e49e5a1",
+			"commit": "0cf51ed",
 			"gap": "The hook is now written against the series without 0017 and its import is placed away from 0017's hunk, verified by applying it to a tree with and without 0017 — but that was a manual check; nothing in the repo applies the hook to both trees, so only a dispatched `build-macos` run of each baseline would catch a regression.",
 			"manual": {
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
@@ -8197,7 +8199,7 @@
 			"component": "agentic-browser test build variant (browserView-hook.patch)",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "e49e5a1",
+			"commit": "0cf51ed",
 			"gap": "Removed by inlining `getAgentBrowserViewCreationDefaults`; only a dispatched variant build compiles the hooked tree, so nothing in CI on this branch would catch a reintroduced duplicate import.",
 			"manual": {
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
@@ -8215,7 +8217,7 @@
 			"component": "agentic-browser hook arming",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "e49e5a1",
+			"commit": "0cf51ed",
 			"gap": "Inverted to `Number(fields.until) > Date.now()` (fails closed), but there is no arming test for the browser-drive hook, unlike `test/builds/rogue-reh-arming.ts` for the rogue-REH hook.",
 			"manual": {
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
@@ -8233,7 +8235,7 @@
 			"component": "agentic-browser hook arming",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "e49e5a1",
+			"commit": "0cf51ed",
 			"gap": "It now requires `/^[0-9a-f]{32}$/` as the rogue-REH hook does, but no arming test exercises a bad nonce for this hook.",
 			"manual": {
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
@@ -8251,7 +8253,7 @@
 			"component": "agentic-browser hook (drive tick)",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "e49e5a1",
+			"commit": "0cf51ed",
 			"gap": "The latch is now set before the await and released only on a miss, but no test drives two ticks concurrently to prove one page is opened.",
 			"manual": {
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
@@ -8269,7 +8271,7 @@
 			"component": "test/builds/variants.json",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "e49e5a1",
+			"commit": "0cf51ed",
 			"gap": "`variants.json` now points at this record, but no check validates that a variant's `review` field names a record that actually reviews it (build/test-variant.sh does not read the field).",
 			"manual": {
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
@@ -8319,7 +8321,7 @@
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
 				"quote": "## Correction (security review round 9, 2026-11-10): the faithfulness envelope moved"
 			},
-			"note": "Landed in commit 0b0e30f on the branch, together with the two added log points (`savedScope=` in `_getOrCreateLazy` and the resolved scope/network at the end of `_resolveViewSession`)."
+			"note": "Landed in commit f3cc2ae on the branch, together with the two added log points (`savedScope=` in `_getOrCreateLazy` and the resolved scope/network at the end of `_resolveViewSession`)."
 		},
 		{
 			"record": "20261106-agentic-real-tab-spike.md",
@@ -11635,7 +11637,7 @@
 			"component": "test/agentic/ahp/ahp_inventory.py",
 			"owner": "agentic",
 			"status": "deferred",
-			"followUp": "Fixed with its test on branch anticomputer-agentic-gate-0015-v3 (6353682, unpushed): exit_code() fails on a non-empty problems list, and self_test injects a scanner gap. Counts as fixed once that commit lands on main."
+			"followUp": "Fixed with its test on branch anticomputer-agentic-gate-0015-v3 (8913891, unpushed): exit_code() fails on a non-empty problems list, and self_test injects a scanner gap. Counts as fixed once that commit lands on main."
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
