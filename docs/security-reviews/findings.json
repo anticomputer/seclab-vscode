@@ -4167,7 +4167,7 @@
 			"component": "obs schema / window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "23d6a98",
+			"commit": "c42a11c218644a774efec2ebc7ec7b059c8e0a5d",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "a ref that fails the pattern keeps the event"
@@ -4183,7 +4183,7 @@
 			"component": "obs window decision logs / Tab Manager",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "23d6a98",
+			"commit": "c42a11c218644a774efec2ebc7ec7b059c8e0a5d",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "forwarding needs the policy stamp AND the enforcing code"
@@ -4199,7 +4199,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "23d6a98",
+			"commit": "c42a11c218644a774efec2ebc7ec7b059c8e0a5d",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "spdlog rotation by rename (a.log -> a.1.log -> a.2.log)"
@@ -4215,7 +4215,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed-untested",
-			"commit": "23d6a98",
+			"commit": "c42a11c218644a774efec2ebc7ec7b059c8e0a5d",
 			"gap": "windowlog.ts caps work at BATCHES_PER_TICK = 4 per file and lists the gate log first, but the forwarder test delivers only 3 batches from one file, so neither the cap nor the gate-first ordering is asserted."
 		},
 		{
