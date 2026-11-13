@@ -12411,7 +12411,7 @@
 			"commit": "d602ec8",
 			"test": {
 				"file": "test/configsync/probe.ts",
-				"name": "CFG-1 an extension-declared key receives no host value (env-map URL, plain value)"
+				"name": "CFG-1 an extension-declared key receives no host value (env-map URL, plain value, nested form)"
 			},
 			"note": "Design change, project owner 2026-11-13: extension-declared keys never receive host user, policy or local-workspace values. Per-extension opt-in is a follow-up."
 		},
@@ -12439,8 +12439,9 @@
 			"commit": "1442c1cf",
 			"test": {
 				"file": "test/configsync/probe.ts",
-				"name": "CFG-3 nested-form settings under a tab-declared prefix stay on the host"
-			}
+				"name": "CFG-1 an extension-declared key receives no host value (env-map URL, plain value, nested form)"
+			},
+			"note": "Since round 2 the CFG-1 rule refuses the prefix key before the prefix check; the canary is asserted under CFG-1."
 		},
 		{
 			"record": "20261112-tab-configuration-snapshot.md",
@@ -12491,6 +12492,48 @@
 			"summary": "`${config:…}` in a tab-owned tasks.json or launch.json resolves in the renderer against the unfiltered configuration.",
 			"status": "open",
 			"gap": "A sibling of the snapshot filter: resolve config variables for tab tasks against the tab's filtered view."
+		},
+		{
+			"record": "20261112-tab-configuration-snapshot.md",
+			"round": "Round 2",
+			"component": "patch 0036 configuration snapshot",
+			"owner": "docsync",
+			"anchor": "CFG-8",
+			"severity": "medium",
+			"summary": "Core `launch` (WINDOW scope, not restricted) carried the user's debug configurations to the tab; args and connection strings can hold credentials the classifier misses.",
+			"status": "fixed",
+			"commit": "fad0bbee",
+			"test": {
+				"file": "test/configsync/probe.ts",
+				"name": "CFG-8 a core free-form setting brings no host text (launch args)"
+			}
+		},
+		{
+			"record": "20261112-tab-configuration-snapshot.md",
+			"round": "Round 2",
+			"component": "patch 0036 configuration snapshot",
+			"owner": "docsync",
+			"anchor": "CFG-9",
+			"severity": "low",
+			"summary": "The change-event key classification trusted `e.source`, which upstream sets to WORKSPACE for multi-layer reloads, so host key names were checked against tab keys only.",
+			"status": "fixed-untested",
+			"commit": "fad0bbee",
+			"gap": "No runtime test for change-event key lists after a profile switch or reload."
+		},
+		{
+			"record": "20261112-tab-configuration-snapshot.md",
+			"round": "Round 2",
+			"component": "patch 0036 configuration snapshot",
+			"owner": "docsync",
+			"anchor": "CFG-10",
+			"severity": "info",
+			"summary": "The CFG-3 harness assertion became vacuous after the CFG-1 change, and no canary covered core free-form settings.",
+			"status": "fixed",
+			"commit": "fad0bbee",
+			"test": {
+				"file": "test/configsync/probe.ts",
+				"name": "CFG-8 a core free-form setting brings no host text (launch args)"
+			}
 		}
 	]
 }

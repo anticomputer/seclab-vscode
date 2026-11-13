@@ -240,7 +240,8 @@ User-visible consequences of containment, so they read as design rather than bug
   extension commands don't work on them (patch 0035, [EDR](edr/20261109-document-sync-provenance.md)).
 - **Extension settings come only from the tab.** A setting an extension declares receives no
   value from the host user settings, policy or a local workspace file. Set it in the tab's own
-  remote or workspace settings instead. Core editor settings still follow the host (patch 0036,
+  remote or workspace settings instead. Core editor settings still follow the host, except object
+  or array settings that contain text, such as global `launch` configurations (patch 0036,
   [EDR](edr/20261112-tab-configuration-snapshot.md)). A per-extension opt-in is planned.
 - **Credential-looking settings are withheld.** A host setting whose name or value looks like a
   credential never reaches a tab. The Tab Manager names the key so the user can move the secret to
