@@ -13931,6 +13931,92 @@
 			"note": "Nine self-test cases, run with the check by ./seclab lint workflows in the required lint job; also proven on the real tree by injecting if: false into ci-unit."
 		},
 		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Findings",
+			"component": "patch 0038 editor-tab model",
+			"owner": "docsync",
+			"anchor": "EDT-1",
+			"severity": "medium",
+			"summary": "Webview subclasses that show files (media preview, custom-editor diffs) were exempt from the ownership rule, so a host file path reached the tab.",
+			"status": "fixed",
+			"commit": "1ad537ee",
+			"test": {
+				"file": "test/edtabs/probe.ts",
+				"name": "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary, login name)"
+			}
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Findings",
+			"component": "patch 0038 editor-tab model",
+			"owner": "docsync",
+			"anchor": "EDT-2",
+			"severity": "low",
+			"summary": "A host-created untitled editor counted as the tab's own, so its first line reached the tab as a label.",
+			"status": "fixed-untested",
+			"commit": "1ad537ee",
+			"gap": "No runtime case opens a host-created untitled document with content; the rule is 0035's untitled predicate."
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Findings",
+			"component": "patch 0038 editor-tab model",
+			"owner": "docsync",
+			"anchor": "EDT-3",
+			"severity": "low",
+			"summary": "A filesystem provider registered later by the tab could claim host editors already open in its scheme (latent under the RPC filter).",
+			"status": "fixed-untested",
+			"commit": "1ad537ee",
+			"gap": "Not reachable at run time today: the RPC filter refuses a tab's provider registration."
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Findings",
+			"component": "patch 0038 editor-tab model",
+			"owner": "docsync",
+			"anchor": "EDT-4",
+			"severity": "info",
+			"summary": "The edtabs probe could pass without the host editors reaching the tab's model.",
+			"status": "fixed",
+			"commit": "1ad537ee",
+			"test": {
+				"file": "test/edtabs/probe.ts",
+				"name": "control: the host editors reached the tab"
+			}
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Round 2",
+			"component": "patch 0038 editor-tab model",
+			"owner": "docsync",
+			"anchor": "EDT-5",
+			"severity": "low",
+			"summary": "Webview panels pass by scheme, so a host-side panel's title and view type reach the tab.",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "Under the RPC filter a tab cannot create webview panels, so every panel in a tab window is the window's own; none carries host data in its title.",
+			"ref": {
+				"file": "docs/security-reviews/20261116-editor-tab-provenance.md",
+				"quote": "Under the RPC filter a tab can't create a webview panel"
+			}
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Round 2",
+			"component": "patch 0038 editor-tab model",
+			"owner": "docsync",
+			"anchor": "EDT-6",
+			"severity": "info",
+			"summary": "A host-local terminal's title reaches the tab as an editor label.",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "No new exposure: the terminal service already pushes every terminal name to every host (DOCSYNC-R5).",
+			"ref": {
+				"file": "docs/security-reviews/20261116-editor-tab-provenance.md",
+				"quote": "No new exposure: the terminal service already pushes"
+			}
+		},
+		{
 			"record": "20261116-gate-fail-open-remainder.md",
 			"anchor": "FBA-1",
 			"round": "Round FBA",

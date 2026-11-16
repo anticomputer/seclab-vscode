@@ -29,19 +29,21 @@ and a `vscode:` URI for the default keybindings. Its own `README.md` arrived as 
 
 ## Decision
 Patch `0038-seclab-editor-tab-provenance`, for a non-`LocalProcess` host in a `seclab+` window
-(0035's predicate). An editor is the tab's own when every resource it shows (both sides of a diff,
-merge inputs, multi-diff entries, an interactive window's input) is:
+(0035's predicate). An editor is the tab's own when it shows at least one resource and every
+resource it shows (both sides of a diff of any kind, merge inputs, multi-diff entries, an
+interactive window's input) is:
 - a `vscode-remote` URI on this window's tab authority;
-- a model this host's own content provider made, or a resource of a filesystem provider this host
-  registered (0035's per-model and per-provider tags, so a tab can't claim a host scheme by
-  registering a provider for it);
-- an untitled document without a path (its label, `Untitled-1`, carries nothing).
+- a webview panel's or terminal's own id (`webview-panel:`, `vscode-terminal:`), which names no
+  resource;
+- any other URI only if its model is one 0035 would sync to this host (`seclabShouldSync`: a model
+  this host's provider made, a file born under a filesystem provider this host registered, an
+  untitled document this host created or that was empty when it appeared). Never by scheme, so a
+  tab can't claim a host scheme by registering a provider for it (review EDT-3).
 
-Any other editor reaches the tab as present only: an opaque id, `UnknownInput` and the label
-`Editor`. Terminals and webview panels keep their input (no URI; a title the panel's owner set).
-Ids are a salted SHA-1 of upstream's id for every editor, so an id never changes when an editor's
-status does. When 0035's tags change (a provider's model appears after its diff tab opened), the
-model is rebuilt and resent.
+Any other editor, including one with no resource at all, reaches the tab as present only: an
+opaque id, `UnknownInput` and the label `Editor`. Ids are a salted SHA-1 of upstream's id for every
+editor, so an id never changes when an editor's status does. When 0035's tags change (a provider's
+model appears after its diff tab opened), the model is rebuilt and resent.
 
 ## Alternatives considered
 - **Drop host editors from the model.** The extension API indexes tabs by position; dropping
@@ -50,8 +52,12 @@ model is rebuilt and resent.
   0035: a tab can register a provider for a host scheme.
 
 ## Consequences
-- An extension in a tab sees host-side editors as `Editor` tabs with an unknown input.
-- At 61 changed lines the patch is over the usual size; it is one concern in one file.
+- An extension in a tab sees host-side editors as `Editor` tabs with an unknown input. A tab's
+  own untitled editor shows as `Editor` until its model exists.
+- Webview panels and terminals keep their titles (review EDT-5, EDT-6): under the RPC filter a tab
+  creates no webview panel, and terminal names already reach every host through the terminal
+  service (DOCSYNC-R5).
+- At 70 changed lines the patch is over the usual size; it is one concern in one file.
 - If the filter ever allows `$moveTab` or `$closeTab`, the opaque ids already round-trip (the
   window's lookup uses the same ids).
 
@@ -59,4 +65,9 @@ model is rebuilt and resent.
 - **`fixture:test/edtabs/probe-extension`:** `test/edtabs/probe.ts drive` on main `6589051b`,
   sbx tab, headless driver, measure mode, 2026-11-16: the profile canary and the login name reached
   the tab in `vscode-userdata` URIs; no focus steal; the teardown gate passed.
+- `test/edtabs/probe.ts drive` on main `6589051b`, assert mode, 2026-11-16: every control holds
+  and `DOCSYNC-R3 …` fails (the profile canary and login name reach the tab), as it must without
+  the patch.
 - Typecheck: the patched file adds no error against the pinned tree.
+- Review: [20261116-editor-tab-provenance](../security-reviews/20261116-editor-tab-provenance.md),
+  two rounds; no high or critical finding.
