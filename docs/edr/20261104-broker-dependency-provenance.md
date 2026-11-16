@@ -267,6 +267,9 @@ local image it runs.
     - email-validator imports it only for deliverability checks, which
       pydantic's `EmailStr` doesn't enable;
     - DNS answers are wire format, and the advisory is about parsing text.
+
+    Closed 2026-11-16: 2.9.2 cleared the hold and is pinned (security review
+    round 18).
   - **The harness's `docker` CLI image** moved from `docker:29-cli` (Docker
     29.9.3, built 2026-11-03) to `docker:29.9.2-cli@sha256:5e6baf67…`
     (2026-10-22). This follows the shared 7-day pin-age rule; image pulls

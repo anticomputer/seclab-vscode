@@ -2,15 +2,15 @@
 # tab supervisor): creates the pod, drives the broker over `docker exec -i`
 # stdio, and runs probes inside the workspace container.
 # Build context: broker/ (wheels are fetched as in broker/Dockerfile).
-FROM docker:29.9.2-cli@sha256:5e6baf67325a79f64ed3bed6863954d5e05d0f3d4e57cbdb14809346814bbfdb AS cli
+FROM docker:29.9.3-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d AS cli
 
-FROM python:3.13-slim-trixie@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1 AS wheels
+FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS wheels
 ARG PIP_SOURCE
 COPY tools/pip-fetch.py /opt/pipfetch/pip-fetch.py
 COPY tests/integration/images/harness/requirements.txt /opt/pipfetch/requirements.txt
 RUN --mount=type=secret,id=cfs_feed_token,required=false --mount=type=secret,id=cfs_feed_index,required=false --mount=type=tmpfs,target=/run/cfs-auth python3 -I /opt/pipfetch/pip-fetch.py /opt/pipfetch/requirements.txt
 
-FROM python:3.13-slim-trixie@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1
+FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
 COPY --from=cli /usr/local/bin/docker /usr/local/bin/docker
 COPY tests/integration/images/harness/requirements.txt /opt/harness/requirements.txt
 RUN --mount=type=bind,from=wheels,source=/wheels,target=/opt/wheels pip install --no-cache-dir --no-deps --require-hashes --only-binary=:all: --no-index --find-links /opt/wheels -r /opt/harness/requirements.txt

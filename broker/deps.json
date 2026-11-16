@@ -22,7 +22,7 @@
   {
    "name": "python",
    "version": "3.13-slim-trixie",
-   "ref": "python:3.13-slim-trixie@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1",
+   "ref": "python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90",
    "source": "Docker Official Image (docker-library)",
    "usedBy": [
     "test upstream image",
@@ -45,8 +45,8 @@
   },
   {
    "name": "docker",
-   "version": "29.9.2-cli",
-   "ref": "docker:29.9.2-cli@sha256:5e6baf67325a79f64ed3bed6863954d5e05d0f3d4e57cbdb14809346814bbfdb",
+   "version": "29.9.3-cli",
+   "ref": "docker:29.9.3-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d",
    "source": "Docker Official Image (docker-library)",
    "usedBy": [
     "test harness image (docker CLI binary)"
@@ -176,8 +176,8 @@
   },
   {
    "name": "dnspython",
-   "version": "2.9.1",
-   "source": "https://pypi.org/project/dnspython/2.9.1/",
+   "version": "2.9.2",
+   "source": "https://pypi.org/project/dnspython/2.9.2/",
    "pin": "sha256 (pip --require-hashes)",
    "usedBy": [
     "attestation verifier (tool)"
@@ -350,8 +350,8 @@
   },
   {
    "name": "platformdirs",
-   "version": "4.14.3",
-   "source": "https://pypi.org/project/platformdirs/4.14.3/",
+   "version": "4.14.5",
+   "source": "https://pypi.org/project/platformdirs/4.14.5/",
    "pin": "sha256 (pip --require-hashes)",
    "usedBy": [
     "attestation verifier (tool)"
@@ -401,8 +401,8 @@
   },
   {
    "name": "pydantic",
-   "version": "2.14.2",
-   "source": "https://pypi.org/project/pydantic/2.14.2/",
+   "version": "2.14.3",
+   "source": "https://pypi.org/project/pydantic/2.14.3/",
    "pin": "sha256 (pip --require-hashes)",
    "usedBy": [
     "attestation verifier (tool)"
@@ -416,8 +416,8 @@
   },
   {
    "name": "pydantic-core",
-   "version": "2.50.2",
-   "source": "https://pypi.org/project/pydantic-core/2.50.2/",
+   "version": "2.50.4",
+   "source": "https://pypi.org/project/pydantic-core/2.50.4/",
    "pin": "sha256 (pip --require-hashes)",
    "usedBy": [
     "attestation verifier (tool)"
@@ -452,19 +452,9 @@
    }
   },
   {
-   "name": "pyasn1",
-   "version": "0.6.5",
-   "source": "https://pypi.org/project/pyasn1/0.6.5/",
-   "pin": "sha256 (pip --require-hashes)",
-   "usedBy": [
-    "attestation verifier (tool)"
-   ],
-   "tier": "hash-pinned"
-  },
-  {
    "name": "pypi-attestations",
-   "version": "0.0.30",
-   "source": "https://pypi.org/project/pypi-attestations/0.0.30/",
+   "version": "0.0.31",
+   "source": "https://pypi.org/project/pypi-attestations/0.0.31/",
    "pin": "sha256 (pip --require-hashes)",
    "usedBy": [
     "attestation verifier (tool)"
@@ -644,8 +634,8 @@
   },
   {
    "name": "typing-inspection",
-   "version": "0.4.4",
-   "source": "https://pypi.org/project/typing-inspection/0.4.4/",
+   "version": "0.4.5",
+   "source": "https://pypi.org/project/typing-inspection/0.4.5/",
    "pin": "sha256 (pip --require-hashes)",
    "usedBy": [
     "attestation verifier (tool)"
