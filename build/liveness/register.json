@@ -223,6 +223,16 @@
 			]
 		},
 		{
+			"id": "fixture:test/containment/response-probe",
+			"runBy": "test/containment/response-probe.ts pre-control|control, with the editor driven headlessly (test/driver/editor.ts) in an OCI tab of the containment test build (macOS, local only)",
+			"evidence": [
+				{
+					"record": "docs/adr/20261116-response-side-control.md",
+					"date": "2026-11-16"
+				}
+			]
+		},
+		{
 			"id": "fixture:test/containment/benign-extension",
 			"runBy": "test/containment/check-evidence.ts prepare|check (the positive control beside the rogue extension, or alone with SECLAB_BENIGN_ONLY=1) and test/containment/rpc-trace.ts, with the editor launched by test/window.ts (macOS, local only)",
 			"evidence": [

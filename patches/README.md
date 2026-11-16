@@ -146,6 +146,11 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   registers its rewrite with the filter, which permits those methods only once registered.
   Whatever extension id a tab claims, it addresses only its own partition
   ([ADR addendum](../docs/adr/20261106-tab-state-partition.md)).
+- `0033-seclab-sanitise-tab-provider-results.patch`: `mainThreadLanguageFeatures.ts`. A tab's
+  hover contents and completion items (command, documentation, on first result and on resolve)
+  pass through `seclabFromTab` before the UI sees them, and a selector without a scheme
+  matches only the tab's `vscode-remote` documents
+  ([ADR](../docs/adr/20261116-response-side-control.md)).
 - `0030-seclab-no-remote-cli-push-in-tabs.patch`: `remoteTerminalBackend.ts`. In a tab
   window upstream's `onExecuteCommand` handler, which runs a command the REH names, is never
   registered. A refusing handler answers each push at once with an error, touches no command

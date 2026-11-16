@@ -601,15 +601,17 @@ Numbers 1 to 4 came out of the independent design review
     user who opens their settings (`vscode-userdata:`) or an output channel in a
     tab window hands its content to the tab. This is a Win → Ext push, so this
     filter never sees it. Open on main; needs its own push-side control.
-11. **Responses are not filtered.** The filter screens requests, never what a
-    tab returns. Any tab-provided item that carries a command, a `command:` link,
-    trusted markdown or a remote image would put tab-chosen actions or fetches
-    into trusted UI, executed by the global `ICommandService` on a user gesture.
-    So every provider, tree, SCM, status bar, decoration and notification
-    registration stays denied until one structural response-side control exists
-    (taint by origin for commands and links; neutralise trusted markdown and
-    remote images from tab data). The ordinary-session classification drafts for
-    them are kept, not enforced, in
+11. **Responses are filtered at the customer, one surface at a time.** The filter screens
+    requests; what a tab returns is rewritten where a customer turns it into UI objects,
+    through `seclabFromTab` ([ADR](adr/20261116-response-side-control.md)). A command becomes
+    the token command `_seclab.tabCommand`, which runs a command the policy allows outright on
+    the trusted side under the tab's origin, and anything else in the tab's own extension host,
+    logging a refusal when the tab doesn't have it; markdown keeps only token links
+    (`isTrusted` enables nothing else), loses HTML, and keeps only `data:` images.
+    `check_drift.py::check_responses` refuses any reachable `$register*` method that doesn't
+    name the control and the patch applying it. Hover and completion are wired (patch 0033);
+    trees, SCM, the status bar, decorations and notifications stay denied until their customers
+    are. The ordinary-session drafts for them are kept, not enforced, in
     [`rpc-filter/policy/drafts/`](../rpc-filter/policy/drafts/20261106-ordinary-session.json).
 12. **Nested URIs.** `SECLAB_URI_ARGS` covers parameters typed exactly
     `UriComponents`; a URI inside an options object or a union type is invisible
@@ -618,24 +620,15 @@ Numbers 1 to 4 came out of the independent design review
 
 ### 7.1 What a tab's extensions cannot do yet
 
-Denied until the response-side control above lands, so these are visible
-losses, not bugs:
-- source control (the git extension's SCM view, quick diff, timeline). The git extension
-  opens no repository in a tab at all: it asks for resource trust first
-  ([`model.ts#L676-L684`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/git/src/model.ts#L676-L684))
-  and `$requestResourceTrust` is denied, so it never runs `git status` there. The
-  editor-driven run's `[fsmonitor]` check is an expected failure on a filtered build for this
-  reason, only with that denial in the trusted-side log. A tab can make that call itself, so
-  the expected failure covers only the in-tab run: the host facts (no probe marker in the run
-  directory, written by a host run whatever the workspace says) stay hard checks. A tab reaches
-  the host checkout on both drivers (OCI directly, sbx through the write-back paths the gate
-  doesn't hold), so the run also fails if a file a host run would read changed, a file was
-  added, or a `.git` appeared; a tab that tampers and restores before the check is not caught
-  (ADR write-back-gate §7);
+Denied until their customers are wired to the response-side control above, so these are
+visible losses, not bugs:
+- source control (the git extension's SCM view, quick diff, timeline);
 - tree views, output channels, status bar items and decorations;
-- language features registered by the tab (hover, completion, code actions,
-  code lens, links, folding), so a language extension in a tab activates but
-  contributes nothing to the editor;
+- language features registered by the tab other than hover and completion (code actions,
+  code lens, links, folding, signature help and the rest); hover and completion work for the
+  tab's own documents, and a command they carry runs in the tab unless the policy allows it
+  outright on the trusted side, so a completion that triggers a built-in editor command
+  (parameter hints, for instance) does nothing yet;
 - debugging, terminal environment contributions, URI handlers, quick
   fixes, workspace trust requests;
 - **Tasks don't run in tabs yet.** The tab's extension host is denied
