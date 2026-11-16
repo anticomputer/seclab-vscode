@@ -186,12 +186,20 @@ if (!files.length) {
 	findings.push('check-pins: no file to scan');
 }
 // The broker's supply-chain checker is skipped as samples; it must stay a pure parser (GG-1):
-// if it ever executes anything, its image references need this check again.
-try {
-	if (/subprocess|\bos\.(system|exec\w*|popen|spawn\w*)\b|\bfrom\s+os\s+import\b|__import__|\bimportlib\b|\bpty\b|\bctypes\b/.test(fs.readFileSync(path.join(repo, 'broker/tools/supplychain.py'), 'utf8'))) {
-		findings.push('broker/tools/supplychain.py: executes processes, so it can no longer be skipped as samples (narrow the skip)');
+// if it ever executes anything, its image references need this check again. Skipped by name, so
+// a tracked copy that can't be read is a finding, never a pass (GATE-15).
+const PURE_PARSER = 'broker/tools/supplychain.py';
+if (listed.includes(PURE_PARSER)) {
+	let text: string | undefined;
+	try {
+		text = fs.readFileSync(path.join(repo, PURE_PARSER), 'utf8');
+	} catch (e) {
+		findings.push(`${PURE_PARSER}: skipped by name as samples, but it can't be read (${(e as NodeJS.ErrnoException).code ?? 'error'}), so its purity can't be checked`);
 	}
-} catch { /* absent */ }
+	if (text !== undefined && /subprocess|\bos\.(system|exec\w*|popen|spawn\w*)\b|\bfrom\s+os\s+import\b|__import__|\bimportlib\b|\bpty\b|\bctypes\b/.test(text)) {
+		findings.push(`${PURE_PARSER}: executes processes, so it can no longer be skipped as samples (narrow the skip)`);
+	}
+}
 for (const f of files) {
 	// A tracked file that can't be read is a finding, never a silent skip (GATE-7). A tracked
 	// symlink is skipped: its target is checked where it is tracked.
