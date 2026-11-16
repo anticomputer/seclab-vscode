@@ -3769,7 +3769,7 @@
 			"component": "write-back mount (seclab-wb-mount)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "6c6c1c419964b530b477e5142a510c3599557ee1",
+			"commit": "patch:7c46e8d5231cde479b77f988b1b40cd582251b2f",
 			"test": {
 				"file": "sandbox/test/test_wb_mount.py",
 				"name": "test_a_share_moved_by_renaming_a_tab_owned_ancestor_is_refused"
@@ -10441,7 +10441,7 @@
 			"component": "liveness gate / ci workflows (liveness-refresh)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "4ad02d51b927d3e2279014a7e6fded0e3ba9e57d",
+			"commit": "patch:07836f4920604d58ae01d3f1c182b9ab7771f29d",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "scheduled and push, never run on schedule"
@@ -12043,7 +12043,7 @@
 			"component": "build/hooks/pre-push",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "8c0ce8d571e896e1bc2993b97a6a6249e8718232",
+			"commit": "patch:0783b9bc7f2d2a02d0af53ef8017e8bd2bf2a65d",
 			"test": {
 				"file": "test/hooks/hook-lock.test.sh",
 				"name": "a push with no ref lines says nothing was checked, never \"0 ref(s) checked\" (GATE-13)"
@@ -12059,7 +12059,7 @@
 			"component": "pin-age",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "b0eb9aabe1c967762a6e190dca1ebc6cd8d966cb",
+			"commit": "patch:9cf00d48944092b520fc17c4e8ab6417a7e23bc5",
 			"test": {
 				"file": "test/safety/gate-inputs.test.ts",
 				"name": "pin-age: a cooldown below 7 days and an empty or foreign file list are refused"
@@ -12074,7 +12074,7 @@
 			"component": "check-pins supplychain.py probe",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "b0eb9aabe1c967762a6e190dca1ebc6cd8d966cb",
+			"commit": "patch:9cf00d48944092b520fc17c4e8ab6417a7e23bc5",
 			"gap": "An unreadable tracked copy is now a finding; no test makes the repository's own file unreadable."
 		},
 		{
@@ -12086,7 +12086,7 @@
 			"component": "check-source.ts",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "b0eb9aabe1c967762a6e190dca1ebc6cd8d966cb",
+			"commit": "patch:9cf00d48944092b520fc17c4e8ab6417a7e23bc5",
 			"test": {
 				"file": "build/check-source.ts",
 				"name": "an empty extensions/series fails (GATE-16)"
@@ -13683,7 +13683,7 @@
 			"component": "build/hooks/pre-push",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "8c0ce8d571e896e1bc2993b97a6a6249e8718232",
+			"commit": "patch:0783b9bc7f2d2a02d0af53ef8017e8bd2bf2a65d",
 			"test": {
 				"file": "test/hooks/hook-lock.test.sh",
 				"name": "a push with no ref lines says nothing was checked, never \"0 ref(s) checked\" (GATE-13)"
@@ -13698,7 +13698,7 @@
 			"component": "write-back mount (seclab-wb-mount)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "8c0ce8d571e896e1bc2993b97a6a6249e8718232",
+			"commit": "patch:0783b9bc7f2d2a02d0af53ef8017e8bd2bf2a65d",
 			"gap": "Checked by hand in a real sbx tab (a forged device record is refused); no automated test runs the helper's mount path."
 		},
 		{
@@ -13726,7 +13726,7 @@
 			"component": "build/check-source.ts",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "8c0ce8d571e896e1bc2993b97a6a6249e8718232",
+			"commit": "patch:0783b9bc7f2d2a02d0af53ef8017e8bd2bf2a65d",
 			"test": {
 				"file": "build/check-source.ts",
 				"name": "a checkout with empty series starts with both findings (the wiring the run uses)"
@@ -13741,7 +13741,7 @@
 			"component": "build/check-pins.ts",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "8c0ce8d571e896e1bc2993b97a6a6249e8718232",
+			"commit": "patch:0783b9bc7f2d2a02d0af53ef8017e8bd2bf2a65d",
 			"gap": "No case removes the parser from the list while it stays on disk."
 		},
 		{
@@ -13753,7 +13753,7 @@
 			"component": "liveness gate (workflow discovery)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "5e849d36cdfad88c16f0b09c7866299a87f90cb1",
+			"commit": "patch:c6a4cd8edda5587d9604bfefa032cca7deb1362f",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "LSR-1 schedule spelled ${spelling}"
@@ -13769,7 +13769,7 @@
 			"component": "liveness gate (subject evidence)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "5e849d36cdfad88c16f0b09c7866299a87f90cb1",
+			"commit": "patch:c6a4cd8edda5587d9604bfefa032cca7deb1362f",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "LSR-2 a scheduled workflow proven by a ci mark"
@@ -13784,7 +13784,7 @@
 			"component": "liveness gate (exemptions)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "5e849d36cdfad88c16f0b09c7866299a87f90cb1",
+			"commit": "patch:c6a4cd8edda5587d9604bfefa032cca7deb1362f",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "LSR-3 union merge resurrects a tombstoned exemption with its code"
@@ -13800,7 +13800,7 @@
 			"component": "liveness gate (workflow discovery)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "8bf50e763e7c9244c88ff292316e1b9bdb509d3d",
+			"commit": "patch:8ebc6ff02acd11a27e3ea736e153d62764fc9968",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "LSR-4 push filter spelled ${spelling}"
@@ -13816,7 +13816,7 @@
 			"component": "liveness gate (workflow discovery)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "8bf50e763e7c9244c88ff292316e1b9bdb509d3d",
+			"commit": "patch:8ebc6ff02acd11a27e3ea736e153d62764fc9968",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "LSR-5 a .yaml twin of a registered .yml workflow"
@@ -13831,7 +13831,7 @@
 			"component": "liveness gate (exemptions)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "8bf50e763e7c9244c88ff292316e1b9bdb509d3d",
+			"commit": "patch:8ebc6ff02acd11a27e3ea736e153d62764fc9968",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "LSR-6 a tombstone dropped against the base"
@@ -13847,7 +13847,7 @@
 			"component": "liveness gate (workflow discovery)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "d0e27b55c7e8a308a5826e8557d8bd7552de1e4b",
+			"commit": "patch:333d65ac028db9c075e28cdba42d891886ed8c1f",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "LSR-7 ${shape}"
@@ -13863,7 +13863,7 @@
 			"component": "liveness gate (exemptions)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "d0e27b55c7e8a308a5826e8557d8bd7552de1e4b",
+			"commit": "patch:333d65ac028db9c075e28cdba42d891886ed8c1f",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "LSR-8 a restored tombstone with no exemption"
@@ -13878,7 +13878,7 @@
 			"component": "liveness gate (workflow discovery)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "d19a591ec1d0bf7b137f8576d29d073242955a90",
+			"commit": "patch:e443d6adcb4e0b41b1ad53c8742c27bc43895836",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "LSR-9 ${shape}"
@@ -13894,7 +13894,7 @@
 			"component": "liveness gate (self-test)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "d19a591ec1d0bf7b137f8576d29d073242955a90",
+			"commit": "patch:e443d6adcb4e0b41b1ad53c8742c27bc43895836",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "LSR-7 ${shape}"
@@ -13910,8 +13910,11 @@
 			"component": "liveness gate (workflow discovery)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "a59083858a5f139b0a1c19562e4213373aae1fff",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-11 ${shape}" },
+			"commit": "patch:c0ff7fe85323b27d4c86c85d84850284b9f8b9b4",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-11 ${shape}"
+			},
 			"note": "Eight shapes are injected; the recognition rule, the continuation rule and the empty-list rule each fail a case when mutated."
 		},
 		{
@@ -13923,8 +13926,11 @@
 			"component": "liveness gate (workflow discovery)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "a59083858a5f139b0a1c19562e4213373aae1fff",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-9 ${shape}" },
+			"commit": "patch:c0ff7fe85323b27d4c86c85d84850284b9f8b9b4",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-9 ${shape}"
+			},
 			"note": "Case: a tagged quoted default continued at column 0; it fails with the anchor/tag skip mutated."
 		},
 		{
@@ -13936,8 +13942,11 @@
 			"component": "liveness gate (workflow filters)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "0c9012b6a091e1fae737aaf4b76f1952f4e4ade1",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-13 ${shape}" },
+			"commit": "patch:21c6e1f7c416eba0e1519817a54041cd9c21e1de",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-13 ${shape}"
+			},
 			"note": "Ten shapes are injected and two controls keep ordinary filters live; each new runs() branch fails its own case when mutated."
 		},
 		{
@@ -13949,8 +13958,11 @@
 			"component": "liveness gate (workflow filters)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "0c9012b6a091e1fae737aaf4b76f1952f4e4ade1",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-13 ${shape}" },
+			"commit": "patch:21c6e1f7c416eba0e1519817a54041cd9c21e1de",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-13 ${shape}"
+			},
 			"note": "Cases: tags only, tags-ignore only, pull_request with non-default types, an unknown key under push."
 		},
 		{
@@ -13962,8 +13974,11 @@
 			"component": "liveness gate (workflow discovery)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "9e5d06062eaf715872e61234258453878bb2fcdc",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-15 ${shape}" },
+			"commit": "patch:56c71a618f33cc7d8c5b1e43800fb2a1acd0b9a7",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-15 ${shape}"
+			},
 			"note": "Four injections: decoys inside an open flow mapping and an open quoted scalar, a duplicate top-level on:, and a file whose only on: is inside an open value; the count rule and the prefix rule each fail their own case when mutated."
 		}
 	]
