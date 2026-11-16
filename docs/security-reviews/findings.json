@@ -13538,7 +13538,7 @@
 			"component": "terminal profile resolution (terminalProfileResolverService, remoteTerminalChannel.createProcess)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "4a0ab0e9",
+			"commit": "patch:244ee1dd349139cb86b1cc79ac0678fb85894bd9",
 			"test": {
 				"file": "test/containment/terminal-variables.test.ts",
 				"name": "patch 0034 resolves no host variables for a tab terminal"
@@ -13647,7 +13647,7 @@
 			"component": "terminal launch environment (terminalProcessManager, patch 0034)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "4a0ab0e9",
+			"commit": "patch:244ee1dd349139cb86b1cc79ac0678fb85894bd9",
 			"test": {
 				"file": "test/containment/terminal-variables.test.ts",
 				"name": "each rule fails on a mutant of the real patch"
@@ -13686,7 +13686,7 @@
 			"component": "containment probes (rogue REH, reh-profile-config-host-setting)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "4a0ab0e9",
+			"commit": "patch:244ee1dd349139cb86b1cc79ac0678fb85894bd9",
 			"test": {
 				"file": "test/containment/check-probes.test.ts",
 				"name": "the profile probe needs the canary in path and env on a baseline, and both unresolved after patch 0034"
@@ -13701,7 +13701,7 @@
 			"component": "test/containment/terminal-variables.test.ts",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "e139ae32",
+			"commit": "patch:b1c9ae8be9eb749ff86dfca080f90bdaacedfb49",
 			"test": {
 				"file": "test/containment/terminal-variables.test.ts",
 				"name": "the tab resolvers in the patch resolve only env, from the REH environment"
@@ -13716,7 +13716,7 @@
 			"component": "terminal profile resolution (patch 0034)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "4a0ab0e9",
+			"commit": "patch:244ee1dd349139cb86b1cc79ac0678fb85894bd9",
 			"test": {
 				"file": "test/containment/terminal-variables.test.ts",
 				"name": "patch 0034 resolves no host variables for a tab terminal"
