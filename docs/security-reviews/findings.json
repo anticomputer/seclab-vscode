@@ -7149,9 +7149,9 @@
 			"component": "agent-host connection providers, settings pinning",
 			"owner": "agentic",
 			"status": "deferred",
-			"gap": "no code pins the setting or nulls the other providers on main",
-			"followUp": "increment 4 / patch 0019 seclab-no-other-agent-host-providers (agentic); for v0 the RPC-lockdown session's 0011 — neither is in patches/series",
-			"note": "0017 on the unmerged branch pins four other keys only; this one is not among them."
+			"gap": "the dial is closed on main: 0015 refuses the agent-host transport before the WebSocket connects, so no connection leaves the host and there is no token to forward. What remains is that chat.workspaceRemoteAgentHosts is still tab-writable and the other agent-host providers are still registered in tab windows, so containment rests on the gate alone rather than on the setting being unreachable.",
+			"followUp": "the dial half rests on 0015 and the reh-push proof harness (test/containment/reh-push.ts), recorded in docs/edr/20261116-reh-push-refusals.md, which checks on every run that each attempt is refused, that neither listener is reached, and that an empty-window control does reach the host listener. The residual half - pinning the setting and nulling the other providers - is increment 4 / patch 0019 (agentic).",
+			"note": "0011 is retired: it was the v0 cover for this and is no longer needed, because 0015's check runs when the protocol client installs a transport. 0017 pins four other keys, not this one."
 		},
 		{
 			"record": "20261105-secure-agentic-experiences-design.md",
