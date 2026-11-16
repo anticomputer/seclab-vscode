@@ -65,7 +65,7 @@ usage: ./seclab <command>
                                 consistency, the security findings register; --run-commands runs <!-- ci: run -->
                                 blocks (and the broker's); --online resolves external links (lychee, cached);
                                 --paired enforces doc changes next to protocol/patch/provider/product changes
-  findings --self-test | check | baseline | growth [DAYS] | rot | remap --branch B [--patch]
+  findings --self-test | check | baseline | growth [DAYS] | rot | pin | remap --branch B [--patch]
                                 Security findings register (docs/security-reviews/findings.json): every review
                                 finding registered, fixed ones with a regression test, no open high outside the
                                 shrinking baseline; `baseline` prints the open highs (markdown)
@@ -224,11 +224,24 @@ lint_secrets() {
 # the register at the merge base with origin/main (new findings need explicit IDs; the baseline only
 # shrinks: review QQQ-5/6), then every landed `fixed` entry's commit must be on HEAD's history
 # (host git; CI's docs job has full history).
-findings_ancestry() { # stdin: "<key>\t<sha>" lines; fails on any SHA that isn't a commit on HEAD
-	local key sha bad=0
-	while IFS=$'\t' read -r key sha; do
+findings_ancestry() { # TIP MAIN; stdin: "<key>\t<sha or patch:id>\t<1 if high>"; every fix commit on TIP's history
+	local key sha high bad=0 tip main
+	tip="$(git -C "$ROOT" rev-parse -q --verify "${1:-HEAD}^{commit}")" || { echo "findings: no commit to check ancestry against" >&2; return 1; }
+	main="$(git -C "$ROOT" rev-parse -q --verify "${2:-refs/remotes/origin/main}^{commit}")" || { echo "findings: no origin/main to check ancestry against (fetch it)" >&2; return 1; }
+	while IFS=$'\t' read -r key sha high; do
 		[[ -z "$key" ]] && continue
-		if [[ ! "$sha" =~ ^[0-9a-f]{7,40}$ ]] || ! git -C "$ROOT" merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then
+		# A patch: fix commit (CCCC): a commit on TIP's history carries that change, whatever its SHA
+		# became in a rebase-merge. One that closes a high must be on main already, so a change can't
+		# close a high on its own add-then-revert pair (CCCC-1): the high closes in a follow-up.
+		if [[ "$sha" =~ ^patch:[0-9a-f]{40}$ ]]; then
+			if [[ "$high" = 1 ]]; then
+				findings_patch_recent "$main" "${sha#patch:}" >/dev/null && git -C "$ROOT" merge-base --is-ancestor "$main" "$tip" 2>/dev/null && continue
+				echo "findings: $key: a high's fix commit $sha isn't on main yet; close the high in a follow-up once it lands" >&2; bad=1; continue
+			fi
+			findings_patch_recent "$tip" "${sha#patch:}" >/dev/null && continue
+			echo "findings: $key: fix commit $sha is no change on this branch's history" >&2; bad=1; continue
+		fi
+		if [[ ! "$sha" =~ ^[0-9a-f]{7,40}$ ]] || ! git -C "$ROOT" merge-base --is-ancestor "$sha" "$tip" 2>/dev/null; then
 			echo "findings: $key: fix commit $sha is not on this branch's history" >&2
 			bad=1
 		fi
@@ -293,32 +306,56 @@ findings_patch_in() { # BASE TIP ID: 0 if a commit in BASE..TIP has the patch-id
 	[[ -n "$hit" ]] && echo "$hit"
 }
 findings_patch_reset() { rm -rf "$ROOT/.work/findings-pids"; } # once per run: never a checked-in cache (AAAA-1)
-# MAIN TIP HEAD ID: 3 on main (prints the SHA), else 0 live in TIP's or HEAD's own commits, else 1.
-# Main is checked first, so a change that landed is pinned even while its branch still carries a
-# copy (AAAA-3).
+# TIP ID: 0 if a non-merge commit on TIP's history carries the patch-id (prints it). The whole
+# history, so a landed citation never ages out (CCCC-4).
+findings_patch_recent() {
+	local f hit
+	[[ "$1" =~ ^[0-9a-f]{40}$ && "$2" =~ ^[0-9a-f]{40}$ ]] || return 1
+	f="$ROOT/.work/findings-pids/recent-$1.txt"
+	mkdir -p "$ROOT/.work/findings-pids"
+	if [[ ! -e "$f" ]]; then
+		git -C "$ROOT" log -p --no-merges "$1" | git -C "$ROOT" patch-id --stable > "$f.tmp" && mv "$f.tmp" "$f" || return 1
+	fi
+	grep -qvE '^[0-9a-f]{40} [0-9a-f]{40}$' "$f" && return 1
+	hit="$(awk -v p="$2" '$1 == p { print $2; exit }' "$f")"
+	[[ -n "$hit" ]] && echo "$hit"
+}
+# MAIN BRANCH_TIP HEAD ID: 3 on main (prints the SHA: pin it), else 0 on HEAD's history (a PR's own
+# change) or in BRANCH_TIP's own commits, else 1. Main is checked first (AAAA-3). A patch: citation
+# survives the rebase-merge that re-creates its commit (CCCC).
 findings_patch_judge() {
-	local main="$1" tip mb hit
-	for tip in "$2" "$3"; do
-		[[ -n "$tip" ]] || continue
-		mb="$(git -C "$ROOT" merge-base "$main" "$tip")" || continue
-		hit="$(findings_patch_in "$mb" "$main" "$4")" && { echo "$hit"; return 3; }
-	done
-	for tip in "$2" "$3"; do
-		[[ -n "$tip" ]] || continue
-		mb="$(git -C "$ROOT" merge-base "$main" "$tip")" || continue
-		findings_patch_in "$mb" "$tip" "$4" >/dev/null && return 0
-	done
+	local main="$1" mb hit
+	hit="$(findings_patch_recent "$main" "$4")" && { echo "$hit"; return 3; }
+	[[ -n "$3" ]] && findings_patch_recent "$3" "$4" >/dev/null && return 0
+	if [[ -n "$2" ]]; then
+		mb="$(git -C "$ROOT" merge-base "$main" "$2")" && findings_patch_in "$mb" "$2" "$4" >/dev/null && return 0
+	fi
 	return 1
 }
-findings_patch_state() { # patch:ID BRANCH: 0 live on the branch or HEAD, 3 on main (prints the SHA), 1 neither
-	local id="${1#patch:}" br="$2" main tip
-	[[ "$id" =~ ^[0-9a-f]{40}$ && "$br" =~ ^[A-Za-z0-9._/-]+$ && "$br" != *..* && "$br" != -* ]] || return 1
-	main="$(git -C "$ROOT" rev-parse -q --verify 'refs/remotes/origin/main^{commit}')" || return 1
-	tip="$(git -C "$ROOT" rev-parse -q --verify "refs/remotes/origin/$br^{commit}")" || tip=""
+findings_patch_state() { # patch:ID BRANCH(- none) [MAIN]: 0 live on HEAD or the branch, 3 on main (prints the SHA), 1 neither
+	local id="${1#patch:}" br="$2" main tip=""
+	[[ "$id" =~ ^[0-9a-f]{40}$ ]] || return 1
+	main="$(git -C "$ROOT" rev-parse -q --verify "${3:-refs/remotes/origin/main}^{commit}")" || return 1
+	if [[ "$br" != - ]]; then
+		[[ "$br" =~ ^[A-Za-z0-9._/-]+$ && "$br" != *..* && "$br" != -* ]] || return 1
+		tip="$(git -C "$ROOT" rev-parse -q --verify "refs/remotes/origin/$br^{commit}")" || tip=""
+	fi
 	findings_patch_judge "$main" "$tip" "$(git -C "$ROOT" rev-parse HEAD)" "$id"
 }
-findings_shas() { # STRICT (1: every citation; 0: only touched entries'). stdin: findings.ts shas
-	local t up br touched use extra rc where hint landed msg bad=0 stale=0 hard malformed=0
+# Every SHA upstream.lock has pinned, from its history (CCCC): a prefix of one names the upstream
+# Code-OSS commit, not one of ours, so an upstream bump never strands the old pin's citations.
+findings_upstream_pins() { # MAIN: only what main's history has pinned, never the change under check (CCCC-2)
+	[[ "$1" =~ ^[0-9a-f]{40}$ ]] || return 1
+	git -C "$ROOT" log -p --format= "$1" -- upstream.lock \
+		| sed -n 's/^[+-]\{0,1\}UPSTREAM_SHA=\([0-9a-f]\{40\}\)[[:space:]]*$/\1/p' | sort -u
+}
+# STRICT (1: every citation; 0: only touched entries') [MAIN [BASE]]; stdin: findings.ts shas. MAIN
+# defaults to origin/main and must resolve (CCCC-5); BASE is the change's comparison point.
+findings_shas() {
+	local t up br touched use extra rc where hint landed msg bad=0 stale=0 hard malformed=0 pins=0 pins_up main base=""
+	main="$(git -C "$ROOT" rev-parse -q --verify "${2:-refs/remotes/origin/main}^{commit}")" || { echo "findings: no origin/main to judge citations against (fetch it)" >&2; return 2; }
+	[[ -n "${3:-}" ]] && { base="$(git -C "$ROOT" rev-parse -q --verify "$3^{commit}")" || { echo "findings: the base $3 isn't a commit" >&2; return 2; }; }
+	pins_up="$(findings_upstream_pins "$main")"
 	while IFS=$'\t' read -r t up br touched use extra; do
 		[[ -z "$t$up$br$touched$use$extra" ]] && continue
 		# The two halves' contract is checked, never assumed: a malformed line fails (ZZZ-2).
@@ -327,10 +364,20 @@ findings_shas() { # STRICT (1: every citation; 0: only touched entries'). stdin:
 		fi
 		hard=0; [[ "$1" = 1 || "$touched" = 1 ]] && hard=1
 		if [[ "$t" == patch:* ]]; then
-			rc=0; landed="$(findings_patch_state "$t" "$br")" || rc=$?
+			rc=0; landed="$(findings_patch_state "$t" "$br" "$main")" || rc=$?
 			[[ $rc -eq 0 ]] && continue
-			if [[ $rc -eq 3 ]]; then msg="$use cites $t, which is on main now as ${landed:0:7}: pin that SHA"
-			else msg="$use cites $t, a change origin/$br no longer carries: remap it"; fi
+			# Landed: live evidence. The change that lands it isn't asked to pin (its rebase-merge made the
+			# SHA); a later change touching the entry is (CCCC-4).
+			if [[ $rc -eq 3 ]]; then
+				if [[ "$1" = 0 && "$touched" = 1 && -n "$base" ]] && git -C "$ROOT" merge-base --is-ancestor "$landed" "$base" 2>/dev/null; then
+					echo "findings: $use cites $t, on main as ${landed:0:12} since before this change: run ./seclab findings pin" >&2; bad=1
+				else
+					echo "findings: note: $use cites $t, on main as ${landed:0:12}: ./seclab findings pin" >&2; pins=$((pins+1))
+				fi
+				continue
+			fi
+			where="this history"; [[ "$br" != - ]] && where+=" or origin/$br"
+			msg="$use cites $t, a change $where doesn't carry: remap it"
 			if [[ $hard = 1 ]]; then echo "findings: $msg" >&2; bad=1; else echo "findings: warning: $msg (an entry this change doesn't touch)" >&2; stale=$((stale+1)); fi
 			continue
 		fi
@@ -340,12 +387,21 @@ findings_shas() { # STRICT (1: every citation; 0: only touched entries'). stdin:
 			else echo "findings: warning: $use cites $t, an ambiguous prefix here, in an entry this change doesn't touch" >&2; stale=$((stale+1)); fi
 			continue
 		fi
+		# A prefix of any pin upstream.lock has held, and no commit here: the upstream commit (CCCC).
+		[[ "$up" = 0 && $rc -ne 0 ]] && grep -q "^$t" <<<"$pins_up" && up=1
 		if [[ "$up" = 1 ]]; then
 			[[ $rc -eq 0 ]] || continue
 			echo "findings: $use cites $t as the upstream pin, but it is a commit here" >&2; bad=1
 			continue
 		fi
-		[[ $rc -eq 0 ]] && continue
+		if [[ $rc -eq 0 ]]; then
+			# A change's own new citation must survive its rebase-merge: a commit not yet on main is
+			# cited as patch:<id> (CCCC). Untouched entries and the strict listing don't judge this.
+			if [[ "$1" = 0 && "$touched" = 1 ]] && ! git -C "$ROOT" merge-base --is-ancestor "$t" "$main" 2>/dev/null; then
+				echo "findings: $use cites $t, which isn't on main yet and won't survive a rebase-merge: cite it as patch:$(git -C "$ROOT" show "$t" | git -C "$ROOT" patch-id --stable | cut -d' ' -f1)" >&2; bad=1
+			fi
+			continue
+		fi
 		where="main's history" hint=""
 		[[ "$br" != - ]] && { where+=" or origin/$br"; hint=" (./seclab findings remap --branch $br)"; }
 		if [[ $hard = 0 ]]; then
@@ -356,6 +412,7 @@ findings_shas() { # STRICT (1: every citation; 0: only touched entries'). stdin:
 		fi
 	done
 	[[ $stale -gt 0 ]] && echo "findings: $stale rotted citation(s) in entries this change doesn't touch (warnings above)" >&2
+	[[ $pins -gt 0 ]] && echo "findings: $pins patch: citation(s) landed on main, to pin with ./seclab findings pin" >&2
 	# 2: a defect in the listing itself, never just rot (the weekly job tells them apart).
 	[[ $malformed = 1 ]] && return 2
 	return $bad
@@ -385,6 +442,24 @@ findings_growth() { # [DAYS]
 	printf 'baseline: %s now, %s at %s\n' "$now" "$was" "${old:0:12}" > "$out"
 	findings_emit "$out" || return 2
 	[[ "$now" -le "$was" ]] || { echo "findings growth: the baseline grew ($was -> $now)" >&2; return 1; }
+}
+# `./seclab findings pin` (CCCC): every patch: citation whose change is on main becomes its SHA.
+findings_pin() {
+	local list t up br touched use extra sha pairs="$ROOT/.work/findings-pin.tsv" n=0
+	mkdir -p "$ROOT/.work"; : > "$pairs"; findings_patch_reset
+	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts shas)" || return 1
+	while IFS=$'\t' read -r t up br touched use extra; do
+		[[ "$t" =~ ^patch:[0-9a-f]{40}$ ]] || continue
+		sha="$(findings_patch_state "$t" "$br")" && continue
+		[[ "$sha" =~ ^[0-9a-f]{40}$ ]] || continue
+		printf '%s\t%s\n' "$t" "${sha:0:12}" >> "$pairs"; n=$((n+1)); echo "findings pin: $use: $t -> ${sha:0:12}"
+	done <<<"$list"
+	sort -u -o "$pairs" "$pairs"
+	if [[ $n -gt 0 ]]; then
+		docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" node build/docs/findings.ts pin .work/findings-pin.tsv || return 1
+		docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" node build/docs/findings.ts write || return 1
+	fi
+	echo "findings pin: $n citation(s) pinned"
 }
 # Self-service remap (review ZZZ): a rebased branch's register citations follow it. The old commit
 # must still be a local object; its equivalent is the one commit in the branch's history (main's
@@ -531,15 +606,16 @@ findings_check() {
 		git -C "$ROOT" show "$rev:docs/security-reviews/owner-acceptances.md" > "$ROOT/.work/findings-before/docs/security-reviews/owner-acceptances.md" || exit 1
 	fi
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts check --base .work/findings-base.json --changed .work/findings-changed.txt --before .work/findings-before
+	findings_patch_reset
 	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts commits)"
-	findings_ancestry <<<"$list" || exit 1
+	findings_ancestry HEAD refs/remotes/origin/main <<<"$list" || exit 1
 	echo "findings: every fixed entry's commit is on HEAD's history"
 	findings_patch_reset
 	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts shas --base .work/findings-base.json)" || exit 1
 	# A new upstream pin changes which tokens are exempt, so every citation answers (ZZZ-1).
 	local strict=0
 	grep -qx 'upstream.lock' "$ROOT/.work/findings-changed.txt" && strict=1
-	findings_shas "$strict" <<<"$list" || exit 1
+	findings_shas "$strict" refs/remotes/origin/main "$rev" <<<"$list" || exit 1
 	echo "findings: every commit an entry this change adds or modifies cites is on main's history or its entry's branch"
 }
 # The host half's own injections (QQQ-9, SSS-9): ancestry (a non-ancestor SHA, an option-shaped
@@ -575,7 +651,10 @@ findings_host_self_test() {
 	if findings_main_base "$side" >/dev/null 2>&1; then echo "findings host self-test: a previous head with no shared history passed (XXX-6)" >&2; exit 1; fi
 	# Commit citations: a dangling commit (the orphan above, on no ref) fails untolerated, and so
 	# does a non-commit token; a tolerated non-commit passes; a tolerated reachable commit fails.
-	printf '%s\t0\t-\t1\tcontrol\n' "$head" | findings_shas 0 || { echo "findings host self-test: the control (HEAD cited) failed" >&2; exit 1; }
+	printf '%s\t0\t-\t1\tcontrol\n' "$head" | findings_shas 0 "$head" || { echo "findings host self-test: the control (a commit on main cited) failed" >&2; exit 1; }
+	# CCCC: a change's own new citation of a commit not yet on main won't survive a rebase-merge.
+	if printf '%s\t0\t-\t1\tx\n' "$head" | findings_shas 0 "$root" 2>/dev/null; then echo "findings host self-test: a touched citation of a commit not on main passed (CCCC)" >&2; exit 1; fi
+	printf '%s\t0\t-\t0\tx\n' "$head" | findings_shas 0 "$root" 2>/dev/null || { echo "findings host self-test: an untouched citation of a commit not on main blocked the change (CCCC)" >&2; exit 1; }
 	if printf '%s\t0\t-\t1\tx\n' "$side" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a dangling commit citation passed" >&2; exit 1; fi
 	printf '%s\t0\t-\t0\tx\n' "$side" | findings_shas 0 2>/dev/null || { echo "findings host self-test: a rotted citation in an untouched entry blocked the change (ZZZ)" >&2; exit 1; }
 	if printf '%s\t0\t-\t0\tx\n' "$side" | findings_shas 1 2>/dev/null; then echo "findings host self-test: a rotted citation in an untouched entry passed the strict listing (ZZZ)" >&2; exit 1; fi
@@ -585,6 +664,10 @@ findings_host_self_test() {
 	printf 'abcdef0123456\t1\t-\t1\tx\n' | findings_shas 1 || { echo "findings host self-test: the control (the upstream pin, not a commit here) failed" >&2; exit 1; }
 	if printf '%s\t1\t-\t0\tx\n' "$head" | findings_shas 0 2>/dev/null; then echo "findings host self-test: an upstream-pin token that is a commit here passed" >&2; exit 1; fi
 	if printf -- '--all\t0\t-\t1\tx\n' | findings_shas 0 2>/dev/null; then echo "findings host self-test: an option-shaped token passed" >&2; exit 1; fi
+	# CCCC: a prefix of a pin upstream.lock has held passes as the upstream commit, untagged.
+	local up1; up1="$(findings_upstream_pins "$(git -C "$ROOT" rev-parse refs/remotes/origin/main)" | awk 'NR == 1')"
+	[[ "$up1" =~ ^[0-9a-f]{40}$ ]] || { echo "findings host self-test: no upstream pin found in upstream.lock's history" >&2; exit 1; }
+	printf '%s\t0\t-\t1\tx\n' "${up1:0:7}" | findings_shas 0 || { echo "findings host self-test: a prefix of a past upstream pin failed (CCCC)" >&2; exit 1; }
 	if printf '%s\t0\t../x\t1\tx\n' "$side" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a path-shaped branch passed" >&2; exit 1; fi
 	# ZZZ-2: a malformed line fails, never reads as untouched; the real shas output parses.
 	if printf '%s\t0\t-\tx\n' "$side" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a four-column citation line passed (ZZZ-2)" >&2; exit 1; fi
@@ -629,7 +712,7 @@ findings_host_self_test() {
 	pid="$(git -C "$ROOT" show "$a2" | git -C "$ROOT" patch-id --stable | cut -d' ' -f1)"
 	[[ "$(findings_patch_in "$s2" "$a3" "$pid")" =~ ^($a2|$a3)$ ]] || { echo "findings host self-test: a patch-id in the range wasn't found (ZZZ)" >&2; exit 1; }
 	if findings_patch_in "$root" "$s2" "$pid" >/dev/null; then echo "findings host self-test: a patch-id outside the range was found (ZZZ)" >&2; exit 1; fi
-	if printf 'patch:%s\t0\t-\t1\tx\n' "$pid" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a patch: citation with no branch passed (ZZZ)" >&2; exit 1; fi
+	if printf 'patch:%s\t0\t-\t1\tx\n' "$pid" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a patch: citation no history carries passed (ZZZ)" >&2; exit 1; fi
 	if printf 'patch:xyz\t0\tb\t1\tx\n' | findings_shas 0 2>/dev/null; then echo "findings host self-test: a malformed patch: citation passed (ZZZ)" >&2; exit 1; fi
 	if printf 'patch:%s\t0\tno-such-branch\t1\tx\n' "$pid" | findings_shas 0 2>/dev/null; then echo "findings host self-test: a patch: citation its branch doesn't carry passed (ZZZ)" >&2; exit 1; fi
 	printf 'patch:%s\t0\tno-such-branch\t0\tx\n' "$pid" | findings_shas 0 2>/dev/null || { echo "findings host self-test: an untouched patch: citation that rotted blocked the change (ZZZ)" >&2; exit 1; }
@@ -644,6 +727,50 @@ findings_host_self_test() {
 	printf 'not a line\n%s %s\n' "$pid" "$a2" > "$ROOT/.work/findings-pids/$s2-$a2.txt"
 	if findings_patch_in "$s2" "$a2" "$pid" >/dev/null; then echo "findings host self-test: a malformed patch-id cache was trusted (AAAA-1)" >&2; exit 1; fi
 	if findings_patch_in "--all" "$a2" "$pid" >/dev/null 2>&1; then echo "findings host self-test: an option-shaped range end passed" >&2; exit 1; fi
+	# CCCC: a rebase-merge. The branch's fix F, off root, lands re-created as F2 on main M; F's SHA
+	# is gone from main, its patch-id isn't, so a patch: citation and a patch: fix commit hold.
+	findings_patch_reset
+	local tm tf tmf m f f2 fid
+	findings_st_tree2() { # A B -> root's tree plus two files
+		local ba bb; ba="$(printf '%s\n' "$1" | git -C "$ROOT" hash-object -w --stdin)"; bb="$(printf '%s\n' "$2" | git -C "$ROOT" hash-object -w --stdin)"
+		GIT_INDEX_FILE="$idx" git -C "$ROOT" read-tree "$root" && GIT_INDEX_FILE="$idx" git -C "$ROOT" update-index --add --cacheinfo "100644,$ba,selftest-main.txt" --cacheinfo "100644,$bb,selftest-fix.txt" && GIT_INDEX_FILE="$idx" git -C "$ROOT" write-tree
+	}
+	tm="$(findings_st_tree2 main-moved base)"; tf="$(findings_st_tree2 base fixed)"; tmf="$(findings_st_tree2 main-moved fixed)"
+	t0="$(findings_st_tree2 base base)"; s2="$(git -C "$ROOT" commit-tree -p "$root" -m 'selftest: fork point' "$t0")"
+	m="$(git -C "$ROOT" commit-tree -p "$s2" -m 'selftest: main moves on' "$tm")"
+	f="$(git -C "$ROOT" commit-tree -p "$s2" -m 'selftest: the fix' "$tf")"
+	f2="$(git -C "$ROOT" commit-tree -p "$m" -m 'selftest: the fix' "$tmf")"
+	fid="$(git -C "$ROOT" show "$f" | git -C "$ROOT" patch-id --stable | cut -d' ' -f1)"
+	git -C "$ROOT" merge-base --is-ancestor "$f" "$f2" && { echo "findings host self-test: the rebase-merge simulation kept the branch SHA" >&2; exit 1; }
+	rc=0; got="$(findings_patch_judge "$f2" "" "$f2" "$fid")" || rc=$?
+	[[ $rc -eq 3 && "$got" == "$f2" ]] || { echo "findings host self-test: after a rebase-merge, a patch: citation didn't resolve to the landed commit (CCCC)" >&2; exit 1; }
+	rc=0; findings_patch_judge "$m" "" "$f" "$fid" >/dev/null || rc=$?
+	[[ $rc -eq 0 ]] || { echo "findings host self-test: before the merge, a patch: citation of the PR's own commit wasn't live (CCCC)" >&2; exit 1; }
+	printf 'x\tpatch:%s\n' "$fid" | findings_ancestry "$f2" "$f2" || { echo "findings host self-test: after a rebase-merge, a patch: fix commit failed ancestry (CCCC)" >&2; exit 1; }
+	if printf 'x\t%s\n' "$f" | findings_ancestry "$f2" "$f2" 2>/dev/null; then echo "findings host self-test: a branch SHA passed ancestry after a rebase-merge" >&2; exit 1; fi
+	if printf 'x\tpatch:%s\n' "$fid" | findings_ancestry "$m" "$m" 2>/dev/null; then echo "findings host self-test: a patch: fix commit passed on a history without the change (CCCC)" >&2; exit 1; fi
+	# CCCC-1: a high's patch: fix commit counts only once it's on main, not on the PR's own history.
+	if printf 'x\tpatch:%s\t1\n' "$fid" | findings_ancestry "$f" "$m" 2>/dev/null; then echo "findings host self-test: a high closed on its PR's own patch: commit (CCCC-1)" >&2; exit 1; fi
+	printf 'x\tpatch:%s\t0\n' "$fid" | findings_ancestry "$f" "$s2" || { echo "findings host self-test: the control (a low's patch: fix on its PR) failed" >&2; exit 1; }
+	printf 'x\tpatch:%s\t1\n' "$fid" | findings_ancestry "$f2" "$f2" || { echo "findings host self-test: the control (a high's patch: fix once on main) failed" >&2; exit 1; }
+	# CCCC-4: the landing change isn't asked to pin; a later change touching the entry is.
+	printf 'patch:%s\t0\t-\t1\tx\n' "$fid" | findings_shas 0 "$f2" "$m" 2>/dev/null || { echo "findings host self-test: the landing change was asked to pin (CCCC-4)" >&2; exit 1; }
+	if printf 'patch:%s\t0\t-\t1\tx\n' "$fid" | findings_shas 0 "$f2" "$f2" 2>/dev/null; then echo "findings host self-test: a later change touching an unpinned landed citation passed (CCCC-4)" >&2; exit 1; fi
+	printf 'patch:%s\t0\t-\t0\tx\n' "$fid" | findings_shas 0 "$f2" "$f2" 2>/dev/null || { echo "findings host self-test: an untouched unpinned citation blocked a change (CCCC-4)" >&2; exit 1; }
+	# CCCC-2: an upstream pin only counts from main's history, never from the change under check.
+	local ul ut u
+	ul="$(printf 'UPSTREAM_SHA=%s\n' dead0beef0dead0beef0dead0beef0dead0beef0 | git -C "$ROOT" hash-object -w --stdin)"
+	GIT_INDEX_FILE="$idx" git -C "$ROOT" read-tree "$m"; GIT_INDEX_FILE="$idx" git -C "$ROOT" update-index --add --cacheinfo "100644,$ul,upstream.lock"
+	ut="$(GIT_INDEX_FILE="$idx" git -C "$ROOT" write-tree)"; u="$(git -C "$ROOT" commit-tree -p "$m" -m 'selftest: a pin' "$ut")"
+	findings_upstream_pins "$u" | grep -qx dead0beef0dead0beef0dead0beef0dead0beef0 || { echo "findings host self-test: the control (a pin in a history) wasn't read" >&2; exit 1; }
+	if findings_upstream_pins "$m" | grep -qx dead0beef0dead0beef0dead0beef0dead0beef0; then echo "findings host self-test: a pin outside main's history counted (CCCC-2)" >&2; exit 1; fi
+	# CCCC-5, CCCC-7: an unresolvable main is a defect; a poisoned whole-history cache is refused.
+	rc=0; printf '%s\t0\t-\t0\tx\n' "$head" | findings_shas 0 refs/heads/no-such-main 2>/dev/null || rc=$?
+	[[ $rc -eq 2 ]] || { echo "findings host self-test: an unresolvable main didn't fail as a defect (CCCC-5)" >&2; exit 1; }
+	findings_patch_reset; mkdir -p "$ROOT/.work/findings-pids"
+	printf 'junk\n%s %s\n' "$fid" "$f2" > "$ROOT/.work/findings-pids/recent-$m.txt"
+	if findings_patch_recent "$m" "$fid" >/dev/null; then echo "findings host self-test: a malformed whole-history cache was trusted (CCCC-7)" >&2; exit 1; fi
+	findings_patch_reset
 	findings_patch_reset
 	rm -f "$idx" "$pids"
 	# YYY-4: a ref named like a token doesn't stand in for the object; resolution ignores refs.
@@ -1227,6 +1354,7 @@ case "${1:-help}" in
 				docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts baseline > "$ROOT/.work/findings-baseline.md"
 				findings_emit "$ROOT/.work/findings-baseline.md" ;;
 			growth) findings_growth ;;
+			pin) findings_pin ;;
 			check) findings_check ;;
 			*) usage; exit 2 ;;
 		esac ;;

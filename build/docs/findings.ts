@@ -253,6 +253,30 @@ const HEX_RUN = /(?<![0-9A-Za-z_])[0-9A-Fa-f]{7,}(?![0-9A-Za-z_])/g;
 // once that change is on main it must be pinned to a SHA (review ZZZ, the agentic session's input).
 const PATCH_EXACT = /^patch:[0-9a-f]{40}$/;
 const CITE_RUN = /(?<![0-9A-Za-z_])(?:patch:[0-9a-f]{40}|[0-9A-Fa-f]{7,})(?![0-9A-Za-z_])/g;
+// A hex run inside a file path (`runs/20261104-unpatched-a717861.json`) names a file, not a commit
+// (review CCCC). The evidence must be a real path: the run's word holds a `/` beside a segment
+// that isn't hex, or ends in a file extension. `A..B` ranges, `abc1234-ish` and `.abc1234` stay
+// citations (CCCC-3).
+const PATH_EXT = /\.(json|jsonl|md|ts|js|mjs|cjs|sh|py|txt|ya?ml|log|patch|tsv|csv|html|xml|toml|lock)$/i;
+function pathHex(v: string, at: number, len: number): boolean {
+	const stop = /[\s`'"(),;<>[\]{}|]/;
+	let a = at, b = at + len;
+	while (a > 0 && !stop.test(v[a - 1])) {
+		a--;
+	}
+	while (b < v.length && !stop.test(v[b])) {
+		b++;
+	}
+	const word = v.slice(a, b).replace(/[.:!?]+$/, '');
+	if (word.includes('..')) {
+		return false;
+	}
+	return (word.includes('/') && word.split('/').some(seg => seg !== '' && !/^[0-9a-f]+$/i.test(seg))) || PATH_EXT.test(word);
+}
+// Every citation-shaped run in a string, with path hex dropped.
+function citeRuns(v: string): string[] {
+	return [...v.matchAll(CITE_RUN)].filter(m => m[0].startsWith('patch:') || !pathHex(v, m.index, m[0].length)).map(m => m[0]);
+}
 const DATE8 = /^20\d\d(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/;
 interface Citation { token: string; tolerated: boolean; branch: string | null; touched: boolean; use: string }
 interface Citations { cite: Citation[]; historical: Array<{ token: string; use: string }>; problems: string[] }
@@ -299,11 +323,11 @@ function citations(tree: Tree, reg: Register, base?: Register): Citations {
 		const recText = f.record && tree.exists(`${REVIEWS}/${f.record}`) ? tree.read(`${REVIEWS}/${f.record}`) : undefined;
 		for (const k of ['round', ...SHA_PROSE] as const) {
 			const v = (f as unknown as Record<string, unknown>)[k];
-			for (const raw of typeof v === 'string' ? v.match(CITE_RUN) ?? [] : []) {
+			for (const raw of typeof v === 'string' ? citeRuns(v) : []) {
 				const use = `${keyOf(f)} ${k}`;
 				if (raw.startsWith('patch:')) {
-					if (branch === null || k === 'round') {
-						out.problems.push(`${use}: a patch: citation needs an entry on a branch (and never a round label); pin a SHA`);
+					if (k === 'round') {
+						out.problems.push(`${use}: a round label copies its record; a patch: citation never belongs there`);
 					} else {
 						add({ token: raw, tolerated: false, branch, touched: t0, use });
 					}
@@ -332,15 +356,12 @@ function remapBranch(reg: Register, branch: string, pairs: Array<[string, string
 	const changed: string[] = [];
 	const ok = (t: string) => /^[0-9a-f]{7,40}$/.test(t);
 	const map = new Map(pairs.filter(([o, n]) => ok(o) && (ok(n) || PATCH_EXACT.test(n))));
-	const swap = (v: string) => v.replace(CITE_RUN, m => m.startsWith('patch:') ? m : map.get(m.toLowerCase()) ?? m);
+	const swap = (v: string) => v.replace(CITE_RUN, (m, at: number) => m.startsWith('patch:') || pathHex(v, at, m.length) ? m : map.get(m.toLowerCase()) ?? m);
 	for (const f of reg.findings) {
 		if (entryBranch(reg, f) !== branch) {
 			continue;
 		}
 		for (const k of ['commit', ...SHA_PROSE] as const) {
-			if (k === 'commit' && f.branch === undefined) {
-				continue; // a landed-or-inherited entry's fix commit stays a SHA (AAAA-4)
-			}
 			const rec = f as unknown as Record<string, unknown>;
 			const v = rec[k];
 			if (typeof v === 'string' && swap(v) !== v) {
@@ -350,6 +371,27 @@ function remapBranch(reg: Register, branch: string, pairs: Array<[string, string
 		}
 	}
 	return { reg, changed };
+}
+
+// `./seclab findings pin`: a patch: citation whose change is on main becomes that commit's SHA, in
+// every entry (fix commits and prose, never a round label, which can't hold one).
+function pinPatches(reg: Register, pairs: Array<[string, string]>): string[] {
+	const changed: string[] = [];
+	const map = new Map(pairs.filter(([o, n]) => PATCH_EXACT.test(o) && /^[0-9a-f]{7,40}$/.test(n)));
+	for (const f of reg.findings) {
+		for (const k of ['commit', ...SHA_PROSE] as const) {
+			const rec = f as unknown as Record<string, unknown>;
+			const v = rec[k];
+			if (typeof v === 'string') {
+				const w = v.replace(CITE_RUN, m => map.get(m) ?? m);
+				if (w !== v) {
+					rec[k] = w;
+					changed.push(`${keyOf(f)} ${k}`);
+				}
+			}
+		}
+	}
+	return changed;
 }
 
 function schemaProblems(reg: Register): string[] {
@@ -405,10 +447,10 @@ function schemaProblems(reg: Register): string[] {
 		if (f.branch !== undefined && !(typeof f.branch === 'string' && BRANCH.test(f.branch))) {
 			p.push(`${at}: branch must be a branch name`);
 		}
-		// A patch: fix commit needs the entry's own branch (AAAA-4): such an entry is never compliant,
-		// and the landing change, which drops `branch`, must pin a SHA (AAAA-2).
-		if (f.commit !== undefined && !/^[0-9a-f]{7,40}$/.test(f.commit) && !(typeof f.commit === 'string' && PATCH_EXACT.test(f.commit) && f.branch !== undefined)) {
-			p.push(`${at}: commit must be a hex SHA (patch:<patch-id> only on an entry with its own branch)`);
+		// A fix commit is a SHA, or a patch:<patch-id> that survives a rebase-merge (review CCCC); the
+		// host resolves either on this history, and `./seclab findings pin` writes the SHA later.
+		if (f.commit !== undefined && !/^[0-9a-f]{7,40}$/.test(f.commit) && !(typeof f.commit === 'string' && PATCH_EXACT.test(f.commit))) {
+			p.push(`${at}: commit must be a hex SHA or patch:<patch-id>`);
 		}
 		for (const k of ['ref', 'manual'] as const) {
 			if (f[k] !== undefined && !isRef(f[k])) {
@@ -1246,23 +1288,39 @@ function selfTest(): number {
 		const pc = citations(mkTree(files), pt).cite.map(x => x.token).sort().join(',');
 		expect('a patch: citation is one token, its hex part never a SHA citation too', pc === '0ddba11,patch:cccccccccccccccccccccccccccccccccccccccc' ? [] : [`got ${pc}`], null);
 		expect('control: a patch: fix commit on a branch entry passes the schema', schemaProblems(pt).filter(x => /commit must/.test(x)), null);
+		// CCCC: rebase-merge re-creates every commit, so a patch: citation is allowed on any entry.
 		const inh = reg();
 		inh.findings[0].commit = 'patch:cccccccccccccccccccccccccccccccccccccccc';
-		expect('a patch: fix commit on an entry that only inherits its branch fails the schema (AAAA-4)', schemaProblems(inh), /only on an entry with its own branch/);
+		expect('control: a patch: fix commit on an entry that only inherits its branch passes the schema (CCCC)', schemaProblems(inh).filter(x => /commit must/.test(x)), null);
 		const ph = reg();
 		Object.assign(ph.findings[0], { branch: 'br-p', commit: 'patch:cccccccccccccccccccccccccccccccccccccccc' });
-		expect('a patch: fix commit never makes a high compliant (AAAA-2)', compliant(ph.findings[0]) ? ['compliant'] : [], null);
+		expect('a patch: fix commit never makes a branch entry compliant (AAAA-2)', compliant(ph.findings[0]) ? ['compliant'] : [], null);
 		const ir = reg();
 		ir.findings[0].commit = 'abcdef1';
 		remapBranch(ir, 'b', [['abcdef1', 'patch:dddddddddddddddddddddddddddddddddddddddd']]);
-		expect('remap leaves an inherited-branch entry\'s fix commit a SHA (AAAA-4)', ir.findings[0].commit === 'abcdef1' ? [] : [`got ${ir.findings[0].commit}`], null);
+		expect('remap converts an inherited-branch entry\'s fix commit too (CCCC)', ir.findings[0].commit === 'patch:dddddddddddddddddddddddddddddddddddddddd' ? [] : [`got ${ir.findings[0].commit}`], null);
 		const np = reg();
 		np.owners.o.branch = null;
 		np.findings[0].commit = 'patch:cccccccccccccccccccccccccccccccccccccccc';
-		expect('a patch: fix commit on an entry without a branch fails the schema', schemaProblems(np), /only on an entry with its own branch/);
+		expect('control: a patch: fix commit on an entry without a branch passes the schema (CCCC)', schemaProblems(np).filter(x => /commit must/.test(x)), null);
 		np.findings[0].commit = 'abcdef1';
 		np.findings[0].note = 'see patch:cccccccccccccccccccccccccccccccccccccccc';
-		expect('a patch: citation in prose of an entry without a branch fails', citations(mkTree(files), np).problems, /a patch: citation needs an entry on a branch/);
+		expect('control: a patch: citation in prose of an entry without a branch is a citation (CCCC)', citations(mkTree(files), np).problems.length === 0 && citations(mkTree(files), np).cite.some(x => x.token === 'patch:cccccccccccccccccccccccccccccccccccccccc') ? [] : ['not cited'], null);
+		np.findings[0].round = 'Round A (patch:cccccccccccccccccccccccccccccccccccccccc)';
+		expect('a patch: citation in a round label fails (CCCC)', citations(mkTree(files), np).problems, /a patch: citation never belongs there/);
+		expect('a fix commit that is neither a SHA nor patch: fails the schema', schemaProblems({ ...np, findings: [{ ...np.findings[0], commit: 'patch:xyz' }, ...np.findings.slice(1)] }), /commit must be a hex SHA or patch:<patch-id>/);
+		// CCCC: hex inside a file path names a file, not a commit.
+		const ph2 = reg();
+		ph2.findings[0].gap = 'run rpc-filter/probes/runs/20261104-unpatched-a717861.json, see probe-abc1234-x, abc5678/x and fed0123.json; fixed in 0ddba11.';
+		ph2.findings[0].note = 'Round 2 (d5acbce..e6fdfe7), fixed in 1234abc-ish, see .4567def and 89abcde/fedcba9.';
+		const pg = citations(mkTree(files), ph2).cite.map(x => x.token).sort().join(',');
+		expect('hex inside a file path is not a citation; a SHA ending a sentence, both ends of a range and joined forms are (CCCC-3)', pg === '0ddba11,1234abc,4567def,89abcde,abc1234,abcdef1,d5acbce,e6fdfe7,fedcba9' ? [] : [`got ${pg}`], null);
+		// CCCC: pin turns a landed patch: citation into its SHA, everywhere but round labels.
+		const pn = reg();
+		Object.assign(pn.findings[0], { commit: 'patch:cccccccccccccccccccccccccccccccccccccccc', note: 'also patch:cccccccccccccccccccccccccccccccccccccccc', round: 'Round A' });
+		pn.findings[1].gap = 'see patch:cccccccccccccccccccccccccccccccccccccccc';
+		const pc2 = pinPatches(pn, [['patch:cccccccccccccccccccccccccccccccccccccccc', '1234abc'], ['patch:dddddddddddddddddddddddddddddddddddddddd', 'not-hex']]);
+		expect('pin writes the SHA in every entry\'s commit and prose (CCCC)', pn.findings[0].commit === '1234abc' && pn.findings[0].note === 'also 1234abc' && pn.findings[1].gap === 'see 1234abc' && pc2.length === 3 ? [] : [`got ${JSON.stringify(pc2)}`], null);
 		const pr = reg();
 		pr.findings[0].branch = 'br-p';
 		Object.assign(pr.findings[0], { commit: 'abcdef1', note: 'see abcdef1 and patch:cccccccccccccccccccccccccccccccccccccccc' });
@@ -1607,7 +1665,8 @@ function main(): number {
 	}
 	if (mode === 'commits') {
 		sp.forEach(x => console.error(x));
-		const lines = sp.length ? [] : reg.findings.filter(f => f.status === 'fixed' && !f.branch && f.commit).map(f => `${keyOf(f)}\t${f.commit}\n`);
+		// "<key>\t<commit>\t<1 if high/critical>": a high's patch: fix commit must be on main (CCCC-1).
+		const lines = sp.length ? [] : reg.findings.filter(f => f.status === 'fixed' && !f.branch && f.commit).map(f => `${keyOf(f)}\t${f.commit}\t${isHigh(f) ? 1 : 0}\n`);
 		process.stdout.write(lines.join(''));
 		return sp.length ? 1 : 0;
 	}
@@ -1633,6 +1692,18 @@ function main(): number {
 			return 2;
 		}
 		process.stdout.write(String(r.baseline.length));
+		return 0;
+	}
+	if (mode === 'pin') { // pin PAIRS_FILE: "patch:<id>\t<sha>" lines; every entry's patch: citations become SHAs
+		if (sp.length || !arg) {
+			sp.forEach(x => console.error(x));
+			console.error('usage: findings.ts pin PAIRS_FILE');
+			return 2;
+		}
+		const pairs = fs.readFileSync(path.resolve(repo, arg), 'utf8').split('\n').filter(Boolean).map(l => l.split('\t') as [string, string]);
+		const changed = pinPatches(reg, pairs);
+		fs.writeFileSync(path.join(repo, REGISTER), `${JSON.stringify(reg, null, '\t')}\n`);
+		console.log(`findings: pinned ${changed.length} field(s)`);
 		return 0;
 	}
 	if (mode === 'remap') { // remap BRANCH PAIRS_FILE: rewrites the register in place

@@ -11621,10 +11621,10 @@
 			"owner": "register",
 			"status": "accepted-residual",
 			"acceptedBy": "agent",
-			"rationale": "A patch: fix commit is allowed only on an entry with its own branch, which is never compliant; the landing change drops branch and must pin a SHA (schema and self-test).",
+			"rationale": "A patch: fix commit closes a high only once that change is on main (round CCCC-1), so a change can't close a high on its own commits; patch-id's whitespace equivalence remains.",
 			"ref": {
 				"file": "docs/security-reviews/20261110-security-findings-register.md",
-				"quote": "Residual: a `patch:` fix commit is allowed only on an entry with its own `branch`"
+				"quote": "AAAA-2's mitigation is restated"
 			}
 		},
 		{
@@ -11654,8 +11654,9 @@
 			"status": "fixed",
 			"test": {
 				"file": "build/docs/findings.ts",
-				"name": "only inherits its branch fails the schema (AAAA-4)"
-			}
+				"name": "control: a patch: fix commit on an entry that only inherits its branch passes the schema (CCCC)"
+			},
+			"note": "The schema rule was withdrawn in round CCCC: a patch: fix commit is allowed on any entry, and the schema and the ancestry step now agree on it."
 		},
 		{
 			"record": "20261110-security-findings-register.md",
@@ -11748,6 +11749,108 @@
 			"test": {
 				"file": "seclab",
 				"name": "for sig in \"\" \"trap"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "CCCC-1",
+			"round": "Round CCCC",
+			"severity": "medium",
+			"summary": "A patch: fix commit resolved on the change's own history, so an add-then-revert pair could close a high",
+			"component": "findings register: closing highs",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "a high closed on its PR's own patch: commit (CCCC-1)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "CCCC-2",
+			"round": "Round CCCC",
+			"severity": "medium",
+			"summary": "Exempt upstream pins came from HEAD's history, so a change could add and revert a pin to exempt any token",
+			"component": "findings register: upstream pins",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "a pin outside main's history counted (CCCC-2)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "CCCC-3",
+			"round": "Round CCCC",
+			"severity": "medium",
+			"summary": "One adjacent - / or . dropped a token, so range ends and joined forms escaped",
+			"component": "findings register: path hex",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "both ends of a range and joined forms are (CCCC-3)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "CCCC-4",
+			"round": "Round CCCC",
+			"severity": "medium",
+			"summary": "A landed patch: never failed, nothing forced a pin, and a commit window would later fail every change",
+			"component": "findings register: pinning",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "a later change touching an unpinned landed citation passed (CCCC-4)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "CCCC-5",
+			"round": "Round CCCC",
+			"severity": "low",
+			"summary": "An environment variable could replace origin/main, and an unresolvable one skipped the rule",
+			"component": "findings register: test seam",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "an unresolvable main didn't fail as a defect (CCCC-5)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "CCCC-6",
+			"round": "Round CCCC",
+			"severity": "low",
+			"summary": "AAAA-2's rationale and AAAA-4's test rested on the withdrawn rule",
+			"component": "findings register: earlier rounds",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed-untested",
+			"gap": "Register and record text; nothing to test."
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "CCCC-7",
+			"round": "Round CCCC",
+			"severity": "low",
+			"summary": "No case for a poisoned whole-history cache, an unresolvable main, or a pin from outside main",
+			"component": "findings register: self-test",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "a malformed whole-history cache was trusted (CCCC-7)"
 			}
 		},
 		{

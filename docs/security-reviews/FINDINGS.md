@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 82 | 168 | 181 | 22 | 467 |
-| fixed-untested | 0 | 5 | 60 | 156 | 57 | 278 |
+| fixed | 14 | 82 | 172 | 183 | 22 | 473 |
+| fixed-untested | 0 | 5 | 60 | 157 | 57 | 279 |
 | accepted-residual | 0 | 1 | 12 | 66 | 20 | 99 |
 | deferred | 2 | 2 | 14 | 10 | 2 | 30 |
 | open | 0 | 2 | 14 | 21 | 6 | 43 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 268 | 434 | 113 | 923 |
+| **all** | 16 | 92 | 272 | 437 | 113 | 930 |
 
 ## Baseline: open high and critical findings
 
@@ -491,9 +491,10 @@ The findings register and its gate.
 | [20261110-security-findings-register](20261110-security-findings-register.md) **WWW-3** | medium | fixed-untested | findings register: ancestry | After the history rewrite every cited fix commit was off the new history | Enforced by the docs job's ancestry step over the remapped register, not by a self-test case. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **XXX-2** | medium | accepted-residual | findings register: no-conversations rule | The no-conversations rule is enforced only on owner-acceptances.md; elsewhere it rests on authors and review | accepted by an agent: No checker can tell a paraphrase from a statement. The register's own paraphrases were reworded; the project's records and the deps exception approvals were restated as neutral decisions by the redaction change, so build/deps.ts SS-5 now repeats a decision statement, not a quote. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **YYY-6** | medium | accepted-residual | findings register: remap drift | Remapping rewrote round labels away from their records, and nothing checks that a remapped commit is the equivalent | accepted by an agent: Round labels are remapped only through the rewrite's own map and a token their record carries is the record's citation (self-test). A remap to a different live commit isn't detected; the 17 remapped here were matched by patch-id or file-for-file. |
-| [20261110-security-findings-register](20261110-security-findings-register.md) **AAAA-2** | low | accepted-residual | findings register: patch-id evidence | A patch-id ignores whitespace and mode-only changes, so it doesn't pin content | accepted by an agent: A patch: fix commit is allowed only on an entry with its own branch, which is never compliant; the landing change drops branch and must pin a SHA (schema and self-test). |
+| [20261110-security-findings-register](20261110-security-findings-register.md) **AAAA-2** | low | accepted-residual | findings register: patch-id evidence | A patch-id ignores whitespace and mode-only changes, so it doesn't pin content | accepted by an agent: A patch: fix commit closes a high only once that change is on main (round CCCC-1), so a change can't close a high on its own commits; patch-id's whitespace equivalence remains. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **AAAA-5** | low | fixed-untested | findings register: weekly ratchet | The week-ago comparison point was chosen by any commit's date and skipped silently without a register | Fixed in the workflow step; workflow steps have no test. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **BBBB-2** | low | fixed-untested | findings register: growth | The old register was read back through the bind mount, which can serve a partial file | Fixed by reading from stdin; the race isn't reproducible on demand. |
+| [20261110-security-findings-register](20261110-security-findings-register.md) **CCCC-6** | low | fixed-untested | findings register: earlier rounds | AAAA-2's rationale and AAAA-4's test rested on the withdrawn rule | Register and record text; nothing to test. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **RRR-1** | low | fixed-untested | findings register: liveness-refresh workflow | The baseline listing step gated the liveness refresh job | Fixed by moving the listing into its own contents: read job; no check covers workflow job structure. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **TTT-7** | low | fixed-untested | findings register: base on main | On main without a usable previous head the base was HEAD itself | A shell guard in seclab's findings_check; the host self-test covers base resolution but not this branch. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **UUU-6** | low | fixed-untested | findings register: base on main | On main the pre-register fallback compared the register with itself | A shell guard in seclab's findings_check; not covered by the host self-test. |
@@ -587,7 +588,6 @@ Every other commit the register cites is on main's history, or on the branch its
 | `8ffffa5` | copied as written from its append-only record's round heading | 2 entries: 20261106-background-windows-click-through.md#GGG-1 round; 20261106-background-windows-click-through.md#GGG-2 round |
 | `91e7b2c` | copied as written from its append-only record's round heading | 5 entries: 20261105-cfs-local-builds.md#YY-1 round; 20261105-cfs-local-builds.md#YY-2 round; 20261105-cfs-local-builds.md#YY-3 round; … |
 | `980a16a` | copied as written from its append-only record's round heading | 3 entries: 20261104-supply-chain.md#GG-1 round; 20261104-supply-chain.md#HH-1 round; 20261104-supply-chain.md#HH-2 round |
-| `a717861` | a prefix of the pinned upstream Code-OSS commit (upstream.lock) | 1 entry: 20261104-rpc-probes-increment.md#PR-M3 gap |
 | `a717861c` | a prefix of the pinned upstream Code-OSS commit (upstream.lock) | 1 entry: 20261106-agentic-ahp-gate.md#MEDIUM (9/10), harness: the A1 probes used the wrong action envelopes note |
 | `a999a4d` | copied as written from its append-only record's round heading | 6 entries: 20261106-agentic-ahp-gate.md#HIGH (8/10): A1 is only half closed, MCP auth metadata gets past the sanitiser round; 20261106-agentic-ahp-gate.md#MEDIUM (9/10): seclab.agents.enabled was writable from the tab round; 20261106-agentic-ahp-gate.md#R1-CF1 round; … |
 | `ab97985` | copied as written from its append-only record's round heading | 4 entries: 20261104-m0-tabd-code.md#N1 round; 20261104-m0-tabd-code.md#R1 round; 20261104-m0-tabd-code.md#R2 round; … |
@@ -1684,9 +1684,9 @@ Every other commit the register cites is on main's history, or on the branch its
 | ZZZ-4 | low | fixed-untested | Register text in the weekly summary's fenced block could break out of it | Fixed in the workflow step; workflow output has no test. |
 | ZZZ-5 | low | fixed-untested | An ambiguous prefix of the upstream pin was skipped silently | Fixed; the self-test can't construct an ambiguous seven-character prefix. |
 | AAAA-1 | medium | fixed | A patch-id cache file a change committed under .work could make any patch: citation read live | e8f5613 · `seclab` "a malformed patch-id cache was trusted (AAAA-1)" |
-| AAAA-2 | low | accepted-residual | A patch-id ignores whitespace and mode-only changes, so it doesn't pin content | accepted by an agent: A patch: fix commit is allowed only on an entry with its own branch, which is never compliant; the landing change drops branch and must pin a SHA (schema and self-test). |
+| AAAA-2 | low | accepted-residual | A patch-id ignores whitespace and mode-only changes, so it doesn't pin content | accepted by an agent: A patch: fix commit closes a high only once that change is on main (round CCCC-1), so a change can't close a high on its own commits; patch-id's whitespace equivalence remains. |
 | AAAA-3 | low | fixed | A change on main whose branch still carried a copy read as live, so the pin rule never fired | e8f5613 · `seclab` "a patch-id on main wasn't reported for pinning (AAAA-3)" |
-| AAAA-4 | low | fixed | The schema allowed a patch: fix commit on an entry that only inherits its branch | e8f5613 · `build/docs/findings.ts` "only inherits its branch fails the schema (AAAA-4)" |
+| AAAA-4 | low | fixed | The schema allowed a patch: fix commit on an entry that only inherits its branch | e8f5613 · `build/docs/findings.ts` "control: a patch: fix commit on an entry that only inherits its branch passes the schema (CCCC)" |
 | AAAA-5 | low | fixed-untested | The week-ago comparison point was chosen by any commit's date and skipped silently without a register | Fixed in the workflow step; workflow steps have no test. |
 | BBBB-1 | medium | fixed-untested | The baseline listing wrote into .work without creating it, so a fresh runner failed before the growth check | One-line fix; the self-test runs where .work already exists. |
 | BBBB-2 | low | fixed-untested | The old register was read back through the bind mount, which can serve a partial file | Fixed by reading from stdin; the race isn't reproducible on demand. |
@@ -1694,6 +1694,13 @@ Every other commit the register cites is on main's history, or on the branch its
 | BBBB-4 | low | fixed | The no-early-closing-reader check was narrow: missed forms, findings functions only, one-line functions misread | ff9431f · `seclab` "seclab pipes into a reader that closes early" |
 | BBBB-5 | info | fixed-untested | findings_emit hid a real read error's message | Message-only change; nothing to test. |
 | BBBB-6 | medium | fixed | With SIGPIPE ignored, as on CI runners, cat got EPIPE and exited 1, failing the listing | ff9431f · `seclab` "for sig in "" "trap" |
+| CCCC-1 | medium | fixed | A patch: fix commit resolved on the change's own history, so an add-then-revert pair could close a high | 0000000 · `seclab` "a high closed on its PR's own patch: commit (CCCC-1)" |
+| CCCC-2 | medium | fixed | Exempt upstream pins came from HEAD's history, so a change could add and revert a pin to exempt any token | 0000000 · `seclab` "a pin outside main's history counted (CCCC-2)" |
+| CCCC-3 | medium | fixed | One adjacent - / or . dropped a token, so range ends and joined forms escaped | 0000000 · `build/docs/findings.ts` "both ends of a range and joined forms are (CCCC-3)" |
+| CCCC-4 | medium | fixed | A landed patch: never failed, nothing forced a pin, and a commit window would later fail every change | 0000000 · `seclab` "a later change touching an unpinned landed citation passed (CCCC-4)" |
+| CCCC-5 | low | fixed | An environment variable could replace origin/main, and an unresolvable one skipped the rule | 0000000 · `seclab` "an unresolvable main didn't fail as a defect (CCCC-5)" |
+| CCCC-6 | low | fixed-untested | AAAA-2's rationale and AAAA-4's test rested on the withdrawn rule | Register and record text; nothing to test. |
+| CCCC-7 | low | fixed | No case for a poisoned whole-history cache, an unresolvable main, or a pin from outside main | 0000000 · `seclab` "a malformed whole-history cache was trusted (CCCC-7)" |
 
 ### [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md)
 

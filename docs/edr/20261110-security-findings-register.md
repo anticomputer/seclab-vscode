@@ -155,12 +155,19 @@ script run by a required job: what runs it is the docs job, and its evidence is 
   session (or whoever touches the entry next) runs `./seclab findings remap --branch B`, which
   follows each rotted citation of B's entries to the one commit in B's history (main's included)
   with the same patch-id, else the one with the same subject and file list, rewrites those entries,
-  and reports anything with no equivalent or several, for a hand remap; it never guesses. A
-  citation of a change that isn't on main yet may be written `patch:<git patch-id --stable>`
-  (only in an entry with a branch, never a round label): it resolves against the commits its
-  branch, or HEAD, has and main doesn't, so it survives rebases; once a commit on main carries
-  that patch-id, a change touching the entry must pin it to that SHA. `remap --patch` converts a
-  branch's unlanded citations to that form. The
+  and reports anything with no equivalent or several, for a hand remap; it never guesses.
+- Landing is by pull request with auto-merge's rebase method (project owner's decision), which
+  re-creates every commit, so a branch SHA never lands (review CCCC). A citation of work not yet
+  on `main` is therefore `patch:<git patch-id --stable>`, in any entry, as a fix commit or in prose
+  (never in a round label). It resolves against the last 3000 commits of the history being checked
+  (a PR's own commits) or of `main`, or the entry's branch, so the same citation holds before and
+  after the rebase-merge with no remap. A change whose new or edited entry cites a SHA that isn't on
+  `main` yet fails and prints the `patch:` form to use. Once a cited change is on `main` the docs
+  check notes it, never fails on it, and `./seclab findings pin` writes the SHAs in a follow-up.
+  `remap --patch` converts a branch's unlanded citations to that form.
+- Upstream bumps: a prefix of any SHA `upstream.lock` has pinned in its history, and no commit
+  here, names the upstream Code-OSS commit, so a bump never strands the old pin's citations. A hex
+  run inside a file path (`runs/20261104-unpatched-a717861.json`) is a file name, not a citation. The
   strict view is `./seclab findings rot`, every rotted citation touched or not, which the weekly
   `liveness-refresh` job lists in its summary without failing. That job fails only on a defect
   in a listing (a malformed citation line, an unreadable baseline) or on a baseline larger than a

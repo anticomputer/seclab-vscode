@@ -41,8 +41,9 @@ the process and the index.
    Every commit an entry you add or modify cites must be on `main`'s history (or its entry's
    branch). After rebasing, squashing or deleting a branch the register names, run
    `./seclab findings remap --branch <name>`; it reports anything it can't follow. Cite a commit
-   that isn't on `main` yet as `patch:<patch-id>` (`remap --patch` converts them), and pin the SHA
-   once it lands. The records
+   that isn't on `main` yet as `patch:<patch-id>`: landing rebase-merges and re-creates commits, so
+   a branch SHA never lands (the check prints the form to use). After it lands,
+   `./seclab findings pin` writes the SHAs. The records
    themselves keep the SHAs they were written with.
    `./seclab docs check` enforces all of it.
 

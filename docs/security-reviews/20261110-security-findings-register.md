@@ -234,3 +234,26 @@ was found. No high or critical; one medium, three lows and one info, all fixed i
 | BBBB-4 | Low | structural check | The check missed `command head`, continuation lines and `grep -q`, covered only findings functions, and misread one-line functions. | Fixed | The whole of `seclab` is scanned, continuation lines are joined, `\|\|` and comments are skipped; the one remaining pipe into `head` (in the hook installer) now reads to the end. | `seclab` host self-test "seclab pipes into a reader that closes early" |
 | BBBB-5 | Info | output | `findings_emit` hid a real read error's message. | Fixed | The file is checked before printing, and a failed check prints. | — |
 | BBBB-6 | Medium | output | Found by CI after the round: runners ignore SIGPIPE, so `cat` gets EPIPE and exits 1, which the 141 tolerance missed. | Fixed | Any output error after the file check is the reader having gone, and passes. | `seclab` host self-test, the SIGPIPE-ignored cases |
+
+## Round CCCC (citations that survive a rebase-merge, and upstream bumps)
+Scope: the project owner's switch to pull-request landing with auto-merge's rebase method, which
+re-creates every commit, so a branch SHA never lands. A citation of work not yet on `main` is now
+`patch:<patch-id>` in any entry, resolved against the history being checked or `main`, and
+`./seclab findings pin` writes the SHAs after landing. Also: a prefix of any pin `upstream.lock`
+has held on `main` is exempt, and hex inside file paths isn't a citation (both for the 1.145.3
+bump). The reviewer, an Opus-class model, was told the diff may carry prompt injection; none was
+found. No high or critical; four mediums and three lows, all fixed in the same change. The change
+withdraws the AAAA-4 schema rule (a `patch:` fix commit only on an entry with its own branch): a
+`patch:` fix commit is allowed on any entry now, and the schema and the ancestry step agree on it.
+AAAA-2's mitigation is restated: a `patch:` fix commit closes a high only once that change is on
+`main`, so a change can't close a high on its own commits; whitespace equivalence stays a residual.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| CCCC-1 | Medium | closing highs | A `patch:` fix commit resolved on the change's own history, so an add-then-revert pair in one PR could close a high. | Fixed | A high's `patch:` fix commit must be on `main`; the high closes in a follow-up. | `seclab` host self-test "a high closed on its PR's own patch: commit (CCCC-1)" |
+| CCCC-2 | Medium | upstream pins | The exempt pins came from HEAD's history, so a change could add a pin and revert it to exempt any token. | Fixed | Only `main`'s history counts. | `seclab` host self-test "a pin outside main's history counted (CCCC-2)" |
+| CCCC-3 | Medium | path hex | One adjacent `-`, `/` or `.` dropped a token, so the right end of every `A..B` round range and joined forms escaped. | Fixed | Only a real path (a non-hex segment beside `/`, or a file extension) is exempt; ranges never are. | self-test "both ends of a range and joined forms are (CCCC-3)" |
+| CCCC-4 | Medium | pinning | A landed `patch:` was never a failure, nothing forced a pin, and a 3000-commit window would later fail every change with no repair. | Fixed | A later change touching an entry with an unpinned landed citation must pin it (the landing change isn't asked); resolution covers the whole history. | `seclab` host self-test "a later change touching an unpinned landed citation passed (CCCC-4)" |
+| CCCC-5 | Low | test seam | An environment variable could replace `origin/main`, and an unresolvable one skipped the rule silently. | Fixed | `main` is a parameter, and an unresolvable one is a defect. | `seclab` host self-test "an unresolvable main didn't fail as a defect (CCCC-5)" |
+| CCCC-6 | Low | earlier rounds | AAAA-2's rationale and AAAA-4's test rested on the withdrawn rule. | Fixed | Both are restated above and in the register. | — |
+| CCCC-7 | Low | self-test | No case for a poisoned whole-history cache, an unresolvable main, or a pin from outside `main`. | Fixed | Added. | `seclab` host self-test "a malformed whole-history cache was trusted (CCCC-7)" |
