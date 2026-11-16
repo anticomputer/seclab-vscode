@@ -643,16 +643,14 @@ visible losses, not bugs:
   side resolves task variables. 0031 refuses the pty host's `${env:…}` push and 0034 the
   terminal launch config's host variables; `${config:…}` in tasks still resolves against the
   unfiltered configuration on the trusted side.
-- **Quick Open file search and the Search view don't work in tabs yet.** Inside a
-  tab the extension host serves search itself, registering its file and text
-  search providers for `vscode-remote`. Those registrations are denied, so the
-  search service waits forever for a provider: `workspace.findFiles`, Quick Open
-  file search and the Search view never return. The benign control records
-  `findFiles` as its one expected failure. First follow-up, as designed:
-  `$registerFileSearchProvider` and `$registerTextSearchProvider` for exactly
-  `vscode-remote`; `$handleFileMatch` result URIs canonical `vscode-remote` on
-  this tab's authority; `$handleTextMatch` with a validator for the nested
-  `resource`; `$unregisterProvider` limited to this connection's providers.
+- **File and text search work for the tab's own file system.** Inside a tab the extension
+  host serves search itself, registering its providers for `vscode-remote`; the policy allows
+  exactly that scheme (`tabSearchProvider`), result URIs from `$handleFileMatch` must be
+  canonical `vscode-remote` on this tab's authority (the positional rule), every match
+  resource and result `uri` in `$handleTextMatch` the same (`tabTextMatches`), and
+  `$unregisterProvider` reaches only this host's own providers. `workspace.findFiles`, Quick
+  Open file search and the Search view return again; the benign control's `findFiles` step is
+  no longer an expected failure.
 
 Extensions activate, run their commands, keep per-tab state and secrets, and
 read, write and open their own workspace files.

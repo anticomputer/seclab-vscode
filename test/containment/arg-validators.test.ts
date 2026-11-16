@@ -172,12 +172,39 @@ const DEFECTS: Defect[] = [
 		dangerous: [null, { includePattern: '/seclab-canary/**' }],
 		from: "&& !s.split(',').some(seg => searchPathSegment(seg.trim()));", to: ';',
 	},
+	{
+		name: 'a search provider for the host file system', validator: 'tabSearchProvider',
+		dangerous: [1, 'file'],
+		from: "(args[1] === 'vscode-remote' ? undefined : 'a tab serves search only for vscode-remote')", to: 'undefined',
+	},
+	{
+		name: 'a text match naming a host file', validator: 'tabTextMatches',
+		dangerous: [1, 1, [{ resource: { $mid: 1, scheme: 'file', path: '/seclab-canary/host-only-marker' } }]],
+		from: 'const r = checkTabUri(m.resource, ctx);', to: 'const r = undefined;',
+	},
+	{
+		name: 'a text match result whose own uri is a host file', validator: 'tabTextMatches',
+		dangerous: [1, 1, [{ resource: { $mid: 1, scheme: 'vscode-remote', authority: TAB, path: '/w/a.ts' }, results: [{ uri: { $mid: 1, scheme: 'vscode-userdata', path: '/User/settings.json' }, previewText: 'x', rangeLocations: [] }] }]],
+		from: 'const u = checkTabUri(res.uri, ctx);', to: 'const u = undefined;',
+	},
 ];
 
 const tests: Array<[string, () => void | Promise<void>]> = [];
 const test = (name: string, fn: () => void | Promise<void>) => tests.push([name, fn]);
 
 // --- fail-closed dispatch -------------------------------------------------------------------
+test('tab providers and search: the legitimate shapes pass', () => {
+	ok(shipped, 'tabHoverProvider', [1, [{ $serialized: true, language: 'plaintext' }]]);
+	ok(shipped, 'tabHoverProvider', [1, [{ $serialized: true, scheme: 'vscode-remote', language: 'typescript', pattern: '**/*.ts' }]]);
+	ok(shipped, 'tabCompletionProvider', [1, [{ $serialized: true, language: 'plaintext' }], ['@', '#'], true, EXT_ID]);
+	no(shipped, 'tabCompletionProvider', [1, [{ $serialized: true, language: 'plaintext' }], ['@@'], true, EXT_ID]);
+	no(shipped, 'tabHoverProvider', [1, []]);
+	ok(shipped, 'tabSearchProvider', [3, 'vscode-remote']);
+	no(shipped, 'tabSearchProvider', [3, 'vscode-userdata']);
+	ok(shipped, 'tabTextMatches', [1, 2, [{ resource: tabUri(), results: [{ previewText: 'x', rangeLocations: [] }, { uri: tabUri('/w/b.ts'), text: 'ctx', lineNumber: 1 }] }]]);
+	no(shipped, 'tabTextMatches', [1, 2, [{ resource: tabUri(), results: [{ previewText: 'x'.repeat(70 * 1024) }] }]]);
+});
+
 test('an unknown validator name denies', () => {
 	assert.match(v(shipped, 'noSuchValidator', []) ?? '', /not implemented/);
 });
