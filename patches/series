@@ -27,9 +27,10 @@
 # New files in 0015 are edited in agentic/patch-src (agentic/tools/sync-patch.ts).
 0015-seclab-ahp-gate.patch
 0017-seclab-fixed-tab-settings.patch
-# 0030-0034: RPC capability filter follow-ons. 0030 refuses the server-initiated command push
-# in tab windows; 0031 and 0011 are held until their proofs.
+# 0030-0034: RPC capability filter follow-ons. 0030-0031 refuse the two server-initiated
+# terminal pushes in tab windows.
 0030-seclab-no-remote-cli-push-in-tabs.patch
+0031-seclab-no-variable-resolution-for-tab-pty-hosts.patch
 0032-seclab-partition-tab-extension-state.patch
 0035-seclab-document-sync-provenance.patch
 # Fork build: Restart Extension Host re-resolves a managed (seclab+) authority (EDR ext-host-restart-reresolve).
