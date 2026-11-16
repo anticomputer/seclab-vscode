@@ -77,7 +77,7 @@ function problems(patch: string): string[] {
 
 const tests: Array<[string, () => void]> = [
 	['patch 0034 resolves no host variables for a tab terminal', () => assert.deepEqual(problems(PATCH), [])],
-	['the patch\'s tab resolvers resolve only env, from the REH environment', () => {
+	['the tab resolvers in the patch resolve only env, from the REH environment', () => {
 		const env: Record<string, string> = { HOME: '/home/agent' };
 		for (const tab of [compile(PROFILE_EXPR, 'value', 'env'), compile(MANAGER_EXPR, 'str', 'envForResolver')]) {
 			assert.equal(tab('/bin/sh${config:seclab.test.canary}', env), '/bin/sh${config:seclab.test.canary}');
