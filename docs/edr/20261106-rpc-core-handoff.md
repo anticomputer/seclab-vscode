@@ -282,3 +282,8 @@ Superseding the next step above:
   [`20261105-rpc-core-increment.md`](../security-reviews/20261105-rpc-core-increment.md)
 - Agent-host seam:
   [`20261105-no-builtin-chat-in-tabs.md`](../adr/20261105-no-builtin-chat-in-tabs.md)
+
+## Later (2026-11-16)
+Superseded in part by [the push-refusal EDR](20261116-reh-push-refusals.md): 0030 and 0031 are
+reworked as refusing, logging handlers, and 0011 is retired, because main's 0015 refuses the
+agent-host dial before the socket opens.

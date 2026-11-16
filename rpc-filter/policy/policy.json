@@ -1208,7 +1208,7 @@
         "credential-access",
         "exfiltration"
       ],
-      "rationale": "The agent-host proxy carries agent traffic that runs with the user's host credentials. This is the transport half of the dial path that patch 0011 closes; denied here as well so the verdict does not depend on a patch on a different branch.",
+      "rationale": "The agent-host proxy carries agent traffic that runs with the user's host credentials. This is the transport half of the agent-host connection that patch 0015's gate refuses in a tab window unless it passes through the gate; denied here as well, and not yet enforced on this push (accepted unenforced below).",
       "evidence": [
         "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostIpcChannelTransport.ts#L74"
       ]
@@ -1221,7 +1221,7 @@
         "credential-access",
         "exfiltration"
       ],
-      "rationale": "The agent-host proxy carries agent traffic that runs with the user's host credentials. This is the transport half of the dial path that patch 0011 closes; denied here as well so the verdict does not depend on a patch on a different branch.",
+      "rationale": "The agent-host proxy carries agent traffic that runs with the user's host credentials. This is the transport half of the agent-host connection that patch 0015's gate refuses in a tab window unless it passes through the gate; denied here as well, and not yet enforced on this push (accepted unenforced below).",
       "evidence": [
         "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/agentHost/browser/agentHostIpcChannelTransport.ts#L73"
       ]
