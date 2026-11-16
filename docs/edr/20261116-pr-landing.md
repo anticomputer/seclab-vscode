@@ -1,6 +1,6 @@
 # Landing through pull requests: rebase merge with auto-merge
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-11-16
 - **Deciders:** Project owner (2026-11-16): pull-request landing with auto-merge, the repository staying under its user account; the coordinator (landing order). Fork-build session: implementation.
 - **Related:** [CI hardening](20261104-ci-hardening.md) (§9, the ruleset), [security findings register](20261110-security-findings-register.md), [publish gate](20261112-publish-gate.md)
@@ -25,7 +25,10 @@ queues need an organisation-owned repository, and this one stays under its user 
 
   Every existing rule stays: the four required checks (`unit`, `lint`, `docs`, `patch-build`),
   linear history, no force-push, no deletion, and no bypass actors. The JSON is saved before the
-  change and diffed after it; the diff must show only these two changes.
+  change and diffed after it; the diff must show only these two changes. (GitHub also stores
+  its default `require_extra_approval_for_unattributed_changes: true` and an empty
+  `required_reviewers` in the new rule. The former adds an approval only to pull requests opened
+  by Copilot under its own identity, and sessions open theirs with `gh` as the owner.)
 - **Repository settings:** auto-merge on, and "update branch" on, so an out-of-date PR can be
   rebased onto `main` from `gh` (`gh pr update-branch --rebase`). `delete_branch_on_merge`
   stays off: register entries that name a `branch` resolve their citations on
