@@ -15,7 +15,7 @@ way: [docs/adr/](docs/adr/README.md).
 ## 2. Map
 | Path | What |
 |---|---|
-| `upstream.lock` | Pinned Code-OSS tag and SHA (1.145.0 @ a717861c) |
+| `upstream.lock` | Pinned Code-OSS tag and SHA (1.145.3 @ dcd3ad6e) |
 | `build/` | `fetch-upstream.sh` (verifies tag→SHA), `prepare.sh` (overlay, jq product.json, patches), `product/` (overrides.json, product.jq with invariants, remove-extensions.txt), `linux/` (builder image + build.sh), `build-darwin.sh` (Actions only) |
 | `patches/` | Core patch queue; exactly what `patches/series` lists ships: 0001 build-only, 0002–0004 extension placement |
 | `.github/workflows/` | `build-macos.yml` (unsigned darwin-arm64 app), `ci-linux.yml` (unit, REH, OCI e2e/containment/canary/secrets) |
