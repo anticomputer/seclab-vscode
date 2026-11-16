@@ -86,3 +86,14 @@ queues need an organisation-owned repository, and this one stays under its user 
   resulting `main` SHA, and workflow-lint's push run on it with the `denylist` job green. The
   merge must produce a `push` event on `main`, so auto-merge is armed with the owner's
   credential, never an app's.
+
+## Evidence
+- **Ruleset applied, 2026-11-16:** the live ruleset 26572681 was diffed against its saved JSON
+  before and after. The only changes were strict required checks and the new `pull_request`
+  rule, plus GitHub's two defaults noted above. Auto-merge and update-branch are on, and
+  `delete_branch_on_merge` is off.
+- **First landing, 2026-11-16:** pull request #7 (this EDR and the procedure) passed the four
+  required checks and ci-linux `oci` on its head. It was then armed with
+  `gh pr merge --auto --rebase` and merged by rebase as `main` f7d98c09, with no push to `main`.
+  On that SHA every workflow ran as a `push` and passed, workflow-lint run 43978400806 among
+  them, with its `denylist` job green.
