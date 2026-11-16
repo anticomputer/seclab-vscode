@@ -28,6 +28,8 @@
 | if [$allowedUi[] | select(startswith("vscode.") | not)] | length > 0
     then error("invariant: generated ui allowlist must only contain vscode.* built-ins") else . end
 | if has("configurationSync.store") then error("invariant: Settings Sync store must be absent") else . end
+| if .enableTelemetry != false
+    then error("invariant: telemetry must stay off (with it on, host telemetry ids reach every tab; EDR tab-telemetry-ids)") else . end
 | if .seclabTabRouter != "seclab.tab-manager"
     then error("invariant: local folder opens must route to the Tab Manager (seclabTabRouter, patch 0041)") else . end
 | if (.extensionsGallery.serviceUrl | startswith("https://open-vsx.org/")) | not
