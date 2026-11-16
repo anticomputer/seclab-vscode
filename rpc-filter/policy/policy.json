@@ -839,6 +839,85 @@
           ]
         }
       }
+    },
+    "MainThreadSearch": {
+      "service_default": "deny",
+      "review": "classified",
+      "methods": {
+        "$registerFileSearchProvider": {
+          "verdict": "allow_with_constraint",
+          "capability": "register a file search provider for a URI scheme; the window's search service then asks this host to search folders of that scheme",
+          "impact": [
+            "reconnaissance",
+            "exfiltration"
+          ],
+          "residual_impact": [],
+          "constraint": "the scheme is exactly vscode-remote, the tab's own file system; any other scheme would route the window's searches of host resources, and their query text, to the tab",
+          "validator": "tabSearchProvider",
+          "rationale": "vscode.workspace.findFiles, Quick Open and the Search view in a tab window are served by the tab's extension host, which registers providers for vscode-remote. Denied, those features waited forever for a provider (RPC-LOCKDOWN 7.1). The registry is keyed by scheme and one window holds one tab, so vscode-remote is the tab's own.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSearch.ts#L44-L58"
+          ]
+        },
+        "$registerTextSearchProvider": {
+          "verdict": "allow_with_constraint",
+          "capability": "register a text search provider for a URI scheme; the window's search service then asks this host to search folders of that scheme",
+          "impact": [
+            "reconnaissance",
+            "exfiltration"
+          ],
+          "residual_impact": [],
+          "constraint": "the scheme is exactly vscode-remote, the tab's own file system; any other scheme would route the window's searches of host resources, and their query text, to the tab",
+          "validator": "tabSearchProvider",
+          "rationale": "vscode.workspace.findFiles, Quick Open and the Search view in a tab window are served by the tab's extension host, which registers providers for vscode-remote. Denied, those features waited forever for a provider (RPC-LOCKDOWN 7.1). The registry is keyed by scheme and one window holds one tab, so vscode-remote is the tab's own.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSearch.ts#L44-L58"
+          ]
+        },
+        "$handleFileMatch": {
+          "verdict": "allow_with_constraint",
+          "capability": "report file search results for a session this host is serving",
+          "impact": [
+            "host-fs-read",
+            "ui-spoofing"
+          ],
+          "residual_impact": [
+            "ui-spoofing"
+          ],
+          "constraint": "the positional URI rule: every result URI (argument 2) revives, canonically, to vscode-remote://seclab+<this tab>",
+          "constraint_is_uri_rule": true,
+          "rationale": "A result naming a host file would appear in Quick Open or the Search view and open in this window, and a document opened in a tab window is synchronised to the tab. The handle and session are looked up in this host's own MainThreadSearch instance.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSearch.ts#L69-L76"
+          ]
+        },
+        "$handleTextMatch": {
+          "verdict": "allow_with_constraint",
+          "capability": "report text search matches, with previews, for a session this host is serving",
+          "impact": [
+            "host-fs-read",
+            "ui-spoofing"
+          ],
+          "residual_impact": [
+            "ui-spoofing"
+          ],
+          "constraint": "every match resource and every result uri revives, canonically, to vscode-remote://seclab+<this tab>; previews and context text are bounded strings; at most 10000 matches per call",
+          "validator": "tabTextMatches",
+          "rationale": "The resource is nested inside IRawFileMatch2 and a result may carry its own uri, so the positional rule does not see them; a host URI there would open a host file in this window. Previews render as plain text in the Search view.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSearch.ts#L78-L85"
+          ]
+        },
+        "$unregisterProvider": {
+          "verdict": "allow",
+          "capability": "dispose one of this host's search providers by handle",
+          "impact": [],
+          "rationale": "The handle is looked up in this MainThreadSearch instance's own map, one per extension host, so a tab can only dispose providers it registered.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadSearch.ts#L60-L67"
+          ]
+        }
+      }
     }
   },
   "commands": {

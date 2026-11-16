@@ -552,6 +552,73 @@ const tabCompletionProvider: SeclabValidator = (args) => {
 	return undefined;
 };
 
+/** Results in one $handleTextMatch call, and matches per result, at most. */
+const MAX_TEXT_MATCHES = 10000;
+const MAX_PREVIEW = 64 * 1024;
+
+function handle(v: unknown, what: string): string | undefined {
+	return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? undefined : `${what} is not a handle`;
+}
+
+/**
+ * `$registerFileSearchProvider(handle, scheme)` / `$registerTextSearchProvider(handle, scheme)`.
+ * The search service asks the provider registered for a folder's scheme, so a tab may serve
+ * search only for its own file system: exactly `vscode-remote`. Any other scheme would route
+ * the window's searches of host resources (and their query text) to the tab.
+ */
+const tabSearchProvider: SeclabValidator = (args) => {
+	return arity(args, 2, 2) ?? handle(args[0], 'argument 0')
+		?? (args[1] === 'vscode-remote' ? undefined : 'a tab serves search only for vscode-remote');
+};
+
+/**
+ * `$handleTextMatch(handle, session, data)`. Each match's `resource`, and the `uri` a result may
+ * carry, must be this tab's own canonical resource: a result naming a host file would open it in
+ * this window, and an opened document is synchronised to the tab. Previews are bounded text.
+ */
+const tabTextMatches: SeclabValidator = (args, ctx) => {
+	const bad = arity(args, 3, 3) ?? handle(args[0], 'argument 0') ?? handle(args[1], 'argument 1');
+	if (bad) {
+		return bad;
+	}
+	const data = args[2];
+	if (!Array.isArray(data) || data.length > MAX_TEXT_MATCHES) {
+		return 'argument 2 is not a list of matches';
+	}
+	for (const m of data) {
+		if (!isPlainObject(m)) {
+			return 'a match is not an object';
+		}
+		const r = checkTabUri(m.resource, ctx);
+		if (r) {
+			return `a match resource: ${r}`;
+		}
+		if (m.results === undefined) {
+			continue;
+		}
+		if (!Array.isArray(m.results) || m.results.length > MAX_TEXT_MATCHES) {
+			return 'a match\'s results are not a list';
+		}
+		for (const res of m.results) {
+			if (!isPlainObject(res)) {
+				return 'a result is not an object';
+			}
+			if (res.uri !== undefined) {
+				const u = checkTabUri(res.uri, ctx);
+				if (u) {
+					return `a result uri: ${u}`;
+				}
+			}
+			for (const key of ['previewText', 'text'] as const) {
+				if (res[key] !== undefined && (typeof res[key] !== 'string' || (res[key] as string).length > MAX_PREVIEW)) {
+					return `a result's ${key} is not bounded text`;
+				}
+			}
+		}
+	}
+	return undefined;
+};
+
 export const SECLAB_VALIDATORS: ReadonlyMap<string, SeclabValidator> = new Map([
 	['activationErrorNoInstallPrompt', activationErrorNoInstallPrompt],
 	['tabCommandRegistration', tabCommandRegistration],
@@ -569,6 +636,8 @@ export const SECLAB_VALIDATORS: ReadonlyMap<string, SeclabValidator> = new Map([
 	['setContextKey', setContextKey],
 	['tabHoverProvider', tabHoverProvider],
 	['tabCompletionProvider', tabCompletionProvider],
+	['tabSearchProvider', tabSearchProvider],
+	['tabTextMatches', tabTextMatches],
 ]);
 
 /** Run a named validator, failing closed on an unknown name or a throw. */

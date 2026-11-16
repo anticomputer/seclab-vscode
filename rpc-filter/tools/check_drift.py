@@ -702,6 +702,8 @@ def check_validators(policy: dict, source: str, uri_positions: dict | None = Non
 # fetches. Anything else that registers must route its results through the sanitiser.
 RESPONSE_NONE = {
     "MainThreadCommands.$registerCommand": "the registration routes invocations back to this host; nothing it returns is rendered or executed on the trusted side",
+    "MainThreadSearch.$registerFileSearchProvider": "results arrive through $handleFileMatch as URIs the positional rule confines to this tab; nothing carries a command, markup or a fetch",
+    "MainThreadSearch.$registerTextSearchProvider": "results arrive through $handleTextMatch as tab URIs (validated) and plain-text previews; nothing carries a command, markup or a fetch",
 }
 
 

@@ -418,7 +418,7 @@ Two properties of the digest matter:
   build over a stale surface. **Open work**, noted in §7.
 
 <!-- seclab:begin baseline -->
-Current baseline at `a717861c0758`: **4239 surfaces, 4186 denied, 53 not denied** (22 allow, 18 allow_with_constraint, 4 prompt, 9 rewrite).
+Current baseline at `a717861c0758`: **4239 surfaces, 4181 denied, 58 not denied** (23 allow, 22 allow_with_constraint, 4 prompt, 9 rewrite).
 <!-- seclab:end baseline -->
 
 ### 4.1 What is reachable right now
@@ -471,6 +471,11 @@ any becomes reachable without one.
 | `rpc:MainThreadLanguageFeatures.$registerCompletionsProvider` | allow_with_constraint |
 | `rpc:MainThreadLanguageFeatures.$registerHoverProvider` | allow_with_constraint |
 | `rpc:MainThreadLanguageFeatures.$unregister` | allow |
+| `rpc:MainThreadSearch.$handleFileMatch` | allow_with_constraint |
+| `rpc:MainThreadSearch.$handleTextMatch` | allow_with_constraint |
+| `rpc:MainThreadSearch.$registerFileSearchProvider` | allow_with_constraint |
+| `rpc:MainThreadSearch.$registerTextSearchProvider` | allow_with_constraint |
+| `rpc:MainThreadSearch.$unregisterProvider` | allow |
 | `rpc:MainThreadSecretState.$deletePassword` | rewrite |
 | `rpc:MainThreadSecretState.$getKeys` | rewrite |
 | `rpc:MainThreadSecretState.$getPassword` | rewrite |
@@ -640,16 +645,14 @@ visible losses, not bugs:
   side resolves task variables. 0031 refuses only the pty host's `${env:…}` push; `${config:…}`
   still resolves against the unfiltered configuration on the trusted side, for tasks and for
   terminal profile paths a REH supplies (review finding RFU-1).
-- **Quick Open file search and the Search view don't work in tabs yet.** Inside a
-  tab the extension host serves search itself, registering its file and text
-  search providers for `vscode-remote`. Those registrations are denied, so the
-  search service waits forever for a provider: `workspace.findFiles`, Quick Open
-  file search and the Search view never return. The benign control records
-  `findFiles` as its one expected failure. First follow-up, as designed:
-  `$registerFileSearchProvider` and `$registerTextSearchProvider` for exactly
-  `vscode-remote`; `$handleFileMatch` result URIs canonical `vscode-remote` on
-  this tab's authority; `$handleTextMatch` with a validator for the nested
-  `resource`; `$unregisterProvider` limited to this connection's providers.
+- **File and text search work for the tab's own file system.** Inside a tab the extension
+  host serves search itself, registering its providers for `vscode-remote`; the policy allows
+  exactly that scheme (`tabSearchProvider`), result URIs from `$handleFileMatch` must be
+  canonical `vscode-remote` on this tab's authority (the positional rule), every match
+  resource and result `uri` in `$handleTextMatch` the same (`tabTextMatches`), and
+  `$unregisterProvider` reaches only this host's own providers. `workspace.findFiles`, Quick
+  Open file search and the Search view return again; the benign control's `findFiles` step is
+  no longer an expected failure.
 
 Extensions activate, run their commands, keep per-tab state and secrets, and
 read, write and open their own workspace files.
