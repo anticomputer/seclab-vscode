@@ -1,6 +1,6 @@
 # A tab window opens no host terminal
 
-- **Status:** proposed (accepted once the patched proof run passes)
+- **Status:** accepted. Proof passed, both halves (2026-11-16).
 - **Date:** 2026-11-16
 - **Deciders:** project owner (2026-11-16); RPC follow-ups session
 - **Related:** [tab is the containment unit](20261104-tab-is-the-containment-unit.md),
@@ -60,3 +60,12 @@ When debugging returns to tabs, local-extension-host debuggers need this decisio
     run opens a tab terminal, and the tab's own terminal still runs inside the tab.
   - `test/containment/host-terminal.test.ts` checks each layer in the patch text against
     mutants.
+  - **Baseline: passed** (branch `4a0ab0e9`, the series without 0050, run 43942525846). All
+    15 checks passed, and teardown was clean. Each of the three routes (palette, `newLocal` by
+    id, `file:` cwd) started one host shell.
+  - **Patched: passed** (branch `46d50870`, run 43955964158). All 15 checks passed, and
+    teardown was clean. Neither entry was offered, and `newLocal` was reported not found. The
+    `file:`-cwd launch showed 0050's refusal, no host shell started, and the tab's terminal
+    ran inside the tab.
+- **Review:** round NHT ([record](../security-reviews/20261116-no-host-terminal-in-tabs.md)).
+  Nothing above low; all four findings were addressed.
