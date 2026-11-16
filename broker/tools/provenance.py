@@ -105,8 +105,9 @@ def summary(f: dict) -> dict:
             "publisher": uniq[0] if len(uniq) == 1 else (uniq or None)}
 
 
-def verify_file(x: dict, publisher: dict) -> int:
-    """Number of attestations verified; raises on any failure."""
+def verify_file(x: dict, publisher: dict, offline: bool = False) -> int:
+    """Number of attestations verified; raises on any failure. `offline` uses sigstore's
+    embedded trust root instead of refreshing it (tests only; the gate verifies online)."""
     from pypi_attestations import Distribution, GitHubPublisher, Provenance
     if publisher.get("kind") != "GitHub":
         raise ValueError(f"register publisher kind {publisher.get('kind')!r} is not supported")
@@ -116,7 +117,7 @@ def verify_file(x: dict, publisher: dict) -> int:
     n = 0
     for bundle in prov.attestation_bundles:
         for att in bundle.attestations:
-            att.verify(policy, dist)
+            att.verify(policy, dist, offline=offline)
             n += 1
     if n == 0:
         raise ValueError("provenance has no attestations")
