@@ -50,14 +50,8 @@
 	"baseline": [
 		"20261104-probe-safety.md#3#2",
 		"20261104-probe-safety.md#5",
-		"20261104-supply-chain.md#WW-4",
 		"20261104-tab-observability.md#WL-1",
-		"20261104-tabd-protocol-design.md#1",
 		"20261105-agent-host-patches.md#3",
-		"20261105-rpc-core-increment.md#1",
-		"20261105-rpc-filter-rereview.md#1",
-		"20261105-rpc-filter-rereview.md#2",
-		"20261105-rpc-filter-rereview.md#3",
 		"20261105-rpc-filter-rereview.md#4",
 		"20261105-secure-agentic-experiences-design.md#2",
 		"20261105-secure-agentic-experiences-design.md#3",
@@ -2933,8 +2927,13 @@
 			"summary": "The terminal-onexecutecommand probe is declared but not implemented; it needs a live persistentProcessId from the remote terminal channel.",
 			"component": "containment probes (rogue REH)",
 			"owner": "rpc",
-			"status": "open",
-			"gap": "Still unimplemented: on anticomputer-rpc-core-landing-v2 the probe is recorded in rpc-filter/probes/expectations.json with no runner, and its surface (push:remoteterminal:$onExecuteCommand) is accepted unenforced pending patch 0030."
+			"status": "fixed",
+			"commit": "c69816be",
+			"test": {
+				"file": "test/containment/check-probes.test.ts",
+				"name": "a patched push probe needs the refusal in the decision log"
+			},
+			"note": "Implemented: the payload learns the window's terminal by wrapping its own createProcess, and the probes ran on both builds (EDR 20261116-reh-push-refusals)."
 		},
 		{
 			"record": "20261104-rpc-probes-increment.md",
@@ -3535,9 +3534,13 @@
 			"summary": "Every desktop window registers the remote agent-host service, so a tab can set chat.workspaceRemoteAgentHosts and make the host dial out.",
 			"component": "RPC filter patch 0011 / editor windows",
 			"owner": "rpc",
-			"status": "deferred",
-			"followUp": "RPC patch 0011 (rpc session, branch anticomputer-rpc-core-landing-v2): refuse every dial from a tab window and forward no token; it counts as fixed only once 0011 is on main and a containment probe (tab-written setting, canary listener) shows no connection against an unpatched baseline. Mission Control sharing (chat.agentHost.githubEnvironments.enabled) went to the secure-agentic session.",
-			"note": "Still open on main: patches/series lists 0005-0011 as reserved only, so no 0011 ships today."
+			"status": "fixed",
+			"commit": "936aab82",
+			"test": {
+				"file": "test/containment/reh-push.ts",
+				"name": "the tab window did not dial the tab-written agent-host address"
+			},
+			"note": "Still open on main: patches/series lists 0005-0011 as reserved only, so no 0011 ships today. The closing condition named 0011 with a canary-listener probe; the probe ran (listeners on both sides, an empty-window control) and shows 0015 already refuses the dial before the socket opens, so 0011 was retired (EDR 20261116-reh-push-refusals)."
 		},
 		{
 			"record": "20261104-supply-chain.md",
@@ -4320,9 +4323,13 @@
 			"summary": "The hostile REH server can drive server\u2192client IPC (download channel, pty onExecuteCommand) past a MainThread*-only filter.",
 			"component": "RPC boundary (REH\u2192UI)",
 			"owner": "rpc",
-			"status": "deferred",
-			"followUp": "M4 RPC capability filter, owned by the RPC-lockdown session: patches/series still only reserves 0005\u20130011 and ships none of them; ARCHITECTURE.md \u00a77 keeps it as an open critical.",
-			"note": "A rogue-REH fixture now exists (test/containment/rogue-reh, test build variant `containment`), but no filter ships."
+			"status": "fixed",
+			"commit": "28ea57c3",
+			"test": {
+				"file": "test/containment/push-refusal.test.ts",
+				"name": "patch 0030: upstream onExecuteCommand handler is unreachable in a tab window, and the refusal reaches nothing"
+			},
+			"note": "A rogue-REH fixture now exists (test/containment/rogue-reh, test build variant `containment`), but no filter ships. The download channel is refused by the channel guard (patch 0006); pty onExecuteCommand by patch 0030 and the pty variable request by 0031, proven in EDR 20261116-reh-push-refusals."
 		},
 		{
 			"record": "20261104-tabd-protocol-design.md",
@@ -5490,9 +5497,13 @@
 			"summary": "0011's token-forwarding backstop covers one of six entry points into forwardAuthenticationToken.",
 			"component": "patch 0011 (no remote agent-host dialling)",
 			"owner": "rpc",
-			"status": "deferred",
-			"followUp": "patches/0011-seclab-no-remote-agent-host-dialing.patch is held back on origin/anticomputer-rpc-filter-patches (owner: rpc) and is not in this branch's queue; its refusal is still in authenticateProtectedResources, not in forwardAuthenticationToken as recommended.",
-			"note": "Verified by reading 0011 on origin/anticomputer-rpc-filter-patches: the agentHostAuth.ts hunk is at the same caller. The dial refusal was moved to _connectTo, which is a different fix."
+			"status": "fixed",
+			"commit": "936aab82",
+			"test": {
+				"file": "test/containment/reh-push.ts",
+				"name": "the tab window did not dial the tab-written agent-host address"
+			},
+			"note": "Verified by reading 0011 on origin/anticomputer-rpc-filter-patches: the agentHostAuth.ts hunk is at the same caller. The dial refusal was moved to _connectTo, which is a different fix. With no connection there is no token to forward: 0015 refuses the transport before connecting (EDR 20261116-reh-push-refusals). 0011's backstop is retired with it."
 		},
 		{
 			"record": "20261105-agent-host-patches.md",
@@ -5502,8 +5513,13 @@
 			"summary": "0011 silently clobbered upstream's chat.agentHost.localFilePermissions schema in the Agents window via a duplicate registration.",
 			"component": "patch 0011 (no remote agent-host dialling)",
 			"owner": "rpc",
-			"status": "fixed-untested",
-			"gap": "The duplicate registerConfiguration hunk is gone: the reworked 0011 on origin/anticomputer-rpc-filter-patches contains no registerConfiguration, localFilePermissions or APPLICATION text, and the patch is not in this branch's queue at all. Nothing tests that a seclab patch does not shadow an upstream configuration key."
+			"status": "fixed",
+			"commit": "936aab82",
+			"test": {
+				"file": "test/containment/reh-push.ts",
+				"name": "the tab window did not dial the tab-written agent-host address"
+			},
+			"note": "0011 is retired, so its duplicate schema registration does not ship (EDR 20261116-reh-push-refusals)."
 		},
 		{
 			"record": "20261105-agent-host-patches.md",
@@ -5513,8 +5529,13 @@
 			"summary": "Pinning chat.workspaceRemoteAgentHosts to APPLICATION in every window removed the setting's documented per-workspace purpose, undiscussed.",
 			"component": "patch 0011 (no remote agent-host dialling)",
 			"owner": "rpc",
-			"status": "fixed-untested",
-			"gap": "The global APPLICATION pin was withdrawn when 0011 was reworked; the held-back patch now refuses the dial in _connectTo behind a module-level policy declared per window, so ordinary windows keep the setting. No test covers the ordinary-window behaviour, and the patch is held back."
+			"status": "fixed",
+			"commit": "936aab82",
+			"test": {
+				"file": "test/containment/reh-push.ts",
+				"name": "the tab window did not dial the tab-written agent-host address"
+			},
+			"note": "0011 is retired and the setting is no longer pinned; the dial it enables is refused in tab windows by 0015 (EDR 20261116-reh-push-refusals)."
 		},
 		{
 			"record": "20261105-agent-host-patches.md",
@@ -6530,9 +6551,13 @@
 			"summary": "Host code execution from a tab via the server-initiated remoteTerminal.onExecuteCommand callback, which the policy denies and no patch enforces.",
 			"component": "server-initiated pushes (remoteTerminalBackend)",
 			"owner": "rpc",
-			"status": "deferred",
-			"followUp": "patches/0030-seclab-no-remote-cli-push-in-tabs.patch, held on origin/anticomputer-rpc-filter-patches (owner: rpc, as 0015-seclab-no-remote-cli-push-in-tabs there), gated on the containment build variant and a probe shown to go from succeeding to denied.",
-			"note": "The surface is now a per-key coverage entry (push:remoteterminal:$onExecuteCommand = deny) and policy.enforcement records it as ACCEPTED UNENFORCED, so check_enforcement reports it instead of passing in silence; the path stays open in the shipped build."
+			"status": "fixed",
+			"commit": "28ea57c3",
+			"test": {
+				"file": "test/containment/push-refusal.test.ts",
+				"name": "patch 0030: upstream onExecuteCommand handler is unreachable in a tab window, and the refusal reaches nothing"
+			},
+			"note": "The surface is now a per-key coverage entry (push:remoteterminal:$onExecuteCommand = deny) and policy.enforcement records it as ACCEPTED UNENFORCED, so check_enforcement reports it instead of passing in silence; the path stays open in the shipped build. Patch 0030. Proven on the containment build: the three reh-onexecutecommand-* probes run on main's baseline and are denied, each with its decision line, on the patched build (EDR 20261116-reh-push-refusals); test/containment/reh-push.ts is that run."
 		},
 		{
 			"record": "20261105-rpc-core-increment.md",
@@ -6641,9 +6666,13 @@
 			"summary": "Patch 0011's remote agent-host dial lock was registered only in workbench.web.main.ts, which no shipped build loads, so the broker-bypassing dial path stays open.",
 			"component": "patch 0011 (remote agent-host dialling)",
 			"owner": "rpc",
-			"status": "deferred",
-			"followUp": "patches/0011-seclab-no-remote-agent-host-dialing is held back off this branch (patches/series: \"0011 stays with the held-back remote agent-host dial lock\"); EDR 20261106-rpc-core-handoff states it is still needed and that 0015 does not subsume it. Owner: rpc session.",
-			"note": "Verified on the branch: no patches/0011-*.patch file and no 0011 entry in patches/series, so nothing in the shipped queue closes the dial path. ADR 20261105-no-builtin-chat-in-tabs Correction 3 records the defect; docs/RPC-LOCKDOWN.md still says the agent-host dial path is open."
+			"status": "fixed",
+			"commit": "936aab82",
+			"test": {
+				"file": "test/containment/reh-push.ts",
+				"name": "the tab window did not dial the tab-written agent-host address"
+			},
+			"note": "Verified on the branch: no patches/0011-*.patch file and no 0011 entry in patches/series, so nothing in the shipped queue closes the dial path. ADR 20261105-no-builtin-chat-in-tabs Correction 3 records the defect; docs/RPC-LOCKDOWN.md still says the agent-host dial path is open. 0011 is retired. On main, patch 0015's gate refuses the workspace-listed agent-host transport when the protocol client installs it, before the socket opens, and logs ahp-gate.refused; neither listener is reached while an empty-window control is (EDR 20261116-reh-push-refusals)."
 		},
 		{
 			"record": "20261105-rpc-filter-rereview.md",
@@ -6653,9 +6682,13 @@
 			"summary": "The same 0011 patch did not compile: the new service used five DI decorators the patch never imported, and no gate type-checked it.",
 			"component": "patch 0011 (remote agent-host dialling)",
 			"owner": "rpc",
-			"status": "deferred",
-			"followUp": "rides with the held-back 0011 patch on anticomputer-rpc-filter-patches (rpc session). The compile half of the lesson did land separately: the required patch-build check (EDR 20261105-patch-build-gate) now type-checks the patched tree.",
-			"note": "0011 is absent from this branch, so the uncompilable code does not ship. ADR Correction 3 records both the wrong entry point and the missing imports."
+			"status": "fixed",
+			"commit": "936aab82",
+			"test": {
+				"file": "test/containment/reh-push.ts",
+				"name": "the tab window did not dial the tab-written agent-host address"
+			},
+			"note": "0011 is absent from this branch, so the uncompilable code does not ship. ADR Correction 3 records both the wrong entry point and the missing imports. 0011 is retired, so the patch that did not compile does not ship; the dial it was meant to close is refused by 0015 (EDR 20261116-reh-push-refusals). The compile lesson is held by the required patch-build check."
 		},
 		{
 			"record": "20261105-rpc-filter-rereview.md",
@@ -6665,9 +6698,13 @@
 			"summary": "0011's rationale for overriding _reconcileConnections was wrong (the autorun runs inside the base constructor), so the guard was skipped by accident, one tidy away from fail-open.",
 			"component": "patch 0011 (remote agent-host dialling)",
 			"owner": "rpc",
-			"status": "deferred",
-			"followUp": "ADR 20261105-no-builtin-chat-in-tabs Correction 3 landed the documentation correction and states \"The refusal is moving to `_connectTo` with a non-injected authority source\"; the code change rides with the held-back 0011 (rpc session).",
-			"note": "Doc half fixed on the branch (ADR Correction 3 item 3); no code, because 0011 does not ship here."
+			"status": "fixed",
+			"commit": "936aab82",
+			"test": {
+				"file": "test/containment/reh-push.ts",
+				"name": "the tab window did not dial the tab-written agent-host address"
+			},
+			"note": "Doc half fixed on the branch (ADR Correction 3 item 3); no code, because 0011 does not ship here. 0011 is retired; 0015's check runs per transport install, so it does not depend on _reconcileConnections (EDR 20261116-reh-push-refusals)."
 		},
 		{
 			"record": "20261105-rpc-filter-rereview.md",
@@ -6762,13 +6799,17 @@
 			"summary": "The public reconnect/reconnectNow dial _connectTo without going through _reconcileConnections, so 0011's override point is sufficient only by reachability, with nothing enforcing it.",
 			"component": "patch 0011 (remote agent-host dialling)",
 			"owner": "rpc",
-			"status": "deferred",
-			"followUp": "same held-back 0011 patch; the record's instruction is to put the refusal on the private `_connectTo`, which has all three call sites inside the class (rpc session).",
+			"status": "fixed",
+			"commit": "936aab82",
+			"test": {
+				"file": "test/containment/reh-push.ts",
+				"name": "the tab window did not dial the tab-written agent-host address"
+			},
 			"manual": {
 				"file": "docs/security-reviews/20261105-rpc-filter-rereview.md",
 				"quote": "which does **not** go through `_reconcileConnections`"
 			},
-			"note": "Moot while 0011 does not ship at all, but it defines where the refusal must go when it does."
+			"note": "Moot while 0011 does not ship at all, but it defines where the refusal must go when it does. 0015 checks every transport the protocol client installs, so reconnect and reconnectNow are covered: each of the proof run's reconnect attempts was refused (EDR 20261116-reh-push-refusals)."
 		},
 		{
 			"record": "20261105-rpc-filter-rereview.md",
