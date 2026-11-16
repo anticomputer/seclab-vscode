@@ -39,10 +39,16 @@ Reviews ask what code says. Nothing asked whether anything calls it.
     code or the image build.
   - **Exemptions** name a consumer, which must exist and use the symbol in code, or say
     `consumer: null` and why. Null-consumer exemptions are printed on every run. An
-    exemption for something live is stale and fails.
+    exemption for something live is stale and fails, and so does a subject exempted twice: a
+    union merge of the register keeps both an old entry and the one that replaced it.
+  - **Tombstones** (`removed`) list exemptions removed on purpose. Re-adding one fails, even
+    when a merge also brings back the code that made the subject dead, which the stale rule
+    alone can't see (review [LSR](../security-reviews/20261116-liveness-schedule-and-tombstones.md)).
 - **Runtime half.** Discovered from the tree, and matched exactly against the register's
   `subjects`:
-  - workflows with no `push` or `pull_request` trigger;
+  - workflows with a `schedule`, or with no `push` or `pull_request` trigger. A workflow
+    subject's evidence must be `run`s of that workflow: a push run shows the code works, not
+    that the schedule does. Trigger keys are unquoted first, so `"schedule":` counts;
   - test-only hooks in `test/builds/variants.json`;
   - each child of a test `fixtures` dir, and each test extension (a dir with `package.json`
     under `test/`).
@@ -177,9 +183,8 @@ Reviews ask what code says. Nothing asked whether anything calls it.
   push that changes it, `build/liveness/` or `seclab`) runs `verify-runs --refresh`. That turns
   every day-75 and expired note into a failure, listing the entries to re-run before day 85. It
   must print `liveness: refresh mode`, so a lost flag can't pass. It is not a required check.
-  Because it runs on push, the gate counts it as live. It can't be dispatch-only anyway: a
-  workflow can be dispatched only once it is on main, where the gate would refuse it without a
-  run on record. Review [MMM](../security-reviews/20261109-liveness-refresh.md) also made
+  Its push runs don't count: as a scheduled workflow it is a subject, proven by a dispatched
+  run on main. Review [MMM](../security-reviews/20261109-liveness-refresh.md) also made
   `paths` filters count: a push or pull_request that can match no tracked file, or ignores
   everything, doesn't make a workflow live.
 - Discovery depends on convention: fixtures live in a directory named `fixtures`, and test
