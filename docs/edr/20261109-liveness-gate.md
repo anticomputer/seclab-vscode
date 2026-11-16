@@ -60,7 +60,10 @@ Reviews ask what code says. Nothing asked whether anything calls it.
     makes the whole block unreadable, and so the workflow a subject. A filter is read only from
     items it positively recognises (plain or quoted scalars); a block-scalar item, a bare `-`,
     a continuation line, an anchor or tag, or an empty list makes that trigger count as off
-    main, since a dropped item in an `*-ignore` list would otherwise read as live. Two
+    main, since a dropped item in an `*-ignore` list would otherwise read as live. Filters are
+    judged as globs (`m*` in `branches-ignore` covers main). An entry using glob syntax the gate
+    doesn't model (`?`, `+`, `[]`, `!`), a key it doesn't model, a tags-only push, or a
+    pull_request limited to non-default activity types all count against the trigger. Two
     workflow files with one stem (`x.yml`, `x.yaml`) fail: GitHub runs both, but they would
     share one subject;
   - test-only hooks in `test/builds/variants.json`;

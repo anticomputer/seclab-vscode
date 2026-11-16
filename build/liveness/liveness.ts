@@ -687,7 +687,7 @@ export function triggers(yml: string, files?: string[]): string[] {
 			key = undefined;
 			if (!k) {
 				opaque.add(cur);
-			} else if (['branches', 'branches-ignore', 'paths', 'paths-ignore'].includes(k[2])) {
+			} else if (['branches', 'branches-ignore', 'tags', 'tags-ignore', 'paths', 'paths-ignore', 'types'].includes(k[2])) {
 				key = k[2];
 				const v = k[3].replace(/(?:^|\s)#.*/, '').trim();
 				const f = filters.get(cur) ?? new Map<string, string[]>();
@@ -704,6 +704,10 @@ export function triggers(yml: string, files?: string[]): string[] {
 				}
 				f.set(key, list.filter((x): x is string => x !== undefined));
 				filters.set(cur, f);
+			} else {
+				// A key the gate doesn't model under a trigger: only push and pull_request are ever
+				// judged, and for them an unknown key can only make the trigger fire less (LSR-14).
+				opaque.add(cur);
 			}
 		} else if (n < fLevel) {
 			opaque.add(cur);
@@ -716,6 +720,11 @@ export function triggers(yml: string, files?: string[]): string[] {
 		}
 	}
 	const glob = (g: string) => new RegExp(`^${g.split(/(\*\*\/?|\*)/).map(p => p === '**' || p === '**/' ? '.*' : p === '*' ? '[^/]*' : p.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('')}$`);
+	// GitHub filters are globs with `?`, `+`, `[]` and `!` negation besides `*` and `**`. The gate
+	// models only `*` and `**`: an entry using anything else counts against the trigger, never
+	// for it, on either side (an include that might miss main, an ignore that might cover it).
+	const unmodelled = (p: string) => /[?+[\]!]/.test(p);
+	const covers = (p: string, s: string) => !unmodelled(p) && glob(p).test(s);
 	const runs = (t: string) => {
 		if (opaque.has(t)) {
 			return false;
@@ -725,14 +734,25 @@ export function triggers(yml: string, files?: string[]): string[] {
 			return true;
 		}
 		const br = f.get('branches');
-		if (br && !br.some(n => n === 'main' || n === '**' || n === '*')) {
+		if (br && (br.some(unmodelled) || !br.some(p => covers(p, 'main')))) {
 			return false;
 		}
+		// An ignore list is read as globs: `m*`, `main*` and `ma?n` all cover main (LSR-13).
 		const bri = f.get('branches-ignore');
-		if (bri && bri.some(n => n === 'main' || n === '**' || n === '*')) {
+		if (bri && bri.some(p => unmodelled(p) || covers(p, 'main'))) {
 			return false;
 		}
-		if (f.get('paths-ignore')?.some(p => p === '**' || p === '**/*')) {
+		// A push filtered only by tags never fires on a branch (LSR-14).
+		if ((f.has('tags') || f.has('tags-ignore')) && !br && !bri) {
+			return false;
+		}
+		// pull_request fires on main's PRs only for its default activity types.
+		const ty = f.get('types');
+		if (ty && (t !== 'pull_request' || !ty.some(x => ['opened', 'synchronize', 'reopened'].includes(x)))) {
+			return false;
+		}
+		const pi = f.get('paths-ignore');
+		if (pi && (pi.some(unmodelled) || !files || files.every(file => pi.some(p => covers(p, file))))) {
 			return false;
 		}
 		const ps = f.get('paths')?.filter(p => !p.startsWith('!'));
@@ -1320,6 +1340,21 @@ async function selfTest(): Promise<void> {
 	]) {
 		injections.push([`LSR-11 ${shape}`, { ...base, '.github/workflows/nightly.yml': `on:\n  workflow_dispatch:\n  push:\n${filter}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:nightly .* add it to/]);
 	}
+	// LSR-13/14: filters are judged by what they mean, and what the gate doesn't model counts against.
+	for (const [shape, trig] of [
+		['branches-ignore m*', "  push:\n    branches-ignore: ['m*']\n"],
+		['branches-ignore main*', "  push:\n    branches-ignore: ['main*']\n"],
+		['branches-ignore ma?n', "  push:\n    branches-ignore: ['ma?n']\n"],
+		['paths-ignore **/**', "  push:\n    paths-ignore: ['**/**']\n"],
+		['paths-ignore covering every tracked file', "  push:\n    paths-ignore: ['tabd/**', 'test/**', 'extensions/**', '.github/**', 'build/**', 'docs/**', 'sandbox/**', 'broker/**']\n"],
+		['branches with a negation', "  push:\n    branches: ['**', '!main']\n"],
+		['tags only', '  push:\n    tags: [nope]\n'],
+		['tags-ignore only', "  push:\n    tags-ignore: ['v*']\n"],
+		['pull_request with non-default types', '  pull_request:\n    types: [locked]\n'],
+		['an unknown key under push', '  push:\n    nope: [x]\n'],
+	]) {
+		injections.push([`LSR-13 ${shape}`, { ...base, '.github/workflows/nightly.yml': `on:\n  workflow_dispatch:\n${trig}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:nightly .* add it to/]);
+	}
 	injections.push(['LSR-5 a .yaml twin of a registered .yml workflow', { ...base, '.github/workflows/weekly.yaml': "on:\n  schedule:\n    - cron: '2 2 * * 2'\njobs:\n  r:\n    steps:\n      - run: echo\n" }, /weekly\.yaml and \.github\/workflows\/weekly\.yml are both subject workflow:weekly/]);
 	{ // 4. an array nobody reads (seclabTaintEscapes): only test-reached code writes it
 		const r = reg();
@@ -1382,6 +1417,8 @@ async function selfTest(): Promise<void> {
 		['a one-line filter with a comment', "on:\n  push:\n    branches: [main] # [not\n", 'push'],
 		['an odd bracket and quote in a comment', "on:\n  push:\n    branches: [main] # see: [x, don: 't\n", 'push'],
 		['plain and quoted block items', "on:\n  push:\n    branches:\n      - main\n      - 'release/**'\n      - \"v*\" # tags\n", 'push'],
+		['an include glob covering main, with tags', "on:\n  push:\n    branches: ['ma*']\n    tags: ['v*']\n  pull_request:\n    types: [opened, labeled]\n", 'push,pull_request'],
+		['an ignore list that misses main', "on:\n  push:\n    branches-ignore: ['dependabot/**', 'mainline']\n", 'push'],
 		['a quoted list on one line', "on: ['push', \"pull_request\"]\n", 'push,pull_request'],
 	] as const) {
 		const got = triggers(yml).join(',');
