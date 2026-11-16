@@ -47,6 +47,15 @@ a documented fallback.
 > and `libfuse3-4` are installed: no `fuse3`, so there is no setuid `fusermount3`.
 > Never change the upper layer's directory structure while it is mounted; that is
 > unsafe (spike).
+>
+> **Path and mount pinning (2026-11-16, review OR-R3).** The helper runs as root, possibly
+> after the tab has run, so it resolves the workspace path one component at a time without
+> following any link, and after mounting (and on every idempotent call) it requires that the
+> host share's only mount point is the workspace path, with the overlay on top. Measured in an
+> sbx tab: the workspace's parent belongs to the tab user, so ancestor ownership can't be
+> required; every ancestor above it is root-owned (mode 1755), so the tab can't rename it
+> (`mv` as the tab user: permission denied), and the mount check catches a moved share if that
+> ever changes. Test: `sandbox/test/test_wb_mount.py`.
 
 ### 2. tabd's write-back engine is the only writer of tab changes to the host
 It reads the tab's upper layer (through the driver, as root in the tab) and
