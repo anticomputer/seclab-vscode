@@ -123,3 +123,44 @@ the host's copy of the workspace. The first harness version did exactly that, an
 checks passed until they were made to check `uname`. The local terminal is the user's own
 action, not a tab's, but it's an easy wrong turn in a sandboxed window. Reported to the
 coordinator; not changed here.
+
+## Follow-up: patch 0034 closes RFU-1 (2026-11-16)
+
+Patch 0034 makes a tab window resolve no host variables in its REH's terminal launch config.
+All three resolvers key on the window's own authority (review findings RFU-1, RFU1R-1, RFU1R-6;
+[review](../security-reviews/20261116-rfu1-terminal-variables.md)).
+- `remoteTerminalChannel.createProcess` skips `resolveAsync`, so it sends no `${config:…}`,
+  `selectedText` or `lineNumber` values. The authority test is inlined because the REH bundles
+  this file too and must not load the filter module.
+- `terminalProfileResolverService` resolves only `${env:…}` in a tab profile's path and
+  arguments, against the REH's environment.
+- `terminalProcessManager` resolves only `${env:…}` in the launch config's `env`, a REH
+  profile's included.
+- `${config:…}`, `${userHome}` and the other host-state variables stay as written.
+
+The probe `reh-profile-config-host-setting` (policy `data:remoteterminal-profile-path`):
+- The rogue REH offers a `seclab-probe` profile through `$getProfiles`. Its path is
+  `/bin/sh${config:seclab.test.canary}` and its `env` names the same setting. It also answers
+  `getDefaultSystemShell` with that path.
+- The harness seeds the setting with the run's canary in the host user settings, then makes the
+  profile the host's `terminal.integrated.defaultProfile.linux`.
+- The probe reads `$createProcess` at the channel, before the server's own resolution, then
+  starts plain `/bin/sh` without the probe's variable.
+- `test/containment/terminal-variables.test.ts` evaluates the patch's two resolver expressions
+  and fails on a mutant of each rule.
+
+- **Baseline: passed** (main `235a1559`, run 43909820977). 18 checker checks and 11 harness
+  checks passed, and teardown was clean. The canary came back to the REH in both the profile
+  path and its `env`. An earlier run, with only the path probe, also passed; on 0034's first
+  version it showed only the path closed, which the review then found incomplete.
+- **Patched: passed** (branch `4a0ab0e9`, run 43942525846). 21 checker checks and 11 harness
+  checks passed, and teardown was clean.
+  - The window sent the profile path and `env` back unresolved, with no canary anywhere in the
+    request.
+  - The four push probes were denied as before.
+  - The terminal ran inside the tab before and after.
+
+The cost: `${userHome}` and the other host variables stay unresolved in a tab's profiles. A tab
+profile names its paths literally or through `${env:…}`. Still open: the window sends the REH
+the host's raw terminal env, cwd and profile settings (RFU1R-2), and the active file's host
+path (RFU1R-3).

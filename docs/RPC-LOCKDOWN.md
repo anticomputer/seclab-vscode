@@ -545,11 +545,12 @@ withdrawal, not containment.
 >
 > In a tab window upstream's handlers for both are never registered; refusing handlers answer
 > at once and log the policy key (patches 0030 and 0031). A sibling, the window resolving
-> `${config:…}` in a terminal profile path the REH supplies and sending it back in
-> `createProcess` (review finding RFU-1), is closed by patch 0034: in a tab window the window
-> resolves no host variables in the REH's launch config. Both were shown going from
-> succeeding on main's containment build to denied on the patched one
-> ([EDR](edr/20261116-reh-push-refusals.md)).
+> `${config:…}` in a terminal profile's path or `env` the REH supplies and sending it back in
+> `createProcess` (review findings RFU-1 and RFU1R-1), is closed by patch 0034: in a tab
+> window the window resolves no host variables in the REH's launch config. All three were
+> shown going from succeeding on main's containment build to denied (or, for 0034, sent
+> back unresolved) on the patched one ([EDR](edr/20261116-reh-push-refusals.md)). The window
+> still sends the REH the host's raw terminal env, cwd and profile settings (RFU1R-2, open).
 
 > **The agent-host dial path is still open (2026-11-05).** Patch 0011, which
 > closes it, is **not in this increment**. It is on a follow-up branch, held
