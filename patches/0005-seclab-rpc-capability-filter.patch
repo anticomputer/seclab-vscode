@@ -94,7 +94,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/rpcProtocol.ts b/src/vs/
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b/src/vs/workbench/services/extensions/common/seclabArgValidators.ts
 --- a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabArgValidators.ts	2026-11-06 18:50:32
-@@ -0,0 +1,584 @@
+@@ -0,0 +1,653 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: named argument validators for the RPC capability filter.
 + *
@@ -648,6 +648,73 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b
 +	return undefined;
 +};
 +
++/** Results in one $handleTextMatch call, and matches per result, at most. */
++const MAX_TEXT_MATCHES = 10000;
++const MAX_PREVIEW = 64 * 1024;
++
++function handle(v: unknown, what: string): string | undefined {
++	return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? undefined : `${what} is not a handle`;
++}
++
++/**
++ * `$registerFileSearchProvider(handle, scheme)` / `$registerTextSearchProvider(handle, scheme)`.
++ * The search service asks the provider registered for a folder's scheme, so a tab may serve
++ * search only for its own file system: exactly `vscode-remote`. Any other scheme would route
++ * the window's searches of host resources (and their query text) to the tab.
++ */
++const tabSearchProvider: SeclabValidator = (args) => {
++	return arity(args, 2, 2) ?? handle(args[0], 'argument 0')
++		?? (args[1] === 'vscode-remote' ? undefined : 'a tab serves search only for vscode-remote');
++};
++
++/**
++ * `$handleTextMatch(handle, session, data)`. Each match's `resource`, and the `uri` a result may
++ * carry, must be this tab's own canonical resource: a result naming a host file would open it in
++ * this window, and an opened document is synchronised to the tab. Previews are bounded text.
++ */
++const tabTextMatches: SeclabValidator = (args, ctx) => {
++	const bad = arity(args, 3, 3) ?? handle(args[0], 'argument 0') ?? handle(args[1], 'argument 1');
++	if (bad) {
++		return bad;
++	}
++	const data = args[2];
++	if (!Array.isArray(data) || data.length > MAX_TEXT_MATCHES) {
++		return 'argument 2 is not a list of matches';
++	}
++	for (const m of data) {
++		if (!isPlainObject(m)) {
++			return 'a match is not an object';
++		}
++		const r = checkTabUri(m.resource, ctx);
++		if (r) {
++			return `a match resource: ${r}`;
++		}
++		if (m.results === undefined) {
++			continue;
++		}
++		if (!Array.isArray(m.results) || m.results.length > MAX_TEXT_MATCHES) {
++			return 'a match\'s results are not a list';
++		}
++		for (const res of m.results) {
++			if (!isPlainObject(res)) {
++				return 'a result is not an object';
++			}
++			if (res.uri !== undefined) {
++				const u = checkTabUri(res.uri, ctx);
++				if (u) {
++					return `a result uri: ${u}`;
++				}
++			}
++			for (const key of ['previewText', 'text'] as const) {
++				if (res[key] !== undefined && (typeof res[key] !== 'string' || (res[key] as string).length > MAX_PREVIEW)) {
++					return `a result's ${key} is not bounded text`;
++				}
++			}
++		}
++	}
++	return undefined;
++};
++
 +export const SECLAB_VALIDATORS: ReadonlyMap<string, SeclabValidator> = new Map([
 +	['activationErrorNoInstallPrompt', activationErrorNoInstallPrompt],
 +	['tabCommandRegistration', tabCommandRegistration],
@@ -665,6 +732,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b
 +	['setContextKey', setContextKey],
 +	['tabHoverProvider', tabHoverProvider],
 +	['tabCompletionProvider', tabCompletionProvider],
++	['tabSearchProvider', tabSearchProvider],
++	['tabTextMatches', tabTextMatches],
 +]);
 +
 +/** Run a named validator, failing closed on an unknown name or a throw. */
@@ -682,7 +751,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/src/vs/workbench/services/extensions/common/seclabPolicyData.ts
 --- a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabPolicyData.ts	2026-11-06 18:50:32
-@@ -0,0 +1,2968 @@
+@@ -0,0 +1,2974 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: generated RPC capability policy. DO NOT EDIT.
 + *
@@ -747,6 +816,11 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 +	['MainThreadLanguageModels.$tryStartChatRequest', { verdict: 'deny', ref: 'rpc:MainThreadLanguageModels.$tryStartChatRequest' }],
 +	['MainThreadLanguageModels.$unregisterFileIgnoreProvider', { verdict: 'deny', ref: 'rpc:MainThreadLanguageModels.$unregisterFileIgnoreProvider' }],
 +	['MainThreadLanguageModels.$unregisterProvider', { verdict: 'deny', ref: 'rpc:MainThreadLanguageModels.$unregisterProvider' }],
++	['MainThreadSearch.$handleFileMatch', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadSearch.$handleFileMatch', constraint: 'the positional URI rule: every result URI (argument 2) revives, canonically, to vscode-remote://seclab+<this tab>', uriRule: true }],
++	['MainThreadSearch.$handleTextMatch', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadSearch.$handleTextMatch', constraint: 'every match resource and every result uri revives, canonically, to vscode-remote://seclab+<this tab>; previews and context text are bounded strings; at most 10000 matches per call', validator: 'tabTextMatches' }],
++	['MainThreadSearch.$registerFileSearchProvider', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadSearch.$registerFileSearchProvider', constraint: 'the scheme is exactly vscode-remote, the tab\'s own file system; any other scheme would route the window\'s searches of host resources, and their query text, to the tab', validator: 'tabSearchProvider' }],
++	['MainThreadSearch.$registerTextSearchProvider', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadSearch.$registerTextSearchProvider', constraint: 'the scheme is exactly vscode-remote, the tab\'s own file system; any other scheme would route the window\'s searches of host resources, and their query text, to the tab', validator: 'tabSearchProvider' }],
++	['MainThreadSearch.$unregisterProvider', { verdict: 'allow', ref: 'rpc:MainThreadSearch.$unregisterProvider' }],
 +	['MainThreadSecretState.$deletePassword', { verdict: 'rewrite', ref: 'rpc:MainThreadSecretState.$deletePassword', constraint: 'same partition as $getPassword', validator: 'secretByKey' }],
 +	['MainThreadSecretState.$getKeys', { verdict: 'rewrite', ref: 'rpc:MainThreadSecretState.$getKeys', constraint: 'same partition as $getPassword; only keys in this tab\'s partition are listed', validator: 'secretKeys' }],
 +	['MainThreadSecretState.$getPassword', { verdict: 'rewrite', ref: 'rpc:MainThreadSecretState.$getPassword', constraint: 'the storage key is partitioned by the tab bound to the connection: {seclabTab, extensionId, key} (patch 0032). extensionId remains a claim, but only within this tab\'s partition, where every extension shares the one extension host a rogue extension already controls; nothing outside the partition, including UI-side extensions\' secrets and other tabs\', is addressable', validator: 'secretByKey' }],
@@ -778,6 +852,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 +	['MainThreadFileSystem', 'deny'],
 +	['MainThreadLanguageFeatures', 'deny'],
 +	['MainThreadLanguageModels', 'deny'],
++	['MainThreadSearch', 'deny'],
 +	['MainThreadSecretState', 'deny'],
 +	['MainThreadStorage', 'deny'],
 +	['MainThreadTextEditors', 'deny'],
@@ -3830,7 +3905,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 + * and fails the release check on a build that is in fact correct. The whole
 + * line is generated by `emit_policy.py`, which is also why it is not typed.
 + */
-+export const SECLAB_ENFORCING_MARKER = 'seclabRpcFilterEnforcing:ea884005c50ac5dd802d2bcd8de49c62411f356718432ae20b30160422992380';
++export const SECLAB_ENFORCING_MARKER = 'seclabRpcFilterEnforcing:03b792c844a1630e8bf9e212304268f8a92e474130e39b22bd1eef3aba276eb3';
 +
 +/** Max bytes for one log line, and for the tab-chosen `ref` inside it. */
 +const SECLAB_LOG_LINE_MAX = 4096;

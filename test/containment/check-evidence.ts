@@ -338,10 +338,11 @@ if (mode === 'prepare') {
 	const benignFailed = benignResults
 		? Object.entries(benignResults).filter(([k, v]) => k !== 'where' && (v as { ok?: unknown })?.ok !== true).map(([k]) => k)
 		: undefined;
-	// Known, user-accepted failures (2026-11-10), each pinned to the kind of failure AND to
-	// the host-side decision that causes it: benign.json is tab-written, so its failure kind
-	// alone is not evidence (review round 14). An unfiltered build has no decision log, so
-	// there the tolerance never applies. Residual until the search follow-up (round 15).
+	// Known, user-accepted failures, each pinned to the kind of failure AND to the host-side
+	// decision that causes it: benign.json is tab-written, so its failure kind alone is not
+	// evidence (review round 14). An unfiltered build has no decision log, so there the
+	// tolerance never applies. findFiles left this list when file and text search were
+	// restored for the tab's own file system (RPC-LOCKDOWN §7.1).
 	const decisions = rpcDecisions(userData);
 	// With the RPC filter in, the folder-open task and the fsmonitor repo can't run: recorded
 	// losses (docs/RPC-LOCKDOWN.md §7.1), each expected only when its denial was observed.
@@ -349,13 +350,7 @@ if (mode === 'prepare') {
 	if (filtered === true) {
 		markFilteredLosses(checks, decisions);
 	}
-	const EXPECTED_BENIGN_FAILURES: Record<string, { error: string; deniedRef: string; reason: string }> = {
-		findFiles: {
-			error: 'timeout',
-			deniedRef: 'rpc:MainThreadSearch.$registerFileSearchProvider',
-			reason: 'MainThreadSearch.$registerFileSearchProvider is denied: inside a tab the extension host registers its own file search provider for vscode-remote, so the search service waits forever for a provider and $startFileSearch never returns. First follow-up (docs/RPC-LOCKDOWN.md §7.1).',
-		},
-	};
+	const EXPECTED_BENIGN_FAILURES: Record<string, { error: string; deniedRef: string; reason: string }> = {};
 	const unexpected = (benignFailed ?? []).filter(k => {
 		const want = EXPECTED_BENIGN_FAILURES[String(k)];
 		const got = (benignResults?.[String(k)] as { error?: unknown } | undefined)?.error;
