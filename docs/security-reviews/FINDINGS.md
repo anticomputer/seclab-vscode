@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 7 | 68 | 165 | 181 | 20 | 441 |
+| fixed | 7 | 68 | 166 | 182 | 20 | 443 |
 | fixed-untested | 3 | 16 | 59 | 159 | 54 | 291 |
 | accepted-residual | 0 | 1 | 12 | 67 | 19 | 99 |
 | deferred | 6 | 4 | 18 | 9 | 3 | 40 |
 | open | 0 | 2 | 14 | 15 | 4 | 35 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 91 | 268 | 431 | 106 | 912 |
+| **all** | 16 | 91 | 269 | 432 | 106 | 914 |
 
 ## Baseline: open high and critical findings
 
@@ -1874,6 +1874,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | LSR-6 | low | fixed | A change dropping a tombstone together with the re-add (a whole-register merge resolution, or an edit) still passed. | 6d6a6f5 · `build/liveness/liveness.ts` "LSR-6 a tombstone dropped against the base" |
 | LSR-7 | medium | fixed | Push filters at any indentation but 4 spaces were not read, so a 3- or 6-space \`branches: \[nope\]\` still disarmed the push filter. | b3c8fb1 · `build/liveness/liveness.ts` "LSR-7 ${shape}" |
 | LSR-8 | low | fixed | A tombstone marked \`restored\` with no exemption protected nothing, so a later merge could bring the exemption back silently. | b3c8fb1 · `build/liveness/liveness.ts` "LSR-8 a restored tombstone with no exemption" |
+| LSR-9 | medium | fixed | A flow collection or quoted scalar continued on the next line was read short, so a two-line \`branches-ignore\` lost \`main\` and a column-0 quoted continuation hid \`schedule\`. | a2eb22b · `build/liveness/liveness.ts` "LSR-9 ${shape}" |
+| LSR-10 | low | fixed | Three of the on: scanner's fail-closed branches had no self-test injection. | a2eb22b · `build/liveness/liveness.ts` "LSR-7 ${shape}" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
