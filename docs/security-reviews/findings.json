@@ -180,11 +180,15 @@
 			"summary": "A GHE.com data-residency CAPI host is outside the built-in copilot provider and the model-host list, so the body policy needs a declared provider there.",
 			"component": "broker model access (providers)",
 			"owner": "broker",
-			"status": "open",
-			"gap": "Being fixed: copilot*.<tenant>.ghe.com hosts become known model hosts; the register status follows in the next commit.",
+			"status": "fixed",
+			"commit": "patch:538aec4c88b1dbd16cc8b6b9ac4737f26a5b5e44",
 			"ref": {
 				"file": "docs/adr/20261105-broker-model-access.md",
 				"quote": "**GHE.com data-residency CAPI hosts (was open; closed 2026-11-16, finding MODEL-R4).**"
+			},
+			"test": {
+				"file": "broker/tests/unit/test_models.py",
+				"name": "test_model_r4_ghe_com_copilot_hosts_need_a_declared_provider"
 			}
 		},
 		{
