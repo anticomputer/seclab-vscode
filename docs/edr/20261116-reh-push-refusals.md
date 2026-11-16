@@ -1,8 +1,7 @@
 # Server-initiated pushes refused in tab windows (0030, 0031), and 0011 retired
 
 - **Date:** 2026-11-16
-- **Status:** accepted. Proof in progress: the baseline half passed; the patched half follows
-  on this branch's containment build.
+- **Status:** accepted. Proof passed, both halves (2026-11-16).
 - **Owner:** the RPC follow-ups session (register owner `rpc`).
 - **Supersedes in part:** the [handoff](20261106-rpc-core-handoff.md)'s statement that
   `0011-seclab-no-remote-agent-host-dialing` is still needed after 0015. That was true of the
@@ -94,9 +93,21 @@ container or profile left; the editor never took focus).
 - The terminal ran inside the tab before and after the pushes.
 - Dial: as above.
 
-## Patched
+## Patched: passed (branch `5f14df2c`, run 43926319765, 2026-11-16)
 
-To be recorded from this branch's containment build.
+All 17 checker checks and 11 harness checks passed, and teardown was clean (no process,
+container or profile left; the editor never took focus).
+- Each of the four push probes is denied on its own: the three command pushes get the refusal's
+  fixed reply, the variable request gets its text back unresolved, and the decision log holds
+  `push:remoteterminal:$onExecuteCommand` and `…$onPtyHostRequestResolveVariablesEvent` denials.
+  The lines carry the policy key, the fixed reason and a count, nothing the REH named.
+- The terminal ran inside the tab before and after the refusals.
+- Dial: the same as the baseline, as 0015 is unchanged.
+
+The window refuses variable requests from the tab's pty host routinely, not only the probe's:
+the log counted over 30 in one short run. They are the pty host resolving terminal profile
+paths. With the refusal, a profile path that uses `${env:…}` stays unresolved in a tab, which
+is the intended cost: those values come from the host user's environment.
 
 ## Found on the way
 

@@ -532,30 +532,21 @@ follow it.
 
 **This filter does not contain that class, and nothing here should be read as
 if it did.** For v0 the feature is **turned off** in `seclab+` windows
-(patches 0009–0011, [ADR](adr/20261105-no-builtin-chat-in-tabs.md)) — a
+(patches 0009, 0010 and 0015, [ADR](adr/20261105-no-builtin-chat-in-tabs.md); 0011 was retired because 0015 already refuses the agent-host dial, [EDR](edr/20261116-reh-push-refusals.md)) — a
 withdrawal, not containment.
 
-> **Two server-initiated push paths stay open on main (2026-11-06).** The REH
-> can still reach the trusted side through `remoteTerminal`:
+> **The two server-initiated push paths are refused (2026-11-16).** The REH could reach the
+> trusted side through `remoteTerminal`:
 >
-> * **`$onExecuteCommand`** — the server names a command and the workbench runs
->   it, against a four-entry `_remoteCLI` allow list. **Host code execution.**
-> * **`$onPtyHostRequestResolveVariablesEvent`** — the server names strings the
->   workbench resolves over `shellEnvironmentService.getShellEnv()`, so
->   `${env:X}` returns the host user's shell environment. **Host credential
->   exfiltration**, and unlike the above it needs no live pty.
+> * **`$onExecuteCommand`**: the server names a command and the workbench runs it, against a
+>   four-entry `_remoteCLI` allow list. Host code execution.
+> * **`$onPtyHostRequestResolveVariablesEvent`**: the server names strings the workbench
+>   resolves over the host user's shell environment, so `${env:X}` returns host secrets.
 >
-> Patches that refuse both exist, on the RPC-filter follow-up branch. They are
-> **held back deliberately.** Both are rogue-REH surfaces, and the rogue-REH
-> fixture has never been runnable: nothing applies its hook, so there is no
-> runtime proof that either refusal works. A patch whose effect has never been
-> observed is not containment, it is an untested claim, and this increment's
-> scope is exactly what its probes demonstrate. Both are recorded as
-> accepted-unenforced in `policy.json`, so the gate prints them on every run.
->
-> They land once the attested containment build variant exists and each probe
-> is shown going from succeeding on a baseline build to denied on a patched
-> one.
+> In a tab window upstream's handlers for both are never registered; refusing handlers answer
+> at once and log the policy key (patches 0030 and 0031). Both were shown going from
+> succeeding on main's containment build to denied on the patched one
+> ([EDR](edr/20261116-reh-push-refusals.md)).
 
 > **The agent-host dial path is still open (2026-11-05).** Patch 0011, which
 > closes it, is **not in this increment**. It is on a follow-up branch, held
@@ -637,8 +628,8 @@ losses, not bugs:
   `$registerTaskProvider`, so the workbench never learns it can run shell or process
   tasks there. The editor-driven run's `[task]` check is an expected failure on a
   filtered build for this reason, and must still pass without the filter. The
-  follow-up comes after patch 0031: the task-system info a tab sends shapes how
-  the trusted side resolves task variables, which is what 0031 bounds.
+  follow-up builds on patch 0031 (landed): the task-system info a tab sends shapes how
+  the trusted side resolves task variables, which 0031 bounds for pty-host requests.
 - **Quick Open file search and the Search view don't work in tabs yet.** Inside a
   tab the extension host serves search itself, registering its file and text
   search providers for `vscode-remote`. Those registrations are denied, so the
