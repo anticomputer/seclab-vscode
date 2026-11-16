@@ -691,10 +691,12 @@ read, write and open their own workspace files.
       ([EDR](edr/20261112-tab-configuration-snapshot.md));
     - ext-host init data (host telemetry ids); placeholders only, because telemetry
       is off, which the build and the release check enforce
-      ([EDR](edr/20261116-tab-telemetry-ids.md)).
+      ([EDR](edr/20261116-tab-telemetry-ids.md));
+    - notebook document sync (cells of host notebooks); no notebook opens in a tab
+      window, because patch 0005 refuses a tab's notebook serializer
+      ([EDR](edr/20261116-notebook-sync.md)).
 
     Still open, each needing its own push-side control:
-    - notebook document sync (cells of host notebooks);
     - the editor-tab model (host URIs and labels);
     - the terminal default profile and environment collections;
     - workspace data;
