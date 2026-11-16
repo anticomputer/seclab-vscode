@@ -53,7 +53,10 @@ jobs:
             docker run --rm -v seclab-lychee-cache:/cache -v "$PWD/.work/lychee-cache:/in:ro" "$ALPINE" cp /in/.lycheecache /cache/
           fi
       - name: Download attestation bundles (the only step with a token; gh on the runner)
-        if: github.event_name == 'push'
+        # Pull requests too: the required `docs` check runs on them, and without bundles the
+        # gate would verify online unauthenticated, sharing a runner IP's rate limit. Branch
+        # pushes already run this step with the same read-only token (EDR pr-landing).
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: broker/tools/verify-images.sh --download "$SECLAB_ATTESTATION_DIR"
