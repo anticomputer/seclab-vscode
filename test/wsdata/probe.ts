@@ -1,0 +1,150 @@
+// Workspace-data probe: what does the window tell a tab's extension host about its workspace, and
+// can a host folder join it? (sibling DOCSYNC-R6 of patch 0035). macOS, sbx, local only.
+//   node test/wsdata/probe.ts drive --app PATH [--measure]   # prepare, drive the window, check, teardown
+// The isolated profile's directory and a host folder outside the tab's mount are named with a
+// generated fake `seclabcanary_` token. The window is launched on the tab with `--add` naming the
+// host folder (1.145 ignores it at start-up; adding a folder to a folder window means entering a
+// workspace, which patch 0041 refuses: see EDR workspace-data). The
+// probe reports folder and configuration schemes and hashes of URI and name tokens; it is
+// tab-controlled data, read through a fixed schema.
+
+import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash, randomBytes } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { TabdClient } from '../../tabd/src/client.ts';
+import { DrivenEditor } from '../driver/editor.ts';
+import { checkUserDataDir, focusStealLog } from '../harness.ts';
+import { readManifest, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
+
+const repo = path.resolve(import.meta.dirname, '../..');
+const base = path.join(repo, '.work', 'wsdata');
+const ws = path.join(base, 'ws');
+const runFile = path.join(base, 'canaries.json');
+const resultsFile = path.join(repo, '.work', 'wsdata-results.jsonl');
+const SBX = '/opt/homebrew/bin/sbx';
+const VSCE_IMAGE = 'seclab-vsce:3.9.2';
+const [mode, ...rest] = process.argv.slice(2);
+const appArg = rest.includes('--app') ? path.resolve(rest[rest.indexOf('--app') + 1]) : undefined;
+const measure = rest.includes('--measure');
+const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+const tabId = () => (readManifest(base).tabs ?? [])[0];
+const inTab = (args: string[]) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20 });
+
+if (mode !== 'drive' || !appArg) {
+	console.error('usage: probe.ts drive --app PATH [--measure]');
+	process.exit(2);
+}
+if (fs.existsSync(path.join(base, 'run.json'))) {
+	console.error('a previous wsdata run is still recorded: remove it with its teardown first');
+	process.exit(1);
+}
+const canary = `seclabcanary_${randomBytes(8).toString('hex')}`;
+const userData = path.join(os.homedir(), '.seclab-test', canary);
+const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
+checkUserDataDir(userData);
+fs.rmSync(base, { recursive: true, force: true });
+fs.mkdirSync(path.join(ws, '.seclab'), { recursive: true });
+fs.writeFileSync(runFile, JSON.stringify({ canary }));
+writeSnapshot(base);
+writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir] });
+fs.writeFileSync(path.join(ws, 'README.md'), '# wsdata probe workspace\n');
+const hostDir = path.join(base, 'host', `${canary}_folder`);
+fs.mkdirSync(hostDir, { recursive: true });
+fs.writeFileSync(path.join(hostDir, 'note.txt'), 'host folder\n');
+fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
+fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
+	'security.workspace.trust.enabled': false, 'seclab.tabs.driver': 'sbx', 'seclab.tabs.allowedRoots': [base], 'window.restoreWindows': 'none',
+	'workbench.welcomePage.experimentalOnboarding': false, 'workbench.startupEditor': 'none', 'workbench.tips.enabled': false, 'chat.disableAIFeatures': true,
+}, null, '\t'));
+fs.writeFileSync(path.join(userData, 'User', 'keybindings.json'), '[]\n');
+const until = Math.floor(Date.now() / 1000) + 2 * 3600;
+fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${randomBytes(16).toString('hex')}\nrun=${base}\nuntil=${until}\n`);
+
+const vsixDir = path.join(base, 'vsix');
+fs.mkdirSync(vsixDir, { recursive: true });
+execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`,
+	'-v', `${path.join(import.meta.dirname, 'probe-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
+	VSCE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/wsdata-probe.vsix'], { stdio: 'ignore' });
+const client = new TabdClient({
+	command: process.execPath,
+	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', 'sbx', '--allowed-root', base],
+	env: { HOME: process.env.HOME, USER: process.env.USER },
+});
+await client.initialize('wsdata-probe', '0');
+const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
+writeManifest(base, { tabs: [tab.metadata.name] });
+await client.request('tab.ensureRunning', { tabId: tab.metadata.name });
+fs.copyFileSync(path.join(vsixDir, 'wsdata-probe.vsix'), path.join(ws, '.wsdata-probe.vsix'));
+const installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.wsdata-probe.vsix')]).status === 0;
+client.dispose();
+await new Promise(res => client.once('exit', res));
+
+const reportPath = path.join(ws, '.seclab-wsdata', 'report.json');
+const read = () => {
+	try {
+		return JSON.parse(tabId() ? inTab(['cat', reportPath]).stdout ?? '' : '');
+	} catch {
+		return undefined;
+	}
+};
+let launched = false;
+let ed: DrivenEditor | undefined;
+if (installed) {
+	try {
+		ed = await DrivenEditor.launch({ app: appArg, userData, folderUri: `vscode-remote://seclab+${tab.metadata.name}${ws}`, args: ['--add', hostDir] });
+		launched = true;
+		for (let i = 0; i < 90 && !read(); i++) {
+			spawnSync('sleep', ['1']);
+		}
+		spawnSync('sleep', ['15']);
+		await ed.screenshot(path.join(base, 'drive.png')).catch(() => 0);
+	} catch (e) {
+		console.error(`drive: ${String(e).slice(0, 300)}`);
+	}
+}
+fs.writeFileSync(path.join(ws, '.seclab', 'stop'), '');
+let rep: any = read();
+for (let i = 0; i < 30 && tabId() && rep?.done !== true; i++) {
+	spawnSync('sleep', ['1']);
+	rep = read();
+}
+await ed?.close().catch(() => undefined);
+
+const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').match(/^arm=([0-9a-f]{32})$/m) ?? [])[1];
+const counts = (o: unknown) => !!o && typeof o === 'object' && Object.entries(o as object).every(([k, v]) => /^(folder|config):[a-z0-9.+-]{1,40}$/.test(k) && Number.isInteger(v));
+const valid = !!rep && rep.schema === 'seclab-wsdata-report/1' && rep.arm === armed && typeof rep.done === 'boolean' && Number.isInteger(rep.maxFolders)
+	&& counts(rep.schemes) && Array.isArray(rep.tokens) && rep.tokens.length <= 5000
+	&& rep.tokens.every((x: any) => !!x && ['folder', 'folderName', 'name', 'config'].includes(x.field) && /^[0-9a-f]{64}$/.test(x.sha256));
+// Not the login name: the tab's own folder is a host path under the user's home (sbx mounts it
+// at the same path), which the tab is given on purpose.
+const markers: Record<string, string> = { canary: sha(canary) };
+const leaks = valid ? Object.entries(markers).flatMap(([name, h]) => (rep.tokens as Array<{ field: string; sha256: string }>).filter(x => x.sha256 === h).map(x => `${name}@${x.field}`)) : [];
+const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';
+const results: Array<{ name: string; ok: boolean }> = [];
+const expect = (name: string, ok: boolean) => results.push({ name, ok });
+if (valid) {
+	console.log(`tab saw: up to ${rep.maxFolders} folder(s); schemes ${JSON.stringify(rep.schemes)}`);
+	console.log(`host markers in the tab's workspace data: ${[...new Set(leaks)].join(', ') || 'none'}`);
+}
+expect('probe installed in the tab', installed);
+expect('the window launched with the host folder to add', launched);
+expect('report present, from this run, and matches the schema', valid);
+if (valid && !measure) {
+	expect('the probe finished', rep.done === true);
+	expect('control: the tab sees its own folder', (rep.schemes['folder:file+own'] ?? 0) > 0);
+	expect('the workspace never held more than the tab\'s own folder', rep.maxFolders === 1);
+	expect('DOCSYNC-R6 no host path reaches the tab through the workspace data (canary folder and profile)', leaks.length === 0);
+}
+expect('no focus steal', !steals);
+const gate = verifyTeardown(base);
+if (gate.every(g => g.ok)) {
+	fs.renameSync(path.join(base, 'run.json'), path.join(base, `run-checked-${Date.now()}.json`));
+}
+for (const r of [...results, ...gate]) {
+	console.log(`${r.ok ? 'OK  ' : 'FAIL'}  ${r.name}`);
+}
+const pass = results.every(r => r.ok) && gate.every(g => g.ok);
+fs.appendFileSync(resultsFile, JSON.stringify({ at: new Date().toISOString(), app: appArg, measure, pass, leaks: [...new Set(leaks)], schemes: valid ? rep.schemes : null, maxFolders: valid ? rep.maxFolders : null }) + '\n');
+process.exit(pass ? 0 : 1);

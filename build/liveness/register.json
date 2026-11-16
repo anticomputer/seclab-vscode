@@ -308,6 +308,16 @@
 					"date": "2026-11-16"
 				}
 			]
+		},
+		{
+			"id": "fixture:test/wsdata/probe-extension",
+			"runBy": "test/wsdata/probe.ts drive, with the editor driven by test/driver/editor.ts (macOS, sbx, local only)",
+			"evidence": [
+				{
+					"record": "docs/edr/20261116-workspace-data.md",
+					"date": "2026-11-16"
+				}
+			]
 		}
 	]
 }
