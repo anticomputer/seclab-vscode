@@ -557,6 +557,26 @@ findings_main_base() { # PREVIOUS_HEAD
 		git -C "$ROOT" merge-base "$prev" HEAD || { echo "findings: on main, the previous head $prev shares no history with HEAD; refusing to compare with less" >&2; return 1; }
 	fi
 }
+# The liveness register at the base this change is judged against, into OUT (empty when the base
+# predates it): the merge base with origin/main, or on main the push's previous head (DOCS_BASE),
+# exactly as for the findings register. Its tombstones are append-only (review LSR-6).
+liveness_base() { # OUT
+	local main mb rev path=build/liveness/register.json listed
+	main="$(git -C "$ROOT" rev-parse --verify -q origin/main)" || { echo "liveness: no origin/main (fetch it)" >&2; return 1; }
+	mb="$(git -C "$ROOT" merge-base "$main" HEAD)" || { echo "liveness: no merge base with origin/main" >&2; return 1; }
+	rev="$mb"
+	if [[ "$mb" == "$(git -C "$ROOT" rev-parse HEAD)" ]]; then
+		rev="$(findings_main_base "${DOCS_BASE:-}")" || return 1
+	fi
+	mkdir -p "$ROOT/.work"
+	listed="$(git -C "$ROOT" ls-tree "$rev" -- "$path")" || { echo "liveness: can't read the tree at $rev" >&2; return 1; }
+	if [[ -n "$listed" ]]; then
+		git -C "$ROOT" show "$rev:$path" > "$1" || { echo "liveness: can't read $path at $rev" >&2; return 1; }
+	else
+		: > "$1"
+	fi
+	echo "liveness: tombstones compared with ${rev:0:12}"
+}
 findings_check() {
 	local mb rev list main
 	mkdir -p "$ROOT/.work"
@@ -1471,7 +1491,8 @@ case "${1:-help}" in
 			--self-test) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/liveness/liveness.ts --self-test ;;
 			check)
 				[[ $# -eq 1 ]] || { usage; exit 2; }
-				git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/liveness/liveness.ts check - ;;
+				liveness_base "$ROOT/.work/liveness-base.json" || exit 1
+				git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/liveness/liveness.ts check - --base .work/liveness-base.json ;;
 			# The only networked, token-holding step: it sees the register and the checker, nothing
 			# else (KKK-4; `lint mounts` keeps the list exact).
 			verify-runs) mount_files "${LIVENESS_VERIFY_FILES[@]}" "${LIVENESS_VERIFY_DATA[@]}"
