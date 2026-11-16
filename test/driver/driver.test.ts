@@ -75,12 +75,12 @@ test('a request with no answer times out', async () => {
 
 test('the editor gets a clean environment, never the launcher\'s secrets', () => {
 	process.env.GITHUB_TOKEN = 'seclabcanary_launcher_token';
-	process.env.SECLAB_HOST_CAPS = 'screen-capture';
+	process.env.SECLAB_LAUNCHER_ONLY = '1';
 	const env = editorEnv({ userData: '/x/profile', env: { FOO: 'bar' } });
 	delete process.env.GITHUB_TOKEN;
-	delete process.env.SECLAB_HOST_CAPS;
+	delete process.env.SECLAB_LAUNCHER_ONLY;
 	assert.equal(env.GITHUB_TOKEN, undefined);
-	assert.equal(env.SECLAB_HOST_CAPS, undefined);
+	assert.equal(env.SECLAB_LAUNCHER_ONLY, undefined);
 	assert.equal(env.FOO, 'bar');
 	assert.equal(env.SECLAB_BACKGROUND_WINDOWS, '1');
 	assert.equal(env.VSCODE_PORTABLE, '/x/profile-portable');

@@ -24,6 +24,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      # CI-runner only: this inline step sends a System Events keystroke, which a test on a
+      # developer's Mac must never do (tests need no OS privacy permissions). It exists only in
+      # this workflow, on a disposable hosted runner; no repository script runs it.
       - name: Spaces and keystroke delivery
         run: |
           set +e

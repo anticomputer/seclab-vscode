@@ -81,9 +81,10 @@ for window number, layer, bounds and owner pid. Window names and contents, the p
 Screen Recording, aren't read: without that permission macOS withholds them, and with it the
 watcher still ignores them. Both queries return data without a prompt.
 
-**OS-level focus paths (Space switches).** `test/focus/spaces.ts` needs the `keystrokes` host
-capability (`test/host-caps.ts`) and otherwise skips with the reason. Its latest evidence stays
-the 2026-11-09 run ([background windows](20261105-background-windows.md)). Two things replace it:
+**OS-level focus paths (Space switches).** The Space-switch probe (`test/focus/spaces.ts`) is
+removed (2026-11-13, coordinator's decision): no host can usefully run it without OS
+permissions. Finding LLL-5 rests on the structural check and the 2026-11-09 recorded run
+([background windows](20261105-background-windows.md)), with no live probe:
 
 - A structural check: `check-release --desktop` fails a desktop app that lacks the bootstrap
   policy, the guard's policy or the below-normal window level, the three things that make the
@@ -92,8 +93,8 @@ the 2026-11-09 run ([background windows](20261105-background-windows.md)). Two t
   two were a prefix of each other until review QQQ-2. Self-tested by removing each.
 - `macos-focus-paths.yml` measures whether a hosted macOS runner can drive a Space switch.
   First run, 43251392437 (macOS 15.8.2): the keystroke is accepted (exit 0), but the on-screen
-  window set doesn't change, so a switch can't be observed there. The Space path therefore
-  stays covered by the structural check and the recorded run.
+  window set doesn't change, so a switch can't be observed there. Only that workflow's inline
+  step sends a keystroke, and it runs only on the hosted runner.
 
 **Linux under Xvfb.** `./seclab test driver` runs the Linux editor build in a container
 (`test/driver/xvfb/`, same pinned base as the builder) with no network, driving it over the pipe:
@@ -118,7 +119,7 @@ builds it, and keeps it for two days so a local Xvfb run can reuse it.
 | Probe | Before | After |
 |---|---|---|
 | `window.ts shot`, demo and `notify-e2e --shot` screenshots | `screencapture -l` (Screen Recording) | `test/driver/shot.ts` and the driven launch: renderer screenshot. Linux: run 43260178015. macOS: the build from run 43262494433, below-normal window captured |
-| Space-switch probe (`spaces.ts`) | System Events keystrokes (Accessibility) | skips with the reason; structural check in check-release (self-tested); the hosted runner can't show a Space switch (run 43251392437) |
+| Space-switch probe (`spaces.ts`) | System Events keystrokes (Accessibility) | removed; structural check in check-release (self-tested) and the 2026-11-09 recorded run; the hosted runner can't show a Space switch (run 43251392437) |
 | Focus battery (`probe.ts`), Level B, containment editor runs | no permission needed (watcher verified above) | unchanged |
 | Clipboard canary | read and restored the host clipboard | removed from the harness; RPC core's in-memory clipboard |
 | Local windows: no workspace or third-party extension runs; spoofed built-ins (m0#3-1, m0#4-1) | never written (record only) | `test/driver/local-window.ts`, in `headless-linux` CI: run 43260178015, 9/9; macOS build from run 43262494433, 17/17 (with reviews TTT-1 and UUU-2's checks) |
