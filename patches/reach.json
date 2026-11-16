@@ -2,6 +2,7 @@
 	"0006-seclab-channel-guard.patch": ["server"],
 	"0030-seclab-no-remote-cli-push-in-tabs.patch": ["desktop"],
 	"0031-seclab-no-variable-resolution-for-tab-pty-hosts.patch": ["desktop"],
+	"0033-seclab-sanitise-tab-provider-results.patch": ["desktop"],
 	"0034-seclab-no-host-variables-for-tab-terminals.patch": ["desktop"],
 	"0050-seclab-no-host-terminal-in-tabs.patch": ["desktop"],
 	"0032-seclab-partition-tab-extension-state.patch": ["desktop"],

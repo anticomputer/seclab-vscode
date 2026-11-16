@@ -482,6 +482,76 @@ const setContextKey: SeclabValidator = (args, ctx) => {
 	return undefined;
 };
 
+/** Filters at most; trigger characters at most. */
+const MAX_SELECTOR_FILTERS = 64;
+const MAX_TRIGGER_CHARACTERS = 64;
+const MAX_FILTER_STRING = 256;
+
+/**
+ * A document selector a tab registers a provider for. The registry is window-wide, so a filter
+ * that matched a trusted document (user settings, an output channel, a host file) would paint
+ * the tab's content inside it. Accepted: a non-empty array of plain filters, each with
+ * `$serialized: true`, `scheme` absent or `vscode-remote` (patch 0033 narrows an absent scheme
+ * to `vscode-remote` for a tab), `language` and `pattern` short strings or absent, `exclusive`
+ * boolean or absent, `isBuiltin` absent or false (it would order the tab ahead of built-ins),
+ * and nothing else: no notebook type, no RelativePattern, no unknown key.
+ */
+function tabSelector(v: unknown): string | undefined {
+	if (!Array.isArray(v) || v.length === 0 || v.length > MAX_SELECTOR_FILTERS) {
+		return 'argument 1 is not a document selector';
+	}
+	for (const f of v) {
+		if (!isPlainObject(f) || f.$serialized !== true) {
+			return 'a selector entry is not a document filter';
+		}
+		for (const key of Object.keys(f)) {
+			if (!['$serialized', 'scheme', 'language', 'pattern', 'exclusive', 'isBuiltin'].includes(key)) {
+				return `a document filter carries ${key.slice(0, 32)}`;
+			}
+		}
+		if (f.scheme !== undefined && f.scheme !== 'vscode-remote') {
+			return 'a document filter names a scheme the tab does not own';
+		}
+		for (const key of ['language', 'pattern'] as const) {
+			if (f[key] !== undefined && (typeof f[key] !== 'string' || (f[key] as string).length > MAX_FILTER_STRING)) {
+				return `a document filter's ${key} is not a short string`;
+			}
+		}
+		if (f.exclusive !== undefined && typeof f.exclusive !== 'boolean') {
+			return 'a document filter\'s exclusive is not a boolean';
+		}
+		if (f.isBuiltin !== undefined && f.isBuiltin !== false) {
+			return 'a tab provider cannot claim to be built in';
+		}
+	}
+	return undefined;
+}
+
+/** `$registerHoverProvider(handle, selector)`. */
+const tabHoverProvider: SeclabValidator = (args) => {
+	return arity(args, 2, 2) ?? (typeof args[0] !== 'number' ? 'argument 0 is not a handle' : undefined) ?? tabSelector(args[1]);
+};
+
+/** `$registerCompletionsProvider(handle, selector, triggerCharacters, supportsResolveDetails, extensionId)`. The id is a claim, used only for display. */
+const tabCompletionProvider: SeclabValidator = (args) => {
+	const bad = arity(args, 5, 5) ?? (typeof args[0] !== 'number' ? 'argument 0 is not a handle' : undefined) ?? tabSelector(args[1]);
+	if (bad) {
+		return bad;
+	}
+	const triggers = args[2];
+	if (!Array.isArray(triggers) || triggers.length > MAX_TRIGGER_CHARACTERS || triggers.some(t => typeof t !== 'string' || t.length !== 1)) {
+		return 'argument 2 is not a list of trigger characters';
+	}
+	if (typeof args[3] !== 'boolean') {
+		return 'argument 3 is not a boolean';
+	}
+	const id = args[4];
+	if (!isPlainObject(id) || typeof id.value !== 'string' || id.value.length > MAX_ID) {
+		return 'argument 4 is not an extension identifier';
+	}
+	return undefined;
+};
+
 export const SECLAB_VALIDATORS: ReadonlyMap<string, SeclabValidator> = new Map([
 	['activationErrorNoInstallPrompt', activationErrorNoInstallPrompt],
 	['tabCommandRegistration', tabCommandRegistration],
@@ -497,6 +567,8 @@ export const SECLAB_VALIDATORS: ReadonlyMap<string, SeclabValidator> = new Map([
 	['secretKeys', secretKeys],
 	['tabModelPosition', tabModelPosition],
 	['setContextKey', setContextKey],
+	['tabHoverProvider', tabHoverProvider],
+	['tabCompletionProvider', tabCompletionProvider],
 ]);
 
 /** Run a named validator, failing closed on an unknown name or a throw. */

@@ -1,0 +1,13 @@
+{
+	"name": "response-probe",
+	"displayName": "Response-side probe (seclab containment fixture)",
+	"description": "Returns a completion item and a hover whose command and command: link name a host-terminal command, plus the same carrying its own command as the positive control. Inert unless a harness run armed the workspace.",
+	"version": "0.0.1",
+	"publisher": "seclab-test",
+	"license": "MIT",
+	"engines": { "vscode": "^1.80.0" },
+	"activationEvents": ["*"],
+	"main": "./extension.js",
+	"extensionKind": ["workspace"],
+	"capabilities": { "untrustedWorkspaces": { "supported": true } }
+}

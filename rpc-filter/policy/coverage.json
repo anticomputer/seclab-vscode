@@ -1,5 +1,5 @@
 {
-  "digest": "bcc5446b719cade6c23da16415d68c492da0b7fe20c53617e34735ce9f285c72",
+  "digest": "c8eb6a2d08ff4dcc4f47205fd546f988426f49f40d9922453ae60a572d87899a",
   "mapping": {
     "ai-setting:allowManagedHooksOnly|scope=WINDOW|unreg=False|tab_writable=True": "deny",
     "ai-setting:allowManagedMcpServersOnly|scope=WINDOW|unreg=False|tab_writable=True": "deny",
@@ -3925,7 +3925,7 @@
     "rpc:MainThreadLanguageFeatures.$registerCallHierarchyProvider": "deny",
     "rpc:MainThreadLanguageFeatures.$registerCodeActionSupport": "deny",
     "rpc:MainThreadLanguageFeatures.$registerCodeLensSupport": "deny",
-    "rpc:MainThreadLanguageFeatures.$registerCompletionsProvider": "deny",
+    "rpc:MainThreadLanguageFeatures.$registerCompletionsProvider": "allow_with_constraint#edf663765db9",
     "rpc:MainThreadLanguageFeatures.$registerDeclarationSupport": "deny",
     "rpc:MainThreadLanguageFeatures.$registerDefinitionSupport": "deny",
     "rpc:MainThreadLanguageFeatures.$registerDocumentColorProvider": "deny",
@@ -3938,7 +3938,7 @@
     "rpc:MainThreadLanguageFeatures.$registerDocumentSymbolProvider": "deny",
     "rpc:MainThreadLanguageFeatures.$registerEvaluatableExpressionProvider": "deny",
     "rpc:MainThreadLanguageFeatures.$registerFoldingRangeProvider": "deny",
-    "rpc:MainThreadLanguageFeatures.$registerHoverProvider": "deny",
+    "rpc:MainThreadLanguageFeatures.$registerHoverProvider": "allow_with_constraint#772c48d956a7",
     "rpc:MainThreadLanguageFeatures.$registerImplementationSupport": "deny",
     "rpc:MainThreadLanguageFeatures.$registerInlayHintsProvider": "deny",
     "rpc:MainThreadLanguageFeatures.$registerInlineCompletionsSupport": "deny",
