@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 7 | 66 | 158 | 177 | 20 | 428 |
-| fixed-untested | 3 | 16 | 57 | 157 | 53 | 286 |
-| accepted-residual | 0 | 1 | 12 | 66 | 19 | 98 |
+| fixed | 7 | 66 | 159 | 178 | 20 | 430 |
+| fixed-untested | 3 | 16 | 57 | 158 | 54 | 288 |
+| accepted-residual | 0 | 1 | 12 | 67 | 19 | 99 |
 | deferred | 6 | 4 | 18 | 9 | 3 | 40 |
 | open | 0 | 2 | 14 | 16 | 4 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 89 | 259 | 425 | 105 | 894 |
+| **all** | 16 | 89 | 260 | 428 | 106 | 899 |
 
 ## Baseline: open high and critical findings
 
@@ -374,6 +374,8 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-3** | low | fixed-untested | Tab Manager (open request) | The Tab Manager's already-a-tab check, which skips the confirmation, compared paths case-insensitively, also on Linux. | No unit test drives the Tab Manager's sameFolder; it needs the extension host. |
 | [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-4** | low | fixed-untested | Tab Manager (open request) | One rejected open request poisoned the Tab Manager's request chain, so later opens were dropped silently. | No test injects a rejection into the chain. |
 | [20261112-main-process-routing](20261112-main-process-routing.md) **WWW-2** | low | accepted-residual | patch 0041 (enterWorkspace guard) | Add Folder to Workspace in a tab window reloads the window when main refuses, and leaves the untitled workspace file it wrote. | accepted by an agent: Fail-closed; the tab reconnects (patch 0040). |
+| [20261116-gate-fail-open-remainder](20261116-gate-fail-open-remainder.md) **FBA-2** | low | fixed-untested | write-back mount (seclab-wb-mount) | seclab-wb-mount recognised the overlay by filesystem type only, so an overlay it didn't mount would have been accepted. | Checked by hand in a real sbx tab (a forged device record is refused); no automated test runs the helper's mount path. |
+| [20261116-gate-fail-open-remainder](20261116-gate-fail-open-remainder.md) **FBA-3** | low | accepted-residual | write-back mount (seclab-wb-mount) | seclab-wb-mount's link-free walk doesn't drive the mount; later steps re-resolve the workspace path by name. | accepted by an agent: In the measured sbx layout nothing can win the race, and the post-mount pin catches a moved share. |
 | [docs/adr/20261104-extension-placement-hardening.md](../../docs/adr/20261104-extension-placement-hardening.md) **ADR-EPH-1** | low | open | patch 0003 / extension placement | Installing an extension in an empty local window still writes it to the host extensions dir; blocking local installs needs a further shared-process patch. | Recorded only as an ADR open item: no patch blocks local installs, and no test covers the write-but-never-run behaviour (it is the same gap as m0 3-1's missing Level B case). |
 | [20261104-broker-folder-open-loaders](20261104-broker-folder-open-loaders.md) **5** | info | fixed-untested | tab.event contract (tabd / Tab Manager) | If the client counts Workspace Trust or "allow automatic tasks" as a user action, the gate is open when runOn: folderOpen fires. | The spec fix is in schema/protocol.v1.json and the Tab Manager only sends tab.userAction on keyboard/mouse selection changes, but no test asserts that consent interactions (Workspace Trust, automatic tasks, security dialogs) never produce userAction. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **L-2** | info | accepted-residual | campaign fixture arming | The stage's run-dir check accepts any path containing \`/.work/\`, not only this worktree's. | accepted by an agent: The marker is written with the \`wx\` flag, so the worst case is creating one new file in some other \`.work/\` directory. |
@@ -403,6 +405,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261112-main-process-routing](20261112-main-process-routing.md) **WWW-1** | info | fixed-untested | patch 0041 (routing rule) | Patch 0041 routed a folder paired with an authority only for file:, not another locally backed scheme. | Not reachable today (the RPC filter denies a tab's vscode.openFolder); the driven test covers file: only. |
 | [20261112-main-process-routing](20261112-main-process-routing.md) **WWW-3** | info | accepted-residual | Tab Manager (open request) | The Tab Manager's sameFolder keys on the platform, so a case-sensitive macOS volume keeps VVV-3's residual. | accepted by an agent: Needs an existing tab and a link the user allowed; bounded by the allowed roots. |
 | [20261112-main-process-routing](20261112-main-process-routing.md) **WWW-5** | info | fixed-untested | docs/edr/20261112-main-process-routing.md | The EDR's "tab windows are untouched" was stale. | Documentation only; nothing to test. |
+| [20261116-gate-fail-open-remainder](20261116-gate-fail-open-remainder.md) **FBA-5** | info | fixed-untested | build/check-pins.ts | check-pins' purity probe depended on the supplied file list. | No case removes the parser from the list while it stays on disk. |
 
 ### RPC core landing v2
 
@@ -1730,7 +1733,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | GATE-10 | medium | fixed | A missing focus-steal log reads as never took focus; nothing proves the watcher lived | 158b893ab5b7a9b2ae9c1f531267455dcbb31af1 · `test/safety/gate-inputs.test.ts` "teardown: no steal log means clean only if the watcher watched the editor to the end" |
 | GATE-11 | medium | deferred | Exits 0 with scanner gaps in problems | follow-up: Fixed with its test on branch anticomputer-agentic-gate-0015-v3 (8913891, unpushed): exit_code() fails on a non-empty problems list, and self_test injects a scanner gap. Counts as fixed once that commit lands on main. |
 | GATE-12 | medium | fixed-untested | Drops the upstream-driven tests without an upstream checkout, the normal path in the unit job | Fixed on main (ci-unit runs rpc-filter/tools/test.sh with the upstream tree; confirmed in round 18 of 20261112-internal-identifier-scan.md, the runner fails on any skip). No injected-defect test. |
-| GATE-13 | low | fixed | Exits 0 when it receives no ref lines | 27b0972 · `test/hooks/hook-lock.test.sh` "a push with no ref lines is blocked, not reported clean (GATE-13)" |
+| GATE-13 | low | fixed | Exits 0 when it receives no ref lines | 73495df · `test/hooks/hook-lock.test.sh` "a push with no ref lines says nothing was checked, never "0 ref(s) checked" (GATE-13)" |
 | GATE-14 | low | fixed | Dates no npm pins on an empty list; --days 0 passes everything | 27b0972 · `test/safety/gate-inputs.test.ts` "pin-age: a cooldown below 7 days and an empty or foreign file list are refused" |
 | GATE-15 | low | fixed-untested | The purity probe sits in a swallowing catch | An unreadable tracked copy is now a finding; no test makes the repository's own file unreadable. |
 | GATE-16 | low | fixed | Scans only tabd/src when extensions/series is empty | 27b0972 · `build/check-source.ts` "an empty extensions/series fails (GATE-16)" |
@@ -1847,6 +1850,16 @@ Every other commit the register cites is on main's history, or on the branch its
 | R23-6 | low | fixed | Installer and hook hashed with different tools; an empty marker hash could lock every push out | 95408c3 · `test/hooks/hook-lock.test.sh` "hooks check: the installed, locked gate hook is ok" |
 | R23-7 | info | fixed-untested | A ~ in core.hooksPath blocked every push | Read path-typed; not exercised by the test. |
 | R23-8 | info | fixed | hooks check misreported as root; removing a clone fails on the locked directory | 95408c3 · `test/hooks/hook-lock.test.sh` "hooks check: an unlocked directory is caught" |
+
+### [20261116-gate-fail-open-remainder](20261116-gate-fail-open-remainder.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| FBA-1 | medium | fixed | The first GATE-13 fix blocked every up-to-date push (git runs pre-push with no ref lines), inviting --no-verify, which drops both scans. | 73495df · `test/hooks/hook-lock.test.sh` "a push with no ref lines says nothing was checked, never "0 ref(s) checked" (GATE-13)" |
+| FBA-2 | low | fixed-untested | seclab-wb-mount recognised the overlay by filesystem type only, so an overlay it didn't mount would have been accepted. | Checked by hand in a real sbx tab (a forged device record is refused); no automated test runs the helper's mount path. |
+| FBA-3 | low | accepted-residual | seclab-wb-mount's link-free walk doesn't drive the mount; later steps re-resolve the workspace path by name. | accepted by an agent: In the measured sbx layout nothing can win the race, and the post-mount pin catches a moved share. |
+| FBA-4 | low | fixed | check-source reported clean on an empty patches/series, and its self-test didn't cover the wiring. | 73495df · `build/check-source.ts` "a checkout with empty series starts with both findings (the wiring the run uses)" |
+| FBA-5 | info | fixed-untested | check-pins' purity probe depended on the supplied file list. | No case removes the parser from the list while it stays on disk. |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
