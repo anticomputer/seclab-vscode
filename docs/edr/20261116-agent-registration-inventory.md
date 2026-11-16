@@ -104,3 +104,36 @@ prototype members and so cannot be recovered from the real class's prototype alo
 Settling that shape needs the real consumers' usage read, and then the patched build run; it is
 a behaviour question about upstream code, not something to decide by reading alone. Until then
 the design above is a plan and not a result.
+
+## What the real consumers actually touch, and the scope question it raises
+
+The outside consumers were read rather than guessed at. They do not call methods; they read
+**observable instance fields** and then call `.get()` or `.read(reader)` on them — the
+remote-connections toggle reads `environmentName` and `state` that way, and calls
+`setEnvironmentName` only in response to a user action.
+
+That settles two things and opens a third.
+
+It settles that a prototype-derived stand-in is not enough: observables are instance fields, so
+a stand-in built from the real class's prototype would not have `state` at all, and the first
+read would throw rather than fail closed.
+
+It settles that the blanket no-op proxy is doubly wrong here: `state.get()` would return a
+function, which is truthy, so a window with an inert provider would render as *sharing
+enabled*. Falsy-on-unknown is not a stylistic preference; it is the difference between a null
+provider and a provider that lies in the dangerous direction.
+
+What it opens is a scope question against the plan. The plan asks for the Mission Control
+services to be nulled alongside the cloud sandbox agent-host service. The agent-host service
+has no consumer outside its own definition, so nulling it is free. The Mission Control sharing
+service and the connection-customization service do have live consumers, so nulling them means
+supplying a stand-in shaped to what those consumers read, or their UI breaks.
+
+The proposal, rather than ten hand-written null classes or one unsafe proxy, is a single small
+table in the patch naming, per service, which members are observables, which are events and
+which are methods, with a shared builder that returns a falsy constant observable,
+`Event.None`, and an async no-op respectively. One mechanism, one place to audit, and the
+shape comes from the declared interface rather than from guesswork.
+
+Pending the coordinator's decision on that scope, since it is a departure from the plan's
+wording even though it serves the plan's purpose.
