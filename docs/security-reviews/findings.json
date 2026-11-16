@@ -259,13 +259,17 @@
 			"summary": "No response-side sanitiser: anything a tab returns that carries a command, a `command:` link, trusted markdown or a remote image would put tab-chosen actions into trusted UI, run by the global ICommandService.",
 			"component": "RPC filter (request-side only)",
 			"owner": "rpc",
-			"status": "deferred",
-			"followUp": "one structural response-side control (taint by origin for commands and links; neutralise trusted markdown and remote images from tab data) before any provider, tree, SCM, status bar, decoration or notification registration is allowed; the ordinary-session classification drafts are kept unenforced in rpc-filter/policy/drafts/ (rpc session).",
+			"status": "fixed",
 			"ref": {
 				"file": "docs/RPC-LOCKDOWN.md",
 				"quote": "**Responses are filtered at the customer, one surface at a time.**"
 			},
-			"note": "Hover and completion are the live edge of this: _executeHoverProvider and _executeCompletionItemProvider are allowed leaf exceptions, so tab-authored hover/completion content already reaches the host window, and only the registration surfaces (code lens, status bar, trees) stay denied."
+			"note": "Patch 0033 and seclabFromTab (ADR 20261116-response-side-control): commands, command: links and markdown from tab data go through the filter; remote images and HTML are dropped. Hover and completion are wired; check_drift.py::check_responses refuses any other reachable registration until its customer is wired. Pre-control and control runs in the ADR.",
+			"commit": "d29b5fef",
+			"test": {
+				"file": "test/containment/filter-module.test.ts",
+				"name": "response: a denied command runs in the tab, never on the trusted side, and is logged when the tab lacks it"
+			}
 		},
 		{
 			"record": null,
