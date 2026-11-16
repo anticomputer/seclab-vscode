@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 7 | 70 | 169 | 186 | 22 | 454 |
+| fixed | 7 | 70 | 171 | 186 | 22 | 456 |
 | fixed-untested | 3 | 15 | 60 | 161 | 56 | 295 |
 | accepted-residual | 0 | 1 | 12 | 68 | 19 | 100 |
 | deferred | 6 | 4 | 18 | 9 | 3 | 40 |
 | open | 0 | 2 | 14 | 15 | 5 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 273 | 439 | 111 | 931 |
+| **all** | 16 | 92 | 275 | 439 | 111 | 933 |
 
 ## Baseline: open high and critical findings
 
@@ -1903,6 +1903,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | LSR-10 | low | fixed | Three of the on: scanner's fail-closed branches had no self-test injection. | d19a591ec1d0bf7b137f8576d29d073242955a90 · `build/liveness/liveness.ts` "LSR-7 ${shape}" |
 | LSR-11 | medium | fixed | A filter item the scanner couldn't read was dropped, and in an *-ignore list that reads as live: a block-scalar item, a bare dash, a continuation line or an empty list disarmed the filter. | a59083858a5f139b0a1c19562e4213373aae1fff · `build/liveness/liveness.ts` "LSR-11 ${shape}" |
 | LSR-12 | low | fixed | An anchor or tag before a flow collection or quoted scalar hid that the line was left open. | a59083858a5f139b0a1c19562e4213373aae1fff · `build/liveness/liveness.ts` "LSR-9 ${shape}" |
+| LSR-13 | medium | fixed | Ignore lists were compared literally, so a glob covering main (\`m*\`, \`main*\`, \`ma?n\`, \`**/**\`) read as "main not ignored". | 0c9012b6a091e1fae737aaf4b76f1952f4e4ade1 · `build/liveness/liveness.ts` "LSR-13 ${shape}" |
+| LSR-14 | medium | fixed | A filter key the gate doesn't model was ignored, so a tags-only push read as a live branch push. | 0c9012b6a091e1fae737aaf4b76f1952f4e4ade1 · `build/liveness/liveness.ts` "LSR-13 ${shape}" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

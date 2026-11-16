@@ -13926,6 +13926,32 @@
 			"commit": "a59083858a5f139b0a1c19562e4213373aae1fff",
 			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-9 ${shape}" },
 			"note": "Case: a tagged quoted default continued at column 0; it fails with the anchor/tag skip mutated."
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-13",
+			"round": "Round LSR",
+			"severity": "medium",
+			"summary": "Ignore lists were compared literally, so a glob covering main (`m*`, `main*`, `ma?n`, `**/**`) read as \"main not ignored\".",
+			"component": "liveness gate (workflow filters)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "0c9012b6a091e1fae737aaf4b76f1952f4e4ade1",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-13 ${shape}" },
+			"note": "Ten shapes are injected and two controls keep ordinary filters live; each new runs() branch fails its own case when mutated."
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-14",
+			"round": "Round LSR",
+			"severity": "medium",
+			"summary": "A filter key the gate doesn't model was ignored, so a tags-only push read as a live branch push.",
+			"component": "liveness gate (workflow filters)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "0c9012b6a091e1fae737aaf4b76f1952f4e4ade1",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-13 ${shape}" },
+			"note": "Cases: tags only, tags-ignore only, pull_request with non-default types, an unknown key under push."
 		}
 	]
 }

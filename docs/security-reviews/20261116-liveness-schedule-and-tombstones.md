@@ -73,3 +73,14 @@ rather than a silent bypass.
 |---|---|---|---|---|---|
 | LSR-11 | Medium | discovery | An item the scanner couldn't read was dropped from the list. In `branches-ignore` or `paths-ignore` that reads as "main not ignored", so live: a block-scalar item (`- >-` then `main`), a bare `-` with the value below, a continuation line, or an empty list. | Fixed | Filter items must be plain or quoted scalars. Anything else makes the trigger count as off main. Eight shapes are injected. |
 | LSR-12 | Low | discovery | An anchor or tag before a flow collection or quoted scalar (`&b [foo,`, `!!str "a`) hid that the line was left open. | Fixed | `lineOpen` skips an anchor or tag where a node can start. A tagged quoted default continued at column 0 is injected; a control pins the comment rule. |
+
+## Round LSR, fifth follow-up
+LSR-11 and LSR-12 were confirmed closed. A 30-shape corpus found no syntax bypass, and every new
+branch fails its own case when mutated. The reviewer then audited `triggers()` for any remaining
+path where unread input reads as "found nothing". It found that the inversion stopped at syntax:
+input the gate read but doesn't model still resolved to "no disqualifying filter".
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| LSR-13 | Medium | filters | Ignore lists were compared literally, so a glob covering main (`branches-ignore: ['m*']`, `['main*']`, `['ma?n']`, `paths-ignore: ['**/**']`) read as "main not ignored". | Fixed | Entries are matched as globs. An entry using glob syntax the gate doesn't model (`?`, `+`, `[]`, `!`) counts against the trigger on either side, and a `paths-ignore` covering every tracked file disqualifies it. |
+| LSR-14 | Medium | filters | A key under push or pull_request that the gate doesn't model was ignored, so a tags-only push (`tags: [nope]`) read as a live branch push. | Fixed | `tags`/`tags-ignore` without a branches filter, pull_request `types` with no default activity type, and any unknown key count against the trigger. |
