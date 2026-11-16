@@ -63,9 +63,9 @@ has `VSCODE_DEV`
 and a window takes the launching CLI's environment
 ([windowsMainService.ts#L1569](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/windows/electron-main/windowsMainService.ts#L1569)).
 So a host process that opens a tab window with `VSCODE_DEV=1` set gives that tab the real ids.
-Only the host can set it; a tab can't. Neither check here sees it. It is recorded as a residual
-(review TEL-2) and reported to the coordinator for a decision on stripping `VSCODE_DEV` from the
-shipped app.
+Only the host can set it; a tab can't. Neither check here sees it. It is a recorded residual
+(review TEL-2), with no patch (coordinator, 2026-11-16): a process that can set the editor's
+launch environment on the host is already outside the threat model.
 
 ## Alternatives considered
 - **Patch the init data now (the appendix).** Give each tab ids derived from its own authority and
