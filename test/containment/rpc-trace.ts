@@ -137,6 +137,9 @@ async function main(): Promise<void> {
 		if (spawnSync('docker', ['image', 'inspect', VSCE_IMAGE], { stdio: 'ignore' }).status !== 0) {
 			execFileSync('gh', ['cfs', '--', 'docker', 'build', '-q', '-t', VSCE_IMAGE, path.join(repo, 'build', 'vsce')], { stdio: 'inherit' });
 		}
+		// The benign extension requires ./probe-safety.js, which ships inside the .vsix as a copy of
+		// the single source (check-evidence.ts does the same); never package a stale one.
+		fs.copyFileSync(path.join(import.meta.dirname, 'probe-safety.js'), path.join(import.meta.dirname, 'benign-extension', 'probe-safety.js'));
 		execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`,
 			'-v', `${path.join(import.meta.dirname, 'benign-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
 			VSCE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/benign.vsix'], { stdio: 'inherit' });
