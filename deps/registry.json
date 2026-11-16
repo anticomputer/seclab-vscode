@@ -92,7 +92,7 @@
       "publisher": "Docker Official Images (docker-library)",
       "official": true,
       "purpose": "Runner for the stdlib-only RPC filter tools.",
-      "pins": ["python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30"],
+      "pins": ["python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b"],
       "used": ["rpc-filter/tools/*.sh", "test/agentic/ahp/inventory.sh"],
       "provenance": "Unsigned BuildKit provenance/SBOM.",
       "verify": "Digest pin (multi-arch index); runs with --network none.",

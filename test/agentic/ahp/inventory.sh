@@ -12,7 +12,7 @@ RPC_REF="${RPC_REF:-17d9f51}"   # anticomputer-rpc-filter-patches; repinned afte
 # even though the objects linger in an older local one. The new pin's
 # `rpc-filter/tools/seclab_inventory` tree is byte-identical to the old pin's
 # (019c70f61e3730d57e0813fa465d3ba760a16029), so this changes the SHA and nothing else.
-IMG='python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30'
+IMG='python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b'
 TOOLS="$ROOT/.work/agentic/rpc-tools-$RPC_REF"
 if [[ ! -d "$TOOLS" ]]; then
 	mkdir -p "$TOOLS"
