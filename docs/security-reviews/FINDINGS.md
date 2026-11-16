@@ -1694,13 +1694,13 @@ Every other commit the register cites is on main's history, or on the branch its
 | BBBB-4 | low | fixed | The no-early-closing-reader check was narrow: missed forms, findings functions only, one-line functions misread | ff9431f · `seclab` "seclab pipes into a reader that closes early" |
 | BBBB-5 | info | fixed-untested | findings_emit hid a real read error's message | Message-only change; nothing to test. |
 | BBBB-6 | medium | fixed | With SIGPIPE ignored, as on CI runners, cat got EPIPE and exited 1, failing the listing | ff9431f · `seclab` "for sig in "" "trap" |
-| CCCC-1 | medium | fixed | A patch: fix commit resolved on the change's own history, so an add-then-revert pair could close a high | 0000000 · `seclab` "a high closed on its PR's own patch: commit (CCCC-1)" |
-| CCCC-2 | medium | fixed | Exempt upstream pins came from HEAD's history, so a change could add and revert a pin to exempt any token | 0000000 · `seclab` "a pin outside main's history counted (CCCC-2)" |
-| CCCC-3 | medium | fixed | One adjacent - / or . dropped a token, so range ends and joined forms escaped | 0000000 · `build/docs/findings.ts` "both ends of a range and joined forms are (CCCC-3)" |
-| CCCC-4 | medium | fixed | A landed patch: never failed, nothing forced a pin, and a commit window would later fail every change | 0000000 · `seclab` "a later change touching an unpinned landed citation passed (CCCC-4)" |
-| CCCC-5 | low | fixed | An environment variable could replace origin/main, and an unresolvable one skipped the rule | 0000000 · `seclab` "an unresolvable main didn't fail as a defect (CCCC-5)" |
+| CCCC-1 | medium | fixed | A patch: fix commit resolved on the change's own history, so an add-then-revert pair could close a high | patch:3db7bc1dd009d68931d992703b43660675c561db · `seclab` "a high closed on its PR's own patch: commit (CCCC-1)" |
+| CCCC-2 | medium | fixed | Exempt upstream pins came from HEAD's history, so a change could add and revert a pin to exempt any token | patch:3db7bc1dd009d68931d992703b43660675c561db · `seclab` "a pin outside main's history counted (CCCC-2)" |
+| CCCC-3 | medium | fixed | One adjacent - / or . dropped a token, so range ends and joined forms escaped | patch:3db7bc1dd009d68931d992703b43660675c561db · `build/docs/findings.ts` "both ends of a range and joined forms are (CCCC-3)" |
+| CCCC-4 | medium | fixed | A landed patch: never failed, nothing forced a pin, and a commit window would later fail every change | patch:3db7bc1dd009d68931d992703b43660675c561db · `seclab` "a later change touching an unpinned landed citation passed (CCCC-4)" |
+| CCCC-5 | low | fixed | An environment variable could replace origin/main, and an unresolvable one skipped the rule | patch:3db7bc1dd009d68931d992703b43660675c561db · `seclab` "an unresolvable main didn't fail as a defect (CCCC-5)" |
 | CCCC-6 | low | fixed-untested | AAAA-2's rationale and AAAA-4's test rested on the withdrawn rule | Register and record text; nothing to test. |
-| CCCC-7 | low | fixed | No case for a poisoned whole-history cache, an unresolvable main, or a pin from outside main | 0000000 · `seclab` "a malformed whole-history cache was trusted (CCCC-7)" |
+| CCCC-7 | low | fixed | No case for a poisoned whole-history cache, an unresolvable main, or a pin from outside main | patch:3db7bc1dd009d68931d992703b43660675c561db · `seclab` "a malformed whole-history cache was trusted (CCCC-7)" |
 
 ### [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md)
 

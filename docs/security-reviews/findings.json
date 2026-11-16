@@ -11759,7 +11759,7 @@
 			"summary": "A patch: fix commit resolved on the change's own history, so an add-then-revert pair could close a high",
 			"component": "findings register: closing highs",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -11774,7 +11774,7 @@
 			"summary": "Exempt upstream pins came from HEAD's history, so a change could add and revert a pin to exempt any token",
 			"component": "findings register: upstream pins",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -11789,7 +11789,7 @@
 			"summary": "One adjacent - / or . dropped a token, so range ends and joined forms escaped",
 			"component": "findings register: path hex",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
 			"status": "fixed",
 			"test": {
 				"file": "build/docs/findings.ts",
@@ -11804,7 +11804,7 @@
 			"summary": "A landed patch: never failed, nothing forced a pin, and a commit window would later fail every change",
 			"component": "findings register: pinning",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -11819,7 +11819,7 @@
 			"summary": "An environment variable could replace origin/main, and an unresolvable one skipped the rule",
 			"component": "findings register: test seam",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -11834,7 +11834,7 @@
 			"summary": "AAAA-2's rationale and AAAA-4's test rested on the withdrawn rule",
 			"component": "findings register: earlier rounds",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
 			"status": "fixed-untested",
 			"gap": "Register and record text; nothing to test."
 		},
@@ -11846,7 +11846,7 @@
 			"summary": "No case for a poisoned whole-history cache, an unresolvable main, or a pin from outside main",
 			"component": "findings register: self-test",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
