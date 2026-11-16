@@ -32,6 +32,8 @@
 0030-seclab-no-remote-cli-push-in-tabs.patch
 0031-seclab-no-variable-resolution-for-tab-pty-hosts.patch
 0032-seclab-partition-tab-extension-state.patch
+# 0033: what a tab returns to trusted UI goes through seclabFromTab (ADR response-side-control).
+0033-seclab-sanitise-tab-provider-results.patch
 0035-seclab-document-sync-provenance.patch
 # Fork build: Restart Extension Host re-resolves a managed (seclab+) authority (EDR ext-host-restart-reresolve).
 0036-seclab-tab-configuration-snapshot.patch

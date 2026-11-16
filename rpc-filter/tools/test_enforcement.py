@@ -542,3 +542,55 @@ class CallerGateSelfTest(unittest.TestCase):
         added = fresh._code_only(fresh._patch_added_text())
         self.assertRegex(added, r"\bseclabResolveTabId\b",
                          "seclabResolveTabId has no caller in the patch queue's upstream hunks")
+
+
+class ResponseGateTest(unittest.TestCase):
+    """A registration whose results reach trusted UI is allowed only with the response control.
+
+    ADR 20261116-response-side-control: what a tab returns (commands, command: links, trusted
+    markdown, remote images) reaches the trusted renderer, so a reachable `$register*` method
+    must route its results through seclabFromTab, applied by a patch in the series.
+    """
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="seclab-resp-test-")
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        os.makedirs(os.path.join(self.root, "patches"))
+        with open(os.path.join(self.root, "patches", "0033-x.patch"), "w") as fh:
+            fh.write("+++ b/x.ts\n+\tthis._s = seclabFromTab(authority, run);\n")
+        with open(os.path.join(self.root, "patches", "series"), "w") as fh:
+            fh.write("0033-x.patch\n")
+        self.policy = {"rpc": {"MainThreadLanguageFeatures": {"methods": {
+            "$registerHoverProvider": {"verdict": "allow_with_constraint", "response": "seclabFromTab",
+                                       "response_patch": "0033-x.patch"}}}}}
+
+    def gate(self):
+        return CD.check_responses(self.policy, self.root)
+
+    def method(self):
+        return self.policy["rpc"]["MainThreadLanguageFeatures"]["methods"]["$registerHoverProvider"]
+
+    def test_control_a_wired_registration_passes(self):
+        self.assertEqual(self.gate(), [])
+
+    def test_a_reachable_registration_without_the_control_fails(self):
+        del self.method()["response"]
+        self.assertTrue(any("declares no response control" in e for e in self.gate()))
+
+    def test_the_patch_must_be_in_the_series(self):
+        with open(os.path.join(self.root, "patches", "series"), "w") as fh:
+            fh.write("\n")
+        self.assertTrue(any("not in patches/series" in e for e in self.gate()))
+
+    def test_the_patch_must_call_the_sanitiser_in_added_code(self):
+        with open(os.path.join(self.root, "patches", "0033-x.patch"), "w") as fh:
+            fh.write("+++ b/x.ts\n // seclabFromTab( is only context here\n")
+        self.assertTrue(any("never calls seclabFromTab" in e for e in self.gate()))
+
+    def test_a_denied_registration_needs_nothing(self):
+        self.method()["verdict"] = "deny"
+        del self.method()["response"]
+        self.assertEqual(self.gate(), [])
+
+    def test_the_shipped_policy_passes(self):
+        self.assertEqual(CD.check_responses(CD._load(CD.POLICY), CD.REPO_ROOT), [])

@@ -49,6 +49,7 @@ registerHooks({
 const F = await import(pathToFileURL(join(SRC_DIR, 'seclabRpcFilter.ts')).href);
 const PD = await import(pathToFileURL(join(SRC_DIR, 'seclabPolicyData.ts')).href);
 const ipc = await import(pathToFileURL(join(HERE, 'filter-stubs', 'ipc.mjs')).href);
+const commands = await import(pathToFileURL(join(HERE, 'filter-stubs', 'commands.mjs')).href);
 
 const TAB = 't-aaaaaaaaaaaaaaaaaaaaaaaaaa';
 const AUTH = `seclab+${TAB}`;
@@ -149,6 +150,92 @@ test('0008 route: a tab command goes to the tainted path with its origin, and fa
 	await assert.rejects(F.seclabExecuteCommandFromTab({ executeCommand: async () => 'untainted' }, 'x.y', [], origin), /Unsupported operation/);
 });
 
+// ---- the response side (ADR 20261116-response-side-control)
+
+/** The command a token link or a rewritten command names, and its token. */
+function tokenOf(link: string): string {
+	const m = link.match(/^command:_seclab\.tabCommand\?(.+)$/);
+	assert.ok(m, `not a token link: ${link}`);
+	const args = JSON.parse(decodeURIComponent(m[1]));
+	assert.ok(Array.isArray(args) && args.length === 1 && /^[0-9a-f]{32}$/.test(args[0]));
+	return args[0];
+}
+const run = (token: unknown, cs: unknown = {}) => commands.handlers.get(F.SECLAB_TAB_COMMAND)({ get: () => cs }, token);
+
+test('response: a trusted host gets no sanitiser; a tab and an unknown remote do', () => {
+	assert.equal(F.seclabFromTab(null, async () => undefined), undefined);
+	assert.ok(F.seclabFromTab(AUTH, async () => undefined));
+	assert.ok(F.seclabFromTab('ssh-remote+x', async () => undefined));
+});
+
+test('response: tab markdown loses command links, HTML and remote images', () => {
+	const s = F.seclabFromTab(AUTH, async () => undefined);
+	const md = s.markdown({
+		value: 'a [run](command:workbench.action.terminal.newLocal) b ![x](https://example.test/p.png) ![y](data:image/png;base64,AAAA) ![z][ref] [ref]: https://example.test/q.png <img src="https://example.test/r.png">',
+		isTrusted: true, supportHtml: true, baseUri: { scheme: 'https', authority: 'example.test', path: '/' },
+	});
+	assert.deepEqual(md.isTrusted, { enabledCommands: [F.SECLAB_TAB_COMMAND] });
+	assert.equal(md.supportHtml, false);
+	assert.equal('baseUri' in md, false);
+	assert.doesNotMatch(md.value, /command:workbench/);
+	assert.doesNotMatch(md.value, /!\[/);
+	assert.match(md.value, /!?\[?y\]?\(data:image\/png/);
+	const link = md.value.match(/\((command:[^)]+)\)/)![1];
+	tokenOf(link);
+	assert.equal(s.markdown('plain').value, 'plain');
+	assert.equal(s.markdown(undefined).value, '');
+});
+
+test('response: a tab command becomes the token command', () => {
+	const s = F.seclabFromTab(AUTH, async () => undefined);
+	const c = s.command({ id: 'workbench.action.terminal.newLocal', title: 't', arguments: [1] });
+	assert.equal(c.id, F.SECLAB_TAB_COMMAND);
+	assert.equal(c.arguments.length, 1);
+	assert.match(c.arguments[0], /^[0-9a-f]{32}$/);
+	assert.equal(s.command(undefined), undefined);
+});
+
+test('response: a denied command runs in the tab, never on the trusted side, and is logged when the tab lacks it', async () => {
+	const seen: Array<Record<string, unknown>> = [];
+	const sub = F.seclabOnDecision((d: Record<string, unknown>) => seen.push(d));
+	try {
+		const ranInTab: unknown[][] = [];
+		const s = F.seclabFromTab(AUTH, async (id: string, args: unknown[]) => { ranInTab.push([id, args]); throw new Error('not found'); });
+		const trusted = { seclabExecuteFromTab: async () => { throw new Error('must not run on the trusted side'); } };
+		const token = s.command({ id: 'workbench.action.terminal.newLocal', title: 't', arguments: [1] }).arguments[0];
+		await assert.rejects(run(token, trusted), /Unsupported operation/);
+		assert.deepEqual(ranInTab, [['workbench.action.terminal.newLocal', [1]]]);
+		assert.ok(seen.some(d => d.ref === 'cmd:workbench.action.terminal.newLocal' && d.verdict === 'deny'), 'the refusal was not logged');
+		const link = s.markdown({ value: '[x](command:workbench.action.terminal.sendSequence?%7B%22text%22%3A%22x%22%7D)' }).value.match(/\((command:[^)]+)\)/)![1];
+		await assert.rejects(run(tokenOf(link), trusted), /Unsupported operation/);
+		assert.deepEqual(ranInTab[1], ['workbench.action.terminal.sendSequence', [{ text: 'x' }]]);
+	} finally {
+		sub.dispose();
+	}
+});
+
+test('response: the tab\'s own command runs in the tab; an unknown token is refused', async () => {
+	const s = F.seclabFromTab(AUTH, async (id: string) => `ran ${id}`);
+	const token = s.command({ id: 'pub.ext.own', title: 't' }).arguments[0];
+	assert.equal(await run(token), 'ran pub.ext.own');
+	await assert.rejects(run('0'.repeat(32)), /Unsupported operation/);
+	await assert.rejects(run(undefined), /Unsupported operation/);
+});
+
+test('response: a command the policy allows outright runs on the trusted side, under the tab origin', async () => {
+	PD.SECLAB_COMMANDS.set('seclabTest.allowed', { verdict: 'allow', ref: 'cmd:seclabTest.allowed' });
+	try {
+		const calls: unknown[][] = [];
+		const trusted = { seclabExecuteFromTab: async (id: string, args: unknown[], origin: unknown) => { calls.push([id, args, origin]); return 'trusted'; } };
+		const s = F.seclabFromTab(AUTH, async () => { throw new Error('must not run in the tab'); });
+		assert.equal(await run(s.command({ id: 'seclabTest.allowed', title: 't', arguments: [2] }).arguments[0], trusted), 'trusted');
+		assert.equal(calls.length, 1);
+		assert.equal((calls[0][2] as { tabId: string }).tabId, TAB);
+	} finally {
+		PD.SECLAB_COMMANDS.delete('seclabTest.allowed');
+	}
+});
+
 test('0008 patch: $executeCommand routes a tab origin, captured from the connection, before the plain path', () => {
 	const patch = readFileSync(join(REPO, 'patches', '0008-seclab-route-tab-commands.patch'), 'utf8');
 	assert.deepEqual(routeProblems(patch), []);
@@ -208,6 +295,12 @@ if (!process.env.SECLAB_FILTER_SRC_DIR) {
 		['the tab id accepts any characters', "authority.match(/^seclab\\+([\\w.-]+)$/)", "authority.match(/^seclab\\+(.+)$/)"],
 		['the route falls back to the plain path', "return Promise.reject(new Error('Unsupported operation'));\n\t}\n\treturn tainted.seclabExecuteFromTab", "return (commandService as any).executeCommand(id, ...args);\n\t}\n\treturn tainted.seclabExecuteFromTab"],
 		['early decisions are dropped', 'if (seclabEarly.length < SECLAB_EARLY_MAX) {', 'if (false) {'],
+		['a denied data command runs on the trusted side', "if (entry.filter.commandVerdict(entry.id) === 'allow') {", 'if (true) {'],
+		['markdown keeps full trust', 'isTrusted: { enabledCommands: [SECLAB_TAB_COMMAND] },', 'isTrusted: true,'],
+		['remote images are kept', ".replace(SECLAB_INLINE_IMAGE, (_m, alt: string, src: string) => /^data:/i.test(src) ? _m : alt)\n\t\t\t\t.replace(SECLAB_OTHER_IMAGE, (_m, alt: string) => alt)", ".replace(SECLAB_INLINE_IMAGE, (_m) => _m)\n\t\t\t\t.replace(SECLAB_OTHER_IMAGE, (_m) => _m)"],
+		['reference images are kept', ".replace(SECLAB_OTHER_IMAGE, (_m, alt: string) => alt)", ".replace(SECLAB_OTHER_IMAGE, (_m) => _m)"],
+		['command links are kept', '.replace(SECLAB_COMMAND_LINK,', '.replace(/$^/,'],
+		['an unknown token runs', "if (!entry) {\n\t\tthrow denied();", "if (!entry) {\n\t\treturn undefined;"],
 	];
 	const src = readFileSync(join(SRC_DIR, 'seclabRpcFilter.ts'), 'utf8');
 	const scratch = mkdtempSync(join(process.env.SECLAB_SCRATCH ?? tmpdir(), 'seclab-filter-mutants-'));

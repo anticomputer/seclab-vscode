@@ -259,7 +259,7 @@
 			"followUp": "one structural response-side control (taint by origin for commands and links; neutralise trusted markdown and remote images from tab data) before any provider, tree, SCM, status bar, decoration or notification registration is allowed; the ordinary-session classification drafts are kept unenforced in rpc-filter/policy/drafts/ (rpc session).",
 			"ref": {
 				"file": "docs/RPC-LOCKDOWN.md",
-				"quote": "**Responses are not filtered.** The filter screens requests, never what a"
+				"quote": "**Responses are filtered at the customer, one surface at a time.**"
 			},
 			"note": "Hover and completion are the live edge of this: _executeHoverProvider and _executeCompletionItemProvider are allowed leaf exceptions, so tab-authored hover/completion content already reaches the host window, and only the registration surfaces (code lens, status bar, trees) stay denied."
 		},
@@ -276,7 +276,7 @@
 			"rationale": "Deny-by-default is the fork's chosen posture: these surfaces stay denied until a structural response-side control exists (RPC-R2), so the gap is visible loss of function rather than a containment hole. Extensions still activate, run their own commands, keep per-tab state and secrets, and read/write/search their own workspace.",
 			"ref": {
 				"file": "docs/RPC-LOCKDOWN.md",
-				"quote": "Denied until the response-side control above lands, so these are visible"
+				"quote": "Denied until their customers are wired to the response-side control above"
 			},
 			"note": "Re-enabling any of these is a policy change that must clear check_validators and the deferred-laundering residual gate first."
 		},
