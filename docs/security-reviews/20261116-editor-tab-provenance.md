@@ -30,3 +30,14 @@ Below the reporting bar, recorded:
 |---|---|---|---|---|---|---|
 | EDT-5 | Low | webviews | Webview panels pass by scheme, so a host-side panel's title and view type reach the tab. | accepted-residual | Under the RPC filter a tab can't create a webview panel, so every panel in a tab window is the window's; none found whose title carries host data (Release Notes is a constant). If panels are ever allowed, own only panels this host created. | none |
 | EDT-6 | Info | terminals | A host-local terminal's title (`user@host: ~/dir`) reaches the tab as an editor label. | accepted-residual | No new exposure: the terminal service already pushes every terminal's name to every host (DOCSYNC-R5). | none |
+
+## Round 3
+At `a0c20243`: 0038 no longer adds constructor parameters (upstream's unit test constructs the
+class); the document sync publishes its ownership judgement on the host's 0035 record. Confirmed:
+the editor-tab model can't be built before the judgement exists (every host object is constructed
+in one synchronous pass, and publishing fires the rebuild), and the host context's authority is
+the window's `seclab+` authority for the tab's remote host. No high or critical finding.
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| EDT-7 | Info | hosts | Filtering keys on the host's own authority, so a desktop web-worker host in a tab window is unfiltered, where 0035 filters it by the window's authority. | accepted-residual | The desktop app never runs tab-installed extensions in the local web worker, only host-installed web extensions; 0038 is desktop-only. Revisit if the web build is ever in scope. | none |
