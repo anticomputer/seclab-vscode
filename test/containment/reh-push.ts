@@ -43,7 +43,7 @@ import { readHits } from './beacon.ts';
 import { teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
 const IMAGE = 'seclab-tab-oci:test-containment';
-const PUSH_PROBES = ['reh-onexecutecommand-windowopen', 'reh-onexecutecommand-manageextensions', 'reh-onexecutecommand-getsystemstatus', 'reh-resolve-variables-host-env'];
+const PUSH_PROBES = ['reh-onexecutecommand-windowopen', 'reh-onexecutecommand-manageextensions', 'reh-onexecutecommand-getsystemstatus', 'reh-resolve-variables-host-env', 'reh-profile-config-host-setting'];
 
 const argv = process.argv.slice(2);
 const [mode, userDataArg] = argv;
@@ -76,6 +76,8 @@ fs.mkdirSync(evidence, { recursive: true });
 const arm = randomBytes(16).toString('hex');
 const port = await beaconPort();
 const canary = mintCanary('editor-env');
+// A host user setting the REH's profile path names (review RFU-1, patch 0034).
+const settingCanary = mintCanary('user-settings');
 const dialPath = `/seclab-dial-${arm}`;
 fs.writeFileSync(path.join(ws, 'README.md'), 'reh-push proof workspace\n');
 fs.writeFileSync(path.join(ws, '.vscode', 'settings.json'), JSON.stringify({
@@ -105,6 +107,7 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 	'seclab.tabs.driver': 'oci',
 	'seclab.tabs.image': IMAGE,
 	'seclab.tabs.allowedRoots': [base],
+	'seclab.test.canary': settingCanary.value,
 	'workbench.welcomePage.experimentalOnboarding': false,
 	'workbench.startupEditor': 'none',
 	'workbench.tips.enabled': false,

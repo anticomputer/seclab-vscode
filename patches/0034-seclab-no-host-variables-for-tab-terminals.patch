@@ -1,0 +1,67 @@
+diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-16 13:53:14
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-16 13:53:34
+@@ -23,6 +23,7 @@
+ import { ITerminalInstanceService } from './terminal.js';
+ import { Disposable } from '../../../../base/common/lifecycle.js';
+ import { isString, type SingleOrMany } from '../../../../base/common/types.js';
++import { seclabIsTabAuthority } from '../../../services/extensions/common/seclabRpcFilter.js';
+ 
+ export interface IProfileContextProvider {
+ 	getDefaultSystemShell(remoteAuthority: string | undefined, os: OperatingSystem): Promise<string>;
+@@ -333,21 +334,27 @@
+ 		// Resolve path variables
+ 		const activeWorkspaceRootUri = this._historyService.getLastActiveWorkspaceRoot(options.remoteAuthority ? Schemas.vscodeRemote : Schemas.file);
+ 		const lastActiveWorkspace = activeWorkspaceRootUri ? this._workspaceContextService.getWorkspaceFolder(activeWorkspaceRootUri) ?? undefined : undefined;
+-		profile.path = await this._resolveVariables(profile.path, env, lastActiveWorkspace);
++		const seclabTab = seclabIsTabAuthority(options.remoteAuthority);
++		profile.path = await this._resolveVariables(profile.path, env, lastActiveWorkspace, seclabTab);
+ 
+ 		// Resolve args variables
+ 		if (profile.args) {
+ 			if (isString(profile.args)) {
+-				profile.args = await this._resolveVariables(profile.args, env, lastActiveWorkspace);
++				profile.args = await this._resolveVariables(profile.args, env, lastActiveWorkspace, seclabTab);
+ 			} else {
+-				profile.args = await Promise.all(profile.args.map(arg => this._resolveVariables(arg, env, lastActiveWorkspace)));
++				profile.args = await Promise.all(profile.args.map(arg => this._resolveVariables(arg, env, lastActiveWorkspace, seclabTab)));
+ 			}
+ 		}
+ 
+ 		return profile;
+ 	}
+ 
+-	private async _resolveVariables(value: string, env: IProcessEnvironment, lastActiveWorkspace: IWorkspaceFolder | undefined) {
++	private async _resolveVariables(value: string, env: IProcessEnvironment, lastActiveWorkspace: IWorkspaceFolder | undefined, seclabTab = false) {
++		if (seclabTab) {
++			// seclab: a tab's REH supplies this profile; resolve only `${env:…}`, against the REH's
++			// own environment. `${config:…}`, `${userHome}` and the rest read host state.
++			return value.replace(/\$\{env:([^}]+)\}/g, (_m, name: string) => env[name] ?? '');
++		}
+ 		try {
+ 			value = await this._configurationResolverService.resolveWithEnvironment(env, lastActiveWorkspace, value);
+ 		} catch (e) {
+diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts
+--- a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-16 13:53:14
++++ b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-16 13:58:14
+@@ -138,6 +138,12 @@
+ 		const resolvedVariables = Object.create(null);
+ 		const lastActiveWorkspace = activeWorkspaceRootUri ? this._workspaceContextService.getWorkspaceFolder(activeWorkspaceRootUri) ?? undefined : undefined;
+ 		const expr = ConfigurationResolverExpression.parse({ shellLaunchConfig, configuration });
++		// seclab: a tab's REH chooses the shell launch config (its default shell and profiles), so
++		// the window resolves nothing for it: `${config:…}` is the host user's settings and
++		// selectedText may be a host document's. Sent unresolved, as for any unknown variable.
++		// The authority test is inlined: this file is in the REH bundle too, which must not
++		// load the filter module.
++		if (!/^seclab\+/.test(this._remoteAuthority)) {
+ 		try {
+ 			await this._resolverService.resolveAsync(lastActiveWorkspace, expr);
+ 		} catch (err) {
+@@ -147,6 +153,7 @@
+ 			if (/^config:/.test(inner) || inner === 'selectedText' || inner === 'lineNumber') {
+ 				resolvedVariables[inner] = resolved.value;
+ 			}
++		}
+ 		}
+ 
+ 		const envVariableCollections: ITerminalEnvironmentVariableCollections = [];

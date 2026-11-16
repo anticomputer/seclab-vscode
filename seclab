@@ -1221,13 +1221,15 @@ case "${1:-help}" in
 			filter-module) docker run --rm --network none --tmpfs /scratch -e SECLAB_SCRATCH=/scratch -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --experimental-transform-types --no-warnings test/containment/filter-module.test.ts ;;
 			# Patch 0009: a tab window registers, runs and sends no built-in chat tools or requests.
 			chat-gate) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/chat-gate.test.ts ;;
+			# Patch 0034: a tab window resolves no host variables in its REH's terminal launch config.
+			terminal-variables) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/terminal-variables.test.ts ;;
 			# RPC filter: patches 0030/0031 never register upstream's push handlers in a tab window.
 			push-refusal) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/push-refusal.test.ts ;;
 			# RPC filter: the shipped decision-log line formatter always writes JSON that parses.
 			decision-line) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/decision-line.test.ts ;;
 			# Every pure RPC-filter suite, so adding one to CI is a single edit.
 			rpc-filter)
-				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators decision-line check-probes push-refusal filter-module chat-gate; do
+				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators decision-line check-probes push-refusal filter-module chat-gate terminal-variables; do
 					printf '\n=== %s\n' "$t"
 					"$0" test "$t" || exit 1
 				done ;;
