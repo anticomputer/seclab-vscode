@@ -1698,8 +1698,9 @@
       "symbol": "seclabRefusePush(remoteAuthority, 'push:remoteterminal:$onExecuteCommand')"
     },
     "push:remoteterminal:$onPtyHostRequestResolveVariablesEvent": {
-      "mechanism": "ACCEPTED UNENFORCED ON THIS BRANCH. A patch exists that refuses this (0031-seclab-no-variable-resolution-for-tab-pty-hosts.patch, kept on the rpc-filter follow-up branch; renumbered out of the 0015-0021 range, which belongs to the agentic series, so that applying the queue by filename cannot silently displace 0015-seclab-ahp-gate.patch), but it is held back because the rogue-REH fixture has never been runnable: nothing applies its hook, so no runtime proof exists that the refusal works. Nothing unproven ships. The path is OPEN on main until the containment build variant lands and the probe is shown to go from succeeding to denied.",
-      "unenforced_accepted": true
+      "mechanism": "In a seclab+ window upstream's pty-host variable resolver is never registered; a refusing handler answers each request at once with the text unresolved, reaches no resolver or environment, and logs the policy key through the decision log. The local backend keeps upstream's resolver. Its proof is the rogue-REH reh-resolve-variables-host-env probe on the containment build variant, succeeding on the baseline and denied on the patched build (test/containment/reh-push.ts).",
+      "patch": "0031-seclab-no-variable-resolution-for-tab-pty-hosts.patch",
+      "symbol": "seclabRefusePush(seclabPtyHostAuthority, 'push:remoteterminal:$onPtyHostRequestResolveVariablesEvent')"
     },
     "push:agentHostLogger:onDidChangeLoggers": {
       "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with no code refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. These are not argued to be safe: the subscription search that reports zero workbench subscribers for most of them is my own sweep, which review showed under-reports, so a zero there is an unmeasured surface and not evidence of absence. The increment's claim is limited to host code execution, which patches 0007/0008/0015 close; this class is open work.",

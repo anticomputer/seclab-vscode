@@ -1,0 +1,63 @@
+diff -ruN a/src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts b/src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts
+--- a/src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts	2026-11-16 12:13:46
++++ b/src/vs/workbench/contrib/terminal/browser/baseTerminalBackend.ts	2026-11-16 12:14:24
+@@ -14,6 +14,7 @@
+ import { IHistoryService } from '../../../services/history/common/history.js';
+ import { IStatusbarEntry, IStatusbarEntryAccessor, IStatusbarService, StatusbarAlignment } from '../../../services/statusbar/browser/statusbar.js';
+ import { TerminalContribCommandId } from '../terminalContribExports.js';
++import { seclabIsTabAuthority, seclabRefusePush } from '../../../services/extensions/common/seclabRpcFilter.js';
+ 
+ export abstract class BaseTerminalBackend extends Disposable {
+ 	private _isPtyHostUnresponsive: boolean = false;
+@@ -35,7 +36,10 @@
+ 		historyService: IHistoryService,
+ 		configurationResolverService: IConfigurationResolverService,
+ 		statusBarService: IStatusbarService,
+-		protected readonly _workspaceContextService: IWorkspaceContextService
++		protected readonly _workspaceContextService: IWorkspaceContextService,
++		// seclab: the authority of this backend's pty host, undefined for the local one. A plain
++		// value, so the guard below does not depend on subclass field initialisation.
++		seclabPtyHostAuthority?: string
+ 	) {
+ 		super();
+ 
+@@ -83,6 +87,19 @@
+ 			this._isPtyHostUnresponsive = false;
+ 			this._onPtyHostResponsive.fire();
+ 		}));
++		// seclab: a tab's pty host names strings and gets back their values, resolved over the
++		// host user's shell environment (`${env:X}`); the workspaceId check is routing, not a
++		// boundary. In a tab window upstream's resolver is never registered: the refusal touches
++		// no resolver or environment, answers at once with the text unresolved, and logs only
++		// the policy key.
++		const seclabTab = seclabIsTabAuthority(seclabPtyHostAuthority);
++		if (seclabTab) {
++			this._register(this._ptyHostController.onPtyHostRequestResolveVariables(e => {
++				seclabRefusePush(seclabPtyHostAuthority, 'push:remoteterminal:$onPtyHostRequestResolveVariablesEvent');
++				this._ptyHostController.acceptPtyHostResolvedVariables(e.requestId, e.originalText.map(t => String(t)));
++			}));
++		}
++		if (!seclabTab) {
+ 		this._register(this._ptyHostController.onPtyHostRequestResolveVariables(async e => {
+ 			// Only answer requests for this workspace
+ 			if (e.workspaceId !== this._workspaceContextService.getWorkspace().id) {
+@@ -96,6 +113,7 @@
+ 			const result = await Promise.all(resolveCalls);
+ 			this._ptyHostController.acceptPtyHostResolvedVariables(e.requestId, result);
+ 		}));
++		}
+ 	}
+ 
+ 	restartPtyHost(): void {
+diff -ruN a/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts b/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts
+--- a/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts	2026-11-16 12:14:10
++++ b/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts	2026-11-16 12:14:24
+@@ -78,7 +78,7 @@
+ 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+ 		@IStatusbarService statusBarService: IStatusbarService
+ 	) {
+-		super(_remoteTerminalChannel, logService, _historyService, configurationResolverService, statusBarService, workspaceContextService);
++		super(_remoteTerminalChannel, logService, _historyService, configurationResolverService, statusBarService, workspaceContextService, remoteAuthority);
+ 
+ 		this._register(this._remoteTerminalChannel.onProcessData(e => this._ptys.get(e.id)?.handleData(e.event)));
+ 		this._register(this._remoteTerminalChannel.onProcessReplay(e => {

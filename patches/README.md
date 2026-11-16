@@ -144,6 +144,11 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   window upstream's `onExecuteCommand` handler, which runs a command the REH names, is never
   registered. A refusing handler answers each push at once with an error, touches no command
   service, and logs the policy key through the filter's decision log (`seclabRefusePush`).
+- `0031-seclab-no-variable-resolution-for-tab-pty-hosts.patch`: `baseTerminalBackend.ts`, and
+  the remote backend passes its authority. In a tab window upstream's variable resolver for
+  pty-host requests, which resolves `${env:…}` over the host user's shell environment, is
+  never registered. A refusing handler answers at once with the text unresolved and logs the
+  policy key. The local backend passes no authority and keeps upstream's resolver.
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
