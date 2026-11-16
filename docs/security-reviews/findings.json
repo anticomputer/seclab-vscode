@@ -12038,11 +12038,12 @@
 			"component": "build/hooks/pre-push",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "27b0972",
+			"commit": "73495df",
 			"test": {
 				"file": "test/hooks/hook-lock.test.sh",
-				"name": "a push with no ref lines is blocked, not reported clean (GATE-13)"
-			}
+				"name": "a push with no ref lines says nothing was checked, never \"0 ref(s) checked\" (GATE-13)"
+			},
+			"note": "Exiting 0 is right when git sends no ref lines (an up-to-date push publishes nothing); the fix is that the hook no longer reports refs as checked. Blocking it (the first fix) would have invited --no-verify (review FBA-1)."
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -13667,6 +13668,76 @@
 			"commit": "patch:92cb55ddc738306f460fb657fffde0851f0931b6",
 			"test": { "file": "build/check-required-checks.ts", "name": "a required job with a job-level if" },
 			"note": "Nine self-test cases, run with the check by ./seclab lint workflows in the required lint job; also proven on the real tree by injecting if: false into ci-unit."
+		},
+		{
+			"record": "20261116-gate-fail-open-remainder.md",
+			"anchor": "FBA-1",
+			"round": "Round FBA",
+			"severity": "medium",
+			"summary": "The first GATE-13 fix blocked every up-to-date push (git runs pre-push with no ref lines), inviting --no-verify, which drops both scans.",
+			"component": "build/hooks/pre-push",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "73495df",
+			"test": {
+				"file": "test/hooks/hook-lock.test.sh",
+				"name": "a push with no ref lines says nothing was checked, never \"0 ref(s) checked\" (GATE-13)"
+			}
+		},
+		{
+			"record": "20261116-gate-fail-open-remainder.md",
+			"anchor": "FBA-2",
+			"round": "Round FBA",
+			"severity": "low",
+			"summary": "seclab-wb-mount recognised the overlay by filesystem type only, so an overlay it didn't mount would have been accepted.",
+			"component": "write-back mount (seclab-wb-mount)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "73495df",
+			"gap": "Checked by hand in a real sbx tab (a forged device record is refused); no automated test runs the helper's mount path."
+		},
+		{
+			"record": "20261116-gate-fail-open-remainder.md",
+			"anchor": "FBA-3",
+			"round": "Round FBA",
+			"severity": "low",
+			"summary": "seclab-wb-mount's link-free walk doesn't drive the mount; later steps re-resolve the workspace path by name.",
+			"component": "write-back mount (seclab-wb-mount)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "In the measured sbx layout nothing can win the race, and the post-mount pin catches a moved share.",
+			"ref": {
+				"file": "docs/security-reviews/20261116-gate-fail-open-remainder.md",
+				"quote": "Nothing can win that race in the measured layout"
+			}
+		},
+		{
+			"record": "20261116-gate-fail-open-remainder.md",
+			"anchor": "FBA-4",
+			"round": "Round FBA",
+			"severity": "low",
+			"summary": "check-source reported clean on an empty patches/series, and its self-test didn't cover the wiring.",
+			"component": "build/check-source.ts",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "73495df",
+			"test": {
+				"file": "build/check-source.ts",
+				"name": "a checkout with empty series starts with both findings (the wiring the run uses)"
+			}
+		},
+		{
+			"record": "20261116-gate-fail-open-remainder.md",
+			"anchor": "FBA-5",
+			"round": "Round FBA",
+			"severity": "info",
+			"summary": "check-pins' purity probe depended on the supplied file list.",
+			"component": "build/check-pins.ts",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "73495df",
+			"gap": "No case removes the parser from the list while it stays on disk."
 		}
 	]
 }

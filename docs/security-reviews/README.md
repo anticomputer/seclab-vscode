@@ -41,9 +41,8 @@ the process and the index.
    Every commit an entry you add or modify cites must be on `main`'s history (or its entry's
    branch). After rebasing, squashing or deleting a branch the register names, run
    `./seclab findings remap --branch <name>`; it reports anything it can't follow. Cite a commit
-   that isn't on `main` yet as `patch:<patch-id>`: landing rebase-merges and re-creates commits, so
-   a branch SHA never lands (the check prints the form to use). After it lands,
-   `./seclab findings pin` writes the SHAs. The records
+   that isn't on `main` yet as `patch:<patch-id>` (`remap --patch` converts them), and pin the SHA
+   once it lands. The records
    themselves keep the SHAs they were written with.
    `./seclab docs check` enforces all of it.
 
@@ -147,7 +146,7 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-12 | [the publish gate (pre-push hook, CI and posted text)](20261112-publish-gate.md) | see record | see record |
 | 2026-11-12 | [patch 0036, the tab configuration snapshot](20261112-tab-configuration-snapshot.md) | origin/main..branch head: patch 0036, build/secret-rules and test/configsync. | see record |
 | 2026-11-16 | [broker dependency bumps past the CFS hold (round 18)](20261116-broker-dependency-bumps.md) | "broker: bump held attest-tool pins and the python and docker CLI images" | see record |
-| 2026-11-16 | [regression tests for broker findings, and MODEL-R4 (round 19)](20261116-broker-finding-tests.md) | - "broker: regression tests for four medium fixed-untested findings": build.sh --label and | see record |
+| 2026-11-16 | [the remaining gate fail-open findings and the write-back mount (round FBA)](20261116-gate-fail-open-remainder.md) | round FBA, by an Opus-class model: | see record |
 | 2026-11-16 | [landing through pull requests (round PRL)](20261116-pr-landing.md) | round PRL, by an Opus-class model, of the proposal in | see record |
 | 2026-11-16 | [RPC follow-ups, landing A (push refusals, 0011 retired, regression tests)](20261116-rpc-follow-ups.md) | see record | see record |
 <!-- index:end -->
