@@ -1102,14 +1102,23 @@ export interface SeclabMarkdown {
 
 /** `command:<id>?<args>` as the opener parses it: JSON in the query, an array or one value. */
 const SECLAB_COMMAND_LINK = /command:([^\s?)\]"'<>]+)(\?[^\s)\]"'<>]*)?/gi;
-/** Any image: inline `![alt](src ...)`, then every other `![alt]` (reference forms). */
-const SECLAB_INLINE_IMAGE = /!\[([^\]]*)\]\(\s*<?([^\s)>]*)>?(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g;
-const SECLAB_OTHER_IMAGE = /!\[([^\]]*)\](?:\[[^\]]*\])?/g;
+/**
+ * What opens an image or raw HTML in tab markdown. No pattern can strip images: nested and
+ * reference forms survive any pass (review RSC-2). So every `![` loses its image marker (the
+ * bracket is escaped) and every `<` that could open a tag or comment becomes an entity, which no
+ * preceding backslash can turn back into markup. Images and HTML then render as literal text.
+ */
+const SECLAB_IMAGE_OPEN = /!\[/g;
+const SECLAB_HTML_OPEN = /<(?=[A-Za-z/!?])/g;
+/** A snippet that reads the clipboard (upstream SnippetParser.guessNeedsClipboard, widened). */
+const SECLAB_SNIPPET_CLIPBOARD = /\$\{?\s*CLIPBOARD/;
 
 /** Rewrites one tab's data for trusted UI. */
 export interface SeclabFromTab {
 	command(cmd: { readonly id: string; readonly title?: string; readonly tooltip?: string; readonly arguments?: unknown[] } | undefined): { id: string; title: string; tooltip?: string; arguments: unknown[] } | undefined;
 	markdown(md: unknown): SeclabMarkdown;
+	/** False when a snippet from tab data would read the host clipboard (review RSC-1). */
+	snippetAllowed(insertText: string): boolean;
 }
 
 /**
@@ -1143,8 +1152,8 @@ export function seclabFromTab(
 		markdown(md) {
 			const raw = typeof md === 'string' ? md : (md && typeof (md as { value?: unknown }).value === 'string' ? (md as { value: string }).value : '');
 			const value = raw
-				.replace(SECLAB_INLINE_IMAGE, (_m, alt: string, src: string) => /^data:/i.test(src) ? _m : alt)
-				.replace(SECLAB_OTHER_IMAGE, (_m, alt: string) => alt)
+				.replace(SECLAB_IMAGE_OPEN, '!\\[')
+				.replace(SECLAB_HTML_OPEN, '&lt;')
 				.replace(SECLAB_COMMAND_LINK, (_m, rawId: string, query: string | undefined) => {
 					let id: string;
 					let args: unknown[] = [];
@@ -1160,14 +1169,18 @@ export function seclabFromTab(
 					}
 					return link(id, args);
 				});
-			// Anything the rewrite missed stays inert: only the token command is enabled, and HTML
-			// is off, so no <img>, no <a> and no styled span reaches the renderer.
+			// Anything the link rewrite missed stays inert: only the token command is enabled. HTML
+			// is off and every tag opener is escaped above, so no <img>, <a> or <span> block reaches
+			// the renderer (a trusted string would otherwise pass `<span …>` blocks through).
 			return {
 				value,
 				isTrusted: { enabledCommands: [SECLAB_TAB_COMMAND] },
 				supportThemeIcons: (md as { supportThemeIcons?: unknown } | undefined)?.supportThemeIcons === true,
 				supportHtml: false,
 			};
+		},
+		snippetAllowed(insertText) {
+			return typeof insertText === 'string' && !SECLAB_SNIPPET_CLIPBOARD.test(insertText);
 		},
 	};
 }

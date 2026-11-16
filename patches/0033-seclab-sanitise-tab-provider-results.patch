@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts b/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts
 --- a/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts	2026-11-16 13:20:33
-+++ b/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts	2026-11-16 13:20:47
++++ b/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts	2026-11-16 18:40:03
 @@ -33,6 +33,7 @@
  import * as search from '../../contrib/search/common/search.js';
  import * as typeh from '../../contrib/typeHierarchy/common/typeHierarchy.js';
@@ -51,17 +51,18 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts b/src/vs/
  				}
  				return {
 -					suggestions: result[ISuggestResultDtoField.completions].map(d => MainThreadLanguageFeatures._inflateSuggestDto(result[ISuggestResultDtoField.defaultRanges], d, extensionId)),
-+					suggestions: result[ISuggestResultDtoField.completions].map(d => this._seclabCompletion(MainThreadLanguageFeatures._inflateSuggestDto(result[ISuggestResultDtoField.defaultRanges], d, extensionId))),
++					suggestions: result[ISuggestResultDtoField.completions].map(d => this._seclabSnippet(this._seclabCompletion(MainThreadLanguageFeatures._inflateSuggestDto(result[ISuggestResultDtoField.defaultRanges], d, extensionId)))),
  					incomplete: result[ISuggestResultDtoField.isIncomplete] || false,
  					duration: result[ISuggestResultDtoField.duration],
  					dispose: () => {
-@@ -636,12 +642,23 @@
+@@ -636,12 +642,32 @@
  						return suggestion;
  					}
  
 -					const newSuggestion = MainThreadLanguageFeatures._inflateSuggestDto(suggestion.range, result, extensionId);
+-					return mixin(suggestion, newSuggestion, true);
 +					const newSuggestion = this._seclabCompletion(MainThreadLanguageFeatures._inflateSuggestDto(suggestion.range, result, extensionId));
- 					return mixin(suggestion, newSuggestion, true);
++					return this._seclabSnippet(mixin(suggestion, newSuggestion, true));
  				});
  			};
  		}
@@ -73,6 +74,15 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts b/src/vs/
 +	private _seclabCompletion(item: languages.CompletionItem): languages.CompletionItem {
 +		const seclab = this._seclabFromTab;
 +		return seclab ? { ...item, command: seclab.command(item.command), documentation: item.documentation && typeof item.documentation !== 'string' ? seclab.markdown(item.documentation) : item.documentation } : item;
++	}
++
++	/** seclab: a tab's snippet that reads the host clipboard is inserted as plain text (RSC-1). */
++	private _seclabSnippet(item: languages.CompletionItem): languages.CompletionItem {
++		const rules = item.insertTextRules ?? 0;
++		if (this._seclabFromTab && (rules & languages.CompletionItemInsertTextRule.InsertAsSnippet) && !this._seclabFromTab.snippetAllowed(item.insertText)) {
++			item.insertTextRules = rules & ~languages.CompletionItemInsertTextRule.InsertAsSnippet;
++		}
++		return item;
 +	}
 +
 +	/** seclab: a tab's selector without a scheme matches only its own (remote) documents. */
