@@ -244,6 +244,16 @@
 					"date": "2026-11-12"
 				}
 			]
+		},
+		{
+			"id": "fixture:test/nbsync/probe-extension",
+			"runBy": "test/nbsync/probe.ts prepare|check (editor launched by test/window.ts) or drive (headless driver) (macOS, sbx, local only)",
+			"evidence": [
+				{
+					"record": "docs/edr/20261116-notebook-sync.md",
+					"date": "2026-11-16"
+				}
+			]
 		}
 	]
 }
