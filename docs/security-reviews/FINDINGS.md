@@ -15,11 +15,11 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 7 | 66 | 159 | 178 | 20 | 430 |
+| fixed | 7 | 66 | 159 | 179 | 20 | 431 |
 | fixed-untested | 3 | 16 | 57 | 158 | 54 | 288 |
 | accepted-residual | 0 | 1 | 12 | 67 | 19 | 99 |
 | deferred | 6 | 4 | 18 | 9 | 3 | 40 |
-| open | 0 | 2 | 14 | 16 | 4 | 36 |
+| open | 0 | 2 | 14 | 15 | 4 | 35 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
 | **all** | 16 | 89 | 260 | 428 | 106 | 899 |
 
@@ -353,7 +353,6 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261109-ext-host-restart-reresolve](20261109-ext-host-restart-reresolve.md) **OOO-1** | low | fixed-untested | patch 0040 ext-host restart re-resolve | Overlapping extension-host restarts: the second skipped the re-resolve and the first completed its request with a socket factory from a stopped host. | The managed authority is remembered and each restart takes a generation number, so a stale resolution is dropped; no test drives two overlapping restarts (the focus probe only covers a single restart-extension-host step). |
 | [20261109-level-b-repair](20261109-level-b-repair.md) **—** | low | accepted-residual | level B evidence check (OCI coverage) | fsmonitor is not armed on OCI tabs, so that vector has no Level B coverage there. | accepted by an agent: An OCI tab writes .git/config straight to the host checkout (no write-back gate), so the vector is reported as an explicit known-gap row naming the write-back-gate ADR; Level A still covers fsmonitor on OCI. |
 | [20261109-liveness-gate](20261109-liveness-gate.md) **KKK-4** | low | fixed-untested | liveness gate (verify-runs container) | The token-holding, networked \`verify-runs\` container mounted the whole repo, diverging from EE-2/DD-4. | Enforced only by \`seclab\` ("node build/import-closure.ts build/liveness/liveness.ts -- ${LIVENESS_VERIFY_FILES\[*\]}"), which is not a regression test: no test fails if the fix is reverted. |
-| [20261109-liveness-refresh](20261109-liveness-refresh.md) **—** | low | open | liveness gate / ci workflows (liveness-refresh) | A push run cannot be register evidence (\`verifyRuns\` requires dispatch or schedule), so liveness-refresh counts as live only because it runs on push. | build/liveness/register.json still has no \`workflow:liveness-refresh\` subject (verified by grep), so no evidence cites the first scheduled run as the record asks. |
 | [20261109-liveness-refresh](20261109-liveness-refresh.md) **—#2** | low | accepted-residual | liveness gate (verify-runs) | \`verify-runs\` checks only \`run\` evidence, so with none left it would pass over nothing. | accepted by an agent: Pre-existing, and the register has run evidence today; the offline check still covers every subject. |
 | [20261109-liveness-refresh](20261109-liveness-refresh.md) **—#3** | low | accepted-residual | ci workflows (liveness-refresh) | A liveness-refresh failure is only a scheduled-run notification; no owner or response window is named. | accepted by an agent: Deliberate trade-off so that lapsing evidence does not block PRs on age. |
 | [20261109-liveness-refresh](20261109-liveness-refresh.md) **MMM-2** | low | fixed-untested | ci workflows (liveness-refresh) | A lost \`--refresh\` failed open: the weekly job silently reverted to the required check's behaviour, and \`seclab\` was not in the push paths. | Enforced only by \`.github/workflows/liveness-refresh.yml\` ("grep -qx 'liveness: refresh mode'"), which is not a regression test: no test fails if the fix is reverted. |
@@ -1630,7 +1629,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | MMM-2 | low | fixed-untested | A lost \`--refresh\` failed open: the weekly job silently reverted to the required check's behaviour, and \`seclab\` was not in the push paths. | Enforced only by \`.github/workflows/liveness-refresh.yml\` ("grep -qx 'liveness: refresh mode'"), which is not a regression test: no test fails if the fix is reverted. |
 | MMM-3 | low | fixed-untested | The concurrency group was global, so a branch push could supersede the scheduled run, which then reads as cancelled. | \`group: liveness-refresh-${{ github.ref }}\` is in the workflow (verified), but no lint or test asserts per-ref concurrency groups. |
 | MMM-4 | low | fixed-untested | \`./seclab liveness verify-runs\` did not bound \`$#\` before its argument allow-list. | \`\[\[ $# -le 2 \]\]\` is present before the case allow-list, but no test drives seclab's argument handling. |
-| — | low | open | A push run cannot be register evidence (\`verifyRuns\` requires dispatch or schedule), so liveness-refresh counts as live only because it runs on push. | build/liveness/register.json still has no \`workflow:liveness-refresh\` subject (verified by grep), so no evidence cites the first scheduled run as the record asks. |
+| — | low | fixed | A push run cannot be register evidence (\`verifyRuns\` requires dispatch or schedule), so liveness-refresh counts as live only because it runs on push. | 6ca347e · `build/liveness/liveness.ts` "scheduled and push, never run on schedule" |
 | —#2 | low | accepted-residual | \`verify-runs\` checks only \`run\` evidence, so with none left it would pass over nothing. | accepted by an agent: Pre-existing, and the register has run evidence today; the offline check still covers every subject. |
 | —#3 | low | accepted-residual | A liveness-refresh failure is only a scheduled-run notification; no owner or response window is named. | accepted by an agent: Deliberate trade-off so that lapsing evidence does not block PRs on age. |
 
