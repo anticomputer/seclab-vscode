@@ -40,6 +40,12 @@ interactive window's input) is:
   untitled document this host created or that was empty when it appeared). Never by scheme, so a
   tab can't claim a host scheme by registering a provider for it (review EDT-3).
 
+The document sync's `MainThreadDocumentsAndEditors` publishes that judgement, by URI, on the
+host's 0035 origin record, so the editor-tab model takes no new services and its constructor keeps
+upstream's signature (upstream's unit test constructs it). Until the judgement is published,
+nothing counts as the tab's own; publishing it fires 0035's change event, which rebuilds the model.
+Filtering is decided from the host context's own authority, as 0035's fail-closed path does.
+
 Any other editor, including one with no resource at all, reaches the tab as present only: an
 opaque id, `UnknownInput` and the label `Editor`. Ids are a salted SHA-1 of upstream's id for every
 editor, so an id never changes when an editor's status does. When 0035's tags change (a provider's
@@ -57,7 +63,8 @@ model appears after its diff tab opened), the model is rebuilt and resent.
 - Webview panels and terminals keep their titles (review EDT-5, EDT-6): under the RPC filter a tab
   creates no webview panel, and terminal names already reach every host through the terminal
   service (DOCSYNC-R5).
-- At 70 changed lines the patch is over the usual size; it is one concern in one file.
+- At 70 changed lines in three files (the editor-tab model, and the two 0035 files that publish
+  the judgement) the patch is over the usual size; it is one concern.
 - If the filter ever allows `$moveTab` or `$closeTab`, the opaque ids already round-trip (the
   window's lookup uses the same ids).
 

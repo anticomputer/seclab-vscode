@@ -1,18 +1,30 @@
+diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts
+--- a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-16 15:28:42
++++ b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-16 15:28:53
+@@ -308,6 +308,12 @@
+ 
+ 		seclabOrigin(extHostContext).filtered = seclabIsFiltered(extHostContext, environmentService.remoteAuthority);
+ 		const shouldSync = (model: ITextModel) => seclabShouldSync(extHostContext, model, environmentService.remoteAuthority, fileService, this._textFileService);
++		// seclab (patch 0038): the same judgement by URI, for the editor-tab model.
++		seclabOrigin(extHostContext).owns = uri => {
++			const model = this._modelService.getModel(uri);
++			return !!model && shouldSync(model);
++		};
++		seclabOrigin(extHostContext).onDidChange.fire();
+ 		this._mainThreadDocuments = this._register(new MainThreadDocuments(extHostContext, this._modelService, this._textFileService, fileService, textModelResolverService, environmentService, uriIdentityService, workingCopyFileService, pathService));
+ 		extHostContext.set(MainContext.MainThreadDocuments, this._mainThreadDocuments);
+ 
 diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts
 --- a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-16 14:53:14
-+++ b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-16 15:10:20
-@@ -29,7 +29,33 @@
++++ b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-16 15:29:04
+@@ -29,7 +29,29 @@
  import { GroupDirection, IEditorGroup, IEditorGroupsService, preferredSideBySideGroupDirection } from '../../services/editor/common/editorGroupsService.js';
  import { IEditorsChangeEvent, IEditorService, SIDE_GROUP } from '../../services/editor/common/editorService.js';
  import { extHostNamedCustomer, IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
 +import { StringSHA1 } from '../../../base/common/hash.js';
 +import { Schemas } from '../../../base/common/network.js';
 +import { generateUuid } from '../../../base/common/uuid.js';
-+import { IModelService } from '../../../editor/common/services/model.js';
-+import { IFileService } from '../../../platform/files/common/files.js';
-+import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
-+import { ITextFileService } from '../../services/textfile/common/textfiles.js';
-+import { seclabIsFiltered, seclabOrigin, seclabShouldSync } from './seclabDocumentOrigin.js';
++import { seclabIsFiltered, seclabOrigin } from './seclabDocumentOrigin.js';
  
 +/** Every resource an editor shows (seclab, patch 0038): both sides, diffs of any kind, merge inputs, multi-diff entries. */
 +function seclabEditorUris(editor: EditorInput): URI[] {
@@ -35,7 +47,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  interface TabInfo {
  	tab: IEditorTabDto;
  	group: IEditorGroup;
-@@ -48,16 +74,50 @@
+@@ -48,6 +70,8 @@
  	private readonly _tabInfoLookup: Map<string, TabInfo> = new Map();
  	// Tracks resource-change listeners for currently open multi-diff tabs
  	private readonly _multiDiffEditorInputListeners: DisposableMap<string> = new DisposableMap();
@@ -44,21 +56,14 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  
  	constructor(
  		extHostContext: IExtHostContext,
- 		@IEditorGroupsService private readonly _editorGroupsService: IEditorGroupsService,
- 		@IConfigurationService private readonly _configurationService: IConfigurationService,
- 		@ILogService private readonly _logService: ILogService,
--		@IEditorService editorService: IEditorService
-+		@IEditorService editorService: IEditorService,
-+		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
-+		@IModelService modelService: IModelService,
-+		@IFileService fileService: IFileService,
-+		@ITextFileService textFileService: ITextFileService,
+@@ -58,6 +82,35 @@
  	) {
  
  		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostEditorTabs);
 +		// seclab (patch 0038): a tab's host learns of host-side editors in its window only that they
 +		// exist: no URI, label or resource-bearing id. Its own are those 0035 would sync to it.
-+		const authority = environmentService.remoteAuthority;
++		// The host's own authority: for a tab's remote host, the window's (fails closed like 0035).
++		const authority = extHostContext.remoteAuthority ?? undefined;
 +		if (seclabIsFiltered(extHostContext, authority)) {
 +			const o = seclabOrigin(extHostContext);
 +			const salt = generateUuid();
@@ -68,9 +73,9 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
 +					return u.scheme !== Schemas.vscodeRemote || u.authority === authority;
 +				}
 +				// Anything else only as 0035 judges its model (provider-made, born under this host's
-+				// filesystem provider, or untitled the user typed): never by scheme.
-+				const model = modelService.getModel(u);
-+				return !!model && seclabShouldSync(extHostContext, model, authority, fileService, textFileService);
++				// filesystem provider, or untitled the user typed), never by scheme; nothing before
++				// the document sync publishes its judge (it fires onDidChange then).
++				return o.owns?.(u) ?? false;
 +			};
 +			this._seclabHost = editor => {
 +				const uris = seclabEditorUris(editor);
@@ -87,7 +92,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  
  		// Main listener which responds to events from the editor service
  		this._dispoables.add(editorService.onDidEditorsChange((event) => {
-@@ -96,7 +156,7 @@
+@@ -96,7 +149,7 @@
  		const editorId = editor.editorId;
  		const tab: IEditorTabDto = {
  			id: this._generateTabId(editor, group.id),
@@ -96,7 +101,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  			editorId,
  			input: this._editorInputToDto(editor),
  			isPinned: group.isSticky(editorIndex),
-@@ -108,6 +168,9 @@
+@@ -108,6 +161,9 @@
  	}
  
  	private _editorInputToDto(editor: EditorInput): AnyInputDto {
@@ -106,7 +111,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  
  		if (editor instanceof MergeEditorInput) {
  			return {
-@@ -250,7 +313,7 @@
+@@ -250,7 +306,7 @@
  		} else {
  			resourceString = `${resource?.primary?.toString()}-${resource?.secondary?.toString()}`;
  		}
@@ -115,7 +120,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  	}
  
  	/**
-@@ -276,7 +339,7 @@
+@@ -276,7 +332,7 @@
  		const tabInfo = this._tabInfoLookup.get(tabId);
  		// If tab is found patch, else rebuild
  		if (tabInfo) {
@@ -124,3 +129,23 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  			this._proxy.$acceptTabOperation({
  				groupId,
  				index: editorIndex,
+diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts
+--- a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-16 15:28:42
++++ b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-16 15:28:53
+@@ -12,6 +12,7 @@
+ 
+ import { Emitter } from '../../../base/common/event.js';
+ import { Schemas } from '../../../base/common/network.js';
++import { URI } from '../../../base/common/uri.js';
+ import { ITextModel, shouldSynchronizeModel } from '../../../editor/common/model.js';
+ import { IFileService, IFileSystemProvider } from '../../../platform/files/common/files.js';
+ import { IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
+@@ -28,6 +29,8 @@
+ 	writing: ITextModel | undefined;
+ 	/** Set by MainThreadDocumentsAndEditors: a non-local host in a `seclab+` window. */
+ 	filtered = false;
++	/** Set by MainThreadDocumentsAndEditors (patch 0038): whether this host owns the model at a URI. */
++	owns: ((uri: URI) => boolean) | undefined;
+ }
+ const origins = new WeakMap<IExtHostContext, SeclabOrigin>();
+ // What a model was when the window first saw it: every host's predicate records it, at birth.
