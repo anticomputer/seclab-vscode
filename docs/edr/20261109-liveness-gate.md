@@ -44,11 +44,17 @@ Reviews ask what code says. Nothing asked whether anything calls it.
   - **Tombstones** (`removed`) list exemptions removed on purpose. Re-adding one fails, even
     when a merge also brings back the code that made the subject dead, which the stale rule
     alone can't see (review [LSR](../security-reviews/20261116-liveness-schedule-and-tombstones.md)).
+    They are append-only against the base register (the merge base with main, or on main the
+    push's previous head), so taking a branch's whole register in a merge can't drop one. A
+    deliberate return gives the tombstone `restored` with why; a union merge of that edit keeps
+    both lines and fails as listed twice.
 - **Runtime half.** Discovered from the tree, and matched exactly against the register's
   `subjects`:
   - workflows with a `schedule`, or with no `push` or `pull_request` trigger. A workflow
     subject's evidence must be `run`s of that workflow: a push run shows the code works, not
-    that the schedule does. Trigger keys are unquoted first, so `"schedule":` counts;
+    that the schedule does. Trigger keys and filter keys are unquoted first, so `"schedule":`
+    and `"branches":` count. Two workflow files with one stem (`x.yml`, `x.yaml`) fail: GitHub
+    runs both, but they would share one subject;
   - test-only hooks in `test/builds/variants.json`;
   - each child of a test `fixtures` dir, and each test extension (a dir with `package.json`
     under `test/`).

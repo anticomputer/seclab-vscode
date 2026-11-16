@@ -69,6 +69,9 @@ jobs:
       - name: Liveness gate self-test
         run: ./seclab liveness --self-test
       - name: Liveness gate (offline)
+        env:
+          # On main, tombstones are compared with the push's previous head (as docs-check does).
+          DOCS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: ./seclab liveness check
       - name: Liveness gate (the recorded Actions runs exist and succeeded; register only, KKK-4)
         env:

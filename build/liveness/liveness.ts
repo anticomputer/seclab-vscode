@@ -17,6 +17,7 @@
 //            twice (a union merge keeps both an old and a superseding entry).
 //   removed  a tombstone for an exemption removed on purpose: re-adding that subject to
 //            `exempt` fails, even when a merge also brings back the code that made it dead.
+//            Append-only against the base register (--base); `restored` says why one came back.
 // Runtime half (register.json `subjects`, matched exactly against what the tree contains):
 //   workflow every workflow with a schedule, or that never runs on push or pull_request. Its
 //            evidence is runs of that workflow only (a push run shows the code, not the schedule);
@@ -33,7 +34,7 @@
 //            every run.
 //
 // Usage (through ./seclab liveness, which feeds `git ls-files -z` on stdin):
-//        node build/liveness/liveness.ts check - [--verify-runs]
+//        node build/liveness/liveness.ts check - --base BASE_REGISTER_FILE
 //        node build/liveness/liveness.ts marks FILE.yml#JOB LOGFILE
 //        node build/liveness/liveness.ts --self-test
 
@@ -45,8 +46,11 @@ export interface Exempt { subject: string; consumer: string | null; reason: stri
 export interface Entry { subject: string; calledBy: string; declaredIn: string }
 export interface Evidence { run?: number; workflow?: string; job?: string; sha?: string; date?: string; ci?: string; mark?: string; runner?: string; record?: string }
 export interface Subject { id: string; runBy: string; evidence: Evidence[] }
-/** An exemption removed on purpose, kept so that a merge cannot quietly bring it back. */
-export interface Removed { subject: string; reason: string }
+/**
+ * An exemption removed on purpose, kept so that a merge cannot quietly bring it back. Append-only
+ * against the base register; `restored` says why bringing it back is deliberate.
+ */
+export interface Removed { subject: string; reason: string; restored?: string }
 export interface Register { entry?: Entry[]; exempt: Exempt[]; removed?: Removed[]; subjects: Subject[] }
 
 const REGISTER = 'build/liveness/register.json';
@@ -528,10 +532,10 @@ export function triggers(yml: string, files?: string[]): string[] {
 			key = undefined;
 			continue;
 		}
-		const k = /^ {4}(branches|branches-ignore|paths|paths-ignore):\s*(.*)$/.exec(l);
+		const k = /^ {4}(["']?)(branches|branches-ignore|paths|paths-ignore)\1\s*:\s*(.*)$/.exec(l);
 		if (k && cur) {
-			key = k[1];
-			const v = k[2].replace(/#.*/, '').trim();
+			key = k[2];
+			const v = k[3].replace(/#.*/, '').trim();
 			const f = filters.get(cur) ?? new Map<string, string[]>();
 			f.set(key, v ? v.replace(/^\[|\]$/g, '').split(',').map(unq).filter(Boolean) : []);
 			filters.set(cur, f);
@@ -666,7 +670,7 @@ export function discover(files: string[], read: (f: string) => string): Map<stri
 
 export interface Report { errors: string[]; notes: string[] }
 
-export async function check(files: string[], read: (f: string) => string, opts: { links?: Map<string, string> } = {}): Promise<Report> {
+export async function check(files: string[], read: (f: string) => string, opts: { links?: Map<string, string>; base?: Register | null } = {}): Promise<Report> {
 	const errors: string[] = [];
 	const notes: string[] = [];
 	const has = new Set(files);
@@ -735,16 +739,26 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 	}
 
 	const exempted = new Set<string>();
-	const tombs = new Map<string, string>();
+	const tombs = new Map<string, Removed>();
 	for (const t of reg.removed ?? []) {
-		if (!t || typeof t.subject !== 'string' || !/^[^#\s]+#?[^#\s]*$/.test(t.subject) || typeof t.reason !== 'string' || !t.reason.trim()) {
-			errors.push(`removed ${JSON.stringify(t)}: needs subject and reason`);
+		if (!t || typeof t.subject !== 'string' || !/^[^#\s]+#?[^#\s]*$/.test(t.subject) || typeof t.reason !== 'string' || !t.reason.trim()
+			|| (t.restored !== undefined && (typeof t.restored !== 'string' || !t.restored.trim()))) {
+			errors.push(`removed ${JSON.stringify(t)}: needs subject and reason (and, if present, a non-empty restored)`);
 			continue;
 		}
 		if (tombs.has(t.subject)) {
 			errors.push(`removed ${t.subject}: listed twice`);
 		}
-		tombs.set(t.subject, t.reason);
+		tombs.set(t.subject, t);
+	}
+	// Tombstones are append-only against the base register (main, or the push's previous head):
+	// a resolution that takes a branch's whole register, or an edit, can't drop one (LSR-6).
+	if (opts.base !== undefined) {
+		for (const t of opts.base?.removed ?? []) {
+			if (t && typeof t.subject === 'string' && !tombs.has(t.subject)) {
+				errors.push(`removed ${t.subject}: dropped, but tombstones are append-only (the base register has it); to bring the exemption back on purpose, give the tombstone \`restored\` with why`);
+			}
+		}
 	}
 	for (const x of reg.exempt ?? []) {
 		if (!x || typeof x.subject !== 'string' || typeof x.reason !== 'string' || !x.reason.trim() || !('consumer' in x)) {
@@ -756,8 +770,9 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 		if (exempted.has(x.subject)) {
 			errors.push(`exempt ${x.subject}: listed twice (a merge kept an old entry and the one that replaced it?)`);
 		}
-		if (tombs.has(x.subject)) {
-			errors.push(`exempt ${x.subject}: its exemption was removed on purpose (${tombs.get(x.subject)}); drop it, or drop the \`removed\` entry if bringing it back is deliberate`);
+		const tomb = tombs.get(x.subject);
+		if (tomb && tomb.restored === undefined) {
+			errors.push(`exempt ${x.subject}: its exemption was removed on purpose (${tomb.reason}); drop it, or give the tombstone \`restored\` with why if bringing it back is deliberate`);
 		}
 		exempted.add(x.subject);
 		const [file, name] = x.subject.split('#');
@@ -791,6 +806,16 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 
 	// Runtime subjects.
 	const found = discover(files, read);
+	// GitHub runs x.yml and x.yaml as two workflows, but both are subject `workflow:x`: the twin
+	// would need no evidence of its own (LSR-5).
+	const stems = new Map<string, string>();
+	for (const f of files.filter(f => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(f))) {
+		const stem = path.posix.basename(f).replace(/\.ya?ml$/, '');
+		if (stems.has(stem)) {
+			errors.push(`${stems.get(stem)} and ${f} are both subject workflow:${stem}; rename one`);
+		}
+		stems.set(stem, f);
+	}
 	const ids = new Set<string>();
 	for (const s of reg.subjects ?? []) {
 		if (!s || typeof s.id !== 'string' || typeof s.runBy !== 'string' || !s.runBy.trim() || !Array.isArray(s.evidence) || !s.evidence.length) {
@@ -1020,13 +1045,13 @@ async function selfTest(): Promise<void> {
 			],
 		}),
 	};
-	const run = (tree: Record<string, string>) => check(Object.keys(tree).sort(), f => {
+	const run = (tree: Record<string, string>, base?: Register | null) => check(Object.keys(tree).sort(), f => {
 		if (!(f in tree)) {
 			throw new Error(`ENOENT ${f}`);
 		}
 		return tree[f];
-	});
-	const control = await run(base);
+	}, { base });
+	const control = await run(base, JSON.parse(base['build/liveness/register.json']) as Register);
 	if (control.errors.length) {
 		throw new Error(`self-test control failed. Either the gate or this self-test is wrong: establish which before believing either (re-run the control alone):\n${control.errors.join('\n')}`);
 	}
@@ -1078,6 +1103,10 @@ async function selfTest(): Promise<void> {
 	for (const [spelling, on] of [['"schedule":', 'on:\n  "schedule":\n    - cron: \'1 1 * * 1\'\n  push:\n'], ["'schedule' :", "on:\n  'schedule' :\n    - cron: '1 1 * * 1'\n  push:\n"], ['an inline quoted list', 'on: ["schedule", push]\n']]) {
 		injections.push([`LSR-1 schedule spelled ${spelling}`, { ...base, '.github/workflows/alarm.yml': `${on}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:alarm .* add it to/]);
 	}
+	for (const [spelling, filter] of [['"branches": [nope]', '    "branches": [nope]\n'], ['branches : [nope]', '    branches : [nope]\n'], ["'paths-ignore': ['**']", "    'paths-ignore': ['**']\n"]]) {
+		injections.push([`LSR-4 push filter spelled ${spelling}`, { ...base, '.github/workflows/nightly.yml': `on:\n  workflow_dispatch:\n  push:\n${filter}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:nightly .* add it to/]);
+	}
+	injections.push(['LSR-5 a .yaml twin of a registered .yml workflow', { ...base, '.github/workflows/weekly.yaml': "on:\n  schedule:\n    - cron: '2 2 * * 2'\njobs:\n  r:\n    steps:\n      - run: echo\n" }, /weekly\.yaml and \.github\/workflows\/weekly\.yml are both subject workflow:weekly/]);
 	{ // 4. an array nobody reads (seclabTaintEscapes): only test-reached code writes it
 		const r = reg();
 		r.exempt = r.exempt.filter(x => x.subject !== 'tabd/src/rpc.ts#escapes');
@@ -1129,6 +1158,22 @@ async function selfTest(): Promise<void> {
 		const got = await run(tree);
 		if (!got.errors.some(e => want.test(e))) {
 			throw new Error(`self-test: injected "${name}" not caught; got:\n${got.errors.join('\n') || '(no errors)'}`);
+		}
+	}
+	// LSR-6: tombstones are append-only against the base register; `restored` is the only way back.
+	{
+		const r = reg();
+		r.removed = [];
+		const got = await run(withReg(r), reg());
+		if (!got.errors.some(e => /removed tabd\/src\/zombie\.ts#resurrected: dropped, but tombstones are append-only/.test(e))) {
+			throw new Error(`self-test: injected "LSR-6 a tombstone dropped against the base" not caught; got:\n${got.errors.join('\n') || '(no errors)'}`);
+		}
+		const back = reg();
+		back.removed = [{ ...back.removed![0], restored: 'synthetic: brought back on purpose' }];
+		back.exempt.push({ subject: 'tabd/src/zombie.ts#resurrected', consumer: null, reason: 'brought back on purpose' });
+		const ok = await run(withReg(back, { 'tabd/src/zombie.ts': 'export function resurrected() {}\n' }), reg());
+		if (ok.errors.length) {
+			throw new Error(`self-test: a restored tombstone with its exemption back should pass; got:\n${ok.errors.join('\n')}`);
 		}
 	}
 	const r = JSON.parse(base['build/liveness/register.json']) as Register;
@@ -1218,7 +1263,11 @@ if (import.meta.main) {
 	};
 	if (cmd === '--self-test') {
 		await selfTest();
-	} else if (cmd === 'check' && rest.length === 1 && rest[0] === '-') {
+	} else if (cmd === 'check' && rest.length === 3 && rest[0] === '-' && rest[1] === '--base') {
+		// The base register (main's, or the push's previous head's) is required, so the tombstone
+		// rule can't be skipped by omission; an empty file means the base predates the register.
+		const baseText = fs.readFileSync(rest[2], 'utf8');
+		const base = baseText.trim() ? JSON.parse(baseText) as Register : null;
 		const files = fs.readFileSync(0, 'utf8').split('\0').filter(Boolean).filter(f => fs.existsSync(path.join(repo, f)));
 		const links = new Map<string, string>();
 		for (const f of files) {
@@ -1226,7 +1275,7 @@ if (import.meta.main) {
 				links.set(f, path.posix.normalize(path.posix.join(path.posix.dirname(f), fs.readlinkSync(path.join(repo, f)))));
 			}
 		}
-		report(await check(files.filter(f => !links.has(f)), read, { links }), 'liveness: ok (Actions runs are verified by verify-runs)');
+		report(await check(files.filter(f => !links.has(f)), read, { links, base }), 'liveness: ok (Actions runs are verified by verify-runs)');
 	} else if (cmd === 'verify-runs' && (rest.length === 0 || (rest.length === 1 && rest[0] === '--refresh'))) {
 		// --refresh (the weekly liveness-refresh workflow): evidence near or past the retention
 		// horizon fails, so it's re-run before it lapses; the required check only notes it. The
@@ -1240,7 +1289,7 @@ if (import.meta.main) {
 		const log = fs.existsSync(rest[1]) ? fs.readFileSync(rest[1], 'utf8') : undefined;
 		report({ errors: checkMarks(JSON.parse(read(REGISTER)) as Register, rest[0], log), notes: [] }, `liveness marks ${rest[0]}: ok`);
 	} else {
-		console.error('usage: liveness.ts check - | verify-runs | marks FILE.yml#JOB LOG | --self-test');
+		console.error('usage: liveness.ts check - --base FILE | verify-runs | marks FILE.yml#JOB LOG | --self-test');
 		process.exit(2);
 	}
 }
