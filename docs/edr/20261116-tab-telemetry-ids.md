@@ -43,18 +43,29 @@ is checked:
 2. **Release:** `build/check-release.sh` requires every app `product.json` (desktop app and REH,
    vendored copies under `node_modules` excluded as for the RPC stamp) to name `enableTelemetry`
    exactly once in the file, on a top-level line `"enableTelemetry": false` (the build writes the
-   file tab-indented, so top level is one tab). Anything else fails closed: `true`, missing, twice,
-   only inside a nested object, or a file not tab-indented. The self-test (run by `ci-unit`)
-   injects each of those.
-3. **Runtime:** `test/telemetryid/probe.ts` is the regression test: the tab's machineId must not
-   be the seeded host id.
+   file tab-indented, so top level is one tab), with no `\u` escape anywhere in the file (an escaped
+   duplicate key would beat the text match; jq writes none). Anything else fails closed: `true`,
+   missing, twice, only inside a nested object, an escaped duplicate, or a file not tab-indented.
+   The self-test (run by `ci-unit`) injects each of those.
+3. **Runtime:** `test/telemetryid/probe.ts` is the regression test: no id the tab can read
+   (`machineId`, `sessionId`, and `devDeviceId` where the proposal is enabled) may be any seeded
+   host id. `sqmId` reaches an extension only in telemetry common properties, which are not sent
+   while telemetry is off.
 
 DOCSYNC-R4 is closed as fixed, with the release check's self-test as its CI-run test and the probe
 as its runtime test.
 
-A dev build (`isBuilt` false) uses a real telemetry service whatever the product says
+A dev build uses a real telemetry service whatever the product says
 ([telemetryUtils.ts#L98-L100](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/telemetry/common/telemetryUtils.ts#L98-L100)).
-We ship only built apps, and `check-release` runs on those.
+"Dev" is decided at run time, not by the build: `isBuilt` is false when the window's environment
+has `VSCODE_DEV`
+([environmentService.ts#L231](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/environment/common/environmentService.ts#L231)),
+and a window takes the launching CLI's environment
+([windowsMainService.ts#L1569](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/platform/windows/electron-main/windowsMainService.ts#L1569)).
+So a host process that opens a tab window with `VSCODE_DEV=1` set gives that tab the real ids.
+Only the host can set it; a tab can't. Neither check here sees it. It is recorded as a residual
+(review TEL-2) and reported to the coordinator for a decision on stripping `VSCODE_DEV` from the
+shipped app.
 
 ## Alternatives considered
 - **Patch the init data now (the appendix).** Give each tab ids derived from its own authority and
@@ -74,15 +85,18 @@ We ship only built apps, and `check-release` runs on those.
 ## Evidence
 - **`fixture:test/telemetryid/probe-extension`:** `test/telemetryid/probe.ts` on main `607873da`
   (run 43264609543), sbx tab, background launch through `test/window.ts`, 2026-11-16: the seeded
-  machineId never reached the tab (`DOCSYNC-R4 the tab's machineId is not the host's` passed); the
-  tab read the product placeholder; no focus steal; the teardown gate passed.
+  ids never reached the tab (`DOCSYNC-R4 the tab's machineId is not the host's` and the all-ids
+  assertion passed; `devDeviceId` was not readable, the proposal being off); the tab read the
+  product placeholder; no focus steal; the teardown gate passed.
 - `build/check-release.sh --self-test`, on GNU and BusyBox `sh`: every injected defect fails on
   the telemetry check's own message, and the clean product passes. A mutation that drops the
   check's failure is caught by the first telemetry case.
 - `product.jq` with `enableTelemetry` set to `true` in the overrides stops on the invariant; the
   real overrides pass.
 - `check-release` on the attested desktop app and the REH from main reports nothing about
-  telemetry.
+  telemetry; neither file has a `\u` escape.
+- Review: [20261116-tab-telemetry-ids](../security-reviews/20261116-tab-telemetry-ids.md), no high
+  or critical finding.
 
 ## Appendix: the plan if telemetry is ever enabled
 A core patch to `remoteExtensionHost.ts` (33 lines, typechecked against the pinned tree on

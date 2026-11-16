@@ -1,6 +1,6 @@
 // Telemetry-id probe (test only; test/telemetryid/probe.ts). Runs in the tab's extension host and
-// reports what identifies the machine to it: SHA-256 hashes of vscode.env.machineId and sessionId,
-// and their shape. Never the values. Inert unless the workspace was armed by a run. Writes only
+// reports what identifies the machine to it: SHA-256 hashes of vscode.env.machineId, sessionId and,
+// where readable, devDeviceId, and their shape. Never the values. Inert unless the workspace was armed by a run. Writes only
 // under <workspace>/.seclab-telemetryid. Sends nothing over the network.
 
 const crypto = require('node:crypto');
@@ -30,10 +30,17 @@ exports.activate = function () {
 	}
 	const out = path.join(root, '.seclab-telemetryid');
 	fs.mkdirSync(out, { recursive: true });
+	let devDeviceId = null;
+	try {
+		devDeviceId = vscode.env.devDeviceId; // proposed API: throws unless the proposal is enabled
+	} catch {
+		devDeviceId = null;
+	}
 	const report = {
 		schema: 'seclab-telemetryid-report/1', arm: t.arm,
 		machineId: { sha256: hash(vscode.env.machineId), shape: shape(vscode.env.machineId) },
 		sessionId: { sha256: hash(vscode.env.sessionId), shape: shape(vscode.env.sessionId) },
+		devDeviceId: typeof devDeviceId === 'string' ? { sha256: hash(devDeviceId), shape: shape(devDeviceId) } : null,
 	};
 	fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report));
 };
