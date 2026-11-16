@@ -50,3 +50,22 @@ sending host data that isn't variable resolution, so each stays open with a foll
 - RFU1R-2 and RFU1R-3 are registered open. Follow-up: in a tab window, filter the terminal
   configuration and profiles the window sends with 0036's withhold rules, and send
   `activeFileResource` only for this tab's `vscode-remote` authority.
+
+## Second pass (same date, same reviewer setup)
+Subject: `git diff 1d65614b..e139ae32`, the extended 0034, the probe and harness changes, and the
+records above. The prompt carried the same prompt-injection warning; none was found.
+
+RFU1R-1 is closed. The only window-side resolution of `shellLaunchConfig.env` now runs the
+env-only resolver against the REH's environment. The relaunch paths go back through it, and the
+default profile `$acceptDefaultProfile` sends the tab's extension host is now resolved the same
+way.
+
+| ID | Sev | Component | Finding | Status |
+|---|---|---|---|---|
+| RFU1R2-1 | low | `MainThreadTerminalService._updateDefaultProfile` (upstream) | In a tab window the host user's raw `terminal.integrated.automationProfile.<os>` object, including any `env` or `args`, goes to the tab's extension host in `$acceptDefaultProfile`. Nothing filters that push, though 0036 withholds the same setting from the tab's configuration when it carries an `env` or a secret-looking value. It isn't variable resolution (0034 resolves its path and args env-only); it belongs with RFU1R-2 | open |
+| RFU1R2-2 | info | `reh-profile-config-host-setting` patched predicate | A window that couldn't read the seeded setting would also leave `${config:…}` unresolved, so the patched run alone doesn't show the window could have resolved it. The baseline run, seeded the same way by the same harness, shows it does | accepted residual |
+
+In response: RFU1R-5's register entry now cites `e139ae32`, which introduced its test's name.
+RFU1R2-1 is registered open beside RFU1R-2, and the follow-up covers both. RFU1R2-2 is accepted:
+both modes seed `seclab.test.canary` identically (`reh-push.ts`), and the baseline's
+`pathCanary` and `envCanary` show the window resolving it.

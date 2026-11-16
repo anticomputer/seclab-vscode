@@ -13662,7 +13662,7 @@
 			"component": "remote terminal backend (remoteTerminalBackend.createProcess, getProfiles)",
 			"owner": "rpc",
 			"status": "open",
-			"followUp": "In a seclab+ window, filter the terminal configuration and profiles sent to the REH with 0036's withhold rules, with a rogue-REH probe reading them (rpc session).",
+			"followUp": "In a seclab+ window, filter the terminal configuration and profiles sent to the REH, and the automation profile sent to the tab's extension host (RFU1R2-1), with 0036's withhold rules, with rogue-REH and rogue-extension probes reading them (rpc session).",
 			"gap": "No patch or probe yet: host terminal env, cwd and profile settings reach the tab's REH in createProcess and getProfiles."
 		},
 		{
@@ -13701,7 +13701,7 @@
 			"component": "test/containment/terminal-variables.test.ts",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "4a0ab0e9",
+			"commit": "e139ae32",
 			"test": {
 				"file": "test/containment/terminal-variables.test.ts",
 				"name": "the tab resolvers in the patch resolve only env, from the REH environment"
@@ -13720,6 +13720,34 @@
 			"test": {
 				"file": "test/containment/terminal-variables.test.ts",
 				"name": "patch 0034 resolves no host variables for a tab terminal"
+			}
+		},
+		{
+			"record": "20261116-rfu1-terminal-variables.md",
+			"anchor": "RFU1R2-1",
+			"round": "patch 0034 review, second pass (2026-11-16)",
+			"severity": "low",
+			"summary": "In a tab window the host user's raw terminal.integrated.automationProfile.<os> object (env and args included) goes to the tab's extension host in $acceptDefaultProfile, unfiltered, though 0036 withholds it from the tab's configuration.",
+			"component": "terminal default profile push (MainThreadTerminalService._updateDefaultProfile)",
+			"owner": "rpc",
+			"status": "open",
+			"followUp": "With RFU1R-2: in a seclab+ window send no automation profile, or one filtered with 0036's withholdReason, in $acceptDefaultProfile, with a rogue-extension probe (rpc session).",
+			"gap": "No patch or probe yet: the host automation profile reaches the tab's extension host."
+		},
+		{
+			"record": "20261116-rfu1-terminal-variables.md",
+			"anchor": "RFU1R2-2",
+			"round": "patch 0034 review, second pass (2026-11-16)",
+			"severity": "info",
+			"summary": "The profile probe's patched predicate can't tell a window that withheld ${config:...} from one that couldn't read the seeded setting; only the baseline shows the setting resolves.",
+			"component": "containment probes (rogue REH, reh-profile-config-host-setting)",
+			"owner": "rpc",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "Both modes seed the setting identically in the same harness, and the baseline run shows the window resolving it into the profile path and env; the pair, not the patched run alone, is the proof.",
+			"ref": {
+				"file": "docs/security-reviews/20261116-rfu1-terminal-variables.md",
+				"quote": "both modes seed `seclab.test.canary` identically"
 			}
 		}
 	]
