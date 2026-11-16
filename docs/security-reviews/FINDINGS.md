@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 7 | 69 | 167 | 183 | 22 | 448 |
+| fixed | 7 | 69 | 168 | 184 | 22 | 450 |
 | fixed-untested | 3 | 16 | 60 | 160 | 56 | 295 |
 | accepted-residual | 0 | 1 | 12 | 67 | 19 | 99 |
 | deferred | 6 | 4 | 18 | 9 | 3 | 40 |
 | open | 0 | 2 | 14 | 15 | 5 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 271 | 434 | 111 | 924 |
+| **all** | 16 | 92 | 272 | 435 | 111 | 926 |
 
 ## Baseline: open high and critical findings
 
@@ -1896,6 +1896,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | LSR-8 | low | fixed | A tombstone marked \`restored\` with no exemption protected nothing, so a later merge could bring the exemption back silently. | 59e852cfe5aa679b8cdcaf7fb94918440d76cd17 · `build/liveness/liveness.ts` "LSR-8 a restored tombstone with no exemption" |
 | LSR-9 | medium | fixed | A flow collection or quoted scalar continued on the next line was read short, so a two-line \`branches-ignore\` lost \`main\` and a column-0 quoted continuation hid \`schedule\`. | 392e66e707064bef5277844d5f49e1ac83ec4e98 · `build/liveness/liveness.ts` "LSR-9 ${shape}" |
 | LSR-10 | low | fixed | Three of the on: scanner's fail-closed branches had no self-test injection. | 392e66e707064bef5277844d5f49e1ac83ec4e98 · `build/liveness/liveness.ts` "LSR-7 ${shape}" |
+| LSR-11 | medium | fixed | A filter item the scanner couldn't read was dropped, and in an *-ignore list that reads as live: a block-scalar item, a bare dash, a continuation line or an empty list disarmed the filter. | 3abc1d8 · `build/liveness/liveness.ts` "LSR-11 ${shape}" |
+| LSR-12 | low | fixed | An anchor or tag before a flow collection or quoted scalar hid that the line was left open. | 3abc1d8 · `build/liveness/liveness.ts` "LSR-9 ${shape}" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

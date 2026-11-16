@@ -59,3 +59,17 @@ truth, found one remaining root cause.
 |---|---|---|---|---|---|
 | LSR-9 | Medium | discovery | The scanner reads a line at a time, so a flow collection or quoted scalar continued on the next line was read short: `branches-ignore: [foo,` then `main]` dropped `main`, so the push counted as live. A quoted input default continued at column 0 ended the block before `schedule:`. | Fixed | A line of the `on:` block that leaves a flow collection or quoted scalar open makes the whole block unreadable, and so the workflow a subject. Brackets and quotes count only where YAML starts a collection or scalar, and block scalars are skipped. Four injections, and four controls that keep ordinary workflows readable. |
 | LSR-10 | Low | self-test | Three fail-closed branches had no injection (trigger-level dedent, unreadable filter line, filter-level dedent), so a refactor could delete them unnoticed. | Fixed | One injection each; each fails when its branch is mutated. |
+
+## Round LSR, fourth follow-up
+LSR-9 and LSR-10 were confirmed closed: the 24-shape corpus is clean, and none of the
+repository's own workflows reads as unparsed. The reviewer judged that a hand-rolled scanner
+keeps producing new bypasses because an unread fragment reads as "nothing found". That makes
+every parse gap in an ignore list fail open. A YAML library would end the class of bugs, but so
+would inverting the default, and that needs no new dependency. The scanner now has to recognise
+each filter item positively, and a YAML construct it doesn't know costs a visible false subject
+rather than a silent bypass.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| LSR-11 | Medium | discovery | An item the scanner couldn't read was dropped from the list. In `branches-ignore` or `paths-ignore` that reads as "main not ignored", so live: a block-scalar item (`- >-` then `main`), a bare `-` with the value below, a continuation line, or an empty list. | Fixed | Filter items must be plain or quoted scalars. Anything else makes the trigger count as off main. Eight shapes are injected. |
+| LSR-12 | Low | discovery | An anchor or tag before a flow collection or quoted scalar (`&b [foo,`, `!!str "a`) hid that the line was left open. | Fixed | `lineOpen` skips an anchor or tag where a node can start. A tagged quoted default continued at column 0 is injected; a control pins the comment rule. |
