@@ -15,11 +15,11 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 7 | 66 | 154 | 173 | 20 | 420 |
-| fixed-untested | 3 | 16 | 61 | 156 | 53 | 289 |
-| accepted-residual | 0 | 1 | 12 | 65 | 19 | 97 |
+| fixed | 7 | 66 | 154 | 176 | 20 | 423 |
+| fixed-untested | 3 | 16 | 61 | 157 | 53 | 290 |
+| accepted-residual | 0 | 1 | 12 | 66 | 19 | 98 |
 | deferred | 6 | 4 | 18 | 10 | 3 | 41 |
-| open | 0 | 2 | 14 | 21 | 4 | 41 |
+| open | 0 | 2 | 14 | 16 | 4 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
 | **all** | 16 | 89 | 259 | 425 | 105 | 894 |
 
@@ -364,11 +364,8 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261109-liveness-refresh](20261109-liveness-refresh.md) **MMM-2** | low | fixed-untested | ci workflows (liveness-refresh) | A lost \`--refresh\` failed open: the weekly job silently reverted to the required check's behaviour, and \`seclab\` was not in the push paths. | Enforced only by \`.github/workflows/liveness-refresh.yml\` ("grep -qx 'liveness: refresh mode'"), which is not a regression test: no test fails if the fix is reverted. |
 | [20261109-liveness-refresh](20261109-liveness-refresh.md) **MMM-3** | low | fixed-untested | ci workflows (liveness-refresh) | The concurrency group was global, so a branch push could supersede the scheduled run, which then reads as cancelled. | \`group: liveness-refresh-${{ github.ref }}\` is in the workflow (verified), but no lint or test asserts per-ref concurrency groups. |
 | [20261109-liveness-refresh](20261109-liveness-refresh.md) **MMM-4** | low | fixed-untested | seclab liveness verify-runs | \`./seclab liveness verify-runs\` did not bound \`$#\` before its argument allow-list. | \`\[\[ $# -le 2 \]\]\` is present before the case allow-list, but no test drives seclab's argument handling. |
-| [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md) **GATE-13** | low | open | build/hooks/pre-push | Exits 0 when it receives no ref lines | Fail when no ref was checked. |
-| [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md) **GATE-14** | low | open | pin-age | Dates no npm pins on an empty list; --days 0 passes everything | Fail on an empty npm list; refuse --days 0. |
-| [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md) **GATE-15** | low | open | check-pins supplychain.py probe | The purity probe sits in a swallowing catch | Fail when the file can't be read while skipped by name. |
-| [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md) **GATE-16** | low | open | check-source.ts | Scans only tabd/src when extensions/series is empty | Fail on an empty extensions/series. |
-| [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md) **GATE-17** | low | open | seclab image prune | A best-effort prune masked with \|\| true; it certifies nothing | None beyond keeping it out of any gate. |
+| [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md) **GATE-15** | low | fixed-untested | check-pins supplychain.py probe | The purity probe sits in a swallowing catch | An unreadable tracked copy is now a finding; no test makes the repository's own file unreadable. |
+| [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md) **GATE-17** | low | accepted-residual | seclab image prune | A best-effort prune masked with \|\| true; it certifies nothing | accepted by an agent: A local, best-effort cleanup after builds; CI skips it and no gate reads its result. |
 | [20261112-gate-fail-open](20261112-gate-fail-open.md) **SSS-4** | low | fixed-untested | focus harness (watcher record) | The focus watcher's record lived in the editor's own profile, which the editor writes. | The record is now a sibling of the profile; no test asserts its location. |
 | [20261112-gate-fail-open](20261112-gate-fail-open.md) **SSS-5** | low | accepted-residual | focus harness (launch record) | The launch record that turns the watcher check on is still in the profile. | accepted by an agent: Removing it needs host-side code; tab code can't reach the host profile. |
 | [20261112-gate-fail-open](20261112-gate-fail-open.md) **SSS-6** | low | accepted-residual | local Docker store | A process with Docker access controls the image store and build cache, outside these gates. | accepted by an agent: That access is root on the Docker VM; no gate can defend against it. |
@@ -1738,11 +1735,11 @@ Every other commit the register cites is on main's history, or on the branch its
 | GATE-10 | medium | fixed | A missing focus-steal log reads as never took focus; nothing proves the watcher lived | 158b893ab5b7a9b2ae9c1f531267455dcbb31af1 · `test/safety/gate-inputs.test.ts` "teardown: no steal log means clean only if the watcher watched the editor to the end" |
 | GATE-11 | medium | deferred | Exits 0 with scanner gaps in problems | follow-up: Fixed with its test on branch anticomputer-agentic-gate-0015-v3 (8913891, unpushed): exit_code() fails on a non-empty problems list, and self_test injects a scanner gap. Counts as fixed once that commit lands on main. |
 | GATE-12 | medium | fixed-untested | Drops the upstream-driven tests without an upstream checkout, the normal path in the unit job | Fixed on main (ci-unit runs rpc-filter/tools/test.sh with the upstream tree; confirmed in round 18 of 20261112-internal-identifier-scan.md, the runner fails on any skip). No injected-defect test. |
-| GATE-13 | low | open | Exits 0 when it receives no ref lines | Fail when no ref was checked. |
-| GATE-14 | low | open | Dates no npm pins on an empty list; --days 0 passes everything | Fail on an empty npm list; refuse --days 0. |
-| GATE-15 | low | open | The purity probe sits in a swallowing catch | Fail when the file can't be read while skipped by name. |
-| GATE-16 | low | open | Scans only tabd/src when extensions/series is empty | Fail on an empty extensions/series. |
-| GATE-17 | low | open | A best-effort prune masked with \|\| true; it certifies nothing | None beyond keeping it out of any gate. |
+| GATE-13 | low | fixed | Exits 0 when it receives no ref lines | 27b0972 · `test/hooks/hook-lock.test.sh` "a push with no ref lines is blocked, not reported clean (GATE-13)" |
+| GATE-14 | low | fixed | Dates no npm pins on an empty list; --days 0 passes everything | 27b0972 · `test/safety/gate-inputs.test.ts` "pin-age: a cooldown below 7 days and an empty or foreign file list are refused" |
+| GATE-15 | low | fixed-untested | The purity probe sits in a swallowing catch | An unreadable tracked copy is now a finding; no test makes the repository's own file unreadable. |
+| GATE-16 | low | fixed | Scans only tabd/src when extensions/series is empty | 27b0972 · `build/check-source.ts` "an empty extensions/series fails (GATE-16)" |
+| GATE-17 | low | accepted-residual | A best-effort prune masked with \|\| true; it certifies nothing | accepted by an agent: A local, best-effort cleanup after builds; CI skips it and no gate reads its result. |
 
 ### [20261112-gate-fail-open](20261112-gate-fail-open.md)
 
