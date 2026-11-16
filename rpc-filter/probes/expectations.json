@@ -44,7 +44,7 @@
       "policyRef": "ai-setting:chat.workspaceRemoteAgentHosts",
       "why": "the tab writes chat.workspaceRemoteAgentHosts pointing at a local beacon, through both .vscode/settings.json and remote user settings. The host renderer would dial it from the host network, bypassing the broker, and the dialled connection is not seclab+ so the authority predicate never fires",
       "status": "not-implemented",
-      "blocked_on": "no runner imports test/containment/rogue-extension/ai-probes.js yet, and the class-(e) oracle is a host-side observation (beacon hits, marker, whether chat became usable) rather than a return value, so it needs harness support that does not exist. Marked not-implemented rather than required: a required probe that cannot run reported a pass and counted as evidence of containment."
+      "blocked_on": "the dial itself is measured outside this runner by test/containment/reh-push.ts on every run: the workspace settings file lists a loopback agent host, a listener on each side of the boundary records any dial, an empty window dialling the same kind of entry is the positive control, and patch 0015's gate log records the refusal. Nothing in the rogue-extension runner imports test/containment/rogue-extension/ai-probes.js yet, so this registry entry stays not-implemented for that runner rather than counting as a pass."
     },
     "ai-settings-reenable": {
       "required": false,
@@ -181,34 +181,6 @@
       "why": "hands a URI to the host opener, leaving the tab without passing its broker",
       "beacon": "/open-external"
     },
-    "reh-onexecutecommand-manageextensions": {
-      "required": true,
-      "surface": "code-execution",
-      "policyRef": "push:remoteterminal:$onExecuteCommand",
-      "why": "installing or listing extensions on the trusted side is host code execution",
-      "hostEffectAbsolute": "PWNED-manageextensions"
-    },
-    "reh-onexecutecommand-openexternal": {
-      "required": true,
-      "surface": "exfiltration",
-      "policyRef": "push:remoteterminal:$onExecuteCommand",
-      "why": "egress from the trusted side, around the tab's broker",
-      "hostEffectAbsolute": "PWNED-openexternal"
-    },
-    "reh-onexecutecommand-windowopen": {
-      "required": true,
-      "surface": "code-execution",
-      "policyRef": "push:remoteterminal:$onExecuteCommand",
-      "why": "the server names a command and the trusted workbench runs it; windowOpen acts on the host UI",
-      "hostEffectAbsolute": "PWNED-windowopen"
-    },
-    "reh-resolve-variables-host-env": {
-      "required": true,
-      "surface": "credential-access",
-      "policyRef": "push:remoteterminal:$onPtyHostRequestResolveVariablesEvent",
-      "why": "the pty host names strings the trusted side resolves over the host shell environment, so ${env:X} returns host secrets; needs no live pty",
-      "hostEffectAbsolute": "PWNED-resolvevars"
-    },
     "secret-read-cross-tab": {
       "required": true,
       "surface": "cross-tab-access",
@@ -334,29 +306,25 @@
       "required": true,
       "surface": "code-execution",
       "policyRef": "push:remoteterminal:$onExecuteCommand",
-      "why": "managing extensions on the trusted side is a host code-execution primitive",
-      "hostEffectAbsolute": "PWNED-manageextensions"
+      "why": "the server names a command and the trusted workbench runs it; managing extensions on the trusted side is a host code-execution primitive (the probe only lists)"
     },
-    "reh-onexecutecommand-openexternal": {
+    "reh-onexecutecommand-getsystemstatus": {
       "required": true,
-      "surface": "exfiltration",
+      "surface": "reconnaissance",
       "policyRef": "push:remoteterminal:$onExecuteCommand",
-      "why": "egress from the trusted side, around the tab's broker",
-      "hostEffectAbsolute": "PWNED-openexternal"
+      "why": "the server names a command and the trusted workbench runs it: getSystemStatus returns the host's diagnostics (OS, CPUs, memory, processes) to the tab. It stands in for openExternal, which on a baseline build launches the host's default browser, a window outside the run's control that takes focus"
     },
     "reh-onexecutecommand-windowopen": {
       "required": true,
       "surface": "code-execution",
       "policyRef": "push:remoteterminal:$onExecuteCommand",
-      "why": "the server names a command and the trusted workbench runs it; windowOpen acts on the host UI",
-      "hostEffectAbsolute": "PWNED-windowopen"
+      "why": "the server names a command and the trusted workbench runs it; windowOpen acts on the host UI"
     },
     "reh-resolve-variables-host-env": {
       "required": true,
       "surface": "credential-access",
       "policyRef": "push:remoteterminal:$onPtyHostRequestResolveVariablesEvent",
-      "why": "the pty host names strings the trusted side resolves over the host shell environment, so ${env:X} returns host secrets; needs no live pty, unlike onExecuteCommand",
-      "hostEffectAbsolute": "PWNED-resolvevars"
+      "why": "the pty host names strings the trusted side resolves over the host shell environment, so ${env:X} returns host secrets"
     },
     "rpc-proxy-auth": {
       "required": true,

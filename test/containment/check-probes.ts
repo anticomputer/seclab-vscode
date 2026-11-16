@@ -5,6 +5,9 @@
 //     --beacon F    beacon log (required in patched mode)
 //     --denials F   host-side filter denial log (required in patched mode)
 //     --no-reh      the run did not include the rogue-REH fixture
+//     --only IDS    judge only these registered probes (comma-separated), for a run that
+//                   exercises one surface (test/containment/reh-push.ts); reported as a
+//                   selection, never as the whole set
 //
 // The two modes are not symmetric, and that asymmetry is the point:
 //
@@ -39,6 +42,7 @@ const opt = (name: string): string | undefined => {
 	return i >= 0 ? argv[i + 1] : undefined;
 };
 const noReh = argv.includes('--no-reh');
+const only = opt('--only')?.split(',').filter(Boolean);
 if ((mode !== 'unpatched' && mode !== 'patched') || !evidenceArg) {
 	console.error('usage: check-probes.ts unpatched|patched <evidence-dir> [--beacon F] [--denials F] [--user-data DIR --tab ID] [--no-reh]');
 	process.exit(2);
@@ -140,7 +144,8 @@ const results = new Map<string, Result>();
 function load(file: string, label: string, required: boolean): void {
 	const p = path.join(evidence, file);
 	if (!fs.existsSync(p)) {
-		c('probes', !required, `${label} evidence present (${file})`, `missing ${p}`);
+		c('probes', !required, required ? `${label} evidence present (${file})` : `${label} evidence not needed by this selection (${file})`,
+			required ? `missing ${p}` : 'absent');
 		return;
 	}
 	const run = JSON.parse(fs.readFileSync(p, 'utf8')) as { results: Result[] };
@@ -149,7 +154,9 @@ function load(file: string, label: string, required: boolean): void {
 	}
 	c('probes', true, `${label} evidence present (${file})`, `${run.results.length} results`);
 }
-load('rpc-probes.json', 'rogue extension', true);
+// A selection of REH probes only needs the REH evidence; any rogue-extension probe in it
+// still needs the rogue extension's.
+load('rpc-probes.json', 'rogue extension', !only || only.some(id => id in (expectations.probes as Record<string, unknown>)));
 // The restart probe runs last, once, in its own record (it can restart the extension host
 // that runs it). An attempt that no new host settled has no outcome: inconclusive, never a pass.
 {
@@ -188,6 +195,16 @@ const specs: Record<string, Spec> = {
 	...(noReh ? {} : (expectations.rehProbes as Record<string, Spec>)),
 };
 delete (specs as Record<string, unknown>).note;
+if (only) {
+	const unknown = only.filter(id => !(id in specs));
+	c('probes-selected', unknown.length === 0, `judging only ${only.length} registered probe(s): ${only.join(', ')}`,
+		unknown.length ? `not registered: ${unknown.join(', ')}` : `${Object.keys(specs).length - only.length} others not judged by this run`);
+	for (const id of Object.keys(specs)) {
+		if (!only.includes(id)) {
+			delete specs[id];
+		}
+	}
+}
 
 // ---------------------------------------------------------------- oracles
 const beaconFile = opt('--beacon');
@@ -268,6 +285,16 @@ const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
 	// The canary clipboard (a test build's in-memory store) must return this run's canary.
 	'clipboard-read': r =>
 		fact(r, 'sawCanary') === true ? null : 'the canary clipboard did not return the run\'s canary',
+	// The REH push probes (patches 0030/0031) record facts the trusted side's reply carries,
+	// since the REH can't write a host path: the command ran there, and the status it returned
+	// describes the host rather than the Linux tab.
+	'reh-onexecutecommand-windowopen': r => fact(r, 'ran') === true ? null : 'the trusted side did not run the command',
+	'reh-onexecutecommand-manageextensions': r => fact(r, 'ran') === true ? null : 'the trusted side did not run the command',
+	'reh-onexecutecommand-getsystemstatus': r =>
+		fact(r, 'ran') !== true ? 'the trusted side did not run the command'
+			: process.platform === 'darwin' && fact(r, 'hostIsMac') !== true ? 'the status returned does not describe the macOS host' : null,
+	'reh-resolve-variables-host-env': r =>
+		tokens(r).length > 0 ? null : 'the host environment canary did not come back',
 	// A restart is proven only by a new extension host process settling the attempt, never by
 	// an outcome that was simply not written (review rounds 14 and 15).
 	'host-restart-extension-host': r => {

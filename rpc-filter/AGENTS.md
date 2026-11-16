@@ -126,10 +126,6 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 | `open-external-silent` | rogue extension | `rpc:MainThreadWindow.$openUri` | denied |
 | `provider-completion-host-file` | rogue extension | `cmd:_executeCompletionItemProvider` | denied |
 | `provider-hover-host-file` | rogue extension | `cmd:_executeHoverProvider` | denied |
-| `reh-onexecutecommand-manageextensions` | rogue extension | `push:remoteterminal:$onExecuteCommand` | denied |
-| `reh-onexecutecommand-openexternal` | rogue extension | `push:remoteterminal:$onExecuteCommand` | denied |
-| `reh-onexecutecommand-windowopen` | rogue extension | `push:remoteterminal:$onExecuteCommand` | denied |
-| `reh-resolve-variables-host-env` | rogue extension | `push:remoteterminal:$onPtyHostRequestResolveVariablesEvent` | denied |
 | `secret-claim-tab-manager-write` | rogue extension | `rpc:MainThreadSecretState.$setPassword` | succeeded |
 | `secret-read-cross-tab` | rogue extension | `rpc:MainThreadSecretState.$getPassword` | succeeded |
 | `secret-write-own` | rogue extension | `rpc:MainThreadSecretState.$setPassword` | denied |
@@ -142,8 +138,8 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 | `channel-mcp-call-tool` | rogue REH | `chan:mcpGatewayToolBroker` | denied |
 | `channel-mcp-list-servers` | rogue REH | `chan:mcpGatewayToolBroker` | denied |
 | `harness` | rogue REH | `rpc:raw` | denied |
+| `reh-onexecutecommand-getsystemstatus` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
 | `reh-onexecutecommand-manageextensions` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
-| `reh-onexecutecommand-openexternal` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
 | `reh-onexecutecommand-windowopen` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
 | `reh-resolve-variables-host-env` | rogue REH | `push:remoteterminal:$onPtyHostRequestResolveVariablesEvent` | denied |
 | `rpc-proxy-auth` | rogue REH | `rpc:MainThreadWorkspace.$lookupAuthorization` | denied |
