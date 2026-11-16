@@ -1,7 +1,7 @@
 diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts
 --- a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-16 14:53:14
-+++ b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-16 14:55:29
-@@ -29,7 +29,30 @@
++++ b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-16 15:10:20
+@@ -29,7 +29,33 @@
  import { GroupDirection, IEditorGroup, IEditorGroupsService, preferredSideBySideGroupDirection } from '../../services/editor/common/editorGroupsService.js';
  import { IEditorsChangeEvent, IEditorService, SIDE_GROUP } from '../../services/editor/common/editorService.js';
  import { extHostNamedCustomer, IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
@@ -11,12 +11,15 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
 +import { IModelService } from '../../../editor/common/services/model.js';
 +import { IFileService } from '../../../platform/files/common/files.js';
 +import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
-+import { seclabIsFiltered, seclabOrigin } from './seclabDocumentOrigin.js';
++import { ITextFileService } from '../../services/textfile/common/textfiles.js';
++import { seclabIsFiltered, seclabOrigin, seclabShouldSync } from './seclabDocumentOrigin.js';
  
-+/** Every resource an editor shows (seclab, patch 0038): both sides, merge inputs, multi-diff entries. */
++/** Every resource an editor shows (seclab, patch 0038): both sides, diffs of any kind, merge inputs, multi-diff entries. */
 +function seclabEditorUris(editor: EditorInput): URI[] {
 +	const r = EditorResourceAccessor.getCanonicalUri(editor, { supportSideBySide: SideBySideEditor.BOTH });
++	const d = editor as Partial<{ originalResource: unknown; modifiedResource: unknown }>;
 +	const uris: unknown[] = URI.isUri(r) ? [r] : [r?.primary, r?.secondary];
++	uris.push(d.originalResource, d.modifiedResource);
 +	if (editor instanceof MergeEditorInput) {
 +		uris.push(editor.base, editor.input1.uri, editor.input2.uri, editor.result);
 +	}
@@ -32,7 +35,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  interface TabInfo {
  	tab: IEditorTabDto;
  	group: IEditorGroup;
-@@ -48,16 +71,44 @@
+@@ -48,16 +74,50 @@
  	private readonly _tabInfoLookup: Map<string, TabInfo> = new Map();
  	// Tracks resource-change listeners for currently open multi-diff tabs
  	private readonly _multiDiffEditorInputListeners: DisposableMap<string> = new DisposableMap();
@@ -49,6 +52,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
 +		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
 +		@IModelService modelService: IModelService,
 +		@IFileService fileService: IFileService,
++		@ITextFileService textFileService: ITextFileService,
  	) {
  
  		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostEditorTabs);
@@ -59,14 +63,19 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
 +			const o = seclabOrigin(extHostContext);
 +			const salt = generateUuid();
 +			const mine = (u: URI) => {
-+				if (u.scheme === Schemas.vscodeRemote || u.scheme === Schemas.untitled) {
-+					return u.scheme === Schemas.untitled ? !u.path.includes('/') : u.authority === authority;
++				if (u.scheme === Schemas.vscodeRemote || u.scheme === Schemas.webviewPanel || u.scheme === Schemas.vscodeTerminal) {
++					// A webview panel's or terminal's own id: no resource behind it.
++					return u.scheme !== Schemas.vscodeRemote || u.authority === authority;
 +				}
-+				const model = modelService.getModel(u), provider = fileService.getProvider(u.scheme);
-+				return (!!model && o.models.has(model)) || (!!provider && o.fsProviders.has(provider));
++				// Anything else only as 0035 judges its model (provider-made, born under this host's
++				// filesystem provider, or untitled the user typed): never by scheme.
++				const model = modelService.getModel(u);
++				return !!model && seclabShouldSync(extHostContext, model, authority, fileService, textFileService);
 +			};
-+			this._seclabHost = editor => !(editor instanceof TerminalEditorInput || (editor instanceof WebviewInput && !(editor instanceof CustomEditorInput)))
-+				&& !seclabEditorUris(editor).every(mine);
++			this._seclabHost = editor => {
++				const uris = seclabEditorUris(editor);
++				return !uris.length || !uris.every(mine);
++			};
 +			this._seclabId = id => {
 +				const sha = new StringSHA1();
 +				sha.update(salt + id);
@@ -78,7 +87,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  
  		// Main listener which responds to events from the editor service
  		this._dispoables.add(editorService.onDidEditorsChange((event) => {
-@@ -96,7 +147,7 @@
+@@ -96,7 +156,7 @@
  		const editorId = editor.editorId;
  		const tab: IEditorTabDto = {
  			id: this._generateTabId(editor, group.id),
@@ -87,7 +96,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  			editorId,
  			input: this._editorInputToDto(editor),
  			isPinned: group.isSticky(editorIndex),
-@@ -108,6 +159,9 @@
+@@ -108,6 +168,9 @@
  	}
  
  	private _editorInputToDto(editor: EditorInput): AnyInputDto {
@@ -97,7 +106,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  
  		if (editor instanceof MergeEditorInput) {
  			return {
-@@ -250,7 +304,7 @@
+@@ -250,7 +313,7 @@
  		} else {
  			resourceString = `${resource?.primary?.toString()}-${resource?.secondary?.toString()}`;
  		}
@@ -106,7 +115,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  	}
  
  	/**
-@@ -276,7 +330,7 @@
+@@ -276,7 +339,7 @@
  		const tabInfo = this._tabInfoLookup.get(tabId);
  		// If tab is found patch, else rebuild
  		if (tabInfo) {

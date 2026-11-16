@@ -150,7 +150,9 @@ expect('report present, from this run, and matches the schema', valid);
 expect('control: the window opened the host editors (settings.json, keybindings.json)', Object.values(opened).length === HOST_EDITORS.length && Object.values(opened).every(Boolean));
 if (valid && !measure) {
 	expect('the probe finished', rep.done === true);
-	expect('control: the tab sees its own editor (vscode-remote on its authority)', (rep.schemes['vscode-remote+own'] ?? 0) > 0);
+	expect('control: the tab sees its own editor (its workspace file)', (rep.schemes['file+own'] ?? 0) > 0);
+	// Without this a run where the host editors never reached the tab's model would pass (review EDT-4).
+	expect('control: the host editors reached the tab\'s editor-tab model (anonymous or not)', (rep.kinds.unknown ?? 0) > 0 || (rep.schemes['vscode-userdata'] ?? 0) > 0);
 	expect('DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary, login name)', leaks.length === 0);
 }
 expect('no focus steal', !steals);

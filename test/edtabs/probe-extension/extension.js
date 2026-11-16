@@ -30,7 +30,6 @@ exports.activate = async function (context) {
 	if (!t) {
 		return;
 	}
-	const own = vscode.workspace.workspaceFolders[0].uri.authority;
 	const out = path.join(root, '.seclab-edtabs');
 	fs.mkdirSync(out, { recursive: true });
 	const report = { schema: 'seclab-edtabs-report/1', arm: t.arm, done: false, tabs: 0, kinds: {}, schemes: {}, tokens: [] };
@@ -70,7 +69,8 @@ exports.activate = async function (context) {
 				report.kinds[kind] = (report.kinds[kind] ?? 0) + 1;
 				tokens(tab.label, 'label');
 				for (const u of uris(tab.input)) {
-					const key = `${u.scheme}${u.scheme === 'vscode-remote' ? (u.authority === own ? '+own' : '+other') : ''}`;
+					// The REH's URI transformer shows the tab's own vscode-remote files as file: here, and host files as vscode-local:.
+					const key = u.scheme === 'file' && (u.fsPath + path.sep).startsWith(root + path.sep) ? 'file+own' : u.scheme;
 					report.schemes[key] = (report.schemes[key] ?? 0) + 1;
 					tokens(u.toString(true), 'uri');
 				}
