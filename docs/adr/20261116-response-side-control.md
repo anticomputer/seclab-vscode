@@ -1,6 +1,6 @@
 # Data a tab returns can't put tab-chosen actions or fetches into trusted UI
 
-- **Status:** proposed
+- **Status:** accepted. Proof passed, both halves (2026-11-16).
 - **Date:** 2026-11-16
 - **Deciders:** project owner (closing condition for the deferred-laundering acceptance,
   `docs/security-reviews/owner-acceptances.md`, 2026-11-12); RPC follow-ups session
@@ -57,14 +57,31 @@ function, and a gate makes it impossible to allow a registration without it.
    documents open in the window).
 
 ## Proof
-The fixture `test/containment/response-probe`, run by `test/containment/response-probe.ts`,
-registers a completion item and a hover whose `command` and `command:` link name
-`workbench.action.terminal.newLocal`. The headless driver accepts the item and activates the
-link. On a branch-only pre-control test build (the landing commit without 0033, marked a test
-build so `check-release` refuses it) the host terminal opens and `PWNED-newlocal` is written;
-on the control build the decision log records `cmd:workbench.action.terminal.newLocal` denied
-and no marker exists. The trees must be byte-identical apart from 0033, and each app's
-`product.json` names its repo SHA. The pre-control branch is kept as the vulnerable baseline.
+The fixture `test/containment/response-probe` is run by `test/containment/response-probe.ts`,
+with the editor driven headlessly in an OCI tab of the containment test build.
+- It registers a completion item and a hover. Their `command` and `command:` link name
+  `workbench.action.terminal.newLocal`, a host shell when the trusted side runs it. A second
+  item and link name the extension's own command, the positive control.
+- The driver accepts each item and clicks each link, as a user would.
+- After each host vector the harness counts the shells under the editor's own process tree on
+  the host. A tab's shells are never there.
+
+The pre-control build is a branch-only test build of the landing commit without 0033 (branch
+`anticomputer-rpc-response-precontrol`, kept as the vulnerable baseline). The two commits
+differ only in the 0033 patch file, its series lines and its reach entry. Each app's build info
+names its repo SHA.
+
+- **Pre-control: passed** (`3daea180`, run 43933292801). All 8 checks passed, and teardown was
+  clean. The hover link and the accepted completion each opened one host shell. The own-command
+  link and completion ran in the tab.
+- **Control: passed** (`b0e86b3c`, run 43933297956). All 10 checks passed, and teardown was
+  clean. Neither vector opened a host shell, and the decision log records
+  `cmd:workbench.action.terminal.newLocal` refused for each. The own-command link, rewritten to
+  the token command, and the own completion both ran in the tab.
+- The landing commit is `b0e86b3c` cherry-picked onto the 0034 and 0050 branch. Patch 0033 and
+  the filter module are unchanged: 0005 regenerates byte-identical with `emit.sh`.
+- **`fixture:test/containment/response-probe`:** run by `test/containment/response-probe.ts`
+  in both modes on 2026-11-16 (runs above).
 
 ## Consequences
 - Hover and completion work in tabs again, with their commands subject to the same verdicts as
