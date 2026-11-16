@@ -316,7 +316,18 @@ export function loggerTime(line: string): number | undefined {
 }
 
 /** Where this window session's RPC-filter log begins. */
-export interface WindowSession { time: number; ino: number; pos: number }
+export interface WindowSession {
+	time: number; ino: number; pos: number;
+	/** The logger time of the last RPC-filter line before the install line (the previous session's), if any. */
+	prevLast?: number;
+}
+
+/**
+ * The gate logs from the same renderer before the RPC filter installs (it is asked first, at
+ * startup: measured 0.2 s earlier). Its lines get this much grace before the install line, but
+ * never reach back to the previous session's last RPC-filter line.
+ */
+export const GATE_GRACE_MS = 3000;
 
 /**
  * The start of the current window session (review round 14): the last `rpc:seclab.installed`
@@ -345,17 +356,20 @@ export function findWindowSession(rpcLog: string): WindowSession | undefined {
 			const buf = Buffer.alloc(st.size);
 			const n = fs.readSync(fd, buf, 0, st.size, 0);
 			let found: WindowSession | undefined;
+			let lastTime: number | undefined;
 			let off = 0;
 			for (const line of buf.toString('utf8', 0, n).split('\n')) {
 				const start = off;
 				off += Buffer.byteLength(line) + 1;
-				if (!line.includes('rpc:seclab.installed')) {
-					continue;
+				const lt = loggerTime(line);
+				if (line.includes('rpc:seclab.installed')) {
+					const ev = parseWindowLogLine(line, WINDOW_LOGS.get('seclabRpcFilter.log')!.sources);
+					if (ev?.detail?.ref === 'rpc:seclab.installed' && lt !== undefined) {
+						found = { time: lt, ino: st.ino, pos: start, ...(lastTime !== undefined ? { prevLast: lastTime } : {}) };
+					}
 				}
-				const ev = parseWindowLogLine(line, WINDOW_LOGS.get('seclabRpcFilter.log')!.sources);
-				const time = loggerTime(line);
-				if (ev?.detail?.ref === 'rpc:seclab.installed' && time !== undefined) {
-					found = { time, ino: st.ino, pos: start };
+				if (lt !== undefined) {
+					lastTime = lt;
 				}
 			}
 			if (found) {
@@ -416,10 +430,11 @@ export class WindowLogForwarder {
 		for (const t of this.tails) {
 			const name = path.basename(t.file);
 			const saved = this.o.state?.get(name);
-			t.notBefore = s.time;
 			if (name === 'seclabRpcFilter.log') {
+				t.notBefore = s.time;
 				t.resume(saved && saved.ino === s.ino && saved.pos >= s.pos ? saved : { ino: s.ino, pos: s.pos });
 			} else {
+				t.notBefore = Math.max(s.time - GATE_GRACE_MS, s.prevLast !== undefined ? s.prevLast + 1 : -Infinity);
 				t.resume(saved);
 			}
 		}
