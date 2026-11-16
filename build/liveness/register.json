@@ -1,5 +1,5 @@
 {
-	"$comment": "Liveness register (EDR 20261109-liveness-gate; checked by build/liveness/liveness.ts in workflow-lint). `entry`: declarations a host calls, which are live and make what they reach live. `exempt`: exported values nothing that runs reaches, each naming the consumer that uses it (it must exist and use the symbol in code) or `consumer: null` with the reason (printed on every run). `subjects`: everything that only matters if something runs it (dispatch-only workflows, test hooks, fixtures, test extensions), each with what runs it and evidence it ran: a GitHub Actions `run` (verified in CI), a `ci` mark its runner records in the named job, or a `record` in a doc that names the subject id.",
+	"$comment": "Liveness register (EDR 20261109-liveness-gate; checked by build/liveness/liveness.ts in workflow-lint). `entry`: declarations a host calls, which are live and make what they reach live. `exempt`: exported values nothing that runs reaches, each naming the consumer that uses it (it must exist and use the symbol in code) or `consumer: null` with the reason (printed on every run); a subject is exempted at most once. `removed`: tombstones for exemptions removed on purpose; re-adding one fails. `subjects`: everything that only matters if something runs it (scheduled and dispatch-only workflows, test hooks, fixtures, test extensions), each with what runs it and evidence it ran: a GitHub Actions `run` (verified in CI; the only kind a workflow subject accepts, and only of that workflow), a `ci` mark its runner records in the named job, or a `record` in a doc that names the subject id.",
 	"entry": [
 		{
 			"subject": "extensions/seclab-tab-manager/src/extension.ts#activate",
@@ -23,6 +23,15 @@
 			"consumer": "build/cfs-config.ts",
 			"reason": "The CLI extracts the tenant from gh cfs output with it."
 		}
+	],
+	"removed": [
+		{ "subject": "tabd/src/cfs-config.ts#loadCfsConfig", "reason": "live since tabd reads the CFS config itself (dac2cd50); a union merge re-added it once (fixed in c5cb491c)" },
+		{ "subject": "tabd/src/cfs-config.ts#validateCfsConfig", "reason": "live since dac2cd50; re-added by a union merge once (c5cb491c)" },
+		{ "subject": "tabd/src/cfs-config.ts#cfsConfigPath", "reason": "live since dac2cd50; re-added by a union merge once (c5cb491c)" },
+		{ "subject": "tabd/src/cfs-config.ts#CfsConfigError", "reason": "live since dac2cd50; re-added by a union merge once (c5cb491c)" },
+		{ "subject": "tabd/src/cfs-config.ts#CFS_RULES", "reason": "live since dac2cd50; re-added by a union merge once (c5cb491c)" },
+		{ "subject": "tabd/src/cfs-config.ts#CFS_FIELDS", "reason": "live since dac2cd50; re-added by a union merge once (c5cb491c)" },
+		{ "subject": "tabd/src/cfs-config.ts#CFS_HOST", "reason": "live since dac2cd50; re-added by a union merge once (c5cb491c)" }
 	],
 	"subjects": [
 		{

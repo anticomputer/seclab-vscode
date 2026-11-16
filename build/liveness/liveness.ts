@@ -13,9 +13,13 @@
 //   scripts  every in-tab program in sandbox/rootfs/opt/seclab/bin is named by product code.
 //   exempt   an exemption names its consumer, which must exist and use the symbol, or says
 //            `consumer: null` and why (printed on every run, so the claim stays visible). An
-//            exemption for something live is stale and fails.
+//            exemption for something live is stale and fails, and so does a subject exempted
+//            twice (a union merge keeps both an old and a superseding entry).
+//   removed  a tombstone for an exemption removed on purpose: re-adding that subject to
+//            `exempt` fails, even when a merge also brings back the code that made it dead.
 // Runtime half (register.json `subjects`, matched exactly against what the tree contains):
-//   workflow every workflow that never runs on push or pull_request (scheduled, dispatch-only);
+//   workflow every workflow with a schedule, or that never runs on push or pull_request. Its
+//            evidence is runs of that workflow only (a push run shows the code, not the schedule);
 //   hook     every test-only hook in test/builds/variants.json;
 //   fixture  every child of a test `fixtures` dir, and every test extension (a dir with a
 //            package.json under test/);
@@ -41,7 +45,9 @@ export interface Exempt { subject: string; consumer: string | null; reason: stri
 export interface Entry { subject: string; calledBy: string; declaredIn: string }
 export interface Evidence { run?: number; workflow?: string; job?: string; sha?: string; date?: string; ci?: string; mark?: string; runner?: string; record?: string }
 export interface Subject { id: string; runBy: string; evidence: Evidence[] }
-export interface Register { entry?: Entry[]; exempt: Exempt[]; subjects: Subject[] }
+/** An exemption removed on purpose, kept so that a merge cannot quietly bring it back. */
+export interface Removed { subject: string; reason: string }
+export interface Register { entry?: Entry[]; exempt: Exempt[]; removed?: Removed[]; subjects: Subject[] }
 
 const REGISTER = 'build/liveness/register.json';
 // Code that runs: product sources (every built-in extension's src), and the tools CI or an
@@ -496,27 +502,29 @@ export function deadExports(texts: Map<string, string>, entries: string[] = [], 
  */
 export function triggers(yml: string, files?: string[]): string[] {
 	const lines = yml.split('\n');
-	const i = lines.findIndex(l => /^(?:on|"on"|'on'):/.test(l));
+	const i = lines.findIndex(l => /^(?:on|"on"|'on')\s*:/.test(l));
 	if (i < 0) {
 		return [];
 	}
+	// YAML lets any key be quoted ("schedule":), so every trigger name is unquoted before use:
+	// a positive match on `schedule` must not miss a spelling GitHub accepts (review LSR-1).
+	const unq = (s: string) => s.trim().replace(/^['"]|['"]$/g, '');
 	const inline = lines[i].replace(/^[^:]+:\s*/, '').replace(/#.*/, '').trim();
 	if (inline) {
-		return inline.replace(/^\[|\]$/g, '').split(',').map(s => s.trim()).filter(Boolean);
+		return inline.replace(/^\[|\]$/g, '').split(',').map(unq).filter(Boolean);
 	}
 	const out: string[] = [];
 	let cur: string | undefined;
 	let key: string | undefined;
 	const filters = new Map<string, Map<string, string[]>>();
-	const unq = (s: string) => s.trim().replace(/^['"]|['"]$/g, '');
 	for (const l of lines.slice(i + 1)) {
 		if (/^\S/.test(l)) {
 			break;
 		}
-		const m = /^ {2}([A-Za-z_]+):/.exec(l) ?? /^ {2}- ([A-Za-z_]+)\s*$/.exec(l);
+		const m = /^ {2}(["']?)([A-Za-z_]+)\1\s*:/.exec(l) ?? /^ {2}- (["']?)([A-Za-z_]+)\1\s*$/.exec(l);
 		if (m) {
-			out.push(m[1]);
-			cur = m[1];
+			out.push(m[2]);
+			cur = m[2];
 			key = undefined;
 			continue;
 		}
@@ -727,10 +735,29 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 	}
 
 	const exempted = new Set<string>();
+	const tombs = new Map<string, string>();
+	for (const t of reg.removed ?? []) {
+		if (!t || typeof t.subject !== 'string' || !/^[^#\s]+#?[^#\s]*$/.test(t.subject) || typeof t.reason !== 'string' || !t.reason.trim()) {
+			errors.push(`removed ${JSON.stringify(t)}: needs subject and reason`);
+			continue;
+		}
+		if (tombs.has(t.subject)) {
+			errors.push(`removed ${t.subject}: listed twice`);
+		}
+		tombs.set(t.subject, t.reason);
+	}
 	for (const x of reg.exempt ?? []) {
 		if (!x || typeof x.subject !== 'string' || typeof x.reason !== 'string' || !x.reason.trim() || !('consumer' in x)) {
 			errors.push(`exempt ${JSON.stringify(x)}: needs subject, consumer (a path or null) and reason`);
 			continue;
+		}
+		// A union merge keeps both the old and the superseding entry for a still-dead subject,
+		// and a tombstoned subject comes back with its code; neither trips the stale rule (LSR-3).
+		if (exempted.has(x.subject)) {
+			errors.push(`exempt ${x.subject}: listed twice (a merge kept an old entry and the one that replaced it?)`);
+		}
+		if (tombs.has(x.subject)) {
+			errors.push(`exempt ${x.subject}: its exemption was removed on purpose (${tombs.get(x.subject)}); drop it, or drop the \`removed\` entry if bringing it back is deliberate`);
 		}
 		exempted.add(x.subject);
 		const [file, name] = x.subject.split('#');
@@ -776,6 +803,12 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 		ids.add(s.id);
 		if (!found.has(s.id)) {
 			errors.push(`subject ${s.id}: not in the tree (stale entry)`);
+		}
+		// A workflow subject is proven only by runs of that workflow: a ci mark or a record
+		// comes from push-class or local runs, which say nothing about its schedule (LSR-2).
+		const wfFile = s.id.startsWith('workflow:') ? found.get(s.id) : undefined;
+		if (wfFile && s.evidence.some(e => !e || e.run === undefined || e.workflow !== path.posix.basename(wfFile))) {
+			errors.push(`subject ${s.id}: every evidence must be a run of ${path.posix.basename(wfFile)}`);
 		}
 		for (const e of s.evidence) {
 			const kinds = ['run', 'ci', 'record'].filter(k => k in e);
@@ -979,6 +1012,7 @@ async function selfTest(): Promise<void> {
 				{ subject: 'tabd/src/scan.ts#note', consumer: null, reason: 'synthetic' },
 				{ subject: 'extensions/e/src/boot.ts#keyOnly', consumer: null, reason: 'synthetic: only an object key and a member' },
 			],
+			removed: [{ subject: 'tabd/src/zombie.ts#resurrected', reason: 'synthetic: the file was deleted with its exemption' }],
 			subjects: [
 				{ id: 'workflow:weekly', runBy: 'schedule', evidence: [{ run: 1, workflow: 'weekly.yml', sha: 'a'.repeat(40), date: '2026-11-01' }] },
 				{ id: 'hook:v/h', runBy: 'harness', evidence: [{ record: 'docs/proof.md', date: '2026-11-01' }] },
@@ -1016,6 +1050,33 @@ async function selfTest(): Promise<void> {
 		const r = reg();
 		r.exempt.push({ subject: 'tabd/src/sup.ts#start', consumer: 'tabd/src/main.ts', reason: 'removed on main, re-added by a union merge' });
 		injections.push(['union merge re-adds a removed exemption', withReg(r), /exempt tabd\/src\/sup\.ts#start: it is live/]);
+	}
+	// Review LSR: what the stale rule alone lets a union merge, or a quoted key, through.
+	{
+		const r = reg();
+		r.exempt.push({ subject: 'tabd/src/rpc.ts#escapes', consumer: null, reason: 'the entry main replaced' });
+		injections.push(['LSR-3 union merge keeps a superseded exemption', withReg(r), /exempt tabd\/src\/rpc\.ts#escapes: listed twice/]);
+	}
+	{
+		const r = reg();
+		r.exempt.push({ subject: 'tabd/src/zombie.ts#resurrected', consumer: null, reason: 'came back with its file' });
+		injections.push(['LSR-3 union merge resurrects a tombstoned exemption with its code', withReg(r, { 'tabd/src/zombie.ts': 'export function resurrected() {}\n' }), /exempt tabd\/src\/zombie\.ts#resurrected: its exemption was removed on purpose/]);
+	}
+	{
+		const r = reg();
+		r.removed!.push({ subject: 'tabd/src/zombie.ts#resurrected', reason: 'again' });
+		injections.push(['LSR-3 a tombstone listed twice', withReg(r), /removed tabd\/src\/zombie\.ts#resurrected: listed twice/]);
+	}
+	{
+		const r = reg();
+		r.subjects = r.subjects.map(s => s.id === 'workflow:weekly' ? { ...s, evidence: [{ ci: 'ci.yml#oci', mark: 'evil-ran', runner: 'test/run.ts' }] } : s);
+		injections.push(['LSR-2 a scheduled workflow proven by a ci mark', withReg(r), /workflow:weekly: every evidence must be a run of weekly\.yml/]);
+		const r2 = reg();
+		r2.subjects = r2.subjects.map(s => s.id === 'workflow:weekly' ? { ...s, evidence: [{ run: 1, workflow: 'ci.yml', sha: 'a'.repeat(40), date: '2026-11-01' }] } : s);
+		injections.push(['LSR-2 a scheduled workflow proven by another workflow\'s run', withReg(r2), /workflow:weekly: every evidence must be a run of weekly\.yml/]);
+	}
+	for (const [spelling, on] of [['"schedule":', 'on:\n  "schedule":\n    - cron: \'1 1 * * 1\'\n  push:\n'], ["'schedule' :", "on:\n  'schedule' :\n    - cron: '1 1 * * 1'\n  push:\n"], ['an inline quoted list', 'on: ["schedule", push]\n']]) {
+		injections.push([`LSR-1 schedule spelled ${spelling}`, { ...base, '.github/workflows/alarm.yml': `${on}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:alarm .* add it to/]);
 	}
 	{ // 4. an array nobody reads (seclabTaintEscapes): only test-reached code writes it
 		const r = reg();
