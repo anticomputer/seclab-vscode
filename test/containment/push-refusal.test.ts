@@ -24,6 +24,7 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = (p: string) => readFileSync(join(REPO, p), 'utf8');
 
 interface Spec {
+	title: string;
 	file: string;
 	/** Upstream's registration line, as a context line of the patch. */
 	upstream: string;
@@ -35,6 +36,7 @@ interface Spec {
 
 const SPECS: Spec[] = [
 	{
+		title: 'patch 0030: upstream onExecuteCommand handler is unreachable in a tab window, and the refusal reaches nothing',
 		file: 'patches/0030-seclab-no-remote-cli-push-in-tabs.patch',
 		upstream: 'this._register(this._remoteTerminalChannel.onExecuteCommand(async e => {',
 		authority: 'remoteAuthority',
@@ -42,6 +44,7 @@ const SPECS: Spec[] = [
 		reply: /this\._remoteTerminalChannel\.sendCommandResult\(e\.reqId, true, 'seclab: denied'\);/,
 	},
 	{
+		title: 'patch 0031: upstream pty-host variable resolver is unreachable in a tab window, and the refusal reaches nothing',
 		file: 'patches/0031-seclab-no-variable-resolution-for-tab-pty-hosts.patch',
 		upstream: 'this._register(this._ptyHostController.onPtyHostRequestResolveVariables(async e => {',
 		authority: 'seclabPtyHostAuthority',
@@ -135,7 +138,7 @@ const test = (name: string, fn: () => void) => tests.push([name, fn]);
 for (const spec of SPECS) {
 	const patch = read(spec.file);
 	const tag = spec.file.slice('patches/'.length, 'patches/'.length + 4);
-	test(`${tag}: upstream's handler is unreachable in a tab window, and the refusal reaches nothing`, () => {
+	test(spec.title, () => {
 		assert.deepEqual(check(patch, spec), []);
 	});
 	const mutants: Array<[string, (p: string) => string]> = [
