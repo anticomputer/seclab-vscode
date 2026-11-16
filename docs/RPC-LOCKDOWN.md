@@ -544,7 +544,9 @@ withdrawal, not containment.
 >   resolves over the host user's shell environment, so `${env:X}` returns host secrets.
 >
 > In a tab window upstream's handlers for both are never registered; refusing handlers answer
-> at once and log the policy key (patches 0030 and 0031). Both were shown going from
+> at once and log the policy key (patches 0030 and 0031). A sibling stays open: a REH-supplied
+> terminal profile path with `${config:…}` is still resolved against the host user's settings
+> on the trusted side and sent back to the REH (review finding RFU-1). Both were shown going from
 > succeeding on main's containment build to denied on the patched one
 > ([EDR](edr/20261116-reh-push-refusals.md)).
 
@@ -628,8 +630,10 @@ losses, not bugs:
   `$registerTaskProvider`, so the workbench never learns it can run shell or process
   tasks there. The editor-driven run's `[task]` check is an expected failure on a
   filtered build for this reason, and must still pass without the filter. The
-  follow-up builds on patch 0031 (landed): the task-system info a tab sends shapes how
-  the trusted side resolves task variables, which 0031 bounds for pty-host requests.
+  follow-up needs its own control: the task-system info a tab sends shapes how the trusted
+  side resolves task variables. 0031 refuses only the pty host's `${env:…}` push; `${config:…}`
+  still resolves against the unfiltered configuration on the trusted side, for tasks and for
+  terminal profile paths a REH supplies (review finding RFU-1).
 - **Quick Open file search and the Search view don't work in tabs yet.** Inside a
   tab the extension host serves search itself, registering its file and text
   search providers for `vscode-remote`. Those registrations are denied, so the
