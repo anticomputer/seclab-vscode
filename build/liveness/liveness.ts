@@ -621,7 +621,9 @@ export function discover(files: string[], read: (f: string) => string): Map<stri
 	const out = new Map<string, string>();
 	for (const f of files.filter(f => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(f))) {
 		const t = triggers(read(f), files);
-		if (!t.includes('push') && !t.includes('pull_request')) {
+		// Push runs show the pushed code works, not the scheduled class: a scheduled workflow needs
+		// run evidence of its own even when it also runs on push (liveness-refresh, review MMM).
+		if ((!t.includes('push') && !t.includes('pull_request')) || t.includes('schedule')) {
 			out.set(`workflow:${path.posix.basename(f).replace(/\.ya?ml$/, '')}`, f);
 		}
 	}
@@ -1019,6 +1021,9 @@ async function selfTest(): Promise<void> {
 		const r = reg();
 		r.subjects = r.subjects.filter(s => s.id !== 'workflow:weekly');
 		injections.push(['scheduled job never run', withReg(r), /workflow:weekly .* add it to/]);
+	}
+	{ // a scheduled workflow that also runs on push still needs evidence of a scheduled-class run
+		injections.push(['scheduled and push, never run on schedule', { ...base, '.github/workflows/alarm.yml': 'on:\n  schedule:\n    - cron: \'1 1 * * 1\'\n  push:\njobs:\n  a:\n    steps:\n      - run: x\n' }, /workflow:alarm .* add it to/]);
 	}
 	{ // and a ci job that never checks its marks
 		injections.push(['marks step removed', { ...base, '.github/workflows/ci.yml': 'on:\n  push:\njobs:\n  oci:\n    steps:\n      - run: ./seclab test containment\n' }, /must end with exactly/]);
