@@ -174,3 +174,39 @@ So the table records a **safe value per member**, not merely a kind:
 The general rule the builder enforces, and which the tests should pin: a member the table does
 not name is not silently defaulted to anything callable. Guessing in the capable direction is
 how a null provider becomes a provider that lies.
+
+## Status at the 2026-11-16 wind-down
+
+**Proven.** Patch 0019 exists, the full queue applies, and 265 unit tests pass, including nine
+that pin the stand-in. Those nine were checked against the defect they exist to catch: a proxy
+returning a no-op function for every property read fails five of them, so they are evidence
+rather than decoration. The inventory above was read from the pinned tree, and the two upstream
+invariants patch 0018 rests on were each shown to fail under defect injection.
+
+**Not proven, and not claimed.** No runtime proof has been run for increments 3 or 4. Nothing
+here shows the patched build behaving as described in a real window; "the queue applies" and
+"the tests pass" are not that, and the project's own history on this branch is that review and
+unit tests have repeatedly passed over checks that could not fail. The patch-reach check, which
+is what would show 0019's module reachable from the shipped desktop build, needs a full upstream
+tree and so runs in CI rather than locally; it has not run on this change yet.
+
+**Exact next step.** Add the sole-consumer invariants for 0019, pinning the facts its argument
+depends on: that the ten registrations and the three contributions are the only ones, and that
+the remote contribution is what registers agents for another connection. Each must be shown to
+fail under injection before it is recorded. Then the security review round on 0019, then close
+R12-2 in the register with its regression test, then the runtime proof.
+
+**The runtime proof has to show both halves**, per the coordinator's direction of 2026-11-16: a
+request routed by a forged agent id or participant mention is refused, and the tab's own gated
+agent still works. The second half is what stops the first from being satisfied by a build that
+simply does nothing. Each nulled provider's `seclab.null-provider.registered` event is asserted
+positively, not inferred from an absent connection.
+
+**Builds.** None dispatched or fetched in this stretch; no run ids to carry forward. The U and
+F variants from the increment-2 proof are not valid baselines for increment 3 or 4, since main
+now contains 0017; a vulnerable baseline has to branch from before the patch under test or
+revert it explicitly.
+
+**Awaiting the owner.** Nothing. Finding R12-2 stays open and registered rather than deferred by
+acceptance, because increment 4 closes it; the register reports exactly that one problem on this
+branch, which is the accurate state until 0019 lands with increment 3.
