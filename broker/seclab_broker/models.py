@@ -137,6 +137,7 @@ class ModelPolicy:
     def from_json(cls, obj: dict | None) -> "ModelPolicy":
         obj = obj or {}
         builtin = builtin_providers()
+        known_model_host_patterns()  # shipped data is checked at load, not at the first request
         providers = []
         for p in obj.get("providers", []):
             if isinstance(p, str):
@@ -188,11 +189,31 @@ def builtin_providers() -> dict[str, dict]:
 @lru_cache(maxsize=1)
 def known_model_hosts() -> tuple[HostPattern, ...]:
     data = json.loads((DATA_DIR / "model-hosts.v1.json").read_text())
-    return tuple(_parse_host_pattern(e["host"]) for e in data["entries"])
+    return tuple(_parse_host_pattern(e["host"]) for e in data["entries"] if "host" in e)
+
+
+@lru_cache(maxsize=1)
+def known_model_host_patterns() -> tuple[re.Pattern, ...]:
+    """Model hosts whose shape a host pattern can't express (an inner label), as anchored
+    patterns in the provider-data grammar (policy._REDIRECT_HOST_PATTERN): literal labels and
+    bounded classes only, so one can never widen past its literal suffix."""
+    from .policy import _REDIRECT_HOST_PATTERN
+    data = json.loads((DATA_DIR / "model-hosts.v1.json").read_text())
+    out = []
+    for e in data["entries"]:
+        if set(e) - {"host", "pattern", "reason"} or ("host" in e) == ("pattern" in e):
+            raise PolicyError("model-hosts: each entry is exactly one of host or pattern (with reason)")
+        if "pattern" in e:
+            p = e["pattern"]
+            if not (isinstance(p, str) and _REDIRECT_HOST_PATTERN.fullmatch(p) and r"\." in p and e.get("reason")):
+                raise PolicyError(f"model-hosts: {p!r} is not an anchored host pattern with a reason")
+            out.append(re.compile(p))
+    return tuple(out)
 
 
 def is_model_host(host: str, policy: ModelPolicy) -> bool:
-    return policy.provider_for(host) is not None or any(h.matches(host) for h in known_model_hosts())
+    return (policy.provider_for(host) is not None or any(h.matches(host) for h in known_model_hosts())
+            or any(p.fullmatch(host) for p in known_model_host_patterns()))
 
 
 # ----------------------------------------------------------------- strict JSON

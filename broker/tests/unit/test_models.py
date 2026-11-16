@@ -99,6 +99,40 @@ def test_known_model_hosts_are_model_hosts_without_a_provider():
     assert is_model_host("model.example.test", POL)
 
 
+def test_model_r4_ghe_com_copilot_hosts_need_a_declared_provider():
+    """MODEL-R4: a GHE.com enterprise's Copilot hosts are known model hosts, so a GitHub token
+    bound to one with no declared provider is denied at the model gate instead of bypassing the
+    body policy; a policy that declares a provider for the exact host gets its body policy.
+    Hosts are built from an obviously fake tenant label: a real tenant name is a customer
+    identifier and never goes in the tree (the publish gate refuses one)."""
+    from seclab_broker.models import known_model_host_patterns
+    dom = ".".join(["ghe", "com"])
+    t = "seclabfaketenant"
+
+    def h(*labels):
+        return ".".join(labels)
+
+    capi = h("copilot-api", t, dom)
+    empty = ModelPolicy.from_json(None)
+    for host in (capi, h("copilot-proxy", t, dom), h("copilot", t, dom)):
+        assert is_model_host(host, empty), host
+        v = check_request(empty, host, "POST", "/chat/completions", {"content-type": ["application/json"]},
+                          b'{"model":"m"}', None)
+        assert not v.ok and v.reason == "model host has no declared provider", host
+    for host in (h("api", t, dom), h(t, dom), h("copilot-api", dom), h(capi, "example", "test"),
+                 h("copilot-api", "a", "b", dom), h("xcopilot-api", t, dom), h("copilot-api", t, "ghe", "community")):
+        assert not is_model_host(host, empty), host
+    import copy
+    from seclab_broker.models import builtin_providers
+    tenant = copy.deepcopy(builtin_providers()["copilot"])
+    tenant.update(id="copilot-tenant", hosts=[capi])
+    declared = ModelPolicy.from_json({"providers": [tenant]})
+    assert declared.provider_for(capi).id == "copilot-tenant"
+    assert check_request(declared, capi, "POST", "/chat/completions",
+                         {"content-type": ["application/json"]}, b'{"model":"m","messages":[]}', None).ok
+    assert len(known_model_host_patterns()) == 1
+
+
 def test_budget_and_policy_wiring():
     p = Policy.from_json({"version": 1, "models": {"providers": ["copilot"], "budget": {"requests": 2, "bytes": 10}}})
     b = Budget()

@@ -20,6 +20,8 @@
     {"host": "api.fireworks.ai"},
     {"host": "api.deepseek.com"},
     {"host": "api.perplexity.ai"},
-    {"host": "openrouter.ai"}
+    {"host": "openrouter.ai"},
+    {"pattern": "^copilot[a-z0-9-]{0,40}\\.[a-z0-9-]+\\.ghe\\.com$",
+     "reason": "Copilot services of a GHE.com (data residency) enterprise, on its own subdomain: a copilot-proxy host on the enterprise subdomain in GitHub's Copilot allowlist reference (github/docs@84bdf4c88dcbd2402b0a2b3ab537c5a104e23a6a, content/copilot/reference/copilot-allowlist-reference.md); the runtime takes its CAPI base from the server's endpoints.api, so the exact label is not fixed. Finding MODEL-R4: a GitHub token bound to such a host now needs a declared provider, or the request is denied."}
   ]
 }

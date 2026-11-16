@@ -316,6 +316,8 @@ Built-in providers (`seclab_broker/data/model-providers.v1.json`; `copilot` is m
 Known model hosts (`seclab_broker/data/model-hosts.v1.json`). A request to one of these is denied unless the policy declares a provider for its host:
 
 `api.openai.com`, `api.anthropic.com`, `api.githubcopilot.com`, `*.githubcopilot.com`, `generativelanguage.googleapis.com`, `aiplatform.googleapis.com`, `*.openai.azure.com`, `*.services.ai.azure.com`, `models.inference.ai.azure.com`, `models.github.ai`, `api.mistral.ai`, `api.cohere.com`, `api.cohere.ai`, `api.x.ai`, `api.groq.com`, `api.together.xyz`, `api.fireworks.ai`, `api.deepseek.com`, `api.perplexity.ai`, `openrouter.ai`.
+
+Also every host matching `^copilot[a-z0-9-]{0,40}\.[a-z0-9-]+\.ghe\.com$`: Copilot services of a GHE.com (data residency) enterprise, on its own subdomain: a copilot-proxy host on the enterprise subdomain in GitHub's Copilot allowlist reference (github/docs@84bdf4c88dcbd2402b0a2b3ab537c5a104e23a6a, content/copilot/reference/copilot-allowlist-reference.md).
 <!-- END GENERATED: policy-models -->
 
 ## Risky destinations (generated)
