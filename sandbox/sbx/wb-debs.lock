@@ -2,7 +2,7 @@
 # ADR write-back-gate, EDR write-back-gate-spike addendum). Fetched with apt (signature-verified)
 # in the pinned debian image below, then checked here before they are copied in.
 # Bump: change the versions, run the fetch, record the new sha256 (security review).
-image debian:trixie@sha256:2dc419c6d7fe3dad0a2f9fd469c34cc90b0f9ba642d8fde837fe3d7d34a0e7f1
+image debian:trixie@sha256:9c6e381421d0f48d1b8133e573f33c185ee16cbf505eda9c4a8a4791b25ea8a6
 deb fuse-overlayfs_1.14-1+b1_arm64.deb 177d4f0c6493e8240983757b7b9b7a48fb76ec3797c286a1080d02e59c0f3daf
 deb fuse-overlayfs_1.14-1+b1_amd64.deb e796f6f3c6b7dbef0df283f0a7c277d60a97db0e50665199dafbd2e3733ccae0
 deb libfuse3-4_3.17.2-3_arm64.deb 66793b6b9a559e95a5ff853cbbff337076ef900c4b0d927f57fd986b3b1bea09
