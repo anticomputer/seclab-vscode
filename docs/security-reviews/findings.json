@@ -1871,7 +1871,7 @@
 			"component": "Tab Manager routing / core main process",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "a492fd2",
+			"commit": "8ce6cc70562b3bdf36000576f584478273c9b8ad",
 			"test": {
 				"file": "test/driver/cli-open.ts",
 				"name": "no window ever had a workspace, not even before a dialog (m0#2b-1, m0#3-2)"
@@ -1946,7 +1946,7 @@
 			"component": "Tab Manager routing (close-first)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "a492fd2",
+			"commit": "8ce6cc70562b3bdf36000576f584478273c9b8ad",
 			"test": {
 				"file": "test/driver/cli-open.ts",
 				"name": "no window ever had a workspace, not even before a dialog (m0#2b-1, m0#3-2)"
@@ -11544,7 +11544,7 @@
 			"component": "patch-build: check-patch-reach.ts",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "662f6d7",
+			"commit": "e88cc6ac881ac5f593028eca321ed28d4c78b090",
 			"test": {
 				"file": "build/patch-reach-imports.test.ts",
 				"name": "GATE-2: unreachable.json missing"
@@ -11560,7 +11560,7 @@
 			"component": "patch-build: check-patch-reach.ts",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "662f6d7",
+			"commit": "e88cc6ac881ac5f593028eca321ed28d4c78b090",
 			"test": {
 				"file": "build/patch-reach-imports.test.ts",
 				"name": "GATE-3: reach.json missing"
@@ -11576,7 +11576,7 @@
 			"component": "lint pins: check-pins.ts",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "89bd97e",
+			"commit": "158b893ab5b7a9b2ae9c1f531267455dcbb31af1",
 			"test": {
 				"file": "test/safety/gate-inputs.test.ts",
 				"name": "check-pins: an empty, foreign, truncated or canary-only list fails"
@@ -11591,7 +11591,7 @@
 			"component": "fixture lint --av",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "89bd97e",
+			"commit": "158b893ab5b7a9b2ae9c1f531267455dcbb31af1",
 			"test": {
 				"file": "test/safety/gate-inputs.test.ts",
 				"name": "fixture-lint --av: an empty, truncated or canary-only list fails"
@@ -11606,7 +11606,7 @@
 			"component": "fixture lint roots",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "89bd97e",
+			"commit": "158b893ab5b7a9b2ae9c1f531267455dcbb31af1",
 			"test": {
 				"file": "test/safety/gate-inputs.test.ts",
 				"name": "fixture-lint: a missing root fails, and a root with nothing to scan fails"
@@ -11621,12 +11621,12 @@
 			"component": "check-pins, deps, fixture-lint",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "d60ee0f",
+			"commit": "ee42156301c7dec9f39ee97d3eed2683db9144d6",
 			"test": {
 				"file": "test/safety/gate-inputs.test.ts",
 				"name": "so its pins never drop out silently (GATE-7, review UUU-1)"
 			},
-			"note": "check-pins (89bd97e) and fixture-lint have their own unreadable-file cases in the same file; build/deps.ts was fixed after review UUU-1, which this test covers."
+			"note": "check-pins (158b893ab5b7a9b2ae9c1f531267455dcbb31af1) and fixture-lint have their own unreadable-file cases in the same file; build/deps.ts was fixed after review UUU-1, which this test covers."
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -11637,7 +11637,7 @@
 			"component": "seclab verify_signed_image",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "89bd97e",
+			"commit": "158b893ab5b7a9b2ae9c1f531267455dcbb31af1",
 			"gap": "The marker is gone: verify_signed_image verifies on every use, and review SSS-2 removed tool reuse by tag. No test drives the seclab shell function with a forged marker or tag."
 		},
 		{
@@ -11660,7 +11660,7 @@
 			"component": "focus harness (teardown, window.ts)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "89bd97e",
+			"commit": "158b893ab5b7a9b2ae9c1f531267455dcbb31af1",
 			"test": {
 				"file": "test/safety/gate-inputs.test.ts",
 				"name": "teardown: no steal log means clean only if the watcher watched the editor to the end"
@@ -12513,7 +12513,7 @@
 			"component": "list-driven gates (check-pins, fixture-lint)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "a55fc62",
+			"commit": "502dd43ce0115a18223159f434dada921318f306",
 			"test": {
 				"file": "test/safety/gate-inputs.test.ts",
 				"name": "canary-only list fails; an unreadable file is a finding"
@@ -12529,7 +12529,7 @@
 			"component": "build/tools/tool.sh",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "a55fc62",
+			"commit": "502dd43ce0115a18223159f434dada921318f306",
 			"gap": "The image is rebuilt from cache on every use; no test retags a tool image and checks it is rebuilt."
 		},
 		{
@@ -12541,7 +12541,7 @@
 			"component": "patch-build: check-patch-reach.ts",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "a55fc62",
+			"commit": "502dd43ce0115a18223159f434dada921318f306",
 			"test": {
 				"file": "build/patch-reach-imports.test.ts",
 				"name": "SSS-3: reach.json with an emptied entry"
@@ -12556,7 +12556,7 @@
 			"component": "focus harness (watcher record)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "a55fc62",
+			"commit": "502dd43ce0115a18223159f434dada921318f306",
 			"gap": "The record is now a sibling of the profile; no test asserts its location."
 		},
 		{
@@ -12600,7 +12600,7 @@
 			"component": "headless driver (CDP pipe)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "e060e1a",
+			"commit": "3b6696dba8454757f5ed845e1dffedd92864b37f",
 			"test": {
 				"file": "test/driver/selftest.ts",
 				"name": "no other process holds the CDP pipe (no login shell, no inheriting child)"
@@ -12616,7 +12616,7 @@
 			"component": "check-release --desktop",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "9795020",
+			"commit": "12ac270cfa05abee1033b846a325083d1e4aae78",
 			"test": {
 				"file": "build/check-release.sh",
 				"name": "desktop with the bootstrap policy but not the guard's (review QQQ-2)"
@@ -12631,7 +12631,7 @@
 			"component": "seclab test driver",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "9795020",
+			"commit": "12ac270cfa05abee1033b846a325083d1e4aae78",
 			"gap": "Exercised by every CI run of the command, but no test targets the shell construct."
 		},
 		{
@@ -12659,7 +12659,7 @@
 			"component": "headless driver (editor environment)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "e060e1a",
+			"commit": "3b6696dba8454757f5ed845e1dffedd92864b37f",
 			"test": {
 				"file": "test/driver/driver.test.ts",
 				"name": "no shell-environment resolution, so no login shell (RRR-1)"
@@ -12674,7 +12674,7 @@
 			"component": "patch 0042",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "e060e1a",
+			"commit": "3b6696dba8454757f5ed845e1dffedd92864b37f",
 			"gap": "Log wording only; nothing to test."
 		},
 		{
@@ -12718,7 +12718,7 @@
 			"component": "local-window test",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "54a428e",
+			"commit": "8e491a27189c818419f20a0b47e96ac1aabead8c",
 			"test": {
 				"file": "test/driver/local-window.ts",
 				"name": "entry point exists and parses"
@@ -12733,7 +12733,7 @@
 			"component": "tab feed install script",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "54a428e",
+			"commit": "8e491a27189c818419f20a0b47e96ac1aabead8c",
 			"test": {
 				"file": "tabd/test/broker-supervisor.test.ts",
 				"name": "a sentinel outside the shape tabd mints is refused (TTT-2)"
@@ -12748,7 +12748,7 @@
 			"component": "build/deps.ts",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "d60ee0f",
+			"commit": "ee42156301c7dec9f39ee97d3eed2683db9144d6",
 			"test": {
 				"file": "test/safety/gate-inputs.test.ts",
 				"name": "so its pins never drop out silently (GATE-7, review UUU-1)"
@@ -12763,7 +12763,7 @@
 			"component": "local-window test",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "d60ee0f",
+			"commit": "ee42156301c7dec9f39ee97d3eed2683db9144d6",
 			"test": {
 				"file": "test/driver/local-window.ts",
 				"name": "shows the marker the run looks for when it activates"
@@ -12779,7 +12779,7 @@
 			"component": "headless driver (CDP pipe)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "d60ee0f",
+			"commit": "ee42156301c7dec9f39ee97d3eed2683db9144d6",
 			"gap": "It reports unknown unless it found both fds; the self-test exercises the normal path (macOS 8/8), but no case makes the fds unreadable."
 		},
 		{
@@ -12807,7 +12807,7 @@
 			"component": "findings register citations",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "d60ee0f",
+			"commit": "ee42156301c7dec9f39ee97d3eed2683db9144d6",
 			"gap": "Citation wording; the register check itself verifies each name occurs once."
 		},
 		{
@@ -12846,7 +12846,7 @@
 			"component": "patch 0041 (routing rule)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "bbfcbe8",
+			"commit": "9c3c0c900c0f3b289f72858798c030ae57ed6db9",
 			"test": {
 				"file": "test/driver/cli-open.ts",
 				"name": "workspace file claiming a tab authority (VVV-1)"
@@ -12862,7 +12862,7 @@
 			"component": "build/check-release.sh",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "bbfcbe8",
+			"commit": "9c3c0c900c0f3b289f72858798c030ae57ed6db9",
 			"test": {
 				"file": "build/check-release.sh",
 				"name": "desktop whose product.json doesn't turn patch 0041's routing on (review VVV-2)"
@@ -12877,7 +12877,7 @@
 			"component": "Tab Manager (open request)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "bbfcbe8",
+			"commit": "9c3c0c900c0f3b289f72858798c030ae57ed6db9",
 			"gap": "No unit test drives the Tab Manager's sameFolder; it needs the extension host."
 		},
 		{
@@ -12889,7 +12889,7 @@
 			"component": "Tab Manager (open request)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "bbfcbe8",
+			"commit": "9c3c0c900c0f3b289f72858798c030ae57ed6db9",
 			"gap": "No test injects a rejection into the chain."
 		},
 		{
@@ -12933,7 +12933,7 @@
 			"component": "test/driver/cli-open.ts",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "bbfcbe8",
+			"commit": "9c3c0c900c0f3b289f72858798c030ae57ed6db9",
 			"gap": "A test of the test; it now waits for the confirmation text itself."
 		},
 		{
@@ -12945,7 +12945,7 @@
 			"component": "patch 0041 (routing rule)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "cf734e5",
+			"commit": "7138ed3d2589ad9d693e874e0a94fa94243151b6",
 			"gap": "Not reachable today (the RPC filter denies a tab's vscode.openFolder); the driven test covers file: only."
 		},
 		{
@@ -12989,7 +12989,7 @@
 			"component": "build/check-release.sh",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "cf734e5",
+			"commit": "7138ed3d2589ad9d693e874e0a94fa94243151b6",
 			"test": {
 				"file": "build/check-release.sh",
 				"name": "desktop with a vendored product.json under node_modules"
