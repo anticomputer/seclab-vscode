@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Build the sbx tab template: the sbx `shell` kit + our REH + in-sandbox scripts, saved
 # with `sbx template save` (sbx's native snapshot mechanism). Runs on the host; uses only sbx.
-# Usage: sandbox/sbx/build-template.sh [TAG]   (default seclab-tab:local)
+# Usage: sandbox/sbx/build-template.sh [TAG]   (default seclab-tab:local; a proof build uses a
+#   per-build seclab-tab:b-NAME so it never swaps the shared :local under other sessions, and
+#   harnesses take it through SECLAB_TAB_IMAGE)
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TAG="${1:-seclab-tab:local}"
@@ -9,7 +11,7 @@ ARCH="${ARCH:-arm64}"
 REH_TGZ="$ROOT/.work/out/seclab-reh-linux-${ARCH}.tar.gz"
 B=seclab-template-builder
 [[ -f "$REH_TGZ" ]] || { echo "missing $REH_TGZ; run ./seclab build linux reh" >&2; exit 1; }
-[[ "$TAG" =~ ^[a-z0-9][a-z0-9._/-]*:[a-zA-Z0-9._-]+$ ]] || { echo "bad tag" >&2; exit 2; }
+[[ "$TAG" == seclab-tab:local || "$TAG" =~ ^seclab-tab:b-[a-z0-9][a-z0-9.-]{0,40}$ ]] || { echo "bad tag: seclab-tab:local or seclab-tab:b-NAME" >&2; exit 2; }
 
 # Observability (ADR tab-observability): strace from a pinned deb. sbx's global policy blocks
 # deb.debian.org inside sandboxes, so apt runs in the pinned debian image and the deb is

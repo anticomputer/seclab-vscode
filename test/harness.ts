@@ -1,6 +1,9 @@
 // Shared harness helpers: lets several worktrees (and sessions) run the suites at once.
 //   SECLAB_BEACON_PORT  host-loopback beacon port (default: a free port picked per run)
 //   SECLAB_EVIDENCE_DIR level B fixture dir (default: <repo>/.work/containment-editor)
+//   SECLAB_TAB_IMAGE    tab image for every runner (default: tabd's, seclab-tab:local for sbx and
+//                       seclab-tab-oci:local for oci); a proof build's per-build b-NAME tag, so
+//                       it never swaps the shared :local under other sessions
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash, createHmac } from 'node:crypto';
@@ -27,6 +30,36 @@ export function tabExec(sandbox: string, args: string[], opts: { timeoutMs?: num
 }
 
 export const worktreeId = createHash('sha256').update(repoRoot).digest('hex').slice(0, 8);
+
+/**
+ * The problem with a tab image for a driver, or undefined: only our own tab images, and the one
+ * kind the driver runs (an sbx template is `seclab-tab:`, an OCI image `seclab-tab-oci:`), so a
+ * mistyped override fails here instead of as a confusing tab failure.
+ */
+export function tabImageProblem(image: string, driver: string): string | undefined {
+	const m = /^(seclab-tab|seclab-tab-oci):([a-z0-9][a-z0-9._-]{0,63})$/.exec(image);
+	if (!m) {
+		return `SECLAB_TAB_IMAGE must name a seclab-tab image, got ${JSON.stringify(image)}`;
+	}
+	if ((driver === 'sbx') !== (m[1] === 'seclab-tab')) {
+		return `SECLAB_TAB_IMAGE ${image} is not a ${driver} tab image (${driver === 'sbx' ? 'seclab-tab:' : 'seclab-tab-oci:'}…)`;
+	}
+	return undefined;
+}
+
+/** tabd's `--image` arguments for SECLAB_TAB_IMAGE (none when unset); exits on a bad value. */
+export function tabImageArgs(driver: string): string[] {
+	const image = process.env.SECLAB_TAB_IMAGE || undefined;
+	if (image === undefined) {
+		return [];
+	}
+	const problem = tabImageProblem(image, driver);
+	if (problem) {
+		console.error(problem);
+		process.exit(2);
+	}
+	return ['--image', image];
+}
 
 /** SECLAB_BEACON_PORT, or a free loopback port. */
 export async function beaconPort(): Promise<number> {

@@ -420,7 +420,11 @@ const imageIds = new Map(lines('docker', ['image', 'ls', '--no-trunc', '--format
 }));
 for (const n of [...imageIds.keys()].filter(n => OURS.image.test(n))) {
 	const img = imageIds.get(n)!;
-	const isLive = live.names.has(n) || live.ids.has(img.id) || !(Date.now() - img.created > 3_600_000);
+	// A proof build's per-build tab image (seclab-tab-oci:b-NAME) is named in no tracked file, so
+	// it would look superseded within the hour and another session's build would prune it
+	// mid-proof. It stays live for a week; --caches still removes it.
+	const perBuild = /^seclab-tab(-oci)?:b-/.test(n) && Date.now() - img.created < 7 * 24 * 3_600_000;
+	const isLive = perBuild || live.names.has(n) || live.ids.has(img.id) || !(Date.now() - img.created > 3_600_000);
 	const remove = isLive ? args.has('--caches') : true;
 	items.push({
 		kind: 'image', name: `${n}${isLive ? '' : ' (superseded)'}`, state: '', remove, why: remove ? '' : 'in use by a current build (use --caches)',

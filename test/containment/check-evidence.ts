@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
-import { beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, ensureVsceImage, lockRun, VSCE_IMAGE } from '../harness.ts';
+import { beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, ensureVsceImage, lockRun, tabImageProblem, VSCE_IMAGE } from '../harness.ts';
 import { brokerProxy, checkEvidence, readEvidence, report, rpcDecisions, type Check } from './assert.ts';
 import { materialiseFixture, readManifest, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 import { partitionFindings, seedTabManagerState, stateItems } from './state-db.ts';
@@ -29,8 +29,9 @@ const driver = driverArg ?? 'sbx';
 // (docs/edr/20261106-test-build-variants.md): SECLAB_TAB_IMAGE=seclab-tab-oci:test-containment.
 // Only our own tab images are accepted; the editor's Tab Manager gets the same image.
 const tabImage = process.env.SECLAB_TAB_IMAGE || undefined;
-if (tabImage !== undefined && !/^seclab-tab(-oci)?:[a-z0-9][a-z0-9._-]{0,63}$/.test(tabImage)) {
-	console.error(`SECLAB_TAB_IMAGE must name a seclab-tab image, got ${JSON.stringify(tabImage)}`);
+const tabImageError = tabImage === undefined ? undefined : tabImageProblem(tabImage, driver);
+if (tabImageError) {
+	console.error(tabImageError);
 	process.exit(2);
 }
 const imageArgs = tabImage ? ['--image', tabImage] : [];
