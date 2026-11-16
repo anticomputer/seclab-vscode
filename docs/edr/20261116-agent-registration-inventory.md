@@ -69,9 +69,38 @@ each of these services resolved to the null provider, rather than infer it from 
 a connection. Absence of effect is not containment, and a check that cannot fail is not
 evidence.
 
-## What is not yet settled
+## Both halves are needed, which was checked rather than assumed
 
-Whether an inert stand-in destabilises the three workbench contributions that consume these
-services, or whether those contributions must be withheld in a tab window as well. That is a
-behaviour question about upstream code, so it is settled by running the patched build, not by
-reading. Until it is, the shape above is a plan and not a result.
+The agent registration at row 6 is a method of `RemoteAgentHostContribution`, one of the three
+workbench contributions. So withholding those three contributions in a tab window is what
+actually closes R12-2, and it is the low-risk half: a contribution that never runs is the same
+state upstream is in when the feature is off.
+
+That raised the obvious question of whether the ten services could then be left alone, on the
+grounds that only those contributions resolve them. They cannot. Reading the tree for
+consumers outside the remote agent-host directory found real ones:
+`IMissionControlSharingService` is resolved by the remote-connections toggle and by the tunnel
+host contribution, and `IRemoteAgentHostConnectionCustomizationService` by the agent-host
+artifact integrations. Nulling the services is therefore not belt-and-braces; it is load
+bearing for those consumers, and the plan was right to ask for it.
+
+Stated plainly because it is the kind of premise this project has been caught on before: "only
+the contributions use these services" is false, and had it been assumed rather than checked,
+0019 would have shipped with three live consumers of services it believed were unreachable.
+
+## The fail-open trap in the inert stand-in, and why the shape is not settled
+
+The compact way to make an inert stand-in satisfy ten different interfaces is a proxy whose
+every property read returns a no-op function. That is a fail-open, and it must not be used: a
+consumer writing `if (service.enabled)` reads a function, which is truthy, so an inert provider
+would report itself as *more* capable than the real one rather than less. The same applies to
+any capability flag these services expose.
+
+An inert stand-in therefore has to fail closed on reads it does not understand — a property
+read it cannot resolve must be falsy, not callable — while still supplying the event
+properties consumers subscribe to, since those are usually instance fields rather than
+prototype members and so cannot be recovered from the real class's prototype alone.
+
+Settling that shape needs the real consumers' usage read, and then the patched build run; it is
+a behaviour question about upstream code, not something to decide by reading alone. Until then
+the design above is a plan and not a result.
