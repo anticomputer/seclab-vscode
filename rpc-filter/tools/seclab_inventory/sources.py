@@ -74,7 +74,7 @@ class SourceTree:
         return url
 
 
-def read_pinned_sha(repo_root: str, fallback: str) -> tuple:
+def read_pinned_sha(repo_root: str, fallback: "str | None") -> tuple:
     """Resolve the upstream SHA.
 
     Prefers ``upstream.lock`` (owned by the fork-build session) so the

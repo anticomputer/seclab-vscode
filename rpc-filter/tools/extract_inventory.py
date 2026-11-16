@@ -24,9 +24,6 @@ from seclab_inventory import ai, channels, commands, pushes, rpc, tabdata  # noq
 from seclab_inventory.render import render_markdown  # noqa: E402
 from seclab_inventory.sources import SourceTree, read_pinned_sha  # noqa: E402
 
-# Used only when upstream.lock is absent. Keep in step with ARCHITECTURE.md.
-FALLBACK_SHA = "a717861c07586a53d83b80d742cd3f59b20a6273"
-
 REPO_ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 
 
@@ -45,9 +42,14 @@ def main(argv=None) -> int:
         print("error: %s does not look like a vscode checkout" % source, file=sys.stderr)
         return 2
 
-    sha, sha_origin = read_pinned_sha(REPO_ROOT, FALLBACK_SHA)
+    sha, sha_origin = read_pinned_sha(REPO_ROOT, None)
     if args.sha:
         sha, sha_origin = args.sha, "--sha flag"
+    if not sha:
+        # No constant to fall back on: a stale one labelled every permalink with the previous
+        # release after a bump (review of the 1.145.3 bump).
+        print("error: upstream.lock names no upstream SHA (or pass --sha)", file=sys.stderr)
+        return 2
 
     tree = SourceTree(root=source, sha=sha)
 
