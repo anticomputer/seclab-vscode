@@ -13743,6 +13743,44 @@
 			"status": "fixed-untested",
 			"commit": "805b677a7b9e29bce9f4405d5c9cf25bd880cda7",
 			"gap": "No case removes the parser from the list while it stays on disk."
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-1",
+			"round": "Round LSR",
+			"severity": "medium",
+			"summary": "A quoted or spaced `schedule` trigger key, or a quoted inline trigger list, hid a schedule+push workflow from discovery, so it needed no evidence.",
+			"component": "liveness gate (workflow discovery)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "b4db393",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-1 schedule spelled ${spelling}" },
+			"note": "Three spellings are injected (`\"schedule\":`, `'schedule' :`, an inline quoted list); each fails with its unquoting reverted."
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-2",
+			"round": "Round LSR",
+			"severity": "medium",
+			"summary": "A workflow subject could be satisfied by a ci mark from its own push job, or by another workflow's run.",
+			"component": "liveness gate (subject evidence)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "b4db393",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-2 a scheduled workflow proven by a ci mark" }
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-3",
+			"round": "Round LSR",
+			"severity": "low",
+			"summary": "The stale-exemption rule missed a union merge that keeps a superseded exemption beside its replacement, or brings a removed exemption back with its code.",
+			"component": "liveness gate (exemptions)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "b4db393",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-3 union merge resurrects a tombstoned exemption with its code" },
+			"note": "Also injected: a superseded entry kept beside its replacement, and a tombstone listed twice."
 		}
 	]
 }
