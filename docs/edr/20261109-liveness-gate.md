@@ -63,7 +63,9 @@ Reviews ask what code says. Nothing asked whether anything calls it.
     main, since a dropped item in an `*-ignore` list would otherwise read as live. Filters are
     judged as globs (`m*` in `branches-ignore` covers main). An entry using glob syntax the gate
     doesn't model (`?`, `+`, `[]`, `!`), a key it doesn't model, a tags-only push, or a
-    pull_request limited to non-default activity types all count against the trigger. Two
+    pull_request limited to non-default activity types all count against the trigger. The
+    `on:` line itself must be the only one, with every line before it closed, so a column-0
+    continuation of an earlier value can't stand in for the real trigger block. Two
     workflow files with one stem (`x.yml`, `x.yaml`) fail: GitHub runs both, but they would
     share one subject;
   - test-only hooks in `test/builds/variants.json`;

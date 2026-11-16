@@ -569,8 +569,13 @@ function openFlow(lines: string[], i: number): boolean {
 	if (lineOpen(lines[i].replace(/^[^:]+:/, ''))) {
 		return true;
 	}
+	return anyOpen(lines.slice(i + 1), true);
+}
+
+/** Whether any of these lines is left open; `block` stops at the first top-level line. */
+function anyOpen(lines: string[], block: boolean): boolean {
 	let scalar: number | undefined;
-	for (const l of lines.slice(i + 1)) {
+	for (const l of lines) {
 		if (/^\s*$/.test(l)) {
 			continue;
 		}
@@ -582,7 +587,7 @@ function openFlow(lines: string[], i: number): boolean {
 		if (/^\s*#/.test(l)) {
 			continue;
 		}
-		if (/^\S/.test(l)) {
+		if (block && /^\S/.test(l)) {
 			break;
 		}
 		if (lineOpen(l)) {
@@ -602,9 +607,16 @@ function openFlow(lines: string[], i: number): boolean {
  */
 export function triggers(yml: string, files?: string[]): string[] {
 	const lines = yml.split('\n');
-	const i = lines.findIndex(l => /^(?:on|"on"|'on')\s*:/.test(l));
+	const onKey = /^(?:on|"on"|'on')\s*:/;
+	const i = lines.findIndex(l => onKey.test(l));
 	if (i < 0) {
 		return [];
+	}
+	// The `on:` line must be the real top-level key: a value left open on an earlier line can
+	// continue at column 0 with a decoy `on: push` that would be read instead (LSR-15). So the
+	// lines before it must all be closed, and only one line may look like `on:`.
+	if (lines.filter(l => onKey.test(l)).length > 1 || anyOpen(lines.slice(0, i), false)) {
+		return ['unparsed'];
 	}
 	// YAML lets any key be quoted ("schedule":), so every trigger name is unquoted before use:
 	// a positive match on `schedule` must not miss a spelling GitHub accepts (review LSR-1).
@@ -1339,6 +1351,15 @@ async function selfTest(): Promise<void> {
 		['an anchored two-line list', '    branches-ignore: &b [foo,\n                         main]\n'],
 	]) {
 		injections.push([`LSR-11 ${shape}`, { ...base, '.github/workflows/nightly.yml': `on:\n  workflow_dispatch:\n  push:\n${filter}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:nightly .* add it to/]);
+	}
+	// LSR-15: the `on:` line must be the real top-level key.
+	for (const [shape, yml] of [
+		['a decoy on: inside an open flow mapping', 'env: {A: a,\n"on": push,\nB: b}\non:\n  push:\n    branches: [nope]\n'],
+		['a decoy on: inside an open quoted scalar', 'env:\n  NOTE: "x\non: push"\non:\n  push:\n    branches: [nope]\n'],
+		['a duplicate top-level on:', 'on: push\non:\n  workflow_dispatch:\n'],
+		['the only on: is inside an open value', 'env: {A: a,\n"on": push,\nB: b}\n'],
+	]) {
+		injections.push([`LSR-15 ${shape}`, { ...base, '.github/workflows/nightly.yml': `${yml}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:nightly .* add it to/]);
 	}
 	// LSR-13/14: filters are judged by what they mean, and what the gate doesn't model counts against.
 	for (const [shape, trig] of [
