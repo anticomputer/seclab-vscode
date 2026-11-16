@@ -3,6 +3,7 @@
 //   node test/nbsync/probe.ts prepare [--app PATH]   # benign tab + probe extension; fake canaries on the host
 //   node test/window.ts launch …                     # (the printed line) background launch, focus watcher
 //   node test/nbsync/probe.ts check [--measure]      # report + assertions (or only the measurement), then the teardown gate
+//   node test/nbsync/probe.ts drive --app PATH [--measure]   # all of it in one go through the headless driver (builds with patch 0012's bootstrap)
 // Canaries are generated fake `seclabcanary_nb_` values, seeded on the host only: a markdown cell of
 // a host .ipynb, and a line of a host .seclabnb (a type only the probe's serializer reads). The
 // tab's own notebook carries a detection value, to prove the probe sees cells on this build. The
@@ -26,6 +27,8 @@ const ws = path.join(base, 'ws');
 const hostIpynb = path.join(base, 'host', 'host.ipynb');
 const hostNb = path.join(base, 'host', 'host.seclabnb');
 const canaryFile = path.join(base, 'canaries.json');
+// Written by drive from the window's RPC-filter log (host-written, fixed refs only).
+const evidenceFile = path.join(base, 'drive-evidence.json');
 const resultsFile = path.join(repo, '.work', 'nbsync-results.jsonl');
 const userData = path.join(os.homedir(), '.seclab-test', 'nb');
 const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
@@ -138,12 +141,27 @@ async function check(measure: boolean): Promise<boolean> {
 		console.log(`canary hits: ${hits.map(h => `${h.kind}@${h.channel}/${h.phase}`).join(', ') || 'none'}`);
 		console.log(`controls: ${JSON.stringify(rep.controls)}`);
 		if (!measure) {
+			// Notebooks in a tab need the tab's serializer. Where the RPC filter refuses it (patch 0005's
+			// default deny), no notebook opens in the window, so the leak checks below can't be vacuous
+			// unless that refusal is shown; otherwise detection must work on this build.
+			let ev: { serializerRefused?: unknown } = {};
+			try {
+				ev = JSON.parse(fs.readFileSync(evidenceFile, 'utf8'));
+			} catch {
+				ev = {};
+			}
+			const off = ev.serializerRefused === true;
+			console.log(`notebooks in this tab: ${off ? 'off (the RPC filter refused the tab\'s serializer)' : 'on'}`);
 			expect('the probe finished', rep.done === true);
-			expect('control: detection works: the tab\'s own notebook cell was seen', hits.some(h => h.kind === 'detect' && SYNC.includes(h.channel)));
-			expect('control: the tab\'s own notebook is synced', rep.controls.ownNotebook === true);
-			expect('control: a notebook the tab created is synced and takes an edit', rep.controls.tabUntitled === true && rep.controls.tabUntitledEdited === true);
-			expect('NB-1 no host notebook cell reaches the tab through the notebook sync', !hits.some(h => h.kind !== 'detect' && SYNC.includes(h.channel)));
-			expect('NB-2 no host notebook bytes reach a serializer in the tab', !hits.some(h => h.kind !== 'detect' && h.channel === 'serializer'));
+			if (off) {
+				expect('control: no notebook opened in the tab at all (its own included), consistent with the refused serializer', rep.controls.ownNotebook === false && rep.controls.tabUntitled === false && Object.keys(rep.schemes).length === 0);
+			} else {
+				expect('control: detection works: the tab\'s own notebook cell was seen', hits.some(h => h.kind === 'detect' && SYNC.includes(h.channel)));
+				expect('control: the tab\'s own notebook is synced', rep.controls.ownNotebook === true);
+				expect('control: a notebook the tab created is synced and takes an edit', rep.controls.tabUntitled === true && rep.controls.tabUntitledEdited === true);
+			}
+			expect('DOCSYNC-R2 NB-1 no host notebook cell reaches the tab through the notebook sync', !hits.some(h => h.kind !== 'detect' && SYNC.includes(h.channel)));
+			expect('DOCSYNC-R2 NB-2 no host notebook bytes reach a serializer in the tab', !hits.some(h => h.kind !== 'detect' && h.channel === 'serializer'));
 		}
 	}
 	expect('no focus steal', !steals);
@@ -182,6 +200,22 @@ if (mode === 'prepare') {
 			spawnSync('sleep', ['1']);
 		}
 		spawnSync('sleep', ['5']);
+		// Evidence from the window, before teardown removes the profile: which editors it opened (the
+		// host notebooks' tab labels), and what the RPC filter refused (fixed-shape refs only).
+		const labels = await ed.evaluate<string[]>(`[...document.querySelectorAll('.tabs-container .tab .label-name')].map(e => e.textContent ?? '')`).catch(() => [] as string[]);
+		console.log(`window editors: ${JSON.stringify(labels.filter(l => /^[\w. -]{1,60}$/.test(l)))}`);
+		await ed.screenshot(path.join(base, 'drive.png')).catch(() => 0);
+		const denies = new Map<string, number>();
+		const walk = (d: string): string[] => fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : e.name === 'seclabRpcFilter.log' ? [path.join(d, e.name)] : []) : [];
+		for (const f of walk(path.join(userData, 'logs'))) {
+			for (const m of fs.readFileSync(f, 'utf8').matchAll(/"ref":"((?:rpc|cmd):[A-Za-z0-9_.$-]{1,120})","verdict":"deny"/g)) {
+				if (/otebook|executeCommand|vscode\.open/i.test(m[1])) {
+					denies.set(m[1], (denies.get(m[1]) ?? 0) + 1);
+				}
+			}
+		}
+		console.log(`filter denials (notebook-related ref -> lines): ${JSON.stringify(Object.fromEntries(denies))}`);
+		fs.writeFileSync(evidenceFile, JSON.stringify({ serializerRefused: denies.has('rpc:MainThreadNotebook.$registerNotebookSerializer'), editors: labels.length }));
 	} catch (e) {
 		console.error(`drive: ${String(e)}`);
 	} finally {
