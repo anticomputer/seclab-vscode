@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 82 | 179 | 191 | 22 | 488 |
+| fixed | 14 | 82 | 181 | 192 | 22 | 491 |
 | fixed-untested | 0 | 5 | 56 | 163 | 58 | 282 |
 | accepted-residual | 0 | 1 | 12 | 68 | 20 | 101 |
 | deferred | 2 | 2 | 14 | 9 | 2 | 29 |
 | open | 0 | 2 | 14 | 15 | 6 | 37 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 275 | 446 | 114 | 943 |
+| **all** | 16 | 92 | 277 | 447 | 114 | 946 |
 
 ## Baseline: open high and critical findings
 
@@ -1865,6 +1865,9 @@ Every other commit the register cites is on main's history, or on the branch its
 | LSR-1 | medium | fixed | A quoted or spaced \`schedule\` trigger key, or a quoted inline trigger list, hid a schedule+push workflow from discovery, so it needed no evidence. | b4db393 · `build/liveness/liveness.ts` "LSR-1 schedule spelled ${spelling}" |
 | LSR-2 | medium | fixed | A workflow subject could be satisfied by a ci mark from its own push job, or by another workflow's run. | b4db393 · `build/liveness/liveness.ts` "LSR-2 a scheduled workflow proven by a ci mark" |
 | LSR-3 | low | fixed | The stale-exemption rule missed a union merge that keeps a superseded exemption beside its replacement, or brings a removed exemption back with its code. | b4db393 · `build/liveness/liveness.ts` "LSR-3 union merge resurrects a tombstoned exemption with its code" |
+| LSR-4 | medium | fixed | Quoted or spaced push/pull_request filter keys (\`"branches": \[nope\]\`) were not recognised, so a decoy push trigger made a dispatch-only workflow look live. | 6d6a6f5 · `build/liveness/liveness.ts` "LSR-4 push filter spelled ${spelling}" |
+| LSR-5 | medium | fixed | A \`.yaml\` twin of a \`.yml\` workflow shared its subject id, so the twin needed no evidence of its own. | 6d6a6f5 · `build/liveness/liveness.ts` "LSR-5 a .yaml twin of a registered .yml workflow" |
+| LSR-6 | low | fixed | A change dropping a tombstone together with the re-add (a whole-register merge resolution, or an edit) still passed. | 6d6a6f5 · `build/liveness/liveness.ts` "LSR-6 a tombstone dropped against the base" |
 
 ### [20261116-pr-landing](20261116-pr-landing.md)
 
