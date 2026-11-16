@@ -13819,6 +13819,31 @@
 			"commit": "6d6a6f5",
 			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-6 a tombstone dropped against the base" },
 			"note": "`./seclab liveness check` passes the base register (merge base with main, or on main the push's previous head), and liveness.ts requires it. Also checked end to end through the CLI with a dropped tombstone."
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-7",
+			"round": "Round LSR",
+			"severity": "medium",
+			"summary": "Push filters at any indentation but 4 spaces were not read, so a 3- or 6-space `branches: [nope]` still disarmed the push filter.",
+			"component": "liveness gate (workflow discovery)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "b3c8fb1",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-7 ${shape}" },
+			"note": "Six shapes are injected: 6- and 3-space filters, 4-space triggers, an inline flow-mapping filter, a column-0 comment before the schedule, and an unreadable trigger line. Each fail-closed branch was mutated and failed its own case."
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-8",
+			"round": "Round LSR",
+			"severity": "low",
+			"summary": "A tombstone marked `restored` with no exemption protected nothing, so a later merge could bring the exemption back silently.",
+			"component": "liveness gate (exemptions)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "b3c8fb1",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-8 a restored tombstone with no exemption" }
 		}
 	]
 }

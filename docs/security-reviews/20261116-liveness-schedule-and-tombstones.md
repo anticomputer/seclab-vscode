@@ -37,3 +37,15 @@ of the same shape, and a residual.
 | LSR-4 | Medium | discovery | The push and pull_request filter keys were still quote- and space-sensitive, so `"branches": [nope]` let a decoy push trigger make a dispatch-only workflow look live (the KKK-7 and MMM-1 fail-open). | Fixed | Filter keys are unquoted like trigger keys. Three spellings are injected. |
 | LSR-5 | Medium | discovery | `x.yml` and `x.yaml` are two workflows to GitHub but one subject to the gate, so the twin needed no evidence of its own. | Fixed | Two workflow files with one stem fail. |
 | LSR-6 | Low | exemptions | A change that drops a tombstone together with the re-add (taking a branch's whole register in a merge, or an edit) still passed. | Fixed | Tombstones are append-only against the base register, the same base the findings register uses. `check` requires `--base`. A deliberate return marks the tombstone `restored`. |
+
+## Round LSR, second follow-up
+The reviewer confirmed LSR-5 and LSR-6 closed and the base wiring sound. The comparison is never
+against the change's own register. `--base` can't be omitted or redirected. A pull request is
+judged against main's tip. A branch forked before the register existed goes unenforced only on
+its own branch-push run; the pull request and main runs still enforce. It also confirmed that a
+union merge can't defeat a tombstone, `restored` included.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| LSR-7 | Medium | discovery | LSR-4 was fixed only at exactly 4-space indentation. A filter at 3 or 6 spaces is valid YAML that GitHub acts on, and still disarmed the push filter. | Fixed | The `on:` scanner follows YAML indentation and fails closed on what it can't read: an unparseable trigger line makes the workflow a subject, and an inline or unreadable push filter counts as off main. Column-0 comments no longer end the block. Six shapes are injected. |
+| LSR-8 | Low | exemptions | A tombstone marked `restored` with no exemption (armed ahead of time, or left on afterwards) protected nothing, so a later merge could bring the exemption back silently. | Fixed | `restored` stands only while its exemption exists. |
