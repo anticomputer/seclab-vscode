@@ -137,3 +137,40 @@ shape comes from the declared interface rather than from guesswork.
 
 Pending the coordinator's decision on that scope, since it is a departure from the plan's
 wording even though it serves the plan's purpose.
+
+## The declared members, and why the table needs safe values rather than safe kinds
+
+Reading the two interfaces that have live outside consumers turned the fail-open from a
+predicted hazard into a demonstrated one, and changed the design.
+
+`IMissionControlSharingService` declares `state: IObservable<'disabled' | 'connecting' |
+'enabled'>`, `environmentName: IObservable<string | undefined>`, and the methods
+`setEnvironmentName`, `setEnabled` and `setProjectFolders`. The neighbouring Mission Control
+service declares `hosts: IObservable<readonly IMissionControlHost[]>`, `accountKey: string |
+undefined`, **`enabled: boolean`**, and six methods.
+
+`enabled: boolean` is the predicted trap, in the tree, declared: under a proxy that returns a
+no-op function for every property read, `service.enabled` is a function and therefore truthy.
+A tab window would report the Mission Control provider as enabled precisely because it had been
+nulled.
+
+`state` sharpens the rule further. Returning `undefined` for it is not safe either, because
+consumers compare it against the three named values; `undefined` is neither `'disabled'` nor
+`'enabled'`, so a `=== 'disabled'` guard fails and a `!== 'enabled'` guard passes, and which
+one a given call site uses decides whether the result is contained or not. The stand-in has to
+return the explicit contained value, `'disabled'`.
+
+So the table records a **safe value per member**, not merely a kind:
+
+| member | kind | stand-in value |
+|---|---|---|
+| `state` | observable | `constObservable('disabled')` — the named contained state, never `undefined` |
+| `environmentName` | observable | `constObservable(undefined)` |
+| `hosts` | observable | `constObservable([])` |
+| `accountKey` | property | `undefined` |
+| `enabled` | property | `false`, explicitly, because the default must be falsy |
+| all methods | method | async no-op |
+
+The general rule the builder enforces, and which the tests should pin: a member the table does
+not name is not silently defaulted to anything callable. Guessing in the capable direction is
+how a null provider becomes a provider that lies.
