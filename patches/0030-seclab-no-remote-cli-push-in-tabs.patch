@@ -1,0 +1,38 @@
+diff -ruN a/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts b/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts
+--- a/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts	2026-11-16 12:13:46
++++ b/src/vs/workbench/contrib/terminal/browser/remoteTerminalBackend.ts	2026-11-16 12:13:59
+@@ -20,6 +20,7 @@
+ import { IProcessDetails } from '../../../../platform/terminal/common/terminalProcess.js';
+ import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+ import { IWorkbenchContribution } from '../../../common/contributions.js';
++import { seclabIsTabAuthority, seclabRefusePush } from '../../../services/extensions/common/seclabRpcFilter.js';
+ import { BaseTerminalBackend } from './baseTerminalBackend.js';
+ import { RemotePty } from './remotePty.js';
+ import { ITerminalInstanceService } from './terminal.js';
+@@ -100,6 +101,18 @@
+ 		}));
+ 
+ 		const allowedCommands = ['_remoteCLI.openExternal', '_remoteCLI.windowOpen', '_remoteCLI.getSystemStatus', '_remoteCLI.manageExtensions'];
++		// seclab: in a tab window the REH is untrusted, and this push lets it pick a command for
++		// the trusted window to run. It crosses no RPC filter, channel guard or command taint, so
++		// it is refused here: upstream's handler is never registered, and the refusal touches no
++		// command service, answers at once with an error and logs only the policy key.
++		const seclabTab = seclabIsTabAuthority(remoteAuthority);
++		if (seclabTab) {
++			this._register(this._remoteTerminalChannel.onExecuteCommand(e => {
++				seclabRefusePush(remoteAuthority, 'push:remoteterminal:$onExecuteCommand');
++				this._remoteTerminalChannel.sendCommandResult(e.reqId, true, 'seclab: denied');
++			}));
++		}
++		if (!seclabTab) {
+ 		this._register(this._remoteTerminalChannel.onExecuteCommand(async e => {
+ 			// Ensure this request for for this window
+ 			const pty = this._ptys.get(e.persistentProcessId);
+@@ -120,6 +133,7 @@
+ 				this._remoteTerminalChannel.sendCommandResult(reqId, true, err);
+ 			}
+ 		}));
++		}
+ 
+ 		this._onPtyHostConnected.fire();
+ 	}
