@@ -500,6 +500,76 @@ export function deadExports(texts: Map<string, string>, entries: string[] = [], 
 // ---- workflows ----------------------------------------------------------------------------
 
 /**
+ * Whether a line leaves a flow collection (`[`, `{`) or a quoted scalar open at its end. A quote
+ * opens a scalar only where one can start (after indentation, `:`, `-`, `[`, `{` or `,`), so an
+ * apostrophe inside a plain scalar doesn't count; `#` after a space, outside quotes, is a comment.
+ */
+export function lineOpen(line: string): boolean {
+	let depth = 0;
+	let q: '"' | "'" | undefined;
+	let prev = '';
+	for (let k = 0; k < line.length; k++) {
+		const c = line[k];
+		if (q === '"') {
+			if (c === '\\') {
+				k++;
+			} else if (c === '"') {
+				q = undefined;
+			}
+		} else if (q === "'") {
+			if (c === "'" && line[k + 1] === "'") {
+				k++;
+			} else if (c === "'") {
+				q = undefined;
+			}
+		} else if (c === '#' && (k === 0 || /\s/.test(line[k - 1]))) {
+			break;
+		} else if ((c === '"' || c === "'") && (prev === '' || /[:\-[{,]/.test(prev))) {
+			q = c;
+		} else if ((c === '[' || c === '{') && (depth > 0 || prev === '' || /[:\-[{,]/.test(prev))) {
+			depth++;
+		} else if ((c === ']' || c === '}') && depth > 0) {
+			depth--;
+		}
+		if (!/\s/.test(c)) {
+			prev = c;
+		}
+	}
+	return depth !== 0 || q !== undefined;
+}
+
+/** Whether any line of the `on:` block starting at line `i` is left open (block scalars skipped). */
+function openFlow(lines: string[], i: number): boolean {
+	if (lineOpen(lines[i].replace(/^[^:]+:/, ''))) {
+		return true;
+	}
+	let scalar: number | undefined;
+	for (const l of lines.slice(i + 1)) {
+		if (/^\s*$/.test(l)) {
+			continue;
+		}
+		const n = /^ */.exec(l)![0].length;
+		if (scalar !== undefined && n > scalar) {
+			continue;
+		}
+		scalar = undefined;
+		if (/^\s*#/.test(l)) {
+			continue;
+		}
+		if (/^\S/.test(l)) {
+			break;
+		}
+		if (lineOpen(l)) {
+			return true;
+		}
+		if (/:\s*[|>][-+0-9]*\s*(?:#.*)?$/.test(l)) {
+			scalar = n;
+		}
+	}
+	return false;
+}
+
+/**
  * Trigger names of a workflow (`on:` as a map, a list or a scalar). A push or pull_request
  * trigger that can't run on main is left out: a `branches` filter that excludes main (KKK-7),
  * a `paths-ignore` of everything, or `paths` matching no tracked file (MMM-1, given `files`).
@@ -513,6 +583,13 @@ export function triggers(yml: string, files?: string[]): string[] {
 	// YAML lets any key be quoted ("schedule":), so every trigger name is unquoted before use:
 	// a positive match on `schedule` must not miss a spelling GitHub accepts (review LSR-1).
 	const unq = (s: string) => s.trim().replace(/^['"]|['"]$/g, '');
+	// The scanner reads a line at a time, so a flow collection or quoted scalar that runs onto
+	// the next line would be read short: a filter list truncated before `main`, or a quoted
+	// continuation at column 0 ending the block before `schedule` (LSR-9). Any line of the block
+	// left open makes the whole block unreadable, and so the workflow a subject.
+	if (openFlow(lines, i)) {
+		return ['unparsed'];
+	}
 	const inline = lines[i].replace(/^[^:]+:\s*/, '').replace(/#.*/, '').trim();
 	if (inline) {
 		return inline.replace(/^\[|\]$/g, '').split(',').map(unq).filter(Boolean);
@@ -1161,8 +1238,20 @@ async function selfTest(): Promise<void> {
 		['an inline flow-mapping filter', 'on:\n  workflow_dispatch:\n  push: {branches: [nope]}\n'],
 		['a column-0 comment before the schedule', "on:\n  push:\n# weekly\n  schedule:\n    - cron: '1 1 * * 1'\n"],
 		['an unreadable trigger line', "on:\n  push:\n  ? schedule\n"],
+		['a trigger-level dedent', 'on:\n    push:\n  workflow_dispatch:\n'],
+		['an unreadable line at the filter level', 'on:\n  workflow_dispatch:\n  push:\n    - nope\n'],
+		['a filter-level dedent', 'on:\n  workflow_dispatch:\n  push:\n      tags: [v1]\n    branches: [nope]\n'],
 	]) {
 		injections.push([`LSR-7 ${shape}`, { ...base, '.github/workflows/nightly.yml': `${on}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:nightly .* add it to/]);
+	}
+	// LSR-9: a flow collection or quoted scalar that continues on the next line.
+	for (const [shape, on] of [
+		['a two-line branches-ignore', 'on:\n  workflow_dispatch:\n  push:\n    branches-ignore: [foo,\n                      main]\n'],
+		['a two-line paths-ignore', "on:\n  workflow_dispatch:\n  push:\n    paths-ignore: ['docs/**',\n      '**']\n"],
+		['a two-line on: list', 'on: [push,\n  schedule]\n'],
+		['a quoted default continued at column 0', "on:\n  push:\n  workflow_dispatch:\n    inputs:\n      x:\n        default: \"a\nb\"\n  schedule:\n    - cron: '1 1 * * 1'\n"],
+	]) {
+		injections.push([`LSR-9 ${shape}`, { ...base, '.github/workflows/nightly.yml': `${on}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:nightly .* add it to/]);
 	}
 	injections.push(['LSR-5 a .yaml twin of a registered .yml workflow', { ...base, '.github/workflows/weekly.yaml': "on:\n  schedule:\n    - cron: '2 2 * * 2'\njobs:\n  r:\n    steps:\n      - run: echo\n" }, /weekly\.yaml and \.github\/workflows\/weekly\.yml are both subject workflow:weekly/]);
 	{ // 4. an array nobody reads (seclabTaintEscapes): only test-reached code writes it
@@ -1216,6 +1305,19 @@ async function selfTest(): Promise<void> {
 		const got = await run(tree);
 		if (!got.errors.some(e => want.test(e))) {
 			throw new Error(`self-test: injected "${name}" not caught; got:\n${got.errors.join('\n') || '(no errors)'}`);
+		}
+	}
+	// LSR-9 controls: what reads in full stays readable (a fail-closed rule that fires on ordinary
+	// workflows would bury the real cases in subjects nobody can evidence).
+	for (const [shape, yml, want] of [
+		['an apostrophe in a plain scalar', "on:\n  push:\n  workflow_dispatch:\n    inputs:\n      x:\n        description: don't [stop\n", 'push,workflow_dispatch'],
+		['a block scalar with brackets', "on:\n  push:\n  workflow_dispatch:\n    inputs:\n      x:\n        description: |\n          a [b {c\n          'd\n", 'push,workflow_dispatch'],
+		['a one-line filter with a comment', "on:\n  push:\n    branches: [main] # [not\n", 'push'],
+		['a quoted list on one line', "on: ['push', \"pull_request\"]\n", 'push,pull_request'],
+	] as const) {
+		const got = triggers(yml).join(',');
+		if (got !== want) {
+			throw new Error(`self-test: LSR-9 control "${shape}": got ${got}, want ${want}`);
 		}
 	}
 	// LSR-6: tombstones are append-only against the base register; `restored` is the only way back.
