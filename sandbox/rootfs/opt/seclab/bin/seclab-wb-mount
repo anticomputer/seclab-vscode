@@ -115,6 +115,50 @@ def lower_references(lower_dev):
     return hits
 
 
+def link_problem(ws):
+    """None if ws resolves without following any link, component by component; else the reason.
+    In an sbx tab the workspace's parent belongs to the tab user (measured), so ownership can't
+    be required; what matters is pinned after mounting by share_mount_problem (OR-R3)."""
+    fd = os.open("/", os.O_PATH | os.O_DIRECTORY)
+    try:
+        here = ""
+        for name in ws.split("/")[1:]:
+            try:
+                nfd = os.open(name, os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            except OSError as e:
+                return "%s/%s can't be opened without following a link (%s)" % (here, name, e.strerror)
+            os.close(fd)
+            fd, here = nfd, here + "/" + name
+        got, want = os.fstat(fd), os.stat(ws)
+        if (got.st_dev, got.st_ino) != (want.st_dev, want.st_ino):
+            return "the workspace path changed while it was being checked"
+        return None
+    finally:
+        os.close(fd)
+
+
+def share_mount_problem(mountinfo_lines, ws, lower_dev):
+    """None if the host share (device lower_dev) is mounted exactly once, at ws, with our overlay
+    on top of it at ws; else the reason. A tab that renamed an ancestor it owns between the checks
+    and the mount would leave the share reachable under the new name (review OR-R3)."""
+    dev = "%d:%d" % (os.major(lower_dev), os.minor(lower_dev))
+    share, overlay = [], []
+    for line in mountinfo_lines:
+        pre, sep, post = line.rstrip("\n").partition(" - ")
+        a = pre.split(" ")
+        if not sep or len(a) < 5:
+            continue
+        if a[2] == dev:
+            share.append(unescape(a[4]))
+        elif post.split(" ")[0] == "fuse.fuse-overlayfs" and unescape(a[4]) == ws:
+            overlay.append(ws)
+    if share != [ws]:
+        return "the host share is mounted at %s, not only at the workspace path" % (", ".join(share) or "nowhere")
+    if not overlay:
+        return "no overlay is mounted on the workspace path"
+    return None
+
+
 def main():
     if os.geteuid() != 0:
         die("must run as root")
@@ -131,6 +175,9 @@ def main():
         die("workspace path is not canonical (links in it)")
     if not os.path.isdir(ws):
         die("workspace is not a directory")
+    bad = link_problem(ws)
+    if bad:
+        die("refusing: " + bad)
     # A setuid fusermount would let the tab user mount FUSE over directories it owns (JJ-5).
     for fm in ("/usr/bin/fusermount3", "/usr/bin/fusermount", "/bin/fusermount3", "/bin/fusermount"):
         try:
@@ -166,12 +213,13 @@ def main():
         die("the workspace path still resolves to the host share")
 
     # Post-mount (and on every idempotent call): nothing may still reach the lower layer, by
-    # process reference or by another mount of the same share (KK-2). Scan until two passes
-    # see the same pid set, so a fork during the scan can't slip a reference past it.
+    # process reference or by another mount of the same share (KK-2), and the share's one mount
+    # is still at the workspace path under our overlay (OR-R3). Scan until two passes see the
+    # same pid set, so a fork during the scan can't slip a reference past it.
     with open("/proc/self/mountinfo", "r", encoding="latin-1") as f:
-        same = [l.split(" ")[4] for l in f if l.split(" ")[2] == "%d:%d" % (os.major(lower_dev), os.minor(lower_dev))]
-    if len(same) != 1:
-        die("the host share is mounted at more than one place (%d); refusing" % len(same))
+        bad = share_mount_problem(f.readlines(), ws, lower_dev)
+    if bad:
+        die("refusing: " + bad)
     prev = None
     for _ in range(10):
         hits = lower_references(lower_dev)
