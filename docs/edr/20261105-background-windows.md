@@ -216,11 +216,16 @@ Dialogs cancelled in background mode answer with their `cancelId`, which
   four lows, all fixed:
   - `setVisibleOnAllWorkspaces` (Electron's `DockShow`) and `setKiosk` are pinned;
   - the Space probe runs no shell and checks that each switch happened.
-- **Probe:** `test/focus/spaces.ts` (run only with the user's agreement, since it moves their
-  screen):
-  - it switches to an empty Space and launches the editor there, so its window is alone;
-  - it switches away and back three times, then returns home;
-  - each switch is a host mark for `probe.ts check`.
+- **Probe:** `test/focus/spaces.ts` (it moved the screen between Spaces):
+  - it switched to an empty Space and launched the editor there, so its window was alone;
+  - it switched away and back three times, then returned home;
+  - each switch was a host mark for `probe.ts check`.
+  - **Removed on 2026-11-13** (decided by the coordinator): tests must not need OS privacy
+    permissions, and a hosted macOS runner can't observe a Space switch (run 43251392437, EDR
+    headless-driver), so no host could usefully run it. The Space path (finding LLL-5) rests
+    on `check-release --desktop`'s structural check (the bootstrap and guard policies and the
+    below-normal window level; self-tested) and on the run on branch build 42663670292
+    (`0a3c210`), 2026-11-09, below. There is no live probe.
 - **Result, branch build 42663670292 (`0a3c210`), 2026-11-09:**
   - the Space run: launch on the empty Space, three round trips and the return home, no
     steal, `BackgroundOnly`, every window click-through and below normal;
