@@ -13749,6 +13749,64 @@
 				"file": "docs/security-reviews/20261116-rfu1-terminal-variables.md",
 				"quote": "both modes seed `seclab.test.canary` identically"
 			}
+		},
+		{
+			"record": "20261116-no-host-terminal-in-tabs.md",
+			"anchor": "NHT-1",
+			"round": "patch 0050 review (2026-11-16)",
+			"severity": "low",
+			"summary": "The host-terminal proof could pass vacuously: an empty palette list did not show the query arrived, and nothing at runtime showed newLocal unregistered in a tab window.",
+			"component": "containment proof harness (test/containment/host-terminal.ts)",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "2d7ba7b1",
+			"test": {
+				"file": "test/containment/host-terminal.ts",
+				"name": "newLocal by id is not a command in a tab window (reported not found)"
+			}
+		},
+		{
+			"record": "20261116-no-host-terminal-in-tabs.md",
+			"anchor": "NHT-2",
+			"round": "patch 0050 review (2026-11-16)",
+			"severity": "info",
+			"summary": "The ADR's debug note said runInTerminal kind external opens the host's terminal application; only a host-side (local extension host) adapter could.",
+			"component": "ADR 20261116-no-host-terminal-in-tabs",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "2d7ba7b1",
+			"gap": "A documentation correction: the ADR wording has no behaviour for a regression test to hold."
+		},
+		{
+			"record": "20261116-no-host-terminal-in-tabs.md",
+			"anchor": "NHT-3",
+			"round": "patch 0050 review (2026-11-16)",
+			"severity": "info",
+			"summary": "The Explorer's Open in Integrated/External Terminal items still showed for a host (file:) resource in a tab window, though the launch was refused.",
+			"component": "Explorer terminal menu items (externalTerminal browser contribution, patch 0050)",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "2d7ba7b1",
+			"test": {
+				"file": "test/containment/host-terminal.test.ts",
+				"name": "each rule fails on a mutant of the real patch"
+			}
+		},
+		{
+			"record": "20261116-no-host-terminal-in-tabs.md",
+			"anchor": "NHT-4",
+			"round": "patch 0050 review (2026-11-16)",
+			"severity": "info",
+			"summary": "Upstream's openNativeConsole handler unit tests do not stub IWorkbenchEnvironmentService, so 0050's handler check would throw there.",
+			"component": "openNativeConsole handler (patch 0050)",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "2d7ba7b1",
+			"test": {
+				"file": "test/containment/host-terminal.test.ts",
+				"name": "patch 0050 offers and starts no host terminal in a tab window"
+			},
+			"note": "The rule pins the defensive read (?.remoteAuthority); upstream's own unit suite is not run in CI."
 		}
 	]
 }
