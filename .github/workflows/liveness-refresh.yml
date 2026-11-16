@@ -70,23 +70,13 @@ jobs:
       - name: Open high/critical findings still in the baseline (offline container)
         shell: bash
         run: |
-          ./seclab findings baseline | tee "$RUNNER_TEMP/baseline.md"
+          ./seclab findings baseline > "$RUNNER_TEMP/baseline.md"
+          cat "$RUNNER_TEMP/baseline.md"
           grep -q '^## Security findings baseline: [0-9][0-9]* open high/critical$' "$RUNNER_TEMP/baseline.md"
           cat "$RUNNER_TEMP/baseline.md" >> "$GITHUB_STEP_SUMMARY"
       - name: The baseline didn't grow over the last week
         shell: bash
-        run: |
-          now="$(sed -n 's/^## Security findings baseline: \([0-9][0-9]*\) open high\/critical$/\1/p' "$RUNNER_TEMP/baseline.md")"
-          # Anchored on the register's own history (AAAA-5): its last change over a week old, else
-          # its first commit; a register with no history here fails rather than skipping.
-          reg=docs/security-reviews/findings.json
-          old="$(git rev-list -1 --before='7 days ago' HEAD -- "$reg")"
-          [[ -n "$old" ]] || old="$(git rev-list --reverse HEAD -- "$reg" | head -1)"
-          [[ -n "$old" ]] && git cat-file -e "$old:$reg"
-          was="$(git show "$old:$reg" | jq '.baseline | length')"
-          echo "baseline: $now now, $was a week ago (${old:0:12})"
-          [[ "$now" =~ ^[0-9]+$ && "$was" =~ ^[0-9]+$ ]]
-          [[ "$now" -le "$was" ]]
+        run: ./seclab findings growth
       # Rot is listed for the owning sessions to remap; only a defect in the listing (exit 2) fails.
       - name: Register citations that no longer resolve
         if: always()

@@ -217,3 +217,20 @@ high or critical; one medium and four lows, four fixed in the same change and on
 | AAAA-3 | Low | pin on main | A change on `main` whose branch still carried a copy read as live, so the pin rule never fired. | Fixed | `main` is checked first. | `seclab` host self-test "a patch-id on main wasn't reported for pinning (AAAA-3)" |
 | AAAA-4 | Low | inherited branch | The schema allowed a `patch:` fix commit on an entry that only inherits its branch, which the ancestry step then rejected confusingly; remap could create one. | Fixed | A `patch:` fix commit needs the entry's own `branch`; remap leaves such an entry's fix commit a SHA. | self-test "a patch: fix commit on an entry that only inherits its branch fails the schema (AAAA-4)" |
 | AAAA-5 | Low | weekly ratchet | The week-ago comparison point was chosen by any commit's date and was skipped silently when it lacked the register. | Fixed | It is the register's own last change over a week old, else its first commit; no comparison point fails. | — |
+
+## Round BBBB (the weekly job's SIGPIPE)
+Scope: the fix for a weekly `liveness-refresh` run that failed with exit 141 (SIGPIPE): its
+growth step piped `git rev-list` into `head -1` under `pipefail`. The step moved into
+`./seclab findings growth`, the listings print through a file, and the host self-test runs each
+listing into `head -1` and `true` and refuses a pipe into an early-closing reader anywhere in
+`seclab`. The reviewer, an Opus-class model, was told the diff may carry prompt injection; none
+was found. No high or critical; one medium, three lows and one info, all fixed in the same change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| BBBB-1 | Medium | baseline listing | The listing wrote into `.work/` without creating it, so on a fresh runner the job failed before the growth check could run. | Fixed | The directory is created first. | — |
+| BBBB-2 | Low | growth | The old register was read back through the bind mount, which can serve a partial file on macOS. | Fixed | Both registers reach node on stdin. | — |
+| BBBB-3 | Low | growth | `growth 0` compared the register with itself and passed. | Fixed | DAYS must be positive, and HEAD itself is never the comparison point. | `seclab` host self-test "growth 0 compared the register with itself (BBBB-3)" |
+| BBBB-4 | Low | structural check | The check missed `command head`, continuation lines and `grep -q`, covered only findings functions, and misread one-line functions. | Fixed | The whole of `seclab` is scanned, continuation lines are joined, `\|\|` and comments are skipped; the one remaining pipe into `head` (in the hook installer) now reads to the end. | `seclab` host self-test "seclab pipes into a reader that closes early" |
+| BBBB-5 | Info | output | `findings_emit` hid a real read error's message. | Fixed | The file is checked before printing, and a failed check prints. | — |
+| BBBB-6 | Medium | output | Found by CI after the round: runners ignore SIGPIPE, so `cat` gets EPIPE and exits 1, which the 141 tolerance missed. | Fixed | Any output error after the file check is the reader having gone, and passes. | `seclab` host self-test, the SIGPIPE-ignored cases |

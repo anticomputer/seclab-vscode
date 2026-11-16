@@ -65,7 +65,7 @@ usage: ./seclab <command>
                                 consistency, the security findings register; --run-commands runs <!-- ci: run -->
                                 blocks (and the broker's); --online resolves external links (lychee, cached);
                                 --paired enforces doc changes next to protocol/patch/provider/product changes
-  findings --self-test | check | baseline | rot | remap --branch B [--patch]
+  findings --self-test | check | baseline | growth [DAYS] | rot | remap --branch B [--patch]
                                 Security findings register (docs/security-reviews/findings.json): every review
                                 finding registered, fixed ones with a regression test, no open high outside the
                                 shrinking baseline; `baseline` prints the open highs (markdown)
@@ -360,6 +360,32 @@ findings_shas() { # STRICT (1: every citation; 0: only touched entries'). stdin:
 	[[ $malformed = 1 ]] && return 2
 	return $bad
 }
+# The listings print through a file, so a reader that closes early (`| head -1`) can't fail them:
+# the container never writes to a pipe, and cat's SIGPIPE is the reader's choice, not an error.
+# The file is checked first, so an output error afterwards is only the reader having gone, whether
+# the writer dies of SIGPIPE (141) or, with SIGPIPE ignored as on CI runners, gets EPIPE.
+findings_emit() {
+	[[ -f "$1" && -r "$1" ]] || { echo "findings: can't read $1" >&2; return 1; }
+	cat "$1" 2>/dev/null || true
+}
+# The weekly ratchet: the baseline isn't larger than the register's own last change over DAYS days
+# old (default 7), else its first commit. No pipe into head anywhere (exit 141 under pipefail).
+findings_growth() { # [DAYS]
+	local days="${1:-7}" reg=docs/security-reviews/findings.json old now was out="$ROOT/.work/findings-growth.txt"
+	[[ "$days" =~ ^[1-9][0-9]{0,5}$ ]] || { echo "findings growth: DAYS must be a positive number" >&2; return 2; }
+	mkdir -p "$ROOT/.work"
+	old="$(git -C "$ROOT" rev-list -1 --before="$days days ago" HEAD -- "$reg")"
+	[[ -n "$old" ]] || old="$(git -C "$ROOT" rev-list HEAD -- "$reg" | tail -n 1)"
+	[[ "$old" =~ ^[0-9a-f]{40}$ ]] && git -C "$ROOT" cat-file -e "$old:$reg" 2>/dev/null || { echo "findings growth: no register in this history to compare with" >&2; return 2; }
+	[[ "$old" != "$(git -C "$ROOT" rev-parse HEAD)" ]] || { echo "findings growth: the comparison point is HEAD itself" >&2; return 2; }
+	# Both registers reach the counter on stdin, never as a file through the bind mount (BBBB-2).
+	now="$(docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts count < "$ROOT/$reg")" || return 2
+	was="$(git -C "$ROOT" show "$old:$reg" | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts count)" || return 2
+	[[ "$now" =~ ^[0-9]+$ && "$was" =~ ^[0-9]+$ ]] || { echo "findings growth: unreadable baseline counts" >&2; return 2; }
+	printf 'baseline: %s now, %s at %s\n' "$now" "$was" "${old:0:12}" > "$out"
+	findings_emit "$out" || return 2
+	[[ "$now" -le "$was" ]] || { echo "findings growth: the baseline grew ($was -> $now)" >&2; return 1; }
+}
 # Self-service remap (review ZZZ): a rebased branch's register citations follow it. The old commit
 # must still be a local object; its equivalent is the one commit in the branch's history (main's
 # included) with the same patch-id, else the one with the same subject and file list. Anything
@@ -623,6 +649,28 @@ findings_host_self_test() {
 	# YYY-4: a ref named like a token doesn't stand in for the object; resolution ignores refs.
 	[[ "$(findings_resolve "${head:0:12}")" == "$head" ]] || { echo "findings host self-test: the control (resolving HEAD's prefix) failed" >&2; exit 1; }
 	if findings_resolve "$(git -C "$ROOT" rev-parse HEAD^{tree})" >/dev/null 2>&1; then echo "findings host self-test: a tree object resolved as a commit" >&2; exit 1; fi
+	# A reader that closes early can't fail a listing (exit 141 under pipefail, seen on CI). DAYS so
+	# large that no register commit is older drives the first-commit fallback.
+	if [[ -f "$ROOT/docs/security-reviews/findings.json" ]]; then
+		if "$ROOT/seclab" findings growth 0 >/dev/null 2>&1; then echo "findings host self-test: growth 0 compared the register with itself (BBBB-3)" >&2; exit 1; fi
+		for args in "baseline" "growth" "growth 999999"; do
+			for reader in "head -1" "true"; do
+				# With SIGPIPE default (a terminal) and ignored (CI runners): both must pass.
+				for sig in "" "trap '' PIPE;"; do
+					rc=0; ( eval "$sig"; set -o pipefail; "$ROOT/seclab" findings $args 2>/dev/null | $reader >/dev/null ) || rc=$?
+					[[ $rc -eq 0 ]] || { echo "findings host self-test: '${sig}findings $args | $reader' exited $rc" >&2; exit 1; }
+				done
+			done
+		done
+	fi
+	# Readers that close early (head, grep -q or -m) in a pipe are refused anywhere in seclab;
+	# continuation lines are joined first, `||` isn't a pipe, comments don't count (BBBB-4).
+	if awk '{ l = $0; while (l ~ /(\\|\|)[[:space:]]*$/ && (getline nx) > 0) { sub(/\\[[:space:]]*$/, "", l); l = l " " nx }
+		if (l ~ /^[[:space:]]*#/) next; gsub(/\|\|/, " OR ", l)
+		if (l ~ /\|[[:space:]]*(command[[:space:]]+)?(head|grep[[:space:]]+(-[a-zA-Z]*[qm]|--quiet|--max-count))([^a-zA-Z_-]|$)/) { print "seclab:" NR ": " l; bad = 1 } }
+		END { exit !bad }' "$ROOT/seclab" >&2; then
+		echo "findings host self-test: seclab pipes into a reader that closes early (SIGPIPE under pipefail)" >&2; exit 1
+	fi
 	echo "findings host self-test: ok"
 }
 
@@ -1160,6 +1208,7 @@ case "${1:-help}" in
 		esac ;;
 	findings)
 		shift
+		if [[ "${1:-}" == growth && $# -eq 2 ]]; then findings_growth "$2"; exit $?; fi
 		if [[ "${1:-}" == remap ]]; then
 			[[ ( $# -eq 3 || ( $# -eq 4 && "$4" == --patch ) ) && "$2" == --branch ]] || { usage; exit 2; }
 			findings_remap "$3" "${4:-}"; exit $?
@@ -1174,7 +1223,10 @@ case "${1:-help}" in
 				exit $rc ;;
 			--self-test) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts --self-test
 				findings_host_self_test ;;
-			baseline) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts baseline ;;
+			baseline) mkdir -p "$ROOT/.work"
+				docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts baseline > "$ROOT/.work/findings-baseline.md"
+				findings_emit "$ROOT/.work/findings-baseline.md" ;;
+			growth) findings_growth ;;
 			check) findings_check ;;
 			*) usage; exit 2 ;;
 		esac ;;
@@ -1217,7 +1269,7 @@ case "${1:-help}" in
 		git -C "$ROOT" cat-file -e "origin/main:build/publish-allow.json" 2>/dev/null \
 			|| { echo "hooks: origin/main has no build/publish-allow.json yet; land the publish gate first" >&2; exit 1; }
 		# The image the gate runs in is main's pin, not this checkout's (R20-4).
-		main_node="$(git -C "$ROOT" cat-file blob origin/main:seclab | sed -n 's/^[[:space:]]*echo "\(node:[^"]*@sha256:[0-9a-f]\{64\}\)"$/\1/p' | head -1)"
+		main_node="$(git -C "$ROOT" cat-file blob origin/main:seclab | sed -n 's/^[[:space:]]*echo "\(node:[^"]*@sha256:[0-9a-f]\{64\}\)"$/\1/p' | awk 'NR == 1')"
 		[[ -n "$main_node" ]] || { echo "hooks: can't read the node image pin from origin/main:seclab" >&2; exit 1; }
 		[[ "$main_node" == "$(node_image)" ]] || echo "hooks: note: this checkout's node image differs from origin/main's; installing main's" >&2
 		for f in seclab build/tools/tools.json build/tools/tool.sh; do

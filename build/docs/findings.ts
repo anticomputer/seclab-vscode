@@ -1626,6 +1626,15 @@ function main(): number {
 		}
 		return sp.length || c?.problems.length ? 1 : 0;
 	}
+	if (mode === 'count') { // the baseline size of a register read from stdin (./seclab findings growth)
+		const r = JSON.parse(fs.readFileSync(0, 'utf8')) as Register;
+		if (!Array.isArray(r?.baseline)) {
+			console.error('findings: count: no baseline array on stdin');
+			return 2;
+		}
+		process.stdout.write(String(r.baseline.length));
+		return 0;
+	}
 	if (mode === 'remap') { // remap BRANCH PAIRS_FILE: rewrites the register in place
 		const pairsFile = process.argv[4];
 		if (sp.length || !arg || !/^[A-Za-z0-9._/-]+$/.test(arg) || arg.includes('..') || !pairsFile) {

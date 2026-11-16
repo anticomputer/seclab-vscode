@@ -110,7 +110,9 @@ by nobody: a record saying "Fixed" was the only evidence.
    fixed on `main` with its test or accepted by the owner. The weekly `liveness-refresh` workflow
    lists the baseline in its own job (`./seclab findings baseline`: offline, no token, only
    `contents: read`), which passes while listing it and fails only if a baseline key doesn't resolve
-   or the baseline is larger than a week ago.
+   or the baseline is larger than a week ago (`./seclab findings growth`). The listings print
+   through a file, so a reader that closes early can't fail them, and no findings function pipes
+   into `head` (a timing-dependent SIGPIPE under `pipefail` failed a run on 2026-11-16).
 
 ## Liveness
 The check is reached from `./seclab docs check`, which the required `docs` job runs on every push and
