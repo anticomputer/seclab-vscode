@@ -63,7 +63,8 @@
 	],
 	"noFindings": [
 		"20261112-cfs-config-outside-repo.md",
-		"20261116-broker-dependency-bumps.md"
+		"20261116-broker-dependency-bumps.md",
+		"20261116-broker-finding-tests.md"
 	],
 	"manualOnly": [
 		"20261105-broker-websocket-opt-in.md",
