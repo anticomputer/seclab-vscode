@@ -178,12 +178,45 @@ test('response: tab markdown loses command links, HTML and remote images', () =>
 	assert.equal(md.supportHtml, false);
 	assert.equal('baseUri' in md, false);
 	assert.doesNotMatch(md.value, /command:workbench/);
-	assert.doesNotMatch(md.value, /!\[/);
-	assert.match(md.value, /!?\[?y\]?\(data:image\/png/);
 	const link = md.value.match(/\((command:[^)]+)\)/)![1];
 	tokenOf(link);
 	assert.equal(s.markdown('plain').value, 'plain');
 	assert.equal(s.markdown(undefined).value, '');
+});
+
+/** Markup that could open an image or a tag: an unescaped `![`, or `<` before a tag character. */
+const OPENS_IMAGE_OR_TAG = /(?<!\\)!\[|<(?=[A-Za-z/!?])/;
+
+test('response: no image or HTML form survives in tab markdown (review RSC-2)', () => {
+	const s = F.seclabFromTab(AUTH, async () => undefined);
+	const forms = [
+		'![x](https://example.test/a.png)',
+		'![x![]y](https://example.test/nested.png)',
+		'![x![]y][1]\n\n[1]: https://example.test/ref.png',
+		'<span x>\n<img src="https://example.test/block.png">\n',
+		'<span class="a"><img src="https://example.test/inline.png"></span>',
+		'\\<img src="https://example.test/escaped-backslash.png">',
+		'\\![x](https://example.test/escaped-backslash.png)',
+		'<!-- c --><?x?></a>',
+		'![y](data:image/png;base64,AAAA)',
+	];
+	for (const form of forms) {
+		const out = s.markdown({ value: form, isTrusted: true }).value;
+		assert.doesNotMatch(out, OPENS_IMAGE_OR_TAG, form);
+	}
+	// Ordinary text is untouched: a comparison and a plain link.
+	assert.equal(s.markdown('a < b and [docs](https://example.test/)').value, 'a < b and [docs](https://example.test/)');
+});
+
+test('response: a tab snippet that reads the clipboard is refused (review RSC-1)', () => {
+	const s = F.seclabFromTab(AUTH, async () => undefined);
+	for (const t of ['${CLIPBOARD}', '$CLIPBOARD', 'x ${CLIPBOARD:default} y', '${ CLIPBOARD}', '${1:${CLIPBOARD}}']) {
+		assert.equal(s.snippetAllowed(t), false, t);
+	}
+	for (const t of ['${1:name}', '$TM_FILENAME', 'CLIPBOARD', '${TM_SELECTED_TEXT}']) {
+		assert.equal(s.snippetAllowed(t), true, t);
+	}
+	assert.equal(s.snippetAllowed(undefined as unknown as string), false);
 });
 
 test('response: a tab command becomes the token command', () => {
@@ -297,8 +330,10 @@ if (!process.env.SECLAB_FILTER_SRC_DIR) {
 		['early decisions are dropped', 'if (seclabEarly.length < SECLAB_EARLY_MAX) {', 'if (false) {'],
 		['a denied data command runs on the trusted side', "if (entry.filter.commandVerdict(entry.id) === 'allow') {", 'if (true) {'],
 		['markdown keeps full trust', 'isTrusted: { enabledCommands: [SECLAB_TAB_COMMAND] },', 'isTrusted: true,'],
-		['remote images are kept', ".replace(SECLAB_INLINE_IMAGE, (_m, alt: string, src: string) => /^data:/i.test(src) ? _m : alt)\n\t\t\t\t.replace(SECLAB_OTHER_IMAGE, (_m, alt: string) => alt)", ".replace(SECLAB_INLINE_IMAGE, (_m) => _m)\n\t\t\t\t.replace(SECLAB_OTHER_IMAGE, (_m) => _m)"],
-		['reference images are kept', ".replace(SECLAB_OTHER_IMAGE, (_m, alt: string) => alt)", ".replace(SECLAB_OTHER_IMAGE, (_m) => _m)"],
+		['images are kept', ".replace(SECLAB_IMAGE_OPEN, '!\\\\[')", ".replace(SECLAB_IMAGE_OPEN, '![')"],
+		['HTML is kept', ".replace(SECLAB_HTML_OPEN, '&lt;')", ".replace(SECLAB_HTML_OPEN, '<')"],
+		['HTML is escaped with a backslash', ".replace(SECLAB_HTML_OPEN, '&lt;')", ".replace(SECLAB_HTML_OPEN, '\\\\<')"],
+		['the clipboard snippet is allowed', 'return typeof insertText === \'string\' && !SECLAB_SNIPPET_CLIPBOARD.test(insertText);', 'return typeof insertText === \'string\';'],
 		['command links are kept', '.replace(SECLAB_COMMAND_LINK,', '.replace(/$^/,'],
 		['an unknown token runs', "if (!entry) {\n\t\tthrow denied();", "if (!entry) {\n\t\treturn undefined;"],
 	];
