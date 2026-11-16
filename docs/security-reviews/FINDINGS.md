@@ -1926,7 +1926,7 @@ Every other commit the register cites is on main's history, or on the branch its
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
-| EDT-1 | medium | fixed | Webview subclasses that show files (media preview, custom-editor diffs) were exempt from the ownership rule, so a host file path reached the tab. | 1ad537ee · `test/edtabs/probe.ts` "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary, login name)" |
+| EDT-1 | medium | fixed | Webview subclasses that show files (media preview, custom-editor diffs) were exempt from the ownership rule, so a host file path reached the tab. | 1ad537ee · `test/edtabs/probe.ts` "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary)" |
 | EDT-2 | low | fixed-untested | A host-created untitled editor counted as the tab's own, so its first line reached the tab as a label. | No runtime case opens a host-created untitled document with content; the rule is 0035's untitled predicate. |
 | EDT-3 | low | fixed-untested | A filesystem provider registered later by the tab could claim host editors already open in its scheme (latent under the RPC filter). | Not reachable at run time today: the RPC filter refuses a tab's provider registration. |
 | EDT-4 | info | fixed | The edtabs probe could pass without the host editors reaching the tab's model. | 1ad537ee · `test/edtabs/probe.ts` "control: the host editors reached the tab" |

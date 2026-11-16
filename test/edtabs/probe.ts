@@ -2,8 +2,7 @@
 // host-side editors open in its window? (sibling DOCSYNC-R3 of patch 0035). macOS, sbx, local only.
 //   node test/edtabs/probe.ts drive --app PATH [--measure]   # prepare, drive the window, check, teardown
 // The isolated profile's directory is named with a generated fake `seclabcanary_` token, so every
-// host path under it (user settings.json, keybindings.json) carries the canary; the user's login
-// name is the second marker (any host home path carries it). The window opens host-side editors as
+// host path under it (user settings.json, keybindings.json) carries the canary. The window opens host-side editors as
 // a user would (command palette, headless driver). The probe reports input kinds, URI schemes and
 // hashes of label and URI tokens; it is tab-controlled data, read through a fixed schema.
 
@@ -135,7 +134,9 @@ const valid = !!rep && rep.schema === 'seclab-edtabs-report/1' && rep.arm === ar
 	&& counts(rep.kinds, /^[A-Za-z]{1,40}$/) && counts(rep.schemes, /^[a-z0-9.+-]{1,40}$/)
 	&& Array.isArray(rep.tokens) && rep.tokens.length <= 5000
 	&& rep.tokens.every((x: any) => !!x && (x.field === 'label' || x.field === 'uri') && /^[0-9a-f]{64}$/.test(x.sha256));
-const markers: Record<string, string> = { canary: sha(canary), username: sha(os.userInfo().username) };
+// Not the login name: the tab's own folder is a host path under the user's home (sbx mounts it at
+// the same path), which the tab is given on purpose; the canary names only the host profile.
+const markers: Record<string, string> = { canary: sha(canary) };
 const leaks = valid ? Object.entries(markers).flatMap(([name, h]) => (rep.tokens as Array<{ field: string; sha256: string }>).filter(x => x.sha256 === h).map(x => `${name}@${x.field}`)) : [];
 const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';
 const results: Array<{ name: string; ok: boolean }> = [];
@@ -153,7 +154,7 @@ if (valid && !measure) {
 	expect('control: the tab sees its own editor (its workspace file)', (rep.schemes['file+own'] ?? 0) > 0);
 	// Without this a run where the host editors never reached the tab's model would pass (review EDT-4).
 	expect('control: the host editors reached the tab\'s editor-tab model (anonymous or not)', (rep.kinds.unknown ?? 0) > 0 || (rep.schemes['vscode-userdata'] ?? 0) > 0);
-	expect('DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary, login name)', leaks.length === 0);
+	expect('DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary)', leaks.length === 0);
 }
 expect('no focus steal', !steals);
 const gate = verifyTeardown(base);

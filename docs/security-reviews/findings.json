@@ -13942,7 +13942,7 @@
 			"commit": "1ad537ee",
 			"test": {
 				"file": "test/edtabs/probe.ts",
-				"name": "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary, login name)"
+				"name": "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary)"
 			}
 		},
 		{

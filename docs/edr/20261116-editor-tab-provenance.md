@@ -1,8 +1,8 @@
 # Host editors stay anonymous to a tab: provenance for the editor-tab model (patch 0038)
 
-- **Status:** proposed (patched-build proof and review pending)
+- **Status:** accepted
 - **Date:** 2026-11-16
-- **Deciders:** coordinator, 2026-11-16 (close the 0035 siblings in turn; this one next). Document-sync session: measurement and implementation.
+- **Deciders:** coordinator, 2026-11-16 (close the 0035 siblings in turn; this one next; the patched-build proof run). Document-sync session: measurement and implementation.
 - **Related:** [document sync provenance](20261109-document-sync-provenance.md) (0035); [RPC lockdown](../RPC-LOCKDOWN.md) §7 item 10
 
 ## Context
@@ -18,10 +18,10 @@ tab sends no ids back today.
 
 ## Measurement
 `test/edtabs/probe.ts drive` names the isolated profile's directory with a generated
-`seclabcanary_` token, so every host path under it carries the canary; the user's login name is a
-second marker. The window opens the user's settings and keybindings as a user would (command
+`seclabcanary_` token, so every host path under it carries the canary. The window opens the user's settings and keybindings as a user would (command
 palette, headless driver). The probe in the tab reports input kinds, URI schemes and hashes of
-every label and URI token.
+every label and URI token. The login name is not a marker: the tab's own folder is a host path
+under the user's home (sbx mounts it at the same path), which the tab is given on purpose.
 
 **Main `6589051b` (run 43929230851), 2026-11-16:** both editors opened in the window, and the tab
 saw `vscode-userdata` URIs carrying the profile canary and the login name (the host home path),
@@ -70,11 +70,12 @@ model appears after its diff tab opened), the model is rebuilt and resent.
 
 ## Evidence
 - **`fixture:test/edtabs/probe-extension`:** `test/edtabs/probe.ts drive` on main `6589051b`,
-  sbx tab, headless driver, measure mode, 2026-11-16: the profile canary and the login name reached
-  the tab in `vscode-userdata` URIs; no focus steal; the teardown gate passed.
-- `test/edtabs/probe.ts drive` on main `6589051b`, assert mode, 2026-11-16: every control holds
-  and `DOCSYNC-R3 …` fails (the profile canary and login name reach the tab), as it must without
-  the patch.
+  sbx tab, headless driver, 2026-11-16 (attested builds):
+  - main `6589051b` (run 43929230851): every control holds and `DOCSYNC-R3 …` fails, the profile
+    canary reaching the tab in `vscode-userdata` URIs, as it must without the patch;
+  - this branch at `a5239620` (run 43953763295): 4 of 4 runs pass. The host editors reach the tab
+    as `unknown` inputs, no canary in any label or URI, its own `README.md` still arrives. No
+    focus steal; the teardown gate passed every run.
 - Typecheck: the patched file adds no error against the pinned tree.
 - Review: [20261116-editor-tab-provenance](../security-reviews/20261116-editor-tab-provenance.md),
   three rounds; no high or critical finding.
