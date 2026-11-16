@@ -59,6 +59,20 @@ test('fixture-lint --av: an empty, truncated or canary-only list fails; an unrea
 	assert.equal(real.status, 0, real.stdout);
 });
 
+test('pin-age: a cooldown below 7 days and an empty or foreign file list are refused, before any network (GATE-14)', () => {
+	const days = run(['build/pin-age.ts', '--days', '0', '-']);
+	assert.equal(days.status, 2, days.stdout + days.stderr);
+	assert.match(days.stderr, /at least 7/);
+	const empty = spawnSync(process.execPath, ['build/pin-age.ts', '-'], { cwd: repo, encoding: 'utf8', input: '' });
+	assert.equal(empty.status, 1, empty.stdout + empty.stderr);
+	assert.match(empty.stdout, /file list \(0 Dockerfile\(s\), 0 npm pin\(s\)\) is empty or isn't this repository's/);
+	const foreign = spawnSync(process.execPath, ['build/pin-age.ts', '--list-npm', '-'], { cwd: repo, encoding: 'utf8', input: 'sandbox/oci/Dockerfile.tab\0' });
+	assert.equal(foreign.status, 1, 'a list without build/vsce/Dockerfile lists no npm pins and must fail');
+	const real = spawnSync(process.execPath, ['build/pin-age.ts', '--list-npm', '-'], { cwd: repo, encoding: 'utf8', input: 'build/vsce/Dockerfile\0' });
+	assert.equal(real.status, 0, real.stdout + real.stderr);
+	assert.match(real.stdout, /@vscode\/vsce \d/);
+});
+
 test('fixture-lint: a missing root fails, and a root with nothing to scan fails (GATE-6)', () => {
 	const missing = run(['test/safety/fixture-lint.ts', path.relative(repo, path.join(scratch, 'absent'))]);
 	assert.equal(missing.status, 2, missing.stderr);

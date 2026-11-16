@@ -13,6 +13,31 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const repo = path.resolve(import.meta.dirname, '..');
+
+/** Problems with the roots to scan: an empty extensions/series scans only tabd/src (GATE-16). */
+export function rootProblems(series: string[], exists: (rel: string) => boolean): string[] {
+	const p: string[] = [];
+	if (series.length === 0) {
+		p.push('extensions/series lists no extension, so no shipped extension would be scanned');
+	}
+	for (const n of series) {
+		if (!exists(path.join('extensions', n, 'src'))) {
+			p.push(`extensions/series names ${n}, but extensions/${n}/src doesn't exist`);
+		}
+	}
+	return p;
+}
+if (process.argv[2] === '--self-test') {
+	const cases: Array<[string, boolean]> = [
+		['an empty extensions/series fails (GATE-16)', rootProblems([], () => true).length === 1],
+		['a series entry with no src dir fails', rootProblems(['seclab-x'], () => false).length === 1],
+		['a real series passes', rootProblems(['seclab-tab-manager'], () => true).length === 0],
+	];
+	const failed = cases.filter(([, ok]) => !ok).map(([n]) => n);
+	console.log(failed.length ? `check-source self-test FAILED: ${failed.join(', ')}` : `check-source self-test: ${cases.length} cases OK`);
+	process.exit(failed.length ? 1 : 0);
+}
+
 const series = fs.readFileSync(path.join(repo, 'extensions', 'series'), 'utf8').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(Boolean);
 const roots = [...series.map(n => path.join('extensions', n, 'src')), 'tabd/src'];
 const allow = new Set(fs.readFileSync(path.join(repo, 'build', 'source-allowlist.txt'), 'utf8').split('\n').map(l => l.replace(/^#.*/, '').trim()).filter(Boolean));
@@ -24,7 +49,7 @@ const RULES: Array<{ id: string; re: RegExp; reviewable: boolean }> = [
 	{ id: 'test-marker', re: /SECLAB_TEST_ONLY|seclab-test-hook/, reviewable: false },
 ];
 
-const findings: string[] = [];
+const findings: string[] = rootProblems(series, rel => fs.existsSync(path.join(repo, rel)));
 const used = new Set<string>();
 function scanLines(rel: string, lines: Array<[number, string]>): void {
 	for (const [n, raw] of lines) {

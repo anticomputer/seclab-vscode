@@ -809,7 +809,8 @@ npm_fetch_cfs() {
 }
 
 # Remove our images no worktree's build references any more (clean-host's rule), so tagged
-# snapshots (npm caches of ~2.3 GB, tool content tags) don't pile up. Best effort, local only.
+# snapshots (npm caches of ~2.3 GB, tool content tags) don't pile up. Best effort, local only,
+# and never a gate: its result is ignored and certifies nothing (GATE-17).
 prune_superseded_images() {
 	[[ -n "${CI:-}" ]] && return 0
 	"${SECLAB_NODE:-node}" "$ROOT/test/clean-host.ts" --superseded-images >/dev/null 2>&1 || true
@@ -1005,7 +1006,7 @@ case "${1:-help}" in
 				else
 					git -C "$ROOT" ls-files -z | docker run -i --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/deps.ts check -
 				fi ;;
-			source) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-source.ts ;;
+			source) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" sh -c 'node build/check-source.ts --self-test && node build/check-source.ts' ;;
 			# Internal identifiers (build/check-denylist.ts): the whole tracked tree, plus any run-record
 			# dir passed with --extra. The list never lives in the repo: a private developer file
 			# (SECLAB_DENYLIST_FILE, default ~/.config/seclab/denylist.txt, chmod 600), mounted
