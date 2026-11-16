@@ -767,6 +767,17 @@ def main(argv=None) -> int:
     inv = _load(INVENTORY)
     policy = _load(POLICY)
 
+    # The inventory must be of the upstream the build pins. Without this, an upstream bump that
+    # skipped regeneration compared the old inventory with the old policy and passed (review of
+    # the 1.145.3 bump): a vacuous check that looks like a real one.
+    from seclab_inventory.sources import read_pinned_sha  # noqa: E402
+    pinned, origin = read_pinned_sha(REPO_ROOT, None)
+    if origin != "upstream.lock" or inv["upstream_sha"] != pinned:
+        print("error: inventory is at %s but upstream.lock pins %s; run rpc-filter/tools/fetch-upstream.sh"
+              " and run.sh, then re-pin the policy (repin_policy.py)"
+              % (inv["upstream_sha"][:12], (pinned or "nothing")[:12]), file=sys.stderr)
+        return 2
+
     if inv["upstream_sha"] != policy["upstream_sha"]:
         print("error: inventory is at %s but policy claims %s"
               % (inv["upstream_sha"][:12], policy["upstream_sha"][:12]), file=sys.stderr)

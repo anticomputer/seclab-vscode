@@ -116,7 +116,7 @@ flowchart LR
 
 ### 4.1 Fork build (keep the patch set small)
 
-> As built: Code-OSS 1.145.3 is pinned in `upstream.lock`. The patch queue has three patches (one build-only, two for extension placement), and the built-in Copilot extension is removed ([EDR](edr/20261104-remove-builtin-copilot.md)).
+> As built: Code-OSS 1.145.3 is pinned in `upstream.lock`. The patch queue ([`patches/series`](../patches/series)) holds 22 patches: build and extension-placement patches, and the containment set (the RPC capability filter, channel guard, command taint, the chat, agent-host and AHP gates, fixed tab settings, the tab configuration snapshot, push refusals and folder-open routing). The built-in Copilot extension is removed ([EDR](edr/20261104-remove-builtin-copilot.md)).
 
 We follow VSCodium's model ([prepare_vscode.sh](https://github.com/VSCodium/vscodium/blob/ca7f7b44b5e5c3faa663f6cdc043998f71936653/prepare_vscode.sh#L1-L40)) and avoid a hard fork like Positron's:
 

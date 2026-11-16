@@ -79,6 +79,12 @@ never the `MainContext` property name (7 diverge) and never the numeric `nid`
 
 ## 5. Reading a drift-check failure on an upstream bump
 
+On a bump: `tools/fetch-upstream.sh`, `tools/run.sh`, then re-pin the policy with
+`python3 tools/repin_policy.py OLD NEW CHANGED_FILES` (CHANGED_FILES lists every upstream file the
+bump changes; it refuses if a policy permalink cites one, because those entries need a manual
+re-check). `check.sh` fails until the inventory is of the SHA `upstream.lock` pins, so a bump that
+skips regeneration can't pass against the old inventory.
+
 | Failure | Meaning | Do |
 |---|---|---|
 | `NEW rpc:…` / `NEW cmd:…` | Upstream added a surface. It is already denied. | Classify it, or leave denied deliberately, then `--accept`. |
