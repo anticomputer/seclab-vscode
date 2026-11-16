@@ -95,6 +95,13 @@ Current queue:
   Manager over the window's local extension host. The shared classifier and rule table are edited
   in `build/secret-rules/src` and synced with `node build/secret-rules/sync-patch.ts --write`
   ([EDR](../docs/edr/20261112-tab-configuration-snapshot.md)).
+- `0038-seclab-editor-tab-provenance.patch`: in a `seclab+` window, a non-local extension host's
+  editor-tab model shows host-side editors only as present: an opaque id (a salted hash), an
+  unknown input and the label `Editor`. An editor is the tab's own when every resource it shows
+  is on this window's tab authority, a model this host's own provider made, a file of a
+  filesystem provider this host registered (0035's tags), or a path-less untitled document.
+  Terminals and webview panels keep their input. Local hosts and other windows are unchanged
+  ([EDR](../docs/edr/20261116-editor-tab-provenance.md)).
 - `0040-reresolve-managed-authority-on-restart.patch`: after Restart Extension Host, a window
   whose authority resolved to a managed connection (`seclab+`) resolves it again through the
   new local extension host before the remote one connects. Without it, the remote host reuses

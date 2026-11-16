@@ -39,8 +39,10 @@
 # whose terminalProcessManager change it builds on.
 0050-seclab-no-host-terminal-in-tabs.patch
 0035-seclab-document-sync-provenance.patch
-# Fork build: Restart Extension Host re-resolves a managed (seclab+) authority (EDR ext-host-restart-reresolve).
 0036-seclab-tab-configuration-snapshot.patch
+# 0038: a tab's host learns only that host-side editors exist, not their URIs or labels (EDR editor-tab-provenance).
+0038-seclab-editor-tab-provenance.patch
+# Fork build: Restart Extension Host re-resolves a managed (seclab+) authority (EDR ext-host-restart-reresolve).
 0040-reresolve-managed-authority-on-restart.patch
 # Fork build: main-process routing (ADR route-folder-opens-in-main): no window ever loads a local
 # folder or workspace; the Tab Manager opens it as a sandboxed tab.

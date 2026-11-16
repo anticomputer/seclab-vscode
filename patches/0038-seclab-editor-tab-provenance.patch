@@ -1,0 +1,117 @@
+diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts
+--- a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-16 14:53:14
++++ b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-16 14:55:29
+@@ -29,7 +29,30 @@
+ import { GroupDirection, IEditorGroup, IEditorGroupsService, preferredSideBySideGroupDirection } from '../../services/editor/common/editorGroupsService.js';
+ import { IEditorsChangeEvent, IEditorService, SIDE_GROUP } from '../../services/editor/common/editorService.js';
+ import { extHostNamedCustomer, IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
++import { StringSHA1 } from '../../../base/common/hash.js';
++import { Schemas } from '../../../base/common/network.js';
++import { generateUuid } from '../../../base/common/uuid.js';
++import { IModelService } from '../../../editor/common/services/model.js';
++import { IFileService } from '../../../platform/files/common/files.js';
++import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
++import { seclabIsFiltered, seclabOrigin } from './seclabDocumentOrigin.js';
+ 
++/** Every resource an editor shows (seclab, patch 0038): both sides, merge inputs, multi-diff entries. */
++function seclabEditorUris(editor: EditorInput): URI[] {
++	const r = EditorResourceAccessor.getCanonicalUri(editor, { supportSideBySide: SideBySideEditor.BOTH });
++	const uris: unknown[] = URI.isUri(r) ? [r] : [r?.primary, r?.secondary];
++	if (editor instanceof MergeEditorInput) {
++		uris.push(editor.base, editor.input1.uri, editor.input2.uri, editor.result);
++	}
++	if (editor instanceof MultiDiffEditorInput) {
++		uris.push(...(editor.resources.get() ?? []).flatMap(x => [x.originalUri, x.modifiedUri]));
++	}
++	if (editor instanceof InteractiveEditorInput) {
++		uris.push(editor.inputResource);
++	}
++	return uris.filter(URI.isUri);
++}
++
+ interface TabInfo {
+ 	tab: IEditorTabDto;
+ 	group: IEditorGroup;
+@@ -48,16 +71,44 @@
+ 	private readonly _tabInfoLookup: Map<string, TabInfo> = new Map();
+ 	// Tracks resource-change listeners for currently open multi-diff tabs
+ 	private readonly _multiDiffEditorInputListeners: DisposableMap<string> = new DisposableMap();
++	private readonly _seclabHost: (editor: EditorInput) => boolean = () => false;
++	private readonly _seclabId: (id: string) => string = id => id;
+ 
+ 	constructor(
+ 		extHostContext: IExtHostContext,
+ 		@IEditorGroupsService private readonly _editorGroupsService: IEditorGroupsService,
+ 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+ 		@ILogService private readonly _logService: ILogService,
+-		@IEditorService editorService: IEditorService
++		@IEditorService editorService: IEditorService,
++		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
++		@IModelService modelService: IModelService,
++		@IFileService fileService: IFileService,
+ 	) {
+ 
+ 		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostEditorTabs);
++		// seclab (patch 0038): a tab's host learns of host-side editors in its window only that they
++		// exist: no URI, label or resource-bearing id. Its own are those 0035 would sync to it.
++		const authority = environmentService.remoteAuthority;
++		if (seclabIsFiltered(extHostContext, authority)) {
++			const o = seclabOrigin(extHostContext);
++			const salt = generateUuid();
++			const mine = (u: URI) => {
++				if (u.scheme === Schemas.vscodeRemote || u.scheme === Schemas.untitled) {
++					return u.scheme === Schemas.untitled ? !u.path.includes('/') : u.authority === authority;
++				}
++				const model = modelService.getModel(u), provider = fileService.getProvider(u.scheme);
++				return (!!model && o.models.has(model)) || (!!provider && o.fsProviders.has(provider));
++			};
++			this._seclabHost = editor => !(editor instanceof TerminalEditorInput || (editor instanceof WebviewInput && !(editor instanceof CustomEditorInput)))
++				&& !seclabEditorUris(editor).every(mine);
++			this._seclabId = id => {
++				const sha = new StringSHA1();
++				sha.update(salt + id);
++				return `${id.slice(0, id.indexOf('~'))}~seclab-${sha.digest()}`;
++			};
++			// Tagging changes what counts as the tab's own (a provider's model appears later).
++			this._dispoables.add(o.onDidChange.event(() => this._createTabsModel()));
++		}
+ 
+ 		// Main listener which responds to events from the editor service
+ 		this._dispoables.add(editorService.onDidEditorsChange((event) => {
+@@ -96,7 +147,7 @@
+ 		const editorId = editor.editorId;
+ 		const tab: IEditorTabDto = {
+ 			id: this._generateTabId(editor, group.id),
+-			label: editor.getName(),
++			label: this._seclabHost(editor) ? 'Editor' : editor.getName(),
+ 			editorId,
+ 			input: this._editorInputToDto(editor),
+ 			isPinned: group.isSticky(editorIndex),
+@@ -108,6 +159,9 @@
+ 	}
+ 
+ 	private _editorInputToDto(editor: EditorInput): AnyInputDto {
++		if (this._seclabHost(editor)) {
++			return { kind: TabInputKind.UnknownInput };
++		}
+ 
+ 		if (editor instanceof MergeEditorInput) {
+ 			return {
+@@ -250,7 +304,7 @@
+ 		} else {
+ 			resourceString = `${resource?.primary?.toString()}-${resource?.secondary?.toString()}`;
+ 		}
+-		return `${groupId}~${editor.editorId}-${editor.typeId}-${resourceString} `;
++		return this._seclabId(`${groupId}~${editor.editorId}-${editor.typeId}-${resourceString} `);
+ 	}
+ 
+ 	/**
+@@ -276,7 +330,7 @@
+ 		const tabInfo = this._tabInfoLookup.get(tabId);
+ 		// If tab is found patch, else rebuild
+ 		if (tabInfo) {
+-			tabInfo.tab.label = editorInput.getName();
++			tabInfo.tab.label = this._seclabHost(editorInput) ? 'Editor' : editorInput.getName();
+ 			this._proxy.$acceptTabOperation({
+ 				groupId,
+ 				index: editorIndex,
