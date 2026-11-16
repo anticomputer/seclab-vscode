@@ -49,3 +49,13 @@ union merge can't defeat a tombstone, `restored` included.
 |---|---|---|---|---|---|
 | LSR-7 | Medium | discovery | LSR-4 was fixed only at exactly 4-space indentation. A filter at 3 or 6 spaces is valid YAML that GitHub acts on, and still disarmed the push filter. | Fixed | The `on:` scanner follows YAML indentation and fails closed on what it can't read: an unparseable trigger line makes the workflow a subject, and an inline or unreadable push filter counts as off main. Column-0 comments no longer end the block. Six shapes are injected. |
 | LSR-8 | Low | exemptions | A tombstone marked `restored` with no exemption (armed ahead of time, or left on afterwards) protected nothing, so a later merge could bring the exemption back silently. | Fixed | `restored` stands only while its exemption exists. |
+
+## Round LSR, third follow-up
+LSR-7 and LSR-8 were confirmed closed, and six of the scanner's branches were confirmed to fail
+their own cases when mutated. A 24-shape differential corpus, with a YAML parser as ground
+truth, found one remaining root cause.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| LSR-9 | Medium | discovery | The scanner reads a line at a time, so a flow collection or quoted scalar continued on the next line was read short: `branches-ignore: [foo,` then `main]` dropped `main`, so the push counted as live. A quoted input default continued at column 0 ended the block before `schedule:`. | Fixed | A line of the `on:` block that leaves a flow collection or quoted scalar open makes the whole block unreadable, and so the workflow a subject. Brackets and quotes count only where YAML starts a collection or scalar, and block scalars are skipped. Four injections, and four controls that keep ordinary workflows readable. |
+| LSR-10 | Low | self-test | Three fail-closed branches had no injection (trigger-level dedent, unreadable filter line, filter-level dedent), so a refactor could delete them unnoticed. | Fixed | One injection each; each fails when its branch is mutated. |

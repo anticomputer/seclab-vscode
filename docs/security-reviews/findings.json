@@ -13844,6 +13844,32 @@
 			"status": "fixed",
 			"commit": "b3c8fb1",
 			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-8 a restored tombstone with no exemption" }
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-9",
+			"round": "Round LSR",
+			"severity": "medium",
+			"summary": "A flow collection or quoted scalar continued on the next line was read short, so a two-line `branches-ignore` lost `main` and a column-0 quoted continuation hid `schedule`.",
+			"component": "liveness gate (workflow discovery)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "a2eb22b",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-9 ${shape}" },
+			"note": "Four shapes are injected (two-line branches-ignore and paths-ignore, a two-line on: list, a quoted default continued at column 0), and four controls keep ordinary workflows readable."
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-10",
+			"round": "Round LSR",
+			"severity": "low",
+			"summary": "Three of the on: scanner's fail-closed branches had no self-test injection.",
+			"component": "liveness gate (self-test)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "a2eb22b",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-7 ${shape}" },
+			"note": "Cases: a trigger-level dedent, an unreadable line at the filter level, a filter-level dedent; each fails with its branch mutated."
 		}
 	]
 }
