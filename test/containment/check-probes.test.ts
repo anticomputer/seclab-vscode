@@ -177,14 +177,21 @@ const tests: Array<[string, () => void]> = [
 		const r = run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh([]) });
 		assert.ok(failed(r.out, /reh-resolve-variables-host-env shows the escape itself/), r.out);
 	}],
-	['the profile-path probe needs the canary on a baseline and none after patch 0034', () => {
+	['the profile probe needs the canary in path and env on a baseline, and both unresolved after patch 0034', () => {
 		const spec = { required: true, policyRef: 'data:remoteterminal-profile-path', patchedOutcome: 'succeeded', why: 'synthetic' };
 		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-profile-config-host-setting': spec } };
-		const reh = (tokens: string[]) => ({ results: [{ id: 'reh-profile-config-host-setting', policyRef: 'data:remoteterminal-profile-path', outcome: 'succeeded', facts: { sawProfilePath: true, canaryTokens: tokens, unresolved: tokens.length === 0 } }] });
-		assert.ok(!failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh(['seclabcanary_user_settings_1']) }).out, /reh-profile-config-host-setting/));
-		assert.ok(failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh([]) }).out, /reh-profile-config-host-setting shows the escape itself/));
-		assert.equal(run({ expectations: exp, reh: reh([]) }).status, 0);
-		assert.ok(failed(run({ expectations: exp, reh: reh(['seclabcanary_user_settings_1']) }).out, /reh-profile-config-host-setting patched predicate holds/));
+		const base = { sawProfilePath: true, sawProfileEnv: true, pathCanary: false, envCanary: false, resolvedVariablesCanary: false, unresolved: true, canaryTokens: [] as string[] };
+		const reh = (over: Record<string, unknown>) => ({ results: [{ id: 'reh-profile-config-host-setting', policyRef: 'data:remoteterminal-profile-path', outcome: 'succeeded', facts: { ...base, ...over } }] });
+		const leaked = { pathCanary: true, envCanary: true, unresolved: false, canaryTokens: ['seclabcanary_user_settings_1'] };
+		assert.ok(!failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh(leaked) }).out, /reh-profile-config-host-setting/));
+		assert.ok(failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh({}) }).out, /reh-profile-config-host-setting shows the escape itself/));
+		// The path leaking alone is not the env leak RFU1R-1 adds.
+		assert.ok(failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh({ ...leaked, envCanary: false }) }).out, /reh-profile-config-host-setting shows the escape itself/));
+		assert.equal(run({ expectations: exp, reh: reh({}) }).status, 0);
+		assert.ok(failed(run({ expectations: exp, reh: reh(leaked) }).out, /reh-profile-config-host-setting patched predicate holds/));
+		// A patched run that never saw the env, or saw it resolved to some other value, proves nothing.
+		assert.ok(failed(run({ expectations: exp, reh: reh({ sawProfileEnv: false }) }).out, /reh-profile-config-host-setting patched predicate holds/));
+		assert.ok(failed(run({ expectations: exp, reh: reh({ unresolved: false }) }).out, /reh-profile-config-host-setting patched predicate holds/));
 	}],
 	['a patched push probe needs the refusal in the decision log', () => {
 		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-onexecutecommand-windowopen': { required: true, policyRef: 'push:remoteterminal:$onExecuteCommand', why: 'synthetic' } } };
