@@ -46,11 +46,17 @@ function problems(patch: string): string[] {
 	if (!external.includes(`when: ContextKeyExpr.and(TerminalContextKeys.notFocus, IsSessionsWindowContext.negate(), ${NOT_TAB}),`)) {
 		p.push('the external terminal keybinding is active in a tab window');
 	}
-	if (!external.includes('handler: async (accessor) => {\nif (seclabIsTabAuthority(accessor.get(IWorkbenchEnvironmentService).remoteAuthority)) {\nreturn;\n}')) {
+	if (!external.includes('handler: async (accessor) => {\nif (seclabIsTabAuthority(accessor.get(IWorkbenchEnvironmentService)?.remoteAuthority)) {\nreturn;\n}')) {
 		p.push('the external terminal handler runs in a tab window');
 	}
 	if (!external.includes(`title: nls.localize2('globalConsoleAction', "Open New External Terminal")\n},\nwhen: ${NOT_TAB}\n});`)) {
 		p.push('the palette offers the external terminal in a tab window');
+	}
+	// The Explorer's "Open in ... Terminal" items for a host (file:) resource (review NHT-3). The
+	// file name is shared with the electron-browser contribution, so read the browser hunk by path.
+	const explorer = code(patch, 'contrib/externalTerminal/browser/externalTerminal.contribution.ts');
+	if ((explorer.match(new RegExp(`ResourceContextKey\\.Scheme\\.isEqualTo\\(Schemas\\.file\\), ${NOT_TAB.replace(/[().]/g, '\\$&')},`, 'g')) ?? []).length !== 2) {
+		p.push('the Explorer offers a terminal on a host folder in a tab window');
 	}
 	const manager = code(patch, 'terminalProcessManager.ts');
 	const refuse = manager.indexOf('if (seclabIsTabAuthority(seclabWindow) && this.remoteAuthority?.toLowerCase() !== seclabWindow!.toLowerCase()) {\nreturn { message:');
@@ -67,7 +73,8 @@ const tests: Array<[string, () => void]> = [
 		const mutants: Array<[string, string, string]> = [
 			['local terminal registered anyway', ' && !seclabIsTabAuthority(connection.remoteAuthority)) {', ') {'],
 			['keybinding when clause dropped', `IsSessionsWindowContext.negate(), ${NOT_TAB}),`, 'IsSessionsWindowContext.negate()),'],
-			['handler refusal dropped', '+\t\tif (seclabIsTabAuthority(accessor.get(IWorkbenchEnvironmentService).remoteAuthority)) {\n+\t\t\treturn;', '+\t\tif (false) {\n+\t\t\treturn;'],
+			['handler refusal dropped', '+\t\tif (seclabIsTabAuthority(accessor.get(IWorkbenchEnvironmentService)?.remoteAuthority)) {\n+\t\t\treturn;', '+\t\tif (false) {\n+\t\t\treturn;'],
+			['Explorer item shown on a host folder', `ResourceContextKey.Scheme.isEqualTo(Schemas.file), ${NOT_TAB},`, 'ResourceContextKey.Scheme.isEqualTo(Schemas.file),'],
 			['palette when clause dropped', `+\twhen: ${NOT_TAB}\n`, ''],
 			['backend refusal allows any authority', 'this.remoteAuthority?.toLowerCase() !== seclabWindow!.toLowerCase()', 'this.remoteAuthority === undefined && false'],
 			['backend refusal keyed on the terminal', 'const seclabWindow = this._workbenchEnvironmentService.remoteAuthority;', 'const seclabWindow = this.remoteAuthority;'],

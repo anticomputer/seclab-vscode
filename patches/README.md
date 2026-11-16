@@ -155,13 +155,14 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   `createProcess` sends no `${config:…}`, `selectedText` or `lineNumber` values, and a profile's
   path, arguments and `env` resolve only `${env:…}`, against the REH's own environment. Both
   resolvers key on the window's authority (review findings RFU-1, RFU1R-1).
-- `0050-seclab-no-host-terminal-in-tabs.patch`: `terminalNativeContribution.ts`,
-  `externalTerminal.contribution.ts` and `terminalProcessManager.ts`. A tab window offers and
+- `0050-seclab-no-host-terminal-in-tabs.patch`: `terminalNativeContribution.ts`, both
+  `externalTerminal.contribution.ts` files and `terminalProcessManager.ts`. A tab window offers and
   starts no host terminal (project owner decision 2026-11-16,
   [ADR](../docs/adr/20261116-no-host-terminal-in-tabs.md)): "Create New Integrated Terminal
   (Local)" isn't registered, "Open New External Terminal" is hidden from the palette and
-  keybinding (`remoteName != seclab`) and its handler returns, and `terminalProcessManager`
-  refuses any pty outside the window's own tab. Applies after 0034, which edits the same file.
+  keybinding (`remoteName != seclab`) and its handler returns, the Explorer's "Open in …
+  Terminal" items are hidden for host (`file:`) folders, and `terminalProcessManager` refuses any
+  pty outside the window's own tab. Applies after 0034, which edits the same file.
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
