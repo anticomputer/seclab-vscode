@@ -15,6 +15,11 @@
 			"evidence": [{ "run": 43247709454, "workflow": "deps-updates.yml", "sha": "5943146cbfc04c30158ba0079ede36a07246648e", "date": "2026-11-12" }]
 		},
 		{
+			"id": "workflow:liveness-refresh",
+			"runBy": "schedule (weekly) and workflow_dispatch: verify-runs over the register's run evidence, and the findings register's rot check on main",
+			"evidence": [{ "run": 43910231243, "workflow": "liveness-refresh.yml", "sha": "c5cb491ccbc4661a7209e45f848019cd1cc5b853", "date": "2026-11-16" }]
+		},
+		{
 			"id": "hook:containment/rogue-reh",
 			"runBy": "build-macos.yml dispatched with test_variant=containment applies it (build/test-variant.sh); test/builds/rogue-reh-arming.ts arms it in a real OCI tab of that REH",
 			"evidence": [
