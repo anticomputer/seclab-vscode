@@ -113,6 +113,9 @@ lint_workflows() {
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ZIZMOR_IMAGE" --offline --no-progress --persona=regular .github/workflows
 	# Actions logs here are public: no workflow or CI script echoes env, secrets or host data.
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" sh -ec 'node build/check-workflow-echo.ts --self-test; node build/check-workflow-echo.ts'
+	# Required checks can't be skipped by the change they gate (EDR pr-landing): no job-level
+	# if: on a required job, no trigger filter on its workflow.
+	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" sh -ec 'node build/check-required-checks.ts --self-test; node build/check-required-checks.ts'
 }
 
 # Publisher-signature check before use (ADR supply-chain provenance), for images whose

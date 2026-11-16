@@ -98,7 +98,10 @@ cache would therefore reach the user's machine directly. Already in place:
    the `unit`, `lint` and `docs` status checks on the pushed SHA, has no bypass
    actors, and blocks non-fast-forward pushes and deletion. History stays linear
    and no pull request is required. Sessions push their branch, wait for the
-   checks on that SHA, then fast-forward `main` to it.
+   checks on that SHA, then fast-forward `main` to it. (Superseded 2026-11-16 by
+   [pull-request landing](20261116-pr-landing.md), once its ruleset change is applied: a
+   pull request is required, merged by rebase, and the required checks are `unit`, `lint`,
+   `docs` and `patch-build`.)
 10. **Process.** Every workflow change gets its own security-review round and
     must pass `lint workflows` and `lint pins` (AGENTS.md hard rule).
 

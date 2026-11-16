@@ -36,6 +36,17 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      # The only step with a token (gh on the runner, download only; review HH-1), first after
+      # checkout, before anything else the change controls runs (review XX-1). Same-repository
+      # pull requests too: the required `docs` check runs on them, and without bundles the gate
+      # verifies online unauthenticated, sharing the runner IP's rate limit. Their authors can
+      # already push branches, which run this step with the same read-only token. Never a fork's
+      # pull request: its code would get a token (EDR pr-landing).
+      - name: Download attestation bundles (the only step with a token; gh on the runner)
+        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: broker/tools/verify-images.sh --download "$SECLAB_ATTESTATION_DIR"
       # Link-check cache: keyed per ref, restored read-only on PRs (never saved from a PR,
       # so PR content can't seed what main or a tag restores).
       - name: Restore the link-check cache
@@ -52,14 +63,6 @@ jobs:
           if [ -f .work/lychee-cache/.lycheecache ]; then
             docker run --rm -v seclab-lychee-cache:/cache -v "$PWD/.work/lychee-cache:/in:ro" "$ALPINE" cp /in/.lycheecache /cache/
           fi
-      - name: Download attestation bundles (the only step with a token; gh on the runner)
-        # Pull requests too: the required `docs` check runs on them, and without bundles the
-        # gate would verify online unauthenticated, sharing a runner IP's rate limit. Branch
-        # pushes already run this step with the same read-only token (EDR pr-landing).
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: broker/tools/verify-images.sh --download "$SECLAB_ATTESTATION_DIR"
       - name: Docs gate (records, links, commands, paired docs)
         env:
           # Exact range: the PR's base, or the push's previous head (all-zero for a new branch).
