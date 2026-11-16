@@ -222,7 +222,7 @@
 			"record": null,
 			"anchor": "AGENTIC-R1",
 			"severity": "medium",
-			"severityNote": "No review row rates it; raised above \"low\" because a whole class of tab egress (browser-view tunnel sockets) bypasses the broker entirely \u2014 it is unmediated and absent from the broker's audit, and is contained only by the fence, so any future fence grant silently opens it.",
+			"severityNote": "No review row rates it; raised above \"low\" because a whole class of tab egress (browser-view tunnel sockets) bypasses the broker entirely — it is unmediated and absent from the broker's audit, and is contained only by the fence, so any future fence grant silently opens it.",
 			"summary": "Browser-view traffic is contained by the sbx fence, not mediated by the broker: raw tunnel sockets ignore the tab's proxy variables, so this egress is unbrokered and unlogged",
 			"component": "patch 0017 browser view, tab fence vs broker",
 			"owner": "agentic",
@@ -244,7 +244,7 @@
 			"component": "command taint (seclabRpcFilter) / policy commands",
 			"owner": "rpc",
 			"status": "deferred",
-			"followUp": "RPC-LOCKDOWN.md \u00a77 residual 0: \"Fixing the residual properly is the follow-up after this landing\" (rpc session). Meanwhile check_drift.py::check_residuals fails the build if any command gets a verdict other than deny, except the recorded leaf exceptions (_setContext, _executeHoverProvider, _executeCompletionItemProvider), each validated and probed.",
+			"followUp": "RPC-LOCKDOWN.md §7 residual 0: \"Fixing the residual properly is the follow-up after this landing\" (rpc session). Meanwhile check_drift.py::check_residuals fails the build if any command gets a verdict other than deny, except the recorded leaf exceptions (_setContext, _executeHoverProvider, _executeCompletionItemProvider), each validated and probed.",
 			"ref": {
 				"file": "docs/RPC-LOCKDOWN.md",
 				"quote": "No command may be given a verdict other than deny until the deferred-laundering residual is fixed, except the residual's recorded leaf exceptions, each validated."
@@ -311,7 +311,7 @@
 			"severity": "high",
 			"severityNote": "No severity is recorded; rated high against the threat model because the configuration snapshot pushes every host user setting value (settings files can hold tokens) into a host the tab fully controls.",
 			"summary": "Window-to-tab push: the configuration snapshot still sends every host user setting value to a tab's extension host.",
-			"component": "window\u2192tab pushes (configuration snapshot)",
+			"component": "window→tab pushes (configuration snapshot)",
 			"owner": "docsync",
 			"status": "fixed",
 			"commit": "37d7c0e75179bd22c9a62ae01da4241d559f08cf",
@@ -331,7 +331,7 @@
 			"severity": "medium",
 			"severityNote": "No severity is recorded; rated medium because it is host document content (notebook cells) pushed into a tab, the same class as 0035's F1 but for a channel 0035 does not cover.",
 			"summary": "Window-to-tab push: notebook document sync still sends cells of host notebooks to a tab's extension host.",
-			"component": "window\u2192tab pushes (notebook sync)",
+			"component": "window→tab pushes (notebook sync)",
 			"owner": "docsync",
 			"status": "fixed",
 			"commit": "cc51fa7d",
@@ -351,7 +351,7 @@
 			"severity": "info",
 			"severityNote": "A follow-up, not a leak: notebooks are off in tabs today, so nothing reaches a tab; the item records what must exist before they are turned on.",
 			"summary": "Notebooks don't work in tabs; enabling them needs per-model notebook provenance, a serializer that reads only the tab's files, and 0035's cell rule for tab-created notebooks.",
-			"component": "window\u2192tab pushes (notebook sync)",
+			"component": "window→tab pushes (notebook sync)",
 			"owner": "docsync",
 			"status": "deferred",
 			"followUp": "With the RPC follow-ups session's landing D, which needs a validator for MainThreadNotebook (coordinator, 2026-11-16). The plan is in the EDR's Decision section; test/nbsync/probe.ts must pass with notebooks on.",
@@ -366,7 +366,7 @@
 			"severity": "low",
 			"severityNote": "No severity is recorded; metadata (host paths and labels) rather than content, so low.",
 			"summary": "Window-to-tab push: the editor-tab model still exposes host URIs and labels to a tab's extension host.",
-			"component": "window\u2192tab pushes (editor tabs)",
+			"component": "window→tab pushes (editor tabs)",
 			"owner": "docsync",
 			"status": "open",
 			"gap": "No push-side control for the editor-tab model; reported to the coordinator as a 0035 sibling.",
@@ -381,7 +381,7 @@
 			"severity": "low",
 			"severityNote": "No severity is recorded; host telemetry identifiers are correlatable host metadata, not credentials or content.",
 			"summary": "Window-to-tab push: ext-host init data still carries host telemetry ids into a tab's extension host.",
-			"component": "window\u2192tab pushes (ext-host init data)",
+			"component": "window→tab pushes (ext-host init data)",
 			"owner": "docsync",
 			"status": "fixed",
 			"commit": "98db0a5b4142",
@@ -486,7 +486,7 @@
 			"severity": "medium",
 			"severityNote": "No severity is recorded; rated medium because environment collections and the default profile can carry host-side environment values and reveal host shell configuration.",
 			"summary": "Window-to-tab push: the terminal default profile and environment collections still reach a tab's extension host.",
-			"component": "window\u2192tab pushes (terminal profile/env)",
+			"component": "window→tab pushes (terminal profile/env)",
 			"owner": "docsync",
 			"status": "open",
 			"gap": "No push-side control for terminal profile and environment collections; reported to the coordinator as a 0035 sibling.",
@@ -501,7 +501,7 @@
 			"severity": "medium",
 			"severityNote": "No severity is recorded; rated medium because workspace data can carry host folder paths and workspace state into a tab.",
 			"summary": "Window-to-tab push: workspace data is still pushed to a tab's extension host.",
-			"component": "window\u2192tab pushes (workspace data)",
+			"component": "window→tab pushes (workspace data)",
 			"owner": "docsync",
 			"status": "open",
 			"gap": "No push-side control for workspace data; reported to the coordinator as a 0035 sibling.",
@@ -515,8 +515,8 @@
 			"anchor": "DOCSYNC-R7",
 			"severity": "medium",
 			"severityNote": "No severity is recorded; rated medium because it is the same hijack class as F1 (rated high) but on channels other than the document sync, which 0035 does not cover.",
-			"summary": "A tab can still squat host filesystem schemes with its own provider on window\u2192tab channels other than the document sync.",
-			"component": "window\u2192tab pushes (filesystem-scheme squatting)",
+			"summary": "A tab can still squat host filesystem schemes with its own provider on window→tab channels other than the document sync.",
+			"component": "window→tab pushes (filesystem-scheme squatting)",
 			"owner": "docsync",
 			"status": "open",
 			"gap": "Patch 0035 neutralises squatting only for the document sync (per-model provenance); no general control stops a tab registering a provider for a host scheme on other push channels.",
@@ -748,7 +748,7 @@
 			"anchor": "1",
 			"round": "Round 3 (fd70ed5..564d2e6)",
 			"severity": "medium",
-			"summary": "Wildcard-DNS names (nip.io, sslip.io, \u2026) and IP-spelling hostnames escaped the raw-IP gating, so a loader's C2 got a normal allow-tab prompt.",
+			"summary": "Wildcard-DNS names (nip.io, sslip.io, …) and IP-spelling hostnames escaped the raw-IP gating, so a loader's C2 got a normal allow-tab prompt.",
 			"component": "broker prompt gating",
 			"owner": "broker",
 			"status": "fixed",
@@ -1157,7 +1157,7 @@
 			"rationale": "The reviewer recorded it as an informational confirmation, not a defect: no fix and no regression were required.",
 			"ref": {
 				"file": "docs/security-reviews/20261104-campaign-fixture.md",
-				"quote": "| CI-G | Info | Network, beacon, eval | Reserved targets; bounded loop and lifetime; responses never evaluated. | \u2014 | \u2014 |"
+				"quote": "| CI-G | Info | Network, beacon, eval | Reserved targets; bounded loop and lifetime; responses never evaluated. | — | — |"
 			}
 		},
 		{
@@ -1445,7 +1445,7 @@
 			"rationale": "Not a finding: the row records that the review looked for a silent pass in the records check and found none (no disposition, no fix).",
 			"ref": {
 				"file": "docs/security-reviews/20261104-docs-check.md",
-				"quote": "| DC-8 | Info | Records | No silent pass found. | \u2014 | \u2014 |"
+				"quote": "| DC-8 | Info | Records | No silent pass found. | — | — |"
 			}
 		},
 		{
@@ -1820,7 +1820,7 @@
 			"anchor": "T-6",
 			"round": "Round 1",
 			"severity": "low",
-			"summary": "clean-host called any ppid-1 process naming tabd an orphan, and any `.work/\u2026userdata` path a test profile.",
+			"summary": "clean-host called any ppid-1 process naming tabd an orphan, and any `.work/…userdata` path a test profile.",
 			"component": "clean-host",
 			"owner": "fork-build",
 			"status": "fixed-untested",
@@ -2128,7 +2128,7 @@
 			"anchor": "(self)",
 			"round": "Round 4 (5436acb..3bcbe4f, re-review of round 3)",
 			"severity": "info",
-			"severityNote": "No severity in the record (\u2014). A build/typecheck defect in a patch, not a boundary gap, so info; it would have left `_productService` undefined at runtime in the placement picker.",
+			"severityNote": "No severity in the record (—). A build/typecheck defect in a patch, not a boundary gap, so info; it would have left `_productService` undefined at runtime in the placement picker.",
 			"summary": "Patch 0003 added a constructor parameter the NativeExtensionService call site did not pass (TS2554).",
 			"component": "patch 0003",
 			"owner": "fork-build",
@@ -2275,7 +2275,7 @@
 		{
 			"record": "20261104-m0-tabd-code.md",
 			"anchor": "D1",
-			"round": "Round 8 (d513831..c4ce450, re-review of R1\u2013R3)",
+			"round": "Round 8 (d513831..c4ce450, re-review of R1–R3)",
 			"severity": "medium",
 			"summary": "Directory links were copied only if their target matched a bash mirror of gitleaks' allowlist, dodgeable by case and gaps.",
 			"component": "pre-mount secret scanner",
@@ -2290,9 +2290,9 @@
 		{
 			"record": "20261104-m0-tabd-code.md",
 			"anchor": "D2",
-			"round": "Round 8 (d513831..c4ce450, re-review of R1\u2013R3)",
+			"round": "Round 8 (d513831..c4ce450, re-review of R1–R3)",
 			"severity": "medium",
-			"severityNote": "Record says \"Low\u2013Med\"; taking the highest per the rules.",
+			"severityNote": "Record says \"Low–Med\"; taking the highest per the rules.",
 			"summary": "tabd ran realpath/stat on tab-chosen absolute paths on the host, which could trigger automount and DNS.",
 			"component": "tabd host-side link resolution",
 			"owner": "fork-build",
@@ -2307,7 +2307,7 @@
 		{
 			"record": "20261104-m0-tabd-code.md",
 			"anchor": "D3",
-			"round": "Round 8 (d513831..c4ce450, re-review of R1\u2013R3)",
+			"round": "Round 8 (d513831..c4ce450, re-review of R1–R3)",
 			"severity": "medium",
 			"summary": "gitleaks silently skips files whose first chunk has an application/* magic, so a tab could blind `.env` with a zip header.",
 			"component": "pre-mount secret scanner",
@@ -2322,7 +2322,7 @@
 		{
 			"record": "20261104-m0-tabd-code.md",
 			"anchor": "E1",
-			"round": "Round 9 (c4ce450..6f263c1, re-review of D1\u2013D3)",
+			"round": "Round 9 (c4ce450..6f263c1, re-review of D1–D3)",
 			"severity": "medium",
 			"summary": "The host-side alias list was incomplete, so links reaching the workspace by another spelling were not scanned.",
 			"component": "pre-mount secret scanner",
@@ -2337,7 +2337,7 @@
 		{
 			"record": "20261104-m0-tabd-code.md",
 			"anchor": "E2",
-			"round": "Round 9 (c4ce450..6f263c1, re-review of D1\u2013D3)",
+			"round": "Round 9 (c4ce450..6f263c1, re-review of D1–D3)",
 			"severity": "medium",
 			"summary": "Archives were never scanned (`--max-archive-depth 0` dropped them by name, logged only at trace level).",
 			"component": "pre-mount secret scanner",
@@ -2352,7 +2352,7 @@
 		{
 			"record": "20261104-m0-tabd-code.md",
 			"anchor": "E3",
-			"round": "Round 9 (c4ce450..6f263c1, re-review of D1\u2013D3)",
+			"round": "Round 9 (c4ce450..6f263c1, re-review of D1–D3)",
 			"severity": "low",
 			"summary": "A binary-looking file whose name zerolog quotes made every scan incomplete, training users to click Open Anyway.",
 			"component": "pre-mount secret scanner",
@@ -2367,7 +2367,7 @@
 		{
 			"record": "20261104-m0-tabd-code.md",
 			"anchor": "F1",
-			"round": "Round 10 (6f263c1..77188d4, re-review of E1\u2013E3)",
+			"round": "Round 10 (6f263c1..77188d4, re-review of E1–E3)",
 			"severity": "medium",
 			"summary": "Archives unrecognised by name (.jar/.docx/.whl) were not opened, and nested archives failed on a missing TMPDIR without blocking.",
 			"component": "pre-mount secret scanner",
@@ -2445,7 +2445,7 @@
 				"file": "docs/security-reviews/20261104-m0-tabd-code.md",
 				"quote": "**Finding ids weren't deterministic.**"
 			},
-			"round": "Round 7 (self-found while fixing R1\u2013R3)",
+			"round": "Round 7 (self-found while fixing R1–R3)",
 			"severity": "low",
 			"severityNote": "Self-found prose finding with no severity word: it failed closed (blocked again) but flaked the accept/re-gate path, so low.",
 			"summary": "Secret-finding ids were not stable across rescans, so an accepted finding could not be matched on the re-gate.",
@@ -2510,7 +2510,7 @@
 			"owner": "fork-build",
 			"status": "fixed-untested",
 			"commit": "5cf4172",
-			"gap": "The fix is real and gated in CI (`./seclab lint source` over extensions/series + tabd/src + the lines patches/series adds), but the regression the record cites \u2014 a check-source self-test with an env-gated require, a concatenated and a template import() \u2014 does not exist in the tree: build/check-source.ts has no self-test mode and nothing else invokes it with injected defects."
+			"gap": "The fix is real and gated in CI (`./seclab lint source` over extensions/series + tabd/src + the lines patches/series adds), but the regression the record cites — a check-source self-test with an env-gated require, a concatenated and a template import() — does not exist in the tree: build/check-source.ts has no self-test mode and nothing else invokes it with injected defects."
 		},
 		{
 			"record": "20261104-patch-guard.md",
@@ -2720,7 +2720,7 @@
 			"owner": "rpc",
 			"status": "fixed-untested",
 			"commit": "eb93c3a",
-			"gap": "The usage is corrected and `.seclab-probe-nonce` is written host-side, but no gate runs `prepare` \u2014 the very reason the ReferenceError survived. The liveness register records it only by `runBy`/record evidence."
+			"gap": "The usage is corrected and `.seclab-probe-nonce` is written host-side, but no gate runs `prepare` — the very reason the ReferenceError survived. The liveness register records it only by `runBy`/record evidence."
 		},
 		{
 			"record": "20261104-probe-safety.md",
@@ -2913,7 +2913,7 @@
 			"owner": "rpc",
 			"status": "fixed",
 			"commit": "99dc6ae",
-			"note": "commands.py now matches the generic `register*({ id: \u2026 })` shape; check_keys fails on a commands.exact id absent from the inventory, and both terminal ids are in commands.exact, so a scanner regression fails the regeneration job.",
+			"note": "commands.py now matches the generic `register*({ id: … })` shape; check_keys fails on a commands.exact id absent from the inventory, and both terminal ids are in commands.exact, so a scanner regression fails the regeneration job.",
 			"test": {
 				"file": "rpc-filter/tools/test_enforcement.py",
 				"name": "test_the_scanner_finds_a_helper_registration_by_shape"
@@ -2966,7 +2966,7 @@
 			"owner": "rpc",
 			"status": "fixed-untested",
 			"commit": "ac155f2",
-			"gap": "The 'walker shares code with revive' fix was later shown unsound (anticomputer-rpc-core-landing-v2 round 5, finding 2: URI.revive ignores $mid, so a shape search can never agree with a positional consumer) and was replaced by the generated SECLAB_URI_ARGS positional check. Main carries the generated table and test/containment/uri-constraint.test.ts, but rpc-filter/patch-src/seclabRpcFilter.ts on main still ships the superseded shape walker and docs/RPC-LOCKDOWN.md \u00a72.5.3 still documents it; the positional filter lives only on the branch."
+			"gap": "The 'walker shares code with revive' fix was later shown unsound (anticomputer-rpc-core-landing-v2 round 5, finding 2: URI.revive ignores $mid, so a shape search can never agree with a positional consumer) and was replaced by the generated SECLAB_URI_ARGS positional check. Main carries the generated table and test/containment/uri-constraint.test.ts, but rpc-filter/patch-src/seclabRpcFilter.ts on main still ships the superseded shape walker and docs/RPC-LOCKDOWN.md §2.5.3 still documents it; the positional filter lives only on the branch."
 		},
 		{
 			"record": "20261104-rpc-lockdown-design.md",
@@ -3194,7 +3194,7 @@
 			"anchor": "DD-2",
 			"round": "Round 2",
 			"severity": "medium",
-			"summary": "`docker://` workflow steps and `$VAR/\u2026@sha256` references escaped the dependency register.",
+			"summary": "`docker://` workflow steps and `$VAR/…@sha256` references escaped the dependency register.",
 			"component": "build/deps.ts",
 			"owner": "fork-build",
 			"status": "fixed",
@@ -3347,7 +3347,7 @@
 			"anchor": "info",
 			"round": "Round 3: re-review",
 			"severity": "info",
-			"severityNote": "The row's severity cell is \"\u2014\"; the \"#\" cell reads \"info\", and the issue is a CI portability bug with no security impact.",
+			"severityNote": "The row's severity cell is \"—\"; the \"#\" cell reads \"info\", and the issue is a CI portability bug with no security impact.",
 			"summary": "`--platform linux/arm64` was pinned in the RPC filter's test.sh while CI runs on x86.",
 			"component": "rpc-filter/tools/test.sh",
 			"owner": "rpc",
@@ -3357,7 +3357,7 @@
 		},
 		{
 			"record": "20261104-supply-chain.md",
-			"anchor": "\u2014",
+			"anchor": "—",
 			"round": "Round 3: re-review",
 			"severity": "low",
 			"severityNote": "The severity cell reads \"Residual\"; rated low because the exposure is a local, developer-only `.work/upstream` tree and CI clones fresh.",
@@ -4525,8 +4525,8 @@
 			"anchor": "1",
 			"round": "Findings",
 			"severity": "critical",
-			"summary": "The hostile REH server can drive server\u2192client IPC (download channel, pty onExecuteCommand) past a MainThread*-only filter.",
-			"component": "RPC boundary (REH\u2192UI)",
+			"summary": "The hostile REH server can drive server→client IPC (download channel, pty onExecuteCommand) past a MainThread*-only filter.",
+			"component": "RPC boundary (REH→UI)",
 			"owner": "rpc",
 			"status": "fixed",
 			"commit": "b554ca31",
@@ -5542,7 +5542,7 @@
 			"anchor": "QQ-3",
 			"round": "Increment 3: review prompt (d24311b and fixes)",
 			"severity": "low",
-			"summary": "Tab content could forge the renderer's own markers (\u27e8N blanks\u27e9, \u2192, \u21aa).",
+			"summary": "Tab content could forge the renderer's own markers (⟨N blanks⟩, →, ↪).",
 			"component": "write-back review prompt (Tab Manager)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
@@ -5988,7 +5988,7 @@
 			"anchor": "9-1",
 			"round": "Round 9 (440d80f; fixes 5a889d3)",
 			"severity": "high",
-			"summary": "The gate split the Dockerfile keyword on a space only, so `RUN<TAB>--mount=type=secret,\u2026` was skipped and leaked the CFS token.",
+			"summary": "The gate split the Dockerfile keyword on a space only, so `RUN<TAB>--mount=type=secret,…` was skipped and leaked the CFS token.",
 			"component": "broker CFS build gate",
 			"owner": "broker",
 			"status": "fixed",
@@ -6049,7 +6049,7 @@
 			"round": "Round 9b (b27d088)",
 			"severity": "low",
 			"severityNote": "Record rates it \"Note\" (no severity word); graded low as an accepted residual in a security gate: the installer heuristic is bypassable by shell construction.",
-			"summary": "`RUN x=p; ${x}ip install \u2026` gets past the stray-installer heuristic in the supply-chain gate.",
+			"summary": "`RUN x=p; ${x}ip install …` gets past the stray-installer heuristic in the supply-chain gate.",
 			"component": "broker CFS build gate",
 			"owner": "broker",
 			"status": "accepted-residual",
@@ -6693,7 +6693,7 @@
 			"anchor": "10c-2",
 			"round": "Round 10c",
 			"severity": "low",
-			"summary": "`$(git cat-file blob \u2026)` drops trailing newlines, so a symlink target ending in \\n was written one byte short of the tree under a clean label.",
+			"summary": "`$(git cat-file blob …)` drops trailing newlines, so a symlink target ending in \\n was written one byte short of the tree under a clean label.",
 			"component": "broker image snapshot writer",
 			"owner": "broker",
 			"status": "fixed",
@@ -7007,7 +7007,7 @@
 			"anchor": "7",
 			"round": "Round 7 (re-review of round 6)",
 			"severity": "medium",
-			"summary": "The settings scan still cannot see a chat./mcp. setting that is read in an editor window but registered nowhere \u2014 the maximally permissive case.",
+			"summary": "The settings scan still cannot see a chat./mcp. setting that is read in an editor window but registered nowhere — the maximally permissive case.",
 			"component": "rpc-filter inventory (seclab_inventory/ai.py)",
 			"owner": "rpc",
 			"status": "open",
@@ -7130,7 +7130,7 @@
 			"owner": "agentic",
 			"status": "deferred",
 			"gap": "no code pins the setting or nulls the other providers on main",
-			"followUp": "increment 4 / patch 0019 seclab-no-other-agent-host-providers (agentic); for v0 the RPC-lockdown session's 0011 \u2014 neither is in patches/series",
+			"followUp": "increment 4 / patch 0019 seclab-no-other-agent-host-providers (agentic); for v0 the RPC-lockdown session's 0011 — neither is in patches/series",
 			"note": "0017 on the unmerged branch pins four other keys only; this one is not among them."
 		},
 		{
@@ -7273,11 +7273,11 @@
 			"round": "Findings (round 1, 141cd99)",
 			"severity": "medium",
 			"summary": "A tab can trigger upstream prompts (resource permission, workspace trust, MCP sign-in) directly, outside the inbox",
-			"component": "prompt triggers (plan \u00a79.2)",
+			"component": "prompt triggers (plan §9.2)",
 			"owner": "agentic",
 			"status": "deferred",
 			"gap": "session/inputNeededSet and inputNeededRemoved are still `allow` inbound in the gate's tables; no inbox exists",
-			"followUp": "plan \u00a79.2 prompt inbox, increment 5/6 (agentic)"
+			"followUp": "plan §9.2 prompt inbox, increment 5/6 (agentic)"
 		},
 		{
 			"record": "20261105-secure-agentic-experiences-design.md",
@@ -7298,11 +7298,11 @@
 			"round": "Findings (round 1, 141cd99)",
 			"severity": "medium",
 			"summary": "Tier C: a host view of a tab page runs in host Chromium, the tunnel proxy opens agent-host TCP, MCP grants were per server",
-			"component": "Tier C host views (plan \u00a75.3)",
+			"component": "Tier C host views (plan §5.3)",
 			"owner": "agentic",
 			"status": "deferred",
 			"gap": "no Tier C work has started; ephemeral partition, broker-only traffic and per-tool MCP grants are design only",
-			"followUp": "Tier C probes after the Tier A increments (agentic plan \u00a75.3, \u00a711.2)"
+			"followUp": "Tier C probes after the Tier A increments (agentic plan §5.3, §11.2)"
 		},
 		{
 			"record": "20261105-secure-agentic-experiences-design.md",
@@ -7343,7 +7343,7 @@
 			"owner": "agentic",
 			"status": "deferred",
 			"gap": "no provider table or openExternal restriction exists yet",
-			"followUp": "increment 5 / patch 0020 (agentic), plan \u00a74.2 step 1 and \u00a75.2; fuzz with A1 and B1"
+			"followUp": "increment 5 / patch 0020 (agentic), plan §4.2 step 1 and §5.2; fuzz with A1 and B1"
 		},
 		{
 			"record": "20261105-secure-agentic-experiences-design.md",
@@ -7355,19 +7355,19 @@
 			"owner": "agentic",
 			"status": "deferred",
 			"gap": "no source-side filter for URI-less attachments, queued messages or chat import exists",
-			"followUp": "the workbench-side increments (agentic plan \u00a73.2), probe A19"
+			"followUp": "the workbench-side increments (agentic plan §3.2), probe A19"
 		},
 		{
 			"record": "20261105-secure-agentic-experiences-design.md",
 			"anchor": "2.2",
 			"round": "Re-review round 2 (141cd99..849a9c6)",
 			"severity": "medium",
-			"summary": "A URL-bearing input request renders as a trusted \"Authorization Required, Open \u2026\" card that opens any scheme",
+			"summary": "A URL-bearing input request renders as a trusted \"Authorization Required, Open …\" card that opens any scheme",
 			"component": "input requests and pills rendering",
 			"owner": "agentic",
 			"status": "deferred",
 			"gap": "session/inputNeededSet is still allowed inbound and nothing strips or re-renders the URL card",
-			"followUp": "increment 6 rendering (agentic plan \u00a73.2/\u00a75.2), probe A24"
+			"followUp": "increment 6 rendering (agentic plan §3.2/§5.2), probe A24"
 		},
 		{
 			"record": "20261105-secure-agentic-experiences-design.md",
@@ -7427,11 +7427,11 @@
 			"round": "Re-review round 2 (141cd99..849a9c6)",
 			"severity": "low",
 			"summary": "Non-file URIs pass through unmapped, and \"tab authority only\" was ambiguous",
-			"component": "URI mapping (plan \u00a73.2)",
+			"component": "URI mapping (plan §3.2)",
 			"owner": "agentic",
 			"status": "deferred",
 			"gap": "no URI scheme/authority filter exists; today the inbound path is closed only because every reverse request is refused",
-			"followUp": "increment 5/6 (agentic plan \u00a73.2), probe A26"
+			"followUp": "increment 5/6 (agentic plan §3.2), probe A26"
 		},
 		{
 			"record": "20261105-secure-agentic-experiences-design.md",
@@ -8174,7 +8174,7 @@
 			"anchor": "LOW, two overclaims in the EDR.",
 			"round": "Round 7 (2026-11-06)",
 			"severity": "low",
-			"summary": "The EDR claimed the decision matches design \u00a73.5 (whose grant is unimplemented) and still argued the superseded `false` case",
+			"summary": "The EDR claimed the decision matches design §3.5 (whose grant is unimplemented) and still argued the superseded `false` case",
 			"component": "increment 2 EDR",
 			"owner": "agentic",
 			"status": "fixed-untested",
@@ -8440,13 +8440,13 @@
 			"anchor": "BV-1",
 			"round": "Variant review (six defects)",
 			"severity": "low",
-			"severityNote": "The record states \"No high or critical finding\" and gives no per-defect severity; judged low \u2014 the U baseline was unbuildable, so the proof could not be produced (evidence defect, not a product boundary).",
+			"severityNote": "The record states \"No high or critical finding\" and gives no per-defect severity; judged low — the U baseline was unbuildable, so the proof could not be produced (evidence defect, not a product boundary).",
 			"summary": "The browser-drive hook could not apply on `main`: its context was generated against a tree including 0017, whose hunk touches the same import block",
 			"component": "agentic-browser test build variant (browserView-hook.patch)",
 			"owner": "agentic",
 			"status": "fixed-untested",
 			"commit": "fdf87d4",
-			"gap": "The hook is now written against the series without 0017 and its import is placed away from 0017's hunk, verified by applying it to a tree with and without 0017 \u2014 but that was a manual check; nothing in the repo applies the hook to both trees, so only a dispatched `build-macos` run of each baseline would catch a regression.",
+			"gap": "The hook is now written against the series without 0017 and its import is placed away from 0017's hunk, verified by applying it to a tree with and without 0017 — but that was a manual check; nothing in the repo applies the hook to both trees, so only a dispatched `build-macos` run of each baseline would catch a regression.",
 			"manual": {
 				"file": "docs/security-reviews/20261106-agentic-browser-variant.md",
 				"quote": "**The hook could not apply on `main`, so the U baseline it describes was unbuildable.**"
@@ -8638,7 +8638,7 @@
 			"anchor": "5",
 			"round": "Findings",
 			"severity": "low",
-			"severityNote": "The record gives no severity word (\"design\"); judged low \u2014 it is a proof-structure and defence-in-depth concern, not a boundary gap, and the plan now separates the layers.",
+			"severityNote": "The record gives no severity word (\"design\"); judged low — it is a proof-structure and defence-in-depth concern, not a boundary gap, and the plan now separates the layers.",
 			"summary": "Folding the second layers into the gate conflated probe evidence with defence in depth; content filtering and credential issuance in one component share one failure",
 			"component": "agentic design plan (layering)",
 			"owner": "agentic",
@@ -8655,7 +8655,7 @@
 			"anchor": "6",
 			"round": "Findings",
 			"severity": "medium",
-			"severityNote": "No severity word in the record (\"design\"); raised to medium because vacuous probes are the project's recurring false-negative class \u2014 a probe that passes trivially reads exactly like containment.",
+			"severityNote": "No severity word in the record (\"design\"); raised to medium because vacuous probes are the project's recurring false-negative class — a probe that passes trivially reads exactly like containment.",
 			"summary": "Probes passed vacuously: A1's `authenticate` was hard-wired empty, increment 3's negative probe showed 0009, and the session predicate rested on the RPC filter",
 			"component": "agentic probes (increments 1 and 3)",
 			"owner": "agentic",
@@ -8668,7 +8668,7 @@
 			"anchor": "7",
 			"round": "Findings",
 			"severity": "medium",
-			"severityNote": "No severity word in the record (\"design\"); judged medium because the amended D7 puts a durable GitHub token on model traffic and widens broker provider lists \u2014 a real credential-exposure question, not a note.",
+			"severityNote": "No severity word in the record (\"design\"); judged medium because the amended D7 puts a durable GitHub token on model traffic and widens broker provider lists — a real credential-exposure question, not a note.",
 			"summary": "Amended D7 puts the durable GitHub token on model traffic and widens the provider lists; the three org-policy responses were never measured",
 			"component": "broker model access, credential binding (plan increment 5)",
 			"owner": "broker",
@@ -8779,7 +8779,7 @@
 				"file": "docs/security-reviews/20261106-background-windows-click-through.md",
 				"quote": "The remaining exposure is a click on the Dock icon during startup."
 			},
-			"note": "Restated as the LLL startup residual (anchor \u2014#3 in 20261109-background-only-windows.md)."
+			"note": "Restated as the LLL startup residual (anchor —#3 in 20261109-background-only-windows.md)."
 		},
 		{
 			"record": "20261106-background-windows-click-through.md",
@@ -9669,7 +9669,7 @@
 			"owner": "rpc",
 			"status": "fixed-untested",
 			"commit": "cc51fa7",
-			"gap": "Verified on the branch: the seclabRegisterRewrite exemption is gone from CALLER_EXEMPT and check_callers now errors with \"CALLER_EXEMPT[%s] is stale: %s now has a caller\". No automated test covers that rule \u2014 sync_patch.py has no test file \u2014 so the stale-exemption gate is itself unproven after the fact."
+			"gap": "Verified on the branch: the seclabRegisterRewrite exemption is gone from CALLER_EXEMPT and check_callers now errors with \"CALLER_EXEMPT[%s] is stale: %s now has a caller\". No automated test covers that rule — sync_patch.py has no test file — so the stale-exemption gate is itself unproven after the fact."
 		},
 		{
 			"record": "20261106-rpc-core-landing-v2.md",
@@ -9705,7 +9705,7 @@
 			"owner": "rpc",
 			"status": "accepted-residual",
 			"acceptedBy": "agent",
-			"rationale": "Accepted because no UI-side extension declares onFileSystem:file at the pinned upstream (the Tab Manager and the built-ins were read), and the alternative \u2014 refusing 'file' \u2014 broke every workspace.fs call the tab's own extension host makes. The comment, the constraint text and the EDR now state what happens.",
+			"rationale": "Accepted because no UI-side extension declares onFileSystem:file at the pinned upstream (the Tab Manager and the built-ins were read), and the alternative — refusing 'file' — broke every workspace.fs call the tab's own extension host makes. The comment, the constraint text and the EDR now state what happens.",
 			"ref": {
 				"file": "docs/edr/20261106-ordinary-session-rpc-trace.md",
 				"quote": "and it is recorded as a residual."
@@ -9722,7 +9722,7 @@
 			"owner": "rpc",
 			"status": "deferred",
 			"followUp": "the probe returns to required once a baseline run reproduces the escape (rpc session); expectations.json records blocked_on \"did not reproduce on the unfiltered baseline (main 1cfa18a, 2026-11-09)\".",
-			"note": "arg-validators.test.ts covers the nested-URI and search-root refusals, including injected defects, so the control is not absent \u2014 only the runtime oracle is."
+			"note": "arg-validators.test.ts covers the nested-URI and search-root refusals, including injected defects, so the control is not absent — only the runtime oracle is."
 		},
 		{
 			"record": "20261106-rpc-core-landing-v2.md",
@@ -9849,7 +9849,7 @@
 			"component": "docs/RPC-LOCKDOWN.md, patches/series",
 			"owner": "rpc",
 			"status": "open",
-			"gap": "The patches/series half is fixed \u2014 the held-back REH-push patches were renumbered to 0030/0031 in cc51fa7, so no two patches share 0015. Still contradicting the code on the branch: docs/RPC-LOCKDOWN.md:3 \"**Status:** design for review (Phase 2). Not implemented.\" while 0005-0010 ship, and its sample at ~:113-124 shows `seclabFilterFor(this._extensionHost.remoteAuthority, this.kind)` where patch 0005 passes `seclabResolveTabId`."
+			"gap": "The patches/series half is fixed — the held-back REH-push patches were renumbered to 0030/0031 in cc51fa7, so no two patches share 0015. Still contradicting the code on the branch: docs/RPC-LOCKDOWN.md:3 \"**Status:** design for review (Phase 2). Not implemented.\" while 0005-0010 ship, and its sample at ~:113-124 shows `seclabFilterFor(this._extensionHost.remoteAuthority, this.kind)` where patch 0005 passes `seclabResolveTabId`."
 		},
 		{
 			"record": "20261106-rpc-policy-stamp.md",
@@ -10016,7 +10016,7 @@
 		},
 		{
 			"record": "20261109-background-only-windows.md",
-			"anchor": "\u2014",
+			"anchor": "—",
 			"round": "Round LLL",
 			"severity": "low",
 			"severityNote": "No severity in the record; a pre-existing dialog-default hardening gap, not a boundary crossing.",
@@ -10033,11 +10033,11 @@
 		},
 		{
 			"record": "20261109-background-only-windows.md",
-			"anchor": "\u2014#2",
+			"anchor": "—#2",
 			"round": "Round LLL",
 			"severity": "low",
 			"severityNote": "No severity in the record; an operational visibility trade-off, so low rather than info (an invisible armed editor was a real past incident).",
-			"summary": "A background run has no on-screen indicator: not in the on-screen list, no Dock icon, no \u2318-Tab entry.",
+			"summary": "A background run has no on-screen indicator: not in the on-screen list, no Dock icon, no ⌘-Tab entry.",
 			"component": "background windows / harness",
 			"owner": "fork-build",
 			"status": "accepted-residual",
@@ -10050,7 +10050,7 @@
 		},
 		{
 			"record": "20261109-background-only-windows.md",
-			"anchor": "\u2014#3",
+			"anchor": "—#3",
 			"round": "Round LLL",
 			"severity": "low",
 			"severityNote": "No severity in the record; same exposure as GGG-1, which the record rated Low.",
@@ -10088,7 +10088,7 @@
 			"anchor": "JJJ-1",
 			"round": "Round JJJ",
 			"severity": "low",
-			"summary": "The mount lint enforced mounts \u2287 closure only, so a widened container mount (the EE-2/DD-4 upper bound) passed silently.",
+			"summary": "The mount lint enforced mounts ⊇ closure only, so a widened container mount (the EE-2/DD-4 upper bound) passed silently.",
 			"component": "seclab lint mounts / import-closure",
 			"owner": "fork-build",
 			"status": "fixed",
@@ -10157,7 +10157,7 @@
 		},
 		{
 			"record": "20261109-deps-updates-mounts.md",
-			"anchor": "\u2014",
+			"anchor": "—",
 			"round": "Round JJJ",
 			"severity": "low",
 			"severityNote": "No severity in the record; pre-existing CI privilege exposure, writer-only (issues: write), not a tab boundary.",
@@ -10214,7 +10214,7 @@
 			"owner": "docsync",
 			"status": "fixed-untested",
 			"commit": "95a1f55",
-			"gap": "A filtered host now writes only models its own provider made (hardened again in 3848f6d), but the record records \"code review; no probe\" \u2014 driving it needs the user settings path inside the tab."
+			"gap": "A filtered host now writes only models its own provider made (hardened again in 3848f6d), but the record records \"code review; no probe\" — driving it needs the user settings path inside the tab."
 		},
 		{
 			"record": "20261109-document-sync-provenance.md",
@@ -10286,7 +10286,7 @@
 			"owner": "docsync",
 			"status": "fixed-untested",
 			"commit": "1663342",
-			"gap": "Birth now requires a finished read (lastResolvedFileStat) with no text model yet, but the record records \"code review; no probe\" \u2014 there is no predictable host creator to drive."
+			"gap": "Birth now requires a finished read (lastResolvedFileStat) with no text model yet, but the record records \"code review; no probe\" — there is no predictable host creator to drive."
 		},
 		{
 			"record": "20261109-document-sync-provenance.md",
@@ -10298,7 +10298,7 @@
 			"owner": "docsync",
 			"status": "fixed-untested",
 			"commit": "1663342",
-			"gap": "Reused models are tainted on onDidResolve so their later text models never count, but the record records \"code review\" only \u2014 no probe."
+			"gap": "Reused models are tainted on onDidResolve so their later text models never count, but the record records \"code review\" only — no probe."
 		},
 		{
 			"record": "20261109-ext-host-restart-reresolve.md",
@@ -10326,7 +10326,7 @@
 		},
 		{
 			"record": "20261109-ext-host-restart-reresolve.md",
-			"anchor": "\u2014",
+			"anchor": "—",
 			"round": "Round OOO",
 			"severity": "low",
 			"severityNote": "No severity in the record; upstream behaviour with reload-level recovery, no boundary crossing.",
@@ -10435,7 +10435,7 @@
 		},
 		{
 			"record": "20261109-level-b-repair.md",
-			"anchor": "\u2014",
+			"anchor": "—",
 			"round": "Round NNN",
 			"severity": "low",
 			"severityNote": "No severity in the record; a coverage gap in the proof on one driver, visible as an explicit known-gap row.",
@@ -10452,7 +10452,7 @@
 		},
 		{
 			"record": "20261109-level-b-repair.md",
-			"anchor": "\u2014#2",
+			"anchor": "—#2",
 			"round": "Round NNN",
 			"severity": "medium",
 			"severityNote": "No severity in the record; raised to medium because Level B is the containment proof and its vector rows are authored by the side under test.",
@@ -10469,7 +10469,7 @@
 		},
 		{
 			"record": "20261109-level-b-repair.md",
-			"anchor": "\u2014#3",
+			"anchor": "—#3",
 			"round": "Round NNN",
 			"severity": "info",
 			"severityNote": "No severity in the record; a fail-closed robustness issue with no security consequence.",
@@ -10559,14 +10559,14 @@
 				"file": "build/liveness/liveness.ts",
 				"name": "KKK-5 record mentions the id in passing"
 			},
-			"note": "Evidence pins sha and date; a record needs a `- **\\`<id>\\`:** \u2026` line; a 404 older than 85 days degrades to a note. Seven fake-API cases plus this injection."
+			"note": "Evidence pins sha and date; a record needs a `- **\\`<id>\\`:** …` line; a 404 older than 85 days degrades to a note. Seven fake-API cases plus this injection."
 		},
 		{
 			"record": "20261109-liveness-gate.md",
 			"anchor": "KKK-6",
 			"round": "Round KKK",
 			"severity": "low",
-			"summary": "A bare word let `.name`, `{ name: \u2026 }` and same-named locals vouch for an export being used.",
+			"summary": "A bare word let `.name`, `{ name: … }` and same-named locals vouch for an export being used.",
 			"component": "liveness gate (use detection)",
 			"owner": "fork-build",
 			"status": "fixed",
@@ -10607,7 +10607,7 @@
 		},
 		{
 			"record": "20261109-liveness-gate.md",
-			"anchor": "\u2014",
+			"anchor": "—",
 			"round": "Round KKK",
 			"severity": "medium",
 			"severityNote": "No severity in the record; raised to medium because host-side code in the job (including an escape the suite exists to detect) could forge every mark the gate relies on.",
@@ -10677,7 +10677,7 @@
 		},
 		{
 			"record": "20261109-liveness-refresh.md",
-			"anchor": "\u2014",
+			"anchor": "—",
 			"round": "Round MMM",
 			"severity": "low",
 			"severityNote": "No severity in the record; a gate-coverage gap (the alarm workflow has no evidence of its own scheduled class), not a tab boundary.",
@@ -10694,7 +10694,7 @@
 		},
 		{
 			"record": "20261109-liveness-refresh.md",
-			"anchor": "\u2014#2",
+			"anchor": "—#2",
 			"round": "Round MMM",
 			"severity": "low",
 			"severityNote": "No severity in the record; a pre-existing vacuous-pass risk in a CI gate, not a runtime boundary.",
@@ -10711,7 +10711,7 @@
 		},
 		{
 			"record": "20261109-liveness-refresh.md",
-			"anchor": "\u2014#3",
+			"anchor": "—#3",
 			"round": "Round MMM",
 			"severity": "low",
 			"severityNote": "No severity in the record; an ownership/response gap around a non-required alarm.",
@@ -13775,7 +13775,7 @@
 			"owner": "docsync",
 			"anchor": "CFG-7",
 			"severity": "info",
-			"summary": "`${config:\u2026}` in a tab-owned tasks.json or launch.json resolves in the renderer against the unfiltered configuration.",
+			"summary": "`${config:…}` in a tab-owned tasks.json or launch.json resolves in the renderer against the unfiltered configuration.",
 			"status": "open",
 			"gap": "A sibling of the snapshot filter: resolve config variables for tab tasks against the tab's filtered view."
 		},
@@ -15546,6 +15546,126 @@
 			"ref": {
 				"file": "docs/security-reviews/20261117-link-check-retries.md",
 				"quote": "None found."
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "DDDD-1",
+			"round": "Round DDDD",
+			"severity": "high",
+			"summary": "An anchor with a tab or newline split a high's line to the ancestry step and the keyless half was skipped, defeating CCCC-1",
+			"component": "findings register: fix-commit lines",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "0000000",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "an anchor with a tab fails the schema (DDDD-1)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "DDDD-2",
+			"round": "Round DDDD",
+			"severity": "low",
+			"summary": "Register text printed to the CI log could start a workflow command",
+			"component": "findings register: log output",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "0000000",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "an anchor that starts a workflow command fails the schema (DDDD-2)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "DDDD-3",
+			"round": "Round DDDD",
+			"severity": "low",
+			"summary": "The ID clash warning covered only the same owner, missing the concurrent-branch case",
+			"component": "findings register: clash scope",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "0000000",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "reuses with another meaning is warned, across owners (DDDD-3)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "DDDD-4",
+			"round": "Round DDDD",
+			"severity": "low",
+			"summary": "Touching an entry already in a clash warned about it again",
+			"component": "findings register: clash noise",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "0000000",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "editing an entry whose clash the base already had is not warned (DDDD-4)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "DDDD-5",
+			"round": "Round DDDD",
+			"severity": "info",
+			"summary": "Numbered anchors, other owners, edits and the exit code weren't covered",
+			"component": "findings register: self-test",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "0000000",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "control: a clash warning never fails the check (DDDD-5)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "EEEE-1",
+			"round": "Round EEEE",
+			"severity": "medium",
+			"summary": "A stale fork point could demote a recorded high, and an add-then-revert pair could close a new high",
+			"component": "findings register: new highs",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "0000000",
+			"test": {
+				"file": "seclab",
+				"name": "a reverted fix passed ancestry (EEEE-1)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "EEEE-2",
+			"round": "Round EEEE",
+			"severity": "low",
+			"summary": "Problem lines still printed register text raw",
+			"component": "findings register: log output",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "0000000",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "every printed line is one line and never a workflow command (EEEE-2)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "EEEE-3",
+			"round": "Round EEEE",
+			"severity": "low",
+			"summary": "An empty severity flag passed as not-high",
+			"component": "findings register: host contract",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "0000000",
+			"test": {
+				"file": "seclab",
+				"name": "a fix-commit line with no severity flag passed (EEEE-3)"
 			}
 		}
 	]

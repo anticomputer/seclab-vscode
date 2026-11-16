@@ -227,22 +227,27 @@ lint_secrets() {
 # the register at the merge base with origin/main (new findings need explicit IDs; the baseline only
 # shrinks: review QQQ-5/6), then every landed `fixed` entry's commit must be on HEAD's history
 # (host git; CI's docs job has full history).
-findings_ancestry() { # TIP MAIN; stdin: "<key>\t<sha or patch:id>\t<1 if high>"; every fix commit on TIP's history
-	local key sha high bad=0 tip main
+findings_ancestry() { # TIP MAIN; stdin: "<key>\t<sha or patch:id>\t<1 if it must be on main>"; every fix commit on TIP's history
+	local bad=0 tip main
 	tip="$(git -C "$ROOT" rev-parse -q --verify "${1:-HEAD}^{commit}")" || { echo "findings: no commit to check ancestry against" >&2; return 1; }
 	main="$(git -C "$ROOT" rev-parse -q --verify "${2:-refs/remotes/origin/main}^{commit}")" || { echo "findings: no origin/main to check ancestry against (fetch it)" >&2; return 1; }
-	while IFS=$'\t' read -r key sha high; do
-		[[ -z "$key" ]] && continue
+	local key sha high extra
+	while IFS=$'\t' read -r key sha high extra; do
+		[[ -z "$key$sha$high$extra" ]] && continue
+		# The contract is checked, never assumed (DDDD-1): three fields, a key, a 0/1 severity flag.
+		if [[ -z "$key" || -z "$sha" || -n "$extra" || ! "$high" =~ ^[01]$ ]]; then
+			echo "findings: malformed fix-commit line from findings.ts commits; refusing to judge it" >&2; bad=1; continue
+		fi
 		# A patch: fix commit (CCCC): a commit on TIP's history carries that change, whatever its SHA
 		# became in a rebase-merge. One that closes a high must be on main already, so a change can't
 		# close a high on its own add-then-revert pair (CCCC-1): the high closes in a follow-up.
 		if [[ "$sha" =~ ^patch:[0-9a-f]{40}$ ]]; then
 			if [[ "$high" = 1 ]]; then
-				findings_patch_recent "$main" "${sha#patch:}" >/dev/null && git -C "$ROOT" merge-base --is-ancestor "$main" "$tip" 2>/dev/null && continue
+				findings_patch_recent "$main" "${sha#patch:}" >/dev/null && git -C "$ROOT" merge-base --is-ancestor "$main" "$tip" 2>/dev/null && ! findings_patch_reverted "$tip" "${sha#patch:}" && continue
 				echo "findings: $key: a high's fix commit $sha isn't on main yet; close the high in a follow-up once it lands" >&2; bad=1; continue
 			fi
-			findings_patch_recent "$tip" "${sha#patch:}" >/dev/null && continue
-			echo "findings: $key: fix commit $sha is no change on this branch's history" >&2; bad=1; continue
+			findings_patch_recent "$tip" "${sha#patch:}" >/dev/null && ! findings_patch_reverted "$tip" "${sha#patch:}" && continue
+			echo "findings: $key: fix commit $sha is no change on this branch's history, or it was reverted" >&2; bad=1; continue
 		fi
 		if [[ ! "$sha" =~ ^[0-9a-f]{7,40}$ ]] || ! git -C "$ROOT" merge-base --is-ancestor "$sha" "$tip" 2>/dev/null; then
 			echo "findings: $key: fix commit $sha is not on this branch's history" >&2
@@ -322,6 +327,15 @@ findings_patch_recent() {
 	grep -qvE '^[0-9a-f]{40} [0-9a-f]{40}$' "$f" && return 1
 	hit="$(awk -v p="$2" '$1 == p { print $2; exit }' "$f")"
 	[[ -n "$hit" ]] && echo "$hit"
+}
+# TIP ID: 0 if TIP's history also carries the reverse of the change with that patch-id: a fix that
+# was added and reverted closes nothing (EEEE-1).
+findings_patch_reverted() {
+	local c rid
+	c="$(findings_patch_recent "$1" "$2")" || return 1
+	git -C "$ROOT" rev-parse -q --verify "$c^1^{commit}" >/dev/null || return 1
+	rid="$(git -C "$ROOT" diff "$c" "$c^1" | git -C "$ROOT" patch-id --stable | cut -d' ' -f1)"
+	[[ "$rid" =~ ^[0-9a-f]{40}$ ]] && findings_patch_recent "$1" "$rid" >/dev/null
 }
 # MAIN BRANCH_TIP HEAD ID: 3 on main (prints the SHA: pin it), else 0 on HEAD's history (a PR's own
 # change) or in BRANCH_TIP's own commits, else 1. Main is checked first (AAAA-3). A patch: citation
@@ -630,7 +644,12 @@ findings_check() {
 	fi
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts check --base .work/findings-base.json --changed .work/findings-changed.txt --before .work/findings-before
 	findings_patch_reset
-	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts commits)"
+	if git -C "$ROOT" cat-file -e "$main:docs/security-reviews/findings.json" 2>/dev/null; then
+		git -C "$ROOT" show "$main:docs/security-reviews/findings.json" > "$ROOT/.work/findings-main.json" || exit 1
+	else
+		: > "$ROOT/.work/findings-main.json"
+	fi
+	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts commits --base .work/findings-base.json --main .work/findings-main.json)" || exit 1
 	findings_ancestry HEAD refs/remotes/origin/main <<<"$list" || exit 1
 	echo "findings: every fixed entry's commit is on HEAD's history"
 	findings_patch_reset
@@ -647,9 +666,9 @@ findings_host_self_test() {
 	local head root out="$ROOT/.work/findings-base-selftest.json"
 	mkdir -p "$ROOT/.work"
 	head="$(git -C "$ROOT" rev-parse HEAD)"
-	printf 'control\t%s\n' "$head" | findings_ancestry || { echo "findings host self-test: the control (HEAD) failed" >&2; exit 1; }
-	if printf 'x\t%s\n' 0123456789abcdef0123456789abcdef01234567 | findings_ancestry 2>/dev/null; then echo "findings host self-test: a non-ancestor SHA passed" >&2; exit 1; fi
-	if printf 'x\t%s\n' '--upload-pack=x' | findings_ancestry 2>/dev/null; then echo "findings host self-test: an option-shaped SHA passed" >&2; exit 1; fi
+	printf 'control\t%s\t0\n' "$head" | findings_ancestry || { echo "findings host self-test: the control (HEAD) failed" >&2; exit 1; }
+	if printf 'x\t%s\t0\n' 0123456789abcdef0123456789abcdef01234567 | findings_ancestry 2>/dev/null; then echo "findings host self-test: a non-ancestor SHA passed" >&2; exit 1; fi
+	if printf 'x\t%s\t0\n' '--upload-pack=x' | findings_ancestry 2>/dev/null; then echo "findings host self-test: an option-shaped SHA passed" >&2; exit 1; fi
 	root="$(git -C "$ROOT" rev-list --max-parents=0 HEAD | tail -1)"
 	findings_base "$root" "$out" && [[ ! -s "$out" ]] || { echo "findings host self-test: a commit before the register didn't give an empty base" >&2; exit 1; }
 	if findings_base 0123456789abcdef0123456789abcdef01234567 "$out" 2>/dev/null; then echo "findings host self-test: a missing base commit didn't fail" >&2; exit 1; fi
@@ -769,11 +788,17 @@ findings_host_self_test() {
 	[[ $rc -eq 3 && "$got" == "$f2" ]] || { echo "findings host self-test: after a rebase-merge, a patch: citation didn't resolve to the landed commit (CCCC)" >&2; exit 1; }
 	rc=0; findings_patch_judge "$m" "" "$f" "$fid" >/dev/null || rc=$?
 	[[ $rc -eq 0 ]] || { echo "findings host self-test: before the merge, a patch: citation of the PR's own commit wasn't live (CCCC)" >&2; exit 1; }
-	printf 'x\tpatch:%s\n' "$fid" | findings_ancestry "$f2" "$f2" || { echo "findings host self-test: after a rebase-merge, a patch: fix commit failed ancestry (CCCC)" >&2; exit 1; }
-	if printf 'x\t%s\n' "$f" | findings_ancestry "$f2" "$f2" 2>/dev/null; then echo "findings host self-test: a branch SHA passed ancestry after a rebase-merge" >&2; exit 1; fi
-	if printf 'x\tpatch:%s\n' "$fid" | findings_ancestry "$m" "$m" 2>/dev/null; then echo "findings host self-test: a patch: fix commit passed on a history without the change (CCCC)" >&2; exit 1; fi
+	printf 'x\tpatch:%s\t0\n' "$fid" | findings_ancestry "$f2" "$f2" || { echo "findings host self-test: after a rebase-merge, a patch: fix commit failed ancestry (CCCC)" >&2; exit 1; }
+	if printf 'x\t%s\t0\n' "$f" | findings_ancestry "$f2" "$f2" 2>/dev/null; then echo "findings host self-test: a branch SHA passed ancestry after a rebase-merge" >&2; exit 1; fi
+	if printf 'x\tpatch:%s\t0\n' "$fid" | findings_ancestry "$m" "$m" 2>/dev/null; then echo "findings host self-test: a patch: fix commit passed on a history without the change (CCCC)" >&2; exit 1; fi
 	# CCCC-1: a high's patch: fix commit counts only once it's on main, not on the PR's own history.
 	if printf 'x\tpatch:%s\t1\n' "$fid" | findings_ancestry "$f" "$m" 2>/dev/null; then echo "findings host self-test: a high closed on its PR's own patch: commit (CCCC-1)" >&2; exit 1; fi
+	if printf 'x\tpatch:%s\n' "$fid" | findings_ancestry "$f2" "$f2" 2>/dev/null; then echo "findings host self-test: a fix-commit line with no severity flag passed (EEEE-3)" >&2; exit 1; fi
+	# EEEE-1: a fix added and then reverted closes nothing.
+	local rv; rv="$(git -C "$ROOT" commit-tree -p "$f2" -m 'selftest: revert the fix' "$tm")"
+	if printf 'x\tpatch:%s\t0\n' "$fid" | findings_ancestry "$rv" "$rv" 2>/dev/null; then echo "findings host self-test: a reverted fix passed ancestry (EEEE-1)" >&2; exit 1; fi
+	if printf '\tpatch:%s\t1\n' "$fid" | findings_ancestry "$f2" "$f2" 2>/dev/null; then echo "findings host self-test: a fix-commit line with no key passed (DDDD-1)" >&2; exit 1; fi
+	if printf 'x\tpatch:%s\t0\textra\n' "$fid" | findings_ancestry "$f2" "$f2" 2>/dev/null; then echo "findings host self-test: a four-field fix-commit line passed (DDDD-1)" >&2; exit 1; fi
 	printf 'x\tpatch:%s\t0\n' "$fid" | findings_ancestry "$f" "$s2" || { echo "findings host self-test: the control (a low's patch: fix on its PR) failed" >&2; exit 1; }
 	printf 'x\tpatch:%s\t1\n' "$fid" | findings_ancestry "$f2" "$f2" || { echo "findings host self-test: the control (a high's patch: fix once on main) failed" >&2; exit 1; }
 	# CCCC-4: the landing change isn't asked to pin; a later change touching the entry is.
