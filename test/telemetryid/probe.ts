@@ -96,7 +96,8 @@ if (mode === 'prepare') {
 	}
 	const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').match(/^arm=([0-9a-f]{32})$/m) ?? [])[1];
 	const field = (f: any) => !!f && /^[0-9a-f]{64}$/.test(f.sha256) && typeof f.shape === 'string' && /^[\x20-\x7e]{0,120}$/.test(f.shape);
-	const valid = !!rep && rep.schema === 'seclab-telemetryid-report/1' && rep.arm === armed && field(rep.machineId) && field(rep.sessionId);
+	const valid = !!rep && rep.schema === 'seclab-telemetryid-report/1' && rep.arm === armed && field(rep.machineId) && field(rep.sessionId)
+		&& (rep.devDeviceId === null || field(rep.devDeviceId));
 	const launched = (() => {
 		try {
 			return String(JSON.parse(fs.readFileSync(path.join(userData, 'seclab-launch.json'), 'utf8')).app ?? '');
@@ -110,8 +111,10 @@ if (mode === 'prepare') {
 	expect('report present, from this run, and matches the schema', valid);
 	if (valid) {
 		console.log(`tab machineId: ${rep.machineId.shape} (${rep.machineId.sha256 === sha(seeded.machineId) ? 'THE HOST\'S' : 'not the host\'s'})`);
-		console.log(`tab sessionId: ${rep.sessionId.shape}`);
+		console.log(`tab sessionId: ${rep.sessionId.shape}; devDeviceId: ${rep.devDeviceId ? rep.devDeviceId.shape : 'not readable (proposed API)'}`);
 		expect('DOCSYNC-R4 the tab\'s machineId is not the host\'s', rep.machineId.sha256 !== sha(seeded.machineId));
+		const host = new Set(Object.values(seeded).map(sha));
+		expect('no id the tab can read is any seeded host id (machine, SQM, device)', [rep.machineId, rep.sessionId, rep.devDeviceId].every(f => !f || !host.has(f.sha256)));
 		expect('control: the tab read a non-empty machineId', rep.machineId.shape.length > 0);
 	}
 	expect('no focus steal', !steals);

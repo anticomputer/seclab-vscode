@@ -137,6 +137,9 @@ if [ "${1:-}" = "--self-test" ]; then
 	run "$T/with5" fail "product.json with enableTelemetry false only in a nested object"
 	stamp "$hab"; tr -d '\n\t' < "$T/root/product.json" > "$T/pj" && mv "$T/pj" "$T/root/product.json"
 	run "$T/with5" fail "product.json not tab-indented (fails closed)"
+	stamp "$hab"; sed 's/"nameShort": "x",/"nameShort": "x", "enable\\u0054elemetry": true,/' "$T/root/product.json" > "$T/pj" && mv "$T/pj" "$T/root/product.json"
+	grep -q 'enable\\u0054elemetry' "$T/root/product.json" || { echo "check-release self-test: escaped key not injected" >&2; exit 1; }
+	run "$T/with5" fail "product.json with an escaped duplicate enableTelemetry true (review TEL-1)"
 	stamp "$hab"; run "$T/with5" pass "the REH again, enableTelemetry false at the top level"
 	rm -rf "$T/root"; mkdir -p "$T/root"; echo 'var x=1;' > "$T/root/a.js"
 	run "$T/no5" fail "no product.json at all"
@@ -192,7 +195,10 @@ if [ "${1:-}" = "--inner" ]; then
 			# closed: the name once in the whole file, on a top-level `false` line (no nested decoy).
 			n=$(grep -o 'enableTelemetry' "$pj" | wc -l | tr -d ' ')
 			top=$(grep -c "^$(printf '\t')\"enableTelemetry\": false,\{0,1\}$(printf '\r')\{0,1\}\$" "$pj" || :)
-			[ "$n" = 1 ] && [ "$top" = 1 ] || { echo "check-release: $pj must set top-level \"enableTelemetry\": false exactly once (found the name $n times); with telemetry on, host telemetry ids reach tabs"; bad=1; }
+			# A \u escape can spell the name past the text match, and the last duplicate key wins in
+			# JSON.parse; jq writes none, so any \u in a product.json fails (review TEL-1).
+			esc=$(grep -c '\\u' "$pj" || :)
+			[ "$n" = 1 ] && [ "$top" = 1 ] && [ "$esc" = 0 ] || { echo "check-release: $pj must set top-level \"enableTelemetry\": false exactly once, with no \\u escapes (found the name $n times, $esc line(s) with \\u); with telemetry on, host telemetry ids reach tabs"; bad=1; }
 		done <<EOF
 $prods
 EOF
