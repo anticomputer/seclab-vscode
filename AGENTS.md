@@ -447,7 +447,10 @@ Electron with `ELECTRON_RUN_AS_NODE=1`); nothing is installed.
   1. Edit `upstream.lock` (tag + SHA from `git ls-remote`).
   2. `./seclab build linux`, which re-runs fetch, jq and the `patches/series` queue; fix any patch that fails to apply (and keep `series` exact).
   3. Drift check.
-  4. `./seclab template sbx && ./seclab image oci`.
+  4. `./seclab template sbx seclab-tab:b-NAME && ./seclab image oci --tag b-NAME`: per-build
+     tags, so the bump's proofs never swap the shared `:local` images under other sessions.
+     Run the suites below with `SECLAB_TAB_IMAGE=seclab-tab:b-NAME` (sbx) or
+     `SECLAB_TAB_IMAGE=seclab-tab-oci:b-NAME` (oci).
   5. Containment + canary suites (sbx and oci).
   6. Security review.
   7. Write an EDR.

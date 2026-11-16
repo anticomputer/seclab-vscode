@@ -8,6 +8,7 @@ import { PassThrough } from 'node:stream';
 import { test } from 'node:test';
 import { CdpPipe } from './cdp.ts';
 import { editorEnv, executable, hasBootstrapPolicy, BOOTSTRAP_POLICY_MARK } from './editor.ts';
+import { tabImageProblem } from '../harness.ts';
 
 function pair() {
 	const toEditor = new PassThrough();
@@ -107,5 +108,16 @@ test('a build is exec-safe only if its bootstrap carries the policy mark; Linux 
 		}
 	} finally {
 		fs.rmSync(scratch, { recursive: true, force: true });
+	}
+});
+
+test('SECLAB_TAB_IMAGE: only our tab images, and only the kind the driver runs', () => {
+	assert.equal(tabImageProblem('seclab-tab:b-1453-dcd3ad6', 'sbx'), undefined);
+	assert.equal(tabImageProblem('seclab-tab-oci:b-1453-dcd3ad6', 'oci'), undefined);
+	assert.equal(tabImageProblem('seclab-tab-oci:test-containment', 'oci'), undefined);
+	assert.match(tabImageProblem('seclab-tab-oci:b-x', 'sbx') ?? '', /not a sbx tab image/);
+	assert.match(tabImageProblem('seclab-tab:b-x', 'oci') ?? '', /not a oci tab image/);
+	for (const bad of ['seclab-broker:dev', 'seclab-tab', 'seclab-tab:', 'seclab-tab:B-UPPER', 'evil/seclab-tab:b-x', 'seclab-tab:b-x@sha256:00']) {
+		assert.match(tabImageProblem(bad, 'sbx') ?? '', /must name a seclab-tab image/, bad);
 	}
 });

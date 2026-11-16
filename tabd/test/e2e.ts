@@ -9,6 +9,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../src/client.ts';
 import { teardownGate, writeManifest, writeSnapshot } from '../../test/containment/teardown.ts';
+import { tabImageArgs } from '../../test/harness.ts';
 
 const driver = process.argv[2] ?? 'sbx';
 const repo = path.resolve(import.meta.dirname, '../..');
@@ -26,7 +27,7 @@ process.on('exit', code => {
 
 const client = new TabdClient({
 	command: process.execPath,
-	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', path.join(work, 'tabs')],
+	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', path.join(work, 'tabs'), ...tabImageArgs(driver)],
 	env: { HOME: process.env.HOME, USER: process.env.USER, PATH: '/usr/bin:/bin' },
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));

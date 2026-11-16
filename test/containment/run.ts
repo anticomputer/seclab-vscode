@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
-import { beaconPort, lockRun, NGINX_IMAGE, worktreeId } from '../harness.ts';
+import { beaconPort, lockRun, NGINX_IMAGE, tabImageArgs, worktreeId } from '../harness.ts';
 import { brokerProxy, checkEvidence, readEvidence, report, type Check } from './assert.ts';
 import { armCampaignTab, disarmCampaign, runCampaign, setupCampaign } from './campaign.ts';
 import { exitedOrTimeout, materialiseFixture, teardownGate, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
@@ -59,7 +59,7 @@ execFileSync('docker', ['run', '-d', '--rm', '--name', LOOPBACK_NAME, '-p', `127
 
 const client = new TabdClient({
 	command: process.execPath,
-	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', path.join(work, 'tabs')],
+	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', path.join(work, 'tabs'), ...tabImageArgs(driver)],
 	env: { HOME: process.env.HOME, USER: process.env.USER },
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));
