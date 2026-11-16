@@ -38,7 +38,7 @@ diff -ruN a/src/vs/workbench/contrib/externalTerminal/electron-browser/externalT
  export class ExternalTerminalContribution implements IWorkbenchContribution {
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts b/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts
 --- a/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts	2026-11-16 14:52:54
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts	2026-11-16 14:53:16
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts	2026-11-16 15:46:58
 @@ -262,6 +262,12 @@
  			this._processType = ProcessType.PsuedoTerminal;
  			newProcess = shellLaunchConfig.customPtyImplementation(this._instanceId, cols, rows);
@@ -47,7 +47,7 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts 
 +			// asked for it (project owner decision 2026-11-16: local terminals open from a normal window).
 +			const seclabWindow = this._workbenchEnvironmentService.remoteAuthority;
 +			if (seclabIsTabAuthority(seclabWindow) && this.remoteAuthority?.toLowerCase() !== seclabWindow!.toLowerCase()) {
-+				return { message: localize('seclab.noHostTerminal', "A sandboxed tab opens no host terminal. Open a local terminal from a normal window.") };
++				return { message: localize('seclab.noHostTerminal', "A sandboxed tab opens no host terminal. Open a local terminal from a normal window") };
 +			}
  			const backend = await this._terminalInstanceService.getBackend(this.remoteAuthority);
  			if (!backend) {
