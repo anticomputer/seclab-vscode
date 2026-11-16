@@ -100,10 +100,12 @@ MUST_ARM = (
 )
 # An arming gate must not merely be MENTIONED: the call has to be followed
 # closely by a bail-out, so a future edit cannot keep the call while gutting the
-# check. Matches `const x = armed(root)` / `safety.context(...)` followed within
-# a few lines by continue/return/if (!...).
+# check. Matches `const ctx = safety.context(...)` followed within a few lines by
+# `if (!ctx.armed)` (or `if (!armed(root))`) whose block returns or continues. Any
+# return nearby used to count, so `if (false) { return; }` passed (found by the
+# arming test in test_lint_probes.py).
 ARMING_CALL = re.compile(r"(?:safety\.context\(|\barmed\s*\(\s*root\s*\))")
-ARMING_BAIL = re.compile(r"\b(?:continue|return)\b|\bif\s*\(\s*!")
+ARMING_BAIL = re.compile(r"\bif\s*\(\s*!\s*(?:\w+\.armed|armed\s*\(\s*root\s*\))\s*\)\s*\{?[^}]*?\b(?:return|continue)\b", re.S)
 # Exemptions are LINE-scoped, never file-scoped. A file-wide exemption covered
 # every future base64 use in a 110-line payload that writes its output where the
 # attacker reads it; the justification only ever applied to one expression.
