@@ -186,7 +186,7 @@ if (mode === 'prepare') {
 		for (const f of ['tabSizeInitial', 'colorInitial', 'changeSeen']) {
 			expect(`control: ${f}`, rep.controls[f] === true);
 		}
-		fs.writeFileSync(path.join(repo, '.work', `configsync-keys-${launched ? path.basename(path.dirname(launched)) : 'unknown'}.txt`), rep.keys.join('\n') + '\n');
+		fs.writeFileSync(path.join(repo, '.work', `configsync-keys-${launched ? path.basename(path.dirname(launched)) : 'unknown'}.txt`), [...new Set((rep.keys as string[]).map(k => k.includes('://') ? k.slice(0, k.slice(0, k.indexOf('://')).lastIndexOf('.')) : k))].sort().join('\n') + '\n');
 	}
 	expect('no focus steal', !steals);
 	const gate = verifyTeardown(base);

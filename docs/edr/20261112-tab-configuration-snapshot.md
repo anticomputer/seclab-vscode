@@ -1,6 +1,6 @@
 # A tab receives only its own settings: the configuration snapshot filter (patch 0036)
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-11-12
 - **Deciders:** coordinator, 2026-11-09 (scope; drop rather than sentinel for now; policy filtered like user settings; core keys allowed by scope with `restricted` and credential-named keys excluded, no editor allowlist; each withheld key reported by name for the user to move to the broker). Tab observability session, 2026-11-09 (the report's shape and its verification on the Tab Manager side). Project owner, 2026-11-13 (extension-declared keys never receive host user, policy or local-workspace values; a per-extension opt-in is a follow-up). Document-sync session: implementation.
 - **Related:** [document sync provenance](20261109-document-sync-provenance.md) (0035); [settings withheld notice](20261109-settings-withheld-notice.md); [RPC lockdown](../RPC-LOCKDOWN.md) §7; [no real secret in a tab](../adr/20261104-no-real-secret-in-a-tab.md); [pre-mount secret scan](../adr/20261104-pre-mount-secret-scan.md)
@@ -125,4 +125,24 @@ builds: main `607873da`, run 43264609543, and this branch at `af36452`, run 4327
 Review round 1 then hardened the harness. It now activates on `*` and scans from the first
 moment, a canary in the tab's own workspace settings must be seen (proving detection works on the
 build under test), and canaries cover an env-style map and nested-form settings under a
-tab-declared key. Results for the hardened harness: to be added.
+tab-declared key.
+
+**Proof with the hardened harness** (2026-11-13 and 2026-11-16; main `607873da`, run 43264609543,
+and this branch at `b61bb2f`, run 43530885946, both attested; 10 runs each). The canaries:
+undeclared, `http.proxyAuthorization`, the low-entropy password, the secret-shaped value, the
+mid-run change, an env-map `postgres://` URL and a plain value under extension-declared keys,
+nested form under a prefix key, and `launch` args.
+- **Main:** 10 of 10 runs fail as designed. Every canary above reaches the tab in every run, at
+  start and again after the host change, including the ones the classifier can't recognise. The
+  detection canary is seen, so detection works on that build.
+- **Patched:** 10 of 10 pass. No leak canary reaches the tab in any run; only the detection canary
+  is seen. The controls hold: `editor.tabSize` arrives and changes, and the tab extension's own
+  setting arrives from the tab's workspace settings while its host value is withheld. No focus
+  steal, and the teardown gate passed every run.
+
+**Settings that cross.** `test/configsync/crossing-keys.txt` lists the setting names the
+patched tab received from a default profile, by prefix mostly `editor`, `workbench`, `chat`,
+`accessibility`, built-in language extensions, `terminal` and `debug`. Names only, no values.
+Review it on upstream bumps: a new entry is a setting that now crosses. `launch.configurations` and
+`launch.compounds` appear with their empty registry defaults; the host's values don't cross
+(CFG-8 canary).
