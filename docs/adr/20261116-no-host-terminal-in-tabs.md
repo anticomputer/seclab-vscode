@@ -31,16 +31,19 @@ A tab window offers and starts no host terminal (project owner, 2026-11-16). Loc
 open from a normal window. Patch 0050 does it in three layers:
 1. **Not offered.** `newLocal` isn't registered in a `seclab+` window. The external terminal's
    palette entry and keybinding carry `remoteName != seclab`, and its handler returns at once
-   in a tab window, so a direct `executeCommand` does nothing either.
+   in a tab window, so a direct `executeCommand` does nothing either. The Explorer's "Open in
+   Integrated/External Terminal" items for a host (`file:`) resource carry the same condition.
 2. **Not started.** In a tab window, `terminalProcessManager` refuses to start any pty whose
    authority isn't the window's own tab, with a message saying where local terminals live. That
    catches every route to the local backend, including ones nothing names yet.
 3. **Recorded** in ARCHITECTURE §4.8, the tab limitations list.
 
 Not changed: pseudo-terminals (an extension's own `Pseudoterminal`) and the tab's own
-terminals. Debug's `runInTerminal` with kind `external` also opens the host's terminal
-application, but no tab can reach it today: `MainThreadDebugService` is default-denied. When
-debugging is restored to tabs, that path needs this decision applied.
+terminals. Debug's `runInTerminal` with kind `external` runs in the extension host that hosts
+the debug adapter. A tab's adapter opens it inside the sandbox. Only a host-side (local
+extension host) adapter, driven by a launch configuration the tab wrote, could open the host's
+terminal application. No tab can drive one today: `MainThreadDebugService` is default-denied.
+When debugging returns to tabs, local-extension-host debuggers need this decision applied.
 
 ## Consequences
 - Every terminal in a tab window runs in the tab.
@@ -48,9 +51,12 @@ debugging is restored to tabs, that path needs this decision applied.
   local window, so it never opens a folder: the Tab Manager routes folders to tabs. The shell
   starts in the home folder.
 - **Proof** (`test/containment/host-terminal.ts`, headless driver, real OCI tab):
-  - baseline: the palette offers both entries, and the local terminal and a `file:`-cwd
-    keybinding each start a shell under the editor's process tree;
-  - patched: neither entry is offered, neither route starts a host shell, and the tab's own
-    terminal still runs inside the tab.
+  - baseline: the palette offers both entries. The local terminal from the palette,
+    `newLocal` by id from a keybinding, and a `file:`-cwd keybinding each start a shell under
+    the editor's process tree;
+  - patched: neither entry is offered, while the same palette still lists the tab's own
+    "Create New Terminal". `newLocal` is reported not found, the `file:`-cwd launch is refused
+    with 0050's message, and no host shell starts. A plain new-terminal keybinding in the same
+    run opens a tab terminal, and the tab's own terminal still runs inside the tab.
   - `test/containment/host-terminal.test.ts` checks each layer in the patch text against
     mutants.

@@ -12,11 +12,15 @@
 //   2. if the palette offers the local terminal, it is run, and the shells under the editor's own
 //      process tree on the host are counted before and after (a tab's shells are in its sandbox,
 //      never there);
-//   3. a user keybinding runs `workbench.action.terminal.new` with a `file:` cwd, which upstream
-//      launches on the local (host) backend; the host shells are counted again;
+//   3. user keybindings run `workbench.action.terminal.newLocal` by id, and
+//      `workbench.action.terminal.new` with a `file:` cwd, which upstream launches on the local
+//      (host) backend; the host shells are counted after each. A third keybinding opening a plain
+//      terminal is the control that the keybinding path works in the same run;
 //   0. first, the tab's own terminal runs `uname -s`, which must say Linux.
 // Baseline: the palette offers both; each route starts a host shell. Patched: the palette offers
-// neither, neither route starts a host shell, and the tab's terminal still works.
+// neither (while it still lists the tab's own "Create New Terminal"), newLocal is reported not
+// found, the file: cwd launch is refused with 0050's message, no host shell starts, and the tab's
+// terminal still works.
 //
 // "Open New External Terminal" (Ctrl+Shift+C) is never run: on a baseline it opens the host's
 // terminal application, a window outside the run's control. Its palette row is checked here, its
@@ -84,6 +88,9 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 	'workbench.welcomePage.experimentalOnboarding': false,
 	'workbench.startupEditor': 'none',
 	'workbench.tips.enabled': false,
+	// The newLocal keybinding below reaches the workbench even with a terminal focused, so it
+	// never types into a shell.
+	'terminal.integrated.commandsToSkipShell': ['workbench.action.terminal.newLocal'],
 }, null, '\t'));
 // The user's own keybinding: a new terminal whose cwd is a host (file:) folder. Upstream gives a
 // terminal with a non-remote cwd to the local backend, so on a baseline this is a host shell.
@@ -92,6 +99,8 @@ fs.writeFileSync(path.join(userData, 'User', 'keybindings.json'), JSON.stringify
 	// The control: the same command with no cwd, a terminal in the tab, so the run shows the
 	// keybinding path itself works whatever the file: one does.
 	{ key: 'ctrl+alt+shift+f11', command: 'workbench.action.terminal.new' },
+	// The local terminal by its command id, as a user's keybinding or a `command:` link names it.
+	{ key: 'ctrl+alt+shift+f10', command: 'workbench.action.terminal.newLocal' },
 ], null, '\t'));
 
 const tabd = new TabdClient({
@@ -173,11 +182,17 @@ try {
 		await ed!.waitFor(`document.querySelector('.quick-input-widget') && getComputedStyle(document.querySelector('.quick-input-widget')).display !== 'none'`);
 		await ed!.type(query);
 		await sleep(1500);
+		const typed = await ed!.evaluate<string>(`document.querySelector('.quick-input-widget input')?.value ?? ''`);
 		const rows = await ed!.evaluate<string[]>(`[...document.querySelectorAll('.quick-input-widget .quick-input-list .monaco-list-row')].map(r => r.getAttribute('aria-label') || r.textContent || '')`);
 		await ed!.key('Escape');
 		await sleep(500);
+		// An empty list must mean "no such command", never a query that went nowhere.
+		c('palette', typed.endsWith(query), `the palette received the query for "${query}"`, JSON.stringify(typed.length));
 		return rows;
 	};
+	// The control: the same search lists the tab's own "Create New Terminal" in both modes.
+	const controlRows = await paletteRows('Terminal: Create New Terminal');
+	c('palette', controlRows.some(r => /Terminal: Create New Terminal(?! \()/.test(r)), 'control: the palette lists the tab\'s own "Create New Terminal"', `${controlRows.length} row(s)`);
 	const localRows = await paletteRows(LOCAL_LABEL);
 	const externalRows = await paletteRows(EXTERNAL_LABEL);
 	const offersLocal = localRows.some(r => r.includes(LOCAL_LABEL));
@@ -196,6 +211,18 @@ try {
 	}
 	console.log(`host shells from the palette's local terminal: ${localShells}`);
 	c('local', baseline ? localShells > 0 : localShells === 0, baseline ? 'the local terminal starts a host shell (baseline)' : 'no host shell from the palette');
+
+	// newLocal by its id (Ctrl+Alt+Shift+F10). Patched, the command doesn't exist in a tab window,
+	// which the workbench reports as not found.
+	const shells2 = hostShells(ed.child.pid!);
+	for (const type of ['rawKeyDown', 'keyUp']) {
+		await ed.cdp.send('Input.dispatchKeyEvent', { type, key: 'F10', code: 'F10', modifiers: 1 | 2 | 8, windowsVirtualKeyCode: 121, nativeVirtualKeyCode: 109 }, ed.session);
+	}
+	await waitFor(() => hostShells(ed!.child.pid!) > shells2, baseline ? 20_000 : 5000);
+	const idShells = hostShells(ed.child.pid!) - shells2;
+	const notFound = await ed.evaluate<boolean>(`document.body.innerText.includes("command 'workbench.action.terminal.newLocal' not found")`);
+	console.log(`host shells from newLocal by id: ${idShells}; not found: ${notFound}`);
+	c('local', baseline ? idShells > 0 : idShells === 0 && notFound, baseline ? 'newLocal by id starts a host shell (baseline)' : 'newLocal by id is not a command in a tab window (reported not found)', `${idShells}`);
 
 	// The keybinding: Ctrl+Alt+Shift+F12, delivered to the renderer over CDP. The terminal count
 	// in the panel says whether the keybinding ran at all, so "no host shell" can't be a key that
@@ -224,7 +251,7 @@ try {
 	console.log(`host shells from the file: cwd keybinding: ${keyShells}`);
 	c('backend', baseline ? keyShells > 0 : keyShells === 0, baseline ? 'a terminal with a file: cwd starts a host shell (baseline)' : 'a terminal with a file: cwd starts no host shell');
 
-	c('total', hostShells(ed.child.pid!) - shells0 === localShells + keyShells, 'every host shell is accounted for by the two routes');
+	c('total', hostShells(ed.child.pid!) - shells0 === localShells + idShells + keyShells, 'every host shell is accounted for by the three routes');
 } catch (err) {
 	c('run', false, 'the run completed', (err as Error).message);
 } finally {
