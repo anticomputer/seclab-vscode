@@ -351,6 +351,88 @@ class ValidatorGateTest(unittest.TestCase):
         self.assertEqual(CD.check_validators(policy, CD._read(CD.VALIDATORS_SRC), CD._uri_positions(inv)), [])
 
 
+class LogTrustGateTest(unittest.TestCase):
+    """The decision log's integrity checks must fail when they should.
+
+    Round 14 of the observability review found this gate narrower than the
+    claim it carried: it accepted any `allow_with_constraint` on `$writeFile`
+    without checking that anything constrained it, and pinned neither
+    `$delete` nor the other host-file writers. Nothing was exploitable, which
+    is exactly why it could have stayed that way.
+
+    Each case below was confirmed to pass *unnoticed* against the previous
+    version of the gate before this one was written.
+    """
+
+    def setUp(self):
+        import json
+        root = CD.REPO_ROOT
+        with open(os.path.join(root, "rpc-filter", "inventory",
+                               "inventory.json"), encoding="utf-8") as fh:
+            self.inv = json.load(fh)
+        with open(os.path.join(root, "rpc-filter", "policy",
+                               "policy.json"), encoding="utf-8") as fh:
+            policy = json.load(fh)
+        self.mapping = CD.build_mapping(self.inv, policy)
+
+    def test_control_the_shipped_policy_passes(self):
+        self.assertEqual(CD.check_log_trust(self.mapping, self.inv), [])
+
+    def test_write_file_constrained_but_nothing_constrains_it(self):
+        # The constraint is prose, so the gate cannot read it. What it can read
+        # is whether the positional URI rule actually applies.
+        import copy
+        inv = copy.deepcopy(self.inv)
+        for svc in inv["surfaces"]["a_mainthread_rpc"]["services"]:
+            if svc["sid"] == "MainThreadFileSystem":
+                svc["uri_arg_positions"].pop("$writeFile", None)
+        mapping = dict(self.mapping)
+        mapping["rpc:MainThreadFileSystem.$writeFile"] = "allow_with_constraint#abc"
+        errors = CD.check_log_trust(mapping, inv)
+        self.assertTrue(errors)
+        self.assertIn("no URI argument positions", errors[0])
+
+    def test_write_file_denied_outright_is_acceptable(self):
+        # Stricter than constrained must never be reported as a problem, or
+        # the gate pushes people towards the weaker verdict.
+        mapping = dict(self.mapping)
+        mapping["rpc:MainThreadFileSystem.$writeFile"] = "deny"
+        self.assertEqual(CD.check_log_trust(mapping, self.inv), [])
+
+    def test_delete_must_be_denied(self):
+        # Deleting the log stops forwarding; silence is not a safe failure for
+        # an audit log.
+        mapping = dict(self.mapping)
+        mapping["rpc:MainThreadFileSystem.$delete"] = "allow#abc"
+        self.assertTrue(CD.check_log_trust(mapping, self.inv))
+
+    def test_other_host_file_writers_must_be_denied(self):
+        for key, verdict in (
+                ("rpc:MainThreadBulkEdits.$tryApplyWorkspaceEdit", "allow#abc"),
+                ("rpc:MainThreadDocuments.$trySaveDocument", "prompt")):
+            with self.subTest(key=key):
+                mapping = dict(self.mapping)
+                mapping[key] = verdict
+                errors = CD.check_log_trust(mapping, self.inv)
+                self.assertTrue(errors)
+                self.assertIn(key, errors[0])
+
+    def test_a_surface_missing_from_the_mapping_is_not_silently_skipped(self):
+        # In this codebase the scanner has lost surfaces more than once, so
+        # absence is at least as likely to be a scanner regression as an
+        # upstream removal. Either way a human should look.
+        mapping = dict(self.mapping)
+        del mapping["rpc:MainThreadFileSystem.$delete"]
+        errors = CD.check_log_trust(mapping, self.inv)
+        self.assertTrue(errors)
+        self.assertIn("not in the surface mapping", errors[0])
+
+    def test_logger_methods_must_stay_denied(self):
+        mapping = dict(self.mapping)
+        mapping["rpc:MainThreadLogger.$log"] = "allow#abc"
+        self.assertTrue(CD.check_log_trust(mapping, self.inv))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

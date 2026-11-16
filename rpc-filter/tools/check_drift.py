@@ -527,14 +527,36 @@ def check_enforcement(mapping: dict, policy: dict, repo_root: str) -> list:
     return errors
 
 
-def check_log_trust(mapping: dict) -> list:
-    """Hold the two facts the decision log's trustworthiness rests on.
+def check_log_trust(mapping: dict, inv: dict) -> list:
+    """Hold the facts the decision log's trustworthiness rests on.
 
     The Tab Manager forwards `seclabRpcFilter.log` to tabd as *trusted*. That
-    is only sound while a tab can neither forge lines nor write the file, and
-    both are policy decisions that could be relaxed by someone who has no idea
-    a log depends on them. Stated in a comment, the dependency would be found
-    again only after it stopped holding.
+    is only sound while a tab can neither forge lines in it, write it, nor
+    delete it, and each of those is a policy decision someone could relax
+    without knowing a log depends on it.
+
+    Round 14 of the observability review found this check narrower than the
+    claim it was supposed to carry, in three ways, and reviewing it turned up a
+    fourth. None was exploitable -- every surface below is denied or
+    URI-constrained in the landed policy -- but a check that passes for the
+    wrong reason is worth no more than the comment it replaced:
+
+    1. `$writeFile` was accepted on the *verdict alone*: any
+       `allow_with_constraint` passed, whatever the constraint said. The
+       constraint is prose ("same as $readFile"), so the gate could not read
+       it, and an entry rewritten to constrain something else entirely would
+       still have passed. It now requires the positional URI rule to actually
+       apply, by checking the generated `uri_arg_positions` -- the data the
+       filter enforces from, not a sentence describing it.
+    2. `$delete` was not pinned. Deleting `seclabRpcFilter.log` stops
+       forwarding; silence is not a safe failure for an audit log.
+    3. Other host-file writers were not pinned: a workspace edit or a document
+       save reaches the file system just as well as `$writeFile`.
+    4. An *absent* key was skipped. In a codebase where the scanner has
+       repeatedly lost surfaces -- the seven user-input primitives, seven
+       server-initiated pushes, factory-produced AI tools -- "not in the
+       mapping" is at least as likely to mean the inventory lost it as that
+       upstream removed it, and in both cases a human should look.
     """
     errors = []
     for key, value in mapping.items():
@@ -543,26 +565,55 @@ def check_log_trust(mapping: dict) -> list:
             errors.append(
                 "invariant rpc-filter-log-is-trustworthy: %s is not denied, so "
                 "a tab could forge lines in the filter's decision log." % key)
-    writes = ("rpc:MainThreadFileSystem.$writeFile",
-              "rpc:MainThreadFileSystem.$mkdir",
-              "rpc:MainThreadFileSystem.$copy",
-              "rpc:MainThreadFileSystem.$rename")
-    for key in writes:
-        value = mapping.get(key)
-        if value is None:
+
+    uri_args = {}
+    for service in ((inv or {}).get("surfaces", {})
+                    .get("a_mainthread_rpc", {}).get("services", [])):
+        for method, positions in (service.get("uri_arg_positions") or {}).items():
+            uri_args["rpc:%s.%s" % (service["sid"], method)] = list(positions)
+
+    WRITE_FILE = "rpc:MainThreadFileSystem.$writeFile"
+    # Every route by which a tab could create, move, replace or remove a file
+    # in the window logs directory. Denied outright; only $writeFile is allowed
+    # at all, and only under the positional URI rule.
+    MUST_DENY = (
+        "rpc:MainThreadFileSystem.$mkdir",
+        "rpc:MainThreadFileSystem.$copy",
+        "rpc:MainThreadFileSystem.$rename",
+        "rpc:MainThreadFileSystem.$delete",
+        "rpc:MainThreadBulkEdits.$tryApplyWorkspaceEdit",
+        "rpc:MainThreadDocuments.$trySaveDocument",
+    )
+
+    for key in (WRITE_FILE,) + MUST_DENY:
+        if key not in mapping:
+            errors.append(
+                "invariant rpc-filter-log-is-trustworthy: %s is not in the "
+                "surface mapping at all. Either upstream removed it, or the "
+                "scanner lost it; the log's integrity depends on its verdict, "
+                "so confirm which before removing it from this check." % key)
             continue
-        verdict = _verdict_of(value)
-        if key.endswith("$writeFile"):
-            if verdict not in ("deny", "allow_with_constraint"):
+        verdict = _verdict_of(mapping[key])
+        if key == WRITE_FILE:
+            if verdict == "deny":
+                continue
+            if verdict != "allow_with_constraint":
                 errors.append(
                     "invariant rpc-filter-log-is-trustworthy: %s is '%s'. It "
                     "must stay denied or URI-constrained, or a tab can write "
                     "the window logs directory directly." % (key, verdict))
+            elif not uri_args.get(key):
+                errors.append(
+                    "invariant rpc-filter-log-is-trustworthy: %s is "
+                    "allow_with_constraint but has no URI argument positions, "
+                    "so the positional authority rule does not apply to it. "
+                    "The verdict says constrained and nothing constrains it."
+                    % key)
         elif verdict != "deny":
             errors.append(
-                "invariant rpc-filter-log-is-trustworthy: %s is not denied, "
-                "which reopens a create-then-rename route into the window "
-                "logs directory." % key)
+                "invariant rpc-filter-log-is-trustworthy: %s is '%s', not "
+                "denied. It reaches the file system, so it is another route "
+                "into the window logs directory." % (key, verdict))
     return errors
 
 
@@ -741,7 +792,7 @@ def main(argv=None) -> int:
                         ("residuals",
                          lambda: check_residuals(mapping, policy)),
                         ("validators", lambda: check_validators(policy, _read(VALIDATORS_SRC), _uri_positions(inv))),
-                        ("log-trust", lambda: check_log_trust(mapping))):
+                        ("log-trust", lambda: check_log_trust(mapping, inv))):
         errors = check()
         if errors:
             failures.append((name, errors))
