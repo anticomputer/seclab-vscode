@@ -298,6 +298,16 @@
 					"date": "2026-11-16"
 				}
 			]
+		},
+		{
+			"id": "fixture:test/squat/probe-extension",
+			"runBy": "test/squat/probe.ts drive, with the editor driven by test/driver/editor.ts (macOS, sbx, local only)",
+			"evidence": [
+				{
+					"record": "docs/edr/20261116-scheme-squatting.md",
+					"date": "2026-11-16"
+				}
+			]
 		}
 	]
 }
