@@ -15557,7 +15557,7 @@
 			"component": "findings register: fix-commit lines",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "0000000",
+			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an anchor with a tab fails the schema (DDDD-1)"
@@ -15572,7 +15572,7 @@
 			"component": "findings register: log output",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "0000000",
+			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an anchor that starts a workflow command fails the schema (DDDD-2)"
@@ -15587,7 +15587,7 @@
 			"component": "findings register: clash scope",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "0000000",
+			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "reuses with another meaning is warned, across owners (DDDD-3)"
@@ -15602,7 +15602,7 @@
 			"component": "findings register: clash noise",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "0000000",
+			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "editing an entry whose clash the base already had is not warned (DDDD-4)"
@@ -15617,7 +15617,7 @@
 			"component": "findings register: self-test",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "0000000",
+			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "control: a clash warning never fails the check (DDDD-5)"
@@ -15632,7 +15632,7 @@
 			"component": "findings register: new highs",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "0000000",
+			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
 			"test": {
 				"file": "seclab",
 				"name": "a reverted fix passed ancestry (EEEE-1)"
@@ -15647,7 +15647,7 @@
 			"component": "findings register: log output",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "0000000",
+			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "every printed line is one line and never a workflow command (EEEE-2)"
@@ -15662,7 +15662,7 @@
 			"component": "findings register: host contract",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "0000000",
+			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
 			"test": {
 				"file": "seclab",
 				"name": "a fix-commit line with no severity flag passed (EEEE-3)"
