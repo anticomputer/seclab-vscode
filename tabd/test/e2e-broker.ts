@@ -200,8 +200,22 @@ try {
 		assert.notEqual(r.status, 0, 'direct connection must fail');
 	});
 	check('the allowed host works through the broker, TLS trusted via the tab CA', () => {
-		const r = inTab(`curl -sS -o /dev/null -w '%{http_code}' --max-time 30 https://${ALLOWED}/zen`);
-		assert.equal(r.stdout.trim(), '200', r.stderr);
+		// The one request in this suite that reaches a real upstream. `/rate_limit` doesn't count
+		// against GitHub's unauthenticated limit (60 an hour per IP, shared on hosted runners),
+		// which `/zen` does: a 403 from GitHub there once failed this check. The headers say who
+		// answered: anything the broker made carries X-Seclab-Broker and fails; GitHub's own
+		// answer carries X-GitHub-Request-Id, and proves the broker forwarded the allowed GET
+		// over TLS that curl verified against the tab CA (curl exits 0).
+		const r = inTab(`curl -sS -o /dev/null -D - -w '\\nstatus=%{http_code}\\n' --max-time 30 https://${ALLOWED}/rate_limit`);
+		assert.equal(r.status, 0, `curl failed (TLS or connection): ${r.stderr}`);
+		const status = /^status=(\d{3})$/m.exec(r.stdout)?.[1];
+		const headers = r.stdout.toLowerCase();
+		assert.ok(!/^x-seclab-broker:/m.test(headers), `the broker answered ${status} itself:\n${r.stdout}`);
+		assert.ok(/^x-github-request-id:/m.test(headers), `no upstream answer (status ${status}):\n${r.stdout}`);
+		if (status !== '200') {
+			// Infrastructure, reported, never retried: the broker part of this check held.
+			console.log(`INFRA upstream ${ALLOWED} answered ${status} (not the broker); x-ratelimit-remaining: ${/^x-ratelimit-remaining: *(\S+)/m.exec(headers)?.[1] ?? 'n/a'}`);
+		}
 	});
 	check('the broker refuses the proxy without the tab credentials (407)', () => {
 		const r = inTab(`curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -x http://${proxyHost} --proxy-user seclab:wrong-password-xxxxxxxx https://${ALLOWED}/zen`);
