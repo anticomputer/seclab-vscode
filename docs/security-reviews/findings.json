@@ -13900,6 +13900,32 @@
 				"name": "LSR-7 ${shape}"
 			},
 			"note": "Cases: a trigger-level dedent, an unreadable line at the filter level, a filter-level dedent; each fails with its branch mutated."
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-11",
+			"round": "Round LSR",
+			"severity": "medium",
+			"summary": "A filter item the scanner couldn't read was dropped, and in an *-ignore list that reads as live: a block-scalar item, a bare dash, a continuation line or an empty list disarmed the filter.",
+			"component": "liveness gate (workflow discovery)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "3abc1d8",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-11 ${shape}" },
+			"note": "Eight shapes are injected; the recognition rule, the continuation rule and the empty-list rule each fail a case when mutated."
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-12",
+			"round": "Round LSR",
+			"severity": "low",
+			"summary": "An anchor or tag before a flow collection or quoted scalar hid that the line was left open.",
+			"component": "liveness gate (workflow discovery)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "3abc1d8",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-9 ${shape}" },
+			"note": "Case: a tagged quoted default continued at column 0; it fails with the anchor/tag skip mutated."
 		}
 	]
 }
