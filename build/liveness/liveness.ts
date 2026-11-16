@@ -1012,6 +1012,11 @@ async function selfTest(): Promise<void> {
 		r.exempt.push({ subject: 'tabd/src/rpc.ts#onDecision', consumer: 'tabd/src/main.ts', reason: 'the Tab Manager subscribes' });
 		injections.push(['false exemption', withReg(r, { 'tabd/src/main.ts': "import { start } from './sup.ts';\n// onDecision is subscribed elsewhere\nstart();\n" }), /consumer tabd\/src\/main\.ts never uses onDecision/]);
 	}
+	{ // a merge that unions the register re-adds an exemption main removed when the export went live
+		const r = reg();
+		r.exempt.push({ subject: 'tabd/src/sup.ts#start', consumer: 'tabd/src/main.ts', reason: 'removed on main, re-added by a union merge' });
+		injections.push(['union merge re-adds a removed exemption', withReg(r), /exempt tabd\/src\/sup\.ts#start: it is live/]);
+	}
 	{ // 4. an array nobody reads (seclabTaintEscapes): only test-reached code writes it
 		const r = reg();
 		r.exempt = r.exempt.filter(x => x.subject !== 'tabd/src/rpc.ts#escapes');
