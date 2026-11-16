@@ -254,8 +254,9 @@ const predicates: Record<string, (r: Result) => string | null> = {
 	// Patch 0034: the window still answers with the REH's profile path, but resolves no host
 	// setting into it.
 	'reh-profile-config-host-setting': r =>
-		fact(r, 'sawProfilePath') !== true ? 'the window never sent the REH\'s profile path back'
-			: tokens(r).length > 0 ? 'a host setting\'s canary came back in the profile path' : null,
+		fact(r, 'sawProfilePath') !== true || fact(r, 'sawProfileEnv') !== true ? 'the window never sent the REH\'s profile path and env back'
+			: tokens(r).length > 0 ? 'a host setting\'s canary came back in the profile launch'
+				: fact(r, 'unresolved') !== true ? 'the profile path or env came back resolved to something else' : null,
 	'secret-claim-tab-manager-write': () => partitionReason(2, 3),
 };
 
@@ -301,7 +302,7 @@ const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
 	'reh-resolve-variables-host-env': r =>
 		tokens(r).length > 0 ? null : 'the host environment canary did not come back',
 	'reh-profile-config-host-setting': r =>
-		fact(r, 'sawProfilePath') === true && tokens(r).length > 0 ? null : 'the host setting canary did not come back in the profile path',
+		fact(r, 'pathCanary') === true && fact(r, 'envCanary') === true ? null : 'the host setting canary did not come back in both the profile path and its env',
 	// A restart is proven only by a new extension host process settling the attempt, never by
 	// an outcome that was simply not written (review rounds 14 and 15).
 	'host-restart-extension-host': r => {

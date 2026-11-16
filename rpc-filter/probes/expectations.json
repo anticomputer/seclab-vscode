@@ -345,7 +345,7 @@
       "surface": "credential-access",
       "policyRef": "data:remoteterminal-profile-path",
       "patchedOutcome": "succeeded",
-      "why": "the REH answers the window's getDefaultSystemShell with a path naming ${config:<setting>}; the window resolves the profile path against the host user's settings and sends the value back in createProcess (review RFU-1). On the patched build the call still happens, so the outcome is succeeded and the predicate checks no canary came back"
+      "why": "the REH offers a profile whose path and env name ${config:<setting>} (and answers getDefaultSystemShell with that path), and the host user's defaultProfile names it; the window resolves the profile path and its env against the host user's settings and sends the values back in createProcess (review RFU-1, RFU1R-1). On the patched build the call still happens, so the outcome is succeeded and the predicate checks both came back unresolved, with no canary"
     }
   }
 }

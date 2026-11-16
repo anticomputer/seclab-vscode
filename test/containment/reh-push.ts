@@ -174,6 +174,12 @@ try {
 	// The hook polls for targets every 2 s and starts the payload 5 s later; it must be in place
 	// before the window creates its terminal, as a hostile REH always is.
 	await sleep(12_000);
+	// RFU1R-1: make the REH's offered profile the host user's default, as a user's own
+	// defaultProfile setting would. The change makes the window ask the (now armed) REH for
+	// its profiles again, so the new terminal launches that profile, `env` included.
+	const userSettings = path.join(userData, 'User', 'settings.json');
+	fs.writeFileSync(userSettings, JSON.stringify({ ...JSON.parse(fs.readFileSync(userSettings, 'utf8')), 'terminal.integrated.defaultProfile.linux': 'seclab-probe' }, null, '\t'));
+	await sleep(5000);
 
 	// A terminal the window owns, so the REH has a pty to name, and one command run through it,
 	// which also tells the payload to start (its `ready` file).

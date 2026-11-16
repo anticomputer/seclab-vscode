@@ -1,6 +1,30 @@
+diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts b/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts	2026-11-16 14:37:46
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProcessManager.ts	2026-11-16 14:38:13
+@@ -31,6 +31,7 @@
+ import * as terminalEnvironment from '../common/terminalEnvironment.js';
+ import { IConfigurationResolverService } from '../../../services/configurationResolver/common/configurationResolver.js';
+ import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
++import { seclabIsTabAuthority } from '../../../services/extensions/common/seclabRpcFilter.js';
+ import { IHistoryService } from '../../../services/history/common/history.js';
+ import { IPathService } from '../../../services/path/common/pathService.js';
+ import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
+@@ -273,7 +274,11 @@
+ 			// variables and shell-profile modifications take precedence.
+ 			const envForResolver = { ...await this._terminalProfileResolverService.getEnvironment(this.remoteAuthority) };
+ 			terminalEnvironment.mergeEnvironments(envForResolver, await backend.getShellEnvironment());
+-			const variableResolver = terminalEnvironment.createVariableResolver(this._cwdWorkspaceFolder, envForResolver, this._configurationResolverService);
++			// seclab: in a tab window the shell launch config, profile `env` included, comes from the
++			// tab's REH and is sent back to it, so it resolves only `${env:…}`, from the REH's env.
++			const variableResolver = seclabIsTabAuthority(this._workbenchEnvironmentService.remoteAuthority)
++				? async (str: string) => str.replace(/\$\{env:([^}]+)\}/g, (_m, name: string) => envForResolver[name] ?? '')
++				: terminalEnvironment.createVariableResolver(this._cwdWorkspaceFolder, envForResolver, this._configurationResolverService);
+ 
+ 			// resolvedUserHome is needed here as remote resolvers can launch local terminals before
+ 			// they're connected to the remote.
 diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts
 --- a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-16 13:53:14
-+++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-16 13:53:34
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-16 14:37:59
 @@ -23,6 +23,7 @@
  import { ITerminalInstanceService } from './terminal.js';
  import { Disposable } from '../../../../base/common/lifecycle.js';
@@ -9,12 +33,13 @@ diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverSer
  
  export interface IProfileContextProvider {
  	getDefaultSystemShell(remoteAuthority: string | undefined, os: OperatingSystem): Promise<string>;
-@@ -333,21 +334,27 @@
+@@ -333,21 +334,28 @@
  		// Resolve path variables
  		const activeWorkspaceRootUri = this._historyService.getLastActiveWorkspaceRoot(options.remoteAuthority ? Schemas.vscodeRemote : Schemas.file);
  		const lastActiveWorkspace = activeWorkspaceRootUri ? this._workspaceContextService.getWorkspaceFolder(activeWorkspaceRootUri) ?? undefined : undefined;
 -		profile.path = await this._resolveVariables(profile.path, env, lastActiveWorkspace);
-+		const seclabTab = seclabIsTabAuthority(options.remoteAuthority);
++		// seclab: keyed on the window's own authority, not the per-terminal one a caller supplies.
++		const seclabTab = seclabIsTabAuthority(this._remoteAgentService.getConnection()?.remoteAuthority);
 +		profile.path = await this._resolveVariables(profile.path, env, lastActiveWorkspace, seclabTab);
  
  		// Resolve args variables
