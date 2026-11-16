@@ -2928,7 +2928,7 @@
 			"component": "containment probes (rogue REH)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "c69816be",
+			"commit": "5fc34cdb",
 			"test": {
 				"file": "test/containment/check-probes.test.ts",
 				"name": "a patched push probe needs the refusal in the decision log"
@@ -4324,7 +4324,7 @@
 			"component": "RPC boundary (REH\u2192UI)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "28ea57c3",
+			"commit": "b554ca31",
 			"test": {
 				"file": "test/containment/push-refusal.test.ts",
 				"name": "patch 0030: upstream onExecuteCommand handler is unreachable in a tab window, and the refusal reaches nothing"
@@ -6552,7 +6552,7 @@
 			"component": "server-initiated pushes (remoteTerminalBackend)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "28ea57c3",
+			"commit": "b554ca31",
 			"test": {
 				"file": "test/containment/push-refusal.test.ts",
 				"name": "patch 0030: upstream onExecuteCommand handler is unreachable in a tab window, and the refusal reaches nothing"
