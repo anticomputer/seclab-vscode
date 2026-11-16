@@ -151,18 +151,28 @@ RPC-lockdown session adds. Keep them consistent with this file.
   fixed review round. Each push needs its review recorded, the relevant tests
   passing, and the records updated. `main` always builds and passes. Why: the
   project owner requires it, and other sessions build on `main`.
-- **How a change reaches `main`.** A ruleset enforces this
-  ([EDR](docs/edr/20261104-ci-hardening.md)):
-  1. Push your branch.
-  2. Wait for the required checks `unit` (ci-unit), `lint` (workflow-lint),
-     `docs` (docs-check) and `patch-build` to go green on that exact SHA. If your change touches
-     code that ci-linux covers, wait for ci-linux `oci` too.
-  3. Fast-forward: `git push origin <sha>:refs/heads/main`.
-  
-  GitHub rejects a SHA without green required checks, any non-fast-forward
-  push, and deletion. There are no bypass actors. Never force-push `main`. When
-  landing another session's branch, run `./seclab docs check` on it as well,
-  not only its own suite.
+- **How a change reaches `main`: a pull request, rebase-merged by auto-merge.** A ruleset
+  enforces this ([EDR](docs/edr/20261116-pr-landing.md)): `main` takes changes only through a
+  pull request, merged by rebase, once the required checks `unit` (ci-unit), `lint`
+  (workflow-lint), `docs` (docs-check) and `patch-build` are green on a head that contains
+  current `main`. Nobody pushes to `main`, and there are no bypass actors.
+  1. Rebase onto `origin/main` and run `./seclab findings remap --branch <yours>` (see the note
+     on SHAs below). Push your branch.
+  2. Write the PR title and body to a file and run `./seclab scan-text < FILE`. Post only text
+     it reports clean (a flag means: no quote, paraphrase or excerpt of a private conversation,
+     and no internal name).
+  3. `gh pr create --base main --head <yours> --title "…" --body-file FILE`.
+  4. `gh pr merge <number> --auto --rebase`. GitHub merges when the checks pass.
+  5. If `main` moves first, the PR is out of date and can't merge: `gh pr update-branch
+     <number> --rebase`, remap again if the register cites your commits, and the checks re-run.
+     If your change touches code that ci-linux covers, wait for ci-linux `oci` on the PR head
+     before step 4.
+
+  A rebase merge re-creates every commit, so the SHAs on `main` are never the branch's.
+  Cite your unlanded commits in the register in a form that survives that (the register's
+  rules, [EDR](docs/edr/20261110-security-findings-register.md)). Coordinate landings with the
+  coordinator; it still sets the order. When reviewing another session's PR, run
+  `./seclab docs check` on it as well, not only its own suite.
 - **Fixtures use generated or obviously fake values** (`seclabcanary_…`, nothing that matches a
   real token format, not even a public example value) **and no push goes out unscanned.**
   Every session runs `./seclab hooks install` once per clone (and again when `build/hooks`,
