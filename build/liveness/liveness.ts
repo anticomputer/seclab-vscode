@@ -526,6 +526,13 @@ export function lineOpen(line: string): boolean {
 			break;
 		} else if ((c === '"' || c === "'") && (prev === '' || /[:\-[{,]/.test(prev))) {
 			q = c;
+		} else if ((c === '&' || c === '!') && (prev === '' || /[:\-[{,]/.test(prev))) {
+			// An anchor or tag sits before the node it names (`&b [foo,`): skip it, so the
+			// collection after it still counts as starting where a node can start (LSR-12).
+			while (k + 1 < line.length && !/\s/.test(line[k + 1])) {
+				k++;
+			}
+			continue;
 		} else if ((c === '[' || c === '{') && (depth > 0 || prev === '' || /[:\-[{,]/.test(prev))) {
 			depth++;
 		} else if ((c === ']' || c === '}') && depth > 0) {
@@ -536,6 +543,25 @@ export function lineOpen(line: string): boolean {
 		}
 	}
 	return depth !== 0 || q !== undefined;
+}
+
+/**
+ * A filter item's value if it is a scalar the scanner reads in full: a quoted scalar, or a plain
+ * one that can't start anything else (block scalar, alias, anchor, tag, flow collection).
+ * Undefined otherwise, which the caller treats as unreadable.
+ */
+export function scalarItem(raw: string): string | undefined {
+	const s = raw.replace(/\s+#.*$/, '').trim();
+	if (/^"(?:[^"\\]|\\.)*"$/.test(s)) {
+		return s.slice(1, -1);
+	}
+	if (/^'(?:[^']|'')*'$/.test(s)) {
+		return s.slice(1, -1).replace(/''/g, "'");
+	}
+	if (/^[^\s>|&*!?{}[\]"',#%@`-][^#]*$/.test(s) || /^-[^\s#][^#]*$/.test(s)) {
+		return s;
+	}
+	return undefined;
 }
 
 /** Whether any line of the `on:` block starting at line `i` is left open (block scalars skipped). */
@@ -606,6 +632,7 @@ export function triggers(yml: string, files?: string[]): string[] {
 	let fLevel: number | undefined;
 	const filters = new Map<string, Map<string, string[]>>();
 	const opaque = new Set<string>();
+	const emptyKeys: Array<[string, string]> = [];
 	const indent = (l: string) => /^ */.exec(l)![0].length;
 	for (const l of lines.slice(i + 1)) {
 		if (/^\s*(#.*)?$/.test(l)) {
@@ -641,9 +668,18 @@ export function triggers(yml: string, files?: string[]): string[] {
 			continue;
 		}
 		fLevel ??= n;
-		const item = /^ *- (.+)$/.exec(l);
-		if (item && key && n >= fLevel) {
-			filters.get(cur)!.get(key)!.push(unq(item[1].replace(/#.*/, '')));
+		// A filter is read only from items it positively recognises: a plain or quoted scalar.
+		// Anything else under a filter key (a block-scalar item, a bare `-`, a continuation, an
+		// anchor or tag) makes the trigger opaque. Dropping an unread item from an *-ignore list
+		// would otherwise read as "main not ignored", which is live (LSR-11).
+		const item = /^ *-(?:\s+(.*))?$/.exec(l);
+		if (key && n >= fLevel && (item || n > fLevel)) {
+			const s = item?.[1] !== undefined ? scalarItem(item[1]) : undefined;
+			if (s === undefined) {
+				opaque.add(cur);
+			} else {
+				filters.get(cur)!.get(key)!.push(s);
+			}
 			continue;
 		}
 		if (n === fLevel) {
@@ -653,13 +689,30 @@ export function triggers(yml: string, files?: string[]): string[] {
 				opaque.add(cur);
 			} else if (['branches', 'branches-ignore', 'paths', 'paths-ignore'].includes(k[2])) {
 				key = k[2];
-				const v = k[3].replace(/#.*/, '').trim();
+				const v = k[3].replace(/(?:^|\s)#.*/, '').trim();
 				const f = filters.get(cur) ?? new Map<string, string[]>();
-				f.set(key, v ? v.replace(/^\[|\]$/g, '').split(',').map(unq).filter(Boolean) : []);
+				let list: Array<string | undefined> = [];
+				if (/^\[.*\]$/.test(v)) {
+					list = v.slice(1, -1).split(',').map(x => x.trim()).filter(Boolean).map(scalarItem);
+				} else if (v) {
+					list = [scalarItem(v)];
+				} else {
+					emptyKeys.push([cur, key]);
+				}
+				if (list.some(x => x === undefined)) {
+					opaque.add(cur);
+				}
+				f.set(key, list.filter((x): x is string => x !== undefined));
 				filters.set(cur, f);
 			}
 		} else if (n < fLevel) {
 			opaque.add(cur);
+		}
+	}
+	// `branches-ignore:` with no items at all is not "ignore nothing": it was not read (LSR-11).
+	for (const [t, k] of emptyKeys) {
+		if (!filters.get(t)?.get(k)?.length) {
+			opaque.add(t);
 		}
 	}
 	const glob = (g: string) => new RegExp(`^${g.split(/(\*\*\/?|\*)/).map(p => p === '**' || p === '**/' ? '.*' : p === '*' ? '[^/]*' : p.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('')}$`);
@@ -1250,8 +1303,22 @@ async function selfTest(): Promise<void> {
 		['a two-line paths-ignore', "on:\n  workflow_dispatch:\n  push:\n    paths-ignore: ['docs/**',\n      '**']\n"],
 		['a two-line on: list', 'on: [push,\n  schedule]\n'],
 		['a quoted default continued at column 0', "on:\n  push:\n  workflow_dispatch:\n    inputs:\n      x:\n        default: \"a\nb\"\n  schedule:\n    - cron: '1 1 * * 1'\n"],
+		['a tagged quoted default continued at column 0', "on:\n  push:\n  workflow_dispatch:\n    inputs:\n      x:\n        default: !!str \"a\nb\"\n  schedule:\n    - cron: '1 1 * * 1'\n"],
 	]) {
 		injections.push([`LSR-9 ${shape}`, { ...base, '.github/workflows/nightly.yml': `${on}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:nightly .* add it to/]);
+	}
+	// LSR-11/12: an item the scanner doesn't positively read counts against the workflow.
+	for (const [shape, filter] of [
+		['a folded block-scalar item', '    branches-ignore:\n      - >-\n        main\n'],
+		['a literal block-scalar item', '    branches-ignore:\n      - |-\n        main\n'],
+		['a block-scalar paths-ignore item', '    paths-ignore:\n      - >-\n        **\n'],
+		['a bare dash with the value below', '    branches-ignore:\n      -\n        main\n'],
+		['a plain item continued on the next line', '    branches-ignore:\n      - foo\n        main\n'],
+		['an empty branches-ignore', '    branches-ignore:\n'],
+		['an anchored inline list', '    branches-ignore: &b [main]\n'],
+		['an anchored two-line list', '    branches-ignore: &b [foo,\n                         main]\n'],
+	]) {
+		injections.push([`LSR-11 ${shape}`, { ...base, '.github/workflows/nightly.yml': `on:\n  workflow_dispatch:\n  push:\n${filter}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:nightly .* add it to/]);
 	}
 	injections.push(['LSR-5 a .yaml twin of a registered .yml workflow', { ...base, '.github/workflows/weekly.yaml': "on:\n  schedule:\n    - cron: '2 2 * * 2'\njobs:\n  r:\n    steps:\n      - run: echo\n" }, /weekly\.yaml and \.github\/workflows\/weekly\.yml are both subject workflow:weekly/]);
 	{ // 4. an array nobody reads (seclabTaintEscapes): only test-reached code writes it
@@ -1313,6 +1380,8 @@ async function selfTest(): Promise<void> {
 		['an apostrophe in a plain scalar', "on:\n  push:\n  workflow_dispatch:\n    inputs:\n      x:\n        description: don't [stop\n", 'push,workflow_dispatch'],
 		['a block scalar with brackets', "on:\n  push:\n  workflow_dispatch:\n    inputs:\n      x:\n        description: |\n          a [b {c\n          'd\n", 'push,workflow_dispatch'],
 		['a one-line filter with a comment', "on:\n  push:\n    branches: [main] # [not\n", 'push'],
+		['an odd bracket and quote in a comment', "on:\n  push:\n    branches: [main] # see: [x, don: 't\n", 'push'],
+		['plain and quoted block items', "on:\n  push:\n    branches:\n      - main\n      - 'release/**'\n      - \"v*\" # tags\n", 'push'],
 		['a quoted list on one line', "on: ['push', \"pull_request\"]\n", 'push,pull_request'],
 	] as const) {
 		const got = triggers(yml).join(',');
