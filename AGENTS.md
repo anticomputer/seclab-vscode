@@ -162,15 +162,22 @@ RPC-lockdown session adds. Keep them consistent with this file.
      it reports clean (a flag means: no quote, paraphrase or excerpt of a private conversation,
      and no internal name).
   3. `gh pr create --base main --head <yours> --title "…" --body-file FILE`.
-  4. `gh pr merge <number> --auto --rebase`. GitHub merges when the checks pass.
-  5. If `main` moves first, the PR is out of date and can't merge: `gh pr update-branch
+  4. If your change touches code that ci-linux covers, wait for ci-linux `oci` to pass on the PR
+     head. It isn't a required check, so auto-merge won't wait for it.
+  5. `gh pr merge <number> --auto --rebase`. GitHub merges when the required checks pass.
+  6. If `main` moves first, the PR is out of date and can't merge: `gh pr update-branch
      <number> --rebase`, remap again if the register cites your commits, and the checks re-run.
-     If your change touches code that ci-linux covers, wait for ci-linux `oci` on the PR head
-     before step 4.
+     Auto-merge stays armed, so if step 4 applies, disarm it first (`gh pr merge <number>
+     --disable-auto`), wait for `oci` on the new head, then arm it again.
+  7. After the merge, confirm `unit`, `lint`, `docs` and `patch-build` are green on the new
+     `main` SHA, and that workflow-lint's `denylist` job ran on that push. Tell the coordinator
+     before the next PR is armed.
 
-  A rebase merge re-creates every commit, so the SHAs on `main` are never the branch's.
-  Cite your unlanded commits in the register in a form that survives that (the register's
-  rules, [EDR](docs/edr/20261110-security-findings-register.md)). Coordinate landings with the
+  A rebase merge re-creates every commit, so the SHAs on `main` are never the branch's, and
+  the commit that becomes `main` has had its required checks run on the same tree but not on
+  that SHA; they run on it right after the merge (step 7). Cite your unlanded commits in the
+  register in a form that survives the rewrite (the register's rules,
+  [EDR](docs/edr/20261110-security-findings-register.md)). Coordinate landings with the
   coordinator; it still sets the order. When reviewing another session's PR, run
   `./seclab docs check` on it as well, not only its own suite.
 - **Fixtures use generated or obviously fake values** (`seclabcanary_…`, nothing that matches a
