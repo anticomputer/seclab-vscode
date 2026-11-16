@@ -13781,6 +13781,44 @@
 			"commit": "b4db393",
 			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-3 union merge resurrects a tombstoned exemption with its code" },
 			"note": "Also injected: a superseded entry kept beside its replacement, and a tombstone listed twice."
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-4",
+			"round": "Round LSR",
+			"severity": "medium",
+			"summary": "Quoted or spaced push/pull_request filter keys (`\"branches\": [nope]`) were not recognised, so a decoy push trigger made a dispatch-only workflow look live.",
+			"component": "liveness gate (workflow discovery)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "6d6a6f5",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-4 push filter spelled ${spelling}" },
+			"note": "Three spellings are injected (`\"branches\": [nope]`, `branches : [nope]`, `'paths-ignore': ['**']`)."
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-5",
+			"round": "Round LSR",
+			"severity": "medium",
+			"summary": "A `.yaml` twin of a `.yml` workflow shared its subject id, so the twin needed no evidence of its own.",
+			"component": "liveness gate (workflow discovery)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "6d6a6f5",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-5 a .yaml twin of a registered .yml workflow" }
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-6",
+			"round": "Round LSR",
+			"severity": "low",
+			"summary": "A change dropping a tombstone together with the re-add (a whole-register merge resolution, or an edit) still passed.",
+			"component": "liveness gate (exemptions)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "6d6a6f5",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-6 a tombstone dropped against the base" },
+			"note": "`./seclab liveness check` passes the base register (merge base with main, or on main the push's previous head), and liveness.ts requires it. Also checked end to end through the CLI with a dropped tombstone."
 		}
 	]
 }
