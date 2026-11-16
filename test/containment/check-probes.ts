@@ -251,6 +251,11 @@ const predicates: Record<string, (r: Result) => string | null> = {
 	'state-claim-tab-manager-read': r =>
 		tokens(r).length > 0 ? 'the Tab Manager\'s seeded globalState canary reached the tab' : null,
 	'state-claim-tab-manager-write': () => partitionReason(0, 1),
+	// Patch 0034: the window still answers with the REH's profile path, but resolves no host
+	// setting into it.
+	'reh-profile-config-host-setting': r =>
+		fact(r, 'sawProfilePath') !== true ? 'the window never sent the REH\'s profile path back'
+			: tokens(r).length > 0 ? 'a host setting\'s canary came back in the profile path' : null,
 	'secret-claim-tab-manager-write': () => partitionReason(2, 3),
 };
 
@@ -295,6 +300,8 @@ const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
 			: process.platform === 'darwin' && fact(r, 'hostIsMac') !== true ? 'the status returned does not describe the macOS host' : null,
 	'reh-resolve-variables-host-env': r =>
 		tokens(r).length > 0 ? null : 'the host environment canary did not come back',
+	'reh-profile-config-host-setting': r =>
+		fact(r, 'sawProfilePath') === true && tokens(r).length > 0 ? null : 'the host setting canary did not come back in the profile path',
 	// A restart is proven only by a new extension host process settling the attempt, never by
 	// an outcome that was simply not written (review rounds 14 and 15).
 	'host-restart-extension-host': r => {

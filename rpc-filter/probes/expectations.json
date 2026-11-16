@@ -339,6 +339,13 @@
       "policyRef": "rpc:MainThreadSecretState.$getKeys",
       "why": "extensionId is an RPC argument, so the caller can name vscode.github-authentication and enumerate its stored secrets",
       "canary": "auth-session"
+    },
+    "reh-profile-config-host-setting": {
+      "required": true,
+      "surface": "credential-access",
+      "policyRef": "data:remoteterminal-profile-path",
+      "patchedOutcome": "succeeded",
+      "why": "the REH answers the window's getDefaultSystemShell with a path naming ${config:<setting>}; the window resolves the profile path against the host user's settings and sends the value back in createProcess (review RFU-1). On the patched build the call still happens, so the outcome is succeeded and the predicate checks no canary came back"
     }
   }
 }

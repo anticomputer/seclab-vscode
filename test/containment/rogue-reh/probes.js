@@ -76,6 +76,7 @@ function inconclusive(results, id, policyRef, kind) {
 
 
 const RESOLVE_REF = 'push:remoteterminal:$onPtyHostRequestResolveVariablesEvent';
+const PROFILE_REF = 'data:remoteterminal-profile-path';
 
 /**
  * Ask the trusted side to resolve ${env:...} and hand us the values.
@@ -166,6 +167,23 @@ function terminalChannel(socketServer) {
  * passed (argument 10). In memory only; never recorded.
  */
 const captured = [];
+/**
+ * The terminal-profile probe (review RFU-1). This REH answers the window's getDefaultSystemShell
+ * with a path naming `${config:seclab.test.canary}`, a host user setting the harness seeds. The
+ * window resolves the profile path and sends it back in createProcess; a canary there is the
+ * host's setting reaching the tab. The process is started as plain /bin/sh either way, so the
+ * window's terminal still works.
+ */
+const PROFILE_PATH = '/bin/sh${config:seclab.test.canary}';
+const profileProbe = { armed: false, seen: undefined };
+function armProfileProbe(channel) {
+	const svc = channel && (channel._ptyHostService || channel.ptyHostService);
+	if (!svc || typeof svc.getDefaultSystemShell !== 'function') {
+		return;
+	}
+	svc.getDefaultSystemShell = async () => PROFILE_PATH;
+	profileProbe.armed = true;
+}
 function captureCreatedPtys(channel) {
 	const svc = channel && (channel._ptyHostService || channel.ptyHostService);
 	if (!svc || typeof svc.createProcess !== 'function' || svc.__seclabCaptured) {
@@ -174,6 +192,13 @@ function captureCreatedPtys(channel) {
 	const original = svc.createProcess.bind(svc);
 	svc.__seclabCaptured = true;
 	svc.createProcess = async (...args) => {
+		const launch = args[0];
+		if (profileProbe.armed && launch && typeof launch.executable === 'string' && launch.executable.startsWith('/bin/sh') && launch.executable !== '/bin/sh') {
+			if (!profileProbe.seen) {
+				profileProbe.seen = { sawProfilePath: true, canaryTokens: safety.canaryTokens(launch.executable), unresolved: launch.executable.includes('${config:') };
+			}
+			launch.executable = '/bin/sh';
+		}
 		const id = await original(...args);
 		if (Number.isSafeInteger(id)) {
 			captured.push({ id, workspaceId: typeof args[9] === 'string' ? args[9] : undefined });
@@ -296,10 +321,16 @@ async function runRehProbes(socketServer, router) {
 		// The server-initiated push proof (patches 0030/0031) runs these alone, after recording
 		// what the payload could see (facts only), so an inconclusive run says why.
 		captureCreatedPtys(terminalChannel(socketServer));
+		armProfileProbe(terminalChannel(socketServer));
 		await waitForReady(targets.ready);
 		await writeDiagnostics(socketServer);
 		await runExecuteCommandProbes(results, ctx, socketServer);
 		await runResolveVariablesProbe(results, ctx, socketServer);
+		if (!profileProbe.armed || !profileProbe.seen) {
+			inconclusive(results, 'reh-profile-config-host-setting', PROFILE_REF, profileProbe.armed ? KIND.noPty : KIND.noEmitter);
+		} else {
+			await probe(results, 'reh-profile-config-host-setting', PROFILE_REF, async () => profileProbe.seen);
+		}
 		return results;
 	}
 
