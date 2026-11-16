@@ -3748,9 +3748,13 @@
 			"summary": "seclab-wb-mount runs as root on ensure-reh, after the tab has run; it must resolve the workspace with RESOLVE_NO_SYMLINKS and check root-owned parents.",
 			"component": "write-back mount (seclab-wb-mount)",
 			"owner": "fork-build",
-			"status": "deferred",
-			"followUp": "Constraint handed to the fork-build session (write-back gate work): seclab-wb-mount still only checks os.path.realpath(ws) != ws and has no root-owned-parent check.",
-			"note": "No later review record covers it; the write-back-engine review's JJ-1 is a different finding."
+			"status": "fixed",
+			"commit": "341f3fb",
+			"test": {
+				"file": "sandbox/test/test_wb_mount.py",
+				"name": "test_a_share_moved_by_renaming_a_tab_owned_ancestor_is_refused"
+			},
+			"note": "The path resolves one component at a time with O_NOFOLLOW, and after mounting the share's only mount point must be the workspace path under the overlay. Root-owned parents can't be required: in an sbx tab the workspace's parent belongs to the tab user (measured 2026-11-16); every ancestor above it is root-owned 1755, so the tab can't rename it (ADR write-back-gate)."
 		},
 		{
 			"record": "20261104-tab-observability.md",
