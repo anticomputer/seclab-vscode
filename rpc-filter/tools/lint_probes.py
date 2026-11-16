@@ -74,7 +74,9 @@ RULES = (
                 r"chown|chownSync|rename|renameSync|truncate|truncateSync)\s*\("),
      "destructive or permission-changing filesystem call"),
     ("persistence",
-     re.compile(r"LaunchAgents|LaunchDaemons|crontab|\.bashrc|\.zshrc|\.profile|launchctl"),
+     # `.profile` as a path, not a property (`p.profileName`, `x.profile`): no identifier or
+     # closing bracket right before the dot.
+     re.compile(r"LaunchAgents|LaunchDaemons|crontab|\.bashrc|\.zshrc|(?<![\w$)\]])\.profile\b|launchctl"),
      "touches a persistence mechanism"),
     ("process-control",
      re.compile(r"\bprocess\.kill\s*\(|\bprocess\.exit\s*\(|\bkillall\b"),
@@ -441,7 +443,9 @@ def main(argv: list | None = None) -> int:
                     if fh.read() != want:
                         violations.append((f"test/containment/{d}/probe-safety.js", 0,
                                            "guard-divergence",
-                                           "differs from test/containment/probe-safety.js"))
+                                           "differs from test/containment/probe-safety.js (a stale, "
+                                           "untracked build-time copy: the harnesses re-copy it before "
+                                           "packaging; delete it or rerun the harness's prepare)"))
 
     if not violations:
         print("probe payloads clean: %d files, %d content rules + clipboard, record, lit, probe-id, pasteboard"

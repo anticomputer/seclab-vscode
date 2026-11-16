@@ -29,6 +29,35 @@ def ids(violations):
     return [v[2] for v in violations]
 
 
+REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+# The guard copies the harnesses write next to each extension before packaging. They are
+# gitignored, so a checkout has none; a worktree keeps whatever its last run copied.
+GUARD_COPIES = tuple(p for p in L.EXEMPT if p != "test/containment/probe-safety.js")
+
+
+def tree_copy(case):
+    """test/ as a checkout has it: no node_modules, no .work, no build-time guard copies, so a
+    stale copy a local run left behind can't decide a unit test."""
+    root = tempfile.mkdtemp(prefix="seclab-lint-test-")
+    case.addCleanup(shutil.rmtree, root, ignore_errors=True)
+
+    def ignore(d, names):
+        rel = os.path.relpath(d, REPO)
+        out = {n for n in names if n in ("node_modules", ".work")}
+        return out | {n for n in names if os.path.join(rel, n) in GUARD_COPIES}
+    shutil.copytree(os.path.join(REPO, "test"), os.path.join(root, "test"), ignore=ignore)
+    return root
+
+
+def lint(root):
+    import contextlib
+    import io
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+        status = L.main([root])
+    return status, out.getvalue()
+
+
 class ClipboardTest(unittest.TestCase):
     def clip(self, text):
         return ids(L.clipboard_violations("x.js", text))
@@ -161,7 +190,8 @@ class GuardedSourceTest(unittest.TestCase):
                          ["real-keychain"])
 
     def test_the_shipped_payloads_are_clean(self):
-        self.assertEqual(L.main([]), 0)
+        status, out = lint(tree_copy(self))
+        self.assertEqual(status, 0, out)
 
     def test_a_root_with_no_payloads_fails_rather_than_passing_vacuously(self):
         # The first version of this test passed while linting 0 files (it read
@@ -178,22 +208,11 @@ class ArmingGateTest(unittest.TestCase):
     and each payload with its bail-out removed fails, so reverting either half is caught.
     """
 
-    REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-
     def copy(self):
-        root = tempfile.mkdtemp(prefix="seclab-arming-test-")
-        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
-        shutil.copytree(os.path.join(self.REPO, "test"), os.path.join(root, "test"),
-                        ignore=shutil.ignore_patterns("node_modules", ".work"))
-        return root
+        return tree_copy(self)
 
     def lint_ids(self, root):
-        import contextlib
-        import io
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
-            status = L.main([root])
-        return status, out.getvalue()
+        return lint(root)
 
     def test_control_the_copied_payloads_pass(self):
         status, out = self.lint_ids(self.copy())
@@ -212,6 +231,55 @@ class ArmingGateTest(unittest.TestCase):
             status, out = self.lint_ids(root)
             self.assertEqual(status, 1, rel)
             self.assertIn("no-arming", out, rel)
+
+
+class GuardCopyTest(unittest.TestCase):
+    """The packaged guard copies are exempt from the content rules only because they match the
+    single source byte for byte. A checkout has no copies, so this is the only place CI sees the
+    guard-divergence rule run."""
+
+    def write(self, root, rel, data):
+        with open(os.path.join(root, rel), "wb") as fh:
+            fh.write(data)
+
+    def source(self):
+        with open(os.path.join(REPO, "test/containment/probe-safety.js"), "rb") as fh:
+            return fh.read()
+
+    def test_an_exact_copy_passes(self):
+        root = tree_copy(self)
+        for rel in GUARD_COPIES:
+            self.write(root, rel, self.source())
+        status, out = lint(root)
+        self.assertEqual(status, 0, out)
+
+    def test_a_stale_copy_fails(self):
+        for rel in GUARD_COPIES:
+            root = tree_copy(self)
+            self.write(root, rel, self.source() + b"// stale\n")
+            status, out = lint(root)
+            self.assertEqual(status, 1, rel)
+            self.assertIn("FAIL [guard-divergence] %s" % rel, out)
+
+    def test_the_guard_copies_are_ignored_by_git(self):
+        # A tracked copy would be a second source of truth.
+        with open(os.path.join(REPO, ".gitignore"), encoding="utf-8") as fh:
+            ignored = {l.strip() for l in fh}
+        for rel in GUARD_COPIES:
+            self.assertIn(rel, ignored)
+
+
+class PersistenceRuleTest(unittest.TestCase):
+    def rule(self):
+        return next(p for rid, p, _ in L.RULES if rid == "persistence")
+
+    def test_profile_paths_fail(self):
+        for line in ("fs.readFileSync(home + '/.profile')", "const p = '~/.profile';", "cat .profile"):
+            self.assertTrue(self.rule().search(line), line)
+
+    def test_profile_properties_pass(self):
+        for line in ("p.profileName !== NAME", "args.profile", "x[0].profile", "f().profile"):
+            self.assertFalse(self.rule().search(line), line)
 
 
 if __name__ == "__main__":
