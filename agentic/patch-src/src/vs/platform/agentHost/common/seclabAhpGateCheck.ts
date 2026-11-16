@@ -25,6 +25,41 @@ export function seclabAhpInstallWindow(eventSink: (e: SeclabAhpEvent) => void): 
 	sink ??= eventSink;
 }
 
+/** The setting both gates read. Defined here, in the common layer, so that patch 0018's
+ *  chat gate (whose caller is in `chat/common/`) and 0015's browser gate name one constant. */
+export const SECLAB_AGENTS_ENABLED_SETTING = 'seclab.agents.enabled';
+
+/** The shape of a configuration `inspect()` result this rule reads. */
+export interface SeclabInspectedSetting { readonly policyValue?: boolean; readonly defaultValue?: boolean }
+
+/**
+ * Whether an agent host is enabled for this window, from sources a TAB CANNOT WRITE:
+ * enterprise policy, the registered default, or `SECLAB_AGENTS_ENABLED=1` in the host main
+ * process environment, stamped onto the window configuration at load.
+ *
+ * `getValue` is deliberately not used: it merges the user, remote and workspace layers, and a
+ * tab extension can write the user layer through `$updateConfigurationOption`.
+ *
+ * This lives here, in the common layer, so that BOTH callers share one implementation: 0015's
+ * `seclabAgentHostAllowed` (browser) and 0018's chat gate, whose caller is in `chat/common/`
+ * and may not import from `browser/`. Two copies of an enablement rule would be a drift
+ * hazard in the one place drift is least acceptable.
+ */
+export function seclabAgentsEnabled(inspected: SeclabInspectedSetting, windowSeclabAgentsEnabled: boolean | undefined): boolean {
+	return inspected.policyValue === true
+		|| windowSeclabAgentsEnabled === true
+		|| (inspected.policyValue === undefined && inspected.defaultValue === true);
+}
+
+/**
+ * Writes an event to this window's gate log, for callers in the common layer that have no
+ * `ServicesAccessor` to hand (patch 0018's chat gate). Silent before the sink is installed,
+ * which is startup only: the gate log exists before any chat request can be dispatched.
+ */
+export function seclabAhpEmit(event: SeclabAhpEvent): void {
+	sink?.(event);
+}
+
 /** A fresh connection number, shared by gated and ungated transports. */
 export function seclabAhpNextConnection(): number {
 	return nextConnection++;

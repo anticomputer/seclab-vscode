@@ -54,6 +54,23 @@
 					"const configured = this.configurationService.getValue<BrowserViewStorageScope | 'default'>('workbench.browser.dataStorage') ?? 'default';"
 				],
 				"why": "the early return is what makes the invariant above load-bearing: a session request that already carries a scope is returned verbatim, WITHOUT reading `workbench.browser.dataStorage`. Patch 0017 also relies on the configured-storage branch still existing and still reading that exact setting id, since the patch fixes the value the window reads there. If either half changes, the 0017 security argument and the increment 2 proof both need rereading."
+			},
+			{
+				"file": "src/vs/platform/agentHost/browser/agentHostConnectionsService.ts",
+				"mustContain": [
+					"get ambientConnection(): IAgentConnection {\n\t\treturn this._agentHostService;\n\t}",
+					"if (authority === AMBIENT_AGENT_HOST_AUTHORITY || authority === this._ambientResourceAuthority) {\n\t\t\treturn this._agentHostService;\n\t\t}",
+					"const connection = this.getConnectionByAuthority(identity.connectionAuthority);"
+				],
+				"why": "patch 0018 decides which chat sessions a tab window may address by comparing the connection OBJECT that `resolveSessionResource` returns with `ambientConnection`. That comparison is only meaningful because upstream returns the same injected `IAgentHostService` from both: `ambientConnection` returns it directly, and `getConnectionByAuthority` returns it for the ambient authority, which is what `resolveSessionResource` goes through. If upstream ever wrapped or copied either side, reference equality would stop holding and 0018 would refuse this window's own agent-host session -- failing closed, but silently breaking the agent host rather than reporting it. Pinned so that change fails the patch build instead."
+			},
+			{
+				"file": "src/vs/platform/agentHost/browser/agentHostConnectionsService.ts",
+				"mustContain": [
+					"\t\tif (scheme.startsWith(LOCAL_AGENT_HOST_SCHEME_PREFIX)) {\n\t\t\tconst provider = scheme.substring(LOCAL_AGENT_HOST_SCHEME_PREFIX.length);\n\t\t\treturn provider\n\t\t\t\t? this._createSessionIdentity(AMBIENT_AGENT_HOST_AUTHORITY, provider, normalized)\n\t\t\t\t: undefined;",
+					"\t\t\t...(this._backendSessions.has(sessionResource) ? { backendSessionIsAdvertised: true as const } : {}),"
+				],
+				"why": "patch 0018 refuses a chat request unless the session resolves to THIS window's own agent-host connection AND `backendSessionIsAdvertised` is true. Both halves are needed because of these two lines together: `resolveSessionResourceIdentity` does not fail on an unknown session, it SYNTHESISES an ambient identity from any `agent-host-*` scheme, and `getConnectionByAuthority(AMBIENT_AGENT_HOST_AUTHORITY)` then returns the same object as `ambientConnection`. So a connection-identity check alone would have been a scheme-prefix string test one layer down, which is the very thing the patch exists to avoid. `backendSessionIsAdvertised` is the only signal that separates a registry hit from the synthesised fallback. If upstream makes the fallback fail, or sets the flag anywhere but on a `_backendSessions` hit, the patch's argument must be re-derived."
 			}
 		]
 	}

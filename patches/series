@@ -28,6 +28,7 @@
 # New files in 0015 are edited in agentic/patch-src (agentic/tools/sync-patch.ts).
 0015-seclab-ahp-gate.patch
 0017-seclab-fixed-tab-settings.patch
+0018-seclab-agent-host-sessions-only.patch
 # 0030-0034: RPC capability filter follow-ons. 0030-0031 refuse the two server-initiated
 # terminal pushes in tab windows.
 0030-seclab-no-remote-cli-push-in-tabs.patch

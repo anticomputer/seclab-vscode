@@ -16,5 +16,6 @@
 	"0036-seclab-tab-configuration-snapshot.patch": ["desktop"],
 	"0038-seclab-editor-tab-provenance.patch": ["desktop"],
 	"0040-reresolve-managed-authority-on-restart.patch": ["desktop"],
-	"0041-route-local-folder-opens-to-tabs.patch": ["desktop"]
+	"0041-route-local-folder-opens-to-tabs.patch": ["desktop"],
+	"0018-seclab-agent-host-sessions-only.patch": ["desktop"]
 }

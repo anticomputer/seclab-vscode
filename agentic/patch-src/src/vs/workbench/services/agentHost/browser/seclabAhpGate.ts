@@ -13,7 +13,7 @@ import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
 import { joinPath } from '../../../../base/common/resources.js';
 import type { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { localize } from '../../../../nls.js';
-import { isSeclabAuthority, seclabAhpBrandTransport, seclabAhpInstallWindow, seclabAhpNextConnection } from '../../../../platform/agentHost/common/seclabAhpGateCheck.js';
+import { SECLAB_AGENTS_ENABLED_SETTING, isSeclabAuthority, seclabAgentsEnabled, seclabAhpBrandTransport, seclabAhpInstallWindow, seclabAhpNextConnection } from '../../../../platform/agentHost/common/seclabAhpGateCheck.js';
 import { SeclabAhpEvent, SeclabAhpFilter, SeclabAhpOutput } from '../../../../platform/agentHost/common/seclabAhpPolicy.js';
 import { SECLAB_AHP_TABLES } from '../../../../platform/agentHost/common/seclabAhpPolicyData.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
@@ -24,7 +24,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
 
-export const SECLAB_AGENTS_ENABLED_SETTING = 'seclab.agents.enabled';
+export { SECLAB_AGENTS_ENABLED_SETTING } from '../../../../platform/agentHost/common/seclabAhpGateCheck.js';
 
 // APPLICATION scope: the remote (tab-supplied) user settings layer can't set it.
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
@@ -101,8 +101,10 @@ export function seclabAgentHostAllowed(accessor: ServicesAccessor, authority: st
 	// The desktop window configuration, reached structurally: this file is in the browser
 	// layer and may not import the electron-browser environment service's types.
 	const windowConfiguration = (accessor.get(IWorkbenchEnvironmentService) as { configuration?: { seclabAgentsEnabled?: boolean } }).configuration;
-	if (inspected.policyValue === true || windowConfiguration?.seclabAgentsEnabled === true
-		|| (inspected.policyValue === undefined && inspected.defaultValue === true)) {
+	// One implementation, shared with patch 0018's chat gate, which cannot import this
+	// browser-layer module from `chat/common/`. Duplicating the rule would risk the two
+	// drifting apart, and an enablement rule is the worst place for that.
+	if (seclabAgentsEnabled(inspected, windowConfiguration?.seclabAgentsEnabled)) {
 		return true;
 	}
 	emit({ source: 'ahp-gate', class: 'ahp.decision', priority: 'notice', summary: 'ahp-gate.disabled deny', detail: { gateRule: 'ahp-gate.disabled', connection: 0, verdict: 'deny' } });
