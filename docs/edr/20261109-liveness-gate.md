@@ -55,7 +55,9 @@ Reviews ask what code says. Nothing asked whether anything calls it.
     that the schedule does. Trigger keys and filter keys are unquoted first, so `"schedule":`
     and `"branches":` count. The `on:` scanner follows YAML's indentation rather than fixed
     columns, and fails closed on what it can't read: an unparseable trigger line makes the
-    workflow a subject, and an inline or unreadable push filter counts as off main. Two
+    workflow a subject, and an inline or unreadable push filter counts as off main. A line that
+    leaves a flow collection or quoted scalar open (a filter list continued on the next line)
+    makes the whole block unreadable, and so the workflow a subject. Two
     workflow files with one stem (`x.yml`, `x.yaml`) fail: GitHub runs both, but they would
     share one subject;
   - test-only hooks in `test/builds/variants.json`;
