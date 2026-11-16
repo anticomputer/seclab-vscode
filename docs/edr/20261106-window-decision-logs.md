@@ -26,9 +26,15 @@ reached the stream, Tab Activity or the detections.
      when it is reused for another workspace, so one log can hold several tabs' lines. Each
      renderer installs the filter once and writes `rpc:seclab.installed` first, so the
      latest install line starts the current session. The forwarder starts the RPC log there
-     and drops lines in both logs stamped (by the logger, on the host) before it. Until an
-     install line exists, nothing is forwarded. A resume position is used only when it lies
-     after the install line in the same file.
+     and drops RPC lines stamped (by the logger, on the host) before it. The gate logs from
+     the same renderer slightly earlier (it is asked at startup, before the filter installs:
+     0.2 s in the real run), so gate lines get 3 s of grace before the install line, but
+     never reach back to the previous session's last RPC-filter line. Until an install line
+     exists, nothing is forwarded. A resume position is used only when it lies after the
+     install line in the same file.
+     - **Residual:** on a reused window, gate lines the previous tab wrote after its own last
+       RPC line and within 3 s of the new tab's install line would be credited to the new
+       tab. A gate install line, asked of the gate's owner, would remove the grace.
 2. **Line shape (agreed with the RPC session):**
    ```json
    {"source":"rpc-filter","class":"rpc.decision","priority":"warning","summary":"deny rpc","detail":{"surface":"rpc","ref":"rpc:MainThreadTerminalService.$createTerminal","verdict":"deny","reason":"policy","claimedExtensionId":"evil.ext"}}
@@ -84,11 +90,15 @@ The logs are written by the main process on the host. A tab could forge a line o
   extensions' read-only resources; `$mkdir`, `$copy` and `$rename` are denied.
 
 The RPC session gates both facts in CI (`check_log_trust` in `rpc-filter/tools/check.sh`).
-That check is narrower than "fails if either weakens" (review round 14): it accepts any
-`allow_with_constraint` on `$writeFile` without checking the constraint is the URI rule, and
-doesn't pin `$delete` (deleting the log would stop forwarding) or other host-file writers
-such as `$tryApplyWorkspaceEdit` and `$trySaveDocument`. All are denied or URI-constrained
-in the landed policy today; tightening the check is asked of the RPC session.
+On `cc51fa7d` that check is narrower than "fails if either weakens" (review round 14). It
+accepts any `allow_with_constraint` on `$writeFile`, and couldn't do better as written: the
+constraint is free text, so the check had no machine-readable handle on whether the URI rule
+applies. It also didn't pin `$delete` (deleting the log would stop forwarding: silence, not
+forgery) or other host-file writers such as `$tryApplyWorkspaceEdit` and `$trySaveDocument`,
+and it skipped a method missing from the policy instead of failing. All are denied or
+URI-constrained in the landed policy today. The RPC session's fix (written, not yet
+on main) checks the generated positional URI table for `$writeFile`, pins the others to
+`deny`, and fails on absence.
 
 **Merge order is enforced in code** (review round 12, HIGH before this fix). Before the
 filter ships, a tab can reach `MainThreadLogger.$log`, and its init data names the logger

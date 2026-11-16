@@ -1246,10 +1246,12 @@ test('window decision logs: prefix parsed, sources pinned per file, hostile line
 	fs.writeFileSync(f, '');
 	await b.tick();
 	assert.deepEqual(bGot, [], 'no install line: no session, nothing forwarded');
-	fs.writeFileSync(f, at('10:00:00.000', installed) + at('10:00:01.000', deny(1)) + at('10:00:02.000', deny(2)) + at('10:05:00.000', installed) + at('10:05:01.000', deny(3)));
-	fs.appendFileSync(gf, at('10:05:02.000', gate('ahp-gate.b-session')));
+	fs.writeFileSync(f, at('10:00:00.000', installed) + at('10:00:01.000', deny(1)) + at('10:04:58.500', deny(2)) + at('10:05:00.000', installed) + at('10:05:01.000', deny(3)));
+	fs.writeFileSync(gf, at('10:00:01.500', gate('ahp-gate.a-session')) + at('10:04:58.000', gate('ahp-gate.a-late')) + at('10:04:59.800', gate('ahp-gate.b-early')) + at('10:05:02.000', gate('ahp-gate.b-session')));
 	await b.tick();
-	assert.deepEqual(bGot, ['ahp-gate.b-session', 'rpc:seclab.installed', 'rpc:MainThreadX.$m3'], 'only the current session, from both logs (gate log first)');
+	// The gate logs before the filter installs (same renderer): its lines get a grace before the
+	// install line, but never reach back past the previous session's last RPC-filter line.
+	assert.deepEqual(bGot, ['ahp-gate.b-early', 'ahp-gate.b-session', 'rpc:seclab.installed', 'rpc:MainThreadX.$m3'], 'only the current session, from both logs (gate log first)');
 	b.dispose();
 });
 
