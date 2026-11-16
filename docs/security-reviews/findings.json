@@ -492,9 +492,10 @@
 			"severityNote": "No severity is recorded; rated medium because environment collections and the default profile can carry host-side environment values and reveal host shell configuration.",
 			"summary": "Window-to-tab push: the terminal default profile and environment collections still reach a tab's extension host.",
 			"component": "window→tab pushes (terminal profile/env)",
-			"owner": "docsync",
+			"owner": "rpc",
 			"status": "open",
 			"gap": "No push-side control for terminal profile and environment collections; reported to the coordinator as a 0035 sibling.",
+			"note": "Handed to the RPC follow-ups session (coordinator, 2026-11-16): its patches 0034 (no host variables in a tab REH's terminal launch config) and 0050 (no host terminal in a tab window) touch the same code. Document-sync notes: measure what MainThreadTerminalService pushes to a tab's host (terminal names and launch configs of host terminals, the default profile, environment variable collections) with a host-side canary in terminal.integrated.env.* and a host terminal title; the editor-tab model already sends a host terminal's title (EDT-6).",
 			"ref": {
 				"file": "docs/RPC-LOCKDOWN.md",
 				"quote": "the terminal default profile and environment collections;"
@@ -523,8 +524,13 @@
 			"summary": "A tab can still squat host filesystem schemes with its own provider on window→tab channels other than the document sync.",
 			"component": "window→tab pushes (filesystem-scheme squatting)",
 			"owner": "docsync",
-			"status": "open",
-			"gap": "Patch 0035 neutralises squatting only for the document sync (per-model provenance); no general control stops a tab registering a provider for a host scheme on other push channels.",
+			"status": "fixed",
+			"commit": "cc51fa7d",
+			"test": {
+				"file": "test/squat/probe.ts",
+				"name": "filesystem provider for a host scheme (decision log)"
+			},
+			"note": "Closed by the RPC filter (patch 0005): a tab's $registerFileSystemProvider and $registerTextContentProvider fall to its default deny, so no tab provider serves any scheme (coordinator, 2026-11-16; docs/edr/20261116-scheme-squatting.md). The probe also requires the text-content refusal and that the window never called a tab provider.",
 			"ref": {
 				"file": "docs/RPC-LOCKDOWN.md",
 				"quote": "filesystem-scheme squatting by a tab provider."
