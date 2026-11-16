@@ -10,12 +10,14 @@
 // Allowlist lines: "<file>:<rule>:<exact trimmed source line>" (reviewed; churn is intended).
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 const repo = path.resolve(import.meta.dirname, '..');
 
-/** Problems with the roots to scan: an empty extensions/series scans only tabd/src (GATE-16). */
-export function rootProblems(series: string[], exists: (rel: string) => boolean): string[] {
+/** Problems with what will be scanned: an empty extensions/series scans only tabd/src
+ *  (GATE-16), and an empty patches/series scans no patch line (review FBA-4). */
+export function rootProblems(series: string[], patches: string[], exists: (rel: string) => boolean): string[] {
 	const p: string[] = [];
 	if (series.length === 0) {
 		p.push('extensions/series lists no extension, so no shipped extension would be scanned');
@@ -25,20 +27,45 @@ export function rootProblems(series: string[], exists: (rel: string) => boolean)
 			p.push(`extensions/series names ${n}, but extensions/${n}/src doesn't exist`);
 		}
 	}
+	if (patches.length === 0) {
+		p.push('patches/series lists no patch, so no core patch line would be scanned');
+	}
+	for (const n of patches) {
+		if (!exists(path.join('patches', n))) {
+			p.push(`patches/series names ${n}, but patches/${n} doesn't exist`);
+		}
+	}
 	return p;
 }
+const listOf = (root: string, rel: string) => fs.readFileSync(path.join(root, rel), 'utf8').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(Boolean);
+/** The run's starting findings for a checkout: what the scan below begins with. */
+export function initialFindings(root: string): string[] {
+	return rootProblems(listOf(root, 'extensions/series'), listOf(root, 'patches/series'), rel => fs.existsSync(path.join(root, rel)));
+}
 if (process.argv[2] === '--self-test') {
+	// The wiring too: a checkout whose series are empty starts with findings (FBA-4).
+	const fake = fs.mkdtempSync(path.join(os.tmpdir(), 'check-source-self-test-'));
+	fs.mkdirSync(path.join(fake, 'extensions'));
+	fs.mkdirSync(path.join(fake, 'patches'));
+	fs.writeFileSync(path.join(fake, 'extensions', 'series'), '# none\n');
+	fs.writeFileSync(path.join(fake, 'patches', 'series'), '# none\n');
+	const wired = initialFindings(fake);
+	fs.rmSync(fake, { recursive: true, force: true });
 	const cases: Array<[string, boolean]> = [
-		['an empty extensions/series fails (GATE-16)', rootProblems([], () => true).length === 1],
-		['a series entry with no src dir fails', rootProblems(['seclab-x'], () => false).length === 1],
-		['a real series passes', rootProblems(['seclab-tab-manager'], () => true).length === 0],
+		['an empty extensions/series fails (GATE-16)', rootProblems([], ['0001-x.patch'], () => true).length === 1],
+		['a series entry with no src dir fails', rootProblems(['seclab-x'], ['0001-x.patch'], rel => !rel.startsWith('extensions')).length === 1],
+		['an empty patches/series fails (FBA-4)', rootProblems(['seclab-tab-manager'], [], () => true).length === 1],
+		['a patches/series entry with no file fails', rootProblems(['seclab-tab-manager'], ['0001-x.patch'], rel => !rel.startsWith('patches')).length === 1],
+		['a checkout with empty series starts with both findings (the wiring the run uses)', wired.length === 2],
+		['a real series passes', rootProblems(['seclab-tab-manager'], ['0001-x.patch'], () => true).length === 0],
+		['this checkout passes', initialFindings(repo).length === 0],
 	];
 	const failed = cases.filter(([, ok]) => !ok).map(([n]) => n);
 	console.log(failed.length ? `check-source self-test FAILED: ${failed.join(', ')}` : `check-source self-test: ${cases.length} cases OK`);
 	process.exit(failed.length ? 1 : 0);
 }
 
-const series = fs.readFileSync(path.join(repo, 'extensions', 'series'), 'utf8').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(Boolean);
+const series = listOf(repo, 'extensions/series');
 const roots = [...series.map(n => path.join('extensions', n, 'src')), 'tabd/src'];
 const allow = new Set(fs.readFileSync(path.join(repo, 'build', 'source-allowlist.txt'), 'utf8').split('\n').map(l => l.replace(/^#.*/, '').trim()).filter(Boolean));
 
@@ -49,7 +76,7 @@ const RULES: Array<{ id: string; re: RegExp; reviewable: boolean }> = [
 	{ id: 'test-marker', re: /SECLAB_TEST_ONLY|seclab-test-hook/, reviewable: false },
 ];
 
-const findings: string[] = rootProblems(series, rel => fs.existsSync(path.join(repo, rel)));
+const findings: string[] = initialFindings(repo);
 const used = new Set<string>();
 function scanLines(rel: string, lines: Array<[number, string]>): void {
 	for (const [n, raw] of lines) {
@@ -87,7 +114,7 @@ for (const r of roots) {
 	walk(path.join(repo, r));
 }
 // Core patches ship too (review UU-3): the lines each patch in patches/series adds.
-const patches = fs.readFileSync(path.join(repo, 'patches', 'series'), 'utf8').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(Boolean);
+const patches = listOf(repo, 'patches/series');
 for (const p of patches) {
 	const rel = path.join('patches', p);
 	scanLines(rel, fs.readFileSync(path.join(repo, rel), 'utf8').split('\n')

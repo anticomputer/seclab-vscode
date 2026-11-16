@@ -189,7 +189,8 @@ if (!files.length) {
 // if it ever executes anything, its image references need this check again. Skipped by name, so
 // a tracked copy that can't be read is a finding, never a pass (GATE-15).
 const PURE_PARSER = 'broker/tools/supplychain.py';
-if (listed.includes(PURE_PARSER)) {
+// Probed whenever it is listed or on disk: the scan skips it by name either way (review FBA-5).
+if (listed.includes(PURE_PARSER) || fs.existsSync(path.join(repo, PURE_PARSER))) {
 	let text: string | undefined;
 	try {
 		text = fs.readFileSync(path.join(repo, PURE_PARSER), 'utf8');

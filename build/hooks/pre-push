@@ -77,7 +77,12 @@ while read -r _lref lsha rref rsha; do
 		echo "pre-push: publish gate clean (${lsha:0:7})"
 	fi
 done
-# No ref lines means nothing was checked: that is never a clean push (GATE-13).
-[[ "$refs" -gt 0 ]] || fail "no ref lines on stdin, so nothing was checked; push blocked"
+# No ref lines: git runs this hook even when every ref is up to date, and then nothing is
+# published. Say so rather than claim refs were checked (GATE-13; blocking it would only push
+# people to --no-verify, which drops both scans: review FBA-1).
+if [[ "$refs" -eq 0 ]]; then
+	echo "pre-push: no ref lines (nothing to push), so nothing was checked and nothing is published"
+	exit "$status"
+fi
 echo "pre-push: $refs ref(s) checked"
 exit "$status"
