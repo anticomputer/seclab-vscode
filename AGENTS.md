@@ -156,8 +156,9 @@ RPC-lockdown session adds. Keep them consistent with this file.
   pull request, merged by rebase, once the required checks `unit` (ci-unit), `lint`
   (workflow-lint), `docs` (docs-check) and `patch-build` are green on a head that contains
   current `main`. Nobody pushes to `main`, and there are no bypass actors.
-  1. Rebase onto `origin/main` and run `./seclab findings remap --branch <yours>` (see the note
-     on SHAs below). Push your branch.
+  1. Rebase onto `origin/main`. Cite your unlanded commits in the register as `patch:<id>`
+     (`./seclab findings remap --branch <yours> --patch`); a SHA that isn't on `main` fails.
+     Push your branch.
   2. Write the PR title and body to a file and run `./seclab scan-text < FILE`. Post only text
      it reports clean (a flag means: no quote, paraphrase or excerpt of a private conversation,
      and no internal name).
@@ -166,7 +167,7 @@ RPC-lockdown session adds. Keep them consistent with this file.
      head. It isn't a required check, so auto-merge won't wait for it.
   5. `gh pr merge <number> --auto --rebase`. GitHub merges when the required checks pass.
   6. If `main` moves first, the PR is out of date and can't merge: `gh pr update-branch
-     <number> --rebase`, remap again if the register cites your commits, and the checks re-run.
+     <number> --rebase`, and the checks re-run (`patch:` citations survive it).
      Auto-merge stays armed, so if step 4 applies, disarm it first (`gh pr merge <number>
      --disable-auto`), wait for `oci` on the new head, then arm it again.
   7. After the merge, confirm `unit`, `lint`, `docs` and `patch-build` are green on the new
@@ -175,8 +176,9 @@ RPC-lockdown session adds. Keep them consistent with this file.
 
   A rebase merge re-creates every commit, so the SHAs on `main` are never the branch's, and
   the commit that becomes `main` has had its required checks run on the same tree but not on
-  that SHA; they run on it right after the merge (step 7). Cite your unlanded commits in the
-  register in a form that survives the rewrite (the register's rules,
+  that SHA; they run on it right after the merge (step 7). That is why unlanded work is cited
+  as `patch:<id>`, which resolves on `main` once it lands; a later change touching the entry
+  pins it to the SHA (`./seclab findings pin`; the register's
   [EDR](docs/edr/20261110-security-findings-register.md)). Coordinate landings with the
   coordinator; it still sets the order. When reviewing another session's PR, run
   `./seclab docs check` on it as well, not only its own suite.
