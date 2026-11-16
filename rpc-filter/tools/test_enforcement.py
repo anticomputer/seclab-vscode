@@ -353,3 +353,192 @@ class ValidatorGateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class CategoryGrantRevertTest(unittest.TestCase):
+    """rpc-lockdown-design findings 1 and 2: a substring rule must never grant.
+
+    389 commands were once reachable through category rules, and `editor-local` captured an
+    external-link opener and `_workbench.editor.configureDefaultEditor`. The fix is two checks:
+    a rule may only carry `deny` (check_keys), and every reachable command must have its own
+    `commands.exact` entry over the RESOLVED mapping (check_invariants). Each test here fails
+    if its half of the fix is reverted.
+    """
+
+    CAPTURED = ("editor.action.accessibilityHelpOpenHelpLink", "_workbench.editor.configureDefaultEditor")
+
+    def setUp(self):
+        self.inv = CD._load(CD.INVENTORY)
+        self.policy = CD._load(CD.POLICY)
+
+    def granting(self):
+        # The original shape: the whole `editor-local` category granted at once.
+        import copy
+        policy = copy.deepcopy(self.policy)
+        rule = {"match": {"category": "editor-local"}, "verdict": "allow", "impact": ["ui-spoofing"]}
+        policy["commands"]["rules"] = [rule] + list(policy["commands"].get("rules") or [])
+        return policy
+
+    def command(self, cid):
+        return next(c for c in self.inv["surfaces"]["b_command_registry"]["commands"] if c["id"] == cid)
+
+    def test_control_the_shipped_policy_grants_nothing_by_category(self):
+        errors = CD.check_keys(self.inv, self.policy) + CD.check_invariants(self.inv, self.policy)
+        self.assertEqual([e for e in errors if "Category rules" in e or "through a category rule" in e], [])
+
+    def test_a_granting_rule_fails_the_keys_check(self):
+        errors = CD.check_keys(self.inv, self.granting())
+        self.assertTrue(any("Category rules are a substring heuristic" in e for e in errors), errors)
+
+    def test_a_granting_rule_is_caught_over_the_resolved_mapping_too(self):
+        # Independently of check_keys: the invariant runs over what each id resolves to.
+        errors = CD.check_invariants(self.inv, self.granting())
+        hits = [e for e in errors if "through a category rule" in e]
+        self.assertTrue(hits)
+        for cid in self.CAPTURED:
+            self.assertTrue(any("'%s'" % cid in e for e in hits), cid)
+
+    def test_the_ids_editor_local_captured_resolve_to_deny(self):
+        for cid in self.CAPTURED:
+            verdict, _ = CD.resolve_command(self.policy, self.command(cid))
+            self.assertEqual(verdict, "deny", cid)
+
+
+class InventoryScannerRevertTest(unittest.TestCase):
+    """rpc-lockdown-design finding 3: the scanner modelled named helpers, so
+    `terminal.newLocal` and `sendSequence` were absent and their deny entries matched nothing.
+
+    The fix matches the shape `register*({ id: ... })` and resolves enum members, and the keys
+    check fails a `commands.exact` entry the inventory lacks. Each half is pinned here.
+    """
+
+    IDS = ("workbench.action.terminal.newLocal", "workbench.action.terminal.sendSequence")
+
+    def test_the_committed_inventory_has_both_and_they_resolve_to_deny(self):
+        inv, policy = CD._load(CD.INVENTORY), CD._load(CD.POLICY)
+        by_id = {c["id"]: c for c in inv["surfaces"]["b_command_registry"]["commands"]}
+        for cid in self.IDS:
+            self.assertIn(cid, by_id)
+            self.assertEqual(CD.resolve_command(policy, by_id[cid])[0], "deny", cid)
+
+    def test_an_exact_entry_the_inventory_lacks_fails_the_keys_check(self):
+        import copy
+        inv, policy = CD._load(CD.INVENTORY), CD._load(CD.POLICY)
+        policy = copy.deepcopy(policy)
+        policy["commands"]["exact"]["workbench.action.terminal.newLocal"] = {"verdict": "deny"}
+        inv = copy.deepcopy(inv)
+        inv["surfaces"]["b_command_registry"]["commands"] = [
+            c for c in inv["surfaces"]["b_command_registry"]["commands"] if c["id"] != "workbench.action.terminal.newLocal"]
+        errors = CD.check_keys(inv, policy)
+        self.assertTrue(any("newLocal'] is not in the inventory" in e for e in errors), errors)
+
+    def test_the_scanner_finds_a_helper_registration_by_shape(self):
+        from seclab_inventory import commands as C
+        from seclab_inventory.sources import SourceTree
+        root = tempfile.mkdtemp(prefix="seclab-scan-test-")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        files = {
+            "src/vs/workbench/contrib/terminal/common/terminal.ts":
+                "export const enum TerminalCommandId {\n\tNewLocal = 'workbench.action.terminal.newLocal',\n}\n",
+            "src/vs/workbench/contrib/terminal/electron-browser/terminalRemote.ts":
+                "import { TerminalCommandId } from '../common/terminal.js';\n"
+                "registerTerminalAction({\n\tid: TerminalCommandId.NewLocal,\n\ttitle: 'x',\n\trun: () => { }\n});\n",
+            "src/vs/workbench/contrib/terminalContrib/sendSequence/browser/terminal.sendSequence.contribution.ts":
+                "registerTerminalAction({\n\tid: 'workbench.action.terminal.sendSequence',\n\trun: () => { }\n});\n",
+        }
+        for rel, text in files.items():
+            os.makedirs(os.path.dirname(os.path.join(root, rel)), exist_ok=True)
+            with open(os.path.join(root, rel), "w", encoding="utf-8") as fh:
+                fh.write(text)
+        ids = {c["id"] for c in C.build(SourceTree(root=root, sha="x"))["commands"]}
+        for cid in self.IDS:
+            self.assertIn(cid, ids)
+
+
+class CallerGateSelfTest(unittest.TestCase):
+    """The dead-entry-point gate (sync_patch.check_callers) fails on each shape it exists for.
+
+    rpc-filter-patches finding 4 and rpc-core-landing finding 4: `seclabRegisterTab` had no
+    caller, so `seclabFilterFor` threw for every tab, and nothing showed the gate that should
+    have caught it could fail. Each case builds a tiny tree (one patch-src file, one patch) and
+    runs the real gate over it.
+    """
+
+    SRC = "rpc-filter/patch-src/seclabX.ts"
+    TARGET = "src/vs/x/seclabX.ts"
+
+    def setUp(self):
+        import sync_patch as SP
+        self.SP = SP
+        self.root = tempfile.mkdtemp(prefix="seclab-callers-test-")
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        os.makedirs(os.path.join(self.root, "rpc-filter", "patch-src"))
+        os.makedirs(os.path.join(self.root, "patches"))
+        saved = (SP.REPO, SP.PATCH_DIR, SP.MAPPING, SP.CALLER_EXEMPT)
+        self.addCleanup(lambda: setattr_all(SP, saved))
+
+        def setattr_all(mod, vals):
+            mod.REPO, mod.PATCH_DIR, mod.MAPPING, mod.CALLER_EXEMPT = vals
+        SP.REPO, SP.PATCH_DIR = self.root, os.path.join(self.root, "patches")
+        SP.MAPPING, SP.CALLER_EXEMPT = {self.TARGET: self.SRC}, {}
+
+    def tree(self, source, added_lines, own_section_lines=()):
+        with open(os.path.join(self.root, self.SRC), "w") as fh:
+            fh.write(source)
+        upstream = ["diff -ruN a/src/vs/y/user.ts b/src/vs/y/user.ts", "--- a/src/vs/y/user.ts",
+                    "+++ b/src/vs/y/user.ts", "@@ -1,1 +1,%d @@" % (len(added_lines) + 1), " x"]
+        upstream += ["+" + l for l in added_lines]
+        own = ["diff -ruN a/%s b/%s" % (self.TARGET, self.TARGET), "--- a/%s" % self.TARGET,
+               "+++ b/%s" % self.TARGET, "@@ -0,0 +1,%d @@" % len(own_section_lines)]
+        own += ["+" + l for l in own_section_lines]
+        with open(os.path.join(self.root, "patches", "0005-x.patch"), "w") as fh:
+            fh.write("\n".join(upstream + (own if own_section_lines else [])) + "\n")
+
+    SOURCE = ("export function seclabA(): void {\n\tseclabB();\n}\n"
+              "export function seclabB(): void { }\n")
+
+    def errors(self):
+        return self.SP.check_callers()
+
+    def test_control_a_called_entry_and_its_helper_pass(self):
+        self.tree(self.SOURCE, ["seclabA();"])
+        self.assertEqual(self.errors(), [])
+
+    def test_an_uncalled_export_fails(self):
+        self.tree(self.SOURCE + "export function seclabDead(): void { }\n", ["seclabA();"])
+        self.assertTrue(any("seclabDead" in e for e in self.errors()))
+
+    def test_a_comment_is_not_a_caller(self):
+        self.tree(self.SOURCE, ["// seclabA() used to be called here"])
+        self.assertTrue(any("seclabA" in e for e in self.errors()))
+
+    def test_an_import_is_not_a_caller(self):
+        self.tree(self.SOURCE, ["import { seclabA } from './seclabX.js';"])
+        self.assertTrue(any("seclabA" in e for e in self.errors()))
+
+    def test_the_declaring_patch_section_does_not_vouch_for_itself(self):
+        self.tree(self.SOURCE, [], own_section_lines=self.SOURCE.splitlines() + ["seclabA();"])
+        self.assertTrue(any("seclabA" in e for e in self.errors()))
+
+    def test_a_cycle_of_uncalled_entries_does_not_make_itself_live(self):
+        cyc = ("export function seclabC(): void {\n\tseclabD();\n}\n"
+               "export function seclabD(): void {\n\tseclabC();\n}\n")
+        self.tree(self.SOURCE + cyc, ["seclabA();"])
+        errs = self.errors()
+        self.assertTrue(any("seclabC" in e for e in errs) and any("seclabD" in e for e in errs), errs)
+
+    def test_an_exemption_must_name_a_real_consumer_and_go_stale_when_called(self):
+        self.tree(self.SOURCE + "export function seclabE(): void { }\n", ["seclabA();"])
+        self.SP.CALLER_EXEMPT = {"seclabE": {"consumer": "nowhere.ts", "reason": "x"}}
+        self.assertTrue(any("does not exist" in e for e in self.errors()))
+        self.SP.CALLER_EXEMPT = {"seclabA": {"consumer": None, "reason": "x"}}
+        self.assertTrue(any("is stale" in e for e in self.errors()))
+
+    def test_the_real_tree_passes_and_resolve_tab_id_is_live(self):
+        import importlib
+        import sync_patch as fresh
+        importlib.reload(fresh)
+        self.assertEqual(fresh.check_callers(), [])
+        added = fresh._code_only(fresh._patch_added_text())
+        self.assertRegex(added, r"\bseclabResolveTabId\b",
+                         "seclabResolveTabId has no caller in the patch queue's upstream hunks")
