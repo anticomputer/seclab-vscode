@@ -24,8 +24,9 @@ import { ageDays, commitDate, COOLDOWN_DAYS, imageDate, npmDatePublic, pypiDate,
 const repo = path.resolve(import.meta.dirname, '..');
 const daysArg = process.argv.indexOf('--days');
 const minDays = daysArg > 0 ? Number(process.argv[daysArg + 1]) : COOLDOWN_DAYS;
-if (!(minDays >= 0)) {
-	console.error('usage: pin-age.ts [--days N]');
+// Below the feed's hold the rule checks less than it promises; --days 0 passed everything (GATE-14).
+if (!(minDays >= COOLDOWN_DAYS)) {
+	console.error(`usage: pin-age.ts [--days N] (N at least ${COOLDOWN_DAYS}, the cooldown)`);
 	process.exit(2);
 }
 
@@ -109,6 +110,12 @@ for (const f of files) {
 			}
 		}
 	}
+}
+// An empty or foreign file list dates no npm pin and would report clean (GATE-14): the list must
+// name the vsce image's Dockerfile, which installs pinned npm packages, and yield at least one pin.
+if (!files.includes('build/vsce/Dockerfile') || npmPins.length === 0) {
+	console.log(`FAIL  pin-age: the file list (${files.length} Dockerfile(s), ${npmPins.length} npm pin(s)) is empty or isn't this repository's: it must include build/vsce/Dockerfile and its npm pins`);
+	process.exit(1);
 }
 if (process.argv.includes('--list-npm')) {
 	for (const p of npmPins) {

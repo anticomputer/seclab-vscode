@@ -94,5 +94,25 @@ git config --unset core.hooksPath
 out="$(run_hook)"
 [[ "$out" == *'core.hooksPath no longer points at the gate hook'* ]] && ok 'an unset core.hooksPath fails closed' || { bad 'an unset core.hooksPath went unnoticed'; echo "$out" | tail -2; }
 
+# GATE-13: a fully installed hook (publish gate beside it, a stub docker that reports the pinned
+# scanner binary, a private test list) given no ref lines checked nothing, and must block.
+publish_gate_unlock_hooks "$hookdir"
+mkdir -p "$hookdir/publish-gate" "$work/bin"
+cp "$ROOT/build/hooks/publish-gate.sh" "$hookdir/publish-gate/publish-gate.sh"
+hook="$(<"$ROOT/build/hooks/pre-push")"
+hook="${hook//@GITLEAKS_IMAGE@/sha256:$z64}"
+hook="${hook//@GITLEAKS_SHA256@/$z64}"
+hook="${hook//@NODE_IMAGE@/sha256:$z64}"
+hook="${hook//@GATE_SUMS@/x}"
+hook="${hook//@DRIVER_SHA256@/$(sha256 <"$hookdir/publish-gate/publish-gate.sh")}"
+printf '%s\n' "$hook" >"$hookdir/pre-push" && chmod 0755 "$hookdir/pre-push"
+printf '%s\n%s\n' "$(sha256 <"$hookdir/pre-push")" "$z64" >"$hookdir/.installed"
+git config core.hooksPath "$hookdir"
+publish_gate_lock_hooks "$hookdir"
+printf '#!/bin/sh\necho "%s  /usr/bin/gitleaks"\n' "$z64" >"$work/bin/docker" && chmod 0755 "$work/bin/docker"
+printf 'example-known-name\n' >"$work/list" && chmod 0600 "$work/list"
+out="$(PATH="$work/bin:$PATH" SECLAB_DENYLIST_FILE="$work/list" bash "$hookdir/pre-push" origin x </dev/null 2>&1)"
+[[ "$out" == *'no ref lines on stdin, so nothing was checked'* ]] && ok 'a push with no ref lines is blocked, not reported clean (GATE-13)' || { bad 'a push with no ref lines passed'; echo "$out" | tail -2; }
+
 [[ "$fail" == 0 ]] && echo "hook-lock: downgrade protection holds"
 exit "$fail"
