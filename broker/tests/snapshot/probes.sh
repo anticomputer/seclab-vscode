@@ -116,3 +116,33 @@ done
 
 [ "$fails" -eq 0 ] || exit 1
 echo "snapshot probes: ok ($SHELLS; 1 exact tree, 9 refusals each; nothing written outside a context)"
+
+# The revision label (finding 10-1): `build.sh --label` computes it exactly as the build does.
+# Only a broker/ that is exactly HEAD's tree is clean; a modified, untracked, assume-unchanged or
+# skip-worktree file (the last two hide edits from `git status` and `git stash create`) marks
+# it -dirty. Each case runs in a fresh clone of the probe repo.
+mkdir -p "$repo/broker/sub"
+printf 'tracked\n' > "$repo/broker/sub/data.txt"
+git -C "$repo" add broker/sub/data.txt
+git -C "$repo" commit -q -m data
+head=$(git -C "$repo" rev-parse HEAD)
+label_case() {  # $1 shell, $2 name, $3 expected label, $4 shell code that prepares the clone
+  c=$work/label-$1-$2
+  git clone -q "$repo" "$c"
+  (cd "$c" && eval "$4")
+  run=$1; [ "$1" = bash ] && run="bash --posix"
+  got=$(cd "$work" && $run "$c/broker/build.sh" --label 2>"$work/err") || { fail "$1" "label $2: $(cat "$work/err")"; return; }
+  [ "$got" = "$3" ] || fail "$1" "label $2: got '$got', want '$3'"
+}
+for sh in $SHELLS; do
+  label_case "$sh" clean "$head" ':'
+  label_case "$sh" modified "$head-dirty" 'echo changed > broker/sub/data.txt'
+  label_case "$sh" untracked "$head-dirty" 'echo new > broker/sub/new.txt'
+  label_case "$sh" assume-unchanged "$head-dirty" \
+    'git update-index --assume-unchanged broker/sub/data.txt && echo hidden > broker/sub/data.txt'
+  label_case "$sh" skip-worktree "$head-dirty" \
+    'git update-index --skip-worktree broker/sub/data.txt && echo hidden > broker/sub/data.txt'
+  label_case "$sh" outside-broker "$head" 'echo elsewhere > outside.txt'
+done
+[ "$fails" -eq 0 ] || exit 1
+echo "snapshot label probes: ok ($SHELLS; clean, outside-broker clean; modified, untracked, assume-unchanged, skip-worktree dirty)"

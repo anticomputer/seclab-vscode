@@ -83,6 +83,10 @@ if [ "${1:-}" = --write-context ]; then
 fi
 
 tag=${1:-seclab-broker:dev}
+# `build.sh --label`: only compute and print the revision label (test entry; no context, no
+# image): the snapshot and dirty checks below are exactly the build's.
+label_only=
+[ "$tag" != --label ] || label_only=1
 prefix=$(git -C "$here" rev-parse --show-prefix)
 revision=$(git -C "$here" rev-parse HEAD)
 # The snapshot comes first: nothing from the working tree is read or run before it.
@@ -98,6 +102,10 @@ git -C "$here" diff --quiet "$revision" "$snap" -- . || dirty=1
 # assume-unchanged and skip-worktree entries hide edits from `git status` and `stash create`.
 [ -z "$(git -C "$here" ls-files -v -- . | grep -v '^H ')" ] || dirty=1
 [ -z "$dirty" ] || revision="$revision-dirty"
+if [ -n "$label_only" ]; then
+  printf '%s\n' "$revision"
+  exit 0
+fi
 # gh cfs accepts only a local directory as the context, so the snapshot is written (by
 # write_context, above) into a fresh directory under .work/ (gitignored), removed on exit.
 mkdir -p "$top/.work"

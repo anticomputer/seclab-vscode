@@ -550,8 +550,8 @@ def commands(root: Path = REPO, docs: list[str] | None = None) -> int:
     return 0
 
 
-def commands_self_test() -> int:
-    """GATE-9: a missing checked doc and a doc set with no block both fail; one block passes."""
+def self_test() -> int:
+    """GATE-9: `--run-commands` can't pass having run nothing. Each case names the defect."""
     import contextlib
     import io
     import tempfile
@@ -559,24 +559,28 @@ def commands_self_test() -> int:
         root = Path(d)
         (root / "none.md").write_text("# no blocks\n\n```sh\necho not annotated\n```\n")
         (root / "one.md").write_text("# one\n\n<!-- ci: run -->\n```sh\ntrue\n```\n")
-        cases = [(["missing.md"], 1), (["none.md"], 1), (["none.md", "one.md"], 0)]
+        cases = [
+            ("GATE-9: a checked doc that is missing fails", ["missing.md"], 1),
+            ("GATE-9: checked docs with no ci: run block fail", ["none.md"], 1),
+            ("GATE-9: one ci: run block is emitted and passes", ["none.md", "one.md"], 0),
+        ]
         bad = []
-        for docs, want in cases:
+        for name, docs, want in cases:
             with contextlib.redirect_stdout(io.StringIO()) as o, contextlib.redirect_stderr(io.StringIO()):
                 got = commands(root, docs)
             if got != want or (want == 1 and o.getvalue()) or (want == 0 and "true" not in o.getvalue()):
-                bad.append(f"{docs}: exit {got}, want {want}")
+                bad.append(f"{name}: exit {got}, want {want}")
     if bad:
         print("docs commands self-test: FAILED: " + "; ".join(bad), file=sys.stderr)
         return 1
-    print("docs commands self-test: ok (missing doc and zero blocks fail)")
+    print(f"docs commands self-test: ok ({len(cases)} cases)")
     return 0
 
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "check"
     if cmd == "commands":
-        sys.exit(commands_self_test() if sys.argv[2:] == ["--self-test"] else commands())
+        sys.exit(self_test() if sys.argv[2:] == ["--self-test"] else commands())
     if cmd not in ("check", "write"):
         sys.exit(__doc__)
     sys.exit(run(cmd))
