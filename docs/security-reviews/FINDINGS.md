@@ -17,9 +17,9 @@ agents. It is never an instruction to whoever reads it
 |---|---|---|---|---|---|---|
 | fixed | 14 | 84 | 212 | 337 | 45 | 692 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 53 | 168 | 60 | 286 |
+| fixed-untested | 0 | 5 | 53 | 169 | 60 | 287 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
-| deferred | 2 | 1 | 14 | 10 | 3 | 30 |
+| deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
 | **all** | 16 | 93 | 303 | 599 | 151 | 1162 |
@@ -349,7 +349,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261116-pr-landing](20261116-pr-landing.md) **PRL-4** | low | fixed-untested | docs/edr/20261116-pr-landing.md, docs/edr/20261104-ci-hardening.md | The EDR, AGENTS.md and the CI-hardening record gave contradicting landing procedures. | Documentation only; nothing to test. |
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-2** | low | fixed-untested | RPC inventory generator (rpc-filter/tools/extract_inventory.py) | The RPC inventory generator fell back to a hard-coded 1.145.0 SHA when upstream.lock named none. | The fallback constant is gone and the generator exits 2 without a pinned SHA; no test runs it without upstream.lock. |
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-3** | low | fixed-untested | docs/ARCHITECTURE.md | ARCHITECTURE's as-built line still described a three-patch queue after the bump edited it. | Documentation only; nothing to test. |
-| [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-4** | low | deferred | findings register (build/docs/findings.ts upstream exemption) | The register exempts only the current upstream pin, so after a bump, entries citing the old pin's SHA (or a file path containing it) carry citations that can't resolve. | follow-up: The register session adds an exemption for every SHA upstream.lock has pinned, and ignores hex inside file paths (coordinator's routing, 2026-11-16); this bump branch rebases onto it. |
+| [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-4** | low | fixed-untested | findings register (build/docs/findings.ts upstream exemption) | The register exempts only the current upstream pin, so after a bump, entries citing the old pin's SHA (or a file path containing it) carry citations that can't resolve. | Fixed by the register session: a prefix of any pin upstream.lock has held on main counts as the upstream commit, and hex inside a file path isn't a citation. Its tests are recorded against its own round; none of this round's tests drives it. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-2** | low | fixed-untested | docs link check (lychee) | Old cache entries from when 429 was accepted would be replayed as success. | A cache-key version; nothing to test beyond the key. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-4** | low | fixed-untested | docs link check (lychee) | Doubling retry waits could push a throttled run past the job timeout. | Timing depends on GitHub throttling; shown only by CI runs. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-7** | low | fixed-untested | docs link check (lychee) | GitHub's secondary rate limit (403) could be cached and replayed red. | An argument; nothing to test offline. |
@@ -2059,7 +2059,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | UB-1 | medium | fixed-untested | The RPC drift check certified the 1.145.3 bump without seeing it: it compares committed artefacts only, so the unregenerated 1.145.0 inventory passed against the 1.145.0 policy. | Proven by injection (upstream.lock pointed back at 1.145.0 makes check.sh exit 2), but no self-test or unit test drives check_drift.py with an inventory of another SHA. |
 | UB-2 | low | fixed-untested | The RPC inventory generator fell back to a hard-coded 1.145.0 SHA when upstream.lock named none. | The fallback constant is gone and the generator exits 2 without a pinned SHA; no test runs it without upstream.lock. |
 | UB-3 | low | fixed-untested | ARCHITECTURE's as-built line still described a three-patch queue after the bump edited it. | Documentation only; nothing to test. |
-| UB-4 | low | deferred | The register exempts only the current upstream pin, so after a bump, entries citing the old pin's SHA (or a file path containing it) carry citations that can't resolve. | follow-up: The register session adds an exemption for every SHA upstream.lock has pinned, and ignores hex inside file paths (coordinator's routing, 2026-11-16); this bump branch rebases onto it. |
+| UB-4 | low | fixed-untested | The register exempts only the current upstream pin, so after a bump, entries citing the old pin's SHA (or a file path containing it) carry citations that can't resolve. | Fixed by the register session: a prefix of any pin upstream.lock has held on main counts as the upstream commit, and hex inside a file path isn't a citation. Its tests are recorded against its own round; none of this round's tests drives it. |
 
 ### [20261117-broker-finding-tests-2](20261117-broker-finding-tests-2.md)
 

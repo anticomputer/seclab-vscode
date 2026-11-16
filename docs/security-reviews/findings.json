@@ -17081,7 +17081,7 @@
 			"component": "RPC drift check (rpc-filter/tools/check_drift.py)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "6f974480b9d01e96c1be6c5b9783a05cf8eca817",
+			"commit": "patch:f95d9ca0065beb34441e8be260117784485c7654",
 			"gap": "Proven by injection (upstream.lock pointed back at 1.145.0 makes check.sh exit 2), but no self-test or unit test drives check_drift.py with an inventory of another SHA."
 		},
 		{
@@ -17093,7 +17093,7 @@
 			"component": "RPC inventory generator (rpc-filter/tools/extract_inventory.py)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "6f974480b9d01e96c1be6c5b9783a05cf8eca817",
+			"commit": "patch:f95d9ca0065beb34441e8be260117784485c7654",
 			"gap": "The fallback constant is gone and the generator exits 2 without a pinned SHA; no test runs it without upstream.lock."
 		},
 		{
@@ -17105,7 +17105,7 @@
 			"component": "docs/ARCHITECTURE.md",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "6f974480b9d01e96c1be6c5b9783a05cf8eca817",
+			"commit": "patch:f95d9ca0065beb34441e8be260117784485c7654",
 			"gap": "Documentation only; nothing to test."
 		},
 		{
@@ -17116,8 +17116,9 @@
 			"summary": "The register exempts only the current upstream pin, so after a bump, entries citing the old pin's SHA (or a file path containing it) carry citations that can't resolve.",
 			"component": "findings register (build/docs/findings.ts upstream exemption)",
 			"owner": "fork-build",
-			"status": "deferred",
-			"followUp": "The register session adds an exemption for every SHA upstream.lock has pinned, and ignores hex inside file paths (coordinator's routing, 2026-11-16); this bump branch rebases onto it."
+			"status": "fixed-untested",
+			"commit": "6d798949bb6c0334c8151bbbc99ff55f6b05c593",
+			"gap": "Fixed by the register session: a prefix of any pin upstream.lock has held on main counts as the upstream commit, and hex inside a file path isn't a citation. Its tests are recorded against its own round; none of this round's tests drives it."
 		}
 	]
 }
