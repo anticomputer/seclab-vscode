@@ -214,6 +214,12 @@ test('obs detect: rpc.deny-burst from trusted filter denials only; allows and ot
 	assert.deepEqual(hits, []);
 	assert.deepEqual(rpc(19, 'deny'), ['rpc.deny-burst:trusted']);
 	assert.deepEqual(rpc(20, 'deny'), [], 'reported once per 10 minutes');
+	// Review round 14: the filter collapses repeats of one call into a line with `count`. One
+	// method probed hard (2 lines, 1 + 37) is a burst; aggregated allows still never count.
+	const det2 = new Detector();
+	const one = (i: number, verdict: string, count?: number) => det2.check(ev({ source: 'rpc-filter', integrity: 'trusted', class: 'rpc.decision', time: new Date(t0 + i * 1000).toISOString(), detail: { surface: 'rpc', verdict, ...(count ? { count } : {}) } }), {}).map(d => d.rule);
+	assert.deepEqual([...one(0, 'allow', 500), ...one(1, 'deny')], []);
+	assert.deepEqual(one(11, 'deny', 37), ['rpc.deny-burst']);
 });
 
 test('obs detect: a regular beacon is reported once; jitter is not a beacon', () => {
@@ -1132,6 +1138,7 @@ test('window decision logs: prefix parsed, sources pinned per file, hostile line
 	const rpcOnly = new Set(['rpc-filter']);
 	const line = (o: unknown) => `2026-11-06 12:00:00.000 [info] ${JSON.stringify(o)}\n`;
 	const deny = (n: number) => ({ source: 'rpc-filter', class: 'rpc.decision', priority: 'warning', summary: 'deny rpc', detail: { surface: 'rpc', ref: `rpc:MainThreadX.$m${n}`, verdict: 'deny', nested: { x: 1 } } });
+	const installed = { source: 'rpc-filter', class: 'rpc.decision', priority: 'informational', summary: 'filter installed', detail: { surface: 'rpc', ref: 'rpc:seclab.installed', verdict: 'allow', reason: 'marker' } };
 	assert.deepEqual(parseWindowLogLine(line(deny(1)).trimEnd(), rpcOnly), { source: 'rpc-filter', class: 'rpc.decision', priority: 'warning', summary: 'deny rpc', detail: { surface: 'rpc', ref: 'rpc:MainThreadX.$m1', verdict: 'deny' } }, 'nested detail dropped');
 	assert.equal(parseWindowLogLine(line({ ...deny(1), source: 'ahp-gate' }), rpcOnly), undefined, 'a source the file may not carry');
 	assert.equal(parseWindowLogLine(line({ ...deny(1), source: 'broker' }), new Set(['ahp-gate'])), undefined);
@@ -1196,7 +1203,7 @@ test('window decision logs: prefix parsed, sources pinned per file, hostile line
 
 	// Forwarder: in order, at most 64 per report, held (not dropped) while tabd is away, and a
 	// reload resumes where delivery ended.
-	fs.writeFileSync(f, Array.from({ length: 150 }, (_, i) => line(deny(i))).join(''));
+	fs.writeFileSync(f, `2026-11-06 11:59:59.000 [info] ${JSON.stringify(installed)}\n` + Array.from({ length: 150 }, (_, i) => line(deny(i))).join(''));
 	const batches: number[] = [];
 	const got: string[] = [];
 	let up = false;
@@ -1212,8 +1219,8 @@ test('window decision logs: prefix parsed, sources pinned per file, hostile line
 	assert.deepEqual(got, []);
 	up = true;
 	await fw.tick();
-	assert.deepEqual(batches, [64, 64, 22]);
-	assert.deepEqual(got, Array.from({ length: 150 }, (_, i) => `rpc:MainThreadX.$m${i}`));
+	assert.deepEqual(batches, [64, 64, 23]);
+	assert.deepEqual(got, ['rpc:seclab.installed', ...Array.from({ length: 150 }, (_, i) => `rpc:MainThreadX.$m${i}`)]);
 	fw.dispose();
 	fs.appendFileSync(f, line(deny(150)));
 	got.length = 0;
@@ -1221,6 +1228,29 @@ test('window decision logs: prefix parsed, sources pinned per file, hostile line
 	await again.tick();
 	assert.deepEqual(got, ['rpc:MainThreadX.$m150'], 'a reloaded window reports only new lines');
 	again.dispose();
+
+	// Review round 14: a reused window. Tab A's lines (including ones A never delivered), then the
+	// renderer reloads for tab B and the filter writes a new install line. B's forwarder (no saved
+	// position of its own) forwards only B's session, from both logs; with no install line yet it
+	// forwards nothing.
+	for (const n of fs.readdirSync(dir)) {
+		fs.rmSync(path.join(dir, n), { recursive: true, force: true });
+	}
+	const at = (t: string, o: unknown) => `2026-11-16 ${t} [info] ${JSON.stringify(o)}\n`;
+	const gate = (r: string) => ({ source: 'ahp-gate', class: 'ahp.decision', priority: 'notice', summary: r, detail: { gateRule: r, connection: 0, verdict: 'deny' } });
+	const gf = path.join(dir, 'seclabAhpGate.log');
+	fs.writeFileSync(f, at('10:00:00.000', installed) + at('10:00:01.000', deny(1)) + at('10:00:02.000', deny(2)));
+	fs.writeFileSync(gf, at('10:00:01.500', gate('ahp-gate.a-session')));
+	const bGot: string[] = [];
+	const b = new WindowLogForwarder({ dir, report: async evs => { bGot.push(...evs.map(e => String(e.detail?.ref ?? e.detail?.gateRule))); } });
+	fs.writeFileSync(f, '');
+	await b.tick();
+	assert.deepEqual(bGot, [], 'no install line: no session, nothing forwarded');
+	fs.writeFileSync(f, at('10:00:00.000', installed) + at('10:00:01.000', deny(1)) + at('10:00:02.000', deny(2)) + at('10:05:00.000', installed) + at('10:05:01.000', deny(3)));
+	fs.appendFileSync(gf, at('10:05:02.000', gate('ahp-gate.b-session')));
+	await b.tick();
+	assert.deepEqual(bGot, ['ahp-gate.b-session', 'rpc:seclab.installed', 'rpc:MainThreadX.$m3'], 'only the current session, from both logs (gate log first)');
+	b.dispose();
 });
 
 test('settings withheld (0036): a tab-originated call can only produce a true notice; forged claims are refused', async () => {

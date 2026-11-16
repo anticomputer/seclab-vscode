@@ -22,6 +22,13 @@ reached the stream, Tab Activity or the detections.
      forwards nothing, rather than guessing.
    - The tab id is the window's own `seclab+<tab>` authority, never a field of a line.
      The lines carry no tab id.
+   - **Only this window session's lines** (review round 14). A window keeps its log folder
+     when it is reused for another workspace, so one log can hold several tabs' lines. Each
+     renderer installs the filter once and writes `rpc:seclab.installed` first, so the
+     latest install line starts the current session. The forwarder starts the RPC log there
+     and drops lines in both logs stamped (by the logger, on the host) before it. Until an
+     install line exists, nothing is forwarded. A resume position is used only when it lies
+     after the install line in the same file.
 2. **Line shape (agreed with the RPC session):**
    ```json
    {"source":"rpc-filter","class":"rpc.decision","priority":"warning","summary":"deny rpc","detail":{"surface":"rpc","ref":"rpc:MainThreadTerminalService.$createTerminal","verdict":"deny","reason":"policy","claimedExtensionId":"evil.ext"}}
@@ -29,11 +36,14 @@ reached the stream, Tab Activity or the detections.
    - `detail` is the filter's `SeclabDecision` minus `tabId` and `at`. `summary` is fixed
      text; `ref`, `reason` and `claimedExtensionId` are tab-chosen and tagged untrusted.
    - `priority` is `warning` for deny and prompt, `notice` for rewrite, `informational`
-     for aggregated allows (with `count`).
-   - Lines are at most 4 KiB, with `ref` cut to 1 KiB. A window writes at most 2 MB of
-     filter decisions (rpc-core `338134b`, counted in bytes written), then one
-     `rpc:seclab.log-capped` deny, so the log fits one spdlog file (5 MB). The gate caps at
-     2000 decisions per connection.
+     for allows. The filter collapses repeats of one (surface, id, verdict) within 10 s,
+     denials included, into a follow-up line with `count`.
+   - The landed writer (patch 0005, `cc51fa7d`) bounds `ref` to 256 characters and
+     `reason` to 512 before serialising, and a line to 4096; a line still over budget is
+     written without its free text, never cut. Its byte budget is 512 KiB per rolling
+     60 s window, refilled each window; a suppressed run is summarised as one
+     `rpc:seclab.log-throttled` deny with its `count`. The gate caps at 2000 decisions per
+     connection.
 3. **Each file may carry only its own sources:** `seclabAhpGate.log` carries `ahp-gate`,
    `ahp-reverse` and `ahp-credential`; `seclabRpcFilter.log` carries `rpc-filter`. tabd
    then pins each source's classes and sets integrity from the source (`trusted`).
@@ -60,8 +70,9 @@ reached the stream, Tab Activity or the detections.
    Such a ref now lands as escaped `detail.refText`, and `ref` stays exact or absent. The
    `data:` surface is accepted too.
 7. **New detection `rpc.deny-burst`:** 20 or more trusted filter denials (or prompts,
-   which fail closed until they are wired) from one tab within 60 s, reported at most
-   once per 10 minutes. It notifies like `ahp.deny-burst`.
+   which fail closed until they are wired) from one tab within 60 s, each line weighted by
+   its `count` (at most 1000), so probing one method hard still counts (review round 14).
+   Reported at most once per 10 minutes. It notifies like `ahp.deny-burst`.
 
 ## Why the label is `trusted`
 The logs are written by the main process on the host. A tab could forge a line only by:
@@ -72,8 +83,12 @@ The logs are written by the main process on the host. A tab could forge a line o
   limited to the tab's own `vscode-remote://seclab+<tab>` URIs, `untitled:` and its
   extensions' read-only resources; `$mkdir`, `$copy` and `$rename` are denied.
 
-The RPC session gates both facts in its build (`check_log_trust`, rpc-core `a7f4fb1`), so
-the build fails if either weakens.
+The RPC session gates both facts in CI (`check_log_trust` in `rpc-filter/tools/check.sh`).
+That check is narrower than "fails if either weakens" (review round 14): it accepts any
+`allow_with_constraint` on `$writeFile` without checking the constraint is the URI rule, and
+doesn't pin `$delete` (deleting the log would stop forwarding) or other host-file writers
+such as `$tryApplyWorkspaceEdit` and `$trySaveDocument`. All are denied or URI-constrained
+in the landed policy today; tightening the check is asked of the RPC session.
 
 **Merge order is enforced in code** (review round 12, HIGH before this fix). Before the
 filter ships, a tab can reach `MainThreadLogger.$log`, and its init data names the logger
@@ -84,17 +99,15 @@ URIs. The Tab Manager forwards nothing, with a warning in its log, unless both o
   policy table was applied, so the log calls it "RPC policy table applied", never "filter
   active";
 - the built workbench bundle (`out/vs/workbench/workbench.desktop.main.js`) contains
-  `seclabRpcFilterEnforcing:<that sha256>`. The marker is generated into `seclabRpcFilter.ts`
-  (rpc-core `74a6d78`, the same patch as the filter and its log), and `emit_policy.py --check`
-  fails on drift. The filter names it in the log's first line (`rpc:seclab.installed`), so
-  tree-shaking can't drop it. A series with 0005 but without the enforcing code therefore
-  forwards nothing.
+  `seclabRpcFilterEnforcing:<that sha256>`. The marker is a literal in `seclabRpcFilter.ts`
+  (patch 0005, the same patch as the filter and its log), and the filter names it in the
+  log's first line (`rpc:seclab.installed`), so tree-shaking can't drop it. A series with
+  0005 but without the enforcing code therefore forwards nothing.
 
-Together these establish **policy table applied and enforcement code present**, not
-enforcement demonstrated. That the filter is attached to every RPC protocol is the RPC
-session's runtime proof, which is not yet complete. Nothing yet checks in a release artefact
-that the marker agrees with the stamp: that `check-release` assertion is owed by Fork-build.
-Until it exists, this runtime check is the only one.
+Together these establish **policy table applied and enforcement code present**; that the
+filter is attached to every RPC protocol rests on the RPC session's runtime proof, run
+before the core landed (`cc51fa7d`). `check-release` also requires every marker in a
+release artefact to name the stamped table.
 
 The bundle is scanned once per window, off the activation path.
 
@@ -115,3 +128,20 @@ The bundle is scanned once per window, off the activation path.
   it has one.
 - A build without the filter forwards nothing; filter and gate decisions then stay in the
   window logs only.
+
+## Evidence on record
+- **`fixture:test/observability/rpc-prober`:** `node test/observability/window-log-probe.ts
+  --app .work/app-branch/seclab-vscode.app`, branch build 43935119119 (`5a26d48`, on main
+  with the RPC core: stamp `seclabRpcPolicy.sha256` c4d64e51…, the matching enforcing
+  marker, and this forwarder), sbx, headless driver, 2026-11-16. In each variant the prober
+  ran in the tab and the RPC filter refused its call; the window's `seclabRpcFilter.log` had
+  the install line and the denial, and `seclabAhpGate.log` had one gate decision.
+  - **Unmodified build:** all 41 lines (40 RPC filter, 1 AHP gate) reached tabd as trusted
+    `rpc.decision` / `ahp.decision` events, the probed command's `ref` tagged untrusted.
+  - **A copy without the product stamp:** tabd got none of the 60 lines; the Tab Manager
+    logged "no RPC policy table applied in this build".
+  - **A copy with the bundle's marker altered:** tabd got none; the Tab Manager logged "RPC
+    policy table applied (c4d64e51691e), enforcement marker missing in this build".
+
+  The editor ran background-only and never took focus; every variant's teardown was clean,
+  and the altered copies were deleted with their run directories.

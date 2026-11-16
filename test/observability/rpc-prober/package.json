@@ -1,0 +1,14 @@
+{
+	"name": "seclab-rpc-prober",
+	"displayName": "seclab RPC-filter prober (test only)",
+	"description": "Test extension for the window-log probe: from inside a tab, asks the editor to run a seclab.* command that does not exist, so the RPC filter records a denial. Does nothing unless armed by the run.",
+	"publisher": "seclab-test",
+	"version": "0.0.1",
+	"private": true,
+	"license": "MIT",
+	"engines": { "vscode": "^1.90.0" },
+	"main": "./extension.js",
+	"activationEvents": ["onStartupFinished"],
+	"extensionKind": ["workspace"],
+	"capabilities": { "untrustedWorkspaces": { "supported": true } }
+}

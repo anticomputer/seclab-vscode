@@ -153,6 +153,10 @@ export class WindowLogTail {
 	private skipping = false;
 	/** Lines dropped as oversized or invalid (counted, never forwarded). */
 	invalid = 0;
+	/** Lines stamped before this window session began (an earlier tab in the same window). */
+	earlier = 0;
+	/** Session start (logger time, ms): earlier lines are another session's and never forwarded. */
+	notBefore: number | undefined;
 
 	constructor(file: string, log: WindowLog) {
 		this.file = file;
@@ -241,6 +245,17 @@ export class WindowLogTail {
 				continue;
 			}
 			const ev = parseWindowLogLine(line, this.log.sources);
+			if (ev && this.notBefore !== undefined) {
+				const t = loggerTime(line);
+				if (t === undefined) {
+					this.invalid++;
+					continue;
+				}
+				if (t < this.notBefore) {
+					this.earlier++;
+					continue;
+				}
+			}
 			if (ev) {
 				out.push(ev);
 			} else if (line.trim()) {
@@ -290,6 +305,69 @@ function statOrUndefined(p: string): fs.Stats | undefined {
 	}
 }
 
+/** The logger's own timestamp (`2026-11-16 14:28:02.366 [info] …`, host local time), in ms. */
+export function loggerTime(line: string): number | undefined {
+	const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})\.(\d{3}) /.exec(line);
+	if (!m) {
+		return undefined;
+	}
+	const t = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6], +m[7]).getTime();
+	return Number.isFinite(t) ? t : undefined;
+}
+
+/** Where this window session's RPC-filter log begins. */
+export interface WindowSession { time: number; ino: number; pos: number }
+
+/**
+ * The start of the current window session (review round 14): the last `rpc:seclab.installed`
+ * line the RPC filter wrote. A window keeps its log folder when it is reused for another
+ * workspace, and its renderer reloads and installs the filter again, so everything before the
+ * latest install line belongs to an earlier tab. Searched newest file first. Undefined until the
+ * filter has written one (then nothing is forwarded yet).
+ */
+export function findWindowSession(rpcLog: string): WindowSession | undefined {
+	for (let k = 0; k <= MAX_ROTATED; k++) {
+		const file = rotatedName(rpcLog, k);
+		let fd: number;
+		try {
+			fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+		} catch {
+			if (k === 0) {
+				continue;
+			}
+			return undefined;
+		}
+		try {
+			const st = fs.fstatSync(fd);
+			if (!st.isFile() || st.size > 64 << 20) {
+				continue;
+			}
+			const buf = Buffer.alloc(st.size);
+			const n = fs.readSync(fd, buf, 0, st.size, 0);
+			let found: WindowSession | undefined;
+			let off = 0;
+			for (const line of buf.toString('utf8', 0, n).split('\n')) {
+				const start = off;
+				off += Buffer.byteLength(line) + 1;
+				if (!line.includes('rpc:seclab.installed')) {
+					continue;
+				}
+				const ev = parseWindowLogLine(line, WINDOW_LOGS.get('seclabRpcFilter.log')!.sources);
+				const time = loggerTime(line);
+				if (ev?.detail?.ref === 'rpc:seclab.installed' && time !== undefined) {
+					found = { time, ino: st.ino, pos: start };
+				}
+			}
+			if (found) {
+				return found;
+			}
+		} finally {
+			fs.closeSync(fd);
+		}
+	}
+	return undefined;
+}
+
 export interface WindowLogForwarderOptions {
 	/** The window's log directory (`windowLogsPath`). */
 	readonly dir: string;
@@ -311,14 +389,41 @@ export class WindowLogForwarder {
 	private readonly backlog = new Map<WindowLogTail, ReportEvent[]>();
 	private readonly invalidSeen = new Map<WindowLogTail, number>();
 	private readonly o: WindowLogForwarderOptions;
+	private session: WindowSession | undefined;
 
 	constructor(o: WindowLogForwarderOptions) {
 		this.o = o;
 		for (const [name, log] of WINDOW_LOGS) {
-			const t = new WindowLogTail(path.join(o.dir, name), log);
-			t.resume(o.state?.get(name));
-			this.tails.push(t);
+			this.tails.push(new WindowLogTail(path.join(o.dir, name), log));
 		}
+	}
+
+	/**
+	 * Bind the tails to this window session (review round 14): the RPC log starts at the
+	 * session's install line, or at the saved position when that is later in the same file (a
+	 * restarted extension host); every line stamped before the session is dropped. Until the
+	 * filter has written its install line there is no session, and nothing is forwarded.
+	 */
+	private bindSession(): boolean {
+		if (this.session) {
+			return true;
+		}
+		const s = findWindowSession(path.join(this.o.dir, 'seclabRpcFilter.log'));
+		if (!s) {
+			return false;
+		}
+		this.session = s;
+		for (const t of this.tails) {
+			const name = path.basename(t.file);
+			const saved = this.o.state?.get(name);
+			t.notBefore = s.time;
+			if (name === 'seclabRpcFilter.log') {
+				t.resume(saved && saved.ino === s.ino && saved.pos >= s.pos ? saved : { ino: s.ino, pos: s.pos });
+			} else {
+				t.resume(saved);
+			}
+		}
+		return true;
 	}
 
 	start(): void {
@@ -336,6 +441,9 @@ export class WindowLogForwarder {
 		}
 		this.busy = true;
 		try {
+			if (!this.bindSession()) {
+				return;
+			}
 			for (const t of this.tails) {
 				await this.drain(t);
 			}
