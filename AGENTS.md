@@ -357,7 +357,7 @@ build/apply-patches.sh --check  # patch queue == patches/series (no unlisted pat
 ./seclab docs check --run-commands --paired   # docs gate (records, links, ARCHITECTURE, findings register, ci: run blocks, paired docs); --online adds lychee
 ./seclab findings check         # findings register only: every review finding registered, fixed ones tested, no new open high
 ./seclab findings baseline      # the open high/critical findings the ratchet still allows (markdown)
-./seclab findings remap --branch <name>   # after rebasing a branch the register names: follow its cited commits (patch-id, else subject+files)
+./seclab findings remap --branch <name> [--patch]   # after rebasing a branch the register names: follow its cited commits (patch-id, else subject+files); --patch cites unlanded ones as patch:<id>
 ./seclab findings rot           # every register citation that no longer resolves (the weekly job's strict view)
 build/check-release.sh .work/out/seclab-reh-linux-arm64.tar.gz   # no test hooks in a release artifact (also: <app>/Contents/Resources/app)
 node test/containment/teardown.test.ts   # teardown regression: orphaned editor tree + leftover tab pod are stopped/removed

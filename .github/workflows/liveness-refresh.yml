@@ -64,15 +64,30 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      # Listings, not alarms: open highs and rotted citations are printed and the job passes. It
+      # fails only on a defect in the listing itself, or on a baseline larger than a week ago (the
+      # docs gate already refuses growth; this catches anything that got past it).
       - name: Open high/critical findings still in the baseline (offline container)
         shell: bash
         run: |
           ./seclab findings baseline | tee "$RUNNER_TEMP/baseline.md"
           grep -q '^## Security findings baseline: [0-9][0-9]* open high/critical$' "$RUNNER_TEMP/baseline.md"
           cat "$RUNNER_TEMP/baseline.md" >> "$GITHUB_STEP_SUMMARY"
-      # The strict view (review ZZZ): every register citation that no longer resolves, touched or
-      # not. A change only answers for the entries it touches, so rot left by a rebased branch is
-      # listed here; the weekly and dispatched runs fail on it, a push run only lists it.
+      - name: The baseline didn't grow over the last week
+        shell: bash
+        run: |
+          now="$(sed -n 's/^## Security findings baseline: \([0-9][0-9]*\) open high\/critical$/\1/p' "$RUNNER_TEMP/baseline.md")"
+          # Anchored on the register's own history (AAAA-5): its last change over a week old, else
+          # its first commit; a register with no history here fails rather than skipping.
+          reg=docs/security-reviews/findings.json
+          old="$(git rev-list -1 --before='7 days ago' HEAD -- "$reg")"
+          [[ -n "$old" ]] || old="$(git rev-list --reverse HEAD -- "$reg" | head -1)"
+          [[ -n "$old" ]] && git cat-file -e "$old:$reg"
+          was="$(git show "$old:$reg" | jq '.baseline | length')"
+          echo "baseline: $now now, $was a week ago (${old:0:12})"
+          [[ "$now" =~ ^[0-9]+$ && "$was" =~ ^[0-9]+$ ]]
+          [[ "$now" -le "$was" ]]
+      # Rot is listed for the owning sessions to remap; only a defect in the listing (exit 2) fails.
       - name: Register citations that no longer resolve
         if: always()
         shell: bash
@@ -81,4 +96,4 @@ jobs:
           ./seclab findings rot 2>&1 | tee "$RUNNER_TEMP/rot.txt" || rc=$?
           # An indented block with backticks stripped: register text can't break out of it (ZZZ-4).
           { echo '## Register citations that no longer resolve'; echo; grep -E 'cites|no rotted' "$RUNNER_TEMP/rot.txt" | tr -d '`' | sed 's/^/    /' || true; } >> "$GITHUB_STEP_SUMMARY"
-          if [[ "$GITHUB_EVENT_NAME" != push ]]; then exit "$rc"; fi
+          [[ $rc -le 1 ]]

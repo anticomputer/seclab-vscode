@@ -109,7 +109,8 @@ by nobody: a record saying "Fixed" was the only evidence.
    `baseline`. Each names its owning session and component, nothing may join, and each leaves when
    fixed on `main` with its test or accepted by the owner. The weekly `liveness-refresh` workflow
    lists the baseline in its own job (`./seclab findings baseline`: offline, no token, only
-   `contents: read`), which fails if a baseline key doesn't resolve, so none goes quiet.
+   `contents: read`), which passes while listing it and fails only if a baseline key doesn't resolve
+   or the baseline is larger than a week ago.
 
 ## Liveness
 The check is reached from `./seclab docs check`, which the required `docs` job runs on every push and
@@ -152,9 +153,17 @@ script run by a required job: what runs it is the docs job, and its evidence is 
   session (or whoever touches the entry next) runs `./seclab findings remap --branch B`, which
   follows each rotted citation of B's entries to the one commit in B's history (main's included)
   with the same patch-id, else the one with the same subject and file list, rewrites those entries,
-  and reports anything with no equivalent or several, for a hand remap; it never guesses. The
+  and reports anything with no equivalent or several, for a hand remap; it never guesses. A
+  citation of a change that isn't on main yet may be written `patch:<git patch-id --stable>`
+  (only in an entry with a branch, never a round label): it resolves against the commits its
+  branch, or HEAD, has and main doesn't, so it survives rebases; once a commit on main carries
+  that patch-id, a change touching the entry must pin it to that SHA. `remap --patch` converts a
+  branch's unlanded citations to that form. The
   strict view is `./seclab findings rot`, every rotted citation touched or not, which the weekly
-  `liveness-refresh` job lists in its summary and fails on (a push run only lists it). The rule
+  `liveness-refresh` job lists in its summary without failing. That job fails only on a defect
+  in a listing (a malformed citation line, an unreadable baseline) or on a baseline larger than a
+  week ago, so a red run means something to fix, not a reminder (coordinator decision,
+  2026-11-16). The rule
   covers the register only: review records and EDRs are append-only and keep the SHAs they were
   written with, some of them now historical (review YYY-7).
 - The repo is public, so FINDINGS.md and the weekly listing publish the open findings with their

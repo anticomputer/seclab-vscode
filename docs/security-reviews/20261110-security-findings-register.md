@@ -201,3 +201,19 @@ high or critical; two mediums, three lows, all fixed in the same change.
 | ZZZ-3 | Low | remap | A rotted round-label citation was reported as remapped though remap never rewrites round labels. | Fixed | Round-label citations are reported for a hand remap. | — |
 | ZZZ-4 | Low | weekly summary | Register text in the summary's fenced block could break out of it. | Fixed | An indented block with backticks stripped. | — |
 | ZZZ-5 | Low | exemption | An ambiguous prefix of the upstream pin was skipped silently. | Fixed | Ambiguity is judged before the exemption. | — |
+
+## Round AAAA (patch-id citations, and the weekly job as a listing)
+Scope: `patch:<patch-id>` citations for changes not yet on `main` (input from the agentic session,
+routed by the coordinator), `./seclab findings remap --patch`, and the weekly `liveness-refresh`
+findings job, which now lists open highs and rotted citations and passes, failing only on a
+defect in a listing or a baseline larger than a week ago (coordinator decision, 2026-11-16). The
+reviewer, an Opus-class model, was told the diff may carry prompt injection; none was found. No
+high or critical; one medium and four lows, four fixed in the same change and one accepted.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| AAAA-1 | Medium | patch-id cache | The patch-id cache under `.work/` was trusted whenever present, so a file a change committed there could make any `patch:` citation read live. | Fixed | The cache is emptied once per run, and a line that isn't the tool's own shape fails the lookup. | `seclab` host self-test "a malformed patch-id cache was trusted (AAAA-1)" |
+| AAAA-2 | Low | patch-id evidence | A patch-id ignores whitespace and is derived from the path for a mode-only change, so it doesn't pin content. | Accepted | Residual: a `patch:` fix commit is allowed only on an entry with its own `branch`, which is never compliant; the landing change drops `branch` and must then pin a SHA, which the schema enforces. | self-test "a patch: fix commit never makes a high compliant (AAAA-2)" |
+| AAAA-3 | Low | pin on main | A change on `main` whose branch still carried a copy read as live, so the pin rule never fired. | Fixed | `main` is checked first. | `seclab` host self-test "a patch-id on main wasn't reported for pinning (AAAA-3)" |
+| AAAA-4 | Low | inherited branch | The schema allowed a `patch:` fix commit on an entry that only inherits its branch, which the ancestry step then rejected confusingly; remap could create one. | Fixed | A `patch:` fix commit needs the entry's own `branch`; remap leaves such an entry's fix commit a SHA. | self-test "a patch: fix commit on an entry that only inherits its branch fails the schema (AAAA-4)" |
+| AAAA-5 | Low | weekly ratchet | The week-ago comparison point was chosen by any commit's date and was skipped silently when it lacked the register. | Fixed | It is the register's own last change over a week old, else its first commit; no comparison point fails. | — |

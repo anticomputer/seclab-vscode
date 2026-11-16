@@ -40,7 +40,9 @@ the process and the index.
    change than the closure. No record quotes or paraphrases a conversation.
    Every commit an entry you add or modify cites must be on `main`'s history (or its entry's
    branch). After rebasing, squashing or deleting a branch the register names, run
-   `./seclab findings remap --branch <name>`; it reports anything it can't follow. The records
+   `./seclab findings remap --branch <name>`; it reports anything it can't follow. Cite a commit
+   that isn't on `main` yet as `patch:<patch-id>` (`remap --patch` converts them), and pin the SHA
+   once it lands. The records
    themselves keep the SHAs they were written with.
    `./seclab docs check` enforces all of it.
 

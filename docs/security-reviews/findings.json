@@ -67,7 +67,6 @@
 		"20261105-agent-host-patches.md#2",
 		"20261105-agent-host-patches.md#3",
 		"20261105-agent-host-patches.md#4",
-		"20261105-broker-repin-and-image-snapshot.md#10b-1",
 		"20261105-rpc-core-increment.md#1",
 		"20261105-rpc-filter-rereview.md#1",
 		"20261105-rpc-filter-rereview.md#2",
@@ -4157,7 +4156,7 @@
 			"component": "obs schema / window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "c42a11c218644a774efec2ebc7ec7b059c8e0a5d",
+			"commit": "patch:205f4746a8b650f3d8284bfa22d270923d40d3e3",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "a ref that fails the pattern keeps the event"
@@ -4173,7 +4172,7 @@
 			"component": "obs window decision logs / Tab Manager",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "c42a11c218644a774efec2ebc7ec7b059c8e0a5d",
+			"commit": "patch:205f4746a8b650f3d8284bfa22d270923d40d3e3",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "forwarding needs the policy stamp AND the enforcing code"
@@ -4189,7 +4188,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "c42a11c218644a774efec2ebc7ec7b059c8e0a5d",
+			"commit": "patch:205f4746a8b650f3d8284bfa22d270923d40d3e3",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "spdlog rotation by rename (a.log -> a.1.log -> a.2.log)"
@@ -4205,7 +4204,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed-untested",
-			"commit": "c42a11c218644a774efec2ebc7ec7b059c8e0a5d",
+			"commit": "patch:205f4746a8b650f3d8284bfa22d270923d40d3e3",
 			"gap": "windowlog.ts caps work at BATCHES_PER_TICK = 4 per file and lists the gate log first, but the forwarder test delivers only 3 batches from one file, so neither the cap nor the gate-first ordering is asserted."
 		},
 		{
@@ -6292,9 +6291,13 @@
 			"summary": "`ln -s` without `--`: a symlink target starting with `-` made GNU ln read it as options, dropping the entry under a clean label.",
 			"component": "broker image snapshot writer",
 			"owner": "broker",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "8007864",
-			"gap": "build.sh now uses `ln -s -- \"$target\" \"$out\"` and refuses an empty target, but the writer probes (macOS /bin/sh and dash with GNU ln) were run by hand; no CI test replays them."
+			"test": {
+				"file": "broker/tests/snapshot/probes.sh",
+				"name": "$(blob -rf)${T}link-rf"
+			},
+			"note": "The writer probes run in ci-unit (broker/tests/snapshot/run.sh, 0a8bc7a)."
 		},
 		{
 			"record": "20261105-broker-repin-and-image-snapshot.md",
@@ -11490,6 +11493,79 @@
 			"commit": "16504ad",
 			"status": "fixed-untested",
 			"gap": "Fixed; the self-test can't construct an ambiguous seven-character prefix."
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "AAAA-1",
+			"round": "Round AAAA",
+			"severity": "medium",
+			"summary": "A patch-id cache file a change committed under .work could make any patch: citation read live",
+			"component": "findings register: patch-id cache",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "a malformed patch-id cache was trusted (AAAA-1)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "AAAA-2",
+			"round": "Round AAAA",
+			"severity": "low",
+			"summary": "A patch-id ignores whitespace and mode-only changes, so it doesn't pin content",
+			"component": "findings register: patch-id evidence",
+			"owner": "register",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "A patch: fix commit is allowed only on an entry with its own branch, which is never compliant; the landing change drops branch and must pin a SHA (schema and self-test).",
+			"ref": {
+				"file": "docs/security-reviews/20261110-security-findings-register.md",
+				"quote": "Residual: a `patch:` fix commit is allowed only on an entry with its own `branch`"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "AAAA-3",
+			"round": "Round AAAA",
+			"severity": "low",
+			"summary": "A change on main whose branch still carried a copy read as live, so the pin rule never fired",
+			"component": "findings register: pin on main",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "a patch-id on main wasn't reported for pinning (AAAA-3)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "AAAA-4",
+			"round": "Round AAAA",
+			"severity": "low",
+			"summary": "The schema allowed a patch: fix commit on an entry that only inherits its branch",
+			"component": "findings register: inherited branch",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "only inherits its branch fails the schema (AAAA-4)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "AAAA-5",
+			"round": "Round AAAA",
+			"severity": "low",
+			"summary": "The week-ago comparison point was chosen by any commit's date and skipped silently without a register",
+			"component": "findings register: weekly ratchet",
+			"owner": "register",
+			"commit": "0000000",
+			"status": "fixed-untested",
+			"gap": "Fixed in the workflow step; workflow steps have no test."
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
