@@ -15,13 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 83 | 202 | 268 | 39 | 606 |
+| fixed | 14 | 84 | 203 | 273 | 40 | 614 |
+| fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 52 | 154 | 55 | 266 |
 | accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 13 | 15 | 6 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-| **all** | 16 | 92 | 293 | 515 | 138 | 1054 |
+| **all** | 16 | 93 | 294 | 520 | 139 | 1062 |
 
 ## Baseline: open high and critical findings
 
@@ -1732,6 +1733,14 @@ Every other commit the register cites is on main's history, or on the branch its
 | CCCC-5 | low | fixed | An environment variable could replace origin/main, and an unresolvable one skipped the rule | 6d798949bb6c · `seclab` "an unresolvable main didn't fail as a defect (CCCC-5)" |
 | CCCC-6 | low | fixed-untested | AAAA-2's rationale and AAAA-4's test rested on the withdrawn rule | Register and record text; nothing to test. |
 | CCCC-7 | low | fixed | No case for a poisoned whole-history cache, an unresolvable main, or a pin from outside main | 6d798949bb6c · `seclab` "a malformed whole-history cache was trusted (CCCC-7)" |
+| DDDD-1 | high | fixed | An anchor with a tab or newline split a high's line to the ancestry step and the keyless half was skipped, defeating CCCC-1 | 0000000 · `build/docs/findings.ts` "an anchor with a tab fails the schema (DDDD-1)" |
+| DDDD-2 | low | fixed | Register text printed to the CI log could start a workflow command | 0000000 · `build/docs/findings.ts` "an anchor that starts a workflow command fails the schema (DDDD-2)" |
+| DDDD-3 | low | fixed | The ID clash warning covered only the same owner, missing the concurrent-branch case | 0000000 · `build/docs/findings.ts` "reuses with another meaning is warned, across owners (DDDD-3)" |
+| DDDD-4 | low | fixed | Touching an entry already in a clash warned about it again | 0000000 · `build/docs/findings.ts` "editing an entry whose clash the base already had is not warned (DDDD-4)" |
+| DDDD-5 | info | fixed | Numbered anchors, other owners, edits and the exit code weren't covered | 0000000 · `build/docs/findings.ts` "control: a clash warning never fails the check (DDDD-5)" |
+| EEEE-1 | medium | fixed | A stale fork point could demote a recorded high, and an add-then-revert pair could close a new high | 0000000 · `seclab` "a reverted fix passed ancestry (EEEE-1)" |
+| EEEE-2 | low | fixed | Problem lines still printed register text raw | 0000000 · `build/docs/findings.ts` "every printed line is one line and never a workflow command (EEEE-2)" |
+| EEEE-3 | low | fixed | An empty severity flag passed as not-high | 0000000 · `seclab` "a fix-commit line with no severity flag passed (EEEE-3)" |
 
 ### [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md)
 

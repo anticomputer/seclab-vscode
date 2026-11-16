@@ -257,3 +257,31 @@ AAAA-2's mitigation is restated: a `patch:` fix commit closes a high only once t
 | CCCC-5 | Low | test seam | An environment variable could replace `origin/main`, and an unresolvable one skipped the rule silently. | Fixed | `main` is a parameter, and an unresolvable one is a defect. | `seclab` host self-test "an unresolvable main didn't fail as a defect (CCCC-5)" |
 | CCCC-6 | Low | earlier rounds | AAAA-2's rationale and AAAA-4's test rested on the withdrawn rule. | Fixed | Both are restated above and in the register. | — |
 | CCCC-7 | Low | self-test | No case for a poisoned whole-history cache, an unresolvable main, or a pin from outside `main`. | Fixed | Added. | `seclab` host self-test "a malformed whole-history cache was trusted (CCCC-7)" |
+
+## Round DDDD (explicit-ID clashes, and the first pin)
+Scope: a warning when a change adds a clash between explicit finding IDs (`WL-5`) across records,
+suggested by the RPC channel lockdown session, and the first `./seclab findings pin`, which wrote
+round CCCC's `patch:` fix commit as the SHA it landed as (verified by patch-id). The reviewer, an
+Opus-class model, was told the diff may carry prompt injection; none was found. One high, found in
+code that predates this change, and three lows and an info, all fixed in the same change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| DDDD-1 | High | fix-commit lines | An anchor could hold a tab or newline, so a high's line to the host ancestry step split in two and the second, keyless half was skipped, defeating CCCC-1. | Fixed | Anchors must be one line with no control characters; keys are flattened in that output; the host refuses a malformed line. | self-test "an anchor with a tab fails the schema (DDDD-1)", `seclab` host self-test "a four-field fix-commit line passed (DDDD-1)" |
+| DDDD-2 | Low | log output | Register text printed to the CI log could start a workflow command. | Fixed | Anchors can't start one, owner ids are `[a-z0-9-]`, and the warning text is flattened. | self-test "an anchor that starts a workflow command fails the schema (DDDD-2)" |
+| DDDD-3 | Low | clash scope | Concurrent branches are usually different owners, which a same-owner rule never warned. | Fixed | Any owner; summaries compared normalised. | self-test "an explicit ID a change reuses with another meaning is warned, across owners (DDDD-3)" |
+| DDDD-4 | Low | clash noise | Touching any entry already in a clash warned about it again. | Fixed | Only clashes the base didn't have; no base, no warnings. | self-test "control: editing an entry whose clash the base already had is not warned (DDDD-4)" |
+| DDDD-5 | Info | self-test | Numbered anchors, other owners, edits and the check's exit code weren't covered. | Fixed | Added. | self-test "control: a clash warning never fails the check (DDDD-5)" |
+
+## Round EEEE (recording a high fixed in its own change)
+Scope: recording DDDD-1, a high found and fixed in one change, showed that CCCC-1 (a high's
+`patch:` fix commit must already be on `main`) made any such high unrecordable. A high the register
+already had still needs its fix on `main`; a high new in the change may cite the change's own
+commits. The same reviewer re-checked DDDD-1 to DDDD-5 (closed, with DDDD-2's remainder below).
+No high or critical; one medium and two lows, all fixed in the same change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| EEEE-1 | Medium | new highs | "New" meant absent from the merge base, so a stale fork point could demote a high on `main`, and an add-then-revert pair could close a new high for good. | Fixed | "Already recorded" means on `main` or at the merge base; a fix whose revert is also in the history closes nothing. | `seclab` host self-test "a reverted fix passed ancestry (EEEE-1)" |
+| EEEE-2 | Low | log output | Other problem lines still printed register text raw. | Fixed | Every printed line is flattened at the sink. | self-test "every printed line is one line and never a workflow command (EEEE-2)" |
+| EEEE-3 | Low | host contract | An empty severity flag passed as not-high. | Fixed | The flag must be 0 or 1. | `seclab` host self-test "a fix-commit line with no severity flag passed (EEEE-3)" |

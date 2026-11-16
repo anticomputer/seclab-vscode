@@ -394,6 +394,52 @@ function pinPatches(reg: Register, pairs: Array<[string, string]>): string[] {
 	return changed;
 }
 
+// An explicit ID (`WL-5`) is scoped to its record, so concurrent branches (usually different
+// sessions, so different owners) can mint the same ID with different meanings, invisible until both
+// land. A change is warned of a clash it adds: an ID it adds or edits that names another finding in
+// another record with another summary, unless the base already had that clash (review DDDD). A
+// warning, since some rounds reuse generic IDs (R-1) on purpose; no base, no warnings.
+const EXPLICIT_ID = /^[A-Z][A-Z0-9]*-[0-9][^\s]*$/;
+const normSummary = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+function clashPairs(reg: Register, keys: Set<string>): Map<string, string[]> {
+	const out = new Map<string, string[]>();
+	for (const f of reg.findings) {
+		if (!keys.has(keyOf(f)) || !EXPLICIT_ID.test(f.anchor)) {
+			continue;
+		}
+		const other = reg.findings.filter(g => g !== f && g.anchor === f.anchor && g.record !== f.record && normSummary(g.summary) !== normSummary(f.summary));
+		if (other.length) {
+			out.set(keyOf(f), other.map(keyOf));
+		}
+	}
+	return out;
+}
+function anchorClashes(reg: Register, base?: Register): string[] {
+	if (!base) {
+		return [];
+	}
+	const was = clashPairs(base, new Set(base.findings.map(keyOf)));
+	return [...clashPairs(reg, touchedKeys(reg, base))].flatMap(([k, others]) => {
+		const fresh = others.filter(o => !(was.get(k) ?? []).includes(o));
+		return fresh.length ? [logLine(`${k}: its ID also names ${fresh.join(', ')}, another finding in another record; if both were minted on concurrent branches, rename one`)] : [];
+	});
+}
+
+// The host ancestry step's input: "<key>\t<fix commit>\t<1 if it must already be on main>". A high
+// the base register already had closes on a patch: fix commit only once that change is on main, so
+// a change can't close a recorded high on its own add-then-revert pair (CCCC-1). A high new in
+// this change may cite its own commits: it was never open on main, so nothing is closed (EEEE).
+// `main` is origin/main's register, so a branch forked before a high was recorded can't treat it as
+// new (EEEE-1).
+function commitLines(reg: Register, base?: Register, main?: Register): string[] {
+	const had = new Set([...(base?.findings ?? []), ...(main?.findings ?? [])].map(keyOf));
+	return reg.findings.filter(f => f.status === 'fixed' && !f.branch && f.commit)
+		.map(f => `${keyOf(f).replace(/[\t\r\n]/g, ' ')}\t${f.commit}\t${isHigh(f) && (!base || had.has(keyOf(f)) || (!!f.wasKey && had.has(f.wasKey))) ? 1 : 0}\n`);
+}
+
+// Every line the checker prints is register-derived text: one line, never a workflow command (EEEE-2).
+const logLine = (x: string) => x.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/^\s*::/, ': :');
+
 function schemaProblems(reg: Register): string[] {
 	const p: string[] = [];
 	if (!reg || typeof reg !== 'object' || !Array.isArray(reg.findings) || !Array.isArray(reg.baseline) || !Array.isArray(reg.noFindings) || !Array.isArray(reg.manualOnly) || !reg.owners || typeof reg.owners !== 'object') {
@@ -411,6 +457,10 @@ function schemaProblems(reg: Register): string[] {
 	}
 	const BRANCH = /^[A-Za-z0-9._/-]+$/;
 	for (const [id, o] of Object.entries(reg.owners)) {
+		if (!/^[a-z][a-z0-9-]*$/.test(id)) {
+			p.push(`owner ${JSON.stringify(id).slice(0, 40)}: an owner id is lowercase letters, digits and dashes`);
+			continue;
+		}
 		if (!nonEmpty(o?.session) || !nonEmpty(o?.scope) || !(o.branch === null || (typeof o.branch === 'string' && BRANCH.test(o.branch)))) {
 			p.push(`owner ${id}: needs session, scope and branch (a branch name or null)`);
 		}
@@ -434,6 +484,11 @@ function schemaProblems(reg: Register): string[] {
 			if (!nonEmpty(f[k])) {
 				p.push(`${at}: ${k} is required`);
 			}
+		}
+		// A key travels in tab-separated lines to the host and into CI logs: no control characters,
+		// no leading workflow command (DDDD-1, DDDD-2).
+		if (typeof f.anchor === 'string' && (/[\u0000-\u001f\u007f]/.test(f.anchor) || /^\s*::/.test(f.anchor))) {
+			p.push(`${at}: anchor must be one line with no control characters`);
 		}
 		if (!SEVS.includes(f.severity)) {
 			p.push(`${at}: severity must be one of ${SEVS.join(', ')}`);
@@ -1326,6 +1381,51 @@ function selfTest(): number {
 		Object.assign(pr.findings[0], { commit: 'abcdef1', note: 'see abcdef1 and patch:cccccccccccccccccccccccccccccccccccccccc' });
 		remapBranch(pr, 'br-p', [['abcdef1', 'patch:dddddddddddddddddddddddddddddddddddddddd']]);
 		expect('remap converts a branch SHA to a patch: citation and leaves existing ones', pr.findings[0].commit === 'patch:dddddddddddddddddddddddddddddddddddddddd' && pr.findings[0].note === 'see patch:dddddddddddddddddddddddddddddddddddddddd and patch:cccccccccccccccccccccccccccccccccccccccc' ? [] : [`got ${JSON.stringify(pr.findings[0])}`], null);
+		// DDDD: a change is warned of an explicit-ID clash it adds, across owners, never of one the
+		// base had, a numbered anchor, or the same finding; the warning never fails the check.
+		const cl = reg();
+		cl.findings.push({ record: null, anchor: 'WL-5', severity: 'low', summary: 'one meaning', component: 'c', owner: 'o', status: 'open', gap: 'g', ref: { file: EDR, quote: 'only on main' } });
+		const clBase = JSON.parse(JSON.stringify(cl)) as Register;
+		cl.owners.p = { session: 'Other', branch: null, scope: 'x' };
+		cl.findings.push({ record: '20261101-a.md', anchor: 'WL-5', severity: 'low', summary: 'another meaning', component: 'c', owner: 'p', status: 'open', gap: 'g' });
+		expect('an explicit ID a change reuses with another meaning is warned, across owners (DDDD-3)', anchorClashes(cl, clBase), /WL-5: its ID also names register#WL-5/);
+		const old = JSON.parse(JSON.stringify(cl)) as Register;
+		const later = JSON.parse(JSON.stringify(cl)) as Register;
+		later.findings[later.findings.length - 1].gap = 'edited';
+		expect('control: editing an entry whose clash the base already had is not warned (DDDD-4)', anchorClashes(later, old), null);
+		expect('control: no base, no warnings (DDDD-4)', anchorClashes(cl), null);
+		const cn = JSON.parse(JSON.stringify(clBase)) as Register;
+		cn.findings.push({ record: '20261101-a.md', anchor: 'WL-5', severity: 'low', summary: 'One  meaning.', component: 'c', owner: 'o', status: 'open', gap: 'g' });
+		expect('control: the same ID with the same summary (one finding, two records) is not warned (DDDD)', anchorClashes(cn, clBase), null);
+		const nb = JSON.parse(JSON.stringify(clBase)) as Register;
+		nb.findings.push({ record: null, anchor: '7', severity: 'low', summary: 'x', component: 'c', owner: 'o', status: 'open', gap: 'g', ref: { file: EDR, quote: 'only on main' } }, { record: '20261101-a.md', anchor: '7', severity: 'low', summary: 'y', component: 'c', owner: 'o', status: 'open', gap: 'g' });
+		expect('control: a numbered anchor is never warned (DDDD-5)', anchorClashes(nb, clBase), null);
+		expect('control: a clash warning never fails the check (DDDD-5)', run(base(), cl, true, clBase).filter(x => /its ID also names/.test(x)), null);
+		// EEEE: only a high the base already had must have its patch: fix on main.
+		const ch = reg();
+		ch.findings[0].commit = 'patch:cccccccccccccccccccccccccccccccccccccccc';
+		const flag = (r: Register, b?: Register, m?: Register) => commitLines(r, b, m).find(l => l.startsWith('20261101-a.md#A-1\t'))?.split('\t')[2].trim();
+		expect('a recorded high\'s fix commit must be on main (CCCC-1)', flag(ch, reg()) === '1' ? [] : [`got ${flag(ch, reg())}`], null);
+		const chBase = reg();
+		chBase.findings = chBase.findings.filter(f => f.anchor !== 'A-1');
+		expect('control: a high new in this change may cite its own commits (EEEE)', flag(ch, chBase) === '0' ? [] : [`got ${flag(ch, chBase)}`], null);
+		const mv = JSON.parse(JSON.stringify(ch)) as Register;
+		mv.findings[0].anchor = 'A-1b';
+		mv.findings[0].wasKey = '20261101-a.md#A-1';
+		expect('a recorded high renamed via wasKey still must be on main (EEEE)', commitLines(mv, reg()).find(l => l.startsWith('20261101-a.md#A-1b\t'))?.split('\t')[2].trim() === '1' ? [] : ['flag 0'], null);
+		expect('a high main\'s register has is never new, whatever the fork point (EEEE-1)', flag(ch, chBase, reg()) === '1' ? [] : [`got ${flag(ch, chBase, reg())}`], null);
+		expect('no base: every high must be on main (EEEE)', flag(ch) === '1' ? [] : [`got ${flag(ch)}`], null);
+		// DDDD-1, DDDD-2: an anchor or owner id that could split a host line or start a workflow command.
+		const tabbed = reg();
+		tabbed.findings.push({ record: null, anchor: 'H1\tpatch:x\t0', severity: 'low', summary: 's', component: 'c', owner: 'o', status: 'open', gap: 'g', ref: { file: EDR, quote: 'only on main' } });
+		expect('an anchor with a tab fails the schema (DDDD-1)', schemaProblems(tabbed), /anchor must be one line/);
+		const cmd = reg();
+		cmd.findings.push({ record: null, anchor: '::error::x', severity: 'low', summary: 's', component: 'c', owner: 'o', status: 'open', gap: 'g', ref: { file: EDR, quote: 'only on main' } });
+		expect('an anchor that starts a workflow command fails the schema (DDDD-2)', schemaProblems(cmd), /anchor must be one line/);
+		const ow = reg();
+		ow.owners['x\n::warning::y'] = { session: 's', branch: null, scope: 's' };
+		expect('an owner id outside [a-z0-9-] fails the schema (DDDD-2)', schemaProblems(ow), /an owner id is lowercase/);
+		expect('every printed line is one line and never a workflow command (EEEE-2)', ['x\n::error::y', '::warning::z', 'a\tb'].map(logLine).filter(l => /[\n\t]|^\s*::/.test(l)), null);
 		const long = reg();
 		long.findings[0].note = `digest ${'ab12'.repeat(11)}`;
 		expect('a hex run over 40 characters fails (YYY-1)', run(base(), long), /a hex run of 44 characters isn't a commit citation/);
@@ -1663,10 +1763,20 @@ function main(): number {
 		console.log(`findings: wrote ${VIEW}`);
 		return 0;
 	}
-	if (mode === 'commits') {
+	if (mode === 'commits') { // [--base FILE [--main FILE]]
 		sp.forEach(x => console.error(x));
-		// "<key>\t<commit>\t<1 if high/critical>": a high's patch: fix commit must be on main (CCCC-1).
-		const lines = sp.length ? [] : reg.findings.filter(f => f.status === 'fixed' && !f.branch && f.commit).map(f => `${keyOf(f)}\t${f.commit}\t${isHigh(f) ? 1 : 0}\n`);
+		const a = process.argv.slice(3);
+		if (!(a.length === 0 || (a.length === 2 && a[0] === '--base') || (a.length === 4 && a[0] === '--base' && a[2] === '--main')) || a.some((x, i) => i % 2 === 1 && !x)) {
+			console.error('usage: findings.ts commits [--base FILE [--main FILE]]');
+			return 2;
+		}
+		// A register file that is empty, or has no findings array, counts as absent (strictest).
+		const load = (f?: string) => {
+			const t = f ? fs.readFileSync(path.resolve(repo, f), 'utf8') : '';
+			const r = t.trim() ? JSON.parse(t) as Register : undefined;
+			return r && Array.isArray(r.findings) ? r : undefined;
+		};
+		const lines = sp.length ? [] : commitLines(reg, load(a[1]), load(a[3]));
 		process.stdout.write(lines.join(''));
 		return sp.length ? 1 : 0;
 	}
@@ -1769,7 +1879,10 @@ function main(): number {
 		console.log('findings: no --changed list; the rule that a decision lands before the closure (UUU-4) is skipped');
 	}
 	const problems = check(tree, reg, sp.length ? undefined : render(reg, tree), base, change);
-	problems.forEach(x => console.log(x));
+	problems.forEach(x => console.log(logLine(x)));
+	if (!sp.length) {
+		anchorClashes(reg, base).forEach(x => console.log(`findings: warning: ${x}`));
+	}
 	const open = sp.length ? 0 : reg.findings.filter(f => f.status !== 'fixed' && f.status !== 'false-positive').length;
 	console.log(problems.length ? `findings: ${problems.length} problem(s)` : `findings: ok (${reg.findings.length} findings, ${open} not fixed, ${reg.baseline.length} in the baseline)`);
 	return problems.length ? 1 : 0;

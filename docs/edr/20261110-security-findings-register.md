@@ -165,6 +165,14 @@ script run by a required job: what runs it is the docs job, and its evidence is 
   `main` yet fails and prints the `patch:` form to use. Once a cited change is on `main` the docs
   check notes it, never fails on it, and `./seclab findings pin` writes the SHAs in a follow-up.
   `remap --patch` converts a branch's unlanded citations to that form.
+- An explicit finding ID (`WL-5`) is scoped to its record, so concurrent branches can mint the same
+  ID with different meanings. The docs check warns a change that adds a clash: an ID it adds or
+  edits that names another finding, with another summary, in another record, unless the clash was
+  already there. It is a warning, since some rounds reuse generic IDs (`R-1`) on purpose (reviews
+  DDDD, EEEE).
+- A high the register already had (on `main` or at the merge base, under its key or a `wasKey`)
+  closes on a `patch:` fix commit only once that change is on `main`; a high new in a change may cite
+  that change's own commits. Either way a fix whose revert is also in the history closes nothing.
 - Upstream bumps: a prefix of any SHA `upstream.lock` has pinned in its history, and no commit
   here, names the upstream Code-OSS commit, so a bump never strands the old pin's citations. A hex
   run inside a file path (`runs/20261104-unpatched-a717861.json`) is a file name, not a citation. The
