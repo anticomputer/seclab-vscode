@@ -1862,7 +1862,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | PRL-2 | low | fixed-untested | A rebase merge makes main's new tip a SHA no required check has seen; the EDR didn't say so or check it after landing. | A procedure step (confirm the required checks and the denylist job on the new main SHA before the next PR); nothing enforces it. |
 | PRL-3 | low | fixed-untested | Auto-merge doesn't wait for ci-linux oci, which isn't required, including after an update-branch. | Procedure only (wait before arming; after an update, disarm, wait, re-arm). Machine enforcement needs an always-running gate job in ci-linux and a fifth required context. |
 | PRL-4 | low | fixed-untested | The EDR, AGENTS.md and the CI-hardening record gave contradicting landing procedures. | Documentation only; nothing to test. |
-| PRL-5 | low | fixed | A required check passes when a job-level if: skips its job or a trigger filter keeps its workflow from running, and the workflow files belong to the change. | 121f1c96349e7a3e690c57f753afb3ba287cd63a · `build/check-required-checks.ts` "a required job with a job-level if" |
+| PRL-5 | low | fixed | A required check passes when a job-level if: skips its job or a trigger filter keeps its workflow from running, and the workflow files belong to the change. | patch:92cb55ddc738306f460fb657fffde0851f0931b6 · `build/check-required-checks.ts` "a required job with a job-level if" |
 
 ### [20261116-rpc-follow-ups](20261116-rpc-follow-ups.md)
 

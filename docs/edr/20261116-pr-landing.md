@@ -64,10 +64,10 @@ queues need an organisation-owned repository, and this one stays under its user 
   citations, the secret scan's range, the publish gate's allowlist range) see the new SHAs
   only in the push run that follows. Step 7 of the procedure confirms that run before the next
   PR is armed. A red `main` is fixed by another PR.
-- **Register citations must survive the rewrite.** A branch SHA is never the SHA on `main`. The
-  register session owns the rule for that. The ruleset change is applied only after that rule
-  is on `main`, because once it is, fast-forward landing is impossible. The coordinator then
-  switches every session over.
+- **Register citations survive the rewrite.** A branch SHA is never the SHA on `main`, so
+  unlanded work is cited as `patch:<id>` (the register's rule, on `main` since 6d798949). The
+  ruleset change is applied once this EDR is approved; from then on fast-forward landing is
+  impossible, and the coordinator switches every session over.
 - **`oci` isn't required.** ci-linux is path-filtered, so it can't be a required check as it
   stands, and auto-merge doesn't wait for it. Sessions wait for it by procedure (steps 4 and 6).
   Making it machine-enforced would need an always-running gate job in ci-linux and a fifth

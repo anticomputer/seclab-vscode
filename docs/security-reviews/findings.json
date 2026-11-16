@@ -13574,7 +13574,7 @@
 			"component": "docs-check / ci-linux workflows",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "121f1c96349e7a3e690c57f753afb3ba287cd63a",
+			"commit": "patch:92cb55ddc738306f460fb657fffde0851f0931b6",
 			"gap": "The condition admits only a pull request whose head is in this repository; no test exercises a fork's pull request."
 		},
 		{
@@ -13586,7 +13586,7 @@
 			"component": "landing procedure (EDR pr-landing, AGENTS.md)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "121f1c96349e7a3e690c57f753afb3ba287cd63a",
+			"commit": "patch:92cb55ddc738306f460fb657fffde0851f0931b6",
 			"gap": "A procedure step (confirm the required checks and the denylist job on the new main SHA before the next PR); nothing enforces it."
 		},
 		{
@@ -13598,7 +13598,7 @@
 			"component": "landing procedure (AGENTS.md)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "121f1c96349e7a3e690c57f753afb3ba287cd63a",
+			"commit": "patch:92cb55ddc738306f460fb657fffde0851f0931b6",
 			"gap": "Procedure only (wait before arming; after an update, disarm, wait, re-arm). Machine enforcement needs an always-running gate job in ci-linux and a fifth required context."
 		},
 		{
@@ -13610,7 +13610,7 @@
 			"component": "docs/edr/20261116-pr-landing.md, docs/edr/20261104-ci-hardening.md",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "121f1c96349e7a3e690c57f753afb3ba287cd63a",
+			"commit": "patch:92cb55ddc738306f460fb657fffde0851f0931b6",
 			"gap": "Documentation only; nothing to test."
 		},
 		{
@@ -13622,7 +13622,7 @@
 			"component": "required checks (build/check-required-checks.ts)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "121f1c96349e7a3e690c57f753afb3ba287cd63a",
+			"commit": "patch:92cb55ddc738306f460fb657fffde0851f0931b6",
 			"test": { "file": "build/check-required-checks.ts", "name": "a required job with a job-level if" },
 			"note": "Nine self-test cases, run with the check by ./seclab lint workflows in the required lint job; also proven on the real tree by injecting if: false into ci-unit."
 		}
