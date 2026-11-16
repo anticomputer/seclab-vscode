@@ -88,7 +88,7 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 // The user's own keybinding: a new terminal whose cwd is a host (file:) folder. Upstream gives a
 // terminal with a non-remote cwd to the local backend, so on a baseline this is a host shell.
 fs.writeFileSync(path.join(userData, 'User', 'keybindings.json'), JSON.stringify([
-	{ key: 'ctrl+alt+shift+f12', command: 'workbench.action.terminal.new', args: { cwd: { scheme: 'file', path: ws } } },
+	{ key: 'ctrl+alt+shift+f12', command: 'workbench.action.terminal.new', args: { cwd: { scheme: 'file', authority: '', path: ws, query: '', fragment: '', fsPath: ws } } },
 ], null, '\t'));
 
 const tabd = new TabdClient({
@@ -194,13 +194,20 @@ try {
 	console.log(`host shells from the palette's local terminal: ${localShells}`);
 	c('local', baseline ? localShells > 0 : localShells === 0, baseline ? 'the local terminal starts a host shell (baseline)' : 'no host shell from the palette');
 
-	// The keybinding: Ctrl+Alt+Shift+F12, delivered to the renderer over CDP.
+	// The keybinding: Ctrl+Alt+Shift+F12, delivered to the renderer over CDP. The terminal count
+	// in the panel says whether the keybinding ran at all, so "no host shell" can't be a key that
+	// never arrived.
+	const terminals = () => ed!.evaluate<number>(`document.querySelectorAll('.terminal-tabs-entry, .single-terminal-tab').length`);
+	const terms1 = await terminals();
 	const shells1 = hostShells(ed.child.pid!);
 	for (const type of ['rawKeyDown', 'keyUp']) {
 		await ed.cdp.send('Input.dispatchKeyEvent', { type, key: 'F12', code: 'F12', modifiers: 1 | 2 | 8, windowsVirtualKeyCode: 123, nativeVirtualKeyCode: 111 }, ed.session);
 	}
 	await waitFor(() => hostShells(ed!.child.pid!) > shells1, 20_000);
 	const keyShells = hostShells(ed.child.pid!) - shells1;
+	const terms2 = await terminals();
+	console.log(`terminals in the panel: ${terms1} -> ${terms2}`);
+	c('backend', terms2 > terms1 || keyShells > 0, 'the file: cwd keybinding ran (a terminal was created)', `${terms1} -> ${terms2}`);
 	console.log(`host shells from the file: cwd keybinding: ${keyShells}`);
 	c('backend', baseline ? keyShells > 0 : keyShells === 0, baseline ? 'a terminal with a file: cwd starts a host shell (baseline)' : 'a terminal with a file: cwd starts no host shell');
 
@@ -209,6 +216,10 @@ try {
 	c('run', false, 'the run completed', (err as Error).message);
 } finally {
 	await ed?.close();
+}
+// The window's own logs, kept in the run directory (gitignored, deleted with it) for diagnosis.
+if (fs.existsSync(path.join(userData, 'logs'))) {
+	fs.cpSync(path.join(userData, 'logs'), path.join(base, 'editor-logs'), { recursive: true, force: true });
 }
 
 process.exitCode = report(checks) ? 0 : 1;
