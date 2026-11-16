@@ -1,0 +1,166 @@
+// Editor-tabs probe: what does the window's editor-tab model tell a tab's extension host about
+// host-side editors open in its window? (sibling DOCSYNC-R3 of patch 0035). macOS, sbx, local only.
+//   node test/edtabs/probe.ts drive --app PATH [--measure]   # prepare, drive the window, check, teardown
+// The isolated profile's directory is named with a generated fake `seclabcanary_` token, so every
+// host path under it (user settings.json, keybindings.json) carries the canary; the user's login
+// name is the second marker (any host home path carries it). The window opens host-side editors as
+// a user would (command palette, headless driver). The probe reports input kinds, URI schemes and
+// hashes of label and URI tokens; it is tab-controlled data, read through a fixed schema.
+
+import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash, randomBytes } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { TabdClient } from '../../tabd/src/client.ts';
+import { DrivenEditor } from '../driver/editor.ts';
+import { checkUserDataDir, focusStealLog } from '../harness.ts';
+import { readManifest, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
+
+const repo = path.resolve(import.meta.dirname, '../..');
+const base = path.join(repo, '.work', 'edtabs');
+const ws = path.join(base, 'ws');
+const runFile = path.join(base, 'canaries.json');
+const resultsFile = path.join(repo, '.work', 'edtabs-results.jsonl');
+const SBX = '/opt/homebrew/bin/sbx';
+const VSCE_IMAGE = 'seclab-vsce:3.9.2';
+const [mode, ...rest] = process.argv.slice(2);
+const appArg = rest.includes('--app') ? path.resolve(rest[rest.indexOf('--app') + 1]) : undefined;
+const measure = rest.includes('--measure');
+const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+const tabId = () => (readManifest(base).tabs ?? [])[0];
+const inTab = (args: string[]) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20 });
+// What the window opens, by palette label, and the editor tab label each should produce.
+const HOST_EDITORS: Array<[string, string]> = [
+	['Preferences: Open User Settings (JSON)', 'settings.json'],
+	['Preferences: Open Keyboard Shortcuts (JSON)', 'keybindings.json'],
+];
+
+if (mode !== 'drive' || !appArg) {
+	console.error('usage: probe.ts drive --app PATH [--measure]');
+	process.exit(2);
+}
+if (fs.existsSync(path.join(base, 'run.json'))) {
+	console.error('a previous edtabs run is still recorded: remove it with its teardown first');
+	process.exit(1);
+}
+const canary = `seclabcanary_${randomBytes(8).toString('hex')}`;
+const userData = path.join(os.homedir(), '.seclab-test', canary);
+const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
+checkUserDataDir(userData);
+fs.rmSync(base, { recursive: true, force: true });
+fs.mkdirSync(path.join(ws, '.seclab'), { recursive: true });
+fs.writeFileSync(runFile, JSON.stringify({ canary }));
+writeSnapshot(base);
+writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir] });
+fs.writeFileSync(path.join(ws, 'README.md'), '# edtabs probe workspace\n');
+fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
+fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
+	'security.workspace.trust.enabled': false, 'seclab.tabs.driver': 'sbx', 'seclab.tabs.allowedRoots': [base], 'window.restoreWindows': 'none',
+	'workbench.welcomePage.experimentalOnboarding': false, 'workbench.startupEditor': 'none', 'workbench.tips.enabled': false, 'chat.disableAIFeatures': true,
+}, null, '\t'));
+fs.writeFileSync(path.join(userData, 'User', 'keybindings.json'), '[]\n');
+const until = Math.floor(Date.now() / 1000) + 2 * 3600;
+fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${randomBytes(16).toString('hex')}\nrun=${base}\nuntil=${until}\n`);
+
+const vsixDir = path.join(base, 'vsix');
+fs.mkdirSync(vsixDir, { recursive: true });
+execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`,
+	'-v', `${path.join(import.meta.dirname, 'probe-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
+	VSCE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/edtabs-probe.vsix'], { stdio: 'ignore' });
+const client = new TabdClient({
+	command: process.execPath,
+	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', 'sbx', '--allowed-root', base],
+	env: { HOME: process.env.HOME, USER: process.env.USER },
+});
+await client.initialize('edtabs-probe', '0');
+const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
+writeManifest(base, { tabs: [tab.metadata.name] });
+await client.request('tab.ensureRunning', { tabId: tab.metadata.name });
+fs.copyFileSync(path.join(vsixDir, 'edtabs-probe.vsix'), path.join(ws, '.edtabs-probe.vsix'));
+const installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.edtabs-probe.vsix')]).status === 0;
+client.dispose();
+await new Promise(res => client.once('exit', res));
+
+const reportPath = path.join(ws, '.seclab-edtabs', 'report.json');
+const read = () => {
+	try {
+		return JSON.parse(tabId() ? inTab(['cat', reportPath]).stdout ?? '' : '');
+	} catch {
+		return undefined;
+	}
+};
+let windowLabels: string[] = [];
+const opened: Record<string, boolean> = {};
+let ed: DrivenEditor | undefined;
+if (installed) {
+	try {
+		ed = await DrivenEditor.launch({ app: appArg, userData, folderUri: `vscode-remote://seclab+${tab.metadata.name}${ws}` });
+		for (let i = 0; i < 90 && !read(); i++) {
+			spawnSync('sleep', ['1']);
+		}
+		const labels = () => ed!.evaluate<string[]>(`[...document.querySelectorAll('.tabs-container .tab .label-name')].map(e => e.textContent ?? '')`).catch(() => [] as string[]);
+		// Settings and keybindings open in a modal editor in 1.145, outside the tab strip: look for
+		// the editor title anywhere in the window.
+		const shown = (label: string) => ed!.evaluate<boolean>(`[...document.querySelectorAll('.label-name, .title-label, .modal-editor-title')].some(e => (e.textContent ?? '').trim() === ${JSON.stringify(label)})`).catch(() => false);
+		for (const [cmd, label] of HOST_EDITORS) {
+			// Close a modal editor left by the previous step (its own close action, in the renderer).
+			await ed.evaluate(`(() => { const m = [...document.querySelectorAll('[class*="modal"]')].find(e => e.querySelector('.codicon-close')); m?.querySelector('.codicon-close')?.closest('a,.action-label,.monaco-button')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); m?.querySelector('.codicon-close')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); })()`).catch(() => undefined);
+			await new Promise(r => setTimeout(r, 800));
+			await ed.command(cmd).catch(() => undefined);
+			for (let i = 0; i < 20 && !(await shown(label)); i++) {
+				await new Promise(r => setTimeout(r, 500));
+			}
+			opened[label] = await shown(label);
+			spawnSync('sleep', ['2']);
+		}
+		windowLabels = (await labels()).filter(l => /^[\w. -]{1,60}$/.test(l));
+		await ed.screenshot(path.join(base, 'drive.png')).catch(() => 0);
+		spawnSync('sleep', ['4']);
+	} catch (e) {
+		console.error(`drive: ${String(e).slice(0, 300)}`);
+	}
+}
+fs.writeFileSync(path.join(ws, '.seclab', 'stop'), '');
+let rep: any = read();
+for (let i = 0; i < 30 && tabId() && rep?.done !== true; i++) {
+	spawnSync('sleep', ['1']);
+	rep = read();
+}
+await ed?.close().catch(() => undefined);
+
+const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').match(/^arm=([0-9a-f]{32})$/m) ?? [])[1];
+const counts = (o: unknown, key: RegExp) => !!o && typeof o === 'object' && Object.entries(o as object).every(([k, v]) => key.test(k) && Number.isInteger(v));
+const valid = !!rep && rep.schema === 'seclab-edtabs-report/1' && rep.arm === armed && typeof rep.done === 'boolean' && Number.isInteger(rep.tabs)
+	&& counts(rep.kinds, /^[A-Za-z]{1,40}$/) && counts(rep.schemes, /^[a-z0-9.+-]{1,40}$/)
+	&& Array.isArray(rep.tokens) && rep.tokens.length <= 5000
+	&& rep.tokens.every((x: any) => !!x && (x.field === 'label' || x.field === 'uri') && /^[0-9a-f]{64}$/.test(x.sha256));
+const markers: Record<string, string> = { canary: sha(canary), username: sha(os.userInfo().username) };
+const leaks = valid ? Object.entries(markers).flatMap(([name, h]) => (rep.tokens as Array<{ field: string; sha256: string }>).filter(x => x.sha256 === h).map(x => `${name}@${x.field}`)) : [];
+const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';
+const results: Array<{ name: string; ok: boolean }> = [];
+const expect = (name: string, ok: boolean) => results.push({ name, ok });
+console.log(`window editors: ${JSON.stringify(windowLabels)}; opened by the window: ${JSON.stringify(opened)}`);
+if (valid) {
+	console.log(`tab saw: up to ${rep.tabs} tabs; kinds ${JSON.stringify(rep.kinds)}; schemes ${JSON.stringify(rep.schemes)}`);
+	console.log(`host markers in the tab's tab model: ${[...new Set(leaks)].join(', ') || 'none'}`);
+}
+expect('probe installed in the tab', installed);
+expect('report present, from this run, and matches the schema', valid);
+expect('control: the window opened the host editors (settings.json, keybindings.json)', Object.values(opened).length === HOST_EDITORS.length && Object.values(opened).every(Boolean));
+if (valid && !measure) {
+	expect('the probe finished', rep.done === true);
+	expect('control: the tab sees its own editor (vscode-remote on its authority)', (rep.schemes['vscode-remote+own'] ?? 0) > 0);
+	expect('DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary, login name)', leaks.length === 0);
+}
+expect('no focus steal', !steals);
+const gate = verifyTeardown(base);
+if (gate.every(g => g.ok)) {
+	fs.renameSync(path.join(base, 'run.json'), path.join(base, `run-checked-${Date.now()}.json`));
+}
+for (const r of [...results, ...gate]) {
+	console.log(`${r.ok ? 'OK  ' : 'FAIL'}  ${r.name}`);
+}
+const pass = results.every(r => r.ok) && gate.every(g => g.ok);
+fs.appendFileSync(resultsFile, JSON.stringify({ at: new Date().toISOString(), app: appArg, measure, pass, leaks: [...new Set(leaks)], kinds: valid ? rep.kinds : null, schemes: valid ? rep.schemes : null, opened }) + '\n');
+process.exit(pass ? 0 : 1);
