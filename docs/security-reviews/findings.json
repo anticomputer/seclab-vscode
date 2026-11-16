@@ -19475,7 +19475,7 @@
 			"component": "patch 0018 chat session gate",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "55889ba8",
+			"commit": "patch:7322472cf8456936db7619a977e86ff351699e1a",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "the patch gates the queued path, which never reaches the dispatch function"
@@ -19500,7 +19500,7 @@
 			"component": "patch 0015 window gate log",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "55889ba8",
+			"commit": "patch:7322472cf8456936db7619a977e86ff351699e1a",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "the gate log counts per rule, so one rule cannot crowd out the refusals of another"
@@ -19514,7 +19514,7 @@
 			"component": "upstream invariants for patch 0018",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "55889ba8",
+			"commit": "patch:7322472cf8456936db7619a977e86ff351699e1a",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "the upstream facts patch 0018 depends on are pinned, each to the file that states them"
