@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 82 | 191 | 200 | 25 | 512 |
+| fixed | 14 | 82 | 191 | 204 | 25 | 516 |
 | fixed-untested | 0 | 5 | 56 | 164 | 58 | 283 |
 | accepted-residual | 0 | 1 | 12 | 68 | 21 | 102 |
 | deferred | 2 | 2 | 14 | 9 | 2 | 29 |
 | open | 0 | 2 | 14 | 16 | 6 | 38 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 287 | 457 | 118 | 970 |
+| **all** | 16 | 92 | 287 | 461 | 118 | 974 |
 
 ## Baseline: open high and critical findings
 
@@ -1887,6 +1887,15 @@ Every other commit the register cites is on main's history, or on the branch its
 | LSR-13 | medium | fixed | Ignore lists were compared literally, so a glob covering main (\`m*\`, \`main*\`, \`ma?n\`, \`**/**\`) read as "main not ignored". | patch:21c6e1f7c416eba0e1519817a54041cd9c21e1de · `build/liveness/liveness.ts` "LSR-13 ${shape}" |
 | LSR-14 | medium | fixed | A filter key the gate doesn't model was ignored, so a tags-only push read as a live branch push. | patch:21c6e1f7c416eba0e1519817a54041cd9c21e1de · `build/liveness/liveness.ts` "LSR-13 ${shape}" |
 | LSR-15 | medium | fixed | The \`on:\` line was found by a first-line match, so a column-0 continuation of an earlier open value could carry a decoy \`on: push\` read instead of the real trigger block. | patch:56c71a618f33cc7d8c5b1e43800fb2a1acd0b9a7 · `build/liveness/liveness.ts` "LSR-15 ${shape}" |
+
+### [20261116-log-trust-gate](20261116-log-trust-gate.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| LT-1 | low | fixed | check_log_trust accepted any allow_with_constraint on MainThreadFileSystem.$writeFile without establishing that anything constrained it. | patch:6489d107052981fca94223d2c9afabc0f6de22c3 · `rpc-filter/tools/test_enforcement.py` "test_write_file_constrained_but_nothing_constrains_it" |
+| LT-2 | low | fixed | check_log_trust did not pin MainThreadFileSystem.$delete, so nothing stopped a future policy allowing a tab to delete seclabRpcFilter.log and end forwarding. | patch:6489d107052981fca94223d2c9afabc0f6de22c3 · `rpc-filter/tools/test_enforcement.py` "test_delete_must_be_denied" |
+| LT-3 | low | fixed | check_log_trust did not pin other host-file writers, MainThreadBulkEdits.$tryApplyWorkspaceEdit and MainThreadDocuments.$trySaveDocument. | patch:6489d107052981fca94223d2c9afabc0f6de22c3 · `rpc-filter/tools/test_enforcement.py` "test_other_host_file_writers_must_be_denied" |
+| LT-4 | low | fixed | check_log_trust skipped any pinned surface absent from the mapping, so the check went quiet instead of failing if a surface disappeared. | patch:6489d107052981fca94223d2c9afabc0f6de22c3 · `rpc-filter/tools/test_enforcement.py` "test_a_surface_missing_from_the_mapping_is_not_silently_skipped" |
 
 ### [20261116-pr-landing](20261116-pr-landing.md)
 
