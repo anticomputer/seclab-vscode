@@ -3769,7 +3769,7 @@
 			"component": "write-back mount (seclab-wb-mount)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "89f0b7ce56d97b4b7abb9a0bd4efd0dab8846196",
+			"commit": "ad32783bc6d61655f7acdf49fd49f2bc18f14a63",
 			"test": {
 				"file": "sandbox/test/test_wb_mount.py",
 				"name": "test_a_share_moved_by_renaming_a_tab_owned_ancestor_is_refused"
@@ -10441,7 +10441,7 @@
 			"component": "liveness gate / ci workflows (liveness-refresh)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "2b60a25fbce70b96c2723b5b3fb2d74a7968c1d2",
+			"commit": "aef8beb1ea3d224592cb19ab751a03308e1ea192",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "scheduled and push, never run on schedule"
@@ -12043,7 +12043,7 @@
 			"component": "build/hooks/pre-push",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "805b677a7b9e29bce9f4405d5c9cf25bd880cda7",
+			"commit": "e4b3408c99c1089bf6457c81ff13a8bc693c6eaa",
 			"test": {
 				"file": "test/hooks/hook-lock.test.sh",
 				"name": "a push with no ref lines says nothing was checked, never \"0 ref(s) checked\" (GATE-13)"
@@ -12059,7 +12059,7 @@
 			"component": "pin-age",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "baf79e6a4502913286017d43ee13f69824b7944f",
+			"commit": "2f45d31ce24db3390260b471f6837be37df1f6eb",
 			"test": {
 				"file": "test/safety/gate-inputs.test.ts",
 				"name": "pin-age: a cooldown below 7 days and an empty or foreign file list are refused"
@@ -12074,7 +12074,7 @@
 			"component": "check-pins supplychain.py probe",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "baf79e6a4502913286017d43ee13f69824b7944f",
+			"commit": "2f45d31ce24db3390260b471f6837be37df1f6eb",
 			"gap": "An unreadable tracked copy is now a finding; no test makes the repository's own file unreadable."
 		},
 		{
@@ -12086,7 +12086,7 @@
 			"component": "check-source.ts",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "baf79e6a4502913286017d43ee13f69824b7944f",
+			"commit": "2f45d31ce24db3390260b471f6837be37df1f6eb",
 			"test": {
 				"file": "build/check-source.ts",
 				"name": "an empty extensions/series fails (GATE-16)"
@@ -13683,7 +13683,7 @@
 			"component": "build/hooks/pre-push",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "805b677a7b9e29bce9f4405d5c9cf25bd880cda7",
+			"commit": "e4b3408c99c1089bf6457c81ff13a8bc693c6eaa",
 			"test": {
 				"file": "test/hooks/hook-lock.test.sh",
 				"name": "a push with no ref lines says nothing was checked, never \"0 ref(s) checked\" (GATE-13)"
@@ -13698,7 +13698,7 @@
 			"component": "write-back mount (seclab-wb-mount)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "805b677a7b9e29bce9f4405d5c9cf25bd880cda7",
+			"commit": "e4b3408c99c1089bf6457c81ff13a8bc693c6eaa",
 			"gap": "Checked by hand in a real sbx tab (a forged device record is refused); no automated test runs the helper's mount path."
 		},
 		{
@@ -13726,7 +13726,7 @@
 			"component": "build/check-source.ts",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "805b677a7b9e29bce9f4405d5c9cf25bd880cda7",
+			"commit": "e4b3408c99c1089bf6457c81ff13a8bc693c6eaa",
 			"test": {
 				"file": "build/check-source.ts",
 				"name": "a checkout with empty series starts with both findings (the wiring the run uses)"
@@ -13741,7 +13741,7 @@
 			"component": "build/check-pins.ts",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "805b677a7b9e29bce9f4405d5c9cf25bd880cda7",
+			"commit": "e4b3408c99c1089bf6457c81ff13a8bc693c6eaa",
 			"gap": "No case removes the parser from the list while it stays on disk."
 		},
 		{
@@ -13753,8 +13753,11 @@
 			"component": "liveness gate (workflow discovery)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "b4db393",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-1 schedule spelled ${spelling}" },
+			"commit": "0d4d0ae56b4c63b60a440882e5c4f27c7c4cc538",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-1 schedule spelled ${spelling}"
+			},
 			"note": "Three spellings are injected (`\"schedule\":`, `'schedule' :`, an inline quoted list); each fails with its unquoting reverted."
 		},
 		{
@@ -13766,8 +13769,11 @@
 			"component": "liveness gate (subject evidence)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "b4db393",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-2 a scheduled workflow proven by a ci mark" }
+			"commit": "0d4d0ae56b4c63b60a440882e5c4f27c7c4cc538",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-2 a scheduled workflow proven by a ci mark"
+			}
 		},
 		{
 			"record": "20261116-liveness-schedule-and-tombstones.md",
@@ -13778,8 +13784,11 @@
 			"component": "liveness gate (exemptions)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "b4db393",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-3 union merge resurrects a tombstoned exemption with its code" },
+			"commit": "0d4d0ae56b4c63b60a440882e5c4f27c7c4cc538",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-3 union merge resurrects a tombstoned exemption with its code"
+			},
 			"note": "Also injected: a superseded entry kept beside its replacement, and a tombstone listed twice."
 		},
 		{
@@ -13791,8 +13800,11 @@
 			"component": "liveness gate (workflow discovery)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "6d6a6f5",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-4 push filter spelled ${spelling}" },
+			"commit": "2210769e878348f70f270551476858a7ed42b314",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-4 push filter spelled ${spelling}"
+			},
 			"note": "Three spellings are injected (`\"branches\": [nope]`, `branches : [nope]`, `'paths-ignore': ['**']`)."
 		},
 		{
@@ -13804,8 +13816,11 @@
 			"component": "liveness gate (workflow discovery)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "6d6a6f5",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-5 a .yaml twin of a registered .yml workflow" }
+			"commit": "2210769e878348f70f270551476858a7ed42b314",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-5 a .yaml twin of a registered .yml workflow"
+			}
 		},
 		{
 			"record": "20261116-liveness-schedule-and-tombstones.md",
@@ -13816,8 +13831,11 @@
 			"component": "liveness gate (exemptions)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "6d6a6f5",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-6 a tombstone dropped against the base" },
+			"commit": "2210769e878348f70f270551476858a7ed42b314",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-6 a tombstone dropped against the base"
+			},
 			"note": "`./seclab liveness check` passes the base register (merge base with main, or on main the push's previous head), and liveness.ts requires it. Also checked end to end through the CLI with a dropped tombstone."
 		},
 		{
@@ -13829,8 +13847,11 @@
 			"component": "liveness gate (workflow discovery)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "b3c8fb1",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-7 ${shape}" },
+			"commit": "59e852cfe5aa679b8cdcaf7fb94918440d76cd17",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-7 ${shape}"
+			},
 			"note": "Six shapes are injected: 6- and 3-space filters, 4-space triggers, an inline flow-mapping filter, a column-0 comment before the schedule, and an unreadable trigger line. Each fail-closed branch was mutated and failed its own case."
 		},
 		{
@@ -13842,8 +13863,11 @@
 			"component": "liveness gate (exemptions)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "b3c8fb1",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-8 a restored tombstone with no exemption" }
+			"commit": "59e852cfe5aa679b8cdcaf7fb94918440d76cd17",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-8 a restored tombstone with no exemption"
+			}
 		},
 		{
 			"record": "20261116-liveness-schedule-and-tombstones.md",
@@ -13854,8 +13878,11 @@
 			"component": "liveness gate (workflow discovery)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "a2eb22b",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-9 ${shape}" },
+			"commit": "392e66e707064bef5277844d5f49e1ac83ec4e98",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-9 ${shape}"
+			},
 			"note": "Four shapes are injected (two-line branches-ignore and paths-ignore, a two-line on: list, a quoted default continued at column 0), and four controls keep ordinary workflows readable."
 		},
 		{
@@ -13867,8 +13894,11 @@
 			"component": "liveness gate (self-test)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "a2eb22b",
-			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-7 ${shape}" },
+			"commit": "392e66e707064bef5277844d5f49e1ac83ec4e98",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "LSR-7 ${shape}"
+			},
 			"note": "Cases: a trigger-level dedent, an unreadable line at the filter level, a filter-level dedent; each fails with its branch mutated."
 		}
 	]
