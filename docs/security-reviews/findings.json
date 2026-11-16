@@ -10440,8 +10440,10 @@
 			"summary": "A push run cannot be register evidence (`verifyRuns` requires dispatch or schedule), so liveness-refresh counts as live only because it runs on push.",
 			"component": "liveness gate / ci workflows (liveness-refresh)",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "build/liveness/register.json still has no `workflow:liveness-refresh` subject (verified by grep), so no evidence cites the first scheduled run as the record asks."
+			"status": "fixed",
+			"commit": "6ca347e",
+			"test": { "file": "build/liveness/liveness.ts", "name": "scheduled and push, never run on schedule" },
+			"note": "Discovery makes every scheduled workflow a subject even when it also runs on push; build/liveness/register.json cites a dispatched liveness-refresh run on main (c5cb491c), checked by verify-runs. The self-test case runs in the required workflow-lint check."
 		},
 		{
 			"record": "20261109-liveness-refresh.md",
