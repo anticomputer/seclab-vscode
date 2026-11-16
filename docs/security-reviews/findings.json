@@ -12019,8 +12019,12 @@
 			"summary": "Exits 0 when it receives no ref lines",
 			"component": "build/hooks/pre-push",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "Fail when no ref was checked."
+			"status": "fixed",
+			"commit": "27b0972",
+			"test": {
+				"file": "test/hooks/hook-lock.test.sh",
+				"name": "a push with no ref lines is blocked, not reported clean (GATE-13)"
+			}
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -12030,8 +12034,12 @@
 			"summary": "Dates no npm pins on an empty list; --days 0 passes everything",
 			"component": "pin-age",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "Fail on an empty npm list; refuse --days 0."
+			"status": "fixed",
+			"commit": "27b0972",
+			"test": {
+				"file": "test/safety/gate-inputs.test.ts",
+				"name": "pin-age: a cooldown below 7 days and an empty or foreign file list are refused"
+			}
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -12041,8 +12049,9 @@
 			"summary": "The purity probe sits in a swallowing catch",
 			"component": "check-pins supplychain.py probe",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "Fail when the file can't be read while skipped by name."
+			"status": "fixed-untested",
+			"commit": "27b0972",
+			"gap": "An unreadable tracked copy is now a finding; no test makes the repository's own file unreadable."
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -12052,8 +12061,13 @@
 			"summary": "Scans only tabd/src when extensions/series is empty",
 			"component": "check-source.ts",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "Fail on an empty extensions/series."
+			"status": "fixed",
+			"commit": "27b0972",
+			"test": {
+				"file": "build/check-source.ts",
+				"name": "an empty extensions/series fails (GATE-16)"
+			},
+			"note": "The self-test runs in ./seclab lint source."
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
@@ -12063,8 +12077,13 @@
 			"summary": "A best-effort prune masked with || true; it certifies nothing",
 			"component": "seclab image prune",
 			"owner": "fork-build",
-			"status": "open",
-			"gap": "None beyond keeping it out of any gate."
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "A local, best-effort cleanup after builds; CI skips it and no gate reads its result.",
+			"ref": {
+				"file": "seclab",
+				"quote": "never a gate: its result is ignored and certifies nothing (GATE-17)"
+			}
 		},
 		{
 			"record": "20261112-internal-identifier-scan.md",
