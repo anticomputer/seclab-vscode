@@ -57,7 +57,10 @@ Reviews ask what code says. Nothing asked whether anything calls it.
     columns, and fails closed on what it can't read: an unparseable trigger line makes the
     workflow a subject, and an inline or unreadable push filter counts as off main. A line that
     leaves a flow collection or quoted scalar open (a filter list continued on the next line)
-    makes the whole block unreadable, and so the workflow a subject. Two
+    makes the whole block unreadable, and so the workflow a subject. A filter is read only from
+    items it positively recognises (plain or quoted scalars); a block-scalar item, a bare `-`,
+    a continuation line, an anchor or tag, or an empty list makes that trigger count as off
+    main, since a dropped item in an `*-ignore` list would otherwise read as live. Two
     workflow files with one stem (`x.yml`, `x.yaml`) fail: GitHub runs both, but they would
     share one subject;
   - test-only hooks in `test/builds/variants.json`;
