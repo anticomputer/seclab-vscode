@@ -168,21 +168,64 @@ function terminalChannel(socketServer) {
  */
 const captured = [];
 /**
- * The terminal-profile probe (review RFU-1). This REH answers the window's getDefaultSystemShell
- * with a path naming `${config:seclab.test.canary}`, a host user setting the harness seeds. The
- * window resolves the profile path and sends it back in createProcess; a canary there is the
- * host's setting reaching the tab. The process is started as plain /bin/sh either way, so the
- * window's terminal still works.
+ * The terminal-profile probe (review RFU-1, RFU1R-1). This REH offers the window a profile,
+ * `seclab-probe`, whose path and `env` name `${config:seclab.test.canary}`, a host user setting
+ * the harness seeds; the harness then makes it the host's default profile, as a user's
+ * `terminal.integrated.defaultProfile.linux` would. It also answers getDefaultSystemShell with
+ * that path. The window resolves the profile and sends it back in `$createProcess`; a canary
+ * there is the host's setting reaching the tab. The probe reads the request as the window sent
+ * it, before the server resolves anything, then starts plain /bin/sh without the probe's
+ * variable, so the window's terminal still works.
  */
-const PROFILE_PATH = '/bin/sh${config:seclab.test.canary}';
-const profileProbe = { armed: false, seen: undefined };
+const PROFILE_NAME = 'seclab-probe';
+const PROFILE_ENV_KEY = 'SECLAB_PROBE_PROFILE_ENV';
+const PROFILE_VALUE = '${config:seclab.test.canary}';
+const PROFILE_PATH = `/bin/sh${PROFILE_VALUE}`;
+const profileProbe = { armed: false, offered: false, seen: undefined };
 function armProfileProbe(channel) {
 	const svc = channel && (channel._ptyHostService || channel.ptyHostService);
-	if (!svc || typeof svc.getDefaultSystemShell !== 'function') {
+	if (!svc || typeof svc.getDefaultSystemShell !== 'function' || typeof channel.call !== 'function' || channel.__seclabProfileProbe) {
 		return;
 	}
+	channel.__seclabProfileProbe = true;
 	svc.getDefaultSystemShell = async () => PROFILE_PATH;
+	const call = channel.call.bind(channel);
+	channel.call = async (ctx, command, args, ...rest) => {
+		if (command === '$createProcess' && args && args.shellLaunchConfig) {
+			observeProfileLaunch(args);
+		}
+		const result = await call(ctx, command, args, ...rest);
+		if (command === '$getProfiles' && Array.isArray(result)) {
+			profileProbe.offered = true;
+			return [...result.filter(p => !p || p.profileName !== PROFILE_NAME),
+				{ profileName: PROFILE_NAME, path: PROFILE_PATH, isDefault: false, isAutoDetected: false, env: { [PROFILE_ENV_KEY]: PROFILE_VALUE } }];
+		}
+		return result;
+	};
 	profileProbe.armed = true;
+}
+function observeProfileLaunch(args) {
+	const launch = args.shellLaunchConfig;
+	const exe = typeof launch.executable === 'string' ? launch.executable : '';
+	if (!exe.startsWith('/bin/sh') || exe === '/bin/sh') {
+		return;
+	}
+	const envValue = launch.env && typeof launch.env[PROFILE_ENV_KEY] === 'string' ? launch.env[PROFILE_ENV_KEY] : undefined;
+	if (!profileProbe.seen) {
+		profileProbe.seen = {
+			sawProfilePath: true,
+			sawProfileEnv: envValue !== undefined,
+			pathCanary: safety.canaryTokens(exe).length > 0,
+			envCanary: envValue !== undefined && safety.canaryTokens(envValue).length > 0,
+			resolvedVariablesCanary: safety.canaryTokens(args.resolvedVariables).length > 0,
+			unresolved: exe.includes('${config:') && envValue !== undefined && envValue.includes('${config:'),
+			canaryTokens: safety.canaryTokens([exe, envValue ?? null, args.resolvedVariables ?? null]),
+		};
+	}
+	launch.executable = '/bin/sh';
+	if (launch.env) {
+		delete launch.env[PROFILE_ENV_KEY];
+	}
 }
 function captureCreatedPtys(channel) {
 	const svc = channel && (channel._ptyHostService || channel.ptyHostService);
@@ -192,13 +235,6 @@ function captureCreatedPtys(channel) {
 	const original = svc.createProcess.bind(svc);
 	svc.__seclabCaptured = true;
 	svc.createProcess = async (...args) => {
-		const launch = args[0];
-		if (profileProbe.armed && launch && typeof launch.executable === 'string' && launch.executable.startsWith('/bin/sh') && launch.executable !== '/bin/sh') {
-			if (!profileProbe.seen) {
-				profileProbe.seen = { sawProfilePath: true, canaryTokens: safety.canaryTokens(launch.executable), unresolved: launch.executable.includes('${config:') };
-			}
-			launch.executable = '/bin/sh';
-		}
 		const id = await original(...args);
 		if (Number.isSafeInteger(id)) {
 			captured.push({ id, workspaceId: typeof args[9] === 'string' ? args[9] : undefined });

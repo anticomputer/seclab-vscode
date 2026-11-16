@@ -149,11 +149,12 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   pty-host requests, which resolves `${env:…}` over the host user's shell environment, is
   never registered. A refusing handler answers at once with the text unresolved and logs the
   policy key. The local backend passes no authority and keeps upstream's resolver.
-- `0034-seclab-no-host-variables-for-tab-terminals.patch`: `remoteTerminalChannel.ts` and
-  `terminalProfileResolverService.ts`. A tab's REH supplies its default shell and profiles, so in
-  a tab window the window resolves no host variables for them: `createProcess` sends no
-  `${config:…}`, `selectedText` or `lineNumber` values, and a profile path or argument resolves
-  only `${env:…}`, against the REH's own environment (review finding RFU-1).
+- `0034-seclab-no-host-variables-for-tab-terminals.patch`: `remoteTerminalChannel.ts`,
+  `terminalProfileResolverService.ts` and `terminalProcessManager.ts`. A tab's REH supplies its
+  default shell and profiles, so in a tab window the window resolves no host variables for them:
+  `createProcess` sends no `${config:…}`, `selectedText` or `lineNumber` values, and a profile's
+  path, arguments and `env` resolve only `${env:…}`, against the REH's own environment. Both
+  resolvers key on the window's authority (review findings RFU-1, RFU1R-1).
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
