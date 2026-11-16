@@ -164,8 +164,25 @@ try {
 	};
 	const rectOf = (js: string) => e.evaluate<{ x: number; y: number } | null>(`(() => { const el = ${js}; if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left + Math.min(r.width / 2, 20), y: r.top + r.height / 2 }; })()`);
 	const word = `[...document.querySelectorAll('.view-line span span')].find(s => s.textContent.includes('hoverword'))`;
-	const link = (text: string) => `[...document.querySelectorAll('.monaco-hover a')].find(a => a.textContent.trim() === '${text}')`;
+	// Only a visible link: a hover that hid after the first click can keep its DOM, with a zero box.
+	const link = (text: string) => `[...document.querySelectorAll('.monaco-hover a')].find(a => a.textContent.trim() === '${text}' && a.getBoundingClientRect().width > 0 && a.getBoundingClientRect().height > 0)`;
 	const emptyLine = `[...document.querySelectorAll('.view-line')].sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[2]`;
+	// Keys and text go only to the probe file's editor. On a pre-control build the host link opens
+	// a host terminal, which takes focus; nothing may ever be typed into it (fixture safety).
+	const inEditor = () => e.evaluate<boolean>(`!!document.activeElement?.closest('.monaco-editor') && !document.activeElement?.closest('.terminal')`);
+	const focusEditor = async (): Promise<boolean> => {
+		const l = await rectOf(emptyLine);
+		if (l) {
+			await click(l.x, l.y);
+		}
+		return inEditor();
+	};
+	const editorKey = async (key: 'Escape' | 'Enter') => {
+		if (!await inEditor()) {
+			throw new Error(`focus left the editor before ${key}; nothing typed`);
+		}
+		await e.key(key);
+	};
 
 	// Hover: host link, then own link.
 	const hoverAndClick = async (text: string): Promise<boolean> => {
@@ -189,22 +206,29 @@ try {
 	await sleep(6000);
 	results.hoverHostShells = hostShells(e.child.pid!) - before;
 	results.hoverRefused = await waitFor(() => refusals() > refusedBefore, 15_000);
-	await e.key('Escape');
+	if (await focusEditor()) {
+		await editorKey('Escape');
+	}
 	results.hoverOwnClicked = await hoverAndClick('ownlink');
+	if (process.env.SECLAB_RESPONSE_DEBUG) {
+		const href = await e.evaluate<string>(`(${link('ownlink')})?.getAttribute('data-href') ?? (${link('ownlink')})?.getAttribute('href') ?? 'none'`).catch(() => 'gone');
+		console.log(`debug ownlink href: ${href}`);
+		await e.screenshot(path.join(base, 'after-ownlink.png'));
+	}
 	results.hoverOwnRan = await waitFor(() => exists('own-hover'), 20_000);
-	await e.key('Escape');
+	if (await focusEditor()) {
+		await editorKey('Escape');
+	}
 
 	// Completion: host item, then own item.
 	const accept = async (trigger: string, label: string): Promise<boolean> => {
-		const l = await rectOf(emptyLine);
-		if (!l) {
+		if (!await focusEditor()) {
 			return false;
 		}
-		await click(l.x, l.y);
 		await e.type(trigger);
 		const shown = await waitFor(async () => !!(await e.evaluate<boolean>(`[...document.querySelectorAll('.suggest-widget .monaco-list-row')].some(r => r.textContent.includes('${label}'))`).catch(() => false)), 15_000);
 		if (shown) {
-			await e.key('Enter');
+			await editorKey('Enter');
 		}
 		return shown;
 	};
@@ -221,6 +245,10 @@ try {
 	c('run', false, 'the run completed', (err as Error).message);
 } finally {
 	await ed?.close();
+}
+// The window's own logs, kept in the run directory (gitignored, deleted with it) for diagnosis.
+if (fs.existsSync(path.join(userData, 'logs'))) {
+	fs.cpSync(path.join(userData, 'logs'), path.join(base, 'editor-logs'), { recursive: true, force: true });
 }
 
 // ------------------------------------------------------------------ judge
