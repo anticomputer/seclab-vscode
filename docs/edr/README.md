@@ -119,6 +119,7 @@ Same rules as ADRs:
 | 2026-11-12 | [Probe records hold facts, the clipboard is a canary, and nothing internal enters the repo](20261112-probe-records-canary-clipboard.md) | accepted |
 | 2026-11-12 | [Publish gate: only what can be shown to be public is published](20261112-publish-gate.md) | accepted |
 | 2026-11-12 | [A tab receives only its own settings: the configuration snapshot filter (patch 0036)](20261112-tab-configuration-snapshot.md) | accepted |
+| 2026-11-16 | [Host notebooks and a tab: notebook sync measurement (DOCSYNC-R2)](20261116-notebook-sync.md) | proposed |
 | 2026-11-16 | [Landing through pull requests: rebase merge with auto-merge](20261116-pr-landing.md) | accepted |
 | 2026-11-16 | [Server-initiated pushes refused in tab windows (0030, 0031), and 0011 retired](20261116-reh-push-refusals.md) | accepted |
 | 2026-11-16 | [Host telemetry ids stay out of tabs: telemetry off, checked at build and release](20261116-tab-telemetry-ids.md) | accepted |
