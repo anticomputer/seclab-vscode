@@ -12,8 +12,8 @@
 			"scope": "broker/: the per-tab mitmproxy broker, policy, credentials, CFS feeds, egress prompts (broker side)."
 		},
 		"rpc": {
-			"session": "RPC core landing v2",
-			"branch": "anticomputer-rpc-core-landing-v2",
+			"session": "RPC follow-ups",
+			"branch": "anticomputer-rpc-follow-ups",
 			"scope": "The RPC filter patch series, the RPC lockdown design, probes and the rogue REH."
 		},
 		"agentic": {
