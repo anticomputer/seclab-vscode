@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 82 | 198 | 207 | 27 | 528 |
+| fixed | 14 | 82 | 198 | 208 | 28 | 530 |
 | fixed-untested | 0 | 5 | 52 | 164 | 59 | 280 |
-| accepted-residual | 0 | 1 | 12 | 68 | 21 | 102 |
+| accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
 | deferred | 2 | 1 | 14 | 9 | 2 | 28 |
 | open | 0 | 3 | 14 | 15 | 6 | 38 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 290 | 463 | 121 | 982 |
+| **all** | 16 | 92 | 290 | 465 | 122 | 985 |
 
 ## Baseline: open high and critical findings
 
@@ -128,6 +128,7 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **R2-1** | low | fixed-untested | patch 0035 document sync | "Born as a text file" meant only that a text file model existed, so a tab stalling its provider's read could pre-claim a host URI. | Birth now requires a finished read (lastResolvedFileStat) with no text model yet, but the record records "code review; no probe" — there is no predictable host creator to drive. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **R4-1** | low | fixed-untested | patch 0035 document sync | A text file model that reused an existing host model kept its stat after that model was disposed, so a later host-created model would count as its own. | Reused models are tainted on onDidResolve so their later text models never count, but the record records "code review" only — no probe. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-9** | low | fixed-untested | patch 0036 configuration snapshot | The change-event key classification trusted \`e.source\`, which upstream sets to WORKSPACE for multi-layer reloads, so host key names were checked against tab keys only. | No runtime test for change-event key lists after a profile switch or reload. |
+| [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-2** | low | accepted-residual | telemetry selection at run time | A host process that opens a tab window with VSCODE_DEV set makes the window a dev build, which enables real telemetry and gives that tab the host ids. | accepted by an agent: Coordinator, 2026-11-16: kept as a recorded residual, no patch. A process that can set the editor's launch environment on the host is already outside the threat model, and a tab cannot set it. |
 | [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **DOCSYNC-R3** | low | open | window→tab pushes (editor tabs) | Window-to-tab push: the editor-tab model still exposes host URIs and labels to a tab's extension host. | No push-side control for the editor-tab model; reported to the coordinator as a 0035 sibling. |
 | [docs/edr/20261109-document-sync-provenance.md](../../docs/edr/20261109-document-sync-provenance.md) **DOCSYNC-R8** | low | accepted-residual | patch 0035 document sync (untitled rule) | A host feature that creates an empty untitled document and then fills it with host data programmatically would still sync into a tab. | accepted by an agent: The untitled rule treats an empty, path-less model first seen by the window as user-typed; no such host feature was seen in the EDR's measurement of the real editor. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **F4** | info | fixed-untested | patch 0035 document sync | \`CellUri.parse\` on a tab-made URI could throw; the sole-consumer pin matches substrings; other calls still name host URIs. | Parse now fails closed and cells are limited to the tab authority, but the record lists no regression test; the remaining host-URI call paths are accepted and reported as siblings. |
@@ -1936,6 +1937,14 @@ Every other commit the register cites is on main's history, or on the branch its
 | RFU-2 | info | open | For a workspace-listed WebSocket agent host, 0015 refuses only if the window's gate sink is installed before the first reconcile; true today, pinned only by the live proof run. | The sink-before-reconcile ordering is checked only by the live reh-push proof run, not by a unit case. |
 | RFU-3 | info | accepted-residual | Before the decision log installs, a REH can fill the 64 held slots with distinct channel-guard keys; later early decisions show only as a seclab.early-dropped count. | accepted by an agent: Low impact: held decisions past the bound are counted in a fixed-literal line, never dropped silently, and nothing a tab sends becomes a log line. |
 
+### [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| TEL-1 | low | fixed | check-release matched the literal key name; an escaped duplicate key set to true would pass it and win in JSON.parse. | d10bec83 · `build/check-release.sh` "product.json with an escaped duplicate enableTelemetry true (review TEL-1)" |
+| TEL-2 | low | accepted-residual | A host process that opens a tab window with VSCODE_DEV set makes the window a dev build, which enables real telemetry and gives that tab the host ids. | accepted by an agent: Coordinator, 2026-11-16: kept as a recorded residual, no patch. A process that can set the editor's launch environment on the host is already outside the threat model, and a tab cannot set it. |
+| TEL-3 | info | fixed | The telemetry probe seeded SQM and device ids but asserted only on machineId. | d10bec83 · `test/telemetryid/probe.ts` "no id the tab can read is any seeded host id (machine, SQM, device)" |
+
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
 | Finding | Sev | Status | Summary | Evidence |
@@ -1957,7 +1966,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | DOCSYNC-R1 | high | fixed | Window-to-tab push: the configuration snapshot still sends every host user setting value to a tab's extension host. | 37d7c0e75179bd22c9a62ae01da4241d559f08cf · `test/configsync/probe.ts` "DOCSYNC-R1 no host user setting value reaches the tab, initially or on change" |
 | DOCSYNC-R2 | medium | open | Window-to-tab push: notebook document sync still sends cells of host notebooks to a tab's extension host. | No push-side control exists for notebook sync; patch 0035 covers only the text document sync. Reported to the coordinator as a 0035 sibling. |
 | DOCSYNC-R3 | low | open | Window-to-tab push: the editor-tab model still exposes host URIs and labels to a tab's extension host. | No push-side control for the editor-tab model; reported to the coordinator as a 0035 sibling. |
-| DOCSYNC-R4 | low | fixed | Window-to-tab push: ext-host init data still carries host telemetry ids into a tab's extension host. | ebe6d08b · `build/check-release.sh` "product.json with enableTelemetry true" |
+| DOCSYNC-R4 | low | fixed | Window-to-tab push: ext-host init data still carries host telemetry ids into a tab's extension host. | b1ec43d7 · `build/check-release.sh` "product.json with enableTelemetry true" |
 | DOCSYNC-R5 | medium | open | Window-to-tab push: the terminal default profile and environment collections still reach a tab's extension host. | No push-side control for terminal profile and environment collections; reported to the coordinator as a 0035 sibling. |
 | DOCSYNC-R6 | medium | open | Window-to-tab push: workspace data is still pushed to a tab's extension host. | No push-side control for workspace data; reported to the coordinator as a 0035 sibling. |
 | DOCSYNC-R7 | medium | open | A tab can still squat host filesystem schemes with its own provider on window→tab channels other than the document sync. | Patch 0035 neutralises squatting only for the document sync (per-model provenance); no general control stops a tab registering a provider for a host scheme on other push channels. |
