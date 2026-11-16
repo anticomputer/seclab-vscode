@@ -8,6 +8,7 @@
 
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 
 import {
 	seclabChatSessionAllowed,
@@ -191,4 +192,89 @@ test('the shared enablement rule ignores every layer a tab can write', () => {
 
 test('the setting is named once', () => {
 	assert.equal(SECLAB_AGENTS_ENABLED_SETTING, 'seclab.agents.enabled');
+});
+
+test('the patch gates the queued path, which never reaches the dispatch function', () => {
+	// Security review round 2, alert 1. A request submitted with `options.queue` returns from
+	// `sendRequestInternal` BEFORE `_sendRequestAsync`, and for an agent-host session the
+	// queue is server-managed, so the gated local drain never runs either: the pending
+	// messages are synced straight to the agent host over its connection. `migrateRequests`
+	// and `sendPendingRequestImmediately` both arrive there with `queue` set.
+	//
+	// The patch text is the artifact that ships, so assert against it rather than against a
+	// copy of the call site that could drift away from it.
+	const patch = readFileSync(new URL('../../../patches/0018-seclab-agent-host-sessions-only.patch', import.meta.url), 'utf8');
+	const added = patch.split('\n').filter(l => l.startsWith('+')).join('\n');
+
+	// One implementation...
+	assert.equal((added.match(/private seclabCheckSession\(/g) ?? []).length, 1);
+	// ...called from the queued path and from the dispatch function, and from nowhere else.
+	assert.equal((added.match(/this\.seclabCheckSession\(sessionResource\);/g) ?? []).length, 2);
+
+	// The queued call must sit inside the `options?.queue` branch, above the queueing itself,
+	// or the message is already on its way to the host by the time it is checked. Ordering is
+	// read from the patch as a whole, because the branch and the `queuePendingRequest` call
+	// are upstream context lines, not added ones.
+	const queueBranch = patch.indexOf('if (options?.queue) {');
+	const queueCall = patch.indexOf('+\t\t\tthis.seclabCheckSession(sessionResource);', queueBranch);
+	const queued = patch.indexOf('this.queuePendingRequest(', queueBranch);
+	assert.ok(queueBranch >= 0, 'the queue branch should be in the patch context');
+	assert.ok(queueCall > queueBranch, 'the queued path should be checked');
+	assert.ok(queued > queueCall, 'the check must come before the request is queued');
+
+	// And the dispatch-function call must be the first statement of `_sendRequestAsync`.
+	assert.match(patch, /private _sendRequestAsync\([^)]*\)[^\n]*\n\+\t\tthis\.seclabCheckSession\(sessionResource\);/);
+});
+
+test('the gate refuses by throwing, and never by returning a value a caller could ignore', () => {
+	// A gate that returned false would depend on every call site checking it. Round 2 found
+	// callers that catch and re-queue, so the refusal has to be unignorable at the point it
+	// is made.
+	const patch = readFileSync(new URL('../../../patches/0018-seclab-agent-host-sessions-only.patch', import.meta.url), 'utf8');
+	const added = patch.split('\n').filter(l => l.startsWith('+')).join('\n');
+	const body = added.slice(added.indexOf('private seclabCheckSession('));
+	assert.match(body.slice(0, body.indexOf('\n+\t}')), /throw new Error\('Unsupported operation'\);/);
+	assert.doesNotMatch(body.slice(0, body.indexOf('\n+\t}')), /return (true|false)/);
+});
+
+test('the gate log counts per rule, so one rule cannot crowd out the refusals of another', () => {
+	// Security review round 2, alert 3. The cap was per connection number, and patch 0018's
+	// chat verdicts share connection 0 with `ahp-gate.disabled`. A tab can drive chat
+	// refusals cheaply, so a per-connection budget let it silently stop either kind from
+	// being recorded. An unlogged refusal is indistinguishable from nothing happening, which
+	// is the one thing these events exist to rule out.
+	const gate = readFileSync(new URL('../../../agentic/patch-src/src/vs/workbench/services/agentHost/browser/seclabAhpGate.ts', import.meta.url), 'utf8');
+	const sink = gate.slice(gate.indexOf('const counts ='), gate.indexOf('emitWindow = sink;'));
+
+	// Keyed by connection AND rule, not by connection alone.
+	assert.match(sink, /const counts = new Map<string, number>\(\);/);
+	assert.match(sink, /const key = `\$\{connection\}\\u0000\$\{rule\}`;/);
+	assert.match(sink, /counts\.set\(key, n\);/);
+	assert.doesNotMatch(sink, /counts\.(get|set)\(connection[,)]/);
+
+	// And when it does cap, the notice says which rule it capped, or the evidence is
+	// ambiguous in exactly the way the per-rule counting was meant to remove.
+	assert.match(sink, /cappedRule: rule/);
+});
+
+test('the upstream facts patch 0018 depends on are pinned, each to the file that states them', () => {
+	// Security review round 2, alert 4. These are the facts no unit test can hold, because
+	// the unit container has no upstream checkout: they are checked over the patched tree by
+	// the patch-build job. This test only guards that they remain pinned at all, so that
+	// dropping one is a failure here rather than a silent weakening of the argument.
+	const rules = JSON.parse(readFileSync(new URL('../../../patches/sole-consumer.json', import.meta.url), 'utf8')).__upstreamInvariants.rules as { file: string; mustContain: string[] }[];
+	const pinned = (file: string, needle: string) =>
+		rules.some(r => r.file === file && r.mustContain.some(m => m.includes(needle)));
+
+	const connections = 'src/vs/platform/agentHost/browser/agentHostConnectionsService.ts';
+	// The advertised flag is set only on a registry hit...
+	assert.ok(pinned(connections, 'backendSessionIsAdvertised: true as const'), 'advertised-flag origin');
+	// ...an unknown session is SYNTHESISED into an ambient identity rather than refused,
+	// which is why identity alone was not enough...
+	assert.ok(pinned(connections, 'AMBIENT_AGENT_HOST_AUTHORITY, provider, normalized'), 'ambient synthesis');
+	// ...and the flag reaches the resolution the gate reads only through this spread.
+	assert.ok(pinned(connections, '{ ...identity, connection }'), 'identity spread into the resolution');
+
+	// The one remaining route to `defaultValue` is closed by upstream's scope filter.
+	assert.ok(pinned('src/vs/workbench/api/common/configurationExtensionPoint.ts', 'const allowedScopes ='), 'configurationDefaults scope filter');
 });
