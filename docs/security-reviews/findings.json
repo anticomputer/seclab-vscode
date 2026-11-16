@@ -11502,7 +11502,7 @@
 			"summary": "A patch-id cache file a change committed under .work could make any patch: citation read live",
 			"component": "findings register: patch-id cache",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "e8f5613",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -11533,7 +11533,7 @@
 			"summary": "A change on main whose branch still carried a copy read as live, so the pin rule never fired",
 			"component": "findings register: pin on main",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "e8f5613",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -11548,7 +11548,7 @@
 			"summary": "The schema allowed a patch: fix commit on an entry that only inherits its branch",
 			"component": "findings register: inherited branch",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "e8f5613",
 			"status": "fixed",
 			"test": {
 				"file": "build/docs/findings.ts",
@@ -11563,7 +11563,7 @@
 			"summary": "The week-ago comparison point was chosen by any commit's date and skipped silently without a register",
 			"component": "findings register: weekly ratchet",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "e8f5613",
 			"status": "fixed-untested",
 			"gap": "Fixed in the workflow step; workflow steps have no test."
 		},

@@ -1729,10 +1729,10 @@ Every other commit the register cites is on main's history, or on the branch its
 | ZZZ-3 | low | fixed-untested | A rotted round-label citation was reported as remapped though remap never rewrites round labels | Fixed in findings_remap; no self-test drives the remap wiring end to end. |
 | ZZZ-4 | low | fixed-untested | Register text in the weekly summary's fenced block could break out of it | Fixed in the workflow step; workflow output has no test. |
 | ZZZ-5 | low | fixed-untested | An ambiguous prefix of the upstream pin was skipped silently | Fixed; the self-test can't construct an ambiguous seven-character prefix. |
-| AAAA-1 | medium | fixed | A patch-id cache file a change committed under .work could make any patch: citation read live | 0000000 · `seclab` "a malformed patch-id cache was trusted (AAAA-1)" |
+| AAAA-1 | medium | fixed | A patch-id cache file a change committed under .work could make any patch: citation read live | e8f5613 · `seclab` "a malformed patch-id cache was trusted (AAAA-1)" |
 | AAAA-2 | low | accepted-residual | A patch-id ignores whitespace and mode-only changes, so it doesn't pin content | accepted by an agent: A patch: fix commit is allowed only on an entry with its own branch, which is never compliant; the landing change drops branch and must pin a SHA (schema and self-test). |
-| AAAA-3 | low | fixed | A change on main whose branch still carried a copy read as live, so the pin rule never fired | 0000000 · `seclab` "a patch-id on main wasn't reported for pinning (AAAA-3)" |
-| AAAA-4 | low | fixed | The schema allowed a patch: fix commit on an entry that only inherits its branch | 0000000 · `build/docs/findings.ts` "only inherits its branch fails the schema (AAAA-4)" |
+| AAAA-3 | low | fixed | A change on main whose branch still carried a copy read as live, so the pin rule never fired | e8f5613 · `seclab` "a patch-id on main wasn't reported for pinning (AAAA-3)" |
+| AAAA-4 | low | fixed | The schema allowed a patch: fix commit on an entry that only inherits its branch | e8f5613 · `build/docs/findings.ts` "only inherits its branch fails the schema (AAAA-4)" |
 | AAAA-5 | low | fixed-untested | The week-ago comparison point was chosen by any commit's date and skipped silently without a register | Fixed in the workflow step; workflow steps have no test. |
 
 ### [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md)
