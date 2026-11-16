@@ -109,6 +109,12 @@ the log counted over 30 in one short run. They are the pty host resolving termin
 paths. With the refusal, a profile path that uses `${env:…}` stays unresolved in a tab, which
 is the intended cost: those values come from the host user's environment.
 
+## Review (round RFU, [record](../security-reviews/20261116-rpc-follow-ups.md))
+No high or critical finding. RFU-1 (medium, open): a REH that answers `getDefaultSystemShell` or
+`getProfiles` with a path containing `${config:…}` gets the host user's setting back, resolved
+by the window's terminal profile resolver and sent in `createProcess`. 0031 closes the `${env:…}`
+push only; this request/response path needs its own control.
+
 ## Found on the way
 
 In a tab window the command palette ranks "Terminal: Create New Integrated Terminal (Local)"

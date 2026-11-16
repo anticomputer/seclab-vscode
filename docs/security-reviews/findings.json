@@ -4328,7 +4328,7 @@
 				"file": "test/containment/push-refusal.test.ts",
 				"name": "patch 0030: upstream onExecuteCommand handler is unreachable in a tab window, and the refusal reaches nothing"
 			},
-			"note": "A rogue-REH fixture now exists (test/containment/rogue-reh, test build variant `containment`), but no filter ships. The download channel is refused by the channel guard (patch 0006); pty onExecuteCommand by patch 0030 and the pty variable request by 0031, proven in EDR 20261116-reh-push-refusals."
+			"note": "A rogue-REH fixture now exists (test/containment/rogue-reh, test build variant `containment`), but no filter ships. The download channel is refused by the channel guard (patch 0006); pty onExecuteCommand by patch 0030 and the pty host's ${env:} push by 0031, proven in EDR 20261116-reh-push-refusals. A sibling, ${config:} in a REH-supplied terminal profile path, is open as 20261116-rpc-follow-ups.md#RFU-1."
 		},
 		{
 			"record": "20261104-tabd-protocol-design.md",
@@ -13309,6 +13309,47 @@
 			"test": {
 				"file": "test/configsync/probe.ts",
 				"name": "CFG-8 a core free-form setting brings no host text (launch args)"
+			}
+		},
+		{
+			"record": "20261116-rpc-follow-ups.md",
+			"anchor": "RFU-1",
+			"round": "Landing A review (2026-11-16)",
+			"severity": "medium",
+			"summary": "A hostile REH answers getDefaultSystemShell or getProfiles with a path containing ${config:...}; the window resolves it against the unfiltered configuration (host user settings) and sends the value back to the REH in createProcess.",
+			"component": "terminal profile resolution (terminalProfileResolverService, remoteTerminalChannel.createProcess)",
+			"owner": "rpc",
+			"status": "open",
+			"followUp": "In a seclab+ window resolve terminal profile paths, args and createProcess variables against the tab's filtered configuration (the CFG-7 sibling), or leave config: unresolved, with a rogue-REH probe answering getDefaultSystemShell with a canary setting (rpc session).",
+			"gap": "No patch or probe yet: the window still resolves ${config:...} in a REH-supplied terminal profile path against the host user settings."
+		},
+		{
+			"record": "20261116-rpc-follow-ups.md",
+			"anchor": "RFU-2",
+			"round": "Landing A review (2026-11-16)",
+			"severity": "info",
+			"summary": "For a workspace-listed WebSocket agent host, 0015 refuses only if the window's gate sink is installed before the first reconcile; true today, pinned only by the live proof run.",
+			"component": "patch 0015 AHP gate / 0011 retirement",
+			"owner": "rpc",
+			"status": "open",
+			"followUp": "A unit case for the ordering, or a check that refuses when the sink is absent in a seclab+ window (rpc session).",
+			"gap": "The sink-before-reconcile ordering is checked only by the live reh-push proof run, not by a unit case."
+		},
+		{
+			"record": "20261116-rpc-follow-ups.md",
+			"anchor": "RFU-3",
+			"round": "Landing A review (2026-11-16)",
+			"severity": "info",
+			"summary": "Before the decision log installs, a REH can fill the 64 held slots with distinct channel-guard keys; later early decisions show only as a seclab.early-dropped count.",
+			"component": "seclabRpcFilter early decision hold",
+			"owner": "rpc",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"note": "Nothing is dropped silently and no line can be spoofed; the count is a fixed literal.",
+			"rationale": "Low impact: held decisions past the bound are counted in a fixed-literal line, never dropped silently, and nothing a tab sends becomes a log line.",
+			"ref": {
+				"file": "docs/security-reviews/20261116-rpc-follow-ups.md",
+				"quote": "Nothing is lost silently and no line can be spoofed"
 			}
 		}
 	]
