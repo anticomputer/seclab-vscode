@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 82 | 172 | 183 | 22 | 473 |
-| fixed-untested | 0 | 5 | 60 | 157 | 57 | 279 |
+| fixed | 14 | 82 | 172 | 184 | 22 | 474 |
+| fixed-untested | 0 | 5 | 60 | 161 | 57 | 283 |
 | accepted-residual | 0 | 1 | 12 | 66 | 20 | 99 |
 | deferred | 2 | 2 | 14 | 10 | 2 | 30 |
 | open | 0 | 2 | 14 | 21 | 6 | 43 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 272 | 437 | 113 | 930 |
+| **all** | 16 | 92 | 272 | 442 | 113 | 935 |
 
 ## Baseline: open high and critical findings
 
@@ -356,6 +356,10 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-3** | low | fixed-untested | Tab Manager (open request) | The Tab Manager's already-a-tab check, which skips the confirmation, compared paths case-insensitively, also on Linux. | No unit test drives the Tab Manager's sameFolder; it needs the extension host. |
 | [20261112-main-process-routing](20261112-main-process-routing.md) **VVV-4** | low | fixed-untested | Tab Manager (open request) | One rejected open request poisoned the Tab Manager's request chain, so later opens were dropped silently. | No test injects a rejection into the chain. |
 | [20261112-main-process-routing](20261112-main-process-routing.md) **WWW-2** | low | accepted-residual | patch 0041 (enterWorkspace guard) | Add Folder to Workspace in a tab window reloads the window when main refuses, and leaves the untitled workspace file it wrote. | accepted by an agent: Fail-closed; the tab reconnects (patch 0040). |
+| [20261116-pr-landing](20261116-pr-landing.md) **PRL-1** | low | fixed-untested | docs-check / ci-linux workflows | The proposed attestation download on pull requests included a fork's, whose code would then hold the read-only token, and it didn't run first. | The condition admits only a pull request whose head is in this repository; no test exercises a fork's pull request. |
+| [20261116-pr-landing](20261116-pr-landing.md) **PRL-2** | low | fixed-untested | landing procedure (EDR pr-landing, AGENTS.md) | A rebase merge makes main's new tip a SHA no required check has seen; the EDR didn't say so or check it after landing. | A procedure step (confirm the required checks and the denylist job on the new main SHA before the next PR); nothing enforces it. |
+| [20261116-pr-landing](20261116-pr-landing.md) **PRL-3** | low | fixed-untested | landing procedure (AGENTS.md) | Auto-merge doesn't wait for ci-linux oci, which isn't required, including after an update-branch. | Procedure only (wait before arming; after an update, disarm, wait, re-arm). Machine enforcement needs an always-running gate job in ci-linux and a fifth required context. |
+| [20261116-pr-landing](20261116-pr-landing.md) **PRL-4** | low | fixed-untested | docs/edr/20261116-pr-landing.md, docs/edr/20261104-ci-hardening.md | The EDR, AGENTS.md and the CI-hardening record gave contradicting landing procedures. | Documentation only; nothing to test. |
 | [docs/adr/20261104-extension-placement-hardening.md](../../docs/adr/20261104-extension-placement-hardening.md) **ADR-EPH-1** | low | open | patch 0003 / extension placement | Installing an extension in an empty local window still writes it to the host extensions dir; blocking local installs needs a further shared-process patch. | Recorded only as an ADR open item: no patch blocks local installs, and no test covers the write-but-never-run behaviour (it is the same gap as m0 3-1's missing Level B case). |
 | [20261104-broker-folder-open-loaders](20261104-broker-folder-open-loaders.md) **5** | info | fixed-untested | tab.event contract (tabd / Tab Manager) | If the client counts Workspace Trust or "allow automatic tasks" as a user action, the gate is open when runOn: folderOpen fires. | The spec fix is in schema/protocol.v1.json and the Tab Manager only sends tab.userAction on keyboard/mouse selection changes, but no test asserts that consent interactions (Workspace Trust, automatic tasks, security dialogs) never produce userAction. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **L-2** | info | accepted-residual | campaign fixture arming | The stage's run-dir check accepts any path containing \`/.work/\`, not only this worktree's. | accepted by an agent: The marker is written with the \`wx\` flag, so the worst case is creating one new file in some other \`.work/\` directory. |
@@ -1849,6 +1853,16 @@ Every other commit the register cites is on main's history, or on the branch its
 | CFG-8 | medium | fixed | Core \`launch\` (WINDOW scope, not restricted) carried the user's debug configurations to the tab; args and connection strings can hold credentials the classifier misses. | a141fb5c605b57df2fa1028c531afcfc93aeccce · `test/configsync/probe.ts` "CFG-8 a core free-form setting brings no host text (launch args)" |
 | CFG-9 | low | fixed-untested | The change-event key classification trusted \`e.source\`, which upstream sets to WORKSPACE for multi-layer reloads, so host key names were checked against tab keys only. | No runtime test for change-event key lists after a profile switch or reload. |
 | CFG-10 | info | fixed | The CFG-3 harness assertion became vacuous after the CFG-1 change, and no canary covered core free-form settings. | a141fb5c605b57df2fa1028c531afcfc93aeccce · `test/configsync/probe.ts` "CFG-8 a core free-form setting brings no host text (launch args)" |
+
+### [20261116-pr-landing](20261116-pr-landing.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| PRL-1 | low | fixed-untested | The proposed attestation download on pull requests included a fork's, whose code would then hold the read-only token, and it didn't run first. | The condition admits only a pull request whose head is in this repository; no test exercises a fork's pull request. |
+| PRL-2 | low | fixed-untested | A rebase merge makes main's new tip a SHA no required check has seen; the EDR didn't say so or check it after landing. | A procedure step (confirm the required checks and the denylist job on the new main SHA before the next PR); nothing enforces it. |
+| PRL-3 | low | fixed-untested | Auto-merge doesn't wait for ci-linux oci, which isn't required, including after an update-branch. | Procedure only (wait before arming; after an update, disarm, wait, re-arm). Machine enforcement needs an always-running gate job in ci-linux and a fifth required context. |
+| PRL-4 | low | fixed-untested | The EDR, AGENTS.md and the CI-hardening record gave contradicting landing procedures. | Documentation only; nothing to test. |
+| PRL-5 | low | fixed | A required check passes when a job-level if: skips its job or a trigger filter keeps its workflow from running, and the workflow files belong to the change. | 121f1c96349e7a3e690c57f753afb3ba287cd63a · `build/check-required-checks.ts` "a required job with a job-level if" |
 
 ### [20261116-rpc-follow-ups](20261116-rpc-follow-ups.md)
 

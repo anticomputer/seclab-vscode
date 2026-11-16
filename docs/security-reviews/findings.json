@@ -13564,6 +13564,67 @@
 				"file": "docs/security-reviews/20261116-rpc-follow-ups.md",
 				"quote": "Nothing is lost silently and no line can be spoofed"
 			}
+		},
+		{
+			"record": "20261116-pr-landing.md",
+			"anchor": "PRL-1",
+			"round": "Round PRL",
+			"severity": "low",
+			"summary": "The proposed attestation download on pull requests included a fork's, whose code would then hold the read-only token, and it didn't run first.",
+			"component": "docs-check / ci-linux workflows",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "121f1c96349e7a3e690c57f753afb3ba287cd63a",
+			"gap": "The condition admits only a pull request whose head is in this repository; no test exercises a fork's pull request."
+		},
+		{
+			"record": "20261116-pr-landing.md",
+			"anchor": "PRL-2",
+			"round": "Round PRL",
+			"severity": "low",
+			"summary": "A rebase merge makes main's new tip a SHA no required check has seen; the EDR didn't say so or check it after landing.",
+			"component": "landing procedure (EDR pr-landing, AGENTS.md)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "121f1c96349e7a3e690c57f753afb3ba287cd63a",
+			"gap": "A procedure step (confirm the required checks and the denylist job on the new main SHA before the next PR); nothing enforces it."
+		},
+		{
+			"record": "20261116-pr-landing.md",
+			"anchor": "PRL-3",
+			"round": "Round PRL",
+			"severity": "low",
+			"summary": "Auto-merge doesn't wait for ci-linux oci, which isn't required, including after an update-branch.",
+			"component": "landing procedure (AGENTS.md)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "121f1c96349e7a3e690c57f753afb3ba287cd63a",
+			"gap": "Procedure only (wait before arming; after an update, disarm, wait, re-arm). Machine enforcement needs an always-running gate job in ci-linux and a fifth required context."
+		},
+		{
+			"record": "20261116-pr-landing.md",
+			"anchor": "PRL-4",
+			"round": "Round PRL",
+			"severity": "low",
+			"summary": "The EDR, AGENTS.md and the CI-hardening record gave contradicting landing procedures.",
+			"component": "docs/edr/20261116-pr-landing.md, docs/edr/20261104-ci-hardening.md",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "121f1c96349e7a3e690c57f753afb3ba287cd63a",
+			"gap": "Documentation only; nothing to test."
+		},
+		{
+			"record": "20261116-pr-landing.md",
+			"anchor": "PRL-5",
+			"round": "Round PRL",
+			"severity": "low",
+			"summary": "A required check passes when a job-level if: skips its job or a trigger filter keeps its workflow from running, and the workflow files belong to the change.",
+			"component": "required checks (build/check-required-checks.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "121f1c96349e7a3e690c57f753afb3ba287cd63a",
+			"test": { "file": "build/check-required-checks.ts", "name": "a required job with a job-level if" },
+			"note": "Nine self-test cases, run with the check by ./seclab lint workflows in the required lint job; also proven on the real tree by injecting if: false into ci-unit."
 		}
 	]
 }
