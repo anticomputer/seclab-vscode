@@ -140,20 +140,18 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   registers its rewrite with the filter, which permits those methods only once registered.
   Whatever extension id a tab claims, it addresses only its own partition
   ([ADR addendum](../docs/adr/20261106-tab-state-partition.md)).
+- `0030-seclab-no-remote-cli-push-in-tabs.patch`: `remoteTerminalBackend.ts`. In a tab
+  window upstream's `onExecuteCommand` handler, which runs a command the REH names, is never
+  registered. A refusing handler answers each push at once with an error, touches no command
+  service, and logs the policy key through the filter's decision log (`seclabRefusePush`).
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
 builds. The rogue-REH hook lives at
-`test/containment/rogue-reh/serverServices-hook.patch`.
-
-**It is applied by nothing today (2026-11-06).** This file previously said it
-was "applied by the containment harness for a dedicated probe build". That
-mechanism does not exist: no build script, workflow, harness or `seclab`
-subcommand applies the patch or sets `SECLAB_ROGUE_REH`. The rogue-REH probes
-have therefore never executed, and `check-probes.ts` skips the whole bucket
-when their evidence file is absent. A dedicated containment build variant is
-being added; until it lands, treat every `rehProbes` entry as a specification
-and not as a result ([EDR](../docs/edr/20261104-rpc-escape-probes.md)).
+`test/containment/rogue-reh/serverServices-hook.patch`, and only the `containment` test build
+variant applies it (`test/builds/variants.json`,
+[EDR](../docs/edr/20261106-test-build-variants.md)); `check-release` refuses any artifact
+carrying it.
 
 Expected later patches (M4): the RPC capability filter, auth mediation,
 partitioning, webview egress, and main-process folder routing (proposed).

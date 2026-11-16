@@ -3581,7 +3581,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-06 18:50:32
-@@ -0,0 +1,1007 @@
+@@ -0,0 +1,1053 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -3654,7 +3654,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 + * authorization, and a UI must present it as "claims to be X".
 + */
 +export interface SeclabDecision {
-+	readonly surface: 'rpc' | 'cmd' | 'chan' | 'data';
++	readonly surface: 'rpc' | 'cmd' | 'chan' | 'data' | 'push';
 +	readonly id: string;
 +	readonly ref: string;
 +	readonly tabId: string;
@@ -3675,12 +3675,39 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +const SECLAB_AGGREGATE_MS = 10_000;
 +const seclabPending = new Map<string, { decision: SeclabDecision; count: number; timer: unknown }>();
 +
++/**
++ * Decisions made before anything listens, held for the first listener. A push refusal can come
++ * before the window's first extension host installs the log (the pty host asks as soon as the
++ * terminal backend exists), and a denial nothing records is the failure the log exists to end.
++ * Bounded; past the bound only a count is kept, delivered with the flush.
++ */
++const SECLAB_EARLY_MAX = 64;
++const seclabEarly: SeclabDecision[] = [];
++let seclabEarlyDropped = 0;
++
 +export function seclabOnDecision(listener: SeclabDecisionListener): { dispose(): void } {
 +	seclabListeners.add(listener);
++	const early = seclabEarly.splice(0);
++	const dropped = seclabEarlyDropped;
++	seclabEarlyDropped = 0;
++	for (const d of early) {
++		seclabDeliver(d);
++	}
++	if (dropped > 0) {
++		seclabDeliver({ surface: 'rpc', id: 'seclab.early-dropped', ref: 'rpc:seclab.early-dropped', tabId: 'unparsed', verdict: 'deny', reason: 'decisions before the log installed, over the hold bound', count: dropped, at: Date.now() });
++	}
 +	return { dispose: () => { seclabListeners.delete(listener); } };
 +}
 +
 +function seclabDeliver(d: SeclabDecision): void {
++	if (seclabListeners.size === 0) {
++		if (seclabEarly.length < SECLAB_EARLY_MAX) {
++			seclabEarly.push(d);
++		} else {
++			seclabEarlyDropped++;
++		}
++		return;
++	}
 +	for (const l of seclabListeners) {
 +		try {
 +			l(d);
@@ -4488,14 +4515,33 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 + * for instance -- want this one; reusing `seclabAiDisabled` there would read
 + * as a claim about chat that the code is not making.
 + */
-+// Not exported on this branch. Its only external callers were the two
-+// server-initiated push patches, which are held back until the rogue-REH
-+// fixture can actually run them; exporting it here would leave a seclab entry
-+// point that ships, type-checks and is never called -- the shape the patch
-+// queue's dead-entry-point check exists to catch. The follow-up branch
-+// re-exports it as part of those patches.
-+function seclabIsTabAuthority(remoteAuthority: string | null | undefined): boolean {
++export function seclabIsTabAuthority(remoteAuthority: string | null | undefined): boolean {
 +	return typeof remoteAuthority === 'string' && SECLAB_AUTHORITY.test(remoteAuthority);
++}
++
++/**
++ * The server-initiated pushes a tab window refuses, by policy key. A closed set, so a caller
++ * cannot log a tab-chosen string as the ref.
++ */
++export type SeclabRefusedPush =
++	| 'push:remoteterminal:$onExecuteCommand'
++	| 'push:remoteterminal:$onPtyHostRequestResolveVariablesEvent';
++
++/**
++ * Record that a tab window refused a server-initiated push (patches 0030 and 0031).
++ *
++ * These pushes never cross RPCProtocol, so no filter sees them; the terminal backend refuses
++ * them itself and reports here, into the same decision log, throttle and byte budget as every
++ * other denial. The line carries the policy key and a fixed reason only: never the command id
++ * or the variable names the push asked for, which the tab chose. Repeats collapse into one
++ * follow-up with a count, like every other key.
++ */
++export function seclabRefusePush(remoteAuthority: string | null | undefined, ref: SeclabRefusedPush): void {
++	seclabRecord({
++		surface: 'push', id: ref, ref,
++		tabId: seclabResolveTabId(remoteAuthority ?? '') ?? 'unparsed',
++		verdict: 'deny', reason: 'server-initiated push refused in a tab window', at: Date.now(),
++	});
 +}
 +
 +/**
