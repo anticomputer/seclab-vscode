@@ -385,7 +385,7 @@
       "component": "window\u2192tab pushes (ext-host init data)",
       "owner": "docsync",
       "status": "fixed",
-      "commit": "b1ec43d7",
+      "commit": "patch:0b9bd0fc05b03578c6ffd01f23ff813087b3615c",
       "test": {
         "file": "build/check-release.sh",
         "name": "product.json with enableTelemetry true"
@@ -405,7 +405,7 @@
       "severity": "low",
       "summary": "check-release matched the literal key name; an escaped duplicate key set to true would pass it and win in JSON.parse.",
       "status": "fixed",
-      "commit": "d10bec83",
+      "commit": "patch:77902decf6792ae25e93576234f6434d417c2662",
       "test": {
         "file": "build/check-release.sh",
         "name": "product.json with an escaped duplicate enableTelemetry true (review TEL-1)"
@@ -436,7 +436,7 @@
       "severity": "info",
       "summary": "The telemetry probe seeded SQM and device ids but asserted only on machineId.",
       "status": "fixed",
-      "commit": "d10bec83",
+      "commit": "patch:77902decf6792ae25e93576234f6434d417c2662",
       "test": {
         "file": "test/telemetryid/probe.ts",
         "name": "no id the tab can read is any seeded host id (machine, SQM, device)"

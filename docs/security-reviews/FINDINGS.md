@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 82 | 198 | 208 | 28 | 530 |
+| fixed | 14 | 82 | 199 | 208 | 28 | 531 |
 | fixed-untested | 0 | 5 | 52 | 164 | 59 | 280 |
 | accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
-| deferred | 2 | 1 | 14 | 9 | 2 | 28 |
-| open | 0 | 3 | 14 | 15 | 6 | 38 |
+| deferred | 2 | 1 | 14 | 9 | 3 | 29 |
+| open | 0 | 3 | 13 | 15 | 6 | 37 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 290 | 465 | 122 | 985 |
+| **all** | 16 | 92 | 290 | 465 | 123 | 986 |
 
 ## Baseline: open high and critical findings
 
@@ -120,7 +120,6 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 |---|---|---|---|---|---|
 | [20261104-tab-observability](20261104-tab-observability.md) **CW-1** | medium | deferred | settings-withheld notice (patch 0036) | A tab extension registering the same command id would win through ICommandService, suppressing the withheld notice and learning key names. | follow-up: Lands with patch 0036 (config/settings filter), owned by the docsync session; 0036 is not in patches/series on main nor on origin/anticomputer-config-snapshot yet. tabd refuses the claim unless 0036 is shipped, so no notice is produced meanwhile. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-2** | medium | fixed-untested | patch 0036 configuration snapshot | A tab-declared \`__proto__.&lt;x&gt;\` key reached addToValueTree on a plain object (prototype write in the renderer); inherited registry lookups for keys like \`constructor\`. | No runtime test: unsafe segments are refused, the output tree has a null prototype and lookups use Object.hasOwn. Upstream DefaultConfiguration has the same sink (not fixed here). |
-| [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **DOCSYNC-R2** | medium | open | window→tab pushes (notebook sync) | Window-to-tab push: notebook document sync still sends cells of host notebooks to a tab's extension host. | No push-side control exists for notebook sync; patch 0035 covers only the text document sync. Reported to the coordinator as a 0035 sibling. |
 | [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **DOCSYNC-R5** | medium | open | window→tab pushes (terminal profile/env) | Window-to-tab push: the terminal default profile and environment collections still reach a tab's extension host. | No push-side control for terminal profile and environment collections; reported to the coordinator as a 0035 sibling. |
 | [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **DOCSYNC-R6** | medium | open | window→tab pushes (workspace data) | Window-to-tab push: workspace data is still pushed to a tab's extension host. | No push-side control for workspace data; reported to the coordinator as a 0035 sibling. |
 | [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **DOCSYNC-R7** | medium | open | window→tab pushes (filesystem-scheme squatting) | A tab can still squat host filesystem schemes with its own provider on window→tab channels other than the document sync. | Patch 0035 neutralises squatting only for the document sync (per-model provenance); no general control stops a tab registering a provider for a host scheme on other push channels. |
@@ -136,6 +135,7 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-4** | info | fixed-untested | patch 0036 configuration snapshot | The change key list named a key once more after it became withheld, and keys the tab planted in its own layer revealed host edits. | No runtime test for change-event key lists. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-5** | info | fixed-untested | patch 0036 configuration snapshot | A withheld-setting report refused before the Tab Manager registered its command was counted as sent. | No runtime test for report retry. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-7** | info | open | variable resolution (outside 0036) | \`${config:…}\` in a tab-owned tasks.json or launch.json resolves in the renderer against the unfiltered configuration. | A sibling of the snapshot filter: resolve config variables for tab tasks against the tab's filtered view. |
+| [docs/edr/20261116-notebook-sync.md](../../docs/edr/20261116-notebook-sync.md) **DOCSYNC-R9** | info | deferred | window→tab pushes (notebook sync) | Notebooks don't work in tabs; enabling them needs per-model notebook provenance, a serializer that reads only the tab's files, and 0035's cell rule for tab-created notebooks. | follow-up: With the RPC follow-ups session's landing D, which needs a validator for MainThreadNotebook (coordinator, 2026-11-16). The plan is in the EDR's Decision section; test/nbsync/probe.ts must pass with notebooks on. |
 
 ### Egress and credential broker
 
@@ -1941,9 +1941,9 @@ Every other commit the register cites is on main's history, or on the branch its
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
-| TEL-1 | low | fixed | check-release matched the literal key name; an escaped duplicate key set to true would pass it and win in JSON.parse. | d10bec83 · `build/check-release.sh` "product.json with an escaped duplicate enableTelemetry true (review TEL-1)" |
+| TEL-1 | low | fixed | check-release matched the literal key name; an escaped duplicate key set to true would pass it and win in JSON.parse. | patch:77902decf6792ae25e93576234f6434d417c2662 · `build/check-release.sh` "product.json with an escaped duplicate enableTelemetry true (review TEL-1)" |
 | TEL-2 | low | accepted-residual | A host process that opens a tab window with VSCODE_DEV set makes the window a dev build, which enables real telemetry and gives that tab the host ids. | accepted by an agent: Coordinator, 2026-11-16: kept as a recorded residual, no patch. A process that can set the editor's launch environment on the host is already outside the threat model, and a tab cannot set it. |
-| TEL-3 | info | fixed | The telemetry probe seeded SQM and device ids but asserted only on machineId. | d10bec83 · `test/telemetryid/probe.ts` "no id the tab can read is any seeded host id (machine, SQM, device)" |
+| TEL-3 | info | fixed | The telemetry probe seeded SQM and device ids but asserted only on machineId. | patch:77902decf6792ae25e93576234f6434d417c2662 · `test/telemetryid/probe.ts` "no id the tab can read is any seeded host id (machine, SQM, device)" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
@@ -1964,9 +1964,10 @@ Every other commit the register cites is on main's history, or on the branch its
 | RPC-R3 | info | accepted-residual | Methods denied pending validators and the response-side control: SCM, tree views, output channels, status bar, decorations, tab-registered language features, tasks, debug, URI handlers. | accepted by an agent: Deny-by-default is the fork's chosen posture: these surfaces stay denied until a structural response-side control exists (RPC-R2), so the gap is visible loss of function rather than a containment hole. Extensions still activate, run their own commands, keep per-tab state and secrets, and read/write/search their own workspace. |
 | INC-3 | high | fixed | A run's beacon was left running on the host, bound to a non-loopback address, with no manifest entry so teardown and clean-host both reported clean | 5842c15 · `test/containment/teardown.test.ts` "a leaked helper with no manifest entry is still found" |
 | DOCSYNC-R1 | high | fixed | Window-to-tab push: the configuration snapshot still sends every host user setting value to a tab's extension host. | 37d7c0e75179bd22c9a62ae01da4241d559f08cf · `test/configsync/probe.ts` "DOCSYNC-R1 no host user setting value reaches the tab, initially or on change" |
-| DOCSYNC-R2 | medium | open | Window-to-tab push: notebook document sync still sends cells of host notebooks to a tab's extension host. | No push-side control exists for notebook sync; patch 0035 covers only the text document sync. Reported to the coordinator as a 0035 sibling. |
+| DOCSYNC-R2 | medium | fixed | Window-to-tab push: notebook document sync still sends cells of host notebooks to a tab's extension host. | cc51fa7d · `test/nbsync/probe.ts` "DOCSYNC-R2 NB-1 no host notebook cell reaches the tab through the notebook sync" |
+| DOCSYNC-R9 | info | deferred | Notebooks don't work in tabs; enabling them needs per-model notebook provenance, a serializer that reads only the tab's files, and 0035's cell rule for tab-created notebooks. | follow-up: With the RPC follow-ups session's landing D, which needs a validator for MainThreadNotebook (coordinator, 2026-11-16). The plan is in the EDR's Decision section; test/nbsync/probe.ts must pass with notebooks on. |
 | DOCSYNC-R3 | low | open | Window-to-tab push: the editor-tab model still exposes host URIs and labels to a tab's extension host. | No push-side control for the editor-tab model; reported to the coordinator as a 0035 sibling. |
-| DOCSYNC-R4 | low | fixed | Window-to-tab push: ext-host init data still carries host telemetry ids into a tab's extension host. | b1ec43d7 · `build/check-release.sh` "product.json with enableTelemetry true" |
+| DOCSYNC-R4 | low | fixed | Window-to-tab push: ext-host init data still carries host telemetry ids into a tab's extension host. | patch:0b9bd0fc05b03578c6ffd01f23ff813087b3615c · `build/check-release.sh` "product.json with enableTelemetry true" |
 | DOCSYNC-R5 | medium | open | Window-to-tab push: the terminal default profile and environment collections still reach a tab's extension host. | No push-side control for terminal profile and environment collections; reported to the coordinator as a 0035 sibling. |
 | DOCSYNC-R6 | medium | open | Window-to-tab push: workspace data is still pushed to a tab's extension host. | No push-side control for workspace data; reported to the coordinator as a 0035 sibling. |
 | DOCSYNC-R7 | medium | open | A tab can still squat host filesystem schemes with its own provider on window→tab channels other than the document sync. | Patch 0035 neutralises squatting only for the document sync (per-model provenance); no general control stops a tab registering a provider for a host scheme on other push channels. |
