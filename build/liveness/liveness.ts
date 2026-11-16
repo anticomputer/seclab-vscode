@@ -517,39 +517,79 @@ export function triggers(yml: string, files?: string[]): string[] {
 	if (inline) {
 		return inline.replace(/^\[|\]$/g, '').split(',').map(unq).filter(Boolean);
 	}
+	// Indent-aware, not column-anchored (LSR-7): YAML only needs a child deeper than its parent,
+	// so the trigger level is the first child's indent and each trigger's filter level is its own
+	// first child's. Anything the scanner can't read fails closed: a trigger line it can't parse
+	// is `unparsed` (the workflow becomes a subject), and a trigger with an inline value or an
+	// unreadable filter is treated as filtered off main.
 	const out: string[] = [];
 	let cur: string | undefined;
 	let key: string | undefined;
+	let level: number | undefined;
+	let fLevel: number | undefined;
 	const filters = new Map<string, Map<string, string[]>>();
+	const opaque = new Set<string>();
+	const indent = (l: string) => /^ */.exec(l)![0].length;
 	for (const l of lines.slice(i + 1)) {
+		if (/^\s*(#.*)?$/.test(l)) {
+			continue;
+		}
 		if (/^\S/.test(l)) {
 			break;
 		}
-		const m = /^ {2}(["']?)([A-Za-z_]+)\1\s*:/.exec(l) ?? /^ {2}- (["']?)([A-Za-z_]+)\1\s*$/.exec(l);
-		if (m) {
+		const n = indent(l);
+		level ??= n;
+		if (n < level) {
+			out.push('unparsed');
+			continue;
+		}
+		if (n === level) {
+			const m = /^ *(["']?)([A-Za-z_]+)\1\s*:\s*(.*)$/.exec(l) ?? /^ *- (["']?)([A-Za-z_]+)\1\s*(?:#.*)?$/.exec(l);
+			if (!m) {
+				out.push('unparsed');
+				cur = undefined;
+				continue;
+			}
 			out.push(m[2]);
 			cur = m[2];
 			key = undefined;
+			fLevel = undefined;
+			const v = (m[3] ?? '').replace(/#.*/, '').trim();
+			if (v && !/^(?:null|~|\{\})$/.test(v)) {
+				opaque.add(cur);
+			}
 			continue;
 		}
-		const k = /^ {4}(["']?)(branches|branches-ignore|paths|paths-ignore)\1\s*:\s*(.*)$/.exec(l);
-		if (k && cur) {
-			key = k[2];
-			const v = k[3].replace(/#.*/, '').trim();
-			const f = filters.get(cur) ?? new Map<string, string[]>();
-			f.set(key, v ? v.replace(/^\[|\]$/g, '').split(',').map(unq).filter(Boolean) : []);
-			filters.set(cur, f);
+		if (!cur) {
 			continue;
 		}
-		const item = /^ {4,}- (.+)$/.exec(l);
-		if (item && cur && key) {
+		fLevel ??= n;
+		const item = /^ *- (.+)$/.exec(l);
+		if (item && key && n >= fLevel) {
 			filters.get(cur)!.get(key)!.push(unq(item[1].replace(/#.*/, '')));
-		} else if (/^ {4}\S/.test(l)) {
+			continue;
+		}
+		if (n === fLevel) {
+			const k = /^ *(["']?)([A-Za-z_-]+)\1\s*:\s*(.*)$/.exec(l);
 			key = undefined;
+			if (!k) {
+				opaque.add(cur);
+			} else if (['branches', 'branches-ignore', 'paths', 'paths-ignore'].includes(k[2])) {
+				key = k[2];
+				const v = k[3].replace(/#.*/, '').trim();
+				const f = filters.get(cur) ?? new Map<string, string[]>();
+				f.set(key, v ? v.replace(/^\[|\]$/g, '').split(',').map(unq).filter(Boolean) : []);
+				filters.set(cur, f);
+			}
+		} else if (n < fLevel) {
+			opaque.add(cur);
 		}
 	}
 	const glob = (g: string) => new RegExp(`^${g.split(/(\*\*\/?|\*)/).map(p => p === '**' || p === '**/' ? '.*' : p === '*' ? '[^/]*' : p.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('')}$`);
 	const runs = (t: string) => {
+		if (opaque.has(t)) {
+			return false;
+		}
 		const f = filters.get(t);
 		if (!f) {
 			return true;
@@ -635,7 +675,7 @@ export function discover(files: string[], read: (f: string) => string): Map<stri
 		const t = triggers(read(f), files);
 		// Push runs show the pushed code works, not the scheduled class: a scheduled workflow needs
 		// run evidence of its own even when it also runs on push (liveness-refresh, review MMM).
-		if ((!t.includes('push') && !t.includes('pull_request')) || t.includes('schedule')) {
+		if ((!t.includes('push') && !t.includes('pull_request')) || t.includes('schedule') || t.includes('unparsed')) {
 			out.set(`workflow:${path.posix.basename(f).replace(/\.ya?ml$/, '')}`, f);
 		}
 	}
@@ -791,6 +831,13 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 		const sym = name ?? path.posix.basename(file);
 		if (!uses(codeOnly(read(x.consumer), langOf(x.consumer) ?? 'sh', true), sym)) {
 			errors.push(`exempt ${x.subject}: consumer ${x.consumer} never uses ${sym} (comments don't count). The exemption claims something untrue.`);
+		}
+	}
+	// `restored` is one-shot: it stands only while the exemption it let back exists, so an armed
+	// tombstone can't sit inert for a later merge to bring the exemption back silently (LSR-8).
+	for (const t of tombs.values()) {
+		if (t.restored !== undefined && !exempted.has(t.subject)) {
+			errors.push(`removed ${t.subject}: says restored, but nothing exempts it; drop \`restored\` to re-arm the tombstone`);
 		}
 	}
 	for (const [k, d] of dead) {
@@ -1106,6 +1153,17 @@ async function selfTest(): Promise<void> {
 	for (const [spelling, filter] of [['"branches": [nope]', '    "branches": [nope]\n'], ['branches : [nope]', '    branches : [nope]\n'], ["'paths-ignore': ['**']", "    'paths-ignore': ['**']\n"]]) {
 		injections.push([`LSR-4 push filter spelled ${spelling}`, { ...base, '.github/workflows/nightly.yml': `on:\n  workflow_dispatch:\n  push:\n${filter}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:nightly .* add it to/]);
 	}
+	// LSR-7: indentation is YAML's, not a fixed column; what the scanner can't read fails closed.
+	for (const [shape, on] of [
+		['a 6-space filter', 'on:\n  workflow_dispatch:\n  push:\n      branches: [nope]\n'],
+		['a 3-space filter', 'on:\n  workflow_dispatch:\n  push:\n   branches: [nope]\n'],
+		['4-space triggers', 'on:\n    workflow_dispatch:\n    push:\n        paths-ignore:\n          - \'**\'\n'],
+		['an inline flow-mapping filter', 'on:\n  workflow_dispatch:\n  push: {branches: [nope]}\n'],
+		['a column-0 comment before the schedule', "on:\n  push:\n# weekly\n  schedule:\n    - cron: '1 1 * * 1'\n"],
+		['an unreadable trigger line', "on:\n  push:\n  ? schedule\n"],
+	]) {
+		injections.push([`LSR-7 ${shape}`, { ...base, '.github/workflows/nightly.yml': `${on}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:nightly .* add it to/]);
+	}
 	injections.push(['LSR-5 a .yaml twin of a registered .yml workflow', { ...base, '.github/workflows/weekly.yaml': "on:\n  schedule:\n    - cron: '2 2 * * 2'\njobs:\n  r:\n    steps:\n      - run: echo\n" }, /weekly\.yaml and \.github\/workflows\/weekly\.yml are both subject workflow:weekly/]);
 	{ // 4. an array nobody reads (seclabTaintEscapes): only test-reached code writes it
 		const r = reg();
@@ -1174,6 +1232,13 @@ async function selfTest(): Promise<void> {
 		const ok = await run(withReg(back, { 'tabd/src/zombie.ts': 'export function resurrected() {}\n' }), reg());
 		if (ok.errors.length) {
 			throw new Error(`self-test: a restored tombstone with its exemption back should pass; got:\n${ok.errors.join('\n')}`);
+		}
+		// LSR-8: armed with no exemption (pre-armed, or left on after the exemption went).
+		const armed = reg();
+		armed.removed = [{ ...armed.removed![0], restored: 'synthetic: armed ahead of time' }];
+		const inert = await run(withReg(armed), reg());
+		if (!inert.errors.some(e => /removed tabd\/src\/zombie\.ts#resurrected: says restored, but nothing exempts it/.test(e))) {
+			throw new Error(`self-test: injected "LSR-8 a restored tombstone with no exemption" not caught; got:\n${inert.errors.join('\n') || '(no errors)'}`);
 		}
 	}
 	const r = JSON.parse(base['build/liveness/register.json']) as Register;
