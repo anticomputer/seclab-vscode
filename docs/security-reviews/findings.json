@@ -11677,7 +11677,7 @@
 			"summary": "The baseline listing wrote into .work without creating it, so a fresh runner failed before the growth check",
 			"component": "findings register: baseline listing",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "ff9431f",
 			"status": "fixed-untested",
 			"gap": "One-line fix; the self-test runs where .work already exists."
 		},
@@ -11689,7 +11689,7 @@
 			"summary": "The old register was read back through the bind mount, which can serve a partial file",
 			"component": "findings register: growth",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "ff9431f",
 			"status": "fixed-untested",
 			"gap": "Fixed by reading from stdin; the race isn't reproducible on demand."
 		},
@@ -11701,7 +11701,7 @@
 			"summary": "growth 0 compared the register with itself and passed",
 			"component": "findings register: growth",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "ff9431f",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -11716,7 +11716,7 @@
 			"summary": "The no-early-closing-reader check was narrow: missed forms, findings functions only, one-line functions misread",
 			"component": "findings register: structural check",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "ff9431f",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -11731,7 +11731,7 @@
 			"summary": "findings_emit hid a real read error's message",
 			"component": "findings register: output",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "ff9431f",
 			"status": "fixed-untested",
 			"gap": "Message-only change; nothing to test."
 		},
@@ -11743,7 +11743,7 @@
 			"summary": "With SIGPIPE ignored, as on CI runners, cat got EPIPE and exited 1, failing the listing",
 			"component": "findings register: output",
 			"owner": "register",
-			"commit": "0000000",
+			"commit": "ff9431f",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",

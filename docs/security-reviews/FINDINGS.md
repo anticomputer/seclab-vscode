@@ -1690,10 +1690,10 @@ Every other commit the register cites is on main's history, or on the branch its
 | AAAA-5 | low | fixed-untested | The week-ago comparison point was chosen by any commit's date and skipped silently without a register | Fixed in the workflow step; workflow steps have no test. |
 | BBBB-1 | medium | fixed-untested | The baseline listing wrote into .work without creating it, so a fresh runner failed before the growth check | One-line fix; the self-test runs where .work already exists. |
 | BBBB-2 | low | fixed-untested | The old register was read back through the bind mount, which can serve a partial file | Fixed by reading from stdin; the race isn't reproducible on demand. |
-| BBBB-3 | low | fixed | growth 0 compared the register with itself and passed | 0000000 · `seclab` "growth 0 compared the register with itself (BBBB-3)" |
-| BBBB-4 | low | fixed | The no-early-closing-reader check was narrow: missed forms, findings functions only, one-line functions misread | 0000000 · `seclab` "seclab pipes into a reader that closes early" |
+| BBBB-3 | low | fixed | growth 0 compared the register with itself and passed | ff9431f · `seclab` "growth 0 compared the register with itself (BBBB-3)" |
+| BBBB-4 | low | fixed | The no-early-closing-reader check was narrow: missed forms, findings functions only, one-line functions misread | ff9431f · `seclab` "seclab pipes into a reader that closes early" |
 | BBBB-5 | info | fixed-untested | findings_emit hid a real read error's message | Message-only change; nothing to test. |
-| BBBB-6 | medium | fixed | With SIGPIPE ignored, as on CI runners, cat got EPIPE and exited 1, failing the listing | 0000000 · `seclab` "for sig in "" "trap" |
+| BBBB-6 | medium | fixed | With SIGPIPE ignored, as on CI runners, cat got EPIPE and exited 1, failing the listing | ff9431f · `seclab` "for sig in "" "trap" |
 
 ### [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md)
 
