@@ -686,12 +686,16 @@ read, write and open their own workspace files.
     every extension host on its own initiative, so screening tab calls never sees it.
     The document sync is closed by patch 0035: a tab's host receives only documents
     it owns, judged per model
-    ([EDR](edr/20261109-document-sync-provenance.md)). Still open, each needing its
-    own push-side control:
-    - the configuration snapshot (every user setting value);
+    ([EDR](edr/20261109-document-sync-provenance.md)). Closed since:
+    - the configuration snapshot (every user setting value); patch 0036
+      ([EDR](edr/20261112-tab-configuration-snapshot.md));
+    - ext-host init data (host telemetry ids); placeholders only, because telemetry
+      is off, which the build and the release check enforce
+      ([EDR](edr/20261116-tab-telemetry-ids.md)).
+
+    Still open, each needing its own push-side control:
     - notebook document sync (cells of host notebooks);
     - the editor-tab model (host URIs and labels);
-    - ext-host init data (host telemetry ids);
     - the terminal default profile and environment collections;
     - workspace data;
     - filesystem-scheme squatting by a tab provider.

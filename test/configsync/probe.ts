@@ -179,6 +179,7 @@ if (mode === 'prepare') {
 		const seen = (k: string) => hits.some(h => h.startsWith(`${k}@`));
 		expect('CFG-1 an extension-declared key receives no host value (env-map URL, plain value, nested form)', !seen('toolsEnv') && !seen('label') && !seen('nested'));
 		expect('CFG-8 a core free-form setting brings no host text (launch args)', !seen('launchArgs'));
+		expect('DOCSYNC-R1 no host user setting value reaches the tab, initially or on change', !['undeclared', 'proxyAuth', 'password', 'secretValue', 'changed'].some(seen));
 		for (const k of KINDS) {
 			const at = hits.filter(h => h.startsWith(`${k}@`));
 			expect(`no ${k} canary reached the tab`, at.length === 0, at.join(','));

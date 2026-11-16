@@ -8,6 +8,10 @@
 #     (build/test-variant.sh; EDR test-build-variants);
 #   - environment-controlled module loading: require()/import() of a path taken from
 #     process.env (a classic test hook that becomes a backdoor in a release);
+#   - an app product.json without a top-level `"enableTelemetry": false` (tab-indented, the name once
+#     in the file; anything else fails closed): with telemetry on,
+#     the host's machine, SQM, device and session ids reach every tab's extension host (EDR
+#     tab-telemetry-ids);
 #   - a path with no JS at all (wrong path = no check), or any scan error (fail closed).
 # --desktop (the trusted app, never the REH; invariant I8, EDR agent-runtimes-exception): also
 # fails on any agent runtime, on disk or listed in an asar header (the Copilot SDK and its
@@ -63,13 +67,14 @@ if [ "${1:-}" = "--self-test" ]; then
 	mk5 "$T/two" ''; printf '0001-a.patch\n0005-rpc.patch\n0006-b.patch\n' > "$T/two/series"; printf '+++ b/%s\n' "$RPC_POLICY_REL" > "$T/two/0006-b.patch"
 	hab=$(printf 'a\nb\n' | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | cut -c1-64)
 	habn=$(printf 'a\nb' | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | cut -c1-64)
-	stamp() { printf '{\n\t"nameShort": "x",\n\t"seclabTabRouter": "seclab.tab-manager",\n\t"seclabRpcPolicy": {\n\t\t"sha256": "%s",\n\t\t"file": "%s"\n\t}\n}\n' "$1" "$RPC_POLICY_REL" > "$T/root/product.json"; }
+	stamp() { printf '{\n\t"nameShort": "x",\n\t"enableTelemetry": false,\n\t"seclabTabRouter": "seclab.tab-manager",\n\t"seclabRpcPolicy": {\n\t\t"sha256": "%s",\n\t\t"file": "%s"\n\t}\n}\n' "$1" "$RPC_POLICY_REL" > "$T/root/product.json"; }
+	plain() { printf '{\n\t"nameShort": "x",\n\t"enableTelemetry": false\n}\n' > "$T/root/product.json"; }
 	run() { # $1 patches dir, $2 expect pass|fail, $3 what, $4 mode (default release)
 		if SECLAB_PATCHES="$1" sh "$SELF" --inner "$T/w" "${4:-release}" "$T/root" >"$T/out" 2>&1; then r=pass; else r=fail; fi
 		rm -rf "$T/w"
 		[ "$r" = "$2" ] || { cat "$T/out" >&2; echo "check-release self-test: $3: got $r, want $2" >&2; exit 1; }
 	}
-	echo '{"nameShort":"x"}' > "$T/root/product.json"
+	plain
 	run "$T/no5" pass "no 0005, no stamp"
 	run "$T/with5" fail "0005 listed, no stamp"
 	stamp "$hab"; run "$T/with5" pass "0005 listed, its table's hash"
@@ -79,10 +84,10 @@ if [ "${1:-}" = "--self-test" ]; then
 	stamp "$hab"; run "$T/two" fail "another patch also changes the table"
 	# DDD: a commented-out 0005 is absent; CRLF in series still lists it; a duplicate key fails.
 	printf '0001-a.patch\n# 0005-rpc.patch\n' > "$T/no5/series"
-	echo '{"nameShort":"x"}' > "$T/root/product.json"; run "$T/no5" pass "0005 only in a comment: absent"
+	plain; run "$T/no5" pass "0005 only in a comment: absent"
 	printf '0001-a.patch\r\n0005-rpc.patch\r\n' > "$T/with5/series"
 	stamp "$hab"; run "$T/with5" pass "CRLF series still lists 0005"
-	printf '{"seclabRpcPolicy":{"sha256":"%s"},"x":{"seclabRpcPolicy":{"sha256":"%s"}}}\n' "$hab" "$hab" > "$T/root/product.json"
+	printf '{\n\t"enableTelemetry": false,\n\t"seclabRpcPolicy": {"sha256": "%s"}, "x": {"seclabRpcPolicy": {"sha256": "%s"}}\n}\n' "$hab" "$hab" > "$T/root/product.json"
 	run "$T/with5" fail "a duplicate nested seclabRpcPolicy"
 	# The RPC filter's enforcing marker, each defect injected first: missing from the app with
 	# 0005 listed, naming another table, present without 0005; then the right one passes, and
@@ -116,10 +121,23 @@ if [ "${1:-}" = "--self-test" ]; then
 	bgfix
 	run "$T/with5" pass "desktop, 0005 listed, its enforcing marker" desktop
 	rm "$T/root/g.js" "$T/root/b.js" "$T/root/r.js"
-	echo '{"nameShort":"x"}' > "$T/root/product.json"
+	plain
 	run "$T/no5" fail "an enforcing marker without 0005"
 	rm "$T/root/m.js"; stamp "$hab"
 	run "$T/with5" pass "the REH (release mode), 0005 listed, no workbench marker needed"
+	# Telemetry stays off in every app product.json (EDR tab-telemetry-ids): true, missing, twice,
+	# only nested (a decoy) and not at the top level's indent all fail.
+	sed 's/"enableTelemetry": false/"enableTelemetry": true/' "$T/root/product.json" > "$T/pj" && mv "$T/pj" "$T/root/product.json"
+	run "$T/with5" fail "product.json with enableTelemetry true"
+	sed '/"enableTelemetry"/d' "$T/root/product.json" > "$T/pj" && mv "$T/pj" "$T/root/product.json"
+	run "$T/with5" fail "product.json without enableTelemetry"
+	stamp "$hab"; sed 's/"nameShort": "x",/"nameShort": "x", "enableTelemetry": true,/' "$T/root/product.json" > "$T/pj" && mv "$T/pj" "$T/root/product.json"
+	run "$T/with5" fail "product.json with enableTelemetry twice"
+	printf '{\n\t"nameShort": "x",\n\t"seclabTabRouter": "seclab.tab-manager",\n\t"seclabRpcPolicy": {\n\t\t"enableTelemetry": false,\n\t\t"sha256": "%s",\n\t\t"file": "%s"\n\t}\n}\n' "$hab" "$RPC_POLICY_REL" > "$T/root/product.json"
+	run "$T/with5" fail "product.json with enableTelemetry false only in a nested object"
+	stamp "$hab"; tr -d '\n\t' < "$T/root/product.json" > "$T/pj" && mv "$T/pj" "$T/root/product.json"
+	run "$T/with5" fail "product.json not tab-indented (fails closed)"
+	stamp "$hab"; run "$T/with5" pass "the REH again, enableTelemetry false at the top level"
 	rm -rf "$T/root"; mkdir -p "$T/root"; echo 'var x=1;' > "$T/root/a.js"
 	run "$T/no5" fail "no product.json at all"
 	echo "check-release self-test: ok"
@@ -168,6 +186,16 @@ if [ "${1:-}" = "--inner" ]; then
 		# The RPC filter stamp (prepare.sh step 7), both directions, in every app product.json.
 		prods=$(find "$d" -type f -name product.json -not -path "*/extensions/*" -not -path "*/node_modules/*" 2>/dev/null)
 		[ -n "$prods" ] || { echo "check-release: no product.json under $d"; bad=1; }
+		while IFS= read -r pj; do
+			[ -n "$pj" ] || continue
+			# The build writes product.json tab-indented, so a top-level key sits at one tab. Fail
+			# closed: the name once in the whole file, on a top-level `false` line (no nested decoy).
+			n=$(grep -o 'enableTelemetry' "$pj" | wc -l | tr -d ' ')
+			top=$(grep -c "^$(printf '\t')\"enableTelemetry\": false,\{0,1\}$(printf '\r')\{0,1\}\$" "$pj" || :)
+			[ "$n" = 1 ] && [ "$top" = 1 ] || { echo "check-release: $pj must set top-level \"enableTelemetry\": false exactly once (found the name $n times); with telemetry on, host telemetry ids reach tabs"; bad=1; }
+		done <<EOF
+$prods
+EOF
 		while IFS= read -r pj; do
 			[ -n "$pj" ] && [ -n "$rpc_exp" ] || continue
 			flat=$(tr -d ' \t\r\n' < "$pj")
