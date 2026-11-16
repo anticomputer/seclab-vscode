@@ -318,6 +318,34 @@ Checked as sound:
   `withheld.ts`) so the forger's five calls are unit-tested end to end against a real
   tabd hub; the Tab Manager keeps only the editor API wiring.
 
+## Round 14: window decision logs against the landed RPC core (EDR window-decision-logs)
+Scope: the forwarder (`windowlog.ts`, Tab Manager wiring), tabd's report path and
+`rpc.deny-burst`, checked against the landed writers (patch 0005's `seclabRpcFilter.log`,
+patch 0015's `seclabAhpGate.log`); the new probe `test/observability/window-log-probe.ts` and
+its in-tab `rpc-prober`.
+
+One pass. No high or critical findings.
+
+| ID | Sev | Area | Finding | Status | Fix |
+|---|---|---|---|---|---|
+| WL-4 | Medium | attribution | A reused window keeps its log folder, so one log holds every tab the window showed. A new tab's forwarder, with no resume position of its own, read the file from the start and reported the earlier tab's lines (including undelivered ones) as its own trusted events, e.g. a `rpc.deny-burst` a tab didn't cause. | Fixed | The forwarder binds to the window session: it starts at the latest `rpc:seclab.installed` line (one per renderer) and drops lines in both logs stamped before it; nothing is forwarded until it exists. Regression test (a reused window, both logs). |
+| WL-5 | Medium | detection | The landed filter collapses repeated denials of one call into a follow-up line with `count`; `rpc.deny-burst` counted lines, so hammering one method stayed under the threshold. | Fixed | Each line weighs its `count` (at most 1000). Regression test. |
+| WL-6 | Low | fixture hygiene | The probe's altered app copies weren't deleted and stayed registered with LaunchServices under the product's bundle id. | Fixed | Unregistered and deleted on every path, with a teardown check; the copies from the first run were removed. |
+
+Checked as sound:
+- Every real line shape parses: `ref` ≤ 256 and `reason` ≤ 512 are bounded before
+  serialising, lines ≤ 4096 (forwarder limit 8 KiB); the install, throttled and over-budget
+  lines parse, and a bad `ref` becomes `refText`, not a rejection.
+- The interlock reads host files only (`product.json` and the bundle under `appRoot`); the
+  marker names the stamped table; the log folder comes from the local extension host and is
+  opened `O_NOFOLLOW`.
+- The trust basis holds on main: all `MainThreadLogger.*` denied, `$writeFile`
+  URI-constrained, `$mkdir`/`$copy`/`$rename` denied. `check_log_trust` is narrower than the
+  EDR claimed (it doesn't check the `$writeFile` constraint's kind or pin `$delete`); recorded
+  in the EDR and passed to the RPC session.
+- The prober is inert unless armed, calls one nonexistent `seclab.*` command, and writes only
+  the tab's `/tmp`.
+
 ## Accepted residuals (documented in the ADR)
 - `tab-vm-root` events are forgeable by root inside the tab VM. The collector's heartbeats are `tab-vm-root` evidence, not proof. Never base a decision on them alone.
 - Under OCI the privileged Falco sees every container on the Docker host. Only rules for the exact tab container ids are loaded, and its only output is stdout to tabd.

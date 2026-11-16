@@ -203,6 +203,16 @@
 			]
 		},
 		{
+			"id": "fixture:test/observability/rpc-prober",
+			"runBy": "test/observability/window-log-probe.ts (headless macOS editor, sbx tab, local only)",
+			"evidence": [
+				{
+					"record": "docs/edr/20261106-window-decision-logs.md",
+					"date": "2026-11-16"
+				}
+			]
+		},
+		{
 			"id": "fixture:test/docsync/probe-extension",
 			"runBy": "test/docsync/probe.ts prepare|seed|check, with the editor launched by test/window.ts (macOS, sbx, local only)",
 			"evidence": [
