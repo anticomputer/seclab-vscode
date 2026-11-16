@@ -377,6 +377,52 @@
       "note": "No core patch (coordinator, 2026-11-16): telemetry stays off, so a tab sees placeholders; product.jq and check-release enforce it. Runtime test: test/telemetryid/probe.ts. The per-tab id patch is the plan if telemetry is ever enabled (docs/edr/20261116-tab-telemetry-ids.md)."
     },
     {
+      "record": "20261116-tab-telemetry-ids.md",
+      "round": "Findings",
+      "component": "release check (telemetry)",
+      "owner": "docsync",
+      "anchor": "TEL-1",
+      "severity": "low",
+      "summary": "check-release matched the literal key name; an escaped duplicate key set to true would pass it and win in JSON.parse.",
+      "status": "fixed",
+      "commit": "67125db3",
+      "test": {
+        "file": "build/check-release.sh",
+        "name": "product.json with an escaped duplicate enableTelemetry true (review TEL-1)"
+      }
+    },
+    {
+      "record": "20261116-tab-telemetry-ids.md",
+      "round": "Findings",
+      "component": "telemetry selection at run time",
+      "owner": "docsync",
+      "anchor": "TEL-2",
+      "severity": "low",
+      "summary": "A host process that opens a tab window with VSCODE_DEV set makes the window a dev build, which enables real telemetry and gives that tab the host ids.",
+      "status": "accepted-residual",
+      "acceptedBy": "agent",
+      "rationale": "Only a host process can set the variable; a tab cannot. Reported to the coordinator to decide whether the shipped app should ignore VSCODE_DEV.",
+      "ref": {
+        "file": "docs/edr/20261116-tab-telemetry-ids.md",
+        "quote": "Only the host can set it; a tab can't."
+      }
+    },
+    {
+      "record": "20261116-tab-telemetry-ids.md",
+      "round": "Findings",
+      "component": "telemetryid harness",
+      "owner": "docsync",
+      "anchor": "TEL-3",
+      "severity": "info",
+      "summary": "The telemetry probe seeded SQM and device ids but asserted only on machineId.",
+      "status": "fixed",
+      "commit": "67125db3",
+      "test": {
+        "file": "test/telemetryid/probe.ts",
+        "name": "no id the tab can read is any seeded host id (machine, SQM, device)"
+      }
+    },
+    {
       "record": null,
       "anchor": "DOCSYNC-R5",
       "severity": "medium",
