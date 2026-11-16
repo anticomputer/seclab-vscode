@@ -5191,9 +5191,13 @@
 			"summary": "Truncated, non-UTF-8 or very long-line content could be approved without the user seeing all of it.",
 			"component": "write-back review prompt (Tab Manager)",
 			"owner": "fork-build",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "b73bca7",
-			"gap": "extensions/seclab-tab-manager/src/writeback.ts escapes non-UTF-8 and offers only 'Approve without seeing all of it' when truncated, but the extension has no unit tests and no level-B check renders a truncated or binary held change."
+			"test": {
+				"file": "test/tab-manager/tab-manager.test.ts",
+				"name": "OO-2: a truncated tab version offers neither plain Approve nor Always"
+			},
+			"note": "The same file checks non-UTF-8 content shows escaped byte by byte."
 		},
 		{
 			"record": "20261104-write-back-engine.md",
@@ -5267,9 +5271,12 @@
 			"summary": "Wrapping counted characters, not display columns, so blanks or wide characters pushed a payload off-screen.",
 			"component": "write-back review prompt (Tab Manager)",
 			"owner": "fork-build",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "7819404",
-			"gap": "visibleLine()/width() render blank runs as ⟨N blanks⟩ and wrap at 80 display columns, but there is no test file for the extension, so none of the rendering is exercised."
+			"test": {
+				"file": "test/tab-manager/tab-manager.test.ts",
+				"name": "PP-1: blank runs and long lines cannot push a payload off-screen"
+			}
 		},
 		{
 			"record": "20261104-write-back-engine.md",
@@ -9124,9 +9131,12 @@
 			"summary": "Until the RPC filter lands, tab code can open the package-feeds command and a timed Enter accepts the modal's default button.",
 			"component": "Tab Manager package feeds",
 			"owner": "fork-build",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "c4cf748",
-			"gap": "The fresh random 4-letter typed code is in packages.ts, but the Tab Manager has no automated test; nothing asserts the confirmation cannot be satisfied without typing it."
+			"test": {
+				"file": "test/tab-manager/tab-manager.test.ts",
+				"name": "EEE-3: accepting the modal alone (a timed Enter) never turns feeds on"
+			}
 		},
 		{
 			"record": "20261106-cfs-feeds-tabd.md",
@@ -9166,9 +9176,13 @@
 			"summary": "A tab extension could fake user activity (cursorMove with source 'mouse', type) and relax the broker's early-after-open auto-deny.",
 			"component": "Tab Manager userAction relay",
 			"owner": "fork-build",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "fc70586",
-			"gap": "prompts.ts additionally requires window.state.focused && window.state.active, but the Tab Manager has no unit tests; the tabd-side test only covers relay and rate limiting. The core fix (strip `source` from commands issued by remote extension hosts) is still open in the RPC filter work."
+			"test": {
+				"file": "test/tab-manager/tab-manager.test.ts",
+				"name": "BBB-1: selection changes count as user activity only in a focused, active window"
+			},
+			"note": "The Tab Manager's mitigation is tested; the core fix (strip `source` from commands issued by remote extension hosts) belongs to the RPC filter work."
 		},
 		{
 			"record": "20261106-egress-prompts.md",
@@ -10059,7 +10073,7 @@
 			"owner": "fork-build",
 			"status": "fixed-untested",
 			"commit": "821fe75",
-			"gap": "writeback.ts:509 already refuses \"Always allow\" for isGitPath/isHookish (no unit test asserts a `.git/**` path specifically — the existing alwaysAllow tests cover agent config, hooks and manifests), and the new check-mode disarm on exit/SIGINT/SIGTERM has no test."
+			"gap": "The \"always allow\" half is tested (tabd/test/writeback.test.ts, NNN-3 case: .git at any depth); the check-mode disarm on exit/SIGINT/SIGTERM still has no test."
 		},
 		{
 			"record": "20261109-level-b-repair.md",
