@@ -324,7 +324,9 @@ def gen_models() -> str:
             + "\n".join(out)
             + "\nKnown model hosts (`seclab_broker/data/model-hosts.v1.json`). A request to one of these "
             "is denied unless the policy declares a provider for its host:\n\n"
-            + ", ".join(f"`{e['host']}`" for e in hosts["entries"]) + ".\n")
+            + ", ".join(f"`{e['host']}`" for e in hosts["entries"] if "host" in e) + ".\n"
+            + "".join(f"\nAlso every host matching `{e['pattern']}`: {e['reason'].split(';')[0]}.\n"
+                      for e in hosts["entries"] if "pattern" in e))
 
 
 GENERATORS = {

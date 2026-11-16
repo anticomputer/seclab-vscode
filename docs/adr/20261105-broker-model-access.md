@@ -393,14 +393,19 @@ before calling it verified).
   form. That github.com maps to `api.github.com` for it too is an inference
   from the shared shape, until a github.com run or its source confirms it.
 
-**Open: GHE.com data-residency CAPI hosts.**
+**GHE.com data-residency CAPI hosts (was open; closed 2026-11-16, finding MODEL-R4).**
 - A GHE.com tenant's CAPI host is outside the built-in `copilot` provider's
-  hosts and the known model-host list (patterns have no inner wildcard).
-- A policy that binds the GitHub token to such a host must also declare a
-  provider for it, for example a copy of `copilot` with that host. Otherwise
-  the body policy does not apply there.
-- The secure-agentic provider table must do this until the broker can match
-  those hosts.
+  hosts (patterns have no inner wildcard), and the runtime takes it from the
+  server's `endpoints.api`, so its exact label isn't fixed.
+- Every `copilot*.<tenant>.ghe.com` host is now a known model host
+  (`model-hosts.v1.json`, an anchored pattern in the provider-data grammar).
+  A request to one is denied unless the policy declares a provider for it,
+  for example a copy of `copilot` with that host, so the GitHub token can't
+  reach a tenant CAPI host without the body policy
+  (`test_model_r4_ghe_com_copilot_hosts_need_a_declared_provider`).
+- The secure-agentic provider table must declare such a provider for a GHE.com
+  tenant. A tenant CAPI host not named `copilot*` would still escape this
+  match; none is documented.
 
 **Probes:**
 - `broker/tests/unit/test_models.py`: `test_measured_copilot_requests_pass`,

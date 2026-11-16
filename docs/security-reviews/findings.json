@@ -181,10 +181,10 @@
 			"component": "broker model access (providers)",
 			"owner": "broker",
 			"status": "open",
-			"gap": "Recorded as \"Open\" in the ADR: no code change and no test; a policy that binds the GitHub token to a tenant CAPI host must also declare a provider for it, and nothing refuses such a binding without one.",
+			"gap": "Being fixed: copilot*.<tenant>.ghe.com hosts become known model hosts; the register status follows in the next commit.",
 			"ref": {
 				"file": "docs/adr/20261105-broker-model-access.md",
-				"quote": "**Open: GHE.com data-residency CAPI hosts.**"
+				"quote": "**GHE.com data-residency CAPI hosts (was open; closed 2026-11-16, finding MODEL-R4).**"
 			}
 		},
 		{
