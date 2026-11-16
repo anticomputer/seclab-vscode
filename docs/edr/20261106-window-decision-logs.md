@@ -98,7 +98,7 @@ forgery) or other host-file writers such as `$tryApplyWorkspaceEdit` and `$trySa
 and it skipped a method missing from the policy instead of failing. All are denied or
 URI-constrained in the landed policy today. The RPC session's fix (written, not yet
 on main) checks the generated positional URI table for `$writeFile`, pins the others to
-`deny`, and fails on absence.
+`deny`, and fails on absence (its review record's LT-1 to LT-4).
 
 **Merge order is enforced in code** (review round 12, HIGH before this fix). Before the
 filter ships, a tab can reach `MainThreadLogger.$log`, and its init data names the logger
@@ -141,11 +141,12 @@ The bundle is scanned once per window, off the activation path.
 
 ## Evidence on record
 - **`fixture:test/observability/rpc-prober`:** `node test/observability/window-log-probe.ts
-  --app .work/app-branch/seclab-vscode.app`, branch build 43935119119 (`5a26d48`, on main
+  --app .work/app-branch/seclab-vscode.app`, branch build 43953524461 (`688f15b`, on main
   with the RPC core: stamp `seclabRpcPolicy.sha256` c4d64e51…, the matching enforcing
-  marker, and this forwarder), sbx, headless driver, 2026-11-16. In each variant the prober
-  ran in the tab and the RPC filter refused its call; the window's `seclabRpcFilter.log` had
-  the install line and the denial, and `seclabAhpGate.log` had one gate decision.
+  marker, and this forwarder with the review round 14 fixes), sbx, headless driver,
+  2026-11-16. In each variant the prober ran in the tab and the RPC filter refused its call;
+  the window's `seclabRpcFilter.log` had the install line and the denial, and
+  `seclabAhpGate.log` had one gate decision, written before the filter's install line.
   - **Unmodified build:** all 41 lines (40 RPC filter, 1 AHP gate) reached tabd as trusted
     `rpc.decision` / `ahp.decision` events, the probed command's `ref` tagged untrusted.
   - **A copy without the product stamp:** tabd got none of the 60 lines; the Tab Manager
@@ -154,4 +155,5 @@ The bundle is scanned once per window, off the activation path.
     policy table applied (c4d64e51691e), enforcement marker missing in this build".
 
   The editor ran background-only and never took focus; every variant's teardown was clean,
-  and the altered copies were deleted with their run directories.
+  and the altered copies were unregistered and deleted. Earlier runs on builds 43935119119
+  and 43942841086 found the leftover copies (WL-6) and the dropped gate line (WL-7).
