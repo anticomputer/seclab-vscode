@@ -49,12 +49,10 @@
 	},
 	"baseline": [
 		"20261104-probe-safety.md#3#2",
-		"20261104-probe-safety.md#4",
 		"20261104-probe-safety.md#5",
 		"20261104-supply-chain.md#WW-4",
 		"20261104-tab-observability.md#WL-1",
 		"20261104-tabd-protocol-design.md#1",
-		"20261105-agent-host-patches.md#2",
 		"20261105-agent-host-patches.md#3",
 		"20261105-rpc-core-increment.md#1",
 		"20261105-rpc-filter-rereview.md#1",
@@ -2474,10 +2472,13 @@
 			"summary": "Unarmed observation block wrote the full host environment, the clipboard and real GitHub and Microsoft sessions into the attacker-readable workspace.",
 			"component": "probe payloads (extension.js)",
 			"owner": "rpc",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "df28c85",
-			"note": "Gated on arming with a five-key env allow-list and a fake auth provider; the lint's structural arming rule (run by ci-unit) fails if the gate call survives without a bail-out. Related host-data residual: INC-1.",
-			"gap": "Enforced only by `rpc-filter/tools/lint_probes.py` (\"no arming gate: a safety.context()/armed(root) call must be \"), which is not a regression test: no test fails if the fix is reverted."
+			"note": "Gated on arming with a five-key env allow-list and a fake auth provider; the lint's structural arming rule (run by ci-unit) fails if the gate call survives without a bail-out. Related host-data residual: INC-1. The regression test found the lint's bail-out rule too loose (any nearby return counted, so `if (false) { return; }` passed); it now requires `if (!ctx.armed)` or `if (!armed(root))` with a return or continue in its block.",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_a_payload_without_its_arming_bail_fails"
+			}
 		},
 		{
 			"record": "20261104-probe-safety.md",
@@ -5447,9 +5448,12 @@
 			"summary": "0009 gated only registerTool, so registerToolData/Implementation still registered the host-shell tool and every tab-contributed tool in a tab window.",
 			"component": "patch 0009 (no built-in chat in tabs)",
 			"owner": "rpc",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "cc51fa7",
-			"gap": "0009 now gates registerToolData and registerToolImplementation (the primitives that write _tools) plus invokeTool, verified by reading the patch; no test or probe exercises the registration refusal, and the six AI probes that would measure it are unimplemented (finding 3)."
+			"test": {
+				"file": "test/containment/chat-gate.test.ts",
+				"name": "registerToolData refuses first in a tab window"
+			}
 		},
 		{
 			"record": "20261105-agent-host-patches.md",

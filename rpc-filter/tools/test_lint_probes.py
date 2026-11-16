@@ -169,5 +169,50 @@ class GuardedSourceTest(unittest.TestCase):
         self.assertEqual(L.main([os.path.dirname(os.path.abspath(__file__))]), 1)
 
 
+
+class ArmingGateTest(unittest.TestCase):
+    """probe-safety finding 4: every payload entry point bails unless the run armed it.
+
+    The fix lives in the payloads (each calls safety.context() and returns when not armed) and is
+    held by the lint's `no-arming` rule. Run over a copy of the tree: the shipped payloads pass,
+    and each payload with its bail-out removed fails, so reverting either half is caught.
+    """
+
+    REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+
+    def copy(self):
+        root = tempfile.mkdtemp(prefix="seclab-arming-test-")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        shutil.copytree(os.path.join(self.REPO, "test"), os.path.join(root, "test"),
+                        ignore=shutil.ignore_patterns("node_modules", ".work"))
+        return root
+
+    def lint_ids(self, root):
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            status = L.main([root])
+        return status, out.getvalue()
+
+    def test_control_the_copied_payloads_pass(self):
+        status, out = self.lint_ids(self.copy())
+        self.assertEqual(status, 0, out)
+
+    def test_a_payload_without_its_arming_bail_fails(self):
+        for rel in L.MUST_ARM:
+            root = self.copy()
+            path = os.path.join(root, rel)
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
+            gutted = text.replace("if (!ctx.armed) {", "if (false) {")
+            self.assertNotEqual(gutted, text, "%s no longer has the bail this test removes" % rel)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(gutted)
+            status, out = self.lint_ids(root)
+            self.assertEqual(status, 1, rel)
+            self.assertIn("no-arming", out, rel)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
