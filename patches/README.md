@@ -97,10 +97,9 @@ Current queue:
   ([EDR](../docs/edr/20261112-tab-configuration-snapshot.md)).
 - `0038-seclab-editor-tab-provenance.patch`: in a `seclab+` window, a non-local extension host's
   editor-tab model shows host-side editors only as present: an opaque id (a salted hash), an
-  unknown input and the label `Editor`. An editor is the tab's own when every resource it shows
-  is on this window's tab authority, a model this host's own provider made, a file of a
-  filesystem provider this host registered (0035's tags), or a path-less untitled document.
-  Terminals and webview panels keep their input. Local hosts and other windows are unchanged
+  unknown input and the label `Editor`. An editor is the tab's own when it shows a resource and
+  every resource is on this window's tab authority, a webview panel's or terminal's own id, or a
+  model 0035 would sync to this host. Local hosts and other windows are unchanged
   ([EDR](../docs/edr/20261116-editor-tab-provenance.md)).
 - `0040-reresolve-managed-authority-on-restart.patch`: after Restart Extension Host, a window
   whose authority resolved to a managed connection (`seclab+`) resolves it again through the

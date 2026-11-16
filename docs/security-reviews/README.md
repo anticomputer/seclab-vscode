@@ -152,6 +152,7 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-12 | [patch 0036, the tab configuration snapshot](20261112-tab-configuration-snapshot.md) | origin/main..branch head: patch 0036, build/secret-rules and test/configsync. | see record |
 | 2026-11-16 | [broker dependency bumps past the CFS hold (round 18)](20261116-broker-dependency-bumps.md) | "broker: bump held attest-tool pins and the python and docker CLI images" | see record |
 | 2026-11-16 | [regression tests for broker findings, and MODEL-R4 (round 19)](20261116-broker-finding-tests.md) | - "broker: regression tests for four medium fixed-untested findings": build.sh --label and | see record |
+| 2026-11-16 | [patch 0038, the editor-tab model](20261116-editor-tab-provenance.md) | origin/main..branch head: patch 0038, test/edtabs and the EDR. | see record |
 | 2026-11-16 | [the remaining gate fail-open findings and the write-back mount (round FBA)](20261116-gate-fail-open-remainder.md) | round FBA, by an Opus-class model: | see record |
 | 2026-11-16 | [scheduled workflows and removed exemptions in the liveness gate (round LSR)](20261116-liveness-schedule-and-tombstones.md) | round LSR, by an Opus-class model. It covers two changes to build/liveness/liveness.ts | see record |
 | 2026-11-16 | [the decision log's trust gate (`check_log_trust`)](20261116-log-trust-gate.md) | see record | see record |

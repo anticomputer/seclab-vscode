@@ -1,0 +1,32 @@
+# Security review: patch 0038, the editor-tab model
+
+- **Date:** 2026-11-16
+- **Scope:** origin/main..branch head: patch 0038, `test/edtabs` and the EDR.
+  - Round 1: `e56e7575`.
+  - Round 2: the round-1 fixes, at `1ad537ee`.
+- **Reviewer:** security-review agent (an Opus-class model), triage by the document-sync session. Finding IDs `EDT-n`.
+- **Threat model:** a rogue extension owns the tab's extension host, sends any RPC and registers
+  providers for any scheme. The editor-tab model must not tell it host paths, file names or other
+  host data about editors in its window. Local windows and the local host behave as upstream.
+- **Related:** [EDR editor-tab-provenance](../edr/20261116-editor-tab-provenance.md).
+- **Prompt injection:** none found.
+
+## Findings
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| EDT-1 | Medium | ownership | The webview exemption (`WebviewInput` but not `CustomEditorInput`) also exempted the media preview and custom-editor diffs, which extend `WebviewInput` and show files: a host video dragged into the window reached the tab with its full path. | fixed | No type exemption: only `webview-panel:` and `vscode-terminal:` ids pass by scheme, and diff resources of every kind are collected. | test/edtabs/probe.ts "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary, login name)" |
+| EDT-2 | Low | ownership | Any path-less untitled editor counted as the tab's own, so a host-created untitled document's first line reached the tab as its label. | fixed | Non-remote resources pass only through 0035's `seclabShouldSync` on their model (created by this host, or empty at birth). | none |
+| EDT-3 | Low | ownership | A filesystem provider the tab registered later claimed host editors already open in that scheme (latent: the filter refuses provider registration). | fixed | Same predicate: born under this host's provider, never by scheme. | none |
+| EDT-4 | Info | harness | The probe could pass without the host editors reaching the tab's model. | fixed | A control requires them to arrive, anonymous or not; the tab's own files are recognised as `file:` (URI transformer). | none |
+
+## Round 2
+Confirmed EDT-1 to EDT-4, and that calling `seclabShouldSync` from the editor-tab model never
+records a model's birth first (every host's document-sync state computer does that on model add).
+Editors without any resource now fail closed. No high or critical finding.
+
+Below the reporting bar, recorded:
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| EDT-5 | Low | webviews | Webview panels pass by scheme, so a host-side panel's title and view type reach the tab. | accepted-residual | Under the RPC filter a tab can't create a webview panel, so every panel in a tab window is the window's; none found whose title carries host data (Release Notes is a constant). If panels are ever allowed, own only panels this host created. | none |
+| EDT-6 | Info | terminals | A host-local terminal's title (`user@host: ~/dir`) reaches the tab as an editor label. | accepted-residual | No new exposure: the terminal service already pushes every terminal's name to every host (DOCSYNC-R5). | none |
