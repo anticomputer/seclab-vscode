@@ -39,6 +39,16 @@ const GOOD_RPC = {
 		{ id: 'state-claim-tab-manager-read', policyRef: 'rpc:MainThreadStorage.$initializeExtensionStorage', outcome: 'succeeded', facts: { present: false, canaryTokens: [] } },
 	],
 };
+/** The probes block of EXPECTATIONS(), for cases that bring their own rehProbes. */
+const GOOD_EXPECT_PROBES = EXPECTATIONS().probes;
+/** GOOD_RPC as an unpatched run records it: every probe succeeded and showed its escape. */
+const UNPATCHED_RPC = {
+	inTab: true,
+	results: [
+		{ id: 'clipboard-read', policyRef: 'rpc:MainThreadClipboard.$readText', outcome: 'succeeded', facts: { sawCanary: true, canaryTokens: [] } },
+		{ id: 'state-claim-tab-manager-read', policyRef: 'rpc:MainThreadStorage.$initializeExtensionStorage', outcome: 'succeeded', facts: { present: true, canaryTokens: ['seclabcanary_tab_manager_state_1'] } },
+	],
+};
 const GOOD_REH = { results: [{ id: 'channel-download-host-write', policyRef: 'chan:download', outcome: 'denied', error: 'unsupported-operation' }] };
 const GOOD_DENIALS = ['rpc:MainThreadClipboard.$readText', 'chan:download'];
 
@@ -46,7 +56,7 @@ let n = 0;
 /** One run of the real checker over a fresh fixture. */
 function run(opts: {
 	rpc?: unknown; reh?: unknown | null; denials?: string[] | null; beacon?: boolean;
-	expectations?: unknown; args?: string[];
+	expectations?: unknown; args?: string[]; mode?: 'patched' | 'unpatched';
 }): { status: number | null; out: string } {
 	const dir = path.join(root, `case-${++n}`);
 	const ev = path.join(dir, 'evidence');
@@ -57,13 +67,13 @@ function run(opts: {
 	}
 	const exp = path.join(dir, 'expectations.json');
 	fs.writeFileSync(exp, JSON.stringify(opts.expectations ?? EXPECTATIONS()));
-	const args = ['patched', ev, '--expectations', exp];
+	const args = [opts.mode ?? 'patched', ev, '--expectations', exp];
 	if (opts.denials !== null) {
 		const f = path.join(dir, 'denials.jsonl');
 		fs.writeFileSync(f, (opts.denials ?? GOOD_DENIALS).map(policyRef => JSON.stringify({ policyRef })).join('\n') + '\n');
 		args.push('--denials', f);
 	}
-	if (opts.beacon !== false) {
+	if (opts.beacon !== false && opts.mode !== 'unpatched') {
 		const f = path.join(dir, 'beacon.log');
 		fs.writeFileSync(f, '');
 		args.push('--beacon', f);
@@ -142,6 +152,39 @@ const tests: Array<[string, () => void]> = [
 		});
 		assert.equal(ok.status, 0, ok.out);
 	}],
+	['--only judges the selection, names it, and refuses an unregistered id', () => {
+		const ok = run({ args: ['--only', 'channel-download-host-write'], rpc: { results: [] } });
+		assert.equal(ok.status, 0, ok.out);
+		assert.match(ok.out, /judging only 1 registered probe/);
+		const bad = run({ args: ['--only', 'channel-download-host-write,no-such-probe'] });
+		assert.ok(failed(bad.out, /judging only 2 registered probe/), bad.out);
+	}],
+	// The REH push probes (patches 0030/0031): a baseline must show the trusted side ran the
+	// command or resolved the host canary, never just that something replied.
+	['an unpatched push probe that did not run on the trusted side fails', () => {
+		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-onexecutecommand-manageextensions': { required: true, policyRef: 'push:remoteterminal:$onExecuteCommand', why: 'synthetic' } } };
+		const reh = (facts: unknown) => ({ results: [{ id: 'reh-onexecutecommand-manageextensions', policyRef: 'push:remoteterminal:$onExecuteCommand', outcome: 'succeeded', facts }] });
+		const ok = run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh({ replied: true, ran: true, hostIsMac: false }) });
+		assert.ok(!failed(ok.out, /reh-onexecutecommand-manageextensions/), ok.out);
+		const r = run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh({ replied: true }) });
+		assert.ok(failed(r.out, /reh-onexecutecommand-manageextensions shows the escape itself/), r.out);
+	}],
+	['an unpatched resolve-variables probe without the host canary fails', () => {
+		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-resolve-variables-host-env': { required: true, policyRef: 'push:remoteterminal:$onPtyHostRequestResolveVariablesEvent', why: 'synthetic' } } };
+		const reh = (tokens: string[]) => ({ results: [{ id: 'reh-resolve-variables-host-env', policyRef: 'push:remoteterminal:$onPtyHostRequestResolveVariablesEvent', outcome: 'succeeded', facts: { replied: true, canaryTokens: tokens } }] });
+		const ok = run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh(['seclabcanary_editor_env_1']) });
+		assert.ok(!failed(ok.out, /reh-resolve-variables-host-env/), ok.out);
+		const r = run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh([]) });
+		assert.ok(failed(r.out, /reh-resolve-variables-host-env shows the escape itself/), r.out);
+	}],
+	['a patched push probe needs the refusal in the decision log', () => {
+		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-onexecutecommand-windowopen': { required: true, policyRef: 'push:remoteterminal:$onExecuteCommand', why: 'synthetic' } } };
+		const reh = { results: [{ id: 'reh-onexecutecommand-windowopen', policyRef: 'push:remoteterminal:$onExecuteCommand', outcome: 'denied', error: 'unsupported-operation' }] };
+		const ok = run({ expectations: exp, reh, denials: [...GOOD_DENIALS, 'push:remoteterminal:$onExecuteCommand'] });
+		assert.equal(ok.status, 0, ok.out);
+		const r = run({ expectations: exp, reh });
+		assert.ok(failed(r.out, /reh-onexecutecommand-windowopen denial recorded by the filter/), r.out);
+	}],
 ];
 
 let failures = 0;
@@ -164,6 +207,8 @@ const MUTANTS: Array<[string, string, string]> = [
 	['a denial need not be corroborated', 'c(\'denial-log\', deniedRefs.has(spec.policyRef) || !spec.required,', "c('denial-log', true,"],
 	['the claimed-state predicate is gutted', "tokens(r).length > 0 ? 'the Tab Manager", "false ? 'the Tab Manager"],
 	['a prose hostEffect is joined onto the run dir', 'if (!HOST_EFFECT_FILENAME.test(effect)) {', 'if (false) {'],
+	['the push probes\' baseline predicate is gutted', "'reh-onexecutecommand-manageextensions': r => fact(r, 'ran') === true ? null", "'reh-onexecutecommand-manageextensions': r => true ? null"],
+	['the resolve-variables baseline predicate is gutted', "tokens(r).length > 0 ? null : 'the host environment canary", "true ? null : 'the host environment canary"],
 ];
 const source = fs.readFileSync(CHECKER_SOURCE, 'utf8');
 // Mutants live in a scratch mirror of the checker's import closure (same relative layout), so
