@@ -99,6 +99,7 @@ MUST_ARM = (
     "test/containment/rogue-extension/rpc-probes.js",
     "test/containment/rogue-reh/probes.js",
     "test/containment/rogue-extension/extension.js",
+    "test/containment/response-probe/extension.js",
 )
 # An arming gate must not merely be MENTIONED: the call has to be followed
 # closely by a bail-out, so a future edit cannot keep the call while gutting the
@@ -154,6 +155,7 @@ RECORD_WRITERS = (
     "test/containment/rogue-extension/rpc-probes.js",
     "test/containment/rogue-reh/probes.js",
     "test/containment/benign-extension/extension.js",
+    "test/containment/response-probe/extension.js",
 )
 WRITE_CALL = re.compile(r"\b(?:fs\.(?:writeFileSync|writeFile|appendFileSync|appendFile)|workspace\.fs\.writeFile)\s*\(")
 RECORD_DATA = re.compile(r"""^(?:(?:enc\.encode|Buffer\.from)\(\s*)?(?:safety\.recordJson\(|(['"])(?:(?!\1)[^\\\n]|\\.)*\1\s*\)?$)""")

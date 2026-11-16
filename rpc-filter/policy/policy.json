@@ -484,6 +484,46 @@
           "evidence": [
             "https://github.com/microsoft/vscode/blob/dcd3ad6e368fbe19d03f37054a40dbaf40d676f4/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts#L100-L102"
           ]
+        },
+        "$registerHoverProvider": {
+          "verdict": "allow_with_constraint",
+          "capability": "register a hover provider for a document selector; the window then asks the tab for hover markdown at a position in a matching document",
+          "impact": [
+            "ui-spoofing",
+            "code-execution",
+            "exfiltration"
+          ],
+          "residual_impact": [
+            "ui-spoofing"
+          ],
+          "constraint": "the selector names only this tab's documents (scheme vscode-remote, or no scheme, which patch 0033 narrows to vscode-remote), no notebook type, RelativePattern, built-in claim or unknown key; the hover markdown the tab returns passes through seclabFromTab before it reaches the hover widget: command: links become the token command, which runs under the command verdict or in the tab, isTrusted enables only that command, HTML is off and images other than data: are dropped",
+          "validator": "tabHoverProvider",
+          "response": "seclabFromTab",
+          "response_patch": "0033-seclab-sanitise-tab-provider-results.patch",
+          "rationale": "The registry is window-wide, so the selector decides which documents' hovers the tab paints; limited to the tab's own remote documents it cannot paint inside user settings or an output channel. What the tab returns is the risk the response-side control exists for (ADR 20261116-response-side-control): command: links would run on the global ICommandService on a click, and remote images would be fetched by the trusted renderer outside the broker. Both are rewritten in the customer before the widget sees them.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts#L268-L290",
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/base/browser/markdownRenderer.ts#L494"
+          ]
+        },
+        "$registerCompletionsProvider": {
+          "verdict": "allow_with_constraint",
+          "capability": "register a completion provider for a document selector, with trigger characters; an accepted item can carry a command and markdown documentation",
+          "impact": [
+            "ui-spoofing",
+            "code-execution"
+          ],
+          "residual_impact": [
+            "ui-spoofing"
+          ],
+          "constraint": "the same selector rule as $registerHoverProvider; trigger characters are at most 64 one-character strings; the extension id is a claim used for display only; every item's command and markdown documentation pass through seclabFromTab, on the first result and on resolve, so an accepted item's command runs under the command verdict or in the tab",
+          "validator": "tabCompletionProvider",
+          "response": "seclabFromTab",
+          "response_patch": "0033-seclab-sanitise-tab-provider-results.patch",
+          "rationale": "An accepted completion item's command runs on the global ICommandService with no origin, a weaker gesture than a click; _inflateSuggestDto carries it from a positional array, which no shape walk over the RPC traffic would find, so the control is applied where the item is built. additionalTextEdits apply to the model the completion was requested in, which the selector limits to the tab's own documents.",
+          "evidence": [
+            "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts#L571-L645"
+          ]
         }
       }
     },

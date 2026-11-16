@@ -767,6 +767,54 @@ def inventory_pin_problem(inv: dict, repo_root: str) -> "str | None":
         return ("inventory is at %s but upstream.lock pins %s; run rpc-filter/tools/fetch-upstream.sh"
                 " and run.sh, then re-pin the policy (repin_policy.py)" % (have[:12] or "nothing", (pinned or "nothing")[:12]))
     return None
+# Registrations a tab can make whose results never reach trusted UI as actions, markup or
+# fetches. Anything else that registers must route its results through the sanitiser.
+RESPONSE_NONE = {
+    "MainThreadCommands.$registerCommand": "the registration routes invocations back to this host; nothing it returns is rendered or executed on the trusted side",
+}
+
+
+def check_responses(policy: dict, repo_root: str) -> list:
+    """Every reachable registration routes what the tab returns through seclabFromTab.
+
+    The RPC filter screens requests, never what a tab returns. A provider, tree, SCM, status
+    bar or decoration registration hands the trusted renderer data that can carry a command,
+    a command: link, trusted markdown or a remote image (RPC-LOCKDOWN residual 11). So a
+    reachable `$register*` method must either declare `"response": "seclabFromTab"` and name the
+    patch that applies it (in patches/series, calling `seclabFromTab(`), or be listed in
+    RESPONSE_NONE with the reason its results never reach UI (ADR response-side-control).
+    """
+    errors = []
+    series_path = os.path.join(repo_root, "patches", "series")
+    series = set()
+    if os.path.isfile(series_path):
+        with open(series_path, "r", encoding="utf-8") as fh:
+            series = {l.split("#", 1)[0].strip() for l in fh if l.split("#", 1)[0].strip()}
+    for sid, service in (policy.get("rpc") or {}).items():
+        for method, entry in (service.get("methods") or {}).items():
+            if not method.startswith("$register") or entry.get("verdict") not in REACHABLE:
+                continue
+            key = "%s.%s" % (sid, method)
+            if key in RESPONSE_NONE:
+                continue
+            if entry.get("response") != "seclabFromTab":
+                errors.append(
+                    "%s is reachable but declares no response control. What a tab returns "
+                    "through it reaches trusted UI; set \"response\": \"seclabFromTab\" and wire "
+                    "the customer, or list it in RESPONSE_NONE with the reason." % key)
+                continue
+            patch = entry.get("response_patch") or ""
+            if patch not in series:
+                errors.append("%s names response_patch %r, which is not in patches/series."
+                              % (key, patch))
+                continue
+            with open(os.path.join(repo_root, "patches", patch), "r", encoding="utf-8") as fh:
+                text = fh.read()
+            added = "\n".join(l[1:] for l in text.splitlines() if l.startswith("+") and not l.startswith("+++"))
+            if "seclabFromTab(" not in added:
+                errors.append("%s names response_patch %s, which never calls seclabFromTab."
+                              % (key, patch))
+    return errors
 
 
 def main(argv=None) -> int:
@@ -817,7 +865,8 @@ def main(argv=None) -> int:
                         ("residuals",
                          lambda: check_residuals(mapping, policy)),
                         ("validators", lambda: check_validators(policy, _read(VALIDATORS_SRC), _uri_positions(inv))),
-                        ("log-trust", lambda: check_log_trust(mapping, inv))):
+                        ("log-trust", lambda: check_log_trust(mapping, inv)),
+                        ("responses", lambda: check_responses(policy, REPO_ROOT))):
         errors = check()
         if errors:
             failures.append((name, errors))
