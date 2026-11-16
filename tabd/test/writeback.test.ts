@@ -104,6 +104,15 @@ test('writeback: W-2 content of host-executable files, venvs, config-as-code, no
 	assert.throws(() => e.alwaysAllow('bin/dev'), /not available/);
 });
 
+test('writeback: NNN-3 "always allow" is never available under .git, at any depth, even for inert text', () => {
+	const { mk } = setup('nnn3');
+	const e = mk();
+	for (const p of ['.git/config', '.git/hooks/pre-commit', '.git/info/attributes', 'sub/.git/config', 'vendor/lib/.git/HEAD']) {
+		assert.throws(() => e.alwaysAllow(p), /not available/, p);
+	}
+	assert.doesNotThrow(() => e.alwaysAllow('docs/notes.txt'), 'an ordinary file can be always-allowed (control)');
+});
+
 test('writeback: W-3 approval is bound to mode and link target', () => {
 	const { mk, root } = setup('w3');
 	const e = mk();
