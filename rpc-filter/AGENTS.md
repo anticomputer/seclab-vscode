@@ -141,6 +141,7 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 | `reh-onexecutecommand-getsystemstatus` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
 | `reh-onexecutecommand-manageextensions` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
 | `reh-onexecutecommand-windowopen` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
+| `reh-profile-config-host-setting` | rogue REH | `data:remoteterminal-profile-path` | succeeded |
 | `reh-resolve-variables-host-env` | rogue REH | `push:remoteterminal:$onPtyHostRequestResolveVariablesEvent` | denied |
 | `rpc-proxy-auth` | rogue REH | `rpc:MainThreadWorkspace.$lookupAuthorization` | denied |
 | `rpc-secret-identity-spoof` | rogue REH | `rpc:MainThreadSecretState.$getKeys` | denied |

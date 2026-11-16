@@ -177,6 +177,15 @@ const tests: Array<[string, () => void]> = [
 		const r = run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh([]) });
 		assert.ok(failed(r.out, /reh-resolve-variables-host-env shows the escape itself/), r.out);
 	}],
+	['the profile-path probe needs the canary on a baseline and none after patch 0034', () => {
+		const spec = { required: true, policyRef: 'data:remoteterminal-profile-path', patchedOutcome: 'succeeded', why: 'synthetic' };
+		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-profile-config-host-setting': spec } };
+		const reh = (tokens: string[]) => ({ results: [{ id: 'reh-profile-config-host-setting', policyRef: 'data:remoteterminal-profile-path', outcome: 'succeeded', facts: { sawProfilePath: true, canaryTokens: tokens, unresolved: tokens.length === 0 } }] });
+		assert.ok(!failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh(['seclabcanary_user_settings_1']) }).out, /reh-profile-config-host-setting/));
+		assert.ok(failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh([]) }).out, /reh-profile-config-host-setting shows the escape itself/));
+		assert.equal(run({ expectations: exp, reh: reh([]) }).status, 0);
+		assert.ok(failed(run({ expectations: exp, reh: reh(['seclabcanary_user_settings_1']) }).out, /reh-profile-config-host-setting patched predicate holds/));
+	}],
 	['a patched push probe needs the refusal in the decision log', () => {
 		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-onexecutecommand-windowopen': { required: true, policyRef: 'push:remoteterminal:$onExecuteCommand', why: 'synthetic' } } };
 		const reh = { results: [{ id: 'reh-onexecutecommand-windowopen', policyRef: 'push:remoteterminal:$onExecuteCommand', outcome: 'denied', error: 'unsupported-operation' }] };
