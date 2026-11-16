@@ -89,6 +89,9 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 // terminal with a non-remote cwd to the local backend, so on a baseline this is a host shell.
 fs.writeFileSync(path.join(userData, 'User', 'keybindings.json'), JSON.stringify([
 	{ key: 'ctrl+alt+shift+f12', command: 'workbench.action.terminal.new', args: { cwd: { scheme: 'file', authority: '', path: ws, query: '', fragment: '', fsPath: ws } } },
+	// The control: the same command with no cwd, a terminal in the tab, so the run shows the
+	// keybinding path itself works whatever the file: one does.
+	{ key: 'ctrl+alt+shift+f11', command: 'workbench.action.terminal.new' },
 ], null, '\t'));
 
 const tabd = new TabdClient({
@@ -206,8 +209,18 @@ try {
 	await waitFor(() => hostShells(ed!.child.pid!) > shells1, 20_000);
 	const keyShells = hostShells(ed.child.pid!) - shells1;
 	const terms2 = await terminals();
-	console.log(`terminals in the panel: ${terms1} -> ${terms2}`);
-	c('backend', terms2 > terms1 || keyShells > 0, 'the file: cwd keybinding ran (a terminal was created)', `${terms1} -> ${terms2}`);
+	const refusal = await ed.evaluate<boolean>(`document.body.innerText.includes('opens no host terminal')`);
+	await ed.screenshot(path.join(base, 'after-file-cwd.png'));
+	console.log(`terminals in the panel: ${terms1} -> ${terms2}; refusal shown: ${refusal}`);
+	c('backend', baseline ? terms2 > terms1 : refusal, baseline ? 'the file: cwd keybinding ran (a terminal was created)' : 'the file: cwd keybinding ran and was refused (the message is shown)', `${terms1} -> ${terms2}`);
+	// The control keybinding: a plain new terminal, in the tab.
+	for (const type of ['rawKeyDown', 'keyUp']) {
+		await ed.cdp.send('Input.dispatchKeyEvent', { type, key: 'F11', code: 'F11', modifiers: 1 | 2 | 8, windowsVirtualKeyCode: 122, nativeVirtualKeyCode: 103 }, ed.session);
+	}
+	await waitFor(() => false, 5000);
+	const terms3 = await terminals();
+	console.log(`terminals after the control keybinding: ${terms3}`);
+	c('backend', terms3 > terms2, 'control: the same keybinding path opens a tab terminal', `${terms2} -> ${terms3}`);
 	console.log(`host shells from the file: cwd keybinding: ${keyShells}`);
 	c('backend', baseline ? keyShells > 0 : keyShells === 0, baseline ? 'a terminal with a file: cwd starts a host shell (baseline)' : 'a terminal with a file: cwd starts no host shell');
 
