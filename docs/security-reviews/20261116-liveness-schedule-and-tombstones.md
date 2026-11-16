@@ -84,3 +84,13 @@ input the gate read but doesn't model still resolved to "no disqualifying filter
 |---|---|---|---|---|---|
 | LSR-13 | Medium | filters | Ignore lists were compared literally, so a glob covering main (`branches-ignore: ['m*']`, `['main*']`, `['ma?n']`, `paths-ignore: ['**/**']`) read as "main not ignored". | Fixed | Entries are matched as globs. An entry using glob syntax the gate doesn't model (`?`, `+`, `[]`, `!`) counts against the trigger on either side, and a `paths-ignore` covering every tracked file disqualifies it. |
 | LSR-14 | Medium | filters | A key under push or pull_request that the gate doesn't model was ignored, so a tags-only push (`tags: [nope]`) read as a live branch push. | Fixed | `tags`/`tags-ignore` without a branches filter, pull_request `types` with no default activity type, and any unknown key count against the trigger. |
+
+## Round LSR, final pass
+LSR-13 and LSR-14 were confirmed closed. Every historical shape still counts against the trigger,
+all ten repository workflows keep the verdicts they had before (no over-strictness), and every
+new branch fails its own case when mutated. One input still resolved to "live" without the gate
+establishing anything, upstream of all the hardening.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| LSR-15 | Medium | discovery | The `on:` line was found by a bare first-line match. A value left open on an earlier line (a flow mapping, a quoted scalar) can continue at column 0 with a decoy `on: push`, which was read instead of the real, filtered or scheduled trigger block. | Fixed | Only one line may look like `on:`, and every line before it must be closed; otherwise the workflow is unparsed, and so a subject. Four injections, one isolating each rule. |

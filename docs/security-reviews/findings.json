@@ -13952,6 +13952,19 @@
 			"commit": "0c9012b6a091e1fae737aaf4b76f1952f4e4ade1",
 			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-13 ${shape}" },
 			"note": "Cases: tags only, tags-ignore only, pull_request with non-default types, an unknown key under push."
+		},
+		{
+			"record": "20261116-liveness-schedule-and-tombstones.md",
+			"anchor": "LSR-15",
+			"round": "Round LSR",
+			"severity": "medium",
+			"summary": "The `on:` line was found by a first-line match, so a column-0 continuation of an earlier open value could carry a decoy `on: push` read instead of the real trigger block.",
+			"component": "liveness gate (workflow discovery)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "9e5d06062eaf715872e61234258453878bb2fcdc",
+			"test": { "file": "build/liveness/liveness.ts", "name": "LSR-15 ${shape}" },
+			"note": "Four injections: decoys inside an open flow mapping and an open quoted scalar, a duplicate top-level on:, and a file whose only on: is inside an open value; the count rule and the prefix rule each fail their own case when mutated."
 		}
 	]
 }
