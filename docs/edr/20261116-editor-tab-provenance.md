@@ -77,4 +77,4 @@ model appears after its diff tab opened), the model is rebuilt and resent.
   the patch.
 - Typecheck: the patched file adds no error against the pinned tree.
 - Review: [20261116-editor-tab-provenance](../security-reviews/20261116-editor-tab-provenance.md),
-  two rounds; no high or critical finding.
+  three rounds; no high or critical finding.

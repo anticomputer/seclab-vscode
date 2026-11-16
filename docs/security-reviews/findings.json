@@ -14017,6 +14017,22 @@
 			}
 		},
 		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Round 3",
+			"component": "patch 0038 editor-tab model",
+			"owner": "docsync",
+			"anchor": "EDT-7",
+			"severity": "info",
+			"summary": "A desktop web-worker host in a tab window is unfiltered by 0038, which keys on the host's own authority.",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "Tab-installed extensions never run in the desktop local web worker; 0038 is desktop-only. Revisit if the web build is ever in scope.",
+			"ref": {
+				"file": "docs/security-reviews/20261116-editor-tab-provenance.md",
+				"quote": "The desktop app never runs tab-installed extensions in the local web worker"
+			}
+		},
+		{
 			"record": "20261116-gate-fail-open-remainder.md",
 			"anchor": "FBA-1",
 			"round": "Round FBA",
