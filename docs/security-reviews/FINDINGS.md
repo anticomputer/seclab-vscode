@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 82 | 191 | 204 | 25 | 516 |
-| fixed-untested | 0 | 5 | 56 | 164 | 58 | 283 |
+| fixed | 14 | 82 | 191 | 205 | 27 | 519 |
+| fixed-untested | 0 | 5 | 56 | 164 | 59 | 284 |
 | accepted-residual | 0 | 1 | 12 | 68 | 21 | 102 |
 | deferred | 2 | 2 | 14 | 9 | 2 | 29 |
 | open | 0 | 2 | 14 | 16 | 6 | 38 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 287 | 461 | 118 | 974 |
+| **all** | 16 | 92 | 287 | 462 | 121 | 978 |
 
 ## Baseline: open high and critical findings
 
@@ -475,6 +475,7 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261112-publish-gate](20261112-publish-gate.md) **R22-6** | info | fixed-untested | publish gate: mount test | The mount test proves nothing on a macOS engine | The test says so off Linux; CI's Linux run is the proof (its first run, before the fix, failed with the same error). |
 | [20261112-publish-gate](20261112-publish-gate.md) **R22-7** | info | fixed-untested | publish gate: driver | Nothing pinned the driver's container hardening flags | build/test-publish-mount.sh asserts the flags in CI, but a shell script outside a test path isn't a register-recognised test. |
 | [20261112-publish-gate](20261112-publish-gate.md) **R23-7** | info | fixed-untested | publish gate: hook downgrade protection | A ~ in core.hooksPath blocked every push | Read path-typed; not exercised by the test. |
+| [20261116-no-host-terminal-in-tabs](20261116-no-host-terminal-in-tabs.md) **NHT-2** | info | fixed-untested | ADR 20261116-no-host-terminal-in-tabs | The ADR's debug note said runInTerminal kind external opens the host's terminal application; only a host-side (local extension host) adapter could. | A documentation correction: the ADR wording has no behaviour for a regression test to hold. |
 | [20261116-rfu1-terminal-variables](20261116-rfu1-terminal-variables.md) **RFU1R2-2** | info | accepted-residual | containment probes (rogue REH, reh-profile-config-host-setting) | The profile probe's patched predicate can't tell a window that withheld ${config:...} from one that couldn't read the seeded setting; only the baseline shows the setting resolves. | accepted by an agent: Both modes seed the setting identically in the same harness, and the baseline run shows the window resolving it into the profile path and env; the pair, not the patched run alone, is the proof. |
 | [20261116-rpc-follow-ups](20261116-rpc-follow-ups.md) **RFU-2** | info | open | patch 0015 AHP gate / 0011 retirement | For a workspace-listed WebSocket agent host, 0015 refuses only if the window's gate sink is installed before the first reconcile; true today, pinned only by the live proof run. | The sink-before-reconcile ordering is checked only by the live reh-push proof run, not by a unit case. |
 | [20261116-rpc-follow-ups](20261116-rpc-follow-ups.md) **RFU-3** | info | accepted-residual | seclabRpcFilter early decision hold | Before the decision log installs, a REH can fill the 64 held slots with distinct channel-guard keys; later early decisions show only as a seclab.early-dropped count. | accepted by an agent: Low impact: held decisions past the bound are counted in a fixed-literal line, never dropped silently, and nothing a tab sends becomes a log line. |
@@ -1896,6 +1897,15 @@ Every other commit the register cites is on main's history, or on the branch its
 | LT-2 | low | fixed | check_log_trust did not pin MainThreadFileSystem.$delete, so nothing stopped a future policy allowing a tab to delete seclabRpcFilter.log and end forwarding. | 96156496a278 · `rpc-filter/tools/test_enforcement.py` "test_delete_must_be_denied" |
 | LT-3 | low | fixed | check_log_trust did not pin other host-file writers, MainThreadBulkEdits.$tryApplyWorkspaceEdit and MainThreadDocuments.$trySaveDocument. | 96156496a278 · `rpc-filter/tools/test_enforcement.py` "test_other_host_file_writers_must_be_denied" |
 | LT-4 | low | fixed | check_log_trust skipped any pinned surface absent from the mapping, so the check went quiet instead of failing if a surface disappeared. | 96156496a278 · `rpc-filter/tools/test_enforcement.py` "test_a_surface_missing_from_the_mapping_is_not_silently_skipped" |
+
+### [20261116-no-host-terminal-in-tabs](20261116-no-host-terminal-in-tabs.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| NHT-1 | low | fixed | The host-terminal proof could pass vacuously: an empty palette list did not show the query arrived, and nothing at runtime showed newLocal unregistered in a tab window. | 2d7ba7b1 · `test/containment/host-terminal.ts` "newLocal by id is not a command in a tab window (reported not found)" |
+| NHT-2 | info | fixed-untested | The ADR's debug note said runInTerminal kind external opens the host's terminal application; only a host-side (local extension host) adapter could. | A documentation correction: the ADR wording has no behaviour for a regression test to hold. |
+| NHT-3 | info | fixed | The Explorer's Open in Integrated/External Terminal items still showed for a host (file:) resource in a tab window, though the launch was refused. | 2d7ba7b1 · `test/containment/host-terminal.test.ts` "each rule fails on a mutant of the real patch" |
+| NHT-4 | info | fixed | Upstream's openNativeConsole handler unit tests do not stub IWorkbenchEnvironmentService, so 0050's handler check would throw there. | 2d7ba7b1 · `test/containment/host-terminal.test.ts` "patch 0050 offers and starts no host terminal in a tab window" |
 
 ### [20261116-pr-landing](20261116-pr-landing.md)
 
