@@ -49,16 +49,23 @@ function installWindowSink(accessor: ServicesAccessor): (e: SeclabAhpEvent) => v
 	if (!emitWindow) {
 		const environmentService = accessor.get(IWorkbenchEnvironmentService);
 		const logger = accessor.get(ILoggerService).createLogger(joinPath(environmentService.windowLogsPath, 'seclabAhpGate.log'), { id: 'seclabAhpGate', name: 'seclab agent-host gate', logLevel: 'always', hidden: true });
-		const counts = new Map<number, number>();
+		// Counted per connection AND per rule. Per connection alone would let one chatty rule
+		// exhaust the budget and silently crowd out another rule's refusals: patch 0018's chat
+		// verdicts and `ahp-gate.disabled` both carry connection 0, and a tab can drive the
+		// chat ones cheaply. A refusal that is not logged is indistinguishable from nothing
+		// having happened, which is the one thing these events exist to rule out
+		// (security review round 2).
+		const counts = new Map<string, number>();
 		const sink = (e: SeclabAhpEvent) => {
 			const connection = typeof e.detail.connection === 'number' ? e.detail.connection : 0;
 			const rule = e.detail.gateRule;
 			if (rule !== 'ahp-gate.opened' && rule !== 'ahp-gate.verified' && rule !== 'ahp-gate.refused') {
-				const n = (counts.get(connection) ?? 0) + 1;
-				counts.set(connection, n);
+				const key = `${connection}\u0000${rule}`;
+				const n = (counts.get(key) ?? 0) + 1;
+				counts.set(key, n);
 				if (n > DECISIONS_PER_CONNECTION) {
 					if (n === DECISIONS_PER_CONNECTION + 1) {
-						logger.info(JSON.stringify({ source: 'ahp-gate', class: 'ahp.decision', priority: 'warning', summary: 'ahp-gate.log-capped', detail: { gateRule: 'ahp-gate.log-capped', connection, verdict: 'deny' } } satisfies SeclabAhpEvent));
+						logger.info(JSON.stringify({ source: 'ahp-gate', class: 'ahp.decision', priority: 'warning', summary: `ahp-gate.log-capped ${rule}`, detail: { gateRule: 'ahp-gate.log-capped', cappedRule: rule, connection, verdict: 'deny' } } satisfies SeclabAhpEvent));
 					}
 					return;
 				}

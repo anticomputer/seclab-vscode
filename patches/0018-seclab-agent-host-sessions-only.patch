@@ -1,5 +1,5 @@
 diff --git a/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts b/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts
-index 0842031..3b2cb3c 100644
+index 0842031..40fcc58 100644
 --- a/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts
 +++ b/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts
 @@ -37,6 +37,8 @@ import { isVirtualWorkspace } from '../../../../../platform/workspace/common/vir
@@ -11,34 +11,55 @@ index 0842031..3b2cb3c 100644
  import { IChatEntitlementService } from '../../../../services/chat/common/chatEntitlementService.js';
  import { requiresCopilotAgentHost, IManagedSettingsService } from '../../../../../platform/policy/common/copilotManagedSettings.js';
  import { IAccountPolicyGateService, whenAccountPolicySettled } from '../../../../services/policies/common/accountPolicyService.js';
-@@ -1840,6 +1842,30 @@ export class ChatService extends Disposable implements IChatService {
+@@ -1638,6 +1640,14 @@ export class ChatService extends Disposable implements IChatService {
+ 		};
+ 
+ 		if (options?.queue) {
++			// seclab patch 0018: a queued request does NOT pass through `_sendRequestAsync`.
++			// For an agent-host session the queue is server-managed, so the gated local drain
++			// never runs; the pending messages are synced straight to the agent host over its
++			// connection. `migrateRequests` and `sendPendingRequestImmediately` both arrive
++			// here with `queue` set, so without this the message would reach a host with no
++			// check and no verdict (security review round 2). The resource has already been
++			// re-targeted above, so this is the resource that will actually be dispatched.
++			this.seclabCheckSession(sessionResource);
+ 			const queued = this.queuePendingRequest(model, sessionResource, request, options, transferredMode);
+ 			notifyAccepted();
+ 			if (!options.pauseQueue) {
+@@ -1839,7 +1849,36 @@ export class ChatService extends Disposable implements IChatService {
+ 		return newTokenSource.token;
  	}
  
- 	private _sendRequestAsync(model: ChatModel, sessionResource: URI, parsedRequest: IParsedChatRequest, attempt: number, enableCommandDetection: boolean, defaultAgent: IChatAgentData, location: ChatAgentLocation, options?: IChatSendRequestOptions, preservedRequest?: ChatRequestModel, requestId?: string): IChatSendRequestResponseState {
-+		// seclab patch 0018: in a tab window, only this window's own agent-host session may be
-+		// dispatched. The check is HERE, not at `sendRequest`, because this is the one place
-+		// every request actually reaches the model: `sendRequestInternal` re-targets the
-+		// resource twice after entry (a materialised real session, and an untitled session
-+		// becoming a real one), and `resendRequest` reaches this function without passing
-+		// through `sendRequest` at all. Gating the entry argument would have admitted a
-+		// resource that is not the one dispatched (security review round 1, alert 2).
-+		const seclabAuthority = this.seclabEnvironmentService.remoteAuthority;
-+		const seclabVerdict = seclabChatSessionVerdict(
-+			seclabAuthority,
-+			// The same enablement rule patch 0015's gate uses, shared rather than copied, and
-+			// read from `inspect()` so that the tab-writable user and remote layers a
-+			// `getValue()` would merge in cannot turn agents on (patch 0017's finding).
++	/**
++	 * seclab patch 0018: in a tab window, only this window's own agent-host session may be
++	 * dispatched. Throws otherwise, with the reason recorded in the window's gate log so a
++	 * refusal is provable rather than looking like nothing happened.
++	 *
++	 * Called from every point at which a request leaves this service for a model or an agent
++	 * host, and from none earlier: `sendRequestInternal` re-targets the session resource twice
++	 * after entry, so a check at entry would have authorised a resource that is not the one
++	 * dispatched (security review round 1).
++	 */
++	private seclabCheckSession(sessionResource: URI): void {
++		const authority = this.seclabEnvironmentService.remoteAuthority;
++		const verdict = seclabChatSessionVerdict(
++			authority,
++			// The same enablement rule patch 0015's transport gate uses, shared rather than
++			// copied, and read from `inspect()` so that the user and remote layers a tab can
++			// write (patch 0017's finding) cannot turn agents on.
 +			seclabAgentsEnabled(
 +				this.configurationService.inspect<boolean>(SECLAB_AGENTS_ENABLED_SETTING),
 +				(this.seclabEnvironmentService as { configuration?: { seclabAgentsEnabled?: boolean } }).configuration?.seclabAgentsEnabled),
 +			this.agentHostConnectionsService,
 +			sessionResource);
-+		if (seclabVerdict !== 'allow') {
-+			// Logged, so a refusal is provable from the window's own gate log rather than
-+			// looking like nothing happened.
-+			seclabAhpEmit(seclabChatSessionEvent(seclabVerdict));
++		if (verdict !== 'allow') {
++			seclabAhpEmit(seclabChatSessionEvent(verdict));
 +			throw new Error('Unsupported operation');
 +		}
++	}
++
+ 	private _sendRequestAsync(model: ChatModel, sessionResource: URI, parsedRequest: IParsedChatRequest, attempt: number, enableCommandDetection: boolean, defaultAgent: IChatAgentData, location: ChatAgentLocation, options?: IChatSendRequestOptions, preservedRequest?: ChatRequestModel, requestId?: string): IChatSendRequestResponseState {
++		this.seclabCheckSession(sessionResource);
  		const followupsCancelToken = this.refreshFollowupsCancellationToken(sessionResource);
  		let request: ChatRequestModel | undefined;
  		const agentPart = parsedRequest.parts.find((r): r is ChatRequestAgentPart => r instanceof ChatRequestAgentPart);

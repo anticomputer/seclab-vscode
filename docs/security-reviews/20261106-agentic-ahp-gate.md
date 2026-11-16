@@ -615,3 +615,96 @@ Worth stating plainly, because it is the same lesson as rounds 8 to 10: this fai
 found by reading the code, it was found when a check reported success for work that had not
 run. The first attempt to prove the patch-0017 upstream invariants could fail reported "no
 problems" purely because the config argument had been omitted.
+
+## Round 12 — patch 0018, agent-host sessions only (increment 3)
+
+Reviewed: patch `0018-seclab-agent-host-sessions-only.patch`, the predicate in
+`agentic/patch-src/src/vs/platform/agentHost/common/seclabChatSessions.ts`, the shared
+enablement rule moved into `seclabAhpGateCheck.ts`, the resulting edit to the landed patch
+0015, and `test/agentic/gate/chat-sessions.test.ts`. The reviewer read the real upstream code
+in a fully patched tree rather than the patch alone. No prompt-injection text was found in the
+diff, tests or the upstream files read.
+
+This is the second round on 0018; round 1's two findings are described in the patch's own
+commit message and are not repeated here. Four findings this round, two of them substantive.
+
+| id | severity | finding |
+|---|---|---|
+| R12-1 | medium | A chat request submitted with `options.queue` returned before the gate and reached the agent host through the pending-message sync, unchecked and with no verdict logged |
+| R12-2 | high | The agent a request is dispatched to is chosen from the caller, a participant mention parsed out of the request text or participant detection, none of which are constrained by the gated session resource |
+| R12-3 | low | The gate log capped decisions per connection number, so tab-driven chat verdicts could silently crowd out other refusals sharing connection 0 |
+| R12-4 | low | Two upstream facts the gate's argument depends on were unpinned: the spread that carries the advertised flag into the resolution, and the scope filter that rejects a `configurationDefaults` override of the enablement setting |
+
+**R12-1 — the queued path reached an agent host with no check and no verdict (MEDIUM,
+fixed).** The gate sat at `_sendRequestAsync`, which round 1 established is where every
+request is dispatched. That was wrong for one case: a request submitted with `options.queue`
+returns from `sendRequestInternal` before reaching it. The local drain that would have been
+gated does not run for these sessions either, because `processNextPendingRequest` returns
+early for a server-managed queue, which is exactly what an agent-host session has. The text
+instead reaches the host through the session handler's pending-message sync, over the host's
+connection. Two public `IChatService` methods arrive there with `queue` set, and both are
+invoked from commands. The consequence was not only an unchecked dispatch but an unlogged
+one, which under this project's evidence doctrine cannot be told apart from nothing having
+happened.
+
+The check is now a single private helper called from both the queued branch and the dispatch
+function, and from nowhere else. In the queued branch it sits above the queueing itself, since
+a check made after the message is on its way is not a check. The regression test asserts
+against the patch text — the artifact that actually ships — that there is one implementation,
+exactly two call sites, and that the ordering holds; removing either call fails it.
+
+**R12-2 — the agent a request is dispatched to is chosen independently of the session
+(HIGH, open, deferred to increment 4).** The gate authorises the session resource. The agent
+id that determines where the request actually executes comes from the caller, from an
+`participant mention` parsed out of the request text, or from participant detection, and none of these
+are constrained by the session resource. The patch's property therefore holds only under the
+unstated premise that every agent implementation registered in a tab window belongs to that
+window's own gated connection. Nothing pins that premise today.
+
+This is not fixed here. It is the subject of increment 4, whose purpose is precisely to
+establish which agent-host providers may exist in a tab window, and fixing it inside 0018
+would mean guessing at the registration set rather than constraining it. It is recorded in the
+findings register as an open high finding against increment 4, and increment 3 does not claim
+the property the premise would be needed for. The reviewer could not demonstrate a concrete
+trusted-side agent to target, because the registration set in a built tab window is itself
+what increment 4 determines.
+
+**R12-3 — the gate log's cap let one rule crowd out another's refusals (LOW, fixed).**
+Decisions were capped per connection number. Patch 0018's chat verdicts and the existing
+`ahp-gate.disabled` event both carry connection 0, and a tab can drive the chat ones cheaply,
+so a few thousand refused requests would silently stop any further refusal of either kind from
+being recorded. A refusal that is not logged is indistinguishable from nothing having
+happened, which is the one thing these events exist to rule out. Counting is now per
+connection and rule, and the capped notice names the rule it applies to.
+
+**R12-4 — two load-bearing upstream facts were not pinned (LOW, fixed).** The gate reads
+`backendSessionIsAdvertised` off the session resolution, but upstream only ever sets that flag
+on the identity; it reaches the resolution through a single spread. Had upstream built the
+resolution field by field, the flag would have become undefined and the gate would have denied
+everything — fail-closed, but silently. Separately, the reason a tab extension cannot reach
+`inspect().defaultValue` is that `configurationDefaults` contributions are rejected for
+settings outside an allowed scope set, and `seclab.agents.enabled` is registered at
+APPLICATION scope. Both are now upstream invariants, and both were verified to fail under
+defect injection before being recorded.
+
+**Verified and not found wanting.** The three `_sendRequestAsync` call sites are all gated and
+the model and session resource can no longer diverge, so round 1's finding is closed. Nothing
+reachable from a tab can register a session resource under another authority, so a tab cannot
+make `backendSessionIsAdvertised` true for a session it controls. The window configuration
+boolean is stamped in the main process on every load, so a requester-supplied value is
+overwritten. The tests are not vacuous: replacing the predicate with `return true` fails five
+of them, and a scheme-prefix string test fails too, because the fixture deliberately exposes
+no `scheme`. The 0015 change is behaviour-preserving — the clauses are character-identical and
+in the same order, and the setting is re-exported, so registration, scope and every importer
+are unchanged.
+
+**Named as unverified by the reviewer**, and recorded here rather than resolved: which chat
+agent implementations exist in a built tab window; whether the two queue-reaching methods are
+reachable from inside a tab through the command taint and routing patches, which bounds how
+exploitable R12-1 was; and the frame policy's treatment of the session-added notification,
+which was read only at the consumer end. The first of these is increment 4's subject.
+
+A second route to a model that does not pass through `IChatService` at all was also checked
+and found closed by an already-landed patch: an agent host can drive a trusted-side model call
+over a dedicated channel, but that channel is registered only by the client the tab-window
+case does not select.

@@ -71,6 +71,21 @@
 					"\t\t\t...(this._backendSessions.has(sessionResource) ? { backendSessionIsAdvertised: true as const } : {}),"
 				],
 				"why": "patch 0018 refuses a chat request unless the session resolves to THIS window's own agent-host connection AND `backendSessionIsAdvertised` is true. Both halves are needed because of these two lines together: `resolveSessionResourceIdentity` does not fail on an unknown session, it SYNTHESISES an ambient identity from any `agent-host-*` scheme, and `getConnectionByAuthority(AMBIENT_AGENT_HOST_AUTHORITY)` then returns the same object as `ambientConnection`. So a connection-identity check alone would have been a scheme-prefix string test one layer down, which is the very thing the patch exists to avoid. `backendSessionIsAdvertised` is the only signal that separates a registry hit from the synthesised fallback. If upstream makes the fallback fail, or sets the flag anywhere but on a `_backendSessions` hit, the patch's argument must be re-derived."
+			},
+			{
+				"file": "src/vs/platform/agentHost/browser/agentHostConnectionsService.ts",
+				"mustContain": [
+					"\t\treturn connection ? { ...identity, connection } : undefined;"
+				],
+				"why": "patch 0018 reads `backendSessionIsAdvertised` off the session RESOLUTION, but upstream only ever sets that flag on the IDENTITY, in `_createSessionIdentity`. It reaches the resolution solely through this spread. If upstream built the resolution field by field instead, the flag would silently become undefined and the gate would deny every request: fail-closed, but silently, which is the failure mode the gate's verdict logging exists to prevent (security review round 2, alert 4)."
+			},
+			{
+				"file": "src/vs/workbench/api/common/configurationExtensionPoint.ts",
+				"mustContain": [
+					"\t\tconst allowedScopes = [ConfigurationScope.MACHINE_OVERRIDABLE, ConfigurationScope.WINDOW, ConfigurationScope.RESOURCE, ConfigurationScope.LANGUAGE_OVERRIDABLE];",
+					"\t\t\t\t\tif (registeredPropertyScheme?.scope && !allowedScopes.includes(registeredPropertyScheme.scope)) {"
+				],
+				"why": "patches 0015 and 0018 both decide whether agents are on from `inspect().policyValue` and `.defaultValue` only, never `getValue()`, because a tab extension can write the user, workspace and remote layers. That leaves `defaultValue` as the one remaining route, reachable through an extension's `configurationDefaults` contribution. It is closed because `seclab.agents.enabled` is registered at ConfigurationScope.APPLICATION and these lines reject a default override for any scope outside the allowed set. If the allowed scopes grow to include APPLICATION, or the scope check is dropped, a tab extension could turn agents on and the enablement rule must be re-derived (security review round 2, alert 4)."
 			}
 		]
 	}
