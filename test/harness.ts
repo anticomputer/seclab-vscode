@@ -273,9 +273,14 @@ export function editorPid(userData: string): number {
 	const ps = execFileSync('ps', ['-axww', '-o', 'pid=,args='], { encoding: 'utf8' });
 	// The path must end the option value (SS-6: /x/run1 must not match /x/run10).
 	const re = new RegExp(`\\s--user-data-dir(=|\\s+)${userData.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`);
+	// The editor's main process: the app bundle's binary on macOS; on Linux the unpacked build's
+	// binary, never its CLI (out/cli.js under ELECTRON_RUN_AS_NODE) or a child (--type=).
+	const isMain = (args: string) => process.platform === 'darwin'
+		? args.includes('/Contents/MacOS/')
+		: /\/VSCode-linux-[^/\s]+\/[^/\s]+(\s|$)/.test(args) && !/\/out\/cli\.js(\s|$)/.test(args);
 	for (const line of ps.split('\n')) {
 		const m = /^\s*(\d+)\s+(.*)$/.exec(line);
-		if (m && m[2].includes('/Contents/MacOS/') && !m[2].includes('--type=') && re.test(m[2])) {
+		if (m && isMain(m[2]) && !m[2].includes('--type=') && re.test(m[2])) {
 			return Number(m[1]);
 		}
 	}
@@ -369,6 +374,12 @@ function focusStolen(userData: string): boolean {
 	return fs.existsSync(focusStealLog(userData)) && fs.readFileSync(focusStealLog(userData), 'utf8').trim() !== '';
 }
 
+/** The app's `resources/app` dir: `<X>.app/Contents/Resources/app` for a macOS bundle, else
+ *  `<VSCode-linux-*>/resources/app` (an unpacked Linux build). */
+export function appResourcesDir(app: string): string {
+	return app.endsWith('.app') ? path.join(app, 'Contents', 'Resources', 'app') : path.join(app, 'resources', 'app');
+}
+
 /**
  * Does this app carry the canary clipboard (the `canary-clipboard` test hook in
  * test/builds/variants.json: an in-memory clipboard seeded with the run's canary)? Read from
@@ -382,7 +393,7 @@ export function appHasCanaryClipboard(app: string): boolean {
 		if (!hook?.marker || !hook.bundle || hook.bundle.includes('..')) {
 			return false;
 		}
-		return fs.readFileSync(path.join(app, 'Contents', 'Resources', 'app', hook.bundle), 'utf8').includes(hook.marker);
+		return fs.readFileSync(path.join(appResourcesDir(app), hook.bundle), 'utf8').includes(hook.marker);
 	} catch {
 		return false;
 	}

@@ -109,3 +109,28 @@ test('a build is exec-safe only if its bootstrap carries the policy mark; Linux 
 		fs.rmSync(scratch, { recursive: true, force: true });
 	}
 });
+
+test('level B: the launch record is facts prepare set; anything else is refused before any launch', async () => {
+	const { launchProblem } = await import('./level-b.ts');
+	const scratch = fs.mkdtempSync(path.join(process.env.SECLAB_SCRATCH ?? path.join(import.meta.dirname, '..', '..', '.work', 'test-scratch'), 'level-b-'));
+	try {
+		const want = { app: '/x/VSCode-linux-x64', profile: '/x/profile', runDir: scratch };
+		const good = () => ({ app: want.app, userData: want.profile, folderUri: 'vscode-remote://seclab+t-abc123/x/ws-editor',
+			env: { SECLAB_PROBE_NONCE: 'n', SECLAB_PROBE_RUNDIR: scratch, SECLAB_EDITOR_CANARY: 'c', SECLAB_PROBE_BEACON_PORT: '1' } as Record<string, string> });
+		assert.equal(launchProblem(good(), want, false), undefined, 'control: a record prepare wrote');
+		assert.match(launchProblem({ ...good(), argv: ['--remote-debugging-port=9222'] }, want, false) ?? '', /unexpected keys/);
+		assert.match(launchProblem({ ...good(), env: { ...good().env, NODE_OPTIONS: '--require x' } }, want, false) ?? '', /unexpected env entry NODE_OPTIONS/);
+		assert.match(launchProblem({ ...good(), app: '/elsewhere/VSCode-linux-x64' }, want, false) ?? '', /another app/);
+		assert.match(launchProblem({ ...good(), userData: '/srv/other-profile' }, want, false) ?? '', /another profile/);
+		assert.match(launchProblem({ ...good(), folderUri: 'file:///x/ws-editor' }, want, false) ?? '', /not a seclab tab/);
+		assert.match(launchProblem({ ...good(), env: { ...good().env, SECLAB_PROBE_RUNDIR: '/elsewhere' } }, want, false) ?? '', /run dir/);
+		// window.ts's canary-clipboard refusal, both ways it can be armed.
+		assert.match(launchProblem({ ...good(), env: { ...good().env, SECLAB_TEST_CLIPBOARD_CANARY: 'c' } }, want, false) ?? '', /no canary-clipboard hook/);
+		fs.mkdirSync(path.join(scratch, 'ws-editor', '.seclab'), { recursive: true });
+		fs.writeFileSync(path.join(scratch, 'ws-editor', '.seclab', 'targets'), 'canary=x\nclipboard=variant\n');
+		assert.match(launchProblem(good(), want, false) ?? '', /no canary-clipboard hook/);
+		assert.equal(launchProblem(good(), want, true), undefined, 'an app with the hook may run the clipboard probes');
+	} finally {
+		fs.rmSync(scratch, { recursive: true, force: true });
+	}
+});

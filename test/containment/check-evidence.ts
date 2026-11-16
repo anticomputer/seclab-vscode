@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
-import { beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, ensureVsceImage, lockRun, VSCE_IMAGE } from '../harness.ts';
+import { appResourcesDir, beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, ensureVsceImage, lockRun, VSCE_IMAGE } from '../harness.ts';
 import { brokerProxy, checkEvidence, readEvidence, report, rpcDecisions, type Check } from './assert.ts';
 import { materialiseFixture, readManifest, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 import { partitionFindings, seedTabManagerState, stateItems } from './state-db.ts';
@@ -45,15 +45,16 @@ const canary = path.join(base, 'canary', 'secret.txt');
 // markers under PWNED (probe-safety.js), so no marker can be credited to the wrong probe.
 const marker = path.join(base, 'probe-marker');
 const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
-// The app under test (SECLAB_TEST_APP=<path>.app). No run ever reads or writes the user's
+// The app under test (SECLAB_TEST_APP=<path>.app, or an unpacked Linux build's VSCode-linux-*
+// directory for the headless runner, test/driver/level-b.ts). No run ever reads or writes the user's
 // real clipboard. The clipboard probes run only when the app is a test build whose clipboard
 // is an in-memory store seeded with this run's canary: the `canary-clipboard` hook in
 // test/builds/variants.json, verified here by its marker in the built bundle. Otherwise the
 // probes refuse (probe-safety.js withCanaryClipboard) and record a harness fault.
 const CANARY_CLIPBOARD = 'variant';
 const testApp = process.env.SECLAB_TEST_APP ? path.resolve(process.env.SECLAB_TEST_APP) : undefined;
-if (testApp !== undefined && (!testApp.endsWith('.app') || !fs.existsSync(testApp))) {
-	console.error(`SECLAB_TEST_APP must name an existing .app, got ${JSON.stringify(testApp)}`);
+if (testApp !== undefined && (!(testApp.endsWith('.app') || /\/VSCode-linux-[^/]+$/.test(testApp)) || !fs.existsSync(appResourcesDir(testApp)))) {
+	console.error(`SECLAB_TEST_APP must name an existing .app or VSCode-linux-* build, got ${JSON.stringify(testApp)}`);
 	process.exit(2);
 }
 function hasCanaryClipboard(app: string): boolean {
@@ -64,7 +65,7 @@ function hasCanaryClipboard(app: string): boolean {
 		return false;
 	}
 	try {
-		return fs.readFileSync(path.join(app, 'Contents', 'Resources', 'app', hook.bundle), 'utf8').includes(hook.marker);
+		return fs.readFileSync(path.join(appResourcesDir(app), hook.bundle), 'utf8').includes(hook.marker);
 	} catch {
 		return false;
 	}
@@ -72,6 +73,8 @@ function hasCanaryClipboard(app: string): boolean {
 const canaryClipboard = testApp !== undefined && hasCanaryClipboard(testApp);
 
 if (mode === 'prepare') {
+	// The launch record is this run's only: check reads it to know the build under test.
+	fs.rmSync(editorLaunchRecord(userData), { force: true });
 	// A previous run's claim points at the old fixture (a new folder has a new inode, which
 	// tabd rightly refuses): remove its tabs and sandboxes, then start from clean state.
 	if (fs.existsSync(stateDir)) {
@@ -203,11 +206,16 @@ if (mode === 'prepare') {
 	console.log(`\nprepared tab ${tab.metadata.name} for ${ws}`);
 	console.log(`\nnow open the TAB directly (never the local path: a local window must not open this hostile workspace).`);
 	console.log(`Keep --user-data-dir SHORT: macOS caps unix socket paths at 104 bytes and a deep path silently fails to open a window.\n`);
-	console.log(`  ${editorLaunchCommand(userData, `vscode-remote://seclab+${tab.metadata.name}${ws}`, {
+	const folderUri = `vscode-remote://seclab+${tab.metadata.name}${ws}`;
+	const launchEnv: Record<string, string> = {
 		SECLAB_EDITOR_CANARY: canaries[3].value, SECLAB_PROBE_NONCE: arm, SECLAB_PROBE_RUNDIR: base, SECLAB_PROBE_BEACON_PORT: String(port),
 		// Seeds the test build's in-memory clipboard; the real clipboard is never touched.
 		...(canaryClipboard ? { SECLAB_TEST_CLIPBOARD_CANARY: canaries[2].value } : {}),
-	}, testApp)}`);
+	};
+	// The same facts for a driven launch (test/driver/level-b.ts): a record of what prepare set,
+	// never instructions; the launcher accepts only these keys. Private: it holds the arming nonce.
+	fs.writeFileSync(path.join(base, 'launch.json'), JSON.stringify({ app: testApp ?? null, userData, folderUri, env: launchEnv }, null, '\t'), { mode: 0o600 });
+	console.log(`  ${editorLaunchCommand(userData, folderUri, launchEnv, testApp)}`);
 	if (!canaryClipboard) {
 		console.log(`\nThe app under test has no canary clipboard (SECLAB_TEST_APP${testApp ? '' : ' not set'}), so the clipboard probes refuse to run.`);
 	}
@@ -261,9 +269,13 @@ if (mode === 'prepare') {
 	// product.json stamp must match the repo's policy table, or the build is unknown (a failure).
 	let filtered: boolean | undefined;
 	try {
-		const launch = JSON.parse(fs.readFileSync(editorLaunchRecord(userData), 'utf8')) as { app?: unknown; pid?: unknown };
-		if (typeof launch.app === 'string' && launch.pid === editorPid(userData)) {
-			const product = JSON.parse(fs.readFileSync(path.join(launch.app, 'Contents', 'Resources', 'app', 'product.json'), 'utf8')) as { seclabRpcPolicy?: { sha256?: unknown } };
+		const launch = JSON.parse(fs.readFileSync(editorLaunchRecord(userData), 'utf8')) as { app?: unknown; pid?: unknown; driven?: unknown };
+		// This run's editor: still running (a window.ts launch, which check stops), or a driven
+		// launch (test/driver/level-b.ts) that has already quit, since its CDP pipe closes before
+		// check runs. prepare removes any earlier record, so the record is this run's.
+		const running = editorPid(userData);
+		if (typeof launch.app === 'string' && ((running !== 0 && launch.pid === running) || (launch.driven === true && running === 0))) {
+			const product = JSON.parse(fs.readFileSync(path.join(appResourcesDir(launch.app), 'product.json'), 'utf8')) as { seclabRpcPolicy?: { sha256?: unknown } };
 			if (!product.seclabRpcPolicy) {
 				filtered = false;
 			} else {
