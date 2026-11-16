@@ -248,6 +248,11 @@ User-visible consequences of containment, so they read as design rather than bug
 - **Credential-looking settings are withheld.** A host setting whose name or value looks like a
   credential never reaches a tab. The Tab Manager names the key so the user can move the secret to
   the broker (same EDR).
+- **No local (host) terminal in a tab window.** "Create New Integrated Terminal (Local)" and
+  "Open New External Terminal" are not offered in a tab window: not in the palette, menus or
+  keybindings. A terminal whose working folder is a host folder doesn't start either. Every
+  terminal in a tab window runs in the tab; open a local terminal from a normal window
+  (project owner decision 2026-11-16; patch 0050, [ADR](adr/20261116-no-host-terminal-in-tabs.md)).
 
 ## 5. Local vs cloud
 
