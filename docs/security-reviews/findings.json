@@ -334,11 +334,31 @@
       "summary": "Window-to-tab push: notebook document sync still sends cells of host notebooks to a tab's extension host.",
       "component": "window\u2192tab pushes (notebook sync)",
       "owner": "docsync",
-      "status": "open",
-      "gap": "No push-side control exists for notebook sync; patch 0035 covers only the text document sync. Reported to the coordinator as a 0035 sibling.",
+      "status": "fixed",
+      "commit": "cc51fa7d",
+      "test": {
+        "file": "test/nbsync/probe.ts",
+        "name": "DOCSYNC-R2 NB-1 no host notebook cell reaches the tab through the notebook sync"
+      },
+      "note": "Closed by the RPC filter (patch 0005), which refuses a tab's notebook serializer, so no notebook opens in a tab window (coordinator, 2026-11-16; docs/edr/20261116-notebook-sync.md). The probe fails on 607873da and passes on 6589051b. Enabling notebooks in tabs is DOCSYNC-R9.",
       "ref": {
         "file": "docs/RPC-LOCKDOWN.md",
         "quote": "notebook document sync (cells of host notebooks);"
+      }
+    },
+    {
+      "record": null,
+      "anchor": "DOCSYNC-R9",
+      "severity": "info",
+      "severityNote": "A follow-up, not a leak: notebooks are off in tabs today, so nothing reaches a tab; the item records what must exist before they are turned on.",
+      "summary": "Notebooks don't work in tabs; enabling them needs per-model notebook provenance, a serializer that reads only the tab's files, and 0035's cell rule for tab-created notebooks.",
+      "component": "window\u2192tab pushes (notebook sync)",
+      "owner": "docsync",
+      "status": "deferred",
+      "followUp": "With the RPC follow-ups session's landing D, which needs a validator for MainThreadNotebook (coordinator, 2026-11-16). The plan is in the EDR's Decision section; test/nbsync/probe.ts must pass with notebooks on.",
+      "ref": {
+        "file": "docs/edr/20261116-notebook-sync.md",
+        "quote": "the serializer and notebook calls) is a follow-up (register DOCSYNC-R9)"
       }
     },
     {

@@ -1,8 +1,8 @@
 # Host notebooks and a tab: notebook sync measurement (DOCSYNC-R2)
 
-- **Status:** proposed (measured; decision pending with the coordinator)
+- **Status:** accepted
 - **Date:** 2026-11-16
-- **Deciders:** coordinator (assignment: close the 0035 siblings in turn). Document-sync session: measurement.
+- **Deciders:** coordinator, 2026-11-16 (close DOCSYNC-R2 as fixed by patch 0005 with this probe as its regression test; notebooks in tabs listed as a tab limitation; the enabling plan is a follow-up tied to the RPC follow-ups session's landing D, which needs a validator for `MainThreadNotebook`). Document-sync session: measurement.
 - **Related:** [document sync provenance](20261109-document-sync-provenance.md) (0035); [RPC lockdown](../RPC-LOCKDOWN.md) §7 item 10
 
 ## Context
@@ -46,13 +46,14 @@ channel, and no canary. The host notebooks passed to the window on its command l
 model patch 0035 already keeps out of the tab.
 
 ## Decision
-Proposed, for the coordinator: close DOCSYNC-R2 as fixed by the RPC filter (patch 0005), which
-refuses a tab's notebook serializer, so no notebook reaches the notebook sync of a tab window. The
+DOCSYNC-R2 is closed as fixed by the RPC filter (patch 0005), which refuses a tab's notebook
+serializer, so no notebook reaches the notebook sync of a tab window. The
 probe is the regression test: NB-1 and NB-2 must hold, and on a build where notebooks open its
 detection controls must hold too; it fails on `607873da` and passes on `6589051b`.
 
-Consequence: notebooks don't work in tabs today. Enabling them (an allow for the serializer and
-notebook calls) needs its own change, with:
+Consequence: notebooks don't work in tabs today (ARCHITECTURE §4.8). Enabling them (an allow for
+the serializer and notebook calls) is a follow-up (register DOCSYNC-R9), with the RPC follow-ups
+session's landing D, which needs a validator for `MainThreadNotebook`. It needs:
 1. per-model provenance for the notebook sync and the dirty and saved events: a notebook on this
    tab's authority, or a model this host's `$tryCreateNotebook` made (tagged per model, never by
    URI; `$tryOpenNotebook` never tags);
