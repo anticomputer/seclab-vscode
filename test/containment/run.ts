@@ -164,8 +164,11 @@ if (driver === 'sbx') {
 	const ordinary = path.join(wsA, 'wb-ordinary.txt');
 	const heldFile = path.join(wsA, '.vscode', 'tasks.json');
 	const heldBefore = fs.readFileSync(heldFile, 'utf8');
-	spawnSync(runtime, ['exec', '-u', 'agent', '-w', '/', containerA, 'sh', '-c',
+	const edit = spawnSync(runtime, ['exec', '-u', 'agent', '-w', '/', containerA, 'sh', '-c',
 		`printf 'from the tab\\n' > ${JSON.stringify(ordinary)}; printf '{"version":"2.0.0","tasks":[]}\\n' > ${JSON.stringify(heldFile)}`], { encoding: 'utf8', timeout: 60_000 });
+	// The edits are the precondition of every check below: a failed exec (a transient runtime
+	// error once showed up as four unrelated write-back failures) must say so, not cascade.
+	checks.push({ vector: 'write-back', name: 'harness: the tab-side edits were made', ok: edit.status === 0, detail: `exit ${edit.status}${edit.error ? ` ${edit.error.message}` : ''} ${(edit.stderr ?? '').trim().slice(0, 200)}` });
 	const s1 = await client.request<{ applied: string[]; held: Array<{ path: string }> }>('tab.writeback.sync', { tabId: tabA });
 	checks.push({ vector: 'write-back', name: 'an ordinary tab edit is synced to the host checkout', ok: fs.existsSync(ordinary) && fs.readFileSync(ordinary, 'utf8') === 'from the tab\n', detail: JSON.stringify(s1).slice(0, 200) });
 	const st = await client.request<{ gated: boolean; pending: Array<{ path: string }> }>('tab.writeback.status', { tabId: tabA });
