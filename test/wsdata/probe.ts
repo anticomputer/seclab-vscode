@@ -30,7 +30,8 @@ const appArg = rest.includes('--app') ? path.resolve(rest[rest.indexOf('--app') 
 const measure = rest.includes('--measure');
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const tabId = () => (readManifest(base).tabs ?? [])[0];
-const inTab = (args: string[]) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20 });
+// Bounded (as review SQ-6): the tab can stall anything read from its workspace.
+const inTab = (args: string[], timeoutMs = 30_000) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
 
 if (mode !== 'drive' || !appArg) {
 	console.error('usage: probe.ts drive --app PATH [--measure]');
@@ -89,7 +90,7 @@ try {
 	writeManifest(base, { tabs: [tabName] });
 	await client.request('tab.ensureRunning', { tabId: tabName });
 	fs.copyFileSync(path.join(vsixDir, 'wsdata-probe.vsix'), path.join(ws, '.wsdata-probe.vsix'));
-	installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.wsdata-probe.vsix')]).status === 0;
+	installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.wsdata-probe.vsix')], 300_000).status === 0;
 } catch (e) {
 	setupError = String(e).slice(0, 300);
 	console.error(`setup: ${setupError}`);
