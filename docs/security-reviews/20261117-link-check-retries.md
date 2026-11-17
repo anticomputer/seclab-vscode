@@ -21,3 +21,17 @@ which URLs are fetched. A cancelled or timed-out job blocks a merge, and the ret
 | LCR-6 | Info | cache | Pull requests read main's cache and write none. Unchanged. | No finding | — |
 | LCR-7 | Low | cache | GitHub's secondary rate limit answers 403, which could be cached and replayed red. | Fixed | 403 is never cached. |
 | LCR-8 | Info | prompt injection | None found. | No finding | — |
+
+## Round LCR2
+Of the change that checks GitHub file permalinks at `raw.githubusercontent.com`, after the first CI
+run with retries alone still failed on 503s. Nothing at medium or above. No dead github.com
+permalink was found that passes at raw, and no link can be remapped into this repo's exclusion
+unless it names this repo.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| LCR2-1 | Low | exclusion | The raw exclude that kept this repo's remapped links excluded also skipped raw links to this repo written in a doc, which used to be checked. | Fixed | A first-match remap maps this repo's github.com links to themselves, so no raw exclude is needed; the online check's self-test requires a raw self-link to be checked. |
+| LCR2-2 | Info | coverage | Only https blob links were remapped; http, `raw` and `blame` permalinks still went to github.com. Fails closed. | Fixed | The remap takes http or https and blob, raw or blame. |
+| LCR2-3 | Info | spurious failures | A blob URL naming a directory, or a private repository, fails at raw. Fails closed; the private case is in the EDR. | No finding | — |
+| LCR2-4 | Info | cache | The cache key isn't bumped. No stale success can mask a dead link: an old key replays a real 200, a new key misses. | No finding | — |
+| LCR2-5 | Info | prompt injection | None found. | No finding | — |

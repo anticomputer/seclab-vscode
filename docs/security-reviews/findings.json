@@ -15472,6 +15472,81 @@
 				"file": "docs/security-reviews/20261117-link-check-retries.md",
 				"quote": "None found."
 			}
+		},
+		{
+			"record": "20261117-link-check-retries.md",
+			"anchor": "LCR2-1",
+			"round": "Round LCR2",
+			"severity": "low",
+			"summary": "A raw exclude for this repo also skipped raw self-links written in a doc, which used to be checked.",
+			"component": "docs link check (lychee)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "this repo's github.com link was checked, not excluded"
+			},
+			"commit": "patch:39524975df5e74422467599ea993f56473f32621"
+		},
+		{
+			"record": "20261117-link-check-retries.md",
+			"anchor": "LCR2-2",
+			"round": "Round LCR2",
+			"severity": "info",
+			"summary": "http, raw and blame permalinks were not remapped to raw.",
+			"component": "docs link check (lychee)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "a dead upstream permalink did not fail at raw"
+			},
+			"commit": "patch:39524975df5e74422467599ea993f56473f32621"
+		},
+		{
+			"record": "20261117-link-check-retries.md",
+			"anchor": "LCR2-3",
+			"round": "Round LCR2",
+			"severity": "info",
+			"summary": "A directory blob URL or a private repository fails at raw.",
+			"component": "docs link check (lychee)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "Fails closed; the review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-link-check-retries.md",
+				"quote": "Fails closed; the private case is in the EDR."
+			}
+		},
+		{
+			"record": "20261117-link-check-retries.md",
+			"anchor": "LCR2-4",
+			"round": "Round LCR2",
+			"severity": "info",
+			"summary": "The cache key is not bumped for the new host.",
+			"component": "docs link check (lychee)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-link-check-retries.md",
+				"quote": "No stale success can mask a dead link"
+			}
+		},
+		{
+			"record": "20261117-link-check-retries.md",
+			"anchor": "LCR2-5",
+			"round": "Round LCR2",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"component": "docs link check (lychee)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-link-check-retries.md",
+				"quote": "None found."
+			}
 		}
 	]
 }
