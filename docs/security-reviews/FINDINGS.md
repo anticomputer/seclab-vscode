@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 210 | 306 | 44 | 658 |
+| fixed | 14 | 84 | 211 | 307 | 44 | 660 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 52 | 160 | 58 | 275 |
+| fixed-untested | 0 | 5 | 52 | 161 | 58 | 276 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-| **all** | 16 | 93 | 300 | 559 | 148 | 1116 |
+| **all** | 16 | 93 | 301 | 561 | 148 | 1119 |
 
 ## Baseline: open high and critical findings
 
@@ -133,6 +133,7 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-2** | low | accepted-residual | telemetry selection at run time | A host process that opens a tab window with VSCODE_DEV set makes the window a dev build, which enables real telemetry and gives that tab the host ids. | accepted by an agent: Coordinator, 2026-11-16: kept as a recorded residual, no patch. A process that can set the editor's launch environment on the host is already outside the threat model, and a tab cannot set it. |
 | [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md) **SQ-4** | low | fixed-untested | probe harnesses | The squat harness wrote its stop file into the tab's workspace from the host after the run, so a tab symlink there could redirect the write to a host file. | The sentinel check can't fail on sbx, whose share doesn't carry the tab's symlink to the host; no run on a driver whose share does. |
 | [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md) **SQ-7** | low | fixed-untested | probe harnesses | The squat harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
+| [20261117-workspace-data-probe](20261117-workspace-data-probe.md) **WSD-1** | low | fixed-untested | probe harnesses | The wsdata harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
 | [docs/edr/20261109-document-sync-provenance.md](../../docs/edr/20261109-document-sync-provenance.md) **DOCSYNC-R8** | low | accepted-residual | patch 0035 document sync (untitled rule) | A host feature that creates an empty untitled document and then fills it with host data programmatically would still sync into a tab. | accepted by an agent: The untitled rule treats an empty, path-less model first seen by the window as user-typed; no such host feature was seen in the EDR's measurement of the real editor. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **F4** | info | fixed-untested | patch 0035 document sync | \`CellUri.parse\` on a tab-made URI could throw; the sole-consumer pin matches substrings; other calls still name host URIs. | Parse now fails closed and cells are limited to the tab authority, but the record lists no regression test; the remaining host-URI call paths are accepted and reported as siblings. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **P3** | info | accepted-residual | patch 0035 document sync | A change sent for a document the tab no longer holds would be invisible to the extension API. | accepted by an agent: The revoking listener is registered at tagging time so it runs first and removes the document synchronously, and ModelTracker re-checks the predicate before sending. |
@@ -2089,6 +2090,14 @@ Every other commit the register cites is on main's history, or on the branch its
 | SQ-6 | low | fixed | The squat harness read the tab's report through an unbounded sbx exec, so a FIFO at the report path stalled the run before its teardown gate. | patch:e843b3ad0cd7bbb58703145430e8cf85c181cb7e · `test/harness/tab-exec.test.ts` "a FIFO with no writer at the read path times out to no data (SQ-6)" |
 | SQ-7 | low | fixed-untested | The squat harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
 | SQ-8 | low | fixed | The squat run manifest didn't list its generated workspace, so the teardown gate left it and the staged probe VSIX in .work. | patch:0b5e8f33cecacad85ed7cc22efd55b3bf70b6aee · `test/containment/teardown.ts` "generated fixture workspaces removed from the host" |
+
+### [20261117-workspace-data-probe](20261117-workspace-data-probe.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| WSD-1 | low | fixed-untested | The wsdata harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
+| WSD-2 | medium | fixed | The wsdata leak check looked for the canary token only, but the host folder's name is one token to the tab's tokenizer, so the host folder reaching the tab went unflagged. | patch:c3df90a7f6f584393bea95b792d3ee7870942da8 · `test/wsdata/probe.ts` "WSD-2 the leak check catches the host folder" |
+| WSD-3 | low | fixed | The wsdata report check ran a regex on a tab-controlled value before its type check, so a crafted object threw before the teardown gate. | patch:c3df90a7f6f584393bea95b792d3ee7870942da8 · `test/wsdata/probe.ts` "WSD-3 the report check rejects a malformed tab value without throwing" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
