@@ -236,6 +236,44 @@ def _line_of(text: str, pos: int) -> int:
     return text.count("\n", 0, pos) + 1
 
 
+_REGEX_AFTER_WORDS = {"return", "typeof", "case", "do", "else", "in", "of", "new", "delete", "void",
+                      "throw", "yield", "await", "instanceof"}
+
+
+def _regex_end(text: str, i: int) -> int | None:
+    """If the `/` at `i` opens a regular-expression literal, the index just past it (flags
+    included); otherwise None. A regex can only start where an operand is expected: at the start,
+    after an operator or opening bracket, or after a keyword such as `return`. Its body ends at an
+    unescaped `/` outside a character class, so `/^https?:\\/\\//` is not a `//` comment
+    (PR review, 2026-11-17)."""
+    j = i - 1
+    while j >= 0 and text[j] in " \t\r\n":
+        j -= 1
+    if j >= 0 and text[j] not in "(,=:[!&|?{};+-*%<>~^":
+        k = j
+        while k >= 0 and (text[k].isalnum() or text[k] in "_$"):
+            k -= 1
+        if text[k + 1:j + 1] not in _REGEX_AFTER_WORDS:
+            return None
+    k, in_class = i + 1, False
+    while k < len(text) and text[k] != "\n":
+        c = text[k]
+        if c == "\\":
+            k += 2
+            continue
+        if c == "[":
+            in_class = True
+        elif c == "]":
+            in_class = False
+        elif c == "/" and not in_class:
+            k += 1
+            while k < len(text) and (text[k].isalnum() or text[k] == "_"):
+                k += 1
+            return k
+        k += 1
+    return None
+
+
 def _strip_comments(text: str) -> str:
     """The text with comments blanked to spaces and string literals kept (positions and newlines
     kept). Blanking whole lines that start with `*` or `//` removed a block comment's closing
@@ -258,6 +296,9 @@ def _strip_comments(text: str) -> str:
                 if j < n:
                     out[j] = " "
             i += 2
+            continue
+        if ch == "/" and (end := _regex_end(text, i)) is not None:
+            i = end
             continue
         if ch in "'\"`":
             quote, i = ch, i + 1
@@ -288,6 +329,9 @@ def _code_only(text: str) -> str:
                 if j < n:
                     out[j] = " "
             i += 2
+            continue
+        if ch == "/" and (end := _regex_end(text, i)) is not None:
+            i = end
             continue
         if ch in "'\"`":
             quote, i = ch, i + 1
