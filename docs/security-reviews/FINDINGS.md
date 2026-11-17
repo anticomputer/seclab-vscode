@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 208 | 299 | 44 | 649 |
+| fixed | 14 | 84 | 208 | 301 | 44 | 651 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 52 | 157 | 57 | 271 |
+| fixed-untested | 0 | 5 | 52 | 158 | 57 | 272 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 14 | 14 | 6 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-| **all** | 16 | 93 | 300 | 549 | 147 | 1105 |
+| **all** | 16 | 93 | 300 | 552 | 147 | 1108 |
 
 ## Baseline: open high and critical findings
 
@@ -128,6 +128,7 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **R2-1** | low | fixed-untested | patch 0035 document sync | "Born as a text file" meant only that a text file model existed, so a tab stalling its provider's read could pre-claim a host URI. | Birth now requires a finished read (lastResolvedFileStat) with no text model yet, but the record records "code review; no probe" — there is no predictable host creator to drive. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **R4-1** | low | fixed-untested | patch 0035 document sync | A text file model that reused an existing host model kept its stat after that model was disposed, so a later host-created model would count as its own. | Reused models are tainted on onDidResolve so their later text models never count, but the record records "code review" only — no probe. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-9** | low | fixed-untested | patch 0036 configuration snapshot | The change-event key classification trusted \`e.source\`, which upstream sets to WORKSPACE for multi-layer reloads, so host key names were checked against tab keys only. | No runtime test for change-event key lists after a profile switch or reload. |
+| [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-17** | low | fixed-untested | edtabs harness | The harness copied the VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-2** | low | fixed-untested | patch 0038 editor-tab model | A host-created untitled editor counted as the tab's own, so its first line reached the tab as a label. | No runtime case opens a host-created untitled document with content; the rule is 0035's untitled predicate. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-3** | low | fixed-untested | patch 0038 editor-tab model | A filesystem provider registered later by the tab could claim host editors already open in its scheme (latent under the RPC filter). | Not reachable at run time today: the RPC filter refuses a tab's provider registration. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-5** | low | accepted-residual | patch 0038 editor-tab model | Webview panels pass by scheme, so a host-side panel's title and view type reach the tab. | accepted by an agent: Under the RPC filter a tab cannot create webview panels, so every panel in a tab window is the window's own; none carries host data in its title. |
@@ -1945,6 +1946,9 @@ Every other commit the register cites is on main's history, or on the branch its
 | EDT-13 | low | fixed | Ownership changes rebuilt the whole tab model, so onDidChangeTabs listeners never saw an untitled tab turn from unknown to text. | patch:93f8922bb5609fa398e186c0b03abe5877a031e9 · `test/edtabs/probe.ts` "control: the tab learned of its untitled text tab through onDidChangeTabs (EDT-13)" |
 | EDT-14 | low | fixed | Every model add fired 0035's origin change, rebuilding the whole document state: quadratic in a tab's background opens up to MainThreadDocuments' 50 held references, a constant factor past it. | patch:242beb7ed662461e98405cd03a34629f83855fed · `test/edtabs/probe.ts` "EDT-14 a background document open does not rebuild the document state" |
 | EDT-15 | info | fixed-untested | After the tab ran, the edtabs harness wrote into the tab's workspace from the host, read its arming file back unguarded and read its report through an unbounded sbx exec (SQ-4 to SQ-6's pattern). | The squat probe and tabExec's unit test cover the pattern (SQ-4 to SQ-6); this harness mirrors the fixes without its own hostile-workspace test. |
+| EDT-16 | low | fixed | A scale phase's marker was written even when every open failed, so the EDT-14 check could run on no workload. | patch:4e3ee594ef4366ce33e0c576a144047e620946a3 · `test/edtabs/probe.ts` "EDT-16 a scale phase whose opens failed is not counted" |
+| EDT-17 | low | fixed-untested | The harness copied the VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
+| EDT-18 | low | fixed | The report check ran a regex on a tab-controlled value before its type check, so a crafted object threw before the teardown gate. | patch:4e3ee594ef4366ce33e0c576a144047e620946a3 · `test/edtabs/probe.ts` "EDT-18 the report check rejects a malformed tab value without throwing" |
 
 ### [20261116-gate-fail-open-remainder](20261116-gate-fail-open-remainder.md)
 

@@ -16301,6 +16301,48 @@
 			"status": "fixed-untested",
 			"commit": "patch:db139299fd5c1290210afc6c075ff4a1f8124c9e",
 			"gap": "The squat probe and tabExec's unit test cover the pattern (SQ-4 to SQ-6); this harness mirrors the fixes without its own hostile-workspace test."
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Copilot review (PR #24, fourth pass)",
+			"owner": "docsync",
+			"component": "edtabs harness",
+			"commit": "patch:4e3ee594ef4366ce33e0c576a144047e620946a3",
+			"severity": "low",
+			"anchor": "EDT-16",
+			"summary": "A scale phase's marker was written even when every open failed, so the EDT-14 check could run on no workload.",
+			"status": "fixed",
+			"test": {
+				"file": "test/edtabs/probe.ts",
+				"name": "EDT-16 a scale phase whose opens failed is not counted"
+			}
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Copilot review (PR #24, fourth pass)",
+			"owner": "docsync",
+			"component": "edtabs harness",
+			"commit": "patch:4e3ee594ef4366ce33e0c576a144047e620946a3",
+			"severity": "low",
+			"anchor": "EDT-17",
+			"summary": "The harness copied the VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file.",
+			"status": "fixed-untested",
+			"gap": "Nothing in the tab runs before the probe is installed, so no run plants the symlink."
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Copilot review (PR #24, fourth pass)",
+			"owner": "docsync",
+			"component": "edtabs harness",
+			"commit": "patch:4e3ee594ef4366ce33e0c576a144047e620946a3",
+			"severity": "low",
+			"anchor": "EDT-18",
+			"summary": "The report check ran a regex on a tab-controlled value before its type check, so a crafted object threw before the teardown gate.",
+			"status": "fixed",
+			"test": {
+				"file": "test/edtabs/probe.ts",
+				"name": "EDT-18 the report check rejects a malformed tab value without throwing"
+			}
 		}
 	]
 }
