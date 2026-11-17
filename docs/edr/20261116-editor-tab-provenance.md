@@ -92,10 +92,17 @@ model appears after its diff tab opened), the model is rebuilt and resent.
   44176135490) passes 4 of 4 runs (no canary in any label or URI; the media preview and the
   host editors anonymous; the user's untitled document a text tab of the tab's own); main
   `6589051b` fails `DOCSYNC-R3 …` and `EDT-1 …`. No focus steal; the teardown gate passed every run.
-- EDT-14 (scale phases): the tab opens 50, then 400, then 50 more of its own files in the
-  background, and the window's renderer counts calls per function (CDP precise coverage). On
-  `bb91e728` the last 50 adds cost about 6.8 times the first 50 (the sync predicate, once per open
-  model per add); the check allows 3.
+- EDT-14 (scale phases): the tab opens 10, then 27, then 10 more of its own files in the
+  background, all under `MainThreadDocuments`' cap of 50 references it holds for documents an
+  extension opens (past it each add evicts an older model, and upstream rescans every model on
+  each removal anyway, so the extra rebuild cost a constant factor there, not an order). The window's
+  renderer counts calls of the document state's per-model judgement (`isTooLargeForSyncing`, CDP
+  precise coverage). Before the fix (`35e8936d`, run 44186897886) the last 10 adds cost 555
+  judgements against 185 for the first 10, one more per open model per add; the check allows
+  twice the first.
+- Final proof, 2026-11-17: this branch at `ca643062` (run 44193765403) passes 5 of 5 runs,
+  with 60 judgements in both phases, the untitled control through `onDidChangeTabs` (EDT-13),
+  no canary in any label or URI, no focus steal and the teardown gate passing every run.
 - Typecheck: the patched file adds no error against the pinned tree.
 - Review: [20261116-editor-tab-provenance](../security-reviews/20261116-editor-tab-provenance.md),
   three rounds; no high or critical finding.

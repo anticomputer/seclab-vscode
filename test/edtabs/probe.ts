@@ -28,7 +28,8 @@ const appArg = rest.includes('--app') ? path.resolve(rest[rest.indexOf('--app') 
 const measure = rest.includes('--measure');
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const tabId = () => (readManifest(base).tabs ?? [])[0];
-const inTab = (args: string[]) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20 });
+// Bounded (as review SQ-6): the tab can stall anything read from its workspace.
+const inTab = (args: string[], timeoutMs = 30_000) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
 // What the window opens, by palette label, and the editor tab label each should produce.
 const HOST_EDITORS: Array<[string, string]> = [
 	['Preferences: Open User Settings (JSON)', 'settings.json'],
@@ -54,7 +55,9 @@ writeSnapshot(base);
 writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir] });
 fs.writeFileSync(path.join(ws, 'README.md'), '# edtabs probe workspace\n');
 // The tab's own files for the scale phases (EDT-14): SCALE[0], then SCALE[1], then SCALE[2] more.
-const SCALE = [50, 400, 50];
+// All under MainThreadDocuments' cap of 50 references held for documents an extension opens: past
+// it each add evicts an older model, and upstream rescans every model on each removal anyway.
+const SCALE = [10, 27, 10];
 fs.mkdirSync(path.join(ws, 'scale'));
 for (let i = 0; i < SCALE[0] + SCALE[1] + SCALE[2]; i++) {
 	fs.writeFileSync(path.join(ws, 'scale', `f${i}.txt`), `scale ${i}\n`);
@@ -100,7 +103,7 @@ try {
 	writeManifest(base, { tabs: [tabName] });
 	await client.request('tab.ensureRunning', { tabId: tabName });
 	fs.copyFileSync(path.join(vsixDir, 'edtabs-probe.vsix'), path.join(ws, '.edtabs-probe.vsix'));
-	installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.edtabs-probe.vsix')]).status === 0;
+	installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.edtabs-probe.vsix')], 300_000).status === 0;
 } catch (e) {
 	setupError = String(e).slice(0, 300);
 	console.error(`setup: ${setupError}`);
@@ -181,7 +184,7 @@ if (installed) {
 		spawnSync('sleep', ['4']);
 		// Scale phases (review EDT-14): the tab opens SCALE[0], SCALE[1], then SCALE[2] more of its own
 		// files in the background. The first and last phases add as many models; work per add that
-		// rescans every model is about ten times more in the last, with 450 more models open.
+		// rescans every model is about three times more in the last, with 37 more models open.
 		type Coverage = { result: Array<{ scriptId: string; functions: Array<{ functionName: string; ranges: Array<{ startOffset: number; count: number }> }> }> };
 		await ed.cdp.send('Profiler.enable', {}, ed.session);
 		await ed.cdp.send('Profiler.startPreciseCoverage', { callCount: true, detailed: false }, ed.session);
@@ -224,9 +227,13 @@ const valid = !!rep && rep.schema === 'seclab-edtabs-report/1' && rep.arm === ar
 // the same path), which the tab is given on purpose; the canary names only the host profile.
 const markers: Record<string, string> = { canary: sha(canary), media: sha(mediaCanary) };
 const leaks = valid ? Object.entries(markers).flatMap(([name, h]) => (rep.tokens as Array<{ field: string; sha256: string }>).filter(x => x.sha256 === h).map(x => `${name}@${x.field}`)) : [];
-// Per-add work independent of the documents already open gives the same counts in the first and
-// last phase; a rescan per add about 9x more. Only functions busy enough to matter are judged.
-const growth = phaseCounts.length === 3 ? [...phaseCounts[2]].filter(([, c]) => c >= 5_000).map(([k, c]) => ({ fn: k.slice(k.lastIndexOf(':') + 1).slice(0, 40), c1: phaseCounts[0].get(k) ?? 0, c3: c, ratio: c / Math.max(phaseCounts[0].get(k) ?? 0, 1) })).sort((a, b) => b.ratio - a.ratio) : [];
+// The document state's per-model judgement (upstream's TextModel.isTooLargeForSyncing, a public
+// name the build keeps) runs once per open model on every rebuild. Per add it is constant unless an
+// add rebuilds the state: then the last phase, with 37 more models open, costs about 3x the first.
+const named = (m: Map<string, number> | undefined, fn: string) => [...(m ?? new Map<string, number>())].filter(([k]) => k.endsWith(`:${fn}`)).reduce((n, [, c]) => n + c, 0);
+const judge = { c1: named(phaseCounts[0], 'isTooLargeForSyncing'), c3: named(phaseCounts[2], 'isTooLargeForSyncing') };
+// For the record only: the busiest renderer functions whose counts grew most (upstream's vary run to run).
+const growth = phaseCounts.length === 3 ? [...phaseCounts[2]].filter(([, c]) => c >= 300).map(([k, c]) => ({ fn: k.slice(k.lastIndexOf(':') + 1).slice(0, 40), c1: phaseCounts[0].get(k) ?? 0, c3: c, ratio: c / Math.max(phaseCounts[0].get(k) ?? 0, 1) })).sort((a, b) => b.ratio - a.ratio) : [];
 const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';
 const results: Array<{ name: string; ok: boolean }> = [];
 const expect = (name: string, ok: boolean) => results.push({ name, ok });
@@ -248,9 +255,10 @@ if (valid && !measure) {
 	expect('EDT-1 a host media file dropped in the window reaches the tab without its path', !leaks.some(l => l.startsWith('media@')));
 	expect('control: an untitled document the user created in the window shows to the tab as its own text tab (EDT-10)', rep.untitledText === true);
 	expect('control: the tab learned of its untitled text tab through onDidChangeTabs (EDT-13)', rep.untitledEvent === true);
-	console.log(`scale: phases done ${phasesDone}/3; fastest-growing busy renderer functions ${JSON.stringify(growth.slice(0, 5))}`);
+	console.log(`scale: phases done ${phasesDone}/3; sync judgements first ${judge.c1}, last ${judge.c3}; fastest-growing busy renderer functions ${JSON.stringify(growth.slice(0, 3))}`);
 	expect('control: all three scale phases ran (the tab opened its own files in the background)', phasesDone === 3);
-	expect('EDT-14 no renderer function\'s call count grows quadratically with the tab\'s background document opens', phasesDone === 3 && growth.every(g => g.ratio < 3));
+	expect('control: the document state judged the added models (its judgement is still found by name)', judge.c1 >= SCALE[0]);
+	expect('EDT-14 a background document open does not rebuild the document state (judgements per add independent of the documents open)', phasesDone === 3 && judge.c3 < 2 * judge.c1);
 }
 expect('no focus steal', !steals);
 const gate = verifyTeardown(base);
