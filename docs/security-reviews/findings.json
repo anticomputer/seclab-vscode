@@ -17339,7 +17339,7 @@
 			"component": "clean-host",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:ffd3f4829ff90909ea9fecbc10db725f398775df",
+			"commit": "patch:2848116491643bd83cae84ccd30326c4a724474d",
 			"test": {
 				"file": "test/clean-host.ts",
 				"name": "should be ${want}"
