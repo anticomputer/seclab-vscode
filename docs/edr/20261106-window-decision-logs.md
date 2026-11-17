@@ -141,6 +141,35 @@ The bundle is scanned once per window, off the activation path.
 - A build without the filter forwards nothing; filter and gate decisions then stay in the
   window logs only.
 
+## Addendum (2026-11-17): code review follow-up
+[Review round 15](../security-reviews/20261104-tab-observability.md#round-15-code-review-of-the-window-log-forwarder-cr10)
+changed four things in how the forwarder reads and delivers:
+- **Bytes, not text.** Partial lines are kept as bytes and only whole lines are decoded, so a
+  character split across reads stays intact and checkpoints are exact byte offsets.
+- **Sessions outlive the install line.** The bound session is kept in the workspace state. If
+  rotation has removed the install line, it still holds from the saved checkpoint while that
+  checkpoint's file exists, since a newer session's install line would sit in that file or a
+  newer one. If not, the RPC log's `skipped` marker is reported once and nothing is
+  forwarded until the window installs the filter again. A checkpoint is resumed whenever it is
+  at or after the session start in the rotation chain, not only in the same file.
+- **Rate-limited events are kept, not lost.** The forwarder reports the RPC log and gate
+  denials with `retryLimited`. tabd accepts an exact prefix of the report and defers the rest
+  from the first event its rate limit refuses (summarised as deferred, not dropped); the
+  forwarder sends those again next round. Each checkpoint moves to the end of the last
+  delivered line, so a restart never replays what tabd acknowledged; a checkpoint whose file
+  has rotated away resumes at the oldest file left, with the loss reported. Checkpoints carry
+  their log folder (another window's is ignored) and every tail is anchored when it binds; a
+  gate tail with no usable checkpoint reads every file still on disk, oldest first. Gap markers
+  have a rate bucket of their own, so provoked denials can't crowd them out.
+- **AHP connection lifecycle is never deferred.** The gate log is read by two tails, connection
+  lifecycle and the rest, each in order with its own checkpoint (the lifecycle lane starts from
+  the old shared checkpoint on upgrade). tabd watches every `opened`/`verified` on first sight,
+  before any limit, for `ahp.ungated`; past its bucket a lifecycle line is dropped and
+  summarised, never deferred, re-sent or watched twice. Deferring it bought nothing the watch
+  needed and cost a series of ordering and restart hazards (review round 15).
+- **Log summaries aren't denials.** `seclab.log-throttled`, `seclab.early-dropped` and
+  `seclab.log-skipped` never count towards `rpc.deny-burst`.
+
 ## Evidence on record
 - **`fixture:test/observability/rpc-prober`:** `node test/observability/window-log-probe.ts
   --app .work/app-branch/seclab-vscode.app`, branch build 43953524461 (`688f15b`, on main
