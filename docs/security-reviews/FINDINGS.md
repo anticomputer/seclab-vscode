@@ -15,23 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-<<<<<<< HEAD
 | fixed | 14 | 84 | 208 | 297 | 44 | 647 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 52 | 157 | 56 | 270 |
-=======
-| fixed | 14 | 83 | 203 | 271 | 40 | 611 |
-| fixed-untested | 0 | 5 | 52 | 158 | 56 | 271 |
->>>>>>> 30223d9 (0038 PR review 2 recorded: EDT-13)
+| fixed-untested | 0 | 5 | 52 | 159 | 56 | 272 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 14 | 14 | 6 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-<<<<<<< HEAD
-| **all** | 16 | 93 | 300 | 547 | 146 | 1102 |
-=======
-| **all** | 16 | 92 | 295 | 522 | 142 | 1067 |
->>>>>>> 30223d9 (0038 PR review 2 recorded: EDT-13)
+| **all** | 16 | 93 | 300 | 549 | 146 | 1104 |
 
 ## Baseline: open high and critical findings
 
@@ -138,6 +129,7 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **R4-1** | low | fixed-untested | patch 0035 document sync | A text file model that reused an existing host model kept its stat after that model was disposed, so a later host-created model would count as its own. | Reused models are tainted on onDidResolve so their later text models never count, but the record records "code review" only — no probe. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-9** | low | fixed-untested | patch 0036 configuration snapshot | The change-event key classification trusted \`e.source\`, which upstream sets to WORKSPACE for multi-layer reloads, so host key names were checked against tab keys only. | No runtime test for change-event key lists after a profile switch or reload. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-13** | low | fixed-untested | patch 0038 editor-tab model | Ownership changes rebuilt the whole tab model, so onDidChangeTabs listeners never saw an untitled tab turn from unknown to text. | The control fails on the build before the fix and is proven on the next build. |
+| [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-14** | low | fixed-untested | patch 0038 editor-tab model | Every model add fired 0035's origin change, rebuilding the whole document state, so a tab opening N documents in the background cost the window work quadratic in N. | The check fails on the build before the fix and is proven on the next build. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-2** | low | fixed-untested | patch 0038 editor-tab model | A host-created untitled editor counted as the tab's own, so its first line reached the tab as a label. | No runtime case opens a host-created untitled document with content; the rule is 0035's untitled predicate. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-3** | low | fixed-untested | patch 0038 editor-tab model | A filesystem provider registered later by the tab could claim host editors already open in its scheme (latent under the RPC filter). | Not reachable at run time today: the RPC filter refuses a tab's provider registration. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-5** | low | accepted-residual | patch 0038 editor-tab model | Webview panels pass by scheme, so a host-side panel's title and view type reach the tab. | accepted by an agent: Under the RPC filter a tab cannot create webview panels, so every panel in a tab window is the window's own; none carries host data in its title. |
@@ -1952,6 +1944,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | EDT-11 | medium | open | The docsync probe (0035's runtime regression test) no longer runs on builds with the RPC filter, and 0038 hides the host untitled URIs it relied on. | Rework the docsync probe to drive host-side actions from the window through the headless driver and pass test URIs on a test-only channel. |
 | EDT-12 | info | fixed-untested | A setup failure skipped the edtabs probe's teardown gate. | Harness structure; no test injects a setup failure. |
 | EDT-13 | low | fixed-untested | Ownership changes rebuilt the whole tab model, so onDidChangeTabs listeners never saw an untitled tab turn from unknown to text. | The control fails on the build before the fix and is proven on the next build. |
+| EDT-14 | low | fixed-untested | Every model add fired 0035's origin change, rebuilding the whole document state, so a tab opening N documents in the background cost the window work quadratic in N. | The check fails on the build before the fix and is proven on the next build. |
 
 ### [20261116-gate-fail-open-remainder](20261116-gate-fail-open-remainder.md)
 

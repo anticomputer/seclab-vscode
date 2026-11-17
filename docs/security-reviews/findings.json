@@ -16271,6 +16271,18 @@
 				"file": "seclab",
 				"name": "a fix whose revert was reverted was taken as reverted (PRR11-13)"
 			}
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Copilot review (PR #24, third pass)",
+			"owner": "docsync",
+			"component": "patch 0038 editor-tab model",
+			"anchor": "EDT-14",
+			"severity": "low",
+			"summary": "Every model add fired 0035's origin change, rebuilding the whole document state, so a tab opening N documents in the background cost the window work quadratic in N.",
+			"status": "fixed-untested",
+			"commit": "patch:242beb7ed662461e98405cd03a34629f83855fed",
+			"gap": "The check fails on the build before the fix and is proven on the next build."
 		}
 	]
 }
