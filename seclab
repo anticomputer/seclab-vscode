@@ -1597,7 +1597,7 @@ case "${1:-help}" in
 			# Patch 0050: a tab window offers and starts no host terminal (palette, keybinding, backend).
 			host-terminal) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/host-terminal.test.ts ;;
 			# Harnesses reap the previous run before wiping it, and tear down on SIGINT/SIGTERM.
-			harness-hygiene) docker run --rm --network none --tmpfs /scratch -e SECLAB_SCRATCH=/scratch -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/harness-hygiene.test.ts ;;
+			harness-hygiene) docker run --rm --network none --tmpfs /scratch:exec -e SECLAB_SCRATCH=/scratch -e HOME=/scratch/home -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/harness-hygiene.test.ts ;;
 			# RPC filter: patches 0030/0031 never register upstream's push handlers in a tab window.
 			push-refusal) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/push-refusal.test.ts ;;
 			# RPC filter: the shipped decision-log line formatter always writes JSON that parses.
