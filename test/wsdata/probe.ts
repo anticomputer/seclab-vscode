@@ -64,24 +64,39 @@ fs.writeFileSync(path.join(userData, 'User', 'keybindings.json'), '[]\n');
 const until = Math.floor(Date.now() / 1000) + 2 * 3600;
 fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${randomBytes(16).toString('hex')}\nrun=${base}\nuntil=${until}\n`);
 
-const vsixDir = path.join(base, 'vsix');
-fs.mkdirSync(vsixDir, { recursive: true });
-execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`,
-	'-v', `${path.join(import.meta.dirname, 'probe-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
-	VSCE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/wsdata-probe.vsix'], { stdio: 'ignore' });
-const client = new TabdClient({
-	command: process.execPath,
-	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', 'sbx', '--allowed-root', base],
-	env: { HOME: process.env.HOME, USER: process.env.USER },
-});
-await client.initialize('wsdata-probe', '0');
-const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
-writeManifest(base, { tabs: [tab.metadata.name] });
-await client.request('tab.ensureRunning', { tabId: tab.metadata.name });
-fs.copyFileSync(path.join(vsixDir, 'wsdata-probe.vsix'), path.join(ws, '.wsdata-probe.vsix'));
-const installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.wsdata-probe.vsix')]).status === 0;
-client.dispose();
-await new Promise(res => client.once('exit', res));
+// Setup failures still end in the teardown gate (PR #24 review, EDT-12): nothing below may skip it.
+let installed = false;
+let tabName = '';
+let setupError = '';
+let client: TabdClient | undefined;
+try {
+	const vsixDir = path.join(base, 'vsix');
+	fs.mkdirSync(vsixDir, { recursive: true });
+	execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`,
+		'-v', `${path.join(import.meta.dirname, 'probe-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
+		VSCE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/wsdata-probe.vsix'], { stdio: 'ignore' });
+	client = new TabdClient({
+		command: process.execPath,
+		args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', 'sbx', '--allowed-root', base],
+		env: { HOME: process.env.HOME, USER: process.env.USER },
+	});
+	await client.initialize('wsdata-probe', '0');
+	const { tab } = await client!.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
+	tabName = tab.metadata.name;
+	writeManifest(base, { tabs: [tabName] });
+	await client.request('tab.ensureRunning', { tabId: tabName });
+	fs.copyFileSync(path.join(vsixDir, 'wsdata-probe.vsix'), path.join(ws, '.wsdata-probe.vsix'));
+	installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.wsdata-probe.vsix')]).status === 0;
+} catch (e) {
+	setupError = String(e).slice(0, 300);
+	console.error(`setup: ${setupError}`);
+} finally {
+	if (client) {
+		const c = client;
+		c.dispose();
+		await Promise.race([new Promise(res => c.once('exit', res)), new Promise(res => setTimeout(res, 15_000))]);
+	}
+}
 
 const reportPath = path.join(ws, '.seclab-wsdata', 'report.json');
 const read = () => {
@@ -97,7 +112,7 @@ let showLocal = false;
 let ed: DrivenEditor | undefined;
 if (installed) {
 	try {
-		ed = await DrivenEditor.launch({ app: appArg, userData, folderUri: `vscode-remote://seclab+${tab.metadata.name}${ws}`, args: ['--add', hostDir] });
+		ed = await DrivenEditor.launch({ app: appArg, userData, folderUri: `vscode-remote://seclab+${tabName}${ws}`, args: ['--add', hostDir] });
 		launched = true;
 		for (let i = 0; i < 90 && !read(); i++) {
 			spawnSync('sleep', ['1']);
@@ -154,6 +169,7 @@ if (valid) {
 	console.log(`tab saw (${rep.activations} activation(s)): up to ${rep.maxFolders} folder(s); schemes ${JSON.stringify(rep.schemes)}`);
 	console.log(`host markers in the tab's workspace data: ${[...new Set(leaks)].join(', ') || 'none'}`);
 }
+expect('setup completed (tab claimed, running, probe installed)', !setupError);
 expect('probe installed in the tab', installed);
 expect('the window launched with the host folder to add', launched);
 expect('report present, from this run, and matches the schema', valid);
