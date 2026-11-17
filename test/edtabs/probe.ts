@@ -98,11 +98,12 @@ try {
 		env: { HOME: process.env.HOME, USER: process.env.USER },
 	});
 	await client.initialize('edtabs-probe', '0');
+	// Staged before the tab exists: once it runs, the host never writes into its workspace (EDT-17).
+	fs.copyFileSync(path.join(vsixDir, 'edtabs-probe.vsix'), path.join(ws, '.edtabs-probe.vsix'));
 	const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
 	tabName = tab.metadata.name;
 	writeManifest(base, { tabs: [tabName] });
 	await client.request('tab.ensureRunning', { tabId: tabName });
-	fs.copyFileSync(path.join(vsixDir, 'edtabs-probe.vsix'), path.join(ws, '.edtabs-probe.vsix'));
 	installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.edtabs-probe.vsix')], 300_000).status === 0;
 } catch (e) {
 	setupError = String(e).slice(0, 300);
@@ -127,6 +128,8 @@ let windowLabels: string[] = [];
 // Per renderer function, its call count in each scale phase (precise coverage, call counts).
 const phaseCounts: Array<Map<string, number>> = [];
 let phasesDone = 0;
+// Phase 0 asks the tab to open a file that doesn't exist: its marker must not pass (EDT-16).
+let failedPhaseRejected = false;
 const opened: Record<string, boolean> = {};
 let ed: DrivenEditor | undefined;
 if (installed) {
@@ -186,6 +189,14 @@ if (installed) {
 		// files in the background. The first and last phases add as many models; work per add that
 		// rescans every model is about three times more in the last, with 37 more models open.
 		type Coverage = { result: Array<{ scriptId: string; functions: Array<{ functionName: string; ranges: Array<{ startOffset: number; count: number }> }> }> };
+		// The marker carries how many documents the tab holds open: a phase counts only if every
+		// open so far succeeded (EDT-16).
+		const phaseOk = (k: number, held: number) => (inTab(['cat', path.join(ws, '.seclab-edtabs', `scale-${k}.done`)]).stdout ?? '').trim() === String(held);
+		writeInTab('scale-0', `${SCALE[0] + SCALE[1] + SCALE[2]} 1`);
+		for (let i = 0; i < 60 && inTab(['test', '-e', path.join(ws, '.seclab-edtabs', 'scale-0.done')]).status !== 0; i++) {
+			spawnSync('sleep', ['1']);
+		}
+		failedPhaseRejected = inTab(['test', '-e', path.join(ws, '.seclab-edtabs', 'scale-0.done')]).status === 0 && !phaseOk(0, 1);
 		await ed.cdp.send('Profiler.enable', {}, ed.session);
 		await ed.cdp.send('Profiler.startPreciseCoverage', { callCount: true, detailed: false }, ed.session);
 		await ed.cdp.send('Profiler.takePreciseCoverage', {}, ed.session);
@@ -203,7 +214,7 @@ if (installed) {
 				}
 			}
 			phaseCounts.push(m);
-			phasesDone += inTab(['test', '-e', done]).status === 0 ? 1 : 0;
+			phasesDone += phaseOk(k, SCALE.slice(0, k).reduce((a, b) => a + b, 0)) ? 1 : 0;
 		}
 		await ed.cdp.send('Profiler.stopPreciseCoverage', {}, ed.session).catch(() => undefined);
 	} catch (e) {
@@ -219,10 +230,26 @@ for (let i = 0; i < 30 && tabId() && rep?.done !== true; i++) {
 await ed?.close().catch(() => undefined);
 
 const counts = (o: unknown, key: RegExp) => !!o && typeof o === 'object' && Object.entries(o as object).every(([k, v]) => key.test(k) && Number.isInteger(v));
-const valid = !!rep && rep.schema === 'seclab-edtabs-report/1' && rep.arm === arm && typeof rep.done === 'boolean' && Number.isInteger(rep.tabs)
-	&& counts(rep.kinds, /^[A-Za-z]{1,40}$/) && counts(rep.schemes, /^[a-z0-9.+-]{1,40}$/)
-	&& typeof rep.untitledText === 'boolean' && typeof rep.untitledEvent === 'boolean' && Array.isArray(rep.tokens) && rep.tokens.length <= 5000
-	&& rep.tokens.every((x: any) => !!x && (x.field === 'label' || x.field === 'uri') && /^[0-9a-f]{64}$/.test(x.sha256));
+// The report is the tab's: its check must reject anything malformed without throwing, or the run
+// would end before its teardown gate (EDT-18). Every value meets a type check before a regex.
+const validReport = (r: any) => !!r && r.schema === 'seclab-edtabs-report/1' && r.arm === arm && typeof r.done === 'boolean' && Number.isInteger(r.tabs)
+	&& counts(r.kinds, /^[A-Za-z]{1,40}$/) && counts(r.schemes, /^[a-z0-9.+-]{1,40}$/)
+	&& typeof r.untitledText === 'boolean' && typeof r.untitledEvent === 'boolean' && Array.isArray(r.tokens) && r.tokens.length <= 5000
+	&& r.tokens.every((x: any) => !!x && (x.field === 'label' || x.field === 'uri') && typeof x.sha256 === 'string' && /^[0-9a-f]{64}$/.test(x.sha256));
+const rejects = (r: unknown) => {
+	try {
+		return !validReport(r);
+	} catch {
+		return false;
+	}
+};
+const hostileRejected = rejects({ schema: 'seclab-edtabs-report/1', arm, done: true, tabs: 0, kinds: {}, schemes: {}, untitledText: false, untitledEvent: false, tokens: [{ field: 'uri', sha256: { toString: null } }] });
+let valid = false;
+try {
+	valid = validReport(rep);
+} catch {
+	// a malformed report is invalid
+}
 // Not the login name: the tab's own folder is a host path under the user's home (sbx mounts it at
 // the same path), which the tab is given on purpose; the canary names only the host profile.
 const markers: Record<string, string> = { canary: sha(canary), media: sha(mediaCanary) };
@@ -245,6 +272,7 @@ if (valid) {
 expect('setup completed (tab claimed, running, probe installed)', !setupError);
 expect('probe installed in the tab', installed);
 expect('report present, from this run, and matches the schema', valid);
+expect('EDT-18 the report check rejects a malformed tab value without throwing', hostileRejected);
 expect('control: the window opened the host editors (settings.json, keybindings.json, an untitled file, a dropped media file)', Object.values(opened).length === HOST_EDITORS.length + 2 && Object.values(opened).every(Boolean));
 if (valid && !measure) {
 	expect('the probe finished', rep.done === true);
@@ -256,7 +284,8 @@ if (valid && !measure) {
 	expect('control: an untitled document the user created in the window shows to the tab as its own text tab (EDT-10)', rep.untitledText === true);
 	expect('control: the tab learned of its untitled text tab through onDidChangeTabs (EDT-13)', rep.untitledEvent === true);
 	console.log(`scale: phases done ${phasesDone}/3; sync judgements first ${judge.c1}, last ${judge.c3}; fastest-growing busy renderer functions ${JSON.stringify(growth.slice(0, 3))}`);
-	expect('control: all three scale phases ran (the tab opened its own files in the background)', phasesDone === 3);
+	expect('control: all three scale phases ran (the tab opened all its own files in the background)', phasesDone === 3);
+	expect('EDT-16 a scale phase whose opens failed is not counted', failedPhaseRejected);
 	expect('control: the document state judged the added models (its judgement is still found by name)', judge.c1 >= SCALE[0]);
 	expect('EDT-14 a background document open does not rebuild the document state (judgements per add independent of the documents open)', phasesDone === 3 && judge.c3 < 2 * judge.c1);
 }

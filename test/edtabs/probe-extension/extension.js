@@ -105,7 +105,7 @@ exports.activate = async function (context) {
 	const held = [];
 	const phases = new Set();
 	for (let i = 0; i < 600 && !fs.existsSync(path.join(root, '.seclab', 'stop')); i++) {
-		for (let k = 1; k <= 3; k++) {
+		for (let k = 0; k <= 3; k++) {
 			let spec = '';
 			try { spec = fs.readFileSync(path.join(root, '.seclab', `scale-${k}`), 'utf8'); } catch { continue; }
 			const m = /^(\d{1,4}) (\d{1,4})$/.exec(spec.trim());
