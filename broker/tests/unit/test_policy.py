@@ -523,3 +523,27 @@ def test_azure_devops_backstop(method, path, denied):
                            ("feed.example.test", "azure-devops")):
         assert (backstop_denies(req(host=host, method=method, path=path), provider) is not None) == denied, (host, method, path)
     assert backstop_denies(req(host="feed.example.test", method="PUT", path="/o/p/_packaging/f")) is None  # not by host
+
+
+def test_folder_open_6_added_risky_categories_stay_listed():
+    """Folder-open review #6: tunnel, request-capture and object-storage hosts and GitHub's
+    release-asset hosts are risky destinations, so an approval can never add a rule for one.
+    Each is checked through the matcher the broker uses, not the file. Hosts are built from
+    labels so the test reads as data."""
+    from seclab_broker.policy import pattern_overlaps_risky, risky_category
+
+    def h(*labels):
+        return ".".join(labels)
+
+    expected = {
+        h("*", "devtunnels", "ms"): "tunnel", h("*", "ngrok", "dev"): "tunnel", h("bore", "pub"): "tunnel",
+        h("*", "interact", "sh"): "request-capture", h("*", "oastify", "com"): "request-capture",
+        h("*", "s3", "amazonaws", "com"): "object-storage", h("storage", "googleapis", "com"): "object-storage",
+        h("*", "blob", "core", "windows", "net"): "object-storage", h("*", "r2", "dev"): "object-storage",
+        h("objects", "githubusercontent", "com"): "raw-content",
+        h("release-assets", "githubusercontent", "com"): "raw-content",
+    }
+    for pattern, category in expected.items():
+        sample = pattern.replace("*", "seclab-sample", 1)
+        assert risky_category(sample) == category, pattern
+        assert pattern_overlaps_risky(pattern), pattern

@@ -197,6 +197,23 @@ def test_upstream_derived_values_cannot_erase_request_fields_from_audit():
     assert "redacted" in b.dispatch("audit.tail", {"limit": 1})["events"][0]["path"]
 
 
+def test_model_access_6_detail_and_tools_are_request_fields():
+    """Model-access review #6: `detail` and `tools` in an audit event are request fields, so a
+    value an upstream minted (and the broker derived) can't redact them; a non-request field
+    carrying the same value still is."""
+    b = Broker()
+    b.dispatch("credential.import", {"id": "imp6", "value": CANARY})
+    parent = b.creds.get("imp6")
+    b.creds.derive(parent, "search_repositories", "json-token-field")
+    b.creds.derive(parent, "/models/chat-endpoint", "json-token-field")
+    b.audit("model.call", detail="/models/chat-endpoint", tools=["search_repositories", "read_file"],
+            note="search_repositories")
+    e = b.dispatch("audit.tail", {"limit": 1})["events"][0]
+    assert e["detail"] == "/models/chat-endpoint"
+    assert e["tools"] == ["search_repositories", "read_file"]
+    assert "redacted" in e["note"]
+
+
 def test_approval_and_policy_surfaces_tag_tab_chosen_fields():
     """#2: the inject header and methods in a binding prompt, and every approval-sourced
     rule or binding in notifications and in policy.get / credential.list, are tagged."""
