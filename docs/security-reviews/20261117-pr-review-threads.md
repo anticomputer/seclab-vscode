@@ -8,7 +8,7 @@
   lint (#14), the host-terminal proof harness (#20), and the reaper added for PRR-4 (#27).
 
 ## Verdict
-All twelve threads point at real gaps, and fixing them turned up two more (PRR-13, PRR-14). Two are as stated. One wasn't as stated but hid a wider gap.
+All thirteen threads point at real gaps, and fixing them turned up two more (PRR-13, PRR-14). Two are as stated. One wasn't as stated but hid a wider gap.
 Two were narrower than stated. None is exploitable on main; each is a gate or harness that
 could pass, or leave things behind, for the wrong reason.
 
@@ -28,6 +28,7 @@ could pass, or leave things behind, for the wrong reason.
 | PRR-12 | low | `lint_probes.py` comment scanner (#27) | A misread `/` moves string boundaries too, without any comment: in `n++ / 2; s = '/'; …` the misread regex ends inside the string, and the code scanner then blanked a computed record key after it | fixed |
 | PRR-13 | low | `lint_probes.py` comment scanner (found fixing PRR-12) | A template ended at the backtick of a template nested in `${…}`, so the rest of a payload line was read with the wrong boundaries | fixed |
 | PRR-14 | low | `lint_probes.py` content rules (found fixing PRR-12) | The content rules chose code lines by their first characters, so a code line starting with `*` (a continued product) escaped every content rule | fixed |
+| PRR-15 | low | `lint_probes.py` slash classification (#27) | Reserved words outside the regex and unsure lists read as division, but `debugger` (like other statement-ending keywords) can be followed by a newline and a regex statement, whose closing slashes then hid a write as a comment | fixed |
 
 ## What changed
 - PRR-1: `MainThreadLogger.$log` joins the presence-pinned must-deny set. A
@@ -71,4 +72,7 @@ could pass, or leave things behind, for the wrong reason.
 - PRR-13: `${…}` substitutions are scanned as code, so nested templates keep their boundaries.
   The PRR-12 rule flagged a real payload line because of this, before it was fixed.
 - PRR-14: code lines for the content rules come from the comment scanner.
+- PRR-15: a `/` after any reserved word but a value keyword (`this`, `super`, `null`, `true`,
+  `false`) is unsure, closing the class rather than adding `debugger` alone. Identifiers, a
+  call's `)`, `]` and literals stay division: a newline before `/` never ends a statement there.
 - Each has a `test_lint_probes.py` case that fails on the previous lint.

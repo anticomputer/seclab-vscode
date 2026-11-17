@@ -16732,6 +16732,21 @@
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_code_line_starting_with_a_star_is_linted"
 			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-15",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "lint_probes read a slash after debugger (and other statement-ending reserved words) as division, so a regex statement after it hid a write behind its closing slashes.",
+			"component": "rpc-filter/tools/lint_probes.py _SlashContext",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:05e88dc75f104e00236cda983d9af49a727885aa",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_property_names_and_contextual_words"
+			}
 		}
 	]
 }
