@@ -575,6 +575,13 @@ const MAX_FILE_MATCHES = 10000;
 /** The keys a serialised URI may carry (upstream `URI.toJSON`): nothing else rides along. */
 const URI_KEYS: ReadonlySet<string> = new Set(['$mid', 'scheme', 'authority', 'path', 'query', 'fragment', 'fsPath', '_sep', 'external']);
 const TEXT_MATCH_KEYS: ReadonlySet<string> = new Set(['resource', 'results']);
+/** The keys a text search result (a match or a context line) carries; never `$mid` (review SRCH2-1). */
+const TEXT_RESULT_KEYS: ReadonlySet<string> = new Set(['uri', 'rangeLocations', 'previewText', 'webviewIndex', 'cellFragment', 'text', 'lineNumber']);
+
+/** A serialised URI and nothing else: `$mid` 1 and only URI keys, so `revive` makes it a URI. */
+function plainUri(v: unknown): boolean {
+	return isPlainObject(v) && v.$mid === 1 && onlyKeys(v, URI_KEYS);
+}
 
 function onlyKeys(o: Record<string, unknown>, allowed: ReadonlySet<string>): boolean {
 	return Object.keys(o).every(k => allowed.has(k));
@@ -605,15 +612,21 @@ function searchItem(item: unknown, ctx: SeclabValidatorContext, text: boolean): 
 	if (!Array.isArray(item.results) || item.results.length === 0 || item.results.length > MAX_TEXT_MATCHES) {
 		return 'a text match\'s results are not a non-empty list';
 	}
+	if (!plainUri(item.resource)) {
+		return 'a match resource is not a plain URI';
+	}
 	const r = checkTabUri(item.resource, ctx);
 	if (r) {
 		return `a match resource: ${r}`;
 	}
 	for (const res of Array.isArray(item.results) ? item.results : []) {
-		if (!isPlainObject(res)) {
-			return 'a result is not an object';
+		if (!isPlainObject(res) || !onlyKeys(res, TEXT_RESULT_KEYS)) {
+			return 'a result is not a plain text search result';
 		}
 		if (res.uri !== undefined) {
+			if (!plainUri(res.uri)) {
+				return 'a result uri is not a plain URI';
+			}
 			const u = checkTabUri(res.uri, ctx);
 			if (u) {
 				return `a result uri: ${u}`;
