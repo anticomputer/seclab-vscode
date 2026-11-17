@@ -4,8 +4,8 @@ name: required-jobs-ran
 # counts as passing, and a PR controls its own workflow files, so no check inside them can stop it
 # (Copilot review on PR 7). This workflow runs from main's copy whenever a required workflow
 # completes. It never checks out, runs or downloads anything from the PR. Through the API it reads
-# the job conclusions of the latest run of each required workflow, by file, for the head SHA, and
-# posts the commit status `required-jobs-ran`:
+# the job conclusions of every push and pull_request run of each required workflow, by file, for
+# the head SHA, and posts the commit status `required-jobs-ran`:
 #   success  every required job concluded success;
 #   pending  a required workflow's run hasn't finished;
 #   failure  a required job concluded anything else (skipped, cancelled, failure), or is missing.
@@ -50,26 +50,31 @@ jobs:
           for pair in ci-unit.yml:unit workflow-lint.yml:lint docs-check.yml:docs patch-build.yml:patch-build; do
             wf="${pair%%:*}"
             job="${pair#*:}"
-            # The latest run of that file for this commit, from a push or a pull request.
-            run="$(gh api "repos/$REPO/actions/workflows/$wf/runs?head_sha=$SHA&per_page=50" \
-              --jq '[.workflow_runs[] | select(.event == "push" or .event == "pull_request")] | sort_by(.run_number, .run_attempt) | last | if . == null then "" else "\(.id) \(.status)" end')"
-            if [[ -z "$run" ]]; then
+            # Every push and pull_request run of that file for this commit, not just the latest: a
+            # file can skip a job on one event and run it on the other (review RJG-2).
+            runs="$(gh api "repos/$REPO/actions/workflows/$wf/runs?head_sha=$SHA&per_page=100" \
+              --jq '.workflow_runs[] | select(.event == "push" or .event == "pull_request") | "\(.id) \(.status)"')"
+            if [[ -z "$runs" ]]; then
               state=failure
               detail+=" $job:missing"
               continue
             fi
-            id="${run%% *}"
-            if [[ "${run#* }" != completed ]]; then
-              [[ "$state" == failure ]] || state=pending
-              detail+=" $job:running"
-              continue
-            fi
-            got="$(gh api "repos/$REPO/actions/runs/$id/jobs?filter=latest&per_page=100" \
-              --jq "[.jobs[] | select(.name == \"$job\")] | if length == 1 then .[0].conclusion // \"none\" else \"missing\" end")"
-            if [[ "$got" != success ]]; then
-              state=failure
-            fi
-            detail+=" $job:$got"
+            verdict=success
+            while read -r id status; do
+              if [[ "$status" != completed ]]; then
+                [[ "$verdict" == success ]] && verdict=running
+                continue
+              fi
+              got="$(gh api "repos/$REPO/actions/runs/$id/jobs?filter=latest&per_page=100" \
+                --jq "[.jobs[] | select(.name == \"$job\")] | if length == 1 then .[0].conclusion // \"none\" else \"missing\" end")"
+              [[ "$got" == success ]] || verdict="$got"
+            done <<<"$runs"
+            case "$verdict" in
+              success) ;;
+              running) [[ "$state" == failure ]] || state=pending ;;
+              *) state=failure ;;
+            esac
+            detail+=" $job:$verdict"
           done
           echo "required-jobs-ran: $state ($detail )"
           gh api -X POST "repos/$REPO/statuses/$SHA" -f state="$state" -f context=required-jobs-ran \

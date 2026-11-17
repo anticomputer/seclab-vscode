@@ -55,15 +55,23 @@ repository's token while handling PR-controlled events, and are almost always us
   controls, so the `workflow_run` risk this rule exists for (running PR code with the base token)
   doesn't arise. A PR can't change the gate either, because `workflow_run` always runs the default
   branch's file.
-- **Residual: a forged status.** A PR that skips `lint` and adds a workflow granting
-  `statuses: write` could post `required-jobs-ran` itself, after the gate's last post. Both statuses
-  come from the same Actions token, so GitHub can't tell them apart. What stands against it:
-  - Copilot's review, with every thread resolved before merging;
-  - `landing verify` after the merge, which refuses because `lint` was skipped;
-  - the repository's default token staying read-only.
-
-  Closing it before the merge would need a status source a workflow can't impersonate, such as a
-  GitHub App. That is an owner decision, outside this record.
+- **What the gate proves, and what it can't (review RJG).** It proves that every push and
+  pull_request run of each required workflow, for the commit, ran its required job to success. It
+  judges every such run, so a file that skips a job on one event and runs it on the other fails
+  (RJG-2). It can't prove those jobs did their work. Every required job runs code the PR controls
+  (its workflow files, `seclab`, `build/`), so a PR that keeps `name: lint` but guts its steps gets
+  a vacuous success. No gate that reads job outcomes can tell those apart. Only review (Copilot's,
+  with every thread resolved, and the owner's) or a check that refuses changes to the CI code itself
+  can (RJG-1, an owner decision recorded separately).
+- **Residual: a forged status.** A PR that skips or guts `lint` and adds a workflow requesting
+  `statuses: write` could post `required-jobs-ran` itself, after the gate's last post. Both come
+  from the Actions token, so GitHub can't tell them apart. The repository's read-only default
+  doesn't stop this, because a same-repository workflow can request the scope explicitly; it
+  stops forks only. Closing it needs a status source a workflow can't impersonate, such as a
+  GitHub App.
+- **`landing verify` after the merge** checks the job outcomes from main's code as it was before
+  the merge, and refuses when run from a checkout that already contains the commit (RJG-5). Its
+  read of the `required-jobs-ran` status is advisory, since merged code could post that context.
 - A required workflow renamed on main must be renamed in the gate in the same change; the
   validator fails until it is.
 

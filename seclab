@@ -1374,27 +1374,39 @@ docs_check() {
 # Skipped, cancelled, failed or missing all refuse. Run it from a main checkout older than the PR,
 # so the list it checks against is main's, not the PR's.
 landing_verify() {
-	local sha repo pairs pair wf job run id got bad=0
+	local sha repo pairs pair wf job runs id status got verdict bad=0
 	sha="$(git -C "$ROOT" rev-parse -q --verify "$1^{commit}" 2>/dev/null)" || { echo "landing verify: $1 is not a commit here (fetch it)" >&2; return 2; }
+	# The code doing the checking must not be the code being checked (review RJG-5): run it from
+	# a checkout of main from before the merge, which doesn't contain the commit.
+	if git -C "$ROOT" merge-base --is-ancestor "$sha" HEAD; then
+		echo "landing verify: this checkout already contains $sha; run it from main as it was before the merge" >&2
+		return 2
+	fi
 	repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)" || return 2
 	[[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "landing verify: bad repository" >&2; return 2; }
 	pairs="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-required-checks.ts --list)" || return 2
 	for pair in $pairs; do
+		[[ "$pair" =~ ^[A-Za-z0-9._-]+\.ya?ml:[A-Za-z0-9._-]+$ ]] || { echo "landing verify: bad required pair" >&2; return 2; }
 		wf="${pair%%:*}" job="${pair#*:}"
-		run="$(gh api "repos/$repo/actions/workflows/$wf/runs?head_sha=$sha&per_page=50" \
-			--jq '[.workflow_runs[] | select(.event == "push" or .event == "pull_request")] | sort_by(.run_number, .run_attempt) | last | if . == null then "" else "\(.id) \(.status)" end')" || return 2
-		if [[ -z "$run" ]]; then
-			got=missing
-		elif [[ "${run#* }" != completed ]]; then
-			got=running
-		else
-			id="${run%% *}"
+		# Every push and pull_request run of the file for the commit (review RJG-2).
+		runs="$(gh api "repos/$repo/actions/workflows/$wf/runs?head_sha=$sha&per_page=100" \
+			--jq '.workflow_runs[] | select(.event == "push" or .event == "pull_request") | "\(.id) \(.status)"')" || return 2
+		verdict=success
+		[[ -n "$runs" ]] || verdict=missing
+		while read -r id status; do
+			[[ -n "$id" ]] || continue
+			if [[ "$status" != completed ]]; then
+				[[ "$verdict" == success ]] && verdict=running
+				continue
+			fi
 			got="$(gh api "repos/$repo/actions/runs/$id/jobs?filter=latest&per_page=100" \
 				--jq "[.jobs[] | select(.name == \"$job\")] | if length == 1 then .[0].conclusion // \"none\" else \"missing\" end")" || return 2
-		fi
-		echo "landing verify: $job ($wf): $got"
-		[[ "$got" == success ]] || bad=1
+			[[ "$got" == success ]] || verdict="$got"
+		done <<<"$runs"
+		echo "landing verify: $job ($wf): $verdict"
+		[[ "$verdict" == success ]] || bad=1
 	done
+	# Advisory: once merged, the main branch's own workflows could post this context too.
 	got="$(gh api "repos/$repo/commits/$sha/status" --jq '[.statuses[] | select(.context == "required-jobs-ran")] | first | .state // "missing"')" || return 2
 	echo "landing verify: required-jobs-ran: $got"
 	[[ "$got" == success ]] || bad=1
