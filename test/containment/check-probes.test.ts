@@ -193,6 +193,18 @@ const tests: Array<[string, () => void]> = [
 		assert.ok(failed(run({ expectations: exp, reh: reh({ sawProfileEnv: false }) }).out, /reh-profile-config-host-setting patched predicate holds/));
 		assert.ok(failed(run({ expectations: exp, reh: reh({ unresolved: false }) }).out, /reh-profile-config-host-setting patched predicate holds/));
 	}],
+	['a probe run only by its own harness is not judged without that selection, and is required with it', () => {
+		const spec = { required: true, runner: 'reh-push', policyRef: 'data:remoteterminal-profile-path', patchedOutcome: 'succeeded', why: 'synthetic' };
+		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-profile-config-host-setting': spec } };
+		// A full REH run whose payload never armed it: reported as not judged, not as a failure or a pass.
+		const full = run({ expectations: exp, reh: { results: [] } });
+		assert.equal(full.status, 0, full.out);
+		assert.match(full.out, /not judged here: 1 probe\(s\) run only by their own harness/);
+		assert.doesNotMatch(full.out, /PASS .*reh-profile-config-host-setting ran/);
+		// Its own harness selects it, and then a missing result fails.
+		const selected = run({ expectations: exp, reh: { results: [] }, args: ['--only', 'reh-profile-config-host-setting'] });
+		assert.ok(failed(selected.out, /reh-profile-config-host-setting ran/), selected.out);
+	}],
 	['a patched push probe needs the refusal in the decision log', () => {
 		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-onexecutecommand-windowopen': { required: true, policyRef: 'push:remoteterminal:$onExecuteCommand', why: 'synthetic' } } };
 		const reh = { results: [{ id: 'reh-onexecutecommand-windowopen', policyRef: 'push:remoteterminal:$onExecuteCommand', outcome: 'denied', error: 'unsupported-operation' }] };

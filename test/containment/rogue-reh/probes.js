@@ -198,7 +198,7 @@ function armProfileProbe(channel) {
 		if (command === '$getProfiles' && Array.isArray(result)) {
 			profileProbe.offered = true;
 			return [...result.filter(p => !p || p.profileName !== PROFILE_NAME),
-				{ profileName: PROFILE_NAME, path: PROFILE_PATH, isDefault: false, isAutoDetected: false, env: { [PROFILE_ENV_KEY]: PROFILE_VALUE } }];
+				{ profileName: PROFILE_NAME, path: PROFILE_PATH, isDefault: false, isAutoDetected: false, env: { SECLAB_PROBE_PROFILE_ENV: PROFILE_VALUE } }];
 		}
 		return result;
 	};

@@ -269,6 +269,25 @@ class GuardCopyTest(unittest.TestCase):
             self.assertIn(rel, ignored)
 
 
+class CommentScopeTest(unittest.TestCase):
+    """A rule sees the code after a block comment (PR review, 2026-11-17): blanking whole comment
+    lines removed a block's closing `*/`, and the rest of the payload read as comment."""
+
+    def test_code_after_a_block_comment_is_linted(self):
+        root = tree_copy(self)
+        path = os.path.join(root, "test/containment/rogue-reh/probes.js")
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write("\n/**\n * A block comment whose closing line starts with a star.\n */\nconst seclabLintProbe = { [SOME_KEY]: 1 };\n")
+        status, out = lint(root)
+        self.assertEqual(status, 1, out)
+        self.assertIn("computed-record-key", out)
+
+    def test_comments_and_strings_are_not_code(self):
+        text = "a(); /* { [K]: 1 } */ b('{ [K]: 1 }'); // { [K]: 1 }\n"
+        self.assertNotRegex(L._code_only(L._strip_comments(text)), r"\[K\]")
+        self.assertIn("'{ [K]: 1 }'", L._strip_comments(text))
+
+
 class PersistenceRuleTest(unittest.TestCase):
     def rule(self):
         return next(p for rid, p, _ in L.RULES if rid == "persistence")

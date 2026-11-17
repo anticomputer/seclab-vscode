@@ -583,6 +583,10 @@ def check_log_trust(mapping: dict, inv: dict) -> list:
         "rpc:MainThreadFileSystem.$delete",
         "rpc:MainThreadBulkEdits.$tryApplyWorkspaceEdit",
         "rpc:MainThreadDocuments.$trySaveDocument",
+        # The forging route itself, pinned by presence too: the loop above sees only keys the
+        # inventory found, so a $log it lost (and an allow entry policy.json could still emit)
+        # would pass unnoticed (PR review, 2026-11-17).
+        "rpc:MainThreadLogger.$log",
     )
 
     for key in (WRITE_FILE,) + MUST_DENY:

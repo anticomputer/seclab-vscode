@@ -40,7 +40,7 @@ import { DrivenEditor } from '../driver/editor.ts';
 import { beaconPort, checkUserDataDir, lockRun, repoRoot } from '../harness.ts';
 import { report, rpcDecisions, type Check } from './assert.ts';
 import { readHits } from './beacon.ts';
-import { teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
+import { exitOnSignals, reapOrRefuse, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
 const IMAGE = 'seclab-tab-oci:test-containment';
 const PUSH_PROBES = ['reh-onexecutecommand-windowopen', 'reh-onexecutecommand-manageextensions', 'reh-onexecutecommand-getsystemstatus', 'reh-resolve-variables-host-env', 'reh-profile-config-host-setting'];
@@ -69,6 +69,8 @@ const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manage
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 // ------------------------------------------------------------------ prepare
+// The previous run's manifest is its only record: reap it before wiping the directory.
+reapOrRefuse(base, 'reh-push');
 fs.rmSync(base, { recursive: true, force: true });
 fs.rmSync(userData, { recursive: true, force: true });
 fs.mkdirSync(path.join(ws, '.vscode'), { recursive: true });
@@ -94,6 +96,7 @@ writeManifest(base, {
 });
 let ed: DrivenEditor | undefined;
 let beacon: ChildProcess | undefined;
+exitOnSignals();
 process.on('exit', code => {
 	beacon?.kill();
 	if (!teardownGate(base) && code === 0) {

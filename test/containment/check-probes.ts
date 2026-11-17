@@ -77,6 +77,8 @@ interface Spec {
 	patchedOutcome?: string; needsTestContribution?: boolean;
 	status?: string; blocked_on?: string;
 	hostEffect?: string; hostEffectAbsolute?: string;
+	/** Run only by this harness's selection (the payload arms it on that path alone). */
+	runner?: string;
 }
 
 /**
@@ -195,6 +197,16 @@ const specs: Record<string, Spec> = {
 	...(noReh ? {} : (expectations.rehProbes as Record<string, Spec>)),
 };
 delete (specs as Record<string, unknown>).note;
+// A probe its payload arms only for one harness (`runner`) can't have run without that
+// harness's selection, so a run that doesn't select it reports it as not judged, never as
+// passed or failed (PR review, 2026-11-17).
+const runnerOnly = Object.keys(specs).filter(id => typeof specs[id].runner === 'string' && !(only ?? []).includes(id));
+if (runnerOnly.length) {
+	c('probes-waived', true, `not judged here: ${runnerOnly.length} probe(s) run only by their own harness`, runnerOnly.map(id => `${id} (${specs[id].runner})`).join(', '));
+	for (const id of runnerOnly) {
+		delete specs[id];
+	}
+}
 if (only) {
 	const unknown = only.filter(id => !(id in specs));
 	c('probes-selected', unknown.length === 0, `judging only ${only.length} registered probe(s): ${only.join(', ')}`,
