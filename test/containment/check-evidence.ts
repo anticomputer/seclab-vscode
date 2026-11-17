@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
 import { beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, ensureVsceImage, lockRun, tabImageProblem, VSCE_IMAGE } from '../harness.ts';
-import { brokerProxy, checkEvidence, readEvidence, report, rpcDecisions, type Check } from './assert.ts';
+import { brokerProxy, checkEvidence, markFilteredLosses, readEvidence, report, rpcDecisions, type Check } from './assert.ts';
 import { materialiseFixture, readManifest, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 import { partitionFindings, seedTabManagerState, stateItems } from './state-db.ts';
 
@@ -277,17 +277,6 @@ if (mode === 'prepare') {
 		filtered = undefined;
 	}
 	checks.push({ vector: 'rpc', name: 'the build under test is known (launch record; RPC filter stamp absent, or matching the repo)', ok: filtered !== undefined, detail: String(filtered) });
-	// With the RPC filter in, a tab's extension host can't register a task system (the core set
-	// denies MainThreadTask.*), so the folder-open task can't run: a recorded loss until the
-	// task-system follow-up (after patch 0031), docs/RPC-LOCKDOWN.md §7.1. Without the filter the
-	// task must run.
-	if (filtered === true) {
-		for (const c of checks) {
-			if (c.vector === 'task' && !c.ok && c.name === 'ran (evidence written into the workspace)' && c.detail === 'no evidence file') {
-				c.knownGap = 'RPC core: tasks are denied in tabs (MainThreadTask.*), a recorded loss until the task-system follow-up, docs/RPC-LOCKDOWN.md §7.1';
-			}
-		}
-	}
 	const effects = new Map<string, string[]>([[path.join(base, 'PWNED.rpcwrite'), ['host-fs-write-file-scheme (negative control)']]]);
 	const expectations = JSON.parse(fs.readFileSync(path.join(repo, 'rpc-filter', 'probes', 'expectations.json'), 'utf8')) as { probes: Record<string, { hostEffect?: unknown; hostEffectAbsolute?: unknown }> };
 	for (const [id, p] of Object.entries(expectations.probes)) {
@@ -345,6 +334,12 @@ if (mode === 'prepare') {
 	// alone is not evidence (review round 14). An unfiltered build has no decision log, so
 	// there the tolerance never applies. Residual until the search follow-up (round 15).
 	const decisions = rpcDecisions(userData);
+	// With the RPC filter in, the folder-open task and the fsmonitor repo can't run: recorded
+	// losses (docs/RPC-LOCKDOWN.md §7.1), each expected only when its denial was observed.
+	// Without the filter both must run.
+	if (filtered === true) {
+		markFilteredLosses(checks, decisions);
+	}
 	const EXPECTED_BENIGN_FAILURES: Record<string, { error: string; deniedRef: string; reason: string }> = {
 		findFiles: {
 			error: 'timeout',

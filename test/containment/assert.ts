@@ -180,3 +180,34 @@ export function rpcDecisions(userDataDir: string): RpcDecision[] {
 	}
 	return out;
 }
+
+/**
+ * Workspace vectors a filtered build stops before they run, each tied to the trusted-side
+ * denial that stops it (docs/RPC-LOCKDOWN.md §7.1). A missing evidence file is tab-controlled,
+ * so on its own it never makes the gap expected: the denial must be in the decision log.
+ */
+export const FILTERED_VECTOR_LOSSES: Record<string, { deniedRef: string; gap: string }> = {
+	// The tab's extension host can't register a task system, so the folder-open task never runs.
+	task: {
+		deniedRef: 'rpc:MainThreadTask.$registerTaskSystem',
+		gap: 'RPC core: tasks are denied in tabs (MainThreadTask.*), a recorded loss until the task-system follow-up, docs/RPC-LOCKDOWN.md §7.1',
+	},
+	// The git extension asks for resource trust before it opens any repository and skips the
+	// repository when the answer isn't true, so it never runs `git status` there.
+	fsmonitor: {
+		deniedRef: 'rpc:MainThreadWorkspace.$requestResourceTrust',
+		gap: 'RPC core: workspace trust requests are denied in tabs, so the git extension opens no repository and never runs git status, docs/RPC-LOCKDOWN.md §7.1; Level A covers fsmonitor',
+	},
+};
+
+/** On a filtered build, mark each vector's "ran" failure as its recorded loss, only when the
+ *  denial that causes it was observed on the trusted side. */
+export function markFilteredLosses(checks: Check[], decisions: RpcDecision[]): void {
+	for (const c of checks) {
+		const loss = Object.hasOwn(FILTERED_VECTOR_LOSSES, c.vector) ? FILTERED_VECTOR_LOSSES[c.vector] : undefined;
+		if (loss && !c.ok && c.name === 'ran (evidence written into the workspace)' && c.detail === 'no evidence file'
+			&& decisions.some(d => d.detail?.ref === loss.deniedRef && d.detail?.verdict === 'deny')) {
+			c.knownGap = loss.gap;
+		}
+	}
+}

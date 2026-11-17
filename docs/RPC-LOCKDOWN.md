@@ -620,7 +620,12 @@ Numbers 1 to 4 came out of the independent design review
 
 Denied until the response-side control above lands, so these are visible
 losses, not bugs:
-- source control (the git extension's SCM view, quick diff, timeline);
+- source control (the git extension's SCM view, quick diff, timeline). The git extension
+  opens no repository in a tab at all: it asks for resource trust first
+  ([`model.ts#L676-L684`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/git/src/model.ts#L676-L684))
+  and `$requestResourceTrust` is denied, so it never runs `git status` there. The
+  editor-driven run's `[fsmonitor]` check is an expected failure on a filtered build for this
+  reason, only with that denial in the trusted-side log (Level A still runs the vector);
 - tree views, output channels, status bar items and decorations;
 - language features registered by the tab (hover, completion, code actions,
   code lens, links, folding), so a language extension in a tab activates but

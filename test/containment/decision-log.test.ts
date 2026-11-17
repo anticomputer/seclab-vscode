@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { rpcDecisions } from './assert.ts';
+import { FILTERED_VECTOR_LOSSES, markFilteredLosses, rpcDecisions, type Check } from './assert.ts';
 
 const tests: Array<[string, () => void]> = [];
 const test = (name: string, fn: () => void) => tests.push([name, fn]);
@@ -103,6 +103,37 @@ test('a log file by any other name is not read', () => {
 	fs.mkdirSync(dir, { recursive: true });
 	fs.writeFileSync(path.join(dir, 'renderer.log'), JSON.stringify(DENY) + '\n');
 	assert.deepEqual(rpcDecisions(root), []);
+});
+
+// A filtered build's recorded losses (task, fsmonitor) are expected only when the denial that
+// causes them is on the trusted side: the missing evidence file is the tab's to withhold.
+const ranCheck = (vector: string): Check => ({ vector, name: 'ran (evidence written into the workspace)', ok: false, detail: 'no evidence file' });
+const denial = (ref: string, verdict = 'deny') => ({ source: 'rpc-filter', class: 'rpc.decision', detail: { surface: 'rpc', ref, verdict, reason: 'policy' } });
+
+test('each recorded loss is expected when its denial was observed', () => {
+	for (const [vector, loss] of Object.entries(FILTERED_VECTOR_LOSSES)) {
+		const checks = [ranCheck(vector)];
+		markFilteredLosses(checks, rpcDecisions(profile([JSON.stringify(denial(loss.deniedRef))])));
+		assert.equal(checks[0].knownGap, loss.gap, vector);
+	}
+	assert.deepEqual(Object.keys(FILTERED_VECTOR_LOSSES).sort(), ['fsmonitor', 'task']);
+});
+
+test('a recorded loss with no observed denial stays a failure', () => {
+	for (const vector of Object.keys(FILTERED_VECTOR_LOSSES)) {
+		const checks = [ranCheck(vector)];
+		markFilteredLosses(checks, []);
+		assert.equal(checks[0].knownGap, undefined, vector);
+	}
+});
+
+test('another vector\'s denial, an allow, or a different failure is not the loss', () => {
+	const task = [ranCheck('task')];
+	markFilteredLosses(task, [denial(FILTERED_VECTOR_LOSSES.fsmonitor.deniedRef), denial(FILTERED_VECTOR_LOSSES.task.deniedRef, 'allow')]);
+	assert.equal(task[0].knownGap, undefined);
+	const other = [{ ...ranCheck('fsmonitor'), detail: 'evidence present, wrong hostname' }, { ...ranCheck('fsmonitor'), name: 'ran inside the tab, not on the host' }, ranCheck('constructor')];
+	markFilteredLosses(other, [denial(FILTERED_VECTOR_LOSSES.fsmonitor.deniedRef)]);
+	assert.deepEqual(other.map(c => c.knownGap), [undefined, undefined, undefined]);
 });
 
 let failed = 0;
