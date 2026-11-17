@@ -14907,6 +14907,21 @@
 				"file": "broker/tools/token_steps.py",
 				"name": "BRK20D-3: a backslash continuation after the quote opened on an earlier line fails"
 			}
+		},
+		{
+			"record": "20261117-broker-finding-tests-2.md",
+			"anchor": "BRK20D-4",
+			"round": "Copilot code review on the round 20 pull request",
+			"severity": "low",
+			"summary": "The HH-1 check's continuation rule skipped lines starting with #, but inside a multi-line double-quoted value such a line is content, so it could still join into a token reference.",
+			"component": "broker HH-1 check (token_steps.py)",
+			"owner": "broker",
+			"status": "fixed",
+			"commit": "patch:d3a89092387985ada4b61baf465546d875262062",
+			"test": {
+				"file": "broker/tools/token_steps.py",
+				"name": "BRK20D-4: a hash-led continuation line inside a multi-line double-quoted value fails"
+			}
 		}
 	]
 }
