@@ -16465,6 +16465,48 @@
 				"file": "test/containment/teardown.ts",
 				"name": "generated fixture workspaces removed from the host"
 			}
+		},
+		{
+			"record": "20261117-workspace-data-probe.md",
+			"round": "Copilot review (PR #37)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"commit": "patch:c3df90a7f6f584393bea95b792d3ee7870942da8",
+			"anchor": "WSD-1",
+			"severity": "low",
+			"summary": "The wsdata harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file.",
+			"status": "fixed-untested",
+			"gap": "Nothing in the tab runs before the probe is installed, so no run plants the symlink."
+		},
+		{
+			"record": "20261117-workspace-data-probe.md",
+			"round": "Copilot review (PR #37)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"commit": "patch:c3df90a7f6f584393bea95b792d3ee7870942da8",
+			"anchor": "WSD-2",
+			"severity": "medium",
+			"summary": "The wsdata leak check looked for the canary token only, but the host folder's name is one token to the tab's tokenizer, so the host folder reaching the tab went unflagged.",
+			"status": "fixed",
+			"test": {
+				"file": "test/wsdata/probe.ts",
+				"name": "WSD-2 the leak check catches the host folder"
+			}
+		},
+		{
+			"record": "20261117-workspace-data-probe.md",
+			"round": "Copilot review (PR #37)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"commit": "patch:c3df90a7f6f584393bea95b792d3ee7870942da8",
+			"anchor": "WSD-3",
+			"severity": "low",
+			"summary": "The wsdata report check ran a regex on a tab-controlled value before its type check, so a crafted object threw before the teardown gate.",
+			"status": "fixed",
+			"test": {
+				"file": "test/wsdata/probe.ts",
+				"name": "WSD-3 the report check rejects a malformed tab value without throwing"
+			}
 		}
 	]
 }
