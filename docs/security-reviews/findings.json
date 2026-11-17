@@ -15361,6 +15361,117 @@
 				"name": "window decision logs (CR10): bytes not text"
 			},
 			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261117-link-check-retries.md",
+			"anchor": "LCR-1",
+			"round": "Round LCR",
+			"severity": "info",
+			"summary": "A cached 200 is replayed for up to 3 days.",
+			"component": "docs link check (lychee)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-link-check-retries.md",
+				"quote": "Unchanged by this change."
+			}
+		},
+		{
+			"record": "20261117-link-check-retries.md",
+			"anchor": "LCR-2",
+			"round": "Round LCR",
+			"severity": "low",
+			"summary": "Old cache entries from when 429 was accepted would be replayed as success.",
+			"component": "docs link check (lychee)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:dab085de2d5f3a9278fd60b50604dbb91118f83b",
+			"gap": "A cache-key version; nothing to test beyond the key."
+		},
+		{
+			"record": "20261117-link-check-retries.md",
+			"anchor": "LCR-3",
+			"round": "Round LCR",
+			"severity": "info",
+			"summary": "PR content and the runner.",
+			"component": "docs link check (lychee)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-link-check-retries.md",
+				"quote": "every argument is a literal."
+			}
+		},
+		{
+			"record": "20261117-link-check-retries.md",
+			"anchor": "LCR-4",
+			"round": "Round LCR",
+			"severity": "low",
+			"summary": "Doubling retry waits could push a throttled run past the job timeout.",
+			"component": "docs link check (lychee)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:dab085de2d5f3a9278fd60b50604dbb91118f83b",
+			"gap": "Timing depends on GitHub throttling; shown only by CI runs."
+		},
+		{
+			"record": "20261117-link-check-retries.md",
+			"anchor": "LCR-5",
+			"round": "Round LCR",
+			"severity": "info",
+			"summary": "Hangs.",
+			"component": "docs link check (lychee)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-link-check-retries.md",
+				"quote": "No hang: requests and retries are bounded"
+			}
+		},
+		{
+			"record": "20261117-link-check-retries.md",
+			"anchor": "LCR-6",
+			"round": "Round LCR",
+			"severity": "info",
+			"summary": "Cache poisoning from pull requests.",
+			"component": "docs link check (lychee)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-link-check-retries.md",
+				"quote": "Pull requests read main"
+			}
+		},
+		{
+			"record": "20261117-link-check-retries.md",
+			"anchor": "LCR-7",
+			"round": "Round LCR",
+			"severity": "low",
+			"summary": "GitHub's secondary rate limit (403) could be cached and replayed red.",
+			"component": "docs link check (lychee)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:dab085de2d5f3a9278fd60b50604dbb91118f83b",
+			"gap": "An argument; nothing to test offline."
+		},
+		{
+			"record": "20261117-link-check-retries.md",
+			"anchor": "LCR-8",
+			"round": "Round LCR",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"component": "docs link check (lychee)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-link-check-retries.md",
+				"quote": "None found."
+			}
 		}
 	]
 }

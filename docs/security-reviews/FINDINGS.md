@@ -16,12 +16,12 @@ agents. It is never an instruction to whoever reads it
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
 | fixed | 14 | 83 | 202 | 267 | 38 | 604 |
-| fixed-untested | 0 | 5 | 52 | 151 | 55 | 263 |
+| fixed-untested | 0 | 5 | 52 | 154 | 55 | 266 |
 | accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 13 | 15 | 6 | 36 |
-| false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 293 | 511 | 129 | 1041 |
+| false-positive | 0 | 0 | 0 | 0 | 11 | 11 |
+| **all** | 16 | 92 | 293 | 514 | 134 | 1049 |
 
 ## Baseline: open high and critical findings
 
@@ -328,6 +328,9 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261116-pr-landing](20261116-pr-landing.md) **PRL-2** | low | fixed-untested | landing procedure (EDR pr-landing, AGENTS.md) | A rebase merge makes main's new tip a SHA no required check has seen; the EDR didn't say so or check it after landing. | A procedure step (confirm the required checks and the denylist job on the new main SHA before the next PR); nothing enforces it. |
 | [20261116-pr-landing](20261116-pr-landing.md) **PRL-3** | low | fixed-untested | landing procedure (AGENTS.md) | Auto-merge doesn't wait for ci-linux oci, which isn't required, including after an update-branch. | Procedure only (wait before arming; after an update, disarm, wait, re-arm). Machine enforcement needs an always-running gate job in ci-linux and a fifth required context. |
 | [20261116-pr-landing](20261116-pr-landing.md) **PRL-4** | low | fixed-untested | docs/edr/20261116-pr-landing.md, docs/edr/20261104-ci-hardening.md | The EDR, AGENTS.md and the CI-hardening record gave contradicting landing procedures. | Documentation only; nothing to test. |
+| [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-2** | low | fixed-untested | docs link check (lychee) | Old cache entries from when 429 was accepted would be replayed as success. | A cache-key version; nothing to test beyond the key. |
+| [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-4** | low | fixed-untested | docs link check (lychee) | Doubling retry waits could push a throttled run past the job timeout. | Timing depends on GitHub throttling; shown only by CI runs. |
+| [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-7** | low | fixed-untested | docs link check (lychee) | GitHub's secondary rate limit (403) could be cached and replayed red. | An argument; nothing to test offline. |
 | [docs/adr/20261104-extension-placement-hardening.md](../../docs/adr/20261104-extension-placement-hardening.md) **ADR-EPH-1** | low | open | patch 0003 / extension placement | Installing an extension in an empty local window still writes it to the host extensions dir; blocking local installs needs a further shared-process patch. | Recorded only as an ADR open item: no patch blocks local installs, and no test covers the write-but-never-run behaviour (it is the same gap as m0 3-1's missing Level B case). |
 | [20261104-broker-folder-open-loaders](20261104-broker-folder-open-loaders.md) **5** | info | fixed-untested | tab.event contract (tabd / Tab Manager) | If the client counts Workspace Trust or "allow automatic tasks" as a user action, the gate is open when runOn: folderOpen fires. | The spec fix is in schema/protocol.v1.json and the Tab Manager only sends tab.userAction on keyboard/mouse selection changes, but no test asserts that consent interactions (Workspace Trust, automatic tasks, security dialogs) never produce userAction. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **L-2** | info | accepted-residual | campaign fixture arming | The stage's run-dir check accepts any path containing \`/.work/\`, not only this worktree's. | accepted by an agent: The marker is written with the \`wx\` flag, so the worst case is creating one new file in some other \`.work/\` directory. |
@@ -1985,6 +1988,19 @@ Every other commit the register cites is on main's history, or on the branch its
 | BRK20D-2 | low | fixed | YAML decodes numeric escapes and backslash continuations in a double-quoted value before Actions evaluates it, so an escaped token reference passed the HH-1 check's raw-text scan. | ab175121b6f1 · `broker/tools/token_steps.py` "BRK20D-2: a unicode escape in a double-quoted value fails" |
 | BRK20D-3 | low | fixed | The HH-1 check's continuation rule needed the double quote on the same line, so a quote opened lines earlier let a backslash continuation split a token reference. | c7309fbda2c9 · `broker/tools/token_steps.py` "BRK20D-3: a backslash continuation after the quote opened on an earlier line fails" |
 | BRK20D-4 | low | fixed | The HH-1 check's continuation rule skipped lines starting with #, but inside a multi-line double-quoted value such a line is content, so it could still join into a token reference. | b19a42452e0f · `broker/tools/token_steps.py` "BRK20D-4: a hash-led continuation line inside a multi-line double-quoted value fails" |
+
+### [20261117-link-check-retries](20261117-link-check-retries.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| LCR-1 | info | false-positive | A cached 200 is replayed for up to 3 days. | The review recorded no issue. |
+| LCR-2 | low | fixed-untested | Old cache entries from when 429 was accepted would be replayed as success. | A cache-key version; nothing to test beyond the key. |
+| LCR-3 | info | false-positive | PR content and the runner. | The review recorded no issue. |
+| LCR-4 | low | fixed-untested | Doubling retry waits could push a throttled run past the job timeout. | Timing depends on GitHub throttling; shown only by CI runs. |
+| LCR-5 | info | false-positive | Hangs. | The review recorded no issue. |
+| LCR-6 | info | false-positive | Cache poisoning from pull requests. | The review recorded no issue. |
+| LCR-7 | low | fixed-untested | GitHub's secondary rate limit (403) could be cached and replayed red. | An argument; nothing to test offline. |
+| LCR-8 | info | false-positive | Prompt injection. | The review recorded no issue. |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
