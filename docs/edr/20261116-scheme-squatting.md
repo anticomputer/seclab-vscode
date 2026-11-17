@@ -37,6 +37,11 @@ rule and 0038's editor-tab rule already judge such a provider's content per mode
   content. With the final probe, three runs on main `6589051b`, 2026-11-17, pass every assertion,
   with the window log open and no provider call. (The settings control now polls for the content
   while the modal is open; read once, it failed one earlier run on timing.)
+- **Hostile workspace (PR #33 review, SQ-4/SQ-5):** the extension also makes the harness's stop
+  file a symlink to a host sentinel and deletes its arming file. The harness no longer writes into
+  or reads back from the tab's workspace once the tab runs. Two runs on main `6589051b`,
+  2026-11-17, pass every assertion. On sbx the share doesn't carry the tab's symlink to the host:
+  the link exists in the tab right after creation and is gone on both sides by the end of the run.
 - **SQ-3 injection:** the probe extension adds unvalidated `note` fields carrying the marker inside
   its report's `registered` and `calls`. With the harness's projection reverted to copy those
   objects whole, the SQ-3 assertion fails; with the projection, it passes.
