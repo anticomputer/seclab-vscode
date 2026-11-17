@@ -46,6 +46,11 @@ upstream's signature (upstream's unit test constructs it). Until the judgement i
 nothing counts as the tab's own; publishing it fires 0035's change event, which rebuilds the model.
 Filtering is decided from the host context's own authority, as 0035's fail-closed path does.
 
+A multi-diff is judged by the resources it shows, not by its own source id (review EDT-9). Because
+an untitled editor joins its group before its model exists, the document sync also fires the
+origin change when a model is added, after recording its birth, so the user's own untitled tab
+shows as the tab's own (EDT-10).
+
 Any other editor, including one with no resource at all, reaches the tab as present only: an
 opaque id, `UnknownInput` and the label `Editor`. Ids are a salted SHA-1 of upstream's id for every
 editor, so an id never changes when an editor's status does. When 0035's tags change (a provider's
@@ -63,7 +68,7 @@ model appears after its diff tab opened), the model is rebuilt and resent.
 - Webview panels and terminals keep their titles (review EDT-5, EDT-6): under the RPC filter a tab
   creates no webview panel, and terminal names already reach every host through the terminal
   service (DOCSYNC-R5).
-- At 70 changed lines in three files (the editor-tab model, and the two 0035 files that publish
+- At 76 changed lines in three files (the editor-tab model, and the two 0035 files that publish
   the judgement) the patch is over the usual size; it is one concern.
 - If the filter ever allows `$moveTab` or `$closeTab`, the opaque ids already round-trip (the
   window's lookup uses the same ids).
@@ -76,6 +81,10 @@ model appears after its diff tab opened), the model is rebuilt and resent.
   - this branch at `a5239620` (run 43953763295): 4 of 4 runs pass. The host editors reach the tab
     as `unknown` inputs, no canary in any label or URI, its own `README.md` still arrives. No
     focus steal; the teardown gate passed every run.
+- After the pull-request review (EDT-8): the probe also drops a host media file into the window
+  (its folder carries a second canary) and creates an untitled document there. On main the media
+  preview reaches the tab as a custom-editor input with its host path; on the patched build it is
+  anonymous. The untitled control fails on `a5239620`, which predates the EDT-10 fix.
 - Typecheck: the patched file adds no error against the pinned tree.
 - Review: [20261116-editor-tab-provenance](../security-reviews/20261116-editor-tab-provenance.md),
   three rounds; no high or critical finding.
