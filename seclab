@@ -65,7 +65,8 @@ usage: ./seclab <command>
                                 consistency, the security findings register; --run-commands runs <!-- ci: run -->
                                 blocks (and the broker's); --online resolves external links (lychee, cached);
                                 --paired enforces doc changes next to protocol/patch/provider/product changes
-  findings --self-test | check | baseline | growth [DAYS] | rot | pin | remap --branch B [--patch]
+  findings --self-test | check | baseline | growth [DAYS] | rot | pin | remap --branch B [--patch] | rebase-resolve
+           | clashes [--ref REF]...  (this change's new finding IDs against open PR heads; advisory)
                                 Security findings register (docs/security-reviews/findings.json): every review
                                 finding registered, fixed ones with a regression test, no open high outside the
                                 shrinking baseline; `baseline` prints the open highs (markdown)
@@ -252,6 +253,46 @@ findings_ancestry() { # TIP MAIN; stdin: "<key>\t<sha or patch:id>\t<1 if it mus
 		if [[ ! "$sha" =~ ^[0-9a-f]{7,40}$ ]] || ! git -C "$ROOT" merge-base --is-ancestor "$sha" "$tip" 2>/dev/null; then
 			echo "findings: $key: fix commit $sha is not on this branch's history" >&2
 			bad=1
+		elif findings_reverted_after "$tip" "$sha"; then
+			# A pinned fix that was reverted later closes nothing either (EEEE-1, PR #11 review).
+			echo "findings: $key: fix commit $sha was reverted later on this history" >&2
+			bad=1
+		fi
+	done
+	return $bad
+}
+# fixed-before-landing (GGGG). stdin from findings.ts prefix: "<key>\t<preFix>\t<fix>\t<1 new here>".
+# A new entry's reviewed commit and its fix are distinct commits on TIP's history, the reviewed one
+# an ancestor of the fix, and (BASE given) neither was there before this change: the vulnerable code
+# and its fix arrive together. On main BASE is the push's previous head (GGGG-8). Every fix is also
+# judged by findings_ancestry.
+findings_commit_on() { # TOKEN TIP -> the commit on TIP's history that TOKEN (SHA or patch:) names
+	local c
+	if [[ "$1" =~ ^patch:[0-9a-f]{40}$ ]]; then
+		findings_patch_recent "$2" "${1#patch:}"; return
+	fi
+	c="$(findings_resolve "$1")" || return 1
+	git -C "$ROOT" merge-base --is-ancestor "$c" "$2" 2>/dev/null || return 1
+	echo "$c"
+}
+findings_prefix() { # TIP [BASE]
+	local tip base="" key pre fix new extra cp cf bad=0
+	tip="$(git -C "$ROOT" rev-parse -q --verify "$1^{commit}")" || { echo "findings: no commit to check fixed-before-landing against" >&2; return 1; }
+	[[ -n "${2:-}" ]] && { base="$(git -C "$ROOT" rev-parse -q --verify "$2^{commit}")" || { echo "findings: the base $2 isn't a commit" >&2; return 1; }; }
+	while IFS=$'\t' read -r key pre fix new extra; do
+		[[ -z "$key$pre$fix$new$extra" ]] && continue
+		if [[ -z "$key" || -n "$extra" || ! "$new" =~ ^[01]$ || ! "$pre" =~ ^([0-9a-f]{7,40}|patch:[0-9a-f]{40})$ || ! "$fix" =~ ^([0-9a-f]{7,40}|patch:[0-9a-f]{40})$ ]]; then
+			echo "findings: malformed fixed-before-landing line from findings.ts prefix; refusing to judge it" >&2; bad=1; continue
+		fi
+		# Every entry, landed or new: distinct commits, the reviewed one before the fix (PRR11-9). Only
+		# the comparison with the landing base is for new entries.
+		cp="$(findings_commit_on "$pre" "$tip")" || { echo "findings: $key: preFix $pre is no commit on this history" >&2; bad=1; continue; }
+		cf="$(findings_commit_on "$fix" "$tip")" || { echo "findings: $key: fix commit $fix is no commit on this history" >&2; bad=1; continue; }
+		if [[ "$cp" == "$cf" ]] || ! git -C "$ROOT" merge-base --is-ancestor "$cp" "$cf" 2>/dev/null; then
+			echo "findings: $key: the reviewed commit (preFix) must come before its fix on this history" >&2; bad=1; continue
+		fi
+		if [[ "$new" = 1 && -n "$base" ]] && git -C "$ROOT" merge-base --is-ancestor "$cp" "$base" 2>/dev/null; then
+			echo "findings: $key: the reviewed commit (preFix) was on main before this change; fixed-before-landing is for code that never reached main (use fixed)" >&2; bad=1
 		fi
 	done
 	return $bad
@@ -331,11 +372,38 @@ findings_patch_recent() {
 # TIP ID: 0 if TIP's history also carries the reverse of the change with that patch-id: a fix that
 # was added and reverted closes nothing (EEEE-1).
 findings_patch_reverted() {
-	local c rid
+	local c
 	c="$(findings_patch_recent "$1" "$2")" || return 1
+	findings_reverted_after "$1" "$c"
+}
+# TIP COMMIT: 0 if a commit on TIP's history after COMMIT carries COMMIT's inverse. Only later ones:
+# a fix that itself reverts the change that brought the issue matches that earlier change, and is no
+# revert of the fix (PR #11 review). For a pinned SHA as for a patch: citation (PR #11 review).
+# The newest such event decides: a revert that was itself reverted (the fix reapplied) leaves the
+# fix in place (PRR11-13). On a merged history any newest event that is a revert counts.
+findings_reverted_after() {
+	local tip c rid fid h x y newest ev=() kind=() i j
+	tip="$(git -C "$ROOT" rev-parse -q --verify "$1^{commit}")" || return 1
+	c="$(git -C "$ROOT" rev-parse -q --verify "$2^{commit}")" || return 1
 	git -C "$ROOT" rev-parse -q --verify "$c^1^{commit}" >/dev/null || return 1
 	rid="$(git -C "$ROOT" diff "$c" "$c^1" | git -C "$ROOT" patch-id --stable | cut -d' ' -f1)"
-	[[ "$rid" =~ ^[0-9a-f]{40}$ ]] && findings_patch_recent "$1" "$rid" >/dev/null
+	fid="$(git -C "$ROOT" show "$c" | git -C "$ROOT" patch-id --stable | cut -d' ' -f1)"
+	[[ "$rid" =~ ^[0-9a-f]{40}$ && "$fid" =~ ^[0-9a-f]{40}$ ]] || return 1
+	findings_patch_recent "$tip" "$rid" >/dev/null || return 1
+	for h in $(awk -v p="$rid" -v f="$fid" '$1 == p { print "r:" $2 } $1 == f { print "a:" $2 }' "$ROOT/.work/findings-pids/recent-$tip.txt"); do
+		x="${h#?:}"
+		[[ "$x" != "$c" ]] && git -C "$ROOT" merge-base --is-ancestor "$c" "$x" 2>/dev/null || continue
+		ev+=("$x"); kind+=("${h%%:*}")
+	done
+	[[ ${#ev[@]} -gt 0 ]] || return 1
+	for i in "${!ev[@]}"; do
+		newest=1
+		for j in "${!ev[@]}"; do
+			[[ $i != "$j" ]] && git -C "$ROOT" merge-base --is-ancestor "${ev[$i]}" "${ev[$j]}" 2>/dev/null && { newest=0; break; }
+		done
+		[[ $newest = 1 && "${kind[$i]}" == r ]] && return 0
+	done
+	return 1
 }
 # MAIN BRANCH_TIP HEAD ID: 3 on main (prints the SHA: pin it), else 0 on HEAD's history (a PR's own
 # change) or in BRANCH_TIP's own commits, else 1. Main is checked first (AAAA-3). A patch: citation
@@ -366,7 +434,7 @@ findings_upstream_pins() { # MAIN: only what main's history has pinned, never th
 	git -C "$ROOT" log -p --format= "$1" -- upstream.lock \
 		| sed -n 's/^[+-]\{0,1\}UPSTREAM_SHA=\([0-9a-f]\{40\}\)[[:space:]]*$/\1/p' | sort -u
 }
-# STRICT (1: every citation; 0: only touched entries') [MAIN [BASE]]; stdin: findings.ts shas. MAIN
+# STRICT (1: every citation; 0: only touched entries') [MAIN [BASE [ON_MAIN]]]; stdin: findings.ts shas. MAIN
 # defaults to origin/main and must resolve (CCCC-5); BASE is the change's comparison point.
 findings_shas() {
 	local t up br touched use extra rc where hint landed msg bad=0 stale=0 hard malformed=0 pins=0 pins_up main base=""
@@ -386,7 +454,9 @@ findings_shas() {
 			# Landed: live evidence. The change that lands it isn't asked to pin (its rebase-merge made the
 			# SHA); a later change touching the entry is (CCCC-4).
 			if [[ $rc -eq 3 ]]; then
-				if [[ "$1" = 0 && "$touched" = 1 && -n "$base" ]] && git -C "$ROOT" merge-base --is-ancestor "$landed" "$base" 2>/dev/null; then
+				# On main itself it's a note to pin, never a red main: the pull request already met this
+				# rule against its exact base (GGGG-2).
+				if [[ "$1" = 0 && "$touched" = 1 && -n "$base" && "${4:-0}" = 0 ]] && git -C "$ROOT" merge-base --is-ancestor "$landed" "$base" 2>/dev/null; then
 					echo "findings: $use cites $t, on main as ${landed:0:12} since before this change: run ./seclab findings pin" >&2; bad=1
 				else
 					echo "findings: note: $use cites $t, on main as ${landed:0:12}: ./seclab findings pin" >&2; pins=$((pins+1))
@@ -553,6 +623,122 @@ findings_remap() { # BRANCH [--patch]
 	echo "findings remap: $n citation(s) remapped, $left left to remap by hand"
 	[[ $left -eq 0 ]]
 }
+# `./seclab findings rebase-resolve` (GGGG-4): during a conflicted rebase or merge, merge the register
+# three ways by entry key (index stages 1-3), regenerate the generated files, and stage what it
+# resolved. A real clash (one entry changed both ways) is refused and left for a hand. Files it
+# didn't generate are never staged; anything still conflicted is listed.
+# WORKFLOW: 0 if every step that runs ./seclab docs check (single-line or block run) has its own
+# step-level DOCS_BASE, the exact range, and at least one does (GGGG-7, GGGG-13).
+findings_wf_docs_base() {
+	awk 'function done_() { if (r && !e) bad = 1; if (r) n++; r = 0; e = 0 }
+		/^[[:space:]]+- (name|uses|run|id|if|env|with|shell|timeout-minutes|continue-on-error):/ { done_() }
+		/\.\/seclab docs check/ { r = 1 }
+		index($0, "DOCS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}") { e = 1 }
+		END { done_(); exit (bad || n == 0) }' "$1"
+}
+# PATH...: stage each that is conflicted or modified, so everything the writers refreshed lands
+# (GGGG-12); a file still holding a marker is reported and never staged.
+findings_stage_resolved() {
+	local f
+	for f in "$@"; do
+		[[ -n "$(git -C "$ROOT" ls-files -u -- "$f")$(git -C "$ROOT" diff --name-only -- "$f")" ]] || continue
+		if findings_has_markers "$ROOT/$f"; then echo "findings rebase-resolve: $f still has conflict markers outside its generated part; resolve it by hand" >&2; continue; fi
+		git -C "$ROOT" add -- "$f" || return 1
+	done
+}
+# FILE: 0 if it still holds a conflict marker of any size (diff3's base marker too) (GGGG-10).
+findings_has_markers() { grep -qE '^(<{7}|={7}|>{7}|[|]{7})' "$1"; }
+findings_rebase_resolve() {
+	local reg=docs/security-reviews/findings.json dir="$ROOT/.work/findings-merge" st f left gen="docs/security-reviews/FINDINGS.md docs/security-reviews/README.md docs/adr/README.md docs/edr/README.md"
+	# shellcheck disable=SC2086 # gen is a fixed list of plain paths
+	[[ -n "$(git -C "$ROOT" ls-files -u -- "$reg" $gen)" ]] || { echo "findings rebase-resolve: neither the register nor a file generated from it is conflicted here" >&2; return 1; }
+	# The register, if it conflicts; often only its generated view does.
+	if [[ -n "$(git -C "$ROOT" ls-files -u -- "$reg")" ]]; then
+		rm -rf "$dir"; mkdir -p "$dir"
+		for st in 1 2 3; do
+			if git -C "$ROOT" cat-file -e ":$st:$reg" 2>/dev/null; then
+				git -C "$ROOT" show ":$st:$reg" > "$dir/$st.json" || return 1
+			else
+				: > "$dir/$st.json"
+			fi
+		done
+		docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" node build/docs/findings.ts merge3 .work/findings-merge/1.json .work/findings-merge/2.json .work/findings-merge/3.json || return 1
+		git -C "$ROOT" add -- "$reg" || return 1
+	fi
+	# The generated view and indexes: any side will do, the writers regenerate them from the sources.
+	for f in docs/security-reviews/FINDINGS.md docs/security-reviews/README.md docs/adr/README.md docs/edr/README.md; do
+		[[ -n "$(git -C "$ROOT" ls-files -u -- "$f")" ]] || continue
+		if [[ "$f" == */FINDINGS.md ]]; then git -C "$ROOT" show ":2:$f" > "$ROOT/$f" || return 1; fi
+	done
+	docker run --rm --network none -u "$(id -u):$(id -g)" -v "$ROOT:/repo" -w /repo "$(node_image)" sh -c 'node build/docs/findings.ts write && node build/docs/docs-check.ts write' || { echo "findings rebase-resolve: regenerating the generated files failed; resolve the rest by hand" >&2; return 1; }
+	# shellcheck disable=SC2086 # gen is a fixed list of plain paths
+	findings_stage_resolved "$reg" $gen || return 1
+	left="$(git -C "$ROOT" diff --name-only --diff-filter=U)"
+	if [[ -n "$left" ]]; then printf 'findings rebase-resolve: still conflicted:\n%s\n' "$left" >&2; return 1; fi
+	echo "findings rebase-resolve: resolved; check, then continue the rebase (./seclab docs check)"
+}
+# `./seclab findings clashes` (FFFF): this tree's new or edited finding IDs against those of every
+# open pull request's head (or each --ref), relative to main. Advisory and local: the required check
+# compares with main only, since a PR-head comparison would fail two PRs that see each other. A PR's
+# register is data: only parsed as JSON, printed through logLine. Exit 0 none, 1 a clash, 2 a defect
+# here, 3 an internal error in the comparison.
+# gh in this checkout, whatever the caller's directory: the PRs listed are the ones fetched (PRR11-10).
+findings_gh() { (cd "$ROOT" && gh "$@"); }
+# stdin "<number>\t<isCrossRepository>\t<head commit or ->"; prints "<number>\t<commit>" for each PR
+# head to compare: not MINE (this branch's PR), not a fork's (FFFF-6), not one HEAD already contains
+# (FFFF-4).
+findings_clash_heads() { # MINE
+	local n cross c
+	while IFS=$'\t' read -r n cross c; do
+		[[ "$n" =~ ^[0-9]{1,9}$ ]] || continue
+		[[ "$n" == "$1" ]] && continue
+		if [[ "$cross" != false ]]; then echo "findings clashes: #$n is from a fork; not compared" >&2; continue; fi
+		[[ "$c" =~ ^[0-9a-f]{40}$ ]] || continue
+		git -C "$ROOT" merge-base --is-ancestor "$c" HEAD 2>/dev/null && continue
+		printf '%s\t%s\n' "$n" "$c"
+	done
+}
+findings_clashes() { # [--ref REF]...
+	local main mine n r c i=0 dir="$ROOT/.work/findings-clashes" refs=() labels=() args=()
+	while [[ $# -gt 0 ]]; do
+		[[ "$1" == --ref && -n "${2:-}" && "$2" =~ ^[A-Za-z0-9._/^~-]+$ && "$2" != *..* && "$2" != -* ]] || { echo "findings clashes: usage: clashes [--ref REF]..." >&2; return 2; }
+		refs+=("$2"); labels+=("${2//[^A-Za-z0-9._\/-]/_}"); shift 2
+	done
+	main="$(git -C "$ROOT" rev-parse -q --verify 'refs/remotes/origin/main^{commit}')" || { echo "findings clashes: no origin/main (git fetch origin)" >&2; return 2; }
+	rm -rf "$dir"; mkdir -p "$dir"
+	if git -C "$ROOT" cat-file -e "$main:docs/security-reviews/findings.json" 2>/dev/null; then
+		git -C "$ROOT" show "$main:docs/security-reviews/findings.json" > "$dir/main.json" || return 2
+	else
+		: > "$dir/main.json"
+	fi
+	if [[ ${#refs[@]} -eq 0 ]]; then
+		# This branch's own PR is found by gh, not by branch name, and any head this HEAD already contains
+		# is skipped, so local amendments are never reported against themselves (FFFF-4). A fork's PR is
+		# untrusted data that could steer a rename: never compared, only noted (FFFF-6).
+		mine="$(findings_gh pr view --json number --jq .number 2>/dev/null || true)"
+		local list cross; list="$(findings_gh pr list --state open --limit 200 --json number,isCrossRepository --jq '.[] | "\(.number)\t\(.isCrossRepository)"')" || { echo "findings clashes: can't list open pull requests (gh)" >&2; return 2; }
+		local heads=""
+		while IFS=$'\t' read -r n cross; do
+			[[ "$n" =~ ^[0-9]{1,9}$ && "$cross" == false ]] || { heads+="$n"$'\t'"$cross"$'\t-\n'; continue; }
+			git -C "$ROOT" fetch -q --no-tags origin "refs/pull/$n/head" || { echo "findings clashes: can't fetch #$n" >&2; return 2; }
+			c="$(git -C "$ROOT" rev-parse -q --verify 'FETCH_HEAD^{commit}')" || return 2
+			heads+="$n"$'\t'"$cross"$'\t'"$c"$'\n'
+		done <<<"$list"
+		while IFS=$'\t' read -r n c; do
+			[[ -n "$n" ]] || continue
+			refs+=("$c"); labels+=("#$n")
+		done < <(findings_clash_heads "$mine" <<<"$heads")
+	fi
+	for r in ${refs[@]+"${refs[@]}"}; do
+		c="$(git -C "$ROOT" rev-parse -q --verify "$r^{commit}")" || { echo "findings clashes: ${labels[$i]} is not a commit here" >&2; return 2; }
+		if git -C "$ROOT" cat-file -e "$c:docs/security-reviews/findings.json" 2>/dev/null; then
+			git -C "$ROOT" show "$c:docs/security-reviews/findings.json" > "$dir/$i.json" || return 2
+			args+=(--pr "${labels[$i]}" ".work/findings-clashes/$i.json")
+		fi
+		i=$((i+1))
+	done
+	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts clashes --main .work/findings-clashes/main.json ${args[@]+"${args[@]}"}
+}
 # On main (HEAD is the merge base): what to compare with, given the push's previous head. Unset
 # (local runs): the first parent. Never HEAD itself. A previous head that isn't an ancestor (a
 # force-push) never narrows the comparison: its merge base with HEAD is older, so stricter; one
@@ -591,8 +777,20 @@ liveness_base() { # OUT
 	fi
 	echo "liveness: tombstones compared with ${rev:0:12}"
 }
+# ON_MAIN DOCS_BASE IN_CI: how fixed-before-landing entries are judged. "exact": against the change's
+# range (a PR, or main with the push's previous head). "landed": main with no range (a local run),
+# already judged in CI with its exact range, so HEAD^1 isn't mistaken for it (PRR11-6). An update of
+# main itself in CI needs the range: its absence fails, never passes quietly. Another ref pushed at a
+# landed commit (a new branch or tag: an all-zero previous head) is landed history (PRR11-8).
+findings_landing_mode() { # ON_MAIN DOCS_BASE IN_CI REF [DIRTY]
+	if [[ "$1" = 1 && ( -z "$2" || "$2" =~ ^0+$ ) && "${5:-0}" != 1 ]]; then
+		[[ -n "$3" && "${4:-}" == refs/heads/main ]] && { echo "findings: an update of main in CI with no DOCS_BASE; the workflow must pass the push's range" >&2; return 1; }
+		echo landed; return 0
+	fi
+	echo exact
+}
 findings_check() {
-	local mb rev list main
+	local mb rev list main lmode
 	mkdir -p "$ROOT/.work"
 	main="$(git -C "$ROOT" rev-parse --verify -q origin/main)" || { echo "findings: no origin/main (fetch it)" >&2; exit 1; }
 	mb="$(git -C "$ROOT" merge-base "$main" HEAD)" || { echo "findings: no merge base with origin/main" >&2; exit 1; }
@@ -601,9 +799,17 @@ findings_check() {
 	# (validated before git sees it: TTT-11), else the first parent (TTT-7). Never HEAD itself.
 	# A previous head that isn't an ancestor (a force-push) never narrows the comparison to one
 	# commit: use its merge base with HEAD (stricter), and fail if there is none (XXX-6).
+	# Uncommitted edits on main with no range are a change of their own: judged against HEAD, every
+	# rule on (PRR11-12), never as the landed history around them.
+	local dirty=0; [[ -n "$(git -C "$ROOT" status --porcelain)" ]] && dirty=1
 	if [[ "$mb" == "$(git -C "$ROOT" rev-parse HEAD)" ]]; then
-		rev="$(findings_main_base "${DOCS_BASE:-}")" || exit 1
-		echo "findings: on main; comparing with $rev"
+		if [[ $dirty = 1 && -z "${DOCS_BASE:-}" && -z "${GITHUB_ACTIONS:-}" ]]; then
+			rev="$(git -C "$ROOT" rev-parse HEAD)"
+			echo "findings: on main with uncommitted changes; judging them against HEAD"
+		else
+			rev="$(findings_main_base "${DOCS_BASE:-}")" || exit 1
+			echo "findings: on main; comparing with $rev"
+		fi
 	fi
 	findings_base "$rev" "$ROOT/.work/findings-base.json" || exit 1
 	local base_had=1 main_has=0
@@ -642,7 +848,10 @@ findings_check() {
 	if git -C "$ROOT" cat-file -e "$rev:docs/security-reviews/owner-acceptances.md" 2>/dev/null; then
 		git -C "$ROOT" show "$rev:docs/security-reviews/owner-acceptances.md" > "$ROOT/.work/findings-before/docs/security-reviews/owner-acceptances.md" || exit 1
 	fi
-	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts check --base .work/findings-base.json --changed .work/findings-changed.txt --before .work/findings-before
+	local onmain0=0; [[ "$mb" == "$(git -C "$ROOT" rev-parse HEAD)" ]] && onmain0=1
+	lmode="$(findings_landing_mode "$onmain0" "${DOCS_BASE:-}" "${GITHUB_ACTIONS:-}" "${GITHUB_REF:-}" "$dirty")" || exit 1
+	[[ "$lmode" == landed ]] && echo "findings: on main with no landing range; fixed-before-landing entries count as landed (judged in CI against the push's range)"
+	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts check --base .work/findings-base.json --changed .work/findings-changed.txt --before .work/findings-before --landed "$lmode"
 	findings_patch_reset
 	if git -C "$ROOT" cat-file -e "$main:docs/security-reviews/findings.json" 2>/dev/null; then
 		git -C "$ROOT" show "$main:docs/security-reviews/findings.json" > "$ROOT/.work/findings-main.json" || exit 1
@@ -652,12 +861,15 @@ findings_check() {
 	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts commits --base .work/findings-base.json --main .work/findings-main.json)" || exit 1
 	findings_ancestry HEAD refs/remotes/origin/main <<<"$list" || exit 1
 	echo "findings: every fixed entry's commit is on HEAD's history"
+	local onmain=0; [[ "$mb" == "$(git -C "$ROOT" rev-parse HEAD)" ]] && onmain=1
+	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts prefix --base .work/findings-base.json)" || exit 1
+	if [[ "$lmode" == landed ]]; then findings_prefix HEAD <<<"$list" || exit 1; else findings_prefix HEAD "$rev" <<<"$list" || exit 1; fi
 	findings_patch_reset
 	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts shas --base .work/findings-base.json)" || exit 1
 	# A new upstream pin changes which tokens are exempt, so every citation answers (ZZZ-1).
 	local strict=0
 	grep -qx 'upstream.lock' "$ROOT/.work/findings-changed.txt" && strict=1
-	findings_shas "$strict" refs/remotes/origin/main "$rev" <<<"$list" || exit 1
+	findings_shas "$strict" refs/remotes/origin/main "$rev" "$onmain" <<<"$list" || exit 1
 	echo "findings: every commit an entry this change adds or modifies cites is on main's history or its entry's branch"
 }
 # The host half's own injections (QQQ-9, SSS-9): ancestry (a non-ancestor SHA, an option-shaped
@@ -797,6 +1009,20 @@ findings_host_self_test() {
 	# EEEE-1: a fix added and then reverted closes nothing.
 	local rv; rv="$(git -C "$ROOT" commit-tree -p "$f2" -m 'selftest: revert the fix' "$tm")"
 	if printf 'x\tpatch:%s\t0\n' "$fid" | findings_ancestry "$rv" "$rv" 2>/dev/null; then echo "findings host self-test: a reverted fix passed ancestry (EEEE-1)" >&2; exit 1; fi
+	# PR #11 review: a pinned SHA fix that was reverted later closes nothing either; a fix that itself
+	# reverts the earlier change that brought the issue (its inverse is older) still counts.
+	if printf 'x\t%s\t0\n' "$f2" | findings_ancestry "$rv" "$rv" 2>/dev/null; then echo "findings host self-test: a pinned fix that was reverted later passed ancestry (PRR11-2)" >&2; exit 1; fi
+	# PRR11-13: a revert that was itself reverted (the fix reapplied) leaves the fix in place.
+	local rr; rr="$(git -C "$ROOT" commit-tree -p "$rv" -m 'selftest: revert the revert' "$tmf")"
+	printf 'x\t%s\t0\n' "$f2" | findings_ancestry "$rr" "$rr" || { echo "findings host self-test: a fix whose revert was reverted was taken as reverted (PRR11-13)" >&2; exit 1; }
+	printf 'x\tpatch:%s\t0\n' "$fid" | findings_ancestry "$rr" "$rr" || { echo "findings host self-test: a patch: fix whose revert was reverted was taken as reverted (PRR11-13)" >&2; exit 1; }
+	local rrr; rrr="$(git -C "$ROOT" commit-tree -p "$rr" -m 'selftest: revert it again' "$tm")"
+	if printf 'x\t%s\t0\n' "$f2" | findings_ancestry "$rrr" "$rrr" 2>/dev/null; then echo "findings host self-test: a fix reverted again after its reapplication passed (PRR11-13)" >&2; exit 1; fi
+	local bad1 undo; bad1="$(git -C "$ROOT" commit-tree -p "$m" -m 'selftest: the unsafe change' "$tmf")"
+	undo="$(git -C "$ROOT" commit-tree -p "$bad1" -m 'selftest: the fix reverts it' "$tm")"
+	printf 'x\t%s\t0\n' "$undo" | findings_ancestry "$undo" "$undo" || { echo "findings host self-test: a fix that reverts the unsafe change was taken for a reverted fix (PRR11-3)" >&2; exit 1; }
+	local uid; uid="$(git -C "$ROOT" show "$undo" | git -C "$ROOT" patch-id --stable | cut -d' ' -f1)"
+	printf 'x\tpatch:%s\t0\n' "$uid" | findings_ancestry "$undo" "$undo" || { echo "findings host self-test: a patch: fix that reverts the unsafe change was taken for a reverted fix (PRR11-3)" >&2; exit 1; }
 	if printf '\tpatch:%s\t1\n' "$fid" | findings_ancestry "$f2" "$f2" 2>/dev/null; then echo "findings host self-test: a fix-commit line with no key passed (DDDD-1)" >&2; exit 1; fi
 	if printf 'x\tpatch:%s\t0\textra\n' "$fid" | findings_ancestry "$f2" "$f2" 2>/dev/null; then echo "findings host self-test: a four-field fix-commit line passed (DDDD-1)" >&2; exit 1; fi
 	printf 'x\tpatch:%s\t0\n' "$fid" | findings_ancestry "$f" "$s2" || { echo "findings host self-test: the control (a low's patch: fix on its PR) failed" >&2; exit 1; }
@@ -846,6 +1072,72 @@ findings_host_self_test() {
 		END { exit !bad }' "$ROOT/seclab" >&2; then
 		echo "findings host self-test: seclab pipes into a reader that closes early (SIGPIPE under pipefail)" >&2; exit 1
 	fi
+	# GGGG-1: a fixed-before-landing entry's reviewed commit precedes its fix, and wasn't there before.
+	printf 'k\t%s\t%s\t1\n' "$root" "$head" | findings_prefix HEAD || { echo "findings host self-test: the control (reviewed root, fix HEAD) failed (GGGG-1)" >&2; exit 1; }
+	if printf 'k\t%s\t%s\t1\n' "$head" "$root" | findings_prefix HEAD 2>/dev/null; then echo "findings host self-test: a fix before its reviewed commit passed (GGGG-1)" >&2; exit 1; fi
+	if printf 'k\t%s\t%s\t1\n' "$head" "$head" | findings_prefix HEAD 2>/dev/null; then echo "findings host self-test: a reviewed commit that is its own fix passed (GGGG-1)" >&2; exit 1; fi
+	if printf 'k\t%s\t%s\t1\n' "$root" "$head" | findings_prefix HEAD "$p1" 2>/dev/null; then echo "findings host self-test: a reviewed commit already on main passed (GGGG-1)" >&2; exit 1; fi
+	printf 'k\t%s\t%s\t0\n' "$root" "$head" | findings_prefix HEAD "$p1" || { echo "findings host self-test: an entry the base had was judged again (GGGG-1)" >&2; exit 1; }
+	if printf 'k\t%s\t%s\t0\n' "$head" "$head" | findings_prefix HEAD "$p1" 2>/dev/null; then echo "findings host self-test: a landed entry whose reviewed commit is its own fix passed (PRR11-9)" >&2; exit 1; fi
+	if printf 'k\t%s\t%s\t0\n' "$head" "$root" | findings_prefix HEAD "$p1" 2>/dev/null; then echo "findings host self-test: a landed entry whose fix precedes its reviewed commit passed (PRR11-9)" >&2; exit 1; fi
+	if printf 'k\t%s\t%s\t1\textra\n' "$root" "$head" | findings_prefix HEAD 2>/dev/null; then echo "findings host self-test: a malformed prefix line passed (GGGG-1)" >&2; exit 1; fi
+	# GGGG-2: on main, a touched patch: citation that landed before the push is a note to pin, never a
+	# red main; a pull request still fails it.
+	local pid1; pid1="$(git -C "$ROOT" show "$p1" | git -C "$ROOT" patch-id --stable | cut -d' ' -f1)"
+	if [[ "$pid1" =~ ^[0-9a-f]{40}$ ]]; then
+		findings_patch_reset
+		if printf 'patch:%s\t0\t-\t1\tx\n' "$pid1" | findings_shas 0 "$head" "$head" 0 2>/dev/null; then echo "findings host self-test: a landed patch: citation a change touches passed off main (GGGG-2)" >&2; exit 1; fi
+		printf 'patch:%s\t0\t-\t1\tx\n' "$pid1" | findings_shas 0 "$head" "$head" 1 2>/dev/null || { echo "findings host self-test: a landed patch: citation failed main itself (GGGG-2)" >&2; exit 1; }
+		findings_patch_reset
+	fi
+	# FFFF: the PR-head comparison reads a ref's register (control: main's own register, no clash)
+	# and refuses an option-shaped ref.
+	findings_clashes --ref refs/remotes/origin/main >/dev/null || { echo "findings host self-test: the control (clashes against main's own register) failed (FFFF)" >&2; exit 1; }
+	# FFFF-4/6: own PR, a fork's PR and a head HEAD contains are not compared; another head is.
+	got="$(printf '7\tfalse\t%s\n8\ttrue\t%s\n9\tfalse\t%s\n10\tfalse\t%s\n' "$side" "$side" "$p1" "$side" | findings_clash_heads 7 2>/dev/null)"
+	[[ "$got" == "10"$'\t'"$side" ]] || { echo "findings host self-test: PR heads to compare weren't own-PR, fork and ancestor filtered (FFFF-4, FFFF-6): $got" >&2; exit 1; }
+	local rc=0; findings_clashes --ref --upload-pack=x >/dev/null 2>&1 || rc=$?
+	[[ $rc -eq 2 ]] || { echo "findings host self-test: an option-shaped clashes ref wasn't refused (FFFF)" >&2; exit 1; }
+	# GGGG-12: a refreshed file that wasn't conflicted is staged too; one with a marker never is.
+	local sr="$ROOT/.work/findings-stage-selftest" staged
+	rm -rf "$sr"; mkdir -p "$sr"
+	git -C "$sr" init -q && printf 'a\n' > "$sr/view.md" && printf 'b\n' > "$sr/hand.md" && git -C "$sr" add view.md hand.md \
+		&& GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid git -C "$sr" commit -qm s \
+		|| { echo "findings host self-test: can't make the staging scratch repo" >&2; exit 1; }
+	printf 'regenerated\n' > "$sr/view.md"; printf '<<<<<<< ours\nb\n' > "$sr/hand.md"
+	(ROOT="$sr"; findings_stage_resolved view.md hand.md 2>/dev/null) || { echo "findings host self-test: staging failed" >&2; exit 1; }
+	staged="$(git -C "$sr" diff --cached --name-only)"
+	[[ "$staged" == view.md ]] || { echo "findings host self-test: a refreshed view that wasn't conflicted wasn't staged, or a file with markers was (GGGG-12): $staged" >&2; exit 1; }
+	rm -rf "$sr"
+	# PRR11-10: gh runs in this checkout, not the caller's directory (a stub gh prints where it ran).
+	local gb="$ROOT/.work/findings-gh-selftest" gdir
+	rm -rf "$gb"; mkdir -p "$gb"; printf '#!/bin/sh\npwd -P\n' > "$gb/gh"; chmod +x "$gb/gh"
+	gdir="$(cd / && PATH="$gb:$PATH" findings_gh pr list)"
+	[[ "$gdir" == "$(cd "$ROOT" && pwd -P)" ]] || { echo "findings host self-test: gh ran outside this checkout (PRR11-10): $gdir" >&2; exit 1; }
+	rm -rf "$gb"
+	# GGGG-10: a conflict marker of any size is seen.
+	local mk="$ROOT/.work/findings-markers-selftest.md"
+	printf 'a\n<<<<<<<< ours\nb\n' > "$mk"; findings_has_markers "$mk" || { echo "findings host self-test: an 8-character conflict marker wasn't seen (GGGG-10)" >&2; exit 1; }
+	printf 'a\n||||||| base\n' > "$mk"; findings_has_markers "$mk" || { echo "findings host self-test: a diff3 base marker wasn't seen (GGGG-10)" >&2; exit 1; }
+	printf 'a\nb\n' > "$mk"; if findings_has_markers "$mk"; then echo "findings host self-test: a file with no marker was flagged (GGGG-10)" >&2; exit 1; fi
+	rm -f "$mk"
+	# GGGG-7/8/13: every docs workflow step that runs the gate gets the exact range, step-level
+	# (checked per step, a block run included), and the host judges fixed-before-landing against it.
+	local wf="$ROOT/.github/workflows/docs-check.yml" wft="$ROOT/.work/findings-wf-selftest.yml"
+	if [[ -f "$wf" ]]; then
+		findings_wf_docs_base "$wf" || { echo "findings host self-test: a docs workflow step runs the gate without DOCS_BASE (GGGG-7)" >&2; exit 1; }
+		printf 'jobs:\n  d:\n    steps:\n      - name: a\n        env:\n          DOCS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}\n          DOCS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}\n        run: ./seclab docs check\n      - name: b\n        run: |\n          ./seclab docs check --online\n' > "$wft"
+		if findings_wf_docs_base "$wft"; then echo "findings host self-test: a block-run gate step without its own DOCS_BASE passed (GGGG-13)" >&2; exit 1; fi
+		rm -f "$wft"
+	fi
+	grep -qF 'else findings_prefix HEAD "$rev" <<<"$list" || exit 1; fi' "$ROOT/seclab" || { echo "findings host self-test: findings_check doesn't judge fixed-before-landing against its base (GGGG-8)" >&2; exit 1; }
+	# PRR11-6: main with no range (local) counts as landed; CI on main without a range fails; a PR or
+	# main with its range is judged exactly.
+	[[ "$(findings_landing_mode 1 "" "")" == landed && "$(findings_landing_mode 1 0000000000000000000000000000000000000000 "")" == landed ]] || { echo "findings host self-test: a local check on main without a range didn't treat landed entries as landed (PRR11-6)" >&2; exit 1; }
+	if findings_landing_mode 1 "" true refs/heads/main >/dev/null 2>&1; then echo "findings host self-test: CI on main without DOCS_BASE passed (PRR11-6)" >&2; exit 1; fi
+	[[ "$(findings_landing_mode 1 0000000000000000000000000000000000000000 true refs/heads/new-branch)" == landed && "$(findings_landing_mode 1 "" true refs/tags/v1)" == landed ]] || { echo "findings host self-test: a new branch or tag pushed at a landed commit wasn't landed history (PRR11-8)" >&2; exit 1; }
+	[[ "$(findings_landing_mode 1 "" "" "" 1)" == exact ]] || { echo "findings host self-test: uncommitted edits on main without a range weren't judged exactly (PRR11-12)" >&2; exit 1; }
+	[[ "$(findings_landing_mode 1 "$p1" true)" == exact && "$(findings_landing_mode 0 "" "")" == exact ]] || { echo "findings host self-test: a check with its range wasn't judged exactly (PRR11-6)" >&2; exit 1; }
 	echo "findings host self-test: ok"
 }
 
@@ -1422,10 +1714,12 @@ case "${1:-help}" in
 	findings)
 		shift
 		if [[ "${1:-}" == growth && $# -eq 2 ]]; then findings_growth "$2"; exit $?; fi
+		if [[ "${1:-}" == rebase-resolve && $# -eq 1 ]]; then findings_rebase_resolve; exit $?; fi
 		if [[ "${1:-}" == remap ]]; then
 			[[ ( $# -eq 3 || ( $# -eq 4 && "$4" == --patch ) ) && "$2" == --branch ]] || { usage; exit 2; }
 			findings_remap "$3" "${4:-}"; exit $?
 		fi
+		if [[ "${1:-}" == clashes ]]; then shift; findings_clashes "$@"; exit $?; fi
 		[[ $# -eq 1 ]] || { usage; exit 2; }
 		case "$1" in
 			# Every rotted citation, touched or not (the weekly listing's strict view).
