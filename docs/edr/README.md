@@ -128,4 +128,5 @@ Same rules as ADRs:
 | 2026-11-16 | [A tab's workspace data names only the tab's folder (DOCSYNC-R6)](20261116-workspace-data.md) | accepted |
 | 2026-11-17 | [Findings fixed before they land, and a register that rebases cleanly](20261117-fixed-before-landing.md) | accepted |
 | 2026-11-17 | [Link check: retry GitHub's rate limits instead of accepting them](20261117-link-check-retries.md) | accepted |
+| 2026-11-17 | [Code-OSS 1.145.0 → 1.145.3](20261117-upstream-1145-3.md) | accepted |
 <!-- index:end -->
