@@ -229,11 +229,13 @@ export function levelBVectors(driver: string): string[] {
 }
 
 /** Host OS artifacts (Finder, Spotlight) that say nothing about a tab (review FXF-18). */
-/** Narrow, so a tab can't hide a file behind one of these names (review FXF-23): .DS_Store
- *  anywhere, AppleDouble ._X only beside a real X, the volume indexes only at the root. */
-const OS_ARTIFACT = (rel: string, name: string, siblings: Set<string>) => name === '.DS_Store'
-	|| (name.startsWith('._') && siblings.has(name.slice(2)))
-	|| (!rel && (name === '.Spotlight-V100' || name === '.fseventsd'));
+/** Narrow, so a tab can't hide anything behind one of these names (review FXF-23, and Copilot's
+ *  review on PR 26): .DS_Store and AppleDouble ._X (beside a real X) only as regular files, the
+ *  volume indexes only as directories at the root. A directory named like a file artifact is
+ *  walked like any other. */
+const OS_ARTIFACT = (rel: string, e: fs.Dirent, siblings: Set<string>) => e.isFile()
+	? e.name === '.DS_Store' || (e.name.startsWith('._') && siblings.has(e.name.slice(2)))
+	: e.isDirectory() && !rel && (e.name === '.Spotlight-V100' || e.name === '.fseventsd');
 
 /** Every file under `ws`, relative, sorted (`.git` is checked on its own), and the directories
  *  that couldn't be listed: a subtree the check can't see is a failure, never "nothing there"
@@ -252,7 +254,7 @@ export function listTree(ws: string): { files: string[]; unreadable: string[] } 
 		const names = new Set(entries.map(e => e.name));
 		for (const e of entries) {
 			const r = rel ? `${rel}/${e.name}` : e.name;
-			if (r === '.git' || OS_ARTIFACT(rel, e.name, names)) {
+			if (r === '.git' || OS_ARTIFACT(rel, e, names)) {
 				continue;
 			}
 			if (e.isDirectory()) {
@@ -280,15 +282,42 @@ export function armingFiles(tree: string[]): string[] {
 const EXPECTED_ADDITION = (driver: string, r: string) => r.startsWith('.seclab-evidence/')
 	|| (driver !== 'sbx' && (r === '.github/instructions/seclab-probe.instructions.md' || r === '.github/copilot-instructions.md'));
 
-/** sha256 of each listed workspace file (null when absent). */
+/** The bytes of a regular file under `ws`, read without blocking or following a symlink and at
+ *  most `max` bytes; undefined for anything else. On OCI a tab can put a FIFO, a symlink or a huge
+ *  file where an arming file was, and the check must still finish and tear down (Copilot review
+ *  on PR 26). */
+export function readRegular(file: string, max = 16 << 20): Buffer | undefined {
+	let fd: number | undefined;
+	try {
+		fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | fs.constants.O_NOFOLLOW);
+		const st = fs.fstatSync(fd);
+		if (!st.isFile() || st.size > max) {
+			return undefined;
+		}
+		const buf = Buffer.alloc(st.size + 1);
+		let n = 0, got: number;
+		while ((got = fs.readSync(fd, buf, n, buf.length - n, null)) > 0) {
+			n += got;
+			if (n > st.size) {
+				return undefined; // grew while being read
+			}
+		}
+		return buf.subarray(0, n);
+	} catch {
+		return undefined;
+	} finally {
+		if (fd !== undefined) {
+			fs.closeSync(fd);
+		}
+	}
+}
+
+/** sha256 of each listed workspace file (null when absent or not a plain readable file). */
 export function armingDigest(ws: string, rels: string[]): Record<string, string | null> {
 	const out: Record<string, string | null> = {};
 	for (const rel of [...rels].sort()) {
-		try {
-			out[rel] = createHash('sha256').update(fs.readFileSync(path.join(ws, rel))).digest('hex');
-		} catch {
-			out[rel] = null;
-		}
+		const b = readRegular(path.join(ws, rel));
+		out[rel] = b ? createHash('sha256').update(b).digest('hex') : null;
 	}
 	return out;
 }

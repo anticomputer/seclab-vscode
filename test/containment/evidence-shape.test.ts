@@ -21,7 +21,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { armingRecord, type ArmingRecord, checkEvidence, hostRunChecks, levelBVectors, parseArmingRecord, readEvidence, unattributedMarkers, withheldEvidence, type Evidence } from './assert.ts';
+import { armingRecord, type ArmingRecord, checkEvidence, hostRunChecks, levelBVectors, parseArmingRecord, readEvidence, readRegular, unattributedMarkers, withheldEvidence, type Evidence } from './assert.ts';
 
 const tests: Array<[string, () => void]> = [];
 const test = (name: string, fn: () => void) => tests.push([name, fn]);
@@ -258,6 +258,51 @@ test('FXF-23: a tab-added file can\'t hide behind an OS artifact name', () => {
 		} finally {
 			r.done();
 		}
+	}
+});
+
+test('PR 26 review: a directory named like an OS artifact is walked; only the real ones are skipped', () => {
+	for (const rel of ['.DS_Store/payload.sh', '._.vscode/payload.sh', '.vscode/.DS_Store/x', '.fseventsd', 'sub/.fseventsd/x']) {
+		const r = hostRun();
+		try {
+			put(r.ws, rel);
+			assert.ok(failing(hostRunChecks('sbx', r.ws, r.arming)).includes(ADDED_ROW), rel);
+		} finally {
+			r.done();
+		}
+	}
+	const r = hostRun();
+	try {
+		put(r.ws, '.fseventsd/fseventsd-uuid');
+		put(r.ws, '.vscode/.DS_Store');
+		assert.deepEqual(failing(hostRunChecks('sbx', r.ws, r.arming)), [], 'the real artifacts');
+	} finally {
+		r.done();
+	}
+});
+
+test('PR 26 review: a FIFO, symlink or oversized file in place of an arming file fails, never blocks', () => {
+	for (const [what, swap] of [
+		['FIFO', (f: string) => execFileSync('mkfifo', [f])],
+		['symlink', (f: string) => fs.symlinkSync('/etc/hostname', f)],
+	] as Array<[string, (f: string) => void]>) {
+		const r = hostRun();
+		try {
+			const f = path.join(r.ws, '.seclab', 'targets');
+			fs.rmSync(f);
+			swap(f);
+			assert.ok(failing(hostRunChecks('oci', r.ws, r.arming)).includes(ARMING_ROW), what);
+		} finally {
+			r.done();
+		}
+	}
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'seclab-big-'));
+	try {
+		fs.writeFileSync(path.join(dir, 'f'), 'x'.repeat(100));
+		assert.equal(readRegular(path.join(dir, 'f'), 10), undefined, 'over the bound');
+		assert.equal(readRegular(path.join(dir, 'f'))?.length, 100);
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
 	}
 });
 
