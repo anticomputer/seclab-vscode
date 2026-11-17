@@ -700,10 +700,11 @@ read, write and open their own workspace files.
       ([EDR](edr/20261116-editor-tab-provenance.md));
     - filesystem-scheme squatting by a tab provider. Patch 0005 refuses a tab's
       filesystem and text-content provider registrations
-      ([EDR](edr/20261116-scheme-squatting.md)).
+      ([EDR](edr/20261116-scheme-squatting.md));
+    - workspace data; patch 0041: no window enters a workspace, so a tab window's
+      workspace names only the tab's folder ([EDR](edr/20261116-workspace-data.md)).
 
     Still open, each needing its own push-side control:
-    - workspace data;
     - the terminal default profile and environment collections; owned by the RPC
       follow-ups, whose patches 0034 and 0050 touch the same code.
 
