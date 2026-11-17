@@ -40,7 +40,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { jobProblems } from '../check-required-checks.ts';
 
 export interface Exempt { subject: string; consumer: string | null; reason: string }
 /** A declaration a host calls (VS Code calls `activate`): live, and so is what it reaches. */
@@ -544,6 +543,112 @@ export function lineOpen(line: string): boolean {
 		}
 	}
 	return depth !== 0 || q !== undefined;
+}
+
+/** A job that must run whenever its workflow does: present once, its job-level lines readable,
+ *  and only keys that can't make it skip. Shared by the required-checks validator and this gate's ci evidence jobs. It lives here
+ *  because verify-runs mounts this file alone (KKK-4, review CR-5). */
+export function jobProblems(yml: string, job: string, label: string): { problems: string[]; body: string[]; found: boolean } {
+	const out: string[] = [];
+	const lines = yml.split('\n');
+	// A YAML key can be quoted
+	// (`"if": false`), escaped inside quotes (`"i\x66"`), duplicated, or merged in from an anchor
+	// (`<<: *defaults`), and Actions honours all of them (Copilot review on PR 7). So job-level lines are
+	// parsed fail-closed: a plain or simply quoted key, a sequence entry or a comment; anything
+	// else is unreadable and fails.
+	const jobKey = new RegExp(`^ {2}(["']?)${job.replace(/[^A-Za-z0-9_-]/g, '')}\\1\\s*:`);
+	const decls = lines.filter(l => jobKey.test(l)).length;
+	const start = lines.findIndex(l => l === `  ${job}:`);
+	if (start < 0 || !lines.slice(0, start).some(l => l === 'jobs:')) {
+		out.push(`${label}: job \`${job}\` not found under jobs:`);
+		return { problems: out, body: [], found: false };
+	}
+	if (decls !== 1) {
+		out.push(`${label}: job \`${job}\` is declared ${decls} times`);
+	}
+	const body: string[] = [];
+	for (const l of lines.slice(start + 1)) {
+		if (/^ {0,2}\S/.test(l)) {
+			break;
+		}
+		body.push(l);
+	}
+	const KEY = /^ {4}(?:(["'])([A-Za-z_][A-Za-z0-9_-]*)\1|([A-Za-z_][A-Za-z0-9_-]*))\s*:(?:\s|$)/;
+	const keys: string[] = [];
+	for (const l of body) {
+		if (!/^ {4}\S/.test(l) || /^ {4}#/.test(l) || /^ {4}- /.test(l)) {
+			continue;
+		}
+		const m = KEY.exec(l);
+		if (!m) {
+			out.push(`${label}: job \`${job}\` has a job-level line that isn't a plain key: ${JSON.stringify(l.trim().slice(0, 40))}`);
+			continue;
+		}
+		keys.push(m[2] ?? m[3]);
+		if (/:\s*[&*]/.test(l)) {
+			out.push(`${label}: job \`${job}\` uses a YAML anchor or alias at job level`);
+		}
+	}
+	// An allowlist, not a denylist: `if:` isn't the only way to skip a job. One that `needs:` a
+	// skipped or failed job is skipped too, `continue-on-error:` and an empty `strategy` matrix
+	// do the same in effect, and a reusable `uses:` hands the job to other code (review CR-1). A
+	// required job may carry only what can't make it skip.
+	// Only what the jobs use today. It bounds skipping, not vacuous success: `defaults:` could make
+	// every step a no-op, so it isn't here either (review CR-6).
+	const ALLOWED = new Set(['name', 'runs-on', 'timeout-minutes', 'permissions', 'steps']);
+	for (const k of keys.filter(k => !ALLOWED.has(k) && k !== 'if')) {
+		out.push(`${label}: job \`${job}\` has \`${k}:\`; a required job may carry only ${[...ALLOWED].join(', ')}`);
+	}
+	if (keys.includes('if')) {
+		out.push(`${label}: job \`${job}\` has a job-level if:, and a skipped job passes a required check`);
+	}
+	return { problems: out, body, found: true };
+}
+
+/** Every job's check-run name (`name:`, else the job id), which is what a required status check
+ *  matches. Undefined when the jobs can't be read in full, which callers treat as a failure: a job
+ *  whose name can't be read could be reporting any context (review CR-4). */
+export function jobContexts(yml: string): Array<{ id: string; context: string }> | undefined {
+	const lines = yml.split('\n');
+	const at = lines.findIndex(l => /^jobs\s*:/.test(l));
+	if (at < 0 || lines.filter(l => /^["']?jobs["']?\s*:/.test(l)).length !== 1 || lines[at].replace(/^jobs\s*:/, '').replace(/\s+#.*$/, '').trim()) {
+		return undefined;
+	}
+	const out: Array<{ id: string; context: string }> = [];
+	let cur: { id: string; context: string } | undefined;
+	for (const l of lines.slice(at + 1)) {
+		if (/^\S/.test(l)) {
+			break;
+		}
+		if (/^\s*(#.*)?$/.test(l)) {
+			continue;
+		}
+		if (/^ {2}\S/.test(l)) {
+			const m = /^ {2}(["']?)([A-Za-z_][A-Za-z0-9_-]*)\1\s*:\s*(#.*)?$/.exec(l);
+			if (!m) {
+				return undefined;
+			}
+			cur = { id: m[2], context: m[2] };
+			out.push(cur);
+			continue;
+		}
+		const n = /^ {4}(["']?)name\1\s*:\s*(.*?)\s*(#.*)?$/.exec(l);
+		if (n && cur) {
+			const v = n[2];
+			const plain = v.includes('${{') ? undefined
+				: /^[^\s'"&*!|>{[`%@#][^#]*$/.test(v) ? v
+				: /^"[^"\\]*"$/.test(v) ? v.slice(1, -1)
+				: /^'(?:[^']|'')*'$/.test(v) ? v.slice(1, -1).replace(/''/g, "'")
+				: undefined;
+			if (plain === undefined) {
+				return undefined;
+			}
+			cur.context = plain;
+		} else if (cur === undefined) {
+			return undefined;
+		}
+	}
+	return out;
 }
 
 /**
