@@ -34,9 +34,16 @@ gd() { GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -C "$DEST" -c core.
 	-c core.sparseCheckout=false -c core.sparseCheckoutCone=false -c status.showUntrackedFiles=normal "$@"; }
 scrub() {
 	local g="$DEST/.git"
+	# Git makes no symlink here; one would point a write or a delete outside DEST (a linked
+	# config truncated, a linked info/ emptied, a linked objects/ written by the fetch).
+	if [[ -n "$(find "$g" -type l -print -quit)" ]]; then
+		echo "upstream: $g holds a symlink (refusing)" >&2
+		exit 1
+	fi
+	# Unlinked first, so a hard-linked config's other name is left alone.
+	rm -f "$g/config"
 	printf '[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n' > "$g/config"
-	rm -rf "$g/config.worktree" "$g/commondir" "$g/worktrees" "$g/hooks" "$g/index" \
-		"$g/info/attributes" "$g/info/exclude" "$g/info/sparse-checkout"
+	rm -rf "$g/config.worktree" "$g/commondir" "$g/worktrees" "$g/hooks" "$g/index" "$g/info"
 	local top
 	top="$(gd rev-parse --show-toplevel)" && [[ "$top" == "$(cd "$DEST" && pwd -P)" ]] \
 		|| { echo "upstream: $DEST's work tree resolves elsewhere (refusing)" >&2; exit 1; }

@@ -197,3 +197,28 @@ test('fetch-upstream: a kept core.worktree can\'t redirect the reset and clean (
 		fs.rmSync(scratch, { recursive: true, force: true });
 	}
 });
+
+test('fetch-upstream: a linked .git/config or .git/info reaches nothing outside DEST (PR 25 review)', () => {
+	for (const [what, link] of [
+		['symlinked config', (dest: string, out: string) => { fs.rmSync(path.join(dest, '.git/config')); fs.symlinkSync(path.join(out, 'victim'), path.join(dest, '.git/config')); }],
+		['symlinked info dir', (dest: string, out: string) => { fs.rmSync(path.join(dest, '.git/info'), { recursive: true, force: true }); fs.mkdirSync(path.join(out, 'info')); put(out, 'info/exclude', 'keep'); fs.symlinkSync(path.join(out, 'info'), path.join(dest, '.git/info')); }],
+		['hard-linked config', (dest: string, out: string) => { fs.rmSync(path.join(dest, '.git/config')); fs.linkSync(path.join(out, 'victim'), path.join(dest, '.git/config')); }],
+	] as Array<[string, (dest: string, out: string) => void]>) {
+		try {
+			const { dest, fetch } = setup();
+			fetch('v2');
+			const out = path.join(scratch, 'outside');
+			put(out, 'victim', 'not ours\n');
+			link(dest, out);
+			try {
+				fetch('v2');
+			} catch { /* a refusal is fine; what matters is what happened outside */ }
+			assert.equal(fs.readFileSync(path.join(out, 'victim'), 'utf8'), 'not ours\n', `${what}: the outside file is untouched`);
+			if (fs.existsSync(path.join(out, 'info'))) {
+				assert.equal(fs.readFileSync(path.join(out, 'info/exclude'), 'utf8'), 'keep', `${what}: the outside directory is untouched`);
+			}
+		} finally {
+			fs.rmSync(scratch, { recursive: true, force: true });
+		}
+	}
+});
