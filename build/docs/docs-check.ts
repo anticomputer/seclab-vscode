@@ -85,16 +85,29 @@ function readRecords(kind: typeof KINDS[number]): Rec[] {
 }
 
 const records = Object.fromEntries(KINDS.map(k => [k, readRecords(k)])) as Record<typeof KINDS[number], Rec[]>;
+// Keyed by kind and file: an ADR, an EDR and a review record can share a name (20261116-pr-landing
+// is both an EDR and a review), and one must not shadow another.
 const allRecs = new Map<string, { kind: string; rec: Rec; text: string }>();
 for (const k of KINDS) {
 	for (const r of records[k]) {
-		allRecs.set(r.file, { kind: k, rec: r, text: fs.readFileSync(path.join(repo, 'docs', k, r.file), 'utf8') });
+		allRecs.set(`${k}/${r.file}`, { kind: k, rec: r, text: fs.readFileSync(path.join(repo, 'docs', k, r.file), 'utf8') });
 	}
 }
+/** A supersede target: in the linking record's own kind first (where a bare link points), else
+ *  the one record of that name in another kind. */
+function findRec(kind: string, file: string): { kind: string; rec: Rec; text: string } | undefined {
+	const own = allRecs.get(`${kind}/${file}`);
+	if (own) {
+		return own;
+	}
+	const others = [...allRecs.values()].filter(v => v.rec.file === file);
+	return others.length === 1 ? others[0] : undefined;
+}
 // Supersede links must work in both directions.
-for (const [file, { kind, rec }] of allRecs) {
+for (const { kind, rec } of allRecs.values()) {
+	const file = rec.file;
 	for (const target of rec.supersededBy) {
-		const t = allRecs.get(target);
+		const t = findRec(kind, target);
 		if (!t) {
 			bad(`docs/${kind}/${file}`, `superseded by a missing record ${target}`);
 		} else if (!t.text.includes(file)) {
@@ -102,7 +115,7 @@ for (const [file, { kind, rec }] of allRecs) {
 		}
 	}
 	for (const target of rec.supersedes) {
-		const t = allRecs.get(target);
+		const t = findRec(kind, target);
 		if (!t) {
 			bad(`docs/${kind}/${file}`, `supersedes a missing record ${target}`);
 		} else if (!/supersed/i.test(t.rec.status) || !t.text.includes(file)) {
