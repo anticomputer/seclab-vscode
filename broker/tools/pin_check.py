@@ -113,6 +113,19 @@ def self_test() -> list[str]:
                 failures.append(f"{name}: errors {errors}")
             elif want is not None and not any(want in e for e in errors):
                 failures.append(f"{name}: no error containing {want!r} in {errors}")
+        # 11-9: the registered source is the one compared, not the lock's `<lock>.in` sibling.
+        name = "11-9: the registered source is compared, not the sibling .in"
+        case = Path(d) / "registered"
+        case.mkdir()
+        (case / "requirements.txt").write_text(lock)
+        (case / "requirements.in").write_text("pkga==1.0\n")
+        (case / "deps.in").write_text("pkga==0.9\n")
+        try:
+            errors = source_drift(case / "requirements.txt", locked, source=case / "deps.in")
+            if not any("deps.in" in e and "pkga==0.9 but" in e for e in errors):
+                failures.append(f"{name}: no drift reported against deps.in in {errors}")
+        except Exception as e:  # noqa: BLE001 - any crash fails the case
+            failures.append(f"{name}: raised {type(e).__name__}")
     return failures
 
 

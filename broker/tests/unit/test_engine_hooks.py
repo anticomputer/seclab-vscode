@@ -137,3 +137,45 @@ def test_13_8_a_spent_credential_is_never_prompted_for():
     assert status == 429 and prompts == []
     status, prompts = run(spent=False)
     assert len(prompts) == 1 and prompts[0]["kind"] == "credential-binding"
+
+
+def _connect(deny_rule):
+    b, events = _broker(deny=[deny_rule] if deny_rule else [])
+    b.dispatch("proxy.auth.set", {"username": "seclab", "password": "P" * 22})
+    import base64
+    f = tflow.tflow()
+    f.request.method = "CONNECT"
+    f.request.host = "blocked.example.test"
+    f.request.port = 443
+    f.request.headers["Proxy-Authorization"] = "Basic " + base64.b64encode(b"seclab:" + b"P" * 22).decode()
+    SeclabAddon(b, frozenset()).http_connect(f)
+    denied = [p for m, p in events if m == "audit.event" and p.get("type") == "request.denied"]
+    return f, denied
+
+
+def test_12_7_and_12b_2_a_blocked_host_is_refused_at_connect():
+    """12-7: a CONNECT to a blocked host is refused with 403 at CONNECT time and audited with
+    the rule id, before any inner request. 12b-2: a deny rule narrowed to http still refuses the
+    tunnel, which could carry either scheme. Control: no rule, the tunnel opens."""
+    for rule in ({"id": "blk", "host": "blocked.example.test"},
+                 {"id": "blk", "host": "blocked.example.test", "schemes": ["http"]}):
+        f, denied = _connect(rule)
+        assert f.response is not None and f.response.status_code == 403, rule
+        assert [d.get("ruleId") for d in denied] == ["blk"], rule
+        assert denied[0]["method"] == "CONNECT"
+    f, denied = _connect(None)
+    assert f.response is None and denied == []
+
+
+def test_11_7_a_bodiless_exception_response_passes_and_error_bodies_are_checked():
+    """11-7: a bodiless 204/304 on a backstop-exception route passes once its headers are
+    clean (it isn't "not strict JSON"); a header with a credential-named field still blocks."""
+    b, _ = _broker()
+    addon = SeclabAddon(b, frozenset())
+    for status in (204, 304):
+        resp = http.Response.make(status, b"", {})
+        assert addon._exception_response_check(resp) == (None, None, None), status
+        resp.headers["x-session-token"] = "r1"
+        assert addon._exception_response_check(resp)[0] == "credential-named header or token-shaped value"
+    resp = http.Response.make(404, b'{"message":"not found","token":"x"}', {"content-type": "application/json"})
+    assert addon._exception_response_check(resp)[:2] == ("credential-named field", "$.token")
