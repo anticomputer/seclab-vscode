@@ -22,7 +22,8 @@ import re
 import sys
 
 from supplychain import (BROKER, SupplyChainError, install_targets, norm, parse_requirements, rel,
-                         requirement_files, self_test)
+                         requirement_files)
+from supplychain import self_test as supplychain_self_test
 
 
 def source_drift(req, locked: dict[str, str], source=None) -> list[str]:
@@ -63,6 +64,48 @@ def source_drift(req, locked: dict[str, str], source=None) -> list[str]:
     for name in sorted(direct - sourced):
         errors.append(f"{rel(src)}: {rel(req)} says {name} is a direct requirement, but it isn't pinned here")
     return errors
+
+
+def self_test() -> list[str]:
+    """The supply-chain vectors, then named lock-drift cases (findings 10-4, 10b-5 and 10c-1):
+    each must fail, or pass, exactly as named."""
+    import tempfile
+    from pathlib import Path
+
+    failures = supplychain_self_test()
+    h = "a" * 64
+    lock = (f"pkga==1.0 --hash=sha256:{h}\n    # via -r requirements.in\n"
+            f"pkgb==2.0 --hash=sha256:{h}\n    # via pkga\n")
+    bare = f"pkga==1.0 --hash=sha256:{h}\npkgb==2.0 --hash=sha256:{h}\n"
+    # Compiled (it has `# via`), but names no direct requirement: only "pins nothing" can fail it.
+    indirect = f"pkga==1.0 --hash=sha256:{h}\n    # via pkgb\npkgb==2.0 --hash=sha256:{h}\n"
+    locked = {"pkga": "1.0", "pkgb": "2.0"}
+    cases = [  # (name, lock text, source text or None for no file, registered, want errors)
+        ("drift: a source that pins what its lock pins passes", lock, "pkga==1.0\n", False, False),
+        ("10-4: a source pinning a superseded version fails", lock, "pkga==0.9\n", False, True),
+        ("10b-5: a compiled lock whose source is missing fails", lock, None, False, True),
+        ("10b-5: an empty source fails", indirect, "", False, True),
+        ("10b-5: a comment-only source fails", indirect, "# pkga==1.0\n", False, True),
+        ("10c-1: a registered source that is missing fails, with no # via comments left", bare, None, True, True),
+        ("10c-1: a direct requirement the source doesn't pin fails", lock, "pkgb==2.0\n", False, True),
+        ("drift: a source line that isn't name==version fails", lock, "pkga>=1.0\n", False, True),
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        for i, (name, ltext, stext, registered, want) in enumerate(cases):
+            case = Path(d) / str(i)
+            case.mkdir()
+            req = case / "requirements.txt"
+            req.write_text(ltext)
+            src = case / "requirements.in"
+            if stext is not None:
+                src.write_text(stext)
+            try:
+                errors = source_drift(req, locked, source=src if registered else None)
+            except Exception as e:  # noqa: BLE001 - a crash is a failed case, never a pass
+                errors = [f"raised {type(e).__name__}"]
+            if bool(errors) != want:
+                failures.append(f"{name}: {'errors' if errors else 'no errors'} {errors}")
+    return failures
 
 
 def main() -> int:
