@@ -8,7 +8,7 @@
 //   - metrics snapshots every 2 s are the heartbeat; kernel drops mark tabs degraded
 // Falco's output is tab-influenced (argv, paths): bounded, parsed strictly, normalised by the hub.
 
-import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -72,14 +72,14 @@ export function falcoRules(tabs: ReadonlyArray<{ shortId: string; deep: boolean 
 /**
  * Whose process table can judge this sensor's tabd dead (PS-2). The Docker daemon may be
  * shared by several pid namespaces (a remote engine, a VM or devcontainer on the same socket,
- * Linux users under hidepid), and a pid missing from one namespace's `ps` says nothing about
- * another's. So tabd labels its sensor `seclab.host` (hostname, pid namespace and uid) and
- * `seclab.boot` (boot time, seconds), and a sweep only judges sensors that match its own.
+ * other Macs, Linux users under hidepid), and a pid missing from one namespace's `ps` says
+ * nothing about another's. So tabd labels its sensor `seclab.host` and `seclab.boot` (boot time,
+ * seconds), and a sweep only judges sensors that match its own. `host` hashes a per-machine,
+ * per-boot id with the pid namespace and uid: Linux's boot id plus hostname (the root
+ * namespace's link is the same on every machine, PS-5), macOS's boot session UUID (its hostname
+ * follows the network, PS-6; CR16-1). Without that id, `host` is undefined and nothing is judged.
  */
-export function sensorOwner(): { host: string; boot: number } {
-	// Linux: the root pid namespace's link is the same on every machine, so the boot id and the
-	// hostname tell machines apart (PS-5). macOS has one namespace per machine, and its hostname
-	// follows the network, so it is left out there (PS-6).
+export function sensorOwner(): { host: string | undefined; boot: number } {
 	const read = (f: string, how: (f: string) => string) => {
 		try {
 			return how(f).trim();
@@ -87,10 +87,22 @@ export function sensorOwner(): { host: string; boot: number } {
 			return '';
 		}
 	};
-	const linux = process.platform === 'linux';
-	const parts = [linux ? os.hostname() : '', read('/proc/self/ns/pid', fs.readlinkSync), read('/proc/sys/kernel/random/boot_id', f => fs.readFileSync(f, 'utf8')),
-		String(process.getuid?.() ?? -1)];
-	return { host: createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 16), boot: Math.round(Date.now() / 1000 - os.uptime()) };
+	let machine = '';
+	if (process.platform === 'linux') {
+		machine = read('/proc/sys/kernel/random/boot_id', f => fs.readFileSync(f, 'utf8'));
+	} else if (process.platform === 'darwin') {
+		const r = spawnSync('/usr/sbin/sysctl', ['-n', 'kern.bootsessionuuid'], { env: {}, encoding: 'utf8', timeout: 5_000, shell: false });
+		machine = r.status === 0 && /^[0-9A-Fa-f-]{36}$/.test(r.stdout.trim()) ? r.stdout.trim() : '';
+	}
+	const boot = Math.round(Date.now() / 1000 - os.uptime());
+	if (!machine) {
+		return { host: undefined, boot };
+	}
+	// The order is the labels' contract: Linux keeps hostname, pid namespace, boot id, uid, so a
+	// sensor labelled by an earlier build still counts as this host's (CR16-10); macOS has its
+	// boot session UUID where Linux has the boot id.
+	const parts = [process.platform === 'linux' ? os.hostname() : '', read('/proc/self/ns/pid', fs.readlinkSync), machine, String(process.getuid?.() ?? -1)];
+	return { host: createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 16), boot };
 }
 
 export function falcoArgs(name: string, rulesDir: string, labels: Record<string, string>): string[] {
@@ -116,6 +128,34 @@ export function falcoArgs(name: string, rulesDir: string, labels: Record<string,
 		args.push('-o', `${k}=${v}`);
 	}
 	return args;
+}
+
+/**
+ * Stale sensors of this state dir (rows `name\thost\tboot`): another supervisor's whose pid is
+ * dead here. The state tag hashes a path another pid namespace on a shared engine may share, so
+ * a labelled sensor counts only if its owner labels are this supervisor's (same host id, boot
+ * within 10 s); an unlabelled one (an older tabd) is judged by its pid as before (CR16-6).
+ */
+export function staleFalcoNames(rows: string[], self: string, labels: Record<string, string>, pidAlive: (pid: number) => boolean): string[] {
+	const out: string[] = [];
+	const myHost = labels['seclab.host'] ?? '', myBoot = Number(labels['seclab.boot']);
+	if (!myHost) {
+		// Without its own identity a supervisor can't tell its namespace's sensors from another's,
+		// labelled or not: it removes none (CR16-9).
+		return out;
+	}
+	for (const row of rows) {
+		const [name, host = '', boot = ''] = row.trim().split('\t');
+		const m = /^seclab-falco-[0-9a-f]{8}-([0-9]{1,10})$/.exec(name ?? '');
+		if (!m || name === self || pidAlive(Number(m[1]))) {
+			continue;
+		}
+		const ours = !host || (host === myHost && /^[0-9]{1,12}$/.test(boot) && Math.abs(Number(boot) - myBoot) <= 10);
+		if (ours) {
+			out.push(name);
+		}
+	}
+	return out;
 }
 
 export interface FalcoDeps {
@@ -225,12 +265,9 @@ export class FalcoSensor {
 	/** Remove Falco containers left by crashed supervisors of the same state dir. */
 	private async cleanupStale(): Promise<void> {
 		const state = this.d.labels['seclab.state'];
-		const r = await this.d.runDocker(['ps', '-a', '--filter', 'label=seclab.obs=falco', '--filter', `label=seclab.state=${state}`, '--format', '{{.Names}}']);
-		for (const name of r.stdout.split('\n').map(x => x.trim())) {
-			const m = /^seclab-falco-[0-9a-f]{8}-([0-9]{1,10})$/.exec(name);
-			if (m && name !== this.d.name && !this.d.pidAlive(Number(m[1]))) {
-				await this.d.runDocker(['rm', '-f', '--', name]);
-			}
+		const r = await this.d.runDocker(['ps', '-a', '--filter', 'label=seclab.obs=falco', '--filter', `label=seclab.state=${state}`, '--format', '{{.Names}}\t{{.Label "seclab.host"}}\t{{.Label "seclab.boot"}}']);
+		for (const name of staleFalcoNames(r.stdout.split('\n'), this.d.name, this.d.labels, this.d.pidAlive)) {
+			await this.d.runDocker(['rm', '-f', '--', name]);
 		}
 	}
 

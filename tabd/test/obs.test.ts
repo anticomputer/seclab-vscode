@@ -573,6 +573,31 @@ test('obs falco: events map to drafts; other containers and non-JSON are ignored
 
 // ---- security review regressions -------------------------------------------------------------
 
+test('obs review CR16-10: on Linux the owner hash keeps its input order, so earlier labels still match', async t => {
+	if (process.platform !== 'linux') {
+		t.skip('Linux identity');
+		return;
+	}
+	const { sensorOwner } = await import('../src/obs/falco.ts');
+	const os = await import('node:os');
+	const { createHash } = await import('node:crypto');
+	const ns = fs.readlinkSync('/proc/self/ns/pid'), boot = fs.readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+	const before = createHash('sha256').update([os.hostname(), ns, boot, String(process.getuid?.() ?? -1)].join('\0')).digest('hex').slice(0, 16);
+	assert.equal(sensorOwner().host, before, 'hostname, pid namespace, boot id, uid: the order an earlier build labelled with');
+});
+
+test('obs review CR16-6: a stale Falco sensor of the same state tag is removed only if it is this host\'s or unlabelled', async () => {
+	const { staleFalcoNames } = await import('../src/obs/falco.ts');
+	const labels = { 'seclab.obs': 'falco', 'seclab.state': '0a1b2c3d', 'seclab.host': 'a'.repeat(16), 'seclab.boot': '1800000000' };
+	const rows = ['seclab-falco-0a1b2c3d-1\taaaaaaaaaaaaaaaa\t1800000000', `seclab-falco-0a1b2c3d-2\t${'a'.repeat(16)}\t1800000004`, 'seclab-falco-0a1b2c3d-3\t\t',
+		`seclab-falco-0a1b2c3d-4\t${'f'.repeat(16)}\t1800000000`, `seclab-falco-0a1b2c3d-5\t${'a'.repeat(16)}\t1700000000`, `seclab-falco-0a1b2c3d-6\t${'a'.repeat(16)}\t1800000000`, 'not-falco\t\t', ''];
+	const alive = (pid: number) => pid === 6;
+	assert.deepEqual(staleFalcoNames(rows, 'seclab-falco-0a1b2c3d-1', labels, alive), ['seclab-falco-0a1b2c3d-2', 'seclab-falco-0a1b2c3d-3'],
+		'this host\'s dead (2) and an unlabelled dead one (3); never self (1), another host\'s (4), another boot\'s (5) or a live one (6)');
+	assert.deepEqual(staleFalcoNames([`seclab-falco-0a1b2c3d-2\t${'a'.repeat(16)}\t1800000000`, 'seclab-falco-0a1b2c3d-3\t\t', 'seclab-falco-0a1b2c3d-7\t\t'], 'x', { ...labels, 'seclab.host': '' }, () => false), [],
+		'CR16-9: a supervisor with no owner identity removes nothing, labelled or not');
+});
+
 test('obs review OR-3: a flood of tab-driven trusted events cannot push out RPC decisions or observation changes', () => {
 	const hub = new ObsHub({ trustedRate: { rate: 10, burst: 20 } });
 	const tab = mintTabId();

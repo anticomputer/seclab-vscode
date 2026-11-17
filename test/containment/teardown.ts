@@ -145,11 +145,12 @@ export function reapPreviousRun(runDir: string): ReapResult {
 	if (problems.length) {
 		return { stopped: [], refused: true, problems, survivors: [] };
 	}
+	const runPids = new Set(runProcesses(runDir, m).map(p => p.pid));
 	const stopped = stopRunProcesses(runDir, m);
 	// Its tabs and helper runtimes too, and its profile: that profile holds the armed rogue
 	// extension, so leaving it is the same hazard the teardown gate exists to prevent.
 	try {
-		removeRunResources(runDir, m);
+		removeRunResources(runDir, m, runTabs(m), runPids);
 	} catch (err) {
 		problems.push(`could not remove the previous run's runtime resources: ${err instanceof Error ? err.message : String(err)}`);
 	}
@@ -410,7 +411,7 @@ function dockerLines(args: string[]): string[] | undefined {
 }
 
 /** Every runtime resource this run still owns; `unknown` lists runtimes that could not be listed. */
-export function runLeftovers(runDir: string, m: RunManifest = readManifest(runDir), tabs: string[] = runTabs(m)): { left: string[]; unknown: string[] } {
+export function runLeftovers(runDir: string, m: RunManifest = readManifest(runDir), tabs: string[] = runTabs(m), runPids: ReadonlySet<number> = new Set()): { left: string[]; unknown: string[] } {
 	const left: string[] = [];
 	const unknown = new Set<string>();
 	const needSbx = m.driver === 'sbx' || (m.driver === undefined && tabs.length > 0);
@@ -455,11 +456,14 @@ export function runLeftovers(runDir: string, m: RunManifest = readManifest(runDi
 			left.push(`container ${c}`);
 		}
 	}
-	// Host-side observability sensor (OCI Falco) that tabd started for this run's state dirs.
-	for (const tag of falcoStateTags(m)) {
-		for (const c of docker(['ps', '-a', '--filter', 'label=seclab.obs=falco', '--filter', `label=seclab.state=${tag}`, '--format', '{{.Names}}'])) {
-			left.push(`container ${c}`);
-		}
+	// Host-side observability sensor (OCI Falco) that tabd started for this run's state dirs:
+	// the run's own, and unlabelled ones it can't prove aren't (CR16-2). Another namespace's is not.
+	const falco = runFalcoSensors(m, runPids);
+	if (!falco && needDocker) {
+		unknown.add('docker');
+	}
+	for (const c of [...falco?.own ?? [], ...falco?.unproven ?? []]) {
+		left.push(`container ${c}`);
 	}
 	return { left, unknown: [...unknown] };
 }
@@ -474,8 +478,8 @@ function falcoStateTags(m: RunManifest): string[] {
 }
 
 /** True when a sensor's owner labels name this namespace and boot (clock slack 10 s; a larger step keeps it). */
-function sameSensorOwner(host: string | undefined, boot: string | undefined, me: { host: string; boot: number }): boolean {
-	return host === me.host && /^[0-9]{1,12}$/.test(boot ?? '') && Math.abs(Number(boot) - me.boot) <= 10;
+function sameSensorOwner(host: string | undefined, boot: string | undefined, me: { host: string | undefined; boot: number }): boolean {
+	return !!me.host && host === me.host && /^[0-9]{1,12}$/.test(boot ?? '') && Math.abs(Number(boot) - me.boot) <= 10;
 }
 
 /** A tabd command line, as `ps` shows it (the harnesses' `main.ts`, the Tab Manager's `dist/tabd.js`). */
@@ -493,7 +497,7 @@ const FALCO_NAME = /^seclab-falco-[0-9a-f]{8}-([0-9]{1,10})$/;
  * label=seclab.obs=falco`, `procs` the complete host process table. Unlabelled sensors, labels
  * that disagree with the name, and other names are never claimed.
  */
-export function falcoOrphans(sensors: string[], procs: Array<{ pid: number; args: string }>, me: { host: string; boot: number } = sensorOwner()): Array<{ name: string; pid: number; why: string }> {
+export function falcoOrphans(sensors: string[], procs: Array<{ pid: number; args: string }>, me: { host: string | undefined; boot: number } = sensorOwner()): Array<{ name: string; pid: number; why: string }> {
 	return classifyFalco(sensors, procs, me).filter(c => c.orphan);
 }
 
@@ -502,7 +506,7 @@ export function falcoOrphans(sensors: string[], procs: Array<{ pid: number; args
  * whose pid isn't in our table but whose owner labels aren't ours (another namespace, an older
  * tabd without labels): it may be an orphan, but only a person can tell (PS-6).
  */
-export function classifyFalco(sensors: string[], procs: Array<{ pid: number; args: string }>, me: { host: string; boot: number }): Array<{ name: string; pid: number; orphan: boolean; unjudged: boolean; why: string }> {
+export function classifyFalco(sensors: string[], procs: Array<{ pid: number; args: string }>, me: { host: string | undefined; boot: number }): Array<{ name: string; pid: number; orphan: boolean; unjudged: boolean; why: string }> {
 	const byPid = new Map(procs.map(p => [p.pid, p.args]));
 	const out: Array<{ name: string; pid: number; orphan: boolean; unjudged: boolean; why: string }> = [];
 	for (const l of sensors) {
@@ -521,6 +525,33 @@ export function classifyFalco(sensors: string[], procs: Array<{ pid: number; arg
 		}
 	}
 	return out;
+}
+
+/**
+ * Whether a process is alive, from `ps -o stat= -p <pid>` and a `kill(pid, 0)` probe (CR16-8).
+ * A zombie is gone. When `ps` gives no answer (failed, signalled, or found nothing), only ESRCH
+ * from the probe proves absence: EPERM or any other error means it may still run.
+ */
+export function pidAliveFrom(ps: { status: number | null; stdout?: string | null; error?: Error; signal?: NodeJS.Signals | null }, probe: () => unknown): boolean {
+	// A `ps` that failed to spawn may have no stdout at all (CR16-11).
+	const st = (ps.stdout ?? '').trim();
+	if (!ps.error && !ps.signal && ps.status === 0 && st) {
+		return !st.startsWith('Z');
+	}
+	try {
+		probe();
+		return true;
+	} catch (err) {
+		return (err as NodeJS.ErrnoException).code !== 'ESRCH';
+	}
+}
+
+/**
+ * Whether `clean-host` may remove a judged sensor now: an orphan, and if its tabd was one the
+ * same pass set out to kill, only once that tabd has really exited (CR16-3: a kill can fail).
+ */
+export function falcoRemovable(c: { orphan: boolean; pid: number }, killed: ReadonlySet<number>, pidAlive: (pid: number) => boolean): boolean {
+	return c.orphan && !(killed.has(c.pid) && pidAlive(c.pid));
 }
 
 /** `docker ps` format for {@link falcoOrphans}. */
@@ -554,7 +585,7 @@ function tabNetworksByName(docker: (args: string[]) => string[], tab: string): s
 }
 
 /** Remove the run's tabs and helpers directly in the runtimes (after tabd is gone). */
-export function removeRunResources(runDir: string, m: RunManifest = readManifest(runDir), tabs: string[] = runTabs(m)): void {
+export function removeRunResources(runDir: string, m: RunManifest = readManifest(runDir), tabs: string[] = runTabs(m), runPids: ReadonlySet<number> = new Set()): void {
 	for (const t of tabs) {
 		spawnSync(SBX, ['rm', '--force', `seclab-${t}`], { stdio: 'ignore' });
 		const cs = dockerLines(['ps', '-aq', '--filter', `label=seclab.tab=${t}`]) ?? [];
@@ -574,12 +605,50 @@ export function removeRunResources(runDir: string, m: RunManifest = readManifest
 	for (const c of m.containers ?? []) {
 		spawnSync('docker', ['rm', '-f', c], { stdio: 'ignore' });
 	}
-	for (const tag of falcoStateTags(m)) {
-		const cs = dockerLines(['ps', '-aq', '--filter', 'label=seclab.obs=falco', '--filter', `label=seclab.state=${tag}`]) ?? [];
-		if (cs.length) {
-			spawnSync('docker', ['rm', '-f', ...cs], { stdio: 'ignore' });
+	for (const c of runFalcoSensors(m, runPids)?.own ?? []) {
+		spawnSync('docker', ['rm', '-f', '--', c], { stdio: 'ignore' });
+	}
+}
+
+/**
+ * The run's Falco sensors (CR16-2). The state tag hashes a path, and another pid namespace on a
+ * shared engine can use the same profile path, so the tag alone never makes a sensor the run's:
+ * `own` also carries this namespace's owner labels, or is named for one of the run's processes
+ * (captured before they were stopped). `unproven` are unlabelled (an older tabd) and not named
+ * for a run process: reported, never removed. Undefined when docker can't be listed.
+ */
+export function runFalcoSensors(m: RunManifest, runPids: ReadonlySet<number>, me: { host: string | undefined; boot: number } = sensorOwner()): { own: string[]; unproven: string[]; unjudged: string[] } | undefined {
+	const tags = new Set(falcoStateTags(m));
+	if (!tags.size) {
+		return { own: [], unproven: [], unjudged: [] };
+	}
+	const rows = dockerLines(['ps', '-a', '--filter', 'label=seclab.obs=falco', '--format', `${FALCO_PS_FORMAT}\t{{.Label "seclab.state"}}`]);
+	const procs = processTableOrUndefined(true);
+	return rows ? classifyRunFalco(rows, tags, runPids, me, procs && new Set(procs.map(p => p.pid))) : undefined;
+}
+
+/** Pure half of {@link runFalcoSensors}: rows are `name\tpid\thost\tboot\tstate`. */
+export function classifyRunFalco(rows: string[], tags: ReadonlySet<string>, runPids: ReadonlySet<number>, me: { host: string | undefined; boot: number }, procs?: ReadonlySet<number>): { own: string[]; unproven: string[]; unjudged: string[] } {
+	const own: string[] = [], unproven: string[] = [], unjudged: string[] = [];
+	for (const r of rows) {
+		const [name, label, host, boot, state] = r.split('\t');
+		const pid = Number(FALCO_NAME.exec(name ?? '')?.[1]);
+		if (!pid || label !== String(pid) || !tags.has(state ?? '')) {
+			continue;
+		}
+		// A run pid proves ownership only for an unlabelled sensor: foreign labels never yield to a
+		// pid collision (CR16-4). Foreign-labelled ones whose pid isn't running here may be the
+		// run's own after label drift (a clock step, a renamed Linux host), or another namespace's:
+		// noted, not failed and never removed (CR16-5).
+		if (sameSensorOwner(host, boot, me) || (!host && runPids.has(pid))) {
+			own.push(name);
+		} else if (!host) {
+			unproven.push(name);
+		} else if (!procs?.has(pid)) {
+			unjudged.push(name);
 		}
 	}
+	return { own, unproven, unjudged };
 }
 
 /**
@@ -599,12 +668,13 @@ export function verifyTeardown(runDir: string, opts: { snapshot?: boolean } = {}
 	}
 	const tabs = runTabs(m); // before the profile (and its tabd state) is deleted
 
+	const runPids = new Set(runProcesses(runDir, m).map(p => p.pid)); // names the run's own Falco sensors (CR16-2)
 	const survivors = stopRunProcesses(runDir, m);
 	add(survivors.length === 0, 'no process from this run is still alive (editor, tabd, streams)',
 		survivors.map(p => `${p.pid}: ${p.args.slice(0, 90)}`).join(' | '));
 
-	removeRunResources(runDir, m, tabs);
-	const { left, unknown } = runLeftovers(runDir, m, tabs);
+	removeRunResources(runDir, m, tabs, runPids);
+	const { left, unknown } = runLeftovers(runDir, m, tabs, runPids);
 	add(left.length === 0, 'no sandbox, container, network or volume from this run remains', left.join(', '));
 	add(unknown.length === 0, 'runtimes could be listed (leftovers otherwise unknown)', unknown.length ? `could not list: ${unknown.join(', ')}` : '');
 	// Any run's Falco sensor whose tabd is gone has no reader and no owner left to stop it (PS-1).
@@ -614,6 +684,10 @@ export function verifyTeardown(runDir: string, opts: { snapshot?: boolean } = {}
 	const orphans = hostFalcoOrphans();
 	add(orphans ? orphans.length === 0 : m.driver !== 'oci', 'no Falco sensor outlives its tabd (this run or an earlier one)',
 		orphans ? orphans.map(o => `${o.name}: ${o.why}`).join(', ') : 'could not list docker or processes');
+	const runUnjudged = runFalcoSensors(m, runPids)?.unjudged ?? [];
+	if (runUnjudged.length) {
+		add(true, 'note: sensors with this run\'s state tag but another owner\'s labels, pid not running here (check by hand)', runUnjudged.join(', '));
+	}
 	const unjudged = hostFalcoUnjudged();
 	if (unjudged.length) {
 		add(true, 'note: Falco sensors whose tabd is not in our process table but which this host can\'t judge (check by hand)', unjudged.join(', '));

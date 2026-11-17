@@ -100,7 +100,7 @@ if (driverName === 'sbx') {
 	const owner = sensorOwner();
 	hostSensor = hub => new FalcoSensor({
 		hub, rulesDir: path.join(stateDir, 'falco'), name: `seclab-falco-${stateTag}-${process.pid}`,
-		labels: { 'seclab.obs': 'falco', 'seclab.state': stateTag, 'seclab.pid': String(process.pid), 'seclab.host': owner.host, 'seclab.boot': String(owner.boot) },
+		labels: { 'seclab.obs': 'falco', 'seclab.state': stateTag, 'seclab.pid': String(process.pid), 'seclab.host': owner.host ?? '', 'seclab.boot': String(owner.boot) },
 		spawnDocker: args => runner.spawnStream(dockerPath, args),
 		runDocker: args => runner.run(dockerPath, args, { timeoutMs: 60_000 }),
 		pidAlive: pid => {
