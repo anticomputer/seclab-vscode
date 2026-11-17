@@ -184,8 +184,9 @@ RPC-lockdown session adds. Keep them consistent with this file.
      conflict in the register, rebase locally and run `./seclab findings rebase-resolve` at each
      stop: it merges `findings.json` by entry, regenerates `FINDINGS.md` and the indexes, and
      refuses a real clash.
-     Auto-merge stays armed, so if step 4 applies, disarm it first (`gh pr merge <number>
-     --disable-auto`), wait for `oci` on the new head, then arm it again.
+     The update is a push, so Copilot reviews again, and a thread it hasn't posted yet can't
+     block the merge. So disarm first (`gh pr merge <number> --disable-auto`), wait for the new
+     review and handle its threads (step 5), and for `oci` if step 4 applies, then arm again.
   8. After the merge, confirm `unit`, `lint`, `docs` and `patch-build` are green on the new
      `main` SHA, and that workflow-lint's `denylist` job ran on that push. Tell the coordinator
      before the next PR is armed.
