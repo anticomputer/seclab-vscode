@@ -59,27 +59,48 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 	'workbench.welcomePage.experimentalOnboarding': false, 'workbench.startupEditor': 'none', 'workbench.tips.enabled': false, 'chat.disableAIFeatures': true,
 }, null, '\t'));
 fs.writeFileSync(path.join(userData, 'User', 'keybindings.json'), '[]\n');
+// A host media file outside the tab's mount, in a folder named with the canary (a few bytes: the
+// editor is chosen by the file extension).
+const mediaCanary = `seclabcanary_${randomBytes(8).toString('hex')}`;
+const mediaFile = path.join(base, 'host', mediaCanary, 'clip.mp4');
+fs.mkdirSync(path.dirname(mediaFile), { recursive: true });
+fs.writeFileSync(mediaFile, Buffer.alloc(64));
 const until = Math.floor(Date.now() / 1000) + 2 * 3600;
 fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${randomBytes(16).toString('hex')}\nrun=${base}\nuntil=${until}\n`);
 
-const vsixDir = path.join(base, 'vsix');
-fs.mkdirSync(vsixDir, { recursive: true });
-execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`,
-	'-v', `${path.join(import.meta.dirname, 'probe-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
-	VSCE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/edtabs-probe.vsix'], { stdio: 'ignore' });
-const client = new TabdClient({
-	command: process.execPath,
-	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', 'sbx', '--allowed-root', base],
-	env: { HOME: process.env.HOME, USER: process.env.USER },
-});
-await client.initialize('edtabs-probe', '0');
-const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
-writeManifest(base, { tabs: [tab.metadata.name] });
-await client.request('tab.ensureRunning', { tabId: tab.metadata.name });
-fs.copyFileSync(path.join(vsixDir, 'edtabs-probe.vsix'), path.join(ws, '.edtabs-probe.vsix'));
-const installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.edtabs-probe.vsix')]).status === 0;
-client.dispose();
-await new Promise(res => client.once('exit', res));
+// Setup failures still end in the teardown gate (PR #24 review): nothing below may skip it.
+let installed = false;
+let tabName = '';
+let setupError = '';
+let client: TabdClient | undefined;
+try {
+	const vsixDir = path.join(base, 'vsix');
+	fs.mkdirSync(vsixDir, { recursive: true });
+	execFileSync('docker', ['run', '--rm', '--network', 'none', '--user', `${process.getuid!()}:${process.getgid!()}`,
+		'-v', `${path.join(import.meta.dirname, 'probe-extension')}:/ext:ro`, '-v', `${vsixDir}:/out`,
+		VSCE_IMAGE, 'sh', '-c', 'cp -r /ext /tmp/e && cd /tmp/e && vsce package --allow-missing-repository --skip-license -o /out/edtabs-probe.vsix'], { stdio: 'ignore' });
+	client = new TabdClient({
+		command: process.execPath,
+		args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', 'sbx', '--allowed-root', base],
+		env: { HOME: process.env.HOME, USER: process.env.USER },
+	});
+	await client.initialize('edtabs-probe', '0');
+	const { tab } = await client.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
+	tabName = tab.metadata.name;
+	writeManifest(base, { tabs: [tabName] });
+	await client.request('tab.ensureRunning', { tabId: tabName });
+	fs.copyFileSync(path.join(vsixDir, 'edtabs-probe.vsix'), path.join(ws, '.edtabs-probe.vsix'));
+	installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.edtabs-probe.vsix')]).status === 0;
+} catch (e) {
+	setupError = String(e).slice(0, 300);
+	console.error(`setup: ${setupError}`);
+} finally {
+	if (client) {
+		const c = client;
+		c.dispose();
+		await Promise.race([new Promise(res => c.once('exit', res)), new Promise(res => setTimeout(res, 15_000))]);
+	}
+}
 
 const reportPath = path.join(ws, '.seclab-edtabs', 'report.json');
 const read = () => {
@@ -94,7 +115,7 @@ const opened: Record<string, boolean> = {};
 let ed: DrivenEditor | undefined;
 if (installed) {
 	try {
-		ed = await DrivenEditor.launch({ app: appArg, userData, folderUri: `vscode-remote://seclab+${tab.metadata.name}${ws}` });
+		ed = await DrivenEditor.launch({ app: appArg, userData, folderUri: `vscode-remote://seclab+${tabName}${ws}` });
 		for (let i = 0; i < 90 && !read(); i++) {
 			spawnSync('sleep', ['1']);
 		}
@@ -113,6 +134,35 @@ if (installed) {
 			opened[label] = await shown(label);
 			spawnSync('sleep', ['2']);
 		}
+		// The user's own untitled document, typed in the window: the tab owns it (0035), so it must
+		// show as a text tab, even though its editor joins the group before its model exists.
+		await ed.evaluate(`(() => { const m = [...document.querySelectorAll('[class*="modal"]')].find(e => e.querySelector('.codicon-close')); m?.querySelector('.codicon-close')?.closest('a,.action-label,.monaco-button')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); m?.querySelector('.codicon-close')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); })()`).catch(() => undefined);
+		await new Promise(r => setTimeout(r, 800));
+		// New Untitled Text File by its keybinding (Cmd+N), sent to the renderer over CDP: the palette's
+		// fuzzy match prefers "Compare New Untitled Text Files".
+		for (const type of ['rawKeyDown', 'keyUp']) {
+			await ed.cdp.send('Input.dispatchKeyEvent', { type, key: 'n', code: 'KeyN', windowsVirtualKeyCode: 78, nativeVirtualKeyCode: 78, modifiers: process.platform === 'darwin' ? 4 : 2 }, ed.session);
+		}
+		await new Promise(r => setTimeout(r, 1000));
+		await ed.type('edtabs untitled control');
+		opened['Untitled-1'] = (await labels()).some(l => /^Untitled-\d+$/.test(l) || l === 'edtabs untitled control');
+		spawnSync('sleep', ['3']);
+		// A host media file dropped on the editor area, as from Finder (CDP drag events in the
+		// renderer, no OS input). Its folder carries the canary; the built-in media preview is a
+		// webview editor that shows a file (review EDT-1).
+		await ed.evaluate(`(() => { const m = [...document.querySelectorAll('[class*="modal"]')].find(e => e.querySelector('.codicon-close')); m?.querySelector('.codicon-close')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); })()`).catch(() => undefined);
+		await new Promise(r => setTimeout(r, 800));
+		const at = await ed.evaluate<{ x: number; y: number }>(`(() => { const r = document.querySelector('.part.editor')?.getBoundingClientRect(); return r ? { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) } : { x: 700, y: 450 }; })()`);
+		const data = { items: [], files: [mediaFile], dragOperationsMask: 1 };
+		for (const type of ['dragEnter', 'dragOver', 'drop']) {
+			await ed.cdp.send('Input.dispatchDragEvent', { type, x: at.x, y: at.y, data }, ed.session);
+			await new Promise(r => setTimeout(r, 300));
+		}
+		for (let i = 0; i < 20 && !(await labels()).includes(path.basename(mediaFile)); i++) {
+			await new Promise(r => setTimeout(r, 500));
+		}
+		opened[path.basename(mediaFile)] = (await labels()).includes(path.basename(mediaFile));
+		spawnSync('sleep', ['3']);
 		windowLabels = (await labels()).filter(l => /^[\w. -]{1,60}$/.test(l));
 		await ed.screenshot(path.join(base, 'drive.png')).catch(() => 0);
 		spawnSync('sleep', ['4']);
@@ -132,11 +182,11 @@ const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').matc
 const counts = (o: unknown, key: RegExp) => !!o && typeof o === 'object' && Object.entries(o as object).every(([k, v]) => key.test(k) && Number.isInteger(v));
 const valid = !!rep && rep.schema === 'seclab-edtabs-report/1' && rep.arm === armed && typeof rep.done === 'boolean' && Number.isInteger(rep.tabs)
 	&& counts(rep.kinds, /^[A-Za-z]{1,40}$/) && counts(rep.schemes, /^[a-z0-9.+-]{1,40}$/)
-	&& Array.isArray(rep.tokens) && rep.tokens.length <= 5000
+	&& typeof rep.untitledText === 'boolean' && Array.isArray(rep.tokens) && rep.tokens.length <= 5000
 	&& rep.tokens.every((x: any) => !!x && (x.field === 'label' || x.field === 'uri') && /^[0-9a-f]{64}$/.test(x.sha256));
 // Not the login name: the tab's own folder is a host path under the user's home (sbx mounts it at
 // the same path), which the tab is given on purpose; the canary names only the host profile.
-const markers: Record<string, string> = { canary: sha(canary) };
+const markers: Record<string, string> = { canary: sha(canary), media: sha(mediaCanary) };
 const leaks = valid ? Object.entries(markers).flatMap(([name, h]) => (rep.tokens as Array<{ field: string; sha256: string }>).filter(x => x.sha256 === h).map(x => `${name}@${x.field}`)) : [];
 const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';
 const results: Array<{ name: string; ok: boolean }> = [];
@@ -146,15 +196,18 @@ if (valid) {
 	console.log(`tab saw: up to ${rep.tabs} tabs; kinds ${JSON.stringify(rep.kinds)}; schemes ${JSON.stringify(rep.schemes)}`);
 	console.log(`host markers in the tab's tab model: ${[...new Set(leaks)].join(', ') || 'none'}`);
 }
+expect('setup completed (tab claimed, running, probe installed)', !setupError);
 expect('probe installed in the tab', installed);
 expect('report present, from this run, and matches the schema', valid);
-expect('control: the window opened the host editors (settings.json, keybindings.json)', Object.values(opened).length === HOST_EDITORS.length && Object.values(opened).every(Boolean));
+expect('control: the window opened the host editors (settings.json, keybindings.json, an untitled file, a dropped media file)', Object.values(opened).length === HOST_EDITORS.length + 2 && Object.values(opened).every(Boolean));
 if (valid && !measure) {
 	expect('the probe finished', rep.done === true);
 	expect('control: the tab sees its own editor (its workspace file)', (rep.schemes['file+own'] ?? 0) > 0);
 	// Without this a run where the host editors never reached the tab's model would pass (review EDT-4).
 	expect('control: the host editors reached the tab\'s editor-tab model (anonymous or not)', (rep.kinds.unknown ?? 0) > 0 || (rep.schemes['vscode-userdata'] ?? 0) > 0);
 	expect('DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary)', leaks.length === 0);
+	expect('EDT-1 a host media file dropped in the window reaches the tab without its path', !leaks.some(l => l.startsWith('media@')));
+	expect('control: an untitled document the user created in the window shows to the tab as its own text tab (EDT-10)', rep.untitledText === true);
 }
 expect('no focus steal', !steals);
 const gate = verifyTeardown(base);

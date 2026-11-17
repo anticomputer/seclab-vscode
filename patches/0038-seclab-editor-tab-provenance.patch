@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts
 --- a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-16 15:28:42
-+++ b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-16 15:28:53
++++ b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-17 15:47:57
 @@ -308,6 +308,12 @@
  
  		seclabOrigin(extHostContext).filtered = seclabIsFiltered(extHostContext, environmentService.remoteAuthority);
@@ -14,10 +14,22 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts b/src/
  		this._mainThreadDocuments = this._register(new MainThreadDocuments(extHostContext, this._modelService, this._textFileService, fileService, textModelResolverService, environmentService, uriIdentityService, workingCopyFileService, pathService));
  		extHostContext.set(MainContext.MainThreadDocuments, this._mainThreadDocuments);
  
+@@ -316,6 +322,11 @@
+ 
+ 		// It is expected that the ctor of the state computer calls our `_onDelta`.
+ 		this._register(new MainThreadDocumentAndEditorStateComputer(delta => this._onDelta(delta), shouldSync, seclabOrigin(extHostContext).onDidChange.event, _modelService, codeEditorService, this._editorService, paneCompositeService));
++		// seclab (patch 0038): a model added after its editor (a new untitled one) changes what the
++		// tab owns; the state computer above has recorded its birth by now.
++		if (seclabIsFiltered(extHostContext, environmentService.remoteAuthority)) {
++			this._register(this._modelService.onModelAdded(() => seclabOrigin(extHostContext).onDidChange.fire()));
++		}
+ 	}
+ 
+ 	private _onDelta(delta: DocumentAndEditorStateDelta): void {
 diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts
 --- a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-16 14:53:14
-+++ b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-16 15:29:04
-@@ -29,7 +29,29 @@
++++ b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-17 15:47:57
+@@ -29,7 +29,30 @@
  import { GroupDirection, IEditorGroup, IEditorGroupsService, preferredSideBySideGroupDirection } from '../../services/editor/common/editorGroupsService.js';
  import { IEditorsChangeEvent, IEditorService, SIDE_GROUP } from '../../services/editor/common/editorService.js';
  import { extHostNamedCustomer, IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
@@ -28,15 +40,16 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  
 +/** Every resource an editor shows (seclab, patch 0038): both sides, diffs of any kind, merge inputs, multi-diff entries. */
 +function seclabEditorUris(editor: EditorInput): URI[] {
++	if (editor instanceof MultiDiffEditorInput) {
++		// Its own resource is a source id (multi-diff-editor:), not a shown document.
++		return (editor.resources.get() ?? []).flatMap(x => [x.originalUri, x.modifiedUri]).filter(URI.isUri);
++	}
 +	const r = EditorResourceAccessor.getCanonicalUri(editor, { supportSideBySide: SideBySideEditor.BOTH });
 +	const d = editor as Partial<{ originalResource: unknown; modifiedResource: unknown }>;
 +	const uris: unknown[] = URI.isUri(r) ? [r] : [r?.primary, r?.secondary];
 +	uris.push(d.originalResource, d.modifiedResource);
 +	if (editor instanceof MergeEditorInput) {
 +		uris.push(editor.base, editor.input1.uri, editor.input2.uri, editor.result);
-+	}
-+	if (editor instanceof MultiDiffEditorInput) {
-+		uris.push(...(editor.resources.get() ?? []).flatMap(x => [x.originalUri, x.modifiedUri]));
 +	}
 +	if (editor instanceof InteractiveEditorInput) {
 +		uris.push(editor.inputResource);
@@ -47,7 +60,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  interface TabInfo {
  	tab: IEditorTabDto;
  	group: IEditorGroup;
-@@ -48,6 +70,8 @@
+@@ -48,6 +71,8 @@
  	private readonly _tabInfoLookup: Map<string, TabInfo> = new Map();
  	// Tracks resource-change listeners for currently open multi-diff tabs
  	private readonly _multiDiffEditorInputListeners: DisposableMap<string> = new DisposableMap();
@@ -56,7 +69,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  
  	constructor(
  		extHostContext: IExtHostContext,
-@@ -58,6 +82,35 @@
+@@ -58,6 +83,35 @@
  	) {
  
  		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostEditorTabs);
@@ -92,7 +105,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  
  		// Main listener which responds to events from the editor service
  		this._dispoables.add(editorService.onDidEditorsChange((event) => {
-@@ -96,7 +149,7 @@
+@@ -96,7 +150,7 @@
  		const editorId = editor.editorId;
  		const tab: IEditorTabDto = {
  			id: this._generateTabId(editor, group.id),
@@ -101,7 +114,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  			editorId,
  			input: this._editorInputToDto(editor),
  			isPinned: group.isSticky(editorIndex),
-@@ -108,6 +161,9 @@
+@@ -108,6 +162,9 @@
  	}
  
  	private _editorInputToDto(editor: EditorInput): AnyInputDto {
@@ -111,7 +124,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  
  		if (editor instanceof MergeEditorInput) {
  			return {
-@@ -250,7 +306,7 @@
+@@ -250,7 +307,7 @@
  		} else {
  			resourceString = `${resource?.primary?.toString()}-${resource?.secondary?.toString()}`;
  		}
@@ -120,7 +133,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  	}
  
  	/**
-@@ -276,7 +332,7 @@
+@@ -276,7 +333,7 @@
  		const tabInfo = this._tabInfoLookup.get(tabId);
  		// If tab is found patch, else rebuild
  		if (tabInfo) {
