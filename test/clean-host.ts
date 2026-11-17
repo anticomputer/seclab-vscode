@@ -52,6 +52,24 @@ const OURS = {
 	image: /^seclab-(tab|tab-oci|builder|broker|broker-placeholder|broker-unit|broker-it-[a-z]+|broker-spike-[0-9a-f]{16}|template-builder|npm-cache|vsce|attest|tool-[a-z]+):[A-Za-z0-9._-]+$/,
 };
 const tabIdOf = (name: string) => new RegExp(`^seclab-(${TAB})(-broker|-net|-egress|-home)?$`).exec(name)?.[1];
+/** A proof build's per-build tab image (seclab-tab-oci:b-NAME) stays live for a week from when
+ *  it was tagged. The image's own creation time isn't that: a cached build reuses an older image
+ *  (Copilot review on PR 25), so the build scripts write a lease, and the later of the two counts. */
+export function perBuildLive(name: string, createdMs: number, leaseMs: number | undefined, nowMs: number): boolean {
+	const from = Math.max(Number.isFinite(createdMs) ? createdMs : 0, leaseMs ?? 0);
+	return /^seclab-tab(-oci)?:b-/.test(name) && nowMs - from < 7 * 24 * 3_600_000;
+}
+/** The lease the build scripts wrote for a tag, in the clone's shared git dir (all worktrees). */
+function imageLease(name: string): number | undefined {
+	const r = spawnSync('git', ['-C', repoRoot(), 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
+	try {
+		const t = Number(fs.readFileSync(path.join(r.stdout.trim(), 'seclab-image-leases', name), 'utf8').trim());
+		return Number.isFinite(t) && t > 0 ? t * 1000 : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 if (args.has('--self-test')) {
 	// Names seen on a real host: ours must match, other projects' and the user's must not.
 	const yes: Array<[keyof typeof OURS, string]> = [['sandbox', 'seclab-t-dyhhlwazovvh3p7sk4el4vbjeq'], ['sandbox', 'seclab-spike-a'],
@@ -106,6 +124,18 @@ if (args.has('--self-test')) {
 	const o41 = { orphan: true, pid: 41 };
 	if (falcoRemovable(o41, new Set([41]), () => true) || !falcoRemovable(o41, new Set([41]), () => false) || falcoRemovable({ orphan: false, pid: 42 }, new Set(), () => false)) {
 		bad.push('falco: a sensor whose stray tabd survived termination must be kept');
+	}
+	// Per-build tags: a week from the later of creation and lease, so a cached (old) image tagged
+	// just now is live.
+	const day = 24 * 3_600_000, now = 100 * day;
+	for (const [name, created, lease, want] of [
+		['seclab-tab-oci:b-x', now - 30 * day, now - day, true], ['seclab-tab-oci:b-x', now - 30 * day, undefined, false],
+		['seclab-tab:b-x', now - day, undefined, true], ['seclab-tab-oci:b-x', now - 8 * day, now - 8 * day, false],
+		['seclab-tab-oci:local', now - 30 * day, now, false], ['seclab-tab-oci:b-x', NaN, now - day, true],
+	] as Array<[string, number, number | undefined, boolean]>) {
+		if (perBuildLive(name, created, lease, now) !== want) {
+			bad.push(`perBuildLive(${name}, created ${(now - created) / day}d ago, lease ${lease === undefined ? 'none' : `${(now - lease) / day}d ago`}) should be ${want}`);
+		}
 	}
 	if (got !== 'seclab-falco-0123abcd-41,seclab-falco-0123abcd-43') {
 		bad.push(`falco orphans: got [${got}], want the dead-pid (41) and reused-pid (43) sensors only`);
@@ -423,7 +453,7 @@ for (const n of [...imageIds.keys()].filter(n => OURS.image.test(n))) {
 	// A proof build's per-build tab image (seclab-tab-oci:b-NAME) is named in no tracked file, so
 	// it would look superseded within the hour and another session's build would prune it
 	// mid-proof. It stays live for a week; --caches still removes it.
-	const perBuild = /^seclab-tab(-oci)?:b-/.test(n) && Date.now() - img.created < 7 * 24 * 3_600_000;
+	const perBuild = /^seclab-tab(-oci)?:b-/.test(n) && perBuildLive(n, img.created, imageLease(n), Date.now());
 	const isLive = perBuild || live.names.has(n) || live.ids.has(img.id) || !(Date.now() - img.created > 3_600_000);
 	const remove = isLive ? args.has('--caches') : true;
 	items.push({
