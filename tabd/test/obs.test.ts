@@ -76,7 +76,7 @@ test('obs schema: unknown enums and integrity/source mismatches are rejected', (
 	}
 });
 
-test('obs schema: fields are picked, capped, escaped and redacted; ref is exact or rejected', () => {
+test('obs schema: fields are picked, capped, escaped and redacted; ref is exact or kept as escaped text', () => {
 	const d = normalizeDraft({
 		source: 'sbx-collector', integrity: 'tab-vm-root', class: 'process.exec', priority: 'informational', summary: 'x\u202E',
 		proc: { pid: 5, argv: Array.from({ length: 40 }, (_, i) => `a${i}\n`), lineage: Array.from({ length: 20 }, (_, i) => ({ pid: i, exe: 'sh' })), evil: 1 },
