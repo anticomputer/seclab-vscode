@@ -383,6 +383,7 @@ Verified commands (one entry point: `./seclab help`):
 ./seclab test secrets sbx       # pre-mount gitleaks gate: block, move-to-vault + sentinel, restore, accept (also: oci)
 ./seclab test obs sbx           # tab observability: inert loader -> expected events/labels; sensor tampering -> gap (also: oci)
 ./seclab test probes            # AHP probes driven into the real upstream client (no window, no network): each must land where it claims, or the check fails
+./seclab test agent-registration # patch 0019, both arms against the real upstream registries: pristine upstream must report vulnerable, pinned-upstream+series contained (the baseline is the control; without it the gated arm proves nothing)
 ./seclab test arg-validators    # the RPC filter's named argument validators, imported from the shipped module, each proved by an injected defect (also in ./seclab test rpc-filter)
 # One-pass RPC measurement of an ordinary session (unfiltered build, benign fixtures only):
 # prepare prints a `node test/window.ts launch --rpc-trace .work/...` line; check derives method
