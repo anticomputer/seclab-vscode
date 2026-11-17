@@ -42,6 +42,10 @@ if [[ -n "$VARIANT" ]]; then
 	exit 0
 fi
 if [[ -n "$PERBUILD" ]]; then
+	# The tag's lease for clean-host: a cached build reuses an older image, so its creation time
+	# isn't when this proof tag was made (Copilot review on PR 25).
+	lease="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)/seclab-image-leases"
+	mkdir -p "$lease" && date +%s > "$lease/$TAG"
 	echo "images: $TAG (SECLAB_TAB_IMAGE=$TAG; the broker images are shared and unchanged)"
 	exit 0
 fi
