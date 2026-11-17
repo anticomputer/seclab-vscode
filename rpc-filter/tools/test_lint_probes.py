@@ -315,15 +315,62 @@ class CommentScopeTest(unittest.TestCase):
                 self.assertEqual(status, 1, out)
                 self.assertRegex(out, r"raw-record|ambiguous-slash")
 
+    def test_a_misread_slash_cannot_move_a_string_boundary(self):
+        # No comment at all: `n++ / 2` read as a regex ends at the quoted '/', and the string's
+        # closing quote then opens one that blanks the computed key.
+        root = tree_copy(self)
+        path = os.path.join(root, "test/containment/rogue-reh/probes.js")
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write("\nlet n = 4; const q = n++ / 2; const s = '/'; const seclabLintX = { [K]: 1 };\n")
+        status, out = lint(root)
+        self.assertEqual(status, 1, out)
+        self.assertRegex(out, r"ambiguous-slash|computed-record-key")
+
     def test_only_a_comment_after_a_code_slash_is_ambiguous(self):
         def amb(text):
             found = []
             L._strip_comments(text, found)
             return found
+        # Only a parser could tell, and something later on the line could move a boundary.
         self.assertEqual(amb("q = n++ / 2; r = /\\//; w();\n"), [1])
-        self.assertEqual(amb("x = a / b; /* c */\n"), [1])
+        self.assertEqual(amb("q = n++ / 2; s = '/';\n"), [1])
+        self.assertEqual(amb("f();\n}\n/a/.test('b');\n"), [3])
+        # Certain readings are trusted, and an unsure slash with nothing after it can't hide code.
+        self.assertEqual(amb("x = a / b; /* c */\nif (/^x/.test(s)) return 'a';\n"), [])
         self.assertEqual(amb("x = 1; // c\n/* d */\ny = '/'; // e\n"), [])
-        self.assertEqual(amb("a = /x/;\n// own line\nb = 'a//b';\n"), [])
+        self.assertEqual(amb("a = /x/;\n// own line\nb = 'a//b';\nq = n++ / 2;\n"), [])
+
+    def test_a_code_line_starting_with_a_star_is_linted(self):
+        # A continued product puts code at the start of a line where a comment's `*` would be.
+        root = tree_copy(self)
+        path = os.path.join(root, "test/containment/rogue-reh/probes.js")
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write("\nconst seclabLintA = 2\n* 3; fs.rmSync(seclabLintP);\n")
+        status, out = lint(root)
+        self.assertEqual(status, 1, out)
+        self.assertIn("destructive-fs", out)
+
+    def test_property_names_and_contextual_words(self):
+        def amb(text):
+            found = []
+            return L._code_only(L._strip_comments(text, found)), found
+        # A property is never a keyword: division, so the string and the key after it stay put.
+        for text in ("x = a.return / 2; y = '/'; z = { [K]: 1 };\n",
+                     "x = o.if(a) / 2; y = '/'; z = { [K]: 1 };\n"):
+            code, found = amb(text)
+            self.assertEqual(found, [], text)
+            self.assertIn("[K]", code, text)
+        # `of` and `default` can be identifiers: unsure, so a later quote fails closed.
+        for text in ("let of = 4; q = of / 2; s = '/';\n", "q = o.x || default / 2; s = '/';\n"):
+            self.assertEqual(amb(text)[1], [1], text)
+
+    def test_nested_templates_keep_their_boundaries(self):
+        found = []
+        text = "t = `a ${f(`b/${c}`)} d`; // e\nw(`x//y`);\n"
+        got = L._strip_comments(text, found)
+        self.assertEqual(found, [])
+        self.assertNotIn("// e", got)
+        self.assertIn("`x//y`", got)
 
     def test_regex_literals_division_and_comments(self):
         cases = [

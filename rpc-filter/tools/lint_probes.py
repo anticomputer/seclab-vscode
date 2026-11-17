@@ -236,54 +236,99 @@ def _line_of(text: str, pos: int) -> int:
     return text.count("\n", 0, pos) + 1
 
 
-_REGEX_AFTER_WORDS = {"return", "typeof", "case", "do", "else", "in", "of", "new", "delete", "void",
-                      "throw", "yield", "await", "instanceof"}
+# After these keywords an operand follows, so `/` opens a regex.
+_REGEX_AFTER_WORDS = {"return", "typeof", "case", "do", "else", "in", "new", "delete", "void",
+                      "throw", "instanceof"}
+# After these the reading depends on context a scanner can't see (contextual keywords, labels).
+_UNSURE_WORDS = {"yield", "await", "let", "async", "get", "set", "static", "break", "continue", "of",
+                 "default"}
 _CONTROL_WORDS = {"if", "while", "for", "with"}
-_OPERAND_EXPECTED = "(,=:[!&|?{};+-*%<>~^/"
+_OPERAND_EXPECTED = "(,=:[!&|?{;+-*%<>~^/"
 
 
 class _SlashContext:
-    """Whether a `/` in code opens a regex literal or is division, from the last significant
-    token. Fed code characters only, so comments between tokens don't count, and a `)` that closes
-    an `if`/`while`/`for`/`with` condition expects an operand, as an operator does (PR review on
-    #27, 2026-11-17)."""
+    """How a `/` in code reads, from the tokens before it: "regex", "div", or "unsure" where only
+    a JavaScript parser could tell (`n++ / 2`, a regex after `break` and a newline, after `}` or
+    a `for await (...)` head). Fed code characters only, so comments between tokens don't count.
+    A `)` closing an `if`/`while`/`for`/`with` condition expects an operand, like an operator.
+    The lint fails closed on "unsure" (see _strip_comments; PR review on #27, 2026-11-17)."""
 
     def __init__(self) -> None:
-        self.tok, self.in_word, self.parens = ("p", "("), False, []
+        self.toks: list = []
+        self.in_word, self.adjacent, self.parens = False, "", []
+
+    def _push(self, tok: tuple) -> None:
+        self.toks = (self.toks + [tok])[-3:]
 
     def code(self, ch: str) -> None:
         if ch.isalnum() or ch in "_$":
-            self.tok = ("w", self.tok[1] + ch) if self.in_word else ("w", ch)
-            self.in_word = True
+            if self.in_word:
+                self.toks[-1] = ("w", self.toks[-1][1] + ch)
+            else:
+                self._push(("w", ch))
+            self.in_word, self.adjacent = True, ch
             return
         self.in_word = False
         if ch.isspace():
+            self.adjacent = ""
             return
-        if ch == "(":
-            self.parens.append(self.tok[0] == "w" and self.tok[1] in _CONTROL_WORDS)
-            self.tok = ("p", ch)
+        last = self.toks[-1] if self.toks else None
+        if ch in "+-" and self.adjacent == ch and last == ("p", ch):
+            self.toks[-1] = ("p", ch * 2)
+        elif ch == "(":
+            before = self.toks[-2] if len(self.toks) > 1 else None
+            if last and last[0] == "w" and last[1] in _CONTROL_WORDS and before != ("a", "."):
+                self.parens.append("regex")
+            elif last == ("w", "await") and before == ("w", "for"):
+                self.parens.append("unsure")
+            else:
+                self.parens.append("div")
+            self._push(("p", ch))
         elif ch == ")":
-            self.tok = ("p", ch) if (self.parens.pop() if self.parens else False) else ("a", "")
+            self._push(("close", self.parens.pop() if self.parens else "unsure"))
+        elif ch == "}":
+            self._push(("close", "unsure"))
+        elif ch in _OPERAND_EXPECTED:
+            self._push(("p", ch))
         else:
-            self.tok = ("p", ch) if ch in _OPERAND_EXPECTED else ("a", "")
+            self._push(("a", ch))
+        self.adjacent = ch
 
     def gap(self) -> None:
         """A comment: it ends a word but is not a token."""
-        self.in_word = False
+        self.in_word, self.adjacent = False, ""
 
     def operand(self) -> None:
         """A string, template or regex literal just ended."""
-        self.in_word, self.tok = False, ("a", "")
+        self.in_word, self.adjacent = False, ""
+        self._push(("a", ""))
 
-    def regex_ok(self) -> bool:
-        kind, value = self.tok
-        return kind == "p" or (kind == "w" and value in _REGEX_AFTER_WORDS)
+    def state(self) -> str:
+        if not self.toks:
+            return "regex"
+        kind, value = self.toks[-1]
+        if kind == "close":
+            return value
+        if kind == "p":
+            return "unsure" if value in ("++", "--") else "regex"
+        if kind == "w":
+            if len(self.toks) > 1 and self.toks[-2] == ("a", "."):
+                return "div"  # a property, whatever its name
+            if value in _REGEX_AFTER_WORDS:
+                return "regex"
+            if value in _UNSURE_WORDS:
+                return "unsure"
+            before = self.toks[-2] if len(self.toks) > 1 else None
+            if before in (("w", "break"), ("w", "continue")):
+                return "unsure"  # a label
+            return "div"
+        return "div"
 
 
 def _regex_end(text: str, i: int) -> int | None:
     """The index just past the regex literal whose opening `/` is at `i` (flags included), or
     None if the line ends first. Its body ends at an unescaped `/` outside a character class, so
-    `/^https?:\\/\\//` is not a `//` comment. Only call it where `_SlashContext.regex_ok()`."""
+    `/^https?:\\/\\//` is not a `//` comment. Only call it where `_SlashContext.state()` is not div."""
     k, in_class = i + 1, False
     while k < len(text) and text[k] != "\n":
         c = text[k]
@@ -309,30 +354,53 @@ def _strip_comments(text: str, ambiguous: list | None = None) -> str:
     `*/` while its `/**` stayed, so the scanner below read the code after it as comment: the
     record and clipboard rules then skipped most of a payload (PR review, 2026-11-17).
 
-    Telling a regex literal from division takes a JavaScript parser (`n++ / 2`, a regex after
-    `break` and a newline, `for await (…)`), and a wrong guess turns code into a comment. So a
-    comment opener that follows any code `/` on its line is not trusted: its line number goes into
-    `ambiguous`, and the lint fails it (PR review on #27)."""
+    Where a `/` could be a regex or division and only a parser could tell, a wrong guess moves a
+    comment or string boundary and hides code. A guess can only go wrong through a later `/`,
+    quote or backtick on the same line (regex and quoted strings end at the line), so such a line
+    goes into `ambiguous` and the lint fails it (PR review on #27)."""
     out, i, n = list(text), 0, len(text)
     ctx = _SlashContext()
-    line_slash = False
+    # Open `${` substitutions, innermost last: the brace depth inside each. Its closing `}` goes
+    # back to the template text, which can hold nested templates.
+    substitutions: list = []
 
-    def opener() -> None:
-        ctx.gap()
-        if line_slash and ambiguous is not None:
-            ambiguous.append(text.count("\n", 0, i) + 1)
+    def template_text(j: int) -> int:
+        """From inside a template's text at `j`: the index after its closing backtick, or after
+        the `${` that opens a substitution (then pushed)."""
+        while j < n and text[j] != "`":
+            if text[j] == "\\":
+                j += 2
+                continue
+            if text[j] == "$" and j + 1 < n and text[j + 1] == "{":
+                substitutions.append(0)
+                ctx.gap()
+                ctx._push(("p", "{"))
+                return j + 2
+            j += 1
+        ctx.operand()
+        return j + 1
 
     while i < n:
         ch = text[i]
+        if substitutions and ch == "{":
+            substitutions[-1] += 1
+        elif substitutions and ch == "}":
+            if substitutions[-1] == 0:
+                substitutions.pop()
+                i = template_text(i + 1)
+                continue
+            substitutions[-1] -= 1
+        if ch == "`":
+            i = template_text(i + 1)
+            continue
         if ch == "/" and i + 1 < n and text[i + 1] == "/":
-            opener()
+            ctx.gap()
             while i < n and text[i] != "\n":
                 out[i] = " "
                 i += 1
             continue
         if ch == "/" and i + 1 < n and text[i + 1] == "*":
-            opener()
-            begin = i
+            ctx.gap()
             while i < n and not (text[i] == "*" and i + 1 < n and text[i + 1] == "/"):
                 if text[i] != "\n":
                     out[i] = " "
@@ -341,25 +409,25 @@ def _strip_comments(text: str, ambiguous: list | None = None) -> str:
                 if j < n:
                     out[j] = " "
             i += 2
-            line_slash = line_slash and "\n" not in text[begin:i]
             continue
-        if ch == "/" and ctx.regex_ok() and (end := _regex_end(text, i)) is not None:
-            ctx.operand()
-            line_slash = True
-            i = end
-            continue
-        if ch in "'\"`":
-            quote, begin, i = ch, i, i + 1
-            while i < n and text[i] != quote and not (quote != "`" and text[i] == "\n"):
+        if ch == "/":
+            state = ctx.state()
+            if state == "unsure" and ambiguous is not None:
+                eol = text.find("\n", i)
+                rest = text[i + 1:eol if eol >= 0 else n]
+                if any(c in rest for c in "/'\"`"):
+                    ambiguous.append(text.count("\n", 0, i) + 1)
+            if state != "div" and (end := _regex_end(text, i)) is not None:
+                ctx.operand()
+                i = end
+                continue
+        if ch in "'\"":
+            quote, i = ch, i + 1
+            while i < n and text[i] != quote and text[i] != "\n":
                 i += 2 if text[i] == "\\" else 1
             i += 1
             ctx.operand()
-            line_slash = line_slash and "\n" not in text[begin:i]
             continue
-        if ch == "\n":
-            line_slash = False
-        elif ch == "/":
-            line_slash = True
         ctx.code(ch)
         i += 1
     return "".join(out)
@@ -388,7 +456,7 @@ def _code_only(text: str) -> str:
                     out[j] = " "
             i += 2
             continue
-        if ch == "/" and ctx.regex_ok() and (end := _regex_end(text, i)) is not None:
+        if ch == "/" and ctx.state() != "div" and (end := _regex_end(text, i)) is not None:
             ctx.operand()
             i = end
             continue
@@ -514,10 +582,16 @@ def main(argv: list | None = None) -> int:
             continue
         with open(path, "r", encoding="utf-8") as fh:
             lines = fh.read().splitlines()
+        # Which lines hold code comes from the comment scanner, not from a line's first characters:
+        # a code line can start with `*` (a continued product), and those were skipped (PR review on
+        # #27). A rule still matches the whole line, comment included, which only adds matches.
+        ambiguous: list = []
+        text = _strip_comments("\n".join(lines), ambiguous)
+        code_lines = text.split("\n")
         code = []
         for n, line in enumerate(lines, start=1):
             stripped = line.strip()
-            if stripped.startswith("//") or stripped.startswith("*") or stripped.startswith("#"):
+            if not code_lines[n - 1].strip() or (n == 1 and stripped.startswith("#!")):
                 continue
             code.append((n, line))
             for rid, pattern, why in RULES:
@@ -531,13 +605,11 @@ def main(argv: list | None = None) -> int:
             if pattern.search(flat) and not any(v[0] == rel and v[2] == rid for v in violations):
                 violations.append((rel, 0, rid, f"{why} (matched after joining lines)"))
         violations.extend(guarded_source_violations(rel, code))
-        ambiguous: list = []
-        text = _strip_comments("\n".join(lines), ambiguous)
         for n in sorted(set(ambiguous)):
             violations.append((rel, n, "ambiguous-slash",
-                               "a comment follows a `/` on this line, and the lint can't tell a regex "
-                               "from division without parsing, so the comment could be hiding code. "
-                               "Put the comment on its own line, or build the regex with new RegExp(...)"))
+                               "a `/` here could be a regex or division, and only a parser could tell; "
+                               "a later `/`, quote or backtick on the line could then hide code. Split "
+                               "the line, add parentheses or a semicolon, or use new RegExp(...)"))
         violations.extend(clipboard_violations(rel, text))
         if rel in RECORD_WRITERS:
             violations.extend(record_violations(rel, text, lines))
