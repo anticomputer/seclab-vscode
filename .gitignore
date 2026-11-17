@@ -5,3 +5,4 @@ test/containment/rogue-extension/probe-safety.js
 test/containment/rogue-reh/probe-safety.js
 test/containment/benign-extension/probe-safety.js
 test/containment/response-probe/probe-safety.js
+test/containment/search-probe/probe-safety.js
