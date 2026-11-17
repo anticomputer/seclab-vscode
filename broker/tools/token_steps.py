@@ -18,10 +18,11 @@ or a shallower line. It covers:
     `::set-env`/`::set-output`/`::save-state` command, which would hand the token to later
     steps with no expression at all (review BRK20R-1);
   * any `secrets:` key (`secrets: inherit` or a mapping to a reusable workflow), anywhere;
-  * any YAML numeric escape (`\x`, `\u`, `\U`, `\N`, `\_`, `\L`, `\P`), and any non-comment line
-    ending in a backslash, anywhere: YAML decodes both in a double-quoted value before Actions
-    sees the expression, so they could spell a name the scan can't see (reviews BRK20D-2,
-    BRK20D-3; the quote may open on an earlier line, so every such line counts);
+  * any YAML numeric escape (`\x`, `\u`, `\U`, `\N`, `\_`, `\L`, `\P`), and any line ending in a
+    backslash, comment-looking or not, anywhere: YAML decodes both in a double-quoted value
+    before Actions sees the expression, so they could spell a name the scan can't see (reviews
+    BRK20D-2 to BRK20D-4; the quote may open on an earlier line, and inside a multi-line value a
+    `#` line is content);
   * exactly one step named ALLOWED_STEP, which must carry the token.
 It is a regression check over a workflow that is also reviewed and linted (actionlint, zizmor),
 not a YAML evaluator: forms Actions rejects (anchors) are out of scope.
@@ -42,8 +43,9 @@ STRING = re.compile(r"'(?:[^']|'')*'")
 # YAML decodes these in a double-quoted scalar before Actions sees the expression, so they could
 # spell a name the scan can't see; the check reads raw text and refuses them (review BRK20D-2).
 YAML_ESCAPE = re.compile(r"\\(?:[xuU][0-9A-Fa-f]|[N_LP])")
-# Any non-comment line ending in a backslash: the double quote may open lines earlier (BRK20D-3).
-DQ_CONTINUATION = re.compile(r"^(?![ \t]*#).*\\[ \t]*$", re.M)
+# Any line ending in a backslash: the double quote may open lines earlier (BRK20D-3), and inside a
+# multi-line double-quoted value a line starting with `#` is content, not a comment (BRK20D-4).
+DQ_CONTINUATION = re.compile(r"\\[ \t]*$", re.M)
 SECRETS_KEY = re.compile(r"^\s*(?:-\s+)?secrets\s*:", re.M)
 # Actions resolves contexts and properties case-insensitively, so these do too (review BRK20C-1).
 RAW_TOKEN = re.compile(TOKEN.pattern + r"|\bGH_TOKEN\b|\bGITHUB_TOKEN\b", re.I)
@@ -227,6 +229,9 @@ def self_test() -> list[str]:
          "continued with a backslash"),
         ("BRK20D-3: a backslash continuation after the quote opened on an earlier line fails",
          head + ok_step + "      - env:\n          ACCESS: \"${{ github['\n            to\\\n            ken'] }}\"\n"
+         "        run: x\n", "continued with a backslash"),
+        ("BRK20D-4: a hash-led continuation line inside a multi-line double-quoted value fails",
+         head + ok_step + "      - env:\n          ACCESS: \"start\n            #${{ github['to\\\n            ken'] }}\"\n"
          "        run: x\n", "continued with a backslash"),
     ]
     failures = []
