@@ -46,8 +46,9 @@ const KINDS = ['adr', 'edr', 'security-reviews'] as const;
 function field(text: string, name: string): string {
 	return new RegExp(`^- \\*\\*${name}:\\*\\*\\s*(.*)$`, 'mi').exec(text)?.[1]?.trim() ?? '';
 }
+/** Markdown links to records, as written (relative to the linking record's directory). */
 function links(s: string): string[] {
-	return [...s.matchAll(/\]\(([^)#\s]+\.md)(?:#[^)]*)?\)/g)].map(m => path.posix.basename(m[1]));
+	return [...s.matchAll(/\]\(([^)#\s]+\.md)(?:#[^)]*)?\)/g)].map(m => m[1]);
 }
 function readRecords(kind: typeof KINDS[number]): Rec[] {
 	const dir = path.join(repo, 'docs', kind);
@@ -93,33 +94,29 @@ for (const k of KINDS) {
 		allRecs.set(`${k}/${r.file}`, { kind: k, rec: r, text: fs.readFileSync(path.join(repo, 'docs', k, r.file), 'utf8') });
 	}
 }
-/** A supersede target: in the linking record's own kind first (where a bare link points), else
- *  the one record of that name in another kind. */
-function findRec(kind: string, file: string): { kind: string; rec: Rec; text: string } | undefined {
-	const own = allRecs.get(`${kind}/${file}`);
-	if (own) {
-		return own;
-	}
-	const others = [...allRecs.values()].filter(v => v.rec.file === file);
-	return others.length === 1 ? others[0] : undefined;
+/** The record a link from a `kind` record points at, by the link's own path: a bare name is in
+ *  the same kind, `../adr/x.md` is the ADR. Never guessed from the name alone (review CR-2). */
+function findRec(kind: string, link: string): { kind: string; rec: Rec; text: string } | undefined {
+	return allRecs.get(path.posix.normalize(path.posix.join(kind, link)));
 }
-// Supersede links must work in both directions.
+// Supersede links must work in both directions, each in the other record's own field: a mention
+// elsewhere (a Related line) isn't a back-link (review CR-2).
 for (const { kind, rec } of allRecs.values()) {
-	const file = rec.file;
+	const self = `${kind}/${rec.file}`;
 	for (const target of rec.supersededBy) {
 		const t = findRec(kind, target);
 		if (!t) {
-			bad(`docs/${kind}/${file}`, `superseded by a missing record ${target}`);
-		} else if (!t.text.includes(file)) {
-			bad(`docs/${t.kind}/${target}`, `supersedes ${file} but doesn't link back to it`);
+			bad(`docs/${kind}/${rec.file}`, `superseded by a missing record ${target}`);
+		} else if (!t.rec.supersedes.some(l => findRec(t.kind, l) && `${findRec(t.kind, l)!.kind}/${findRec(t.kind, l)!.rec.file}` === self)) {
+			bad(`docs/${t.kind}/${t.rec.file}`, `supersedes ${rec.file} but its Supersedes or Status doesn't link back to it`);
 		}
 	}
 	for (const target of rec.supersedes) {
 		const t = findRec(kind, target);
 		if (!t) {
-			bad(`docs/${kind}/${file}`, `supersedes a missing record ${target}`);
-		} else if (!/supersed/i.test(t.rec.status) || !t.text.includes(file)) {
-			bad(`docs/${t.kind}/${target}`, `is superseded by ${file}, but its Status doesn't say so with a link`);
+			bad(`docs/${kind}/${rec.file}`, `supersedes a missing record ${target}`);
+		} else if (!/supersed/i.test(t.rec.status) || !t.rec.supersededBy.some(l => { const r = findRec(t.kind, l); return r !== undefined && `${r.kind}/${r.rec.file}` === self; })) {
+			bad(`docs/${t.kind}/${t.rec.file}`, `is superseded by ${rec.file}, but its Status doesn't say so with a link`);
 		}
 	}
 }
@@ -127,9 +124,9 @@ for (const { kind, rec } of allRecs.values()) {
 const cell = (s: string) => s.replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
 function statusCell(r: Rec): string {
 	if (r.keyword === 'superseded' || (r.supersededBy.length && r.keyword !== 'accepted')) {
-		return `superseded-by ${r.supersededBy.map(b => `[${b.replace(/\.md$/, '')}](${b})`).join(', ')}`;
+		return `superseded-by ${r.supersededBy.map(b => `[${path.posix.basename(b).replace(/\.md$/, '')}](${b})`).join(', ')}`;
 	}
-	return r.keyword + (r.supersededBy.length ? ` (partly superseded by ${r.supersededBy.map(b => `[${b.replace(/\.md$/, '')}](${b})`).join(', ')})` : '');
+	return r.keyword + (r.supersededBy.length ? ` (partly superseded by ${r.supersededBy.map(b => `[${path.posix.basename(b).replace(/\.md$/, '')}](${b})`).join(', ')})` : '');
 }
 function indexTable(kind: typeof KINDS[number]): string {
 	const rows = records[kind];
