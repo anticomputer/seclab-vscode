@@ -251,6 +251,14 @@ if (mode === 'prepare') {
 	for (const vector of driver === 'sbx' ? ['task', 'fsmonitor'] : ['task']) {
 		checks.push(...checkEvidence(readEvidence(ws, vector, readInTab), vector, { marker, expectHostname, proxy: brokerProxy(driver) }));
 	}
+	// An sbx tab's writes stay in the tab until reviewed (write-back gate), so evidence in the
+	// host checkout means the vector ran host-side. A host fact, never a known gap.
+	if (driver === 'sbx') {
+		for (const vector of ['task', 'fsmonitor']) {
+			const f = path.join(ws, '.seclab-evidence', `${vector}.json`);
+			checks.push({ vector, name: 'no evidence file in the host checkout (did not run host-side)', ok: !fs.existsSync(f), detail: f });
+		}
+	}
 	if (driver !== 'sbx') {
 		checks.push({ vector: 'fsmonitor', name: 'ran (armed in the tab)', ok: false, detail: 'not armed on OCI',
 			knownGap: 'an OCI tab writes .git/config straight to the host checkout (no write-back gate, docs/adr/20261104-write-back-gate.md); Level A covers fsmonitor on OCI' });

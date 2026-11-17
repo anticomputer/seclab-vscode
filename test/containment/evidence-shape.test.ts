@@ -17,6 +17,9 @@
  */
 
 import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { checkEvidence, readEvidence, type Evidence } from './assert.ts';
 
 const tests: Array<[string, () => void]> = [];
@@ -69,11 +72,22 @@ test('well-formed evidence still passes, so the guards did not just fail everyth
 	assert.deepEqual(bad.map(c => c.name), [], 'a benign evidence file must pass');
 });
 
-test('a missing evidence file is one honest failing check', () => {
+test('a missing evidence file is one honest failing check, and the host-marker check stands', () => {
 	const checks = run(undefined);
-	assert.equal(checks.length, 1);
-	assert.equal(checks[0].ok, false);
+	assert.deepEqual(checks.map(c => [c.name, c.ok]), [
+		['ran (evidence written into the workspace)', false],
+		['cannot write host file outside the workspace', true],
+	]);
 	assert.match(checks[0].detail, /no evidence file/);
+});
+
+test('with no evidence, a host marker still fails (a tab cannot withhold a host run)', () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'seclab-evshape-'));
+	const marker = path.join(dir, 'probe-marker');
+	fs.writeFileSync(`${marker}.fsmonitor`, 'pwned by fsmonitor\n');
+	const checks = checkEvidence(undefined, 'fsmonitor', { ...OPTS, marker });
+	assert.deepEqual(checks.filter(c => !c.ok).map(c => c.name), ['ran (evidence written into the workspace)', 'cannot write host file outside the workspace']);
+	fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('readEvidence returns undefined for non-JSON, a JSON array and a JSON scalar', () => {

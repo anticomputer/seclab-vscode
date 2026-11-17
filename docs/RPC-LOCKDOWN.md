@@ -625,7 +625,9 @@ losses, not bugs:
   ([`model.ts#L676-L684`](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/extensions/git/src/model.ts#L676-L684))
   and `$requestResourceTrust` is denied, so it never runs `git status` there. The
   editor-driven run's `[fsmonitor]` check is an expected failure on a filtered build for this
-  reason, only with that denial in the trusted-side log (Level A still runs the vector);
+  reason, only with that denial in the trusted-side log. A tab can make that call itself, so
+  the expected failure covers only the in-tab run: the host facts (no probe marker in the run
+  directory, no evidence file in the host checkout) stay hard checks;
 - tree views, output channels, status bar items and decorations;
 - language features registered by the tab (hover, completion, code actions,
   code lens, links, folding), so a language extension in a tab activates but
