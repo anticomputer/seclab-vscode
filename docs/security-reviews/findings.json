@@ -17339,7 +17339,7 @@
 			"component": "clean-host",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:9688a6cd493345884eb92efd8360f75819036dd6",
+			"commit": "patch:ffd3f4829ff90909ea9fecbc10db725f398775df",
 			"test": {
 				"file": "test/clean-host.ts",
 				"name": "should be ${want}"
@@ -17366,7 +17366,7 @@
 			"component": "clean-host",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:96c9326cd794e5f47a2bb9748ce2e3bc48c04bef",
+			"commit": "patch:9e526b3fb2ba6f2bac3721801eb02a38ad14b69b",
 			"test": {
 				"file": "test/clean-host.ts",
 				"name": "imageLease threw"
