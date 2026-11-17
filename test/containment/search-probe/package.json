@@ -1,0 +1,13 @@
+{
+	"name": "search-probe",
+	"displayName": "Search probe (seclab containment fixture)",
+	"description": "Runs workspace.findFiles in a tab and records facts about the result: how many, and whether every URI is on the tab's own authority. Inert unless a harness run armed the workspace.",
+	"version": "0.0.1",
+	"publisher": "seclab-test",
+	"license": "MIT",
+	"engines": { "vscode": "^1.80.0" },
+	"activationEvents": ["*"],
+	"main": "./extension.js",
+	"extensionKind": ["workspace"],
+	"capabilities": { "untrustedWorkspaces": { "supported": true } }
+}

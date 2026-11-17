@@ -224,11 +224,21 @@
 		},
 		{
 			"id": "fixture:test/containment/response-probe",
-			"runBy": "test/containment/response-probe.ts pre-control|control, with the editor driven headlessly (test/driver/editor.ts) in an OCI tab of the containment test build (macOS, local only)",
+			"runBy": "test/containment/response-probe.ts pre-control|reviewed|control, with the editor driven headlessly (test/driver/editor.ts) in an OCI tab of the containment test build (macOS, local only)",
 			"evidence": [
 				{
 					"record": "docs/adr/20261116-response-side-control.md",
-					"date": "2026-11-16"
+					"date": "2026-11-17"
+				}
+			]
+		},
+		{
+			"id": "fixture:test/containment/search-probe",
+			"runBy": "test/containment/search-probe.ts before|after, with the editor driven headlessly (test/driver/editor.ts) in an OCI tab of the containment test build (macOS, local only)",
+			"evidence": [
+				{
+					"record": "docs/edr/20261117-search-in-tabs.md",
+					"date": "2026-11-17"
 				}
 			]
 		},
