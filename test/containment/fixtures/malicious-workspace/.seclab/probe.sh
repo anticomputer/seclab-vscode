@@ -5,9 +5,11 @@
 # (and the host side) afterwards. It must never succeed at anything it tries.
 # Usage: probe.sh <vector>
 #
-# Fixture safety (AGENTS.md; EDR fixture-safety): inert unless armed by a harness run
-# (.seclab/targets with a per-run nonce, and this workspace inside that run's dir). Even
-# if containment failed it only reads harness-seeded canaries, writes one marker per vector
+# Fixture safety (AGENTS.md; EDR fixture-safety): inert unless armed by a harness run, and
+# only inside that run's dir, until its arming window ends. Two routes: a host-side run sees
+# the harness's SECLAB_PROBE_RUNDIR/SECLAB_PROBE_NONCE, confirmed by the run dir's nonce and
+# until files; an in-tab run reads .seclab/targets (per-run nonce, run dir, until). Even if
+# containment failed it only reads harness-seeded canaries, writes one marker per vector
 # under the run's .work dir, and talks only to the run's loopback beacon or to
 # non-routable test addresses (RFC 5737, *.example.test).
 VECTOR="$(printf '%s' "${1:-unknown}" | tr -cd 'a-z0-9-')"
@@ -26,6 +28,9 @@ if [ -n "${SECLAB_PROBE_RUNDIR:-}" ] && [ -n "${SECLAB_PROBE_NONCE:-}" ]; then
 	printf '%s' "$SECLAB_PROBE_NONCE" | grep -qE '^[0-9a-f]{32}$' || exit 0
 	case "$SECLAB_PROBE_RUNDIR" in /?*) ;; *) exit 0 ;; esac
 	[ "$(cat "$SECLAB_PROBE_RUNDIR/.seclab-probe-nonce" 2>/dev/null)" = "$SECLAB_PROBE_NONCE" ] || exit 0
+	UNTIL="$(cat "$SECLAB_PROBE_RUNDIR/.seclab-probe-until" 2>/dev/null)"
+	case "$UNTIL" in ''|*[!0-9]*) exit 0 ;; esac
+	[ "$(date +%s)" -lt "$UNTIL" ] || exit 0
 	RUN="$SECLAB_PROBE_RUNDIR"
 	TRUSTED=1
 else
@@ -54,8 +59,14 @@ code() { [ -n "$HTTP" ] || return 0; "$HTTP" -s -m 6 -o /dev/null -w '%{http_cod
 CANARY="$(get canary)"
 OTHERTAB="$(get othertab)"
 MARKER="$(get marker)"
-[ -n "$TRUSTED" ] && MARKER="$RUN/probe-marker"
 LOOPBACK="$(get loopback)"
+if [ -n "$TRUSTED" ]; then
+	# The marker is the host fact; a tab-written canary path outside the run just isn't read,
+	# so it can't stop the marker (review FXF-10).
+	MARKER="$RUN/probe-marker"
+	inrun "$CANARY" || CANARY=
+	inrun "$OTHERTAB" || OTHERTAB=
+fi
 inrun "$CANARY" && inrun "$OTHERTAB" && inrun "$MARKER" || exit 0
 # One marker path per vector, so a host marker is never credited to the wrong probe (the
 # rogue extension's RPC probes write their own, under other names).

@@ -21,7 +21,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { checkEvidence, hostRunChecks, levelBVectors, readEvidence, unattributedMarkers, type Evidence } from './assert.ts';
+import { armingDigest, checkEvidence, hostRunChecks, levelBVectors, readEvidence, unattributedMarkers, type Evidence } from './assert.ts';
 
 const tests: Array<[string, () => void]> = [];
 const test = (name: string, fn: () => void) => tests.push([name, fn]);
@@ -91,16 +91,22 @@ test('with no evidence, a host marker still fails (a tab cannot withhold a host 
 	fs.rmSync(dir, { recursive: true, force: true });
 });
 
-/** A run directory and a workspace laid out as check-evidence prepares them. */
-function hostRun(): { run: string; ws: string; marker: string; done: () => void } {
+/** A run directory and a workspace laid out as check-evidence prepares them, with the arming
+ *  record prepare writes. */
+const ARMING_FILES = ['.seclab/probe.sh', '.seclab/targets', '.vscode/tasks.json'];
+function hostRun(): { run: string; ws: string; marker: string; arming: Record<string, string | null>; done: () => void } {
 	const run = fs.mkdtempSync(path.join(os.tmpdir(), 'seclab-hostrun-'));
 	const ws = path.join(run, 'ws');
 	const marker = path.join(run, 'probe-marker');
 	fs.mkdirSync(path.join(ws, '.seclab'), { recursive: true });
+	fs.mkdirSync(path.join(ws, '.vscode'), { recursive: true });
+	fs.writeFileSync(path.join(ws, '.seclab', 'probe.sh'), '#!/bin/sh\n');
+	fs.writeFileSync(path.join(ws, '.vscode', 'tasks.json'), '{}\n');
 	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${run}/canary\nmarker=${marker}\nrun=${run}\n`);
-	return { run, ws, marker, done: () => fs.rmSync(run, { recursive: true, force: true }) };
+	return { run, ws, marker, arming: armingDigest(ws, ARMING_FILES), done: () => fs.rmSync(run, { recursive: true, force: true }) };
 }
 const failing = (checks: Array<{ ok: boolean; name: string }>) => checks.filter(c => !c.ok).map(c => c.name);
+const ARMING_ROW = 'the arming files in the host checkout are exactly as prepared';
 
 test('FXF-6: on OCI a host fsmonitor marker is unattributed (no fsmonitor row covers it)', () => {
 	const r = hostRun();
@@ -117,7 +123,7 @@ test('a clean host run passes the host-run checks on both drivers', () => {
 	const r = hostRun();
 	try {
 		for (const d of ['sbx', 'oci']) {
-			assert.deepEqual(failing(hostRunChecks(d, r.ws, r.marker, levelBVectors(d))), [], d);
+			assert.deepEqual(failing(hostRunChecks(d, r.ws, levelBVectors(d), r.arming)), [], d);
 		}
 	} finally {
 		r.done();
@@ -129,31 +135,47 @@ test('on sbx, evidence in the host checkout fails (the vector ran host-side)', (
 	try {
 		fs.mkdirSync(path.join(r.ws, '.seclab-evidence'));
 		fs.writeFileSync(path.join(r.ws, '.seclab-evidence', 'fsmonitor.json'), '{}');
-		assert.deepEqual(failing(hostRunChecks('sbx', r.ws, r.marker, levelBVectors('sbx'))), ['no evidence file in the host checkout (did not run host-side)']);
+		assert.deepEqual(failing(hostRunChecks('sbx', r.ws, levelBVectors('sbx'), r.arming)), ['no evidence file in the host checkout (did not run host-side)']);
 	} finally {
 		r.done();
 	}
 });
 
-test('FXF-7: a blanked or missing marker line in the checkout\'s targets fails', () => {
+test('FXF-7, 10-12: any edit to what a host run reads fails, however small', () => {
+	const edits: Array<[string, (r: ReturnType<typeof hostRun>) => void]> = [
+		['blanked marker line', r => fs.writeFileSync(path.join(r.ws, '.seclab', 'targets'), fs.readFileSync(path.join(r.ws, '.seclab', 'targets'), 'utf8').replace(/^marker=.*$/m, 'marker='))],
+		['prepended empty marker line (FXF-11)', r => fs.writeFileSync(path.join(r.ws, '.seclab', 'targets'), 'marker=\n' + fs.readFileSync(path.join(r.ws, '.seclab', 'targets'), 'utf8'))],
+		['canary pointed outside the run (FXF-10)', r => fs.appendFileSync(path.join(r.ws, '.seclab', 'targets'), 'othertab=/etc/passwd\n')],
+		['probe replaced (FXF-12)', r => fs.writeFileSync(path.join(r.ws, '.seclab', 'probe.sh'), '#!/bin/sh\nexit 0\n')],
+		['task repointed (FXF-12)', r => fs.writeFileSync(path.join(r.ws, '.vscode', 'tasks.json'), '{"tasks":[]}\n')],
+		['targets deleted', r => fs.rmSync(path.join(r.ws, '.seclab', 'targets'))],
+	];
+	for (const [what, edit] of edits) {
+		const r = hostRun();
+		try {
+			edit(r);
+			assert.deepEqual(failing(hostRunChecks('oci', r.ws, levelBVectors('oci'), r.arming)), [ARMING_ROW], what);
+		} finally {
+			r.done();
+		}
+	}
 	const r = hostRun();
 	try {
-		const t = path.join(r.ws, '.seclab', 'targets');
-		for (const text of [fs.readFileSync(t, 'utf8').replace(/^marker=.*$/m, 'marker='), `marker=${r.marker}.elsewhere\n`, '']) {
-			fs.writeFileSync(t, text);
-			assert.deepEqual(failing(hostRunChecks('oci', r.ws, r.marker, levelBVectors('oci'))), ['the probe targets in the host checkout still name the run marker'], JSON.stringify(text));
-		}
-		fs.rmSync(t);
-		assert.deepEqual(failing(hostRunChecks('oci', r.ws, r.marker, levelBVectors('oci'))), ['the probe targets in the host checkout still name the run marker'], 'missing file');
+		fs.mkdirSync(path.join(r.ws, '.git'));
+		assert.deepEqual(failing(hostRunChecks('oci', r.ws, levelBVectors('oci'), r.arming)), ['no .git in the host checkout'], 'a host .git (fsmonitor repointed)');
+		assert.ok(failing(hostRunChecks('oci', r.ws, levelBVectors('oci'), undefined)).includes(ARMING_ROW), 'no arming record');
+		assert.ok(failing(hostRunChecks('oci', r.ws, levelBVectors('oci'), {})).includes(ARMING_ROW), 'an empty arming record');
 	} finally {
 		r.done();
 	}
 });
 
-/** Runs the real probe.sh from a workspace inside a scratch run dir (no network: the HTTP
- *  client's name lives in probe.parts.json, which isn't copied, so no request is made). */
+/** Runs the real probe.sh from a workspace inside a scratch run dir (no HTTP: the client's
+ *  name lives in probe.parts.json, which isn't copied; its one DNS lookup is of a reserved
+ *  *.example.test name). */
 const NONCE = 'a'.repeat(32);
-function probeRun(env: (run: string) => Record<string, string>, targets: (run: string) => string): { marker: boolean; evidence: boolean } {
+const later = () => String(Math.floor(Date.now() / 1000) + 600);
+function probeRun(env: (run: string) => Record<string, string>, targets: (run: string) => string, until = later()): { marker: boolean; evidence: boolean } {
 	const run = fs.mkdtempSync(path.join(os.tmpdir(), 'seclab-probesh-'));
 	try {
 		const ws = path.join(run, 'ws');
@@ -161,25 +183,35 @@ function probeRun(env: (run: string) => Record<string, string>, targets: (run: s
 		fs.copyFileSync(path.join(import.meta.dirname, 'fixtures', 'malicious-workspace', '.seclab', 'probe.sh'), path.join(ws, '.seclab', 'probe.sh'));
 		fs.writeFileSync(path.join(ws, '.seclab', 'targets'), targets(run));
 		fs.writeFileSync(path.join(run, '.seclab-probe-nonce'), NONCE);
+		fs.writeFileSync(path.join(run, '.seclab-probe-until'), until);
 		execFileSync('sh', [path.join(ws, '.seclab', 'probe.sh'), 'task'], { env: { PATH: process.env.PATH ?? '/usr/bin:/bin', ...env(run) }, stdio: 'ignore' });
 		return { marker: fs.existsSync(path.join(run, 'probe-marker.task')), evidence: fs.existsSync(path.join(ws, '.seclab-evidence', 'task.json')) };
 	} finally {
 		fs.rmSync(run, { recursive: true, force: true });
 	}
 }
-const armed = (run: string) => `arm=${NONCE}\nrun=${run}\nuntil=${Math.floor(Date.now() / 1000) + 600}\nmarker=${run}/probe-marker\n`;
+const armed = (run: string) => `arm=${NONCE}\nrun=${run}\nuntil=${later()}\nmarker=${run}/probe-marker\n`;
 const blanked = () => 'marker=\narm=\nuntil=1\n';
+const trusted = (run: string) => ({ SECLAB_PROBE_RUNDIR: run, SECLAB_PROBE_NONCE: NONCE });
 
 test('FXF-7: a host run (trusted env) writes its marker though the tab blanked and expired the targets', () => {
-	assert.deepEqual(probeRun(run => ({ SECLAB_PROBE_RUNDIR: run, SECLAB_PROBE_NONCE: NONCE }), blanked), { marker: true, evidence: true });
+	assert.deepEqual(probeRun(trusted, blanked), { marker: true, evidence: true });
 	// Control: with no trusted env, blanked targets leave the probe inert (the old blind spot).
 	assert.deepEqual(probeRun(() => ({}), blanked), { marker: false, evidence: false });
 });
 
-test('the trusted route stays inert without the matching nonce file (a tab setting the env itself)', () => {
+test('FXF-10: on the trusted route a canary path outside the run is skipped, not a reason to stay silent', () => {
+	assert.deepEqual(probeRun(trusted, run => armed(run) + 'canary=/etc/hostname\nothertab=/etc/passwd\n'), { marker: true, evidence: true });
+	// Control: the targets route still refuses an out-of-run target outright.
+	assert.deepEqual(probeRun(() => ({}), run => 'canary=/etc/hostname\n' + armed(run)), { marker: false, evidence: false });
+});
+
+test('the trusted route stays inert without the matching nonce file or past its window (FXF-13)', () => {
 	assert.deepEqual(probeRun(() => ({ SECLAB_PROBE_RUNDIR: '/nonexistent/run', SECLAB_PROBE_NONCE: NONCE }), armed), { marker: false, evidence: false }, 'unreadable run dir');
 	assert.deepEqual(probeRun(run => ({ SECLAB_PROBE_RUNDIR: run, SECLAB_PROBE_NONCE: 'b'.repeat(32) }), armed), { marker: false, evidence: false }, 'wrong nonce');
 	assert.deepEqual(probeRun(run => ({ SECLAB_PROBE_RUNDIR: run, SECLAB_PROBE_NONCE: 'not-a-nonce' }), armed), { marker: false, evidence: false }, 'malformed nonce');
+	assert.deepEqual(probeRun(trusted, armed, '1'), { marker: false, evidence: false }, 'expired window');
+	assert.deepEqual(probeRun(trusted, armed, 'soon'), { marker: false, evidence: false }, 'malformed window');
 	// Control: the targets route (an in-tab run) still arms as before.
 	assert.deepEqual(probeRun(() => ({}), armed), { marker: true, evidence: true });
 });

@@ -1,6 +1,7 @@
 // Containment assertions shared by the automated runner (run.ts) and the editor-driven
 // check (check-evidence.ts). Evidence comes from fixtures/malicious-workspace/.seclab/probe.sh.
 
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -190,7 +191,8 @@ export function rpcDecisions(userDataDir: string): RpcDecision[] {
  * only with the denial in the decision log. Both the missing evidence and the denial are within
  * a tab's reach (a tab's own code can make the denied call), so neither excuses a host run: the
  * host facts (no host marker; on sbx, no evidence file in the host checkout) stay hard checks.
- * On OCI the tab writes the checkout itself, so those facts are only as strong as the checkout.
+ * On OCI the tab writes the checkout itself, so they also need the arming files unchanged, and a
+ * tab that tampers and restores before the check is not caught (ADR write-back-gate §7).
  */
 export const FILTERED_VECTOR_LOSSES: Record<string, { deniedRef: string; gap: string }> = {
 	// The tab's extension host can't register a task system, so the folder-open task never runs.
@@ -225,8 +227,23 @@ export function levelBVectors(driver: string): string[] {
 	return driver === 'sbx' ? ['task', 'fsmonitor'] : ['task'];
 }
 
-/** Host facts about a Level B run that no tab-written evidence can excuse. */
-export function hostRunChecks(driver: string, ws: string, marker: string, vectors: string[]): Check[] {
+/** sha256 of each workspace file a host-side run of a vector would read or execute (null when
+ *  absent), recorded at prepare in the run directory, which no tab can reach. */
+export function armingDigest(ws: string, rels: string[]): Record<string, string | null> {
+	const out: Record<string, string | null> = {};
+	for (const rel of [...rels].sort()) {
+		try {
+			out[rel] = createHash('sha256').update(fs.readFileSync(path.join(ws, rel))).digest('hex');
+		} catch {
+			out[rel] = null;
+		}
+	}
+	return out;
+}
+
+/** Host facts about a Level B run that no tab-written evidence can excuse. `arming` is the
+ *  digest prepare recorded; undefined (unreadable) fails. */
+export function hostRunChecks(driver: string, ws: string, vectors: string[], arming: Record<string, string | null> | undefined): Check[] {
 	const out: Check[] = [];
 	// On sbx the tab's writes stay in the tab: Level B never asks tabd to sync write-back (only
 	// Level A's run.ts calls tab.writeback.sync, which starts the auto-sync), so evidence in the
@@ -238,14 +255,17 @@ export function hostRunChecks(driver: string, ws: string, marker: string, vector
 			out.push({ vector, name: 'no evidence file in the host checkout (did not run host-side)', ok: !fs.existsSync(f), detail: f });
 		}
 	}
-	// probe.sh skips its marker when `marker=` is blank, so a tab that blanked it in the
-	// checkout (directly on OCI) would silence the host-marker check (review FXF-7). A tab that
-	// restores the line in time is not caught: on OCI the host facts are only as strong as the
-	// checkout.
-	const f = path.join(ws, '.seclab', 'targets');
-	let targets = '';
-	try { targets = fs.readFileSync(f, 'utf8'); } catch { /* a failing check */ }
-	out.push({ vector: 'host', name: 'the probe targets in the host checkout still name the run marker', ok: targets.split('\n').includes(`marker=${marker}`), detail: f });
+	// A tab that rewrote what a host-side run reads (the probe, its targets, the task, the
+	// interpreter shim) could make that run silent: an OCI tab writes the checkout directly
+	// (reviews FXF-7, 10-12). So the arming files must be exactly as prepared, and the checkout
+	// must hold no .git (the fsmonitor repo is armed only inside an sbx tab). A tab that
+	// tampers and restores before the check is not caught: that is the ungated OCI checkout's
+	// race (ADR write-back-gate §7).
+	const now = arming ? armingDigest(ws, Object.keys(arming)) : undefined;
+	const changed = arming && now ? Object.keys(arming).filter(k => arming[k] !== now[k]) : undefined;
+	out.push({ vector: 'host', name: 'the arming files in the host checkout are exactly as prepared', ok: changed !== undefined && changed.length === 0 && Object.keys(arming ?? {}).length > 0,
+		detail: changed === undefined ? 'no arming record' : changed.join(', ') || 'unchanged' });
+	out.push({ vector: 'host', name: 'no .git in the host checkout', ok: !fs.existsSync(path.join(ws, '.git')), detail: path.join(ws, '.git') });
 	return out;
 }
 
