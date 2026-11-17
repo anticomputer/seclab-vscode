@@ -19,6 +19,20 @@
 // Control: neither does; the decision log records `cmd:workbench.action.terminal.newLocal`
 // refused for each; the hover renders and both own-command controls run in the tab.
 //
+// Two data vectors from the 0033 review (RSC-1, RSC-2), judged in a third mode too, `reviewed`
+// (0033 as first reviewed, which they get past):
+//   - the hover carries three images (plain, nested `![x![]y](…)`, an `<img>` inside a `<span>`
+//     HTML block), each at its own port on this host's loopback. The CSP admits only https
+//     images, so each port is a plain TCP listener counting connections: a fetch attempt is a
+//     connection (the TLS handshake then fails). Only the trusted renderer can reach them;
+//   - a completion item inserted as a snippet naming the CLIPBOARD variable, accepted with `%`.
+//     The app must be a containment test build whose clipboard is an in-memory store seeded with
+//     this run's canary (hook `canary-clipboard`); the run refuses any other app. The extension
+//     records only whether the inserted text holds a canary token.
+// Pre-control and reviewed: the nested and span images are fetched and the snippet inserts the
+// canary (pre-control also fetches the plain image). Control: no image port sees a connection,
+// and the snippet inserts the variable as literal text.
+//
 // Inert beyond the escape it measures (EDR fixture safety): the extension writes markers only
 // in its own workspace, no network target exists, and teardown stops the editor's whole tree
 // (including any host shell the pre-control build opened) and removes the tab and profile.
@@ -26,10 +40,12 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
+import * as net from 'node:net';
 import * as path from 'node:path';
+import { mintCanary } from '../canary/canary.ts';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { DrivenEditor } from '../driver/editor.ts';
-import { checkUserDataDir, ensureVsceImage, lockRun, repoRoot, VSCE_IMAGE } from '../harness.ts';
+import { beaconPort, checkUserDataDir, ensureVsceImage, lockRun, repoRoot, VSCE_IMAGE } from '../harness.ts';
 import { report, rpcDecisions, type Check } from './assert.ts';
 import { teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
@@ -39,8 +55,8 @@ const HOST_REF = 'cmd:workbench.action.terminal.newLocal';
 const argv = process.argv.slice(2);
 const [mode, userDataArg] = argv;
 const appArg = argv[argv.indexOf('--app') + 1];
-if ((mode !== 'pre-control' && mode !== 'control') || !userDataArg || !argv.includes('--app') || !appArg) {
-	console.error('usage: response-probe.ts pre-control|control <user-data-dir> --app <test app.app>');
+if ((mode !== 'pre-control' && mode !== 'reviewed' && mode !== 'control') || !userDataArg || !argv.includes('--app') || !appArg) {
+	console.error('usage: response-probe.ts pre-control|reviewed|control <user-data-dir> --app <test app.app>');
 	process.exit(2);
 }
 const app = path.resolve(appArg);
@@ -63,7 +79,31 @@ fs.rmSync(base, { recursive: true, force: true });
 fs.rmSync(userData, { recursive: true, force: true });
 fs.mkdirSync(path.join(ws, '.seclab'), { recursive: true });
 const arm = randomBytes(16).toString('hex');
-fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\nuntil=${Math.floor(Date.now() / 1000) + 3600}\n`);
+// The canary store (test/builds/variants.json hook `canary-clipboard`) must be in this app, or
+// the snippet vector would read the real one: refuse the run.
+const CANARY_STORE_MARK = 'SECLAB_TEST_ONLY:canary-clipboard';
+const mainBundle = path.join(app, 'Contents', 'Resources', 'app', 'out', 'mainImpl.js');
+if (!fs.existsSync(mainBundle) || !fs.readFileSync(mainBundle, 'utf8').includes(CANARY_STORE_MARK)) {
+	console.error('the app has no in-memory canary clipboard (containment test build hook); refusing to run');
+	process.exit(2);
+}
+const storeCanary = mintCanary('clipboard');
+// One loopback listener per image form; it counts connections and never answers.
+const imagePorts: number[] = [];
+const imageHits: number[] = [0, 0, 0];
+const listeners: net.Server[] = [];
+for (let i = 0; i < 3; i++) {
+	imagePorts.push(await beaconPort());
+	const srv = net.createServer(sock => {
+		imageHits[i]++;
+		sock.destroy();
+	});
+	await new Promise<void>((res, rej) => srv.once('error', rej).listen(imagePorts[i], '127.0.0.1', () => res()));
+	listeners.push(srv);
+}
+process.on('exit', () => listeners.forEach(l => l.close()));
+fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\nuntil=${Math.floor(Date.now() / 1000) + 3600}\nclipboard=variant\n`
+	+ imagePorts.map((p, i) => `img${i + 1}=${p}\n`).join(''));
 fs.writeFileSync(path.join(ws, 'probe.txt'), 'hoverword is here\n\n\n');
 writeSnapshot(base);
 writeManifest(base, { driver: 'oci', userDataDir: userData, stateDirs: [stateDir], workspaces: [ws] });
@@ -150,7 +190,15 @@ const exists = (f: string) => fs.existsSync(path.join(ws, '.seclab-response', f)
 // ------------------------------------------------------------------ run
 const results: Record<string, boolean | number> = {};
 try {
-	ed = await DrivenEditor.launch({ app, userData, folderUri: `vscode-remote://seclab+${tabId}${ws}` });
+	// Each listener answers a connection from the harness itself: the positive control that a
+	// silent port means no fetch, not a listener that was never up.
+	for (const p of imagePorts) {
+		await new Promise<void>(res => net.connect(p, '127.0.0.1').on('connect', function (this: net.Socket) { this.destroy(); res(); }).on('error', () => res()));
+	}
+	await sleep(500);
+	results.listenersUp = imageHits.every(h => h === 1);
+	imageHits.fill(0);
+	ed = await DrivenEditor.launch({ app, userData, folderUri: `vscode-remote://seclab+${tabId}${ws}`, env: { SECLAB_TEST_CLIPBOARD_CANARY: storeCanary.value } });
 	const e = ed;
 	c('setup', await waitFor(() => exists('ready'), 180_000), 'the probe registered its providers and opened its file');
 	await e.waitFor(`[...document.querySelectorAll('.view-line')].some(l => l.textContent.includes('hoverword'))`, 60_000);
@@ -241,6 +289,17 @@ try {
 	results.completionRefused = await waitFor(() => refusals() > refusedBefore2, 25_000);
 	results.completionOwnShown = await accept('#', 'seclabOwnCommand');
 	results.completionOwnRan = await waitFor(() => exists('own-completion'), 20_000);
+
+	// RSC-1: the snippet item, accepted with `%` then Enter.
+	results.snippetShown = await accept('%', 'seclabSnippetCommand');
+	results.snippetInserted = await waitFor(() => exists('snippet'), 20_000);
+	if (results.snippetInserted) {
+		const f = JSON.parse(fs.readFileSync(path.join(ws, '.seclab-response', 'snippet'), 'utf8')) as { sawCanary?: unknown; literalVariable?: unknown };
+		results.snippetCanary = f.sawCanary === true;
+		results.snippetLiteral = f.literalVariable === true;
+	}
+	await sleep(2000);
+	[results.imgPlain, results.imgNested, results.imgSpan] = imageHits;
 } catch (err) {
 	c('run', false, 'the run completed', (err as Error).message);
 } finally {
@@ -258,6 +317,16 @@ c('control', results.hoverRendered === true, 'positive control: the tab\'s hover
 c('control', results.hoverOwnRan === true, 'positive control: the hover\'s own-command link ran in the tab');
 c('control', results.completionShown === true && results.completionOwnShown === true, 'positive control: the tab\'s completion items were offered');
 c('control', results.completionOwnRan === true, 'positive control: the own-command completion ran in the tab');
+c('control', results.listenersUp === true, 'positive control: each image port\'s listener counted the harness\'s own connection');
+c('control', results.snippetShown === true && results.snippetInserted === true, 'positive control: the snippet item was offered, accepted and inserted');
+if (mode === 'control') {
+	c('rsc-2', results.imgPlain === 0 && results.imgNested === 0 && results.imgSpan === 0, 'control: no hover image form reached a loopback port', `${results.imgPlain}/${results.imgNested}/${results.imgSpan}`);
+	c('rsc-1', results.snippetCanary === false && results.snippetLiteral === true, 'control: the snippet inserted the variable as text, not the canary store\'s content');
+} else {
+	c('rsc-2', Number(results.imgNested) > 0 && Number(results.imgSpan) > 0, `${mode}: the nested and span-block hover images were fetched by the trusted renderer`, `${results.imgNested}/${results.imgSpan}`);
+	c('rsc-2', mode === 'reviewed' ? results.imgPlain === 0 : Number(results.imgPlain) > 0, mode === 'reviewed' ? 'reviewed: the plain image form was stripped' : 'pre-control: the plain image was fetched', `${results.imgPlain}`);
+	c('rsc-1', results.snippetCanary === true, `${mode}: the snippet inserted the canary store's content into the tab's document`);
+}
 if (mode === 'pre-control') {
 	c('hover', Number(results.hoverHostShells) > 0, 'pre-control: the hover link opened a shell on the host', `+${results.hoverHostShells}`);
 	c('completion', Number(results.completionHostShells) > 0, 'pre-control: the accepted completion opened a shell on the host', `+${results.completionHostShells}`);
