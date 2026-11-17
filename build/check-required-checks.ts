@@ -100,7 +100,13 @@ function yamlLines(yml: string): string[] {
 			continue;
 		}
 		blockIndent = /^\s*(?:-\s+)?[^\s#][^#]*?:\s*[|>][-+0-9]*\s*(?:#.*)?$/.test(l) ? ind : -1;
-		out.push(l);
+		// A full-line comment, and a plain scalar after a plain key, are text YAML never decodes:
+		// `run: printf "%s\n" ok` holds no escape (Copilot review on PR 32). A `permissions:`
+		// value stays, since that's what is read below.
+		// Only a value the scans below would trip on is blanked; a blanked scope line inside a
+		// `permissions:` block still reads as unreadable.
+		const plain = /^(\s*(?:-\s+)?)([A-Za-z0-9_][A-Za-z0-9_.-]*)(\s*:\s+)([^\s"'{[\]}&*!|>%@`?#,].*)$/.exec(l);
+		out.push(/^\s*#/.test(l) ? '' : plain && plain[2] !== 'permissions' && /\\|<</.test(plain[4]) ? plain[1] + plain[2] + plain[3].trimEnd() : l);
 	}
 	return out;
 }
@@ -239,6 +245,10 @@ function selfTest(): void {
 		['an allowed write and a script escape', { 'x.yml': wf('  a:\n    permissions:\n      id-token: write\n      contents: read\n    steps:\n      - run: |\n          echo "a\\b"\n') }, null],
 		['a step named after permissions, and a comment', { 'x.yml': wf('  a:\n    steps:\n      - name: Verify permissions\n        run: x # permissions: are fine\n# permissions: here too\n') }, null],
 		['a permissions key inside a flow step', { 'x.yml': wf('  a:\n    steps:\n      - { name: x, permissions: {checks: write} }\n') }, /can't read/],
+		['a plain-scalar run with an escape, and comments', { 'x.yml': wf('  a:\n    steps:\n      - run: printf "%s\\n" ok > result.txt\n        # "a\\b" and <<: here\n') }, null],
+		['a plain scalar does not hide a later escaped key', { 'x.yml': wf('  a:\n    permissions:\n      "check\\x73": write\n    steps:\n      - run: printf "%s\\n" ok\n') }, /double-quoted YAML escape/],
+		['an escaped key after a plain-scalar value on a flow line', { 'x.yml': wf('  a:\n    steps:\n      - { run: x, "per\\x6dissions": {checks: write} }\n') }, /double-quoted YAML escape/],
+		['a plain scope value with a backslash', { 'x.yml': wf('  a:\n    permissions:\n      checks: wr\\ite\n    steps:\n      - run: x\n') }, /unreadable permission/],
 		['checks: read is fine', { 'x.yml': wf('  a:\n    permissions:\n      checks: read\n    steps:\n      - run: x\n') }, null],
 		['control: the real four and an unrelated job', { 'x.yml': wf('  other:\n    name: other\n    steps:\n      - run: x\n') }, null],
 		['a decoy job named lint', { 'shadow.yml': wf('  a:\n    name: lint\n    steps:\n      - run: x\n') }, /reports the required context `lint`/],
@@ -246,6 +256,9 @@ function selfTest(): void {
 		['a quoted decoy name', { 'shadow.yaml': wf('  a:\n    "name": "docs"\n    steps:\n      - run: x\n') }, /reports the required context `docs`/],
 		['an expression name', { 'shadow.yml': wf("  a:\n    name: ${{ 'lint' }}\n    steps:\n      - run: x\n") }, /can't be read in full/],
 		['an escaped name', { 'shadow.yml': wf('  a:\n    name: "li\\x6et"\n    steps:\n      - run: x\n') }, /can't be read in full/],
+		['a decoy id lint with a null name', { 'shadow.yml': wf('  lint:\n    name: null\n    steps:\n      - run: x\n') }, /can't be read in full/],
+		['a decoy id lint with a ~ name', { 'shadow.yml': wf('  lint:\n    name: ~\n    steps:\n      - run: x\n') }, /can't be read in full/],
+		['a decoy id lint with an empty quoted name', { 'shadow.yml': wf("  lint:\n    name: ''\n    steps:\n      - run: x\n") }, /can't be read in full/],
 		['flow-style jobs', { 'shadow.yml': 'on: push\njobs: {a: {name: lint}}\n' }, /can't be read in full/],
 		['a flow-style job', { 'shadow.yml': wf('  a: {name: lint}\n') }, /can't be read in full/],
 		['CR-7 a name indented 6', { 'shadow.yml': wf('  a:\n      name: lint\n      steps:\n        - run: x\n') }, /can't be read in full/],
@@ -265,7 +278,7 @@ function selfTest(): void {
 			throw new Error(`required-checks self-test "${name}": got ${JSON.stringify(got)}`);
 		}
 	}
-	console.log(`required-checks self-test: ${cases.length + 28} cases OK`);
+	console.log(`required-checks self-test: ${cases.length + 35} cases OK`);
 }
 
 if (import.meta.main) {
