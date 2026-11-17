@@ -14877,6 +14877,21 @@
 				"name": "BRK20D-1: toJSON(github) in a later step fails"
 			},
 			"note": "Expressions are now found quote-aware, so a '}}' inside a string can't end one early."
+		},
+		{
+			"record": "20261117-broker-finding-tests-2.md",
+			"anchor": "BRK20D-2",
+			"round": "Copilot code review on the round 20 pull request",
+			"severity": "low",
+			"summary": "YAML decodes numeric escapes and backslash continuations in a double-quoted value before Actions evaluates it, so an escaped token reference passed the HH-1 check's raw-text scan.",
+			"component": "broker HH-1 check (token_steps.py)",
+			"owner": "broker",
+			"status": "fixed",
+			"commit": "patch:aefb99b47b313a4940fbd08dcb64ae8d64c87cb5",
+			"test": {
+				"file": "broker/tools/token_steps.py",
+				"name": "BRK20D-2: a unicode escape in a double-quoted value fails"
+			}
 		}
 	]
 }
