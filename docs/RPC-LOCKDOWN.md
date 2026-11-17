@@ -694,10 +694,12 @@ read, write and open their own workspace files.
       ([EDR](edr/20261116-tab-telemetry-ids.md));
     - notebook document sync (cells of host notebooks); no notebook opens in a tab
       window, because patch 0005 refuses a tab's notebook serializer
-      ([EDR](edr/20261116-notebook-sync.md)).
+      ([EDR](edr/20261116-notebook-sync.md));
+    - the editor-tab model (host URIs and labels); patch 0038 shows a host-side
+      editor to a tab only as an anonymous `Editor`
+      ([EDR](edr/20261116-editor-tab-provenance.md)).
 
     Still open, each needing its own push-side control:
-    - the editor-tab model (host URIs and labels);
     - the terminal default profile and environment collections;
     - workspace data;
     - filesystem-scheme squatting by a tab provider.
