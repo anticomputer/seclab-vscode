@@ -10,7 +10,7 @@ import { parseArgs } from 'node:util';
 import { OciDriver } from './drivers/oci.ts';
 import { SbxDriver } from './drivers/sbx.ts';
 import type { Driver, TabTemplate } from './drivers/types.ts';
-import { FalcoSensor } from './obs/falco.ts';
+import { FalcoSensor, sensorOwner } from './obs/falco.ts';
 import type { ObsHub } from './obs/hub.ts';
 import { cleanEnv, createRunner, resolveBinary } from './run.ts';
 import { TabStore } from './state.ts';
@@ -97,9 +97,10 @@ if (driverName === 'sbx') {
 	drivers.set('oci', new OciDriver(dockerPath, runner, { brokerImage: placeholder, brokerPin }));
 	// Tab observability: Falco on the Docker host, only while OCI tabs run (ADR tab-observability).
 	const stateTag = createHash('sha256').update(stateDir).digest('hex').slice(0, 8);
+	const owner = sensorOwner();
 	hostSensor = hub => new FalcoSensor({
 		hub, rulesDir: path.join(stateDir, 'falco'), name: `seclab-falco-${stateTag}-${process.pid}`,
-		labels: { 'seclab.obs': 'falco', 'seclab.state': stateTag, 'seclab.pid': String(process.pid) },
+		labels: { 'seclab.obs': 'falco', 'seclab.state': stateTag, 'seclab.pid': String(process.pid), 'seclab.host': owner.host, 'seclab.boot': String(owner.boot) },
 		spawnDocker: args => runner.spawnStream(dockerPath, args),
 		runDocker: args => runner.run(dockerPath, args, { timeoutMs: 60_000 }),
 		pidAlive: pid => {
