@@ -20,6 +20,9 @@ const driver = process.argv[2] ?? 'sbx';
 if (driver !== 'sbx' && driver !== 'oci') {
 	throw new Error('usage: run.ts [sbx|oci]');
 }
+// Validated before anything is created: a bad SECLAB_TAB_IMAGE exits here, not after the run
+// has started containers its cleanup isn't registered for yet (Copilot review on PR 25).
+const tabImage = tabImageArgs(driver);
 const repo = path.resolve(import.meta.dirname, '../..');
 const fixture = path.join(import.meta.dirname, 'fixtures', 'malicious-workspace');
 const work = path.join(repo, '.work', 'containment', driver);
@@ -59,7 +62,7 @@ execFileSync('docker', ['run', '-d', '--rm', '--name', LOOPBACK_NAME, '-p', `127
 
 const client = new TabdClient({
 	command: process.execPath,
-	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', path.join(work, 'tabs'), ...tabImageArgs(driver)],
+	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', path.join(work, 'tabs'), ...tabImage],
 	env: { HOME: process.env.HOME, USER: process.env.USER },
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));

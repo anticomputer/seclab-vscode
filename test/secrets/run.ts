@@ -21,6 +21,9 @@ import { exitedOrTimeout, teardownGate, writeManifest, writeSnapshot } from '../
 import { tabImageArgs } from '../harness.ts';
 
 const driver = process.argv[2] ?? 'sbx';
+// Validated before anything is created: a bad SECLAB_TAB_IMAGE exits here, not after the run
+// has started containers its cleanup isn't registered for yet (Copilot review on PR 25).
+const tabImage = tabImageArgs(driver);
 const repo = path.resolve(import.meta.dirname, '../..');
 const work = path.join(repo, '.work', 'secrets', driver);
 try {
@@ -137,7 +140,7 @@ fs.rmSync(jarSrc, { recursive: true, force: true });
 
 const client = new TabdClient({
 	command: process.execPath,
-	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', path.join(work, 'tabs'), ...tabImageArgs(driver)],
+	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', path.join(work, 'tabs'), ...tabImage],
 	env: { HOME: process.env.HOME, USER: process.env.USER },
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));
