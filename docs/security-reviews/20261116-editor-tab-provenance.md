@@ -41,3 +41,14 @@ the window's `seclab+` authority for the tab's remote host. No high or critical 
 | # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
 |---|---|---|---|---|---|---|
 | EDT-7 | Info | hosts | Filtering keys on the host's own authority, so a desktop web-worker host in a tab window is unfiltered, where 0035 filters it by the window's authority. | accepted-residual | The desktop app never runs tab-installed extensions in the local web worker, only host-installed web extensions; 0038 is desktop-only. Revisit if the web build is ever in scope. | none |
+
+## Copilot review (PR #24)
+Five threads from the automated pull-request review, each checked against the code.
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| EDT-8 | Low | harness | EDT-1's cited test opened only settings and keybindings, so restoring the webview exemption would have left it passing. | fixed | The probe drops a host media file whose folder carries a canary into the window (CDP drag events) and asserts its path never reaches the tab. It fails on main, where the media preview reaches the tab as a custom-editor input with its host path, which is exactly what the old exemption sent. | test/edtabs/probe.ts "EDT-1 a host media file dropped in the window reaches the tab without its path" |
+| EDT-9 | Low | ownership | A multi-diff's own resource is a source id (`multi-diff-editor:`) with no model, so a multi-diff of the tab's own files went anonymous. | fixed | Only the shown resources are judged. | none |
+| EDT-10 | Low | ownership | An untitled editor joins its group before its model exists, so the user's own untitled tab stayed anonymous until an unrelated rebuild. | fixed | The document sync fires the origin change when a model is added, after recording its birth. | test/edtabs/probe.ts "control: an untitled document the user created in the window shows to the tab as its own text tab (EDT-10)" |
+| EDT-11 | Medium | harness | 0038 hides host untitled URIs from the docsync probe, which found them through tab inputs. On builds with the RPC filter that probe is already broken: the filter refuses most of its steps (commands, opens, provider registrations, its own edit), so 0035's runtime regression test no longer runs. | open | The docsync probe needs reworking to drive host-side actions from the window through the headless driver and pass test URIs on a test-only channel; a follow-up. | none |
+| EDT-12 | Info | harness | A failure while setting up the tab skipped the probe's teardown gate. | fixed | Setup is wrapped so the gate always runs. | none |

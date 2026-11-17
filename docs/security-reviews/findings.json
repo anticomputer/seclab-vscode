@@ -13944,10 +13944,10 @@
 			"severity": "medium",
 			"summary": "Webview subclasses that show files (media preview, custom-editor diffs) were exempt from the ownership rule, so a host file path reached the tab.",
 			"status": "fixed",
-			"commit": "patch:51b6187248504a8445988543b599f94779258e01",
+			"commit": "patch:fe5db5019c1bfbb872ac3bc817e84a82587b4f5a",
 			"test": {
 				"file": "test/edtabs/probe.ts",
-				"name": "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary)"
+				"name": "EDT-1 a host media file dropped in the window reaches the tab without its path"
 			}
 		},
 		{
@@ -14036,6 +14036,68 @@
 				"file": "docs/security-reviews/20261116-editor-tab-provenance.md",
 				"quote": "The desktop app never runs tab-installed extensions in the local web worker"
 			}
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Copilot review (PR #24)",
+			"owner": "docsync",
+			"component": "edtabs harness",
+			"anchor": "EDT-8",
+			"severity": "low",
+			"summary": "EDT-1's regression test never opened a media preview, so restoring the webview exemption would have passed it.",
+			"status": "fixed",
+			"commit": "patch:fe5db5019c1bfbb872ac3bc817e84a82587b4f5a",
+			"test": {
+				"file": "test/edtabs/probe.ts",
+				"name": "EDT-1 a host media file dropped in the window reaches the tab without its path"
+			}
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Copilot review (PR #24)",
+			"owner": "docsync",
+			"component": "patch 0038 editor-tab model",
+			"anchor": "EDT-9",
+			"severity": "low",
+			"summary": "A multi-diff's source id has no model, so tab-owned multi-diffs went anonymous.",
+			"status": "fixed-untested",
+			"commit": "patch:fe5db5019c1bfbb872ac3bc817e84a82587b4f5a",
+			"gap": "The RPC filter refuses a tab's commands, so no runtime case opens a tab-owned multi-diff."
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Copilot review (PR #24)",
+			"owner": "docsync",
+			"component": "patch 0038 editor-tab model",
+			"anchor": "EDT-10",
+			"severity": "low",
+			"summary": "An untitled editor joins its group before its model exists, so the user's own untitled tab stayed anonymous.",
+			"status": "fixed-untested",
+			"commit": "patch:fe5db5019c1bfbb872ac3bc817e84a82587b4f5a",
+			"gap": "The probe control is in place; it fails on the build before the fix and is proven on the next build."
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Copilot review (PR #24)",
+			"owner": "docsync",
+			"component": "docsync harness",
+			"anchor": "EDT-11",
+			"severity": "medium",
+			"summary": "The docsync probe (0035's runtime regression test) no longer runs on builds with the RPC filter, and 0038 hides the host untitled URIs it relied on.",
+			"status": "open",
+			"gap": "Rework the docsync probe to drive host-side actions from the window through the headless driver and pass test URIs on a test-only channel."
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Copilot review (PR #24)",
+			"owner": "docsync",
+			"component": "edtabs harness",
+			"anchor": "EDT-12",
+			"severity": "info",
+			"summary": "A setup failure skipped the edtabs probe's teardown gate.",
+			"status": "fixed-untested",
+			"commit": "patch:fe5db5019c1bfbb872ac3bc817e84a82587b4f5a",
+			"gap": "Harness structure; no test injects a setup failure."
 		},
 		{
 			"record": "20261116-gate-fail-open-remainder.md",
