@@ -16607,7 +16607,7 @@
 			"component": "test/containment/teardown.ts reapPreviousRun",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:1e186d32950dca2cb218cb4642c3f6625f693b2b",
+			"commit": "patch:e459e5c300dec4a8fb8b109a0a2a6c18dd2b748a",
 			"test": {
 				"file": "test/containment/harness-hygiene.test.ts",
 				"name": "the reap refuses, keeping the profile, when docker cannot list or removal leaves a container"
@@ -16626,6 +16626,21 @@
 			"test": {
 				"file": "test/containment/harness-hygiene.test.ts",
 				"name": "the reap refuses, keeping the profile, when docker cannot list or removal leaves a container"
+			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-8",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "lint_probes' comment scanner read the // closing a regex literal as a line comment, so a raw record write after it on the same line went unlinted.",
+			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:aee6225e21c61a26b60d6e6fa7e54ba122496e68",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_a_regex_ending_in_slashes_is_not_a_comment"
 			}
 		}
 	]

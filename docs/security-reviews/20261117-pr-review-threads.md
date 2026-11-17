@@ -8,7 +8,7 @@
   lint (#14), the host-terminal proof harness (#20), and the reaper added for PRR-4 (#27).
 
 ## Verdict
-All seven threads point at real gaps. Two are as stated. One wasn't as stated but hid a wider gap.
+All eight threads point at real gaps. Two are as stated. One wasn't as stated but hid a wider gap.
 Two were narrower than stated. None is exploitable on main; each is a gate or harness that
 could pass, or leave things behind, for the wrong reason.
 
@@ -21,6 +21,7 @@ could pass, or leave things behind, for the wrong reason.
 | PRR-5 | low | proof harnesses (#20) | Ctrl+C or SIGTERM skipped the teardown gate: Node's default handling for both signals runs no `exit` handler | fixed |
 | PRR-6 | low | `teardown.ts` `reapPreviousRun` (#27) | The reaper behind PRR-4 trusted removal: `removeRunResources` ignores command failures, so a docker or sbx that failed to list or remove still let the caller wipe the manifest and tabd state that name the leftovers | fixed |
 | PRR-7 | low | `teardown.ts` `runLeftovers` (#27) | Docker listing was required only for OCI runs, but an sbx tab owns a Docker broker container and egress network, so a failed listing let the reap delete an sbx run's profile and tab state over them | fixed |
+| PRR-8 | low | `lint_probes.py` `_strip_comments` (#27) | The comment scanner behind PRR-2 read the `//` that closes a regex literal such as `/^https?:\/\//` as a line comment, so code after it on that line, such as a raw record write, went unlinted | fixed |
 
 ## What changed
 - PRR-1: `MainThreadLogger.$log` joins the presence-pinned must-deny set. A
@@ -43,3 +44,7 @@ could pass, or leave things behind, for the wrong reason.
   previous reaper.
 - PRR-7: a Docker listing is required whenever the run has tabs, whatever the driver. An
   sbx-manifest case in the same test fails on the previous check.
+- PRR-8: the scanner recognises a regex literal where an operand is expected, with escapes and
+  character classes, and skips it in both comment and code passes. `CommentScopeTest` runs the
+  reviewer's case through the full lint, plus regex, division and comment cases; both fail on
+  the previous scanner.
