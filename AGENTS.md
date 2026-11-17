@@ -190,9 +190,12 @@ RPC-lockdown session adds. Keep them consistent with this file.
      The update is a push, so Copilot reviews again, and a thread it hasn't posted yet can't
      block the merge. So disarm first (`gh pr merge <number> --disable-auto`), wait for the new
      review and handle its threads (step 5), and for `oci` if step 4 applies, then arm again.
-  8. After the merge, confirm `unit`, `lint`, `docs` and `patch-build` are green on the new
-     `main` SHA, and that workflow-lint's `denylist` job ran on that push. Tell the coordinator
-     before the next PR is armed.
+  8. After the merge, from a checkout of `main` as it was before the merge (a detached
+     worktree of the old `main` SHA, so the PR can't change the check), run `./seclab landing
+     verify <new main SHA>`. It refuses unless `unit`, `lint`, `docs` and `patch-build` each ran
+     and concluded success, and the `required-jobs-ran` gate posted success
+     ([EDR](docs/edr/20261117-required-jobs-gate.md)). Also confirm that workflow-lint's
+     `denylist` job ran on that push. Tell the coordinator before the next PR is armed.
 
   A rebase merge re-creates every commit, so the SHAs on `main` are never the branch's, and
   the commit that becomes `main` has had its required checks run on the same tree but not on
@@ -253,7 +256,8 @@ RPC-lockdown session adds. Keep them consistent with this file.
   - images are pinned by digest;
   - `permissions` are set per job, least privilege;
   - `persist-credentials: false`;
-  - no `pull_request_target`/`workflow_run`, and no `${{ github.event.* }}` in
+  - no `pull_request_target`/`workflow_run` (one scoped exception: the `required-jobs-ran` gate,
+    [EDR](docs/edr/20261117-required-jobs-gate.md)), and no `${{ github.event.* }}` in
     `run:` (pass it through `env:`);
   - no step echoes the environment, a secret-derived value or host data (Actions logs are
     public; `./seclab lint workflows` runs `build/check-workflow-echo.ts`);
@@ -407,6 +411,7 @@ build/apply-patches.sh --check  # patch queue == patches/series (no unlisted pat
 ./seclab findings growth [DAYS] # the baseline isn't larger than the register's last change DAYS (7) days old
 ./seclab findings rebase-resolve  # in a conflicted rebase: merge findings.json by entry, regenerate the views, stage; refuses real clashes
 ./seclab findings clashes [--ref REF]...   # this change's new finding IDs against every open PR head (gh); same-owner clash exits 1
+./seclab landing verify <sha>   # after a merge, from the old main: every required job ran to success, and the required-jobs-ran gate is green
 build/check-release.sh .work/out/seclab-reh-linux-arm64.tar.gz   # no test hooks in a release artifact (also: <app>/Contents/Resources/app)
 node test/containment/teardown.test.ts   # teardown regression: orphaned editor tree + leftover tab pod are stopped/removed
 ./seclab clean-host [--apply] [--running] [--caches] [--all-tabs]   # list (dry run) / remove seclab-vscode resources (superseded images too); test tabs only unless --all-tabs; never copilot-* or other projects

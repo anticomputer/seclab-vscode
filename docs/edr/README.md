@@ -46,7 +46,7 @@ Same rules as ADRs:
 | 2026-11-04 | [Broker engine: mitmproxy 12.3.1 with our addon (over smokescreen and Envoy)](20261104-broker-engine-mitmproxy.md) | accepted |
 | 2026-11-04 | [Per-tab CA: generated at broker start, private key only on the broker's tmpfs](20261104-broker-per-tab-ca.md) | accepted |
 | 2026-11-04 | [Canary acceptance harness (shared; headline acceptance test)](20261104-canary-harness.md) | accepted |
-| 2026-11-04 | [CI/CD hardening baseline](20261104-ci-hardening.md) | accepted |
+| 2026-11-04 | [CI/CD hardening baseline](20261104-ci-hardening.md) | accepted (partly superseded by [20261117-required-jobs-gate](20261117-required-jobs-gate.md)) |
 | 2026-11-04 | [Docs are generated or checked in CI (docs-check gate)](20261104-docs-check.md) | accepted |
 | 2026-11-04 | [Extensions never persist across tabs or onto the host](20261104-extension-persistence.md) | accepted |
 | 2026-11-04 | [Test fixtures are inert and host-safe by construction](20261104-fixture-safety.md) | accepted |
@@ -131,6 +131,7 @@ Same rules as ADRs:
 | 2026-11-17 | [Findings fixed before they land, and a register that rebases cleanly](20261117-fixed-before-landing.md) | accepted |
 | 2026-11-17 | [Link check: retry GitHub's rate limits instead of accepting them](20261117-link-check-retries.md) | accepted |
 | 2026-11-17 | [Landing through pull requests: Copilot review and resolved threads](20261117-pr-landing-review.md) | accepted |
+| 2026-11-17 | [A pre-merge gate that required jobs ran: one scoped `workflow_run` exception](20261117-required-jobs-gate.md) | accepted |
 | 2026-11-17 | [File and text search in tabs, for the tab's own file system](20261117-search-in-tabs.md) | accepted |
 | 2026-11-17 | [Code-OSS 1.145.0 → 1.145.3](20261117-upstream-1145-3.md) | accepted |
 | 2026-11-18 | [The document-sync probe drives host actions from the window (EDT-11)](20261118-docsync-probe-driven.md) | accepted |

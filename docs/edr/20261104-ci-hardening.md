@@ -1,6 +1,6 @@
 # CI/CD hardening baseline
 
-- **Status:** accepted
+- **Status:** accepted. Partly superseded by [20261117-required-jobs-gate](20261117-required-jobs-gate.md): one scoped `workflow_run` exception to §5.
 - **Date:** 2026-11-04
 - **Deciders:** Project owner (2026-11-04): the GitHub workflows (CI/CD) must also receive careful security review and follow best practices; fork-build session
 - **Related:** [EDR docs-check](20261104-docs-check.md), [EDR patch series](20261104-patch-series.md), security review [CI hardening](../security-reviews/20261104-ci-hardening.md)
