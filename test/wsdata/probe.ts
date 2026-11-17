@@ -85,11 +85,12 @@ try {
 		env: { HOME: process.env.HOME, USER: process.env.USER },
 	});
 	await client.initialize('wsdata-probe', '0');
+	// Staged before the tab exists: once it runs, the host never writes into its workspace (WSD-1).
+	fs.copyFileSync(path.join(vsixDir, 'wsdata-probe.vsix'), path.join(ws, '.wsdata-probe.vsix'));
 	const { tab } = await client!.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
 	tabName = tab.metadata.name;
 	writeManifest(base, { tabs: [tabName] });
 	await client.request('tab.ensureRunning', { tabId: tabName });
-	fs.copyFileSync(path.join(vsixDir, 'wsdata-probe.vsix'), path.join(ws, '.wsdata-probe.vsix'));
 	installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.wsdata-probe.vsix')], 300_000).status === 0;
 } catch (e) {
 	setupError = String(e).slice(0, 300);
@@ -158,13 +159,33 @@ await ed?.close().catch(() => undefined);
 const mainLogs = (d: string): string[] => fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? mainLogs(path.join(d, e.name)) : e.name === 'main.log' ? [path.join(d, e.name)] : []) : [];
 const refusedEnter = mainLogs(path.join(userData, 'logs')).some(f => fs.readFileSync(f, 'utf8').includes('[seclab] a window does not enter a workspace'));
 const counts = (o: unknown) => !!o && typeof o === 'object' && Object.entries(o as object).every(([k, v]) => /^(folder|config):[a-z0-9.+-]{1,40}$/.test(k) && Number.isInteger(v));
-const valid = !!rep && rep.schema === 'seclab-wsdata-report/1' && rep.arm === arm && typeof rep.done === 'boolean' && Number.isInteger(rep.maxFolders) && Number.isInteger(rep.activations)
-	&& counts(rep.schemes) && Array.isArray(rep.tokens) && rep.tokens.length <= 5000
-	&& rep.tokens.every((x: any) => !!x && ['folder', 'folderName', 'name', 'config'].includes(x.field) && /^[0-9a-f]{64}$/.test(x.sha256));
+// The report is the tab's: its check must reject anything malformed without throwing, or the run
+// would end before its teardown gate (WSD-3). Every value meets a type check before a regex.
+const validReport = (r: any) => !!r && r.schema === 'seclab-wsdata-report/1' && r.arm === arm && typeof r.done === 'boolean' && Number.isInteger(r.maxFolders) && Number.isInteger(r.activations)
+	&& counts(r.schemes) && Array.isArray(r.tokens) && r.tokens.length <= 5000
+	&& r.tokens.every((x: any) => !!x && ['folder', 'folderName', 'name', 'config'].includes(x.field) && typeof x.sha256 === 'string' && /^[0-9a-f]{64}$/.test(x.sha256));
+const rejects = (r: unknown) => {
+	try {
+		return !validReport(r);
+	} catch {
+		return false;
+	}
+};
+const hostileRejected = rejects({ schema: 'seclab-wsdata-report/1', arm, done: true, maxFolders: 1, activations: 1, schemes: {}, tokens: [{ field: 'folder', sha256: { toString: null } }] });
+let valid = false;
+try {
+	valid = validReport(rep);
+} catch {
+	// a malformed report is invalid
+}
 // Not the login name: the tab's own folder is a host path under the user's home (sbx mounts it
-// at the same path), which the tab is given on purpose.
-const markers: Record<string, string> = { canary: sha(canary) };
-const leaks = valid ? Object.entries(markers).flatMap(([name, h]) => (rep.tokens as Array<{ field: string; sha256: string }>).filter(x => x.sha256 === h).map(x => `${name}@${x.field}`)) : [];
+// at the same path), which the tab is given on purpose. The host folder's name is one token to the
+// extension's tokenizer (it keeps underscores), so it is a marker of its own (WSD-2).
+const markers: Record<string, string> = { canary: sha(canary), hostFolder: sha(path.basename(hostDir)) };
+const leaksIn = (tokens: Array<{ field: string; sha256: string }>) => Object.entries(markers).flatMap(([name, h]) => tokens.filter(x => x.sha256 === h).map(x => `${name}@${x.field}`));
+const leaks = valid ? leaksIn(rep.tokens) : [];
+// The extension's own split, applied to the host folder's URI: the check must catch it there.
+const hostFolderTokens = `file://${hostDir}`.split(/[\/\\~\s?#&=:.-]+/).filter(t => t.length >= 4 && t.length <= 120).map(t => ({ field: 'folder', sha256: sha(t) }));
 const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';
 const results: Array<{ name: string; ok: boolean }> = [];
 const expect = (name: string, ok: boolean) => results.push({ name, ok });
@@ -173,6 +194,8 @@ if (valid) {
 	console.log(`host markers in the tab's workspace data: ${[...new Set(leaks)].join(', ') || 'none'}`);
 }
 expect('setup completed (tab claimed, running, probe installed)', !setupError);
+expect('WSD-3 the report check rejects a malformed tab value without throwing', hostileRejected);
+expect('WSD-2 the leak check catches the host folder\'s URI as the tab would tokenize it', leaksIn(hostFolderTokens).length > 0);
 expect('probe installed in the tab', installed);
 expect('the window launched with the host folder to add', launched);
 expect('report present, from this run, and matches the schema', valid);
