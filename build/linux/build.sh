@@ -77,9 +77,8 @@ if [[ -d "$KEEP" ]]; then
 	echo "build: restoring the install kept aside by an interrupted run" >&2
 	nm_restore "$SRC" "$KEEP"
 fi
-# Every lockfile npm ci's postinstall installs from (built-in extensions bundle their own
-# node_modules), plus the pinned upstream: a pin bump never keeps an install it didn't audit.
-stamp="${stamp_kind}-$({ git -C "$SRC" rev-parse HEAD; find . -name node_modules -prune -o -name package-lock.json -type f -print | LC_ALL=C sort | while IFS= read -r f; do printf '%s\n' "$f"; cat "$f"; done; } | sha256sum | cut -c1-16)"
+. /repo/build/linux/install-stamp.sh
+stamp="$(install_stamp "$stamp_kind" "$SRC")"
 if [[ ! -f node_modules/.seclab-stamp ]] || [[ "$(cat node_modules/.seclab-stamp)" != "$stamp" ]]; then
 	nm_keep_aside "$SRC" "$KEEP"
 	# Pinned prebuilt ripgrep in the postinstall's cache (a fresh private TMPDIR): no GitHub API

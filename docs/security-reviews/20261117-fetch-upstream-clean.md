@@ -19,4 +19,7 @@
 | FU-4 | Low | fetch-upstream | The clean took a hand-kept path list, so a stray untracked file such as `product.json.seclab-test` survived. | Fixed | `git clean -fd` with no pathspec: every untracked file goes, ignored build state stays. An injected stray file survived the old script and not the new one. |
 | FU-5 | Info | CI | No regression for a fresh volume or the same-pin path. | No finding | — |
 
+Regression tests: `build/fetch-upstream.test.ts` (in `./seclab test unit`) drives the script and the
+stamp against a local two-release upstream. All three cases fail on the code before the fix.
+
 No prompt-injection text was found in the diff.
