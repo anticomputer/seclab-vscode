@@ -1,13 +1,14 @@
-# Review: automated PR review threads on the RPC follow-ups (#9, #14, #20)
+# Review: automated PR review threads on the RPC follow-ups (#9, #14, #20, #27)
 
 - **Date:** 2026-11-17
 - **Reviewer:** GitHub's automated pull request reviewer, on PRs #9, #14 and #20 after they
-  merged. Each thread was checked against the code; the review text was treated as data.
+  merged, and on #27 (this change) before it. Each thread was checked against the code; the
+  review text was treated as data.
 - **Subject:** `check_drift.py`'s log-trust gate (#9), the rogue-REH profile probe and the probe
-  lint (#14), and the host-terminal proof harness (#20).
+  lint (#14), the host-terminal proof harness (#20), and the reaper added for PRR-4 (#27).
 
 ## Verdict
-All five threads point at real gaps. Two are as stated. One wasn't as stated but hid a wider gap.
+All six threads point at real gaps. Two are as stated. One wasn't as stated but hid a wider gap.
 Two were narrower than stated. None is exploitable on main; each is a gate or harness that
 could pass, or leave things behind, for the wrong reason.
 
@@ -18,6 +19,7 @@ could pass, or leave things behind, for the wrong reason.
 | PRR-3 | low | `check-probes.ts`, expectations (#14) | The five REH probes the payload arms only on the reh-push path were required by every REH evidence check, so a full run without that selection failed them. No harness runs such a check today | fixed |
 | PRR-4 | low | proof harnesses (#20) | A rerun after an interrupted or `KEEP=1` run wiped the previous `run.json` and tab state before reaping them, orphaning that run's tabs and processes | fixed |
 | PRR-5 | low | proof harnesses (#20) | Ctrl+C or SIGTERM skipped the teardown gate: Node's default handling for both signals runs no `exit` handler | fixed |
+| PRR-6 | low | `teardown.ts` `reapPreviousRun` (#27) | The reaper behind PRR-4 trusted removal: `removeRunResources` ignores command failures, so a docker or sbx that failed to list or remove still let the caller wipe the manifest and tabd state that name the leftovers | fixed |
 
 ## What changed
 - PRR-1: `MainThreadLogger.$log` joins the presence-pinned must-deny set. A
@@ -34,3 +36,7 @@ could pass, or leave things behind, for the wrong reason.
 
   `harness-hygiene.test.ts` checks the signals in a child process, and the ordering on each
   harness's source, against mutants.
+- PRR-6: the reap captures the tab ids first, checks `runLeftovers` after removal, and refuses
+  on any resource left or runtime it can't list, keeping the profile and its tabd state. A
+  `harness-hygiene.test.ts` case drives it against stand-in docker and sbx and fails on the
+  previous reaper.

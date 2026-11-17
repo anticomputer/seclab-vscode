@@ -16597,6 +16597,21 @@
 				"file": "test/containment/harness-hygiene.test.ts",
 				"name": "SIGINT and SIGTERM reach the exit handler"
 			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-6",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "reapPreviousRun trusted removal: removeRunResources ignores command failures, so a runtime that failed to list or remove still let the caller wipe the manifest and tabd state naming the leftovers.",
+			"component": "test/containment/teardown.ts reapPreviousRun",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:1e186d32950dca2cb218cb4642c3f6625f693b2b",
+			"test": {
+				"file": "test/containment/harness-hygiene.test.ts",
+				"name": "the reap refuses, keeping the profile, when docker cannot list or removal leaves a container"
+			}
 		}
 	]
 }
