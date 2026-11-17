@@ -14733,7 +14733,7 @@
 			"component": "broker HH-1 check (token_steps.py)",
 			"owner": "broker",
 			"status": "fixed",
-			"commit": "patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397",
+			"commit": "patch:c4f75bd81920499ce89083ef450a0f5ac73bd84c",
 			"test": {
 				"file": "broker/tools/token_steps.py",
 				"name": "BRK20-1: a later step whose name only starts like the download step fails"
@@ -14748,7 +14748,7 @@
 			"component": "broker HH-1 check (token_steps.py)",
 			"owner": "broker",
 			"status": "fixed",
-			"commit": "patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397",
+			"commit": "patch:c4f75bd81920499ce89083ef450a0f5ac73bd84c",
 			"test": {
 				"file": "broker/tools/token_steps.py",
 				"name": "BRK20-2: secrets: inherit to a reusable workflow fails"
@@ -14764,7 +14764,7 @@
 			"component": "broker pin_check self-test",
 			"owner": "broker",
 			"status": "fixed",
-			"commit": "patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397",
+			"commit": "patch:c4f75bd81920499ce89083ef450a0f5ac73bd84c",
 			"test": {
 				"file": "broker/tools/pin_check.py",
 				"name": "10-4: a source pinning a superseded version fails"
@@ -14780,10 +14780,40 @@
 			"component": "broker quoting lint (quoted-paths.sh)",
 			"owner": "broker",
 			"status": "fixed",
-			"commit": "patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397",
+			"commit": "patch:c4f75bd81920499ce89083ef450a0f5ac73bd84c",
 			"test": {
 				"file": "broker/tools/quoted-paths.sh",
 				"name": "BRK20-4: git failing (a corrupt index) fails, never an empty pass"
+			}
+		},
+		{
+			"record": "20261117-broker-finding-tests-2.md",
+			"anchor": "BRK20R-1",
+			"round": "Round 20 re-review",
+			"severity": "low",
+			"summary": "The HH-1 check missed the download step handing its token to later steps with no expression, by writing it to $GITHUB_ENV.",
+			"component": "broker HH-1 check (token_steps.py)",
+			"owner": "broker",
+			"status": "fixed",
+			"commit": "patch:f57e9feb9f4b258a8fbc6f62e1716ae64e26346e",
+			"test": {
+				"file": "broker/tools/token_steps.py",
+				"name": "BRK20R-1: the download step writing the token to $GITHUB_ENV fails"
+			}
+		},
+		{
+			"record": "20261117-broker-finding-tests-2.md",
+			"anchor": "BRK20R-2",
+			"round": "Round 20 re-review",
+			"severity": "info",
+			"summary": "The HH-1 check's expression match stopped at the first }}, so a }} inside a quoted string could hide a secret.",
+			"component": "broker HH-1 check (token_steps.py)",
+			"owner": "broker",
+			"status": "fixed",
+			"commit": "patch:f57e9feb9f4b258a8fbc6f62e1716ae64e26346e",
+			"test": {
+				"file": "broker/tools/token_steps.py",
+				"name": "BRK20R-2: a '}}' inside a quoted string can't hide a secret"
 			}
 		}
 	]

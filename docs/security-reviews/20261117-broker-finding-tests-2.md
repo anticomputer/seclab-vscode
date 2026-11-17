@@ -48,3 +48,12 @@ Probed and held:
     `finally`).
   - Scratch stays under `$RUNNER_TEMP` or `.work` and is removed on exit.
 - **Prompt injection.** None found in the diff.
+
+## Re-review of the fixes
+The same reviewer confirmed BRK20-1 to BRK20-4 closed by reverting each fix, and found that the
+fixes added nothing new. It raised two more gaps in the HH-1 check:
+
+| # | Severity | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| BRK20R-1 | Low | HH-1 check | The download step could hand its token to every later step with no expression at all, by writing it to `$GITHUB_ENV`; a later `curl -H "Authorization: Bearer $GH_TOKEN"` then passed. | fixed | Inside the download step, a write to `$GITHUB_ENV`, `$GITHUB_OUTPUT` or `$GITHUB_STATE`, or a `::set-env`/`::set-output`/`::save-state` command, fails; so does a `GH_TOKEN` or `GITHUB_TOKEN` name outside it. | `BRK20R-1: the download step writing the token to $GITHUB_ENV fails` |
+| BRK20R-2 | Info | HH-1 check | The expression match stopped at the first `}}`, so a `}}` inside a quoted string (`format('a}}b', secrets.X)`) hid the rest of the expression. | fixed | Any raw sighting of `github.token`, `github['token']` or `secrets` outside the download step fails, whatever the span. | `BRK20R-2: a '}}' inside a quoted string can't hide a secret` |
