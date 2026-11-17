@@ -16642,6 +16642,36 @@
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_regex_ending_in_slashes_is_not_a_comment"
 			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-9",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "lint_probes decided regex vs division from the raw preceding character, so a regex after a comment or after an if (...) condition was read as division and its closing // hid the rest of the line.",
+			"component": "rpc-filter/tools/lint_probes.py _regex_end",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:9ee7143714e7821ad08e15f20a07b9b0692747b4",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_a_regex_ending_in_slashes_is_not_a_comment"
+			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-10",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "The check-probes runner waiver removed the push probes' expectations but not their results, so a full REH run failed them as absent from expectations.json.",
+			"component": "test/containment/check-probes.ts runner waiver",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:c19144e35004f7939338d14bcacb0e3f63f3510d",
+			"test": {
+				"file": "test/containment/check-probes.test.ts",
+				"name": "a probe run only by its own harness is not judged without that selection, and is required with it"
+			}
 		}
 	]
 }
