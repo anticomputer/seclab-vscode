@@ -824,6 +824,28 @@ findings_host_self_test() {
 	echo "findings host self-test: ok"
 }
 
+# The online link check's remap and exclude rules, self-tested uncached before every online run
+# (review LCR2-1): this repo's github.com link is excluded, a raw link to it is still checked, and a
+# dead upstream permalink fails at raw. Arguments: lychee's arguments.
+link_check_self_test() {
+	local st="$ROOT/.work/lychee-self-test" z=0000000000000000000000000000000000000001 out
+	mkdir -p "$st"
+	printf '[a](https://github.com/anticomputer/seclab-vscode/blob/%s/self-test-a.md)\n[b](https://raw.githubusercontent.com/anticomputer/seclab-vscode/%s/self-test-b.md)\n[c](https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/self-test-c.ts#L1)\n' "$z" "$z" > "$st/links.md"
+	out="$(docker run --rm -v "$st:/input:ro" "$(tool_image lychee)" "$@" '/input/links.md' 2>&1)" || true
+	if grep -q 'self-test-a' <<<"$out"; then
+		echo "docs-check: link-check self-test failed: this repo's github.com link was checked, not excluded" >&2
+	elif ! grep -q "^\[404\] https://raw.githubusercontent.com/anticomputer/seclab-vscode/$z/self-test-b.md" <<<"$out"; then
+		echo "docs-check: link-check self-test failed: a raw link to this repo was not checked at raw" >&2
+	elif ! grep -q '^\[404\] https://raw.githubusercontent.com/microsoft/vscode/a717861c07586a53d83b80d742cd3f59b20a6273/self-test-c.ts' <<<"$out"; then
+		echo "docs-check: link-check self-test failed: a dead upstream permalink did not fail at raw" >&2
+	else
+		echo "docs-check: link-check self-test ok"
+		return 0
+	fi
+	printf '%s\n' "$out" >&2
+	exit 1
+}
+
 docs_check() {
 	local run=0 online=0 paired=0
 	for a in "$@"; do
@@ -861,20 +883,22 @@ docs_check() {
 		# No credentials ever enter this third-party container (EDR supply-chain). GitHub answers a
 		# burst of permalink checks with 429 and 503, so those are retried with backoff and paced
 		# per host (adaptively), and never cached; a link still dead after the retries fails.
-		# Blob permalinks are checked at raw.githubusercontent.com: github.com throttles a runner's
-		# unauthenticated blob views for longer than any backoff, while raw serves the same file at
-		# the same commit, and a missing file, path or commit there is still a 404. lychee remaps before
-		# it excludes, so this repo's own links are excluded under both hosts.
+		# File permalinks (blob, raw, blame) are checked at raw.githubusercontent.com: github.com
+		# throttles a runner's unauthenticated blob views for longer than any backoff, while raw serves
+		# the same file at the same commit, and a missing file, path or commit there is still a 404.
+		# lychee applies the first remap that matches, before it excludes: this repo's own github.com
+		# links map to themselves, so the exclude below still drops them, and a raw link to this repo
+		# written in a doc is still checked (review LCR2-1).
+		local -a link_args=(--no-progress --max-concurrency 8 --host-concurrency 4 --host-request-interval 200ms
+			--max-retries 5 --retry-wait-time 3 --accept 200,206
+			--remap '^(https://github\.com/anticomputer/seclab-vscode/.*)$ $1'
+			--remap '^https?://github\.com/([^/]+)/([^/]+)/(?:blob|raw|blame)/([^#?]+).*$ https://raw.githubusercontent.com/$1/$2/$3'
+			--exclude-path /input/.work --exclude-path /input/vscode --exclude-path /input/node_modules
+			--exclude '^https?://([^/]+\.)?(test|invalid|example|localhost)(/|:|$)' --exclude '^https?://(127\.|localhost|host\.docker\.internal)'
+			--exclude '^vscode-remote:' --exclude '^https://github\.com/anticomputer/seclab-vscode')
+		link_check_self_test "${link_args[@]}"
 		docker run --rm -v "$ROOT:/input:ro" -v seclab-lychee-cache:/cache -w /cache "$(tool_image lychee)" \
-			--no-progress --cache --max-cache-age 3d --cache-exclude-status 403,429,500.. \
-			--max-concurrency 8 --host-concurrency 4 --host-request-interval 200ms \
-			--max-retries 5 --retry-wait-time 3 --accept 200,206 \
-			--remap '^https://github\.com/([^/]+)/([^/]+)/blob/([^#?]+).*$ https://raw.githubusercontent.com/$1/$2/$3' \
-			--exclude-path /input/.work --exclude-path /input/vscode --exclude-path /input/node_modules \
-			--exclude '^https?://([^/]+\.)?(test|invalid|example|localhost)(/|:|$)' --exclude '^https?://(127\.|localhost|host\.docker\.internal)' \
-			--exclude '^vscode-remote:' --exclude '^https://github\.com/anticomputer/seclab-vscode' \
-			--exclude '^https?://raw\.githubusercontent\.com/anticomputer/seclab-vscode/' \
-			'/input/**/*.md'
+			--cache --max-cache-age 3d --cache-exclude-status 403,429,500.. "${link_args[@]}" '/input/**/*.md'
 	fi
 	if [[ $run = 1 ]]; then
 		docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/docs-check.ts commands > "$ROOT/.work/docs-commands.sh"

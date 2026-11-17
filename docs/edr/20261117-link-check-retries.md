@@ -25,13 +25,17 @@ lychee (`./seclab docs check --online`):
 - never caches a 403 (GitHub's secondary rate limit), 429 or 5xx result, so a throttled answer
   isn't replayed as the link's state. The CI cache key is versioned (`lychee-v2-`), dropping
   entries an earlier run cached when 429 was accepted;
-- checks a blob permalink (`github.com/<owner>/<repo>/blob/<ref>/<path>`) at
-  `raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>`, the same file at the same commit. The
-  first CI run with retries alone still failed: GitHub answered 238 of about 700 unique blob
-  permalinks with 503 through all five retries, and every error was a blob page. A missing file,
-  path or commit is a 404 at raw too, so a dead permalink still fails. Line anchors were never
-  checked, at either host. lychee remaps before it excludes, so this repo's own links are excluded
-  under both hosts.
+- checks a file permalink (`github.com/<owner>/<repo>/blob|raw|blame/<ref>/<path>`, http or
+  https) at `raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>`, the same file at the same
+  commit. The first CI run with retries alone still failed: GitHub answered 238 of about 700 unique
+  blob permalinks with 503 through all five retries, and every error was a blob page. A missing
+  file, path or commit is a 404 at raw too, so a dead permalink still fails. Line anchors were never
+  checked, at either host. lychee applies the first remap that matches, and remaps before it
+  excludes, so this repo's own github.com links are first mapped to themselves and stay excluded
+  as before, while a raw link to this repo is still checked (review LCR2-1);
+- runs a self-test of those arguments, uncached, before every online check: this repo's github.com
+  link is excluded, a raw link to it is checked, and a dead upstream permalink fails at raw. A
+  wrong remap or exclude fails `docs` itself.
 
 ## Proof
 On main's tree the online check passed with no errors (2432 links, from a warm local cache). With one dead permalink
@@ -40,7 +44,8 @@ link.
 
 With the raw remap, from an empty cache: 2438 links, 0 errors, the same 13 excluded as before.
 Injected dead permalinks failed with 404 at raw: a missing file at the pinned upstream commit,
-and an existing path at a commit that doesn't exist.
+and an existing path at a commit that doesn't exist. The self-test fails when the self-link remap
+is dropped, when a raw self-link exclude is added, and when the raw remap is dropped.
 
 ## Consequences
 - A blob permalink to a private repository fails at raw as it would at github.com (no
