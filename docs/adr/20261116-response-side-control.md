@@ -1,6 +1,6 @@
 # Data a tab returns can't put tab-chosen actions or fetches into trusted UI
 
-- **Status:** proposed: the command vectors are proven; the RSC-1 and RSC-2 fixes await their control run.
+- **Status:** accepted. Proof passed in all three modes (2026-11-17).
 - **Date:** 2026-11-16
 - **Deciders:** project owner (closing condition for the deferred-laundering acceptance,
   `docs/security-reviews/owner-acceptances.md`, 2026-11-12); RPC follow-ups session
@@ -67,30 +67,38 @@ function, and a gate makes it impossible to allow a registration without it.
 
 ## Proof
 The fixture `test/containment/response-probe` is run by `test/containment/response-probe.ts`,
-with the editor driven headlessly in an OCI tab of the containment test build.
-- It registers a completion item and a hover. Their `command` and `command:` link name
-  `workbench.action.terminal.newLocal`, a host shell when the trusted side runs it. A second
-  item and link name the extension's own command, the positive control.
-- The driver accepts each item and clicks each link, as a user would.
-- After each host vector the harness counts the shells under the editor's own process tree on
-  the host. A tab's shells are never there.
+with the editor driven headlessly in an OCI tab of the containment test build. The extension
+returns data only:
+- **Commands.** A hover link and a completion item name trusted-side commands that open a
+  keybindings file in the window: the host user's from the hover, the default one from the
+  completion. A second link and item name the extension's own command, the positive control.
+  (Patch 0050 removed `workbench.action.terminal.newLocal`, the first version's host command,
+  from tab windows.)
+- **Images (RSC-2).** The hover carries three forms: plain, nested `![x![]y](…)`, and an `<img>`
+  in a `<span>` HTML block. Each points at its own loopback port, where a plain TCP listener
+  counts connections. The CSP admits only `https` images, so a fetch attempt is a connection.
+- **Snippet (RSC-1).** A completion inserted as a snippet naming `${CLIPBOARD}`. The run
+  requires the containment build's in-memory clipboard and seeds it with the run's canary; the
+  extension records only whether the inserted text holds a canary token.
 
-The pre-control build is a branch-only test build of the landing commit without 0033 (branch
-`anticomputer-rpc-response-precontrol`, kept as the vulnerable baseline). The two commits
-differ only in the 0033 patch file, its series lines and its reach entry. Each app's build info
-names its repo SHA.
+The driver clicks the links and accepts the items, as a user would. Every click and key goes to
+the probe file's own editor. Each run's teardown was clean.
 
-- **Pre-control: passed** (`3daea180`, run 43933292801). All 8 checks passed, and teardown was
-  clean. The hover link and the accepted completion each opened one host shell. The own-command
-  link and completion ran in the tab.
-- **Control: passed** (`b0e86b3c`, run 43933297956). All 10 checks passed, and teardown was
-  clean. Neither vector opened a host shell, and the decision log records
-  `cmd:workbench.action.terminal.newLocal` refused for each. The own-command link, rewritten to
-  the token command, and the own completion both ran in the tab.
-- The landing commit is `b0e86b3c` cherry-picked onto the 0034 and 0050 branch. Patch 0033 and
-  the filter module are unchanged: 0005 regenerates byte-identical with `emit.sh`.
+- **Pre-control** (`33b249a2`, run 44138198509): this landing without 0033 (branch
+  `anticomputer-rpc-response-precontrol2`, kept as the vulnerable baseline). All 13 checks passed.
+  - Both commands opened their file.
+  - All three image forms were fetched.
+  - The snippet inserted the canary.
+- **Reviewed** (`b0e86b3c`, run 43933297956): 0033 as first reviewed. All 15 checks passed.
+  - Both commands were refused and logged.
+  - The plain image was stripped, but the nested and span images were fetched (RSC-2).
+  - The snippet inserted the canary (RSC-1).
+- **Control** (`059c5b66`, run 44138193537): this landing. All 14 checks passed.
+  - Both commands were refused, logged and opened nothing; the own commands ran in the tab.
+  - No image port saw a connection.
+  - The snippet inserted the variable as literal text.
 - **`fixture:test/containment/response-probe`:** run by `test/containment/response-probe.ts`
-  in both modes on 2026-11-16 (runs above).
+  in all three modes on 2026-11-17 (runs above).
 
 ## Consequences
 - Hover and completion work in tabs again, with their commands subject to the same verdicts as
