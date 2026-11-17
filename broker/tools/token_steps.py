@@ -6,9 +6,11 @@ tokenless and verify offline from the downloaded bundles).
 The tool images carry no YAML parser, so this reads the text and fails closed. A step starts at a
 `- ` list item directly under a `steps:` key, and runs until the next item at that indentation
 or a shallower line. It covers:
-  * every `${{ … }}` expression naming `github.token` or `secrets`, found across line breaks and
-    in comments too (a comment mentioning one fails: rephrase it), outside the one step whose
-    name is exactly ALLOWED_STEP;
+  * every `${{ … }}` expression naming `github.token` or `secrets`, or handing on the whole
+    `github` context (`toJSON(github)`, `github.*`, a computed `github[…]`), outside the one
+    step whose name is exactly ALLOWED_STEP. Expressions are found across line breaks, in
+    comments too (a comment mentioning one fails: rephrase it), and end at the first `}}`
+    outside a single-quoted string (review BRK20D-1);
   * any raw sighting of `github.token`, `github['token']` or `secrets`, or of a GH_TOKEN or
     GITHUB_TOKEN name, outside that step, so an expression whose span is cut short (a `}}`
     inside a quoted string) is still seen (review BRK20R-2);
@@ -28,8 +30,11 @@ import sys
 from pathlib import Path
 
 ALLOWED_STEP = "Download attestation bundles (the only step with a token; gh on the runner)"
-EXPR = re.compile(r"\$\{\{.*?\}\}", re.S)
 TOKEN = re.compile(r"\bgithub\s*(?:\.\s*token\b|\[\s*['\"]token['\"]\s*\])|\bsecrets\b", re.I)
+# The whole github context carries the token: toJSON(github), github.*, a computed github[...]
+# index. Allowed: a named property (github.ref) or a literal index other than token (BRK20D-1).
+WHOLE_GITHUB = re.compile(r"\bgithub\b(?!\s*\.\s*[A-Za-z_])(?!\s*\[\s*'[^']*'\s*\])", re.I)
+STRING = re.compile(r"'(?:[^']|'')*'")
 SECRETS_KEY = re.compile(r"^\s*(?:-\s+)?secrets\s*:", re.M)
 # Actions resolves contexts and properties case-insensitively, so these do too (review BRK20C-1).
 RAW_TOKEN = re.compile(TOKEN.pattern + r"|\bGH_TOKEN\b|\bGITHUB_TOKEN\b", re.I)
@@ -63,14 +68,39 @@ def step_of_lines(text: str) -> list[str | None]:
     return out
 
 
+def expressions(text: str):
+    """(start offset, body) of each `${{ … }}`, ending at the first `}}` outside a single-quoted
+    string (Actions' only string literal; '' escapes a quote), so a `}}` inside a string can't
+    cut an expression short. An unterminated one runs to the end of the text (fail closed)."""
+    i = 0
+    while (start := text.find("${{", i)) != -1:
+        j, quoted = start + 3, False
+        while j < len(text):
+            if text[j] == "'":
+                if quoted and text[j + 1:j + 2] == "'":
+                    j += 2
+                    continue
+                quoted = not quoted
+            elif not quoted and text.startswith("}}", j):
+                break
+            j += 1
+        yield start, text[start + 3:j]
+        i = j + 2
+
+
+def token_bearing(body: str) -> bool:
+    """An expression that names the token or a secret, or hands on the whole github context."""
+    return bool(TOKEN.search(body) or WHOLE_GITHUB.search(STRING.sub("''", body)))
+
+
 def token_sites(text: str) -> list[tuple[int, str | None]]:
     """(line number, step name or None outside any step) for each token-bearing expression,
     by the line its `${{` opens on."""
     steps = step_of_lines(text)
     out = []
-    for m in EXPR.finditer(text):
-        if TOKEN.search(m[0]):
-            n = text.count("\n", 0, m.start()) + 1
+    for start, body in expressions(text):
+        if token_bearing(body):
+            n = text.count("\n", 0, start) + 1
             out.append((n, steps[n - 1] if n - 1 < len(steps) else None))
     return out
 
@@ -161,6 +191,17 @@ def self_test() -> list[str]:
          head + ok_step + "      - run: echo ${{ GitHub.Token }}\n", outside),
         ("BRK20C-1: a lower-case gh_token name in a later step fails",
          head + ok_step + "      - run: curl -H \"Authorization: Bearer $gh_token\" https://x.invalid/\n", raw),
+        ("BRK20D-1: toJSON(github) in a later step fails",
+         head + ok_step + "      - env:\n          CONTEXT: ${{ toJSON(github) }}\n        run: x\n", outside),
+        ("BRK20D-1: the github.* object filter in a later step fails",
+         head + ok_step + "      - run: echo '${{ join(github.*, ',') }}'\n", outside),
+        ("BRK20D-1: a computed github[...] index in a later step fails",
+         head + ok_step + "      - run: echo ${{ github[format('{0}{1}', 'to', 'ken')] }}\n", outside),
+        ("BRK20D-1: a '}}' inside a string doesn't end the expression early",
+         head + ok_step + "      - run: echo ${{ format('a}}b', toJSON(github)) }}\n", outside),
+        ("BRK20D-1: named github properties and string mentions stay allowed",
+         head + ok_step + gate + "      - if: github.event_name == 'push'\n"
+         "        run: echo ${{ github.ref }} ${{ github['run_id'] }} ${{ format('{0}', 'github') }}\n", None),
     ]
     failures = []
     for name, text, want in cases:
