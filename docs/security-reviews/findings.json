@@ -16418,6 +16418,21 @@
 				"file": "test/squat/probe.ts",
 				"name": "control (SQ-5)"
 			}
+		},
+		{
+			"record": "20261117-scheme-squatting-probe.md",
+			"round": "Copilot review (PR #33, third pass)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"anchor": "SQ-6",
+			"severity": "low",
+			"summary": "The squat harness read the tab's report through an unbounded sbx exec, so a FIFO at the report path stalled the run before its teardown gate.",
+			"status": "fixed",
+			"commit": "patch:e843b3ad0cd7bbb58703145430e8cf85c181cb7e",
+			"test": {
+				"file": "test/harness/tab-exec.test.ts",
+				"name": "a FIFO with no writer at the read path times out to no data (SQ-6)"
+			}
 		}
 	]
 }
