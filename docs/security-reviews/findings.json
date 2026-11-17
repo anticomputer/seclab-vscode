@@ -16359,7 +16359,7 @@
 			"severity": "info",
 			"summary": "The squat probe's profile was shared by every worktree while its run guard is per worktree.",
 			"status": "fixed-untested",
-			"commit": "patch:87d6d313213944a05882a69f941c3738547b5756",
+			"commit": "patch:860143884c3381dd84c0984557fd7ef1e086b9a1",
 			"gap": "A naming fix; nothing runs two worktrees at once to test it."
 		},
 		{
@@ -16371,7 +16371,7 @@
 			"severity": "low",
 			"summary": "The squat probe's window-log step never ran (a modal was still open) and had no positive control, so its no-provider-call claim for the log was unexercised.",
 			"status": "fixed",
-			"commit": "patch:87d6d313213944a05882a69f941c3738547b5756",
+			"commit": "patch:860143884c3381dd84c0984557fd7ef1e086b9a1",
 			"test": {
 				"file": "test/squat/probe.ts",
 				"name": "control: the window opened its own log in an output editor"
@@ -16386,7 +16386,7 @@
 			"severity": "low",
 			"summary": "The squat probe validated named report fields but printed and stored the tab's whole objects, so a rogue report could carry arbitrary text into host output and evidence.",
 			"status": "fixed",
-			"commit": "patch:87d6d313213944a05882a69f941c3738547b5756",
+			"commit": "patch:860143884c3381dd84c0984557fd7ef1e086b9a1",
 			"test": {
 				"file": "test/squat/probe.ts",
 				"name": "reach neither host output nor evidence (SQ-3)"
@@ -16433,6 +16433,18 @@
 				"file": "test/harness/tab-exec.test.ts",
 				"name": "a FIFO with no writer at the read path times out to no data (SQ-6)"
 			}
+		},
+		{
+			"record": "20261117-scheme-squatting-probe.md",
+			"round": "Found while fixing the same in other probes",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"anchor": "SQ-7",
+			"severity": "low",
+			"summary": "The squat harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file.",
+			"status": "fixed-untested",
+			"commit": "patch:1d7c429da322594b3fadd6b5205fcef5ba198872",
+			"gap": "Nothing in the tab runs before the probe is installed, so no run plants the symlink."
 		}
 	]
 }
