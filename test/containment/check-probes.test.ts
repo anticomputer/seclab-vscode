@@ -201,6 +201,12 @@ const tests: Array<[string, () => void]> = [
 		assert.equal(full.status, 0, full.out);
 		assert.match(full.out, /not judged here: 1 probe\(s\) run only by their own harness/);
 		assert.doesNotMatch(full.out, /PASS .*reh-profile-config-host-setting ran/);
+		// The payload records it on a full run too (inconclusive there): still not judged, and not
+		// "absent from expectations.json".
+		const recorded = run({ expectations: exp, reh: { results: [{ id: 'reh-profile-config-host-setting', policyRef: 'data:remoteterminal-profile-path', outcome: 'error', error: 'not-armed' }] } });
+		assert.equal(recorded.status, 0, recorded.out);
+		assert.match(recorded.out, /not judged here: 1 probe\(s\)/);
+		assert.doesNotMatch(recorded.out, /absent from expectations/);
 		// Its own harness selects it, and then a missing result fails.
 		const selected = run({ expectations: exp, reh: { results: [] }, args: ['--only', 'reh-profile-config-host-setting'] });
 		assert.ok(failed(selected.out, /reh-profile-config-host-setting ran/), selected.out);
@@ -236,6 +242,7 @@ const MUTANTS: Array<[string, string, string]> = [
 	['the claimed-state predicate is gutted', "tokens(r).length > 0 ? 'the Tab Manager", "false ? 'the Tab Manager"],
 	['a prose hostEffect is joined onto the run dir', 'if (!HOST_EFFECT_FILENAME.test(effect)) {', 'if (false) {'],
 	['the push probes\' baseline predicate is gutted', "'reh-onexecutecommand-manageextensions': r => fact(r, 'ran') === true ? null", "'reh-onexecutecommand-manageextensions': r => true ? null"],
+	['a waived probe\'s recorded result is still judged', '		results.delete(id);\n', ''],
 	['the resolve-variables baseline predicate is gutted', "tokens(r).length > 0 ? null : 'the host environment canary", "true ? null : 'the host environment canary"],
 ];
 const source = fs.readFileSync(CHECKER_SOURCE, 'utf8');

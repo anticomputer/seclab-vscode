@@ -203,8 +203,11 @@ delete (specs as Record<string, unknown>).note;
 const runnerOnly = Object.keys(specs).filter(id => typeof specs[id].runner === 'string' && !(only ?? []).includes(id));
 if (runnerOnly.length) {
 	c('probes-waived', true, `not judged here: ${runnerOnly.length} probe(s) run only by their own harness`, runnerOnly.map(id => `${id} (${specs[id].runner})`).join(', '));
+	// The payload also records them on a full run (inconclusive there): out of the judged
+	// results too, or the unreviewed-result check below fails them (PR review on #27).
 	for (const id of runnerOnly) {
 		delete specs[id];
+		results.delete(id);
 	}
 }
 if (only) {
