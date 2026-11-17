@@ -70,9 +70,10 @@ built. It raised three more points:
 | BRK20C-3 | Info | HH-1 check | No case failed with only the `secrets:` key rule removed, since the raw rule also matched; the `secrets: inherit` fixture no longer named a reusable workflow. | fixed | Every case names its own rule's message, so removing any one rule fails at least one case; the fixture names a reusable workflow again. | `BRK20-2: secrets: inherit to a reusable workflow fails` |
 
 ## Copilot code review on the pull request
-Copilot's automated review of the pull request raised one more point, verified against the code
-before it was accepted:
+Copilot's automated review of the pull request raised two more points, each verified against the
+code before it was accepted:
 
 | # | Severity | Area | Finding | Disposition | Fix / reason | Regression test |
 |---|---|---|---|---|---|---|
 | BRK20D-1 | Low | HH-1 check | A later step with `${{ toJSON(github) }}` receives the serialised github context, token included, and the check accepted it. The same holds for the `github.*` object filter and a computed `github[...]` index. | fixed | An expression handing on the whole github context counts as token-bearing; named properties and literal indexes stay allowed. Expressions now end at the first `}}` outside a single-quoted string. | `BRK20D-1: toJSON(github) in a later step fails` |
+| BRK20D-2 | Low | HH-1 check | YAML decodes `\u006b` in a double-quoted value before Actions evaluates it, so `github['to\u006ben']` in a later step passed the raw-text scan. A trailing backslash continuation joins lines the same way. | fixed | Any YAML numeric escape, or a double-quoted value continued with a backslash, fails the check; the real workflow uses neither. | `BRK20D-2: a unicode escape in a double-quoted value fails` |
