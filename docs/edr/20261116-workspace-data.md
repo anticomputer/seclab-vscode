@@ -1,8 +1,8 @@
 # A tab's workspace data names only the tab's folder (DOCSYNC-R6)
 
-- **Status:** proposed (measured; closure as fixed by patch 0041 pending with the coordinator)
+- **Status:** accepted
 - **Date:** 2026-11-16
-- **Deciders:** coordinator (assignment: close the 0035 siblings in turn). Document-sync session: measurement.
+- **Deciders:** coordinator, 2026-11-16 (close DOCSYNC-R6 as fixed by patch 0041, with `test/driver/cli-open.ts` and this probe as its regression tests; drive the add path in-process through the headless driver). Document-sync session: measurement.
 - **Related:** [document sync provenance](20261109-document-sync-provenance.md) (0035); [RPC lockdown](../RPC-LOCKDOWN.md) §7 item 10
 
 ## Context
@@ -36,15 +36,24 @@ the host folder (1.145 ignores it at start-up), and reads what the tab's extensi
 run; no canary in any folder URI, folder name, workspace name or configuration URI (there was
 none); no focus steal; the teardown gate passed.
 
-The add path itself was not driven: a second CLI invocation or the Add Folder dialog could take
-focus from the user. Its refusal rests on 0041's main-process guard, whose presence in the desktop
-app `build/check-release.sh` already requires (`[seclab] a window does not enter a workspace`).
+**The add path, main `6589051b`, 2026-11-17.** The probe then runs Workspaces: Add Folder to
+Workspace in the window, in-process: the headless driver opens the command, and the file picker
+is the renderer's own (`files.simpleDialog.enable`), so no native dialog or second CLI call is
+involved. The picker browses only the tab's file system: the host folder does not exist there, and
+it offers no way to the host's. Adding one of the tab's own folders still means entering a
+workspace, and the main process refused it (its log: `[seclab] a window does not enter a
+workspace`). The window stopped its extension hosts to enter the workspace and restarted them when
+that failed; across both activations the tab saw only its own folder and no canary.
 
 ## Decision
-Proposed: close DOCSYNC-R6 as fixed by patch 0041 (`8ce6cc70`), with this probe as the runtime
-regression test for what a tab window's workspace data holds. No new patch.
+DOCSYNC-R6 is closed as fixed by patch 0041 (`8ce6cc70`). No new patch. Regression tests:
+- `test/wsdata/probe.ts drive`: the add path is refused in the main process, and the tab's
+  workspace data holds only its own folder;
+- `test/driver/cli-open.ts`: a local folder or a `.code-workspace` file claiming a tab authority,
+  opened from the command line, never loads in a window.
 
 ## Evidence
 - **`fixture:test/wsdata/probe-extension`:** `test/wsdata/probe.ts drive` on main `6589051b`,
-  sbx tab, headless driver, 2026-11-16: `DOCSYNC-R6 …` and both controls pass; the teardown gate
-  passed.
+  sbx tab, headless driver: 2026-11-16, the workspace data alone; 2026-11-17, with the add path
+  driven in-process. Every assertion passed, including the main process's refusal; no focus steal;
+  the teardown gate passed.

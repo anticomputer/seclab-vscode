@@ -57,6 +57,8 @@ fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
 fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 	'security.workspace.trust.enabled': false, 'seclab.tabs.driver': 'sbx', 'seclab.tabs.allowedRoots': [base], 'window.restoreWindows': 'none',
 	'workbench.welcomePage.experimentalOnboarding': false, 'workbench.startupEditor': 'none', 'workbench.tips.enabled': false, 'chat.disableAIFeatures': true,
+	// The file picker stays inside the renderer (a quick input), never a native dialog.
+	'files.simpleDialog.enable': true,
 }, null, '\t'));
 fs.writeFileSync(path.join(userData, 'User', 'keybindings.json'), '[]\n');
 const until = Math.floor(Date.now() / 1000) + 2 * 3600;
@@ -90,6 +92,8 @@ const read = () => {
 	}
 };
 let launched = false;
+let addPicker = false;
+let showLocal = false;
 let ed: DrivenEditor | undefined;
 if (installed) {
 	try {
@@ -98,7 +102,27 @@ if (installed) {
 		for (let i = 0; i < 90 && !read(); i++) {
 			spawnSync('sleep', ['1']);
 		}
-		spawnSync('sleep', ['15']);
+		spawnSync('sleep', ['5']);
+		// Add Folder to Workspace, as a user would, in-process: the simple file picker (a quick
+		// input in the renderer), switched to the local file system, given the host folder.
+		await ed.command('Workspaces: Add Folder to Workspace...');
+		const pickerOpen = `(() => { const q = document.querySelector('.quick-input-widget'); return !!q && getComputedStyle(q).display !== 'none'; })()`;
+		await ed.waitFor(pickerOpen, 15_000);
+		addPicker = true;
+		// "Show Local" (the picker's title action) when the window is remote: the host folder. If
+		// the picker can't reach the host, any folder (the tab's own) still means entering a
+		// workspace, which is the step patch 0041 refuses.
+		await ed.evaluate(`(() => { const b = [...document.querySelectorAll('.quick-input-widget [aria-label], .quick-input-widget [title]')].find(e => /show local/i.test((e.getAttribute('aria-label') ?? '') + ' ' + (e.getAttribute('title') ?? ''))); b?.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b; })()`).then(v => { showLocal = v === true; }).catch(() => undefined);
+		await new Promise(r => setTimeout(r, 1500));
+		await ed.evaluate(`(() => { const i = document.querySelector('.quick-input-widget input'); if (i) { i.select(); } })()`).catch(() => undefined);
+		await ed.type((showLocal ? hostDir : path.join(ws, '.seclab')) + '/');
+		await new Promise(r => setTimeout(r, 1500));
+		await ed.evaluate(`(() => { const b = [...document.querySelectorAll('.quick-input-widget .monaco-button')].find(e => (e.textContent ?? '').trim() === 'Add'); b?.dispatchEvent(new MouseEvent('click', { bubbles: true })); })()`).catch(() => undefined);
+		await new Promise(r => setTimeout(r, 2000));
+		if (await ed.evaluate<boolean>(pickerOpen).catch(() => false)) {
+			await ed.key('Enter');
+		}
+		spawnSync('sleep', ['10']);
 		await ed.screenshot(path.join(base, 'drive.png')).catch(() => 0);
 	} catch (e) {
 		console.error(`drive: ${String(e).slice(0, 300)}`);
@@ -113,8 +137,10 @@ for (let i = 0; i < 30 && tabId() && rep?.done !== true; i++) {
 await ed?.close().catch(() => undefined);
 
 const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').match(/^arm=([0-9a-f]{32})$/m) ?? [])[1];
+const mainLogs = (d: string): string[] => fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? mainLogs(path.join(d, e.name)) : e.name === 'main.log' ? [path.join(d, e.name)] : []) : [];
+const refusedEnter = mainLogs(path.join(userData, 'logs')).some(f => fs.readFileSync(f, 'utf8').includes('[seclab] a window does not enter a workspace'));
 const counts = (o: unknown) => !!o && typeof o === 'object' && Object.entries(o as object).every(([k, v]) => /^(folder|config):[a-z0-9.+-]{1,40}$/.test(k) && Number.isInteger(v));
-const valid = !!rep && rep.schema === 'seclab-wsdata-report/1' && rep.arm === armed && typeof rep.done === 'boolean' && Number.isInteger(rep.maxFolders)
+const valid = !!rep && rep.schema === 'seclab-wsdata-report/1' && rep.arm === armed && typeof rep.done === 'boolean' && Number.isInteger(rep.maxFolders) && Number.isInteger(rep.activations)
 	&& counts(rep.schemes) && Array.isArray(rep.tokens) && rep.tokens.length <= 5000
 	&& rep.tokens.every((x: any) => !!x && ['folder', 'folderName', 'name', 'config'].includes(x.field) && /^[0-9a-f]{64}$/.test(x.sha256));
 // Not the login name: the tab's own folder is a host path under the user's home (sbx mounts it
@@ -125,12 +151,15 @@ const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusSte
 const results: Array<{ name: string; ok: boolean }> = [];
 const expect = (name: string, ok: boolean) => results.push({ name, ok });
 if (valid) {
-	console.log(`tab saw: up to ${rep.maxFolders} folder(s); schemes ${JSON.stringify(rep.schemes)}`);
+	console.log(`tab saw (${rep.activations} activation(s)): up to ${rep.maxFolders} folder(s); schemes ${JSON.stringify(rep.schemes)}`);
 	console.log(`host markers in the tab's workspace data: ${[...new Set(leaks)].join(', ') || 'none'}`);
 }
 expect('probe installed in the tab', installed);
 expect('the window launched with the host folder to add', launched);
 expect('report present, from this run, and matches the schema', valid);
+console.log(`add folder: picker ${addPicker}, show local ${showLocal}, main refused entering a workspace ${refusedEnter}`);
+expect('control: the window ran Add Folder to Workspace with the host folder (in-process picker)', addPicker);
+expect('DOCSYNC-R6 the main process refused to turn the tab window into a workspace (patch 0041, main log)', refusedEnter);
 if (valid && !measure) {
 	expect('the probe finished', rep.done === true);
 	expect('control: the tab sees its own folder', (rep.schemes['folder:file+own'] ?? 0) > 0);

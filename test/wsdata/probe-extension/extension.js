@@ -32,8 +32,17 @@ exports.activate = async function (context) {
 	}
 	const out = path.join(root, '.seclab-wsdata');
 	fs.mkdirSync(out, { recursive: true });
-	const report = { schema: 'seclab-wsdata-report/1', arm: t.arm, done: false, maxFolders: 0, schemes: {}, tokens: [] };
-	const seen = new Set();
+	const report = { schema: 'seclab-wsdata-report/1', arm: t.arm, done: false, activations: 1, maxFolders: 0, schemes: {}, tokens: [] };
+	// The extension host restarts when entering a workspace fails: carry this run's record over.
+	try {
+		const prev = JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8'));
+		if (prev.schema === report.schema && prev.arm === t.arm) {
+			Object.assign(report, prev, { done: false, activations: (prev.activations ?? 1) + 1 });
+		}
+	} catch {
+		// first activation
+	}
+	const seen = new Set(report.tokens.map(x => `${x.field}|${x.sha256}`));
 	const tokens = (s, field) => {
 		for (const tok of String(s).split(/[\/\\~\s?#&=:.-]+/)) {
 			if (tok.length >= 4 && tok.length <= 120) {

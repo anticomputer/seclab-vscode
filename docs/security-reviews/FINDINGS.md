@@ -15,12 +15,20 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
+<<<<<<< HEAD
 | fixed | 14 | 84 | 209 | 306 | 44 | 657 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 52 | 160 | 58 | 275 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 13 | 14 | 6 | 35 |
+=======
+| fixed | 14 | 83 | 203 | 268 | 39 | 607 |
+| fixed-untested | 0 | 5 | 52 | 154 | 55 | 266 |
+| accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
+| deferred | 2 | 1 | 14 | 9 | 3 | 29 |
+| open | 0 | 2 | 12 | 15 | 6 | 35 |
+>>>>>>> 4123fd0 (DOCSYNC-R6 fixed by patch 0041: add path driven in-process, refused in the main process; EDR accepted)
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
 | **all** | 16 | 93 | 300 | 559 | 148 | 1116 |
 
@@ -120,8 +128,13 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 |---|---|---|---|---|---|
 | [20261104-tab-observability](20261104-tab-observability.md) **CW-1** | medium | deferred | settings-withheld notice (patch 0036) | A tab extension registering the same command id would win through ICommandService, suppressing the withheld notice and learning key names. | follow-up: Lands with patch 0036 (config/settings filter), owned by the docsync session; 0036 is not in patches/series on main nor on origin/anticomputer-config-snapshot yet. tabd refuses the claim unless 0036 is shipped, so no notice is produced meanwhile. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-2** | medium | fixed-untested | patch 0036 configuration snapshot | A tab-declared \`__proto__.&lt;x&gt;\` key reached addToValueTree on a plain object (prototype write in the renderer); inherited registry lookups for keys like \`constructor\`. | No runtime test: unsafe segments are refused, the output tree has a null prototype and lookups use Object.hasOwn. Upstream DefaultConfiguration has the same sink (not fixed here). |
+<<<<<<< HEAD
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-11** | medium | open | docsync harness | The docsync probe (0035's runtime regression test) no longer runs on builds with the RPC filter, and 0038 hides the host untitled URIs it relied on. | Rework the docsync probe to drive host-side actions from the window through the headless driver and pass test URIs on a test-only channel. |
 | [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **DOCSYNC-R6** | medium | open | window→tab pushes (workspace data) | Window-to-tab push: workspace data is still pushed to a tab's extension host. | No push-side control for workspace data; reported to the coordinator as a 0035 sibling. |
+=======
+| [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **DOCSYNC-R5** | medium | open | window→tab pushes (terminal profile/env) | Window-to-tab push: the terminal default profile and environment collections still reach a tab's extension host. | No push-side control for terminal profile and environment collections; reported to the coordinator as a 0035 sibling. |
+| [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **DOCSYNC-R7** | medium | open | window→tab pushes (filesystem-scheme squatting) | A tab can still squat host filesystem schemes with its own provider on window→tab channels other than the document sync. | Patch 0035 neutralises squatting only for the document sync (per-model provenance); no general control stops a tab registering a provider for a host scheme on other push channels. |
+>>>>>>> 4123fd0 (DOCSYNC-R6 fixed by patch 0041: add path driven in-process, refused in the main process; EDR accepted)
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **F3** | low | fixed-untested | patch 0035 document sync | \`$onVirtualDocumentChange\` could replace the text of any loaded model, host settings included (pre-existing; line touched). | A filtered host now writes only models its own provider made (hardened again in 3848f6d), but the record records "code review; no probe" — driving it needs the user settings path inside the tab. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **R2-1** | low | fixed-untested | patch 0035 document sync | "Born as a text file" meant only that a text file model existed, so a tab stalling its provider's read could pre-claim a host URI. | Birth now requires a finished read (lastResolvedFileStat) with no text model yet, but the record records "code review; no probe" — there is no predictable host creator to drive. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **R4-1** | low | fixed-untested | patch 0035 document sync | A text file model that reused an existing host model kept its stat after that model was disposed, so a later host-created model would count as its own. | Reused models are tainted on onDidResolve so their later text models never count, but the record records "code review" only — no probe. |
@@ -2115,8 +2128,13 @@ Every other commit the register cites is on main's history, or on the branch its
 | DOCSYNC-R3 | low | fixed | Window-to-tab push: the editor-tab model still exposes host URIs and labels to a tab's extension host. | 1688ec816271 · `test/edtabs/probe.ts` "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary)" |
 | DOCSYNC-R4 | low | fixed | Window-to-tab push: ext-host init data still carries host telemetry ids into a tab's extension host. | 98db0a5b4142 · `build/check-release.sh` "product.json with enableTelemetry true" |
 | DOCSYNC-R5 | medium | open | Window-to-tab push: the terminal default profile and environment collections still reach a tab's extension host. | No push-side control for terminal profile and environment collections; reported to the coordinator as a 0035 sibling. |
+<<<<<<< HEAD
 | DOCSYNC-R6 | medium | open | Window-to-tab push: workspace data is still pushed to a tab's extension host. | No push-side control for workspace data; reported to the coordinator as a 0035 sibling. |
 | DOCSYNC-R7 | medium | fixed | A tab can still squat host filesystem schemes with its own provider on window→tab channels other than the document sync. | cc51fa7d · `test/squat/probe.ts` "filesystem provider for a host scheme (decision log)" |
+=======
+| DOCSYNC-R6 | medium | fixed | Window-to-tab push: workspace data is still pushed to a tab's extension host. | 8ce6cc70 · `test/wsdata/probe.ts` "DOCSYNC-R6 the main process refused to turn the tab window into a workspace (patch 0041, main log)" |
+| DOCSYNC-R7 | medium | open | A tab can still squat host filesystem schemes with its own provider on window→tab channels other than the document sync. | Patch 0035 neutralises squatting only for the document sync (per-model provenance); no general control stops a tab registering a provider for a host scheme on other push channels. |
+>>>>>>> 4123fd0 (DOCSYNC-R6 fixed by patch 0041: add path driven in-process, refused in the main process; EDR accepted)
 | DOCSYNC-R8 | low | accepted-residual | A host feature that creates an empty untitled document and then fills it with host data programmatically would still sync into a tab. | accepted by an agent: The untitled rule treats an empty, path-less model first seen by the window as user-typed; no such host feature was seen in the EDR's measurement of the real editor. |
 | INC-4 | medium | fixed-untested | Incident: internal identifiers were committed to the public repository's history: internal package-feed identifiers (organisation, project and feed names, feed and tenant IDs including truncated forms, storage account names), names of non-public repositories, a value a probe captured from the host into a run record, an internal chat excerpt with colleagues' handles, local machine details, and prose stating internal policy and a non-public model identifier as fact. | No regression test on main yet. The guard is the RPC core landing's internal-identifier check, which reads the SECLAB_DENYLIST secret from the denylist environment (main only), plus a pre-push hook reading a local denylist file; the literals are never committed. Cite that check's test once it lands. |
 | INC-4-R1 | low | accepted-residual | Residual of INC-4: closed pull requests #1, #2, #4, #5 and #6 keep refs to pre-rewrite commits, a few orphaned commits are no longer on any ref, and GitHub may serve cached views of them. | accepted by the project owner (owner-acceptances.md): Accepted by the project owner on 2026-11-12, with no purge request; recorded in owner-acceptances.md. |
