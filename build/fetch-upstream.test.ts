@@ -222,3 +222,27 @@ test('fetch-upstream: a linked .git/config or .git/info reaches nothing outside 
 		}
 	}
 });
+
+test('fetch-upstream: a replacement ref or a self-ignoring directory changes nothing (PR 25 review)', () => {
+	try {
+		const { dest, fetch } = setup();
+		fetch('v2');
+		// A commit with other bytes, swapped in for the pinned one by a replacement ref.
+		put(dest, 'src/vs/a.ts', 'evil\n');
+		git(dest, 'add', '-A');
+		git(dest, 'commit', '-qm', 'evil');
+		const evil = git(dest, 'rev-parse', 'HEAD');
+		git(dest, 'reset', '-q', '--hard', 'HEAD~1');
+		git(dest, 'replace', git(dest, 'rev-parse', 'HEAD'), evil);
+		// An untracked directory that ignores itself.
+		put(dest, 'src/vs/hide/.gitignore', '*\n');
+		put(dest, 'src/vs/hide/evil.ts', 'x');
+		put(dest, 'node_modules/kept/index.js', 'cached');
+		fetch('v2');
+		assert.equal(fs.readFileSync(path.join(dest, 'src/vs/a.ts'), 'utf8'), 'a2\n', 'the pinned bytes, not the replacement');
+		assert.ok(!fs.existsSync(path.join(dest, 'src/vs/hide')), 'the self-ignoring directory is gone');
+		assert.equal(fs.readFileSync(path.join(dest, 'node_modules/kept/index.js'), 'utf8'), 'cached', 'the install cache stays');
+	} finally {
+		fs.rmSync(scratch, { recursive: true, force: true });
+	}
+});
