@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 211 | 308 | 44 | 661 |
+| fixed | 14 | 84 | 211 | 313 | 44 | 666 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 52 | 161 | 58 | 276 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-| **all** | 16 | 93 | 301 | 562 | 148 | 1120 |
+| **all** | 16 | 93 | 301 | 567 | 148 | 1125 |
 
 ## Baseline: open high and critical findings
 
@@ -2077,6 +2077,16 @@ Every other commit the register cites is on main's history, or on the branch its
 | LCR2-3 | info | false-positive | A directory blob URL or a private repository fails at raw. | Fails closed; the review recorded no issue. |
 | LCR2-4 | info | false-positive | The cache key is not bumped for the new host. | The review recorded no issue. |
 | LCR2-5 | info | false-positive | Prompt injection. | The review recorded no issue. |
+
+### [20261117-pr-review-threads](20261117-pr-review-threads.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| PRR-1 | low | fixed | check_log_trust walked only inventory keys, so a $log the inventory lost (with an allow entry policy.json could still emit) passed the gate. | patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f · `rpc-filter/tools/test_enforcement.py` "test_a_log_method_the_inventory_lost_fails" |
+| PRR-2 | low | fixed | The probe lint blanked whole comment lines, dropping a block comment's closing */ so the code after it read as comment; most of a payload escaped the record and clipboard rules. | patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f · `rpc-filter/tools/test_lint_probes.py` "test_code_after_a_block_comment_is_linted" |
+| PRR-3 | low | fixed | REH probes armed only on the reh-push path were required by every REH evidence check, so a full run failed them. | patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f · `test/containment/check-probes.test.ts` "a probe run only by its own harness is not judged without that selection, and is required with it" |
+| PRR-4 | low | fixed | A harness rerun wiped the previous run.json and tab state before reaping them, orphaning that run's tabs and processes. | patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f · `test/containment/harness-hygiene.test.ts` "each harness reaps before it wipes and tears down on a signal" |
+| PRR-5 | low | fixed | Ctrl+C or SIGTERM skipped a harness's teardown gate (Node's default signal handling runs no exit handler). | patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f · `test/containment/harness-hygiene.test.ts` "SIGINT and SIGTERM reach the exit handler" |
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 

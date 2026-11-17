@@ -16522,6 +16522,81 @@
 				"file": "test/containment/teardown.ts",
 				"name": "generated fixture workspaces removed from the host"
 			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-1",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "check_log_trust walked only inventory keys, so a $log the inventory lost (with an allow entry policy.json could still emit) passed the gate.",
+			"component": "rpc-filter/tools/check_drift.py check_log_trust",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f",
+			"test": {
+				"file": "rpc-filter/tools/test_enforcement.py",
+				"name": "test_a_log_method_the_inventory_lost_fails"
+			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-2",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "The probe lint blanked whole comment lines, dropping a block comment's closing */ so the code after it read as comment; most of a payload escaped the record and clipboard rules.",
+			"component": "rpc-filter/tools/lint_probes.py",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_code_after_a_block_comment_is_linted"
+			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-3",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "REH probes armed only on the reh-push path were required by every REH evidence check, so a full run failed them.",
+			"component": "test/containment/check-probes.ts, rpc-filter/probes/expectations.json",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f",
+			"test": {
+				"file": "test/containment/check-probes.test.ts",
+				"name": "a probe run only by its own harness is not judged without that selection, and is required with it"
+			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-4",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "A harness rerun wiped the previous run.json and tab state before reaping them, orphaning that run's tabs and processes.",
+			"component": "proof harnesses (host-terminal.ts, reh-push.ts)",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f",
+			"test": {
+				"file": "test/containment/harness-hygiene.test.ts",
+				"name": "each harness reaps before it wipes and tears down on a signal"
+			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-5",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "Ctrl+C or SIGTERM skipped a harness's teardown gate (Node's default signal handling runs no exit handler).",
+			"component": "proof harnesses, test/containment/teardown.ts exitOnSignals",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f",
+			"test": {
+				"file": "test/containment/harness-hygiene.test.ts",
+				"name": "SIGINT and SIGTERM reach the exit handler"
+			}
 		}
 	]
 }
