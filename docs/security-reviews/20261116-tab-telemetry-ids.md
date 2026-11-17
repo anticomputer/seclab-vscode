@@ -23,3 +23,13 @@ when none is found; CRLF, comments and nested decoys are handled; GNU and BusyBo
 product.jq invariant stops `prepare.sh` (`set -euo pipefail`) in both build scripts; with
 telemetry off the init data carries only placeholders, and REH-side telemetry sees only the
 tab's own machine. No high or critical finding.
+
+## Copilot review (PR #12)
+Three threads from the automated pull-request review, triaged against the code after the merge
+and fixed in a follow-up.
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| TEL-4 | Low | release check | The check took one-tab indentation as the root level, so a nested `"enableTelemetry": false` indented like a top-level key passed it while the root key was missing. A missing key leaves telemetry off, so no ids flowed; the gate didn't check what it claimed. | fixed | The key must be on its own line at JSON depth 1, counted from braces and brackets outside strings. | build/check-release.sh self-test "a nested enableTelemetry false indented as if top level (TEL-4)" |
+| TEL-5 | Info | harness | The nbsync probe's prepare, launch, check flow read the serializer refusal only in `drive`, so it couldn't pass on a filtered build. | fixed | `check` reads the window's decision log itself, before teardown; the flow passed on main `6589051b`. | none |
+| TEL-6 | Info | harness | The telemetryid and nbsync profiles (and the docsync and configsync ones) were shared by every worktree, while each run's guard is per worktree, so one worktree's run could wipe or tear down another's. | fixed | Each profile name carries a hash of its worktree. | none |
