@@ -84,13 +84,110 @@ export function reporters(files: Record<string, string>): string[] {
 	return out;
 }
 
-/** No workflow may let its token write check runs or commit statuses: a step holding either could
- *  post a passing required context as GitHub Actions itself, with no job of that name (review
- *  CR-8). Nothing needs them; matched anywhere in the text, comments included (fail closed). */
-export function tokenScopes(files: Record<string, string>): string[] {
-	return Object.entries(files).filter(([, yml]) => /\b["']?(?:checks|statuses)["']?\s*:\s*["']?write\b|\bwrite-all\b/.test(yml))
-		.map(([f]) => `${f}: grants checks: write, statuses: write or write-all, which could post a required context`);
+/** Write scopes a workflow may grant; any scope may be read or none. Not checks or statuses: a step
+ *  holding either could post a passing required context as GitHub Actions itself (review CR-8). */
+const WRITE_OK = new Set(['id-token', 'attestations', 'issues']);
+
+/** A workflow's lines with block-scalar content (a `run: |` script) blanked: escapes and quotes
+ *  there are shell text, not YAML. */
+function yamlLines(yml: string): string[] {
+	const out: string[] = [];
+	let blockIndent = -1;
+	for (const l of yml.split('\n')) {
+		const ind = /^ */.exec(l)![0].length;
+		if (blockIndent >= 0 && (/^\s*$/.test(l) || ind > blockIndent)) {
+			out.push('');
+			continue;
+		}
+		blockIndent = /^\s*(?:-\s+)?[^\s#][^#]*?:\s*[|>][-+0-9]*\s*(?:#.*)?$/.test(l) ? ind : -1;
+		out.push(l);
+	}
+	return out;
 }
+
+/** Every `permissions:` grant, read fail-closed (reviews CR-8, CR-9). Actions decodes YAML the way
+ *  a text match doesn't, so a double-quoted escape, a complex key or a merge key anywhere outside a
+ *  script fails the workflow, and a `permissions:` value must read as `read-all`, `{}`, a flow
+ *  map of plain pairs, or plain `scope: read|write|none` lines. Write only where WRITE_OK says. */
+export function permissionsProblems(files: Record<string, string>, writeOk: (f: string, scope: string) => boolean = (_, s) => WRITE_OK.has(s)): string[] {
+	const out: string[] = [];
+	for (const [f, yml] of Object.entries(files)) {
+		const lines = yamlLines(yml);
+		const bad = (why: string) => out.push(`${f}: ${why}; it might grant a token scope unseen`);
+		if (lines.some(l => /(^|[\s:[{,-])"[^"]*\\/.test(l))) {
+			bad('a double-quoted YAML escape');
+			continue;
+		}
+		if (lines.some(l => /^\s*(?:-\s+)?\?(\s|$)/.test(l) || /(^|[\s{,])<<\s*:/.test(l))) {
+			bad('a complex or merge key');
+			continue;
+		}
+		const pair = (scope: string, value: string, where: number) => {
+			if (!/^[a-z][a-z-]*$/.test(scope) || !/^(read|write|none)$/.test(value)) {
+				bad(`line ${where + 1}: unreadable permission ${JSON.stringify(`${scope}: ${value}`)}`);
+			} else if (value === 'write' && !writeOk(f, scope)) {
+				out.push(`${f}: line ${where + 1} grants ${scope}: write, which isn't allowed`);
+			}
+		};
+		const unq = (s: string) => s.replace(/^'([^']*)'$/, '$1').replace(/^"([^"]*)"$/, '$1');
+		for (let i = 0; i < lines.length; i++) {
+			const m = /^(\s*)(?:-\s+)?(["']?)permissions\2\s*:\s*(.*?)\s*(?:#.*)?$/.exec(lines[i]);
+			if (!m) {
+				if (/permissions/.test(lines[i]) && /:/.test(lines[i])) {
+					bad(`line ${i + 1}: a permissions key it can't read`);
+				}
+				continue;
+			}
+			const v = m[3];
+			if (v === 'read-all' || v === '{}') {
+				continue;
+			}
+			if (v === 'write-all') {
+				out.push(`${f}: line ${i + 1} grants write-all`);
+				continue;
+			}
+			const flow = /^\{(.*)\}$/.exec(v);
+			if (flow) {
+				for (const kv of flow[1].split(',').map(x => x.trim()).filter(Boolean)) {
+					const p = /^(["']?)([^"':\s]+)\1\s*:\s*(.+)$/.exec(kv);
+					if (!p) {
+						bad(`line ${i + 1}: unreadable permission ${JSON.stringify(kv)}`);
+					} else {
+						pair(p[2], unq(p[3].trim()), i);
+					}
+				}
+				continue;
+			}
+			if (v !== '') {
+				bad(`line ${i + 1}: unreadable permissions value ${JSON.stringify(v)}`);
+				continue;
+			}
+			const ind = m[1].length;
+			let any = false;
+			for (let j = i + 1; j < lines.length; j++) {
+				const l = lines[j];
+				if (/^\s*(#.*)?$/.test(l)) {
+					continue;
+				}
+				if (/^ */.exec(l)![0].length <= ind) {
+					break;
+				}
+				const p = /^\s+(["']?)([^"':\s]+)\1\s*:\s*(.*?)\s*(?:#.*)?$/.exec(l);
+				if (!p) {
+					bad(`line ${j + 1}: unreadable permission ${JSON.stringify(l.trim())}`);
+				} else {
+					pair(p[2], unq(p[3]), j);
+				}
+				any = true;
+			}
+			if (!any) {
+				bad(`line ${i + 1}: an empty permissions block`);
+			}
+		}
+	}
+	return out;
+}
+
 
 function selfTest(): void {
 	const good = 'on:\n  push:\n  pull_request:\n\njobs:\n  unit:\n    name: unit\n    runs-on: x\n    steps:\n      - run: x\n';
@@ -126,9 +223,18 @@ function selfTest(): void {
 	const wf = (job: string) => `on:\n  push:\n  pull_request:\njobs:\n${job}`;
 	const real = { 'ci-unit.yml': good, 'workflow-lint.yml': good.replace(/unit/g, 'lint'), 'docs-check.yml': good.replace(/unit/g, 'docs'), 'patch-build.yml': good.replace(/unit/g, 'patch-build') };
 	for (const [name, extra, want] of [
-		['CR-8 checks: write', { 'x.yml': wf('  a:\n    permissions:\n      checks: write\n    steps:\n      - run: x\n') }, /could post a required context/],
-		['CR-8 statuses: write in flow style', { 'x.yml': 'permissions: {statuses: write}\n' + wf('  a:\n    steps:\n      - run: x\n') }, /could post a required context/],
-		['CR-8 write-all', { 'x.yml': 'permissions: write-all\n' + wf('  a:\n    steps:\n      - run: x\n') }, /could post a required context/],
+		['CR-8 checks: write', { 'x.yml': wf('  a:\n    permissions:\n      checks: write\n    steps:\n      - run: x\n') }, /grants checks: write/],
+		['CR-8 statuses: write in flow style', { 'x.yml': 'permissions: {statuses: write}\n' + wf('  a:\n    steps:\n      - run: x\n') }, /grants statuses: write/],
+		['CR-8 write-all', { 'x.yml': 'permissions: write-all\n' + wf('  a:\n    steps:\n      - run: x\n') }, /grants write-all/],
+		['CR-9 an escaped scope key', { 'x.yml': 'permissions:\n  "check\\x73": write\n' + wf('  a:\n    steps:\n      - run: x\n') }, /double-quoted YAML escape/],
+		['CR-9 an escaped value', { 'x.yml': 'permissions:\n  checks: "writ\\x65"\n' + wf('  a:\n    steps:\n      - run: x\n') }, /double-quoted YAML escape/],
+		['CR-9 a folded value', { 'x.yml': 'permissions:\n  checks: >-\n    write\n' + wf('  a:\n    steps:\n      - run: x\n') }, /permission|empty/],
+		['CR-9 a literal value', { 'x.yml': 'permissions:\n  statuses: |-\n    write\n' + wf('  a:\n    steps:\n      - run: x\n') }, /permission|empty/],
+		['CR-9 a complex permissions key', { 'x.yml': '? permissions\n: {checks: write}\n' + wf('  a:\n    steps:\n      - run: x\n') }, /complex or merge key/],
+		['CR-9 a merge key', { 'x.yml': wf('  a:\n    <<: *p\n    steps:\n      - run: x\n') }, /complex or merge key/],
+		['CR-9 a quoted write in a flow map', { 'x.yml': "permissions: {'statuses': 'write'}\n" + wf('  a:\n    steps:\n      - run: x\n') }, /statuses: write/],
+		['CR-9 an unknown write scope', { 'x.yml': wf('  a:\n    permissions:\n      pull-requests: write\n    steps:\n      - run: x\n') }, /pull-requests: write/],
+		['an allowed write and a script escape', { 'x.yml': wf('  a:\n    permissions:\n      id-token: write\n      contents: read\n    steps:\n      - run: |\n          echo "a\\b"\n') }, null],
 		['checks: read is fine', { 'x.yml': wf('  a:\n    permissions:\n      checks: read\n    steps:\n      - run: x\n') }, null],
 		['control: the real four and an unrelated job', { 'x.yml': wf('  other:\n    name: other\n    steps:\n      - run: x\n') }, null],
 		['a decoy job named lint', { 'shadow.yml': wf('  a:\n    name: lint\n    steps:\n      - run: x\n') }, /reports the required context `lint`/],
@@ -144,7 +250,7 @@ function selfTest(): void {
 		['CR-7 a decoy after a column-0 comment', { 'shadow.yml': wf('  a:\n    name: ok\n    steps:\n      - run: x\n# a note\n  b:\n    name: lint\n    steps:\n      - run: x\n') }, /reports the required context `lint`/],
 		['an uppercase extension', { 'shadow.YML': wf('  a:\n    name: unit\n    steps:\n      - run: x\n') }, /reports the required context `unit`/],
 	] as Array<[string, Record<string, string>, RegExp | null]>) {
-		const got = [...reporters({ ...real, ...extra }), ...tokenScopes({ ...real, ...extra })];
+		const got = [...reporters({ ...real, ...extra }), ...permissionsProblems({ ...real, ...extra })];
 		if (want ? !got.some(p => want.test(p)) : got.length) {
 			throw new Error(`required-checks self-test "${name}": got ${JSON.stringify(got)}`);
 		}
@@ -155,7 +261,7 @@ function selfTest(): void {
 			throw new Error(`required-checks self-test "${name}": got ${JSON.stringify(got)}`);
 		}
 	}
-	console.log(`required-checks self-test: ${cases.length + 17} cases OK`);
+	console.log(`required-checks self-test: ${cases.length + 26} cases OK`);
 }
 
 if (import.meta.main) {
@@ -166,7 +272,7 @@ if (import.meta.main) {
 		const dir = path.join(root, '.github/workflows');
 		const files = Object.fromEntries(fs.readdirSync(dir).filter(f => /\.ya?ml$/i.test(f)).map(f => [f, fs.readFileSync(path.join(dir, f), 'utf8')]));
 		const all = [...REQUIRED.flatMap(r => files[r.workflow] === undefined ? [`${r.context}: workflow ${r.workflow} is missing`] : problems(files[r.workflow], r.context, r.job)),
-			...reporters(files), ...tokenScopes(files)];
+			...reporters(files), ...permissionsProblems(files)];
 		for (const p of all) {
 			console.error(`required-checks: ${p}`);
 		}
