@@ -72,7 +72,11 @@ const mediaFile = path.join(base, 'host', mediaCanary, 'clip.mp4');
 fs.mkdirSync(path.dirname(mediaFile), { recursive: true });
 fs.writeFileSync(mediaFile, Buffer.alloc(64));
 const until = Math.floor(Date.now() / 1000) + 2 * 3600;
-fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${randomBytes(16).toString('hex')}\nrun=${base}\nuntil=${until}\n`);
+// The harness keeps its own arm; once the tab runs it writes into the tab's workspace only through
+// the tab (sbx exec), never from the host, where a tab symlink could redirect it (as review SQ-4/SQ-5).
+const arm = randomBytes(16).toString('hex');
+fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\nuntil=${until}\n`);
+const writeInTab = (file: string, text: string) => inTab(['sh', '-c', 'printf "%s" "$1" > "$2"', 'sh', text, path.join(ws, '.seclab', file)]);
 
 // Setup failures still end in the teardown gate (PR #24 review): nothing below may skip it.
 let installed = false;
@@ -183,7 +187,7 @@ if (installed) {
 		await ed.cdp.send('Profiler.startPreciseCoverage', { callCount: true, detailed: false }, ed.session);
 		await ed.cdp.send('Profiler.takePreciseCoverage', {}, ed.session);
 		for (let k = 1; k <= 3; k++) {
-			fs.writeFileSync(path.join(ws, '.seclab', `scale-${k}`), `${SCALE.slice(0, k - 1).reduce((a, b) => a + b, 0)} ${SCALE[k - 1]}`);
+			writeInTab(`scale-${k}`, `${SCALE.slice(0, k - 1).reduce((a, b) => a + b, 0)} ${SCALE[k - 1]}`);
 			const done = path.join(ws, '.seclab-edtabs', `scale-${k}.done`);
 			for (let i = 0; i < 300 && inTab(['test', '-e', done]).status !== 0; i++) {
 				spawnSync('sleep', ['1']);
@@ -203,7 +207,7 @@ if (installed) {
 		console.error(`drive: ${String(e).slice(0, 300)}`);
 	}
 }
-fs.writeFileSync(path.join(ws, '.seclab', 'stop'), '');
+writeInTab('stop', '');
 let rep: any = read();
 for (let i = 0; i < 30 && tabId() && rep?.done !== true; i++) {
 	spawnSync('sleep', ['1']);
@@ -211,9 +215,8 @@ for (let i = 0; i < 30 && tabId() && rep?.done !== true; i++) {
 }
 await ed?.close().catch(() => undefined);
 
-const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').match(/^arm=([0-9a-f]{32})$/m) ?? [])[1];
 const counts = (o: unknown, key: RegExp) => !!o && typeof o === 'object' && Object.entries(o as object).every(([k, v]) => key.test(k) && Number.isInteger(v));
-const valid = !!rep && rep.schema === 'seclab-edtabs-report/1' && rep.arm === armed && typeof rep.done === 'boolean' && Number.isInteger(rep.tabs)
+const valid = !!rep && rep.schema === 'seclab-edtabs-report/1' && rep.arm === arm && typeof rep.done === 'boolean' && Number.isInteger(rep.tabs)
 	&& counts(rep.kinds, /^[A-Za-z]{1,40}$/) && counts(rep.schemes, /^[a-z0-9.+-]{1,40}$/)
 	&& typeof rep.untitledText === 'boolean' && typeof rep.untitledEvent === 'boolean' && Array.isArray(rep.tokens) && rep.tokens.length <= 5000
 	&& rep.tokens.every((x: any) => !!x && (x.field === 'label' || x.field === 'uri') && /^[0-9a-f]{64}$/.test(x.sha256));
