@@ -265,7 +265,7 @@
 				"quote": "**Responses are filtered at the customer, one surface at a time.**"
 			},
 			"note": "Patch 0033 and seclabFromTab (ADR 20261116-response-side-control): commands, command: links and markdown from tab data go through the filter; remote images and HTML are dropped. Hover and completion are wired; check_drift.py::check_responses refuses any other reachable registration until its customer is wired. Pre-control and control runs in the ADR.",
-			"commit": "d29b5fef",
+			"commit": "patch:413654738ff99ecabefe2db12e88562f0e8e86de",
 			"test": {
 				"file": "test/containment/filter-module.test.ts",
 				"name": "response: a denied command runs in the tab, never on the trusted side, and is logged when the tab lacks it"
@@ -18706,6 +18706,84 @@
 				"file": "docs/security-reviews/20261118-bump-alpine-zizmor-nginx.md",
 				"quote": "None found in the diff"
 			}
+		},
+		{
+			"record": "20261116-response-side-control.md",
+			"anchor": "RSC-1",
+			"round": "response-side control review (2026-11-16)",
+			"severity": "high",
+			"summary": "A tab completion inserted as a snippet naming ${CLIPBOARD} makes the window read the host clipboard into the tab's document, around the policy's deny of MainThreadClipboard.$readText.",
+			"component": "patch 0033 completion items",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11",
+			"test": {
+				"file": "test/containment/filter-module.test.ts",
+				"name": "response: a tab snippet that reads the clipboard is refused (review RSC-1)"
+			}
+		},
+		{
+			"record": "20261116-response-side-control.md",
+			"anchor": "RSC-2",
+			"round": "response-side control review (2026-11-16)",
+			"severity": "medium",
+			"summary": "Remote images reached the trusted hover renderer from tab markdown: nested and reference image forms survived the strip patterns, and a <span> HTML block passed an <img> through under a truthy isTrusted.",
+			"component": "seclabFromTab markdown sanitiser",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11",
+			"test": {
+				"file": "test/containment/filter-module.test.ts",
+				"name": "response: no image or HTML form survives in tab markdown (review RSC-2)"
+			}
+		},
+		{
+			"record": "20261116-response-side-control.md",
+			"anchor": "RSC-3",
+			"round": "response-side control review (2026-11-16)",
+			"severity": "low",
+			"summary": "RPC-R2 was marked fixed though its markdown and image parts were neither fixed nor proven.",
+			"component": "findings register, ADR response-side-control",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11",
+			"gap": "A register and record correction; nothing to test."
+		},
+		{
+			"record": "20261116-response-side-control.md",
+			"anchor": "RSC-4",
+			"round": "response-side control review (2026-11-16)",
+			"severity": "info",
+			"summary": "The ADR, RPC-LOCKDOWN and a code comment didn't match the code (token routing, whether a tab sees tokens, kept images, scheme-less selectors, styled spans).",
+			"component": "ADR response-side-control, RPC-LOCKDOWN, seclabRpcFilter.ts",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11",
+			"gap": "Documentation corrections; nothing to test."
+		},
+		{
+			"record": "20261116-response-side-control.md",
+			"anchor": "RSC-5",
+			"round": "response-side control review (2026-11-16)",
+			"severity": "info",
+			"summary": "A non-command link in tab markdown opens through the trusted opener: http(s) and mailto on the host behind upstream link protection rather than the tab-naming $openUri prompt, and file: opens a host file in the window. Each needs a click.",
+			"component": "trusted opener for tab markdown links",
+			"owner": "rpc",
+			"status": "open",
+			"followUp": "Route link clicks from tab markdown through the same prompt as $openUri, and drop file: links (rpc session).",
+			"gap": "No change yet: tab-markdown links open through the trusted opener."
+		},
+		{
+			"record": "20261116-response-side-control.md",
+			"anchor": "RSC-6",
+			"round": "response-side control review (2026-11-16)",
+			"severity": "info",
+			"summary": "check_drift.py::check_responses gates only $register* methods; push methods that carry markdown or commands into UI aren't gated. None is reachable today.",
+			"component": "rpc-filter/tools/check_drift.py check_responses",
+			"owner": "rpc",
+			"status": "open",
+			"followUp": "Extend the gate to push methods that carry markdown or commands into UI, or record explicit exemptions (rpc session).",
+			"gap": "The gate covers registrations only; pushes rely on default deny."
 		}
 	]
 }

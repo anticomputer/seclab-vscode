@@ -1,6 +1,6 @@
 # Data a tab returns can't put tab-chosen actions or fetches into trusted UI
 
-- **Status:** accepted. Proof passed, both halves (2026-11-16).
+- **Status:** proposed: the command vectors are proven; the RSC-1 and RSC-2 fixes await their control run.
 - **Date:** 2026-11-16
 - **Deciders:** project owner (closing condition for the deferred-laundering acceptance,
   `docs/security-reviews/owner-acceptances.md`, 2026-11-12); RPC follow-ups session
@@ -36,25 +36,34 @@ function, and a gate makes it impossible to allow a registration without it.
    and, for a tab, a sanitiser with two operations:
    - `command(cmd)` replaces the command with `_seclab.tabCommand` and a single opaque argument:
      a per-window random token mapped to `{ origin, id, arguments }`. The handler, registered
-     once by the filter module, looks the token up and runs
-     `seclabExecuteCommandFromTab(commandService, id, args, origin)`, so the filter's command
-     verdict and the taint apply. An unknown token is refused. A tab can't forge a token: it
-     never sees one, and they come from `crypto.getRandomValues`.
+     once by the filter module, looks the token up. A command the policy allows outright runs on
+     the trusted side through `seclabExecuteCommandFromTab(commandService, id, args, origin)`,
+     so the taint applies; anything else runs in the tab's own extension host, and a refusal is
+     logged when the tab doesn't have it. An unknown token is refused. A tab can't forge a
+     token: they come from `crypto.getRandomValues`, and the map is per window. A tab does see
+     its own tokens (`_executeHoverProvider` and `_executeCompletionItemProvider` return them),
+     which only run that tab's own data.
    - `markdown(md)` returns a copy with `supportHtml: false`, every `command:` link rewritten
-     to the token form, `isTrusted: { enabledCommands: ['_seclab.tabCommand'] }` so any link the
-     rewrite missed is inert, and every image whose source isn't a `data:` URI or this tab's
-     own `vscode-remote` authority replaced by its alt text. `baseUri` and `uris` are dropped.
+     to the token form, and `isTrusted: { enabledCommands: ['_seclab.tabCommand'] }` so any link
+     the rewrite missed is inert. Every image opener (`![`) and every tag opener (`<` before a
+     tag character) is escaped, so no image of any form and no HTML reaches the renderer:
+     review RSC-2 showed that stripping images by pattern misses nested and reference forms,
+     and that a trusted string passes `<span>` HTML blocks through. `baseUri` and `uris` are
+     dropped.
+   - `snippetAllowed(text)`: a completion snippet that names the `CLIPBOARD` variable is
+     inserted as plain text (review RSC-1); otherwise the window would read the host clipboard
+     into the tab's document.
 2. Each tab-reachable customer passes what it hands to the UI through the sanitiser. This
    increment covers the two the probe needs: `$registerHoverProvider` (hover contents) and
-   `$registerCompletionsProvider` (item command, documentation and resolve), in a new patch
+   `$registerCompletionsProvider` (item command, documentation, snippet and resolve), in a new patch
    `0033-seclab-sanitise-tab-provider-results`.
 3. The policy marks every registration whose results reach UI with `"response": "seclabFromTab"`.
    `check_drift.py` fails when such a method is reachable and its customer's patch doesn't call
    the sanitiser, and when a reachable registration method has no `response` declaration. The
    drafts in `rpc-filter/policy/drafts/` move over one surface at a time, each with this field.
 4. Registration arguments are validated: the document selector may name only the
-   `vscode-remote` scheme (a filter without a scheme is refused, since it would match host
-   documents open in the window).
+   `vscode-remote` scheme. A filter without a scheme is accepted and narrowed to
+   `vscode-remote` by 0033, since as written it would match host documents open in the window.
 
 ## Proof
 The fixture `test/containment/response-probe` is run by `test/containment/response-probe.ts`,
