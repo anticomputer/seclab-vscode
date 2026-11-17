@@ -17,12 +17,12 @@ agents. It is never an instruction to whoever reads it
 |---|---|---|---|---|---|---|
 | fixed | 14 | 84 | 212 | 337 | 45 | 692 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 53 | 169 | 60 | 287 |
+| fixed-untested | 0 | 5 | 54 | 171 | 60 | 290 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
-| false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-| **all** | 16 | 93 | 303 | 599 | 151 | 1162 |
+| false-positive | 0 | 0 | 0 | 0 | 16 | 16 |
+| **all** | 16 | 93 | 304 | 601 | 153 | 1167 |
 
 ## Baseline: open high and critical findings
 
@@ -213,6 +213,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md) **GATE-8** | medium | fixed-untested | seclab verify_signed_image | Locally, an existing .work/deps-verified marker skips cosign and attestation verification | The marker is gone: verify_signed_image verifies on every use, and review SSS-2 removed tool reuse by tag. No test drives the seclab shell function with a forged marker or tag. |
 | [20261112-gate-fail-open](20261112-gate-fail-open.md) **SSS-2** | medium | fixed-untested | build/tools/tool.sh | Tool images were reused by content tag, which any local process could point at another image, replacing the verifier. | The image is rebuilt from cache on every use; no test retags a tool image and checks it is rebuilt. |
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-1** | medium | fixed-untested | RPC drift check (rpc-filter/tools/check_drift.py) | The RPC drift check certified the 1.145.3 bump without seeing it: it compares committed artefacts only, so the unregenerated 1.145.0 inventory passed against the 1.145.0 policy. | Proven by injection (upstream.lock pointed back at 1.145.0 makes check.sh exit 2), but no self-test or unit test drives check_drift.py with an inventory of another SHA. |
+| [20261117-fetch-upstream-clean](20261117-fetch-upstream-clean.md) **FU-2** | medium | fixed-untested | build (fetch-upstream, build.sh) | The install stamp hashed three lockfiles, so a pin bump could keep un-audited extension dependency trees. | Proven by a reinstall on the new stamp and none on a rebuild; no committed test runs a pin bump. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-B** | low | fixed-untested | campaign fixture | Fixture C2 port/path and stage query matched published Contagious-Interview IOCs. | Stand-ins (192.0.2.10:8443/api/v1/ping, stage.loader-standin.example.test) are in the fixture, but no check enforces neutral IOCs; only fixture-lint's host allow-list would catch a non-reserved host. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-D** | low | fixed-untested | campaign fixture arming | Tab-side code could rewrite \`targets\` to aim an escaped stage at user files; the marker write followed links and truncated. | The stage requires \`run\` under \`/.work/\` or \`/.seclab-test/\` and writes the marker with \`wx\`, but no test drives a targets file with a hostile run dir. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-F** | low | fixed-untested | campaign fixture teardown | Planted inert files were left in the host checkout when the run used KEEP=1. | \`disarmCampaign\` is called unconditionally in \`cleanup()\` (test/containment/run.ts), but nothing runs the suite with KEEP=1 to prove the planted .git/.envrc are gone. |
@@ -350,6 +351,8 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-2** | low | fixed-untested | RPC inventory generator (rpc-filter/tools/extract_inventory.py) | The RPC inventory generator fell back to a hard-coded 1.145.0 SHA when upstream.lock named none. | The fallback constant is gone and the generator exits 2 without a pinned SHA; no test runs it without upstream.lock. |
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-3** | low | fixed-untested | docs/ARCHITECTURE.md | ARCHITECTURE's as-built line still described a three-patch queue after the bump edited it. | Documentation only; nothing to test. |
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-4** | low | fixed-untested | findings register (build/docs/findings.ts upstream exemption) | The register exempts only the current upstream pin, so after a bump, entries citing the old pin's SHA (or a file path containing it) carry citations that can't resolve. | Fixed by the register session: a prefix of any pin upstream.lock has held on main counts as the upstream commit, and hex inside a file path isn't a citation. Its tests are recorded against its own round; none of this round's tests drives it. |
+| [20261117-fetch-upstream-clean](20261117-fetch-upstream-clean.md) **FU-3** | low | fixed-untested | build (fetch-upstream, build.sh) | The pinned-SHA check named HEAD only; a reused index could hide a modified tracked file from the reset. | An injected skip-worktree edit survived the old script and not the new one, run by hand; fetch-upstream needs the network, so no committed test. |
+| [20261117-fetch-upstream-clean](20261117-fetch-upstream-clean.md) **FU-4** | low | fixed-untested | build (fetch-upstream, build.sh) | The clean took a hand-kept path list, so stray untracked files survived. | An injected stray file survived the old script and not the new one, run by hand; no committed test. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-2** | low | fixed-untested | docs link check (lychee) | Old cache entries from when 429 was accepted would be replayed as success. | A cache-key version; nothing to test beyond the key. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-4** | low | fixed-untested | docs link check (lychee) | Doubling retry waits could push a throttled run past the job timeout. | Timing depends on GitHub throttling; shown only by CI runs. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-7** | low | fixed-untested | docs link check (lychee) | GitHub's secondary rate limit (403) could be cached and replayed red. | An argument; nothing to test offline. |
@@ -2078,6 +2081,16 @@ Every other commit the register cites is on main's history, or on the branch its
 | BRK20D-2 | low | fixed | YAML decodes numeric escapes and backslash continuations in a double-quoted value before Actions evaluates it, so an escaped token reference passed the HH-1 check's raw-text scan. | ab175121b6f1 · `broker/tools/token_steps.py` "BRK20D-2: a unicode escape in a double-quoted value fails" |
 | BRK20D-3 | low | fixed | The HH-1 check's continuation rule needed the double quote on the same line, so a quote opened lines earlier let a backslash continuation split a token reference. | c7309fbda2c9 · `broker/tools/token_steps.py` "BRK20D-3: a backslash continuation after the quote opened on an earlier line fails" |
 | BRK20D-4 | low | fixed | The HH-1 check's continuation rule skipped lines starting with #, but inside a multi-line double-quoted value such a line is content, so it could still join into a token reference. | b19a42452e0f · `broker/tools/token_steps.py` "BRK20D-4: a hash-led continuation line inside a multi-line double-quoted value fails" |
+
+### [20261117-fetch-upstream-clean](20261117-fetch-upstream-clean.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| FU-1 | info | false-positive | The paths shipping patches write were reviewed against the cleaned set. | The review recorded no issue: every patch-written path is cleaned. |
+| FU-2 | medium | fixed-untested | The install stamp hashed three lockfiles, so a pin bump could keep un-audited extension dependency trees. | Proven by a reinstall on the new stamp and none on a rebuild; no committed test runs a pin bump. |
+| FU-3 | low | fixed-untested | The pinned-SHA check named HEAD only; a reused index could hide a modified tracked file from the reset. | An injected skip-worktree edit survived the old script and not the new one, run by hand; fetch-upstream needs the network, so no committed test. |
+| FU-4 | low | fixed-untested | The clean took a hand-kept path list, so stray untracked files survived. | An injected stray file survived the old script and not the new one, run by hand; no committed test. |
+| FU-5 | info | false-positive | CI and same-pin regressions were reviewed. | The review recorded no issue. |
 
 ### [20261117-link-check-retries](20261117-link-check-retries.md)
 

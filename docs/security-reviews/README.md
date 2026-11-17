@@ -163,6 +163,7 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-16 | [telemetry ids stay out of tabs (release check and product invariant)](20261116-tab-telemetry-ids.md) | origin/main..branch head: build/check-release.sh (telemetry check and self-test), | see record |
 | 2026-11-16 | [the Code-OSS 1.145.3 bump (round UB)](20261116-upstream-1145-3.md) | round UB, by an Opus-class model: the upstream bump from 1.145.0 (a717861c) to | see record |
 | 2026-11-17 | [regression tests for broker low findings, and HH-1's check (round 20)](20261117-broker-finding-tests-2.md) | - "broker: regression tests for six low fixed-untested findings": | see record |
+| 2026-11-17 | [fetch-upstream cleans a previous pin's files (round FU)](20261117-fetch-upstream-clean.md) | round FU, by an Opus-class model, of the build/fetch-upstream.sh fix on the | see record |
 | 2026-11-17 | [link-check retries (round LCR)](20261117-link-check-retries.md) | round LCR, by an Opus-class model, of the lychee change in | see record |
 | 2026-11-17 | [Review: automated PR review threads on the RPC follow-ups (#9, #14, #20, #27)](20261117-pr-review-threads.md) | see record | see record |
 | 2026-11-17 | [probe harnesses and the tab's workspace (follow-up to PR #24, #33, #37)](20261117-probe-harness-hygiene.md) | the configsync, docsync, edtabs, nbsync and telemetryid probe harnesses on main, for | see record |

@@ -17119,6 +17119,72 @@
 			"status": "fixed-untested",
 			"commit": "6d798949bb6c0334c8151bbbc99ff55f6b05c593",
 			"gap": "Fixed by the register session: a prefix of any pin upstream.lock has held on main counts as the upstream commit, and hex inside a file path isn't a citation. Its tests are recorded against its own round; none of this round's tests drives it."
+		},
+		{
+			"record": "20261117-fetch-upstream-clean.md",
+			"anchor": "FU-1",
+			"round": "Round FU",
+			"severity": "info",
+			"summary": "The paths shipping patches write were reviewed against the cleaned set.",
+			"component": "build (fetch-upstream, build.sh)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue: every patch-written path is cleaned.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-fetch-upstream-clean.md",
+				"quote": "nothing a patch created survives a pin change any more"
+			}
+		},
+		{
+			"record": "20261117-fetch-upstream-clean.md",
+			"anchor": "FU-2",
+			"round": "Round FU",
+			"severity": "medium",
+			"summary": "The install stamp hashed three lockfiles, so a pin bump could keep un-audited extension dependency trees.",
+			"component": "build (fetch-upstream, build.sh)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:addb6c92039bda4742149bf52e1e843f9896472c",
+			"gap": "Proven by a reinstall on the new stamp and none on a rebuild; no committed test runs a pin bump."
+		},
+		{
+			"record": "20261117-fetch-upstream-clean.md",
+			"anchor": "FU-3",
+			"round": "Round FU",
+			"severity": "low",
+			"summary": "The pinned-SHA check named HEAD only; a reused index could hide a modified tracked file from the reset.",
+			"component": "build (fetch-upstream, build.sh)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:addb6c92039bda4742149bf52e1e843f9896472c",
+			"gap": "An injected skip-worktree edit survived the old script and not the new one, run by hand; fetch-upstream needs the network, so no committed test."
+		},
+		{
+			"record": "20261117-fetch-upstream-clean.md",
+			"anchor": "FU-4",
+			"round": "Round FU",
+			"severity": "low",
+			"summary": "The clean took a hand-kept path list, so stray untracked files survived.",
+			"component": "build (fetch-upstream, build.sh)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:addb6c92039bda4742149bf52e1e843f9896472c",
+			"gap": "An injected stray file survived the old script and not the new one, run by hand; no committed test."
+		},
+		{
+			"record": "20261117-fetch-upstream-clean.md",
+			"anchor": "FU-5",
+			"round": "Round FU",
+			"severity": "info",
+			"summary": "CI and same-pin regressions were reviewed.",
+			"component": "build (fetch-upstream, build.sh)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-fetch-upstream-clean.md",
+				"quote": "No regression for a fresh volume or the same-pin path."
+			}
 		}
 	]
 }
