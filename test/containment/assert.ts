@@ -190,6 +190,7 @@ export function rpcDecisions(userDataDir: string): RpcDecision[] {
  * only with the denial in the decision log. Both the missing evidence and the denial are within
  * a tab's reach (a tab's own code can make the denied call), so neither excuses a host run: the
  * host facts (no host marker; on sbx, no evidence file in the host checkout) stay hard checks.
+ * On OCI the tab writes the checkout itself, so those facts are only as strong as the checkout.
  */
 export const FILTERED_VECTOR_LOSSES: Record<string, { deniedRef: string; gap: string }> = {
 	// The tab's extension host can't register a task system, so the folder-open task never runs.
@@ -201,7 +202,7 @@ export const FILTERED_VECTOR_LOSSES: Record<string, { deniedRef: string; gap: st
 	// repository when the answer isn't true, so it never runs `git status` there.
 	fsmonitor: {
 		deniedRef: 'rpc:MainThreadWorkspace.$requestResourceTrust',
-		gap: 'RPC core: workspace trust requests are denied in tabs, so the git extension opens no repository and never runs git status, docs/RPC-LOCKDOWN.md §7.1; a host run still fails the host-marker and host-evidence checks',
+		gap: 'RPC core: workspace trust requests are denied in tabs, so the git extension opens no repository and never runs git status, docs/RPC-LOCKDOWN.md §7.1; on sbx a host run still fails the host-marker and host-evidence checks',
 	},
 };
 

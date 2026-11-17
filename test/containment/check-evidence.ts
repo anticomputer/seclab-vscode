@@ -248,17 +248,28 @@ if (mode === 'prepare') {
 	// The rogue extension deliberately never runs probe.sh (it can land host-side on an
 	// unpatched build): its own evidence is checked below, not a probe vector.
 	const expectHostname = driver === 'sbx' ? `seclab-${tabId}` : 'tab';
-	for (const vector of driver === 'sbx' ? ['task', 'fsmonitor'] : ['task']) {
+	// One list drives the per-vector checks, the host-evidence checks and the marker sweep's
+	// exemptions, so a vector without its own host-marker row falls through to the sweep.
+	const vectors = driver === 'sbx' ? ['task', 'fsmonitor'] : ['task'];
+	for (const vector of vectors) {
 		checks.push(...checkEvidence(readEvidence(ws, vector, readInTab), vector, { marker, expectHostname, proxy: brokerProxy(driver) }));
 	}
-	// An sbx tab's writes stay in the tab until reviewed (write-back gate), so evidence in the
-	// host checkout means the vector ran host-side. A host fact, never a known gap.
+	// On sbx the tab's writes stay in the tab: Level B never asks tabd to sync write-back
+	// (only Level A's run.ts calls tab.writeback.sync, which starts the auto-sync), so evidence
+	// in the host checkout means the vector ran host-side. A host fact, never a known gap. An
+	// OCI tab writes the checkout directly, so there the check would prove nothing.
 	if (driver === 'sbx') {
-		for (const vector of ['task', 'fsmonitor']) {
+		for (const vector of vectors) {
 			const f = path.join(ws, '.seclab-evidence', `${vector}.json`);
 			checks.push({ vector, name: 'no evidence file in the host checkout (did not run host-side)', ok: !fs.existsSync(f), detail: f });
 		}
 	}
+	// probe.sh skips its marker when `marker=` is blank, so a tab that blanked it in the
+	// checkout (directly on OCI) would silence the host-marker check. A tab that restores the
+	// line in time is not caught: on OCI the host facts are only as strong as the checkout.
+	let targets = '';
+	try { targets = fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8'); } catch { /* a failing check below */ }
+	checks.push({ vector: 'host', name: 'the probe targets in the host checkout still name the run marker', ok: targets.split('\n').includes(`marker=${marker}`), detail: path.join(ws, '.seclab', 'targets') });
 	if (driver !== 'sbx') {
 		checks.push({ vector: 'fsmonitor', name: 'ran (armed in the tab)', ok: false, detail: 'not armed on OCI',
 			knownGap: 'an OCI tab writes .git/config straight to the host checkout (no write-back gate, docs/adr/20261104-write-back-gate.md); Level A covers fsmonitor on OCI' });
@@ -303,7 +314,7 @@ if (mode === 'prepare') {
 		checks.push({ vector: 'rpc', name: `${ids.join(' + ')}: no host effect`, ok: !hit, detail: p, knownGap: hit && filtered === false ? 'open without the RPC capability filter (patch 0005), docs/RPC-LOCKDOWN.md' : undefined });
 	}
 	// Anything marker-shaped in the run dir that no row above or below accounts for.
-	const vectorMarkers = new Set(['task', 'fsmonitor'].map(v => `${marker}.${v}`));
+	const vectorMarkers = new Set(vectors.map(v => `${marker}.${v}`));
 	for (const f of fs.readdirSync(base).filter(n => /^(?:PWNED|probe-marker)/.test(n))) {
 		const p = path.join(base, f);
 		if (!effects.has(p) && !vectorMarkers.has(p)) {
