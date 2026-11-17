@@ -8,16 +8,18 @@
 //
 // One window, one extension (test/containment/response-probe): a completion provider and a
 // hover provider for the workspace's plain-text file. Each returns two things: a command or
-// `command:` link naming `workbench.action.terminal.newLocal`, which opens a shell on the host
-// when the trusted side runs it, and the same naming the extension's own command, the positive
-// control. The driver then, as a user would:
+// `command:` link naming a trusted-side command that opens one of the host user's files in the
+// window (hover: `workbench.action.openGlobalKeybindingsFile`, the host user's keybindings;
+// completion: `workbench.action.openDefaultKeybindingsFile`) when the trusted side runs it. (Patch 0050 removed
+// `workbench.action.terminal.newLocal`, the earlier host command, from tab windows.) Each also
+// returns the same naming the extension's own command, the positive control. The driver then, as a user would:
 //   1. hovers the file's first word and clicks the `hostlink` link, then the `ownlink` one;
 //   2. types `@` and accepts the host-command completion, then `#` and accepts the own one.
-// After each host-command vector it counts the shells under the editor's own process tree on
-// the host, so each vector is judged on its own.
-// Pre-control (the landing commit without patch 0033): both vectors open a host shell.
-// Control: neither does; the decision log records `cmd:workbench.action.terminal.newLocal`
-// refused for each; the hover renders and both own-command controls run in the tab.
+// After each host-command vector it counts the window's editor tabs showing that host file, so
+// each vector is judged on its own. Inert: the files open read as editors; nothing is typed.
+// Pre-control (the landing commit without patch 0033): both vectors open their host file.
+// Control: neither does; the decision log records each command refused; the hover renders and
+// both own-command controls run in the tab.
 //
 // Two data vectors from the 0033 review (RSC-1, RSC-2), judged in a third mode too, `reviewed`
 // (0033 as first reviewed, which they get past):
@@ -50,7 +52,8 @@ import { report, rpcDecisions, type Check } from './assert.ts';
 import { teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
 const IMAGE = 'seclab-tab-oci:test-containment';
-const HOST_REF = 'cmd:workbench.action.terminal.newLocal';
+const HOVER_REF = 'cmd:workbench.action.openGlobalKeybindingsFile';
+const COMPLETION_REF = 'cmd:workbench.action.openDefaultKeybindingsFile';
 
 const argv = process.argv.slice(2);
 const [mode, userDataArg] = argv;
@@ -160,30 +163,12 @@ const waitFor = async (ok: () => boolean | Promise<boolean>, ms: number): Promis
 	return false;
 };
 
-/** Shells anywhere under the editor's own process tree on the host. A tab's shells are not here. */
-function hostShells(root: number): number {
-	const rows = spawnSync('ps', ['-A', '-o', 'pid=,ppid=,comm='], { encoding: 'utf8' }).stdout.split('\n')
-		.map(l => l.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/)).filter((m): m is RegExpMatchArray => !!m);
-	const kids = new Map<number, Array<{ pid: number; comm: string }>>();
-	for (const m of rows) {
-		const list = kids.get(Number(m[2])) ?? [];
-		list.push({ pid: Number(m[1]), comm: m[3] });
-		kids.set(Number(m[2]), list);
-	}
-	let n = 0;
-	const walk = (pid: number, depth: number): void => {
-		for (const k of depth < 12 ? kids.get(pid) ?? [] : []) {
-			n += /(^|\/)-?(zsh|bash|sh|dash|fish)$/.test(k.comm) ? 1 : 0;
-			walk(k.pid, depth + 1);
-		}
-	};
-	walk(root, 0);
-	return n;
-}
+/** Editor tabs in the window whose label is this name. */
+const hostFileTabs = (e: DrivenEditor, name: string) => e.evaluate<number>(`[...document.querySelectorAll('.tabs-container .tab')].filter(t => (t.getAttribute('aria-label') || '').split(',')[0].trim() === ${JSON.stringify(name)}).length`);
 
-/** Total recorded refusals of the host-terminal command, repeats included. */
-const refusals = (): number => rpcDecisions(userData).map(d => d.detail ?? {})
-	.filter(d => d.ref === HOST_REF && d.verdict === 'deny').reduce((n, d) => n + (typeof d.count === 'number' ? d.count : 1), 0);
+/** Total recorded refusals of a host command, repeats included. */
+const refusals = (ref: string): number => rpcDecisions(userData).map(d => d.detail ?? {})
+	.filter(d => d.ref === ref && d.verdict === 'deny').reduce((n, d) => n + (typeof d.count === 'number' ? d.count : 1), 0);
 
 const exists = (f: string) => fs.existsSync(path.join(ws, '.seclab-response', f));
 
@@ -211,14 +196,23 @@ try {
 		await mouse('mouseReleased', x, y);
 	};
 	const rectOf = (js: string) => e.evaluate<{ x: number; y: number } | null>(`(() => { const el = ${js}; if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left + Math.min(r.width / 2, 20), y: r.top + r.height / 2 }; })()`);
-	const word = `[...document.querySelectorAll('.view-line span span')].find(s => s.textContent.includes('hoverword'))`;
+	// Everything is scoped to the probe file's own editor: on a pre-control build the host
+	// commands open host files in the window, and no click or key may ever land in one.
+	const probeEditor = `[...document.querySelectorAll('.monaco-editor')].find(m => m.getBoundingClientRect().width > 0 && [...m.querySelectorAll('.view-line')].some(l => l.textContent.includes('hoverword')))`;
+	const word = `[...((${probeEditor})?.querySelectorAll('.view-line span span') ?? [])].find(s => s.textContent.includes('hoverword'))`;
 	// Only a visible link: a hover that hid after the first click can keep its DOM, with a zero box.
 	const link = (text: string) => `[...document.querySelectorAll('.monaco-hover a')].find(a => a.textContent.trim() === '${text}' && a.getBoundingClientRect().width > 0 && a.getBoundingClientRect().height > 0)`;
-	const emptyLine = `[...document.querySelectorAll('.view-line')].sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[2]`;
-	// Keys and text go only to the probe file's editor. On a pre-control build the host link opens
-	// a host terminal, which takes focus; nothing may ever be typed into it (fixture safety).
-	const inEditor = () => e.evaluate<boolean>(`!!document.activeElement?.closest('.monaco-editor') && !document.activeElement?.closest('.terminal')`);
+	const emptyLine = `[...((${probeEditor})?.querySelectorAll('.view-line') ?? [])].sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[2]`;
+	const probeTab = `[...document.querySelectorAll('.tabs-container .tab')].find(t => (t.getAttribute('aria-label') || '').split(',')[0].trim() === 'probe.txt')`;
+	// Keys and text go only to the probe file's editor, never to a host file a pre-control build
+	// opened (fixture safety).
+	const inEditor = () => e.evaluate<boolean>(`!!document.activeElement && document.activeElement.closest('.monaco-editor') === (${probeEditor})`);
 	const focusEditor = async (): Promise<boolean> => {
+		const t = await rectOf(probeTab);
+		if (t) {
+			await click(t.x, t.y);
+			await sleep(500);
+		}
 		const l = await rectOf(emptyLine);
 		if (l) {
 			await click(l.x, l.y);
@@ -234,6 +228,9 @@ try {
 
 	// Hover: host link, then own link.
 	const hoverAndClick = async (text: string): Promise<boolean> => {
+		if (!await focusEditor()) {
+			return false;
+		}
 		const w = await rectOf(word);
 		if (!w) {
 			return false;
@@ -248,12 +245,18 @@ try {
 		await click(a.x, a.y);
 		return true;
 	};
-	const before = hostShells(e.child.pid!);
-	const refusedBefore = refusals();
+	const before = await hostFileTabs(e, 'keybindings.json');
+	const refusedBefore = refusals(HOVER_REF);
 	results.hoverRendered = await hoverAndClick('hostlink');
 	await sleep(6000);
-	results.hoverHostShells = hostShells(e.child.pid!) - before;
-	results.hoverRefused = await waitFor(() => refusals() > refusedBefore, 15_000);
+	results.hoverHostFile = (await hostFileTabs(e, 'keybindings.json')) - before;
+	if (process.env.SECLAB_RESPONSE_DEBUG) {
+		await e.screenshot(path.join(base, 'after-hostlink.png'));
+	}
+	if (process.env.SECLAB_RESPONSE_DEBUG) {
+		console.log(`debug tabs: ${JSON.stringify(await e.evaluate<string[]>(`[...document.querySelectorAll('.tabs-container .tab')].map(t => t.getAttribute('aria-label'))`))}`);
+	}
+	results.hoverRefused = await waitFor(() => refusals(HOVER_REF) > refusedBefore, 15_000);
 	if (await focusEditor()) {
 		await editorKey('Escape');
 	}
@@ -280,13 +283,16 @@ try {
 		}
 		return shown;
 	};
-	const before2 = hostShells(e.child.pid!);
-	const refusedBefore2 = refusals();
+	const before2 = await hostFileTabs(e, 'Default Keybindings (Default Keybindings)');
+	const refusedBefore2 = refusals(COMPLETION_REF);
 	results.completionShown = await accept('@', 'seclabHostCommand');
 	await sleep(6000);
-	results.completionHostShells = hostShells(e.child.pid!) - before2;
+	results.completionHostFile = (await hostFileTabs(e, 'Default Keybindings (Default Keybindings)')) - before2;
+	if (process.env.SECLAB_RESPONSE_DEBUG) {
+		console.log(`debug tabs 2: ${JSON.stringify(await e.evaluate<string[]>(`[...document.querySelectorAll('.tabs-container .tab')].map(t => t.getAttribute('aria-label'))`))}`);
+	}
 	// Repeats of one key collapse into a follow-up line after the 10 s window.
-	results.completionRefused = await waitFor(() => refusals() > refusedBefore2, 25_000);
+	results.completionRefused = await waitFor(() => refusals(COMPLETION_REF) > refusedBefore2, 25_000);
 	results.completionOwnShown = await accept('#', 'seclabOwnCommand');
 	results.completionOwnRan = await waitFor(() => exists('own-completion'), 20_000);
 
@@ -328,12 +334,12 @@ if (mode === 'control') {
 	c('rsc-1', results.snippetCanary === true, `${mode}: the snippet inserted the canary store's content into the tab's document`);
 }
 if (mode === 'pre-control') {
-	c('hover', Number(results.hoverHostShells) > 0, 'pre-control: the hover link opened a shell on the host', `+${results.hoverHostShells}`);
-	c('completion', Number(results.completionHostShells) > 0, 'pre-control: the accepted completion opened a shell on the host', `+${results.completionHostShells}`);
+	c('hover', Number(results.hoverHostFile) > 0, 'pre-control: the hover link opened the host keybindings file', `+${results.hoverHostFile}`);
+	c('completion', Number(results.completionHostFile) > 0, 'pre-control: the accepted completion opened the default keybindings file', `+${results.completionHostFile}`);
 } else {
-	c('hover', results.hoverHostShells === 0, 'control: the hover link opened no shell on the host', `+${results.hoverHostShells}`);
-	c('hover', results.hoverRefused === true, `control: the hover link's command is refused in the decision log (${HOST_REF})`);
-	c('completion', results.completionHostShells === 0, 'control: the accepted completion opened no shell on the host', `+${results.completionHostShells}`);
-	c('completion', results.completionRefused === true, `control: the completion's command is refused in the decision log (${HOST_REF})`);
+	c('hover', results.hoverHostFile === 0, 'control: the hover link opened no host file', `+${results.hoverHostFile}`);
+	c('hover', results.hoverRefused === true, `control: the hover link's command is refused in the decision log (${HOVER_REF})`);
+	c('completion', results.completionHostFile === 0, 'control: the accepted completion opened no host file', `+${results.completionHostFile}`);
+	c('completion', results.completionRefused === true, `control: the completion's command is refused in the decision log (${COMPLETION_REF})`);
 }
 process.exit(report(checks) ? 0 : 1);
