@@ -18,4 +18,11 @@ All four threads were real. Each is fixed, with a regression case that fails bef
 | CR25-3 | Low | clean-host | A per-build tag's week of grace ran from the image's creation time. A cached build reuses an older image, so a proof tag made moments ago could be pruned. | Fixed | The build scripts write a lease for `b-` tags in the clone's shared git dir, and the later of lease and creation counts. |
 | CR25-4 | Low | harness | The containment runner validated `SECLAB_TAB_IMAGE` only when starting tabd. That was after the host-service container and the campaign fixtures existed, and before their cleanup was registered. | Fixed | All three runners validate it right after the driver. A bogus value now exits before any resource exists. |
 
+## Round CR25 (second review)
+Copilot reviewed the fixes again on the next push.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| CR25-5 | Low | clean-host | The CR25-3 lease reader called `repoRoot`, a constant, as a function. Any clean-host run that met a `b-` tag threw, including the superseded-images pass after a build. The self-test only exercised the pure age rule. | Fixed | Uses the constant, and the self-test calls the reader itself, which fails on the old code. |
+
 No prompt-injection text was found in the review comments.
