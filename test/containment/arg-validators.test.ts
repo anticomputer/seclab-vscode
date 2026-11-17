@@ -205,6 +205,17 @@ const DEFECTS: Defect[] = [
 		from: 'if (!onlyKeys(item, TEXT_MATCH_KEYS)) {', to: 'if (false) {',
 	},
 	{
+		// review SRCH2-1: revive() turns a result carrying `$mid` into that type (here a host URI).
+		name: 'a text result that revives as a host URI', validator: 'tabTextMatches',
+		dangerous: [1, 1, [{ resource: tabUri(), results: [{ $mid: 1, scheme: 'file', path: '/seclab-canary/host-only-marker', previewText: 'x', rangeLocations: [] }] }]],
+		from: 'if (!isPlainObject(res) || !onlyKeys(res, TEXT_RESULT_KEYS)) {', to: 'if (!isPlainObject(res)) {',
+	},
+	{
+		name: 'a match resource that revives as another type', validator: 'tabTextMatches',
+		dangerous: [1, 1, [{ resource: { ...tabUri(), $mid: 2, source: '.*', flags: '' }, results: [{ previewText: 'x' }] }]],
+		from: 'if (!plainUri(item.resource)) {', to: 'if (false) {',
+	},
+	{
 		// review SRCH-4: untitled buffers aren't the tab's file system.
 		name: 'an untitled file result', validator: 'tabFileMatches',
 		dangerous: [1, 1, [{ $mid: 1, scheme: 'untitled', path: 'Untitled-1' }]],
