@@ -61,7 +61,7 @@ export function perBuildLive(name: string, createdMs: number, leaseMs: number | 
 }
 /** The lease the build scripts wrote for a tag, in the clone's shared git dir (all worktrees). */
 function imageLease(name: string): number | undefined {
-	const r = spawnSync('git', ['-C', repoRoot(), 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
+	const r = spawnSync('git', ['-C', repoRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
 	try {
 		const t = Number(fs.readFileSync(path.join(r.stdout.trim(), 'seclab-image-leases', name), 'utf8').trim());
 		return Number.isFinite(t) && t > 0 ? t * 1000 : undefined;
@@ -124,6 +124,15 @@ if (args.has('--self-test')) {
 	const o41 = { orphan: true, pid: 41 };
 	if (falcoRemovable(o41, new Set([41]), () => true) || !falcoRemovable(o41, new Set([41]), () => false) || falcoRemovable({ orphan: false, pid: 42 }, new Set(), () => false)) {
 		bad.push('falco: a sensor whose stray tabd survived termination must be kept');
+	}
+	// The lease reader itself runs (it once called a constant as a function, Copilot review on
+	// PR 25): a tag with no lease reads as none, and never throws.
+	try {
+		if (imageLease('seclab-tab-oci:b-no-such-lease-self-test') !== undefined) {
+			bad.push('imageLease: a tag with no lease should read as none');
+		}
+	} catch (e) {
+		bad.push(`imageLease threw: ${(e as Error).message}`);
 	}
 	// Per-build tags: a week from the later of creation and lease, so a cached (old) image tagged
 	// just now is live.
