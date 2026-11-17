@@ -242,6 +242,17 @@ _REGEX_AFTER_WORDS = {"return", "typeof", "case", "do", "else", "in", "new", "de
 # After these the reading depends on context a scanner can't see (contextual keywords, labels).
 _UNSURE_WORDS = {"yield", "await", "let", "async", "get", "set", "static", "break", "continue", "of",
                  "default"}
+# Every other reserved word (`debugger`, `class`, `var`, `try`, ...) can end a statement or
+# precede a construct where ASI or the grammar decides, so a `/` after it is unsure. Only a value
+# keyword reads like an identifier, as division (PR review on #27).
+_RESERVED_WORDS = {
+    "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do",
+    "else", "enum", "export", "extends", "false", "finally", "for", "function", "if", "import", "in",
+    "instanceof", "new", "null", "return", "super", "switch", "this", "throw", "true", "try",
+    "typeof", "var", "void", "while", "with", "yield", "let", "static", "implements", "interface",
+    "package", "private", "protected", "public", "await",
+}
+_VALUE_WORDS = {"this", "super", "null", "true", "false"}
 _CONTROL_WORDS = {"if", "while", "for", "with"}
 _OPERAND_EXPECTED = "(,=:[!&|?{;+-*%<>~^/"
 
@@ -316,7 +327,7 @@ class _SlashContext:
                 return "div"  # a property, whatever its name
             if value in _REGEX_AFTER_WORDS:
                 return "regex"
-            if value in _UNSURE_WORDS:
+            if value in _UNSURE_WORDS or (value in _RESERVED_WORDS and value not in _VALUE_WORDS):
                 return "unsure"
             before = self.toks[-2] if len(self.toks) > 1 else None
             if before in (("w", "break"), ("w", "continue")):
