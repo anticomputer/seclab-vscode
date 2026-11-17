@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 213 | 339 | 45 | 695 |
+| fixed | 14 | 84 | 213 | 342 | 45 | 698 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 53 | 169 | 60 | 287 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
-| false-positive | 0 | 0 | 0 | 0 | 16 | 16 |
-| **all** | 16 | 93 | 304 | 601 | 153 | 1167 |
+| false-positive | 0 | 0 | 0 | 0 | 20 | 20 |
+| **all** | 16 | 93 | 304 | 604 | 157 | 1174 |
 
 ## Baseline: open high and critical findings
 
@@ -2088,6 +2088,13 @@ Every other commit the register cites is on main's history, or on the branch its
 | FU-3 | low | fixed | The pinned-SHA check named HEAD only; a reused index could hide a modified tracked file from the reset. | patch:addb6c92039bda4742149bf52e1e843f9896472c · `build/fetch-upstream.test.ts` "fetch-upstream: same pin, a tracked file hidden by skip-worktree or sparse state is restored" |
 | FU-4 | low | fixed | The clean took a hand-kept path list, so stray untracked files survived. | patch:addb6c92039bda4742149bf52e1e843f9896472c · `build/fetch-upstream.test.ts` "fetch-upstream: a pin change drops files earlier patches added, keeps ignored build state" |
 | FU-5 | info | false-positive | CI and same-pin regressions were reviewed. | The review recorded no issue. |
+| FU-6 | info | false-positive | The FU-2 fix was re-reviewed. | Confirmation, no issue. |
+| FU-7 | info | false-positive | The FU-3 fix was re-reviewed. | Confirmation, no issue. |
+| FU-8 | info | false-positive | The FU-4 fix was re-reviewed; an untracked nested repository or undeletable file stops the build without saying why. | Confirmation; the stop is fail-closed. The message and clean -ffd were adopted anyway. |
+| FU-9 | low | fixed | A .git file or symlink made the index removal miss the real repository, reopening FU-3 silently. | patch:57e5c88c532b526beb5d6f2a2cd90e1c41e74de3 · `build/fetch-upstream.test.ts` "fetch-upstream: a .git that is a file (another repository) is refused (FU-9)" |
+| FU-10 | low | fixed | Exclude files and git config on the volume or the user could hide a planted file from the clean and the check. | patch:57e5c88c532b526beb5d6f2a2cd90e1c41e74de3 · `build/fetch-upstream.test.ts` "fetch-upstream: excludes and config on the volume or in user config hide nothing (FU-10)" |
+| FU-11 | low | fixed | The install stamp hashed unframed input, skipped symlinked lockfiles and mis-read paths with newlines. | patch:57e5c88c532b526beb5d6f2a2cd90e1c41e74de3 · `build/fetch-upstream.test.ts` "install stamp: a symlinked lockfile is refused; a lockfile under an odd path still counts (FU-11)" |
+| FU-12 | info | false-positive | Upstream reuses a cached marketplace built-in by version without re-checking its hash. | Nothing we ship reads that cache: the local volume build makes only the REH and fetches none, and desktop builds start on fresh runners. |
 
 ### [20261117-link-check-retries](20261117-link-check-retries.md)
 

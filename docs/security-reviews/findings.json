@@ -17194,6 +17194,111 @@
 				"file": "docs/security-reviews/20261117-fetch-upstream-clean.md",
 				"quote": "No regression for a fresh volume or the same-pin path."
 			}
+		},
+		{
+			"record": "20261117-fetch-upstream-clean.md",
+			"anchor": "FU-6",
+			"round": "Round 2",
+			"severity": "info",
+			"summary": "The FU-2 fix was re-reviewed.",
+			"component": "build (fetch-upstream, build.sh)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "Confirmation, no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-fetch-upstream-clean.md",
+				"quote": "FU-2 fix confirmed."
+			}
+		},
+		{
+			"record": "20261117-fetch-upstream-clean.md",
+			"anchor": "FU-7",
+			"round": "Round 2",
+			"severity": "info",
+			"summary": "The FU-3 fix was re-reviewed.",
+			"component": "build (fetch-upstream, build.sh)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "Confirmation, no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-fetch-upstream-clean.md",
+				"quote": "FU-3 fix confirmed."
+			}
+		},
+		{
+			"record": "20261117-fetch-upstream-clean.md",
+			"anchor": "FU-8",
+			"round": "Round 2",
+			"severity": "info",
+			"summary": "The FU-4 fix was re-reviewed; an untracked nested repository or undeletable file stops the build without saying why.",
+			"component": "build (fetch-upstream, build.sh)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "Confirmation; the stop is fail-closed. The message and clean -ffd were adopted anyway.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-fetch-upstream-clean.md",
+				"quote": "FU-4 fix confirmed."
+			}
+		},
+		{
+			"record": "20261117-fetch-upstream-clean.md",
+			"anchor": "FU-9",
+			"round": "Round 2",
+			"severity": "low",
+			"summary": "A .git file or symlink made the index removal miss the real repository, reopening FU-3 silently.",
+			"component": "build (fetch-upstream, build.sh)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:57e5c88c532b526beb5d6f2a2cd90e1c41e74de3",
+			"test": {
+				"file": "build/fetch-upstream.test.ts",
+				"name": "fetch-upstream: a .git that is a file (another repository) is refused (FU-9)"
+			}
+		},
+		{
+			"record": "20261117-fetch-upstream-clean.md",
+			"anchor": "FU-10",
+			"round": "Round 2",
+			"severity": "low",
+			"summary": "Exclude files and git config on the volume or the user could hide a planted file from the clean and the check.",
+			"component": "build (fetch-upstream, build.sh)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:57e5c88c532b526beb5d6f2a2cd90e1c41e74de3",
+			"test": {
+				"file": "build/fetch-upstream.test.ts",
+				"name": "fetch-upstream: excludes and config on the volume or in user config hide nothing (FU-10)"
+			}
+		},
+		{
+			"record": "20261117-fetch-upstream-clean.md",
+			"anchor": "FU-11",
+			"round": "Round 2",
+			"severity": "low",
+			"summary": "The install stamp hashed unframed input, skipped symlinked lockfiles and mis-read paths with newlines.",
+			"component": "build (fetch-upstream, build.sh)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:57e5c88c532b526beb5d6f2a2cd90e1c41e74de3",
+			"test": {
+				"file": "build/fetch-upstream.test.ts",
+				"name": "install stamp: a symlinked lockfile is refused; a lockfile under an odd path still counts (FU-11)"
+			}
+		},
+		{
+			"record": "20261117-fetch-upstream-clean.md",
+			"anchor": "FU-12",
+			"round": "Round 2",
+			"severity": "info",
+			"summary": "Upstream reuses a cached marketplace built-in by version without re-checking its hash.",
+			"component": "build (fetch-upstream, build.sh)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "Nothing we ship reads that cache: the local volume build makes only the REH and fetches none, and desktop builds start on fresh runners.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-fetch-upstream-clean.md",
+				"quote": "desktop builds run on fresh Actions runners"
+			}
 		}
 	]
 }
