@@ -639,10 +639,14 @@ function startWindowLogs(tabId: string, extHostLogs: string): void {
 	const key = (name: string) => `seclab.windowLog.${name}`;
 	windowLogs = new WindowLogForwarder({
 		dir: path.dirname(extHostLogs),
-		report: async events => (await getClient()).request('tab.events.report', { tabId, events }),
+		report: async (events, o) => (await getClient()).request('tab.events.report', { tabId, events, ...(o.retry ? { retryLimited: true } : {}) }),
 		state: {
-			get: name => extensionContext.workspaceState.get<{ ino: number; pos: number }>(key(name)),
+			get: name => extensionContext.workspaceState.get<unknown>(key(name)),
 			set: (name, p) => void extensionContext.workspaceState.update(key(name), p),
+		},
+		session: {
+			get: () => extensionContext.workspaceState.get<unknown>(key('session')),
+			set: s => void extensionContext.workspaceState.update(key('session'), s),
 		},
 		onInvalid: (file, count) => log.warn(`${path.basename(file)}: ${count} malformed line(s) not forwarded`),
 	});

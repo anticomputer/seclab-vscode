@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { test } from 'node:test';
 import { encodeJson, FrameDecoder } from '../src/frames.ts';
+import type { ReportEvent } from '../src/obs/windowlog.ts';
 import { TabStore } from '../src/state.ts';
 import { Supervisor } from '../src/supervisor.ts';
 import type { Driver, FenceReport, SensorHooks, TabRuntimeSpec, TabTemplate } from '../src/drivers/types.ts';
@@ -220,6 +221,18 @@ test('obs detect: rpc.deny-burst from trusted filter denials only; allows and ot
 	const one = (i: number, verdict: string, count?: number) => det2.check(ev({ source: 'rpc-filter', integrity: 'trusted', class: 'rpc.decision', time: new Date(t0 + i * 1000).toISOString(), detail: { surface: 'rpc', verdict, ...(count ? { count } : {}) } }), {}).map(d => d.rule);
 	assert.deepEqual([...one(0, 'allow', 500), ...one(1, 'deny')], []);
 	assert.deepEqual(one(11, 'deny', 37), ['rpc.deny-burst']);
+	// CR10-1: the filter's summary lines carry `verdict: deny` but count suppressed decisions of
+	// every verdict (allows included): they never make a burst.
+	const det3 = new Detector();
+	const summary = (i: number, ref: string, count: number) => det3.check(ev({ source: 'rpc-filter', integrity: 'trusted', class: 'rpc.decision', time: new Date(t0 + i * 1000).toISOString(), detail: { surface: 'rpc', ref, verdict: 'deny', count } }), {}).map(d => d.rule);
+	assert.deepEqual([...summary(0, 'rpc:seclab.log-throttled', 900), ...summary(1, 'rpc:seclab.early-dropped', 900)], [], 'CR10-1: log summaries are not denials');
+	assert.deepEqual(summary(2, 'rpc:MainThreadX.$m', 20), ['rpc.deny-burst'], 'a real denial line still counts');
+	// CR10-25: the gate's gap markers (one per gate tail) aren't AHP denials either.
+	const det4 = new Detector();
+	const gate = (i: number, rule?: string) => det4.check(ev({ source: 'ahp-gate', integrity: 'trusted', class: 'ahp.decision', time: new Date(t0 + i * 100).toISOString(), detail: { verdict: 'deny', ...(rule ? { gateRule: rule } : {}) } }), {}).map(d => d.rule);
+	const hitsGate = [...Array.from({ length: 18 }, (_, i) => gate(i)), gate(18, 'ahp-gate.log-skipped'), gate(19, 'ahp-gate.log-skipped')].flat();
+	assert.deepEqual(hitsGate, [], 'CR10-25: 18 denials and two gap markers are not a burst');
+	assert.deepEqual(gate(20).concat(gate(21)), ['ahp.deny-burst'], 'the 20th real denial is');
 });
 
 test('obs detect: a regular beacon is reported once; jitter is not a beacon', () => {
@@ -249,6 +262,24 @@ test('obs hub: contiguous seq, rate limit summarised, heartbeat gap -> unobserve
 	hub.tickNow();
 	const sums = seen.filter(e => e.class === 'sensor.status').map(e => e.summary);
 	assert.ok(sums.includes('30 sensor events dropped (rate limit)'), JSON.stringify(sums));
+	// CR10-6: events deferred for a reporter that sends them again are summarised, not dropped.
+	const dTab = `t-${'d'.repeat(26)}`;
+	const dSeen: ObsEvent[] = [];
+	const defer = new ObsHub({ now: () => now, onEvent: e => dSeen.push(e), trustedRate: { rate: 1, burst: 1 } });
+	const rpcEv = { source: 'rpc-filter', class: 'rpc.decision', priority: 'warning', summary: 'deny', detail: { surface: 'rpc', verdict: 'deny' }, integrity: 'trusted' };
+	assert.ok(defer.offer(dTab, rpcEv, true).event);
+	assert.deepEqual([defer.offer(dTab, rpcEv, true).limited, defer.offer(dTab, rpcEv, true).limited], [true, true]);
+	now += 1500;
+	assert.equal(defer.offer(dTab, rpcEv, true, true).limited, true, 'CR10-9: held, though a token is available');
+	assert.ok(defer.offer(dTab, rpcEv, true).event, 'the token was not spent by the held event');
+	// CR10-21: with the gate's bucket drained by denials, its gap marker still gets through.
+	const gateEv = { source: 'ahp-gate', class: 'ahp.decision', priority: 'notice', summary: 'deny', detail: { kind: 'action', verdict: 'deny' }, integrity: 'trusted' };
+	while (defer.offer(dTab, gateEv, false).event) { /* drain the ahp bucket */ }
+	const marker = { source: 'ahp-gate', class: 'ahp.decision', priority: 'warning', summary: 'ahp-gate.log-skipped', detail: { gateRule: 'ahp-gate.log-skipped', connection: 0, verdict: 'deny' }, integrity: 'trusted' };
+	assert.ok(defer.offer(dTab, marker, false).event, 'CR10-21: the gap marker has a bucket of its own');
+	defer.tickNow();
+	const dsums = dSeen.filter(e => e.class === 'sensor.status').map(e => e.summary);
+	assert.ok(dsums.includes('3 client events deferred (rate limit; the reporter sends them again)') && !dsums.some(x => /client events dropped/.test(x)), JSON.stringify(dsums));
 	assert.ok(sums.includes('1 malformed events rejected'));
 	assert.deepEqual(seen.map(e => e.seq), seen.map((_, i) => i + 1));
 	assert.deepEqual(obs, ['observed', 'degraded']);
@@ -486,9 +517,19 @@ test('obs supervisor: collector gates the REH, is reused, events stream to subsc
 	assert.equal(burst.length, 1);
 	assert.equal(burst[0].integrity, 'trusted');
 	// Review AE-1: a tab that floods the gate with denials can't drop the opened/verified signals.
+	let flood: { accepted: number; rejected: number; limited?: number[] } | undefined;
 	for (let i = 0; i < 40; i++) {
-		await call('tab.events.report', { tabId, events: Array.from({ length: 64 }, () => ({ source: 'ahp-gate', class: 'ahp.decision', priority: 'notice', summary: 'dropped', detail: { kind: 'action', verdict: 'deny' } })) });
+		flood = await call('tab.events.report', { tabId, events: Array.from({ length: 64 }, () => ({ source: 'ahp-gate', class: 'ahp.decision', priority: 'notice', summary: 'dropped', detail: { kind: 'action', verdict: 'deny' } })) });
 	}
+	// CR10-5, CR10-7: with the bucket empty, a reporter that opts in gets valid events back as
+	// `limited` indices (told apart from invalid ones); one that doesn't has them dropped as before.
+	assert.ok(flood && flood.limited === undefined && flood.rejected > 0, `no opt-in, no limited: ${JSON.stringify(flood)}`);
+	const gateDeny = { source: 'ahp-gate', class: 'ahp.decision', priority: 'notice', summary: 'dropped', detail: { kind: 'action', verdict: 'deny' } };
+	const optIn = await call('tab.events.report', { tabId, retryLimited: true, events: [{ source: 'nope', class: 'x', priority: 'notice', summary: 'x' }, ...Array.from({ length: 63 }, () => gateDeny)] });
+	assert.ok(optIn.limited?.length > 0 && !optIn.limited.includes(0) && optIn.accepted + optIn.limited.length === 63 && optIn.rejected === 1 + optIn.limited.length,
+		`CR10-5: limited indices, the invalid one excluded: ${JSON.stringify(optIn)}`);
+	assert.ok(optIn.limited.every((x: number, k: number) => x === 64 - optIn.limited.length + k), `CR10-9: what is deferred is the whole rest of the request: ${JSON.stringify(optIn.limited)}`);
+	await assert.rejects(call('tab.events.report', { tabId, retryLimited: 'yes', events: [] }), { code: -32602 });
 	const life = await call('tab.events.report', { tabId, events: [
 		{ source: 'ahp-gate', class: 'ahp.decision', priority: 'informational', summary: 'opened', detail: { gateRule: 'ahp-gate.opened', connection: 3 } },
 		{ source: 'ahp-gate', class: 'ahp.decision', priority: 'informational', summary: 'opened', detail: { gateRule: 'ahp-gate.opened', connection: 4 } },
@@ -498,6 +539,20 @@ test('obs supervisor: collector gates the REH, is reused, events stream to subsc
 	await tick(2200);
 	const ung2 = (await call('tab.events.tail', { tabId, limit: 1000 })).events.filter((e: ObsEvent) => e.rule === 'ahp.ungated').map((e: ObsEvent) => e.detail?.connection);
 	assert.ok(ung2.includes(3) && !ung2.includes(4), `connection 3 flagged after the flood; 4 was verified: ${JSON.stringify(ung2)}`);
+	// CR10-12: AHP lifecycle is watched on first sight, before any limit, and never deferred,
+	// even in a `retryLimited` report: past its bucket it is dropped (and summarised), so it is
+	// never sent again or watched twice (CR10-8).
+	const verifiedOnly = (c: number) => ({ source: 'ahp-gate', class: 'ahp.decision', priority: 'informational', summary: 'verified', detail: { gateRule: 'ahp-gate.verified', connection: c } });
+	const openedOnly = (c: number) => ({ source: 'ahp-gate', class: 'ahp.decision', priority: 'informational', summary: 'opened', detail: { gateRule: 'ahp-gate.opened', connection: c } });
+	for (let i = 0; i < 4; i++) {
+		await call('tab.events.report', { tabId, events: Array.from({ length: 64 }, (_, k) => verifiedOnly(1000 + i * 64 + k)) });
+	}
+	const lifeRep = await call('tab.events.report', { tabId, retryLimited: true, events: [...Array.from({ length: 61 }, (_, k) => verifiedOnly(2000 + k)), openedOnly(51), openedOnly(52), verifiedOnly(52)] });
+	assert.ok(lifeRep.limited === undefined && lifeRep.rejected > 0, `CR10-12: lifecycle is dropped past its bucket, never deferred: ${JSON.stringify(lifeRep)}`);
+	await tick(2200);
+	const ung3 = (await call('tab.events.tail', { tabId, limit: 1000 })).events.filter((e: ObsEvent) => e.rule === 'ahp.ungated').map((e: ObsEvent) => e.detail?.connection);
+	assert.equal(ung3.filter((c: number) => c === 51).length, 1, `CR10-12: a dropped opened that is never verified is still flagged, once: ${JSON.stringify(ung3)}`);
+	assert.ok(!ung3.includes(52), `CR10-12: a dropped opened and verified pair raises nothing: ${JSON.stringify(ung3)}`);
 	await sup.clientGone();
 });
 
@@ -1172,6 +1227,346 @@ test('window decision logs (WL-1): forwarding needs the policy stamp and the enf
 	assert.equal(await rpcFilterShipped({ seclabRpcPolicy: { sha256: sha } }, path.join(dir, 'missing.js')), false);
 	assert.equal(await rpcFilterShipped({ seclabRpcPolicy: { sha256: sha } }, bundle), true, 'found past several read chunks');
 	fs.rmSync(bundle);
+	fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('window decision logs (CR10): bytes not text, sessions past rotation, rate-limited events kept', async () => {
+	const { WindowLogForwarder, WindowLogTail, WINDOW_LOGS, rotatedName } = await import('../src/obs/windowlog.ts');
+	const dir = path.join(SCRATCH, 'windowlog-cr10');
+	fs.rmSync(dir, { recursive: true, force: true });
+	fs.mkdirSync(dir, { recursive: true });
+	const line = (o: unknown) => `2026-11-06 12:00:00.000 [info] ${JSON.stringify(o)}\n`;
+	const deny = (n: number, reason = 'r') => ({ source: 'rpc-filter', class: 'rpc.decision', priority: 'warning', summary: 'deny rpc', detail: { surface: 'rpc', ref: `rpc:MainThreadX.$m${n}`, verdict: 'deny', reason } });
+	const installed = { source: 'rpc-filter', class: 'rpc.decision', priority: 'informational', summary: 'filter installed', detail: { surface: 'rpc', ref: 'rpc:seclab.installed', verdict: 'allow', reason: 'marker' } };
+	const f = path.join(dir, 'seclabRpcFilter.log');
+
+	// CR10-2: a read ending inside a multi-byte character neither corrupts the text nor the checkpoint.
+	const whole = Buffer.from(line(deny(1, 'é€😀')));
+	const cut = whole.indexOf(Buffer.from('€')) + 1;
+	fs.writeFileSync(f, whole.subarray(0, cut));
+	const t = new WindowLogTail(f, WINDOW_LOGS.get('seclabRpcFilter.log')!);
+	assert.deepEqual(t.poll(), []);
+	assert.equal(t.position()?.pos, 0, 'the checkpoint stays at the incomplete line, in bytes');
+	fs.appendFileSync(f, whole.subarray(cut));
+	assert.equal(t.poll()[0]?.detail?.reason, 'é€😀', 'CR10-2: the character split across reads is intact');
+	assert.equal(t.position()?.pos, whole.length);
+	t.close();
+
+	// CR10-4: an extension-host restart after rotation resumes a checkpoint in a newer file than
+	// the install line, without replaying what was delivered.
+	const rotate = () => {
+		for (let k = 9; k >= 1; k--) {
+			if (fs.existsSync(rotatedName(f, k))) {
+				fs.renameSync(rotatedName(f, k), rotatedName(f, k + 1));
+			}
+		}
+		fs.renameSync(f, rotatedName(f, 1));
+	};
+	fs.writeFileSync(f, line(installed) + line(deny(2)));
+	const saved = new Map<string, { ino: number; pos: number }>();
+	let session: unknown;
+	const opts = (got: string[]) => ({ dir, report: async (evs: ReportEvent[]) => { got.push(...evs.map(e => String(e.detail?.ref))); },
+		state: { get: (n: string) => saved.get(n), set: (n: string, p: { ino: number; pos: number }) => saved.set(n, p) },
+		session: { get: () => session, set: (x: unknown) => { session = x; } } });
+	const got1: string[] = [];
+	const fw1 = new WindowLogForwarder(opts(got1));
+	await fw1.tick();
+	rotate();
+	fs.writeFileSync(f, line(deny(3)));
+	await fw1.tick();
+	fw1.dispose();
+	assert.deepEqual(got1, ['rpc:seclab.installed', 'rpc:MainThreadX.$m2', 'rpc:MainThreadX.$m3']);
+	const got2: string[] = [];
+	const fw2 = new WindowLogForwarder(opts(got2));
+	fs.appendFileSync(f, line(deny(4)));
+	await fw2.tick();
+	fw2.dispose();
+	assert.deepEqual(got2, ['rpc:MainThreadX.$m4'], 'CR10-4: no replay after rotation');
+
+	// CR10-3: the install line rotated off the end. The saved session still holds from the saved
+	// checkpoint (its file is on disk); without that, the loss is reported once and nothing else.
+	fs.rmSync(rotatedName(f, 1));
+	const got3: string[] = [];
+	const fw3 = new WindowLogForwarder(opts(got3));
+	fs.appendFileSync(f, line(deny(5)));
+	await fw3.tick();
+	fw3.dispose();
+	assert.deepEqual(got3, ['rpc:MainThreadX.$m5'], 'CR10-3: forwarding continues without the install line');
+	// A saved session whose checkpoint file is gone can't vouch for anything newer.
+	saved.set('seclabRpcFilter.log', { ino: 2 ** 40, pos: 0 });
+	const gotGone: string[] = [];
+	const fwGone = new WindowLogForwarder(opts(gotGone));
+	await fwGone.tick();
+	fwGone.dispose();
+	assert.deepEqual(gotGone, ['rpc:seclab.log-skipped'], 'CR10-3: a checkpoint no longer on disk binds nothing');
+	session = undefined;
+	const got4: string[] = [];
+	let deferOnce = true;
+	const fw4 = new WindowLogForwarder({ ...opts(got4), report: async (evs: ReportEvent[]) => {
+		got4.push(...evs.map(e => String(e.detail?.ref)));
+		if (deferOnce) {
+			deferOnce = false;
+			return { accepted: 0, rejected: 1, limited: [0] };
+		}
+		return { accepted: 1, rejected: 0 };
+	} });
+	await fw4.tick();
+	await fw4.tick();
+	await fw4.tick();
+	fw4.dispose();
+	assert.deepEqual(got4, ['rpc:seclab.log-skipped', 'rpc:seclab.log-skipped'], 'CR10-3: the loss is reported once delivered (CR10-7: sent again when deferred)');
+
+	// CR10-5: events tabd refuses for its rate limit are re-sent next round, in order, and the
+	// checkpoint never passes them.
+	fs.rmSync(dir, { recursive: true, force: true });
+	fs.mkdirSync(dir, { recursive: true });
+	fs.writeFileSync(f, line(installed) + line(deny(1)) + line(deny(2)) + line(deny(3)));
+	saved.clear();
+	session = undefined;
+	const sent: string[][] = [];
+	let limitOnce = true;
+	const retrySeen: boolean[] = [];
+	const fw5 = new WindowLogForwarder({ ...opts([]), report: async (evs: ReportEvent[], o: { retry: boolean }) => {
+		sent.push(evs.map(e => String(e.detail?.ref)));
+		retrySeen.push(o.retry);
+		if (limitOnce) {
+			limitOnce = false;
+			return { accepted: 2, rejected: 2, limited: [2, 3] };
+		}
+		return { accepted: evs.length, rejected: 0, limited: [] };
+	} });
+	await fw5.tick();
+	const prefix = Buffer.byteLength(line(installed) + line(deny(1)));
+	assert.equal(saved.get('seclabRpcFilter.log')?.pos, prefix, 'CR10-11: checkpointed at the end of the last delivered line, never past a deferred one');
+	fw5.dispose();
+	// CR10-11: a restart re-sends only what tabd deferred, never what it acknowledged.
+	await fw5.tick();
+	fw5.dispose();
+	assert.deepEqual(retrySeen, [true, true], 'the RPC log is reported with retryLimited');
+	sent.pop();
+	const fw5b = new WindowLogForwarder({ ...opts([]), report: async (evs: ReportEvent[]) => {
+		sent.push(evs.map(e => String(e.detail?.ref)));
+		return { accepted: evs.length, rejected: 0 };
+	} });
+	saved.set('seclabRpcFilter.log', { ino: fs.statSync(f).ino, pos: prefix });
+	await fw5b.tick();
+	fw5b.dispose();
+	assert.deepEqual(sent, [['rpc:seclab.installed', 'rpc:MainThreadX.$m1', 'rpc:MainThreadX.$m2', 'rpc:MainThreadX.$m3'], ['rpc:MainThreadX.$m2', 'rpc:MainThreadX.$m3']]);
+	assert.equal(saved.get('seclabRpcFilter.log')?.pos, fs.statSync(f).size, 'checkpointed once delivered');
+
+	// CR10-10, CR10-12: the gate log has two tails, each in order with its own checkpoint. Gate
+	// denials (retryLimited) that tabd keeps deferring don't hold back connection lifecycle
+	// lines, which are reported best-effort (never deferred), including ones written later.
+	const g = path.join(dir, 'seclabAhpGate.log');
+	const gd = (n: number) => ({ source: 'ahp-gate', class: 'ahp.decision', priority: 'notice', summary: `deny ${n}`, detail: { kind: 'action', verdict: 'deny', connection: n } });
+	const life = (rule: string, c: number) => ({ source: 'ahp-gate', class: 'ahp.decision', priority: 'informational', summary: rule, detail: { gateRule: `ahp-gate.${rule}`, connection: c } });
+	fs.writeFileSync(g, [...Array.from({ length: 64 }, (_, k) => gd(k)), life('opened', 7)].map(line).join(''));
+	const gateCalls: Array<{ retry: boolean; evs: string[] }> = [];
+	const fw6 = new WindowLogForwarder({ ...opts([]), report: async (evs: ReportEvent[], o: { retry: boolean }) => {
+		if (!evs.some(e => e.source === 'ahp-gate')) {
+			return { accepted: evs.length, rejected: 0 };
+		}
+		gateCalls.push({ retry: o.retry, evs: evs.map(e => e.summary) });
+		const d = evs.findIndex(e => e.summary.startsWith('deny'));
+		return d < 0 ? { accepted: evs.length, rejected: 0 } : { accepted: d, rejected: evs.length - d, limited: evs.map((_, k) => k).slice(d) };
+	} });
+	await fw6.tick();
+	assert.equal(saved.get('seclabAhpGate.log')?.pos, 0, 'CR10-19: an uncheckpointed tail is anchored at bind, before anything is deferred');
+	fs.appendFileSync(g, line(life('verified', 7)) + line(life('opened', 8)) + line(life('verified', 8)));
+	await fw6.tick();
+	await fw6.tick();
+	fw6.dispose();
+	const lifeCalls = gateCalls.filter(c => !c.evs[0].startsWith('deny'));
+	assert.deepEqual(lifeCalls, [{ retry: false, evs: ['opened'] }, { retry: false, evs: ['verified', 'opened', 'verified'] }],
+		`CR10-10, CR10-12: lifecycle lines keep moving, best-effort, while denials stay deferred: ${JSON.stringify(lifeCalls)}`);
+	assert.ok(gateCalls.filter(c => c.evs[0].startsWith('deny')).every(c => c.retry && c.evs.length === 64), 'the deferred denials are sent again, as a block, with retryLimited');
+	assert.equal(saved.get('seclabAhpGate.log#lifecycle')?.pos, fs.statSync(g).size, 'the lifecycle tail checkpoints on its own');
+	assert.equal(saved.get('seclabAhpGate.log')?.pos, 0, 'the denial tail delivered nothing yet: still at its anchor');
+
+	// CR10-19: that anchor survives a rotation and a restart; the deferred denials are read again
+	// from the rotated file, not lost by starting at the current one.
+	fs.renameSync(g, rotatedName(g, 1));
+	fs.writeFileSync(g, line(gd(99)));
+	const after: string[] = [];
+	const fw9 = new WindowLogForwarder({ ...opts([]), report: async (evs: ReportEvent[]) => {
+		after.push(...evs.filter(e => e.summary.startsWith('deny')).map(e => e.summary));
+		return { accepted: evs.length, rejected: 0 };
+	} });
+	await fw9.tick();
+	await fw9.tick();
+	fw9.dispose();
+	assert.deepEqual([after.length, after[0], after.at(-1)], [65, 'deny 0', 'deny 99'], 'CR10-19: the deferred denials and the new one, none lost');
+
+	// CR10-13: a checkpoint whose file has rotated away resumes at the oldest file left, with the
+	// loss reported first, never at the current file (which would skip every rotated one).
+	const h = path.join(dir, 'seclabAhpGate.log');
+	for (let k = 1; k <= 10; k++) {
+		fs.rmSync(rotatedName(h, k), { force: true });
+	}
+	fs.writeFileSync(rotatedName(h, 2), line(life('opened', 20)));
+	fs.writeFileSync(rotatedName(h, 1), line(life('verified', 20)));
+	fs.writeFileSync(h, line(life('opened', 21)));
+	const lt = new WindowLogTail(h, WINDOW_LOGS.get('seclabAhpGate.log')!);
+	lt.resume({ ino: 2 ** 40, pos: 10 });
+	const resumed = lt.pollAt();
+	lt.close();
+	assert.deepEqual(resumed.map(x => x.ev.summary), ['ahp-gate.log-skipped', 'opened', 'verified', 'opened'], 'CR10-13: the oldest file first, after the marker');
+	assert.deepEqual(resumed[0].end, { ino: fs.statSync(rotatedName(h, 2)).ino, pos: 0 }, 'CR10-13: delivering the marker checkpoints into the file read next');
+	// CR10-28: with no file to open at all, the loss is still reported once one appears.
+	for (let k = 0; k <= 10; k++) {
+		fs.rmSync(rotatedName(h, k), { force: true });
+	}
+	const empty = new WindowLogTail(h, WINDOW_LOGS.get('seclabAhpGate.log')!);
+	empty.resume({ ino: 2 ** 40, pos: 10 });
+	assert.deepEqual(empty.pollAt(), []);
+	fs.writeFileSync(h, line(life('opened', 22)));
+	const later = empty.pollAt().map(x => x.ev.summary);
+	empty.close();
+	assert.deepEqual(later, ['ahp-gate.log-skipped', 'opened'], 'CR10-28: the gap is reported when the log appears');
+
+	// CR10-15: a checkpoint saved by another window (another log folder) is no loss of this one's:
+	// no marker, reading starts at this window's file.
+	const reports: string[] = [];
+	const fwOther = (key: string) => {
+		saved.clear();
+		saved.set(key, { ino: 2 ** 40, pos: 10, dir: path.join(dir, 'another-window') } as never);
+		return new WindowLogForwarder({ ...opts([]), report: async (evs: ReportEvent[]) => {
+			reports.push(...evs.map(e => e.summary));
+			return { accepted: evs.length, rejected: 0 };
+		} });
+	};
+	for (const key of ['seclabAhpGate.log', 'seclabAhpGate.log#lifecycle']) {
+		const fw = fwOther(key);
+		await fw.tick();
+		fw.dispose();
+	}
+	assert.ok(!reports.includes('ahp-gate.log-skipped'), `CR10-15: no spurious gap on a new window: ${JSON.stringify(reports)}`);
+	// The same checkpoint in this window's folder is a real loss.
+	saved.clear();
+	saved.set('seclabAhpGate.log#lifecycle', { ino: 2 ** 40, pos: 10, dir } as never);
+	reports.length = 0;
+	const fwSame = new WindowLogForwarder({ ...opts([]), report: async (evs: ReportEvent[]) => {
+		reports.push(...evs.map(e => e.summary));
+		return { accepted: evs.length, rejected: 0 };
+	} });
+	await fwSame.tick();
+	fwSame.dispose();
+	assert.equal(reports.filter(x => x === 'ahp-gate.log-skipped').length, 1, 'a checkpoint lost in this window is reported once');
+
+	// CR10-18: upgrading from one gate tail: the lifecycle lane starts at the old shared checkpoint
+	// (persisted at once), so acknowledged lifecycle lines aren't replayed.
+	for (let k = 1; k <= 10; k++) {
+		fs.rmSync(rotatedName(h, k), { force: true });
+	}
+	fs.writeFileSync(h, line(life('opened', 30)) + line(life('verified', 30)));
+	const legacy = fs.statSync(h).size;
+	fs.appendFileSync(h, line(life('opened', 31)));
+	saved.clear();
+	saved.set('seclabAhpGate.log', { ino: fs.statSync(h).ino, pos: legacy });
+	const upgraded: string[] = [];
+	const fwUp = new WindowLogForwarder({ ...opts([]), report: async (evs: ReportEvent[]) => {
+		upgraded.push(...evs.filter(e => e.source === 'ahp-gate').map(e => `${e.summary} ${e.detail?.connection}`));
+		return { accepted: evs.length, rejected: 0 };
+	} });
+	await fwUp.tick();
+	fwUp.dispose();
+	assert.deepEqual(upgraded, ['opened 31'], `CR10-18: no replay of acknowledged lifecycle lines: ${JSON.stringify(upgraded)}`);
+
+	// CR10-22: a gate tail with no usable checkpoint reads every file still on disk, oldest
+	// first (other sessions' lines are kept out by time), so none of this session's is skipped.
+	for (let k = 1; k <= 10; k++) {
+		fs.rmSync(rotatedName(h, k), { force: true });
+	}
+	fs.writeFileSync(rotatedName(h, 1), line(life('opened', 40)));
+	fs.writeFileSync(h, line(life('opened', 41)));
+	saved.clear();
+	const fresh: string[] = [];
+	const fwFresh = new WindowLogForwarder({ ...opts([]), report: async (evs: ReportEvent[]) => {
+		fresh.push(...evs.filter(e => e.source === 'ahp-gate').map(e => `${e.summary} ${e.detail?.connection}`));
+		return { accepted: evs.length, rejected: 0 };
+	} });
+	await fwFresh.tick();
+	await fwFresh.tick();
+	fwFresh.dispose();
+	assert.deepEqual(fresh, ['opened 40', 'opened 41'], `CR10-22: rotated files are read too: ${JSON.stringify(fresh)}`);
+
+	// CR10-23: a poll that ends inside an oversized, unterminated line still checkpoints at the end
+	// of the last delivered line (the read position is undefined while that line is skipped).
+	for (let k = 1; k <= 10; k++) {
+		fs.rmSync(rotatedName(h, k), { force: true });
+	}
+	fs.writeFileSync(h, line(life('opened', 50)));
+	const endOf50 = fs.statSync(h).size;
+	fs.appendFileSync(h, 'x'.repeat(9000));
+	saved.clear();
+	const fwBig = new WindowLogForwarder({ ...opts([]), report: async (evs: ReportEvent[]) => ({ accepted: evs.length, rejected: 0 }) });
+	await fwBig.tick();
+	fwBig.dispose();
+	assert.equal(saved.get('seclabAhpGate.log#lifecycle')?.pos, endOf50, 'CR10-23: the delivered checkpoint stands');
+
+	// CR10-24: each acknowledged batch is checkpointed before the next report is awaited: a restart
+	// while the second report is outstanding doesn't replay the first.
+	fs.writeFileSync(h, Array.from({ length: 70 }, (_, k) => line(life('opened', 100 + k))).join(''));
+	saved.clear();
+	let calls = 0;
+	const fwHang = new WindowLogForwarder({ ...opts([]), report: (evs: ReportEvent[]) => {
+		if (!evs.some(e => e.source === 'ahp-gate')) {
+			return Promise.resolve({ accepted: evs.length, rejected: 0 });
+		}
+		calls++;
+		return calls === 1 ? Promise.resolve({ accepted: evs.length, rejected: 0 }) : new Promise(() => undefined);
+	} });
+	void fwHang.tick();
+	for (let i = 0; i < 50 && calls < 2; i++) {
+		await new Promise(r => setImmediate(r));
+	}
+	fwHang.dispose();
+	const lines64 = Buffer.byteLength(Array.from({ length: 64 }, (_, k) => line(life('opened', 100 + k))).join(''));
+	assert.equal(saved.get('seclabAhpGate.log#lifecycle')?.pos, lines64, `CR10-24: the first batch is checkpointed while the second is outstanding (${calls} calls)`);
+
+	// CR10-26: a denial report that never returns holds up neither the lifecycle tail's reads nor
+	// its reports: a `verified` written later still goes out.
+	fs.writeFileSync(h, line(gd(1)) + line(life('opened', 60)));
+	saved.clear();
+	const lifeSent: string[] = [];
+	const fwStuck = new WindowLogForwarder({ ...opts([]), report: (evs: ReportEvent[]) => {
+		if (evs.some(e => e.summary.startsWith('deny'))) {
+			return new Promise(() => undefined);
+		}
+		lifeSent.push(...evs.filter(e => e.source === 'ahp-gate').map(e => `${e.summary} ${e.detail?.connection}`));
+		return Promise.resolve({ accepted: evs.length, rejected: 0 });
+	} });
+	const settle = async () => {
+		for (let i = 0; i < 20; i++) {
+			await new Promise(r => setImmediate(r));
+		}
+	};
+	void fwStuck.tick();
+	await settle();
+	fs.appendFileSync(h, line(life('verified', 60)));
+	void fwStuck.tick();
+	await settle();
+	fwStuck.dispose();
+	assert.deepEqual(lifeSent, ['opened 60', 'verified 60'], `CR10-26: lifecycle isn't held up by a stuck denial report: ${JSON.stringify(lifeSent)}`);
+
+	// CR10-27: when the install line opens a file, the previous session's last RPC line is found
+	// in the older file, so the gate grace never admits the previous tab's lines.
+	fs.rmSync(dir, { recursive: true, force: true });
+	fs.mkdirSync(dir, { recursive: true });
+	const at = (t: string, o: unknown) => `2026-11-06 ${t} [info] ${JSON.stringify(o)}\n`;
+	fs.writeFileSync(rotatedName(f, 1), at('12:00:00.000', deny(1)));
+	fs.writeFileSync(f, at('12:00:02.000', installed) + at('12:00:02.050', deny(2)));
+	fs.writeFileSync(h, at('11:59:59.500', gd(1)) + at('12:00:02.100', gd(2)));
+	saved.clear();
+	session = undefined;
+	const reuse: string[] = [];
+	const fwReuse = new WindowLogForwarder({ ...opts([]), report: async (evs: ReportEvent[]) => {
+		reuse.push(...evs.filter(e => e.source === 'ahp-gate').map(e => e.summary));
+		return { accepted: evs.length, rejected: 0 };
+	} });
+	await fwReuse.tick();
+	fwReuse.dispose();
+	assert.deepEqual(reuse, ['deny 2'], `CR10-27: the previous tab's gate line stays out: ${JSON.stringify(reuse)}`);
 	fs.rmSync(dir, { recursive: true, force: true });
 });
 

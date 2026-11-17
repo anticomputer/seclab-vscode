@@ -5,6 +5,9 @@
 import type { EventDraft, Integrity, ObsEvent, Priority } from './schema.ts';
 import { weakestIntegrity } from './schema.ts';
 
+/** The RPC filter's log-summary lines and the forwarder's gap marker: about the log, not denials. */
+const RPC_SUMMARY_REFS = new Set(['rpc:seclab.log-throttled', 'rpc:seclab.early-dropped', 'rpc:seclab.log-skipped']);
+
 export interface TabContext {
 	/** ms epoch when the tab's REH was (re)started by this supervisor. */
 	openedAt?: number;
@@ -198,7 +201,8 @@ export class Detector {
 				// Beacons through the broker: see brokerTiming (fed before aggregation).
 				break;
 			case 'ahp.decision':
-				if (e.integrity === 'trusted' && e.detail?.verdict === 'deny') {
+				// The forwarder's gap marker says lines were lost, not that anything was denied (CR10-25).
+				if (e.integrity === 'trusted' && e.detail?.verdict === 'deny' && e.detail?.gateRule !== 'ahp-gate.log-skipped') {
 					const t = Date.parse(e.time);
 					this.ahpDenies.push(t);
 					while (this.ahpDenies.length && t - this.ahpDenies[0] > 60_000) {
@@ -218,7 +222,10 @@ export class Detector {
 				// collapses repeats of one call within 10 s into a follow-up line with `count`, so each
 				// line weighs its count (bounded): probing one method hard still trips the rule (review
 				// round 14).
-				if (e.integrity === 'trusted' && (e.detail?.verdict === 'deny' || e.detail?.verdict === 'prompt')) {
+				// The filter's own summary lines (`seclab.log-throttled`, `seclab.early-dropped`) count
+				// every suppressed decision, allows and rewrites included, and `seclab.log-skipped` marks
+				// a gap: never denials (CR10-1).
+				if (e.integrity === 'trusted' && (e.detail?.verdict === 'deny' || e.detail?.verdict === 'prompt') && !RPC_SUMMARY_REFS.has(String(e.detail?.ref))) {
 					const t = Date.parse(e.time);
 					const c = e.detail?.count;
 					const n = typeof c === 'number' && Number.isInteger(c) && c > 1 ? Math.min(c, 1000) : 1;
