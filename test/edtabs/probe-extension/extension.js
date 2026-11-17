@@ -32,7 +32,7 @@ exports.activate = async function (context) {
 	}
 	const out = path.join(root, '.seclab-edtabs');
 	fs.mkdirSync(out, { recursive: true });
-	const report = { schema: 'seclab-edtabs-report/1', arm: t.arm, done: false, tabs: 0, untitledText: false, kinds: {}, schemes: {}, tokens: [] };
+	const report = { schema: 'seclab-edtabs-report/1', arm: t.arm, done: false, tabs: 0, untitledText: false, untitledEvent: false, kinds: {}, schemes: {}, tokens: [] };
 	const seen = new Set();
 	const tokens = (s, field) => {
 		for (const tok of String(s).split(/[\/\\~\s?#&=:.-]+/)) {
@@ -83,6 +83,9 @@ exports.activate = async function (context) {
 	const write = () => fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report));
 	context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs(e => {
 		for (const tab of [...e.opened, ...e.changed]) {
+			if (tab.input instanceof vscode.TabInputText && tab.input.uri.scheme === 'untitled') {
+				report.untitledEvent = true;
+			}
 			tokens(tab.label, 'label');
 			for (const u of uris(tab.input)) {
 				tokens(u.toString(true), 'uri');

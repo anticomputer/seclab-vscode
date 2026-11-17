@@ -144,7 +144,7 @@ if (installed) {
 			await ed.cdp.send('Input.dispatchKeyEvent', { type, key: 'n', code: 'KeyN', windowsVirtualKeyCode: 78, nativeVirtualKeyCode: 78, modifiers: process.platform === 'darwin' ? 4 : 2 }, ed.session);
 		}
 		await new Promise(r => setTimeout(r, 1000));
-		await ed.type('edtabs untitled control');
+		// Not typed into: a label change would carry the input along and hide a missing ownership update.
 		opened['Untitled-1'] = (await labels()).some(l => /^Untitled-\d+$/.test(l) || l === 'edtabs untitled control');
 		spawnSync('sleep', ['3']);
 		// A host media file dropped on the editor area, as from Finder (CDP drag events in the
@@ -182,7 +182,7 @@ const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').matc
 const counts = (o: unknown, key: RegExp) => !!o && typeof o === 'object' && Object.entries(o as object).every(([k, v]) => key.test(k) && Number.isInteger(v));
 const valid = !!rep && rep.schema === 'seclab-edtabs-report/1' && rep.arm === armed && typeof rep.done === 'boolean' && Number.isInteger(rep.tabs)
 	&& counts(rep.kinds, /^[A-Za-z]{1,40}$/) && counts(rep.schemes, /^[a-z0-9.+-]{1,40}$/)
-	&& typeof rep.untitledText === 'boolean' && Array.isArray(rep.tokens) && rep.tokens.length <= 5000
+	&& typeof rep.untitledText === 'boolean' && typeof rep.untitledEvent === 'boolean' && Array.isArray(rep.tokens) && rep.tokens.length <= 5000
 	&& rep.tokens.every((x: any) => !!x && (x.field === 'label' || x.field === 'uri') && /^[0-9a-f]{64}$/.test(x.sha256));
 // Not the login name: the tab's own folder is a host path under the user's home (sbx mounts it at
 // the same path), which the tab is given on purpose; the canary names only the host profile.
@@ -208,6 +208,7 @@ if (valid && !measure) {
 	expect('DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary)', leaks.length === 0);
 	expect('EDT-1 a host media file dropped in the window reaches the tab without its path', !leaks.some(l => l.startsWith('media@')));
 	expect('control: an untitled document the user created in the window shows to the tab as its own text tab (EDT-10)', rep.untitledText === true);
+	expect('control: the tab learned of its untitled text tab through onDidChangeTabs (EDT-13)', rep.untitledEvent === true);
 }
 expect('no focus steal', !steals);
 const gate = verifyTeardown(base);
