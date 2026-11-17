@@ -20,7 +20,7 @@ SRCH-3, which is open.
 | SRCH-3 | low | query sent to the tab | The query carries `extraFileResources`, which are open editors outside the workspace (host files, user settings). It also carries include and exclude globs built from the host's `files.exclude` and `search.exclude` | open (part fixed) |
 | SRCH-4 | info | `$handleFileMatch` | The positional rule also admits `untitled:` results | fixed |
 | SRCH-5 | info | search validators | `$handleFileMatch` had no bound on its result count | fixed |
-| SRCH-6 | low | `search-probe.ts` | The proof could pass vacuously. `before` passed if nothing was typed, and didn't need the registration's deny. There's no hostile-result negative | fixed |
+| SRCH-6 | low | `search-probe.ts` | The proof could pass vacuously. `before` passed if nothing was typed, and didn't need the registration's deny. There's no hostile-result negative | fixed (untested: the harness runs are its evidence) |
 | SRCH-7 | info | ARCHITECTURE, RPC-LOCKDOWN, policy, `check_drift.py` | The records overclaimed (SRCH-1, SRCH-2), and a rationale said opened documents sync to the tab, which has been stale since 0035 | fixed |
 
 ## Confirmed without findings
@@ -57,3 +57,26 @@ SRCH-3, which is open.
     API the fixture can't enable. The injected-defect cases cover those shapes against the
     shipped validators instead.
 - SRCH-7: the records are corrected.
+
+## Second pass (same date, same reviewer setup)
+Subject: the fixes above (`b4badf48`, `452c1fd3`). The prompt carried the same prompt-injection
+warning; none was found. Both mediums are closed. The reviewer tried the bypasses named in the
+prompt, and none got through:
+- `results: []` with a host resource;
+- falsy `results` values on file items;
+- `$mid` variants;
+- other fields of the completion stats;
+- authority case tricks on `extraFileResources`.
+
+Nothing new at medium or above, 0051 included.
+
+| ID | Sev | Component | Finding | Status |
+|---|---|---|---|---|
+| SRCH2-1 | info | `tabTextMatches` | The nested values of a text match weren't pinned to a type. `revive()` acts on `$mid`, so a resource could become a RegExp or Date, or a result could become a host URI. No consumer reads a URI from them, so the effect was a broken match, not a host file in results | fixed |
+| SRCH2-2 | info | 0051 | Two response fields still pass as they are: the error text a tab rejects a search with, shown in the Search view's input as plain text, and the stats, sent to sampled telemetry. Neither carries a command, a link or markup: the UI-spoofing residual the policy already lists | accepted residual |
+| SRCH2-3 | info | records | This record called SRCH-6 fixed while the register had it as fixed-untested, and SRCH-3's summary still named `extraFileResources`, which 0051 now filters | fixed |
+
+In response: `tabTextMatches` requires each resource and result `uri` to be a plain serialised
+URI (`$mid` 1, URI keys only), and a result to carry only its own keys and never `$mid`. Two
+injected defects cover this (`a0fb6e29`). SRCH2-2 is accepted as the listed UI-spoofing
+residual. The records are aligned.

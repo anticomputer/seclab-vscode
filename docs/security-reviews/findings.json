@@ -18894,7 +18894,7 @@
 			"component": "MainThreadSearch $handleFileMatch / $handleTextMatch validators",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:5300bd8a500672975637cedec804b46f4325cf00",
+			"commit": "patch:f078b985c01c81ea1b267707ab076fd5951c39c5",
 			"test": {
 				"file": "test/containment/arg-validators.test.ts",
 				"name": "a file result carrying results on a host resource"
@@ -18909,7 +18909,7 @@
 			"component": "Search view messages (patch 0051), check_drift.py RESPONSE_NONE",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:5300bd8a500672975637cedec804b46f4325cf00",
+			"commit": "patch:f078b985c01c81ea1b267707ab076fd5951c39c5",
 			"test": {
 				"file": "test/containment/search-responses.test.ts",
 				"name": "patch 0051 sanitises tab search messages and the query sent to a tab"
@@ -18920,7 +18920,7 @@
 			"anchor": "SRCH-3",
 			"round": "search restoration review (2026-11-17)",
 			"severity": "low",
-			"summary": "The query sent to a tab carries extraFileResources (open editors outside the workspace) and include/exclude globs built from the host's files.exclude and search.exclude.",
+			"summary": "The query sent to a tab carried extraFileResources (open editors outside the workspace; now filtered by 0051) and still carries include/exclude globs built from the host's files.exclude and search.exclude.",
 			"component": "search query sent to a tab (searchService, patch 0051)",
 			"owner": "rpc",
 			"status": "open",
@@ -18936,7 +18936,7 @@
 			"component": "MainThreadSearch $handleFileMatch",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:5300bd8a500672975637cedec804b46f4325cf00",
+			"commit": "patch:f078b985c01c81ea1b267707ab076fd5951c39c5",
 			"test": {
 				"file": "test/containment/arg-validators.test.ts",
 				"name": "an untitled file result"
@@ -18951,7 +18951,7 @@
 			"component": "MainThreadSearch $handleFileMatch",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:5300bd8a500672975637cedec804b46f4325cf00",
+			"commit": "patch:f078b985c01c81ea1b267707ab076fd5951c39c5",
 			"test": {
 				"file": "test/containment/arg-validators.test.ts",
 				"name": "tab providers and search: the legitimate shapes pass"
@@ -18966,7 +18966,7 @@
 			"component": "test/containment/search-probe.ts",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "patch:5300bd8a500672975637cedec804b46f4325cf00",
+			"commit": "patch:f078b985c01c81ea1b267707ab076fd5951c39c5",
 			"gap": "The harness itself; its runs are the evidence (EDR search-in-tabs)."
 		},
 		{
@@ -18978,8 +18978,51 @@
 			"component": "ARCHITECTURE, RPC-LOCKDOWN, policy.json, check_drift.py",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "patch:5300bd8a500672975637cedec804b46f4325cf00",
+			"commit": "patch:f078b985c01c81ea1b267707ab076fd5951c39c5",
 			"gap": "Documentation corrections; nothing to test."
+		},
+		{
+			"record": "20261117-search-in-tabs.md",
+			"anchor": "SRCH2-1",
+			"round": "search restoration review, second pass (2026-11-17)",
+			"severity": "info",
+			"summary": "A text match's nested resource, results and result uri weren't pinned to a type, so revive() could turn them into a RegExp, Date or host URI (a broken match, not a host file in results).",
+			"component": "tabTextMatches validator",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:d7246e204420fb3ae2dbc315fadabf52c11973d1",
+			"test": {
+				"file": "test/containment/arg-validators.test.ts",
+				"name": "a text result that revives as a host URI"
+			}
+		},
+		{
+			"record": "20261117-search-in-tabs.md",
+			"anchor": "SRCH2-2",
+			"round": "search restoration review, second pass (2026-11-17)",
+			"severity": "info",
+			"summary": "A tab's search error text (shown as plain text in the Search view input) and stats (sampled telemetry) pass unsanitised; neither carries a command, link or markup.",
+			"component": "search responses (patch 0051)",
+			"owner": "rpc",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "UI spoofing only: the error renders as plain text and stats go to sampled telemetry; neither can run a command, open a link or fetch, and policy.json already lists ui-spoofing as the residual impact of the search registrations.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-search-in-tabs.md",
+				"quote": "SRCH2-2 is accepted as the listed UI-spoofing"
+			}
+		},
+		{
+			"record": "20261117-search-in-tabs.md",
+			"anchor": "SRCH2-3",
+			"round": "search restoration review, second pass (2026-11-17)",
+			"severity": "info",
+			"summary": "The review record called SRCH-6 fixed while the register had it fixed-untested, and SRCH-3's summary still named extraFileResources.",
+			"component": "search review record, register",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:d7246e204420fb3ae2dbc315fadabf52c11973d1",
+			"gap": "Record corrections; nothing to test."
 		}
 	]
 }
