@@ -44,7 +44,11 @@ YAML escape.
 
 ## Consequences
 - A thread left open blocks the merge, so a session can't land past a review it hasn't answered.
-- Copilot's review isn't a required approval: an empty review blocks nothing.
+- Copilot's review isn't a required approval: an empty review blocks nothing, and neither does a
+  review that hasn't posted yet. After an update-branch push the procedure disarms auto-merge
+  until the new review is in and handled.
+- The PR's author resolves its own threads, so the rule holds a session to answering each one,
+  not to a particular answer. The reply is public and stays on the thread.
 - A PR still controls its own workflow files, so it can skip the jobs that run the required-checks
   validator (review thread on PR 7). That needs a control from outside the PR, an owner decision
   recorded separately.
