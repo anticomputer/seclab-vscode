@@ -309,9 +309,16 @@ export function gateProblems(files: Record<string, string>): string[] {
 		bad(`must trigger on workflow_run alone, not ${JSON.stringify(t)}`);
 	}
 	const lines = yamlLines(yml);
-	if (lines.some(l => /^\s*(?:-\s+)?["']?uses["']?\s*:/.test(l))) {
+	// Outside its script, in any spelling: block or flow (review RJG-4).
+	if (lines.some(l => /\buses["']?\s*:/.test(l.replace(/(^|\s)#.*$/, '')))) {
 		bad('has a uses: step (no checkout, no artifact download, no action at all)');
 	}
+	const FLOW_OK = new Set(['permissions: {}', '    workflows: [ci-unit, workflow-lint, docs-check, patch-build]', '    types: [completed]']);
+	lines.forEach((l, i) => {
+		if (/[{}[\]]/.test(l.replace(/\$\{\{[^}]*\}\}/g, '').replace(/\s+#.*$/, '')) && !FLOW_OK.has(l.replace(/\s+#.*$/, ''))) {
+			bad(`line ${i + 1}: a flow collection outside the fixed trigger and permissions lines`);
+		}
+	});
 	if (/\bsecrets\s*[.[]/.test(yml)) {
 		bad('reads a secret');
 	}
@@ -333,7 +340,12 @@ export function gateProblems(files: Record<string, string>): string[] {
 	if (grants.join(', ') !== 'actions: read, statuses: write') {
 		bad(`its token must hold exactly actions: read and statuses: write, not ${JSON.stringify(grants)}`);
 	}
-	const pairs = /for pair in ([^;\n]+);/.exec(yml)?.[1].trim().split(/\s+/) ?? [];
+	// The one loop, inside the script: a comment can't stand in for it (review RJG-4).
+	const loops = yml.split('\n').map((l, i) => ({ l, i })).filter(x => x.l.includes('for pair in'));
+	if (loops.length !== 1 || lines[loops[0].i] !== '' || !/^ {10}for pair in [^;]+; do$/.test(loops[0].l)) {
+		bad('must hold exactly one `for pair in ...; do` loop, inside its script');
+	}
+	const pairs = loops.length === 1 ? /for pair in ([^;\n]+);/.exec(loops[0].l)?.[1].trim().split(/\s+/) ?? [] : [];
 	const wantPairs = REQUIRED.map(r => `${r.workflow}:${r.context}`);
 	if (pairs.join(' ') !== wantPairs.join(' ')) {
 		bad(`checks ${JSON.stringify(pairs)}, not the required ${JSON.stringify(wantPairs)}`);
@@ -451,6 +463,8 @@ function selfTest(): void {
 		['gate gains contents: write', (s: string) => s.replace('      statuses: write\n', '      statuses: write\n      contents: write\n'), /exactly actions: read and statuses: write/],
 		['gate top-level permissions not empty', (s: string) => s.replace('permissions: {}\n', 'permissions:\n  contents: read\n'), /top-level permissions/],
 		['gate drops a required job', (s: string) => s.replace(' docs-check.yml:docs', ''), /not the required/],
+		['RJG-4 a flow-style uses step', (s: string) => s.replace('    steps:\n', '    steps:\n      - { uses: ./.github/actions/x, with: { x: y } }\n'), /uses: step|flow collection/],
+		['RJG-4 the pair list only in a comment', (s: string) => s.replace(/for pair in [^;]+;/, 'for pair in ci-unit.yml:unit;').replace('on:\n', '# for pair in ci-unit.yml:unit workflow-lint.yml:lint docs-check.yml:docs patch-build.yml:patch-build;\non:\n'), /exactly one `for pair in/],
 		['gate waits on another workflow list', (s: string) => s.replace('workflows: [ci-unit, workflow-lint, docs-check, patch-build]', 'workflows: [ci-unit]'), /not the required workflows/],
 	] as Array<[string, (s: string) => string, RegExp | null]>) {
 		const files = { ...realFiles, [GATE]: edit(g) };
