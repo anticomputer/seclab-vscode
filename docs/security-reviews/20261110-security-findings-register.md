@@ -285,3 +285,111 @@ No high or critical; one medium and two lows, all fixed in the same change.
 | EEEE-1 | Medium | new highs | "New" meant absent from the merge base, so a stale fork point could demote a high on `main`, and an add-then-revert pair could close a new high for good. | Fixed | "Already recorded" means on `main` or at the merge base; a fix whose revert is also in the history closes nothing. | `seclab` host self-test "a reverted fix passed ancestry (EEEE-1)" |
 | EEEE-2 | Low | log output | Other problem lines still printed register text raw. | Fixed | Every printed line is flattened at the sink. | self-test "every printed line is one line and never a workflow command (EEEE-2)" |
 | EEEE-3 | Low | host contract | An empty severity flag passed as not-high. | Fixed | The flag must be 0 or 1. | `seclab` host self-test "a fix-commit line with no severity flag passed (EEEE-3)" |
+
+## Round FFFF (finding-ID clashes across concurrent branches)
+Scope: a clash between two findings of one owner now fails the docs check once the first has
+landed, and `./seclab findings clashes` compares a change's new IDs with every open pull request's
+head before landing (advisory, local). Reviewed before it was committed, by an Opus-class model.
+No high or critical; one medium and five lows, all fixed in the same change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| FFFF-1 | Low | clash freshness | A cross-owner clash the base had became one owner's two meanings by changing an owner, with no failure. | Fixed | A pair is a fresh same-owner clash unless the base had it as one. | self-test "a clash the base had across owners fails once one owner holds both (FFFF-1)" |
+| FFFF-2 | Medium | generic IDs | The failure would block an owner's next generic round ID (`R-1`), a convention in its records. | Fixed | A one-letter round ID, or one its owner already reuses in the base, stays a warning. | self-test "a generic round ID reused by its owner is a warning, not a failure (FFFF-2)" |
+| FFFF-3 | Low | stale heads | A stale PR head counted an entry main changed later as one it mints, a false clash. | Fixed | An entry main already has is never the PR's. | self-test "a stale PR head does not claim an entry main already has (FFFF-3)" |
+| FFFF-4 | Low | own PR | This branch's own PR was found by branch name, so local amendments could be reported against themselves. | Fixed | The own PR comes from gh, and any head HEAD contains is skipped. | `seclab` host self-test "PR heads to compare weren't own-PR, fork and ancestor filtered (FFFF-4, FFFF-6)" |
+| FFFF-5 | Low | unreadable input | A PR register that wasn't JSON was dropped silently, and an internal error exited like a clash. | Fixed | It is reported and counted as skipped; an internal error exits 3. | self-test "a PR register that does not parse is reported, not dropped (FFFF-5)" |
+| FFFF-6 | Low | untrusted PRs | A fork's PR, which anyone can open, was compared and could steer a rename. | Fixed | A fork's PR is noted and never compared. | `seclab` host self-test "PR heads to compare weren't own-PR, fork and ancestor filtered (FFFF-4, FFFF-6)" |
+
+## Round GGGG (fixed before landing, a green main, byte format, rebase-resolve)
+Scope: the `fixed-before-landing` status, the docs workflow's link-check step getting the same
+`DOCS_BASE` as the gate (a workflow change), the on-main pin note, the byte-format check and
+`./seclab findings rebase-resolve` ([EDR](../edr/20261117-fixed-before-landing.md)). Reviewed by an
+Opus-class model. The paths that would close a recorded high under the new status (rename without
+`wasKey`, rename with it, delete and re-add, unrelated commits, a forged changed-files list) were
+checked and are blocked. No high or critical; one medium, two lows and three informational
+findings, all fixed in the same change, then three lows from the re-review below.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| GGGG-5 | Medium | evidence | The record of the failing run was checked only while the entry was new, so a later change could remove it. | Fixed | `preFixRef` is checked for the entry's whole life. | self-test "a landed fixed-before-landing entry whose failing-run quote is gone fails (GGGG-5)" |
+| GGGG-6 | Low | absent base | With no base register every fixed-before-landing check was skipped. | Fixed | Such an entry fails, and the host judges it as new. | self-test "fixed-before-landing with no base register fails (GGGG-6)" |
+| GGGG-7 | Low | comparison point | The first draft read the push's previous head from the event file, which earlier steps of the job can rewrite. | Fixed | The link-check step gets a step-level `DOCS_BASE` instead; the event file is not read. | `seclab` host self-test "a docs workflow step runs the gate without DOCS_BASE (GGGG-7)" |
+| GGGG-8 | Info | main | On `main` the reviewed commit wasn't compared with the push's previous head. | Fixed | It is, as on a pull request. | `seclab` host self-test "doesn't judge fixed-before-landing against its base (GGGG-8)" |
+| GGGG-9 | Info | merge | The register merge copied unknown top-level keys (a `__proto__` key vanished) and dropped a finding one side removed. | Fixed | Both are refused. | self-test "a finding one side removed is refused by merge3, never dropped (GGGG-9)" |
+| GGGG-10 | Info | markers | The conflict-marker scan matched seven-character markers only. | Fixed | Seven or more, and the diff3 base marker. | `seclab` host self-test "an 8-character conflict marker wasn't seen (GGGG-10)" |
+
+Re-review of the fixes and the workflow change, by the same reviewer: GGGG-5 to GGGG-10 verified
+closed. The workflow change meets the CI baseline: the expression is in step-level `env:`, never in
+`run:`; no new action, image, permission or token; nothing echoes the environment. No high or
+critical; three lows, fixed in the same change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| GGGG-11 | Low | branch entries | A fixed-before-landing entry on a branch failed for evidence not yet on this tree. | Fixed | A branch entry is judged when it lands, as its record and test are. | self-test "a branch fixed-before-landing entry is not failed for evidence not yet on this tree (GGGG-11)" |
+| GGGG-12 | Low | rebase-resolve | It regenerated files it didn't stage, and still reported them resolved. | Fixed | Every refreshed file is staged unless it holds a marker. | `seclab` host self-test "a refreshed view that wasn't conflicted wasn't staged, or a file with markers was (GGGG-12)" |
+| GGGG-13 | Low | test strength | GGGG-7's test counted lines, not steps, and the prefix base rule had no test. | Fixed | The workflow is checked step by step, block runs included; the base rule has a case. | `seclab` host self-test "a block-run gate step without its own DOCS_BASE passed (GGGG-13)" |
+
+## Round PRR11 (pull request #11's automated review)
+Scope: the three threads the automated pull-request reviewer opened on #11, checked against the
+code. No high or critical; one medium and two lows, fixed in the same change. The first thread's
+own claim, that `::command::` runs after other text on a line, is not what the runner does: it
+takes that form only at the start of a line, after leading spaces (actions/runner@7afce9ed,
+`src/Runner.Common/ActionCommand.cs`, `TryParseV2`). The legacy `##[command]` form, though, is
+taken anywhere in a line (`TryParse`), and the printed lines didn't break it.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| PRR11-1 | Low | log output | A printed line could carry a legacy `##[command]` from register text anywhere in it. | Fixed | Every printed line, and every key the host prints, breaks `##[`. | self-test "a legacy workflow command anywhere in a printed line is broken (PRR11-1)" |
+| PRR11-2 | Medium | reverted fixes | Once a fix was pinned to its SHA, a later revert of it no longer reopened the finding. | Fixed | A SHA fix commit is checked for a later revert as a `patch:` one is. | `seclab` host self-test "a pinned fix that was reverted later passed ancestry (PRR11-2)" |
+| PRR11-3 | Low | reverted fixes | The revert search covered commits before the fix, so a fix that reverts the change that brought the issue was taken for a reverted fix. | Fixed | Only commits after the fix count. | `seclab` host self-test "a fix that reverts the unsafe change was taken for a reverted fix (PRR11-3)" |
+
+Second pass, on the fixed head: three more threads, all true when checked against the code, fixed in
+the same change. No high or critical.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| PRR11-4 | Medium | branch entries | A fixed-before-landing entry the base had on its branch skipped the new-entry checks when it landed. | Fixed | An entry the base had only on its branch counts as new when it lands. | self-test "landing a branch fixed-before-landing entry judges it as new (PRR11-4)" |
+| PRR11-5 | Low | evidence | A landed fixed-before-landing entry could become plain `fixed` and drop its failing-run evidence. | Fixed | It keeps the status; it may reopen. | self-test "a landed fixed-before-landing entry turned into fixed fails (PRR11-5)" |
+| PRR11-6 | Low | local runs | A local check on `main` without a range compared with `HEAD^1` and failed a correct multi-commit landing. | Fixed | With no range, landed entries count as landed; CI on `main` without a range fails. | self-test "on main with no range a landed fixed-before-landing entry is not re-judged (PRR11-6)" |
+
+Third pass: two more threads, both true, fixed in the same change. No high or critical.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| PRR11-7 | Low | local runs | On `main` with no range, an entry `HEAD^1` had open was still refused once it became fixed-before-landing. | Fixed | With no range nothing is compared with `HEAD^1`; the evidence is still checked. | self-test "on main with no range an entry HEAD^1 had open is not refused (PRR11-7)" |
+| PRR11-8 | Low | new refs | A new branch or tag pushed at a landed commit (an all-zero previous head) would fail for a missing range. | Fixed | Only an update of `main` itself needs the range; other refs at landed commits are landed history. | `seclab` host self-test "a new branch or tag pushed at a landed commit wasn't landed history (PRR11-8)" |
+
+Fourth pass: one more thread, true, fixed in the same change. No high or critical. (A fifth comment,
+on the cost of the PR-head comparison, was a performance fix and isn't a finding.)
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| PRR11-9 | Low | landed entries | After landing, a fixed-before-landing entry's reviewed commit could be edited to equal its fix (or follow it) and still pass. | Fixed | The host checks every entry's commits; only the comparison with the landing base is for new ones. | `seclab` host self-test "a landed entry whose reviewed commit is its own fix passed (PRR11-9)" |
+
+Fifth pass: two threads. One is true and fixed in the same change. The other, a reopened
+fixed-before-landing finding later closed as plain `fixed`, is not a defect. A reopened finding is
+an ordinary recorded one, and closing it as `fixed` needs its fix on `main` and a regression test,
+like any other. The earlier failing-run evidence stays in its record and the history.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| PRR11-10 | Low | clashes | `findings clashes` listed pull requests from the caller's directory but fetched them from this checkout, so another checkout's numbers could be compared. | Fixed | gh runs in this checkout. | `seclab` host self-test "gh ran outside this checkout (PRR11-10)" |
+
+Sixth pass: one thread, true, fixed in the same change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| PRR11-11 | Low | local runs | On `main` with no range, the fixed-before-landing to `fixed` transition rule still compared with `HEAD^1`, which may be the same landing's own commit. | Fixed | With no range that rule compares nothing, as the new-entry rules don't. | self-test "on main with no range a transition from HEAD^1 is not judged (PRR11-11)" |
+
+Seventh pass: one thread, true, fixed in the same change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| PRR11-12 | Low | local runs | On `main` with no range, uncommitted register edits were exempted as landed history, so a recorded finding could be switched to fixed-before-landing locally. | Fixed | Uncommitted edits on `main` are judged against `HEAD` with every rule on. | `seclab` host self-test "uncommitted edits on main without a range weren't judged exactly (PRR11-12)" |
+
+Eighth pass: one thread, true, fixed in the same change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| PRR11-13 | Low | reverted fixes | A fix whose revert was itself reverted (the fix reapplied) still counted as reverted. | Fixed | The newest revert or reapplication after the fix decides. | `seclab` host self-test "a fix whose revert was reverted was taken as reverted (PRR11-13)" |

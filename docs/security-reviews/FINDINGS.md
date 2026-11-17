@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 203 | 273 | 40 | 614 |
+| fixed | 14 | 84 | 207 | 294 | 43 | 642 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 52 | 154 | 55 | 266 |
 | accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 13 | 15 | 6 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-| **all** | 16 | 93 | 294 | 520 | 139 | 1062 |
+| **all** | 16 | 93 | 298 | 541 | 142 | 1090 |
 
 ## Baseline: open high and critical findings
 
@@ -1733,14 +1733,42 @@ Every other commit the register cites is on main's history, or on the branch its
 | CCCC-5 | low | fixed | An environment variable could replace origin/main, and an unresolvable one skipped the rule | 6d798949bb6c · `seclab` "an unresolvable main didn't fail as a defect (CCCC-5)" |
 | CCCC-6 | low | fixed-untested | AAAA-2's rationale and AAAA-4's test rested on the withdrawn rule | Register and record text; nothing to test. |
 | CCCC-7 | low | fixed | No case for a poisoned whole-history cache, an unresolvable main, or a pin from outside main | 6d798949bb6c · `seclab` "a malformed whole-history cache was trusted (CCCC-7)" |
-| DDDD-1 | high | fixed | An anchor with a tab or newline split a high's line to the ancestry step and the keyless half was skipped, defeating CCCC-1 | patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211 · `build/docs/findings.ts` "an anchor with a tab fails the schema (DDDD-1)" |
-| DDDD-2 | low | fixed | Register text printed to the CI log could start a workflow command | patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211 · `build/docs/findings.ts` "an anchor that starts a workflow command fails the schema (DDDD-2)" |
-| DDDD-3 | low | fixed | The ID clash warning covered only the same owner, missing the concurrent-branch case | patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211 · `build/docs/findings.ts` "reuses with another meaning is warned, across owners (DDDD-3)" |
-| DDDD-4 | low | fixed | Touching an entry already in a clash warned about it again | patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211 · `build/docs/findings.ts` "editing an entry whose clash the base already had is not warned (DDDD-4)" |
-| DDDD-5 | info | fixed | Numbered anchors, other owners, edits and the exit code weren't covered | patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211 · `build/docs/findings.ts` "control: a clash warning never fails the check (DDDD-5)" |
-| EEEE-1 | medium | fixed | A stale fork point could demote a recorded high, and an add-then-revert pair could close a new high | patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211 · `seclab` "a reverted fix passed ancestry (EEEE-1)" |
-| EEEE-2 | low | fixed | Problem lines still printed register text raw | patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211 · `build/docs/findings.ts` "every printed line is one line and never a workflow command (EEEE-2)" |
-| EEEE-3 | low | fixed | An empty severity flag passed as not-high | patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211 · `seclab` "a fix-commit line with no severity flag passed (EEEE-3)" |
+| DDDD-1 | high | fixed | An anchor with a tab or newline split a high's line to the ancestry step and the keyless half was skipped, defeating CCCC-1 | patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c · `build/docs/findings.ts` "an anchor with a tab fails the schema (DDDD-1)" |
+| DDDD-2 | low | fixed | Register text printed to the CI log could start a workflow command | patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c · `build/docs/findings.ts` "an anchor that starts a workflow command fails the schema (DDDD-2)" |
+| DDDD-3 | low | fixed | The ID clash warning covered only the same owner, missing the concurrent-branch case | patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c · `build/docs/findings.ts` "reuses with another meaning is warned, across owners (DDDD-3)" |
+| DDDD-4 | low | fixed | Touching an entry already in a clash warned about it again | patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c · `build/docs/findings.ts` "editing an entry whose clash the base already had is not warned (DDDD-4)" |
+| DDDD-5 | info | fixed | Numbered anchors, other owners, edits and the exit code weren't covered | patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c · `build/docs/findings.ts` "control: a clash warning across owners never fails the check (DDDD-5)" |
+| EEEE-1 | medium | fixed | A stale fork point could demote a recorded high, and an add-then-revert pair could close a new high | patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c · `seclab` "a reverted fix passed ancestry (EEEE-1)" |
+| EEEE-2 | low | fixed | Problem lines still printed register text raw | patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c · `build/docs/findings.ts` "every printed line is one line and never a workflow command (EEEE-2)" |
+| EEEE-3 | low | fixed | An empty severity flag passed as not-high | patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c · `seclab` "a fix-commit line with no severity flag passed (EEEE-3)" |
+| FFFF-1 | low | fixed | A cross-owner clash the base had could become one owner's two meanings by changing an owner | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "a clash the base had across owners fails once one owner holds both (FFFF-1)" |
+| FFFF-2 | medium | fixed | The same-owner failure would block an owner's next generic round ID (R-1) | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "a generic round ID reused by its owner is a warning, not a failure (FFFF-2)" |
+| FFFF-3 | low | fixed | A stale PR head counted an entry main changed later as one it mints | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "a stale PR head does not claim an entry main already has (FFFF-3)" |
+| FFFF-4 | low | fixed | The own PR was found by branch name, so local amendments could be reported against themselves | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "PR heads to compare weren't own-PR, fork and ancestor filtered (FFFF-4, FFFF-6)" |
+| FFFF-5 | low | fixed | A PR register that wasn't JSON was dropped silently, and an internal error exited like a clash | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "a PR register that does not parse is reported, not dropped (FFFF-5)" |
+| FFFF-6 | low | fixed | A fork's PR was compared and could steer a rename | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "PR heads to compare weren't own-PR, fork and ancestor filtered (FFFF-4, FFFF-6)" |
+| GGGG-5 | medium | fixed | The failing-run record of a fixed-before-landing entry was checked only while the entry was new | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "a landed fixed-before-landing entry whose failing-run quote is gone fails (GGGG-5)" |
+| GGGG-6 | low | fixed | With no base register every fixed-before-landing check was skipped | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "fixed-before-landing with no base register fails (GGGG-6)" |
+| GGGG-7 | low | fixed | A draft read the push's previous head from the event file, which earlier job steps can rewrite | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "a docs workflow step runs the gate without DOCS_BASE (GGGG-7)" |
+| GGGG-8 | info | fixed | On main the reviewed commit wasn't compared with the push's previous head | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "doesn't judge fixed-before-landing against its base (GGGG-8)" |
+| GGGG-9 | info | fixed | The register merge copied unknown top-level keys and dropped a finding one side removed | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "a finding one side removed is refused by merge3, never dropped (GGGG-9)" |
+| GGGG-10 | info | fixed | The conflict-marker scan matched seven-character markers only | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "an 8-character conflict marker wasn't seen (GGGG-10)" |
+| GGGG-11 | low | fixed | A fixed-before-landing entry on a branch failed for evidence not yet on this tree | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "a branch fixed-before-landing entry is not failed for evidence not yet on this tree (GGGG-11)" |
+| GGGG-12 | low | fixed | rebase-resolve regenerated files it didn't stage, and still reported them resolved | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "a refreshed view that wasn't conflicted wasn't staged, or a file with markers was (GGGG-12)" |
+| GGGG-13 | low | fixed | GGGG-7's test counted lines, not steps, and the prefix base rule had no test | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "a block-run gate step without its own DOCS_BASE passed (GGGG-13)" |
+| PRR11-1 | low | fixed | A printed line could carry a legacy ##\[command\] from register text anywhere in it | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "a legacy workflow command anywhere in a printed line is broken (PRR11-1)" |
+| PRR11-2 | medium | fixed | Once a fix was pinned to its SHA, a later revert of it no longer reopened the finding | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "a pinned fix that was reverted later passed ancestry (PRR11-2)" |
+| PRR11-3 | low | fixed | The revert search covered commits before the fix, so a fix reverting the change that brought the issue was taken for a reverted fix | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "a fix that reverts the unsafe change was taken for a reverted fix (PRR11-3)" |
+| PRR11-4 | medium | fixed | A fixed-before-landing entry the base had on its branch skipped the new-entry checks when it landed | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "landing a branch fixed-before-landing entry judges it as new (PRR11-4)" |
+| PRR11-5 | low | fixed | A landed fixed-before-landing entry could become plain fixed and drop its failing-run evidence | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "a landed fixed-before-landing entry turned into fixed fails (PRR11-5)" |
+| PRR11-6 | low | fixed | A local check on main without a range compared with HEAD^1 and failed a correct multi-commit landing | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "on main with no range a landed fixed-before-landing entry is not re-judged (PRR11-6)" |
+| PRR11-7 | low | fixed | On main with no range, an entry HEAD^1 had open was still refused once it became fixed-before-landing | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "on main with no range an entry HEAD^1 had open is not refused (PRR11-7)" |
+| PRR11-8 | low | fixed | A new branch or tag pushed at a landed commit would fail for a missing range | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "a new branch or tag pushed at a landed commit wasn't landed history (PRR11-8)" |
+| PRR11-9 | low | fixed | After landing, a fixed-before-landing entry's reviewed commit could be edited to equal its fix and still pass | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "a landed entry whose reviewed commit is its own fix passed (PRR11-9)" |
+| PRR11-10 | low | fixed | findings clashes listed pull requests from the caller's directory but fetched them from this checkout | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "gh ran outside this checkout (PRR11-10)" |
+| PRR11-11 | low | fixed | On main with no range, the fixed-before-landing to fixed transition rule still compared with HEAD^1 | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `build/docs/findings.ts` "on main with no range a transition from HEAD^1 is not judged (PRR11-11)" |
+| PRR11-12 | low | fixed | On main with no range, uncommitted register edits were exempted as landed history | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "uncommitted edits on main without a range weren't judged exactly (PRR11-12)" |
+| PRR11-13 | low | fixed | A fix whose revert was itself reverted still counted as reverted | patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c · `seclab` "a fix whose revert was reverted was taken as reverted (PRR11-13)" |
 
 ### [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md)
 
