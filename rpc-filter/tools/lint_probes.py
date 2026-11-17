@@ -303,23 +303,36 @@ def _regex_end(text: str, i: int) -> int | None:
     return None
 
 
-def _strip_comments(text: str) -> str:
+def _strip_comments(text: str, ambiguous: list | None = None) -> str:
     """The text with comments blanked to spaces and string literals kept (positions and newlines
     kept). Blanking whole lines that start with `*` or `//` removed a block comment's closing
     `*/` while its `/**` stayed, so the scanner below read the code after it as comment: the
-    record and clipboard rules then skipped most of a payload (PR review, 2026-11-17)."""
+    record and clipboard rules then skipped most of a payload (PR review, 2026-11-17).
+
+    Telling a regex literal from division takes a JavaScript parser (`n++ / 2`, a regex after
+    `break` and a newline, `for await (…)`), and a wrong guess turns code into a comment. So a
+    comment opener that follows any code `/` on its line is not trusted: its line number goes into
+    `ambiguous`, and the lint fails it (PR review on #27)."""
     out, i, n = list(text), 0, len(text)
     ctx = _SlashContext()
+    line_slash = False
+
+    def opener() -> None:
+        ctx.gap()
+        if line_slash and ambiguous is not None:
+            ambiguous.append(text.count("\n", 0, i) + 1)
+
     while i < n:
         ch = text[i]
         if ch == "/" and i + 1 < n and text[i + 1] == "/":
-            ctx.gap()
+            opener()
             while i < n and text[i] != "\n":
                 out[i] = " "
                 i += 1
             continue
         if ch == "/" and i + 1 < n and text[i + 1] == "*":
-            ctx.gap()
+            opener()
+            begin = i
             while i < n and not (text[i] == "*" and i + 1 < n and text[i + 1] == "/"):
                 if text[i] != "\n":
                     out[i] = " "
@@ -328,18 +341,25 @@ def _strip_comments(text: str) -> str:
                 if j < n:
                     out[j] = " "
             i += 2
+            line_slash = line_slash and "\n" not in text[begin:i]
             continue
         if ch == "/" and ctx.regex_ok() and (end := _regex_end(text, i)) is not None:
             ctx.operand()
+            line_slash = True
             i = end
             continue
         if ch in "'\"`":
-            quote, i = ch, i + 1
+            quote, begin, i = ch, i, i + 1
             while i < n and text[i] != quote and not (quote != "`" and text[i] == "\n"):
                 i += 2 if text[i] == "\\" else 1
             i += 1
             ctx.operand()
+            line_slash = line_slash and "\n" not in text[begin:i]
             continue
+        if ch == "\n":
+            line_slash = False
+        elif ch == "/":
+            line_slash = True
         ctx.code(ch)
         i += 1
     return "".join(out)
@@ -511,7 +531,13 @@ def main(argv: list | None = None) -> int:
             if pattern.search(flat) and not any(v[0] == rel and v[2] == rid for v in violations):
                 violations.append((rel, 0, rid, f"{why} (matched after joining lines)"))
         violations.extend(guarded_source_violations(rel, code))
-        text = _strip_comments("\n".join(lines))
+        ambiguous: list = []
+        text = _strip_comments("\n".join(lines), ambiguous)
+        for n in sorted(set(ambiguous)):
+            violations.append((rel, n, "ambiguous-slash",
+                               "a comment follows a `/` on this line, and the lint can't tell a regex "
+                               "from division without parsing, so the comment could be hiding code. "
+                               "Put the comment on its own line, or build the regex with new RegExp(...)"))
         violations.extend(clipboard_violations(rel, text))
         if rel in RECORD_WRITERS:
             violations.extend(record_violations(rel, text, lines))
