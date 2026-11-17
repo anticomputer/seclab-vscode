@@ -21,7 +21,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { armingDigest, checkEvidence, hostRunChecks, levelBVectors, readEvidence, unattributedMarkers, type Evidence } from './assert.ts';
+import { armingRecord, type ArmingRecord, checkEvidence, hostRunChecks, levelBVectors, parseArmingRecord, readEvidence, unattributedMarkers, type Evidence } from './assert.ts';
 
 const tests: Array<[string, () => void]> = [];
 const test = (name: string, fn: () => void) => tests.push([name, fn]);
@@ -93,8 +93,7 @@ test('with no evidence, a host marker still fails (a tab cannot withhold a host 
 
 /** A run directory and a workspace laid out as check-evidence prepares them, with the arming
  *  record prepare writes. */
-const ARMING_FILES = ['.seclab/probe.sh', '.seclab/targets', '.vscode/tasks.json'];
-function hostRun(): { run: string; ws: string; marker: string; arming: Record<string, string | null>; done: () => void } {
+function hostRun(): { run: string; ws: string; marker: string; arming: ArmingRecord; done: () => void } {
 	const run = fs.mkdtempSync(path.join(os.tmpdir(), 'seclab-hostrun-'));
 	const ws = path.join(run, 'ws');
 	const marker = path.join(run, 'probe-marker');
@@ -102,11 +101,13 @@ function hostRun(): { run: string; ws: string; marker: string; arming: Record<st
 	fs.mkdirSync(path.join(ws, '.vscode'), { recursive: true });
 	fs.writeFileSync(path.join(ws, '.seclab', 'probe.sh'), '#!/bin/sh\n');
 	fs.writeFileSync(path.join(ws, '.vscode', 'tasks.json'), '{}\n');
+	fs.writeFileSync(path.join(ws, '.vscode', 'settings.json'), '{}\n');
 	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${run}/canary\nmarker=${marker}\nrun=${run}\n`);
-	return { run, ws, marker, arming: armingDigest(ws, ARMING_FILES), done: () => fs.rmSync(run, { recursive: true, force: true }) };
+	return { run, ws, marker, arming: armingRecord(ws), done: () => fs.rmSync(run, { recursive: true, force: true }) };
 }
 const failing = (checks: Array<{ ok: boolean; name: string }>) => checks.filter(c => !c.ok).map(c => c.name);
 const ARMING_ROW = 'the arming files in the host checkout are exactly as prepared';
+const ADDED_ROW = 'nothing added to the host checkout beyond the run\'s own output';
 
 test('FXF-6: on OCI a host fsmonitor marker is unattributed (no fsmonitor row covers it)', () => {
 	const r = hostRun();
@@ -135,7 +136,7 @@ test('on sbx, evidence in the host checkout fails (the vector ran host-side)', (
 	try {
 		fs.mkdirSync(path.join(r.ws, '.seclab-evidence'));
 		fs.writeFileSync(path.join(r.ws, '.seclab-evidence', 'fsmonitor.json'), '{}');
-		assert.deepEqual(failing(hostRunChecks('sbx', r.ws, levelBVectors('sbx'), r.arming)), ['no evidence file in the host checkout (did not run host-side)']);
+		assert.deepEqual(failing(hostRunChecks('sbx', r.ws, levelBVectors('sbx'), r.arming)), ['no evidence file in the host checkout (did not run host-side)', ADDED_ROW]);
 	} finally {
 		r.done();
 	}
@@ -164,10 +165,52 @@ test('FXF-7, 10-12: any edit to what a host run reads fails, however small', () 
 		fs.mkdirSync(path.join(r.ws, '.git'));
 		assert.deepEqual(failing(hostRunChecks('oci', r.ws, levelBVectors('oci'), r.arming)), ['no .git in the host checkout'], 'a host .git (fsmonitor repointed)');
 		assert.ok(failing(hostRunChecks('oci', r.ws, levelBVectors('oci'), undefined)).includes(ARMING_ROW), 'no arming record');
-		assert.ok(failing(hostRunChecks('oci', r.ws, levelBVectors('oci'), {})).includes(ARMING_ROW), 'an empty arming record');
+		assert.equal(parseArmingRecord({ digest: {}, tree: [] }), undefined, 'an empty arming record is no record');
 	} finally {
 		r.done();
 	}
+});
+
+const put = (ws: string, rel: string, text = 'x') => {
+	fs.mkdirSync(path.dirname(path.join(ws, rel)), { recursive: true });
+	fs.writeFileSync(path.join(ws, rel), text);
+};
+
+test('FXF-14: on OCI the run\'s own writes (rogue settings payload, its instructions, evidence) stay green', () => {
+	const r = hostRun();
+	try {
+		put(r.ws, '.vscode/settings.json', '{"rogue":true}\n');
+		put(r.ws, '.github/instructions/seclab-probe.instructions.md');
+		put(r.ws, '.github/copilot-instructions.md');
+		put(r.ws, '.seclab-evidence/benign.json', '{}');
+		assert.deepEqual(failing(hostRunChecks('oci', r.ws, levelBVectors('oci'), r.arming)), []);
+		// On sbx none of it may reach the host checkout.
+		assert.deepEqual(failing(hostRunChecks('sbx', r.ws, levelBVectors('sbx'), r.arming)), [ADDED_ROW]);
+	} finally {
+		r.done();
+	}
+});
+
+test('FXF-15: a file a tab adds to the checkout fails on both drivers', () => {
+	for (const rel of ['.vscode/launch.json', '.githooks/pre-commit', '.github/workflows/x.yml', '.seclab/extra.sh']) {
+		const r = hostRun();
+		try {
+			put(r.ws, rel);
+			for (const d of ['sbx', 'oci']) {
+				assert.ok(failing(hostRunChecks(d, r.ws, levelBVectors(d), r.arming)).includes(ADDED_ROW), `${d} ${rel}`);
+			}
+		} finally {
+			r.done();
+		}
+	}
+});
+
+test('FXF-16: an arming record naming a path outside the workspace is no record', () => {
+	const digest = { '.seclab/probe.sh': 'a'.repeat(64) };
+	for (const bad of [{ digest: { '../x': null }, tree: [] }, { digest: { '/etc/passwd': null }, tree: [] }, { digest, tree: ['a/../../b'] }, { digest, tree: '.seclab' }, { digest: { k: 'nothex' }, tree: [] }, null, []]) {
+		assert.equal(parseArmingRecord(bad), undefined, JSON.stringify(bad));
+	}
+	assert.deepEqual(parseArmingRecord({ digest, tree: ['.seclab/probe.sh'] }), { digest, tree: ['.seclab/probe.sh'] });
 });
 
 /** Runs the real probe.sh from a workspace inside a scratch run dir (no HTTP: the client's
