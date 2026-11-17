@@ -545,6 +545,39 @@ export function lineOpen(line: string): boolean {
 	return depth !== 0 || q !== undefined;
 }
 
+/** A job-level key: plain or simply quoted, no escapes (an escaped key is unreadable). */
+const JOB_KEY = /^ {4}(?:(["'])([A-Za-z_][A-Za-z0-9_-]*)\1|([A-Za-z_][A-Za-z0-9_-]*))\s*:(?:\s|$)/;
+
+/** The lines of the job declared at `start`, read fail-closed (review CR-7): comments and blank
+ *  lines at any column belong to it, the first other line must be a 4-space key, and an indent of
+ *  3 or a tab in the indentation is unreadable. It ends at the next line indented 0 to 2. */
+export function jobBody(lines: string[], start: number): { body: string[]; bad?: string } {
+	const body: string[] = [];
+	let keyed = false;
+	for (const l of lines.slice(start + 1)) {
+		if (/^\s*(#.*)?$/.test(l)) {
+			body.push(l);
+			continue;
+		}
+		if (/^ {0,2}\S/.test(l)) {
+			break;
+		}
+		if (/\t/.test(/^\s*/.exec(l)![0])) {
+			return { body, bad: 'a tab in its indentation' };
+		}
+		if (/^ {3}\S/.test(l)) {
+			return { body, bad: `a line indented 3: ${JSON.stringify(l.trim().slice(0, 40))}` };
+		}
+		if (/^ {4}\S/.test(l)) {
+			keyed = true;
+		} else if (!keyed) {
+			return { body, bad: `job-level lines not indented 4: ${JSON.stringify(l.trim().slice(0, 40))}` };
+		}
+		body.push(l);
+	}
+	return { body };
+}
+
 /** A job that must run whenever its workflow does: present once, its job-level lines readable,
  *  and only keys that can't make it skip. Shared by the required-checks validator and this gate's ci evidence jobs. It lives here
  *  because verify-runs mounts this file alone (KKK-4, review CR-5). */
@@ -566,14 +599,11 @@ export function jobProblems(yml: string, job: string, label: string): { problems
 	if (decls !== 1) {
 		out.push(`${label}: job \`${job}\` is declared ${decls} times`);
 	}
-	const body: string[] = [];
-	for (const l of lines.slice(start + 1)) {
-		if (/^ {0,2}\S/.test(l)) {
-			break;
-		}
-		body.push(l);
+	const { body, bad } = jobBody(lines, start);
+	if (bad) {
+		out.push(`${label}: job \`${job}\` has ${bad}`);
 	}
-	const KEY = /^ {4}(?:(["'])([A-Za-z_][A-Za-z0-9_-]*)\1|([A-Za-z_][A-Za-z0-9_-]*))\s*:(?:\s|$)/;
+	const KEY = JOB_KEY;
 	const keys: string[] = [];
 	for (const l of body) {
 		if (!/^ {4}\S/.test(l) || /^ {4}#/.test(l) || /^ {4}- /.test(l)) {
@@ -607,7 +637,7 @@ export function jobProblems(yml: string, job: string, label: string): { problems
 
 /** Every job's check-run name (`name:`, else the job id), which is what a required status check
  *  matches. Undefined when the jobs can't be read in full, which callers treat as a failure: a job
- *  whose name can't be read could be reporting any context (review CR-4). */
+ *  whose name can't be read could be reporting any context (reviews CR-4, CR-7). */
 export function jobContexts(yml: string): Array<{ id: string; context: string }> | undefined {
 	const lines = yml.split('\n');
 	const at = lines.findIndex(l => /^jobs\s*:/.test(l));
@@ -615,26 +645,35 @@ export function jobContexts(yml: string): Array<{ id: string; context: string }>
 		return undefined;
 	}
 	const out: Array<{ id: string; context: string }> = [];
-	let cur: { id: string; context: string } | undefined;
-	for (const l of lines.slice(at + 1)) {
-		if (/^\S/.test(l)) {
-			break;
-		}
+	for (let i = at + 1; i < lines.length; i++) {
+		const l = lines[i];
 		if (/^\s*(#.*)?$/.test(l)) {
 			continue;
 		}
-		if (/^ {2}\S/.test(l)) {
-			const m = /^ {2}(["']?)([A-Za-z_][A-Za-z0-9_-]*)\1\s*:\s*(#.*)?$/.exec(l);
-			if (!m) {
+		if (/^\S/.test(l)) {
+			break;
+		}
+		const m = /^ {2}(["']?)([A-Za-z_][A-Za-z0-9_-]*)\1\s*:\s*(#.*)?$/.exec(l);
+		if (!m) {
+			return undefined;
+		}
+		const { body, bad } = jobBody(lines, i);
+		if (bad) {
+			return undefined;
+		}
+		let context = m[2];
+		for (const b of body) {
+			if (!/^ {4}\S/.test(b) || /^ {4}#/.test(b) || /^ {4}- /.test(b)) {
+				continue;
+			}
+			const k = JOB_KEY.exec(b);
+			if (!k) {
 				return undefined;
 			}
-			cur = { id: m[2], context: m[2] };
-			out.push(cur);
-			continue;
-		}
-		const n = /^ {4}(["']?)name\1\s*:\s*(.*?)\s*(#.*)?$/.exec(l);
-		if (n && cur) {
-			const v = n[2];
+			if ((k[2] ?? k[3]) !== 'name') {
+				continue;
+			}
+			const v = b.slice(k[0].length).replace(/\s+#.*$/, '').trim();
 			const plain = v.includes('${{') ? undefined
 				: /^[^\s'"&*!|>{[`%@#][^#]*$/.test(v) ? v
 				: /^"[^"\\]*"$/.test(v) ? v.slice(1, -1)
@@ -643,10 +682,10 @@ export function jobContexts(yml: string): Array<{ id: string; context: string }>
 			if (plain === undefined) {
 				return undefined;
 			}
-			cur.context = plain;
-		} else if (cur === undefined) {
-			return undefined;
+			context = plain;
 		}
+		out.push({ id: m[2], context });
+		i += body.length;
 	}
 	return out;
 }

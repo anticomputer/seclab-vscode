@@ -84,6 +84,14 @@ export function reporters(files: Record<string, string>): string[] {
 	return out;
 }
 
+/** No workflow may let its token write check runs or commit statuses: a step holding either could
+ *  post a passing required context as GitHub Actions itself, with no job of that name (review
+ *  CR-8). Nothing needs them; matched anywhere in the text, comments included (fail closed). */
+export function tokenScopes(files: Record<string, string>): string[] {
+	return Object.entries(files).filter(([, yml]) => /\b["']?(?:checks|statuses)["']?\s*:\s*["']?write\b|\bwrite-all\b/.test(yml))
+		.map(([f]) => `${f}: grants checks: write, statuses: write or write-all, which could post a required context`);
+}
+
 function selfTest(): void {
 	const good = 'on:\n  push:\n  pull_request:\n\njobs:\n  unit:\n    name: unit\n    runs-on: x\n    steps:\n      - run: x\n';
 	const cases: Array<[string, string, RegExp | null]> = [
@@ -111,11 +119,17 @@ function selfTest(): void {
 		['permissions and timeout are fine', good.replace('    runs-on: x\n', '    runs-on: x\n    timeout-minutes: 5\n    permissions:\n      contents: read\n'), null],
 		['defaults (could no-op every step)', good.replace('    runs-on: x\n', '    runs-on: x\n    defaults:\n      run:\n        shell: /usr/bin/true {0}\n'), /has `defaults:`/],
 		['a job with an empty body', good.replace('  unit:\n    name: unit\n    runs-on: x\n    steps:\n      - run: x\n', '  unit:\n'), /must be named/],
+		['CR-7 a required job indented 6 hiding if', good.replace('    name: unit\n    runs-on: x\n    steps:\n      - run: x\n', '      name: unit\n      if: false\n      runs-on: x\n      steps:\n        - run: x\n'), /not indented 4/],
+		['CR-7 if after a column-0 comment', good.replace('    steps:\n', '# note\n    if: false\n    steps:\n'), /job-level if/],
 		['a flow-style job', good.replace('  unit:\n    name: unit\n    runs-on: x\n    steps:\n      - run: x\n', '  unit: {name: unit, if: false}\n'), /not found|declared/],
 	];
 	const wf = (job: string) => `on:\n  push:\n  pull_request:\njobs:\n${job}`;
 	const real = { 'ci-unit.yml': good, 'workflow-lint.yml': good.replace(/unit/g, 'lint'), 'docs-check.yml': good.replace(/unit/g, 'docs'), 'patch-build.yml': good.replace(/unit/g, 'patch-build') };
 	for (const [name, extra, want] of [
+		['CR-8 checks: write', { 'x.yml': wf('  a:\n    permissions:\n      checks: write\n    steps:\n      - run: x\n') }, /could post a required context/],
+		['CR-8 statuses: write in flow style', { 'x.yml': 'permissions: {statuses: write}\n' + wf('  a:\n    steps:\n      - run: x\n') }, /could post a required context/],
+		['CR-8 write-all', { 'x.yml': 'permissions: write-all\n' + wf('  a:\n    steps:\n      - run: x\n') }, /could post a required context/],
+		['checks: read is fine', { 'x.yml': wf('  a:\n    permissions:\n      checks: read\n    steps:\n      - run: x\n') }, null],
 		['control: the real four and an unrelated job', { 'x.yml': wf('  other:\n    name: other\n    steps:\n      - run: x\n') }, null],
 		['a decoy job named lint', { 'shadow.yml': wf('  a:\n    name: lint\n    steps:\n      - run: x\n') }, /reports the required context `lint`/],
 		['a decoy job id unit with no name', { 'shadow.yml': wf('  unit:\n    steps:\n      - run: x\n') }, /reports the required context `unit`/],
@@ -124,8 +138,13 @@ function selfTest(): void {
 		['an escaped name', { 'shadow.yml': wf('  a:\n    name: "li\\x6et"\n    steps:\n      - run: x\n') }, /can't be read in full/],
 		['flow-style jobs', { 'shadow.yml': 'on: push\njobs: {a: {name: lint}}\n' }, /can't be read in full/],
 		['a flow-style job', { 'shadow.yml': wf('  a: {name: lint}\n') }, /can't be read in full/],
+		['CR-7 a name indented 6', { 'shadow.yml': wf('  a:\n      name: lint\n      steps:\n        - run: x\n') }, /can't be read in full/],
+		['CR-7 a name indented 3', { 'shadow.yml': wf('  a:\n   name: lint\n   steps:\n     - run: x\n') }, /can't be read in full/],
+		['CR-7 an escaped name key', { 'shadow.yml': wf('  a:\n    "na\\x6de": lint\n    steps:\n      - run: x\n') }, /can't be read in full/],
+		['CR-7 a decoy after a column-0 comment', { 'shadow.yml': wf('  a:\n    name: ok\n    steps:\n      - run: x\n# a note\n  b:\n    name: lint\n    steps:\n      - run: x\n') }, /reports the required context `lint`/],
+		['an uppercase extension', { 'shadow.YML': wf('  a:\n    name: unit\n    steps:\n      - run: x\n') }, /reports the required context `unit`/],
 	] as Array<[string, Record<string, string>, RegExp | null]>) {
-		const got = reporters({ ...real, ...extra });
+		const got = [...reporters({ ...real, ...extra }), ...tokenScopes({ ...real, ...extra })];
 		if (want ? !got.some(p => want.test(p)) : got.length) {
 			throw new Error(`required-checks self-test "${name}": got ${JSON.stringify(got)}`);
 		}
@@ -136,7 +155,7 @@ function selfTest(): void {
 			throw new Error(`required-checks self-test "${name}": got ${JSON.stringify(got)}`);
 		}
 	}
-	console.log(`required-checks self-test: ${cases.length + 8} cases OK`);
+	console.log(`required-checks self-test: ${cases.length + 17} cases OK`);
 }
 
 if (import.meta.main) {
@@ -145,9 +164,9 @@ if (import.meta.main) {
 	} else {
 		const root = path.resolve(import.meta.dirname, '..');
 		const dir = path.join(root, '.github/workflows');
-		const files = Object.fromEntries(fs.readdirSync(dir).filter(f => /\.ya?ml$/.test(f)).map(f => [f, fs.readFileSync(path.join(dir, f), 'utf8')]));
+		const files = Object.fromEntries(fs.readdirSync(dir).filter(f => /\.ya?ml$/i.test(f)).map(f => [f, fs.readFileSync(path.join(dir, f), 'utf8')]));
 		const all = [...REQUIRED.flatMap(r => files[r.workflow] === undefined ? [`${r.context}: workflow ${r.workflow} is missing`] : problems(files[r.workflow], r.context, r.job)),
-			...reporters(files)];
+			...reporters(files), ...tokenScopes(files)];
 		for (const p of all) {
 			console.error(`required-checks: ${p}`);
 		}
