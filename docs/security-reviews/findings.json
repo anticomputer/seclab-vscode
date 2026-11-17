@@ -50,7 +50,6 @@
 	"baseline": [
 		"20261104-probe-safety.md#3#2",
 		"20261104-probe-safety.md#5",
-		"20261104-tab-observability.md#WL-1",
 		"20261105-agent-host-patches.md#3",
 		"20261105-rpc-filter-rereview.md#4",
 		"20261105-secure-agentic-experiences-design.md#2",
@@ -4322,8 +4321,9 @@
 			"summary": "Nothing enforced that log forwarding starts only after the RPC filter ships, so a tab could $log forged trusted decision lines.",
 			"component": "obs window decision logs / Tab Manager",
 			"owner": "obs",
-			"status": "open",
-			"gap": "Fixed by the interlock in this change (product.json stamp plus the enforcing marker in the bundle; window-log probe no-stamp and no-marker variants); a high closes in a follow-up once its fix is on main."
+			"status": "fixed",
+			"commit": "96010fe012de",
+			"test": { "file": "tabd/test/obs.test.ts", "name": "window decision logs (WL-1): forwarding needs the policy stamp" }
 		},
 		{
 			"record": "20261104-tab-observability.md",
