@@ -13759,7 +13759,7 @@
 			"component": "containment proof harness (test/containment/host-terminal.ts)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "2d7ba7b1",
+			"commit": "patch:ef072e3834b547fcf176cd01550e8ca3b37649eb",
 			"test": {
 				"file": "test/containment/host-terminal.ts",
 				"name": "newLocal by id is not a command in a tab window (reported not found)"
@@ -13774,7 +13774,7 @@
 			"component": "ADR 20261116-no-host-terminal-in-tabs",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "2d7ba7b1",
+			"commit": "patch:ef072e3834b547fcf176cd01550e8ca3b37649eb",
 			"gap": "A documentation correction: the ADR wording has no behaviour for a regression test to hold."
 		},
 		{
@@ -13786,7 +13786,7 @@
 			"component": "Explorer terminal menu items (externalTerminal browser contribution, patch 0050)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "2d7ba7b1",
+			"commit": "patch:ef072e3834b547fcf176cd01550e8ca3b37649eb",
 			"test": {
 				"file": "test/containment/host-terminal.test.ts",
 				"name": "each rule fails on a mutant of the real patch"
@@ -13801,7 +13801,7 @@
 			"component": "openNativeConsole handler (patch 0050)",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "2d7ba7b1",
+			"commit": "patch:ef072e3834b547fcf176cd01550e8ca3b37649eb",
 			"test": {
 				"file": "test/containment/host-terminal.test.ts",
 				"name": "patch 0050 offers and starts no host terminal in a tab window"
