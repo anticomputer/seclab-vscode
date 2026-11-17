@@ -8,7 +8,13 @@
 set -eu
 
 check() {
-  quoted=$(git -C "$1" -c core.quotePath=true ls-files -- broker | grep '^"' || true)
+  # git's own failure (not a repository, a broken index) fails the check; only grep's
+  # no-match is a pass (review BRK20-4).
+  listed=$(git -C "$1" -c core.quotePath=true ls-files -- broker) || {
+    echo "docs-check: git ls-files failed in $1; can't check tracked paths" >&2
+    return 1
+  }
+  quoted=$(printf '%s\n' "$listed" | grep '^"' || true)
   if [ -n "$quoted" ]; then
     printf 'docs-check: tracked path under broker/ needs git quoting; broker/build.sh refuses it: %s\n' "$quoted" >&2
     return 1
@@ -41,8 +47,9 @@ self_test() {
     'echo x > "$odd" && git add "$odd" && rm "$odd"'
   case_ "quoting: a tracked non-ASCII path fails" fail \
     'f=$(printf "broker/caf\303\251.txt") && echo x > "$f" && git add "$f"'
+  case_ "BRK20-4: git failing (a corrupt index) fails, never an empty pass" fail 'echo junk > .git/index'
   [ "$fails" -eq 0 ] || return 1
-  echo "quoted-paths self-test: ok (5 cases)" >&2
+  echo "quoted-paths self-test: ok (6 cases)" >&2
 }
 
 if [ "${1:-}" = "--self-test" ]; then
