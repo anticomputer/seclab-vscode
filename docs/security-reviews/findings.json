@@ -16283,6 +16283,18 @@
 			"status": "fixed-untested",
 			"commit": "patch:242beb7ed662461e98405cd03a34629f83855fed",
 			"gap": "The check fails on the build before the fix and is proven on the next build."
+		},
+		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Copilot review (PR #24, third pass)",
+			"owner": "docsync",
+			"component": "edtabs harness",
+			"anchor": "EDT-15",
+			"severity": "info",
+			"summary": "After the tab ran, the edtabs harness wrote into the tab's workspace from the host and read its arming file back unguarded (SQ-4/SQ-5's pattern).",
+			"status": "fixed-untested",
+			"commit": "patch:db139299fd5c1290210afc6c075ff4a1f8124c9e",
+			"gap": "The squat probe tests the pattern (SQ-4, SQ-5); this harness mirrors its fix without its own hostile-workspace test."
 		}
 	]
 }

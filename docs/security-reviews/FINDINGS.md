@@ -15,14 +15,23 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
+<<<<<<< HEAD
 | fixed | 14 | 84 | 208 | 297 | 44 | 647 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 52 | 159 | 56 | 272 |
+=======
+| fixed | 14 | 83 | 203 | 271 | 40 | 611 |
+| fixed-untested | 0 | 5 | 52 | 159 | 57 | 273 |
+>>>>>>> b397eb7 (register: EDT-15)
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 14 | 14 | 6 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
+<<<<<<< HEAD
 | **all** | 16 | 93 | 300 | 549 | 146 | 1104 |
+=======
+| **all** | 16 | 92 | 295 | 523 | 143 | 1069 |
+>>>>>>> b397eb7 (register: EDT-15)
 
 ## Baseline: open high and critical findings
 
@@ -142,6 +151,7 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-5** | info | fixed-untested | patch 0036 configuration snapshot | A withheld-setting report refused before the Tab Manager registered its command was counted as sent. | No runtime test for report retry. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-7** | info | open | variable resolution (outside 0036) | \`${config:…}\` in a tab-owned tasks.json or launch.json resolves in the renderer against the unfiltered configuration. | A sibling of the snapshot filter: resolve config variables for tab tasks against the tab's filtered view. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-12** | info | fixed-untested | edtabs harness | A setup failure skipped the edtabs probe's teardown gate. | Harness structure; no test injects a setup failure. |
+| [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-15** | info | fixed-untested | edtabs harness | After the tab ran, the edtabs harness wrote into the tab's workspace from the host and read its arming file back unguarded (SQ-4/SQ-5's pattern). | The squat probe tests the pattern (SQ-4, SQ-5); this harness mirrors its fix without its own hostile-workspace test. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-6** | info | accepted-residual | patch 0038 editor-tab model | A host-local terminal's title reaches the tab as an editor label. | accepted by an agent: No new exposure: the terminal service already pushes every terminal name to every host (DOCSYNC-R5). |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-7** | info | accepted-residual | patch 0038 editor-tab model | A desktop web-worker host in a tab window is unfiltered by 0038, which keys on the host's own authority. | accepted by an agent: Tab-installed extensions never run in the desktop local web worker; 0038 is desktop-only. Revisit if the web build is ever in scope. |
 | [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-5** | info | fixed-untested | nbsync harness | The nbsync probe's prepare, launch, check flow could not pass on a filtered build: only drive read the serializer refusal. | A harness fix; its prepare, launch, check run on main 6589051b passed, but no test runs the harness itself. |
@@ -1945,6 +1955,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | EDT-12 | info | fixed-untested | A setup failure skipped the edtabs probe's teardown gate. | Harness structure; no test injects a setup failure. |
 | EDT-13 | low | fixed-untested | Ownership changes rebuilt the whole tab model, so onDidChangeTabs listeners never saw an untitled tab turn from unknown to text. | The control fails on the build before the fix and is proven on the next build. |
 | EDT-14 | low | fixed-untested | Every model add fired 0035's origin change, rebuilding the whole document state, so a tab opening N documents in the background cost the window work quadratic in N. | The check fails on the build before the fix and is proven on the next build. |
+| EDT-15 | info | fixed-untested | After the tab ran, the edtabs harness wrote into the tab's workspace from the host and read its arming file back unguarded (SQ-4/SQ-5's pattern). | The squat probe tests the pattern (SQ-4, SQ-5); this harness mirrors its fix without its own hostile-workspace test. |
 
 ### [20261116-gate-fail-open-remainder](20261116-gate-fail-open-remainder.md)
 
