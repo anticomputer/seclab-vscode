@@ -133,6 +133,48 @@ def test_model_r4_ghe_com_copilot_hosts_need_a_declared_provider():
     assert len(known_model_host_patterns()) == 1
 
 
+def test_model_r4_model_host_data_is_validated(tmp_path, monkeypatch):
+    """MODEL-R4 follow-up: malformed model-host data fails at policy load. Unknown keys, an
+    entry with both or neither of host and pattern, and a pattern that is unanchored, outside
+    the provider-data grammar, without a literal dot, or without a reason are each refused,
+    directly and through ModelPolicy.from_json; the unmodified shipped data loads."""
+    import seclab_broker.models as models
+    shipped = json.loads((models.DATA_DIR / "model-hosts.v1.json").read_text())
+    good = r"^copilot[a-z0-9-]{0,40}\.[a-z0-9-]+\.example\.test$"
+    bad_entries = [
+        {"host": "api.example.test", "note": "unknown key"},
+        {"host": "api.example.test", "pattern": good, "reason": "both"},
+        {"reason": "neither host nor pattern"},
+        {"pattern": good[1:], "reason": "not anchored at the start"},
+        {"pattern": good[:-1], "reason": "not anchored at the end"},
+        {"pattern": r"^.*\.example\.test$", "reason": "outside the grammar"},
+        {"pattern": r"^(a|b)\.example\.test$", "reason": "alternation is outside the grammar"},
+        {"pattern": "^copilot[a-z0-9-]+$", "reason": "no literal dot"},
+        {"pattern": good},
+        {"pattern": good, "reason": ""},
+        {"pattern": 7, "reason": "not a string"},
+    ]
+
+    def load(entries):
+        (tmp_path / "model-hosts.v1.json").write_text(json.dumps({"entries": entries}))
+        monkeypatch.setattr(models, "DATA_DIR", tmp_path)
+        models.known_model_host_patterns.cache_clear()
+
+    try:
+        for bad in bad_entries:
+            load(shipped["entries"] + [bad])
+            with pytest.raises(PolicyError):
+                models.known_model_host_patterns()
+            models.known_model_host_patterns.cache_clear()
+            with pytest.raises(PolicyError):
+                ModelPolicy.from_json(None)
+        load(shipped["entries"] + [{"pattern": good, "reason": "a valid test pattern"}])
+        assert len(models.known_model_host_patterns()) == 2
+        ModelPolicy.from_json(None)
+    finally:
+        models.known_model_host_patterns.cache_clear()
+
+
 def test_budget_and_policy_wiring():
     p = Policy.from_json({"version": 1, "models": {"providers": ["copilot"], "budget": {"requests": 2, "bytes": 10}}})
     b = Budget()
