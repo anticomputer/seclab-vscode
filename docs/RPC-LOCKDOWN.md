@@ -697,12 +697,15 @@ read, write and open their own workspace files.
       ([EDR](edr/20261116-notebook-sync.md));
     - the editor-tab model (host URIs and labels); patch 0038 shows a host-side
       editor to a tab only as an anonymous `Editor`
-      ([EDR](edr/20261116-editor-tab-provenance.md)).
+      ([EDR](edr/20261116-editor-tab-provenance.md));
+    - filesystem-scheme squatting by a tab provider. Patch 0005 refuses a tab's
+      filesystem and text-content provider registrations
+      ([EDR](edr/20261116-scheme-squatting.md)).
 
     Still open, each needing its own push-side control:
-    - the terminal default profile and environment collections;
     - workspace data;
-    - filesystem-scheme squatting by a tab provider.
+    - the terminal default profile and environment collections; owned by the RPC
+      follow-ups, whose patches 0034 and 0050 touch the same code.
 
 ## 8. Decisions taken
 
