@@ -16,6 +16,9 @@ import { exitedOrTimeout, teardownGate, writeManifest, writeSnapshot } from '../
 import { tabImageArgs } from '../harness.ts';
 
 const driver = process.argv[2] ?? 'sbx';
+// Validated before anything is created: a bad SECLAB_TAB_IMAGE exits here, not after the run
+// has started containers its cleanup isn't registered for yet (Copilot review on PR 25).
+const tabImage = tabImageArgs(driver);
 const repo = path.resolve(import.meta.dirname, '../..');
 const work = path.join(repo, '.work', 'canary', driver);
 const runtime = driver === 'sbx' ? '/opt/homebrew/bin/sbx' : 'docker';
@@ -53,7 +56,7 @@ const stateDir = path.join(work, 'state');
 const stderrLog: string[] = [];
 const client = new TabdClient({
 	command: process.execPath,
-	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', driver, '--allowed-root', path.join(work, 'tabs'), ...tabImageArgs(driver)],
+	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', driver, '--allowed-root', path.join(work, 'tabs'), ...tabImage],
 	// Deliberately leaky: the supervisor must scrub all of this before any runtime call.
 	env: { ...leakyEnv, HOME: process.env.HOME, USER: process.env.USER },
 });
