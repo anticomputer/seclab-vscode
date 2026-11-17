@@ -8,7 +8,7 @@
   lint (#14), the host-terminal proof harness (#20), and the reaper added for PRR-4 (#27).
 
 ## Verdict
-All eight threads point at real gaps. Two are as stated. One wasn't as stated but hid a wider gap.
+All ten threads point at real gaps. Two are as stated. One wasn't as stated but hid a wider gap.
 Two were narrower than stated. None is exploitable on main; each is a gate or harness that
 could pass, or leave things behind, for the wrong reason.
 
@@ -22,6 +22,8 @@ could pass, or leave things behind, for the wrong reason.
 | PRR-6 | low | `teardown.ts` `reapPreviousRun` (#27) | The reaper behind PRR-4 trusted removal: `removeRunResources` ignores command failures, so a docker or sbx that failed to list or remove still let the caller wipe the manifest and tabd state that name the leftovers | fixed |
 | PRR-7 | low | `teardown.ts` `runLeftovers` (#27) | Docker listing was required only for OCI runs, but an sbx tab owns a Docker broker container and egress network, so a failed listing let the reap delete an sbx run's profile and tab state over them | fixed |
 | PRR-8 | low | `lint_probes.py` `_strip_comments` (#27) | The comment scanner behind PRR-2 read the `//` that closes a regex literal such as `/^https?:\/\//` as a line comment, so code after it on that line, such as a raw record write, went unlinted | fixed |
+| PRR-9 | low | `lint_probes.py` `_regex_end` (#27) | The regex-or-division decision behind PRR-8 read the raw preceding character, so a regex after a comment, or as the statement after an `if (…)` condition, was still taken for division and its closing `//` hid the rest of the line | fixed |
+| PRR-10 | low | `check-probes.ts` runner waiver (#27) | The PRR-3 waiver removed the push probes' expectations but not their results; the payload records them on every full REH run, so the unreviewed-result check failed them as absent from expectations.json | fixed |
 
 ## What changed
 - PRR-1: `MainThreadLogger.$log` joins the presence-pinned must-deny set. A
@@ -48,3 +50,8 @@ could pass, or leave things behind, for the wrong reason.
   character classes, and skips it in both comment and code passes. `CommentScopeTest` runs the
   reviewer's case through the full lint, plus regex, division and comment cases; both fail on
   the previous scanner.
+- PRR-9: both scanners track the last significant code token (comments are gaps, not tokens),
+  and a `)` closing an `if`/`while`/`for`/`with` condition expects an operand. The full-lint
+  test covers both placements and fails on the previous scanner.
+- PRR-10: waived ids leave the judged results too. A full-run `check-probes.test.ts` case with a
+  recorded result, and a built-in mutant restoring the old waiver, pin it.
