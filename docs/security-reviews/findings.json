@@ -19493,7 +19493,11 @@
 			"commit": "patch:da87e959bc594f3542ec2bf76b31b5352e8bbd14",
 			"test": {
 				"file": "test/agentic/ahp/agent-registration-probe.ts",
+<<<<<<< HEAD
 				"name": "forged-agent-id"
+=======
+				"name": "CONTAINED: the agent-registering contribution is never constructed in a tab window, so a forged agent id has no other connection agent to name"
+>>>>>>> c5a380e0 (agentic: register the round 13 findings for patch 0019)
 			}
 		},
 		{
@@ -19523,6 +19527,51 @@
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "the upstream facts patch 0018 depends on are pinned, each to the file that states them"
 			}
+<<<<<<< HEAD
+=======
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R13-1",
+			"severity": "high",
+			"summary": "The shape named missionControlAvailabilityService carried the neighbouring environment service's members, so the availability stand-in had no `available` and the environment service fell through to an empty stand-in; the unit test and the probe both asserted against the wrong interface and so could not fail",
+			"component": "patch 0019 null-provider shapes",
+			"owner": "agentic",
+			"status": "fixed",
+			"commit": "patch:d91f033beaad5c9103fd060fed106b8ddff50dc6",
+			"test": {
+				"file": "test/agentic/gate/null-providers.test.ts",
+				"name": "THE REAL POINT: a shape is checked against the service it claims to stand in for"
+			}
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R13-2",
+			"severity": "medium",
+			"summary": "Eleven of thirteen guarded names had no shape and silently became an empty stand-in with nothing reporting the miss, and no member kind could express an inert IDisposable",
+			"component": "patch 0019 null-provider shapes",
+			"owner": "agentic",
+			"status": "fixed",
+			"commit": "patch:d91f033beaad5c9103fd060fed106b8ddff50dc6",
+			"test": {
+				"file": "test/agentic/gate/null-providers.test.ts",
+				"name": "a guarded name is shaped or recorded, never silently empty"
+			}
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R13-3",
+			"severity": "medium",
+			"summary": "The probe never observed the three workbench contributions, which are the mechanism that closes R12-2, and its third check restated its first; the baseline control passed on any failure",
+			"component": "patch 0019 probe",
+			"owner": "agentic",
+			"status": "fixed",
+			"commit": "patch:d91f033beaad5c9103fd060fed106b8ddff50dc6",
+			"test": {
+				"file": "test/agentic/ahp/agent-registration-probe.ts",
+				"name": "the actual mechanism that"
+			}
+>>>>>>> c5a380e0 (agentic: register the round 13 findings for patch 0019)
 		}
 	]
 }
