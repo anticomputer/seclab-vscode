@@ -13997,7 +13997,7 @@
       "component": "teardown / clean-host",
       "owner": "obs",
       "status": "fixed",
-      "commit": "patch:af7a8e785b93473d6606c8798a7a6021c233f3e7",
+      "commit": "ed53d3aedc75",
       "test": {
         "file": "test/containment/teardown.test.ts",
         "name": "PS-1: verify removes the dead-pid orphan"
@@ -14012,7 +14012,7 @@
       "component": "teardown / clean-host",
       "owner": "obs",
       "status": "fixed",
-      "commit": "patch:af7a8e785b93473d6606c8798a7a6021c233f3e7",
+      "commit": "ed53d3aedc75",
       "test": {
         "file": "test/containment/teardown.test.ts",
         "name": "PS-2: a sensor owned by another pid namespace survives"
@@ -14027,7 +14027,7 @@
       "component": "teardown / clean-host",
       "owner": "obs",
       "status": "fixed",
-      "commit": "patch:af7a8e785b93473d6606c8798a7a6021c233f3e7",
+      "commit": "ed53d3aedc75",
       "test": {
         "file": "test/containment/teardown.test.ts",
         "name": "PS-3: a failed ps leaves the sweep unknown"
@@ -14042,7 +14042,7 @@
       "component": "teardown / clean-host",
       "owner": "obs",
       "status": "fixed",
-      "commit": "patch:af7a8e785b93473d6606c8798a7a6021c233f3e7",
+      "commit": "ed53d3aedc75",
       "test": {
         "file": "test/containment/teardown.test.ts",
         "name": "PS-4: clean-host reports a failed Falco listing"
@@ -14057,7 +14057,7 @@
       "component": "teardown / clean-host",
       "owner": "obs",
       "status": "fixed",
-      "commit": "patch:af7a8e785b93473d6606c8798a7a6021c233f3e7",
+      "commit": "ed53d3aedc75",
       "test": {
         "file": "test/clean-host.ts",
         "name": "falco orphan cases OK"
@@ -14073,7 +14073,7 @@
       "component": "teardown / clean-host",
       "owner": "obs",
       "status": "fixed",
-      "commit": "patch:af7a8e785b93473d6606c8798a7a6021c233f3e7",
+      "commit": "ed53d3aedc75",
       "test": {
         "file": "test/containment/teardown.test.ts",
         "name": "PS-6: verify notes the foreign sensor it could not judge"
@@ -14088,7 +14088,7 @@
       "component": "teardown / clean-host",
       "owner": "obs",
       "status": "fixed-untested",
-      "commit": "patch:af7a8e785b93473d6606c8798a7a6021c233f3e7",
+      "commit": "ed53d3aedc75",
       "gap": "Test hygiene inside the test itself; a test of the test's own cleanup adds nothing."
     },
     {
