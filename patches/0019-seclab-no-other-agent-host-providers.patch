@@ -1,21 +1,22 @@
 diff --git a/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts b/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts
-index 78ac107..5281ba1 100644
+index 78ac107..c8b8198 100644
 --- a/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts
 +++ b/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts
-@@ -9,6 +9,12 @@ import { CloudSandboxAutoConnectOnOpenSettingId, CloudSandboxEarlyPreparationSet
+@@ -9,6 +9,13 @@ import { CloudSandboxAutoConnectOnOpenSettingId, CloudSandboxEarlyPreparationSet
  import { RemoteAgentHostsEnabledSettingId, WorkspaceRemoteAgentHostsSettingId } from '../../../../../platform/agentHost/common/remoteAgentHostService.js';
  import { ConfigurationScope, Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../../platform/configuration/common/configurationRegistry.js';
  import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
 +import { Event } from '../../../../../base/common/event.js';
++import { Disposable } from '../../../../../base/common/lifecycle.js';
 +import { constObservable } from '../../../../../base/common/observable.js';
 +import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 +import { isSeclabAuthority, seclabAhpEmit } from '../../../../../platform/agentHost/common/seclabAhpGateCheck.js';
-+import { SECLAB_NULL_PROVIDERS, seclabNullProvider, seclabNullProviderEvent } from '../../../../../platform/agentHost/common/seclabNullProviders.js';
++import { SECLAB_NO_SHAPE_NEEDED, SECLAB_NULL_PROVIDERS, seclabNullProvider, seclabNullProviderEvent } from '../../../../../platform/agentHost/common/seclabNullProviders.js';
 +import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
  import { Registry } from '../../../../../platform/registry/common/platform.js';
  import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../../common/contributions.js';
  import { CloudSandboxAgentHostService } from './cloudSandboxAgentHostService.js';
-@@ -34,20 +40,50 @@ class MissionControlContribution {
+@@ -34,20 +41,57 @@ class MissionControlContribution {
  	) { }
  }
  
@@ -56,7 +57,14 @@ index 78ac107..5281ba1 100644
 +			// rather than reading anything into the absence of a connection.
 +			seclabAhpEmit(seclabNullProviderEvent(name) as any);
 +			const shape = SECLAB_NULL_PROVIDERS.find(p => p.name === name);
-+			return seclabNullProvider(shape ?? { name, members: {} }, { constObservable, noEvent: Event.None }) as any;
++			if (!shape && !(name in SECLAB_NO_SHAPE_NEEDED)) {
++				// A guarded name with neither a shape nor a recorded reason to need none used to
++				// become an empty stand-in in silence, which is the quiet default this design
++				// forbids (review round 13). Say so, rather than letting it pass as containment.
++				seclabAhpEmit(seclabNullProviderEvent(`${name} unshaped`) as any);
++			}
++			return seclabNullProvider(shape ?? { name, members: {} },
++				{ constObservable, noEvent: Event.None, noDisposable: Disposable.None }) as any;
 +		}
 +	}
 +	return SeclabGuardedProvider as any;
@@ -84,7 +92,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/src/vs/platform/agentHost/common/seclabNullProviders.ts
-@@ -0,0 +1,136 @@
+@@ -0,0 +1,221 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab patch 0019: no other agent-host providers in a tab window.
 + *
@@ -115,7 +123,7 @@ index 0000000..0000000
 + *--------------------------------------------------------------------------------------------*/
 +
 +/** What a member is, which decides how its safe value is wrapped. */
-+export type SeclabMemberKind = 'observable' | 'event' | 'property' | 'method';
++export type SeclabMemberKind = 'observable' | 'event' | 'property' | 'method' | 'disposable-method';
 +
 +export interface SeclabMember {
 +	readonly kind: SeclabMemberKind;
@@ -139,6 +147,8 @@ index 0000000..0000000
 +	readonly constObservable: (value: unknown) => unknown;
 +	/** Upstream's `Event.None`. */
 +	readonly noEvent: unknown;
++	/** Upstream's `Disposable.None`, for a member whose caller adds the result to a store. */
++	readonly noDisposable: unknown;
 +}
 +
 +/** Builds the inert stand-in for one service. */
@@ -154,6 +164,12 @@ index 0000000..0000000
 +				break;
 +			case 'property':
 +				inert[name] = member.value;
++				break;
++			case 'disposable-method':
++				// A member whose caller does `store.add(service.register(...))`. An async no-op
++				// would return a promise, which a DisposableStore rejects: fail-closed has to
++				// mean the right SHAPE of nothing, not merely nothing (review round 13).
++				inert[name] = () => deps.noDisposable;
 +				break;
 +			case 'method':
 +				// Async, because every method these interfaces declare either returns void or a
@@ -197,6 +213,7 @@ index 0000000..0000000
 + */
 +export const SECLAB_NULL_PROVIDERS: readonly SeclabProviderShape[] = [
 +	{
++		// `IMissionControlSharingService`.
 +		name: 'missionControlSharingService',
 +		members: {
 +			state: { kind: 'observable', value: 'disabled' },
@@ -207,7 +224,11 @@ index 0000000..0000000
 +		},
 +	},
 +	{
-+		name: 'missionControlAvailabilityService',
++		// `IMissionControlEnvironmentService`. These members were filed under the availability
++		// service's name until review round 13: the names were right and the MEMBERS were not,
++		// and both the unit test and the probe asserted against the wrong interface, so neither
++		// could fail. That is why `assertShapesMatchRealServices` below exists.
++		name: 'missionControlEnvironmentService',
 +		members: {
 +			hosts: { kind: 'observable', value: [] },
 +			accountKey: { kind: 'property', value: undefined },
@@ -220,4 +241,76 @@ index 0000000..0000000
 +			setDisplayName: { kind: 'method' },
 +		},
 +	},
++	{
++		// `IMissionControlAvailabilityService` declares exactly one member. Its live consumer is
++		// the remote-connections action item, which reads `available.get()`, so an absent member
++		// here is not fail-closed, it is a throw in the trusted renderer.
++		// `false` is the contained value: upstream treats `available.get() === true` as available.
++		name: 'missionControlAvailabilityService',
++		members: {
++			available: { kind: 'observable', value: false },
++		},
++	},
 +];
++
++/**
++ * The guarded services that deliberately have no shape, with the reason. A guarded name that is
++ * on neither list is a mistake, not a default: see `unshapedProblems`.
++ *
++ * These are inert-by-absence rather than inert-by-shape because every consumer of them in a tab
++ * window is itself one of the withheld contributions. That is a fact about the tree, so it is
++ * written down and checked, not assumed.
++ */
++export const SECLAB_NO_SHAPE_NEEDED: Readonly<Record<string, string>> = {
++	cloudSandboxTelemetryService: 'only the withheld cloud-sandbox contributions report through it',
++	cloudSandboxApiService: 'reached only from the withheld cloud-sandbox contributions',
++	cloudSandboxDraftPreparationService: 'reached only from the withheld cloud-sandbox contributions',
++	cloudSandboxModelCatalogService: 'reached only from the withheld cloud-sandbox contributions',
++	cloudSandboxAgentHostService: 'the provider this patch exists to remove; nothing else may reach it',
++	remoteAgentHostConnectionCustomizationService: 'its only tab-window caller is reached through the withheld editor cloud-sandbox contribution',
++	agentHostAdvertisedAuthenticationResolver: 'reached only from the withheld remote agent-host contribution',
++	remoteAgentHostContribution: 'a withheld workbench contribution, not a service anything resolves',
++	editorCloudSandboxContribution: 'a withheld workbench contribution, not a service anything resolves',
++	missionControlContribution: 'a withheld workbench contribution, not a service anything resolves',
++};
++
++/**
++ * Every guarded name must be either shaped or explicitly listed as needing no shape. Without
++ * this, a name with no shape silently became an empty stand-in, which is the quiet default the
++ * whole design forbids (review round 13, alert 2).
++ */
++export function unshapedProblems(guarded: readonly string[]): string[] {
++	const shaped = new Set(SECLAB_NULL_PROVIDERS.map(p => p.name));
++	return guarded
++		.filter(n => !shaped.has(n) && !(n in SECLAB_NO_SHAPE_NEEDED))
++		.map(n => `${n} is guarded but has neither a shape nor a recorded reason to need none`);
++}
++
++/**
++ * Checks each shape against the REAL service it stands in for, by the only part of it that
++ * survives to runtime: the implementation class's prototype methods.
++ *
++ * This is the check that was missing. A shape filed under the wrong service name still looked
++ * right to a test that named the shape itself; it does not survive being compared with the
++ * class upstream actually registers under that id.
++ */
++export function assertShapesMatchRealServices(realCtors: ReadonlyMap<string, unknown>): string[] {
++	const problems: string[] = [];
++	for (const shape of SECLAB_NULL_PROVIDERS) {
++		const ctor = realCtors.get(shape.name);
++		if (!ctor) {
++			problems.push(`${shape.name}: no service is registered under that id`);
++			continue;
++		}
++		const proto = (ctor as { prototype?: object }).prototype;
++		const real = new Set(proto ? Object.getOwnPropertyNames(proto) : []);
++		for (const [member, { kind }] of Object.entries(shape.members)) {
++			// Only methods live on the prototype; observables and plain properties are instance
++			// fields and cannot be checked this way, so they are not claimed to be.
++			if ((kind === 'method' || kind === 'disposable-method') && !real.has(member)) {
++				problems.push(`${shape.name}.${member} is not a method of the real ${(ctor as { name?: string }).name}`);
++			}
++		}
++	}
++	return problems;
++}
