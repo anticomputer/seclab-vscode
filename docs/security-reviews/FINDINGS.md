@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 83 | 200 | 235 | 29 | 561 |
+| fixed | 14 | 83 | 200 | 236 | 30 | 563 |
 | fixed-untested | 0 | 5 | 52 | 151 | 61 | 269 |
 | accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 13 | 15 | 6 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 291 | 479 | 126 | 1004 |
+| **all** | 16 | 92 | 291 | 480 | 127 | 1006 |
 
 ## Baseline: open high and critical findings
 
@@ -1950,10 +1950,12 @@ Every other commit the register cites is on main's history, or on the branch its
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
-| BRK20-1 | low | fixed | token_steps accepted any step whose name began with the download step's, so a later step named with that prefix could carry the token and pass. | patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397 · `broker/tools/token_steps.py` "BRK20-1: a later step whose name only starts like the download step fails" |
-| BRK20-2 | low | fixed | The line-based token scan missed a token after a ' #' in a quoted string, an expression split across lines and secrets: inherit, and the HH-1 note overclaimed. | patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397 · `broker/tools/token_steps.py` "BRK20-2: secrets: inherit to a reusable workflow fails" |
-| BRK20-3 | low | fixed | In pin_check's self-test a crash in source_drift counted as errors produced, so the named failing cases passed on a crash and never checked which rule fired. | patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397 · `broker/tools/pin_check.py` "10-4: a source pinning a superseded version fails" |
-| BRK20-4 | info | fixed | The quoting lint passed when git ls-files failed, because \|\| true covered the whole pipeline. | patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397 · `broker/tools/quoted-paths.sh` "BRK20-4: git failing (a corrupt index) fails, never an empty pass" |
+| BRK20-1 | low | fixed | token_steps accepted any step whose name began with the download step's, so a later step named with that prefix could carry the token and pass. | patch:c4f75bd81920499ce89083ef450a0f5ac73bd84c · `broker/tools/token_steps.py` "BRK20-1: a later step whose name only starts like the download step fails" |
+| BRK20-2 | low | fixed | The line-based token scan missed a token after a ' #' in a quoted string, an expression split across lines and secrets: inherit, and the HH-1 note overclaimed. | patch:c4f75bd81920499ce89083ef450a0f5ac73bd84c · `broker/tools/token_steps.py` "BRK20-2: secrets: inherit to a reusable workflow fails" |
+| BRK20-3 | low | fixed | In pin_check's self-test a crash in source_drift counted as errors produced, so the named failing cases passed on a crash and never checked which rule fired. | patch:c4f75bd81920499ce89083ef450a0f5ac73bd84c · `broker/tools/pin_check.py` "10-4: a source pinning a superseded version fails" |
+| BRK20-4 | info | fixed | The quoting lint passed when git ls-files failed, because \|\| true covered the whole pipeline. | patch:c4f75bd81920499ce89083ef450a0f5ac73bd84c · `broker/tools/quoted-paths.sh` "BRK20-4: git failing (a corrupt index) fails, never an empty pass" |
+| BRK20R-1 | low | fixed | The HH-1 check missed the download step handing its token to later steps with no expression, by writing it to $GITHUB_ENV. | patch:f57e9feb9f4b258a8fbc6f62e1716ae64e26346e · `broker/tools/token_steps.py` "BRK20R-1: the download step writing the token to $GITHUB_ENV fails" |
+| BRK20R-2 | info | fixed | The HH-1 check's expression match stopped at the first }}, so a }} inside a quoted string could hide a secret. | patch:f57e9feb9f4b258a8fbc6f62e1716ae64e26346e · `broker/tools/token_steps.py` "BRK20R-2: a '}}' inside a quoted string can't hide a secret" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
