@@ -9,7 +9,7 @@
 // fixed schema; the decision log is the window's, and only fixed-shape refs are read from it.
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -44,7 +44,8 @@ if (fs.existsSync(path.join(base, 'run.json'))) {
 	process.exit(1);
 }
 const marker = `seclabsquat_${randomBytes(8).toString('hex')}`;
-const userData = path.join(os.homedir(), '.seclab-test', 'sq');
+// One profile per worktree: the previous-run guard lives in this worktree's .work (PR #33 review).
+const userData = path.join(os.homedir(), '.seclab-test', `sq-${createHash('sha256').update(repo).digest('hex').slice(0, 8)}`);
 const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
 checkUserDataDir(userData);
 fs.rmSync(base, { recursive: true, force: true });
@@ -107,6 +108,7 @@ const read = () => {
 let windowLabels: string[] = [];
 let markerInWindow = true;
 let settingsShown = false;
+let windowLogShown = false;
 const denied = new Set<string>();
 const opened: Record<string, boolean> = {};
 let ed: DrivenEditor | undefined;
@@ -120,22 +122,37 @@ if (installed) {
 		// Settings and keybindings open in a modal editor in 1.145, outside the tab strip: look for
 		// the editor title anywhere in the window.
 		const shown = (label: string) => ed!.evaluate<boolean>(`[...document.querySelectorAll('.label-name, .title-label, .modal-editor-title')].some(e => (e.textContent ?? '').trim() === ${JSON.stringify(label)})`).catch(() => false);
-		for (const [cmd, label] of HOST_EDITORS) {
-			// Close a modal editor left by the previous step (its own close action, in the renderer).
-			await ed.evaluate(`(() => { const m = [...document.querySelectorAll('[class*="modal"]')].find(e => e.querySelector('.codicon-close')); m?.querySelector('.codicon-close')?.closest('a,.action-label,.monaco-button')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); m?.querySelector('.codicon-close')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); })()`).catch(() => undefined);
+		// Close a modal editor left by the previous step (its own close action, in the renderer).
+		const closeModal = async () => {
+			await ed!.evaluate(`(() => { const m = [...document.querySelectorAll('[class*="modal"]')].find(e => e.querySelector('.codicon-close')); m?.querySelector('.codicon-close')?.closest('a,.action-label,.monaco-button')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); m?.querySelector('.codicon-close')?.dispatchEvent(new MouseEvent('click', { bubbles: true })); })()`).catch(() => undefined);
 			await new Promise(r => setTimeout(r, 800));
+		};
+		for (const [cmd, label] of HOST_EDITORS) {
+			await closeModal();
 			await ed.command(cmd).catch(() => undefined);
 			for (let i = 0; i < 20 && !(await shown(label)); i++) {
 				await new Promise(r => setTimeout(r, 500));
 			}
 			opened[label] = await shown(label);
+			// Read while the modal is still open: the log step below closes it.
+			for (let i = 0; i < 20 && !settingsShown; i++) {
+				settingsShown = await ed.evaluate<boolean>(`document.body.innerText.includes('seclab.tabs.driver')`).catch(() => false);
+				if (!settingsShown) {
+					await new Promise(r => setTimeout(r, 500));
+				}
+			}
 			spawnSync('sleep', ['2']);
 		}
+		await closeModal();
 		await ed.command('Developer: Show Window Log').catch(() => undefined);
+		// Positive control (PR #33 review): the window log's editor really shows its output channel.
+		const logShown = () => ed!.evaluate<boolean>(`[...document.querySelectorAll('.monaco-editor[data-uri]')].some(e => /^output:.*rendererLog/.test(e.getAttribute('data-uri') ?? '') && (e.querySelector('.view-lines')?.textContent ?? '').trim().length > 0)`).catch(() => false);
+		for (let i = 0; i < 20 && !(windowLogShown = await logShown()); i++) {
+			await new Promise(r => setTimeout(r, 500));
+		}
 		spawnSync('sleep', ['3']);
 		windowLabels = (await labels()).filter(l => /^[\w. -]{1,60}$/.test(l));
 		markerInWindow = await ed.evaluate<boolean>(`document.body.innerText.includes(${JSON.stringify(marker)})`).catch(() => true);
-		settingsShown = await ed.evaluate<boolean>(`document.body.innerText.includes('seclab.tabs.driver')`).catch(() => false);
 		const walk = (d: string): string[] => fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : e.name === 'seclabRpcFilter.log' ? [path.join(d, e.name)] : []) : [];
 		for (const f of walk(path.join(userData, 'logs'))) {
 			for (const m of fs.readFileSync(f, 'utf8').matchAll(/"ref":"((?:rpc|cmd):[A-Za-z0-9_.$-]{1,120})","verdict":"deny"/g)) {
@@ -157,25 +174,32 @@ for (let i = 0; i < 30 && tabId() && rep?.done !== true; i++) {
 await ed?.close().catch(() => undefined);
 
 const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').match(/^arm=([0-9a-f]{32})$/m) ?? [])[1];
+// Only the validated keys of the tab's report reach host output and evidence (PR #33 review).
 const valid = !!rep && rep.schema === 'seclab-squat-report/1' && rep.arm === armed && !!rep.registered && typeof rep.registered === 'object'
 	&& ['fs', 'content'].every(k => ['returned', 'threw'].includes(rep.registered[k])) && !!rep.calls && Number.isInteger(rep.calls.fs) && Number.isInteger(rep.calls.content);
+const registered = valid ? { fs: rep.registered.fs as string, content: rep.registered.content as string } : null;
+const calls = valid ? { fs: rep.calls.fs as number, content: rep.calls.content as number } : null;
 const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';
 const results: Array<{ name: string; ok: boolean }> = [];
 const expect = (name: string, ok: boolean) => results.push({ name, ok });
 console.log(`window editors: ${JSON.stringify(windowLabels)}; opened by the window: ${JSON.stringify(opened)}`);
 console.log(`filter refused: ${JSON.stringify(REFS.filter(r => denied.has(r)))}`);
+const tabLine = `tab: registrations ${JSON.stringify(registered)}; provider calls ${JSON.stringify(calls)}`;
 if (valid) {
-	console.log(`tab: registrations ${JSON.stringify(rep.registered)}; provider calls ${JSON.stringify(rep.calls)}`);
+	console.log(tabLine);
 }
 expect('setup completed (tab claimed, running, probe installed)', !setupError);
 expect('probe installed in the tab', installed);
 expect('report present, from this run, and matches the schema', valid);
-expect('control: the tab attempted both registrations', valid && rep.registered.fs === 'returned' && rep.registered.content === 'returned');
+expect('control: the tab attempted both registrations', registered?.fs === 'returned' && registered.content === 'returned');
 expect('control: the window opened the host settings and showed their real content', Object.values(opened).every(Boolean) && settingsShown);
 expect('DOCSYNC-R7 the RPC filter refused the tab\'s filesystem provider for a host scheme (decision log)', denied.has(REFS[0]));
 expect('DOCSYNC-R7 the RPC filter refused the tab\'s text-content provider for a host scheme (decision log)', denied.has(REFS[1]));
-expect('the window never used a tab provider: no provider call, no marker in the window', valid && rep.calls.fs === 0 && rep.calls.content === 0 && !markerInWindow);
+expect('control: the window opened its own log in an output editor', windowLogShown);
+expect('the window never used a tab provider: no provider call, no marker in the window', calls?.fs === 0 && calls.content === 0 && !markerInWindow);
 expect('no focus steal', !steals);
+const evidence = (ok: boolean) => JSON.stringify({ at: new Date().toISOString(), app: appArg, pass: ok, refused: REFS.filter(r => denied.has(r)), markerInWindow, calls, registered, opened, windowLogShown });
+expect('the tab\'s unvalidated report fields reach neither host output nor evidence (SQ-3)', valid && !tabLine.includes(marker) && !evidence(true).includes(marker));
 const gate = verifyTeardown(base);
 if (gate.every(g => g.ok)) {
 	fs.renameSync(path.join(base, 'run.json'), path.join(base, `run-checked-${Date.now()}.json`));
@@ -184,5 +208,5 @@ for (const r of [...results, ...gate]) {
 	console.log(`${r.ok ? 'OK  ' : 'FAIL'}  ${r.name}`);
 }
 const pass = results.every(r => r.ok) && gate.every(g => g.ok);
-fs.appendFileSync(resultsFile, JSON.stringify({ at: new Date().toISOString(), app: appArg, pass, refused: REFS.filter(r => denied.has(r)), markerInWindow, calls: valid ? rep.calls : null, opened }) + '\n');
+fs.appendFileSync(resultsFile, evidence(pass) + '\n');
 process.exit(pass ? 0 : 1);
