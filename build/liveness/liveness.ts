@@ -40,6 +40,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { jobProblems } from '../check-required-checks.ts';
 
 export interface Exempt { subject: string; consumer: string | null; reason: string }
 /** A declaration a host calls (VS Code calls `activate`): live, and so is what it reaches. */
@@ -1075,6 +1076,11 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 					if (j.if !== undefined || j.continueOnError !== undefined) {
 						errors.push(`subject ${s.id}: ci job ${e.ci} must have no if: or continue-on-error:`);
 					}
+					// Any other way to skip it (quoted keys, needs:, a matrix, a reusable workflow): the
+					// required-checks rule for jobs that must run (review CR-1).
+					for (const p of jobProblems(yml, job, `subject ${s.id}: ci job ${e.ci}`).problems) {
+						errors.push(p);
+					}
 					if (!last || last.run !== want || last.if !== undefined || last.continueOnError !== undefined) {
 						errors.push(`subject ${s.id}: ci job ${e.ci} must end with exactly \`${want}\` (no if:, no continue-on-error:), or nothing checks its marks`);
 					}
@@ -1410,6 +1416,8 @@ async function selfTest(): Promise<void> {
 		['KKK-1 job if: false', ciWith(`on:\n  push:\njobs:\n  oci:\n    if: \${{ false }}\n    steps:\n      - run: x\n${marksStep}`), /must have no if: or continue-on-error/],
 		['KKK-1 marks step || true', ciWith('on:\n  push:\njobs:\n  oci:\n    steps:\n      - run: x\n      - name: marks\n        run: ./seclab liveness marks ci.yml#oci "$SECLAB_LIVENESS_LOG" || true\n'), /must end with exactly/],
 		['KKK-1 marks step continue-on-error', ciWith(`on:\n  push:\njobs:\n  oci:\n    steps:\n      - run: x\n${marksStep}        continue-on-error: true\n`), /must end with exactly/],
+		['CR-1 ci job needs a skipped job', ciWith(`on:\n  push:\njobs:\n  gate:\n    if: false\n    steps:\n      - run: x\n  oci:\n    needs: gate\n    steps:\n      - run: x\n${marksStep}`), /has `needs:`/],
+		['CR-1 ci job quoted if', ciWith(`on:\n  push:\njobs:\n  oci:\n    "if": false\n    steps:\n      - run: x\n${marksStep}`), /job-level if/],
 		['KKK-1 dispatch-only ci job', ciWith(`on:\n  workflow_dispatch:\njobs:\n  oci:\n    steps:\n      - run: x\n${marksStep}`), /must run on push or pull_request/],
 		['KKK-7 push filtered off main', ciWith(`on:\n  push:\n    branches: [nope]\njobs:\n  oci:\n    steps:\n      - run: x\n${marksStep}`), /workflow:ci .* add it to/],
 		['MMM-1 paths matching no file', ciWith(`on:\n  push:\n    paths: [no/such/path/**]\njobs:\n  oci:\n    steps:\n      - run: x\n${marksStep}`), /workflow:ci .* add it to/],
