@@ -261,7 +261,7 @@ if (mode === 'prepare') {
 	try {
 		arming = parseArmingRecord(JSON.parse(fs.readFileSync(path.join(base, 'arming.json'), 'utf8')));
 	} catch { /* a failing check */ }
-	checks.push(...hostRunChecks(driver, ws, vectors, arming));
+	checks.push(...hostRunChecks(driver, ws, arming));
 	if (driver !== 'sbx') {
 		checks.push({ vector: 'fsmonitor', name: 'ran (armed in the tab)', ok: false, detail: 'not armed on OCI',
 			knownGap: 'an OCI tab writes .git/config straight to the host checkout (no write-back gate, docs/adr/20261104-write-back-gate.md); Level A covers fsmonitor on OCI' });

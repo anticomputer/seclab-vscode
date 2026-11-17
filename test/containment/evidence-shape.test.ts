@@ -124,19 +124,42 @@ test('a clean host run passes the host-run checks on both drivers', () => {
 	const r = hostRun();
 	try {
 		for (const d of ['sbx', 'oci']) {
-			assert.deepEqual(failing(hostRunChecks(d, r.ws, levelBVectors(d), r.arming)), [], d);
+			assert.deepEqual(failing(hostRunChecks(d, r.ws, r.arming)), [], d);
 		}
 	} finally {
 		r.done();
 	}
 });
 
-test('on sbx, evidence in the host checkout fails (the vector ran host-side)', () => {
+test('FXF-20: evidence synced to the host checkout is the run\'s output on both drivers, not a host run', () => {
 	const r = hostRun();
 	try {
-		fs.mkdirSync(path.join(r.ws, '.seclab-evidence'));
-		fs.writeFileSync(path.join(r.ws, '.seclab-evidence', 'fsmonitor.json'), '{}');
-		assert.deepEqual(failing(hostRunChecks('sbx', r.ws, levelBVectors('sbx'), r.arming)), ['no evidence file in the host checkout (did not run host-side)', ADDED_ROW]);
+		put(r.ws, '.seclab-evidence/task.json', '{}');
+		put(r.ws, '.seclab-evidence/benign.json', '{}');
+		for (const d of ['sbx', 'oci']) {
+			assert.deepEqual(failing(hostRunChecks(d, r.ws, r.arming)), [], d);
+		}
+	} finally {
+		r.done();
+	}
+});
+
+test('FXF-17/18: an unreadable directory fails the added-files row and the record; OS artifacts are ignored', () => {
+	// Root reads any directory, so this case needs an unprivileged user (./seclab runs it as one).
+	assert.notEqual(process.getuid?.(), 0, 'run as an unprivileged user');
+	const r = hostRun();
+	try {
+		put(r.ws, '.DS_Store');
+		put(r.ws, '.vscode/._tasks.json');
+		assert.deepEqual(failing(hostRunChecks('sbx', r.ws, r.arming)), [], 'OS artifacts');
+		put(r.ws, 'hidden/launch.json');
+		fs.chmodSync(path.join(r.ws, 'hidden'), 0);
+		try {
+			assert.deepEqual(failing(hostRunChecks('oci', r.ws, r.arming)), [ADDED_ROW]);
+			assert.throws(() => armingRecord(r.ws), /can't list hidden/);
+		} finally {
+			fs.chmodSync(path.join(r.ws, 'hidden'), 0o700);
+		}
 	} finally {
 		r.done();
 	}
@@ -155,7 +178,7 @@ test('FXF-7, 10-12: any edit to what a host run reads fails, however small', () 
 		const r = hostRun();
 		try {
 			edit(r);
-			assert.deepEqual(failing(hostRunChecks('oci', r.ws, levelBVectors('oci'), r.arming)), [ARMING_ROW], what);
+			assert.deepEqual(failing(hostRunChecks('oci', r.ws, r.arming)), [ARMING_ROW], what);
 		} finally {
 			r.done();
 		}
@@ -163,8 +186,8 @@ test('FXF-7, 10-12: any edit to what a host run reads fails, however small', () 
 	const r = hostRun();
 	try {
 		fs.mkdirSync(path.join(r.ws, '.git'));
-		assert.deepEqual(failing(hostRunChecks('oci', r.ws, levelBVectors('oci'), r.arming)), ['no .git in the host checkout'], 'a host .git (fsmonitor repointed)');
-		assert.ok(failing(hostRunChecks('oci', r.ws, levelBVectors('oci'), undefined)).includes(ARMING_ROW), 'no arming record');
+		assert.deepEqual(failing(hostRunChecks('oci', r.ws, r.arming)), ['no .git in the host checkout'], 'a host .git (fsmonitor repointed)');
+		assert.ok(failing(hostRunChecks('oci', r.ws, undefined)).includes(ARMING_ROW), 'no arming record');
 		assert.equal(parseArmingRecord({ digest: {}, tree: [] }), undefined, 'an empty arming record is no record');
 	} finally {
 		r.done();
@@ -183,9 +206,9 @@ test('FXF-14: on OCI the run\'s own writes (rogue settings payload, its instruct
 		put(r.ws, '.github/instructions/seclab-probe.instructions.md');
 		put(r.ws, '.github/copilot-instructions.md');
 		put(r.ws, '.seclab-evidence/benign.json', '{}');
-		assert.deepEqual(failing(hostRunChecks('oci', r.ws, levelBVectors('oci'), r.arming)), []);
+		assert.deepEqual(failing(hostRunChecks('oci', r.ws, r.arming)), []);
 		// On sbx none of it may reach the host checkout.
-		assert.deepEqual(failing(hostRunChecks('sbx', r.ws, levelBVectors('sbx'), r.arming)), [ADDED_ROW]);
+		assert.deepEqual(failing(hostRunChecks('sbx', r.ws, r.arming)), [ADDED_ROW]);
 	} finally {
 		r.done();
 	}
@@ -197,7 +220,7 @@ test('FXF-15: a file a tab adds to the checkout fails on both drivers', () => {
 		try {
 			put(r.ws, rel);
 			for (const d of ['sbx', 'oci']) {
-				assert.ok(failing(hostRunChecks(d, r.ws, levelBVectors(d), r.arming)).includes(ADDED_ROW), `${d} ${rel}`);
+				assert.ok(failing(hostRunChecks(d, r.ws, r.arming)).includes(ADDED_ROW), `${d} ${rel}`);
 			}
 		} finally {
 			r.done();

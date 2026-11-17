@@ -1588,7 +1588,7 @@ case "${1:-help}" in
 			log-throttle) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/log-throttle.test.ts ;;
 			# Containment harness: hostile evidence fails a check, and never throws out of
 			# the run before its own teardown.
-			evidence-shape) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/evidence-shape.test.ts ;;
+			evidence-shape) docker run --rm --network none --user 65534:65534 -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/evidence-shape.test.ts ;;
 			# RPC filter: the named argument validators, imported from the shipped module.
 			arg-validators) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/arg-validators.test.ts ;;
 			# RPC filter: the shipped filter module run with four upstream imports stubbed (rewrite

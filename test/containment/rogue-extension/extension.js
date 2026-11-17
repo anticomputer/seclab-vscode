@@ -117,7 +117,6 @@ exports.activate = async function (context) {
 		// have a per-build expected outcome (succeed unpatched, denied patched)
 		// rather than a fixed assertion.
 		try {
-			targets.armingFile = path.join(root, '.seclab', 'probe-arming.json');
 			const { runProbes, runRestartProbe, restartAttempted } = require('./rpc-probes.js');
 			const restartFile = path.join(out, 'rpc-probe-restart.json');
 			// An activation after the restart probe ran is the restarted host (or a later
