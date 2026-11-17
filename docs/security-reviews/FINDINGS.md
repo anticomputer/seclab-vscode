@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 83 | 200 | 236 | 30 | 563 |
+| fixed | 14 | 83 | 200 | 237 | 32 | 566 |
 | fixed-untested | 0 | 5 | 52 | 151 | 61 | 269 |
 | accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 13 | 15 | 6 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 291 | 480 | 127 | 1006 |
+| **all** | 16 | 92 | 291 | 481 | 129 | 1009 |
 
 ## Baseline: open high and critical findings
 
@@ -1956,6 +1956,9 @@ Every other commit the register cites is on main's history, or on the branch its
 | BRK20-4 | info | fixed | The quoting lint passed when git ls-files failed, because \|\| true covered the whole pipeline. | patch:c4f75bd81920499ce89083ef450a0f5ac73bd84c · `broker/tools/quoted-paths.sh` "BRK20-4: git failing (a corrupt index) fails, never an empty pass" |
 | BRK20R-1 | low | fixed | The HH-1 check missed the download step handing its token to later steps with no expression, by writing it to $GITHUB_ENV. | patch:f57e9feb9f4b258a8fbc6f62e1716ae64e26346e · `broker/tools/token_steps.py` "BRK20R-1: the download step writing the token to $GITHUB_ENV fails" |
 | BRK20R-2 | info | fixed | The HH-1 check's expression match stopped at the first }}, so a }} inside a quoted string could hide a secret. | patch:f57e9feb9f4b258a8fbc6f62e1716ae64e26346e · `broker/tools/token_steps.py` "BRK20R-2: a '}}' inside a quoted string can't hide a secret" |
+| BRK20C-1 | low | fixed | The HH-1 check's token patterns were case-sensitive while Actions resolves contexts case-insensitively, so SECRETS.X or GitHub.Token in another step passed. | patch:46c41e286bafc60901f8f92eae72b33d5cabee13 · `broker/tools/token_steps.py` "BRK20C-1: an upper-case SECRETS context in a later step fails" |
+| BRK20C-2 | info | fixed | BRK20R-1's cited $GITHUB_ENV case passed with the hand-off rule removed, because another rule caught its trailing line. | patch:46c41e286bafc60901f8f92eae72b33d5cabee13 · `broker/tools/token_steps.py` "BRK20R-1: the download step writing the token to $GITHUB_ENV fails" |
+| BRK20C-3 | info | fixed | No HH-1 self-test case failed with only the secrets: key rule removed, and the secrets: inherit fixture no longer named a reusable workflow. | patch:46c41e286bafc60901f8f92eae72b33d5cabee13 · `broker/tools/token_steps.py` "BRK20-2: secrets: inherit to a reusable workflow fails" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

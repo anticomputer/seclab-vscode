@@ -14815,6 +14815,52 @@
 				"file": "broker/tools/token_steps.py",
 				"name": "BRK20R-2: a '}}' inside a quoted string can't hide a secret"
 			}
+		},
+		{
+			"record": "20261117-broker-finding-tests-2.md",
+			"anchor": "BRK20C-1",
+			"round": "Round 20 second re-review",
+			"severity": "low",
+			"summary": "The HH-1 check's token patterns were case-sensitive while Actions resolves contexts case-insensitively, so SECRETS.X or GitHub.Token in another step passed.",
+			"component": "broker HH-1 check (token_steps.py)",
+			"owner": "broker",
+			"status": "fixed",
+			"commit": "patch:46c41e286bafc60901f8f92eae72b33d5cabee13",
+			"test": {
+				"file": "broker/tools/token_steps.py",
+				"name": "BRK20C-1: an upper-case SECRETS context in a later step fails"
+			}
+		},
+		{
+			"record": "20261117-broker-finding-tests-2.md",
+			"anchor": "BRK20C-2",
+			"round": "Round 20 second re-review",
+			"severity": "info",
+			"summary": "BRK20R-1's cited $GITHUB_ENV case passed with the hand-off rule removed, because another rule caught its trailing line.",
+			"component": "broker HH-1 check (token_steps.py)",
+			"owner": "broker",
+			"status": "fixed",
+			"commit": "patch:46c41e286bafc60901f8f92eae72b33d5cabee13",
+			"test": {
+				"file": "broker/tools/token_steps.py",
+				"name": "BRK20R-1: the download step writing the token to $GITHUB_ENV fails"
+			}
+		},
+		{
+			"record": "20261117-broker-finding-tests-2.md",
+			"anchor": "BRK20C-3",
+			"round": "Round 20 second re-review",
+			"severity": "info",
+			"summary": "No HH-1 self-test case failed with only the secrets: key rule removed, and the secrets: inherit fixture no longer named a reusable workflow.",
+			"component": "broker HH-1 check (token_steps.py)",
+			"owner": "broker",
+			"status": "fixed",
+			"commit": "patch:46c41e286bafc60901f8f92eae72b33d5cabee13",
+			"test": {
+				"file": "broker/tools/token_steps.py",
+				"name": "BRK20-2: secrets: inherit to a reusable workflow fails"
+			},
+			"note": "Every case now names its own rule's message; removing any one rule fails at least one case."
 		}
 	]
 }

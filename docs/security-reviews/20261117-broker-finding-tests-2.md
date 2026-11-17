@@ -57,3 +57,14 @@ fixes added nothing new. It raised two more gaps in the HH-1 check:
 |---|---|---|---|---|---|---|
 | BRK20R-1 | Low | HH-1 check | The download step could hand its token to every later step with no expression at all, by writing it to `$GITHUB_ENV`; a later `curl -H "Authorization: Bearer $GH_TOKEN"` then passed. | fixed | Inside the download step, a write to `$GITHUB_ENV`, `$GITHUB_OUTPUT` or `$GITHUB_STATE`, or a `::set-env`/`::set-output`/`::save-state` command, fails; so does a `GH_TOKEN` or `GITHUB_TOKEN` name outside it. | `BRK20R-1: the download step writing the token to $GITHUB_ENV fails` |
 | BRK20R-2 | Info | HH-1 check | The expression match stopped at the first `}}`, so a `}}` inside a quoted string (`format('a}}b', secrets.X)`) hid the rest of the expression. | fixed | Any raw sighting of `github.token`, `github['token']` or `secrets` outside the download step fails, whatever the span. | `BRK20R-2: a '}}' inside a quoted string can't hide a secret` |
+
+## Second re-review
+The reviewer confirmed BRK20R-1 and BRK20R-2 closed, each by reverting its rule. It also
+confirmed that the rebase for the publish gate changed only how the self-test fixtures are
+built. It raised three more points:
+
+| # | Severity | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| BRK20C-1 | Low | HH-1 check | The token patterns were case-sensitive, but Actions resolves contexts and properties case-insensitively, so `${{ SECRETS.MY_KEY }}` or `${{ GitHub.Token }}` in another step passed. | fixed | Both token patterns match case-insensitively. The `secrets:` key rule stays exact: Actions rejects a differently cased key. | `BRK20C-1: an upper-case SECRETS context in a later step fails` |
+| BRK20C-2 | Info | HH-1 check | BRK20R-1's cited `$GITHUB_ENV` case still passed with the hand-off rule removed, because the raw-sighting rule caught its trailing line. | fixed | The case no longer carries that line, and must report the hand-off rule's own message. | `BRK20R-1: the download step writing the token to $GITHUB_ENV fails` |
+| BRK20C-3 | Info | HH-1 check | No case failed with only the `secrets:` key rule removed, since the raw rule also matched; the `secrets: inherit` fixture no longer named a reusable workflow. | fixed | Every case names its own rule's message, so removing any one rule fails at least one case; the fixture names a reusable workflow again. | `BRK20-2: secrets: inherit to a reusable workflow fails` |
