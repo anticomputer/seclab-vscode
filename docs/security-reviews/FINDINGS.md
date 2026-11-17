@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 83 | 200 | 232 | 28 | 557 |
+| fixed | 14 | 83 | 200 | 235 | 29 | 561 |
 | fixed-untested | 0 | 5 | 52 | 151 | 61 | 269 |
 | accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 13 | 15 | 6 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 291 | 476 | 125 | 1000 |
+| **all** | 16 | 92 | 291 | 479 | 126 | 1004 |
 
 ## Baseline: open high and critical findings
 
@@ -1945,6 +1945,15 @@ Every other commit the register cites is on main's history, or on the branch its
 | TEL-4 | low | fixed | check-release took one-tab indentation as the root level, so a nested enableTelemetry false indented like a top-level key passed it. | 0ca59c7dc68e · `build/check-release.sh` "a nested enableTelemetry false indented as if top level (TEL-4)" |
 | TEL-5 | info | fixed-untested | The nbsync probe's prepare, launch, check flow could not pass on a filtered build: only drive read the serializer refusal. | A harness fix; its prepare, launch, check run on main 6589051b passed, but no test runs the harness itself. |
 | TEL-6 | info | fixed-untested | Probe profiles were shared by every worktree while each run guard is per worktree. | A naming fix in four harnesses; nothing runs two worktrees at once to test it. |
+
+### [20261117-broker-finding-tests-2](20261117-broker-finding-tests-2.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| BRK20-1 | low | fixed | token_steps accepted any step whose name began with the download step's, so a later step named with that prefix could carry the token and pass. | patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397 · `broker/tools/token_steps.py` "BRK20-1: a later step whose name only starts like the download step fails" |
+| BRK20-2 | low | fixed | The line-based token scan missed a token after a ' #' in a quoted string, an expression split across lines and secrets: inherit, and the HH-1 note overclaimed. | patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397 · `broker/tools/token_steps.py` "BRK20-2: secrets: inherit to a reusable workflow fails" |
+| BRK20-3 | low | fixed | In pin_check's self-test a crash in source_drift counted as errors produced, so the named failing cases passed on a crash and never checked which rule fired. | patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397 · `broker/tools/pin_check.py` "10-4: a source pinning a superseded version fails" |
+| BRK20-4 | info | fixed | The quoting lint passed when git ls-files failed, because \|\| true covered the whole pipeline. | patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397 · `broker/tools/quoted-paths.sh` "BRK20-4: git failing (a corrupt index) fails, never an empty pass" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

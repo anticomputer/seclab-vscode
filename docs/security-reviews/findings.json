@@ -14723,6 +14723,68 @@
 				"name": "pid liveness: got"
 			},
 			"commit": "patch:7dd12727b11c97e7d2398a692155cd3882964734"
+		},
+		{
+			"record": "20261117-broker-finding-tests-2.md",
+			"anchor": "BRK20-1",
+			"round": "Round 20",
+			"severity": "low",
+			"summary": "token_steps accepted any step whose name began with the download step's, so a later step named with that prefix could carry the token and pass.",
+			"component": "broker HH-1 check (token_steps.py)",
+			"owner": "broker",
+			"status": "fixed",
+			"commit": "patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397",
+			"test": {
+				"file": "broker/tools/token_steps.py",
+				"name": "BRK20-1: a later step whose name only starts like the download step fails"
+			}
+		},
+		{
+			"record": "20261117-broker-finding-tests-2.md",
+			"anchor": "BRK20-2",
+			"round": "Round 20",
+			"severity": "low",
+			"summary": "The line-based token scan missed a token after a ' #' in a quoted string, an expression split across lines and secrets: inherit, and the HH-1 note overclaimed.",
+			"component": "broker HH-1 check (token_steps.py)",
+			"owner": "broker",
+			"status": "fixed",
+			"commit": "patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397",
+			"test": {
+				"file": "broker/tools/token_steps.py",
+				"name": "BRK20-2: secrets: inherit to a reusable workflow fails"
+			},
+			"note": "The self-test also names the quoted ' #', multi-line, github['token'] and toJSON(secrets) cases."
+		},
+		{
+			"record": "20261117-broker-finding-tests-2.md",
+			"anchor": "BRK20-3",
+			"round": "Round 20",
+			"severity": "low",
+			"summary": "In pin_check's self-test a crash in source_drift counted as errors produced, so the named failing cases passed on a crash and never checked which rule fired.",
+			"component": "broker pin_check self-test",
+			"owner": "broker",
+			"status": "fixed",
+			"commit": "patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397",
+			"test": {
+				"file": "broker/tools/pin_check.py",
+				"name": "10-4: a source pinning a superseded version fails"
+			},
+			"note": "Each case now requires its own rule's message; with source_drift raising, all eight named cases fail."
+		},
+		{
+			"record": "20261117-broker-finding-tests-2.md",
+			"anchor": "BRK20-4",
+			"round": "Round 20",
+			"severity": "info",
+			"summary": "The quoting lint passed when git ls-files failed, because || true covered the whole pipeline.",
+			"component": "broker quoting lint (quoted-paths.sh)",
+			"owner": "broker",
+			"status": "fixed",
+			"commit": "patch:16b63c4a7c70b2ff0cfaf4b6b529cdd071805397",
+			"test": {
+				"file": "broker/tools/quoted-paths.sh",
+				"name": "BRK20-4: git failing (a corrupt index) fails, never an empty pass"
+			}
 		}
 	]
 }

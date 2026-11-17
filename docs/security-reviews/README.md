@@ -155,4 +155,5 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-16 | [patch 0034, no host variables for a tab's terminals (RFU-1)](20261116-rfu1-terminal-variables.md) | see record | see record |
 | 2026-11-16 | [RPC follow-ups, landing A (push refusals, 0011 retired, regression tests)](20261116-rpc-follow-ups.md) | see record | see record |
 | 2026-11-16 | [telemetry ids stay out of tabs (release check and product invariant)](20261116-tab-telemetry-ids.md) | origin/main..branch head: build/check-release.sh (telemetry check and self-test), | see record |
+| 2026-11-17 | [regression tests for broker low findings, and HH-1's check (round 20)](20261117-broker-finding-tests-2.md) | - "broker: regression tests for six low fixed-untested findings": | see record |
 <!-- index:end -->
