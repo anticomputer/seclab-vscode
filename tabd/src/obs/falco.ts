@@ -11,6 +11,7 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import type { RunResult } from '../run.ts';
 import type { ObsHub } from './hub.ts';
@@ -66,6 +67,30 @@ export function falcoRules(tabs: ReadonlyArray<{ shortId: string; deep: boolean 
   output: priv %proc.pid %proc.ppid %proc.exepath %proc.pcmdline %evt.type %evt.args %container.id
   priority: INFORMATIONAL
 `;
+}
+
+/**
+ * Whose process table can judge this sensor's tabd dead (PS-2). The Docker daemon may be
+ * shared by several pid namespaces (a remote engine, a VM or devcontainer on the same socket,
+ * Linux users under hidepid), and a pid missing from one namespace's `ps` says nothing about
+ * another's. So tabd labels its sensor `seclab.host` (hostname, pid namespace and uid) and
+ * `seclab.boot` (boot time, seconds), and a sweep only judges sensors that match its own.
+ */
+export function sensorOwner(): { host: string; boot: number } {
+	// Linux: the root pid namespace's link is the same on every machine, so the boot id and the
+	// hostname tell machines apart (PS-5). macOS has one namespace per machine, and its hostname
+	// follows the network, so it is left out there (PS-6).
+	const read = (f: string, how: (f: string) => string) => {
+		try {
+			return how(f).trim();
+		} catch {
+			return '';
+		}
+	};
+	const linux = process.platform === 'linux';
+	const parts = [linux ? os.hostname() : '', read('/proc/self/ns/pid', fs.readlinkSync), read('/proc/sys/kernel/random/boot_id', f => fs.readFileSync(f, 'utf8')),
+		String(process.getuid?.() ?? -1)];
+	return { host: createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 16), boot: Math.round(Date.now() / 1000 - os.uptime()) };
 }
 
 export function falcoArgs(name: string, rulesDir: string, labels: Record<string, string>): string[] {

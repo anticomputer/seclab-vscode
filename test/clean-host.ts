@@ -16,14 +16,17 @@
 // hold their installed extensions. Processes are matched on option values: editors only
 // with a test --user-data-dir, tabd only when orphaned with a test --state-dir. Stale fixture
 // copies (workspaces with our .seclab/ dir, or an AV loader shape) under every worktree's .work/
-// are removed too: they are what endpoint protection flags (EDR fixture-safety).
+// are removed too: they are what endpoint protection flags (EDR fixture-safety). tabd's Falco
+// sensors are removed, running or not, once their tabd is gone (dead pid, a pid reused by
+// another program, or a stray test tabd removed in the same pass).
 // Exit 0; with --apply, 1 if something could not be removed.
 
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { treeTexts } from './containment/teardown.ts';
+import { sensorOwner } from '../tabd/src/obs/falco.ts';
+import { classifyFalco, FALCO_PS_FORMAT, falcoOrphans, treeTexts } from './containment/teardown.ts';
 import { repoRoot } from './harness.ts';
 import { avFindings } from './safety/av-shape.ts';
 
@@ -63,7 +66,19 @@ if (args.has('--self-test')) {
 		...no.filter(([k, n]) => OURS[k].test(n)).map(([k, n]) => `must not match ${k} ${n}`),
 		// Every per-tab resource maps to its tab, so a real tab's is never removed as a test's.
 		...yes.filter(([, n]) => n.startsWith('seclab-t-') && tabIdOf(n) !== n.slice('seclab-'.length, 'seclab-t-'.length + 26)).map(([k, n]) => `${k} ${n} does not map to its tab`)];
-	console.log(bad.length ? bad.join('\n') : `clean-host patterns: ${yes.length + no.length} cases OK`);
+	// Falco sensors (PS-1): an orphan is one whose tabd pid is dead or now runs something else;
+	// a live tabd's sensor, a label that disagrees with the name, a sensor not labelled with
+	// this namespace and boot (PS-2) and other names are never claimed.
+	const me = { host: 'a'.repeat(16), boot: 1_800_000_000 }, ours = `\t${me.host}\t${me.boot + 3}`;
+	const tabdArgs = 'node /r/tabd/src/main.ts --state-dir /s', sensors = [`seclab-falco-0123abcd-41\t41${ours}`, `seclab-falco-0123abcd-42\t42${ours}`,
+		`seclab-falco-0123abcd-43\t43${ours}`, `seclab-falco-0123abcd-44\t45${ours}`, `seclab-falco-x-46\t46${ours}`, `seclab-example-falco-47\t47${ours}`,
+		'seclab-falco-0123abcd-48\t48\t\t', `seclab-falco-0123abcd-49\t49\t${'b'.repeat(16)}\t${me.boot}`, `seclab-falco-0123abcd-50\t50\t${me.host}\t${me.boot - 60}`];
+	const got = falcoOrphans(sensors, [{ pid: 42, args: tabdArgs }, { pid: 43, args: '/usr/bin/vim notes' }, { pid: 44, args: tabdArgs }, { pid: 45, args: tabdArgs }], me)
+		.map(o => o.name).join(',');
+	if (got !== 'seclab-falco-0123abcd-41,seclab-falco-0123abcd-43') {
+		bad.push(`falco orphans: got [${got}], want the dead-pid (41) and reused-pid (43) sensors only`);
+	}
+	console.log(bad.length ? bad.join('\n') : `clean-host patterns: ${yes.length + no.length} cases OK; falco orphan cases OK`);
 	process.exit(bad.length ? 1 : 0);
 }
 const CACHE_VOLUMES = new Set(['seclab-vscode-work', 'seclab-lychee-cache', 'seclab-test-scratch']);
@@ -152,8 +167,10 @@ const tabPolicy = (name: string, hint?: 'test'): { remove: boolean; why: string;
 // ---- processes ---------------------------------------------------------------------------
 // Editors only when running a test profile; tabd only when orphaned AND its state is a test
 // location (T-6). Matched on option values, never on loose substrings.
-const procs = lines('ps', ['-axo', 'pid=,ppid=,args=']).map(l => /^(\d+)\s+(\d+)\s+(.*)$/.exec(l)).filter((m): m is RegExpExecArray => !!m)
+const psRun = run('ps', ['-axo', 'pid=,ppid=,args=']);
+const procs = (psRun.error || psRun.status !== 0 ? [] : psRun.stdout.split('\n').map(s => s.trim()).filter(Boolean)).map(l => /^(\d+)\s+(\d+)\s+(.*)$/.exec(l)).filter((m): m is RegExpExecArray => !!m)
 	.map(m => ({ pid: Number(m[1]), ppid: Number(m[2]), args: m[3] }));
+const strayTabds = new Set<number>();
 /** Long-lived helpers a run starts on the host. Matched by absolute path, per worktree. */
 const HELPER_SCRIPTS = ['test/containment/beacon.ts', 'test/agentic/browser/run.ts'];
 const optValue = (args: string, opt: string) => new RegExp(`(?:^|\\s)--${opt}(?:=|\\s+)(\\S+)`).exec(args)?.[1];
@@ -207,6 +224,9 @@ for (const p of procs) {
 		continue;
 	}
 	const stray = editor ? underTest(path.resolve(udd!)) : p.ppid === 1 && underTest(path.resolve(sd!));
+	if (tabd && stray) {
+		strayTabds.add(p.pid);
+	}
 	items.push({
 		kind: editor ? 'editor process' : 'tabd process', name: `${p.pid} ${p.args.slice(0, 100)}`, state: 'running',
 		remove: stray, why: stray ? '' : editor ? 'not a test profile' : 'has a live parent or real state',
@@ -318,6 +338,26 @@ for (const [n, st] of containers) {
 for (const n of lines('docker', ['network', 'ls', '--filter', 'name=seclab-', '--format', '{{.Name}}']).filter(n => OURS.network.test(n))) {
 	const pol = tabPolicy(n);
 	items.push({ kind: 'network', name: `${n} (${pol.owner})`, state: '', remove: pol.remove, why: pol.why, del: () => ok('docker', ['network', 'rm', n]) });
+}
+// Falco sensors (tabd's `seclab-falco-<state>-<pid>`, label seclab.obs=falco) carry no tab id, so
+// the tab rules above never see them. One is ours to remove only when its tabd is gone, or is a
+// stray test tabd removed above (PS-1), and only if it is labelled with this pid namespace, uid
+// and boot (PS-2). Running or not: an orphan has no reader. A failed listing is shown (PS-4),
+// and nothing is judged from a partial process table (PS-3).
+const falcoPs = run('docker', ['ps', '-a', '--filter', 'label=seclab.obs=falco', '--format', FALCO_PS_FORMAT]);
+const psOk = psRun.status === 0 && !psRun.error && !psRun.signal && procs.length > 0;
+if (falcoPs.error || falcoPs.status !== 0) {
+	items.push({ kind: 'falco sensor', name: '(docker ps failed)', state: '', remove: false, why: 'could not list Falco sensors: nothing known', del: () => false });
+}
+const sensors = falcoPs.error || falcoPs.status !== 0 ? [] : falcoPs.stdout.split('\n').map(x => x.trim()).filter(Boolean);
+const judged = new Map(sensors.length && psOk ? classifyFalco(sensors, procs.filter(p => !strayTabds.has(p.pid)), sensorOwner()).map(c => [c.name, c]) : []);
+for (const s of sensors) {
+	const n = s.split('\t')[0];
+	const c = judged.get(n);
+	const why = !c ? 'process table unavailable' : c.orphan && strayTabds.has(c.pid) ? `its tabd (pid ${c.pid}) is a stray test tabd` : c.unjudged ? `${c.why}; its pid is not running here: check it and remove by hand` : c.why;
+	items.push({
+		kind: 'falco sensor', name: n, state: c?.orphan ? why : '', remove: !!c?.orphan, why, del: () => ok('docker', ['rm', '-f', '--', n]),
+	});
 }
 for (const n of lines('docker', ['volume', 'ls', '--filter', 'name=seclab-', '--format', '{{.Name}}']).filter(n => OURS.volume.test(n) || isCacheVolume(n))) {
 	const cache = isCacheVolume(n);
@@ -502,7 +542,7 @@ if (args.has('--superseded-images')) {
 	process.exit(0);
 }
 // Processes first (they hold sandboxes and dirs), then sandboxes and containers, then the rest.
-const order = ['editor process', 'tabd process', 'sbx sandbox', 'container', 'network', 'volume', 'cache volume', 'image', 'directory', 'fixture copy'];
+const order = ['editor process', 'tabd process', 'falco sensor', 'sbx sandbox', 'container', 'network', 'volume', 'cache volume', 'image', 'directory', 'fixture copy'];
 items.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
 let failed = 0;
 for (const it of items) {

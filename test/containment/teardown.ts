@@ -24,6 +24,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { checkIsolatedProfile, editorPortableDir, focusWatchLog, focusWatchProblem, hostSnapshot, repoRoot, snapshotDiff, type Snapshot } from '../harness.ts';
+import { sensorOwner } from '../../tabd/src/obs/falco.ts';
 import { avFindings } from '../safety/av-shape.ts';
 
 /** The profile's portable sibling (test/harness.ts editorPortableDir): checked as isolated, removed. */
@@ -257,14 +258,19 @@ export function runDirProblems(runDir: string, m: RunManifest): string[] {
 	return [];
 }
 
-/** Tab ids the run owns: recorded ones plus every tab in its tabd state (T-2b), read before the state is deleted. */
-export function runTabs(m: RunManifest): string[] {
-	const ids = new Set((m.tabs ?? []).filter(t => TAB_RE.test(t)));
+/** Every tabd state dir of the run: recorded ones plus the Tab Manager's under the run's profile. */
+function runStateDirs(m: RunManifest): string[] {
 	const dirs = [...(m.stateDirs ?? [])];
 	if (m.userDataDir) {
 		dirs.push(path.join(m.userDataDir, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd'));
 	}
-	for (const d of dirs) {
+	return dirs;
+}
+
+/** Tab ids the run owns: recorded ones plus every tab in its tabd state (T-2b), read before the state is deleted. */
+export function runTabs(m: RunManifest): string[] {
+	const ids = new Set((m.tabs ?? []).filter(t => TAB_RE.test(t)));
+	for (const d of runStateDirs(m)) {
 		let entries: string[] = [];
 		try {
 			entries = fs.readdirSync(path.join(d, 'tabs'));
@@ -290,7 +296,15 @@ export function writeSnapshot(runDir: string): void {
 interface Proc { pid: number; ppid: number; args: string }
 
 function processTable(): Proc[] {
+	return processTableOrUndefined(false) ?? [];
+}
+
+/** The process table; with `strict`, undefined unless `ps` ran to completion (PS-3: a partial table must never read as "dead"). */
+function processTableOrUndefined(strict: boolean): Proc[] | undefined {
 	const ps = spawnSync('ps', ['-axo', 'pid=,ppid=,stat=,args='], { encoding: 'utf8' });
+	if (strict && (ps.error || ps.status !== 0 || ps.signal)) {
+		return undefined;
+	}
 	const out: Proc[] = [];
 	for (const line of (ps.stdout ?? '').split('\n')) {
 		const m = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line);
@@ -450,9 +464,86 @@ export function runLeftovers(runDir: string, m: RunManifest = readManifest(runDi
 	return { left, unknown: [...unknown] };
 }
 
-/** tabd labels its Falco container with sha256(state dir)[0:8] (tabd/src/main.ts). */
+/**
+ * tabd labels its Falco container with sha256(state dir)[0:8] (tabd/src/main.ts). The editor's
+ * tabd keeps its state under the profile, so that dir counts too (PS-1: an editor run's Falco
+ * outlived it for hours because only `stateDirs` was hashed).
+ */
 function falcoStateTags(m: RunManifest): string[] {
-	return (m.stateDirs ?? []).map(d => createHash('sha256').update(d).digest('hex').slice(0, 8));
+	return runStateDirs(m).map(d => createHash('sha256').update(d).digest('hex').slice(0, 8));
+}
+
+/** True when a sensor's owner labels name this namespace and boot (clock slack 10 s; a larger step keeps it). */
+function sameSensorOwner(host: string | undefined, boot: string | undefined, me: { host: string; boot: number }): boolean {
+	return host === me.host && /^[0-9]{1,12}$/.test(boot ?? '') && Math.abs(Number(boot) - me.boot) <= 10;
+}
+
+/** A tabd command line, as `ps` shows it (the harnesses' `main.ts`, the Tab Manager's `dist/tabd.js`). */
+export const TABD_ARGV = /(^|\/)(tabd\/src\/main\.ts|dist\/tabd\.js)(\s|$)/;
+const FALCO_NAME = /^seclab-falco-[0-9a-f]{8}-([0-9]{1,10})$/;
+
+/**
+ * Falco sensors whose tabd is gone (PS-1). tabd runs Falco as `docker run -i --rm`; when tabd is
+ * SIGKILLed (teardown's escalation, a crash) its docker client dies with it and the container
+ * keeps running with nobody reading it. A sensor is live while the pid in its name and
+ * `seclab.pid` label is a running tabd; a dead pid, or one reused by any other program, is an
+ * orphan. Only sensors labelled with this host's pid namespace, uid and boot can be judged
+ * (PS-2): another namespace's tabd is invisible to our `ps`. Pure, so the decision is
+ * testable: `sensors` are `name\tpid\thost\tboot` lines from `docker ps --filter
+ * label=seclab.obs=falco`, `procs` the complete host process table. Unlabelled sensors, labels
+ * that disagree with the name, and other names are never claimed.
+ */
+export function falcoOrphans(sensors: string[], procs: Array<{ pid: number; args: string }>, me: { host: string; boot: number } = sensorOwner()): Array<{ name: string; pid: number; why: string }> {
+	return classifyFalco(sensors, procs, me).filter(c => c.orphan);
+}
+
+/**
+ * Every Falco sensor, judged: `orphan` (remove), or kept with the reason. `unjudged` marks one
+ * whose pid isn't in our table but whose owner labels aren't ours (another namespace, an older
+ * tabd without labels): it may be an orphan, but only a person can tell (PS-6).
+ */
+export function classifyFalco(sensors: string[], procs: Array<{ pid: number; args: string }>, me: { host: string; boot: number }): Array<{ name: string; pid: number; orphan: boolean; unjudged: boolean; why: string }> {
+	const byPid = new Map(procs.map(p => [p.pid, p.args]));
+	const out: Array<{ name: string; pid: number; orphan: boolean; unjudged: boolean; why: string }> = [];
+	for (const l of sensors) {
+		const [name, label, host, boot] = l.split('\t');
+		const pid = Number(FALCO_NAME.exec(name ?? '')?.[1]);
+		if (!pid || label !== String(pid)) {
+			out.push({ name, pid, orphan: false, unjudged: false, why: 'not tabd\'s name and pid label' });
+			continue;
+		}
+		const args = byPid.get(pid);
+		const gone = args === undefined ? `its tabd (pid ${pid}) is dead` : !TABD_ARGV.test(args) ? `pid ${pid} is no longer a tabd` : '';
+		if (!sameSensorOwner(host, boot, me)) {
+			out.push({ name, pid, orphan: false, unjudged: !!gone, why: host ? 'owner labels name another namespace or boot' : 'no owner labels (an older tabd)' });
+		} else {
+			out.push({ name, pid, orphan: !!gone, unjudged: false, why: gone || 'its tabd is running' });
+		}
+	}
+	return out;
+}
+
+/** `docker ps` format for {@link falcoOrphans}. */
+export const FALCO_PS_FORMAT = '{{.Names}}\t{{.Label "seclab.pid"}}\t{{.Label "seclab.host"}}\t{{.Label "seclab.boot"}}';
+
+/** Orphaned Falco sensors on this host now; undefined when docker or ps can't be listed in full (never guess). */
+export function hostFalcoOrphans(): Array<{ name: string; pid: number; why: string }> | undefined {
+	const sensors = dockerLines(['ps', '-a', '--filter', 'label=seclab.obs=falco', '--format', FALCO_PS_FORMAT]);
+	if (!sensors) {
+		return undefined;
+	}
+	if (!sensors.length) {
+		return [];
+	}
+	const procs = processTableOrUndefined(true);
+	return procs?.length ? falcoOrphans(sensors, procs) : undefined;
+}
+
+/** Sensors that look orphaned but aren't provably ours to judge (PS-6); [] when unknown. */
+export function hostFalcoUnjudged(): string[] {
+	const sensors = dockerLines(['ps', '-a', '--filter', 'label=seclab.obs=falco', '--format', FALCO_PS_FORMAT]) ?? [];
+	const procs = sensors.length ? processTableOrUndefined(true) : undefined;
+	return procs?.length ? classifyFalco(sensors, procs, sensorOwner()).filter(c => c.unjudged).map(c => `${c.name}: ${c.why}`) : [];
 }
 
 /** Networks named for this tab: `seclab-<tab>-<suffix>` (docker's name filter is a substring match). */
@@ -516,6 +607,17 @@ export function verifyTeardown(runDir: string, opts: { snapshot?: boolean } = {}
 	const { left, unknown } = runLeftovers(runDir, m, tabs);
 	add(left.length === 0, 'no sandbox, container, network or volume from this run remains', left.join(', '));
 	add(unknown.length === 0, 'runtimes could be listed (leftovers otherwise unknown)', unknown.length ? `could not list: ${unknown.join(', ')}` : '');
+	// Any run's Falco sensor whose tabd is gone has no reader and no owner left to stop it (PS-1).
+	for (const o of hostFalcoOrphans() ?? []) {
+		spawnSync('docker', ['rm', '-f', '--', o.name], { stdio: 'ignore' });
+	}
+	const orphans = hostFalcoOrphans();
+	add(orphans ? orphans.length === 0 : m.driver !== 'oci', 'no Falco sensor outlives its tabd (this run or an earlier one)',
+		orphans ? orphans.map(o => `${o.name}: ${o.why}`).join(', ') : 'could not list docker or processes');
+	const unjudged = hostFalcoUnjudged();
+	if (unjudged.length) {
+		add(true, 'note: Falco sensors whose tabd is not in our process table but which this host can\'t judge (check by hand)', unjudged.join(', '));
+	}
 
 	if (m.userDataDir) {
 		// The focus watcher (test/window.ts) logs any second the editor was the frontmost app (UU-2).

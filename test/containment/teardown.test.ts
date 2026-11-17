@@ -11,11 +11,13 @@
 //   node test/containment/teardown.test.ts
 
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { checkIsolatedProfile, NODE_IMAGE, repoRoot } from '../harness.ts';
-import { reapPreviousRun, runLeftovers, runProcesses, strayHelpers, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
+import { sensorOwner } from '../../tabd/src/obs/falco.ts';
+import { hostFalcoOrphans, reapPreviousRun, runLeftovers, runProcesses, strayHelpers, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
 
 const repo = path.resolve(import.meta.dirname, '../..');
 const base = path.join(repo, '.work', 'teardown-test');
@@ -116,6 +118,59 @@ if (c.status === 0) {
 	spawnSync('docker', ['run', '-d', '--rm', '--network', 'none', '--label', `seclab.tab=${fakeTab}`, '--name', `seclab-${fakeTab}`, NODE_IMAGE, 'sleep', '600'], { stdio: 'ignore' });
 	check('verify removes it and passes', verifyTeardown(runDir, { snapshot: false }).every(x => x.ok));
 	check('the container is gone', !runLeftovers(runDir).left.length);
+
+	// PS-1: Falco sensors outlived their runs for hours. An orphan whose tabd pid is dead is swept
+	// whichever run left it; one tagged with the run profile's tabd state is the run's own; one
+	// whose tabd still runs (a fake `tabd/src/main.ts` here) is someone else's and survives.
+	const deadPid = (() => {
+		const p = spawnSync('/bin/sh', ['-c', 'echo $$'], { encoding: 'utf8' });
+		return Number(p.stdout.trim());
+	})();
+	const fakeTabd = path.join(base, 'tabd', 'src', 'main.ts');
+	fs.mkdirSync(path.dirname(fakeTabd), { recursive: true });
+	fs.writeFileSync(fakeTabd, 'setTimeout(() => undefined, 600_000);\n');
+	const liveTabd = spawn(process.execPath, [fakeTabd], { stdio: 'ignore' });
+	const tag = (d: string) => createHash('sha256').update(d).digest('hex').slice(0, 8);
+	const profileState = path.join(udd, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
+	const sensor = (state: string, pid: number) => `seclab-falco-${tag(state)}-${pid}`;
+	const orphan = sensor(path.join(base, 'gone-state'), deadPid), own = sensor(profileState, liveTabd.pid!), other = sensor(path.join(base, 'other-state'), liveTabd.pid!);
+	// PS-2: a dead-looking pid from another pid namespace (owner labels not ours) is not judged.
+	const foreign = sensor(path.join(base, 'foreign-state'), deadPid);
+	const me = sensorOwner();
+	const plant = (name: string, state: string, pid: number, owner = me) => {
+		spawnSync('docker', ['rm', '-f', '--', name], { stdio: 'ignore' });
+		spawnSync('docker', ['run', '-d', '--rm', '--network', 'none', '--name', name, '--label', 'seclab.obs=falco', '--label', `seclab.state=${tag(state)}`,
+			'--label', `seclab.pid=${pid}`, '--label', `seclab.host=${owner.host}`, '--label', `seclab.boot=${owner.boot}`, NODE_IMAGE, 'sleep', '600'], { stdio: 'ignore' });
+	};
+	plant(orphan, path.join(base, 'gone-state'), deadPid);
+	plant(own, profileState, liveTabd.pid!);
+	plant(other, path.join(base, 'other-state'), liveTabd.pid!);
+	plant(foreign, path.join(base, 'foreign-state'), deadPid, { host: 'f'.repeat(16), boot: me.boot });
+	const running = () => spawnSync('docker', ['ps', '--filter', 'label=seclab.obs=falco', '--format', '{{.Names}}'], { encoding: 'utf8' }).stdout.split('\n');
+	check('PS-1: the planted sensors are running', [orphan, own, other].every(n => running().includes(n)), running().join(', '));
+	check('PS-1: a sensor tagged with the run profile\'s tabd state is the run\'s own', runLeftovers(runDir).left.includes(`container ${own}`), runLeftovers(runDir).left.join(', '));
+	const ps1 = verifyTeardown(runDir, { snapshot: false });
+	check('PS-1: verify removes the dead-pid orphan and the run\'s own sensor, and passes', ps1.every(x => x.ok), ps1.filter(x => !x.ok).map(x => x.detail).join(' | '));
+	check('PS-1: the orphan and the run\'s sensor are gone; a live tabd\'s sensor survives', !running().includes(orphan) && !running().includes(own) && running().includes(other));
+	check('PS-2: a sensor owned by another pid namespace survives though its pid is not ours', running().includes(foreign));
+	check('PS-6: verify notes the foreign sensor it could not judge, without failing', ps1.some(x => x.ok && /can't judge/.test(x.name) && x.detail.includes(foreign)), ps1.map(x => x.name).join(' | ').slice(0, 200));
+	// PS-3: a `ps` that prints part of the table and fails is "unknown", never "dead".
+	const fakeBin = path.join(base, 'fake-bin');
+	fs.mkdirSync(fakeBin, { recursive: true });
+	fs.writeFileSync(path.join(fakeBin, 'ps'), '#!/bin/sh\necho "    1     0 Ss   /sbin/launchd"\nexit 1\n', { mode: 0o755 });
+	const realPath = process.env.PATH;
+	process.env.PATH = `${fakeBin}:${realPath}`;
+	const partial = hostFalcoOrphans();
+	process.env.PATH = realPath;
+	check('PS-3: a failed ps leaves the sweep unknown (nothing is judged dead)', partial === undefined, JSON.stringify(partial));
+	// PS-4: clean-host shows a failed docker listing instead of reporting the host clean.
+	fs.rmSync(path.join(fakeBin, 'ps'));
+	fs.writeFileSync(path.join(fakeBin, 'docker'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+	const ch = spawnSync(process.execPath, [path.join(repo, 'test', 'clean-host.ts')], { encoding: 'utf8', env: { ...process.env, PATH: `${fakeBin}:${realPath}` } });
+	check('PS-4: clean-host reports a failed Falco listing', /keep\s+falco sensor\s+\(docker ps failed\)/.test(ch.stdout), ch.stdout.split('\n').filter(l => /falco|no seclab/.test(l)).join(' | ').slice(0, 200));
+	spawnSync('docker', ['rm', '-f', '--', other, foreign], { stdio: 'ignore' });
+	fs.rmSync(fakeBin, { recursive: true, force: true });
+	liveTabd.kill('SIGKILL');
 } else {
 	console.log(`SKIP  OCI leftover case (docker unavailable: ${c.stderr.trim().slice(0, 80)})`);
 }
