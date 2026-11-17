@@ -27,6 +27,7 @@ usage: ./seclab <command>
   test secrets [sbx|oci]        Pre-mount secret scan (gitleaks) gate, move-to-vault, restore
   test obs [sbx|oci]            Tab observability: inert loader -> expected events and labels; sensor tampering -> gap
   test probes                   AHP probes against the real upstream client (no window, no network): each must land where it claims
+  test agent-registration       Patch 0019 both arms vs the real upstream registries: baseline must be vulnerable, gated contained
   test builds                   Test build variants: the harness's hook check (require-hooks) self-test
   test driver [TARBALL]         Headless driver self-test: the Linux editor under Xvfb, driven over its CDP pipe
   test local-window [TARBALL]   Local windows run no workspace extension, and a spoofed built-in stays one (headless)
@@ -1882,6 +1883,11 @@ case "${1:-help}" in
 			# network-less container. Each probe must reach what it claims before any run can
 			# read its absence as containment.
 			probes) shift; "$ROOT/test/agentic/ahp/validate-probes.sh" "$@" ;;
+			# Patch 0019: no agent-host provider but this window's own is registered in a tab
+			# window, so a forged agent id has no other connection's agent to name. Both arms
+			# every run: the baseline control must report vulnerable, or the gated arm proves
+			# nothing (finding R12-2).
+			agent-registration) shift; "$ROOT/test/agentic/ahp/agent-registration.sh" "$@" ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	tab)

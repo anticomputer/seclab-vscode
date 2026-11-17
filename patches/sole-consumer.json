@@ -86,6 +86,13 @@
 					"\t\t\t\t\tif (registeredPropertyScheme?.scope && !allowedScopes.includes(registeredPropertyScheme.scope)) {"
 				],
 				"why": "patches 0015 and 0018 both decide whether agents are on from `inspect().policyValue` and `.defaultValue` only, never `getValue()`, because a tab extension can write the user, workspace and remote layers. That leaves `defaultValue` as the one remaining route, reachable through an extension's `configurationDefaults` contribution. It is closed because `seclab.agents.enabled` is registered at ConfigurationScope.APPLICATION and these lines reject a default override for any scope outside the allowed set. If the allowed scopes grow to include APPLICATION, or the scope check is dropped, a tab extension could turn agents on and the enablement rule must be re-derived (security review round 2, alert 4)."
+			},
+			{
+				"file": "src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHostChatContribution.ts",
+				"mustContain": [
+					"\tprivate _registerAgent(address: string, connection: IAgentConnection, agent: AgentInfo, configuredName: string | undefined): void {"
+				],
+				"why": "patch 0019 exists because this method registers chat agents for a REMOTE agent-host connection, and it is a method of RemoteAgentHostContribution, one of the three workbench contributions 0019 withholds in a tab window. That is the only site in the tree that registers an agent belonging to a connection other than the window's own: the two extension-contributed sites are denied by the RPC filter, and the other three belong to the window's own host. If upstream moves this registration out of that contribution, withholding the contribution no longer closes it and patch 0018's premise - that every agent in a tab window belongs to its own gated connection - must be re-derived (finding R12-2)."
 			}
 		]
 	}

@@ -101,9 +101,16 @@ export function seclabNullProviderEvent(name: string): object {
  * compare it against the three named values. `enabled` is explicitly `false` for the same
  * reason in the other direction.
  */
+/**
+ * The name is the SERVICE ID upstream registers the provider under, because that is what the
+ * registration wrapper has to hand. A shape whose name did not match would be looked up, missed,
+ * and silently replaced by an empty stand-in: no `enabled: false`, no contained `state`, nothing.
+ * The probe caught exactly that mismatch before this shipped, which is why the names are not
+ * prettier.
+ */
 export const SECLAB_NULL_PROVIDERS: readonly SeclabProviderShape[] = [
 	{
-		name: 'missionControlSharing',
+		name: 'missionControlSharingService',
 		members: {
 			state: { kind: 'observable', value: 'disabled' },
 			environmentName: { kind: 'observable', value: undefined },
@@ -113,7 +120,7 @@ export const SECLAB_NULL_PROVIDERS: readonly SeclabProviderShape[] = [
 		},
 	},
 	{
-		name: 'missionControlAvailability',
+		name: 'missionControlAvailabilityService',
 		members: {
 			hosts: { kind: 'observable', value: [] },
 			accountKey: { kind: 'property', value: undefined },

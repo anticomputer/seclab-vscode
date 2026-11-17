@@ -30,7 +30,7 @@ test('THE POINT: a capability flag reads false, not as a truthy function', () =>
 	// `enabled: boolean` on the Mission Control service. Under a proxy that returns a no-op
 	// function for every property read, `enabled` is a function and so truthy, and the window
 	// would render the provider as enabled precisely because it had been nulled.
-	const inert = seclabNullProvider(shapeNamed('missionControlAvailability'), deps);
+	const inert = seclabNullProvider(shapeNamed('missionControlAvailabilityService'), deps);
 	assert.equal(inert['enabled'], false);
 	assert.equal(typeof inert['enabled'], 'boolean');
 	assert.ok(!inert['enabled']);
@@ -40,7 +40,7 @@ test('a tri-state observable reports the named contained value, never undefined'
 	// `state: IObservable<'disabled' | 'connecting' | 'enabled'>`. `undefined` is not safe:
 	// a `=== 'disabled'` guard would fail while a `!== 'enabled'` guard would pass, so the
 	// call site, not the stand-in, would decide whether the result was contained.
-	const inert = seclabNullProvider(shapeNamed('missionControlSharing'), deps);
+	const inert = seclabNullProvider(shapeNamed('missionControlSharingService'), deps);
 	const state = inert['state'] as { get(): unknown; read(r: unknown): unknown };
 	assert.equal(state.get(), 'disabled');
 	assert.equal(state.read(undefined), 'disabled');
@@ -50,7 +50,7 @@ test('a tri-state observable reports the named contained value, never undefined'
 test('a member the shape does not name is absent, and is never callable', () => {
 	// The rule that keeps the next interface change from failing open: an unnamed member is
 	// `undefined`, which is falsy, and calling it throws rather than quietly succeeding.
-	const inert = seclabNullProvider(shapeNamed('missionControlSharing'), deps);
+	const inert = seclabNullProvider(shapeNamed('missionControlSharingService'), deps);
 	for (const unknownMember of ['enabled', 'connect', 'token', 'isAvailable', 'hosts']) {
 		assert.equal(inert[unknownMember], undefined, unknownMember);
 		assert.notEqual(typeof inert[unknownMember], 'function', unknownMember);
@@ -64,14 +64,14 @@ test('the stand-in has no prototype, so nothing is inherited into it', () => {
 	// `'constructor' in inert` would be true. A consumer probing for a member it expects
 	// could then get Object.prototype's, which is exactly the capable-direction guess the
 	// rule forbids.
-	const inert = seclabNullProvider(shapeNamed('missionControlSharing'), deps);
+	const inert = seclabNullProvider(shapeNamed('missionControlSharingService'), deps);
 	assert.equal(Object.getPrototypeOf(inert), null);
 	assert.equal((inert as Record<string, unknown>)['constructor'], undefined);
 	assert.equal((inert as Record<string, unknown>)['toString'], undefined);
 });
 
 test('every declared method is an awaitable no-op that resolves to undefined', async () => {
-	const inert = seclabNullProvider(shapeNamed('missionControlAvailability'), deps);
+	const inert = seclabNullProvider(shapeNamed('missionControlAvailabilityService'), deps);
 	for (const m of ['initialize', 'refresh', 'connect', 'disconnect', 'delete', 'setDisplayName']) {
 		assert.equal(typeof inert[m], 'function', m);
 		assert.equal(await (inert[m] as () => Promise<unknown>)(), undefined, m);
@@ -113,10 +113,10 @@ test('no shape gives a truthy value to a plain property', () => {
 test('the null-provider event names the provider, so a run asserts rather than infers', () => {
 	// The plan requires every run to assert that each service resolved to the null provider.
 	// An event that did not name which provider could not tell two of them apart.
-	const e = seclabNullProviderEvent('missionControlSharing') as { summary: string; detail: Record<string, unknown> };
-	assert.match(e.summary, /seclab\.null-provider\.registered missionControlSharing/);
+	const e = seclabNullProviderEvent('missionControlSharingService') as { summary: string; detail: Record<string, unknown> };
+	assert.match(e.summary, /seclab\.null-provider\.registered missionControlSharingService/);
 	assert.equal(e.detail['gateRule'], 'seclab.null-provider.registered');
-	assert.equal(e.detail['provider'], 'missionControlSharing');
+	assert.equal(e.detail['provider'], 'missionControlSharingService');
 	assert.equal(e.detail['verdict'], 'deny');
 	assert.notEqual(seclabNullProviderEvent('a').summary, seclabNullProviderEvent('b').summary);
 });
