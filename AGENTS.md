@@ -158,6 +158,7 @@ RPC-lockdown session adds. Keep them consistent with this file.
   current `main`. Nobody pushes to `main`, and there are no bypass actors.
   1. Rebase onto `origin/main`. Cite your unlanded commits in the register as `patch:<id>`
      (`./seclab findings remap --branch <yours> --patch`); a SHA that isn't on `main` fails.
+     If you minted finding IDs, `./seclab findings clashes` checks them against open PRs' heads.
      Push your branch.
   2. Write the PR title and body to a file and run `./seclab scan-text < FILE`. Post only text
      it reports clean (a flag means: no quote, paraphrase or excerpt of a private conversation,
@@ -167,7 +168,10 @@ RPC-lockdown session adds. Keep them consistent with this file.
      head. It isn't a required check, so auto-merge won't wait for it.
   5. `gh pr merge <number> --auto --rebase`. GitHub merges when the required checks pass.
   6. If `main` moves first, the PR is out of date and can't merge: `gh pr update-branch
-     <number> --rebase`, and the checks re-run (`patch:` citations survive it).
+     <number> --rebase`, and the checks re-run (`patch:` citations survive it). If that fails on a
+     conflict in the register, rebase locally and run `./seclab findings rebase-resolve` at each
+     stop: it merges `findings.json` by entry, regenerates `FINDINGS.md` and the indexes, and
+     refuses a real clash.
      Auto-merge stays armed, so if step 4 applies, disarm it first (`gh pr merge <number>
      --disable-auto`), wait for `oci` on the new head, then arm it again.
   7. After the merge, confirm `unit`, `lint`, `docs` and `patch-build` are green on the new
@@ -380,6 +384,8 @@ build/apply-patches.sh --check  # patch queue == patches/series (no unlisted pat
 ./seclab findings rot           # every register citation that no longer resolves (the weekly job's strict view)
 ./seclab findings pin           # landed patch:<id> citations become their SHAs on main (a follow-up after a rebase-merge)
 ./seclab findings growth [DAYS] # the baseline isn't larger than the register's last change DAYS (7) days old
+./seclab findings rebase-resolve  # in a conflicted rebase: merge findings.json by entry, regenerate the views, stage; refuses real clashes
+./seclab findings clashes [--ref REF]...   # this change's new finding IDs against every open PR head (gh); same-owner clash exits 1
 build/check-release.sh .work/out/seclab-reh-linux-arm64.tar.gz   # no test hooks in a release artifact (also: <app>/Contents/Resources/app)
 node test/containment/teardown.test.ts   # teardown regression: orphaned editor tree + leftover tab pod are stopped/removed
 ./seclab clean-host [--apply] [--running] [--caches] [--all-tabs]   # list (dry run) / remove seclab-vscode resources (superseded images too); test tabs only unless --all-tabs; never copilot-* or other projects
@@ -465,7 +471,9 @@ Electron with `ELECTRON_RUN_AS_NODE=1`); nothing is installed.
   **Every finding goes into the register** ([FINDINGS.md](docs/security-reviews/FINDINGS.md),
   [EDR](docs/edr/20261110-security-findings-register.md)) in the same change as its record:
   - add one entry per finding to `docs/security-reviews/findings.json` (status `fixed` with the
-    fix commit and the regression test's file and name; or `fixed-untested`, `accepted-residual`
+    fix commit and the regression test's file and name; `fixed-before-landing` when this change
+    raised, fixed and tested it, with `preFix` and `preFixRef` naming the reviewed commit the test
+    failed on; or `fixed-untested`, `accepted-residual`
     with who accepted it, `deferred`, `open`, `false-positive`), then run `./seclab docs write`;
   - new records use unique explicit IDs (`ROUND-n`) in a findings table with a Sev column;
   - a high or critical finding must end `fixed` with a test, or accepted by the project owner: a

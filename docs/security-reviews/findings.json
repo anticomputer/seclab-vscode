@@ -15557,7 +15557,7 @@
 			"component": "findings register: fix-commit lines",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
+			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an anchor with a tab fails the schema (DDDD-1)"
@@ -15572,7 +15572,7 @@
 			"component": "findings register: log output",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
+			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an anchor that starts a workflow command fails the schema (DDDD-2)"
@@ -15587,7 +15587,7 @@
 			"component": "findings register: clash scope",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
+			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "reuses with another meaning is warned, across owners (DDDD-3)"
@@ -15602,7 +15602,7 @@
 			"component": "findings register: clash noise",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
+			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "editing an entry whose clash the base already had is not warned (DDDD-4)"
@@ -15617,10 +15617,10 @@
 			"component": "findings register: self-test",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
+			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
 			"test": {
 				"file": "build/docs/findings.ts",
-				"name": "control: a clash warning never fails the check (DDDD-5)"
+				"name": "control: a clash warning across owners never fails the check (DDDD-5)"
 			}
 		},
 		{
@@ -15632,7 +15632,7 @@
 			"component": "findings register: new highs",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
+			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
 			"test": {
 				"file": "seclab",
 				"name": "a reverted fix passed ancestry (EEEE-1)"
@@ -15647,7 +15647,7 @@
 			"component": "findings register: log output",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
+			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "every printed line is one line and never a workflow command (EEEE-2)"
@@ -15662,10 +15662,430 @@
 			"component": "findings register: host contract",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:7a8a98d3b619e2dd26d75fe3c7d207112949c211",
+			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
 			"test": {
 				"file": "seclab",
 				"name": "a fix-commit line with no severity flag passed (EEEE-3)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "FFFF-1",
+			"round": "Round FFFF",
+			"severity": "low",
+			"summary": "A cross-owner clash the base had could become one owner's two meanings by changing an owner",
+			"component": "findings register: clash freshness",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a clash the base had across owners fails once one owner holds both (FFFF-1)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "FFFF-2",
+			"round": "Round FFFF",
+			"severity": "medium",
+			"summary": "The same-owner failure would block an owner's next generic round ID (R-1)",
+			"component": "findings register: generic IDs",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a generic round ID reused by its owner is a warning, not a failure (FFFF-2)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "FFFF-3",
+			"round": "Round FFFF",
+			"severity": "low",
+			"summary": "A stale PR head counted an entry main changed later as one it mints",
+			"component": "findings register: stale heads",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a stale PR head does not claim an entry main already has (FFFF-3)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "FFFF-4",
+			"round": "Round FFFF",
+			"severity": "low",
+			"summary": "The own PR was found by branch name, so local amendments could be reported against themselves",
+			"component": "findings register: own PR",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "PR heads to compare weren't own-PR, fork and ancestor filtered (FFFF-4, FFFF-6)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "FFFF-5",
+			"round": "Round FFFF",
+			"severity": "low",
+			"summary": "A PR register that wasn't JSON was dropped silently, and an internal error exited like a clash",
+			"component": "findings register: unreadable input",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a PR register that does not parse is reported, not dropped (FFFF-5)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "FFFF-6",
+			"round": "Round FFFF",
+			"severity": "low",
+			"summary": "A fork's PR was compared and could steer a rename",
+			"component": "findings register: untrusted PRs",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "PR heads to compare weren't own-PR, fork and ancestor filtered (FFFF-4, FFFF-6)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "GGGG-5",
+			"round": "Round GGGG",
+			"severity": "medium",
+			"summary": "The failing-run record of a fixed-before-landing entry was checked only while the entry was new",
+			"component": "findings register: evidence",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a landed fixed-before-landing entry whose failing-run quote is gone fails (GGGG-5)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "GGGG-6",
+			"round": "Round GGGG",
+			"severity": "low",
+			"summary": "With no base register every fixed-before-landing check was skipped",
+			"component": "findings register: absent base",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "fixed-before-landing with no base register fails (GGGG-6)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "GGGG-7",
+			"round": "Round GGGG",
+			"severity": "low",
+			"summary": "A draft read the push's previous head from the event file, which earlier job steps can rewrite",
+			"component": "findings register: comparison point",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "a docs workflow step runs the gate without DOCS_BASE (GGGG-7)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "GGGG-8",
+			"round": "Round GGGG",
+			"severity": "info",
+			"summary": "On main the reviewed commit wasn't compared with the push's previous head",
+			"component": "findings register: main",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "doesn't judge fixed-before-landing against its base (GGGG-8)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "GGGG-9",
+			"round": "Round GGGG",
+			"severity": "info",
+			"summary": "The register merge copied unknown top-level keys and dropped a finding one side removed",
+			"component": "findings register: merge",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a finding one side removed is refused by merge3, never dropped (GGGG-9)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "GGGG-10",
+			"round": "Round GGGG",
+			"severity": "info",
+			"summary": "The conflict-marker scan matched seven-character markers only",
+			"component": "findings register: markers",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "an 8-character conflict marker wasn't seen (GGGG-10)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "GGGG-11",
+			"round": "Round GGGG",
+			"severity": "low",
+			"summary": "A fixed-before-landing entry on a branch failed for evidence not yet on this tree",
+			"component": "findings register: branch entries",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a branch fixed-before-landing entry is not failed for evidence not yet on this tree (GGGG-11)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "GGGG-12",
+			"round": "Round GGGG",
+			"severity": "low",
+			"summary": "rebase-resolve regenerated files it didn't stage, and still reported them resolved",
+			"component": "findings register: rebase-resolve",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "a refreshed view that wasn't conflicted wasn't staged, or a file with markers was (GGGG-12)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "GGGG-13",
+			"round": "Round GGGG",
+			"severity": "low",
+			"summary": "GGGG-7's test counted lines, not steps, and the prefix base rule had no test",
+			"component": "findings register: test strength",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "a block-run gate step without its own DOCS_BASE passed (GGGG-13)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR11-1",
+			"round": "Round PRR11",
+			"severity": "low",
+			"summary": "A printed line could carry a legacy ##[command] from register text anywhere in it",
+			"component": "findings register: log output",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a legacy workflow command anywhere in a printed line is broken (PRR11-1)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR11-2",
+			"round": "Round PRR11",
+			"severity": "medium",
+			"summary": "Once a fix was pinned to its SHA, a later revert of it no longer reopened the finding",
+			"component": "findings register: reverted fixes",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "a pinned fix that was reverted later passed ancestry (PRR11-2)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR11-3",
+			"round": "Round PRR11",
+			"severity": "low",
+			"summary": "The revert search covered commits before the fix, so a fix reverting the change that brought the issue was taken for a reverted fix",
+			"component": "findings register: reverted fixes",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "a fix that reverts the unsafe change was taken for a reverted fix (PRR11-3)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR11-4",
+			"round": "Round PRR11",
+			"severity": "medium",
+			"summary": "A fixed-before-landing entry the base had on its branch skipped the new-entry checks when it landed",
+			"component": "findings register: branch entries",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "landing a branch fixed-before-landing entry judges it as new (PRR11-4)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR11-5",
+			"round": "Round PRR11",
+			"severity": "low",
+			"summary": "A landed fixed-before-landing entry could become plain fixed and drop its failing-run evidence",
+			"component": "findings register: evidence",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a landed fixed-before-landing entry turned into fixed fails (PRR11-5)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR11-6",
+			"round": "Round PRR11",
+			"severity": "low",
+			"summary": "A local check on main without a range compared with HEAD^1 and failed a correct multi-commit landing",
+			"component": "findings register: local runs",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "on main with no range a landed fixed-before-landing entry is not re-judged (PRR11-6)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR11-7",
+			"round": "Round PRR11",
+			"severity": "low",
+			"summary": "On main with no range, an entry HEAD^1 had open was still refused once it became fixed-before-landing",
+			"component": "findings register: local runs",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "on main with no range an entry HEAD^1 had open is not refused (PRR11-7)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR11-8",
+			"round": "Round PRR11",
+			"severity": "low",
+			"summary": "A new branch or tag pushed at a landed commit would fail for a missing range",
+			"component": "findings register: new refs",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "a new branch or tag pushed at a landed commit wasn't landed history (PRR11-8)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR11-9",
+			"round": "Round PRR11",
+			"severity": "low",
+			"summary": "After landing, a fixed-before-landing entry's reviewed commit could be edited to equal its fix and still pass",
+			"component": "findings register: landed entries",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "a landed entry whose reviewed commit is its own fix passed (PRR11-9)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR11-10",
+			"round": "Round PRR11",
+			"severity": "low",
+			"summary": "findings clashes listed pull requests from the caller's directory but fetched them from this checkout",
+			"component": "findings register: clashes",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "gh ran outside this checkout (PRR11-10)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR11-11",
+			"round": "Round PRR11",
+			"severity": "low",
+			"summary": "On main with no range, the fixed-before-landing to fixed transition rule still compared with HEAD^1",
+			"component": "findings register: local runs",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "on main with no range a transition from HEAD^1 is not judged (PRR11-11)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR11-12",
+			"round": "Round PRR11",
+			"severity": "low",
+			"summary": "On main with no range, uncommitted register edits were exempted as landed history",
+			"component": "findings register: local runs",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "uncommitted edits on main without a range weren't judged exactly (PRR11-12)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR11-13",
+			"round": "Round PRR11",
+			"severity": "low",
+			"summary": "A fix whose revert was itself reverted still counted as reverted",
+			"component": "findings register: reverted fixes",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"test": {
+				"file": "seclab",
+				"name": "a fix whose revert was reverted was taken as reverted (PRR11-13)"
 			}
 		}
 	]

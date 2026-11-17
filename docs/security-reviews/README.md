@@ -33,7 +33,10 @@ the process and the index.
    ([FINDINGS.md](FINDINGS.md), [EDR](../edr/20261110-security-findings-register.md)). A `fixed`
    entry names its fix commit and its regression test: a test file (or a case in a checker's
    `--self-test`) and an exact name of at least 12 characters that occurs once in it. Without a
-   test it is `fixed-untested`, which counts as open. A high or critical must end `fixed` on `main`
+   test it is `fixed-untested`, which counts as open. A finding this review raised in a change
+   that fixes and tests it before landing is `fixed-before-landing`: add `preFix`, the reviewed
+   commit, and `preFixRef`, a quote that names the test and records it failing there
+   ([EDR](../edr/20261117-fixed-before-landing.md)). A high or critical must end `fixed` on `main`
    or accepted by the project owner: a row in `owner-acceptances.md` here (the
    finding's full key, the date, the scope, the closing condition, "accepted by the project
    owner"), written only by the coordinator on an explicit owner decision and landed in an earlier
