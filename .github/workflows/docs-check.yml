@@ -53,10 +53,10 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .work/lychee-cache
-          key: lychee-${{ github.ref }}-${{ github.run_id }}
+          key: lychee-v2-${{ github.ref }}-${{ github.run_id }}
           restore-keys: |
-            lychee-${{ github.ref }}-
-            lychee-refs/heads/main-
+            lychee-v2-${{ github.ref }}-
+            lychee-v2-refs/heads/main-
       - name: Seed the lychee cache volume
         run: |
           docker volume create seclab-lychee-cache >/dev/null
@@ -85,4 +85,4 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .work/lychee-cache
-          key: lychee-${{ github.ref }}-${{ github.run_id }}
+          key: lychee-v2-${{ github.ref }}-${{ github.run_id }}

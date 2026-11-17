@@ -862,9 +862,9 @@ docs_check() {
 		# burst of permalink checks with 429 and 503, so those are retried with backoff and paced
 		# per host (adaptively), and never cached; a link still dead after the retries fails.
 		docker run --rm -v "$ROOT:/input:ro" -v seclab-lychee-cache:/cache -w /cache "$(tool_image lychee)" \
-			--no-progress --cache --max-cache-age 3d --cache-exclude-status 429,500.. \
+			--no-progress --cache --max-cache-age 3d --cache-exclude-status 403,429,500.. \
 			--max-concurrency 8 --host-concurrency 4 --host-request-interval 200ms \
-			--max-retries 6 --retry-wait-time 4 --accept 200,206 \
+			--max-retries 5 --retry-wait-time 3 --accept 200,206 \
 			--exclude-path /input/.work --exclude-path /input/vscode --exclude-path /input/node_modules \
 			--exclude '^https?://([^/]+\.)?(test|invalid|example|localhost)(/|:|$)' --exclude '^https?://(127\.|localhost|host\.docker\.internal)' \
 			--exclude '^vscode-remote:' --exclude '^https://github\.com/anticomputer/seclab-vscode' \
