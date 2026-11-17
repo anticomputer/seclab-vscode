@@ -25,16 +25,24 @@ fi
 # hides a modified file, or skip-worktree/sparse state, so it is rebuilt: with no index, the
 # reset compares every tracked file's content. `clean -ffd` without a pathspec removes every
 # untracked file (files earlier patches or a test variant added); ignored build state
-# (node_modules, .build, out*) stays. Git config and exclude files on the volume could hide a
-# planted file from both the clean and the check, so neither is read here (review FU-10).
+# (node_modules, .build, out*) stays. No git config, attribute or hook file outside our control
+# is read: system and global config are off (review FU-10), and the checkout's own repository
+# state is rewritten before any command acts on the tree, because a kept clean/smudge filter or
+# core.worktree would make the tree differ from what the check sees (Copilot review on PR 25).
 gd() { GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -C "$DEST" -c core.excludesFile=/dev/null \
+	-c core.attributesFile=/dev/null -c core.hooksPath=/dev/null -c core.fsmonitor=false \
 	-c core.sparseCheckout=false -c core.sparseCheckoutCone=false -c status.showUntrackedFiles=normal "$@"; }
+scrub() {
+	local g="$DEST/.git"
+	printf '[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n' > "$g/config"
+	rm -rf "$g/config.worktree" "$g/commondir" "$g/worktrees" "$g/hooks" "$g/index" \
+		"$g/info/attributes" "$g/info/exclude" "$g/info/sparse-checkout"
+	local top
+	top="$(gd rev-parse --show-toplevel)" && [[ "$top" == "$(cd "$DEST" && pwd -P)" ]] \
+		|| { echo "upstream: $DEST's work tree resolves elsewhere (refusing)" >&2; exit 1; }
+}
 pristine() {
-	local gitdir common
-	gitdir="$(gd rev-parse --absolute-git-dir)" && common="$(gd rev-parse --path-format=absolute --git-common-dir)" \
-		|| { echo "upstream: can't resolve $DEST's git directory" >&2; exit 1; }
-	gd config --unset-all core.sparseCheckout 2>/dev/null || true
-	rm -f "$gitdir/index" "$gitdir/info/sparse-checkout" "$common/info/sparse-checkout" "$common/info/exclude"
+	scrub
 	gd reset -q --hard "$UPSTREAM_SHA"
 	gd clean -q -ffd
 	local left
@@ -49,19 +57,23 @@ if [[ -L "$DEST/.git" ]] || { [[ -e "$DEST/.git" ]] && [[ ! -d "$DEST/.git" ]]; 
 	exit 1
 fi
 
-if [[ -d "$DEST/.git" ]] && [[ "$(git -C "$DEST" rev-parse HEAD 2>/dev/null)" == "$UPSTREAM_SHA" ]]; then
-	pristine
-	echo "upstream: reusing $DEST at $UPSTREAM_TAG ($UPSTREAM_SHA), reset to pristine"
-	exit 0
+if [[ -d "$DEST/.git" ]]; then
+	scrub
+	if [[ "$(gd rev-parse -q --verify HEAD 2>/dev/null)" == "$UPSTREAM_SHA" ]]; then
+		pristine
+		echo "upstream: reusing $DEST at $UPSTREAM_TAG ($UPSTREAM_SHA), reset to pristine"
+		exit 0
+	fi
+else
+	mkdir -p "$DEST"
+	gd init -q
+	scrub
 fi
 
-mkdir -p "$DEST"
-git -C "$DEST" init -q
-git -C "$DEST" remote remove origin 2>/dev/null || true
-git -C "$DEST" remote add origin "$UPSTREAM_REPO"
-git -C "$DEST" fetch -q --depth 1 origin "$UPSTREAM_SHA"
-git -C "$DEST" -c advice.detachedHead=false checkout -q --force FETCH_HEAD
-got="$(git -C "$DEST" rev-parse HEAD)"
+gd remote add origin "$UPSTREAM_REPO"
+gd fetch -q --depth 1 origin "$UPSTREAM_SHA"
+gd -c advice.detachedHead=false checkout -q --force FETCH_HEAD
+got="$(gd rev-parse HEAD)"
 [[ "$got" == "$UPSTREAM_SHA" ]] || { echo "fetched $got != $UPSTREAM_SHA" >&2; exit 1; }
 # A checkout left at another pin keeps the files earlier patches added; they would make this
 # pin's patches fail to apply (or, if identical, ship a previous build's file).

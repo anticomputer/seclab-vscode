@@ -158,3 +158,42 @@ test('install stamp: a symlinked lockfile is refused; a lockfile under an odd pa
 		fs.rmSync(scratch, { recursive: true, force: true });
 	}
 });
+
+test('fetch-upstream: the volume\'s own config, attributes and hooks are not honoured (PR 25 review)', () => {
+	try {
+		const { dest, fetch } = setup();
+		fetch('v1');
+		// A clean/smudge filter: the tree would hold smudged bytes while status cleans them back.
+		git(dest, 'config', 'filter.evil.smudge', 'sed s/a/EVIL/');
+		git(dest, 'config', 'filter.evil.clean', 'sed s/EVIL/a/');
+		put(dest, '.git/info/attributes', 'src/vs/a.ts filter=evil\n');
+		// A hook that a checkout would run.
+		put(dest, '.git/hooks/post-checkout', `#!/bin/sh\necho ran > ${path.join(scratch, 'hook-ran')}\n`);
+		fs.chmodSync(path.join(dest, '.git/hooks/post-checkout'), 0o755);
+		fetch('v1');
+		assert.equal(fs.readFileSync(path.join(dest, 'src/vs/a.ts'), 'utf8'), 'a1\n', 'same pin: no smudge');
+		fetch('v2');
+		assert.equal(fs.readFileSync(path.join(dest, 'src/vs/a.ts'), 'utf8'), 'a2\n', 'new pin: no smudge');
+		assert.ok(!fs.existsSync(path.join(scratch, 'hook-ran')), 'no hook ran');
+		assert.doesNotMatch(fs.readFileSync(path.join(dest, '.git', 'config'), 'utf8'), /filter/, 'filter config gone');
+	} finally {
+		fs.rmSync(scratch, { recursive: true, force: true });
+	}
+});
+
+test('fetch-upstream: a kept core.worktree can\'t redirect the reset and clean (PR 25 review)', () => {
+	try {
+		const { dest, fetch } = setup();
+		fetch('v2');
+		const other = path.join(scratch, 'other');
+		put(other, 'keep.txt', 'not ours');
+		git(dest, 'config', 'core.worktree', other);
+		put(dest, 'src/vs/stray.ts', 'x');
+		fetch('v2');
+		assert.equal(fs.readFileSync(path.join(other, 'keep.txt'), 'utf8'), 'not ours', 'the other tree is untouched');
+		assert.ok(!fs.existsSync(path.join(dest, 'src/vs/stray.ts')), 'DEST itself was cleaned');
+		assert.equal(fs.readFileSync(path.join(dest, 'src/vs/a.ts'), 'utf8'), 'a2\n');
+	} finally {
+		fs.rmSync(scratch, { recursive: true, force: true });
+	}
+});
