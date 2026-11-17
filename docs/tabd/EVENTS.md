@@ -134,8 +134,12 @@ Reported in `tab.observation` notifications, `tab.events.tail` results and `sens
 
 Lines from an in-tab sensor longer than 64 KiB are dropped and counted. Each tab is rate-limited
 (sensor events 500/s, burst 5 000; host events 200/s, burst 2 000); drops are summarised once a
-second as `sensor.status` and mark the tab `degraded`. The log keeps 4 × 8 MiB segments per tab
-under `<state>/events/<tabId>/`.
+second as `sensor.status` and mark the tab `degraded`. Events a reporter will send again
+(`tab.events.report` with `retryLimited`, the Tab Manager's window-log forwarder) are deferred
+rather than dropped, and summarised the same way with `status: deferred`. AHP connection
+lifecycle is never deferred. The forwarder's gap markers (`ahp-gate.log-skipped`,
+`rpc:seclab.log-skipped`) have a bucket of their own (1/s, burst 20). The log keeps 4 × 8 MiB
+segments per tab under `<state>/events/<tabId>/`.
 
 ## Untrusted fields and LLM consumers
 Code in a tab chooses much of what these events contain: command lines, program and file

@@ -14922,6 +14922,426 @@
 				"file": "broker/tools/token_steps.py",
 				"name": "BRK20D-4: a hash-led continuation line inside a multi-line double-quoted value fails"
 			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-1",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "The RPC filter's log-summary lines (verdict deny, count of suppressed decisions of every verdict) could raise a trusted rpc.deny-burst with nothing denied.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs detect: rpc.deny-burst from trusted filter denials only"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-2",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "A UTF-8 character split across reads was decoded as replacement characters and skewed the checkpoint.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-3",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "medium",
+			"summary": "If rotation removed the install line, an extension-host restart bound no session and both window logs stopped forwarding silently.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-4",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "A checkpoint in a newer rotated file than the install line was rejected on restart, replaying delivered decisions.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-5",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "medium",
+			"summary": "Events tabd refused for its rate limit were dropped with their batch and checkpointed past, losing trusted decisions.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-6",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "Held denials held back AHP lifecycle lines, and deferrals went unsummarised.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-7",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "Retry semantics applied to reporters that never re-send, and the loss marker wasn't re-sent when deferred.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs supervisor: collector gates the REH"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-8",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "A deferred AHP opened was watched at once and again when re-sent, which could raise a false ahp.ungated.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs supervisor: collector gates the REH"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-9",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "A refill within one report could defer an AHP opened and accept its verified, and the re-sent opened raised a false ahp.ungated.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs hub: contiguous seq, rate limit summarised"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-10",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "While gate denials stayed deferred the forwarder stopped reading, so a verified on disk could miss its opened's timeout.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-11",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "The checkpoint moved only once the backlog cleared, so a restart replayed acknowledged events.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-12",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "Watching an AHP opened only once accepted let a rate-limited lifecycle lane delay ahp.ungated.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs supervisor: collector gates the REH"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-13",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "A checkpoint in a rotated-away file made a gate tail restart at the current file, silently skipping the rotated ones.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-14",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "The lifecycle tail's gap marker, charged to the denial bucket, could hold lifecycle lines back; its untimestamped lines went uncounted.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-15",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "Every launch logs to a new folder, so a previous launch's gate checkpoint made each new window report a spurious gap.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-16",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "Watching AHP lifecycle on first sight gained only one batch of lookahead while the lifecycle lane was deferred.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs supervisor: collector gates the REH"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-17",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "A deferred lifecycle gap marker lived only in memory and could be lost on restart.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-18",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "On upgrade the new lifecycle lane had no checkpoint, replaying acknowledged lines and skipping rotated ones.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-19",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "A lane with no checkpoint whose first batch was wholly deferred persisted nothing, losing the deferred events after rotation and restart.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-20",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "A tabd restart between a deferral and its re-send made the new supervisor skip watching a re-sent AHP opened.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs supervisor: collector gates the REH"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-21",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "With the gate's bucket drained by denials, the lifecycle tail's gap marker was dropped, leaving only a generic drop count.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs hub: contiguous seq, rate limit summarised"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-22",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "A gate tail with no usable checkpoint started at the current file, skipping this session's lines in rotated files.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-23",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "A poll ending inside an oversized line dropped the delivered checkpoint, so a restart replayed acknowledged events.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-24",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "An acknowledged batch was checkpointed only at the end of the round, so a restart mid-round replayed it.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-25",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "The gate's gap markers counted as denials towards ahp.deny-burst.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs detect: rpc.deny-burst from trusted filter denials only"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-26",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "Serial draining let an outstanding denial report hold up the lifecycle tail, so a verified could miss its opened's timeout.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-27",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "With the install line opening a file, the previous session's last RPC line was missed, so the gate grace could admit the previous tab's lines.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "CR10-28",
+			"round": "Round 15: code review of the window-log forwarder (CR10)",
+			"severity": "low",
+			"summary": "A checkpoint whose file was gone, with no log to open at bind, lost its gap marker once a log appeared.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "window decision logs (CR10): bytes not text"
+			},
+			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
 		}
 	]
 }

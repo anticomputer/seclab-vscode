@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 83 | 200 | 241 | 32 | 570 |
+| fixed | 14 | 83 | 202 | 267 | 32 | 598 |
 | fixed-untested | 0 | 5 | 52 | 151 | 61 | 269 |
 | accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 13 | 15 | 6 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 291 | 485 | 129 | 1013 |
+| **all** | 16 | 92 | 293 | 511 | 129 | 1041 |
 
 ## Baseline: open high and critical findings
 
@@ -976,6 +976,34 @@ Every other commit the register cites is on main's history, or on the branch its
 | R7E-1 | low | accepted-residual | Under sbx, VM root can poison brokerAddrs (/etc/hosts, a forged hello) and so hide egress-bypass detection to that address. | accepted by an agent: It gives root nothing new: the collector stream is all tab-vm-root, and sbx's network policy is what blocks egress. |
 | AR-1 | low | accepted-residual | tab-vm-root events, including collector heartbeats, are forgeable by root inside the tab VM and are evidence, never proof. | accepted by an agent: Integrity is fixed by source, tab-vm-root is labelled as such everywhere, and no decision is based on it alone. |
 | AR-2 | low | accepted-residual | Under OCI the privileged Falco sees every container on the Docker host; only rules for the exact tab container ids are loaded. | accepted by an agent: Only rules for the exact tab container ids are loaded and its only output is stdout to tabd. |
+| CR10-1 | low | fixed | The RPC filter's log-summary lines (verdict deny, count of suppressed decisions of every verdict) could raise a trusted rpc.deny-burst with nothing denied. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "obs detect: rpc.deny-burst from trusted filter denials only" |
+| CR10-2 | low | fixed | A UTF-8 character split across reads was decoded as replacement characters and skewed the checkpoint. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-3 | medium | fixed | If rotation removed the install line, an extension-host restart bound no session and both window logs stopped forwarding silently. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-4 | low | fixed | A checkpoint in a newer rotated file than the install line was rejected on restart, replaying delivered decisions. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-5 | medium | fixed | Events tabd refused for its rate limit were dropped with their batch and checkpointed past, losing trusted decisions. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-6 | low | fixed | Held denials held back AHP lifecycle lines, and deferrals went unsummarised. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-7 | low | fixed | Retry semantics applied to reporters that never re-send, and the loss marker wasn't re-sent when deferred. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "obs supervisor: collector gates the REH" |
+| CR10-8 | low | fixed | A deferred AHP opened was watched at once and again when re-sent, which could raise a false ahp.ungated. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "obs supervisor: collector gates the REH" |
+| CR10-9 | low | fixed | A refill within one report could defer an AHP opened and accept its verified, and the re-sent opened raised a false ahp.ungated. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "obs hub: contiguous seq, rate limit summarised" |
+| CR10-10 | low | fixed | While gate denials stayed deferred the forwarder stopped reading, so a verified on disk could miss its opened's timeout. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-11 | low | fixed | The checkpoint moved only once the backlog cleared, so a restart replayed acknowledged events. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-12 | low | fixed | Watching an AHP opened only once accepted let a rate-limited lifecycle lane delay ahp.ungated. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "obs supervisor: collector gates the REH" |
+| CR10-13 | low | fixed | A checkpoint in a rotated-away file made a gate tail restart at the current file, silently skipping the rotated ones. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-14 | low | fixed | The lifecycle tail's gap marker, charged to the denial bucket, could hold lifecycle lines back; its untimestamped lines went uncounted. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-15 | low | fixed | Every launch logs to a new folder, so a previous launch's gate checkpoint made each new window report a spurious gap. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-16 | low | fixed | Watching AHP lifecycle on first sight gained only one batch of lookahead while the lifecycle lane was deferred. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "obs supervisor: collector gates the REH" |
+| CR10-17 | low | fixed | A deferred lifecycle gap marker lived only in memory and could be lost on restart. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-18 | low | fixed | On upgrade the new lifecycle lane had no checkpoint, replaying acknowledged lines and skipping rotated ones. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-19 | low | fixed | A lane with no checkpoint whose first batch was wholly deferred persisted nothing, losing the deferred events after rotation and restart. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-20 | low | fixed | A tabd restart between a deferral and its re-send made the new supervisor skip watching a re-sent AHP opened. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "obs supervisor: collector gates the REH" |
+| CR10-21 | low | fixed | With the gate's bucket drained by denials, the lifecycle tail's gap marker was dropped, leaving only a generic drop count. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "obs hub: contiguous seq, rate limit summarised" |
+| CR10-22 | low | fixed | A gate tail with no usable checkpoint started at the current file, skipping this session's lines in rotated files. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-23 | low | fixed | A poll ending inside an oversized line dropped the delivered checkpoint, so a restart replayed acknowledged events. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-24 | low | fixed | An acknowledged batch was checkpointed only at the end of the round, so a restart mid-round replayed it. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-25 | low | fixed | The gate's gap markers counted as denials towards ahp.deny-burst. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "obs detect: rpc.deny-burst from trusted filter denials only" |
+| CR10-26 | low | fixed | Serial draining let an outstanding denial report hold up the lifecycle tail, so a verified could miss its opened's timeout. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-27 | low | fixed | With the install line opening a file, the previous session's last RPC line was missed, so the gate grace could admit the previous tab's lines. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
+| CR10-28 | low | fixed | A checkpoint whose file was gone, with no log to open at bind, lost its gap marker once a log appeared. | patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb · `tabd/test/obs.test.ts` "window decision logs (CR10): bytes not text" |
 
 ### [20261104-tabd-protocol-design](20261104-tabd-protocol-design.md)
 
