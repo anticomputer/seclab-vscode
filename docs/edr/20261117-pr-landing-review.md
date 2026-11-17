@@ -49,6 +49,10 @@ YAML escape.
   until the new review is in and handled.
 - The PR's author resolves its own threads, so the rule holds a session to answering each one,
   not to a particular answer. The reply is public and stays on the thread.
+- The required-checks validator forbids any workflow from granting `checks: write` or
+  `statuses: write`, because a step holding either could post a required context as GitHub
+  Actions itself. That rests on the repository's default workflow token staying read-only
+  ([CI hardening](20261104-ci-hardening.md)).
 - A PR still controls its own workflow files, so it can skip the jobs that run the required-checks
   validator (review thread on PR 7). That needs a control from outside the PR, an owner decision
   recorded separately.
