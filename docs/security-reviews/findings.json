@@ -17299,6 +17299,63 @@
 				"file": "docs/security-reviews/20261117-fetch-upstream-clean.md",
 				"quote": "desktop builds run on fresh Actions runners"
 			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-1",
+			"round": "Round CR25",
+			"severity": "medium",
+			"summary": "The checkout's own git config stayed in force, so a kept clean/smudge filter could make the tree differ from what status saw.",
+			"component": "build (fetch-upstream)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:487f76b0ca9b3a6fd687e02cba41dbb3d7fbceaf",
+			"test": {
+				"file": "build/fetch-upstream.test.ts",
+				"name": "fetch-upstream: the volume\\'s own config, attributes and hooks are not honoured (PR 25 review)"
+			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-2",
+			"round": "Round CR25",
+			"severity": "medium",
+			"summary": "A kept core.worktree could redirect the reset and the whole-tree clean elsewhere.",
+			"component": "build (fetch-upstream)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:487f76b0ca9b3a6fd687e02cba41dbb3d7fbceaf",
+			"test": {
+				"file": "build/fetch-upstream.test.ts",
+				"name": "fetch-upstream: a kept core.worktree can\\'t redirect the reset and clean (PR 25 review)"
+			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-3",
+			"round": "Round CR25",
+			"severity": "low",
+			"summary": "A per-build tag's grace ran from the cached image's creation time, so a fresh proof tag could be pruned.",
+			"component": "clean-host",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:9688a6cd493345884eb92efd8360f75819036dd6",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "should be ${want}"
+			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-4",
+			"round": "Round CR25",
+			"severity": "low",
+			"summary": "A bad SECLAB_TAB_IMAGE exited the containment run after it created resources and before their cleanup was registered.",
+			"component": "harness runners",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:df10a26c4325e739cf8ffc2e1027424ee9364ad6",
+			"gap": "Shown by hand with a bogus value refusing before any resource exists; the runners have no unit seam for their start-up order."
 		}
 	]
 }
