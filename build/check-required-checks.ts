@@ -133,7 +133,9 @@ export function permissionsProblems(files: Record<string, string>, writeOk: (f: 
 		for (let i = 0; i < lines.length; i++) {
 			const m = /^(\s*)(?:-\s+)?(["']?)permissions\2\s*:\s*(.*?)\s*(?:#.*)?$/.exec(lines[i]);
 			if (!m) {
-				if (/permissions/.test(lines[i]) && /:/.test(lines[i])) {
+				// Only where `permissions` could be a key: right before a colon, comments aside. A step
+				// named "Verify permissions" isn't one (Copilot review on PR 32).
+				if (/permissions["']?\s*:/.test(lines[i].replace(/(^|\s)#.*$/, ''))) {
 					bad(`line ${i + 1}: a permissions key it can't read`);
 				}
 				continue;
@@ -235,6 +237,8 @@ function selfTest(): void {
 		['CR-9 a quoted write in a flow map', { 'x.yml': "permissions: {'statuses': 'write'}\n" + wf('  a:\n    steps:\n      - run: x\n') }, /statuses: write/],
 		['CR-9 an unknown write scope', { 'x.yml': wf('  a:\n    permissions:\n      pull-requests: write\n    steps:\n      - run: x\n') }, /pull-requests: write/],
 		['an allowed write and a script escape', { 'x.yml': wf('  a:\n    permissions:\n      id-token: write\n      contents: read\n    steps:\n      - run: |\n          echo "a\\b"\n') }, null],
+		['a step named after permissions, and a comment', { 'x.yml': wf('  a:\n    steps:\n      - name: Verify permissions\n        run: x # permissions: are fine\n# permissions: here too\n') }, null],
+		['a permissions key inside a flow step', { 'x.yml': wf('  a:\n    steps:\n      - { name: x, permissions: {checks: write} }\n') }, /can't read/],
 		['checks: read is fine', { 'x.yml': wf('  a:\n    permissions:\n      checks: read\n    steps:\n      - run: x\n') }, null],
 		['control: the real four and an unrelated job', { 'x.yml': wf('  other:\n    name: other\n    steps:\n      - run: x\n') }, null],
 		['a decoy job named lint', { 'shadow.yml': wf('  a:\n    name: lint\n    steps:\n      - run: x\n') }, /reports the required context `lint`/],
@@ -261,7 +265,7 @@ function selfTest(): void {
 			throw new Error(`required-checks self-test "${name}": got ${JSON.stringify(got)}`);
 		}
 	}
-	console.log(`required-checks self-test: ${cases.length + 26} cases OK`);
+	console.log(`required-checks self-test: ${cases.length + 28} cases OK`);
 }
 
 if (import.meta.main) {
