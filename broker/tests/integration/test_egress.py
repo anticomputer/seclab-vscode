@@ -198,6 +198,10 @@ def test_adding_a_deny_rule_resolves_pending_prompts(pod, ctl):
     resolved = ctl.wait_note("approval.resolved", lambda p: p["approvalId"] == pending["approvalId"],
                              since=mark, timeout=10)
     assert resolved == {"approvalId": pending["approvalId"], "decision": "deny", "by": "deny-rule"}
+    # 12-5: the held request's denial is attributed to the block that resolved its prompt.
+    denied = ctl.wait_note("audit.event", lambda e: e["type"] == "request.denied"
+                           and e.get("path") == "/echo/held-deny", since=mark, timeout=10)
+    assert denied.get("ruleId") == "blk", denied.get("reason")
     for _ in range(20):
         code = pod.ws("cat /tmp/held-deny.code 2>/dev/null").stdout.decode()
         if code:

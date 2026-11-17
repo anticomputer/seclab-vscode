@@ -215,6 +215,29 @@ def test_allow_tab_adds_rule():
     asyncio.run(go())
 
 
+def test_12b_1_allow_tab_refused_at_the_rule_cap():
+    """12b-1: an allow-tab approval can't grow the allow list past MAX_ALLOW_RULES (the
+    policy must stay reloadable); the held request can still be answered allow-once."""
+    from seclab_broker.core import MAX_ALLOW_RULES
+
+    async def go():
+        b = Broker(tab_id="t1")
+        b.rpc_policy_load({"policy": {"version": 1, "prompt": {"timeoutSeconds": 5},
+                                      "allow": [{"host": f"h{i}.example.com"} for i in range(MAX_ALLOW_RULES)]}})
+        ev = []
+        b.add_sink(lambda m, p: ev.append((m, p)))
+        t = asyncio.create_task(b.ask_egress(rv()))
+        await asyncio.sleep(0.05)
+        aid = [p for m, p in ev if m == "approval.requested"][0]["approvalId"]
+        with pytest.raises(RpcError, match=f"already has {MAX_ALLOW_RULES} allow rules"):
+            b.rpc_approval_decide({"approvalId": aid, "decision": "allow-tab"})
+        assert len(b.policy.rules) == MAX_ALLOW_RULES
+        b.rpc_approval_decide({"approvalId": aid, "decision": "allow-once"})
+        assert (await t).allow
+        assert b.allowed(rv()) is None
+    asyncio.run(go())
+
+
 def test_deny_and_cooldown():
     async def go():
         b, ev = mk_broker(timeout=5, denyCooldownSeconds=60)
