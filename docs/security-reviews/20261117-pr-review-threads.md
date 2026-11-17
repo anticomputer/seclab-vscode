@@ -8,7 +8,7 @@
   lint (#14), the host-terminal proof harness (#20), and the reaper added for PRR-4 (#27).
 
 ## Verdict
-All eleven threads point at real gaps. Two are as stated. One wasn't as stated but hid a wider gap.
+All twelve threads point at real gaps, and fixing them turned up two more (PRR-13, PRR-14). Two are as stated. One wasn't as stated but hid a wider gap.
 Two were narrower than stated. None is exploitable on main; each is a gate or harness that
 could pass, or leave things behind, for the wrong reason.
 
@@ -25,6 +25,9 @@ could pass, or leave things behind, for the wrong reason.
 | PRR-9 | low | `lint_probes.py` `_regex_end` (#27) | The regex-or-division decision behind PRR-8 read the raw preceding character, so a regex after a comment, or as the statement after an `if (…)` condition, was still taken for division and its closing `//` hid the rest of the line | fixed |
 | PRR-10 | low | `check-probes.ts` runner waiver (#27) | The PRR-3 waiver removed the push probes' expectations but not their results; the payload records them on every full REH run, so the unreviewed-result check failed them as absent from expectations.json | fixed |
 | PRR-11 | low | `lint_probes.py` comment scanner (#27) | After PRR-9, placements the token heuristic still misjudged (`n++ / 2`, a regex statement after `break` and a newline, a `for await (…)` head) could turn the rest of a line into a comment hidden from the record rules. Telling regex from division needs a parser | fixed |
+| PRR-12 | low | `lint_probes.py` comment scanner (#27) | A misread `/` moves string boundaries too, without any comment: in `n++ / 2; s = '/'; …` the misread regex ends inside the string, and the code scanner then blanked a computed record key after it | fixed |
+| PRR-13 | low | `lint_probes.py` comment scanner (found fixing PRR-12) | A template ended at the backtick of a template nested in `${…}`, so the rest of a payload line was read with the wrong boundaries | fixed |
+| PRR-14 | low | `lint_probes.py` content rules (found fixing PRR-12) | The content rules chose code lines by their first characters, so a code line starting with `*` (a continued product) escaped every content rule | fixed |
 
 ## What changed
 - PRR-1: `MainThreadLogger.$log` joins the presence-pinned must-deny set. A
@@ -60,3 +63,12 @@ could pass, or leave things behind, for the wrong reason.
   code `/` on its line is reported as `ambiguous-slash`, and the payload rewrites the line. The
   real payloads have no such line. The three placements fail the full lint, and pass the
   previous scanner.
+- PRR-12: each code `/` reads as regex, division or unsure (postfix `++`/`--`, `}`, a
+  `for await (…)` head, a label, a contextual word such as `of` or `default`; never a property
+  name). An unsure `/` followed on its line by a `/`, quote or backtick is `ambiguous-slash`: only
+  those can move a boundary, and regex and quoted strings end at the line. This replaces
+  PRR-11's comment-only rule.
+- PRR-13: `${…}` substitutions are scanned as code, so nested templates keep their boundaries.
+  The PRR-12 rule flagged a real payload line because of this, before it was fixed.
+- PRR-14: code lines for the content rules come from the comment scanner.
+- Each has a `test_lint_probes.py` case that fails on the previous lint.
