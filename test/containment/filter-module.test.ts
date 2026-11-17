@@ -450,6 +450,17 @@ test('response: a tab snippet that reads the clipboard is refused (review RSC-1)
 	assert.equal(s.snippetAllowed(undefined as unknown as string), false);
 });
 
+test('response: a tab search provider\'s messages are untrusted, bounded text (review SRCH-2)', () => {
+	const s = F.seclabFromTab(AUTH, async () => undefined);
+	const out = s.searchMessages([{ text: '[run](command:workbench.action.terminal.newLocal)', type: 1, trusted: true }, { text: 'x'.repeat(5000), type: 7 }, { nope: 1 }, ...Array.from({ length: 20 }, () => ({ text: 'm', type: 2 }))]);
+	assert.equal(out.length, 8);
+	assert.ok(out.every((m: { trusted: unknown }) => m.trusted === false));
+	assert.equal(out[0].type, 1);
+	assert.equal(out[1].text.length, 1000);
+	assert.equal(out[1].type, 2);
+	assert.deepEqual(s.searchMessages(undefined), []);
+});
+
 test('response: a tab command becomes the token command', () => {
 	const s = F.seclabFromTab(AUTH, async () => undefined);
 	const c = s.command({ id: 'workbench.action.terminal.newLocal', title: 't', arguments: [1] });
@@ -564,6 +575,8 @@ if (!process.env.SECLAB_FILTER_SRC_DIR) {
 		['images are kept', ".replace(SECLAB_IMAGE_OPEN, '!\\\\[')", ".replace(SECLAB_IMAGE_OPEN, '![')"],
 		['HTML is kept', "? lt : '&lt;');", '? lt : lt);'],
 		['HTML is escaped with a backslash', "? lt : '&lt;');", "? lt : '\\\\<');"],
+		['tab search messages stay trusted', 'trusted: false as const', 'trusted: true as const'],
+		['tab search messages are unbounded', '.slice(0, 8).map(m =>', '.slice(0).map(m =>'],
 		['the clipboard snippet is allowed', 'return typeof insertText === \'string\' && !SECLAB_SNIPPET_CLIPBOARD.test(insertText);', 'return typeof insertText === \'string\';'],
 		['command links are kept', 'out += value.slice(last, m.index) + rewrite(m[1], query);', 'out += value.slice(last, end);'],
 		['the query stops at an apostrophe', ': /[\\s"<>\\]`]/.test(c)) {', ': /[\\s"\'<>\\]`]/.test(c)) {'],

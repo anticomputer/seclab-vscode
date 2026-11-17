@@ -179,13 +179,36 @@ const DEFECTS: Defect[] = [
 	},
 	{
 		name: 'a text match naming a host file', validator: 'tabTextMatches',
-		dangerous: [1, 1, [{ resource: { $mid: 1, scheme: 'file', path: '/seclab-canary/host-only-marker' } }]],
-		from: 'const r = checkTabUri(m.resource, ctx);', to: 'const r = undefined;',
+		dangerous: [1, 1, [{ resource: { $mid: 1, scheme: 'file', path: '/seclab-canary/host-only-marker' }, results: [{ previewText: 'x' }] }]],
+		from: 'const r = checkTabUri(item.resource, ctx);', to: 'const r = undefined;',
 	},
 	{
 		name: 'a text match result whose own uri is a host file', validator: 'tabTextMatches',
 		dangerous: [1, 1, [{ resource: { $mid: 1, scheme: 'vscode-remote', authority: TAB, path: '/w/a.ts' }, results: [{ uri: { $mid: 1, scheme: 'vscode-userdata', path: '/User/settings.json' }, previewText: 'x', rangeLocations: [] }] }]],
 		from: 'const u = checkTabUri(res.uri, ctx);', to: 'const u = undefined;',
+	},
+	{
+		// review SRCH-1(a): the consumer reads an item with results as a text match on its resource.
+		name: 'a file result carrying results on a host resource', validator: 'tabFileMatches',
+		dangerous: [1, 1, [{ ...tabUri(), results: [{ previewText: 'x' }], resource: { $mid: 1, scheme: 'file', path: '/seclab-canary/host-only-marker' } }]],
+		from: 'if (item.results || !onlyKeys(item, URI_KEYS)) {', to: 'if (false) {',
+	},
+	{
+		// review SRCH-1(b): without results the consumer revives the match object itself.
+		name: 'a text match without results', validator: 'tabTextMatches',
+		dangerous: [1, 1, [{ resource: tabUri() }]],
+		from: 'if (!Array.isArray(item.results) || item.results.length === 0 || item.results.length > MAX_TEXT_MATCHES) {', to: 'if (false) {',
+	},
+	{
+		name: 'a text match carrying URI fields beside its resource', validator: 'tabTextMatches',
+		dangerous: [1, 1, [{ resource: tabUri(), results: [{ previewText: 'x' }], scheme: 'file', path: '/seclab-canary/host-only-marker' }]],
+		from: 'if (!onlyKeys(item, TEXT_MATCH_KEYS)) {', to: 'if (false) {',
+	},
+	{
+		// review SRCH-4: untitled buffers aren't the tab's file system.
+		name: 'an untitled file result', validator: 'tabFileMatches',
+		dangerous: [1, 1, [{ $mid: 1, scheme: 'untitled', path: 'Untitled-1' }]],
+		from: 'const r = checkTabUri(item, ctx);', to: 'const r = undefined;',
 	},
 ];
 
@@ -203,6 +226,9 @@ test('tab providers and search: the legitimate shapes pass', () => {
 	no(shipped, 'tabSearchProvider', [3, 'vscode-userdata']);
 	ok(shipped, 'tabTextMatches', [1, 2, [{ resource: tabUri(), results: [{ previewText: 'x', rangeLocations: [] }, { uri: tabUri('/w/b.ts'), text: 'ctx', lineNumber: 1 }] }]]);
 	no(shipped, 'tabTextMatches', [1, 2, [{ resource: tabUri(), results: [{ previewText: 'x'.repeat(70 * 1024) }] }]]);
+	ok(shipped, 'tabFileMatches', [1, 2, [tabUri(), { ...tabUri('/w/b.ts'), fsPath: '/w/b.ts', _sep: 1, external: `vscode-remote://${TAB}/w/b.ts` }]]);
+	no(shipped, 'tabFileMatches', [1, 2, Array.from({ length: 10001 }, () => tabUri())]);
+	no(shipped, 'tabFileMatches', [1, 2, [{ ...tabUri(), authority: 'seclab+other' }]]);
 });
 
 test('an unknown validator name denies', () => {

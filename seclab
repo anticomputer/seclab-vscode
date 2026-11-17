@@ -1755,13 +1755,15 @@ case "${1:-help}" in
 			host-terminal) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/host-terminal.test.ts ;;
 			# Harnesses reap the previous run before wiping it, and tear down on SIGINT/SIGTERM.
 			harness-hygiene) docker run --rm --network none --tmpfs /scratch:exec -e SECLAB_SCRATCH=/scratch -e HOME=/scratch/home -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/harness-hygiene.test.ts ;;
+			# Patch 0051: a tab's search messages are untrusted, and the query sent to it carries no host editor.
+			search-responses) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/search-responses.test.ts ;;
 			# RPC filter: patches 0030/0031 never register upstream's push handlers in a tab window.
 			push-refusal) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/push-refusal.test.ts ;;
 			# RPC filter: the shipped decision-log line formatter always writes JSON that parses.
 			decision-line) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/decision-line.test.ts ;;
 			# Every pure RPC-filter suite, so adding one to CI is a single edit.
 			rpc-filter)
-				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators decision-line check-probes push-refusal filter-module chat-gate terminal-variables host-terminal harness-hygiene; do
+				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators decision-line check-probes push-refusal filter-module chat-gate terminal-variables host-terminal harness-hygiene search-responses; do
 					printf '\n=== %s\n' "$t"
 					"$0" test "$t" || exit 1
 				done ;;
