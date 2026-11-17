@@ -33,8 +33,6 @@
 0030-seclab-no-remote-cli-push-in-tabs.patch
 0031-seclab-no-variable-resolution-for-tab-pty-hosts.patch
 0032-seclab-partition-tab-extension-state.patch
-# 0033: what a tab returns to trusted UI goes through seclabFromTab (ADR response-side-control).
-0033-seclab-sanitise-tab-provider-results.patch
 # 0034: the window resolves no host variables in a tab's terminal launch config (review RFU-1).
 0034-seclab-no-host-variables-for-tab-terminals.patch
 # 0050: a tab window opens no host terminal (project owner decision 2026-11-16); after 0034,
