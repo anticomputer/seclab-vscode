@@ -570,10 +570,90 @@ const tabSearchProvider: SeclabValidator = (args) => {
 		?? (args[1] === 'vscode-remote' ? undefined : 'a tab serves search only for vscode-remote');
 };
 
+/** File results in one $handleFileMatch call, at most. */
+const MAX_FILE_MATCHES = 10000;
+/** The keys a serialised URI may carry (upstream `URI.toJSON`): nothing else rides along. */
+const URI_KEYS: ReadonlySet<string> = new Set(['$mid', 'scheme', 'authority', 'path', 'query', 'fragment', 'fsPath', '_sep', 'external']);
+const TEXT_MATCH_KEYS: ReadonlySet<string> = new Set(['resource', 'results']);
+
+function onlyKeys(o: Record<string, unknown>, allowed: ReadonlySet<string>): boolean {
+	return Object.keys(o).every(k => allowed.has(k));
+}
+
+/**
+ * One item of `$handleFileMatch` or `$handleTextMatch`, checked the way upstream's consumer
+ * (`RemoteSearchProvider.handleFindMatch`) reads it (review SRCH-1): an item with truthy
+ * `results` is a text match and its `resource` is used; any other item is revived as a URI
+ * itself. Each branch is checked on the field that branch uses, with no other keys, so no URI
+ * the filter didn't check reaches the search results. A file provider sends only URIs, and a
+ * text provider only text matches with results.
+ */
+function searchItem(item: unknown, ctx: SeclabValidatorContext, text: boolean): string | undefined {
+	if (!isPlainObject(item)) {
+		return 'a match is not an object';
+	}
+	if (!text) {
+		if (item.results || !onlyKeys(item, URI_KEYS)) {
+			return 'a file result is not a plain URI';
+		}
+		const r = checkTabUri(item, ctx);
+		return r ? `a file result: ${r}` : undefined;
+	}
+	if (!onlyKeys(item, TEXT_MATCH_KEYS)) {
+		return 'a text match carries unexpected fields';
+	}
+	if (!Array.isArray(item.results) || item.results.length === 0 || item.results.length > MAX_TEXT_MATCHES) {
+		return 'a text match\'s results are not a non-empty list';
+	}
+	const r = checkTabUri(item.resource, ctx);
+	if (r) {
+		return `a match resource: ${r}`;
+	}
+	for (const res of Array.isArray(item.results) ? item.results : []) {
+		if (!isPlainObject(res)) {
+			return 'a result is not an object';
+		}
+		if (res.uri !== undefined) {
+			const u = checkTabUri(res.uri, ctx);
+			if (u) {
+				return `a result uri: ${u}`;
+			}
+		}
+		for (const key of ['previewText', 'text'] as const) {
+			if (res[key] !== undefined && (typeof res[key] !== 'string' || (res[key] as string).length > MAX_PREVIEW)) {
+				return `a result's ${key} is not bounded text`;
+			}
+		}
+	}
+	return undefined;
+}
+
+/**
+ * `$handleFileMatch(handle, session, data)`. Every item a plain URI on this tab's own file system
+ * (canonical `vscode-remote` on its authority, so not `untitled:`: review SRCH-4): a result
+ * naming a host file would show and open in this window. Bounded in number.
+ */
+const tabFileMatches: SeclabValidator = (args, ctx) => {
+	const bad = arity(args, 3, 3) ?? handle(args[0], 'argument 0') ?? handle(args[1], 'argument 1');
+	if (bad) {
+		return bad;
+	}
+	if (!Array.isArray(args[2]) || args[2].length > MAX_FILE_MATCHES) {
+		return 'argument 2 is not a list of file results';
+	}
+	for (const item of args[2]) {
+		const r = searchItem(item, ctx, false);
+		if (r) {
+			return r;
+		}
+	}
+	return undefined;
+};
+
 /**
  * `$handleTextMatch(handle, session, data)`. Each match's `resource`, and the `uri` a result may
- * carry, must be this tab's own canonical resource: a result naming a host file would open it in
- * this window, and an opened document is synchronised to the tab. Previews are bounded text.
+ * carry, must be this tab's own canonical resource: a result naming a host file would show and
+ * open in this window. Previews are bounded text.
  */
 const tabTextMatches: SeclabValidator = (args, ctx) => {
 	const bad = arity(args, 3, 3) ?? handle(args[0], 'argument 0') ?? handle(args[1], 'argument 1');
@@ -585,34 +665,9 @@ const tabTextMatches: SeclabValidator = (args, ctx) => {
 		return 'argument 2 is not a list of matches';
 	}
 	for (const m of data) {
-		if (!isPlainObject(m)) {
-			return 'a match is not an object';
-		}
-		const r = checkTabUri(m.resource, ctx);
+		const r = searchItem(m, ctx, true);
 		if (r) {
-			return `a match resource: ${r}`;
-		}
-		if (m.results === undefined) {
-			continue;
-		}
-		if (!Array.isArray(m.results) || m.results.length > MAX_TEXT_MATCHES) {
-			return 'a match\'s results are not a list';
-		}
-		for (const res of m.results) {
-			if (!isPlainObject(res)) {
-				return 'a result is not an object';
-			}
-			if (res.uri !== undefined) {
-				const u = checkTabUri(res.uri, ctx);
-				if (u) {
-					return `a result uri: ${u}`;
-				}
-			}
-			for (const key of ['previewText', 'text'] as const) {
-				if (res[key] !== undefined && (typeof res[key] !== 'string' || (res[key] as string).length > MAX_PREVIEW)) {
-					return `a result's ${key} is not bounded text`;
-				}
-			}
+			return r;
 		}
 	}
 	return undefined;
@@ -636,6 +691,7 @@ export const SECLAB_VALIDATORS: ReadonlyMap<string, SeclabValidator> = new Map([
 	['tabHoverProvider', tabHoverProvider],
 	['tabCompletionProvider', tabCompletionProvider],
 	['tabSearchProvider', tabSearchProvider],
+	['tabFileMatches', tabFileMatches],
 	['tabTextMatches', tabTextMatches],
 ]);
 

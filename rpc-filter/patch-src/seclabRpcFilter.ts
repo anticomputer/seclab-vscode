@@ -1301,6 +1301,18 @@ export interface SeclabFromTab {
 	 * Object.prototype (PR review on #48).
 	 */
 	resolved<T extends object>(item: T, resolved: T): T;
+	/**
+	 * A tab search provider's completion messages (review SRCH-2): plain text, never trusted, so
+	 * a link in them runs no command and opens nothing. At most 8 messages of 1000 characters.
+	 */
+	searchMessages(messages: unknown): SeclabSearchMessage[];
+}
+
+/** A search completion message as the Search view renders it, untrusted. */
+export interface SeclabSearchMessage {
+	readonly text: string;
+	readonly type: number;
+	readonly trusted: false;
 }
 
 /**
@@ -1369,6 +1381,13 @@ export function seclabFromTab(
 				}
 			}
 			return item;
+		},
+		searchMessages(messages) {
+			if (!Array.isArray(messages)) {
+				return [];
+			}
+			return messages.filter((m): m is { text: string; type?: unknown } => !!m && typeof (m as { text?: unknown }).text === 'string')
+				.slice(0, 8).map(m => ({ text: m.text.slice(0, 1000), type: m.type === 1 ? 1 : 2, trusted: false as const }));
 		},
 		selector(selector) {
 			return selector

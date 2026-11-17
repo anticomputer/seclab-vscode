@@ -1,0 +1,90 @@
+diff -ruN a/src/vs/workbench/api/browser/mainThreadSearch.ts b/src/vs/workbench/api/browser/mainThreadSearch.ts
+--- a/src/vs/workbench/api/browser/mainThreadSearch.ts	2026-11-17 14:40:55
++++ b/src/vs/workbench/api/browser/mainThreadSearch.ts	2026-11-17 14:42:33
+@@ -9,12 +9,13 @@
+ import { IConfigurationService } from '../../../platform/configuration/common/configuration.js';
+ import { ITelemetryData, ITelemetryService } from '../../../platform/telemetry/common/telemetry.js';
+ import { extHostNamedCustomer, IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
+-import { IFileMatch, IFileQuery, IRawFileMatch2, ISearchComplete, ISearchCompleteStats, ISearchProgressItem, ISearchQuery, ISearchResultProvider, ISearchService, ITextQuery, QueryType, SearchProviderType } from '../../services/search/common/search.js';
++import { IFileMatch, IFileQuery, IRawFileMatch2, ISearchComplete, ISearchCompleteStats, ISearchProgressItem, ISearchQuery, ISearchResultProvider, ISearchService, ITextQuery, ITextSearchCompleteMessage, QueryType, SearchProviderType } from '../../services/search/common/search.js';
+ import { ExtHostContext, ExtHostSearchShape, MainContext, MainThreadSearchShape } from '../common/extHost.protocol.js';
+ import { revive } from '../../../base/common/marshalling.js';
+ import * as Constants from '../../contrib/search/common/constants.js';
+ import { IContextKeyService } from '../../../platform/contextkey/common/contextkey.js';
+ import { AISearchKeyword } from '../../services/search/common/searchExtTypes.js';
++import { seclabFromTab, type SeclabFromTab } from '../../services/extensions/common/seclabRpcFilter.js';
+ 
+ @extHostNamedCustomer(MainContext.MainThreadSearch)
+ export class MainThreadSearch implements MainThreadSearchShape {
+@@ -22,6 +23,7 @@
+ 	private readonly _proxy: ExtHostSearchShape;
+ 	private readonly _searchProvider = new Map<number, RemoteSearchProvider>();
+ 	private readonly _aiSearchProviderHandles = new Set<number>();
++	private readonly _seclab: { readonly fromTab: SeclabFromTab; readonly authority: string } | undefined;
+ 
+ 	constructor(
+ 		extHostContext: IExtHostContext,
+@@ -31,6 +33,10 @@
+ 		@IContextKeyService protected contextKeyService: IContextKeyService,
+ 	) {
+ 		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostSearch);
++		// seclab: what a tab's search provider returns reaches the Search view (review SRCH-2).
++		const seclabCommands = extHostContext.getProxy(ExtHostContext.ExtHostCommands);
++		const fromTab = seclabFromTab(extHostContext.remoteAuthority, (id, args) => seclabCommands.$executeContributedCommand(id, ...args));
++		this._seclab = fromTab ? { fromTab, authority: extHostContext.remoteAuthority ?? '' } : undefined;
+ 		this._proxy.$enableExtensionHostSearch();
+ 	}
+ 
+@@ -42,18 +48,18 @@
+ 	}
+ 
+ 	$registerTextSearchProvider(handle: number, scheme: string): void {
+-		this._searchProvider.set(handle, new RemoteSearchProvider(this._searchService, SearchProviderType.text, scheme, handle, this._proxy));
++		this._searchProvider.set(handle, new RemoteSearchProvider(this._searchService, SearchProviderType.text, scheme, handle, this._proxy, this._seclab));
+ 	}
+ 
+ 	$registerAITextSearchProvider(handle: number, scheme: string): void {
+ 		Constants.SearchContext.hasAIResultProvider.bindTo(this.contextKeyService).set(true);
+ 
+ 		this._aiSearchProviderHandles.add(handle);
+-		this._searchProvider.set(handle, new RemoteSearchProvider(this._searchService, SearchProviderType.aiText, scheme, handle, this._proxy));
++		this._searchProvider.set(handle, new RemoteSearchProvider(this._searchService, SearchProviderType.aiText, scheme, handle, this._proxy, this._seclab));
+ 	}
+ 
+ 	$registerFileSearchProvider(handle: number, scheme: string): void {
+-		this._searchProvider.set(handle, new RemoteSearchProvider(this._searchService, SearchProviderType.file, scheme, handle, this._proxy));
++		this._searchProvider.set(handle, new RemoteSearchProvider(this._searchService, SearchProviderType.file, scheme, handle, this._proxy, this._seclab));
+ 	}
+ 
+ 	$unregisterProvider(handle: number): void {
+@@ -143,7 +149,8 @@
+ 		type: SearchProviderType,
+ 		private readonly _scheme: string,
+ 		private readonly _handle: number,
+-		private readonly _proxy: ExtHostSearchShape
++		private readonly _proxy: ExtHostSearchShape,
++		private readonly _seclab?: { readonly fromTab: SeclabFromTab; readonly authority: string },
+ 	) {
+ 		this._registrations.add(searchService.registerSearchResultProvider(this._scheme, type, this));
+ 	}
+@@ -172,6 +179,11 @@
+ 			throw new Error('Empty folderQueries');
+ 		}
+ 
++		// seclab: a tab sees no open editor outside its own file system (review SRCH-3).
++		const seclab = this._seclab;
++		if (seclab && query.extraFileResources) {
++			query = { ...query, extraFileResources: query.extraFileResources.filter(r => r.scheme === 'vscode-remote' && r.authority.toLowerCase() === seclab.authority.toLowerCase()) };
++		}
+ 		const search = new SearchOperation(onProgress);
+ 		this._searches.set(search.id, search);
+ 
+@@ -179,7 +191,7 @@
+ 
+ 		return Promise.resolve(searchP).then((result: ISearchCompleteStats) => {
+ 			this._searches.delete(search.id);
+-			return { results: Array.from(search.matches.values()), aiKeywords: Array.from(search.keywords), stats: result.stats, limitHit: result.limitHit, messages: result.messages };
++			return { results: Array.from(search.matches.values()), aiKeywords: Array.from(search.keywords), stats: result.stats, limitHit: result.limitHit, messages: seclab ? seclab.fromTab.searchMessages(result.messages) as ITextSearchCompleteMessage[] : result.messages };
+ 		}, err => {
+ 			this._searches.delete(search.id);
+ 			return Promise.reject(err);

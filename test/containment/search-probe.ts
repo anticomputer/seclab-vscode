@@ -148,6 +148,7 @@ try {
 	await sleep(1000);
 	if (await inQuickInput()) {
 		await e.type(needle);
+		results.quickOpenTyped = await e.evaluate<boolean>(`(document.querySelector('.quick-input-widget input')?.value ?? '').endsWith(${JSON.stringify(needle)})`);
 		results.quickOpenFound = await waitFor(async () => await e.evaluate<boolean>(`[...document.querySelectorAll('.quick-input-widget .quick-input-list .monaco-list-row')].some(r => (r.getAttribute('aria-label') || r.textContent || '').includes(${JSON.stringify(needle)}))`).catch(() => false), 30_000);
 		await e.key('Escape');
 	}
@@ -159,6 +160,7 @@ try {
 	await sleep(1000);
 	if (await e.evaluate<boolean>(`document.activeElement === (${searchInput})`)) {
 		await e.type(token);
+		results.searchViewTyped = await e.evaluate<boolean>(`((${searchInput})?.value ?? '').includes(${JSON.stringify(token)})`);
 		results.searchViewFound = await waitFor(async () => await e.evaluate<boolean>(`[...document.querySelectorAll('.search-view .monaco-list-row')].some(r => (r.textContent || '').includes(${JSON.stringify(needle)}))`).catch(() => false), 30_000);
 	}
 } catch (err) {
@@ -175,10 +177,12 @@ const decisions = rpcDecisions(userData).map(d => d.detail ?? {});
 const registered = (method: string) => decisions.some(d => d.ref === `rpc:MainThreadSearch.${method}` && typeof d.verdict === 'string' && d.verdict.startsWith('allow'));
 results.fileProviderAllowed = registered('$registerFileSearchProvider');
 results.textProviderAllowed = registered('$registerTextSearchProvider');
+results.fileProviderDenied = decisions.some(d => d.ref === 'rpc:MainThreadSearch.$registerFileSearchProvider' && d.verdict === 'deny');
 fs.writeFileSync(path.join(base, 'facts.json'), JSON.stringify({ mode, ...results }, null, '\t'));
 console.log(JSON.stringify(results));
 c('control', results.explorerListed === true, 'positive control: the window lists the tab\'s workspace');
 c('control', results.probeRan === true, 'positive control: the probe extension ran in the tab and recorded its search');
+c('control', results.quickOpenTyped === true && results.searchViewTyped === true, 'positive control: both searches were typed into their inputs');
 if (mode === 'after') {
 	c('findFiles', results.findFilesReturned === true && Number(results.findFilesCount) === 1, 'after: findFiles in the tab returned the needle', `count ${results.findFilesCount}`);
 	c('findFiles', results.findFilesOwnAuthority === true, 'after: every findFiles result is in this tab\'s own workspace folder');
@@ -189,6 +193,6 @@ if (mode === 'after') {
 	c('findFiles', results.findFilesReturned !== true, 'before: findFiles in the tab never returned (provider registration denied)');
 	c('quickOpen', results.quickOpenFound !== true, 'before: Quick Open finds no needle');
 	c('searchView', results.searchViewFound !== true, 'before: the Search view finds no token');
-	c('policy', results.fileProviderAllowed !== true, 'before: the file search provider registration is not allowed');
+	c('policy', results.fileProviderAllowed !== true && results.fileProviderDenied === true, 'before: the decision log holds the file search provider registration denied');
 }
 process.exit(report(checks) ? 0 : 1);
