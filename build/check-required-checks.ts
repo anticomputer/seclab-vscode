@@ -49,11 +49,20 @@ export function problems(yml: string, context: string, job: string): string[] {
 			out.push(`${context}: \`on:\` is not indented as expected`);
 		}
 	}
-	// The job: present, named as the context, no job-level `if:`.
+	// The job: present once, named as the context, no job-level `if:`. A YAML key can be quoted
+	// (`"if": false`), escaped inside quotes (`"i\x66"`), duplicated, or merged in from an anchor
+	// (`<<: *defaults`), and Actions honours all of them (review on PR 7). So job-level lines are
+	// parsed fail-closed: a plain or simply quoted key, a sequence entry or a comment; anything
+	// else is unreadable and fails.
+	const jobKey = new RegExp(`^ {2}(["']?)${job.replace(/[^A-Za-z0-9_-]/g, '')}\\1\\s*:`);
+	const decls = lines.filter(l => jobKey.test(l)).length;
 	const start = lines.findIndex(l => l === `  ${job}:`);
 	if (start < 0 || !lines.slice(0, start).some(l => l === 'jobs:')) {
 		out.push(`${context}: job \`${job}\` not found under jobs:`);
 		return out;
+	}
+	if (decls !== 1) {
+		out.push(`${context}: job \`${job}\` is declared ${decls} times`);
 	}
 	const body: string[] = [];
 	for (const l of lines.slice(start + 1)) {
@@ -62,7 +71,22 @@ export function problems(yml: string, context: string, job: string): string[] {
 		}
 		body.push(l);
 	}
-	const keys = body.filter(l => /^ {4}[A-Za-z_-]+\s*:/.test(l)).map(l => /^ {4}([A-Za-z_-]+)/.exec(l)![1]);
+	const KEY = /^ {4}(?:(["'])([A-Za-z_][A-Za-z0-9_-]*)\1|([A-Za-z_][A-Za-z0-9_-]*))\s*:(?:\s|$)/;
+	const keys: string[] = [];
+	for (const l of body) {
+		if (!/^ {4}\S/.test(l) || /^ {4}#/.test(l) || /^ {4}- /.test(l)) {
+			continue;
+		}
+		const m = KEY.exec(l);
+		if (!m) {
+			out.push(`${context}: job \`${job}\` has a job-level line that isn't a plain key: ${JSON.stringify(l.trim().slice(0, 40))}`);
+			continue;
+		}
+		keys.push(m[2] ?? m[3]);
+		if (/:\s*[&*]/.test(l)) {
+			out.push(`${context}: job \`${job}\` uses a YAML anchor or alias at job level`);
+		}
+	}
 	if (keys.includes('if')) {
 		out.push(`${context}: job \`${job}\` has a job-level if:, and a skipped job passes a required check`);
 	}
@@ -85,6 +109,13 @@ function selfTest(): void {
 		['job renamed', good.replace('    name: unit\n', '    name: unit-x\n'), /must be named/],
 		['job removed', 'on:\n  push:\n  pull_request:\njobs:\n  other:\n    name: unit\n', /not found/],
 		['a step-level if is fine', good.replace('      - run: x\n', '      - run: x\n        if: always()\n'), null],
+		['a double-quoted if key', good.replace('    name: unit\n', '    name: unit\n    "if": false\n'), /job-level if/],
+		['a single-quoted if key', good.replace('    name: unit\n', "    name: unit\n    'if': false\n"), /job-level if/],
+		['an escaped quoted key', good.replace('    name: unit\n', '    name: unit\n    "i\\x66": false\n'), /isn't a plain key/],
+		['a merge key', good.replace('    name: unit\n', '    name: unit\n    <<: *skip\n'), /isn't a plain key/],
+		['an alias as a property value', good.replace('    runs-on: x\n', '    runs-on: x\n    strategy: *s\n'), /anchor or alias/],
+		['the job declared twice', good + '  "unit":\n    name: unit\n    if: false\n', /declared 2 times/],
+		['a flow-style job', good.replace('  unit:\n    name: unit\n    runs-on: x\n    steps:\n      - run: x\n', '  unit: {name: unit, if: false}\n'), /not found|declared/],
 	];
 	for (const [name, yml, want] of cases) {
 		const got = problems(yml, 'unit', 'unit');
