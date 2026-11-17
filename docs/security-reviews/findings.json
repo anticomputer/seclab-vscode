@@ -368,8 +368,13 @@
 			"summary": "Window-to-tab push: the editor-tab model still exposes host URIs and labels to a tab's extension host.",
 			"component": "window→tab pushes (editor tabs)",
 			"owner": "docsync",
-			"status": "open",
-			"gap": "No push-side control for the editor-tab model; reported to the coordinator as a 0035 sibling.",
+			"status": "fixed",
+			"commit": "patch:dab3fe81132fb1c9cc2ead24b9d3c6885b93540e",
+			"test": {
+				"file": "test/edtabs/probe.ts",
+				"name": "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary)"
+			},
+			"note": "Closed by patch 0038 (docs/edr/20261116-editor-tab-provenance.md): host-side editors reach a tab's host as an opaque id, an unknown input and the label Editor. The probe fails on main 6589051b and passes 4 of 4 on the patched build (2026-11-16).",
 			"ref": {
 				"file": "docs/RPC-LOCKDOWN.md",
 				"quote": "the editor-tab model (host URIs and labels);"
@@ -13939,7 +13944,7 @@
 			"severity": "medium",
 			"summary": "Webview subclasses that show files (media preview, custom-editor diffs) were exempt from the ownership rule, so a host file path reached the tab.",
 			"status": "fixed",
-			"commit": "1ad537ee",
+			"commit": "patch:51b6187248504a8445988543b599f94779258e01",
 			"test": {
 				"file": "test/edtabs/probe.ts",
 				"name": "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary)"
@@ -13954,7 +13959,7 @@
 			"severity": "low",
 			"summary": "A host-created untitled editor counted as the tab's own, so its first line reached the tab as a label.",
 			"status": "fixed-untested",
-			"commit": "1ad537ee",
+			"commit": "patch:51b6187248504a8445988543b599f94779258e01",
 			"gap": "No runtime case opens a host-created untitled document with content; the rule is 0035's untitled predicate."
 		},
 		{
@@ -13966,7 +13971,7 @@
 			"severity": "low",
 			"summary": "A filesystem provider registered later by the tab could claim host editors already open in its scheme (latent under the RPC filter).",
 			"status": "fixed-untested",
-			"commit": "1ad537ee",
+			"commit": "patch:51b6187248504a8445988543b599f94779258e01",
 			"gap": "Not reachable at run time today: the RPC filter refuses a tab's provider registration."
 		},
 		{
@@ -13978,7 +13983,7 @@
 			"severity": "info",
 			"summary": "The edtabs probe could pass without the host editors reaching the tab's model.",
 			"status": "fixed",
-			"commit": "1ad537ee",
+			"commit": "patch:51b6187248504a8445988543b599f94779258e01",
 			"test": {
 				"file": "test/edtabs/probe.ts",
 				"name": "control: the host editors reached the tab"
