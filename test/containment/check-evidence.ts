@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
 import { beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, ensureVsceImage, lockRun, tabImageProblem, VSCE_IMAGE } from '../harness.ts';
-import { brokerProxy, checkEvidence, hostRunChecks, levelBVectors, markFilteredLosses, readEvidence, report, rpcDecisions, unattributedMarkers, type Check } from './assert.ts';
+import { armingDigest, brokerProxy, checkEvidence, hostRunChecks, levelBVectors, markFilteredLosses, readEvidence, report, rpcDecisions, unattributedMarkers, type Check } from './assert.ts';
 import { materialiseFixture, readManifest, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 import { partitionFindings, seedTabManagerState, stateItems } from './state-db.ts';
 
@@ -104,6 +104,13 @@ if (mode === 'prepare') {
 	fs.writeFileSync(path.join(base, '.seclab-probe-nonce'), arm);
 	fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `canary=${canary}\nmarker=${marker}\nloopback=${port}\narm=${arm}\nrun=${base}\nuntil=${until}\nuserdata=${userData}\n`
 		+ (canaryClipboard ? `clipboard=${CANARY_CLIPBOARD}\n` : ''));
+	// The trusted probe route's own arming window (FXF-13), next to its nonce.
+	fs.writeFileSync(path.join(base, '.seclab-probe-until'), String(until));
+	// What a host-side run would read or execute, as prepared (FXF-12): every fixture file plus
+	// the targets. Checked byte for byte after the run.
+	const fixtureFiles = (fs.readdirSync(path.join(import.meta.dirname, 'fixtures', 'malicious-workspace'), { recursive: true }) as string[])
+		.filter(r => fs.statSync(path.join(import.meta.dirname, 'fixtures', 'malicious-workspace', r)).isFile());
+	fs.writeFileSync(path.join(base, 'arming.json'), JSON.stringify(armingDigest(ws, [...fixtureFiles, '.seclab/targets'])));
 	writeSnapshot(base);
 	// What this run owns, for teardown.ts: the editor and its tabd are found by the unique
 	// user-data-dir (never by program name), the tab by id.
@@ -252,7 +259,12 @@ if (mode === 'prepare') {
 	for (const vector of vectors) {
 		checks.push(...checkEvidence(readEvidence(ws, vector, readInTab), vector, { marker, expectHostname, proxy: brokerProxy(driver) }));
 	}
-	checks.push(...hostRunChecks(driver, ws, marker, vectors));
+	let arming: Record<string, string | null> | undefined;
+	try {
+		const a = JSON.parse(fs.readFileSync(path.join(base, 'arming.json'), 'utf8')) as unknown;
+		arming = a && typeof a === 'object' && !Array.isArray(a) && Object.values(a).every(v => v === null || (typeof v === 'string' && /^[0-9a-f]{64}$/.test(v))) ? a as Record<string, string | null> : undefined;
+	} catch { /* a failing check */ }
+	checks.push(...hostRunChecks(driver, ws, vectors, arming));
 	if (driver !== 'sbx') {
 		checks.push({ vector: 'fsmonitor', name: 'ran (armed in the tab)', ok: false, detail: 'not armed on OCI',
 			knownGap: 'an OCI tab writes .git/config straight to the host checkout (no write-back gate, docs/adr/20261104-write-back-gate.md); Level A covers fsmonitor on OCI' });
