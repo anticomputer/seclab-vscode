@@ -62,7 +62,10 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 }, null, '\t'));
 fs.writeFileSync(path.join(userData, 'User', 'keybindings.json'), '[]\n');
 const until = Math.floor(Date.now() / 1000) + 2 * 3600;
-fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${randomBytes(16).toString('hex')}\nrun=${base}\nuntil=${until}\n`);
+// The harness keeps its own arm; once the tab runs it writes into the tab's workspace only through
+// the tab (sbx exec), never from the host, where a tab symlink could redirect it (as review SQ-4/SQ-5).
+const arm = randomBytes(16).toString('hex');
+fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\nuntil=${until}\n`);
 
 // Setup failures still end in the teardown gate (PR #24 review, EDT-12): nothing below may skip it.
 let installed = false;
@@ -143,7 +146,7 @@ if (installed) {
 		console.error(`drive: ${String(e).slice(0, 300)}`);
 	}
 }
-fs.writeFileSync(path.join(ws, '.seclab', 'stop'), '');
+inTab(['touch', path.join(ws, '.seclab', 'stop')]);
 let rep: any = read();
 for (let i = 0; i < 30 && tabId() && rep?.done !== true; i++) {
 	spawnSync('sleep', ['1']);
@@ -151,11 +154,10 @@ for (let i = 0; i < 30 && tabId() && rep?.done !== true; i++) {
 }
 await ed?.close().catch(() => undefined);
 
-const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').match(/^arm=([0-9a-f]{32})$/m) ?? [])[1];
 const mainLogs = (d: string): string[] => fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? mainLogs(path.join(d, e.name)) : e.name === 'main.log' ? [path.join(d, e.name)] : []) : [];
 const refusedEnter = mainLogs(path.join(userData, 'logs')).some(f => fs.readFileSync(f, 'utf8').includes('[seclab] a window does not enter a workspace'));
 const counts = (o: unknown) => !!o && typeof o === 'object' && Object.entries(o as object).every(([k, v]) => /^(folder|config):[a-z0-9.+-]{1,40}$/.test(k) && Number.isInteger(v));
-const valid = !!rep && rep.schema === 'seclab-wsdata-report/1' && rep.arm === armed && typeof rep.done === 'boolean' && Number.isInteger(rep.maxFolders) && Number.isInteger(rep.activations)
+const valid = !!rep && rep.schema === 'seclab-wsdata-report/1' && rep.arm === arm && typeof rep.done === 'boolean' && Number.isInteger(rep.maxFolders) && Number.isInteger(rep.activations)
 	&& counts(rep.schemes) && Array.isArray(rep.tokens) && rep.tokens.length <= 5000
 	&& rep.tokens.every((x: any) => !!x && ['folder', 'folderName', 'name', 'config'].includes(x.field) && /^[0-9a-f]{64}$/.test(x.sha256));
 // Not the login name: the tab's own folder is a host path under the user's home (sbx mounts it
