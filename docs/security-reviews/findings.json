@@ -509,8 +509,13 @@
 			"summary": "Window-to-tab push: workspace data is still pushed to a tab's extension host.",
 			"component": "window→tab pushes (workspace data)",
 			"owner": "docsync",
-			"status": "open",
-			"gap": "No push-side control for workspace data; reported to the coordinator as a 0035 sibling.",
+			"status": "fixed",
+			"commit": "8ce6cc70",
+			"test": {
+				"file": "test/wsdata/probe.ts",
+				"name": "DOCSYNC-R6 the main process refused to turn the tab window into a workspace (patch 0041, main log)"
+			},
+			"note": "Closed by patch 0041 (coordinator, 2026-11-16; docs/edr/20261116-workspace-data.md): no window enters a workspace, so a tab window's workspace data names only the tab's folder. Also tested by test/driver/cli-open.ts (local folders and workspace files opened from the command line never load in a window).",
 			"ref": {
 				"file": "docs/RPC-LOCKDOWN.md",
 				"quote": "workspace data;"
