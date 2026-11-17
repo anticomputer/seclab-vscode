@@ -24,13 +24,26 @@ lychee (`./seclab docs check --online`):
 - no longer accepts 429. A link still answering 429, 503 or another error after the retries fails;
 - never caches a 403 (GitHub's secondary rate limit), 429 or 5xx result, so a throttled answer
   isn't replayed as the link's state. The CI cache key is versioned (`lychee-v2-`), dropping
-  entries an earlier run cached when 429 was accepted.
+  entries an earlier run cached when 429 was accepted;
+- checks a blob permalink (`github.com/<owner>/<repo>/blob/<ref>/<path>`) at
+  `raw.githubusercontent.com/<owner>/<repo>/<ref>/<path>`, the same file at the same commit. The
+  first CI run with retries alone still failed: GitHub answered 238 of about 700 unique blob
+  permalinks with 503 through all five retries, and every error was a blob page. A missing file,
+  path or commit is a 404 at raw too, so a dead permalink still fails. Line anchors were never
+  checked, at either host. lychee remaps before it excludes, so this repo's own links are excluded
+  under both hosts.
 
 ## Proof
 On main's tree the online check passed with no errors (2432 links, from a warm local cache). With one dead permalink
 injected (a file that doesn't exist at the pinned upstream commit), it failed with a 404 for that
 link.
 
+With the raw remap, from an empty cache: 2438 links, 0 errors, the same 13 excluded as before.
+Injected dead permalinks failed with 404 at raw: a missing file at the pinned upstream commit,
+and an existing path at a commit that doesn't exist.
+
 ## Consequences
+- A blob permalink to a private repository fails at raw as it would at github.com (no
+  credentials ever reach lychee).
 - The online check is slower when GitHub pushes back, and stays red when GitHub throttles beyond
   the retries. A persistent 429 is now a failure, where it used to pass silently.
