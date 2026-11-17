@@ -17371,6 +17371,36 @@
 				"file": "test/clean-host.ts",
 				"name": "imageLease threw"
 			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-6",
+			"round": "Round CR25 (second review)",
+			"severity": "low",
+			"summary": "A linked .git/config was truncated outside the destination by the config rewrite.",
+			"component": "build (fetch-upstream)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:4b72119f6c072b7e795581cceef913f32fced684",
+			"test": {
+				"file": "build/fetch-upstream.test.ts",
+				"name": "fetch-upstream: a linked .git/config or .git/info reaches nothing outside DEST (PR 25 review)"
+			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-7",
+			"round": "Round CR25 (second review)",
+			"severity": "low",
+			"summary": "A symlinked .git/info made the clean-up delete files in its target.",
+			"component": "build (fetch-upstream)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:4b72119f6c072b7e795581cceef913f32fced684",
+			"test": {
+				"file": "build/fetch-upstream.test.ts",
+				"name": "fetch-upstream: a linked .git/config or .git/info reaches nothing outside DEST (PR 25 review)"
+			}
 		}
 	]
 }

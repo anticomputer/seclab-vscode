@@ -24,5 +24,7 @@ Copilot reviewed the fixes again on the next push.
 | # | Sev | Area | Finding | Disposition | Fix |
 |---|---|---|---|---|---|
 | CR25-5 | Low | clean-host | The CR25-3 lease reader called `repoRoot`, a constant, as a function. Any clean-host run that met a `b-` tag threw, including the superseded-images pass after a build. The self-test only exercised the pure age rule. | Fixed | Uses the constant, and the self-test calls the reader itself, which fails on the old code. |
+| CR25-6 | Low | fetch-upstream | A `.git/config` symlinked or hard-linked outside the destination was truncated by the config rewrite. | Fixed | Unlinked before writing; any symlink under `.git` is refused. |
+| CR25-7 | Low | fetch-upstream | A symlinked `.git/info` made the clean-up delete files in its target. | Fixed | Any symlink under `.git` is refused, and `info/` is removed whole. |
 
 No prompt-injection text was found in the review comments.

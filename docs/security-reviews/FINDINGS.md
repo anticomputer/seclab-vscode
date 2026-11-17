@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 215 | 344 | 45 | 702 |
+| fixed | 14 | 84 | 215 | 346 | 45 | 704 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 53 | 170 | 60 | 288 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 20 | 20 |
-| **all** | 16 | 93 | 306 | 607 | 157 | 1179 |
+| **all** | 16 | 93 | 306 | 609 | 157 | 1181 |
 
 ## Baseline: open high and critical findings
 
@@ -2089,6 +2089,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR25-3 | low | fixed | A per-build tag's grace ran from the cached image's creation time, so a fresh proof tag could be pruned. | patch:9688a6cd493345884eb92efd8360f75819036dd6 · `test/clean-host.ts` "should be ${want}" |
 | CR25-4 | low | fixed-untested | A bad SECLAB_TAB_IMAGE exited the containment run after it created resources and before their cleanup was registered. | Shown by hand with a bogus value refusing before any resource exists; the runners have no unit seam for their start-up order. |
 | CR25-5 | low | fixed | The CR25-3 lease reader called a constant as a function, so clean-host threw on any b- tag. | patch:96c9326cd794e5f47a2bb9748ce2e3bc48c04bef · `test/clean-host.ts` "imageLease threw" |
+| CR25-6 | low | fixed | A linked .git/config was truncated outside the destination by the config rewrite. | patch:4b72119f6c072b7e795581cceef913f32fced684 · `build/fetch-upstream.test.ts` "fetch-upstream: a linked .git/config or .git/info reaches nothing outside DEST (PR 25 review)" |
+| CR25-7 | low | fixed | A symlinked .git/info made the clean-up delete files in its target. | patch:4b72119f6c072b7e795581cceef913f32fced684 · `build/fetch-upstream.test.ts` "fetch-upstream: a linked .git/config or .git/info reaches nothing outside DEST (PR 25 review)" |
 
 ### [20261117-fetch-upstream-clean](20261117-fetch-upstream-clean.md)
 
