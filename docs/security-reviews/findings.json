@@ -19475,7 +19475,7 @@
 			"component": "patch 0018 chat session gate",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:7322472cf8456936db7619a977e86ff351699e1a",
+			"commit": "patch:14e94a46c50ca50e6bb6da1e2cea0f0041bc06af",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "the patch gates the queued path, which never reaches the dispatch function"
@@ -19488,9 +19488,13 @@
 			"summary": "The agent a request is dispatched to is chosen from the caller, an participant mention in the request text or participant detection, none of which are constrained by the gated session resource",
 			"component": "chat agent selection in a tab window",
 			"owner": "agentic",
-			"status": "open",
-			"note": "Deferred to increment 4 (patch 0019), whose subject is which agent-host providers may exist in a tab window. Fixing it inside 0018 would mean guessing at the registration set rather than constraining it, and increment 3 does not claim the property this premise would be needed for.",
-			"gap": "Nothing constrains the agent id a request is dispatched to, so patch 0018's property rests on the unpinned premise that every agent implementation registered in a tab window belongs to that window's own gated connection. Closing it needs the registration set itself constrained, which is increment 4 (patch 0019), plus an upstream invariant pinning the agent-selection path and a runtime probe that dispatches a gate-passing session at a different agent and shows it refused."
+			"status": "fixed",
+			"note": "closed by patch 0019 rather than inside 0018: IChatAgentData carries an extension id and no connection, so there is no comparison the chat gate could make. 0019 removes the only site that registers an agent for another connection, so the premise holds by construction. Proved by ./seclab test agent-registration, whose baseline arm on pristine upstream reports vulnerable.",
+			"commit": "patch:da87e959bc594f3542ec2bf76b31b5352e8bbd14",
+			"test": {
+				"file": "test/agentic/ahp/agent-registration-probe.ts",
+				"name": "forged-agent-id"
+			}
 		},
 		{
 			"record": "20261106-agentic-ahp-gate.md",
@@ -19500,7 +19504,7 @@
 			"component": "patch 0015 window gate log",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:7322472cf8456936db7619a977e86ff351699e1a",
+			"commit": "patch:14e94a46c50ca50e6bb6da1e2cea0f0041bc06af",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "the gate log counts per rule, so one rule cannot crowd out the refusals of another"
@@ -19514,7 +19518,7 @@
 			"component": "upstream invariants for patch 0018",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:7322472cf8456936db7619a977e86ff351699e1a",
+			"commit": "patch:14e94a46c50ca50e6bb6da1e2cea0f0041bc06af",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "the upstream facts patch 0018 depends on are pinned, each to the file that states them"
