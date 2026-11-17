@@ -468,10 +468,13 @@
 			"summary": "verify-images.sh failed open: a failing register reader gave an empty loop and exit 0, and build.sh then built unverified.",
 			"component": "broker image attestation gate",
 			"owner": "broker",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "f84bc5c",
-			"gap": "The list-first, count-equality and malformed-entry failures in broker/tools/verify-images.sh have no automated negative test; the record cites manual EDR evidence only.",
-			"note": "Fix verified in code: the list is produced and validated before the loop, and `ok` requires done_n == expected and > 0."
+			"test": {
+				"file": "broker/tests/verify-images/run.sh",
+				"name": "the register reader fails (not JSON): no empty pass"
+			},
+			"note": "broker/tests/verify-images/run.sh (7d62805e, run in ci-unit) drives verify-images.sh with a fake gh: one exact-arguments pass and seven fail-closed cases, including an empty register, no attested image and one image failing verification."
 		},
 		{
 			"record": "20261104-broker-dependency-provenance.md",
@@ -496,9 +499,13 @@
 			"summary": "Attestation verification re-downloaded the file PyPI named, so nothing bound the verified bytes to the pinned hash or the registered workflow.",
 			"component": "broker provenance gate",
 			"owner": "broker",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "f84bc5c",
-			"gap": "No test asserts a wrong digest, workflow or repository raises VerificationError; the record cites manual EDR evidence. Fix is in code (Distribution(name, digest=...) plus a GitHubPublisher policy from the register)."
+			"test": {
+				"file": "broker/tests/provenance/test_verify_binding.py",
+				"name": "provenance #5: a digest other than the pinned one is refused"
+			},
+			"note": "broker/tests/provenance/run.sh (7d62805e, run in ci-unit) verifies offline in the attest image: the pinned digest passes, and another digest, repository or workflow, a non-GitHub publisher and a provenance with no attestations are each refused."
 		},
 		{
 			"record": "20261104-broker-dependency-provenance.md",
@@ -6276,9 +6283,13 @@
 			"summary": "build.sh labelled the image from the working tree, not the snapshot, so assume-unchanged/skip-worktree edits produced a clean label on a different build.",
 			"component": "broker image identity (build.sh)",
 			"owner": "broker",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "7ae3eb3",
-			"gap": "build.sh takes the snapshot first and marks `-dirty` on any `git ls-files -v` entry that isn't `H`, but the evidence is manual clone probes; nothing in CI re-runs them."
+			"test": {
+				"file": "broker/tests/snapshot/probes.sh",
+				"name": "label_case \"$sh\" assume-unchanged"
+			},
+			"note": "The label probes in broker/tests/snapshot/probes.sh (7d62805e, run in ci-unit) run `build.sh --label` on clones: clean and outside-broker edits stay clean; modified, untracked, assume-unchanged and skip-worktree are -dirty."
 		},
 		{
 			"record": "20261105-broker-repin-and-image-snapshot.md",
@@ -11994,8 +12005,13 @@
 			"summary": "--run-commands passes on an empty script when a doc lost its ci: run blocks",
 			"component": "broker/tools/docs.py commands",
 			"owner": "broker",
-			"status": "fixed-untested",
-			"gap": "Fixed on main (d1153f2): broker/tools/docs.py commands_self_test injects a missing doc and zero blocks, run by broker/docs-check.sh. Its cases are unnamed, outside a function the register recognises as a self-test, so no case can be cited."
+			"status": "fixed",
+			"commit": "d1153f2",
+			"test": {
+				"file": "broker/tools/docs.py",
+				"name": "GATE-9: checked docs with no ci: run block fail"
+			},
+			"note": "The self-test is now `self_test` in broker/tools/docs.py with named cases (7d62805e), run by broker/docs-check.sh."
 		},
 		{
 			"record": "20261112-gate-fail-open-audit.md",
