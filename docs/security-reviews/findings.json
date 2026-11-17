@@ -265,7 +265,7 @@
 				"quote": "**Responses are filtered at the customer, one surface at a time.**"
 			},
 			"note": "Patch 0033 and seclabFromTab (ADR 20261116-response-side-control): commands, command: links and markdown from tab data go through the filter; remote images and HTML are dropped. Hover and completion are wired; check_drift.py::check_responses refuses any other reachable registration until its customer is wired. Pre-control and control runs in the ADR.",
-			"commit": "patch:413654738ff99ecabefe2db12e88562f0e8e86de",
+			"commit": "patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11",
 			"test": {
 				"file": "test/containment/filter-module.test.ts",
 				"name": "response: a denied command runs in the tab, never on the trusted side, and is logged when the tab lacks it"
