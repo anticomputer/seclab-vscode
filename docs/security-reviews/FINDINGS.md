@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 83 | 200 | 237 | 32 | 566 |
+| fixed | 14 | 83 | 200 | 238 | 32 | 567 |
 | fixed-untested | 0 | 5 | 52 | 151 | 61 | 269 |
 | accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 13 | 15 | 6 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 291 | 481 | 129 | 1009 |
+| **all** | 16 | 92 | 291 | 482 | 129 | 1010 |
 
 ## Baseline: open high and critical findings
 
@@ -1959,6 +1959,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | BRK20C-1 | low | fixed | The HH-1 check's token patterns were case-sensitive while Actions resolves contexts case-insensitively, so SECRETS.X or GitHub.Token in another step passed. | patch:46c41e286bafc60901f8f92eae72b33d5cabee13 · `broker/tools/token_steps.py` "BRK20C-1: an upper-case SECRETS context in a later step fails" |
 | BRK20C-2 | info | fixed | BRK20R-1's cited $GITHUB_ENV case passed with the hand-off rule removed, because another rule caught its trailing line. | patch:46c41e286bafc60901f8f92eae72b33d5cabee13 · `broker/tools/token_steps.py` "BRK20R-1: the download step writing the token to $GITHUB_ENV fails" |
 | BRK20C-3 | info | fixed | No HH-1 self-test case failed with only the secrets: key rule removed, and the secrets: inherit fixture no longer named a reusable workflow. | patch:46c41e286bafc60901f8f92eae72b33d5cabee13 · `broker/tools/token_steps.py` "BRK20-2: secrets: inherit to a reusable workflow fails" |
+| BRK20D-1 | low | fixed | The HH-1 check accepted a later step handing on the whole github context (toJSON(github), github.*, a computed index), which carries the token. | patch:6081ee96c70537cd3d4ca50f2fa6408979358bb9 · `broker/tools/token_steps.py` "BRK20D-1: toJSON(github) in a later step fails" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

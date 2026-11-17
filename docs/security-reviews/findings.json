@@ -14861,6 +14861,22 @@
 				"name": "BRK20-2: secrets: inherit to a reusable workflow fails"
 			},
 			"note": "Every case now names its own rule's message; removing any one rule fails at least one case."
+		},
+		{
+			"record": "20261117-broker-finding-tests-2.md",
+			"anchor": "BRK20D-1",
+			"round": "Copilot code review on the round 20 pull request",
+			"severity": "low",
+			"summary": "The HH-1 check accepted a later step handing on the whole github context (toJSON(github), github.*, a computed index), which carries the token.",
+			"component": "broker HH-1 check (token_steps.py)",
+			"owner": "broker",
+			"status": "fixed",
+			"commit": "patch:6081ee96c70537cd3d4ca50f2fa6408979358bb9",
+			"test": {
+				"file": "broker/tools/token_steps.py",
+				"name": "BRK20D-1: toJSON(github) in a later step fails"
+			},
+			"note": "Expressions are now found quote-aware, so a '}}' inside a string can't end one early."
 		}
 	]
 }
