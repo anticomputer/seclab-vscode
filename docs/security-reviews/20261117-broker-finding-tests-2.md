@@ -68,3 +68,11 @@ built. It raised three more points:
 | BRK20C-1 | Low | HH-1 check | The token patterns were case-sensitive, but Actions resolves contexts and properties case-insensitively, so `${{ SECRETS.MY_KEY }}` or `${{ GitHub.Token }}` in another step passed. | fixed | Both token patterns match case-insensitively. The `secrets:` key rule stays exact: Actions rejects a differently cased key. | `BRK20C-1: an upper-case SECRETS context in a later step fails` |
 | BRK20C-2 | Info | HH-1 check | BRK20R-1's cited `$GITHUB_ENV` case still passed with the hand-off rule removed, because the raw-sighting rule caught its trailing line. | fixed | The case no longer carries that line, and must report the hand-off rule's own message. | `BRK20R-1: the download step writing the token to $GITHUB_ENV fails` |
 | BRK20C-3 | Info | HH-1 check | No case failed with only the `secrets:` key rule removed, since the raw rule also matched; the `secrets: inherit` fixture no longer named a reusable workflow. | fixed | Every case names its own rule's message, so removing any one rule fails at least one case; the fixture names a reusable workflow again. | `BRK20-2: secrets: inherit to a reusable workflow fails` |
+
+## Copilot code review on the pull request
+Copilot's automated review of the pull request raised one more point, verified against the code
+before it was accepted:
+
+| # | Severity | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| BRK20D-1 | Low | HH-1 check | A later step with `${{ toJSON(github) }}` receives the serialised github context, token included, and the check accepted it. The same holds for the `github.*` object filter and a computed `github[...]` index. | fixed | An expression handing on the whole github context counts as token-bearing; named properties and literal indexes stay allowed. Expressions now end at the first `}}` outside a single-quoted string. | `BRK20D-1: toJSON(github) in a later step fails` |
