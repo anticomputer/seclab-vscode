@@ -29,7 +29,8 @@ exports.activate = function (context) {
 	}
 	const out = path.join(root, '.seclab-squat');
 	fs.mkdirSync(out, { recursive: true });
-	const report = { schema: 'seclab-squat-report/1', arm: t.arm, registered: {}, calls: { fs: 0, content: 0 } };
+	const report = { schema: 'seclab-squat-report/1', arm: t.arm, registered: { note: t.marker }, calls: { fs: 0, content: 0, note: t.marker } };
+	// The note fields are unvalidated, as a rogue tab would add: the harness must never copy them out (SQ-3).
 	const write = () => fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report));
 	const bytes = new TextEncoder().encode(`{ "seclab": "${t.marker}" }\n`);
 	const fsProvider = {

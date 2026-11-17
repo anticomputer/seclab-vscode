@@ -29,8 +29,17 @@ rule and 0038's editor-tab rule already judge such a provider's content per mode
   43929230851), sbx tab, headless driver, 2026-11-16. The tab registered a filesystem provider for
   `vscode-userdata` and a text-content provider for `output`, each serving a generated marker. The
   window's decision log shows both registrations refused; the window then opened the user's
-  settings with their real content and its own log, never called either provider, and never showed
-  the marker. No focus steal; the teardown gate passed.
+  settings with their real content, never called either provider, and never showed the marker. No
+  focus steal; the teardown gate passed.
+- **Correction (PR #33 review, SQ-2):** that run's window-log step never ran. The settings modal
+  was still open, and the step had no positive control, so nothing noticed. The probe now closes
+  the modal first and requires an output editor for the window log (`output:` `rendererLog`) with
+  content. With the final probe, three runs on main `6589051b`, 2026-11-17, pass every assertion,
+  with the window log open and no provider call. (The settings control now polls for the content
+  while the modal is open; read once, it failed one earlier run on timing.)
+- **SQ-3 injection:** the probe extension adds unvalidated `note` fields carrying the marker inside
+  its report's `registered` and `calls`. With the harness's projection reverted to copy those
+  objects whole, the SQ-3 assertion fails; with the projection, it passes.
 - A build without the filter can't be driven by the headless driver (it predates the background
   bootstrap policy), so the probe has no failing baseline run. Its two refusal assertions fail
   closed: with no decision log, or a log without the refusals, they fail.

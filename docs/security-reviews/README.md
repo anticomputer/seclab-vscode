@@ -163,4 +163,5 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-16 | [telemetry ids stay out of tabs (release check and product invariant)](20261116-tab-telemetry-ids.md) | origin/main..branch head: build/check-release.sh (telemetry check and self-test), | see record |
 | 2026-11-17 | [regression tests for broker low findings, and HH-1's check (round 20)](20261117-broker-finding-tests-2.md) | - "broker: regression tests for six low fixed-untested findings": | see record |
 | 2026-11-17 | [link-check retries (round LCR)](20261117-link-check-retries.md) | round LCR, by an Opus-class model, of the lychee change in | see record |
+| 2026-11-17 | [the scheme-squatting probe (Copilot review, PR #33)](20261117-scheme-squatting-probe.md) | test/squat/probe.ts and its probe extension, the runtime regression test for | see record |
 <!-- index:end -->
