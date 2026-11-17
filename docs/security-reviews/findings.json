@@ -182,7 +182,7 @@
 			"component": "broker model access (providers)",
 			"owner": "broker",
 			"status": "fixed",
-			"commit": "patch:538aec4c88b1dbd16cc8b6b9ac4737f26a5b5e44",
+			"commit": "c8a1aff722e3",
 			"ref": {
 				"file": "docs/adr/20261105-broker-model-access.md",
 				"quote": "**GHE.com data-residency CAPI hosts (was open; closed 2026-11-16, finding MODEL-R4).**"
@@ -11787,7 +11787,7 @@
 			"summary": "A patch: fix commit resolved on the change's own history, so an add-then-revert pair could close a high",
 			"component": "findings register: closing highs",
 			"owner": "register",
-			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
+			"commit": "6d798949bb6c",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -11802,7 +11802,7 @@
 			"summary": "Exempt upstream pins came from HEAD's history, so a change could add and revert a pin to exempt any token",
 			"component": "findings register: upstream pins",
 			"owner": "register",
-			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
+			"commit": "6d798949bb6c",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -11817,7 +11817,7 @@
 			"summary": "One adjacent - / or . dropped a token, so range ends and joined forms escaped",
 			"component": "findings register: path hex",
 			"owner": "register",
-			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
+			"commit": "6d798949bb6c",
 			"status": "fixed",
 			"test": {
 				"file": "build/docs/findings.ts",
@@ -11832,7 +11832,7 @@
 			"summary": "A landed patch: never failed, nothing forced a pin, and a commit window would later fail every change",
 			"component": "findings register: pinning",
 			"owner": "register",
-			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
+			"commit": "6d798949bb6c",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -11847,7 +11847,7 @@
 			"summary": "An environment variable could replace origin/main, and an unresolvable one skipped the rule",
 			"component": "findings register: test seam",
 			"owner": "register",
-			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
+			"commit": "6d798949bb6c",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -11862,7 +11862,7 @@
 			"summary": "AAAA-2's rationale and AAAA-4's test rested on the withdrawn rule",
 			"component": "findings register: earlier rounds",
 			"owner": "register",
-			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
+			"commit": "6d798949bb6c",
 			"status": "fixed-untested",
 			"gap": "Register and record text; nothing to test."
 		},
@@ -11874,7 +11874,7 @@
 			"summary": "No case for a poisoned whole-history cache, an unresolvable main, or a pin from outside main",
 			"component": "findings register: self-test",
 			"owner": "register",
-			"commit": "patch:3db7bc1dd009d68931d992703b43660675c561db",
+			"commit": "6d798949bb6c",
 			"status": "fixed",
 			"test": {
 				"file": "seclab",
@@ -13622,7 +13622,7 @@
 			"component": "docs-check / ci-linux workflows",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:92cb55ddc738306f460fb657fffde0851f0931b6",
+			"commit": "7573a555cf7a",
 			"gap": "The condition admits only a pull request whose head is in this repository; no test exercises a fork's pull request."
 		},
 		{
@@ -13634,7 +13634,7 @@
 			"component": "landing procedure (EDR pr-landing, AGENTS.md)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:92cb55ddc738306f460fb657fffde0851f0931b6",
+			"commit": "7573a555cf7a",
 			"gap": "A procedure step (confirm the required checks and the denylist job on the new main SHA before the next PR); nothing enforces it."
 		},
 		{
@@ -13646,7 +13646,7 @@
 			"component": "landing procedure (AGENTS.md)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:92cb55ddc738306f460fb657fffde0851f0931b6",
+			"commit": "7573a555cf7a",
 			"gap": "Procedure only (wait before arming; after an update, disarm, wait, re-arm). Machine enforcement needs an always-running gate job in ci-linux and a fifth required context."
 		},
 		{
@@ -13658,7 +13658,7 @@
 			"component": "docs/edr/20261116-pr-landing.md, docs/edr/20261104-ci-hardening.md",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:92cb55ddc738306f460fb657fffde0851f0931b6",
+			"commit": "7573a555cf7a",
 			"gap": "Documentation only; nothing to test."
 		},
 		{
@@ -13670,8 +13670,11 @@
 			"component": "required checks (build/check-required-checks.ts)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:92cb55ddc738306f460fb657fffde0851f0931b6",
-			"test": { "file": "build/check-required-checks.ts", "name": "a required job with a job-level if" },
+			"commit": "7573a555cf7a",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "a required job with a job-level if"
+			},
 			"note": "Nine self-test cases, run with the check by ./seclab lint workflows in the required lint job; also proven on the real tree by injecting if: false into ci-unit."
 		},
 		{
