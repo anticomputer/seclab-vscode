@@ -14892,6 +14892,21 @@
 				"file": "broker/tools/token_steps.py",
 				"name": "BRK20D-2: a unicode escape in a double-quoted value fails"
 			}
+		},
+		{
+			"record": "20261117-broker-finding-tests-2.md",
+			"anchor": "BRK20D-3",
+			"round": "Copilot code review on the round 20 pull request",
+			"severity": "low",
+			"summary": "The HH-1 check's continuation rule needed the double quote on the same line, so a quote opened lines earlier let a backslash continuation split a token reference.",
+			"component": "broker HH-1 check (token_steps.py)",
+			"owner": "broker",
+			"status": "fixed",
+			"commit": "patch:40a5b5ce03b48e7595d917dac1ec641773c7042e",
+			"test": {
+				"file": "broker/tools/token_steps.py",
+				"name": "BRK20D-3: a backslash continuation after the quote opened on an earlier line fails"
+			}
 		}
 	]
 }
