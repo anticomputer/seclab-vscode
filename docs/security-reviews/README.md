@@ -158,6 +158,7 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-16 | [the decision log's trust gate (`check_log_trust`)](20261116-log-trust-gate.md) | see record | see record |
 | 2026-11-16 | [patch 0050, no host terminal in a tab window](20261116-no-host-terminal-in-tabs.md) | see record | see record |
 | 2026-11-16 | [landing through pull requests (round PRL)](20261116-pr-landing.md) | round PRL, by an Opus-class model, of the proposal in | see record |
+| 2026-11-16 | [the response-side control (patch 0033, `seclabFromTab`)](20261116-response-side-control.md) | see record | see record |
 | 2026-11-16 | [patch 0034, no host variables for a tab's terminals (RFU-1)](20261116-rfu1-terminal-variables.md) | see record | see record |
 | 2026-11-16 | [RPC follow-ups, landing A (push refusals, 0011 retired, regression tests)](20261116-rpc-follow-ups.md) | see record | see record |
 | 2026-11-16 | [telemetry ids stay out of tabs (release check and product invariant)](20261116-tab-telemetry-ids.md) | origin/main..branch head: build/check-release.sh (telemetry check and self-test), | see record |

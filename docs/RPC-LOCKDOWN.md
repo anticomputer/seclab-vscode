@@ -607,7 +607,8 @@ Numbers 1 to 4 came out of the independent design review
     the token command `_seclab.tabCommand`, which runs a command the policy allows outright on
     the trusted side under the tab's origin, and anything else in the tab's own extension host,
     logging a refusal when the tab doesn't have it; markdown keeps only token links
-    (`isTrusted` enables nothing else), loses HTML, and keeps only `data:` images.
+    (`isTrusted` enables nothing else), and every image and tag opener is escaped, so it renders
+    no image and no HTML; a completion snippet naming `CLIPBOARD` is inserted as plain text.
     `check_drift.py::check_responses` refuses any reachable `$register*` method that doesn't
     name the control and the patch applying it. Hover and completion are wired (patch 0033);
     trees, SCM, the status bar, decorations and notifications stay denied until their customers
