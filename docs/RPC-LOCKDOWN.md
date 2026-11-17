@@ -627,7 +627,8 @@ losses, not bugs:
   editor-driven run's `[fsmonitor]` check is an expected failure on a filtered build for this
   reason, only with that denial in the trusted-side log. A tab can make that call itself, so
   the expected failure covers only the in-tab run: the host facts (no probe marker in the run
-  directory, no evidence file in the host checkout) stay hard checks;
+  directory, no evidence file in the host checkout) stay hard checks on sbx. An OCI tab writes
+  the host checkout itself, including the probe's targets, so there they are weaker;
 - tree views, output channels, status bar items and decorations;
 - language features registered by the tab (hover, completion, code actions,
   code lens, links, folding), so a language extension in a tab activates but
