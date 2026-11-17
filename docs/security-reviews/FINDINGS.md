@@ -15,23 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-<<<<<<< HEAD
-| fixed | 14 | 84 | 208 | 297 | 44 | 647 |
+| fixed | 14 | 84 | 208 | 299 | 44 | 649 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 52 | 159 | 56 | 272 |
-=======
-| fixed | 14 | 83 | 203 | 271 | 40 | 611 |
-| fixed-untested | 0 | 5 | 52 | 159 | 57 | 273 |
->>>>>>> b397eb7 (register: EDT-15)
+| fixed-untested | 0 | 5 | 52 | 157 | 57 | 271 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 14 | 14 | 6 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-<<<<<<< HEAD
-| **all** | 16 | 93 | 300 | 549 | 146 | 1104 |
-=======
-| **all** | 16 | 92 | 295 | 523 | 143 | 1069 |
->>>>>>> b397eb7 (register: EDT-15)
+| **all** | 16 | 93 | 300 | 549 | 147 | 1105 |
 
 ## Baseline: open high and critical findings
 
@@ -137,8 +128,6 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **R2-1** | low | fixed-untested | patch 0035 document sync | "Born as a text file" meant only that a text file model existed, so a tab stalling its provider's read could pre-claim a host URI. | Birth now requires a finished read (lastResolvedFileStat) with no text model yet, but the record records "code review; no probe" — there is no predictable host creator to drive. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **R4-1** | low | fixed-untested | patch 0035 document sync | A text file model that reused an existing host model kept its stat after that model was disposed, so a later host-created model would count as its own. | Reused models are tainted on onDidResolve so their later text models never count, but the record records "code review" only — no probe. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-9** | low | fixed-untested | patch 0036 configuration snapshot | The change-event key classification trusted \`e.source\`, which upstream sets to WORKSPACE for multi-layer reloads, so host key names were checked against tab keys only. | No runtime test for change-event key lists after a profile switch or reload. |
-| [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-13** | low | fixed-untested | patch 0038 editor-tab model | Ownership changes rebuilt the whole tab model, so onDidChangeTabs listeners never saw an untitled tab turn from unknown to text. | The control fails on the build before the fix and is proven on the next build. |
-| [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-14** | low | fixed-untested | patch 0038 editor-tab model | Every model add fired 0035's origin change, rebuilding the whole document state, so a tab opening N documents in the background cost the window work quadratic in N. | The check fails on the build before the fix and is proven on the next build. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-2** | low | fixed-untested | patch 0038 editor-tab model | A host-created untitled editor counted as the tab's own, so its first line reached the tab as a label. | No runtime case opens a host-created untitled document with content; the rule is 0035's untitled predicate. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-3** | low | fixed-untested | patch 0038 editor-tab model | A filesystem provider registered later by the tab could claim host editors already open in its scheme (latent under the RPC filter). | Not reachable at run time today: the RPC filter refuses a tab's provider registration. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-5** | low | accepted-residual | patch 0038 editor-tab model | Webview panels pass by scheme, so a host-side panel's title and view type reach the tab. | accepted by an agent: Under the RPC filter a tab cannot create webview panels, so every panel in a tab window is the window's own; none carries host data in its title. |
@@ -151,7 +140,7 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-5** | info | fixed-untested | patch 0036 configuration snapshot | A withheld-setting report refused before the Tab Manager registered its command was counted as sent. | No runtime test for report retry. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-7** | info | open | variable resolution (outside 0036) | \`${config:…}\` in a tab-owned tasks.json or launch.json resolves in the renderer against the unfiltered configuration. | A sibling of the snapshot filter: resolve config variables for tab tasks against the tab's filtered view. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-12** | info | fixed-untested | edtabs harness | A setup failure skipped the edtabs probe's teardown gate. | Harness structure; no test injects a setup failure. |
-| [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-15** | info | fixed-untested | edtabs harness | After the tab ran, the edtabs harness wrote into the tab's workspace from the host and read its arming file back unguarded (SQ-4/SQ-5's pattern). | The squat probe tests the pattern (SQ-4, SQ-5); this harness mirrors its fix without its own hostile-workspace test. |
+| [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-15** | info | fixed-untested | edtabs harness | After the tab ran, the edtabs harness wrote into the tab's workspace from the host, read its arming file back unguarded and read its report through an unbounded sbx exec (SQ-4 to SQ-6's pattern). | The squat probe and tabExec's unit test cover the pattern (SQ-4 to SQ-6); this harness mirrors the fixes without its own hostile-workspace test. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-6** | info | accepted-residual | patch 0038 editor-tab model | A host-local terminal's title reaches the tab as an editor label. | accepted by an agent: No new exposure: the terminal service already pushes every terminal name to every host (DOCSYNC-R5). |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-7** | info | accepted-residual | patch 0038 editor-tab model | A desktop web-worker host in a tab window is unfiltered by 0038, which keys on the host's own authority. | accepted by an agent: Tab-installed extensions never run in the desktop local web worker; 0038 is desktop-only. Revisit if the web build is ever in scope. |
 | [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-5** | info | fixed-untested | nbsync harness | The nbsync probe's prepare, launch, check flow could not pass on a filtered build: only drive read the serializer refusal. | A harness fix; its prepare, launch, check run on main 6589051b passed, but no test runs the harness itself. |
@@ -1953,9 +1942,9 @@ Every other commit the register cites is on main's history, or on the branch its
 | EDT-10 | low | fixed | An untitled editor joins its group before its model exists, so the user's own untitled tab stayed anonymous. | patch:fe5db5019c1bfbb872ac3bc817e84a82587b4f5a · `test/edtabs/probe.ts` "control: an untitled document the user created in the window shows to the tab as its own text tab (EDT-10)" |
 | EDT-11 | medium | open | The docsync probe (0035's runtime regression test) no longer runs on builds with the RPC filter, and 0038 hides the host untitled URIs it relied on. | Rework the docsync probe to drive host-side actions from the window through the headless driver and pass test URIs on a test-only channel. |
 | EDT-12 | info | fixed-untested | A setup failure skipped the edtabs probe's teardown gate. | Harness structure; no test injects a setup failure. |
-| EDT-13 | low | fixed-untested | Ownership changes rebuilt the whole tab model, so onDidChangeTabs listeners never saw an untitled tab turn from unknown to text. | The control fails on the build before the fix and is proven on the next build. |
-| EDT-14 | low | fixed-untested | Every model add fired 0035's origin change, rebuilding the whole document state, so a tab opening N documents in the background cost the window work quadratic in N. | The check fails on the build before the fix and is proven on the next build. |
-| EDT-15 | info | fixed-untested | After the tab ran, the edtabs harness wrote into the tab's workspace from the host and read its arming file back unguarded (SQ-4/SQ-5's pattern). | The squat probe tests the pattern (SQ-4, SQ-5); this harness mirrors its fix without its own hostile-workspace test. |
+| EDT-13 | low | fixed | Ownership changes rebuilt the whole tab model, so onDidChangeTabs listeners never saw an untitled tab turn from unknown to text. | patch:93f8922bb5609fa398e186c0b03abe5877a031e9 · `test/edtabs/probe.ts` "control: the tab learned of its untitled text tab through onDidChangeTabs (EDT-13)" |
+| EDT-14 | low | fixed | Every model add fired 0035's origin change, rebuilding the whole document state: quadratic in a tab's background opens up to MainThreadDocuments' 50 held references, a constant factor past it. | patch:242beb7ed662461e98405cd03a34629f83855fed · `test/edtabs/probe.ts` "EDT-14 a background document open does not rebuild the document state" |
+| EDT-15 | info | fixed-untested | After the tab ran, the edtabs harness wrote into the tab's workspace from the host, read its arming file back unguarded and read its report through an unbounded sbx exec (SQ-4 to SQ-6's pattern). | The squat probe and tabExec's unit test cover the pattern (SQ-4 to SQ-6); this harness mirrors the fixes without its own hostile-workspace test. |
 
 ### [20261116-gate-fail-open-remainder](20261116-gate-fail-open-remainder.md)
 

@@ -14110,9 +14110,12 @@
 			"anchor": "EDT-13",
 			"severity": "low",
 			"summary": "Ownership changes rebuilt the whole tab model, so onDidChangeTabs listeners never saw an untitled tab turn from unknown to text.",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "patch:93f8922bb5609fa398e186c0b03abe5877a031e9",
-			"gap": "The control fails on the build before the fix and is proven on the next build."
+			"test": {
+				"file": "test/edtabs/probe.ts",
+				"name": "control: the tab learned of its untitled text tab through onDidChangeTabs (EDT-13)"
+			}
 		},
 		{
 			"record": "20261116-gate-fail-open-remainder.md",
@@ -16279,10 +16282,13 @@
 			"component": "patch 0038 editor-tab model",
 			"anchor": "EDT-14",
 			"severity": "low",
-			"summary": "Every model add fired 0035's origin change, rebuilding the whole document state, so a tab opening N documents in the background cost the window work quadratic in N.",
-			"status": "fixed-untested",
+			"summary": "Every model add fired 0035's origin change, rebuilding the whole document state: quadratic in a tab's background opens up to MainThreadDocuments' 50 held references, a constant factor past it.",
+			"status": "fixed",
 			"commit": "patch:242beb7ed662461e98405cd03a34629f83855fed",
-			"gap": "The check fails on the build before the fix and is proven on the next build."
+			"test": {
+				"file": "test/edtabs/probe.ts",
+				"name": "EDT-14 a background document open does not rebuild the document state"
+			}
 		},
 		{
 			"record": "20261116-editor-tab-provenance.md",
@@ -16291,10 +16297,10 @@
 			"component": "edtabs harness",
 			"anchor": "EDT-15",
 			"severity": "info",
-			"summary": "After the tab ran, the edtabs harness wrote into the tab's workspace from the host and read its arming file back unguarded (SQ-4/SQ-5's pattern).",
+			"summary": "After the tab ran, the edtabs harness wrote into the tab's workspace from the host, read its arming file back unguarded and read its report through an unbounded sbx exec (SQ-4 to SQ-6's pattern).",
 			"status": "fixed-untested",
 			"commit": "patch:db139299fd5c1290210afc6c075ff4a1f8124c9e",
-			"gap": "The squat probe tests the pattern (SQ-4, SQ-5); this harness mirrors its fix without its own hostile-workspace test."
+			"gap": "The squat probe and tabExec's unit test cover the pattern (SQ-4 to SQ-6); this harness mirrors the fixes without its own hostile-workspace test."
 		}
 	]
 }
