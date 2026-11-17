@@ -172,3 +172,13 @@ and fails leaves the sweep unknown, and `clean-host` with a failing docker shows
 `clean-host` on main didn't list the leftovers; with the fix the dry run lists both with the
 reason. `clean-host --self-test` pins the classifier (dead pid, reused pid, live tabd, label
 mismatch, unlabelled, other namespace, other boot, foreign names).
+
+**Code review follow-up (2026-11-17, [round 4](../security-reviews/20261104-harness-teardown.md#round-4-code-review-of-the-falco-sweep-cr16)).**
+- The state tag alone never makes a sensor the run's: another namespace on a shared engine can
+  use the same profile path. Teardown removes a tagged sensor only if it carries this
+  namespace's owner labels or is named for one of the run's processes, recorded before they
+  are stopped. An unlabelled tagged sensor it can't prove is reported, not removed.
+- On macOS the owner identity hashes the boot session UUID; with no per-machine id, no sensor
+  is judged.
+- `clean-host` removes a stray tabd's sensor only after confirming that tabd exited.
+
