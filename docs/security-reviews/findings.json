@@ -3401,10 +3401,13 @@
 			"summary": "The docs job's read-only token reached every `ci: run` command, though only gh needed it.",
 			"component": "docs-check workflow",
 			"owner": "broker",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "4185c4c",
-			"gap": "Round 6 verified the split (token only in a push-only attestation-download step; the docs gate runs tokenless and verifies offline with --bundle), but nothing checks that no later step regains a token.",
-			"note": "The broker-side half landed as 30ba85d."
+			"test": {
+				"file": "broker/tools/token_steps.py",
+				"name": "HH-1: a later step that regains the token fails"
+			},
+			"note": "The broker-side half landed as 30ba85d. broker/tools/token_steps.py, run by broker/docs-check.sh, fails when any token-bearing expression in docs-check.yml sits outside the attestation download step, including at workflow or job level."
 		},
 		{
 			"record": "20261104-supply-chain.md",
