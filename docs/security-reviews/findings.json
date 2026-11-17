@@ -443,6 +443,45 @@
 			}
 		},
 		{
+			"record": "20261116-tab-telemetry-ids.md",
+			"round": "Copilot review (PR #12)",
+			"owner": "docsync",
+			"component": "release check (telemetry)",
+			"anchor": "TEL-4",
+			"severity": "low",
+			"summary": "check-release took one-tab indentation as the root level, so a nested enableTelemetry false indented like a top-level key passed it.",
+			"status": "fixed",
+			"commit": "patch:91fe117bc3f3ad5971d3ddd300af7025264f0fb7",
+			"test": {
+				"file": "build/check-release.sh",
+				"name": "a nested enableTelemetry false indented as if top level (TEL-4)"
+			}
+		},
+		{
+			"record": "20261116-tab-telemetry-ids.md",
+			"round": "Copilot review (PR #12)",
+			"owner": "docsync",
+			"component": "nbsync harness",
+			"anchor": "TEL-5",
+			"severity": "info",
+			"summary": "The nbsync probe's prepare, launch, check flow could not pass on a filtered build: only drive read the serializer refusal.",
+			"status": "fixed-untested",
+			"commit": "patch:91fe117bc3f3ad5971d3ddd300af7025264f0fb7",
+			"gap": "A harness fix; its prepare, launch, check run on main 6589051b passed, but no test runs the harness itself."
+		},
+		{
+			"record": "20261116-tab-telemetry-ids.md",
+			"round": "Copilot review (PR #12)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"anchor": "TEL-6",
+			"severity": "info",
+			"summary": "Probe profiles were shared by every worktree while each run guard is per worktree.",
+			"status": "fixed-untested",
+			"commit": "patch:91fe117bc3f3ad5971d3ddd300af7025264f0fb7",
+			"gap": "A naming fix in four harnesses; nothing runs two worktrees at once to test it."
+		},
+		{
 			"record": null,
 			"anchor": "DOCSYNC-R5",
 			"severity": "medium",

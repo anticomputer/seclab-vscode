@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 82 | 199 | 208 | 28 | 531 |
-| fixed-untested | 0 | 5 | 52 | 164 | 59 | 280 |
+| fixed | 14 | 82 | 199 | 209 | 28 | 532 |
+| fixed-untested | 0 | 5 | 52 | 164 | 61 | 282 |
 | accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 3 | 13 | 15 | 6 | 37 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 290 | 465 | 123 | 986 |
+| **all** | 16 | 92 | 290 | 466 | 125 | 989 |
 
 ## Baseline: open high and critical findings
 
@@ -135,6 +135,8 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-4** | info | fixed-untested | patch 0036 configuration snapshot | The change key list named a key once more after it became withheld, and keys the tab planted in its own layer revealed host edits. | No runtime test for change-event key lists. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-5** | info | fixed-untested | patch 0036 configuration snapshot | A withheld-setting report refused before the Tab Manager registered its command was counted as sent. | No runtime test for report retry. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-7** | info | open | variable resolution (outside 0036) | \`${config:…}\` in a tab-owned tasks.json or launch.json resolves in the renderer against the unfiltered configuration. | A sibling of the snapshot filter: resolve config variables for tab tasks against the tab's filtered view. |
+| [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-5** | info | fixed-untested | nbsync harness | The nbsync probe's prepare, launch, check flow could not pass on a filtered build: only drive read the serializer refusal. | A harness fix; its prepare, launch, check run on main 6589051b passed, but no test runs the harness itself. |
+| [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-6** | info | fixed-untested | probe harnesses | Probe profiles were shared by every worktree while each run guard is per worktree. | A naming fix in four harnesses; nothing runs two worktrees at once to test it. |
 | [docs/edr/20261116-notebook-sync.md](../../docs/edr/20261116-notebook-sync.md) **DOCSYNC-R9** | info | deferred | window→tab pushes (notebook sync) | Notebooks don't work in tabs; enabling them needs per-model notebook provenance, a serializer that reads only the tab's files, and 0035's cell rule for tab-created notebooks. | follow-up: With the RPC follow-ups session's landing D, which needs a validator for MainThreadNotebook (coordinator, 2026-11-16). The plan is in the EDR's Decision section; test/nbsync/probe.ts must pass with notebooks on. |
 
 ### Egress and credential broker
@@ -1944,6 +1946,9 @@ Every other commit the register cites is on main's history, or on the branch its
 | TEL-1 | low | fixed | check-release matched the literal key name; an escaped duplicate key set to true would pass it and win in JSON.parse. | 607b7620ae1d · `build/check-release.sh` "product.json with an escaped duplicate enableTelemetry true (review TEL-1)" |
 | TEL-2 | low | accepted-residual | A host process that opens a tab window with VSCODE_DEV set makes the window a dev build, which enables real telemetry and gives that tab the host ids. | accepted by an agent: Coordinator, 2026-11-16: kept as a recorded residual, no patch. A process that can set the editor's launch environment on the host is already outside the threat model, and a tab cannot set it. |
 | TEL-3 | info | fixed | The telemetry probe seeded SQM and device ids but asserted only on machineId. | 607b7620ae1d · `test/telemetryid/probe.ts` "no id the tab can read is any seeded host id (machine, SQM, device)" |
+| TEL-4 | low | fixed | check-release took one-tab indentation as the root level, so a nested enableTelemetry false indented like a top-level key passed it. | patch:91fe117bc3f3ad5971d3ddd300af7025264f0fb7 · `build/check-release.sh` "a nested enableTelemetry false indented as if top level (TEL-4)" |
+| TEL-5 | info | fixed-untested | The nbsync probe's prepare, launch, check flow could not pass on a filtered build: only drive read the serializer refusal. | A harness fix; its prepare, launch, check run on main 6589051b passed, but no test runs the harness itself. |
+| TEL-6 | info | fixed-untested | Probe profiles were shared by every worktree while each run guard is per worktree. | A naming fix in four harnesses; nothing runs two worktrees at once to test it. |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
