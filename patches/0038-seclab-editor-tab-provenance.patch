@@ -28,7 +28,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts b/src/
  	private _onDelta(delta: DocumentAndEditorStateDelta): void {
 diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts
 --- a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-16 14:53:14
-+++ b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-17 15:47:57
++++ b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-17 16:58:42
 @@ -29,7 +29,30 @@
  import { GroupDirection, IEditorGroup, IEditorGroupsService, preferredSideBySideGroupDirection } from '../../services/editor/common/editorGroupsService.js';
  import { IEditorsChangeEvent, IEditorService, SIDE_GROUP } from '../../services/editor/common/editorService.js';
@@ -69,7 +69,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  
  	constructor(
  		extHostContext: IExtHostContext,
-@@ -58,6 +83,35 @@
+@@ -58,6 +83,46 @@
  	) {
  
  		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostEditorTabs);
@@ -99,13 +99,24 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
 +				sha.update(salt + id);
 +				return `${id.slice(0, id.indexOf('~'))}~seclab-${sha.digest()}`;
 +			};
-+			// Tagging changes what counts as the tab's own (a provider's model appears later).
-+			this._dispoables.add(o.onDidChange.event(() => this._createTabsModel()));
++			// Tagging changes what counts as the tab's own (a provider's model appears later): update
++			// each tab whose label or input changed, as TAB_UPDATE, so onDidChangeTabs fires.
++			this._dispoables.add(o.onDidChange.event(() => {
++				for (const info of this._tabInfoLookup.values()) {
++					const index = info.group.getIndexOfEditor(info.editorInput);
++					const fresh = index < 0 ? undefined : this._buildTabObject(info.group, info.editorInput, index);
++					if (fresh && (fresh.label !== info.tab.label || JSON.stringify(fresh.input) !== JSON.stringify(info.tab.input))) {
++						info.tab.label = fresh.label;
++						info.tab.input = fresh.input;
++						this._proxy.$acceptTabOperation({ groupId: info.group.id, index, tabDto: info.tab, kind: TabModelOperationKind.TAB_UPDATE });
++					}
++				}
++			}));
 +		}
  
  		// Main listener which responds to events from the editor service
  		this._dispoables.add(editorService.onDidEditorsChange((event) => {
-@@ -96,7 +150,7 @@
+@@ -96,7 +161,7 @@
  		const editorId = editor.editorId;
  		const tab: IEditorTabDto = {
  			id: this._generateTabId(editor, group.id),
@@ -114,7 +125,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  			editorId,
  			input: this._editorInputToDto(editor),
  			isPinned: group.isSticky(editorIndex),
-@@ -108,6 +162,9 @@
+@@ -108,6 +173,9 @@
  	}
  
  	private _editorInputToDto(editor: EditorInput): AnyInputDto {
@@ -124,7 +135,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  
  		if (editor instanceof MergeEditorInput) {
  			return {
-@@ -250,7 +307,7 @@
+@@ -250,7 +318,7 @@
  		} else {
  			resourceString = `${resource?.primary?.toString()}-${resource?.secondary?.toString()}`;
  		}
@@ -133,7 +144,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  	}
  
  	/**
-@@ -276,7 +333,7 @@
+@@ -276,7 +344,7 @@
  		const tabInfo = this._tabInfoLookup.get(tabId);
  		// If tab is found patch, else rebuild
  		if (tabInfo) {
