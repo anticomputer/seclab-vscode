@@ -15,7 +15,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { DrivenEditor } from '../driver/editor.ts';
-import { checkUserDataDir, focusStealLog } from '../harness.ts';
+import { checkUserDataDir, focusStealLog, tabExec } from '../harness.ts';
 import { readManifest, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
 
 const repo = path.resolve(import.meta.dirname, '../..');
@@ -23,12 +23,12 @@ const base = path.join(repo, '.work', 'squat');
 const ws = path.join(base, 'ws');
 const runFile = path.join(base, 'canaries.json');
 const resultsFile = path.join(repo, '.work', 'squat-results.jsonl');
-const SBX = '/opt/homebrew/bin/sbx';
 const VSCE_IMAGE = 'seclab-vsce:3.9.2';
 const [mode, ...rest] = process.argv.slice(2);
 const appArg = rest.includes('--app') ? path.resolve(rest[rest.indexOf('--app') + 1]) : undefined;
 const tabId = () => (readManifest(base).tabs ?? [])[0];
-const inTab = (args: string[]) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20 });
+// Bounded (review SQ-6): the tab can stall anything read from its workspace.
+const inTab = (args: string[], timeoutMs?: number) => tabExec(`seclab-${tabId()}`, args, { timeoutMs });
 // What the window opens, by palette label, and the editor tab label each should produce.
 const HOST_EDITORS: Array<[string, string]> = [
 	['Preferences: Open User Settings (JSON)', 'settings.json'],
@@ -91,7 +91,7 @@ try {
 	writeManifest(base, { tabs: [tabName] });
 	await client.request('tab.ensureRunning', { tabId: tabName });
 	fs.copyFileSync(path.join(vsixDir, 'squat-probe.vsix'), path.join(ws, '.squat-probe.vsix'));
-	installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.squat-probe.vsix')]).status === 0;
+	installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.squat-probe.vsix')], 300_000) !== undefined;
 } catch (e) {
 	setupError = String(e).slice(0, 300);
 	console.error(`setup: ${setupError}`);
@@ -106,7 +106,7 @@ try {
 const reportPath = path.join(ws, '.seclab-squat', 'report.json');
 const read = () => {
 	try {
-		return JSON.parse(tabId() ? inTab(['cat', reportPath]).stdout ?? '' : '');
+		return JSON.parse(tabId() ? inTab(['cat', reportPath]) ?? '' : '');
 	} catch {
 		return undefined;
 	}
