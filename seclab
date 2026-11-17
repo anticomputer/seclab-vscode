@@ -76,6 +76,9 @@ usage: ./seclab <command>
                                 Security findings register (docs/security-reviews/findings.json): every review
                                 finding registered, fixed ones with a regression test, no open high outside the
                                 shrinking baseline; `baseline` prints the open highs (markdown)
+  landing verify SHA            After a merge, from main's code: refuse unless every required job ran and
+                                concluded success for SHA, and the required-jobs-ran gate posted success
+                                (EDR required-jobs-gate; AGENTS.md landing step 8)
   fetch macos [RUN_ID]          Download the unsigned macOS app from Actions -> .work/app/
   fetch macos-branch RUN_ID     A dispatched non-main test build (attestation checked against its
                                 branch) -> .work/app-branch/ (never the release location)
@@ -1366,6 +1369,39 @@ docs_check() {
 	fi
 }
 
+# The required jobs ran for a commit (EDR required-jobs-gate): the latest run of each required
+# workflow, by file, has its required job concluded success, and the gate's status is success.
+# Skipped, cancelled, failed or missing all refuse. Run it from a main checkout older than the PR,
+# so the list it checks against is main's, not the PR's.
+landing_verify() {
+	local sha repo pairs pair wf job run id got bad=0
+	sha="$(git -C "$ROOT" rev-parse -q --verify "$1^{commit}" 2>/dev/null)" || { echo "landing verify: $1 is not a commit here (fetch it)" >&2; return 2; }
+	repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)" || return 2
+	[[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "landing verify: bad repository" >&2; return 2; }
+	pairs="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-required-checks.ts --list)" || return 2
+	for pair in $pairs; do
+		wf="${pair%%:*}" job="${pair#*:}"
+		run="$(gh api "repos/$repo/actions/workflows/$wf/runs?head_sha=$sha&per_page=50" \
+			--jq '[.workflow_runs[] | select(.event == "push" or .event == "pull_request")] | sort_by(.run_number, .run_attempt) | last | if . == null then "" else "\(.id) \(.status)" end')" || return 2
+		if [[ -z "$run" ]]; then
+			got=missing
+		elif [[ "${run#* }" != completed ]]; then
+			got=running
+		else
+			id="${run%% *}"
+			got="$(gh api "repos/$repo/actions/runs/$id/jobs?filter=latest&per_page=100" \
+				--jq "[.jobs[] | select(.name == \"$job\")] | if length == 1 then .[0].conclusion // \"none\" else \"missing\" end")" || return 2
+		fi
+		echo "landing verify: $job ($wf): $got"
+		[[ "$got" == success ]] || bad=1
+	done
+	got="$(gh api "repos/$repo/commits/$sha/status" --jq '[.statuses[] | select(.context == "required-jobs-ran")] | first | .state // "missing"')" || return 2
+	echo "landing verify: required-jobs-ran: $got"
+	[[ "$got" == success ]] || bad=1
+	[[ $bad == 0 ]] && echo "landing verify: ok ($sha)" || echo "landing verify: REFUSED ($sha): a required job didn't run to success" >&2
+	return $bad
+}
+
 node_image() {
 	# Same Node major as upstream's .nvmrc; used for tests so the host needs no toolchain.
 	echo "node:24.22.1-trixie@sha256:f1e034976f948cf212ef1f659c12e5dd58ac7eab947831813e81a62401ca38be"
@@ -2035,6 +2071,9 @@ case "${1:-help}" in
 			check) shift; docs_check "$@" ;;
 			*) usage; exit 2 ;;
 		esac ;;
+	landing)
+		[[ "${2:-}" == verify && $# -eq 3 ]] || { usage; exit 2; }
+		landing_verify "$3" ;;
 	findings)
 		shift
 		if [[ "${1:-}" == growth && $# -eq 2 ]]; then findings_growth "$2"; exit $?; fi

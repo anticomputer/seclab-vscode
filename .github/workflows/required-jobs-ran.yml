@@ -1,0 +1,76 @@
+name: required-jobs-ran
+
+# Pre-merge gate (EDR 20261117-required-jobs-gate). A required job skipped by the change it gates
+# counts as passing, and a PR controls its own workflow files, so no check inside them can stop it
+# (Copilot review on PR 7). This workflow runs from main's copy whenever a required workflow
+# completes. It never checks out, runs or downloads anything from the PR. Through the API it reads
+# the job conclusions of the latest run of each required workflow, by file, for the head SHA, and
+# posts the commit status `required-jobs-ran`:
+#   success  every required job concluded success;
+#   pending  a required workflow's run hasn't finished;
+#   failure  a required job concluded anything else (skipped, cancelled, failure), or is missing.
+# The status is a required check, so a PR that deletes or disables CI never gets it.
+# Invariants (build/check-required-checks.ts enforces them): triggered by workflow_run only; no
+# uses: step, so no checkout and no artifact download; no secrets; the only expressions are the
+# token, the repository and the head SHA, passed through env; token scopes actions: read and
+# statuses: write; the pairs below equal REQUIRED in build/check-required-checks.ts.
+on:
+  # The one workflow_run trigger: a scoped exception to CI hardening (EDR 20261117-required-jobs-gate).
+  workflow_run: # zizmor: ignore[dangerous-triggers] runs main's copy, executes nothing from the PR
+    workflows: [ci-unit, workflow-lint, docs-check, patch-build]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: required-jobs-ran-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      statuses: write
+    steps:
+      - name: Post required-jobs-ran for the head commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "not a commit SHA" >&2; exit 1; }
+          [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "not a repository" >&2; exit 1; }
+          state=success
+          detail=""
+          # workflow file, required job (= the required context): REQUIRED
+          for pair in ci-unit.yml:unit workflow-lint.yml:lint docs-check.yml:docs patch-build.yml:patch-build; do
+            wf="${pair%%:*}"
+            job="${pair#*:}"
+            # The latest run of that file for this commit, from a push or a pull request.
+            run="$(gh api "repos/$REPO/actions/workflows/$wf/runs?head_sha=$SHA&per_page=50" \
+              --jq '[.workflow_runs[] | select(.event == "push" or .event == "pull_request")] | sort_by(.run_number, .run_attempt) | last | if . == null then "" else "\(.id) \(.status)" end')"
+            if [[ -z "$run" ]]; then
+              state=failure
+              detail+=" $job:missing"
+              continue
+            fi
+            id="${run%% *}"
+            if [[ "${run#* }" != completed ]]; then
+              [[ "$state" == failure ]] || state=pending
+              detail+=" $job:running"
+              continue
+            fi
+            got="$(gh api "repos/$REPO/actions/runs/$id/jobs?filter=latest&per_page=100" \
+              --jq "[.jobs[] | select(.name == \"$job\")] | if length == 1 then .[0].conclusion // \"none\" else \"missing\" end")"
+            if [[ "$got" != success ]]; then
+              state=failure
+            fi
+            detail+=" $job:$got"
+          done
+          echo "required-jobs-ran: $state ($detail )"
+          gh api -X POST "repos/$REPO/statuses/$SHA" -f state="$state" -f context=required-jobs-ran \
+            -f description="${detail# }" >/dev/null

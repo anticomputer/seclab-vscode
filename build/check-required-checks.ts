@@ -10,7 +10,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { jobContexts, jobProblems } from './liveness/liveness.ts';
+import { jobContexts, jobProblems, triggers } from './liveness/liveness.ts';
 
 /** Required status check context -> the workflow and job that report it (ruleset 26572681). */
 export const REQUIRED: ReadonlyArray<{ context: string; workflow: string; job: string }> = [
@@ -292,6 +292,60 @@ export function permissionsProblems(files: Record<string, string>, writeOk: (f: 
 }
 
 
+/** The pre-merge gate (EDR 20261117-required-jobs-gate): the one workflow that may hold
+ *  `statuses: write`, and only while it keeps every invariant here, since a file that could also
+ *  run on a push or pull request would hand that scope to branch code (CR-8 again). */
+export const GATE = 'required-jobs-ran.yml';
+const GATE_EXPRESSIONS = new Set(['github.token', 'github.repository', 'github.event.workflow_run.head_sha']);
+export function gateProblems(files: Record<string, string>): string[] {
+	const yml = files[GATE];
+	if (yml === undefined) {
+		return [`${GATE}: the required-jobs gate is missing`];
+	}
+	const out: string[] = [];
+	const bad = (why: string) => out.push(`${GATE}: ${why}`);
+	const t = triggers(yml);
+	if (t.length !== 1 || t[0] !== 'workflow_run') {
+		bad(`must trigger on workflow_run alone, not ${JSON.stringify(t)}`);
+	}
+	const lines = yamlLines(yml);
+	if (lines.some(l => /^\s*(?:-\s+)?["']?uses["']?\s*:/.test(l))) {
+		bad('has a uses: step (no checkout, no artifact download, no action at all)');
+	}
+	if (/\bsecrets\s*[.[]/.test(yml)) {
+		bad('reads a secret');
+	}
+	yml.split('\n').forEach((l, i) => {
+		for (const m of l.matchAll(/\$\{\{([^}]*)\}\}/g)) {
+			if (!GATE_EXPRESSIONS.has(m[1].trim())) {
+				bad(`line ${i + 1}: the expression \${{${m[1]}}} isn't one of ${[...GATE_EXPRESSIONS].join(', ')}`);
+			}
+		}
+		if (l.includes('${{') && !/^ {10}(GH_TOKEN|REPO|SHA): \$\{\{ [a-z_.]+ \}\}$/.test(l) && !/^ {2}group: required-jobs-ran-\$\{\{ github\.event\.workflow_run\.head_sha \}\}$/.test(l)) {
+			bad(`line ${i + 1}: an expression outside the step's env and the concurrency group`);
+		}
+	});
+	if (!lines.some(l => /^permissions\s*:\s*\{\}\s*$/.test(l))) {
+		bad('top-level permissions must be {}');
+	}
+	const grants = lines.filter(l => /^\s+["']?[a-z-]+["']?\s*:\s*["']?(read|write|none)["']?\s*(#.*)?$/.test(l))
+		.map(l => l.trim().replace(/\s*#.*$/, '').replace(/["']/g, '').replace(/\s*:\s*/, ': ')).sort();
+	if (grants.join(', ') !== 'actions: read, statuses: write') {
+		bad(`its token must hold exactly actions: read and statuses: write, not ${JSON.stringify(grants)}`);
+	}
+	const pairs = /for pair in ([^;\n]+);/.exec(yml)?.[1].trim().split(/\s+/) ?? [];
+	const wantPairs = REQUIRED.map(r => `${r.workflow}:${r.context}`);
+	if (pairs.join(' ') !== wantPairs.join(' ')) {
+		bad(`checks ${JSON.stringify(pairs)}, not the required ${JSON.stringify(wantPairs)}`);
+	}
+	const names = /^ {4}workflows:\s*\[([^\]]*)\]\s*$/m.exec(yml)?.[1].split(',').map(s => s.trim()) ?? [];
+	const wantNames = REQUIRED.map(r => /^name:\s*(\S+)\s*$/m.exec(files[r.workflow] ?? '')?.[1] ?? `?${r.workflow}`);
+	if (names.join(' ') !== wantNames.join(' ')) {
+		bad(`runs after ${JSON.stringify(names)}, not the required workflows ${JSON.stringify(wantNames)}`);
+	}
+	return out;
+}
+
 function selfTest(): void {
 	const good = 'on:\n  push:\n  pull_request:\n\njobs:\n  unit:\n    name: unit\n    runs-on: x\n    steps:\n      - run: x\n';
 	const cases: Array<[string, string, RegExp | null]> = [
@@ -381,6 +435,33 @@ function selfTest(): void {
 			throw new Error(`required-checks self-test "${name}": got ${JSON.stringify(got)}`);
 		}
 	}
+	// The gate: the real file and the real required workflows, each invariant broken in turn.
+	const wfDir = path.join(import.meta.dirname, '..', '.github', 'workflows');
+	const realFiles = Object.fromEntries([GATE, ...REQUIRED.map(r => r.workflow)].map(f => [f, fs.readFileSync(path.join(wfDir, f), 'utf8')]));
+	const g = realFiles[GATE];
+	const allowStatuses = (files: Record<string, string>) => permissionsProblems(files, (f, scope) => WRITE_OK.has(scope) || (f === GATE && scope === 'statuses' && gateProblems(files).length === 0));
+	for (const [name, edit, want] of [
+		['gate control', (s: string) => s, null],
+		['gate on pull_request too', (s: string) => s.replace('\non:\n', '\non:\n  pull_request:\n'), /workflow_run alone/],
+		['gate checks out code', (s: string) => s.replace('    steps:\n', '    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n'), /uses: step/],
+		['gate downloads an artifact', (s: string) => s.replace('    steps:\n', '    steps:\n      - name: get\n        uses: actions/download-artifact@0000000000000000000000000000000000000000\n'), /uses: step/],
+		['gate reads a secret', (s: string) => s.replace('GH_TOKEN: ${{ github.token }}', 'GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}'), /reads a secret/],
+		['gate uses a PR-controlled expression', (s: string) => s.replace('SHA: ${{ github.event.workflow_run.head_sha }}', 'SHA: ${{ github.event.workflow_run.head_branch }}'), /isn't one of/],
+		['gate expression in run', (s: string) => s.replace('set -euo pipefail', 'set -euo pipefail; echo ${{ github.repository }}'), /outside the step's env/],
+		['gate gains contents: write', (s: string) => s.replace('      statuses: write\n', '      statuses: write\n      contents: write\n'), /exactly actions: read and statuses: write/],
+		['gate top-level permissions not empty', (s: string) => s.replace('permissions: {}\n', 'permissions:\n  contents: read\n'), /top-level permissions/],
+		['gate drops a required job', (s: string) => s.replace(' docs-check.yml:docs', ''), /not the required/],
+		['gate waits on another workflow list', (s: string) => s.replace('workflows: [ci-unit, workflow-lint, docs-check, patch-build]', 'workflows: [ci-unit]'), /not the required workflows/],
+	] as Array<[string, (s: string) => string, RegExp | null]>) {
+		const files = { ...realFiles, [GATE]: edit(g) };
+		const got = [...gateProblems(files), ...allowStatuses(files)];
+		if (want ? !got.some(p => want.test(p)) || (name !== 'gate control' && !got.some(p => /statuses: write/.test(p))) : got.length) {
+			throw new Error(`required-checks self-test "${name}": got ${JSON.stringify(got)}`);
+		}
+	}
+	if (!gateProblems({}).some(p => /missing/.test(p))) {
+		throw new Error('required-checks self-test "gate missing": not reported');
+	}
 	for (const [name, yml, want] of cases) {
 		const got = problems(yml, 'unit', 'unit');
 		if (want ? !got.some(p => want.test(p)) : got.length) {
@@ -393,12 +474,16 @@ function selfTest(): void {
 if (import.meta.main) {
 	if (process.argv[2] === '--self-test') {
 		selfTest();
+	} else if (process.argv[2] === '--list') {
+		// workflow:context pairs, for ./seclab landing verify
+		console.log(REQUIRED.map(r => `${r.workflow}:${r.context}`).join(' '));
 	} else {
 		const root = path.resolve(import.meta.dirname, '..');
 		const dir = path.join(root, '.github/workflows');
 		const files = Object.fromEntries(fs.readdirSync(dir).filter(f => /\.ya?ml$/i.test(f)).map(f => [f, fs.readFileSync(path.join(dir, f), 'utf8')]));
 		const all = [...REQUIRED.flatMap(r => files[r.workflow] === undefined ? [`${r.context}: workflow ${r.workflow} is missing`] : problems(files[r.workflow], r.context, r.job)),
-			...reporters(files), ...permissionsProblems(files)];
+			...reporters(files), ...gateProblems(files),
+			...permissionsProblems(files, (f, scope) => WRITE_OK.has(scope) || (f === GATE && scope === 'statuses' && gateProblems(files).length === 0))];
 		for (const p of all) {
 			console.error(`required-checks: ${p}`);
 		}
