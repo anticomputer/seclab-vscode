@@ -17356,6 +17356,21 @@
 			"status": "fixed-untested",
 			"commit": "patch:df10a26c4325e739cf8ffc2e1027424ee9364ad6",
 			"gap": "Shown by hand with a bogus value refusing before any resource exists; the runners have no unit seam for their start-up order."
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-5",
+			"round": "Round CR25 (second review)",
+			"severity": "low",
+			"summary": "The CR25-3 lease reader called a constant as a function, so clean-host threw on any b- tag.",
+			"component": "clean-host",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:96c9326cd794e5f47a2bb9748ce2e3bc48c04bef",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "imageLease threw"
+			}
 		}
 	]
 }
