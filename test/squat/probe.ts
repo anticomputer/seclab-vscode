@@ -86,11 +86,12 @@ try {
 		env: { HOME: process.env.HOME, USER: process.env.USER },
 	});
 	await client.initialize('squat-probe', '0');
+	// Staged before the tab exists: once it runs, the host never writes into its workspace (SQ-7).
+	fs.copyFileSync(path.join(vsixDir, 'squat-probe.vsix'), path.join(ws, '.squat-probe.vsix'));
 	const { tab } = await client!.request<{ tab: { metadata: { name: string } } }>('tab.claim', { workspace: { hostPath: ws } });
 	tabName = tab.metadata.name;
 	writeManifest(base, { tabs: [tabName] });
 	await client.request('tab.ensureRunning', { tabId: tabName });
-	fs.copyFileSync(path.join(vsixDir, 'squat-probe.vsix'), path.join(ws, '.squat-probe.vsix'));
 	installed = inTab(['/opt/seclab/bin/seclab-tab-env', '/opt/seclab-reh/bin/seclab-code-server', '--install-extension', path.join(ws, '.squat-probe.vsix')], 300_000) !== undefined;
 } catch (e) {
 	setupError = String(e).slice(0, 300);

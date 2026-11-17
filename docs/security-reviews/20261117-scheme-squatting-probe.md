@@ -38,3 +38,8 @@ Two threads on the fixed probe, both checked against the code and fixed before m
 | # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
 |---|---|---|---|---|---|---|
 | SQ-6 | Low | harness | The harness read the tab's report with `sbx exec cat` and no timeout, so a tab that made `report.json` a FIFO with no writer stalled the run forever, before the editor closed and the teardown gate ran. | fixed | A shared `tabExec` (test/harness.ts) runs `sbx exec` with a hard timeout and SIGKILL, and maps any failure or timeout to no data. Without the timeout the unit test hangs. | test/harness/tab-exec.test.ts "a FIFO with no writer at the read path times out to no data (SQ-6)" |
+
+## Found while fixing the same in other probes
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| SQ-7 | Low | harness | As the PR #24 and #37 reviews found in the edtabs and wsdata probes (EDT-17, WSD-1), this harness copied its VSIX into the tab's workspace from the host after the tab was running, where a tab symlink could redirect the copy onto a host file. | fixed | The VSIX is staged before the tab is claimed. Nothing in the tab runs before the probe is installed, so no run plants the symlink. | none |
