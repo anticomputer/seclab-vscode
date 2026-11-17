@@ -16,6 +16,16 @@ export const NODE_IMAGE = 'node:24.22.1-trixie@sha256:f1e034976f948cf212ef1f659c
 export const NGINX_IMAGE = 'nginx:alpine@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606';
 
 /** Short, stable id for this worktree: keeps global names (docker containers) apart. */
+/**
+ * Runs a command in a tab's sandbox as its user, bounded (review SQ-6): what it reads is the tab's
+ * (a FIFO stalls it forever), so a run past `timeoutMs` is killed. Its stdout, or undefined on
+ * any failure or timeout, which callers treat as no data so their teardown stays reachable.
+ */
+export function tabExec(sandbox: string, args: string[], opts: { timeoutMs?: number; bin?: string } = {}): string | undefined {
+	const r = spawnSync(opts.bin ?? '/opt/homebrew/bin/sbx', ['exec', '-u', 'agent', sandbox, ...args], { encoding: 'utf8', maxBuffer: 16 << 20, timeout: opts.timeoutMs ?? 30_000, killSignal: 'SIGKILL' });
+	return r.status === 0 && !r.error ? r.stdout : undefined;
+}
+
 export const worktreeId = createHash('sha256').update(repoRoot).digest('hex').slice(0, 8);
 
 /** SECLAB_BEACON_PORT, or a free loopback port. */
