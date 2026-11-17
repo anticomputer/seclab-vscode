@@ -238,23 +238,52 @@ def _line_of(text: str, pos: int) -> int:
 
 _REGEX_AFTER_WORDS = {"return", "typeof", "case", "do", "else", "in", "of", "new", "delete", "void",
                       "throw", "yield", "await", "instanceof"}
+_CONTROL_WORDS = {"if", "while", "for", "with"}
+_OPERAND_EXPECTED = "(,=:[!&|?{};+-*%<>~^/"
+
+
+class _SlashContext:
+    """Whether a `/` in code opens a regex literal or is division, from the last significant
+    token. Fed code characters only, so comments between tokens don't count, and a `)` that closes
+    an `if`/`while`/`for`/`with` condition expects an operand, as an operator does (PR review on
+    #27, 2026-11-17)."""
+
+    def __init__(self) -> None:
+        self.tok, self.in_word, self.parens = ("p", "("), False, []
+
+    def code(self, ch: str) -> None:
+        if ch.isalnum() or ch in "_$":
+            self.tok = ("w", self.tok[1] + ch) if self.in_word else ("w", ch)
+            self.in_word = True
+            return
+        self.in_word = False
+        if ch.isspace():
+            return
+        if ch == "(":
+            self.parens.append(self.tok[0] == "w" and self.tok[1] in _CONTROL_WORDS)
+            self.tok = ("p", ch)
+        elif ch == ")":
+            self.tok = ("p", ch) if (self.parens.pop() if self.parens else False) else ("a", "")
+        else:
+            self.tok = ("p", ch) if ch in _OPERAND_EXPECTED else ("a", "")
+
+    def gap(self) -> None:
+        """A comment: it ends a word but is not a token."""
+        self.in_word = False
+
+    def operand(self) -> None:
+        """A string, template or regex literal just ended."""
+        self.in_word, self.tok = False, ("a", "")
+
+    def regex_ok(self) -> bool:
+        kind, value = self.tok
+        return kind == "p" or (kind == "w" and value in _REGEX_AFTER_WORDS)
 
 
 def _regex_end(text: str, i: int) -> int | None:
-    """If the `/` at `i` opens a regular-expression literal, the index just past it (flags
-    included); otherwise None. A regex can only start where an operand is expected: at the start,
-    after an operator or opening bracket, or after a keyword such as `return`. Its body ends at an
-    unescaped `/` outside a character class, so `/^https?:\\/\\//` is not a `//` comment
-    (PR review, 2026-11-17)."""
-    j = i - 1
-    while j >= 0 and text[j] in " \t\r\n":
-        j -= 1
-    if j >= 0 and text[j] not in "(,=:[!&|?{};+-*%<>~^":
-        k = j
-        while k >= 0 and (text[k].isalnum() or text[k] in "_$"):
-            k -= 1
-        if text[k + 1:j + 1] not in _REGEX_AFTER_WORDS:
-            return None
+    """The index just past the regex literal whose opening `/` is at `i` (flags included), or
+    None if the line ends first. Its body ends at an unescaped `/` outside a character class, so
+    `/^https?:\\/\\//` is not a `//` comment. Only call it where `_SlashContext.regex_ok()`."""
     k, in_class = i + 1, False
     while k < len(text) and text[k] != "\n":
         c = text[k]
@@ -280,14 +309,17 @@ def _strip_comments(text: str) -> str:
     `*/` while its `/**` stayed, so the scanner below read the code after it as comment: the
     record and clipboard rules then skipped most of a payload (PR review, 2026-11-17)."""
     out, i, n = list(text), 0, len(text)
+    ctx = _SlashContext()
     while i < n:
         ch = text[i]
         if ch == "/" and i + 1 < n and text[i + 1] == "/":
+            ctx.gap()
             while i < n and text[i] != "\n":
                 out[i] = " "
                 i += 1
             continue
         if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            ctx.gap()
             while i < n and not (text[i] == "*" and i + 1 < n and text[i + 1] == "/"):
                 if text[i] != "\n":
                     out[i] = " "
@@ -297,7 +329,8 @@ def _strip_comments(text: str) -> str:
                     out[j] = " "
             i += 2
             continue
-        if ch == "/" and (end := _regex_end(text, i)) is not None:
+        if ch == "/" and ctx.regex_ok() and (end := _regex_end(text, i)) is not None:
+            ctx.operand()
             i = end
             continue
         if ch in "'\"`":
@@ -305,7 +338,9 @@ def _strip_comments(text: str) -> str:
             while i < n and text[i] != quote and not (quote != "`" and text[i] == "\n"):
                 i += 2 if text[i] == "\\" else 1
             i += 1
+            ctx.operand()
             continue
+        ctx.code(ch)
         i += 1
     return "".join(out)
 
@@ -313,14 +348,17 @@ def _strip_comments(text: str) -> str:
 def _code_only(text: str) -> str:
     """The text with string literals and comments blanked to spaces (positions and newlines kept)."""
     out, i, n = list(text), 0, len(text)
+    ctx = _SlashContext()
     while i < n:
         ch = text[i]
         if ch == "/" and i + 1 < n and text[i + 1] == "/":
+            ctx.gap()
             while i < n and text[i] != "\n":
                 out[i] = " "
                 i += 1
             continue
         if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            ctx.gap()
             while i < n and not (text[i] == "*" and i + 1 < n and text[i + 1] == "/"):
                 if text[i] != "\n":
                     out[i] = " "
@@ -330,7 +368,8 @@ def _code_only(text: str) -> str:
                     out[j] = " "
             i += 2
             continue
-        if ch == "/" and (end := _regex_end(text, i)) is not None:
+        if ch == "/" and ctx.regex_ok() and (end := _regex_end(text, i)) is not None:
+            ctx.operand()
             i = end
             continue
         if ch in "'\"`":
@@ -350,7 +389,9 @@ def _code_only(text: str) -> str:
                     out[i] = " "
                 i += 1
             i += 1
+            ctx.operand()
             continue
+        ctx.code(ch)
         i += 1
     return "".join(out)
 
