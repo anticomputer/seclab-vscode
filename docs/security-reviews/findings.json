@@ -14509,6 +14509,171 @@
 				"name": "patch 0050 offers and starts no host terminal in a tab window"
 			},
 			"note": "The rule pins the defensive read (?.remoteAuthority); upstream's own unit suite is not run in CI."
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "CR16-1",
+			"round": "Round 4: code review of the Falco sweep (CR16)",
+			"severity": "low",
+			"summary": "On macOS the Falco owner identity was only the uid, so two Macs sharing an engine could match.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:7dd12727b11c97e7d2398a692155cd3882964734",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "falco: an unknown owner identity must judge nothing"
+			}
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "CR16-2",
+			"round": "Round 4: code review of the Falco sweep (CR16)",
+			"severity": "medium",
+			"summary": "Run-scoped teardown removed every Falco sensor with the run's state tag, including another namespace's live sensor sharing the profile path.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:7dd12727b11c97e7d2398a692155cd3882964734",
+			"test": {
+				"file": "test/containment/teardown.test.ts",
+				"name": "CR16-2: verify keeps a foreign sensor with the run profile"
+			}
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "CR16-3",
+			"round": "Round 4: code review of the Falco sweep (CR16)",
+			"severity": "low",
+			"summary": "clean-host removed a stray tabd's sensor after a kill it never confirmed.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:7dd12727b11c97e7d2398a692155cd3882964734",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "falco: a sensor whose stray tabd survived termination must be kept"
+			}
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "CR16-4",
+			"round": "Round 4: code review of the Falco sweep (CR16)",
+			"severity": "low",
+			"summary": "A run pid proved ownership even for a sensor with foreign owner labels.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:7dd12727b11c97e7d2398a692155cd3882964734",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "falco run scope: got"
+			}
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "CR16-5",
+			"round": "Round 4: code review of the Falco sweep (CR16)",
+			"severity": "low",
+			"summary": "A run's own sensor with drifted owner labels was neither removed nor reported.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:7dd12727b11c97e7d2398a692155cd3882964734",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "falco run scope: got"
+			}
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "CR16-6",
+			"round": "Round 4: code review of the Falco sweep (CR16)",
+			"severity": "low",
+			"summary": "tabd's stale-sensor cleanup removed same-tag sensors without the owner check.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:7dd12727b11c97e7d2398a692155cd3882964734",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs review CR16-6: a stale Falco sensor of the same state tag"
+			}
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "CR16-7",
+			"round": "Round 4: code review of the Falco sweep (CR16)",
+			"severity": "low",
+			"summary": "The test wrote the label undefined for an unknown identity, and run-scoped ownership had no pure test.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:7dd12727b11c97e7d2398a692155cd3882964734",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "falco run scope: got"
+			}
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "CR16-8",
+			"round": "Round 4: code review of the Falco sweep (CR16)",
+			"severity": "low",
+			"summary": "clean-host read a failed ps as proof a stray tabd had exited, so a failed kill could still remove its live Falco sensor.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:7dd12727b11c97e7d2398a692155cd3882964734",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "pid liveness: got"
+			}
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "CR16-9",
+			"round": "Round 4: code review of the Falco sweep (CR16)",
+			"severity": "low",
+			"summary": "With no owner identity of its own, tabd's stale-sensor cleanup still removed unlabelled same-tag sensors, possibly another namespace's.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:7dd12727b11c97e7d2398a692155cd3882964734",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs review CR16-6: a stale Falco sensor of the same state tag"
+			}
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "CR16-10",
+			"round": "Round 4: code review of the Falco sweep (CR16)",
+			"severity": "low",
+			"summary": "The macOS identity change reordered the Linux owner-hash inputs, so sensors labelled by an earlier build looked foreign and were never reclaimed.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs review CR16-10: on Linux the owner hash keeps its input order"
+			},
+			"commit": "patch:7dd12727b11c97e7d2398a692155cd3882964734"
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "CR16-11",
+			"round": "Round 4: code review of the Falco sweep (CR16)",
+			"severity": "low",
+			"summary": "A ps that failed to spawn had no stdout, so the liveness check threw before its kill(pid, 0) fallback and aborted cleanup.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "pid liveness: got"
+			},
+			"commit": "patch:7dd12727b11c97e7d2398a692155cd3882964734"
 		}
 	]
 }

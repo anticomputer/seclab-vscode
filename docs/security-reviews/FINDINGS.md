@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 83 | 199 | 209 | 28 | 533 |
+| fixed | 14 | 83 | 200 | 219 | 28 | 544 |
 | fixed-untested | 0 | 5 | 52 | 164 | 61 | 282 |
 | accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 13 | 15 | 6 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 290 | 466 | 125 | 989 |
+| **all** | 16 | 92 | 291 | 476 | 125 | 1000 |
 
 ## Baseline: open high and critical findings
 
@@ -761,6 +761,17 @@ Every other commit the register cites is on main's history, or on the branch its
 | PS-5 | low | fixed | On Linux the root pid namespace link is identical across machines, so cloned machines on one engine differed only by boot time. | ed53d3aedc75 · `test/clean-host.ts` "falco orphan cases OK" |
 | PS-6 | low | fixed | Sensors the sweep cannot judge (older tabd, other namespace, changed macOS hostname) were skipped silently. | ed53d3aedc75 · `test/containment/teardown.test.ts` "PS-6: verify notes the foreign sensor it could not judge" |
 | PS-7 | low | fixed-untested | The teardown test left its inert fake docker script under .work/. | Test hygiene inside the test itself; a test of the test's own cleanup adds nothing. |
+| CR16-1 | low | fixed | On macOS the Falco owner identity was only the uid, so two Macs sharing an engine could match. | patch:7dd12727b11c97e7d2398a692155cd3882964734 · `test/clean-host.ts` "falco: an unknown owner identity must judge nothing" |
+| CR16-2 | medium | fixed | Run-scoped teardown removed every Falco sensor with the run's state tag, including another namespace's live sensor sharing the profile path. | patch:7dd12727b11c97e7d2398a692155cd3882964734 · `test/containment/teardown.test.ts` "CR16-2: verify keeps a foreign sensor with the run profile" |
+| CR16-3 | low | fixed | clean-host removed a stray tabd's sensor after a kill it never confirmed. | patch:7dd12727b11c97e7d2398a692155cd3882964734 · `test/clean-host.ts` "falco: a sensor whose stray tabd survived termination must be kept" |
+| CR16-4 | low | fixed | A run pid proved ownership even for a sensor with foreign owner labels. | patch:7dd12727b11c97e7d2398a692155cd3882964734 · `test/clean-host.ts` "falco run scope: got" |
+| CR16-5 | low | fixed | A run's own sensor with drifted owner labels was neither removed nor reported. | patch:7dd12727b11c97e7d2398a692155cd3882964734 · `test/clean-host.ts` "falco run scope: got" |
+| CR16-6 | low | fixed | tabd's stale-sensor cleanup removed same-tag sensors without the owner check. | patch:7dd12727b11c97e7d2398a692155cd3882964734 · `tabd/test/obs.test.ts` "obs review CR16-6: a stale Falco sensor of the same state tag" |
+| CR16-7 | low | fixed | The test wrote the label undefined for an unknown identity, and run-scoped ownership had no pure test. | patch:7dd12727b11c97e7d2398a692155cd3882964734 · `test/clean-host.ts` "falco run scope: got" |
+| CR16-8 | low | fixed | clean-host read a failed ps as proof a stray tabd had exited, so a failed kill could still remove its live Falco sensor. | patch:7dd12727b11c97e7d2398a692155cd3882964734 · `test/clean-host.ts` "pid liveness: got" |
+| CR16-9 | low | fixed | With no owner identity of its own, tabd's stale-sensor cleanup still removed unlabelled same-tag sensors, possibly another namespace's. | patch:7dd12727b11c97e7d2398a692155cd3882964734 · `tabd/test/obs.test.ts` "obs review CR16-6: a stale Falco sensor of the same state tag" |
+| CR16-10 | low | fixed | The macOS identity change reordered the Linux owner-hash inputs, so sensors labelled by an earlier build looked foreign and were never reclaimed. | patch:7dd12727b11c97e7d2398a692155cd3882964734 · `tabd/test/obs.test.ts` "obs review CR16-10: on Linux the owner hash keeps its input order" |
+| CR16-11 | low | fixed | A ps that failed to spawn had no stdout, so the liveness check threw before its kill(pid, 0) fallback and aborted cleanup. | patch:7dd12727b11c97e7d2398a692155cd3882964734 · `test/clean-host.ts` "pid liveness: got" |
 
 ### [20261104-m0-tabd-code](20261104-m0-tabd-code.md)
 
