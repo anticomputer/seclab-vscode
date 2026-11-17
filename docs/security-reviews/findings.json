@@ -17401,6 +17401,36 @@
 				"file": "build/fetch-upstream.test.ts",
 				"name": "fetch-upstream: a linked .git/config or .git/info reaches nothing outside DEST (PR 25 review)"
 			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-8",
+			"round": "Round CR25 (second review)",
+			"severity": "low",
+			"summary": "A kept replacement ref made the reset and the check use another commit's tree while HEAD named the pin.",
+			"component": "build (fetch-upstream)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:2d8a18566780b7d60e4a6166d9c887d1eefc8aeb",
+			"test": {
+				"file": "build/fetch-upstream.test.ts",
+				"name": "fetch-upstream: a replacement ref or a self-ignoring directory changes nothing (PR 25 review)"
+			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-9",
+			"round": "Round CR25 (second review)",
+			"severity": "low",
+			"summary": "An untracked directory with a .gitignore of * hid itself from the clean and the check.",
+			"component": "build (fetch-upstream)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:2d8a18566780b7d60e4a6166d9c887d1eefc8aeb",
+			"test": {
+				"file": "build/fetch-upstream.test.ts",
+				"name": "fetch-upstream: a replacement ref or a self-ignoring directory changes nothing (PR 25 review)"
+			}
 		}
 	]
 }
