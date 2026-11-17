@@ -72,5 +72,26 @@ run_case "a ref without a digest" '{"images":[{"name":"x","ref":"example/x:1.0",
 run_case "a verify field with shell metacharacters" "{\"images\":[$(img example/one $D1 attested github-attestation 'example/one;true')]}" ok fail "malformed ref or verify fields"
 run_case "one image fails verification" "$GOOD" fail-second fail "FAILED example/two"
 
+# Finding II-1: a cached bundle is used only when $CI or $SECLAB_ATTESTATION_DIR is set; a local
+# run verifies online (so revocation is re-checked), even with a stale bundle on disk.
+bundle_case() {  # name, CI value, expect (bundle|online)
+  t=$scratch/$(printf %s "$1" | tr -c 'A-Za-z0-9' _)
+  mkdir -p "$t/tools" "$scratch/.work/attestations"
+  cp "$broker/tools/verify-images.sh" "$t/tools/verify-images.sh"
+  printf '%s' "$GOOD" > "$t/deps.json"
+  # The script's default bundle directory: <its broker tree>/../.work/attestations.
+  for dg in $D1 $D2; do echo '{"stale":"bundle"}' > "$scratch/.work/attestations/$dg.jsonl"; done
+  : > "$t/gh.log"
+  PATH="$scratch/bin:$PATH" GH_LOG="$t/gh.log" GH_MODE=ok CI=$2 SECLAB_ATTESTATION_DIR= \
+    sh "$t/tools/verify-images.sh" > "$t/out" 2> "$t/err" || { fail "$1" "exit: $(cat "$t/err")"; return; }
+  n=$(grep -c -- ' --bundle ' "$t/gh.log" || true)
+  case $3 in
+    online) [ "$n" -eq 0 ] || fail "$1" "a local run used a cached bundle: $(cat "$t/gh.log")" ;;
+    bundle) [ "$n" -eq 2 ] || fail "$1" "CI didn't use the cached bundles: $(cat "$t/gh.log")" ;;
+  esac
+}
+bundle_case "II-1: a local run never uses a cached bundle" "" online
+bundle_case "II-1: with CI set, the job's own bundles are used" 1 bundle
+
 [ "$fails" -eq 0 ] || exit 1
-echo "verify-images tests: ok (1 pass with exact register binding; 7 fail-closed cases)"
+echo "verify-images tests: ok (1 pass with exact register binding; 7 fail-closed cases; 2 bundle-cache cases)"

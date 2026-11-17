@@ -627,9 +627,13 @@
 			"summary": "Provenance used the verifier's tags, so a pin verified for one interpreter could be installed into the mitmproxy image (different Python) or as an sdist.",
 			"component": "broker provenance gate",
 			"owner": "broker",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "f84bc5c",
-			"gap": "The per-lockfile py3-none-any purity rule in broker/tools/provenance.py has no negative vector; provenance-check.sh passes today whether or not the rule exists. Only the `--only-binary=:all:` half is covered by the supply-chain self-test."
+			"test": {
+				"file": "broker/tests/provenance/test_verify_binding.py",
+				"name": "provenance #6: a platform wheel pinned for another base than the verifier's is refused"
+			},
+			"note": "Offline against a fake index (broker/tests/provenance/run.sh, ci-unit): platform, py2-only and sdist pins for a non-verifier base fail the purity rule, a pure wheel passes, and collect() marks pins pure-required only for such lockfiles."
 		},
 		{
 			"record": "20261104-broker-dependency-provenance.md",
@@ -3427,10 +3431,13 @@
 			"summary": "Locally, a cached attestation bundle was reused and never re-checked revocation.",
 			"component": "broker/tools/verify-images.sh",
 			"owner": "broker",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "8ed6365",
-			"gap": "A cached bundle is now used only when $CI or $SECLAB_ATTESTATION_DIR is set (local runs verify online), but no test covers the stale-bundle path.",
-			"note": "Recorded as \"Open (broker session)\" in the record; the fix landed afterwards."
+			"test": {
+				"file": "broker/tests/verify-images/run.sh",
+				"name": "II-1: a local run never uses a cached bundle"
+			},
+			"note": "Recorded as \"Open (broker session)\" in the record; the fix landed afterwards. With stale bundles on disk a local run verifies online; with CI set the job's bundles are used (the control)."
 		},
 		{
 			"record": "20261104-supply-chain.md",
@@ -6508,10 +6515,13 @@
 			"summary": "tools/attest/requirements.in still pinned the superseded pypi-attestations version, so the next pip-compile would undo the re-pin.",
 			"component": "broker lock drift gate (pin_check)",
 			"owner": "broker",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "7ae3eb3",
-			"note": "pin_check.source_drift fails when a lock's requirements*.in pins a different version; docs-check runs it in CI. Evidence in the record is a manual defect injection, not an automated self-test case.",
-			"gap": "Enforced only by `broker/docs-check.sh` (\"python /repo/broker/tools/pin_check.py --self-test && python /repo/broker/tools/pin_check.py\"), which is not a regression test: no test fails if the fix is reverted."
+			"test": {
+				"file": "broker/tools/pin_check.py",
+				"name": "10-4: a source pinning a superseded version fails"
+			},
+			"note": "pin_check.source_drift fails when a lock's requirements*.in pins a different version; pin_check's self_test now names the case, and docs-check runs it in CI."
 		},
 		{
 			"record": "20261105-broker-repin-and-image-snapshot.md",
@@ -6614,10 +6624,13 @@
 			"summary": "A missing, empty or comment-only requirements.in silently turned the lock-drift check off.",
 			"component": "broker lock drift gate (pin_check)",
 			"owner": "broker",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "8007864",
-			"note": "pin_check.source_drift requires the .in to exist and pin something, and every direct `via -r` requirement to be pinned there.",
-			"gap": "Enforced only by `broker/docs-check.sh` (\"python /repo/broker/tools/pin_check.py --self-test && python /repo/broker/tools/pin_check.py\"), which is not a regression test: no test fails if the fix is reverted."
+			"test": {
+				"file": "broker/tools/pin_check.py",
+				"name": "10b-5: an empty source fails"
+			},
+			"note": "pin_check.source_drift requires the .in to exist and pin something, and every direct `via -r` requirement to be pinned there; pin_check's self_test names the missing, empty and comment-only cases."
 		},
 		{
 			"record": "20261105-broker-repin-and-image-snapshot.md",
@@ -6651,10 +6664,13 @@
 			"summary": "The drift gate inferred pip-compile output from a lock's own `# via` comments, so deleting the .in and stripping comments turned it off.",
 			"component": "broker lock drift gate (pin_check)",
 			"owner": "broker",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "911779f",
-			"note": "Pairings come from broker/deps.json `lockSources`; a registered pair needs both files and every requirements*.in must be registered.",
-			"gap": "Enforced only by `broker/docs-check.sh` (\"python /repo/broker/tools/pin_check.py --self-test && python /repo/broker/tools/pin_check.py\"), which is not a regression test: no test fails if the fix is reverted."
+			"test": {
+				"file": "broker/tools/pin_check.py",
+				"name": "10c-1: a registered source that is missing fails, with no # via comments left"
+			},
+			"note": "Pairings come from broker/deps.json `lockSources`; a registered pair needs both files and every requirements*.in must be registered."
 		},
 		{
 			"record": "20261105-broker-repin-and-image-snapshot.md",
@@ -6680,10 +6696,13 @@
 			"summary": "The quoting lint walked the working tree, so an untracked local file broke docs-check and a tracked path not checked out was missed.",
 			"component": "broker path lint (docs-check)",
 			"owner": "broker",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "911779f",
-			"note": "The lint now reads `git ls-files -- broker` (with core.quotePath), the exact set build.sh snapshots.",
-			"gap": "Enforced only by `broker/docs-check.sh` (\"tracked path under broker/ needs git quoting; broker/build.sh refuses it\"), which is not a regression test: no test fails if the fix is reverted."
+			"test": {
+				"file": "broker/tools/quoted-paths.sh",
+				"name": "10c-3: an untracked path that needs quoting is ignored"
+			},
+			"note": "The lint (now broker/tools/quoted-paths.sh, run by docs-check) reads `git ls-files -- broker` with core.quotePath, the exact set build.sh snapshots; its self-test also covers a tracked path missing from the checkout."
 		},
 		{
 			"record": "20261105-broker-websocket-opt-in.md",
