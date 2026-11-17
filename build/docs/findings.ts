@@ -29,8 +29,11 @@ const REGISTER = `${REVIEWS}/findings.json`;
 const VIEW = `${REVIEWS}/FINDINGS.md`;
 const SEVS = ['critical', 'high', 'medium', 'low', 'info'] as const;
 type Sev = typeof SEVS[number];
-const STATUSES = ['fixed', 'fixed-untested', 'accepted-residual', 'deferred', 'open', 'false-positive'] as const;
+const STATUSES = ['fixed', 'fixed-before-landing', 'fixed-untested', 'accepted-residual', 'deferred', 'open', 'false-positive'] as const;
 type Status = typeof STATUSES[number];
+// Fixed, with its regression test: `fixed`, or `fixed-before-landing` (a finding a review of an
+// unmerged change raised, fixed and tested in that change before it reached main; review GGGG).
+const isFixed = (f: { status: string }) => f.status === 'fixed' || f.status === 'fixed-before-landing';
 
 interface Extracted { record: string; anchor: string; sevs: Sev[]; round: string; line: number; text: string; placeholder: boolean }
 interface Ref { file: string; quote: string }
@@ -39,6 +42,7 @@ interface Finding {
 	summary: string; component: string; owner: string; status: Status;
 	commit?: string; test?: { file: string; name: string }; acceptedBy?: 'owner' | 'agent'; rationale?: string;
 	ref?: Ref; followUp?: string; gap?: string; note?: string; manual?: Ref; wasKey?: string;
+	preFix?: string; preFixRef?: Ref;
 }
 interface Owner { session: string; branch: string | null; scope: string }
 interface Register { $comment?: string; owners: Record<string, Owner>; baseline: string[]; noFindings: string[]; manualOnly: string[]; findings: Finding[] }
@@ -166,7 +170,7 @@ function recordFiles(tree: Tree): string[] {
 // ---- schema -----------------------------------------------------------------------------------
 
 const keyOf = (f: Finding) => `${f.record ?? 'register'}#${f.anchor}`;
-const FIELDS = new Set(['record', 'anchor', 'branch', 'round', 'severity', 'severityNote', 'summary', 'component', 'owner', 'status', 'commit', 'test', 'acceptedBy', 'rationale', 'ref', 'followUp', 'gap', 'note', 'manual', 'wasKey']);
+const FIELDS = new Set(['record', 'anchor', 'branch', 'round', 'severity', 'severityNote', 'summary', 'component', 'owner', 'status', 'commit', 'test', 'acceptedBy', 'rationale', 'ref', 'followUp', 'gap', 'note', 'manual', 'wasKey', 'preFix', 'preFixRef']);
 const nonEmpty = (v: unknown) => typeof v === 'string' && v.trim().length > 0;
 const isRef = (v: unknown): v is Ref => !!v && typeof v === 'object' && nonEmpty((v as Ref).file) && nonEmpty((v as Ref).quote) && Object.keys(v).every(k => k === 'file' || k === 'quote');
 // Cited paths are repo-relative and plain (they're rendered into links), and never the register
@@ -317,8 +321,11 @@ function citations(tree: Tree, reg: Register, base?: Register): Citations {
 	for (const f of reg.findings) {
 		const branch = entryBranch(reg, f);
 		const t0 = touched.has(keyOf(f));
-		if (typeof f.commit === 'string') {
-			add({ token: PATCH_EXACT.test(f.commit) ? f.commit : f.commit.toLowerCase(), tolerated: false, branch, touched: t0, use: `${keyOf(f)} commit` });
+		for (const k of ['commit', 'preFix'] as const) {
+			const v = f[k];
+			if (typeof v === 'string') {
+				add({ token: PATCH_EXACT.test(v) ? v : v.toLowerCase(), tolerated: false, branch, touched: t0, use: `${keyOf(f)} ${k}` });
+			}
 		}
 		const recText = f.record && tree.exists(`${REVIEWS}/${f.record}`) ? tree.read(`${REVIEWS}/${f.record}`) : undefined;
 		for (const k of ['round', ...SHA_PROSE] as const) {
@@ -361,7 +368,7 @@ function remapBranch(reg: Register, branch: string, pairs: Array<[string, string
 		if (entryBranch(reg, f) !== branch) {
 			continue;
 		}
-		for (const k of ['commit', ...SHA_PROSE] as const) {
+		for (const k of ['commit', 'preFix', ...SHA_PROSE] as const) {
 			const rec = f as unknown as Record<string, unknown>;
 			const v = rec[k];
 			if (typeof v === 'string' && swap(v) !== v) {
@@ -379,7 +386,7 @@ function pinPatches(reg: Register, pairs: Array<[string, string]>): string[] {
 	const changed: string[] = [];
 	const map = new Map(pairs.filter(([o, n]) => PATCH_EXACT.test(o) && /^[0-9a-f]{7,40}$/.test(n)));
 	for (const f of reg.findings) {
-		for (const k of ['commit', ...SHA_PROSE] as const) {
+		for (const k of ['commit', 'preFix', ...SHA_PROSE] as const) {
 			const rec = f as unknown as Record<string, unknown>;
 			const v = rec[k];
 			if (typeof v === 'string') {
@@ -401,28 +408,76 @@ function pinPatches(reg: Register, pairs: Array<[string, string]>): string[] {
 // warning, since some rounds reuse generic IDs (R-1) on purpose; no base, no warnings.
 const EXPLICIT_ID = /^[A-Z][A-Z0-9]*-[0-9][^\s]*$/;
 const normSummary = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-function clashPairs(reg: Register, keys: Set<string>): Map<string, string[]> {
-	const out = new Map<string, string[]>();
+const clashes = (f: Finding, g: Finding) => g !== f && EXPLICIT_ID.test(f.anchor) && g.anchor === f.anchor && keyOf(g) !== keyOf(f) && normSummary(g.summary) !== normSummary(f.summary);
+function clashPairs(reg: Register, keys: Set<string>): Map<string, Finding[]> {
+	const out = new Map<string, Finding[]>();
 	for (const f of reg.findings) {
-		if (!keys.has(keyOf(f)) || !EXPLICIT_ID.test(f.anchor)) {
-			continue;
-		}
-		const other = reg.findings.filter(g => g !== f && g.anchor === f.anchor && g.record !== f.record && normSummary(g.summary) !== normSummary(f.summary));
+		const other = keys.has(keyOf(f)) ? reg.findings.filter(g => clashes(f, g)) : [];
 		if (other.length) {
-			out.set(keyOf(f), other.map(keyOf));
+			out.set(keyOf(f), other);
 		}
 	}
 	return out;
 }
-function anchorClashes(reg: Register, base?: Register): string[] {
+// A clash this change adds fails when both findings belong to the same owner (one component, two
+// meanings for one ID, as WL-5 on two RPC branches), and is a warning across owners, where generic
+// round IDs (R-1) recur by design (review FFFF). Required checks run on a head that contains current
+// main, so whichever branch lands second sees the first's ID here and renames its own.
+function anchorClashes(reg: Register, base?: Register): { fail: string[]; warn: string[] } {
+	const out = { fail: [] as string[], warn: [] as string[] };
 	if (!base) {
-		return [];
+		return out;
 	}
 	const was = clashPairs(base, new Set(base.findings.map(keyOf)));
-	return [...clashPairs(reg, touchedKeys(reg, base))].flatMap(([k, others]) => {
-		const fresh = others.filter(o => !(was.get(k) ?? []).includes(o));
-		return fresh.length ? [logLine(`${k}: its ID also names ${fresh.join(', ')}, another finding in another record; if both were minted on concurrent branches, rename one`)] : [];
-	});
+	const bk = new Map(base.findings.map(f => [keyOf(f), f]));
+	const f0 = new Map(reg.findings.map(f => [keyOf(f), f]));
+	// A pair is fresh as a same-owner clash unless the base had it as one, so moving one side's owner
+	// onto the other's can't launder a cross-owner warning into one owner's two meanings (FFFF-1).
+	const wasSame = (k: string, o: Finding) => (was.get(k) ?? []).some(w => keyOf(w) === keyOf(o) && w.owner === bk.get(k)?.owner);
+	const wasAny = (k: string, o: Finding) => (was.get(k) ?? []).some(w => keyOf(w) === keyOf(o));
+	// Generic round IDs (one letter: R-1) and an ID the owner already reuses in the base are that
+	// owner's convention: a warning, never a failure (FFFF-2).
+	const reused = (f: Finding) => {
+		const xs = base.findings.filter(g => g.owner === f.owner && g.anchor === f.anchor);
+		return xs.some(a => xs.some(b => clashes(a, b)));
+	};
+	for (const [k, others] of clashPairs(reg, touchedKeys(reg, base))) {
+		const me = f0.get(k)!;
+		const generic = /^[A-Z]-/.test(me.anchor) || reused(me);
+		const same = others.filter(o => o.owner === me.owner && !generic && !wasSame(k, o));
+		const cross = others.filter(o => !same.includes(o) && !wasAny(k, o));
+		if (same.length) {
+			out.fail.push(logLine(`${k}: its ID also names ${same.map(keyOf).join(', ')}, the same owner's finding with another meaning; rename the anchor in the record that has not landed`));
+		}
+		if (cross.length) {
+			out.warn.push(logLine(`${k}: its ID also names ${cross.map(keyOf).join(', ')}, another finding in another record; if both were minted on concurrent branches, rename one`));
+		}
+	}
+	return out;
+}
+// `./seclab findings clashes`: before landing, this change's new or edited entries against those
+// of every open pull request's head (relative to main). Advisory and local only: as a required
+// check it would fail two PRs that see each other at once. PR registers are data (logLine).
+function prClashes(mine: Register, main: Register | undefined, prs: Array<[string, Register | undefined]>): { fail: string[]; warn: string[] } {
+	const out = { fail: [] as string[], warn: [] as string[] };
+	const mineTouched = touchedKeys(mine, main);
+	const ours = mine.findings.filter(f => mineTouched.has(keyOf(f)));
+	const onMain = new Set((main?.findings ?? []).map(keyOf));
+	for (const [label, pr] of prs) {
+		if (!Array.isArray(pr?.findings) || schemaProblems(pr).length) {
+			out.warn.push(logLine(`${label}: its register doesn't parse; not compared`));
+			continue;
+		}
+		// Only what the PR mints: an entry main already has is main's, even on a stale head (FFFF-3).
+		// Not on main means minted there, so touched; one pass, not one per entry (PR #11 review).
+		const theirs = pr.findings.filter(g => !onMain.has(keyOf(g)));
+		for (const f of ours) {
+			for (const g of theirs.filter(g => g.anchor === f.anchor && EXPLICIT_ID.test(f.anchor) && normSummary(g.summary) !== normSummary(f.summary))) {
+				(keyOf(g) === keyOf(f) || (g.owner === f.owner && !/^[A-Z]-/.test(f.anchor)) ? out.fail : out.warn).push(logLine(`${keyOf(f)}: ${label} also mints ${keyOf(g)} with another meaning${g.owner === f.owner ? ' (same owner)' : ''}; agree which one renames`));
+			}
+		}
+	}
+	return out;
 }
 
 // The host ancestry step's input: "<key>\t<fix commit>\t<1 if it must already be on main>". A high
@@ -433,12 +488,89 @@ function anchorClashes(reg: Register, base?: Register): string[] {
 // new (EEEE-1).
 function commitLines(reg: Register, base?: Register, main?: Register): string[] {
 	const had = new Set([...(base?.findings ?? []), ...(main?.findings ?? [])].map(keyOf));
-	return reg.findings.filter(f => f.status === 'fixed' && !f.branch && f.commit)
-		.map(f => `${keyOf(f).replace(/[\t\r\n]/g, ' ')}\t${f.commit}\t${isHigh(f) && (!base || had.has(keyOf(f)) || (!!f.wasKey && had.has(f.wasKey))) ? 1 : 0}\n`);
+	return reg.findings.filter(f => isFixed(f) && !f.branch && f.commit)
+		.map(f => `${logLine(keyOf(f))}\t${f.commit}\t${isHigh(f) && (!base || had.has(keyOf(f)) || (!!f.wasKey && had.has(f.wasKey))) ? 1 : 0}\n`);
+}
+
+// The host's input for fixed-before-landing (GGGG): "<key>\t<preFix>\t<fix commit>\t<1 if new here>".
+// A new one's reviewed commit precedes its fix on this history, and neither was in the base.
+// A base that parsed but has no findings array is a defect, never "no base" (GGGG-6).
+const prefixBaseOk = (b: Register | undefined) => !b || Array.isArray(b.findings);
+function prefixLines(reg: Register, base?: Register): string[] {
+	// A base entry still on its branch hadn't landed: landing it is its first judgement (PRR11-4).
+	const had = new Set((base?.findings ?? []).filter(f => !f.branch).map(keyOf));
+	return reg.findings.filter(f => f.status === 'fixed-before-landing' && !f.branch && f.commit && f.preFix)
+		.map(f => `${logLine(keyOf(f))}\t${f.preFix}\t${f.commit}\t${base && (had.has(keyOf(f)) || (!!f.wasKey && had.has(f.wasKey))) ? 0 : 1}\n`);
+}
+
+// The register's one byte format: the writer's (tabs, a final newline). A hand-resolved rebase that
+// re-indents it fails, and `./seclab docs write` restores it (GGGG-3).
+const serialise = (reg: Register) => `${JSON.stringify(reg, null, '\t')}\n`;
+
+// `./seclab findings rebase-resolve` (GGGG-4): a three-way merge of the register by entry key, so a
+// rebase that conflicts only because two changes edited different entries resolves without a hand.
+// Each side's change to an entry (or owner, or list member) is taken; the same entry changed both
+// ways, or changed on one side and removed on the other, is a real clash and is refused. Order:
+// ours (the commit being rebased onto) first, then entries only theirs adds, in their order.
+function merge3(b: Register | undefined, o: Register, t: Register): { reg?: Register; clashes: string[] } {
+	const clashes: string[] = [];
+	const same = (x: unknown, y: unknown) => JSON.stringify(x) === JSON.stringify(y);
+	const pick = (what: string, bv: unknown, ov: unknown, tv: unknown): unknown => {
+		if (same(ov, tv) || same(tv, bv)) {
+			return ov;
+		}
+		if (same(ov, bv)) {
+			return tv;
+		}
+		clashes.push(logLine(`${what}: changed on both sides`));
+		return ov;
+	};
+	const keyed = <T>(what: string, bm: Map<string, T>, om: Map<string, T>, tm: Map<string, T>): Map<string, T> => {
+		const out = new Map<string, T>();
+		for (const k of [...om.keys(), ...[...tm.keys()].filter(k => !om.has(k))]) {
+			const v = pick(`${what} ${k}`, bm.get(k), om.get(k), tm.get(k)) as T | undefined;
+			if (v !== undefined) {
+				out.set(k, v);
+			}
+		}
+		return out;
+	};
+	const set = (what: string, bl: string[], ol: string[], tl: string[]) => [...keyed(what, new Map(bl.map(x => [x, x])), new Map(ol.map(x => [x, x])), new Map(tl.map(x => [x, x]))).keys()];
+	const byKey = (r?: Register) => new Map((r?.findings ?? []).map(f => [keyOf(f), f]));
+	for (const [n, r] of [['ours', o], ['theirs', t], ['base', b]] as const) {
+		if (r && new Set(r.findings.map(keyOf)).size !== r.findings.length) {
+			clashes.push(`${n}: two entries share a key; resolve it by hand`);
+		}
+	}
+	const reg: Register = {
+		...(pick('$comment', b?.$comment, o.$comment, t.$comment) !== undefined ? { $comment: pick('$comment', b?.$comment, o.$comment, t.$comment) as string } : {}),
+		owners: Object.fromEntries(keyed('owner', new Map(Object.entries(b?.owners ?? {})), new Map(Object.entries(o.owners)), new Map(Object.entries(t.owners)))),
+		baseline: set('baseline', b?.baseline ?? [], o.baseline, t.baseline),
+		noFindings: set('noFindings', b?.noFindings ?? [], o.noFindings, t.noFindings),
+		manualOnly: set('manualOnly', b?.manualOnly ?? [], o.manualOnly, t.manualOnly),
+		findings: [...keyed('finding', byKey(b), byKey(o), byKey(t)).values()],
+	};
+	// Anything outside the six known keys is refused, never copied (GGGG-9: a "__proto__" key would
+	// vanish through the setter), and a finding one side removed is never dropped quietly.
+	for (const k of new Set([b, o, t].flatMap(r => r ? Object.keys(r) : []))) {
+		if (!['$comment', 'owners', 'baseline', 'noFindings', 'manualOnly', 'findings'].includes(k)) {
+			clashes.push(logLine(`top-level key ${k}: not part of the register; resolve it by hand`));
+		}
+	}
+	const [bf, of, tf] = [byKey(b), byKey(o), byKey(t)];
+	for (const k of bf.keys()) {
+		if (!of.has(k) || !tf.has(k)) {
+			clashes.push(logLine(`finding ${k}: removed on one side (a finding is never removed); resolve it by hand`));
+		}
+	}
+	return clashes.length ? { clashes } : { reg, clashes };
 }
 
 // Every line the checker prints is register-derived text: one line, never a workflow command (EEEE-2).
-const logLine = (x: string) => x.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/^\s*::/, ': :');
+// The runner takes `::cmd::` only at the start of a line (after leading spaces), but the legacy
+// `##[cmd]` form anywhere in it (actions/runner@7afce9ed, src/Runner.Common/ActionCommand.cs,
+// TryParseV2 and TryParse), so both are broken (PR #11 review).
+const logLine = (x: string) => x.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/^\s*::/, ': :').replace(/##\[/g, '# #[');
 
 function schemaProblems(reg: Register): string[] {
 	const p: string[] = [];
@@ -538,6 +670,23 @@ function schemaProblems(reg: Register): string[] {
 					p.push(`${at}: fixed needs commit and test { file, name } (no test: fixed-untested)`);
 				}
 				break;
+			case 'fixed-before-landing':
+				// The reviewed commit the test failed on, and where that failing run is recorded (GGGG).
+				if (!f.commit || !f.test || !nonEmpty(f.test.file) || !nonEmpty(f.test.name) || typeof f.preFix !== 'string' || !isRef(f.preFixRef)) {
+					p.push(`${at}: fixed-before-landing needs commit, test { file, name }, preFix (the reviewed commit the test fails on) and preFixRef { file, quote }`);
+				} else {
+					if (!/^[0-9a-f]{7,40}$/.test(f.preFix) && !PATCH_EXACT.test(f.preFix)) {
+						p.push(`${at}: preFix must be a hex SHA or patch:<patch-id>`);
+					}
+					const pp = pathProblem(f.preFixRef!.file);
+					if (pp) {
+						p.push(`${at}: preFixRef: ${pp}`);
+					}
+					if (!f.preFixRef!.quote.includes(f.test.name) || !/fail/i.test(f.preFixRef!.quote)) {
+						p.push(`${at}: preFixRef.quote must name the test (test.name) and record it failing on the reviewed commit`);
+					}
+				}
+				break;
 			case 'fixed-untested':
 				if (!nonEmpty(f.gap)) {
 					p.push(`${at}: fixed-untested needs gap (the missing regression test)`);
@@ -577,8 +726,11 @@ function schemaProblems(reg: Register): string[] {
 		if (f.wasKey !== undefined && !(typeof f.wasKey === 'string' && /^[^#\s]+#\S/.test(f.wasKey))) {
 			p.push(`${at}: wasKey must be the finding's earlier key (record#anchor)`);
 		}
-		if (f.status !== 'fixed' && f.test !== undefined) {
-			p.push(`${at}: test only applies to fixed`);
+		if (!isFixed(f) && f.test !== undefined) {
+			p.push(`${at}: test only applies to fixed and fixed-before-landing`);
+		}
+		if (f.status !== 'fixed-before-landing' && (f.preFix !== undefined || f.preFixRef !== undefined)) {
+			p.push(`${at}: preFix and preFixRef only apply to fixed-before-landing`);
 		}
 		if (nonEmpty(f.anchor)) {
 			const k = keyOf(f);
@@ -604,7 +756,7 @@ const RANK: Record<Sev, number> = { critical: 4, high: 3, medium: 2, low: 1, inf
 const isHigh = (f: Finding) => RANK[f.severity] >= RANK.high;
 // An entry on a branch is never compliant: its evidence isn't on this tree (review QQQ-1).
 function compliant(f: Finding): boolean {
-	return !f.branch && (f.status === 'fixed'
+	return !f.branch && (isFixed(f)
 		|| (f.status === 'accepted-residual' && f.acceptedBy === 'owner')
 		|| (f.status === 'false-positive' && (f.acceptedBy === 'owner' || (!!f.ref && FP_REF.test(f.ref.file)))));
 }
@@ -670,7 +822,7 @@ function parseOwnerFile(text: string): { rows: Map<string, OwnerRow>; problems: 
 // (UUU-4); an unrelated later edit to the file doesn't reopen it (VVV-3). `ownerBefore` is the
 // owner file at the base whatever the changed list says (null: absent there): "touched" is decided
 // by content, so a path the list doesn't name (a symlink) can't hide an edit (XXX-7).
-interface Change { files: Set<string>; before: Map<string, string>; ownerBefore?: string | null }
+interface Change { files: Set<string>; before: Map<string, string>; ownerBefore?: string | null; landed?: boolean }
 interface Ctx { change?: Change; owner?: Map<string, OwnerRow> }
 // The row that accepts f: under its key, or under its validated wasKey while a rename lands (XXX-5).
 function ownerRowKey(f: Finding, rows: Map<string, OwnerRow> | undefined): string | undefined {
@@ -690,7 +842,7 @@ function ownerRowLanded(tree: Tree, f: Finding, change?: Change): boolean {
 	return ownerRowKey(f, rows) !== undefined;
 }
 function compliantIn(tree: Tree, f: Finding, ctx: Ctx = {}): boolean {
-	if (!compliant(f) || f.status === 'fixed' || !isHigh(f)) {
+	if (!compliant(f) || isFixed(f) || !isHigh(f)) {
 		return compliant(f);
 	}
 	// A high is closed by the owner, never by an agent: its row is in the file, and landed first.
@@ -813,7 +965,7 @@ function check(tree: Tree, reg: Register, renderedView?: string, base?: Register
 				landed = true;
 			}
 		}
-		if (f.status === 'fixed' && f.test) {
+		if (isFixed(f) && f.test) {
 			if (!tree.exists(f.test.file)) {
 				missing.push(`regression test file ${f.test.file} doesn't exist`);
 			} else {
@@ -930,6 +1082,59 @@ function check(tree: Tree, reg: Register, renderedView?: string, base?: Register
 			}
 		}
 	}
+	// fixed-before-landing (GGGG): only for a finding the change itself brings. Its record, its
+	// regression test and the record of the test failing on the reviewed commit all change here; the
+	// host checks the commits (findings_prefix). An entry the base had keeps that status, never gains it.
+	// A landed fixed-before-landing entry keeps that status and its failing-run evidence: it may reopen,
+	// but never turns into plain `fixed` to drop the evidence (PRR11-5).
+	// Not on main with no landing range: HEAD^1 may be the same landing's own commit (PRR11-11).
+	for (const bf of change?.landed ? [] : base?.findings ?? []) {
+		const f = byKey.get(keyOf(bf)) ?? moved.get(keyOf(bf));
+		if (bf.status === 'fixed-before-landing' && !bf.branch && f && f.status === 'fixed') {
+			p.push(`${keyOf(f)}: was fixed-before-landing; it keeps that status and its preFix evidence (it may reopen, not become fixed)`);
+		}
+	}
+	// A branch entry is judged when it lands: its evidence isn't on this tree yet, as for its record
+	// and test, and it is never compliant until then (GGGG-11).
+	for (const f of reg.findings.filter(x => x.status === 'fixed-before-landing' && !x.branch)) {
+		const k = keyOf(f);
+		// The record of the failing run is evidence for the entry's whole life, like a test (GGGG-5).
+		if (f.preFixRef) {
+			const m = refProblem(tree, f.preFixRef, 'preFixRef');
+			if (m) {
+				p.push(`${k}: ${m}`);
+			}
+		}
+		const bf0 = base?.findings.find(x => keyOf(x) === k) ?? (f.wasKey && moved.get(f.wasKey) === f ? base?.findings.find(x => keyOf(x) === f.wasKey) : undefined);
+		// A base entry still on its branch hadn't landed: landing it is its first judgement (PRR11-4).
+		const bf = bf0 && !bf0.branch ? bf0 : undefined;
+		// main with no landing range (a local run): the base is only HEAD^1, not the landing's base, so
+		// nothing is compared with it; the evidence above is still checked (PRR11-6, PRR11-7).
+		if (change?.landed) {
+			continue;
+		}
+		if (bf) {
+			if (bf.status !== 'fixed-before-landing') {
+				p.push(`${k}: ${bf.status} in the merge base's register; fixed-before-landing is only for a finding the change itself brings (a recorded finding closes as fixed)`);
+			}
+			continue;
+		}
+		// No base register to compare with: nothing shows the finding is new, so it can't be (GGGG-6).
+		if (!base) {
+			p.push(`${k}: fixed-before-landing can't be judged without a base register`);
+			continue;
+		}
+		if (!change) {
+			p.push(`${k}: fixed-before-landing is judged against the change's files; run with --changed`);
+			continue;
+		}
+		const need: Array<[string, string | undefined]> = [['its record', f.record === null ? f.ref?.file : `${REVIEWS}/${f.record}`], ['its regression test', f.test?.file], ['preFixRef', f.preFixRef?.file]];
+		for (const [what, file] of need) {
+			if (file && !change.files.has(file)) {
+				p.push(`${k}: fixed-before-landing, but ${what} (${file}) isn't changed here; the finding, its fix and its test land in one change`);
+			}
+		}
+	}
 	for (const f of reg.findings) {
 		if (isHigh(f) && !compliantIn(tree, f, ctx) && !baseline.has(keyOf(f))) {
 			const why = f.branch ? `${f.status} on branch ${f.branch} (not on this tree)`
@@ -941,6 +1146,10 @@ function check(tree: Tree, reg: Register, renderedView?: string, base?: Register
 	if (renderedView !== undefined && (!tree.exists(VIEW) || tree.read(VIEW) !== renderedView)) {
 		p.push(`${VIEW} is stale: run \`./seclab docs write\``);
 	}
+	if (tree.exists(REGISTER) && tree.read(REGISTER) !== serialise(reg)) {
+		p.push(`${REGISTER} isn't in the writer's byte format (tab-indented, as written by the tool): run \`./seclab docs write\``);
+	}
+	p.push(...anchorClashes(reg, base).fail);
 	return p;
 }
 
@@ -957,6 +1166,7 @@ const recLink = (f: Finding) => f.record === null ? (f.branch ? `\`${f.ref?.file
 function evidence(f: Finding): string {
 	switch (f.status) {
 		case 'fixed': return `${esc(f.commit ?? '')} · \`${esc(f.test?.file ?? '')}\` "${esc(f.test?.name ?? '')}"`;
+		case 'fixed-before-landing': return `${esc(f.commit ?? '')} · \`${esc(f.test?.file ?? '')}\` "${esc(f.test?.name ?? '')}" · failed on ${esc(f.preFix ?? '')}`;
 		case 'accepted-residual': return f.acceptedBy === 'owner' ? `${OWNER_DECISION} (owner-acceptances.md): ${esc(f.rationale ?? '')}` : `accepted by an agent: ${esc(f.rationale ?? '')}`;
 		case 'deferred': return `follow-up: ${esc(f.followUp ?? '')}`;
 		case 'false-positive': return esc(f.rationale ?? '');
@@ -995,7 +1205,7 @@ function render(reg: Register, tree?: Tree): string {
 	}
 	L.push('', '## Not fixed, by owner', '');
 	for (const [id, o] of Object.entries(reg.owners).sort((a, b) => a[1].session.localeCompare(b[1].session))) {
-		const mine = fs_.filter(f => f.owner === id && f.status !== 'fixed' && f.status !== 'false-positive').sort(sortSev);
+		const mine = fs_.filter(f => f.owner === id && !isFixed(f) && f.status !== 'false-positive').sort(sortSev);
 		if (!mine.length) {
 			continue;
 		}
@@ -1388,19 +1598,178 @@ function selfTest(): number {
 		const clBase = JSON.parse(JSON.stringify(cl)) as Register;
 		cl.owners.p = { session: 'Other', branch: null, scope: 'x' };
 		cl.findings.push({ record: '20261101-a.md', anchor: 'WL-5', severity: 'low', summary: 'another meaning', component: 'c', owner: 'p', status: 'open', gap: 'g' });
-		expect('an explicit ID a change reuses with another meaning is warned, across owners (DDDD-3)', anchorClashes(cl, clBase), /WL-5: its ID also names register#WL-5/);
+		const allOf = (x: { fail: string[]; warn: string[] }) => [...x.fail, ...x.warn];
+		expect('an explicit ID a change reuses with another meaning is warned, across owners (DDDD-3)', anchorClashes(cl, clBase).warn, /WL-5: its ID also names register#WL-5/);
+		expect('control: a clash across owners is a warning, not a failure (FFFF)', anchorClashes(cl, clBase).fail, null);
 		const old = JSON.parse(JSON.stringify(cl)) as Register;
 		const later = JSON.parse(JSON.stringify(cl)) as Register;
 		later.findings[later.findings.length - 1].gap = 'edited';
-		expect('control: editing an entry whose clash the base already had is not warned (DDDD-4)', anchorClashes(later, old), null);
-		expect('control: no base, no warnings (DDDD-4)', anchorClashes(cl), null);
+		expect('control: editing an entry whose clash the base already had is not warned (DDDD-4)', allOf(anchorClashes(later, old)), null);
+		expect('control: no base, no warnings (DDDD-4)', allOf(anchorClashes(cl)), null);
 		const cn = JSON.parse(JSON.stringify(clBase)) as Register;
 		cn.findings.push({ record: '20261101-a.md', anchor: 'WL-5', severity: 'low', summary: 'One  meaning.', component: 'c', owner: 'o', status: 'open', gap: 'g' });
-		expect('control: the same ID with the same summary (one finding, two records) is not warned (DDDD)', anchorClashes(cn, clBase), null);
+		expect('control: the same ID with the same summary (one finding, two records) is not warned (DDDD)', allOf(anchorClashes(cn, clBase)), null);
 		const nb = JSON.parse(JSON.stringify(clBase)) as Register;
 		nb.findings.push({ record: null, anchor: '7', severity: 'low', summary: 'x', component: 'c', owner: 'o', status: 'open', gap: 'g', ref: { file: EDR, quote: 'only on main' } }, { record: '20261101-a.md', anchor: '7', severity: 'low', summary: 'y', component: 'c', owner: 'o', status: 'open', gap: 'g' });
-		expect('control: a numbered anchor is never warned (DDDD-5)', anchorClashes(nb, clBase), null);
-		expect('control: a clash warning never fails the check (DDDD-5)', run(base(), cl, true, clBase).filter(x => /its ID also names/.test(x)), null);
+		// GGGG: fixed-before-landing, only for a finding the change brings with its fix and test.
+		const gRec = `${REVIEWS}/20261102-g.md`;
+		const gFiles = () => { const f = base(); f.set(gRec, rec('2026-11-02', `## Round G\n${table}| G-1 | **High** | x | bad | Fixed | f |\n\nrejects the bad thing failed on the reviewed commit, then passed with the fix.\n`)); return f; };
+		const gEntry = (): Finding => ({ record: '20261102-g.md', anchor: 'G-1', severity: 'high', summary: 'g', component: 'c', owner: 'o', status: 'fixed-before-landing', commit: 'patch:1111111111111111111111111111111111111111', test: { file: 'tabd/test/unit.test.ts', name: 'rejects the bad thing' }, preFix: 'patch:2222222222222222222222222222222222222222', preFixRef: { file: gRec, quote: 'rejects the bad thing failed on the reviewed commit' } });
+		const gReg = () => { const r = reg(); r.findings.push(gEntry()); return r; };
+		const gChange = (files: string[]): Change => ({ files: new Set(files), before: new Map() });
+		expect('control: a new high fixed before landing, with its record, test and failing run in the change, passes (GGGG-1)', run(gFiles(), gReg(), true, reg(), gChange([gRec, 'tabd/test/unit.test.ts'])), null);
+		expect('fixed-before-landing whose test file is not in the change fails (GGGG-1)', run(gFiles(), gReg(), true, reg(), gChange([gRec])), /G-1: fixed-before-landing, but its regression test/);
+		expect('fixed-before-landing whose record is not in the change fails (GGGG-1)', run(gFiles(), gReg(), true, reg(), gChange(['tabd/test/unit.test.ts'])), /G-1: fixed-before-landing, but its record/);
+		const gOpen = gReg();
+		Object.assign(gOpen.findings[4], { status: 'open', gap: 'g', commit: undefined, test: undefined, preFix: undefined, preFixRef: undefined });
+		expect('a finding the base had cannot become fixed-before-landing (GGGG-1)', run(gFiles(), gReg(), true, JSON.parse(JSON.stringify(gOpen)) as Register, gChange([gRec, 'tabd/test/unit.test.ts'])), /G-1: open in the merge base.s register; fixed-before-landing is only/);
+		const gNoPre = gReg();
+		delete gNoPre.findings[4].preFix;
+		expect('fixed-before-landing without preFix fails the schema (GGGG-1)', run(gFiles(), gNoPre, true, reg(), gChange([gRec, 'tabd/test/unit.test.ts'])), /fixed-before-landing needs commit, test/);
+		const gQuote = gReg();
+		gQuote.findings[4].preFixRef = { file: gRec, quote: 'then passed with the fix' };
+		expect('a preFixRef quote that does not name the failing test fails the schema (GGGG-1)', run(gFiles(), gQuote, true, reg(), gChange([gRec, 'tabd/test/unit.test.ts'])), /preFixRef.quote must name the test/);
+		const gFixed = reg();
+		gFixed.findings[0].preFix = 'abcdef1';
+		expect('preFix on a fixed entry fails the schema (GGGG-1)', run(base(), gFixed), /preFix and preFixRef only apply to fixed-before-landing/);
+		expect('prefix lines mark a new fixed-before-landing entry for the host (GGGG-1)', prefixLines(gReg(), reg()).some(l => /^20261102-g\.md#G-1\tpatch:2{40}\tpatch:1{40}\t1\n$/.test(l)) ? [] : ['no new line'], null);
+		expect('control: one the base had is not judged again (GGGG-1)', prefixLines(gReg(), gReg()).some(l => /\t1\n$/.test(l)) ? ['judged again'] : [], null);
+		expect('a fixed-before-landing high closes like fixed: it is in commit lines for ancestry (GGGG-1)', commitLines(gReg(), reg()).some(l => l.startsWith('20261102-g.md#G-1\t')) ? [] : ['missing'], null);
+		// GGGG-4: the three-way register merge takes each side's change and refuses a real clash.
+		{
+			const mb = reg();
+			const mo = reg();
+			mo.findings.push({ record: null, anchor: 'M-1', severity: 'low', summary: 'ours', component: 'c', owner: 'o', status: 'open', gap: 'g', ref: { file: EDR, quote: 'only on main' } });
+			mo.baseline.push('20261101-a.md#A-1');
+			const mt = reg();
+			mt.findings.push({ record: null, anchor: 'M-2', severity: 'low', summary: 'theirs', component: 'c', owner: 'o', status: 'open', gap: 'g', ref: { file: EDR, quote: 'only on main' } });
+			mt.findings[2].gap = 'edited by theirs';
+			const m = merge3(mb, mo, mt);
+			const keys = (m.reg?.findings ?? []).map(keyOf);
+			expect('control: disjoint changes merge, ours first, then theirs additions (GGGG-4)', m.reg && keys.join(',') === [...reg().findings.map(keyOf), 'register#M-1', 'register#M-2'].join(',') && m.reg.findings[2].gap === 'edited by theirs' && m.reg.baseline.includes('20261101-a.md#A-1') ? [] : [JSON.stringify(keys)], null);
+			const mc = reg();
+			mc.findings[2].gap = 'edited by ours';
+			expect('an entry changed differently on both sides is a clash (GGGG-4)', merge3(mb, mc, mt).clashes, /finding 20261101-a\.md#—#2: changed on both sides/);
+			const md = reg();
+			md.findings.splice(2, 1);
+			expect('an entry removed on one side and edited on the other is a clash (GGGG-4)', merge3(mb, md, mt).clashes, /changed on both sides/);
+			const ma = reg();
+			ma.findings.push({ ...mt.findings[4], summary: 'another' });
+			expect('the same new key added differently on both sides is a clash (GGGG-4)', merge3(mb, ma, mt).clashes, /register#M-2: changed on both sides/);
+			const dup = reg();
+			dup.findings.push(dup.findings[0]);
+			expect('a side with two entries under one key is refused (GGGG-4)', merge3(mb, dup, mt).clashes, /ours: two entries share a key/);
+			const mx = reg();
+			mx.baseline.push('20261101-a.md#A-1');
+			const my = JSON.parse(JSON.stringify(mx)) as Register;
+			my.baseline = [];
+			expect('a baseline entry one side removes stays removed (GGGG-4)', merge3(mx, mx, my).reg?.baseline.length === 0 ? [] : ['kept'], null);
+		}
+		// GGGG-5: the failing-run record is checked for the entry's whole life, not only when new.
+		const gGone = gFiles();
+		gGone.set(gRec, gGone.get(gRec)!.replace('rejects the bad thing failed on the reviewed commit', 'rewritten later'));
+		expect('a landed fixed-before-landing entry whose failing-run quote is gone fails (GGGG-5)', run(gGone, gReg(), true, gReg(), gChange([])), /G-1: preFixRef quote not found/);
+		// GGGG-6: no base register, so nothing shows the finding is new: it fails, and the host judges it.
+		expect('fixed-before-landing with no base register fails (GGGG-6)', run(gFiles(), gReg()), /G-1: fixed-before-landing can.t be judged without a base register/);
+		expect('with no base the host still judges a fixed-before-landing entry (GGGG-6)', prefixLines(gReg()).some(l => /\t1\n$/.test(l)) ? [] : ['not judged'], null);
+		expect('a prefix base register with no findings array is a defect, not an absent base (GGGG-13)', prefixBaseOk({ owners: {} } as unknown as Register) ? ['accepted'] : [], null);
+		expect('control: an absent prefix base is allowed (GGGG-13)', prefixBaseOk(undefined) ? [] : ['refused'], null);
+		const gBr = gReg();
+		gBr.findings[4].branch = 'br-g';
+		expect('a branch fixed-before-landing entry is not failed for evidence not yet on this tree (GGGG-11)', run(base(), gBr, true, reg(), gChange([])).filter(x => /preFixRef/.test(x)), null);
+		// PRR11-4: an entry the base had only on its branch is judged in full when it lands.
+		const gOnBr = gReg();
+		gOnBr.findings[4].branch = 'br-g';
+		expect('landing a branch fixed-before-landing entry judges it as new (PRR11-4)', run(gFiles(), gReg(), true, gOnBr, gChange([gRec])), /G-1: fixed-before-landing, but its regression test/);
+		expect('landing a branch entry, the host judges its commits (PRR11-4)', prefixLines(gReg(), gOnBr).some(l => /\t1\n$/.test(l)) ? [] : ['not judged'], null);
+		// PRR11-5: a landed fixed-before-landing entry never becomes plain fixed.
+		const gToFixed = gReg();
+		Object.assign(gToFixed.findings[4], { status: 'fixed', preFix: undefined, preFixRef: undefined });
+		expect('a landed fixed-before-landing entry turned into fixed fails (PRR11-5)', run(gFiles(), gToFixed, true, gReg(), gChange([])), /was fixed-before-landing; it keeps that status/);
+		expect('on main with no range a transition from HEAD^1 is not judged (PRR11-11)', run(gFiles(), gToFixed, true, gReg(), { files: new Set([gRec]), before: new Map(), landed: true }).filter(x => /keeps that status/.test(x)), null);
+		// PRR11-6: on main with no range, a landed entry is not re-judged against HEAD^1.
+		expect('on main with no range a landed fixed-before-landing entry is not re-judged (PRR11-6)', run(gFiles(), gReg(), true, reg(), { files: new Set([gRec]), before: new Map(), landed: true }).filter(x => /G-1: fixed-before-landing, but/.test(x)), null);
+		const gWasOpen = gReg();
+		Object.assign(gWasOpen.findings[4], { status: 'open', gap: 'g', commit: undefined, test: undefined, preFix: undefined, preFixRef: undefined });
+		expect('on main with no range an entry HEAD^1 had open is not refused (PRR11-7)', run(gFiles(), gReg(), true, gWasOpen, { files: new Set([gRec]), before: new Map(), landed: true }).filter(x => /G-1:/.test(x)), null);
+		const gGone2 = gFiles();
+		gGone2.set(gRec, gGone2.get(gRec)!.replace('rejects the bad thing failed on the reviewed commit', 'rewritten later'));
+		expect('on main with no range the failing-run evidence is still checked (PRR11-7)', run(gGone2, gReg(), true, gWasOpen, { files: new Set([gRec]), before: new Map(), landed: true }), /G-1: preFixRef quote not found/);
+		// GGGG-9: merge3 refuses what it can't merge faithfully.
+		{
+			const m0 = reg();
+			const proto = JSON.parse(`{"__proto__": {"x": 1}, ${JSON.stringify(reg()).slice(1)}`) as Register;
+			expect('a top-level key outside the register (even __proto__) is refused by merge3 (GGGG-9)', merge3(m0, proto, reg()).clashes, /top-level key __proto__/);
+			const gone = reg();
+			gone.findings.splice(1, 1);
+			expect('a finding one side removed is refused by merge3, never dropped (GGGG-9)', merge3(m0, reg(), gone).clashes, /removed on one side/);
+		}
+		// GGGG-3: the register round-trips through the writer byte for byte.
+		const fmt = base();
+		fmt.set(REGISTER, JSON.stringify(reg(), null, 2) + '\n');
+		expect('a register re-indented with spaces fails (GGGG-3)', run(fmt, reg()), /isn.t in the writer.s byte format/);
+		fmt.set(REGISTER, serialise(reg()));
+		expect('control: the writer format passes (GGGG-3)', run(fmt, reg()), null);
+		expect('control: a numbered anchor is never warned (DDDD-5)', allOf(anchorClashes(nb, clBase)), null);
+		expect('control: a clash warning across owners never fails the check (DDDD-5)', run(base(), cl, true, clBase).filter(x => /its ID also names/.test(x)), null);
+		// FFFF: the same owner's ID minted again with another meaning, once the first has landed, fails.
+		const so = JSON.parse(JSON.stringify(clBase)) as Register;
+		so.findings.push({ record: '20261101-a.md', anchor: 'WL-5', severity: 'low', summary: 'another meaning', component: 'c', owner: 'o', status: 'open', gap: 'g' });
+		expect('an explicit ID the same owner reuses with another meaning fails the check (FFFF-1)', run(base(), so, true, clBase), /WL-5: its ID also names register#WL-5, the same owner/);
+		const soLater = JSON.parse(JSON.stringify(so)) as Register;
+		soLater.findings[soLater.findings.length - 1].gap = 'edited';
+		expect('control: a same-owner clash the base already had does not fail an edit (FFFF-1)', anchorClashes(soLater, so).fail, null);
+		// FFFF-1: a cross-owner clash in the base, made one owner's by moving an owner, fails.
+		const ffBase = JSON.parse(JSON.stringify(cl)) as Register;
+		const ffMv = JSON.parse(JSON.stringify(cl)) as Register;
+		ffMv.findings[ffMv.findings.length - 1].owner = 'o';
+		expect('a clash the base had across owners fails once one owner holds both (FFFF-1)', anchorClashes(ffMv, ffBase).fail, /the same owner/);
+		// FFFF-2: a generic one-letter round ID, or one the owner already reuses, stays a warning.
+		const gb = JSON.parse(JSON.stringify(clBase)) as Register;
+		gb.findings.push({ record: null, anchor: 'R-1', severity: 'low', summary: 'one', component: 'c', owner: 'o', status: 'open', gap: 'g', ref: { file: EDR, quote: 'only on main' } });
+		const gn = JSON.parse(JSON.stringify(gb)) as Register;
+		gn.findings.push({ record: '20261101-a.md', anchor: 'R-1', severity: 'low', summary: 'two', component: 'c', owner: 'o', status: 'open', gap: 'g' });
+		expect('a generic round ID reused by its owner is a warning, not a failure (FFFF-2)', anchorClashes(gn, gb).fail, null);
+		expect('control: the generic reuse is still warned (FFFF-2)', anchorClashes(gn, gb).warn, /R-1: its ID also names/);
+		const ru = JSON.parse(JSON.stringify(gn)) as Register;
+		ru.findings.forEach(f => { if (f.anchor === 'R-1') f.anchor = 'RX-1'; });
+		const ruNew = JSON.parse(JSON.stringify(ru)) as Register;
+		ruNew.findings.push({ record: '20261102-g.md', anchor: 'RX-1', severity: 'low', summary: 'three', component: 'c', owner: 'o', status: 'open', gap: 'g' });
+		expect('an ID its owner already reuses in the base stays a warning (FFFF-2)', anchorClashes(ruNew, ru).fail, null);
+		// FFFF: open pull request heads. Only entries each side adds or edits relative to main count.
+		const mainR = JSON.parse(JSON.stringify(clBase)) as Register;
+		mainR.owners.p = { session: 'Other', branch: null, scope: 'x' };
+		const mine = JSON.parse(JSON.stringify(mainR)) as Register;
+		mine.findings.push({ record: '20261101-a.md', anchor: 'LT-2', severity: 'low', summary: 'mine', component: 'c', owner: 'o', status: 'open', gap: 'g' });
+		const prSame = JSON.parse(JSON.stringify(mainR)) as Register;
+		prSame.findings.push({ record: '20261102-b.md', anchor: 'LT-2', severity: 'low', summary: 'theirs', component: 'c', owner: 'o', status: 'open', gap: 'g' });
+		const prCross = JSON.parse(JSON.stringify(prSame)) as Register;
+		prCross.findings[prCross.findings.length - 1].owner = 'p';
+		const prKey = JSON.parse(JSON.stringify(mainR)) as Register;
+		prKey.findings.push({ record: '20261101-a.md', anchor: 'LT-2', severity: 'low', summary: 'theirs', component: 'c', owner: 'p', status: 'open', gap: 'g' });
+		expect('an open PR minting the same owner ID with another meaning is a clash (FFFF)', prClashes(mine, mainR, [['#9', prSame]]).fail, /LT-2: #9 also mints 20261102-b\.md#LT-2 with another meaning \(same owner\)/);
+		expect('an open PR minting the same key in the same record is a clash, whatever its owner (FFFF)', prClashes(mine, mainR, [['#9', prKey]]).fail, /#9 also mints 20261101-a\.md#LT-2/);
+		expect('an open PR minting the ID across owners is a warning (FFFF)', prClashes(mine, mainR, [['#9', prCross]]).warn, /#9 also mints/);
+		expect('control: across owners is not a clash (FFFF)', prClashes(mine, mainR, [['#9', prCross]]).fail, null);
+		expect('control: an ID only main has is not a PR clash (FFFF)', allOf(prClashes(mine, mainR, [['#9', mainR]])), null);
+		expect('control: a PR that edits the same finding is not a clash (FFFF)', allOf(prClashes(mine, mainR, [['#9', mine]])), null);
+		const stale = JSON.parse(JSON.stringify(mainR)) as Register;
+		stale.findings.push({ record: '20261102-b.md', anchor: 'LT-2', severity: 'low', summary: 'theirs', component: 'c', owner: 'o', status: 'open', gap: 'g' });
+		const mainLater = JSON.parse(JSON.stringify(stale)) as Register;
+		mainLater.findings[mainLater.findings.length - 1].gap = 'main edited it later';
+		expect('a stale PR head does not claim an entry main already has (FFFF-3)', allOf(prClashes(mine, mainLater, [['#9', stale]])), null);
+		{
+			const big = JSON.parse(JSON.stringify(mainR)) as Register;
+			for (let i = 0; i < 6000; i++) {
+				big.findings.push({ record: null, anchor: `BIG-${i}`, severity: 'low', summary: `s${i}`, component: 'c', owner: 'o', status: 'open', gap: 'g', ref: { file: EDR, quote: 'only on main' } });
+			}
+			const t0 = Date.now();
+			prClashes(big, mainR, [['#9', big]]);
+			const took = Date.now() - t0;
+			expect('comparing a 6000-entry register with a PR head takes linear time (PR #11 review)', took < 2500 ? [] : [`took ${took} ms`], null);
+		}
+		expect('a PR register that does not parse is reported, not dropped (FFFF-5)', prClashes(mine, mainR, [['#9', undefined]]).warn, /#9: its register doesn.t parse/);
+		expect('a PR register that fails the schema is reported, not compared (FFFF)', prClashes(mine, mainR, [['#9', { findings: [{}] } as unknown as Register]]).warn, /#9: its register doesn.t parse/);
 		// EEEE: only a high the base already had must have its patch: fix on main.
 		const ch = reg();
 		ch.findings[0].commit = 'patch:cccccccccccccccccccccccccccccccccccccccc';
@@ -1426,6 +1795,12 @@ function selfTest(): number {
 		ow.owners['x\n::warning::y'] = { session: 's', branch: null, scope: 's' };
 		expect('an owner id outside [a-z0-9-] fails the schema (DDDD-2)', schemaProblems(ow), /an owner id is lowercase/);
 		expect('every printed line is one line and never a workflow command (EEEE-2)', ['x\n::error::y', '::warning::z', 'a\tb'].map(logLine).filter(l => /[\n\t]|^\s*::/.test(l)), null);
+		expect('a legacy workflow command anywhere in a printed line is broken (PRR11-1)', ['x ##[error]y', 'a ##[add-mask]b', '##[stop-commands]t'].map(logLine).filter(l => l.includes('##[')), null);
+		{
+			const lc = reg();
+			lc.findings[0].anchor = 'A-1 ##[error]x';
+			expect('a key the host prints carries no legacy workflow command (PRR11-1)', [...commitLines(lc), ...prefixLines(lc)].filter(l => l.includes('##[')), null);
+		}
 		const long = reg();
 		long.findings[0].note = `digest ${'ab12'.repeat(11)}`;
 		expect('a hex run over 40 characters fails (YYY-1)', run(base(), long), /a hex run of 44 characters isn't a commit citation/);
@@ -1751,6 +2126,42 @@ function main(): number {
 		process.stdout.write(`${JSON.stringify(all, null, '\t')}\n`);
 		return 0;
 	}
+	// Before the register is read: during a conflicted rebase it holds conflict markers.
+	if (mode === 'merge3') { // merge3 BASE OURS THEIRS: writes the merged register, or lists the clashes (exit 1)
+		const files = process.argv.slice(3);
+		if (files.length !== 3 || files.some(f => !f)) {
+			console.error('usage: findings.ts merge3 BASE OURS THEIRS');
+			return 2;
+		}
+		const [bt, ot, tt] = files.map(f => fs.readFileSync(path.resolve(repo, f), 'utf8'));
+		let parsed: Array<Register | undefined>;
+		try {
+			parsed = [bt, ot, tt].map(x => x.trim() ? JSON.parse(x) as Register : undefined);
+		} catch {
+			console.error('findings rebase-resolve: a side of the register isn\'t JSON; resolve it by hand');
+			return 1;
+		}
+		const [b, o, t] = parsed;
+		if (!o || !t || !Array.isArray(o.findings) || !Array.isArray(t.findings) || (b && !Array.isArray(b.findings))) {
+			console.error('findings rebase-resolve: a side has no register; resolve it by hand');
+			return 1;
+		}
+		const m = merge3(b, o, t);
+		if (!m.reg) {
+			m.clashes.forEach(x => console.error(`findings rebase-resolve: ${x}`));
+			console.error(`findings rebase-resolve: ${m.clashes.length} real clash(es); resolve them by hand`);
+			return 1;
+		}
+		const sp2 = schemaProblems(m.reg);
+		if (sp2.length) {
+			sp2.forEach(x => console.error(`findings rebase-resolve: ${logLine(x)}`));
+			console.error('findings rebase-resolve: the merged register fails the schema; resolve it by hand');
+			return 1;
+		}
+		fs.writeFileSync(path.join(repo, REGISTER), serialise(m.reg));
+		console.log(`findings rebase-resolve: merged ${m.reg.findings.length} findings`);
+		return 0;
+	}
 	const tree = diskTree(repo);
 	const reg = JSON.parse(tree.read(REGISTER)) as Register;
 	const sp = schemaProblems(reg);
@@ -1760,6 +2171,10 @@ function main(): number {
 			return 1;
 		}
 		fs.writeFileSync(path.join(repo, VIEW), render(reg, tree));
+		if (tree.read(REGISTER) !== serialise(reg)) {
+			fs.writeFileSync(path.join(repo, REGISTER), serialise(reg));
+			console.log(`findings: rewrote ${REGISTER} in the writer's format`);
+		}
 		console.log(`findings: wrote ${VIEW}`);
 		return 0;
 	}
@@ -1789,11 +2204,27 @@ function main(): number {
 		}
 		const btext = bf ? fs.readFileSync(path.resolve(repo, bf), 'utf8') : '';
 		const c = sp.length ? undefined : citations(tree, reg, btext.trim() ? JSON.parse(btext) as Register : undefined);
-		process.stdout.write((c?.cite ?? []).map(x => `${x.token}\t${x.tolerated ? 1 : 0}\t${x.branch ?? '-'}\t${x.touched ? 1 : 0}\t${x.use.replace(/[\t\n]/g, ' ')}\n`).join(''));
+		process.stdout.write((c?.cite ?? []).map(x => `${x.token}\t${x.tolerated ? 1 : 0}\t${x.branch ?? '-'}\t${x.touched ? 1 : 0}\t${logLine(x.use)}\n`).join(''));
 		if (c) {
 			console.error(`findings: ${c.historical.length} round-label citations are their records' own (append-only, listed in FINDINGS.md)`);
 		}
 		return sp.length || c?.problems.length ? 1 : 0;
+	}
+	if (mode === 'prefix') { // [--base FILE]
+		sp.forEach(x => console.error(x));
+		const bf = arg === '--base' ? process.argv[4] : undefined;
+		if (arg !== undefined && (arg !== '--base' || !bf || process.argv.length > 5)) {
+			console.error('usage: findings.ts prefix [--base FILE]');
+			return 2;
+		}
+		const btext = bf ? fs.readFileSync(path.resolve(repo, bf), 'utf8') : '';
+		const b = btext.trim() ? JSON.parse(btext) as Register : undefined;
+		if (!prefixBaseOk(b)) {
+			console.error('findings.ts prefix: the base register has no findings array');
+			return 2;
+		}
+		process.stdout.write(sp.length ? '' : prefixLines(reg, b).join(''));
+		return sp.length ? 1 : 0;
 	}
 	if (mode === 'count') { // the baseline size of a register read from stdin (./seclab findings growth)
 		const r = JSON.parse(fs.readFileSync(0, 'utf8')) as Register;
@@ -1804,6 +2235,40 @@ function main(): number {
 		process.stdout.write(String(r.baseline.length));
 		return 0;
 	}
+	if (mode === 'clashes') { // --main FILE (--pr LABEL FILE)...: this tree's new or edited IDs against open PR heads
+		const a = process.argv.slice(3);
+		if (sp.length || a[0] !== '--main' || !a[1] || (a.length - 2) % 3 || a.slice(2).some((x, i) => i % 3 === 0 ? x !== '--pr' : i % 3 === 1 ? !/^#?[A-Za-z0-9._/-]{1,100}$/.test(x) : !x)) {
+			sp.forEach(x => console.error(x));
+			console.error('usage: findings.ts clashes --main FILE (--pr LABEL FILE)...');
+			return 2;
+		}
+		// Exit 0 none, 1 a clash, 3 an internal error (never confused with a clash: FFFF-5). A PR
+		// register that doesn't parse is reported and counted, never dropped silently.
+		try {
+			const load = (f: string) => {
+				const t = fs.readFileSync(path.resolve(repo, f), 'utf8');
+				try {
+					return t.trim() ? JSON.parse(t) as Register : undefined;
+				} catch {
+					return undefined;
+				}
+			};
+			const prs: Array<[string, Register | undefined]> = [];
+			for (let i = 2; i < a.length; i += 3) {
+				prs.push([a[i + 1], load(a[i + 2])]);
+			}
+			const mainReg = load(a[1]);
+			const c = prClashes(reg, mainReg && Array.isArray(mainReg.findings) ? mainReg : undefined, prs);
+			c.warn.forEach(x => console.log(`findings clashes: warning: ${x}`));
+			c.fail.forEach(x => console.log(`findings clashes: ${x}`));
+			const skipped = c.warn.filter(x => /doesn.t parse; not compared/.test(x)).length;
+			console.log(`findings clashes: ${prs.length - skipped} pull request register(s) compared, ${skipped} skipped, ${c.fail.length} clash(es), ${c.warn.length} warning(s)`);
+			return c.fail.length ? 1 : 0;
+		} catch (e) {
+			console.error(`findings clashes: internal error: ${logLine(String(e))}`);
+			return 3;
+		}
+	}
 	if (mode === 'pin') { // pin PAIRS_FILE: "patch:<id>\t<sha>" lines; every entry's patch: citations become SHAs
 		if (sp.length || !arg) {
 			sp.forEach(x => console.error(x));
@@ -1812,7 +2277,7 @@ function main(): number {
 		}
 		const pairs = fs.readFileSync(path.resolve(repo, arg), 'utf8').split('\n').filter(Boolean).map(l => l.split('\t') as [string, string]);
 		const changed = pinPatches(reg, pairs);
-		fs.writeFileSync(path.join(repo, REGISTER), `${JSON.stringify(reg, null, '\t')}\n`);
+		fs.writeFileSync(path.join(repo, REGISTER), serialise(reg));
 		console.log(`findings: pinned ${changed.length} field(s)`);
 		return 0;
 	}
@@ -1825,7 +2290,7 @@ function main(): number {
 		}
 		const pairs = fs.readFileSync(path.resolve(repo, pairsFile), 'utf8').split('\n').filter(Boolean).map(l => l.split('\t') as [string, string]);
 		const { changed } = remapBranch(reg, arg, pairs);
-		fs.writeFileSync(path.join(repo, REGISTER), `${JSON.stringify(reg, null, '\t')}\n`);
+		fs.writeFileSync(path.join(repo, REGISTER), serialise(reg));
 		console.log(`findings: remapped ${changed.length} field(s) in ${arg}'s entries`);
 		return 0;
 	}
@@ -1844,8 +2309,8 @@ function main(): number {
 		const i = opts.indexOf(name);
 		return i >= 0 ? opts[i + 1] : undefined;
 	};
-	if (mode !== 'check' || opts.length % 2 || opts.some((o, i) => i % 2 === 0 && !['--base', '--changed', '--before'].includes(o)) || opts.some((o, i) => i % 2 === 1 && !o) || (opts.includes('--before') && !opts.includes('--changed'))) {
-		console.error('usage: findings.ts check [--base FILE] [--changed FILE [--before DIR]] | write | commits | baseline | extract [DIR] | --self-test');
+	if (mode !== 'check' || opts.length % 2 || opts.some((o, i) => i % 2 === 0 && !['--base', '--changed', '--before', '--landed'].includes(o)) || opts.some((o, i) => i % 2 === 1 && !o) || (opts.includes('--before') && !opts.includes('--changed'))) {
+		console.error('usage: findings.ts check [--base FILE] [--changed FILE [--before DIR]] [--landed landed|exact] | write | commits | baseline | extract [DIR] | --self-test');
 		return 2;
 	}
 	// --base: the register at the merge base (written by ./seclab from git; empty when the base
@@ -1870,7 +2335,7 @@ function main(): number {
 				before.set(f, fs.readFileSync(at, 'utf8'));
 			}
 		}
-		change = { files, before };
+		change = { files, before, landed: opt('--landed') === 'landed' };
 		if (beforeDir) {
 			const at = path.resolve(repo, beforeDir, OWNER_FILE);
 			change.ownerBefore = fs.existsSync(at) ? fs.readFileSync(at, 'utf8') : null;
@@ -1881,9 +2346,9 @@ function main(): number {
 	const problems = check(tree, reg, sp.length ? undefined : render(reg, tree), base, change);
 	problems.forEach(x => console.log(logLine(x)));
 	if (!sp.length) {
-		anchorClashes(reg, base).forEach(x => console.log(`findings: warning: ${x}`));
+		anchorClashes(reg, base).warn.forEach(x => console.log(`findings: warning: ${x}`));
 	}
-	const open = sp.length ? 0 : reg.findings.filter(f => f.status !== 'fixed' && f.status !== 'false-positive').length;
+	const open = sp.length ? 0 : reg.findings.filter(f => !isFixed(f) && f.status !== 'false-positive').length;
 	console.log(problems.length ? `findings: ${problems.length} problem(s)` : `findings: ok (${reg.findings.length} findings, ${open} not fixed, ${reg.baseline.length} in the baseline)`);
 	return problems.length ? 1 : 0;
 }

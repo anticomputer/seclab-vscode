@@ -29,6 +29,10 @@ by nobody: a record saying "Fixed" was the only evidence.
      that occurs exactly once (a test title, a self-test case);
    - `fixed-untested`: the fix exists, the test doesn't (a CI step or a workflow line is not a
      test); counts as open;
+   - `fixed-before-landing` (added by review GGGG,
+     [EDR](20261117-fixed-before-landing.md)): a finding a review of an unmerged change raised,
+     fixed and tested in that same change, with the reviewed commit the test fails on (`preFix`)
+     and where that failing run is recorded (`preFixRef`); counts as fixed;
    - `accepted-residual`: `acceptedBy` owner or agent, and a rationale. An agent's acceptance
      cites a record (`ref` quote). The owner's acceptance is a row in
      `docs/security-reviews/owner-acceptances.md`: the finding's full key, the date, the scope, the
@@ -170,6 +174,14 @@ script run by a required job: what runs it is the docs job, and its evidence is 
   edits that names another finding, with another summary, in another record, unless the clash was
   already there. It is a warning, since some rounds reuse generic IDs (`R-1`) on purpose (reviews
   DDDD, EEEE).
+- Amended by review FFFF: a clash a change adds between two findings of the same owner fails the
+  docs check (one component, two meanings for one ID); across owners it stays a warning. Required
+  checks run on a head that contains current `main`, so whichever branch lands second meets the
+  first one's ID there and renames its own, in a record that hasn't landed. Before that,
+  `./seclab findings clashes` compares the change's new or edited IDs with those of every open pull
+  request's head, relative to `main` (same owner, or the same key: a clash; otherwise a warning).
+  It is local and advisory: as a required check it would fail two PRs that see each other at once,
+  and its result would depend on other PRs' state rather than the change.
 - A high the register already had (on `main` or at the merge base, under its key or a `wasKey`)
   closes on a `patch:` fix commit only once that change is on `main`; a high new in a change may cite
   that change's own commits. Either way a fix whose revert is also in the history closes nothing.

@@ -74,6 +74,11 @@ jobs:
         # No token: lychee (built from pinned source by ./seclab tool lychee) gets no
         # credentials. GitHub's 429 and 503 are retried with backoff and paced per host, never
         # cached; a link still dead after the retries fails (EDR link-check-retries).
+        env:
+          # This step re-runs the gate too, so it judges the same range as the one above; without
+          # it, main compared with HEAD^1 and went red after correct landings (review GGGG-7).
+          # Step-level, so no earlier step's GITHUB_ENV can replace it.
+          DOCS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: ./seclab docs check --online
       - name: Export the lychee cache
         if: always() && github.event_name == 'push'
