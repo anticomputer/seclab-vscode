@@ -305,6 +305,7 @@ class CommentScopeTest(unittest.TestCase):
             "let n = 4; const q = n++ / 2; const r = /\\//; fs.writeFileSync('out', raw);",
             "for (;;) { break\n/\\//.test(u); fs.writeFileSync('out', raw); }",
             "async function f(y) { for await (const x of y) /\\//.test(x); fs.writeFileSync('out', raw); }",
+            "debugger\n/\\//; fs.writeFileSync('out', raw);",
         ):
             with self.subTest(code=code):
                 root = tree_copy(self)
@@ -363,6 +364,11 @@ class CommentScopeTest(unittest.TestCase):
         # `of` and `default` can be identifiers: unsure, so a later quote fails closed.
         for text in ("let of = 4; q = of / 2; s = '/';\n", "q = o.x || default / 2; s = '/';\n"):
             self.assertEqual(amb(text)[1], [1], text)
+        # Any reserved word but a value keyword is unsure; a value keyword reads as division.
+        for word in ("debugger", "class", "var", "try", "finally", "import", "export"):
+            self.assertEqual(amb(word + "\n/a/; s = '/';\n")[1], [2], word)
+        for word in ("this", "null", "true"):
+            self.assertEqual(amb("x = " + word + " / 2; s = '/';\n")[1], [], word)
 
     def test_nested_templates_keep_their_boundaries(self):
         found = []
