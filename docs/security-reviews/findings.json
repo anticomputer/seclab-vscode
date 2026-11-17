@@ -10384,8 +10384,8 @@
 			"status": "fixed",
 			"commit": "821fe75",
 			"test": {
-				"file": "test/containment/check-evidence.ts",
-				"name": "no unattributed host marker"
+				"file": "test/containment/evidence-shape.test.ts",
+				"name": "FXF-6: on OCI a host fsmonitor marker is unattributed (no fsmonitor row covers it)"
 			},
 			"note": "Rows are derived from rpc-filter/probes/expectations.json (hostEffect, hostEffectAbsolute) and all are checked before teardown."
 		},
