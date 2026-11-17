@@ -69,8 +69,11 @@ export function checkEvidence(ev: Evidence | undefined, vector: string, opts: { 
 	// harness must not be steerable by the thing it is assessing.
 	const str = (v: unknown): string => typeof v === 'string' ? v : '';
 
+	// The probe writes its marker only into the run directory, which exists only on the host, so
+	// this one check is a host fact: it stands even when the tab withholds its evidence.
+	const hostMarker = c('cannot write host file outside the workspace', !fs.existsSync(`${opts.marker}.${vector}`), `${opts.marker}.${vector}`);
 	if (!ev) {
-		return [c('ran (evidence written into the workspace)', false, 'no evidence file')];
+		return [c('ran (evidence written into the workspace)', false, 'no evidence file'), hostMarker];
 	}
 	const out: Check[] = [c('ran (evidence written into the workspace)', true)];
 	// A present field of the wrong type is malformed evidence, not the benign value.
@@ -86,7 +89,7 @@ export function checkEvidence(ev: Evidence | undefined, vector: string, opts: { 
 		(opts.expectHostname === undefined || ev.hostname === opts.expectHostname), `hostname=${str(ev.hostname)} SECLAB_TAB=${str(ev.seclab_tab_env)}`));
 	out.push(c('cannot read host file outside the workspace (canary)', ev.canary_read === 'no', str(ev.canary_read)));
 	out.push(c('cannot read another tab\'s workspace', ev.othertab_read === 'no', str(ev.othertab_read)));
-	out.push(c('cannot write host file outside the workspace', !fs.existsSync(`${opts.marker}.${vector}`), `${opts.marker}.${vector}`));
+	out.push(hostMarker);
 	out.push(c('no writable docker.sock', ev.docker_sock_writable === 'no', str(ev.docker_sock_writable)));
 	out.push(c('no sudo', ev.sudo === 'no', str(ev.sudo)));
 	out.push(c('no host secrets / agent sockets in env', typeof ev.secret_env === 'string' && ev.secret_env.trim() === '', str(ev.secret_env)));
@@ -183,8 +186,10 @@ export function rpcDecisions(userDataDir: string): RpcDecision[] {
 
 /**
  * Workspace vectors a filtered build stops before they run, each tied to the trusted-side
- * denial that stops it (docs/RPC-LOCKDOWN.md §7.1). A missing evidence file is tab-controlled,
- * so on its own it never makes the gap expected: the denial must be in the decision log.
+ * denial that stops it (docs/RPC-LOCKDOWN.md §7.1). Only the "ran" row can become expected, and
+ * only with the denial in the decision log. Both the missing evidence and the denial are within
+ * a tab's reach (a tab's own code can make the denied call), so neither excuses a host run: the
+ * host facts (no host marker; on sbx, no evidence file in the host checkout) stay hard checks.
  */
 export const FILTERED_VECTOR_LOSSES: Record<string, { deniedRef: string; gap: string }> = {
 	// The tab's extension host can't register a task system, so the folder-open task never runs.
@@ -196,7 +201,7 @@ export const FILTERED_VECTOR_LOSSES: Record<string, { deniedRef: string; gap: st
 	// repository when the answer isn't true, so it never runs `git status` there.
 	fsmonitor: {
 		deniedRef: 'rpc:MainThreadWorkspace.$requestResourceTrust',
-		gap: 'RPC core: workspace trust requests are denied in tabs, so the git extension opens no repository and never runs git status, docs/RPC-LOCKDOWN.md §7.1; Level A covers fsmonitor',
+		gap: 'RPC core: workspace trust requests are denied in tabs, so the git extension opens no repository and never runs git status, docs/RPC-LOCKDOWN.md §7.1; a host run still fails the host-marker and host-evidence checks',
 	},
 };
 
