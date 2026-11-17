@@ -552,7 +552,10 @@ export function lineOpen(line: string): boolean {
  */
 export function scalarItem(raw: string): string | undefined {
 	const s = raw.replace(/\s+#.*$/, '').trim();
-	if (/^"(?:[^"\\]|\\.)*"$/.test(s)) {
+	// A double-quoted scalar is read only without escapes: Actions decodes `"ma\u0069n"` to `main`,
+	// and an undecoded escape compared literally would miss it (review on PR 13). An escape makes
+	// the item unreadable, which counts against the workflow.
+	if (/^"[^"\\]*"$/.test(s)) {
 		return s.slice(1, -1);
 	}
 	if (/^'(?:[^']|'')*'$/.test(s)) {
@@ -1349,6 +1352,8 @@ async function selfTest(): Promise<void> {
 		['an empty branches-ignore', '    branches-ignore:\n'],
 		['an anchored inline list', '    branches-ignore: &b [main]\n'],
 		['an anchored two-line list', '    branches-ignore: &b [foo,\n                         main]\n'],
+		['an escaped double-quoted item', '    branches-ignore: ["ma\\u0069n"]\n'],
+		['an escaped double-quoted block item', '    branches-ignore:\n      - "ma\\x69n"\n'],
 	]) {
 		injections.push([`LSR-11 ${shape}`, { ...base, '.github/workflows/nightly.yml': `on:\n  workflow_dispatch:\n  push:\n${filter}jobs:\n  a:\n    steps:\n      - run: x\n` }, /workflow:nightly .* add it to/]);
 	}
