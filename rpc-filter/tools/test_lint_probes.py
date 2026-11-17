@@ -298,6 +298,33 @@ class CommentScopeTest(unittest.TestCase):
                 self.assertEqual(status, 1, out)
                 self.assertIn("raw-record", out)
 
+    def test_a_comment_after_a_slash_on_its_line_fails_closed(self):
+        # Placements a token heuristic gets wrong: postfix `++` before division, a regex statement
+        # after `break` and a newline, and after a `for await (…)` head. Each must fail the lint.
+        for code in (
+            "let n = 4; const q = n++ / 2; const r = /\\//; fs.writeFileSync('out', raw);",
+            "for (;;) { break\n/\\//.test(u); fs.writeFileSync('out', raw); }",
+            "async function f(y) { for await (const x of y) /\\//.test(x); fs.writeFileSync('out', raw); }",
+        ):
+            with self.subTest(code=code):
+                root = tree_copy(self)
+                path = os.path.join(root, "test/containment/rogue-reh/probes.js")
+                with open(path, "a", encoding="utf-8") as fh:
+                    fh.write("\n" + code + "\n")
+                status, out = lint(root)
+                self.assertEqual(status, 1, out)
+                self.assertRegex(out, r"raw-record|ambiguous-slash")
+
+    def test_only_a_comment_after_a_code_slash_is_ambiguous(self):
+        def amb(text):
+            found = []
+            L._strip_comments(text, found)
+            return found
+        self.assertEqual(amb("q = n++ / 2; r = /\\//; w();\n"), [1])
+        self.assertEqual(amb("x = a / b; /* c */\n"), [1])
+        self.assertEqual(amb("x = 1; // c\n/* d */\ny = '/'; // e\n"), [])
+        self.assertEqual(amb("a = /x/;\n// own line\nb = 'a//b';\n"), [])
+
     def test_regex_literals_division_and_comments(self):
         cases = [
             ("a = /^https?:\\/\\//; b(); // c\n", "b();", "// c"),
