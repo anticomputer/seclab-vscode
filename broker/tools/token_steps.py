@@ -1,4 +1,4 @@
-"""Finding HH-1: in the docs workflow, the GitHub token reaches exactly one step, the attestation
+r"""Finding HH-1: in the docs workflow, the GitHub token reaches exactly one step, the attestation
 bundle download, and no other step regains it (the docs gate and everything after it run
 tokenless and verify offline from the downloaded bundles).
     python broker/tools/token_steps.py [WORKFLOW]     default .github/workflows/docs-check.yml
@@ -18,6 +18,9 @@ or a shallower line. It covers:
     `::set-env`/`::set-output`/`::save-state` command, which would hand the token to later
     steps with no expression at all (review BRK20R-1);
   * any `secrets:` key (`secrets: inherit` or a mapping to a reusable workflow), anywhere;
+  * any YAML numeric escape (`\x`, `\u`, `\U`, `\N`, `\_`, `\L`, `\P`), and any double-quoted
+    value continued with a trailing backslash, anywhere: YAML decodes both before Actions sees
+    the expression, so they could spell a name the scan can't see (review BRK20D-2);
   * exactly one step named ALLOWED_STEP, which must carry the token.
 It is a regression check over a workflow that is also reviewed and linted (actionlint, zizmor),
 not a YAML evaluator: forms Actions rejects (anchors) are out of scope.
@@ -35,6 +38,10 @@ TOKEN = re.compile(r"\bgithub\s*(?:\.\s*token\b|\[\s*['\"]token['\"]\s*\])|\bsec
 # index. Allowed: a named property (github.ref) or a literal index other than token (BRK20D-1).
 WHOLE_GITHUB = re.compile(r"\bgithub\b(?!\s*\.\s*[A-Za-z_])(?!\s*\[\s*'[^']*'\s*\])", re.I)
 STRING = re.compile(r"'(?:[^']|'')*'")
+# YAML decodes these in a double-quoted scalar before Actions sees the expression, so they could
+# spell a name the scan can't see; the check reads raw text and refuses them (review BRK20D-2).
+YAML_ESCAPE = re.compile(r"\\(?:[xuU][0-9A-Fa-f]|[N_LP])")
+DQ_CONTINUATION = re.compile(r"^[^#\n]*\"[^\"\n]*\\[ \t]*$", re.M)
 SECRETS_KEY = re.compile(r"^\s*(?:-\s+)?secrets\s*:", re.M)
 # Actions resolves contexts and properties case-insensitively, so these do too (review BRK20C-1).
 RAW_TOKEN = re.compile(TOKEN.pattern + r"|\bGH_TOKEN\b|\bGITHUB_TOKEN\b", re.I)
@@ -115,6 +122,11 @@ def check(text: str) -> list[str]:
                for n, _name in sites if lines[n - 1].lstrip().startswith("#")]
     for m in SECRETS_KEY.finditer(text):
         errors.append(f"line {text.count(chr(10), 0, m.start()) + 1}: a secrets: key hands secrets on")
+    for rx, what in ((YAML_ESCAPE, "a YAML numeric escape"),
+                     (DQ_CONTINUATION, "a double-quoted value continued with a backslash")):
+        for m in rx.finditer(text):
+            errors.append(f"line {text.count(chr(10), 0, m.start()) + 1}: {what} (decoded before Actions; "
+                          "fail closed)")
     steps = step_of_lines(text)
     for n, (line, step) in enumerate(zip(lines, steps), 1):
         if step != ALLOWED_STEP and RAW_TOKEN.search(line):
@@ -202,6 +214,15 @@ def self_test() -> list[str]:
         ("BRK20D-1: named github properties and string mentions stay allowed",
          head + ok_step + gate + "      - if: github.event_name == 'push'\n"
          "        run: echo ${{ github.ref }} ${{ github['run_id'] }} ${{ format('{0}', 'github') }}\n", None),
+        ("BRK20D-2: a unicode escape in a double-quoted value fails",
+         head + ok_step + "      - env:\n          ACCESS: \"${{ github['to\\u006ben'] }}\"\n        run: x\n",
+         "a YAML numeric escape"),
+        ("BRK20D-2: a hex escape in a double-quoted value fails",
+         head + ok_step + "      - env:\n          ACCESS: \"${{ github['to\\x6ben'] }}\"\n        run: x\n",
+         "a YAML numeric escape"),
+        ("BRK20D-2: a double-quoted value joined across lines with a backslash fails",
+         head + ok_step + "      - env:\n          ACCESS: \"${{ github['to\\\n            ken'] }}\"\n        run: x\n",
+         "continued with a backslash"),
     ]
     failures = []
     for name, text, want in cases:
