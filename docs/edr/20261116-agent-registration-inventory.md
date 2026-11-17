@@ -210,3 +210,36 @@ revert it explicitly.
 **Awaiting the owner.** Nothing. Finding R12-2 stays open and registered rather than deferred by
 acceptance, because increment 4 closes it; the register reports exactly that one problem on this
 branch, which is the accurate state until 0019 lands with increment 3.
+
+## The real-build run, and why it has not happened yet
+
+A macOS build of this branch was dispatched and succeeded: Actions run `44158800692`, head
+`4f8caab0`. Every required check passed on that commit except the docs gate, which fails for
+exactly one reason — the two high findings on this branch cite fix commits that are not on main,
+and the register deliberately refuses to let one change both introduce and close a high.
+
+`./seclab fetch macos-branch` then refused the build, by design: a build is only fetched when the
+commit itself passed the gates, not merely when it compiled. That rule came from an earlier CI
+review, and it is doing its job here, so it was not worked around. The artefact is sound and will
+be fetchable once the docs gate is green on the exact SHA, which needs the "found and fixed
+before landing" status the register is adding.
+
+The app already present in the branch-build location is from an older run, `42239456909` at repo
+`26137e98`, which predates these patches. It is not evidence about 0019 and was not used.
+
+So the ordinary-window and tab-window runs are serialised behind the register change rather than
+behind anything in the patches. What they have to show, when they run:
+
+- an ordinary window, where the three workbench contributions construct the real classes and the
+  window behaves as it does on main;
+- a tab window, where the same three emit `seclab.null-provider.registered` as they are
+  withheld.
+
+The two are each other's control, which is the point: the tab side alone would be an absence, and
+absence is not containment. Both constructions happen at `AfterRestored` without anything having
+to drive them, so neither side depends on a step that could silently not run.
+
+The question the runs exist to settle is the one the round 13 reviewer named and could not check
+by reading: patch 0019 changes dependency construction from upstream's topological graph walk to
+re-entrant resolution inside the wrapper's constructor. That is reasoned to be equivalent, and
+reasoning is not a booted window.
