@@ -3407,7 +3407,7 @@
 				"file": "broker/tools/token_steps.py",
 				"name": "HH-1: a later step that regains the token fails"
 			},
-			"note": "The broker-side half landed as 30ba85d. broker/tools/token_steps.py, run by broker/docs-check.sh, fails when any token-bearing expression in docs-check.yml sits outside the attestation download step, including at workflow or job level."
+			"note": "The broker-side half landed as 30ba85d. broker/tools/token_steps.py, run by broker/docs-check.sh, reads docs-check.yml as text (no YAML parser) and fails closed. It catches a github.token or secrets expression outside the one exactly named download step, including across line breaks, in comments, and at workflow or job level, plus any secrets: key. It is a regression check over a workflow that is also reviewed and linted, not a YAML evaluator."
 		},
 		{
 			"record": "20261104-supply-chain.md",

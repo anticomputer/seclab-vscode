@@ -80,15 +80,20 @@ def self_test() -> list[str]:
     # Compiled (it has `# via`), but names no direct requirement: only "pins nothing" can fail it.
     indirect = f"pkga==1.0 --hash=sha256:{h}\n    # via pkgb\npkgb==2.0 --hash=sha256:{h}\n"
     locked = {"pkga": "1.0", "pkgb": "2.0"}
-    cases = [  # (name, lock text, source text or None for no file, registered, want errors)
-        ("drift: a source that pins what its lock pins passes", lock, "pkga==1.0\n", False, False),
-        ("10-4: a source pinning a superseded version fails", lock, "pkga==0.9\n", False, True),
-        ("10b-5: a compiled lock whose source is missing fails", lock, None, False, True),
-        ("10b-5: an empty source fails", indirect, "", False, True),
-        ("10b-5: a comment-only source fails", indirect, "# pkga==1.0\n", False, True),
-        ("10c-1: a registered source that is missing fails, with no # via comments left", bare, None, True, True),
-        ("10c-1: a direct requirement the source doesn't pin fails", lock, "pkgb==2.0\n", False, True),
-        ("drift: a source line that isn't name==version fails", lock, "pkga>=1.0\n", False, True),
+    # (name, lock text, source text or None for no file, registered, the error the case's own rule
+    # must report, or None for a pass). A crash fails the case (review BRK20-3).
+    cases = [
+        ("drift: a source that pins what its lock pins passes", lock, "pkga==1.0\n", False, None),
+        ("10-4: a source pinning a superseded version fails", lock, "pkga==0.9\n", False, "pkga==0.9 but"),
+        ("10b-5: a compiled lock whose source is missing fails", lock, None, False, "is missing"),
+        ("10b-5: an empty source fails", indirect, "", False, "pins nothing"),
+        ("10b-5: a comment-only source fails", indirect, "# pkga==1.0\n", False, "pins nothing"),
+        ("10c-1: a registered source that is missing fails, with no # via comments left", bare, None, True,
+         "is missing"),
+        ("10c-1: a direct requirement the source doesn't pin fails", lock, "pkgb==2.0\n", False,
+         "pkga is a direct requirement"),
+        ("drift: a source line that isn't name==version fails", lock, "pkga>=1.0\n", False,
+         "only plain name==version"),
     ]
     with tempfile.TemporaryDirectory() as d:
         for i, (name, ltext, stext, registered, want) in enumerate(cases):
@@ -101,10 +106,13 @@ def self_test() -> list[str]:
                 src.write_text(stext)
             try:
                 errors = source_drift(req, locked, source=src if registered else None)
-            except Exception as e:  # noqa: BLE001 - a crash is a failed case, never a pass
-                errors = [f"raised {type(e).__name__}"]
-            if bool(errors) != want:
-                failures.append(f"{name}: {'errors' if errors else 'no errors'} {errors}")
+            except Exception as e:  # noqa: BLE001 - any crash fails the case
+                failures.append(f"{name}: raised {type(e).__name__}")
+                continue
+            if want is None and errors:
+                failures.append(f"{name}: errors {errors}")
+            elif want is not None and not any(want in e for e in errors):
+                failures.append(f"{name}: no error containing {want!r} in {errors}")
     return failures
 
 
