@@ -62,11 +62,12 @@ setInterval(() => {}, 1000);`;
 }
 
 /**
- * Run reapPreviousRun on a previous OCI run with one tab, against stand-in docker and sbx: `docker`
+ * Run reapPreviousRun on a previous run with one tab, against stand-in docker and sbx: `docker`
  * either fails every call (`unlisted`) or lists the tab's container and ignores `rm` (`stuck`).
+ * An sbx tab owns Docker resources too (its broker container and egress network).
  */
-function reapWith(mode: 'unlisted' | 'stuck' | 'clean'): { refused: boolean; problems: string[]; profileKept: boolean } {
-	const dir = path.join(REAP_ROOT, `reap-${mode}`);
+function reapWith(mode: 'unlisted' | 'stuck' | 'clean', driver: 'oci' | 'sbx' = 'oci'): { refused: boolean; problems: string[]; profileKept: boolean } {
+	const dir = path.join(REAP_ROOT, `reap-${driver}-${mode}`);
 	fs.rmSync(dir, { recursive: true, force: true });
 	const bin = path.join(dir, 'bin');
 	const profile = path.join(dir, 'ud');
@@ -78,7 +79,7 @@ function reapWith(mode: 'unlisted' | 'stuck' | 'clean'): { refused: boolean; pro
 			: 'exit 0';
 	fs.writeFileSync(path.join(bin, 'docker'), `#!/bin/sh\n${docker}\n`, { mode: 0o755 });
 	fs.writeFileSync(path.join(bin, 'sbx'), '#!/bin/sh\n[ "$1" = ls ] && echo "[]"\nexit 0\n', { mode: 0o755 });
-	fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify({ startedAt: 'x', driver: 'oci', tabs: [tab], userDataDir: profile }));
+	fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify({ startedAt: 'x', driver, tabs: [tab], userDataDir: profile }));
 	const script = `import { reapPreviousRun } from ${JSON.stringify(path.join(HERE, 'teardown.ts'))};
 const r = reapPreviousRun(${JSON.stringify(dir)});
 console.log(JSON.stringify({ refused: r.refused, problems: r.problems }));`;
@@ -98,6 +99,9 @@ const tests: Array<[string, () => void | Promise<void>]> = [
 		assert.ok(unlisted.refused && unlisted.problems.some(p => /could not list.*docker/.test(p)) && unlisted.profileKept, JSON.stringify(unlisted));
 		const stuck = reapWith('stuck');
 		assert.ok(stuck.refused && stuck.problems.some(p => /remain: container seclab-t-a+/.test(p)) && stuck.profileKept, JSON.stringify(stuck));
+		const sbxUnlisted = reapWith('unlisted', 'sbx');
+		assert.ok(sbxUnlisted.refused && sbxUnlisted.problems.some(p => /could not list.*docker/.test(p)) && sbxUnlisted.profileKept, JSON.stringify(sbxUnlisted));
+		assert.deepEqual(reapWith('clean', 'sbx'), { refused: false, problems: [], profileKept: false });
 		const clean = reapWith('clean');
 		assert.deepEqual(clean, { refused: false, problems: [], profileKept: false });
 	}],

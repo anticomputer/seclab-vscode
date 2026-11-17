@@ -461,7 +461,8 @@ export function runLeftovers(runDir: string, m: RunManifest = readManifest(runDi
 	const left: string[] = [];
 	const unknown = new Set<string>();
 	const needSbx = m.driver === 'sbx' || (m.driver === undefined && tabs.length > 0);
-	const needDocker = m.driver === 'oci' || (m.containers ?? []).length > 0;
+	// Every tab owns Docker resources: an OCI pod, or an sbx tab's broker container and egress network.
+	const needDocker = m.driver === 'oci' || tabs.length > 0 || (m.containers ?? []).length > 0;
 	const sbx = sbxList();
 	if (!sbx && needSbx) {
 		unknown.add('sbx');
