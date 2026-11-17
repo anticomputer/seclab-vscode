@@ -217,3 +217,43 @@ export function markFilteredLosses(checks: Check[], decisions: RpcDecision[]): v
 		}
 	}
 }
+
+/** The probe vectors Level B arms. One list drives the per-vector checks, the host-run checks
+ *  and the marker sweep's exemptions, so a vector without its own host-marker row falls
+ *  through to the sweep (review FXF-6/8). fsmonitor is armed only on sbx. */
+export function levelBVectors(driver: string): string[] {
+	return driver === 'sbx' ? ['task', 'fsmonitor'] : ['task'];
+}
+
+/** Host facts about a Level B run that no tab-written evidence can excuse. */
+export function hostRunChecks(driver: string, ws: string, marker: string, vectors: string[]): Check[] {
+	const out: Check[] = [];
+	// On sbx the tab's writes stay in the tab: Level B never asks tabd to sync write-back (only
+	// Level A's run.ts calls tab.writeback.sync, which starts the auto-sync), so evidence in the
+	// host checkout means the vector ran host-side. An OCI tab writes the checkout directly, so
+	// there the check would prove nothing.
+	if (driver === 'sbx') {
+		for (const vector of vectors) {
+			const f = path.join(ws, '.seclab-evidence', `${vector}.json`);
+			out.push({ vector, name: 'no evidence file in the host checkout (did not run host-side)', ok: !fs.existsSync(f), detail: f });
+		}
+	}
+	// probe.sh skips its marker when `marker=` is blank, so a tab that blanked it in the
+	// checkout (directly on OCI) would silence the host-marker check (review FXF-7). A tab that
+	// restores the line in time is not caught: on OCI the host facts are only as strong as the
+	// checkout.
+	const f = path.join(ws, '.seclab', 'targets');
+	let targets = '';
+	try { targets = fs.readFileSync(f, 'utf8'); } catch { /* a failing check */ }
+	out.push({ vector: 'host', name: 'the probe targets in the host checkout still name the run marker', ok: targets.split('\n').includes(`marker=${marker}`), detail: f });
+	return out;
+}
+
+/** Marker-shaped files in the run directory that neither a vector's host-marker row nor an
+ *  RPC probe's expected host effect accounts for. */
+export function unattributedMarkers(runDir: string, marker: string, vectors: string[], attributed: Set<string>): Check[] {
+	const own = new Set(vectors.map(v => `${marker}.${v}`));
+	return fs.readdirSync(runDir).filter(n => /^(?:PWNED|probe-marker)/.test(n)).map(n => path.join(runDir, n))
+		.filter(p => !attributed.has(p) && !own.has(p))
+		.map(p => ({ vector: 'rpc', name: 'no unattributed host marker', ok: false, detail: p }));
+}

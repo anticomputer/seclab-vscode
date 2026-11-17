@@ -15,16 +15,32 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 TARGETS="$HERE/.seclab/targets"
 
 get() { sed -n "s/^$1=//p" "$TARGETS" 2>/dev/null | head -1; }
-ARM="$(get arm)"
-RUN="$(get run)"
-UNTIL="$(get until)"
-# Armed only by a harness run: exact 32-hex nonce, an absolute run dir containing this
-# workspace, an unexpired arming window, and every target path inside the run dir.
-printf '%s' "$ARM" | grep -qE '^[0-9a-f]{32}$' || exit 0
-case "$RUN" in /?*) ;; *) exit 0 ;; esac
+# Trusted route (as probe-safety.js): the harness launches the editor with
+# SECLAB_PROBE_RUNDIR and SECLAB_PROBE_NONCE, and no host variable ever reaches a tab, so only
+# a host-side run sees them. Confirmed by the nonce file the harness wrote in the run dir (a
+# tab can't read it: the run dir isn't mounted). Then the run dir and the marker come from
+# there, never from the tab-writable targets, so a tab can't blank or disarm a host run's
+# marker (review FXF-7).
+TRUSTED=
+if [ -n "${SECLAB_PROBE_RUNDIR:-}" ] && [ -n "${SECLAB_PROBE_NONCE:-}" ]; then
+	printf '%s' "$SECLAB_PROBE_NONCE" | grep -qE '^[0-9a-f]{32}$' || exit 0
+	case "$SECLAB_PROBE_RUNDIR" in /?*) ;; *) exit 0 ;; esac
+	[ "$(cat "$SECLAB_PROBE_RUNDIR/.seclab-probe-nonce" 2>/dev/null)" = "$SECLAB_PROBE_NONCE" ] || exit 0
+	RUN="$SECLAB_PROBE_RUNDIR"
+	TRUSTED=1
+else
+	ARM="$(get arm)"
+	RUN="$(get run)"
+	UNTIL="$(get until)"
+	# Armed only by a harness run: exact 32-hex nonce, an absolute run dir containing this
+	# workspace, an unexpired arming window, and every target path inside the run dir.
+	printf '%s' "$ARM" | grep -qE '^[0-9a-f]{32}$' || exit 0
+	case "$RUN" in /?*) ;; *) exit 0 ;; esac
+	case "$UNTIL" in ''|*[!0-9]*) exit 0 ;; esac
+	[ "$(date +%s)" -lt "$UNTIL" ] || exit 0
+fi
+case "$RUN" in *'/..'*|*'../'*) exit 0 ;; esac
 case "$HERE/" in "$RUN"/*) ;; *) exit 0 ;; esac
-case "$UNTIL" in ''|*[!0-9]*) exit 0 ;; esac
-[ "$(date +%s)" -lt "$UNTIL" ] || exit 0
 inrun() { [ -z "$1" ] && return 0; case "$1" in *'/..'*|*'../'*) return 1 ;; "$RUN"/*) return 0 ;; *) return 1 ;; esac; }
 
 OUT="$HERE/.seclab-evidence"
@@ -38,6 +54,7 @@ code() { [ -n "$HTTP" ] || return 0; "$HTTP" -s -m 6 -o /dev/null -w '%{http_cod
 CANARY="$(get canary)"
 OTHERTAB="$(get othertab)"
 MARKER="$(get marker)"
+[ -n "$TRUSTED" ] && MARKER="$RUN/probe-marker"
 LOOPBACK="$(get loopback)"
 inrun "$CANARY" && inrun "$OTHERTAB" && inrun "$MARKER" || exit 0
 # One marker path per vector, so a host marker is never credited to the wrong probe (the
