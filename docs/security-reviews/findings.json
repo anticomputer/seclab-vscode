@@ -17143,9 +17143,12 @@
 			"summary": "The install stamp hashed three lockfiles, so a pin bump could keep un-audited extension dependency trees.",
 			"component": "build (fetch-upstream, build.sh)",
 			"owner": "fork-build",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "patch:addb6c92039bda4742149bf52e1e843f9896472c",
-			"gap": "Proven by a reinstall on the new stamp and none on a rebuild; no committed test runs a pin bump."
+			"test": {
+				"file": "build/fetch-upstream.test.ts",
+				"name": "install stamp: changes with any lockfile (extensions included) and with the pin, not with node_modules"
+			}
 		},
 		{
 			"record": "20261117-fetch-upstream-clean.md",
@@ -17155,9 +17158,12 @@
 			"summary": "The pinned-SHA check named HEAD only; a reused index could hide a modified tracked file from the reset.",
 			"component": "build (fetch-upstream, build.sh)",
 			"owner": "fork-build",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "patch:addb6c92039bda4742149bf52e1e843f9896472c",
-			"gap": "An injected skip-worktree edit survived the old script and not the new one, run by hand; fetch-upstream needs the network, so no committed test."
+			"test": {
+				"file": "build/fetch-upstream.test.ts",
+				"name": "fetch-upstream: same pin, a tracked file hidden by skip-worktree or sparse state is restored"
+			}
 		},
 		{
 			"record": "20261117-fetch-upstream-clean.md",
@@ -17167,9 +17173,12 @@
 			"summary": "The clean took a hand-kept path list, so stray untracked files survived.",
 			"component": "build (fetch-upstream, build.sh)",
 			"owner": "fork-build",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "patch:addb6c92039bda4742149bf52e1e843f9896472c",
-			"gap": "An injected stray file survived the old script and not the new one, run by hand; no committed test."
+			"test": {
+				"file": "build/fetch-upstream.test.ts",
+				"name": "fetch-upstream: a pin change drops files earlier patches added, keeps ignored build state"
+			}
 		},
 		{
 			"record": "20261117-fetch-upstream-clean.md",
