@@ -16672,6 +16672,21 @@
 				"file": "test/containment/check-probes.test.ts",
 				"name": "a probe run only by its own harness is not judged without that selection, and is required with it"
 			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-11",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "lint_probes' regex/division token heuristic still misjudged some placements (n++ / 2, a regex after break and a newline, a for await head), turning the rest of a line into a comment hidden from the record rules.",
+			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:92744b62a48973c6f76f06db4de95531eab3d2c5",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_a_comment_after_a_slash_on_its_line_fails_closed"
+			}
 		}
 	]
 }
