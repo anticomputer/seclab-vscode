@@ -15,34 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-<<<<<<< HEAD
-| fixed | 14 | 84 | 209 | 303 | 44 | 654 |
+| fixed | 14 | 84 | 209 | 305 | 44 | 656 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 52 | 158 | 58 | 273 |
+| fixed-untested | 0 | 5 | 52 | 159 | 58 | 274 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
-=======
-<<<<<<< HEAD
-| fixed | 14 | 83 | 203 | 270 | 39 | 609 |
-| fixed-untested | 0 | 5 | 52 | 154 | 56 | 267 |
-| accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
->>>>>>> 57c54ab (register: SQ-4, SQ-5 from the PR #33 review (second pass))
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 13 | 14 | 6 | 35 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-<<<<<<< HEAD
-| **all** | 16 | 93 | 300 | 554 | 148 | 1111 |
-=======
-| **all** | 16 | 92 | 293 | 517 | 139 | 1057 |
-=======
-| fixed | 14 | 83 | 203 | 270 | 38 | 608 |
-| fixed-untested | 0 | 5 | 52 | 155 | 56 | 268 |
-| accepted-residual | 0 | 1 | 12 | 69 | 21 | 103 |
-| deferred | 2 | 1 | 14 | 9 | 3 | 29 |
-| open | 0 | 2 | 12 | 15 | 6 | 35 |
-| false-positive | 0 | 0 | 0 | 0 | 11 | 11 |
-| **all** | 16 | 92 | 293 | 518 | 135 | 1054 |
->>>>>>> 2cf4a29 (register: SQ-4, SQ-5 from the PR #33 review (second pass))
->>>>>>> 57c54ab (register: SQ-4, SQ-5 from the PR #33 review (second pass))
+| **all** | 16 | 93 | 300 | 557 | 148 | 1114 |
 
 ## Baseline: open high and critical findings
 
@@ -152,11 +132,7 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-5** | low | accepted-residual | patch 0038 editor-tab model | Webview panels pass by scheme, so a host-side panel's title and view type reach the tab. | accepted by an agent: Under the RPC filter a tab cannot create webview panels, so every panel in a tab window is the window's own; none carries host data in its title. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-9** | low | fixed-untested | patch 0038 editor-tab model | A multi-diff's source id has no model, so tab-owned multi-diffs went anonymous. | The RPC filter refuses a tab's commands, so no runtime case opens a tab-owned multi-diff. |
 | [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-2** | low | accepted-residual | telemetry selection at run time | A host process that opens a tab window with VSCODE_DEV set makes the window a dev build, which enables real telemetry and gives that tab the host ids. | accepted by an agent: Coordinator, 2026-11-16: kept as a recorded residual, no patch. A process that can set the editor's launch environment on the host is already outside the threat model, and a tab cannot set it. |
-<<<<<<< HEAD
-=======
 | [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md) **SQ-4** | low | fixed-untested | probe harnesses | The squat harness wrote its stop file into the tab's workspace from the host after the run, so a tab symlink there could redirect the write to a host file. | The sentinel check can't fail on sbx, whose share doesn't carry the tab's symlink to the host; no run on a driver whose share does. |
-| [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **DOCSYNC-R3** | low | open | window→tab pushes (editor tabs) | Window-to-tab push: the editor-tab model still exposes host URIs and labels to a tab's extension host. | No push-side control for the editor-tab model; reported to the coordinator as a 0035 sibling. |
->>>>>>> 57c54ab (register: SQ-4, SQ-5 from the PR #33 review (second pass))
 | [docs/edr/20261109-document-sync-provenance.md](../../docs/edr/20261109-document-sync-provenance.md) **DOCSYNC-R8** | low | accepted-residual | patch 0035 document sync (untitled rule) | A host feature that creates an empty untitled document and then fills it with host data programmatically would still sync into a tab. | accepted by an agent: The untitled rule treats an empty, path-less model first seen by the window as user-typed; no such host feature was seen in the EDR's measurement of the real editor. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **F4** | info | fixed-untested | patch 0035 document sync | \`CellUri.parse\` on a tab-made URI could throw; the sole-consumer pin matches substrings; other calls still name host URIs. | Parse now fails closed and cells are limited to the tab authority, but the record lists no regression test; the remaining host-URI call paths are accepted and reported as siblings. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **P3** | info | accepted-residual | patch 0035 document sync | A change sent for a document the tab no longer holds would be invisible to the extension API. | accepted by an agent: The revoking listener is registered at tagging time so it runs first and removes the document synchronously, and ModelTracker re-checks the predicate before sending. |
@@ -2095,19 +2071,11 @@ Every other commit the register cites is on main's history, or on the branch its
 | LCR-6 | info | false-positive | Cache poisoning from pull requests. | The review recorded no issue. |
 | LCR-7 | low | fixed-untested | GitHub's secondary rate limit (403) could be cached and replayed red. | An argument; nothing to test offline. |
 | LCR-8 | info | false-positive | Prompt injection. | The review recorded no issue. |
-<<<<<<< HEAD
 | LCR2-1 | low | fixed | A raw exclude for this repo also skipped raw self-links written in a doc, which used to be checked. | 1a41c6f66d6e · `seclab` "this repo's github.com link was checked, not excluded" |
 | LCR2-2 | info | fixed | http, raw and blame permalinks were not remapped to raw. | 1a41c6f66d6e · `seclab` "a dead upstream permalink did not fail at raw" |
-=======
-<<<<<<< HEAD
-| LCR2-1 | low | fixed | A raw exclude for this repo also skipped raw self-links written in a doc, which used to be checked. | patch:39524975df5e74422467599ea993f56473f32621 · `seclab` "this repo's github.com link was checked, not excluded" |
-| LCR2-2 | info | fixed | http, raw and blame permalinks were not remapped to raw. | patch:39524975df5e74422467599ea993f56473f32621 · `seclab` "a dead upstream permalink did not fail at raw" |
->>>>>>> 57c54ab (register: SQ-4, SQ-5 from the PR #33 review (second pass))
 | LCR2-3 | info | false-positive | A directory blob URL or a private repository fails at raw. | Fails closed; the review recorded no issue. |
 | LCR2-4 | info | false-positive | The cache key is not bumped for the new host. | The review recorded no issue. |
 | LCR2-5 | info | false-positive | Prompt injection. | The review recorded no issue. |
-=======
->>>>>>> 2cf4a29 (register: SQ-4, SQ-5 from the PR #33 review (second pass))
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 
@@ -2116,11 +2084,9 @@ Every other commit the register cites is on main's history, or on the branch its
 | SQ-1 | info | fixed-untested | The squat probe's profile was shared by every worktree while its run guard is per worktree. | A naming fix; nothing runs two worktrees at once to test it. |
 | SQ-2 | low | fixed | The squat probe's window-log step never ran (a modal was still open) and had no positive control, so its no-provider-call claim for the log was unexercised. | patch:87d6d313213944a05882a69f941c3738547b5756 · `test/squat/probe.ts` "control: the window opened its own log in an output editor" |
 | SQ-3 | low | fixed | The squat probe validated named report fields but printed and stored the tab's whole objects, so a rogue report could carry arbitrary text into host output and evidence. | patch:87d6d313213944a05882a69f941c3738547b5756 · `test/squat/probe.ts` "reach neither host output nor evidence (SQ-3)" |
-<<<<<<< HEAD
-=======
 | SQ-4 | low | fixed-untested | The squat harness wrote its stop file into the tab's workspace from the host after the run, so a tab symlink there could redirect the write to a host file. | The sentinel check can't fail on sbx, whose share doesn't carry the tab's symlink to the host; no run on a driver whose share does. |
 | SQ-5 | low | fixed | The squat harness read the arming file back from the tab's workspace unguarded, so a tab that deleted it made the run skip the teardown gate. | patch:1c8e2b8fdc62e871c4c9a478e9bceae983a22a88 · `test/squat/probe.ts` "control (SQ-5)" |
->>>>>>> 2cf4a29 (register: SQ-4, SQ-5 from the PR #33 review (second pass))
+| SQ-6 | low | fixed | The squat harness read the tab's report through an unbounded sbx exec, so a FIFO at the report path stalled the run before its teardown gate. | patch:e843b3ad0cd7bbb58703145430e8cf85c181cb7e · `test/harness/tab-exec.test.ts` "a FIFO with no writer at the read path times out to no data (SQ-6)" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
