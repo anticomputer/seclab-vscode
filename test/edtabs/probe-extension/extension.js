@@ -32,7 +32,7 @@ exports.activate = async function (context) {
 	}
 	const out = path.join(root, '.seclab-edtabs');
 	fs.mkdirSync(out, { recursive: true });
-	const report = { schema: 'seclab-edtabs-report/1', arm: t.arm, done: false, tabs: 0, kinds: {}, schemes: {}, tokens: [] };
+	const report = { schema: 'seclab-edtabs-report/1', arm: t.arm, done: false, tabs: 0, untitledText: false, kinds: {}, schemes: {}, tokens: [] };
 	const seen = new Set();
 	const tokens = (s, field) => {
 		for (const tok of String(s).split(/[\/\\~\s?#&=:.-]+/)) {
@@ -65,6 +65,9 @@ exports.activate = async function (context) {
 		report.tabs = Math.max(report.tabs, vscode.window.tabGroups.all.reduce((n, g) => n + g.tabs.length, 0));
 		for (const g of vscode.window.tabGroups.all) {
 			for (const tab of g.tabs) {
+				if (tab.input instanceof vscode.TabInputText && tab.input.uri.scheme === 'untitled') {
+					report.untitledText = true;
+				}
 				const kind = KINDS.find(k => vscode[k] && tab.input instanceof vscode[k]) ?? (tab.input === undefined ? 'unknown' : 'other');
 				report.kinds[kind] = (report.kinds[kind] ?? 0) + 1;
 				tokens(tab.label, 'label');
@@ -92,6 +95,7 @@ exports.activate = async function (context) {
 	} catch {
 		// reported through the scan: no own-scheme tab
 	}
+
 	for (let i = 0; i < 240 && !fs.existsSync(path.join(root, '.seclab', 'stop')); i++) {
 		await sleep(1000);
 		scan();
