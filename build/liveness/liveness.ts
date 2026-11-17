@@ -679,7 +679,9 @@ export function jobContexts(yml: string): Array<{ id: string; context: string }>
 				: /^"[^"\\]*"$/.test(v) ? v.slice(1, -1)
 				: /^'(?:[^']|'')*'$/.test(v) ? v.slice(1, -1).replace(/''/g, "'")
 				: undefined;
-			if (plain === undefined) {
+			// Actions falls back to the job id for an empty or null name, so neither is read as a
+			// context of its own (Copilot review on PR 32).
+			if (plain === undefined || /^(|null|Null|NULL|~)$/.test(plain.trim())) {
 				return undefined;
 			}
 			context = plain;
