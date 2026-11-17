@@ -13,15 +13,19 @@ the extension host serves search itself: it registers its file and text search p
 - `$registerFileSearchProvider` and `$registerTextSearchProvider` for exactly `vscode-remote`
   (validator `tabSearchProvider`). So no host-scheme search, and none of its query text, reaches
   the tab.
-- `$handleFileMatch`, with the positional URI rule: every result is canonical `vscode-remote`
+- `$handleFileMatch`, with `tabFileMatches`: every item is a plain URI, canonical `vscode-remote`
   on this tab's authority.
-- `$handleTextMatch`, with `tabTextMatches`: each nested match resource and result `uri` is
-  checked the same way, and previews are bounded.
+- `$handleTextMatch`, with `tabTextMatches`: each match has only a plain URI `resource` and a
+  non-empty `results` list; each result `uri` is checked the same way, and previews are bounded.
+  Both validators follow the window's consumer, which reads an item with `results` as a text
+  match and anything else as a URI (review SRCH-1).
 - `$unregisterProvider`: the handle map is per extension host, so it reaches only this host's own
   providers.
 
-The two registrations are in `check_drift.py`'s `RESPONSE_NONE`: their results are validated
-URIs and plain-text previews, which reach no command or markdown renderer.
+Both registrations name patch 0051 as their response control (`check_drift.py`'s
+`check_responses`). The patch makes the provider's completion messages untrusted plain text, and
+drops open editors outside the tab's file system from the query the tab is sent
+([review](../security-reviews/20261117-search-in-tabs.md), SRCH-2 and SRCH-3).
 `test/containment/arg-validators.test.ts` covers each validator, with injected defects.
 
 ## Proof
@@ -36,15 +40,18 @@ needle file holding a unique token, then searches for it three ways:
 The positive control in both modes: the window's explorer lists the workspace, and the probe
 recorded its search.
 
-- **Before: passed** (`059c5b66`, the response-side control build, run 44138193537). All 7
+- **Before: passed** (`059c5b66`, the response-side control build, run 44138193537). All 8
   checks passed, and teardown was clean.
-  - `findFiles` never returned: the provider registration was denied.
-  - Quick Open and the Search view found nothing.
-  - The decision log has no allowed registration.
-- **After: passed** (`c2d32d8a`, run 44156675172). All 8 checks passed, and teardown was clean.
+  - Both searches were typed into their inputs, and neither found anything.
+  - `findFiles` never returned.
+  - The decision log holds the file search provider registration denied.
+- **After: passed** (`a0fb6e29`, run 44164815992, the build with every review fix). All 9 checks
+  passed, and teardown was clean.
   - `findFiles` returned the one needle, in the tab's own workspace folder.
   - Quick Open and the Search view both found it.
   - The decision log holds both registrations as allowed.
+  - An earlier build, `b4badf48` (run 44162058593), without the SRCH2-1 tightening, also passed
+    9/9.
 - **`fixture:test/containment/search-probe`:** run by `test/containment/search-probe.ts` in both
   modes on 2026-11-17 (runs above).
 
