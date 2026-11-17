@@ -227,24 +227,37 @@ export function levelBVectors(driver: string): string[] {
 	return driver === 'sbx' ? ['task', 'fsmonitor'] : ['task'];
 }
 
-/** Every file under `ws`, relative, sorted (`.git` is checked on its own). */
-export function listTree(ws: string): string[] {
-	const out: string[] = [];
+/** Host OS artifacts (Finder, Spotlight) that say nothing about a tab (review FXF-18). */
+const OS_ARTIFACT = (name: string) => name === '.DS_Store' || name.startsWith('._') || name === '.Spotlight-V100' || name === '.fseventsd';
+
+/** Every file under `ws`, relative, sorted (`.git` is checked on its own), and the directories
+ *  that couldn't be listed: a subtree the check can't see is a failure, never "nothing there"
+ *  (review FXF-17). */
+export function listTree(ws: string): { files: string[]; unreadable: string[] } {
+	const files: string[] = [];
+	const unreadable: string[] = [];
 	const walk = (rel: string): void => {
-		for (const e of (() => { try { return fs.readdirSync(path.join(ws, rel), { withFileTypes: true }); } catch { return []; } })()) {
+		let entries: fs.Dirent[];
+		try {
+			entries = fs.readdirSync(path.join(ws, rel), { withFileTypes: true });
+		} catch {
+			unreadable.push(rel || '.');
+			return;
+		}
+		for (const e of entries) {
 			const r = rel ? `${rel}/${e.name}` : e.name;
-			if (r === '.git') {
+			if (r === '.git' || OS_ARTIFACT(e.name)) {
 				continue;
 			}
 			if (e.isDirectory()) {
 				walk(r);
 			} else {
-				out.push(r);
+				files.push(r);
 			}
 		}
 	};
 	walk('');
-	return out.sort();
+	return { files: files.sort(), unreadable };
 }
 
 /** What Level B's host-run vectors read or execute: the probe and everything beside it, and
@@ -254,10 +267,12 @@ export function armingFiles(tree: string[]): string[] {
 	return tree.filter(r => r.startsWith('.seclab/') || r === '.vscode/tasks.json');
 }
 
-/** On OCI the tab writes the checkout directly, so these additions are the run's own output:
- *  evidence, and the rogue extension's instruction files. On sbx nothing may be added. */
-const OCI_EXPECTED_ADDITIONS = (r: string) => r.startsWith('.seclab-evidence/')
-	|| r === '.github/instructions/seclab-probe.instructions.md' || r === '.github/copilot-instructions.md';
+/** The run's own output in the host checkout. Evidence reaches it on both drivers: on sbx the
+ *  editor syncs write-back for paths the gate doesn't hold, and .seclab-evidence is one (review
+ *  FXF-20). On OCI the tab writes the checkout directly, so the rogue extension's instruction
+ *  files land there too; on sbx the gate holds .github, so there they would be a leak. */
+const EXPECTED_ADDITION = (driver: string, r: string) => r.startsWith('.seclab-evidence/')
+	|| (driver !== 'sbx' && (r === '.github/instructions/seclab-probe.instructions.md' || r === '.github/copilot-instructions.md'));
 
 /** sha256 of each listed workspace file (null when absent). */
 export function armingDigest(ws: string, rels: string[]): Record<string, string | null> {
@@ -276,8 +291,11 @@ export function armingDigest(ws: string, rels: string[]): Record<string, string 
  *  final: the arming files' digests and the whole tree. */
 export interface ArmingRecord { digest: Record<string, string | null>; tree: string[] }
 export function armingRecord(ws: string): ArmingRecord {
-	const tree = listTree(ws);
-	return { digest: armingDigest(ws, armingFiles(tree)), tree };
+	const { files, unreadable } = listTree(ws);
+	if (unreadable.length > 0) {
+		throw new Error(`arming record: can't list ${unreadable.join(', ')} in ${ws}`);
+	}
+	return { digest: armingDigest(ws, armingFiles(files)), tree: files };
 }
 const safeRel = (r: unknown): r is string => typeof r === 'string' && r !== '' && !path.isAbsolute(r) && !r.split('/').includes('..');
 /** A parsed record, or undefined when it isn't one (a failing check, never a pass). */
@@ -295,18 +313,11 @@ export function parseArmingRecord(v: unknown): ArmingRecord | undefined {
 
 /** Host facts about a Level B run that no tab-written evidence can excuse. `record` is what
  *  prepare wrote; undefined (unreadable or malformed) fails. */
-export function hostRunChecks(driver: string, ws: string, vectors: string[], record: ArmingRecord | undefined): Check[] {
+export function hostRunChecks(driver: string, ws: string, record: ArmingRecord | undefined): Check[] {
 	const out: Check[] = [];
-	// On sbx the tab's writes stay in the tab: Level B never asks tabd to sync write-back (only
-	// Level A's run.ts calls tab.writeback.sync, which starts the auto-sync), so evidence in the
-	// host checkout means the vector ran host-side. An OCI tab writes the checkout directly, so
-	// there the check would prove nothing.
-	if (driver === 'sbx') {
-		for (const vector of vectors) {
-			const f = path.join(ws, '.seclab-evidence', `${vector}.json`);
-			out.push({ vector, name: 'no evidence file in the host checkout (did not run host-side)', ok: !fs.existsSync(f), detail: f });
-		}
-	}
+	// Evidence in the host checkout proves nothing about where a vector ran: on sbx the editor
+	// syncs it out of the tab (review FXF-20). A host run is shown by its marker in the run dir,
+	// which a tab can neither write nor withhold (probe.sh's trusted route).
 	// A tab that rewrote what a host-side run reads (the probe, its targets, the task) could make
 	// that run silent, and one that added a file (a launch config, a hook) could arm another: an
 	// OCI tab writes the checkout directly (reviews FXF-7, 10-12, 15). So the arming files must be
@@ -318,9 +329,10 @@ export function hostRunChecks(driver: string, ws: string, vectors: string[], rec
 	out.push({ vector: 'host', name: 'the arming files in the host checkout are exactly as prepared', ok: changed !== undefined && changed.length === 0,
 		detail: changed === undefined ? 'no arming record' : changed.join(', ') || 'unchanged' });
 	const before = new Set(record?.tree ?? []);
-	const added = record ? listTree(ws).filter(r => !before.has(r) && !(driver !== 'sbx' && OCI_EXPECTED_ADDITIONS(r))) : undefined;
-	out.push({ vector: 'host', name: 'nothing added to the host checkout beyond the run\'s own output', ok: added !== undefined && added.length === 0,
-		detail: added === undefined ? 'no arming record' : added.slice(0, 10).join(', ') || 'none' });
+	const tree = listTree(ws);
+	const added = record ? tree.files.filter(r => !before.has(r) && !EXPECTED_ADDITION(driver, r)) : undefined;
+	out.push({ vector: 'host', name: 'nothing added to the host checkout beyond the run\'s own output', ok: added !== undefined && added.length === 0 && tree.unreadable.length === 0,
+		detail: added === undefined ? 'no arming record' : tree.unreadable.length ? `can't list: ${tree.unreadable.join(', ')}` : added.slice(0, 10).join(', ') || 'none' });
 	out.push({ vector: 'host', name: 'no .git in the host checkout', ok: !fs.existsSync(path.join(ws, '.git')), detail: path.join(ws, '.git') });
 	return out;
 }
