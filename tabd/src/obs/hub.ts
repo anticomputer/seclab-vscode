@@ -15,7 +15,7 @@ export const SEGMENTS_KEPT = 4;
 export const MAX_TAB_LOG_DIRS = 64;
 export const HEARTBEAT_TIMEOUT_MS = 6000;
 
-interface Bucket { tokens: number; last: number; readonly rate: number; readonly burst: number; dropped: number; firstSeq?: number; lastSeq?: number }
+interface Bucket { tokens: number; last: number; readonly rate: number; readonly burst: number; dropped: number; deferred?: number; firstSeq?: number; lastSeq?: number }
 
 export interface Observation { state: ObservationState; since: string; reason: string; sensor?: string; mode?: string }
 
@@ -53,8 +53,8 @@ export interface HubOptions {
  * (cheap denials, model denials, one finding) can only drop events of that same type, and
  * the drop is reported with its type. Findings (error or worse) get a lower rate.
  */
-type BucketName = 'sensor' | 'tabDriven' | 'client' | 'ahp' | 'ahpLife' | 'agent' | 'config';
-const BUCKETS: readonly BucketName[] = ['sensor', 'tabDriven', 'client', 'ahp', 'ahpLife', 'agent', 'config'];
+type BucketName = 'sensor' | 'tabDriven' | 'client' | 'ahp' | 'ahpLife' | 'agent' | 'config' | 'gap';
+const BUCKETS: readonly BucketName[] = ['sensor', 'tabDriven', 'client', 'ahp', 'ahpLife', 'agent', 'config', 'gap'];
 const FINDING_RATE = { rate: 20, burst: 200 };
 const BROKER_TYPE_RATE = { rate: 100, burst: 1000 };
 const MAX_BROKER_BUCKETS = 64;
@@ -107,6 +107,7 @@ export class ObsHub {
 					ahpLife: { tokens: 200, last: t, rate: 20, burst: 200, dropped: 0 },
 					agent: { tokens: tr.burst, last: t, rate: tr.rate, burst: tr.burst, dropped: 0 },
 					config: { tokens: 256, last: t, rate: 10, burst: 256, dropped: 0 },
+					gap: { tokens: 20, last: t, rate: 1, burst: 20, dropped: 0 },
 				},
 				findings: new Map(),
 				observation: { state: 'unavailable', since: new Date(t).toISOString(), reason: 'no sensor attached' },
@@ -143,13 +144,23 @@ export class ObsHub {
 	 * was invalid or rate-limited (both counted and summarised, never silently lost).
 	 */
 	emit(tabId: string, input: unknown): ObsEvent | undefined {
+		return this.offer(tabId, input, false).event;
+	}
+
+	/**
+	 * `emit`, telling a rate-limited event apart from an invalid one. With `retry`, the caller
+	 * will offer a rate-limited event again later (the Tab Manager's window-log forwarder keeps
+	 * it): it is counted as deferred, not dropped, because it isn't lost (CR10-5). Deferrals are
+	 * summarised like drops, so a flood stays visible (CR10-6).
+	 */
+	offer(tabId: string, input: unknown, retry: boolean, hold = false): { event?: ObsEvent; limited: boolean } {
 		const s = this.state(tabId);
 		let draft: EventDraft;
 		try {
 			draft = normalizeDraft(input);
 		} catch {
 			s.invalid++;
-			return undefined;
+			return { limited: false };
 		}
 		let bucket: Bucket | undefined;
 		if (draft.source === 'broker') {
@@ -168,10 +179,25 @@ export class ObsHub {
 			// AHP connection lifecycle (renderer-driven) never shares a bucket with the denials a
 			// tab can provoke (review AE-1).
 			const life = draft.source === 'ahp-gate' && (draft.detail?.gateRule === 'ahp-gate.opened' || draft.detail?.gateRule === 'ahp-gate.verified');
-			const group = life ? 'ahpLife' : BUCKET_OF[draft.source];
+			// A window log's gap marker (the forwarder lost lines) has a bucket of its own, so the
+			// denials a tab can provoke can't drain it away (CR10-21).
+			const gap = (draft.source === 'ahp-gate' && draft.detail?.gateRule === 'ahp-gate.log-skipped') || (draft.source === 'rpc-filter' && draft.detail?.ref === 'rpc:seclab.log-skipped');
+			const group = gap ? 'gap' : life ? 'ahpLife' : BUCKET_OF[draft.source];
 			bucket = group ? s.buckets[group] : undefined;
 		}
+		// `hold`: deferred without asking the bucket, because an earlier event of the same request
+		// was (CR10-9: what a retrying reporter gets accepted is always an exact prefix).
+		if (retry && hold) {
+			if (bucket) {
+				bucket.deferred = (bucket.deferred ?? 0) + 1;
+			}
+			return { limited: true };
+		}
 		if (bucket && !take(bucket, this.now())) {
+			if (retry) {
+				bucket.deferred = (bucket.deferred ?? 0) + 1;
+				return { limited: true };
+			}
 			bucket.dropped++;
 			// Broker events: remember which broker seqs were dropped, so the records can be
 			// found in the broker's own audit log (stderr, audit.tail).
@@ -180,13 +206,13 @@ export class ObsHub {
 				bucket.firstSeq ??= bs;
 				bucket.lastSeq = bs;
 			}
-			return undefined;
+			return { limited: false };
 		}
 		const e = this.stamp(tabId, s, draft);
 		for (const d of s.detector.check(e, s.ctx)) {
 			this.stamp(tabId, s, normalizeDraft(d));
 		}
-		return e;
+		return { event: e, limited: false };
 	}
 
 	private stamp(tabId: string, s: TabState, d: EventDraft): ObsEvent {
@@ -280,6 +306,11 @@ export class ObsHub {
 					}
 				} else if (what === 'sensor' && s.observation.state === 'degraded' && s.observation.reason === 'events dropped by rate limit') {
 					this.setObservation(tabId, 'observed', 'rate back to normal', { sensor: s.observation.sensor, mode: s.observation.mode });
+				}
+				if (b.deferred) {
+					const n = b.deferred;
+					b.deferred = 0;
+					this.stamp(tabId, s, normalizeDraft({ source: 'tabd', integrity: 'trusted', class: 'sensor.status', priority: 'notice', summary: `${n} ${what} events deferred (rate limit; the reporter sends them again)`, detail: { status: 'deferred', count: n, stream: what } }));
 				}
 			}
 			for (const [type, b] of s.findings) {

@@ -288,8 +288,19 @@ export class ObsGlue {
 		if (!Array.isArray(p.events) || p.events.length > MAX_REPORT_EVENTS) {
 			throw new ObsParamError(`events must be an array of at most ${MAX_REPORT_EVENTS}`);
 		}
+		if (p.retryLimited !== undefined && typeof p.retryLimited !== 'boolean') {
+			throw new ObsParamError('retryLimited must be a boolean');
+		}
+		// Opt-in (CR10-7): only a reporter that sends rate-limited events again gets their indices
+		// back instead of having them dropped; it keeps them, so they aren't lost (CR10-5).
+		const retry = p.retryLimited === true;
 		let accepted = 0, rejected = 0;
-		for (const ev of p.events) {
+		const limited: number[] = [];
+		// Once one event is deferred, every later valid one in the request is too, so what is
+		// accepted is an exact prefix: the reporter's checkpoint and order stay exact even if the
+		// bucket refills mid-request (CR10-9).
+		let holdRest = false;
+		for (const [i, ev] of p.events.entries()) {
 			const e = (typeof ev === 'object' && ev !== null ? ev : {}) as Record<string, unknown>;
 			const allowed = typeof e.source === 'string' ? CLIENT_SOURCES.get(e.source) : undefined;
 			if (!allowed || typeof e.class !== 'string' || !allowed.has(e.class)) {
@@ -301,17 +312,24 @@ export class ObsGlue {
 			// The connection watch runs on the validated report before any rate limit, so a tab
 			// that floods the gate with denials can't drop an opened/verified signal (review AE-1).
 			const watch = e.source === 'ahp-gate' ? this.ahpSignal(e.detail) : undefined;
-			const ev2 = this.hub.emit(tabId, { source: e.source, class: e.class, priority: e.priority, summary: e.summary, detail: e.detail, integrity });
+			const r = this.hub.offer(tabId, { source: e.source, class: e.class, priority: e.priority, summary: e.summary, detail: e.detail, integrity }, retry && !watch, holdRest && !watch);
+			// AHP connection lifecycle is watched on first sight, before any limit (AE-1), and is
+			// never deferred, even in a `retryLimited` report: past its bucket it is dropped and
+			// summarised, so it is never sent again or watched twice (CR10-8, CR10-12).
 			if (watch) {
-				this.watchAhp(tabId, watch, ev2);
+				this.watchAhp(tabId, watch, r.event);
 			}
-			if (ev2) {
+			if (r.event) {
 				accepted++;
 			} else {
 				rejected++;
+				if (r.limited) {
+					limited.push(i);
+					holdRest = true;
+				}
 			}
 		}
-		return { accepted, rejected };
+		return limited.length ? { accepted, rejected, limited } : { accepted, rejected };
 	}
 
 	private ahpSignal(detail: unknown): { rule: 'opened' | 'verified'; conn: number } | undefined {
