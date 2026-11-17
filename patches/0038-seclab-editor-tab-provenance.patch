@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts
 --- a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-16 15:28:42
-+++ b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-17 15:47:57
++++ b/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts	2026-11-17 17:45:17
 @@ -308,6 +308,12 @@
  
  		seclabOrigin(extHostContext).filtered = seclabIsFiltered(extHostContext, environmentService.remoteAuthority);
@@ -14,21 +14,22 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadDocumentsAndEditors.ts b/src/
  		this._mainThreadDocuments = this._register(new MainThreadDocuments(extHostContext, this._modelService, this._textFileService, fileService, textModelResolverService, environmentService, uriIdentityService, workingCopyFileService, pathService));
  		extHostContext.set(MainContext.MainThreadDocuments, this._mainThreadDocuments);
  
-@@ -316,6 +322,11 @@
+@@ -316,6 +322,12 @@
  
  		// It is expected that the ctor of the state computer calls our `_onDelta`.
  		this._register(new MainThreadDocumentAndEditorStateComputer(delta => this._onDelta(delta), shouldSync, seclabOrigin(extHostContext).onDidChange.event, _modelService, codeEditorService, this._editorService, paneCompositeService));
 +		// seclab (patch 0038): a model added after its editor (a new untitled one) changes what the
-+		// tab owns; the state computer above has recorded its birth by now.
++		// tab owns; the state computer above has recorded its birth by now. Its own event, so that
++		// adds don't rebuild the document state (review EDT-14).
 +		if (seclabIsFiltered(extHostContext, environmentService.remoteAuthority)) {
-+			this._register(this._modelService.onModelAdded(() => seclabOrigin(extHostContext).onDidChange.fire()));
++			this._register(this._modelService.onModelAdded(m => seclabOrigin(extHostContext).onDidAddModel.fire(m.uri)));
 +		}
  	}
  
  	private _onDelta(delta: DocumentAndEditorStateDelta): void {
 diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts
 --- a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-16 14:53:14
-+++ b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-17 16:58:42
++++ b/src/vs/workbench/api/browser/mainThreadEditorTabs.ts	2026-11-17 17:45:17
 @@ -29,7 +29,30 @@
  import { GroupDirection, IEditorGroup, IEditorGroupsService, preferredSideBySideGroupDirection } from '../../services/editor/common/editorGroupsService.js';
  import { IEditorsChangeEvent, IEditorService, SIDE_GROUP } from '../../services/editor/common/editorService.js';
@@ -69,7 +70,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  
  	constructor(
  		extHostContext: IExtHostContext,
-@@ -58,6 +83,46 @@
+@@ -58,6 +83,52 @@
  	) {
  
  		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostEditorTabs);
@@ -100,9 +101,13 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
 +				return `${id.slice(0, id.indexOf('~'))}~seclab-${sha.digest()}`;
 +			};
 +			// Tagging changes what counts as the tab's own (a provider's model appears later): update
-+			// each tab whose label or input changed, as TAB_UPDATE, so onDidChangeTabs fires.
-+			this._dispoables.add(o.onDidChange.event(() => {
++			// each tab whose label or input changed, as TAB_UPDATE, so onDidChangeTabs fires. A model
++			// add re-judges only the tabs showing it (review EDT-14).
++			const refresh = (added?: URI) => {
 +				for (const info of this._tabInfoLookup.values()) {
++					if (added && !seclabEditorUris(info.editorInput).some(u => u.toString() === added.toString())) {
++						continue;
++					}
 +					const index = info.group.getIndexOfEditor(info.editorInput);
 +					const fresh = index < 0 ? undefined : this._buildTabObject(info.group, info.editorInput, index);
 +					if (fresh && (fresh.label !== info.tab.label || JSON.stringify(fresh.input) !== JSON.stringify(info.tab.input))) {
@@ -111,12 +116,14 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
 +						this._proxy.$acceptTabOperation({ groupId: info.group.id, index, tabDto: info.tab, kind: TabModelOperationKind.TAB_UPDATE });
 +					}
 +				}
-+			}));
++			};
++			this._dispoables.add(o.onDidChange.event(() => refresh()));
++			this._dispoables.add(o.onDidAddModel.event(uri => refresh(uri)));
 +		}
  
  		// Main listener which responds to events from the editor service
  		this._dispoables.add(editorService.onDidEditorsChange((event) => {
-@@ -96,7 +161,7 @@
+@@ -96,7 +167,7 @@
  		const editorId = editor.editorId;
  		const tab: IEditorTabDto = {
  			id: this._generateTabId(editor, group.id),
@@ -125,7 +132,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  			editorId,
  			input: this._editorInputToDto(editor),
  			isPinned: group.isSticky(editorIndex),
-@@ -108,6 +173,9 @@
+@@ -108,6 +179,9 @@
  	}
  
  	private _editorInputToDto(editor: EditorInput): AnyInputDto {
@@ -135,7 +142,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  
  		if (editor instanceof MergeEditorInput) {
  			return {
-@@ -250,7 +318,7 @@
+@@ -250,7 +324,7 @@
  		} else {
  			resourceString = `${resource?.primary?.toString()}-${resource?.secondary?.toString()}`;
  		}
@@ -144,7 +151,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  	}
  
  	/**
-@@ -276,7 +344,7 @@
+@@ -276,7 +350,7 @@
  		const tabInfo = this._tabInfoLookup.get(tabId);
  		// If tab is found patch, else rebuild
  		if (tabInfo) {
@@ -155,7 +162,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadEditorTabs.ts b/src/vs/workbe
  				index: editorIndex,
 diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts
 --- a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-16 15:28:42
-+++ b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-16 15:28:53
++++ b/src/vs/workbench/api/browser/seclabDocumentOrigin.ts	2026-11-17 17:45:17
 @@ -12,6 +12,7 @@
  
  import { Emitter } from '../../../base/common/event.js';
@@ -164,12 +171,14 @@ diff -ruN a/src/vs/workbench/api/browser/seclabDocumentOrigin.ts b/src/vs/workbe
  import { ITextModel, shouldSynchronizeModel } from '../../../editor/common/model.js';
  import { IFileService, IFileSystemProvider } from '../../../platform/files/common/files.js';
  import { IExtHostContext } from '../../services/extensions/common/extHostCustomers.js';
-@@ -28,6 +29,8 @@
+@@ -28,6 +29,10 @@
  	writing: ITextModel | undefined;
  	/** Set by MainThreadDocumentsAndEditors: a non-local host in a `seclab+` window. */
  	filtered = false;
 +	/** Set by MainThreadDocumentsAndEditors (patch 0038): whether this host owns the model at a URI. */
 +	owns: ((uri: URI) => boolean) | undefined;
++	/** Fired by MainThreadDocumentsAndEditors (patch 0038) with each added model's URI, after its birth is recorded. */
++	readonly onDidAddModel = new Emitter<URI>();
  }
  const origins = new WeakMap<IExtHostContext, SeclabOrigin>();
  // What a model was when the window first saw it: every host's predicate records it, at birth.

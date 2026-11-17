@@ -47,9 +47,12 @@ nothing counts as the tab's own; publishing it fires 0035's change event, which 
 Filtering is decided from the host context's own authority, as 0035's fail-closed path does.
 
 A multi-diff is judged by the resources it shows, not by its own source id (review EDT-9). Because
-an untitled editor joins its group before its model exists, the document sync also fires the
-origin change when a model is added, after recording its birth, so the user's own untitled tab
-shows as the tab's own (EDT-10).
+an untitled editor joins its group before its model exists, the document sync also announces
+each added model, after recording its birth, so the user's own untitled tab shows as the tab's own
+(EDT-10). The announcement is its own event carrying the model's URI, and the editor-tab model
+re-judges only the tabs showing it: firing 0035's change event instead rebuilt the whole document
+state on every add, so a tab opening N documents in the background cost the window work quadratic
+in N (review EDT-14).
 
 Any other editor, including one with no resource at all, reaches the tab as present only: an
 opaque id, `UnknownInput` and the label `Editor`. Ids are a salted SHA-1 of upstream's id for every
@@ -89,6 +92,10 @@ model appears after its diff tab opened), the model is rebuilt and resent.
   44176135490) passes 4 of 4 runs (no canary in any label or URI; the media preview and the
   host editors anonymous; the user's untitled document a text tab of the tab's own); main
   `6589051b` fails `DOCSYNC-R3 …` and `EDT-1 …`. No focus steal; the teardown gate passed every run.
+- EDT-14 (scale phases): the tab opens 50, then 400, then 50 more of its own files in the
+  background, and the window's renderer counts calls per function (CDP precise coverage). On
+  `bb91e728` the last 50 adds cost about 6.8 times the first 50 (the sync predicate, once per open
+  model per add); the check allows 3.
 - Typecheck: the patched file adds no error against the pinned tree.
 - Review: [20261116-editor-tab-provenance](../security-reviews/20261116-editor-tab-provenance.md),
   three rounds; no high or critical finding.

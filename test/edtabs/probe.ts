@@ -53,6 +53,12 @@ fs.writeFileSync(runFile, JSON.stringify({ canary }));
 writeSnapshot(base);
 writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir] });
 fs.writeFileSync(path.join(ws, 'README.md'), '# edtabs probe workspace\n');
+// The tab's own files for the scale phases (EDT-14): SCALE[0], then SCALE[1], then SCALE[2] more.
+const SCALE = [50, 400, 50];
+fs.mkdirSync(path.join(ws, 'scale'));
+for (let i = 0; i < SCALE[0] + SCALE[1] + SCALE[2]; i++) {
+	fs.writeFileSync(path.join(ws, 'scale', `f${i}.txt`), `scale ${i}\n`);
+}
 fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
 fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 	'security.workspace.trust.enabled': false, 'seclab.tabs.driver': 'sbx', 'seclab.tabs.allowedRoots': [base], 'window.restoreWindows': 'none',
@@ -111,6 +117,9 @@ const read = () => {
 	}
 };
 let windowLabels: string[] = [];
+// Per renderer function, its call count in each scale phase (precise coverage, call counts).
+const phaseCounts: Array<Map<string, number>> = [];
+let phasesDone = 0;
 const opened: Record<string, boolean> = {};
 let ed: DrivenEditor | undefined;
 if (installed) {
@@ -166,6 +175,30 @@ if (installed) {
 		windowLabels = (await labels()).filter(l => /^[\w. -]{1,60}$/.test(l));
 		await ed.screenshot(path.join(base, 'drive.png')).catch(() => 0);
 		spawnSync('sleep', ['4']);
+		// Scale phases (review EDT-14): the tab opens SCALE[0], SCALE[1], then SCALE[2] more of its own
+		// files in the background. The first and last phases add as many models; work per add that
+		// rescans every model is about ten times more in the last, with 450 more models open.
+		type Coverage = { result: Array<{ scriptId: string; functions: Array<{ functionName: string; ranges: Array<{ startOffset: number; count: number }> }> }> };
+		await ed.cdp.send('Profiler.enable', {}, ed.session);
+		await ed.cdp.send('Profiler.startPreciseCoverage', { callCount: true, detailed: false }, ed.session);
+		await ed.cdp.send('Profiler.takePreciseCoverage', {}, ed.session);
+		for (let k = 1; k <= 3; k++) {
+			fs.writeFileSync(path.join(ws, '.seclab', `scale-${k}`), `${SCALE.slice(0, k - 1).reduce((a, b) => a + b, 0)} ${SCALE[k - 1]}`);
+			const done = path.join(ws, '.seclab-edtabs', `scale-${k}.done`);
+			for (let i = 0; i < 300 && inTab(['test', '-e', done]).status !== 0; i++) {
+				spawnSync('sleep', ['1']);
+			}
+			const cov = await ed.cdp.send('Profiler.takePreciseCoverage', {}, ed.session) as Coverage;
+			const m = new Map<string, number>();
+			for (const sc of cov.result) {
+				for (const f of sc.functions) {
+					m.set(`${sc.scriptId}:${f.ranges[0].startOffset}:${f.functionName}`, f.ranges[0].count);
+				}
+			}
+			phaseCounts.push(m);
+			phasesDone += inTab(['test', '-e', done]).status === 0 ? 1 : 0;
+		}
+		await ed.cdp.send('Profiler.stopPreciseCoverage', {}, ed.session).catch(() => undefined);
 	} catch (e) {
 		console.error(`drive: ${String(e).slice(0, 300)}`);
 	}
@@ -188,6 +221,9 @@ const valid = !!rep && rep.schema === 'seclab-edtabs-report/1' && rep.arm === ar
 // the same path), which the tab is given on purpose; the canary names only the host profile.
 const markers: Record<string, string> = { canary: sha(canary), media: sha(mediaCanary) };
 const leaks = valid ? Object.entries(markers).flatMap(([name, h]) => (rep.tokens as Array<{ field: string; sha256: string }>).filter(x => x.sha256 === h).map(x => `${name}@${x.field}`)) : [];
+// Per-add work independent of the documents already open gives the same counts in the first and
+// last phase; a rescan per add about 9x more. Only functions busy enough to matter are judged.
+const growth = phaseCounts.length === 3 ? [...phaseCounts[2]].filter(([, c]) => c >= 5_000).map(([k, c]) => ({ fn: k.slice(k.lastIndexOf(':') + 1).slice(0, 40), c1: phaseCounts[0].get(k) ?? 0, c3: c, ratio: c / Math.max(phaseCounts[0].get(k) ?? 0, 1) })).sort((a, b) => b.ratio - a.ratio) : [];
 const steals = fs.existsSync(focusStealLog(userData)) ? fs.readFileSync(focusStealLog(userData), 'utf8').trim() : '';
 const results: Array<{ name: string; ok: boolean }> = [];
 const expect = (name: string, ok: boolean) => results.push({ name, ok });
@@ -209,6 +245,9 @@ if (valid && !measure) {
 	expect('EDT-1 a host media file dropped in the window reaches the tab without its path', !leaks.some(l => l.startsWith('media@')));
 	expect('control: an untitled document the user created in the window shows to the tab as its own text tab (EDT-10)', rep.untitledText === true);
 	expect('control: the tab learned of its untitled text tab through onDidChangeTabs (EDT-13)', rep.untitledEvent === true);
+	console.log(`scale: phases done ${phasesDone}/3; fastest-growing busy renderer functions ${JSON.stringify(growth.slice(0, 5))}`);
+	expect('control: all three scale phases ran (the tab opened its own files in the background)', phasesDone === 3);
+	expect('EDT-14 no renderer function\'s call count grows quadratically with the tab\'s background document opens', phasesDone === 3 && growth.every(g => g.ratio < 3));
 }
 expect('no focus steal', !steals);
 const gate = verifyTeardown(base);
