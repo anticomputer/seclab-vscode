@@ -14,10 +14,17 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 const HERE = import.meta.dirname;
 const SCRATCH = process.env.SECLAB_SCRATCH ?? path.join(HERE, '..', '..', '.work', 'harness-hygiene');
+/**
+ * The reap refuses a run directory outside the test roots (~/.seclab-test/ or this worktree's
+ * .work/). In the container the worktree is read-only and SECLAB_SCRATCH is a tmpfs, so the
+ * runner points HOME into that tmpfs and the reap fixtures live under its .seclab-test/.
+ */
+const REAP_ROOT = process.env.SECLAB_SCRATCH ? path.join(os.homedir(), '.seclab-test', 'harness-hygiene') : SCRATCH;
 /** The harnesses that wipe a run directory and run an editor or tab. */
 const HARNESSES = ['host-terminal.ts', 'reh-push.ts'];
 
@@ -59,7 +66,7 @@ setInterval(() => {}, 1000);`;
  * either fails every call (`unlisted`) or lists the tab's container and ignores `rm` (`stuck`).
  */
 function reapWith(mode: 'unlisted' | 'stuck' | 'clean'): { refused: boolean; problems: string[]; profileKept: boolean } {
-	const dir = path.join(SCRATCH, `reap-${mode}`);
+	const dir = path.join(REAP_ROOT, `reap-${mode}`);
 	fs.rmSync(dir, { recursive: true, force: true });
 	const bin = path.join(dir, 'bin');
 	const profile = path.join(dir, 'ud');
