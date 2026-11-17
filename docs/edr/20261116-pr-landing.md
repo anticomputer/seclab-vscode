@@ -1,6 +1,6 @@
 # Landing through pull requests: rebase merge with auto-merge
 
-- **Status:** accepted
+- **Status:** accepted. The ruleset and the landing procedure are superseded by [20261117-pr-landing-review](20261117-pr-landing-review.md) (Copilot review, resolved threads); the rest stands.
 - **Date:** 2026-11-16
 - **Deciders:** Project owner (2026-11-16): pull-request landing with auto-merge, the repository staying under its user account; the coordinator (landing order). Fork-build session: implementation.
 - **Related:** [CI hardening](20261104-ci-hardening.md) (§9, the ruleset), [security findings register](20261110-security-findings-register.md), [publish gate](20261112-publish-gate.md)
