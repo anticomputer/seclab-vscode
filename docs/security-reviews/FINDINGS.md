@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 209 | 301 | 44 | 652 |
+| fixed | 14 | 84 | 209 | 303 | 44 | 654 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 52 | 158 | 57 | 272 |
+| fixed-untested | 0 | 5 | 52 | 158 | 58 | 273 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 13 | 14 | 6 | 35 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-| **all** | 16 | 93 | 300 | 552 | 147 | 1108 |
+| **all** | 16 | 93 | 300 | 554 | 148 | 1111 |
 
 ## Baseline: open high and critical findings
 
@@ -144,6 +144,7 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-7** | info | accepted-residual | patch 0038 editor-tab model | A desktop web-worker host in a tab window is unfiltered by 0038, which keys on the host's own authority. | accepted by an agent: Tab-installed extensions never run in the desktop local web worker; 0038 is desktop-only. Revisit if the web build is ever in scope. |
 | [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-5** | info | fixed-untested | nbsync harness | The nbsync probe's prepare, launch, check flow could not pass on a filtered build: only drive read the serializer refusal. | A harness fix; its prepare, launch, check run on main 6589051b passed, but no test runs the harness itself. |
 | [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-6** | info | fixed-untested | probe harnesses | Probe profiles were shared by every worktree while each run guard is per worktree. | A naming fix in four harnesses; nothing runs two worktrees at once to test it. |
+| [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md) **SQ-1** | info | fixed-untested | probe harnesses | The squat probe's profile was shared by every worktree while its run guard is per worktree. | A naming fix; nothing runs two worktrees at once to test it. |
 | [docs/edr/20261116-notebook-sync.md](../../docs/edr/20261116-notebook-sync.md) **DOCSYNC-R9** | info | deferred | window→tab pushes (notebook sync) | Notebooks don't work in tabs; enabling them needs per-model notebook provenance, a serializer that reads only the tab's files, and 0035's cell rule for tab-created notebooks. | follow-up: With the RPC follow-ups session's landing D, which needs a validator for MainThreadNotebook (coordinator, 2026-11-16). The plan is in the EDR's Decision section; test/nbsync/probe.ts must pass with notebooks on. |
 
 ### Egress and credential broker
@@ -2074,6 +2075,14 @@ Every other commit the register cites is on main's history, or on the branch its
 | LCR2-3 | info | false-positive | A directory blob URL or a private repository fails at raw. | Fails closed; the review recorded no issue. |
 | LCR2-4 | info | false-positive | The cache key is not bumped for the new host. | The review recorded no issue. |
 | LCR2-5 | info | false-positive | Prompt injection. | The review recorded no issue. |
+
+### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| SQ-1 | info | fixed-untested | The squat probe's profile was shared by every worktree while its run guard is per worktree. | A naming fix; nothing runs two worktrees at once to test it. |
+| SQ-2 | low | fixed | The squat probe's window-log step never ran (a modal was still open) and had no positive control, so its no-provider-call claim for the log was unexercised. | patch:87d6d313213944a05882a69f941c3738547b5756 · `test/squat/probe.ts` "control: the window opened its own log in an output editor" |
+| SQ-3 | low | fixed | The squat probe validated named report fields but printed and stored the tab's whole objects, so a rogue report could carry arbitrary text into host output and evidence. | patch:87d6d313213944a05882a69f941c3738547b5756 · `test/squat/probe.ts` "reach neither host output nor evidence (SQ-3)" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
