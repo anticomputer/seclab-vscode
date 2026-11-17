@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 213 | 342 | 45 | 698 |
+| fixed | 14 | 84 | 215 | 343 | 45 | 701 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 53 | 169 | 60 | 287 |
+| fixed-untested | 0 | 5 | 53 | 170 | 60 | 288 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 20 | 20 |
-| **all** | 16 | 93 | 304 | 604 | 157 | 1174 |
+| **all** | 16 | 93 | 306 | 606 | 157 | 1178 |
 
 ## Baseline: open high and critical findings
 
@@ -350,6 +350,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-2** | low | fixed-untested | RPC inventory generator (rpc-filter/tools/extract_inventory.py) | The RPC inventory generator fell back to a hard-coded 1.145.0 SHA when upstream.lock named none. | The fallback constant is gone and the generator exits 2 without a pinned SHA; no test runs it without upstream.lock. |
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-3** | low | fixed-untested | docs/ARCHITECTURE.md | ARCHITECTURE's as-built line still described a three-patch queue after the bump edited it. | Documentation only; nothing to test. |
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-4** | low | fixed-untested | findings register (build/docs/findings.ts upstream exemption) | The register exempts only the current upstream pin, so after a bump, entries citing the old pin's SHA (or a file path containing it) carry citations that can't resolve. | Fixed by the register session: a prefix of any pin upstream.lock has held on main counts as the upstream commit, and hex inside a file path isn't a citation. Its tests are recorded against its own round; none of this round's tests drives it. |
+| [20261117-copilot-review-pr25](20261117-copilot-review-pr25.md) **CR25-4** | low | fixed-untested | harness runners | A bad SECLAB_TAB_IMAGE exited the containment run after it created resources and before their cleanup was registered. | Shown by hand with a bogus value refusing before any resource exists; the runners have no unit seam for their start-up order. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-2** | low | fixed-untested | docs link check (lychee) | Old cache entries from when 429 was accepted would be replayed as success. | A cache-key version; nothing to test beyond the key. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-4** | low | fixed-untested | docs link check (lychee) | Doubling retry waits could push a throttled run past the job timeout. | Timing depends on GitHub throttling; shown only by CI runs. |
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-7** | low | fixed-untested | docs link check (lychee) | GitHub's secondary rate limit (403) could be cached and replayed red. | An argument; nothing to test offline. |
@@ -2078,6 +2079,15 @@ Every other commit the register cites is on main's history, or on the branch its
 | BRK20D-2 | low | fixed | YAML decodes numeric escapes and backslash continuations in a double-quoted value before Actions evaluates it, so an escaped token reference passed the HH-1 check's raw-text scan. | ab175121b6f1 · `broker/tools/token_steps.py` "BRK20D-2: a unicode escape in a double-quoted value fails" |
 | BRK20D-3 | low | fixed | The HH-1 check's continuation rule needed the double quote on the same line, so a quote opened lines earlier let a backslash continuation split a token reference. | c7309fbda2c9 · `broker/tools/token_steps.py` "BRK20D-3: a backslash continuation after the quote opened on an earlier line fails" |
 | BRK20D-4 | low | fixed | The HH-1 check's continuation rule skipped lines starting with #, but inside a multi-line double-quoted value such a line is content, so it could still join into a token reference. | b19a42452e0f · `broker/tools/token_steps.py` "BRK20D-4: a hash-led continuation line inside a multi-line double-quoted value fails" |
+
+### [20261117-copilot-review-pr25](20261117-copilot-review-pr25.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| CR25-1 | medium | fixed | The checkout's own git config stayed in force, so a kept clean/smudge filter could make the tree differ from what status saw. | patch:487f76b0ca9b3a6fd687e02cba41dbb3d7fbceaf · `build/fetch-upstream.test.ts` "fetch-upstream: the volume\\'s own config, attributes and hooks are not honoured (PR 25 review)" |
+| CR25-2 | medium | fixed | A kept core.worktree could redirect the reset and the whole-tree clean elsewhere. | patch:487f76b0ca9b3a6fd687e02cba41dbb3d7fbceaf · `build/fetch-upstream.test.ts` "fetch-upstream: a kept core.worktree can\\'t redirect the reset and clean (PR 25 review)" |
+| CR25-3 | low | fixed | A per-build tag's grace ran from the cached image's creation time, so a fresh proof tag could be pruned. | patch:9688a6cd493345884eb92efd8360f75819036dd6 · `test/clean-host.ts` "should be ${want}" |
+| CR25-4 | low | fixed-untested | A bad SECLAB_TAB_IMAGE exited the containment run after it created resources and before their cleanup was registered. | Shown by hand with a bogus value refusing before any resource exists; the runners have no unit seam for their start-up order. |
 
 ### [20261117-fetch-upstream-clean](20261117-fetch-upstream-clean.md)
 
