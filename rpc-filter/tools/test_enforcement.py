@@ -432,6 +432,12 @@ class LogTrustGateTest(unittest.TestCase):
         mapping["rpc:MainThreadLogger.$log"] = "allow#abc"
         self.assertTrue(CD.check_log_trust(mapping, self.inv))
 
+    def test_a_log_method_the_inventory_lost_fails(self):
+        mapping = dict(self.mapping)
+        del mapping["rpc:MainThreadLogger.$log"]
+        errors = CD.check_log_trust(mapping, self.inv)
+        self.assertTrue(any("MainThreadLogger.$log" in e and "not in the surface mapping" in e for e in errors), errors)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

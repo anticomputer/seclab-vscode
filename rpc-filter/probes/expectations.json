@@ -304,24 +304,28 @@
     },
     "reh-onexecutecommand-manageextensions": {
       "required": true,
+      "runner": "reh-push",
       "surface": "code-execution",
       "policyRef": "push:remoteterminal:$onExecuteCommand",
       "why": "the server names a command and the trusted workbench runs it; managing extensions on the trusted side is a host code-execution primitive (the probe only lists)"
     },
     "reh-onexecutecommand-getsystemstatus": {
       "required": true,
+      "runner": "reh-push",
       "surface": "reconnaissance",
       "policyRef": "push:remoteterminal:$onExecuteCommand",
       "why": "the server names a command and the trusted workbench runs it: getSystemStatus returns the host's diagnostics (OS, CPUs, memory, processes) to the tab. It stands in for openExternal, which on a baseline build launches the host's default browser, a window outside the run's control that takes focus"
     },
     "reh-onexecutecommand-windowopen": {
       "required": true,
+      "runner": "reh-push",
       "surface": "code-execution",
       "policyRef": "push:remoteterminal:$onExecuteCommand",
       "why": "the server names a command and the trusted workbench runs it; windowOpen acts on the host UI"
     },
     "reh-resolve-variables-host-env": {
       "required": true,
+      "runner": "reh-push",
       "surface": "credential-access",
       "policyRef": "push:remoteterminal:$onPtyHostRequestResolveVariablesEvent",
       "why": "the pty host names strings the trusted side resolves over the host shell environment, so ${env:X} returns host secrets"
@@ -342,6 +346,7 @@
     },
     "reh-profile-config-host-setting": {
       "required": true,
+      "runner": "reh-push",
       "surface": "credential-access",
       "policyRef": "data:remoteterminal-profile-path",
       "patchedOutcome": "succeeded",

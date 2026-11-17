@@ -38,7 +38,7 @@ import { TabdClient } from '../../tabd/src/client.ts';
 import { DrivenEditor } from '../driver/editor.ts';
 import { checkUserDataDir, lockRun, repoRoot } from '../harness.ts';
 import { report, type Check } from './assert.ts';
-import { teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
+import { exitOnSignals, reapOrRefuse, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
 const IMAGE = 'seclab-tab-oci:test-containment';
 const LOCAL_LABEL = 'Create New Integrated Terminal (Local)';
@@ -66,6 +66,8 @@ const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manage
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 // ------------------------------------------------------------------ prepare
+// The previous run's manifest is its only record: reap it before wiping the directory.
+reapOrRefuse(base, 'host-terminal');
 fs.rmSync(base, { recursive: true, force: true });
 fs.rmSync(userData, { recursive: true, force: true });
 fs.mkdirSync(ws, { recursive: true });
@@ -73,6 +75,7 @@ const arm = randomBytes(8).toString('hex');
 fs.writeFileSync(path.join(ws, 'README.md'), 'host-terminal proof workspace\n');
 writeSnapshot(base);
 writeManifest(base, { driver: 'oci', userDataDir: userData, stateDirs: [stateDir], workspaces: [ws] });
+exitOnSignals();
 process.on('exit', code => {
 	if (!teardownGate(base) && code === 0) {
 		process.exitCode = 1;

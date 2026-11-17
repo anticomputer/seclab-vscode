@@ -170,6 +170,38 @@ export function reapPreviousRun(runDir: string): ReapResult {
 	return { stopped, refused: problems.length > 0 || survivors.length > 0, problems, survivors };
 }
 
+/**
+ * For a harness about to wipe its run directory: reap the previous run first, from the manifest
+ * in that directory, its only record. A refusal exits the process: wiping the record of a run
+ * that could not be reaped would orphan its tabs and processes (PR review, 2026-11-17).
+ */
+export function reapOrRefuse(runDir: string, who: string): void {
+	const reaped = reapPreviousRun(runDir);
+	if (reaped.refused) {
+		for (const p of reaped.problems) {
+			console.error(`${who}: ${p}`);
+		}
+		for (const p of reaped.survivors) {
+			console.error(`${who}: a process from the previous run is still alive: ${p.pid} ${p.args.slice(0, 200)}`);
+		}
+		console.error(`${who}: refusing to wipe ${runDir}: the previous run could not be reaped. Resolve it (./seclab clean-host) and retry.`);
+		process.exit(1);
+	}
+	if (reaped.stopped.length) {
+		console.log(`${who}: reaped ${reaped.stopped.length} process(es) from the previous run`);
+	}
+}
+
+/**
+ * Ctrl+C or SIGTERM end the process through `exit`, so a harness's exit handler (its teardown
+ * gate) runs on interruption too. Node's default for both signals skips `exit` handlers and
+ * pending `finally` blocks (PR review, 2026-11-17).
+ */
+export function exitOnSignals(): void {
+	process.on('SIGINT', () => process.exit(130));
+	process.on('SIGTERM', () => process.exit(143));
+}
+
 export interface ReapResult {
 	/** Processes this reap stopped. */
 	readonly stopped: Proc[];
