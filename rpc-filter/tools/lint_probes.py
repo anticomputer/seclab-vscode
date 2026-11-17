@@ -38,6 +38,7 @@ EXEMPT = (
     "test/containment/rogue-extension/probe-safety.js",
     "test/containment/rogue-reh/probe-safety.js",
     "test/containment/benign-extension/probe-safety.js",
+    "test/containment/response-probe/probe-safety.js",
 )
 
 
@@ -716,7 +717,7 @@ def main(argv: list | None = None) -> int:
     if os.path.isfile(src):
         with open(src, "rb") as fh:
             want = fh.read()
-        for d in ("rogue-extension", "rogue-reh", "benign-extension"):
+        for d in ("rogue-extension", "rogue-reh", "benign-extension", "response-probe"):
             copy = os.path.join(root, "test/containment", d, "probe-safety.js")
             if os.path.isfile(copy):
                 with open(copy, "rb") as fh:

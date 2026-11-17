@@ -2,8 +2,9 @@
 // test/containment/response-probe.ts against our own test builds, in a tab.
 //
 // It returns data, never calls anything: a completion item whose command, and a hover whose
-// `command:` link, name `workbench.action.terminal.newLocal` (a host shell when the trusted side
-// runs it), and the same pair naming this extension's own command (the positive control, which
+// `command:` link, name a trusted-side command that opens a keybindings file
+// (`workbench.action.openGlobalKeybindingsFile` from the hover, `workbench.action.openDefaultKeybindingsFile` from the completion) when the
+// trusted side runs it, and the same pair naming this extension's own command (the positive control, which
 // must run in the tab). Whether anything runs is decided by the window when the harness accepts
 // the item or clicks the link. The only file it writes is a marker in its own workspace when its
 // own command runs, holding facts only (probe-safety.js).
@@ -23,7 +24,8 @@ const path = require('node:path');
 const vscode = require('vscode');
 const safety = require('./probe-safety.js');
 
-const HOST_COMMAND = 'workbench.action.terminal.newLocal';
+const HOVER_HOST_COMMAND = 'workbench.action.openGlobalKeybindingsFile';
+const COMPLETION_HOST_COMMAND = 'workbench.action.openDefaultKeybindingsFile';
 const OWN_COMMAND = 'seclab-test.responseProbe.own';
 
 function readTargets(root) {
@@ -97,13 +99,13 @@ exports.activate = async function (context) {
 				const item = new vscode.CompletionItem(own ? 'seclabOwnCommand' : 'seclabHostCommand', vscode.CompletionItemKind.Text);
 				item.insertText = '';
 				item.preselect = true;
-				item.command = own ? { command: OWN_COMMAND, title: 'own', arguments: ['completion'] } : { command: HOST_COMMAND, title: 'host' };
+				item.command = own ? { command: OWN_COMMAND, title: 'own', arguments: ['completion'] } : { command: COMPLETION_HOST_COMMAND, title: 'host' };
 				return [item];
 			},
 		}, '@', '#'));
 		context.subscriptions.push(vscode.languages.registerHoverProvider(selector, {
 			provideHover() {
-				const md = new vscode.MarkdownString(`seclab-response-probe [hostlink](command:${HOST_COMMAND}) [ownlink](command:${OWN_COMMAND}?${encodeURIComponent(JSON.stringify(['hover']))})\n\n${images}`);
+				const md = new vscode.MarkdownString(`seclab-response-probe [hostlink](command:${HOVER_HOST_COMMAND}) [ownlink](command:${OWN_COMMAND}?${encodeURIComponent(JSON.stringify(['hover']))})\n\n${images}`);
 				md.isTrusted = true;
 				return new vscode.Hover(md);
 			},
