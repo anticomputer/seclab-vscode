@@ -4189,7 +4189,6 @@
 		{
 			"record": "20261104-tab-observability.md",
 			"anchor": "WL-0",
-			"branch": "anticomputer-tab-observability",
 			"round": "Round 12 (window decision logs)",
 			"severity": "medium",
 			"summary": "tabd rejected a whole report whose ref was not printable ASCII, letting a tab hide a denial behind an odd command id.",
@@ -4199,29 +4198,23 @@
 			"commit": "patch:f292e60cf37e97f5af1b6292f7426e3132bda1cc",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
-				"name": "a ref that fails the pattern keeps the event"
+				"name": "ref is exact or kept as escaped text"
 			}
 		},
 		{
 			"record": "20261104-tab-observability.md",
 			"anchor": "WL-1",
-			"branch": "anticomputer-tab-observability",
 			"round": "Round 12 (window decision logs)",
 			"severity": "high",
 			"summary": "Nothing enforced that log forwarding starts only after the RPC filter ships, so a tab could $log forged trusted decision lines.",
 			"component": "obs window decision logs / Tab Manager",
 			"owner": "obs",
-			"status": "fixed",
-			"commit": "patch:f292e60cf37e97f5af1b6292f7426e3132bda1cc",
-			"test": {
-				"file": "tabd/test/obs.test.ts",
-				"name": "forwarding needs the policy stamp AND the enforcing code"
-			}
+			"status": "open",
+			"gap": "Fixed by the interlock in this change (product.json stamp plus the enforcing marker in the bundle; window-log probe no-stamp and no-marker variants); a high closes in a follow-up once its fix is on main."
 		},
 		{
 			"record": "20261104-tab-observability.md",
 			"anchor": "WL-2",
-			"branch": "anticomputer-tab-observability",
 			"round": "Round 12 (window decision logs)",
 			"severity": "medium",
 			"summary": "The tailer jumped from its old file to the current name on spdlog rotation, silently skipping intermediate rotated files.",
@@ -4237,7 +4230,6 @@
 		{
 			"record": "20261104-tab-observability.md",
 			"anchor": "WL-3",
-			"branch": "anticomputer-tab-observability",
 			"round": "Round 12 (window decision logs)",
 			"severity": "low",
 			"summary": "A filter backlog could delay the gate's verified line past tabd's 2 s window and raise a false ahp.ungated.",
@@ -4246,6 +4238,66 @@
 			"status": "fixed-untested",
 			"commit": "patch:f292e60cf37e97f5af1b6292f7426e3132bda1cc",
 			"gap": "windowlog.ts caps work at BATCHES_PER_TICK = 4 per file and lists the gate log first, but the forwarder test delivers only 3 batches from one file, so neither the cap nor the gate-first ordering is asserted."
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "WL-4",
+			"round": "Round 14 (window decision logs against the landed RPC core)",
+			"severity": "medium",
+			"summary": "A reused window keeps its log folder; a new tab's forwarder could report the earlier tab's filter and gate lines as its own trusted events.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:fa34a3aa7fef59f9db9670ad94a5ae8a78589f2f",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "Review round 14: a reused window"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "WL-5",
+			"round": "Round 14 (window decision logs against the landed RPC core)",
+			"severity": "medium",
+			"summary": "rpc.deny-burst counted lines, but the landed filter collapses repeated denials into one line with a count, so probing one method stayed under the threshold.",
+			"component": "obs detections",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:fa34a3aa7fef59f9db9670ad94a5ae8a78589f2f",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "Review round 14: the filter collapses repeats"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "WL-6",
+			"round": "Round 14 (window decision logs against the landed RPC core)",
+			"severity": "low",
+			"summary": "The window-log probe left its altered app copies on disk, registered with LaunchServices under the product's bundle id.",
+			"component": "obs window-log probe",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:fa34a3aa7fef59f9db9670ad94a5ae8a78589f2f",
+			"test": {
+				"file": "test/observability/window-log-probe.ts",
+				"name": "no app copy left in the run directory"
+			}
+		},
+		{
+			"record": "20261104-tab-observability.md",
+			"anchor": "WL-7",
+			"round": "Round 14 (window decision logs against the landed RPC core)",
+			"severity": "medium",
+			"summary": "The WL-4 session cutoff dropped the current tab's first gate lines, which the gate writes before the RPC filter installs; an ahp-gate.opened there would have been lost to ahp.ungated.",
+			"component": "obs window decision logs",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:4128268344d1863c3587dd9d00db7cc5c785c9ca",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "Review round 14: a reused window"
+			}
 		},
 		{
 			"record": "20261104-tab-observability.md",
