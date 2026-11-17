@@ -70,11 +70,14 @@ def lock_drift(req, locked: dict[str, str], register: dict, root=None) -> list[s
     """source_drift for a lock, against its source registered in broker/deps.json `lockSources`
     (paths relative to broker/), or the sibling `.in` when it has none (finding 11-9). `root` is
     the repository root; the self-test passes a scratch tree."""
+    import os
     from pathlib import Path
     root = Path(root) if root is not None else BROKER.parent
     sources = {"broker/" + e["lock"]: "broker/" + e["source"] for e in register.get("lockSources", [])}
+    # Lexical paths, as requirement_files() finds them: resolving would follow a symlinked lock
+    # to its target and miss the registration (review of #36).
     try:
-        key = Path(req).resolve().relative_to(root.resolve()).as_posix()
+        key = Path(os.path.abspath(req)).relative_to(Path(os.path.abspath(root))).as_posix()
     except ValueError:
         key = None
     reg = sources.get(key) if key else None
@@ -145,6 +148,17 @@ def self_test() -> list[str]:
                 failures.append(f"{name}: no drift reported against deps.in in {errors}")
             if lock_drift(x / "requirements.txt", locked, {"lockSources": []}, root=root):
                 failures.append(f"{name}: control (unregistered, matching sibling) reported drift")
+            # A symlinked lock is looked up by its own (registered) path, not its target's.
+            y = root / "broker" / "y"
+            y.mkdir()
+            (y / "actual.txt").write_text(lock)
+            (y / "requirements.txt").symlink_to("actual.txt")
+            (y / "requirements.in").write_text("pkga==1.0\n")
+            (y / "deps.in").write_text("pkga==0.9\n")
+            errors = lock_drift(y / "requirements.txt", locked,
+                                {"lockSources": [{"lock": "y/requirements.txt", "source": "y/deps.in"}]}, root=root)
+            if not any("deps.in" in e and "pkga==0.9 but" in e for e in errors):
+                failures.append(f"{name}: a symlinked lock missed its registration: {errors}")
         except Exception as e:  # noqa: BLE001 - any crash fails the case
             failures.append(f"{name}: raised {type(e).__name__}")
     return failures
