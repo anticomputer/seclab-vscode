@@ -627,10 +627,11 @@ losses, not bugs:
   editor-driven run's `[fsmonitor]` check is an expected failure on a filtered build for this
   reason, only with that denial in the trusted-side log. A tab can make that call itself, so
   the expected failure covers only the in-tab run: the host facts (no probe marker in the run
-  directory, no evidence file in the host checkout) stay hard checks on sbx. An OCI tab writes
-  the host checkout itself, so there the run also fails if any file a host run would read
-  changed or a `.git` appeared; a tab that tampers and restores before the check is not caught
-  (the ungated checkout's race, ADR write-back-gate §7);
+  directory, written by a host run whatever the workspace says) stay hard checks. A tab reaches
+  the host checkout on both drivers (OCI directly, sbx through the write-back paths the gate
+  doesn't hold), so the run also fails if a file a host run would read changed, a file was
+  added, or a `.git` appeared; a tab that tampers and restores before the check is not caught
+  (ADR write-back-gate §7);
 - tree views, output channels, status bar items and decorations;
 - language features registered by the tab (hover, completion, code actions,
   code lens, links, folding), so a language extension in a tab activates but
