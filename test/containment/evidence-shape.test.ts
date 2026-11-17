@@ -21,7 +21,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { armingRecord, type ArmingRecord, checkEvidence, hostRunChecks, levelBVectors, parseArmingRecord, readEvidence, unattributedMarkers, type Evidence } from './assert.ts';
+import { armingRecord, type ArmingRecord, checkEvidence, hostRunChecks, levelBVectors, parseArmingRecord, readEvidence, unattributedMarkers, withheldEvidence, type Evidence } from './assert.ts';
 
 const tests: Array<[string, () => void]> = [];
 const test = (name: string, fn: () => void) => tests.push([name, fn]);
@@ -234,6 +234,31 @@ test('FXF-16: an arming record naming a path outside the workspace is no record'
 		assert.equal(parseArmingRecord(bad), undefined, JSON.stringify(bad));
 	}
 	assert.deepEqual(parseArmingRecord({ digest, tree: ['.seclab/probe.sh'] }), { digest, tree: ['.seclab/probe.sh'] });
+});
+
+test('FXF-22: evidence on the host but not in the tab is a failure, not a missing file', () => {
+	const r = hostRun();
+	try {
+		assert.equal(withheldEvidence(r.ws, 'task', undefined), undefined, 'nothing anywhere: just a missing file');
+		put(r.ws, '.seclab-evidence/task.json', '{}');
+		const c = withheldEvidence(r.ws, 'task', undefined);
+		assert.ok(c && !c.ok && !c.knownGap, 'host copy only: a plain failure');
+		assert.equal(withheldEvidence(r.ws, 'task', GOOD as unknown as Evidence), undefined, 'both: fine');
+	} finally {
+		r.done();
+	}
+});
+
+test('FXF-23: a tab-added file can\'t hide behind an OS artifact name', () => {
+	for (const rel of ['._launch.json', '.vscode/._hook', 'sub/.Spotlight-V100', 'sub/.fseventsd/x']) {
+		const r = hostRun();
+		try {
+			put(r.ws, rel);
+			assert.ok(failing(hostRunChecks('sbx', r.ws, r.arming)).includes(ADDED_ROW), rel);
+		} finally {
+			r.done();
+		}
+	}
 });
 
 /** Runs the real probe.sh from a workspace inside a scratch run dir (no HTTP: the client's

@@ -191,8 +191,9 @@ export function rpcDecisions(userDataDir: string): RpcDecision[] {
  * only with the denial in the decision log. Both the missing evidence and the denial are within
  * a tab's reach (a tab's own code can make the denied call), so neither excuses a host run: the
  * host facts (no host marker; on sbx, no evidence file in the host checkout) stay hard checks.
- * On OCI the tab writes the checkout itself, so they also need the arming files unchanged, and a
- * tab that tampers and restores before the check is not caught (ADR write-back-gate §7).
+ * A tab reaches the host checkout on both drivers (OCI directly; sbx through the write-back
+ * paths the gate doesn't hold, such as .seclab/targets), so they also need the arming files
+ * unchanged, and a tab that tampers and restores before the check is not caught (review FXF-21).
  */
 export const FILTERED_VECTOR_LOSSES: Record<string, { deniedRef: string; gap: string }> = {
 	// The tab's extension host can't register a task system, so the folder-open task never runs.
@@ -228,7 +229,11 @@ export function levelBVectors(driver: string): string[] {
 }
 
 /** Host OS artifacts (Finder, Spotlight) that say nothing about a tab (review FXF-18). */
-const OS_ARTIFACT = (name: string) => name === '.DS_Store' || name.startsWith('._') || name === '.Spotlight-V100' || name === '.fseventsd';
+/** Narrow, so a tab can't hide a file behind one of these names (review FXF-23): .DS_Store
+ *  anywhere, AppleDouble ._X only beside a real X, the volume indexes only at the root. */
+const OS_ARTIFACT = (rel: string, name: string, siblings: Set<string>) => name === '.DS_Store'
+	|| (name.startsWith('._') && siblings.has(name.slice(2)))
+	|| (!rel && (name === '.Spotlight-V100' || name === '.fseventsd'));
 
 /** Every file under `ws`, relative, sorted (`.git` is checked on its own), and the directories
  *  that couldn't be listed: a subtree the check can't see is a failure, never "nothing there"
@@ -244,9 +249,10 @@ export function listTree(ws: string): { files: string[]; unreadable: string[] } 
 			unreadable.push(rel || '.');
 			return;
 		}
+		const names = new Set(entries.map(e => e.name));
 		for (const e of entries) {
 			const r = rel ? `${rel}/${e.name}` : e.name;
-			if (r === '.git' || OS_ARTIFACT(e.name)) {
+			if (r === '.git' || OS_ARTIFACT(rel, e.name, names)) {
 				continue;
 			}
 			if (e.isDirectory()) {
@@ -319,11 +325,14 @@ export function hostRunChecks(driver: string, ws: string, record: ArmingRecord |
 	// syncs it out of the tab (review FXF-20). A host run is shown by its marker in the run dir,
 	// which a tab can neither write nor withhold (probe.sh's trusted route).
 	// A tab that rewrote what a host-side run reads (the probe, its targets, the task) could make
-	// that run silent, and one that added a file (a launch config, a hook) could arm another: an
-	// OCI tab writes the checkout directly (reviews FXF-7, 10-12, 15). So the arming files must be
-	// exactly as prepared, nothing may be added beyond the run's own output, and the checkout must
-	// hold no .git (the fsmonitor repo is armed only inside an sbx tab). A tab that tampers and
-	// restores before the check is not caught: the ungated checkout's race (ADR write-back-gate §7).
+	// that run silent, and one that added a file (a launch config, a hook) could arm another. A
+	// tab reaches the checkout on both drivers: OCI writes it directly, and sbx syncs every path
+	// the write-back gate doesn't hold, .seclab/targets and probe.parts.json among them (reviews
+	// FXF-7, 10-12, 15, 21). So the arming files must be exactly as prepared, nothing may be added
+	// beyond the run's own output, and the checkout must hold no .git (the fsmonitor repo is armed
+	// only inside an sbx tab, and the gate holds .git). A tab that tampers and restores before the
+	// check is not caught (ADR write-back-gate §7). A host run descended from the editor is still
+	// marked: probe.sh's trusted route reads neither file.
 	const now = record ? armingDigest(ws, Object.keys(record.digest)) : undefined;
 	const changed = record && now ? Object.keys(record.digest).filter(k => record.digest[k] !== now[k]) : undefined;
 	out.push({ vector: 'host', name: 'the arming files in the host checkout are exactly as prepared', ok: changed !== undefined && changed.length === 0,
@@ -344,4 +353,12 @@ export function unattributedMarkers(runDir: string, marker: string, vectors: str
 	return fs.readdirSync(runDir).filter(n => /^(?:PWNED|probe-marker)/.test(n)).map(n => path.join(runDir, n))
 		.filter(p => !attributed.has(p) && !own.has(p))
 		.map(p => ({ vector: 'rpc', name: 'no unattributed host marker', ok: false, detail: p }));
+}
+
+/** A vector whose evidence the tab doesn't show while the host checkout has a copy (synced out
+ *  of an sbx tab, or written straight by an OCI one): the tab is hiding its own output. A plain
+ *  failure, never a known gap (review FXF-22). */
+export function withheldEvidence(ws: string, vector: string, inTab: Evidence | undefined): Check | undefined {
+	const f = path.join(ws, '.seclab-evidence', `${vector}.json`);
+	return !inTab && fs.existsSync(f) ? { vector, name: 'evidence the host checkout holds is also in the tab (not withheld)', ok: false, detail: f } : undefined;
 }
