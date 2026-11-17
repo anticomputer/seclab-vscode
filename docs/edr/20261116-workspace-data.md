@@ -45,6 +45,12 @@ workspace, and the main process refused it (its log: `[seclab] a window does not
 workspace`). The window stopped its extension hosts to enter the workspace and restarted them when
 that failed; across both activations the tab saw only its own folder and no canary.
 
+**Correction (PR #37 review, WSD-2).** The runs above checked for the canary token only, while the
+host folder's name (`<canary>_folder`) is one token to the extension, so the folder itself
+reaching the tab would not have been flagged. The probe now treats that name as a marker too, and
+every run checks that the leak check flags the folder's URI. Rerun on main `6589051b`,
+2026-11-17: the tab saw only its own folder, with neither marker anywhere in its workspace data.
+
 ## Decision
 DOCSYNC-R6 is closed as fixed by patch 0041 (`8ce6cc70`). No new patch. Regression tests:
 - `test/wsdata/probe.ts drive`: the add path is refused in the main process, and the tab's
