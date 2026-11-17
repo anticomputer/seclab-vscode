@@ -16349,6 +16349,48 @@
 				"file": "test/edtabs/probe.ts",
 				"name": "EDT-18 the report check rejects a malformed tab value without throwing"
 			}
+		},
+		{
+			"record": "20261117-scheme-squatting-probe.md",
+			"round": "Copilot review (PR #33)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"anchor": "SQ-1",
+			"severity": "info",
+			"summary": "The squat probe's profile was shared by every worktree while its run guard is per worktree.",
+			"status": "fixed-untested",
+			"commit": "patch:87d6d313213944a05882a69f941c3738547b5756",
+			"gap": "A naming fix; nothing runs two worktrees at once to test it."
+		},
+		{
+			"record": "20261117-scheme-squatting-probe.md",
+			"round": "Copilot review (PR #33)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"anchor": "SQ-2",
+			"severity": "low",
+			"summary": "The squat probe's window-log step never ran (a modal was still open) and had no positive control, so its no-provider-call claim for the log was unexercised.",
+			"status": "fixed",
+			"commit": "patch:87d6d313213944a05882a69f941c3738547b5756",
+			"test": {
+				"file": "test/squat/probe.ts",
+				"name": "control: the window opened its own log in an output editor"
+			}
+		},
+		{
+			"record": "20261117-scheme-squatting-probe.md",
+			"round": "Copilot review (PR #33)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"anchor": "SQ-3",
+			"severity": "low",
+			"summary": "The squat probe validated named report fields but printed and stored the tab's whole objects, so a rogue report could carry arbitrary text into host output and evidence.",
+			"status": "fixed",
+			"commit": "patch:87d6d313213944a05882a69f941c3738547b5756",
+			"test": {
+				"file": "test/squat/probe.ts",
+				"name": "reach neither host output nor evidence (SQ-3)"
+			}
 		}
 	]
 }
