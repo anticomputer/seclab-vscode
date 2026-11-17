@@ -137,22 +137,32 @@ if (c.status === 0) {
 	// PS-2: a dead-looking pid from another pid namespace (owner labels not ours) is not judged.
 	const foreign = sensor(path.join(base, 'foreign-state'), deadPid);
 	const me = sensorOwner();
-	const plant = (name: string, state: string, pid: number, owner = me) => {
+	const plant = (name: string, state: string, pid: number, owner: { host: string | undefined; boot: number } = me) => {
 		spawnSync('docker', ['rm', '-f', '--', name], { stdio: 'ignore' });
 		spawnSync('docker', ['run', '-d', '--rm', '--network', 'none', '--name', name, '--label', 'seclab.obs=falco', '--label', `seclab.state=${tag(state)}`,
-			'--label', `seclab.pid=${pid}`, '--label', `seclab.host=${owner.host}`, '--label', `seclab.boot=${owner.boot}`, NODE_IMAGE, 'sleep', '600'], { stdio: 'ignore' });
+			'--label', `seclab.pid=${pid}`, '--label', `seclab.host=${owner.host ?? ''}`, '--label', `seclab.boot=${owner.boot}`, NODE_IMAGE, 'sleep', '600'], { stdio: 'ignore' });
 	};
 	plant(orphan, path.join(base, 'gone-state'), deadPid);
 	plant(own, profileState, liveTabd.pid!);
 	plant(other, path.join(base, 'other-state'), liveTabd.pid!);
 	plant(foreign, path.join(base, 'foreign-state'), deadPid, { host: 'f'.repeat(16), boot: me.boot });
+	// CR16-2: the state tag hashes a path another namespace can share. A sensor with the run
+	// profile's tag but foreign owner labels is not the run's: never removed, never a leftover.
+	// An unlabelled one (older tabd) named for one of the run's own processes is the run's.
+	const foreignSameTag = sensor(profileState, deadPid);
+	plant(foreignSameTag, profileState, deadPid, { host: 'e'.repeat(16), boot: me.boot });
+	const runProc = spawn(process.execPath, [fakeTabd, '--user-data-dir', udd], { stdio: 'ignore' });
+	const unlabelledRun = sensor(profileState, runProc.pid!);
+	plant(unlabelledRun, profileState, runProc.pid!, { host: '', boot: Number.NaN });
 	const running = () => spawnSync('docker', ['ps', '--filter', 'label=seclab.obs=falco', '--format', '{{.Names}}'], { encoding: 'utf8' }).stdout.split('\n');
-	check('PS-1: the planted sensors are running', [orphan, own, other].every(n => running().includes(n)), running().join(', '));
+	check('PS-1: the planted sensors are running', [orphan, own, other, foreignSameTag, unlabelledRun].every(n => running().includes(n)), running().join(', '));
+	check('CR16-2: a foreign sensor with the run profile\'s state tag is not a leftover of the run', !runLeftovers(runDir).left.includes(`container ${foreignSameTag}`), runLeftovers(runDir).left.join(', '));
 	check('PS-1: a sensor tagged with the run profile\'s tabd state is the run\'s own', runLeftovers(runDir).left.includes(`container ${own}`), runLeftovers(runDir).left.join(', '));
 	const ps1 = verifyTeardown(runDir, { snapshot: false });
 	check('PS-1: verify removes the dead-pid orphan and the run\'s own sensor, and passes', ps1.every(x => x.ok), ps1.filter(x => !x.ok).map(x => x.detail).join(' | '));
 	check('PS-1: the orphan and the run\'s sensor are gone; a live tabd\'s sensor survives', !running().includes(orphan) && !running().includes(own) && running().includes(other));
 	check('PS-2: a sensor owned by another pid namespace survives though its pid is not ours', running().includes(foreign));
+	check('CR16-2: verify keeps a foreign sensor with the run profile\'s tag and removes an unlabelled one named for a run process', running().includes(foreignSameTag) && !running().includes(unlabelledRun));
 	check('PS-6: verify notes the foreign sensor it could not judge, without failing', ps1.some(x => x.ok && /can't judge/.test(x.name) && x.detail.includes(foreign)), ps1.map(x => x.name).join(' | ').slice(0, 200));
 	// PS-3: a `ps` that prints part of the table and fails is "unknown", never "dead".
 	const fakeBin = path.join(base, 'fake-bin');
@@ -168,7 +178,8 @@ if (c.status === 0) {
 	fs.writeFileSync(path.join(fakeBin, 'docker'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
 	const ch = spawnSync(process.execPath, [path.join(repo, 'test', 'clean-host.ts')], { encoding: 'utf8', env: { ...process.env, PATH: `${fakeBin}:${realPath}` } });
 	check('PS-4: clean-host reports a failed Falco listing', /keep\s+falco sensor\s+\(docker ps failed\)/.test(ch.stdout), ch.stdout.split('\n').filter(l => /falco|no seclab/.test(l)).join(' | ').slice(0, 200));
-	spawnSync('docker', ['rm', '-f', '--', other, foreign], { stdio: 'ignore' });
+	spawnSync('docker', ['rm', '-f', '--', other, foreign, foreignSameTag, unlabelledRun], { stdio: 'ignore' });
+	runProc.kill('SIGKILL');
 	fs.rmSync(fakeBin, { recursive: true, force: true });
 	liveTabd.kill('SIGKILL');
 } else {

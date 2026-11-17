@@ -36,3 +36,7 @@ tabd/src/cfs.ts:process-spawn:const p = spawn(this.az, ['account', 'get-access-t
 # The host-side CFS feed config's location (EDR cfs-config-outside-repo, 2026-11-12): one fixed
 # key, SECLAB_CFS_CONFIG, read as a default parameter; the file it names is still validated.
 tabd/src/cfs-config.ts:env:export function cfsConfigPath(env: NodeJS.ProcessEnv = process.env): string {
+# Falco sensor owner identity (2026-11-17, review CR16-1): macOS boot session UUID from a fixed
+# absolute sysctl, fixed argv, empty env, shell:false, output validated as a UUID.
+tabd/src/obs/falco.ts:process-spawn:import { spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+tabd/src/obs/falco.ts:process-spawn:const r = spawnSync('/usr/sbin/sysctl', ['-n', 'kern.bootsessionuuid'], { env: {}, encoding: 'utf8', timeout: 5_000, shell: false });

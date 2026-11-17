@@ -26,7 +26,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { sensorOwner } from '../tabd/src/obs/falco.ts';
-import { classifyFalco, FALCO_PS_FORMAT, falcoOrphans, treeTexts } from './containment/teardown.ts';
+import { classifyFalco, classifyRunFalco, FALCO_PS_FORMAT, falcoOrphans, falcoRemovable, pidAliveFrom, treeTexts } from './containment/teardown.ts';
 import { repoRoot } from './harness.ts';
 import { avFindings } from './safety/av-shape.ts';
 
@@ -75,6 +75,38 @@ if (args.has('--self-test')) {
 		'seclab-falco-0123abcd-48\t48\t\t', `seclab-falco-0123abcd-49\t49\t${'b'.repeat(16)}\t${me.boot}`, `seclab-falco-0123abcd-50\t50\t${me.host}\t${me.boot - 60}`];
 	const got = falcoOrphans(sensors, [{ pid: 42, args: tabdArgs }, { pid: 43, args: '/usr/bin/vim notes' }, { pid: 44, args: tabdArgs }, { pid: 45, args: tabdArgs }], me)
 		.map(o => o.name).join(',');
+	// CR16-1: with no per-machine id the identity is unknown, and nothing is judged, even an
+	// unlabelled sensor whose pid is dead.
+	if (falcoOrphans([...sensors, 'seclab-falco-0123abcd-51\t51\t\t'], [{ pid: 42, args: tabdArgs }], { host: undefined, boot: me.boot }).length) {
+		bad.push('falco: an unknown owner identity must judge nothing');
+	}
+	// CR16-2, CR16-4, CR16-5: run-scoped ownership. The tag alone never makes a sensor the
+	// run's; a run pid proves only an unlabelled one; foreign labels with a pid not running here
+	// are noted, never removed or failed.
+	const rt = new Set(['0123abcd']), row = (pid: number, host: string, boot: number | string, state = '0123abcd') => `seclab-falco-${state}-${pid}\t${pid}\t${host}\t${boot}\t${state}`;
+	const cr = classifyRunFalco([row(61, me.host, me.boot), row(62, '', ''), row(63, '', ''), row(64, 'e'.repeat(16), me.boot), row(65, 'e'.repeat(16), me.boot),
+		row(66, 'e'.repeat(16), me.boot), row(67, me.host, me.boot, 'ffffffff')], rt, new Set([62, 64]), me, new Set([66]));
+	if (cr.own.join() !== 'seclab-falco-0123abcd-61,seclab-falco-0123abcd-62' || cr.unproven.join() !== 'seclab-falco-0123abcd-63'
+		|| cr.unjudged.join() !== 'seclab-falco-0123abcd-64,seclab-falco-0123abcd-65') {
+		bad.push(`falco run scope: got ${JSON.stringify(cr)}`);
+	}
+	// CR16-8: a failed `ps` proves nothing; only ESRCH from kill(pid, 0) proves a process gone.
+	const errno = (code: string) => () => {
+		throw Object.assign(new Error(code), { code });
+	};
+	const psFailed = { status: 1, stdout: '' }, psZombie = { status: 0, stdout: 'Z\n' }, psLive = { status: 0, stdout: 'S\n' };
+	const pa = [pidAliveFrom(psFailed, errno('EPERM')), pidAliveFrom(psFailed, () => undefined), pidAliveFrom({ ...psFailed, error: new Error('x') }, errno('EPERM')),
+		pidAliveFrom(psFailed, errno('ESRCH')), pidAliveFrom(psZombie, () => undefined), pidAliveFrom(psLive, errno('ESRCH')),
+		// CR16-11: a `ps` that failed to spawn has no stdout; the probe still decides.
+		pidAliveFrom({ status: null, stdout: undefined, error: new Error('spawn ps ENOENT') }, errno('EPERM')), pidAliveFrom({ status: null, stdout: null, error: new Error('EAGAIN') }, errno('ESRCH'))];
+	if (pa.join() !== 'true,true,true,false,false,true,true,false') {
+		bad.push(`pid liveness: got ${pa.join()}`);
+	}
+	// CR16-3: a stray tabd's sensor is removable only once that tabd has exited.
+	const o41 = { orphan: true, pid: 41 };
+	if (falcoRemovable(o41, new Set([41]), () => true) || !falcoRemovable(o41, new Set([41]), () => false) || falcoRemovable({ orphan: false, pid: 42 }, new Set(), () => false)) {
+		bad.push('falco: a sensor whose stray tabd survived termination must be kept');
+	}
 	if (got !== 'seclab-falco-0123abcd-41,seclab-falco-0123abcd-43') {
 		bad.push(`falco orphans: got [${got}], want the dead-pid (41) and reused-pid (43) sensors only`);
 	}
@@ -171,6 +203,9 @@ const psRun = run('ps', ['-axo', 'pid=,ppid=,args=']);
 const procs = (psRun.error || psRun.status !== 0 ? [] : psRun.stdout.split('\n').map(s => s.trim()).filter(Boolean)).map(l => /^(\d+)\s+(\d+)\s+(.*)$/.exec(l)).filter((m): m is RegExpExecArray => !!m)
 	.map(m => ({ pid: Number(m[1]), ppid: Number(m[2]), args: m[3] }));
 const strayTabds = new Set<number>();
+// Alive and not a zombie (a killed child of launchd may linger as one until reaped); only proof
+// of absence counts as dead (CR16-8).
+const pidAlive = (pid: number) => pidAliveFrom(run('ps', ['-o', 'stat=', '-p', String(pid)]), () => process.kill(pid, 0));
 /** Long-lived helpers a run starts on the host. Matched by absolute path, per worktree. */
 const HELPER_SCRIPTS = ['test/containment/beacon.ts', 'test/agentic/browser/run.ts'];
 const optValue = (args: string, opt: string) => new RegExp(`(?:^|\\s)--${opt}(?:=|\\s+)(\\S+)`).exec(args)?.[1];
@@ -239,8 +274,11 @@ for (const p of procs) {
 			}
 			try {
 				process.kill(p.pid, 'SIGKILL');
-			} catch { /* gone */ }
-			return true;
+			} catch { /* gone, or not ours to signal */ }
+			for (let i = 0; i < 10 && pidAlive(p.pid); i++) {
+				spawnSync('sleep', ['0.2']);
+			}
+			return !pidAlive(p.pid); // exit confirmed, never assumed (CR16-3)
 		},
 	});
 }
@@ -356,7 +394,9 @@ for (const s of sensors) {
 	const c = judged.get(n);
 	const why = !c ? 'process table unavailable' : c.orphan && strayTabds.has(c.pid) ? `its tabd (pid ${c.pid}) is a stray test tabd` : c.unjudged ? `${c.why}; its pid is not running here: check it and remove by hand` : c.why;
 	items.push({
-		kind: 'falco sensor', name: n, state: c?.orphan ? why : '', remove: !!c?.orphan, why, del: () => ok('docker', ['rm', '-f', '--', n]),
+		kind: 'falco sensor', name: n, state: c?.orphan ? why : '', remove: !!c?.orphan, why,
+		// A stray tabd's sensor goes only once that tabd has really exited (CR16-3).
+		del: () => !!c && falcoRemovable(c, strayTabds, pidAlive) && ok('docker', ['rm', '-f', '--', n]),
 	});
 }
 for (const n of lines('docker', ['volume', 'ls', '--filter', 'name=seclab-', '--format', '{{.Name}}']).filter(n => OURS.volume.test(n) || isCacheVolume(n))) {
