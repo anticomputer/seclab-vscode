@@ -24,12 +24,12 @@ fi
 # Make the checkout exactly the pinned tree. A reused volume's index may carry stat info that
 # hides a modified file, or skip-worktree/sparse state, so it is rebuilt: with no index, the
 # reset compares every tracked file's content. `clean -ffd` without a pathspec removes every
-# untracked file (files earlier patches or a test variant added); ignored build state
-# (node_modules, .build, out*) stays. No git config, attribute or hook file outside our control
-# is read: system and global config are off (review FU-10), and the checkout's own repository
+# untracked file (files earlier patches or a test variant added), ignored or not, except the
+# install and download caches (node_modules, .build). No git config, attribute, hook or
+# replacement ref outside our control is read: system and global config are off (review FU-10), and the checkout's own repository
 # state is rewritten before any command acts on the tree, because a kept clean/smudge filter or
 # core.worktree would make the tree differ from what the check sees (Copilot review on PR 25).
-gd() { GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -C "$DEST" -c core.excludesFile=/dev/null \
+gd() { GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 git -C "$DEST" -c core.excludesFile=/dev/null \
 	-c core.attributesFile=/dev/null -c core.hooksPath=/dev/null -c core.fsmonitor=false \
 	-c core.sparseCheckout=false -c core.sparseCheckoutCone=false -c status.showUntrackedFiles=normal "$@"; }
 scrub() {
@@ -51,7 +51,10 @@ scrub() {
 pristine() {
 	scrub
 	gd reset -q --hard "$UPSTREAM_SHA"
-	gd clean -q -ffd
+	# -x: no ignore file decides what stays, since an untracked .gitignore of `*` would hide itself
+	# and its directory from both this and the check (Copilot review on PR 25). Only the install
+	# and download caches stay; build outputs are made again by every build.
+	gd clean -q -ffdx -e node_modules -e /.build
 	local left
 	left="$(gd status --porcelain)"
 	[[ -z "$left" ]] || { echo "upstream: $DEST still differs from $UPSTREAM_SHA after the reset:" >&2; head -20 <<<"$left" >&2; exit 1; }
