@@ -282,6 +282,29 @@ class CommentScopeTest(unittest.TestCase):
         self.assertEqual(status, 1, out)
         self.assertIn("computed-record-key", out)
 
+    def test_a_regex_ending_in_slashes_is_not_a_comment(self):
+        root = tree_copy(self)
+        path = os.path.join(root, "test/containment/rogue-reh/probes.js")
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write("\nconst seclabLintPattern = /^https?:\\/\\//; fs.writeFileSync('out', raw);\n")
+        status, out = lint(root)
+        self.assertEqual(status, 1, out)
+        self.assertIn("raw-record", out)
+
+    def test_regex_literals_division_and_comments(self):
+        cases = [
+            ("a = /^https?:\\/\\//; b(); // c\n", "b();", "// c"),
+            ("x = /[/]/g; y(); /* c */\n", "y();", "/* c */"),
+            ("return /\\/\\//.test(s) && z(); // c\n", "z();", "// c"),
+            ("q = a / b; r(); // c\n", "r();", "// c"),
+            ("q = f(a) / 2; r(); // c\n", "r();", "// c"),
+        ]
+        for text, code, comment in cases:
+            for fn in (L._strip_comments, L._code_only):
+                got = fn(text)
+                self.assertIn(code, got, (fn.__name__, text))
+                self.assertNotIn(comment, got, (fn.__name__, text))
+
     def test_comments_and_strings_are_not_code(self):
         text = "a(); /* { [K]: 1 } */ b('{ [K]: 1 }'); // { [K]: 1 }\n"
         self.assertNotRegex(L._code_only(L._strip_comments(text)), r"\[K\]")
