@@ -8,6 +8,14 @@
 // the item or clicks the link. The only file it writes is a marker in its own workspace when its
 // own command runs, holding facts only (probe-safety.js).
 //
+// Two more vectors (review RSC-1, RSC-2), each needing only data:
+// - a completion item inserted as a snippet naming the CLIPBOARD variable, offered only when the
+//   harness verified the app's in-memory canary store (the system one is never read). After the
+//   item is accepted, the text the window inserted is read back through
+//   safety.withCanaryClipboard, which records only whether a canary token is in it;
+// - hover images in three forms (plain, nested, inside a <span> HTML block), each naming its own
+//   loopback port from the targets file. The harness counts TCP connections on each.
+//
 // Inert unless armed: the workspace's .seclab/targets must carry this run's nonce, a run
 // directory that contains the workspace, and an unexpired `until`.
 const fs = require('node:fs');
@@ -58,6 +66,31 @@ exports.activate = async function (context) {
 			mark(via === 'hover' ? 'own-hover' : 'own-completion', { ran: true, inTab: process.env.SECLAB_TAB === '1' });
 		}));
 		const selector = { language: 'plaintext' };
+		const ports = ['img1', 'img2', 'img3'].map(k => Number(targets[k])).filter(p => Number.isSafeInteger(p) && p > 1024 && p < 65536);
+		const images = ports.length === 3 ? [
+			`![a](https://127.0.0.1:${ports[0]}/a.png)`,
+			`![x![]y](https://127.0.0.1:${ports[1]}/b.png)`,
+			`<span x>\n<img src="https://127.0.0.1:${ports[2]}/c.png">\n</span>`,
+		].join('\n\n') : '';
+		const SNIPPET_LABEL = 'seclabSnippetCommand';
+		if (ctx.canaryClipboard) {
+			context.subscriptions.push(vscode.languages.registerCompletionItemProvider(selector, {
+				provideCompletionItems() {
+					const item = new vscode.CompletionItem(SNIPPET_LABEL, vscode.CompletionItemKind.Snippet);
+					item.insertText = new vscode.SnippetString('<${CLIPBOARD}>');
+					item.preselect = true;
+					return [item];
+				},
+			}, '%'));
+			context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(async e => {
+				if (!e.document.uri.path.endsWith('/probe.txt') || !e.contentChanges.some(c => c.text.startsWith('<') && c.text.endsWith('>'))) {
+					return;
+				}
+				const inserted = e.contentChanges.map(c => c.text).join('');
+				const seen = await safety.withCanaryClipboard(ctx, async () => inserted);
+				mark('snippet', { sawCanary: seen.sawCanary, literalVariable: inserted.includes('${CLIPBOARD}') });
+			}));
+		}
 		context.subscriptions.push(vscode.languages.registerCompletionItemProvider(selector, {
 			provideCompletionItems(_doc, _pos, _token, completion) {
 				const own = completion.triggerCharacter === '#';
@@ -70,7 +103,7 @@ exports.activate = async function (context) {
 		}, '@', '#'));
 		context.subscriptions.push(vscode.languages.registerHoverProvider(selector, {
 			provideHover() {
-				const md = new vscode.MarkdownString(`seclab-response-probe [hostlink](command:${HOST_COMMAND}) [ownlink](command:${OWN_COMMAND}?${encodeURIComponent(JSON.stringify(['hover']))})`);
+				const md = new vscode.MarkdownString(`seclab-response-probe [hostlink](command:${HOST_COMMAND}) [ownlink](command:${OWN_COMMAND}?${encodeURIComponent(JSON.stringify(['hover']))})\n\n${images}`);
 				md.isTrusted = true;
 				return new vscode.Hover(md);
 			},
