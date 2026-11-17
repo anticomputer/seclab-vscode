@@ -52,3 +52,9 @@ Five threads from the automated pull-request review, each checked against the co
 | EDT-10 | Low | ownership | An untitled editor joins its group before its model exists, so the user's own untitled tab stayed anonymous until an unrelated rebuild. | fixed | The document sync fires the origin change when a model is added, after recording its birth. The control fails on the build before the fix and passes on `bb91e728`. | test/edtabs/probe.ts "control: an untitled document the user created in the window shows to the tab as its own text tab (EDT-10)" |
 | EDT-11 | Medium | harness | 0038 hides host untitled URIs from the docsync probe, which found them through tab inputs. On builds with the RPC filter that probe is already broken: the filter refuses most of its steps (commands, opens, provider registrations, its own edit), so 0035's runtime regression test no longer runs. | open | The docsync probe needs reworking to drive host-side actions from the window through the headless driver and pass test URIs on a test-only channel; a follow-up. | none |
 | EDT-12 | Info | harness | A failure while setting up the tab skipped the probe's teardown gate. | fixed | Setup is wrapped so the gate always runs. | none |
+
+## Copilot review (PR #24, second pass)
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| EDT-13 | Low | ownership | The EDT-10 fix rebuilt the whole tab model, which fires only `onDidChangeTabGroups`, so an extension listening to `onDidChangeTabs` never saw the user's untitled tab turn from unknown to text. | fixed | Each tab whose label or input changes with ownership is sent as `TAB_UPDATE`. The control fails on `bb91e728`. | test/edtabs/probe.ts "control: the tab learned of its untitled text tab through onDidChangeTabs (EDT-13)" |
