@@ -8,7 +8,7 @@
   lint (#14), the host-terminal proof harness (#20), and the reaper added for PRR-4 (#27).
 
 ## Verdict
-All six threads point at real gaps. Two are as stated. One wasn't as stated but hid a wider gap.
+All seven threads point at real gaps. Two are as stated. One wasn't as stated but hid a wider gap.
 Two were narrower than stated. None is exploitable on main; each is a gate or harness that
 could pass, or leave things behind, for the wrong reason.
 
@@ -20,6 +20,7 @@ could pass, or leave things behind, for the wrong reason.
 | PRR-4 | low | proof harnesses (#20) | A rerun after an interrupted or `KEEP=1` run wiped the previous `run.json` and tab state before reaping them, orphaning that run's tabs and processes | fixed |
 | PRR-5 | low | proof harnesses (#20) | Ctrl+C or SIGTERM skipped the teardown gate: Node's default handling for both signals runs no `exit` handler | fixed |
 | PRR-6 | low | `teardown.ts` `reapPreviousRun` (#27) | The reaper behind PRR-4 trusted removal: `removeRunResources` ignores command failures, so a docker or sbx that failed to list or remove still let the caller wipe the manifest and tabd state that name the leftovers | fixed |
+| PRR-7 | low | `teardown.ts` `runLeftovers` (#27) | Docker listing was required only for OCI runs, but an sbx tab owns a Docker broker container and egress network, so a failed listing let the reap delete an sbx run's profile and tab state over them | fixed |
 
 ## What changed
 - PRR-1: `MainThreadLogger.$log` joins the presence-pinned must-deny set. A
@@ -40,3 +41,5 @@ could pass, or leave things behind, for the wrong reason.
   on any resource left or runtime it can't list, keeping the profile and its tabd state. A
   `harness-hygiene.test.ts` case drives it against stand-in docker and sbx and fails on the
   previous reaper.
+- PRR-7: a Docker listing is required whenever the run has tabs, whatever the driver. An
+  sbx-manifest case in the same test fails on the previous check.
