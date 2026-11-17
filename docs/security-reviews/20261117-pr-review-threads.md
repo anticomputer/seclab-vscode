@@ -8,7 +8,7 @@
   lint (#14), the host-terminal proof harness (#20), and the reaper added for PRR-4 (#27).
 
 ## Verdict
-All ten threads point at real gaps. Two are as stated. One wasn't as stated but hid a wider gap.
+All eleven threads point at real gaps. Two are as stated. One wasn't as stated but hid a wider gap.
 Two were narrower than stated. None is exploitable on main; each is a gate or harness that
 could pass, or leave things behind, for the wrong reason.
 
@@ -24,6 +24,7 @@ could pass, or leave things behind, for the wrong reason.
 | PRR-8 | low | `lint_probes.py` `_strip_comments` (#27) | The comment scanner behind PRR-2 read the `//` that closes a regex literal such as `/^https?:\/\//` as a line comment, so code after it on that line, such as a raw record write, went unlinted | fixed |
 | PRR-9 | low | `lint_probes.py` `_regex_end` (#27) | The regex-or-division decision behind PRR-8 read the raw preceding character, so a regex after a comment, or as the statement after an `if (…)` condition, was still taken for division and its closing `//` hid the rest of the line | fixed |
 | PRR-10 | low | `check-probes.ts` runner waiver (#27) | The PRR-3 waiver removed the push probes' expectations but not their results; the payload records them on every full REH run, so the unreviewed-result check failed them as absent from expectations.json | fixed |
+| PRR-11 | low | `lint_probes.py` comment scanner (#27) | After PRR-9, placements the token heuristic still misjudged (`n++ / 2`, a regex statement after `break` and a newline, a `for await (…)` head) could turn the rest of a line into a comment hidden from the record rules. Telling regex from division needs a parser | fixed |
 
 ## What changed
 - PRR-1: `MainThreadLogger.$log` joins the presence-pinned must-deny set. A
@@ -55,3 +56,7 @@ could pass, or leave things behind, for the wrong reason.
   test covers both placements and fails on the previous scanner.
 - PRR-10: waived ids leave the judged results too. A full-run `check-probes.test.ts` case with a
   recorded result, and a built-in mutant restoring the old waiver, pin it.
+- PRR-11: the lint fails closed instead of guessing further. A comment opener that follows any
+  code `/` on its line is reported as `ambiguous-slash`, and the payload rewrites the line. The
+  real payloads have no such line. The three placements fail the full lint, and pass the
+  previous scanner.
