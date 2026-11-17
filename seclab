@@ -1382,14 +1382,21 @@ landing_verify() {
 		echo "landing verify: this checkout already contains $sha; run it from main as it was before the merge" >&2
 		return 2
 	fi
+	# ... and is a main the commit descends from, not another branch with its own list (RJG-9).
+	git -C "$ROOT" merge-base --is-ancestor HEAD "$sha" || { echo "landing verify: $sha doesn't descend from this checkout; run it from main as it was before the merge" >&2; return 2; }
 	repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)" || return 2
 	[[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "landing verify: bad repository" >&2; return 2; }
 	pairs="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-required-checks.ts --list)" || return 2
+	# The required contexts must all be there: an empty or trimmed list would check nothing (RJG-9).
+	local ctx
+	for ctx in unit lint docs patch-build; do
+		[[ " $pairs " == *":$ctx "* ]] || { echo "landing verify: the required list lacks $ctx (refusing)" >&2; return 2; }
+	done
 	for pair in $pairs; do
 		[[ "$pair" =~ ^[A-Za-z0-9._-]+\.ya?ml:[A-Za-z0-9._-]+$ ]] || { echo "landing verify: bad required pair" >&2; return 2; }
 		wf="${pair%%:*}" job="${pair#*:}"
 		# Every push and pull_request run of the file for the commit (review RJG-2).
-		runs="$(gh api "repos/$repo/actions/workflows/$wf/runs?head_sha=$sha&per_page=100" \
+		runs="$(gh api --paginate "repos/$repo/actions/workflows/$wf/runs?head_sha=$sha&per_page=100" \
 			--jq '.workflow_runs[] | select(.event == "push" or .event == "pull_request") | "\(.id) \(.status)"')" || return 2
 		verdict=success
 		[[ -n "$runs" ]] || verdict=missing

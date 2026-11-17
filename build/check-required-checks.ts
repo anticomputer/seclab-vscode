@@ -8,6 +8,7 @@
 //   - its workflow triggers on bare `push:` and `pull_request:`, with no filters under them.
 //   node build/check-required-checks.ts [--self-test]
 
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { jobContexts, jobProblems, triggers } from './liveness/liveness.ts';
@@ -296,6 +297,10 @@ export function permissionsProblems(files: Record<string, string>, writeOk: (f: 
  *  `statuses: write`, and only while it keeps every invariant here, since a file that could also
  *  run on a push or pull request would hand that scope to branch code (CR-8 again). */
 export const GATE = 'required-jobs-ran.yml';
+/** The reviewed gate, byte for byte. Its shape rules don't constrain what the script does, and a
+ *  doctored copy on main would pass every future PR, so a change to it changes this constant in
+ *  the same reviewed change (review RJG-8). */
+export const GATE_SHA256 = '176930babd84a6612cd547c0117fc3cde76d384810002cced63aa6cfac68b27c';
 const GATE_EXPRESSIONS = new Set(['github.token', 'github.repository', 'github.event.workflow_run.head_sha']);
 export function gateProblems(files: Record<string, string>): string[] {
 	const yml = files[GATE];
@@ -304,6 +309,9 @@ export function gateProblems(files: Record<string, string>): string[] {
 	}
 	const out: string[] = [];
 	const bad = (why: string) => out.push(`${GATE}: ${why}`);
+	if (createHash('sha256').update(yml).digest('hex') !== GATE_SHA256) {
+		bad('differs from the reviewed gate (GATE_SHA256 in build/check-required-checks.ts)');
+	}
 	const t = triggers(yml);
 	if (t.length !== 1 || t[0] !== 'workflow_run') {
 		bad(`must trigger on workflow_run alone, not ${JSON.stringify(t)}`);
@@ -465,6 +473,8 @@ function selfTest(): void {
 		['gate drops a required job', (s: string) => s.replace(' docs-check.yml:docs', ''), /not the required/],
 		['RJG-4 a flow-style uses step', (s: string) => s.replace('    steps:\n', '    steps:\n      - { uses: ./.github/actions/x, with: { x: y } }\n'), /uses: step|flow collection/],
 		['RJG-4 the pair list only in a comment', (s: string) => s.replace(/for pair in [^;]+;/, 'for pair in ci-unit.yml:unit;').replace('on:\n', '# for pair in ci-unit.yml:unit workflow-lint.yml:lint docs-check.yml:docs patch-build.yml:patch-build;\non:\n'), /exactly one `for pair in/],
+		['RJG-8 an extra step', (s: string) => s + '      - name: x\n        run: echo x\n', /differs from the reviewed gate/],
+		['RJG-8 an unconditional success', (s: string) => s.replace('          state=success\n', '          state=success\n          gh api -X POST "repos/$REPO/statuses/$SHA" -f state=success -f context=required-jobs-ran\n'), /differs from the reviewed gate/],
 		['gate waits on another workflow list', (s: string) => s.replace('workflows: [ci-unit, workflow-lint, docs-check, patch-build]', 'workflows: [ci-unit]'), /not the required workflows/],
 	] as Array<[string, (s: string) => string, RegExp | null]>) {
 		const files = { ...realFiles, [GATE]: edit(g) };

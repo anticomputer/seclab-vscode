@@ -50,9 +50,10 @@ jobs:
           for pair in ci-unit.yml:unit workflow-lint.yml:lint docs-check.yml:docs patch-build.yml:patch-build; do
             wf="${pair%%:*}"
             job="${pair#*:}"
-            # Every push and pull_request run of that file for this commit, not just the latest: a
-            # file can skip a job on one event and run it on the other (review RJG-2).
-            runs="$(gh api "repos/$REPO/actions/workflows/$wf/runs?head_sha=$SHA&per_page=100" \
+            # Every push and pull_request run of that file for this commit, every page: a file can
+            # skip a job on one event and run it on the other (RJG-2), and runs pushed on other
+            # branches mustn't page the PR's own run out of view (RJG-6).
+            runs="$(gh api --paginate "repos/$REPO/actions/workflows/$wf/runs?head_sha=$SHA&per_page=100" \
               --jq '.workflow_runs[] | select(.event == "push" or .event == "pull_request") | "\(.id) \(.status)"')"
             if [[ -z "$runs" ]]; then
               state=failure
