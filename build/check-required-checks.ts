@@ -10,6 +10,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { jobContexts, jobProblems } from './liveness/liveness.ts';
 
 /** Required status check context -> the workflow and job that report it (ruleset 26572681). */
 export const REQUIRED: ReadonlyArray<{ context: string; workflow: string; job: string }> = [
@@ -18,63 +19,6 @@ export const REQUIRED: ReadonlyArray<{ context: string; workflow: string; job: s
 	{ context: 'docs', workflow: 'docs-check.yml', job: 'docs' },
 	{ context: 'patch-build', workflow: 'patch-build.yml', job: 'patch-build' },
 ];
-
-/** A job that must run whenever its workflow does: present once, its job-level lines readable,
- *  and only keys that can't make it skip. Shared with the liveness gate's ci evidence jobs. */
-export function jobProblems(yml: string, job: string, label: string): { problems: string[]; body: string[]; found: boolean } {
-	const out: string[] = [];
-	const lines = yml.split('\n');
-	// A YAML key can be quoted
-	// (`"if": false`), escaped inside quotes (`"i\x66"`), duplicated, or merged in from an anchor
-	// (`<<: *defaults`), and Actions honours all of them (review on PR 7). So job-level lines are
-	// parsed fail-closed: a plain or simply quoted key, a sequence entry or a comment; anything
-	// else is unreadable and fails.
-	const jobKey = new RegExp(`^ {2}(["']?)${job.replace(/[^A-Za-z0-9_-]/g, '')}\\1\\s*:`);
-	const decls = lines.filter(l => jobKey.test(l)).length;
-	const start = lines.findIndex(l => l === `  ${job}:`);
-	if (start < 0 || !lines.slice(0, start).some(l => l === 'jobs:')) {
-		out.push(`${label}: job \`${job}\` not found under jobs:`);
-		return { problems: out, body: [], found: false };
-	}
-	if (decls !== 1) {
-		out.push(`${label}: job \`${job}\` is declared ${decls} times`);
-	}
-	const body: string[] = [];
-	for (const l of lines.slice(start + 1)) {
-		if (/^ {0,2}\S/.test(l)) {
-			break;
-		}
-		body.push(l);
-	}
-	const KEY = /^ {4}(?:(["'])([A-Za-z_][A-Za-z0-9_-]*)\1|([A-Za-z_][A-Za-z0-9_-]*))\s*:(?:\s|$)/;
-	const keys: string[] = [];
-	for (const l of body) {
-		if (!/^ {4}\S/.test(l) || /^ {4}#/.test(l) || /^ {4}- /.test(l)) {
-			continue;
-		}
-		const m = KEY.exec(l);
-		if (!m) {
-			out.push(`${label}: job \`${job}\` has a job-level line that isn't a plain key: ${JSON.stringify(l.trim().slice(0, 40))}`);
-			continue;
-		}
-		keys.push(m[2] ?? m[3]);
-		if (/:\s*[&*]/.test(l)) {
-			out.push(`${label}: job \`${job}\` uses a YAML anchor or alias at job level`);
-		}
-	}
-	// An allowlist, not a denylist: `if:` isn't the only way to skip a job. One that `needs:` a
-	// skipped or failed job is skipped too, `continue-on-error:` and an empty `strategy` matrix
-	// do the same in effect, and a reusable `uses:` hands the job to other code (review CR-1). A
-	// required job may carry only what can't make it skip.
-	const ALLOWED = new Set(['name', 'runs-on', 'timeout-minutes', 'permissions', 'steps', 'env', 'defaults', 'concurrency']);
-	for (const k of keys.filter(k => !ALLOWED.has(k) && k !== 'if')) {
-		out.push(`${label}: job \`${job}\` has \`${k}:\`; a required job may carry only ${[...ALLOWED].join(', ')}`);
-	}
-	if (keys.includes('if')) {
-		out.push(`${label}: job \`${job}\` has a job-level if:, and a skipped job passes a required check`);
-	}
-	return { problems: out, body, found: true };
-}
 
 /** The problems with one required check's workflow text. */
 export function problems(yml: string, context: string, job: string): string[] {
@@ -119,6 +63,27 @@ export function problems(yml: string, context: string, job: string): string[] {
 	return out;
 }
 
+/** Only the registered job may report a required context: GitHub matches a required check by its
+ *  name, so a job of that name in any other workflow could satisfy it while the real one is
+ *  gutted or gone (review CR-4). A workflow whose jobs can't be read in full fails too. */
+export function reporters(files: Record<string, string>): string[] {
+	const out: string[] = [];
+	for (const [f, yml] of Object.entries(files)) {
+		const jobs = jobContexts(yml);
+		if (!jobs) {
+			out.push(`${f}: its jobs can't be read in full, so it might report a required context`);
+			continue;
+		}
+		for (const j of jobs) {
+			const r = REQUIRED.find(x => x.context === j.context);
+			if (r && !(r.workflow === f && r.job === j.id)) {
+				out.push(`${f}: job \`${j.id}\` reports the required context \`${j.context}\`, which only ${r.workflow}#${r.job} may`);
+			}
+		}
+	}
+	return out;
+}
+
 function selfTest(): void {
 	const good = 'on:\n  push:\n  pull_request:\n\njobs:\n  unit:\n    name: unit\n    runs-on: x\n    steps:\n      - run: x\n';
 	const cases: Array<[string, string, RegExp | null]> = [
@@ -143,17 +108,35 @@ function selfTest(): void {
 		['an empty matrix', good.replace('    name: unit\n', '    name: unit\n    strategy:\n      matrix:\n        v: []\n'), /has `strategy:`/],
 		['a reusable workflow', good.replace('    runs-on: x\n', '    uses: ./.github/workflows/x.yml\n'), /has `uses:`/],
 		['a quoted needs', good.replace('    name: unit\n', '    name: unit\n    "needs": gate\n'), /has `needs:`/],
-		['permissions, timeout and env are fine', good.replace('    runs-on: x\n', '    runs-on: x\n    timeout-minutes: 5\n    permissions:\n      contents: read\n    env:\n      A: b\n'), null],
+		['permissions and timeout are fine', good.replace('    runs-on: x\n', '    runs-on: x\n    timeout-minutes: 5\n    permissions:\n      contents: read\n'), null],
+		['defaults (could no-op every step)', good.replace('    runs-on: x\n', '    runs-on: x\n    defaults:\n      run:\n        shell: /usr/bin/true {0}\n'), /has `defaults:`/],
 		['a job with an empty body', good.replace('  unit:\n    name: unit\n    runs-on: x\n    steps:\n      - run: x\n', '  unit:\n'), /must be named/],
 		['a flow-style job', good.replace('  unit:\n    name: unit\n    runs-on: x\n    steps:\n      - run: x\n', '  unit: {name: unit, if: false}\n'), /not found|declared/],
 	];
+	const wf = (job: string) => `on:\n  push:\n  pull_request:\njobs:\n${job}`;
+	const real = { 'ci-unit.yml': good, 'workflow-lint.yml': good.replace(/unit/g, 'lint'), 'docs-check.yml': good.replace(/unit/g, 'docs'), 'patch-build.yml': good.replace(/unit/g, 'patch-build') };
+	for (const [name, extra, want] of [
+		['control: the real four and an unrelated job', { 'x.yml': wf('  other:\n    name: other\n    steps:\n      - run: x\n') }, null],
+		['a decoy job named lint', { 'shadow.yml': wf('  a:\n    name: lint\n    steps:\n      - run: x\n') }, /reports the required context `lint`/],
+		['a decoy job id unit with no name', { 'shadow.yml': wf('  unit:\n    steps:\n      - run: x\n') }, /reports the required context `unit`/],
+		['a quoted decoy name', { 'shadow.yaml': wf('  a:\n    "name": "docs"\n    steps:\n      - run: x\n') }, /reports the required context `docs`/],
+		['an expression name', { 'shadow.yml': wf("  a:\n    name: ${{ 'lint' }}\n    steps:\n      - run: x\n") }, /can't be read in full/],
+		['an escaped name', { 'shadow.yml': wf('  a:\n    name: "li\\x6et"\n    steps:\n      - run: x\n') }, /can't be read in full/],
+		['flow-style jobs', { 'shadow.yml': 'on: push\njobs: {a: {name: lint}}\n' }, /can't be read in full/],
+		['a flow-style job', { 'shadow.yml': wf('  a: {name: lint}\n') }, /can't be read in full/],
+	] as Array<[string, Record<string, string>, RegExp | null]>) {
+		const got = reporters({ ...real, ...extra });
+		if (want ? !got.some(p => want.test(p)) : got.length) {
+			throw new Error(`required-checks self-test "${name}": got ${JSON.stringify(got)}`);
+		}
+	}
 	for (const [name, yml, want] of cases) {
 		const got = problems(yml, 'unit', 'unit');
 		if (want ? !got.some(p => want.test(p)) : got.length) {
 			throw new Error(`required-checks self-test "${name}": got ${JSON.stringify(got)}`);
 		}
 	}
-	console.log(`required-checks self-test: ${cases.length} cases OK`);
+	console.log(`required-checks self-test: ${cases.length + 8} cases OK`);
 }
 
 if (import.meta.main) {
@@ -161,7 +144,10 @@ if (import.meta.main) {
 		selfTest();
 	} else {
 		const root = path.resolve(import.meta.dirname, '..');
-		const all = REQUIRED.flatMap(r => problems(fs.readFileSync(path.join(root, '.github/workflows', r.workflow), 'utf8'), r.context, r.job));
+		const dir = path.join(root, '.github/workflows');
+		const files = Object.fromEntries(fs.readdirSync(dir).filter(f => /\.ya?ml$/.test(f)).map(f => [f, fs.readFileSync(path.join(dir, f), 'utf8')]));
+		const all = [...REQUIRED.flatMap(r => files[r.workflow] === undefined ? [`${r.context}: workflow ${r.workflow} is missing`] : problems(files[r.workflow], r.context, r.job)),
+			...reporters(files)];
 		for (const p of all) {
 			console.error(`required-checks: ${p}`);
 		}
