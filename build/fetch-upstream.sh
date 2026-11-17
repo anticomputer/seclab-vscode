@@ -34,6 +34,9 @@ git -C "$DEST" remote remove origin 2>/dev/null || true
 git -C "$DEST" remote add origin "$UPSTREAM_REPO"
 git -C "$DEST" fetch -q --depth 1 origin "$UPSTREAM_SHA"
 git -C "$DEST" -c advice.detachedHead=false checkout -q --force FETCH_HEAD
+# A checkout left at another pin keeps the files earlier patches added; they would make this
+# pin's patches fail to apply (or, if identical, ship a previous build's file).
+git -C "$DEST" clean -q -fd -- extensions/ src/ build/ product.json product.json.seclab .seclab-builtin-ui.json
 got="$(git -C "$DEST" rev-parse HEAD)"
 [[ "$got" == "$UPSTREAM_SHA" ]] || { echo "fetched $got != $UPSTREAM_SHA" >&2; exit 1; }
 echo "upstream: $UPSTREAM_TAG @ $UPSTREAM_SHA -> $DEST"
