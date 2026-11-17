@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 211 | 313 | 44 | 666 |
+| fixed | 14 | 84 | 211 | 322 | 44 | 675 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 52 | 161 | 58 | 276 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-| **all** | 16 | 93 | 301 | 567 | 148 | 1125 |
+| **all** | 16 | 93 | 301 | 576 | 148 | 1134 |
 
 ## Baseline: open high and critical findings
 
@@ -2087,6 +2087,15 @@ Every other commit the register cites is on main's history, or on the branch its
 | PRR-3 | low | fixed | REH probes armed only on the reh-push path were required by every REH evidence check, so a full run failed them. | patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f · `test/containment/check-probes.test.ts` "a probe run only by its own harness is not judged without that selection, and is required with it" |
 | PRR-4 | low | fixed | A harness rerun wiped the previous run.json and tab state before reaping them, orphaning that run's tabs and processes. | patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f · `test/containment/harness-hygiene.test.ts` "each harness reaps before it wipes and tears down on a signal" |
 | PRR-5 | low | fixed | Ctrl+C or SIGTERM skipped a harness's teardown gate (Node's default signal handling runs no exit handler). | patch:d31024eb7fbf7d73db5c2f58957a0a37f8c29f0f · `test/containment/harness-hygiene.test.ts` "SIGINT and SIGTERM reach the exit handler" |
+| PRR-6 | low | fixed | reapPreviousRun trusted removal: removeRunResources ignores command failures, so a runtime that failed to list or remove still let the caller wipe the manifest and tabd state naming the leftovers. | patch:e459e5c300dec4a8fb8b109a0a2a6c18dd2b748a · `test/containment/harness-hygiene.test.ts` "the reap refuses, keeping the profile, when docker cannot list or removal leaves a container" |
+| PRR-7 | low | fixed | runLeftovers required a Docker listing only for OCI runs, but sbx tabs own a Docker broker container and egress network, so a failed listing let the reap delete an sbx run's profile and tab state over them. | patch:acc63be12cda5f1a0928670758f0e43a705a2d9e · `test/containment/harness-hygiene.test.ts` "the reap refuses, keeping the profile, when docker cannot list or removal leaves a container" |
+| PRR-8 | low | fixed | lint_probes' comment scanner read the // closing a regex literal as a line comment, so a raw record write after it on the same line went unlinted. | patch:aee6225e21c61a26b60d6e6fa7e54ba122496e68 · `rpc-filter/tools/test_lint_probes.py` "test_a_regex_ending_in_slashes_is_not_a_comment" |
+| PRR-9 | low | fixed | lint_probes decided regex vs division from the raw preceding character, so a regex after a comment or after an if (...) condition was read as division and its closing // hid the rest of the line. | patch:9ee7143714e7821ad08e15f20a07b9b0692747b4 · `rpc-filter/tools/test_lint_probes.py` "test_a_regex_ending_in_slashes_is_not_a_comment" |
+| PRR-10 | low | fixed | The check-probes runner waiver removed the push probes' expectations but not their results, so a full REH run failed them as absent from expectations.json. | patch:c19144e35004f7939338d14bcacb0e3f63f3510d · `test/containment/check-probes.test.ts` "a probe run only by its own harness is not judged without that selection, and is required with it" |
+| PRR-11 | low | fixed | lint_probes' regex/division token heuristic still misjudged some placements (n++ / 2, a regex after break and a newline, a for await head), turning the rest of a line into a comment hidden from the record rules. | patch:92744b62a48973c6f76f06db4de95531eab3d2c5 · `rpc-filter/tools/test_lint_probes.py` "test_a_comment_after_a_slash_on_its_line_fails_closed" |
+| PRR-12 | low | fixed | A misread slash moved a string boundary with no comment involved (n++ / 2; s = '/'), so _code_only blanked a computed record key after it. | patch:2a6b06661b108e0ff4ec98f2293de4092e68474c · `rpc-filter/tools/test_lint_probes.py` "test_a_misread_slash_cannot_move_a_string_boundary" |
+| PRR-13 | low | fixed | The comment scanner ended a template at the backtick of a template nested in ${...}, misreading the rest of the line. | patch:2a6b06661b108e0ff4ec98f2293de4092e68474c · `rpc-filter/tools/test_lint_probes.py` "test_nested_templates_keep_their_boundaries" |
+| PRR-14 | low | fixed | The content rules chose code lines by their first characters, so a code line starting with * escaped every content rule. | patch:2a6b06661b108e0ff4ec98f2293de4092e68474c · `rpc-filter/tools/test_lint_probes.py` "test_a_code_line_starting_with_a_star_is_linted" |
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 

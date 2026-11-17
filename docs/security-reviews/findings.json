@@ -16687,6 +16687,51 @@
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_comment_after_a_slash_on_its_line_fails_closed"
 			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-12",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "A misread slash moved a string boundary with no comment involved (n++ / 2; s = '/'), so _code_only blanked a computed record key after it.",
+			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:2a6b06661b108e0ff4ec98f2293de4092e68474c",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_a_misread_slash_cannot_move_a_string_boundary"
+			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-13",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "The comment scanner ended a template at the backtick of a template nested in ${...}, misreading the rest of the line.",
+			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:2a6b06661b108e0ff4ec98f2293de4092e68474c",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_nested_templates_keep_their_boundaries"
+			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-14",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "The content rules chose code lines by their first characters, so a code line starting with * escaped every content rule.",
+			"component": "rpc-filter/tools/lint_probes.py main",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:2a6b06661b108e0ff4ec98f2293de4092e68474c",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_a_code_line_starting_with_a_star_is_linted"
+			}
 		}
 	]
 }
