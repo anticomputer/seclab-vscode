@@ -99,7 +99,29 @@ exports.activate = async function (context) {
 		// reported through the scan: no own-scheme tab
 	}
 
-	for (let i = 0; i < 240 && !fs.existsSync(path.join(root, '.seclab', 'stop')); i++) {
+	// Scale phases (review EDT-14): on the harness's .seclab/scale-<k> ("<start> <count>"), open that
+	// many of the workspace's own scale/f<i>.txt in the background (no editor), keep them open, and
+	// write .seclab-edtabs/scale-<k>.done. The harness counts the window's work per model add.
+	const held = [];
+	const phases = new Set();
+	for (let i = 0; i < 600 && !fs.existsSync(path.join(root, '.seclab', 'stop')); i++) {
+		for (let k = 1; k <= 3; k++) {
+			let spec = '';
+			try { spec = fs.readFileSync(path.join(root, '.seclab', `scale-${k}`), 'utf8'); } catch { continue; }
+			const m = /^(\d{1,4}) (\d{1,4})$/.exec(spec.trim());
+			if (!m || phases.has(k)) {
+				continue;
+			}
+			phases.add(k);
+			for (let j = Number(m[1]); j < Number(m[1]) + Number(m[2]); j += 20) {
+				const batch = [];
+				for (let x = j; x < Math.min(j + 20, Number(m[1]) + Number(m[2])); x++) {
+					batch.push(vscode.workspace.openTextDocument(vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, 'scale', `f${x}.txt`)).then(d => held.push(d), () => undefined));
+				}
+				await Promise.all(batch);
+			}
+			fs.writeFileSync(path.join(out, `scale-${k}.done`), String(held.length));
+		}
 		await sleep(1000);
 		scan();
 		write();

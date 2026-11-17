@@ -58,3 +58,9 @@ Five threads from the automated pull-request review, each checked against the co
 | # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
 |---|---|---|---|---|---|---|
 | EDT-13 | Low | ownership | The EDT-10 fix rebuilt the whole tab model, which fires only `onDidChangeTabGroups`, so an extension listening to `onDidChangeTabs` never saw the user's untitled tab turn from unknown to text. | fixed | Each tab whose label or input changes with ownership is sent as `TAB_UPDATE`. The control fails on `bb91e728`. | test/edtabs/probe.ts "control: the tab learned of its untitled text tab through onDidChangeTabs (EDT-13)" |
+
+## Copilot review (PR #24, third pass)
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| EDT-14 | Low | availability | The EDT-10 fix fired 0035's origin change on every model add, which rebuilds the whole document state: a tab opening N of its own documents in the background made the window do work quadratic in N, synchronously in the renderer. | fixed | Model adds go out on their own event with the model's URI; the editor-tab model re-judges only tabs showing it, and the document state is untouched. The check fails on `bb91e728` (6.8x). | test/edtabs/probe.ts "EDT-14 no renderer function" |
