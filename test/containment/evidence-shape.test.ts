@@ -131,7 +131,7 @@ test('a clean host run passes the host-run checks on both drivers', () => {
 	}
 });
 
-test('FXF-20: evidence synced to the host checkout is the run\'s output on both drivers, not a host run', () => {
+test('FXF-20: evidence synced to the host checkout is run output on both drivers, not a host run', () => {
 	const r = hostRun();
 	try {
 		put(r.ws, '.seclab-evidence/task.json', '{}');
@@ -199,7 +199,7 @@ const put = (ws: string, rel: string, text = 'x') => {
 	fs.writeFileSync(path.join(ws, rel), text);
 };
 
-test('FXF-14: on OCI the run\'s own writes (rogue settings payload, its instructions, evidence) stay green', () => {
+test('FXF-14: on OCI the run output (rogue settings payload, its instructions, evidence) stays green', () => {
 	const r = hostRun();
 	try {
 		put(r.ws, '.vscode/settings.json', '{"rogue":true}\n');
@@ -249,7 +249,7 @@ test('FXF-22: evidence on the host but not in the tab is a failure, not a missin
 	}
 });
 
-test('FXF-23: a tab-added file can\'t hide behind an OS artifact name', () => {
+test('FXF-23: a tab-added file cannot hide behind an OS artifact name', () => {
 	for (const rel of ['._launch.json', '.vscode/._hook', 'sub/.Spotlight-V100', 'sub/.fseventsd/x']) {
 		const r = hostRun();
 		try {

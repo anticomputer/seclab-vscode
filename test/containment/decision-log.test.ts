@@ -127,7 +127,7 @@ test('a recorded loss with no observed denial stays a failure', () => {
 	}
 });
 
-test('another vector\'s denial, an allow, or a different failure is not the loss', () => {
+test('a denial for another vector, an allow, or a different failure is not the loss', () => {
 	const task = [ranCheck('task')];
 	markFilteredLosses(task, [denial(FILTERED_VECTOR_LOSSES.fsmonitor.deniedRef), denial(FILTERED_VECTOR_LOSSES.task.deniedRef, 'allow')]);
 	assert.equal(task[0].knownGap, undefined);
