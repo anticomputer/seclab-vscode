@@ -16391,6 +16391,33 @@
 				"file": "test/squat/probe.ts",
 				"name": "reach neither host output nor evidence (SQ-3)"
 			}
+		},
+		{
+			"record": "20261117-scheme-squatting-probe.md",
+			"round": "Copilot review (PR #33, second pass)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"anchor": "SQ-4",
+			"severity": "low",
+			"summary": "The squat harness wrote its stop file into the tab's workspace from the host after the run, so a tab symlink there could redirect the write to a host file.",
+			"status": "fixed-untested",
+			"commit": "patch:1c8e2b8fdc62e871c4c9a478e9bceae983a22a88",
+			"gap": "The sentinel check can't fail on sbx, whose share doesn't carry the tab's symlink to the host; no run on a driver whose share does."
+		},
+		{
+			"record": "20261117-scheme-squatting-probe.md",
+			"round": "Copilot review (PR #33, second pass)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"anchor": "SQ-5",
+			"severity": "low",
+			"summary": "The squat harness read the arming file back from the tab's workspace unguarded, so a tab that deleted it made the run skip the teardown gate.",
+			"status": "fixed",
+			"commit": "patch:1c8e2b8fdc62e871c4c9a478e9bceae983a22a88",
+			"test": {
+				"file": "test/squat/probe.ts",
+				"name": "control (SQ-5)"
+			}
 		}
 	]
 }
