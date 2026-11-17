@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
 import { beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, ensureVsceImage, lockRun, tabImageProblem, VSCE_IMAGE } from '../harness.ts';
-import { armingDigest, brokerProxy, checkEvidence, hostRunChecks, levelBVectors, markFilteredLosses, readEvidence, report, rpcDecisions, unattributedMarkers, type Check } from './assert.ts';
+import { armingDigest, armingRecord, brokerProxy, checkEvidence, hostRunChecks, levelBVectors, markFilteredLosses, parseArmingRecord, readEvidence, report, rpcDecisions, unattributedMarkers, type ArmingRecord, type Check } from './assert.ts';
 import { materialiseFixture, readManifest, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 import { partitionFindings, seedTabManagerState, stateItems } from './state-db.ts';
 
@@ -106,11 +106,6 @@ if (mode === 'prepare') {
 		+ (canaryClipboard ? `clipboard=${CANARY_CLIPBOARD}\n` : ''));
 	// The trusted probe route's own arming window (FXF-13), next to its nonce.
 	fs.writeFileSync(path.join(base, '.seclab-probe-until'), String(until));
-	// What a host-side run would read or execute, as prepared (FXF-12): every fixture file plus
-	// the targets. Checked byte for byte after the run.
-	const fixtureFiles = (fs.readdirSync(path.join(import.meta.dirname, 'fixtures', 'malicious-workspace'), { recursive: true }) as string[])
-		.filter(r => fs.statSync(path.join(import.meta.dirname, 'fixtures', 'malicious-workspace', r)).isFile());
-	fs.writeFileSync(path.join(base, 'arming.json'), JSON.stringify(armingDigest(ws, [...fixtureFiles, '.seclab/targets'])));
 	writeSnapshot(base);
 	// What this run owns, for teardown.ts: the editor and its tabd are found by the unique
 	// user-data-dir (never by program name), the tab by id.
@@ -209,6 +204,9 @@ if (mode === 'prepare') {
 	client.dispose(); // stops the tab; the editor restarts it (extensions persist in the tab)
 	await new Promise(res => client.once('exit', res));
 	console.log(`\nprepared tab ${tab.metadata.name} for ${ws}`);
+	// The workspace is final: record what a host-side run would read and the whole tree, in the
+	// run dir, for the check (reviews FXF-12, 15).
+	fs.writeFileSync(path.join(base, 'arming.json'), JSON.stringify(armingRecord(ws)));
 	console.log(`\nnow open the TAB directly (never the local path: a local window must not open this hostile workspace).`);
 	console.log(`Keep --user-data-dir SHORT: macOS caps unix socket paths at 104 bytes and a deep path silently fails to open a window.\n`);
 	console.log(`  ${editorLaunchCommand(userData, `vscode-remote://seclab+${tab.metadata.name}${ws}`, {
@@ -259,10 +257,9 @@ if (mode === 'prepare') {
 	for (const vector of vectors) {
 		checks.push(...checkEvidence(readEvidence(ws, vector, readInTab), vector, { marker, expectHostname, proxy: brokerProxy(driver) }));
 	}
-	let arming: Record<string, string | null> | undefined;
+	let arming: ArmingRecord | undefined;
 	try {
-		const a = JSON.parse(fs.readFileSync(path.join(base, 'arming.json'), 'utf8')) as unknown;
-		arming = a && typeof a === 'object' && !Array.isArray(a) && Object.values(a).every(v => v === null || (typeof v === 'string' && /^[0-9a-f]{64}$/.test(v))) ? a as Record<string, string | null> : undefined;
+		arming = parseArmingRecord(JSON.parse(fs.readFileSync(path.join(base, 'arming.json'), 'utf8')));
 	} catch { /* a failing check */ }
 	checks.push(...hostRunChecks(driver, ws, vectors, arming));
 	if (driver !== 'sbx') {
