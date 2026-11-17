@@ -168,7 +168,7 @@ if (driver === 'sbx') {
 	const heldFile = path.join(wsA, '.vscode', 'tasks.json');
 	const heldBefore = fs.readFileSync(heldFile, 'utf8');
 	const edit = spawnSync(runtime, ['exec', '-u', 'agent', '-w', '/', containerA, 'sh', '-c',
-		`printf 'from the tab\\n' > ${JSON.stringify(ordinary)}; printf '{"version":"2.0.0","tasks":[]}\\n' > ${JSON.stringify(heldFile)}`], { encoding: 'utf8', timeout: 60_000 });
+		`printf 'from the tab\\n' > ${JSON.stringify(ordinary)} && printf '{"version":"2.0.0","tasks":[]}\\n' > ${JSON.stringify(heldFile)}`], { encoding: 'utf8', timeout: 60_000 });
 	// The edits are the precondition of every check below: a failed exec (a transient runtime
 	// error once showed up as four unrelated write-back failures) must say so, not cascade.
 	checks.push({ vector: 'write-back', name: 'harness: the tab-side edits were made', ok: edit.status === 0, detail: `exit ${edit.status}${edit.error ? ` ${edit.error.message}` : ''} ${(edit.stderr ?? '').trim().slice(0, 200)}` });
