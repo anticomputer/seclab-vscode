@@ -26,7 +26,9 @@ const base = path.join(repo, '.work', 'docsync');
 const ws = path.join(base, 'ws');
 const hostFile = path.join(base, 'host', 'note.txt');
 const canaryFile = path.join(base, 'canaries.json');
-const userData = path.join(os.homedir(), '.seclab-test', 'ds');
+// One profile per worktree: the previous-run guard lives in this worktree's .work, so a shared
+// profile could be wiped or torn down by another worktree's run (PR #12 review).
+const userData = path.join(os.homedir(), '.seclab-test', `ds-${createHash('sha256').update(repo).digest('hex').slice(0, 8)}`);
 const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
 const SBX = '/opt/homebrew/bin/sbx';
 const VSCE_IMAGE = 'seclab-vsce:3.9.2';

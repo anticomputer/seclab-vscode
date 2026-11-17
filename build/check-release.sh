@@ -8,8 +8,8 @@
 #     (build/test-variant.sh; EDR test-build-variants);
 #   - environment-controlled module loading: require()/import() of a path taken from
 #     process.env (a classic test hook that becomes a backdoor in a release);
-#   - an app product.json without a top-level `"enableTelemetry": false` (tab-indented, the name once
-#     in the file; anything else fails closed): with telemetry on,
+#   - an app product.json without `"enableTelemetry": false` on its own line in the root object (JSON
+#     depth, not indentation; the name once in the file; anything else fails closed): with telemetry on,
 #     the host's machine, SQM, device and session ids reach every tab's extension host (EDR
 #     tab-telemetry-ids);
 #   - a path with no JS at all (wrong path = no check), or any scan error (fail closed).
@@ -135,6 +135,10 @@ if [ "${1:-}" = "--self-test" ]; then
 	run "$T/with5" fail "product.json with enableTelemetry twice"
 	printf '{\n\t"nameShort": "x",\n\t"seclabTabRouter": "seclab.tab-manager",\n\t"seclabRpcPolicy": {\n\t\t"enableTelemetry": false,\n\t\t"sha256": "%s",\n\t\t"file": "%s"\n\t}\n}\n' "$hab" "$RPC_POLICY_REL" > "$T/root/product.json"
 	run "$T/with5" fail "product.json with enableTelemetry false only in a nested object"
+	printf '{\n\t"nameShort": "x",\n\t"seclabTabRouter": "seclab.tab-manager",\n\t"x": {\n\t"enableTelemetry": false\n\t},\n\t"seclabRpcPolicy": {\n\t\t"sha256": "%s",\n\t\t"file": "%s"\n\t}\n}\n' "$hab" "$RPC_POLICY_REL" > "$T/root/product.json"
+	run "$T/with5" fail "a nested enableTelemetry false indented as if top level (TEL-4)"
+	printf '{\n  "nameShort": "x",\n  "enableTelemetry": false,\n  "seclabTabRouter": "seclab.tab-manager",\n  "seclabRpcPolicy": {\n    "sha256": "%s",\n    "file": "%s"\n  }\n}\n' "$hab" "$RPC_POLICY_REL" > "$T/root/product.json"
+	run "$T/with5" pass "control: a top-level enableTelemetry false indented with spaces passes (depth, not indentation)"
 	stamp "$hab"; tr -d '\n\t' < "$T/root/product.json" > "$T/pj" && mv "$T/pj" "$T/root/product.json"
 	run "$T/with5" fail "product.json not tab-indented (fails closed)"
 	stamp "$hab"; sed 's/"nameShort": "x",/"nameShort": "x", "enable\\u0054elemetry": true,/' "$T/root/product.json" > "$T/pj" && mv "$T/pj" "$T/root/product.json"
@@ -191,10 +195,17 @@ if [ "${1:-}" = "--inner" ]; then
 		[ -n "$prods" ] || { echo "check-release: no product.json under $d"; bad=1; }
 		while IFS= read -r pj; do
 			[ -n "$pj" ] || continue
-			# The build writes product.json tab-indented, so a top-level key sits at one tab. Fail
-			# closed: the name once in the whole file, on a top-level `false` line (no nested decoy).
+			# Fail closed: the name once in the whole file, on its own line `"enableTelemetry": false`
+			# at JSON depth 1 (the root object). Depth is counted from the braces and brackets outside
+			# strings, never from indentation, so a nested decoy can't pass (PR #12 review, TEL-4).
 			n=$(grep -o 'enableTelemetry' "$pj" | wc -l | tr -d ' ')
-			top=$(grep -c "^$(printf '\t')\"enableTelemetry\": false,\{0,1\}$(printf '\r')\{0,1\}\$" "$pj" || :)
+			top=$(awk '
+				{ if (depth == 1 && $0 ~ /^[ \t]*"enableTelemetry"[ \t]*:[ \t]*false[ \t]*,?[ \t\r]*$/) c++
+				  for (i = 1; i <= length($0); i++) { ch = substr($0, i, 1)
+				    if (esc) { esc = 0; continue }
+				    if (instr) { if (ch == "\\") esc = 1; else if (ch == "\"") instr = 0; continue }
+				    if (ch == "\"") instr = 1; else if (ch == "{" || ch == "[") depth++; else if (ch == "}" || ch == "]") depth-- } }
+				END { print c + 0 }' "$pj")
 			# A \u escape can spell the name past the text match, and the last duplicate key wins in
 			# JSON.parse; jq writes none, so any \u in a product.json fails (review TEL-1).
 			esc=$(grep -c '\\u' "$pj" || :)
