@@ -861,13 +861,19 @@ docs_check() {
 		# No credentials ever enter this third-party container (EDR supply-chain). GitHub answers a
 		# burst of permalink checks with 429 and 503, so those are retried with backoff and paced
 		# per host (adaptively), and never cached; a link still dead after the retries fails.
+		# Blob permalinks are checked at raw.githubusercontent.com: github.com throttles a runner's
+		# unauthenticated blob views for longer than any backoff, while raw serves the same file at
+		# the same commit, and a missing file, path or commit there is still a 404. lychee remaps before
+		# it excludes, so this repo's own links are excluded under both hosts.
 		docker run --rm -v "$ROOT:/input:ro" -v seclab-lychee-cache:/cache -w /cache "$(tool_image lychee)" \
 			--no-progress --cache --max-cache-age 3d --cache-exclude-status 403,429,500.. \
 			--max-concurrency 8 --host-concurrency 4 --host-request-interval 200ms \
 			--max-retries 5 --retry-wait-time 3 --accept 200,206 \
+			--remap '^https://github\.com/([^/]+)/([^/]+)/blob/([^#?]+).*$ https://raw.githubusercontent.com/$1/$2/$3' \
 			--exclude-path /input/.work --exclude-path /input/vscode --exclude-path /input/node_modules \
 			--exclude '^https?://([^/]+\.)?(test|invalid|example|localhost)(/|:|$)' --exclude '^https?://(127\.|localhost|host\.docker\.internal)' \
 			--exclude '^vscode-remote:' --exclude '^https://github\.com/anticomputer/seclab-vscode' \
+			--exclude '^https?://raw\.githubusercontent\.com/anticomputer/seclab-vscode/' \
 			'/input/**/*.md'
 	fi
 	if [[ $run = 1 ]]; then
