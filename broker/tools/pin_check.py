@@ -66,6 +66,21 @@ def source_drift(req, locked: dict[str, str], source=None) -> list[str]:
     return errors
 
 
+def lock_drift(req, locked: dict[str, str], register: dict, root=None) -> list[str]:
+    """source_drift for a lock, against its source registered in broker/deps.json `lockSources`
+    (paths relative to broker/), or the sibling `.in` when it has none (finding 11-9). `root` is
+    the repository root; the self-test passes a scratch tree."""
+    from pathlib import Path
+    root = Path(root) if root is not None else BROKER.parent
+    sources = {"broker/" + e["lock"]: "broker/" + e["source"] for e in register.get("lockSources", [])}
+    try:
+        key = Path(req).resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        key = None
+    reg = sources.get(key) if key else None
+    return source_drift(req, locked, source=(root / reg) if reg else None)
+
+
 def self_test() -> list[str]:
     """The supply-chain vectors, then named lock-drift cases (findings 10-4, 10b-5 and 10c-1):
     each must fail, or pass, exactly as named."""
@@ -113,17 +128,23 @@ def self_test() -> list[str]:
                 failures.append(f"{name}: errors {errors}")
             elif want is not None and not any(want in e for e in errors):
                 failures.append(f"{name}: no error containing {want!r} in {errors}")
-        # 11-9: the registered source is the one compared, not the lock's `<lock>.in` sibling.
+        # 11-9: the production lookup (lock_drift, what main() calls) compares the source the
+        # register names, not the lock's `<lock>.in` sibling: a drifting registered source next
+        # to a matching sibling must be reported.
         name = "11-9: the registered source is compared, not the sibling .in"
-        case = Path(d) / "registered"
-        case.mkdir()
-        (case / "requirements.txt").write_text(lock)
-        (case / "requirements.in").write_text("pkga==1.0\n")
-        (case / "deps.in").write_text("pkga==0.9\n")
+        root = Path(d) / "repo"
+        x = root / "broker" / "x"
+        x.mkdir(parents=True)
+        (x / "requirements.txt").write_text(lock)
+        (x / "requirements.in").write_text("pkga==1.0\n")
+        (x / "deps.in").write_text("pkga==0.9\n")
+        register = {"lockSources": [{"lock": "x/requirements.txt", "source": "x/deps.in"}]}
         try:
-            errors = source_drift(case / "requirements.txt", locked, source=case / "deps.in")
+            errors = lock_drift(x / "requirements.txt", locked, register, root=root)
             if not any("deps.in" in e and "pkga==0.9 but" in e for e in errors):
                 failures.append(f"{name}: no drift reported against deps.in in {errors}")
+            if lock_drift(x / "requirements.txt", locked, {"lockSources": []}, root=root):
+                failures.append(f"{name}: control (unregistered, matching sibling) reported drift")
         except Exception as e:  # noqa: BLE001 - any crash fails the case
             failures.append(f"{name}: raised {type(e).__name__}")
     return failures
@@ -154,9 +175,7 @@ def main() -> int:
                 errors.append(f"{rel(req)}:{n}: {name}=={version} is not in broker/deps.json")
         if req.resolve() not in targets:
             errors.append(f"{rel(req)}: not installed by any Dockerfile (its target interpreter is unknown)")
-        reg = lock_sources.get(rel(req))
-        errors += source_drift(req, {name: version for _, name, version, _ in pins},
-                               source=(BROKER.parent / reg) if reg else None)
+        errors += lock_drift(req, {name: version for _, name, version, _ in pins}, register)
     for lock, src in lock_sources.items():
         if not (BROKER.parent / lock).exists() or not (BROKER.parent / src).exists():
             errors.append(f"broker/deps.json lockSources: {lock} <- {src}: missing file")
