@@ -27,10 +27,10 @@ const ws = path.join(base, 'ws');
 const hostIpynb = path.join(base, 'host', 'host.ipynb');
 const hostNb = path.join(base, 'host', 'host.seclabnb');
 const canaryFile = path.join(base, 'canaries.json');
-// Written by drive from the window's RPC-filter log (host-written, fixed refs only).
-const evidenceFile = path.join(base, 'drive-evidence.json');
 const resultsFile = path.join(repo, '.work', 'nbsync-results.jsonl');
-const userData = path.join(os.homedir(), '.seclab-test', 'nb');
+// One profile per worktree: the previous-run guard lives in this worktree's .work, so a shared
+// profile could be wiped or torn down by another worktree's run (PR #12 review).
+const userData = path.join(os.homedir(), '.seclab-test', `nb-${createHash('sha256').update(repo).digest('hex').slice(0, 8)}`);
 const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
 const SBX = '/opt/homebrew/bin/sbx';
 const VSCE_IMAGE = 'seclab-vsce:3.9.2';
@@ -98,6 +98,21 @@ async function prepare(): Promise<string> {
 	return tab.metadata.name;
 }
 
+/** Notebook-related refusals in the window's RPC-filter decision log (host-written; fixed-shape refs
+ *  only). Read by check, before teardown removes the profile, whichever way the editor was run. */
+function filterDenials(): Map<string, number> {
+	const denies = new Map<string, number>();
+	const walk = (d: string): string[] => fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : e.name === 'seclabRpcFilter.log' ? [path.join(d, e.name)] : []) : [];
+	for (const f of walk(path.join(userData, 'logs'))) {
+		for (const m of fs.readFileSync(f, 'utf8').matchAll(/"ref":"((?:rpc|cmd):[A-Za-z0-9_.$-]{1,120})","verdict":"deny"/g)) {
+			if (/otebook|executeCommand|vscode\.open/i.test(m[1])) {
+				denies.set(m[1], (denies.get(m[1]) ?? 0) + 1);
+			}
+		}
+	}
+	return denies;
+}
+
 async function check(measure: boolean): Promise<boolean> {
 	const c = JSON.parse(fs.readFileSync(canaryFile, 'utf8')) as Canaries;
 	const reportPath = path.join(ws, '.seclab-nbsync', 'report.json');
@@ -144,13 +159,9 @@ async function check(measure: boolean): Promise<boolean> {
 			// Notebooks in a tab need the tab's serializer. Where the RPC filter refuses it (patch 0005's
 			// default deny), no notebook opens in the window, so the leak checks below can't be vacuous
 			// unless that refusal is shown; otherwise detection must work on this build.
-			let ev: { serializerRefused?: unknown } = {};
-			try {
-				ev = JSON.parse(fs.readFileSync(evidenceFile, 'utf8'));
-			} catch {
-				ev = {};
-			}
-			const off = ev.serializerRefused === true;
+			const denies = filterDenials();
+			console.log(`filter denials (notebook-related ref -> lines): ${JSON.stringify(Object.fromEntries(denies))}`);
+			const off = denies.has('rpc:MainThreadNotebook.$registerNotebookSerializer');
 			console.log(`notebooks in this tab: ${off ? 'off (the RPC filter refused the tab\'s serializer)' : 'on'}`);
 			expect('the probe finished', rep.done === true);
 			if (off) {
@@ -205,17 +216,6 @@ if (mode === 'prepare') {
 		const labels = await ed.evaluate<string[]>(`[...document.querySelectorAll('.tabs-container .tab .label-name')].map(e => e.textContent ?? '')`).catch(() => [] as string[]);
 		console.log(`window editors: ${JSON.stringify(labels.filter(l => /^[\w. -]{1,60}$/.test(l)))}`);
 		await ed.screenshot(path.join(base, 'drive.png')).catch(() => 0);
-		const denies = new Map<string, number>();
-		const walk = (d: string): string[] => fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : e.name === 'seclabRpcFilter.log' ? [path.join(d, e.name)] : []) : [];
-		for (const f of walk(path.join(userData, 'logs'))) {
-			for (const m of fs.readFileSync(f, 'utf8').matchAll(/"ref":"((?:rpc|cmd):[A-Za-z0-9_.$-]{1,120})","verdict":"deny"/g)) {
-				if (/otebook|executeCommand|vscode\.open/i.test(m[1])) {
-					denies.set(m[1], (denies.get(m[1]) ?? 0) + 1);
-				}
-			}
-		}
-		console.log(`filter denials (notebook-related ref -> lines): ${JSON.stringify(Object.fromEntries(denies))}`);
-		fs.writeFileSync(evidenceFile, JSON.stringify({ serializerRefused: denies.has('rpc:MainThreadNotebook.$registerNotebookSerializer'), editors: labels.length }));
 	} catch (e) {
 		console.error(`drive: ${String(e)}`);
 	} finally {
