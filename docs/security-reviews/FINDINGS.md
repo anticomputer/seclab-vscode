@@ -1902,10 +1902,10 @@ Every other commit the register cites is on main's history, or on the branch its
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
-| NHT-1 | low | fixed | The host-terminal proof could pass vacuously: an empty palette list did not show the query arrived, and nothing at runtime showed newLocal unregistered in a tab window. | 2d7ba7b1 · `test/containment/host-terminal.ts` "newLocal by id is not a command in a tab window (reported not found)" |
+| NHT-1 | low | fixed | The host-terminal proof could pass vacuously: an empty palette list did not show the query arrived, and nothing at runtime showed newLocal unregistered in a tab window. | patch:ef072e3834b547fcf176cd01550e8ca3b37649eb · `test/containment/host-terminal.ts` "newLocal by id is not a command in a tab window (reported not found)" |
 | NHT-2 | info | fixed-untested | The ADR's debug note said runInTerminal kind external opens the host's terminal application; only a host-side (local extension host) adapter could. | A documentation correction: the ADR wording has no behaviour for a regression test to hold. |
-| NHT-3 | info | fixed | The Explorer's Open in Integrated/External Terminal items still showed for a host (file:) resource in a tab window, though the launch was refused. | 2d7ba7b1 · `test/containment/host-terminal.test.ts` "each rule fails on a mutant of the real patch" |
-| NHT-4 | info | fixed | Upstream's openNativeConsole handler unit tests do not stub IWorkbenchEnvironmentService, so 0050's handler check would throw there. | 2d7ba7b1 · `test/containment/host-terminal.test.ts` "patch 0050 offers and starts no host terminal in a tab window" |
+| NHT-3 | info | fixed | The Explorer's Open in Integrated/External Terminal items still showed for a host (file:) resource in a tab window, though the launch was refused. | patch:ef072e3834b547fcf176cd01550e8ca3b37649eb · `test/containment/host-terminal.test.ts` "each rule fails on a mutant of the real patch" |
+| NHT-4 | info | fixed | Upstream's openNativeConsole handler unit tests do not stub IWorkbenchEnvironmentService, so 0050's handler check would throw there. | patch:ef072e3834b547fcf176cd01550e8ca3b37649eb · `test/containment/host-terminal.test.ts` "patch 0050 offers and starts no host terminal in a tab window" |
 
 ### [20261116-pr-landing](20261116-pr-landing.md)
 
