@@ -123,4 +123,5 @@ Same rules as ADRs:
 | 2026-11-16 | [Landing through pull requests: rebase merge with auto-merge](20261116-pr-landing.md) | accepted |
 | 2026-11-16 | [Server-initiated pushes refused in tab windows (0030, 0031), and 0011 retired](20261116-reh-push-refusals.md) | accepted |
 | 2026-11-16 | [Host telemetry ids stay out of tabs: telemetry off, checked at build and release](20261116-tab-telemetry-ids.md) | accepted |
+| 2026-11-17 | [Link check: retry GitHub's rate limits instead of accepting them](20261117-link-check-retries.md) | accepted |
 <!-- index:end -->
