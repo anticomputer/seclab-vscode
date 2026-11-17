@@ -14072,9 +14072,12 @@
 			"anchor": "EDT-10",
 			"severity": "low",
 			"summary": "An untitled editor joins its group before its model exists, so the user's own untitled tab stayed anonymous.",
-			"status": "fixed-untested",
+			"status": "fixed",
 			"commit": "patch:fe5db5019c1bfbb872ac3bc817e84a82587b4f5a",
-			"gap": "The probe control is in place; it fails on the build before the fix and is proven on the next build."
+			"test": {
+				"file": "test/edtabs/probe.ts",
+				"name": "control: an untitled document the user created in the window shows to the tab as its own text tab (EDT-10)"
+			}
 		},
 		{
 			"record": "20261116-editor-tab-provenance.md",
