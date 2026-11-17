@@ -645,12 +645,16 @@ visible losses, not bugs:
   unfiltered configuration on the trusted side.
 - **File and text search work for the tab's own file system.** Inside a tab the extension
   host serves search itself, registering its providers for `vscode-remote`; the policy allows
-  exactly that scheme (`tabSearchProvider`), result URIs from `$handleFileMatch` must be
-  canonical `vscode-remote` on this tab's authority (the positional rule), every match
-  resource and result `uri` in `$handleTextMatch` the same (`tabTextMatches`), and
-  `$unregisterProvider` reaches only this host's own providers. `workspace.findFiles`, Quick
-  Open file search and the Search view return again; the benign control's `findFiles` step is
-  no longer an expected failure.
+  exactly that scheme (`tabSearchProvider`). Results are checked the way the window's consumer
+  reads them (review SRCH-1): each `$handleFileMatch` item is a plain URI, canonical
+  `vscode-remote` on this tab's authority (`tabFileMatches`); each `$handleTextMatch` match has
+  only `resource` and a non-empty `results` list, every resource and result `uri` checked the
+  same way, previews bounded (`tabTextMatches`). Patch 0051 makes the provider's completion
+  messages untrusted plain text, so a link in them runs no command (SRCH-2), and drops open
+  editors outside the tab's file system from the query it is sent. The host's
+  `files.exclude`/`search.exclude` globs still reach it (SRCH-3, open). `$unregisterProvider`
+  reaches only this host's own providers. `workspace.findFiles`, Quick Open file search and the
+  Search view return again ([EDR](edr/20261117-search-in-tabs.md)).
 
 Extensions activate, run their commands, keep per-tab state and secrets, and
 read, write and open their own workspace files.

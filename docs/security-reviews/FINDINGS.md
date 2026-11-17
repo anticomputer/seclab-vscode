@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 237 | 385 | 48 | 775 |
+| fixed | 14 | 91 | 239 | 385 | 50 | 779 |
 | fixed-before-landing | 0 | 2 | 0 | 0 | 0 | 2 |
-| fixed-untested | 0 | 5 | 59 | 179 | 63 | 306 |
+| fixed-untested | 0 | 5 | 59 | 180 | 64 | 308 |
 | accepted-residual | 0 | 1 | 12 | 72 | 24 | 109 |
 | deferred | 2 | 1 | 13 | 10 | 3 | 29 |
-| open | 0 | 2 | 12 | 14 | 8 | 36 |
+| open | 0 | 2 | 12 | 15 | 8 | 37 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 102 | 333 | 660 | 172 | 1283 |
+| **all** | 16 | 102 | 335 | 662 | 175 | 1290 |
 
 ## Baseline: open high and critical findings
 
@@ -488,6 +488,8 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261116-response-side-control](20261116-response-side-control.md) **RSC-3** | low | fixed-untested | findings register, ADR response-side-control | RPC-R2 was marked fixed though its markdown and image parts were neither fixed nor proven. | A register and record correction; nothing to test. |
 | [20261116-rfu1-terminal-variables](20261116-rfu1-terminal-variables.md) **RFU1R-3** | low | open | remote terminal channel (remoteTerminalChannel.createProcess) | activeFileResource may be a host file: or vscode-userdata: document, and its path goes to the tab's REH on every createProcess. | No patch yet: a host document's path reaches the tab's REH in createProcess. |
 | [20261116-rfu1-terminal-variables](20261116-rfu1-terminal-variables.md) **RFU1R2-1** | low | open | terminal default profile push (MainThreadTerminalService._updateDefaultProfile) | In a tab window the host user's raw terminal.integrated.automationProfile.&lt;os&gt; object (env and args included) goes to the tab's extension host in $acceptDefaultProfile, unfiltered, though 0036 withholds it from the tab's configuration. | No patch or probe yet: the host automation profile reaches the tab's extension host. |
+| [20261117-search-in-tabs](20261117-search-in-tabs.md) **SRCH-3** | low | open | search query sent to a tab (searchService, patch 0051) | The query sent to a tab carries extraFileResources (open editors outside the workspace) and include/exclude globs built from the host's files.exclude and search.exclude. | Host-derived include/exclude globs still reach the tab's search provider. |
+| [20261117-search-in-tabs](20261117-search-in-tabs.md) **SRCH-6** | low | fixed-untested | test/containment/search-probe.ts | The search proof could pass vacuously: before passed if nothing was typed and needed no logged deny. | The harness itself; its runs are the evidence (EDR search-in-tabs). |
 | [20261104-rpc-probes-increment](20261104-rpc-probes-increment.md) **PR-M4** | info | open | containment probes (raw RPC) | The raw-RPC test hook does not exist, so the two raw-RPC probes report ERROR. | No test hook provides the raw main-thread RPC handle; the probes remain ERROR and the identity-spoof surface is unmeasured. |
 | [20261104-supply-chain](20261104-supply-chain.md) **info** | info | fixed-untested | rpc-filter/tools/test.sh | \`--platform linux/arm64\` was pinned in the RPC filter's test.sh while CI runs on x86. | The flag is gone (multi-arch digest), but nothing asserts that no platform override returns. |
 | [20261104-write-back-engine](20261104-write-back-engine.md) **note#2** | info | deferred | RPC capability filter (M4) | Until the M4 RPC filter enforces, a rogue extension can invoke seclab.reviewChanges/confirmDeletes to pop dialogs (a click is still needed). | follow-up: RPC capability filter series (patches 0005-0011 / 0030-0034, \`rpc\` session): \`seclab.*\` must stay outside the filter's allowed set. Not on main: patches/series has only the reserved ranges, no filter patch. |
@@ -505,6 +507,7 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261116-rfu1-terminal-variables](20261116-rfu1-terminal-variables.md) **RFU1R2-2** | info | accepted-residual | containment probes (rogue REH, reh-profile-config-host-setting) | The profile probe's patched predicate can't tell a window that withheld ${config:...} from one that couldn't read the seeded setting; only the baseline shows the setting resolves. | accepted by an agent: Both modes seed the setting identically in the same harness, and the baseline run shows the window resolving it into the profile path and env; the pair, not the patched run alone, is the proof. |
 | [20261116-rpc-follow-ups](20261116-rpc-follow-ups.md) **RFU-2** | info | open | patch 0015 AHP gate / 0011 retirement | For a workspace-listed WebSocket agent host, 0015 refuses only if the window's gate sink is installed before the first reconcile; true today, pinned only by the live proof run. | The sink-before-reconcile ordering is checked only by the live reh-push proof run, not by a unit case. |
 | [20261116-rpc-follow-ups](20261116-rpc-follow-ups.md) **RFU-3** | info | accepted-residual | seclabRpcFilter early decision hold | Before the decision log installs, a REH can fill the 64 held slots with distinct channel-guard keys; later early decisions show only as a seclab.early-dropped count. | accepted by an agent: Low impact: held decisions past the bound are counted in a fixed-literal line, never dropped silently, and nothing a tab sends becomes a log line. |
+| [20261117-search-in-tabs](20261117-search-in-tabs.md) **SRCH-7** | info | fixed-untested | ARCHITECTURE, RPC-LOCKDOWN, policy.json, check_drift.py | The records overclaimed the search controls, and a policy rationale said opened documents sync to the tab, stale since 0035. | Documentation corrections; nothing to test. |
 | [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **RPC-R3** | info | accepted-residual | rpc-filter policy coverage | Methods denied pending validators and the response-side control: SCM, tree views, output channels, status bar, decorations, tab-registered language features, tasks, debug, URI handlers. | accepted by an agent: Deny-by-default is the fork's chosen posture: these surfaces stay denied until a structural response-side control exists (RPC-R2), so the gap is visible loss of function rather than a containment hole. Extensions still activate, run their own commands, keep per-tab state and secrets, and read/write/search their own workspace. |
 
 ### Security findings register
@@ -2334,6 +2337,18 @@ Every other commit the register cites is on main's history, or on the branch its
 | SQ-6 | low | fixed | The squat harness read the tab's report through an unbounded sbx exec, so a FIFO at the report path stalled the run before its teardown gate. | 8e3a123a88ce · `test/harness/tab-exec.test.ts` "a FIFO with no writer at the read path times out to no data (SQ-6)" |
 | SQ-7 | low | fixed-untested | The squat harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
 | SQ-8 | low | fixed | The squat run manifest didn't list its generated workspace, so the teardown gate left it and the staged probe VSIX in .work. | bf2596423383 · `test/containment/teardown.ts` "generated fixture workspaces removed from the host" |
+
+### [20261117-search-in-tabs](20261117-search-in-tabs.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| SRCH-1 | medium | fixed | A tab could put host files in search results: a URI-shaped file result carrying results and a host resource passed the positional rule, and a text match without results was revived as a host URI. | patch:5300bd8a500672975637cedec804b46f4325cf00 · `test/containment/arg-validators.test.ts` "a file result carrying results on a host resource" |
+| SRCH-2 | medium | fixed | A tab search provider's completion messages reached the Search view unchecked; a trusted message's command: link ran on the trusted side when clicked, and the response gate exempted both search registrations. | patch:5300bd8a500672975637cedec804b46f4325cf00 · `test/containment/search-responses.test.ts` "patch 0051 sanitises tab search messages and the query sent to a tab" |
+| SRCH-3 | low | open | The query sent to a tab carries extraFileResources (open editors outside the workspace) and include/exclude globs built from the host's files.exclude and search.exclude. | Host-derived include/exclude globs still reach the tab's search provider. |
+| SRCH-4 | info | fixed | The positional rule admitted untitled: results from $handleFileMatch. | patch:5300bd8a500672975637cedec804b46f4325cf00 · `test/containment/arg-validators.test.ts` "an untitled file result" |
+| SRCH-5 | info | fixed | $handleFileMatch had no bound on its result count. | patch:5300bd8a500672975637cedec804b46f4325cf00 · `test/containment/arg-validators.test.ts` "tab providers and search: the legitimate shapes pass" |
+| SRCH-6 | low | fixed-untested | The search proof could pass vacuously: before passed if nothing was typed and needed no logged deny. | The harness itself; its runs are the evidence (EDR search-in-tabs). |
+| SRCH-7 | info | fixed-untested | The records overclaimed the search controls, and a policy rationale said opened documents sync to the tab, stale since 0035. | Documentation corrections; nothing to test. |
 
 ### [20261117-workspace-data-probe](20261117-workspace-data-probe.md)
 

@@ -18884,6 +18884,102 @@
 				"file": "test/containment/filter-module.test.ts",
 				"name": "response: oversized tab markdown never reaches the lexer (review on #48)"
 			}
+		},
+		{
+			"record": "20261117-search-in-tabs.md",
+			"anchor": "SRCH-1",
+			"round": "search restoration review (2026-11-17)",
+			"severity": "medium",
+			"summary": "A tab could put host files in search results: a URI-shaped file result carrying results and a host resource passed the positional rule, and a text match without results was revived as a host URI.",
+			"component": "MainThreadSearch $handleFileMatch / $handleTextMatch validators",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:5300bd8a500672975637cedec804b46f4325cf00",
+			"test": {
+				"file": "test/containment/arg-validators.test.ts",
+				"name": "a file result carrying results on a host resource"
+			}
+		},
+		{
+			"record": "20261117-search-in-tabs.md",
+			"anchor": "SRCH-2",
+			"round": "search restoration review (2026-11-17)",
+			"severity": "medium",
+			"summary": "A tab search provider's completion messages reached the Search view unchecked; a trusted message's command: link ran on the trusted side when clicked, and the response gate exempted both search registrations.",
+			"component": "Search view messages (patch 0051), check_drift.py RESPONSE_NONE",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:5300bd8a500672975637cedec804b46f4325cf00",
+			"test": {
+				"file": "test/containment/search-responses.test.ts",
+				"name": "patch 0051 sanitises tab search messages and the query sent to a tab"
+			}
+		},
+		{
+			"record": "20261117-search-in-tabs.md",
+			"anchor": "SRCH-3",
+			"round": "search restoration review (2026-11-17)",
+			"severity": "low",
+			"summary": "The query sent to a tab carries extraFileResources (open editors outside the workspace) and include/exclude globs built from the host's files.exclude and search.exclude.",
+			"component": "search query sent to a tab (searchService, patch 0051)",
+			"owner": "rpc",
+			"status": "open",
+			"followUp": "extraFileResources are filtered by 0051; filter host-derived globs with 0036's withhold rules, or record the trade-off (which files a search returns) as a residual (rpc session).",
+			"gap": "Host-derived include/exclude globs still reach the tab's search provider."
+		},
+		{
+			"record": "20261117-search-in-tabs.md",
+			"anchor": "SRCH-4",
+			"round": "search restoration review (2026-11-17)",
+			"severity": "info",
+			"summary": "The positional rule admitted untitled: results from $handleFileMatch.",
+			"component": "MainThreadSearch $handleFileMatch",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:5300bd8a500672975637cedec804b46f4325cf00",
+			"test": {
+				"file": "test/containment/arg-validators.test.ts",
+				"name": "an untitled file result"
+			}
+		},
+		{
+			"record": "20261117-search-in-tabs.md",
+			"anchor": "SRCH-5",
+			"round": "search restoration review (2026-11-17)",
+			"severity": "info",
+			"summary": "$handleFileMatch had no bound on its result count.",
+			"component": "MainThreadSearch $handleFileMatch",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:5300bd8a500672975637cedec804b46f4325cf00",
+			"test": {
+				"file": "test/containment/arg-validators.test.ts",
+				"name": "tab providers and search: the legitimate shapes pass"
+			}
+		},
+		{
+			"record": "20261117-search-in-tabs.md",
+			"anchor": "SRCH-6",
+			"round": "search restoration review (2026-11-17)",
+			"severity": "low",
+			"summary": "The search proof could pass vacuously: before passed if nothing was typed and needed no logged deny.",
+			"component": "test/containment/search-probe.ts",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:5300bd8a500672975637cedec804b46f4325cf00",
+			"gap": "The harness itself; its runs are the evidence (EDR search-in-tabs)."
+		},
+		{
+			"record": "20261117-search-in-tabs.md",
+			"anchor": "SRCH-7",
+			"round": "search restoration review (2026-11-17)",
+			"severity": "info",
+			"summary": "The records overclaimed the search controls, and a policy rationale said opened documents sync to the tab, stale since 0035.",
+			"component": "ARCHITECTURE, RPC-LOCKDOWN, policy.json, check_drift.py",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:5300bd8a500672975637cedec804b46f4325cf00",
+			"gap": "Documentation corrections; nothing to test."
 		}
 	]
 }
