@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 208 | 294 | 44 | 644 |
+| fixed | 14 | 84 | 208 | 295 | 44 | 645 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 52 | 156 | 55 | 268 |
-| accepted-residual | 0 | 1 | 12 | 70 | 22 | 105 |
+| accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
-| open | 0 | 2 | 13 | 15 | 6 | 36 |
+| open | 0 | 2 | 13 | 14 | 6 | 35 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-| **all** | 16 | 93 | 299 | 544 | 144 | 1096 |
+| **all** | 16 | 93 | 299 | 544 | 145 | 1097 |
 
 ## Baseline: open high and critical findings
 
@@ -131,7 +131,6 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-3** | low | fixed-untested | patch 0038 editor-tab model | A filesystem provider registered later by the tab could claim host editors already open in its scheme (latent under the RPC filter). | Not reachable at run time today: the RPC filter refuses a tab's provider registration. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-5** | low | accepted-residual | patch 0038 editor-tab model | Webview panels pass by scheme, so a host-side panel's title and view type reach the tab. | accepted by an agent: Under the RPC filter a tab cannot create webview panels, so every panel in a tab window is the window's own; none carries host data in its title. |
 | [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-2** | low | accepted-residual | telemetry selection at run time | A host process that opens a tab window with VSCODE_DEV set makes the window a dev build, which enables real telemetry and gives that tab the host ids. | accepted by an agent: Coordinator, 2026-11-16: kept as a recorded residual, no patch. A process that can set the editor's launch environment on the host is already outside the threat model, and a tab cannot set it. |
-| [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **DOCSYNC-R3** | low | open | window→tab pushes (editor tabs) | Window-to-tab push: the editor-tab model still exposes host URIs and labels to a tab's extension host. | No push-side control for the editor-tab model; reported to the coordinator as a 0035 sibling. |
 | [docs/edr/20261109-document-sync-provenance.md](../../docs/edr/20261109-document-sync-provenance.md) **DOCSYNC-R8** | low | accepted-residual | patch 0035 document sync (untitled rule) | A host feature that creates an empty untitled document and then fills it with host data programmatically would still sync into a tab. | accepted by an agent: The untitled rule treats an empty, path-less model first seen by the window as user-typed; no such host feature was seen in the EDR's measurement of the real editor. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **F4** | info | fixed-untested | patch 0035 document sync | \`CellUri.parse\` on a tab-made URI could throw; the sole-consumer pin matches substrings; other calls still name host URIs. | Parse now fails closed and cells are limited to the tab authority, but the record lists no regression test; the remaining host-URI call paths are accepted and reported as siblings. |
 | [20261109-document-sync-provenance](20261109-document-sync-provenance.md) **P3** | info | accepted-residual | patch 0035 document sync | A change sent for a document the tab no longer holds would be invisible to the extension API. | accepted by an agent: The revoking listener is registered at tagging time so it runs first and removes the document synchronously, and ModelTracker re-checks the predicate before sending. |
@@ -139,6 +138,7 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-5** | info | fixed-untested | patch 0036 configuration snapshot | A withheld-setting report refused before the Tab Manager registered its command was counted as sent. | No runtime test for report retry. |
 | [20261112-tab-configuration-snapshot](20261112-tab-configuration-snapshot.md) **CFG-7** | info | open | variable resolution (outside 0036) | \`${config:…}\` in a tab-owned tasks.json or launch.json resolves in the renderer against the unfiltered configuration. | A sibling of the snapshot filter: resolve config variables for tab tasks against the tab's filtered view. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-6** | info | accepted-residual | patch 0038 editor-tab model | A host-local terminal's title reaches the tab as an editor label. | accepted by an agent: No new exposure: the terminal service already pushes every terminal name to every host (DOCSYNC-R5). |
+| [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-7** | info | accepted-residual | patch 0038 editor-tab model | A desktop web-worker host in a tab window is unfiltered by 0038, which keys on the host's own authority. | accepted by an agent: Tab-installed extensions never run in the desktop local web worker; 0038 is desktop-only. Revisit if the web build is ever in scope. |
 | [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-5** | info | fixed-untested | nbsync harness | The nbsync probe's prepare, launch, check flow could not pass on a filtered build: only drive read the serializer refusal. | A harness fix; its prepare, launch, check run on main 6589051b passed, but no test runs the harness itself. |
 | [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-6** | info | fixed-untested | probe harnesses | Probe profiles were shared by every worktree while each run guard is per worktree. | A naming fix in four harnesses; nothing runs two worktrees at once to test it. |
 | [docs/edr/20261116-notebook-sync.md](../../docs/edr/20261116-notebook-sync.md) **DOCSYNC-R9** | info | deferred | window→tab pushes (notebook sync) | Notebooks don't work in tabs; enabling them needs per-model notebook provenance, a serializer that reads only the tab's files, and 0035's cell rule for tab-created notebooks. | follow-up: With the RPC follow-ups session's landing D, which needs a validator for MainThreadNotebook (coordinator, 2026-11-16). The plan is in the EDR's Decision section; test/nbsync/probe.ts must pass with notebooks on. |
@@ -1926,12 +1926,13 @@ Every other commit the register cites is on main's history, or on the branch its
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
-| EDT-1 | medium | fixed | Webview subclasses that show files (media preview, custom-editor diffs) were exempt from the ownership rule, so a host file path reached the tab. | 1ad537ee · `test/edtabs/probe.ts` "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary)" |
+| EDT-1 | medium | fixed | Webview subclasses that show files (media preview, custom-editor diffs) were exempt from the ownership rule, so a host file path reached the tab. | patch:51b6187248504a8445988543b599f94779258e01 · `test/edtabs/probe.ts` "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary)" |
 | EDT-2 | low | fixed-untested | A host-created untitled editor counted as the tab's own, so its first line reached the tab as a label. | No runtime case opens a host-created untitled document with content; the rule is 0035's untitled predicate. |
 | EDT-3 | low | fixed-untested | A filesystem provider registered later by the tab could claim host editors already open in its scheme (latent under the RPC filter). | Not reachable at run time today: the RPC filter refuses a tab's provider registration. |
-| EDT-4 | info | fixed | The edtabs probe could pass without the host editors reaching the tab's model. | 1ad537ee · `test/edtabs/probe.ts` "control: the host editors reached the tab" |
+| EDT-4 | info | fixed | The edtabs probe could pass without the host editors reaching the tab's model. | patch:51b6187248504a8445988543b599f94779258e01 · `test/edtabs/probe.ts` "control: the host editors reached the tab" |
 | EDT-5 | low | accepted-residual | Webview panels pass by scheme, so a host-side panel's title and view type reach the tab. | accepted by an agent: Under the RPC filter a tab cannot create webview panels, so every panel in a tab window is the window's own; none carries host data in its title. |
 | EDT-6 | info | accepted-residual | A host-local terminal's title reaches the tab as an editor label. | accepted by an agent: No new exposure: the terminal service already pushes every terminal name to every host (DOCSYNC-R5). |
+| EDT-7 | info | accepted-residual | A desktop web-worker host in a tab window is unfiltered by 0038, which keys on the host's own authority. | accepted by an agent: Tab-installed extensions never run in the desktop local web worker; 0038 is desktop-only. Revisit if the web build is ever in scope. |
 
 ### [20261116-gate-fail-open-remainder](20261116-gate-fail-open-remainder.md)
 
@@ -2080,7 +2081,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | DOCSYNC-R1 | high | fixed | Window-to-tab push: the configuration snapshot still sends every host user setting value to a tab's extension host. | 37d7c0e75179bd22c9a62ae01da4241d559f08cf · `test/configsync/probe.ts` "DOCSYNC-R1 no host user setting value reaches the tab, initially or on change" |
 | DOCSYNC-R2 | medium | fixed | Window-to-tab push: notebook document sync still sends cells of host notebooks to a tab's extension host. | cc51fa7d · `test/nbsync/probe.ts` "DOCSYNC-R2 NB-1 no host notebook cell reaches the tab through the notebook sync" |
 | DOCSYNC-R9 | info | deferred | Notebooks don't work in tabs; enabling them needs per-model notebook provenance, a serializer that reads only the tab's files, and 0035's cell rule for tab-created notebooks. | follow-up: With the RPC follow-ups session's landing D, which needs a validator for MainThreadNotebook (coordinator, 2026-11-16). The plan is in the EDR's Decision section; test/nbsync/probe.ts must pass with notebooks on. |
-| DOCSYNC-R3 | low | open | Window-to-tab push: the editor-tab model still exposes host URIs and labels to a tab's extension host. | No push-side control for the editor-tab model; reported to the coordinator as a 0035 sibling. |
+| DOCSYNC-R3 | low | fixed | Window-to-tab push: the editor-tab model still exposes host URIs and labels to a tab's extension host. | patch:dab3fe81132fb1c9cc2ead24b9d3c6885b93540e · `test/edtabs/probe.ts` "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary)" |
 | DOCSYNC-R4 | low | fixed | Window-to-tab push: ext-host init data still carries host telemetry ids into a tab's extension host. | 98db0a5b4142 · `build/check-release.sh` "product.json with enableTelemetry true" |
 | DOCSYNC-R5 | medium | open | Window-to-tab push: the terminal default profile and environment collections still reach a tab's extension host. | No push-side control for terminal profile and environment collections; reported to the coordinator as a 0035 sibling. |
 | DOCSYNC-R6 | medium | open | Window-to-tab push: workspace data is still pushed to a tab's extension host. | No push-side control for workspace data; reported to the coordinator as a 0035 sibling. |
