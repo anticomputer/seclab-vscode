@@ -72,7 +72,8 @@ jobs:
         run: ./seclab docs check --run-commands --paired
       - name: External links resolve
         # No token: lychee (built from pinned source by ./seclab tool lychee) gets no
-        # credentials. GitHub rate limits are absorbed by the cache and by accepting 429.
+        # credentials. GitHub's 429 and 503 are retried with backoff and paced per host, never
+        # cached; a link still dead after the retries fails (EDR link-check-retries).
         run: ./seclab docs check --online
       - name: Export the lychee cache
         if: always() && github.event_name == 'push'
