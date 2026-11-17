@@ -16612,6 +16612,21 @@
 				"file": "test/containment/harness-hygiene.test.ts",
 				"name": "the reap refuses, keeping the profile, when docker cannot list or removal leaves a container"
 			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-7",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "runLeftovers required a Docker listing only for OCI runs, but sbx tabs own a Docker broker container and egress network, so a failed listing let the reap delete an sbx run's profile and tab state over them.",
+			"component": "test/containment/teardown.ts runLeftovers",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:acc63be12cda5f1a0928670758f0e43a705a2d9e",
+			"test": {
+				"file": "test/containment/harness-hygiene.test.ts",
+				"name": "the reap refuses, keeping the profile, when docker cannot list or removal leaves a container"
+			}
 		}
 	]
 }
