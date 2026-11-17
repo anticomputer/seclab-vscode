@@ -96,9 +96,11 @@ constraint is free text, so the check had no machine-readable handle on whether 
 applies. It also didn't pin `$delete` (deleting the log would stop forwarding: silence, not
 forgery) or other host-file writers such as `$tryApplyWorkspaceEdit` and `$trySaveDocument`,
 and it skipped a method missing from the policy instead of failing. All are denied or
-URI-constrained in the landed policy today. The RPC session's fix (written, not yet
-on main) checks the generated positional URI table for `$writeFile`, pins the others to
-`deny`, and fails on absence (its review record's LT-1 to LT-4).
+URI-constrained in the landed policy today. The RPC session's fix, on main as
+[`96156496`](https://github.com/anticomputer/seclab-vscode/commit/96156496a2783d89d59f8d79135d469f329df924)
+(recorded in [`20261116-log-trust-gate`](../security-reviews/20261116-log-trust-gate.md), LT-1
+to LT-4), checks the generated positional URI table for `$writeFile`, pins the others to
+`deny`, and fails on absence.
 
 **Merge order is enforced in code** (review round 12, HIGH before this fix). Before the
 filter ships, a tab can reach `MainThreadLogger.$log`, and its init data names the logger
