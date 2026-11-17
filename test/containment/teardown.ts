@@ -61,7 +61,8 @@ export interface TeardownCheck { name: string; ok: boolean; detail: string }
 
 const TAB_RE = /^t-[a-z2-7]{26}$/;
 const HELPER_RE = /^seclab-containment-hostsvc-(sbx|oci)-[0-9a-f]{8}$/;
-const SBX = fs.existsSync('/opt/homebrew/bin/sbx') ? '/opt/homebrew/bin/sbx' : 'sbx';
+// SECLAB_SBX: a test's stand-in, so a reap test never reaches the real sbx.
+const SBX = process.env.SECLAB_SBX ?? (fs.existsSync('/opt/homebrew/bin/sbx') ? '/opt/homebrew/bin/sbx' : 'sbx');
 
 const manifestFile = (runDir: string) => path.join(runDir, 'run.json');
 const snapshotFile = (runDir: string) => path.join(runDir, 'host-snapshot.json');
@@ -136,7 +137,7 @@ export function readManifest(runDir: string): RunManifest {
  */
 export function reapPreviousRun(runDir: string): ReapResult {
 	const m = readManifest(runDir);
-	if (!m.userDataDir && !(m.stateDirs ?? []).length && !(m.commandMarks ?? []).length && !(m.tabs ?? []).length) {
+	if (!m.userDataDir && !(m.stateDirs ?? []).length && !(m.commandMarks ?? []).length && !(m.tabs ?? []).length && !(m.containers ?? []).length) {
 		return { stopped: [], refused: false, problems: [], survivors: [] };
 	}
 	// The same rules verify applies, including R-2: a malformed previous manifest must not
@@ -146,13 +147,26 @@ export function reapPreviousRun(runDir: string): ReapResult {
 		return { stopped: [], refused: true, problems, survivors: [] };
 	}
 	const runPids = new Set(runProcesses(runDir, m).map(p => p.pid));
+	const tabs = runTabs(m); // before the profile (and its tabd state) is deleted
 	const stopped = stopRunProcesses(runDir, m);
 	// Its tabs and helper runtimes too, and its profile: that profile holds the armed rogue
 	// extension, so leaving it is the same hazard the teardown gate exists to prevent.
 	try {
-		removeRunResources(runDir, m, runTabs(m), runPids);
+		removeRunResources(runDir, m, tabs, runPids);
 	} catch (err) {
 		problems.push(`could not remove the previous run's runtime resources: ${err instanceof Error ? err.message : String(err)}`);
+	}
+	// Removal ignores command failures, so check what is left. A runtime that remains, or one that
+	// can't be listed, refuses before the profile and its tabd state (the record of the tabs) go.
+	const { left, unknown } = runLeftovers(runDir, m, tabs, runPids);
+	if (left.length) {
+		problems.push(`the previous run's runtime resources remain: ${left.join(', ')}`);
+	}
+	if (unknown.length) {
+		problems.push(`could not list the previous run's runtimes: ${unknown.join(', ')}`);
+	}
+	if (problems.length) {
+		return { stopped, refused: true, problems, survivors: runProcesses(runDir, m) };
 	}
 	if (m.userDataDir && fs.existsSync(m.userDataDir)) {
 		try {

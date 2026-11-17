@@ -5,12 +5,14 @@
  *     (checked in a child process);
  *   - each listed harness calls reapOrRefuse(base, …) before it first removes `base`, and
  *     registers exitOnSignals() (checked on the source, each rule failing on a mutant).
+ *   - reapPreviousRun refuses when a runtime can't be listed or removal left a resource behind,
+ *     and keeps the profile then (checked in a child process with stand-in docker and sbx).
  *
  * Run: node test/containment/harness-hygiene.test.ts   (or ./seclab test harness-hygiene)
  */
 
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -52,7 +54,46 @@ setInterval(() => {}, 1000);`;
 	return { code, ran: fs.existsSync(marker) };
 }
 
+/**
+ * Run reapPreviousRun on a previous OCI run with one tab, against stand-in docker and sbx: `docker`
+ * either fails every call (`unlisted`) or lists the tab's container and ignores `rm` (`stuck`).
+ */
+function reapWith(mode: 'unlisted' | 'stuck' | 'clean'): { refused: boolean; problems: string[]; profileKept: boolean } {
+	const dir = path.join(SCRATCH, `reap-${mode}`);
+	fs.rmSync(dir, { recursive: true, force: true });
+	const bin = path.join(dir, 'bin');
+	const profile = path.join(dir, 'ud');
+	fs.mkdirSync(bin, { recursive: true });
+	fs.mkdirSync(profile, { recursive: true });
+	const tab = 't-' + 'a'.repeat(26);
+	const docker = mode === 'unlisted' ? 'exit 1'
+		: mode === 'stuck' ? `case "$1 $2" in "ps -a"|"ps -aq") echo seclab-${tab};; esac; exit 0`
+			: 'exit 0';
+	fs.writeFileSync(path.join(bin, 'docker'), `#!/bin/sh\n${docker}\n`, { mode: 0o755 });
+	fs.writeFileSync(path.join(bin, 'sbx'), '#!/bin/sh\n[ "$1" = ls ] && echo "[]"\nexit 0\n', { mode: 0o755 });
+	fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify({ startedAt: 'x', driver: 'oci', tabs: [tab], userDataDir: profile }));
+	const script = `import { reapPreviousRun } from ${JSON.stringify(path.join(HERE, 'teardown.ts'))};
+const r = reapPreviousRun(${JSON.stringify(dir)});
+console.log(JSON.stringify({ refused: r.refused, problems: r.problems }));`;
+	const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+		encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, SECLAB_SBX: path.join(bin, 'sbx') },
+	});
+	assert.equal(r.status, 0, r.stderr.slice(0, 300));
+	const out = JSON.parse(r.stdout.trim().split('\n').pop()!);
+	const profileKept = fs.existsSync(profile);
+	fs.rmSync(dir, { recursive: true, force: true });
+	return { ...out, profileKept };
+}
+
 const tests: Array<[string, () => void | Promise<void>]> = [
+	['the reap refuses, keeping the profile, when docker cannot list or removal leaves a container', () => {
+		const unlisted = reapWith('unlisted');
+		assert.ok(unlisted.refused && unlisted.problems.some(p => /could not list.*docker/.test(p)) && unlisted.profileKept, JSON.stringify(unlisted));
+		const stuck = reapWith('stuck');
+		assert.ok(stuck.refused && stuck.problems.some(p => /remain: container seclab-t-a+/.test(p)) && stuck.profileKept, JSON.stringify(stuck));
+		const clean = reapWith('clean');
+		assert.deepEqual(clean, { refused: false, problems: [], profileKept: false });
+	}],
 	['SIGINT and SIGTERM reach the exit handler', async () => {
 		assert.deepEqual(await signalled('SIGINT'), { code: 130, ran: true });
 		assert.deepEqual(await signalled('SIGTERM'), { code: 143, ran: true });
