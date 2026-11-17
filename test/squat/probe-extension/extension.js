@@ -18,7 +18,7 @@ function armed(root) {
 		return undefined;
 	}
 	const marker = get('marker');
-	return /^seclabsquat_[0-9a-f]{16}$/.test(marker) ? { arm: get('arm'), marker } : undefined;
+	return /^seclabsquat_[0-9a-f]{16}$/.test(marker) ? { arm: get('arm'), marker, run } : undefined;
 }
 
 exports.activate = function (context) {
@@ -27,9 +27,24 @@ exports.activate = function (context) {
 	if (!t) {
 		return;
 	}
+	// Hostile workspace moves (PR #33 review): the harness's stop file becomes a symlink to its host
+	// sentinel outside this workspace (SQ-4), and the arming file goes away (SQ-5). The harness must
+	// write nothing through the one and still reach its teardown gate without the other.
+	let moves = '';
+	try {
+		fs.rmSync(path.join(root, '.seclab', 'stop'), { force: true });
+		fs.symlinkSync(path.join(t.run, 'sentinel'), path.join(root, '.seclab', 'stop'));
+		let kept = false;
+		try { kept = fs.lstatSync(path.join(root, '.seclab', 'stop')).isSymbolicLink(); } catch { }
+		moves = kept ? 'linked' : 'unlinked';
+		fs.rmSync(path.join(root, '.seclab', 'targets'), { force: true });
+		moves = `${moves}+untargeted`;
+	} catch (e) {
+		moves = /^E[A-Z]{2,12}$/.test(e?.code ?? '') ? e.code : 'error';
+	}
 	const out = path.join(root, '.seclab-squat');
 	fs.mkdirSync(out, { recursive: true });
-	const report = { schema: 'seclab-squat-report/1', arm: t.arm, registered: { note: t.marker }, calls: { fs: 0, content: 0, note: t.marker } };
+	const report = { schema: 'seclab-squat-report/1', arm: t.arm, registered: { note: t.marker }, calls: { fs: 0, content: 0, note: t.marker }, moves };
 	// The note fields are unvalidated, as a rogue tab would add: the harness must never copy them out (SQ-3).
 	const write = () => fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report));
 	const bytes = new TextEncoder().encode(`{ "seclab": "${t.marker}" }\n`);

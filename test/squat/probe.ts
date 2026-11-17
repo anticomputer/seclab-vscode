@@ -61,7 +61,13 @@ fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
 }, null, '\t'));
 fs.writeFileSync(path.join(userData, 'User', 'keybindings.json'), '[]\n');
 const until = Math.floor(Date.now() / 1000) + 2 * 3600;
-fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${randomBytes(16).toString('hex')}\nrun=${base}\nuntil=${until}\nmarker=${marker}\n`);
+// The harness keeps its own arm and never reads back or writes into the tab's workspace once the
+// tab runs: the tab owns it, symlinks included (PR #33 review, SQ-4/SQ-5).
+const arm = randomBytes(16).toString('hex');
+fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\nuntil=${until}\nmarker=${marker}\n`);
+const sentinel = path.join(base, 'sentinel');
+const sentinelText = `seclabsentinel_${randomBytes(8).toString('hex')}\n`;
+fs.writeFileSync(sentinel, sentinelText);
 
 // Setup failures still end in the teardown gate (PR #24 review, EDT-12): nothing below may skip it.
 let installed = false;
@@ -165,17 +171,27 @@ if (installed) {
 		console.error(`drive: ${String(e).slice(0, 300)}`);
 	}
 }
-fs.writeFileSync(path.join(ws, '.seclab', 'stop'), '');
-let rep: any = read();
-for (let i = 0; i < 30 && tabId() && rep?.done !== true; i++) {
-	spawnSync('sleep', ['1']);
-	rep = read();
-}
+// The report is final once the window has opened everything: the extension counts as it goes.
+const rep: any = read();
 await ed?.close().catch(() => undefined);
-
-const armed = (fs.readFileSync(path.join(ws, '.seclab', 'targets'), 'utf8').match(/^arm=([0-9a-f]{32})$/m) ?? [])[1];
+const lstat = (p: string) => {
+	try {
+		return fs.lstatSync(p);
+	} catch {
+		return undefined;
+	}
+};
+const moves = typeof rep?.moves === 'string' && /^((un)?linked\+untargeted|error|E[A-Z]{2,12})$/.test(rep.moves) ? rep.moves : 'unreported';
+console.log(`tab's workspace moves: ${moves}`);
+const targetsGone = !lstat(path.join(ws, '.seclab', 'targets'));
+let sentinelNow = '';
+try {
+	sentinelNow = fs.readFileSync(sentinel, 'utf8');
+} catch {
+	// reported below
+}
 // Only the validated keys of the tab's report reach host output and evidence (PR #33 review).
-const valid = !!rep && rep.schema === 'seclab-squat-report/1' && rep.arm === armed && !!rep.registered && typeof rep.registered === 'object'
+const valid = !!rep && rep.schema === 'seclab-squat-report/1' && rep.arm === arm && !!rep.registered && typeof rep.registered === 'object'
 	&& ['fs', 'content'].every(k => ['returned', 'threw'].includes(rep.registered[k])) && !!rep.calls && Number.isInteger(rep.calls.fs) && Number.isInteger(rep.calls.content);
 const registered = valid ? { fs: rep.registered.fs as string, content: rep.registered.content as string } : null;
 const calls = valid ? { fs: rep.calls.fs as number, content: rep.calls.content as number } : null;
@@ -198,6 +214,10 @@ expect('DOCSYNC-R7 the RPC filter refused the tab\'s text-content provider for a
 expect('control: the window opened its own log in an output editor', windowLogShown);
 expect('the window never used a tab provider: no provider call, no marker in the window', calls?.fs === 0 && calls.content === 0 && !markerInWindow);
 expect('no focus steal', !steals);
+// On sbx the share doesn't carry the tab's symlink to the host (it is gone on both sides by now),
+// so the sentinel holds there regardless; a share that does carry it needs the SQ-4 fix.
+expect('control (SQ-5): the tab made the stop file a symlink to the host sentinel and deleted its arming file, and the run still got here', moves === 'linked+untargeted' && targetsGone);
+expect('SQ-4 no host write followed a tab symlink (the host sentinel is unchanged)', sentinelNow === sentinelText);
 const evidence = (ok: boolean) => JSON.stringify({ at: new Date().toISOString(), app: appArg, pass: ok, refused: REFS.filter(r => denied.has(r)), markerInWindow, calls, registered, opened, windowLogShown });
 expect('the tab\'s unvalidated report fields reach neither host output nor evidence (SQ-3)', valid && !tabLine.includes(marker) && !evidence(true).includes(marker));
 const gate = verifyTeardown(base);
