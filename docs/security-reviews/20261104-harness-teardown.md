@@ -43,3 +43,24 @@ owned, leased or holding a vault.
 | R-5 | Low | GC across drivers | A tab created under sbx, collected by an OCI supervisor, would be forgotten while its sandbox was orphaned. | Fixed | `TabRecord.driver` is recorded at claim. GC only collects tabs of the loaded driver. Older records without a driver are never collected. | `supervisor.test.ts`: an other-driver tab survives GC |
 
 **No medium-or-higher findings remain.**
+
+## Round 3: Falco sensors (PS-1)
+Three host-side Falco sensors (`seclab-falco-*`, privileged, `/proc` mounted) kept running
+after their runs, the oldest for about four hours, and both teardown and `clean-host` reported
+the host clean. Scope: `test/containment/teardown.ts`, `test/clean-host.ts`, the sensor's
+owner labels in `tabd/src/obs/falco.ts` and `tabd/src/main.ts`, and the regression tests.
+Decision and root cause: [EDR addendum](../edr/20261104-harness-teardown.md#addendum-2026-11-17-falco-sensors-outlive-their-tabd).
+Reviewed by the `security-review` agent (Opus-class) over two passes.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression |
+|---|---|---|---|---|---|---|
+| PS-1 | **Medium** | Leak reported clean | A Falco sensor outlives a SIGKILLed tabd (its `docker run -i --rm` client dies with it). Teardown found a run's sensor only from the manifest's `stateDirs`, never the profile's tabd state; `clean-host` had no Falco rule; the sensors carry no `seclab.run` or `seclab.tab` label. | Fixed | Teardown hashes every state dir of the run; teardown and `clean-host` remove any sensor whose tabd pid is dead or no longer a tabd. | `teardown.test.ts`: a dead-pid orphan and a profile-tagged sensor are removed, a live tabd's survives |
+| PS-2 | **Medium** | Wrong-container kill | The sweep judged "tabd dead" from our own `ps`, but a Docker engine can be shared by other pid namespaces (remote engine, VM or devcontainer on the socket, `hidepid`), whose live sensors would be removed. | Fixed | tabd labels its sensor `seclab.host` and `seclab.boot`; only sensors matching the caller's own are judged. | a foreign-owner dead-pid sensor survives |
+| PS-3 | Low | Leak or kill on partial data | A `ps` that failed partway was read as the full table. | Fixed | The sweep judges nothing unless `ps` exits 0 with output. | a fake `ps` printing one line then failing leaves the sweep unknown |
+| PS-4 | Low | Leak reported clean | A failed `docker ps` listed no sensors, and `clean-host` could say the host was clean. | Fixed | `clean-host` shows a kept "(docker ps failed)" item. | `clean-host` with a failing docker shows it |
+| PS-5 | Low | Wrong-container kill | On Linux the root pid namespace link is the same on every machine, so cloned machines on one engine differed only by boot time. | Fixed | The Linux identity adds the boot id. | `--self-test`: other-host and other-boot sensors are not claimed |
+| PS-6 | Low | Leak reported clean | Sensors the sweep can't judge (older tabd, other namespace, changed macOS hostname) were skipped silently. | Fixed | macOS leaves the hostname out; teardown notes unjudgeable sensors whose pid isn't running, `clean-host` says to check them by hand. | verify notes the foreign sensor without failing |
+| PS-7 | Low | Test residue | The test left its inert fake `docker` script under `.work/`. | Fixed | Removed at the end of the test. | — |
+
+**No medium-or-higher findings remain.**
+
