@@ -14103,6 +14103,18 @@
 			"gap": "Harness structure; no test injects a setup failure."
 		},
 		{
+			"record": "20261116-editor-tab-provenance.md",
+			"round": "Copilot review (PR #24, second pass)",
+			"owner": "docsync",
+			"component": "patch 0038 editor-tab model",
+			"anchor": "EDT-13",
+			"severity": "low",
+			"summary": "Ownership changes rebuilt the whole tab model, so onDidChangeTabs listeners never saw an untitled tab turn from unknown to text.",
+			"status": "fixed-untested",
+			"commit": "patch:93f8922bb5609fa398e186c0b03abe5877a031e9",
+			"gap": "The control fails on the build before the fix and is proven on the next build."
+		},
+		{
 			"record": "20261116-gate-fail-open-remainder.md",
 			"anchor": "FBA-1",
 			"round": "Round FBA",
