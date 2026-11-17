@@ -7,9 +7,12 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
 import {
+	SECLAB_NO_SHAPE_NEEDED,
 	SECLAB_NULL_PROVIDERS,
+	assertShapesMatchRealServices,
 	seclabNullProvider,
 	seclabNullProviderEvent,
+	unshapedProblems,
 	type SeclabNullDeps,
 } from '../../../agentic/patch-src/src/vs/platform/agentHost/common/seclabNullProviders.ts';
 
@@ -17,6 +20,7 @@ import {
 const deps: SeclabNullDeps = {
 	constObservable: (value: unknown) => ({ get: () => value, read: (_reader: unknown) => value }),
 	noEvent: Object.assign(() => ({ dispose() { } }), { __none: true }),
+	noDisposable: { dispose() { } },
 };
 
 const shapeNamed = (name: string) => {
@@ -30,7 +34,7 @@ test('THE POINT: a capability flag reads false, not as a truthy function', () =>
 	// `enabled: boolean` on the Mission Control service. Under a proxy that returns a no-op
 	// function for every property read, `enabled` is a function and so truthy, and the window
 	// would render the provider as enabled precisely because it had been nulled.
-	const inert = seclabNullProvider(shapeNamed('missionControlAvailabilityService'), deps);
+	const inert = seclabNullProvider(shapeNamed('missionControlEnvironmentService'), deps);
 	assert.equal(inert['enabled'], false);
 	assert.equal(typeof inert['enabled'], 'boolean');
 	assert.ok(!inert['enabled']);
@@ -71,7 +75,7 @@ test('the stand-in has no prototype, so nothing is inherited into it', () => {
 });
 
 test('every declared method is an awaitable no-op that resolves to undefined', async () => {
-	const inert = seclabNullProvider(shapeNamed('missionControlAvailabilityService'), deps);
+	const inert = seclabNullProvider(shapeNamed('missionControlEnvironmentService'), deps);
 	for (const m of ['initialize', 'refresh', 'connect', 'disconnect', 'delete', 'setDisplayName']) {
 		assert.equal(typeof inert[m], 'function', m);
 		assert.equal(await (inert[m] as () => Promise<unknown>)(), undefined, m);
@@ -119,4 +123,76 @@ test('the null-provider event names the provider, so a run asserts rather than i
 	assert.equal(e.detail['provider'], 'missionControlSharingService');
 	assert.equal(e.detail['verdict'], 'deny');
 	assert.notEqual(seclabNullProviderEvent('a').summary, seclabNullProviderEvent('b').summary);
+});
+
+test('THE REAL POINT: a shape is checked against the service it claims to stand in for', () => {
+	// Review round 13, alert 1. The shapes were named correctly and filed with the WRONG
+	// interface's members: `missionControlAvailabilityService` carried the environment
+	// service's nine members, while the real interface declares exactly one, `available`.
+	// Its live consumer reads `available.get()`, so the stand-in threw in the trusted
+	// renderer. The unit test and the probe both asserted against the wrong interface, so
+	// neither could fail, and the containment claim was circular.
+	//
+	// The only part of an interface that survives to runtime is the implementation class's
+	// prototype, so that is what a shape's methods are compared against.
+	class RealEnvironment { initialize() { } refresh() { } connect() { } disconnect() { } delete() { } setDisplayName() { } }
+	class RealAvailability { }
+	class RealSharing { setEnvironmentName() { } setEnabled() { } setProjectFolders() { } }
+	const real = new Map<string, unknown>([
+		['missionControlEnvironmentService', RealEnvironment],
+		['missionControlAvailabilityService', RealAvailability],
+		['missionControlSharingService', RealSharing],
+	]);
+	assert.deepEqual(assertShapesMatchRealServices(real), []);
+
+	// ...and the check fails on exactly the defect that shipped: the environment service's
+	// members filed under the availability service's name.
+	const swapped = new Map<string, unknown>([
+		['missionControlEnvironmentService', RealAvailability],
+		['missionControlAvailabilityService', RealEnvironment],
+		['missionControlSharingService', RealSharing],
+	]);
+	const problems = assertShapesMatchRealServices(swapped);
+	assert.ok(problems.length >= 6, `the swap must be caught, got ${problems.length}`);
+	assert.match(problems.join('\n'), /missionControlEnvironmentService\.initialize is not a method/);
+
+	// A shape naming a service nothing registers is also a problem, not a pass.
+	assert.match(assertShapesMatchRealServices(new Map()).join('\n'), /no service is registered under that id/);
+});
+
+test('the availability service stands in with its own single declared member', () => {
+	// `available: IObservable<boolean | undefined>`, and `false` is the contained value,
+	// because upstream treats `available.get() === true` as available.
+	const inert = seclabNullProvider(shapeNamed('missionControlAvailabilityService'), deps);
+	const available = inert['available'] as { get(): unknown };
+	assert.equal(typeof available, 'object');
+	assert.equal(available.get(), false);
+	// It does NOT carry the neighbouring service's members, which is what went wrong.
+	for (const notMine of ['hosts', 'accountKey', 'enabled', 'initialize', 'connect']) {
+		assert.equal(inert[notMine], undefined, notMine);
+	}
+});
+
+test('a guarded name is shaped or recorded, never silently empty', () => {
+	// Review round 13, alert 2. Eleven of thirteen guarded names had no shape and collapsed
+	// to `{ dispose }` with nothing reporting it.
+	const shaped = SECLAB_NULL_PROVIDERS.map(p => p.name);
+	const recorded = Object.keys(SECLAB_NO_SHAPE_NEEDED);
+	assert.deepEqual(unshapedProblems([...shaped, ...recorded]), []);
+	assert.match(unshapedProblems(['somethingNewUpstreamAdded']).join('\n'), /neither a shape nor a recorded reason/);
+	// Every recorded exemption carries a reason; an empty one would be a silent default
+	// wearing a label.
+	for (const [name, why] of Object.entries(SECLAB_NO_SHAPE_NEEDED)) {
+		assert.ok(why.trim().length > 20, `${name} needs a real reason, got "${why}"`);
+	}
+});
+
+test('a disposable-returning member yields a disposable, not a promise', () => {
+	// Review round 13, alert 2. `store.add(service.register(...))` rejects a promise, so an
+	// async no-op would break the window rather than contain it. Fail-closed has to mean the
+	// right shape of nothing.
+	const inert = seclabNullProvider({ name: 'x', members: { register: { kind: 'disposable-method' } } }, deps);
+	const result = (inert['register'] as () => { dispose?: unknown })();
+	assert.equal(typeof (result as { dispose?: unknown }).dispose, 'function');
+	assert.notEqual(typeof (result as { then?: unknown }).then, 'function');
 });

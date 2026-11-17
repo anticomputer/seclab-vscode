@@ -48,6 +48,7 @@ run_arm() { # arm, source tree
 		-v seclab-vscode-work:/shared:ro \
 		-v "$2":/src:ro \
 		-v "$ROOT/test/agentic/ahp":/harness:ro \
+		-v "$ROOT/agentic/patch-src/src/vs/platform/agentHost/common":/patchsrc:ro \
 		-v "$RUN":/run \
 		-e PROBE_MODE="$1" \
 		"$IMG" sh -c "MODE=baseline ENTRY=/harness/agent-registration-probe.ts OUT=/run/bundle-$1.mjs node /harness/bundle.mjs >/dev/null && node /run/bundle-$1.mjs" \

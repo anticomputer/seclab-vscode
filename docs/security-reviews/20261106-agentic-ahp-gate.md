@@ -708,3 +708,69 @@ A second route to a model that does not pass through `IChatService` at all was a
 and found closed by an already-landed patch: an agent host can drive a trusted-side model call
 over a dedicated channel, but that channel is registered only by the client the tab-window
 case does not select.
+
+## Round 13 — patch 0019, no other agent-host providers (increment 4)
+
+Reviewed: patch `0019-seclab-no-other-agent-host-providers.patch`, the stand-in builder and
+shape table in `seclabNullProviders.ts`, the `seclabGuarded` wrapper in the upstream edit, the
+unit tests, the two-arm probe and its runner, and the upstream invariant. The reviewer ran both
+the probe and the unit tests and read the pinned tree. No prompt-injection text was found.
+
+| id | severity | finding |
+|---|---|---|
+| R13-1 | high | The shape named `missionControlAvailabilityService` carried `IMissionControlEnvironmentService`'s members; the availability stand-in had no `available`, and the environment service fell through to an empty stand-in. The unit test and the probe both asserted against the wrong interface, so neither could fail |
+| R13-2 | medium | Eleven of thirteen guarded names had no shape and silently became `{ dispose }`, with nothing reporting the miss; no member kind could produce a correct inert `IDisposable` |
+| R13-3 | medium | The probe never observed the three workbench contributions, which are the actual mechanism that closes R12-2, and its third check was a restatement of its first |
+
+**R13-1 — the evidence was circular (fixed).** This is the failure mode this branch keeps
+producing, and this time it was in the work that was supposed to prove the absence of it. The
+names were right and the members were wrong: the availability service declares exactly one
+member, `available`, and the nine members of the neighbouring environment service had been
+filed under its name. In a tab window the stand-in therefore had no `available`, and the live
+consumer that reads `available.get()` would have thrown in the trusted renderer; the
+environment service, matching no shape, fell through to the empty stand-in, so its `enabled`
+was `undefined` rather than the explicit `false` the design requires.
+
+What makes it a finding about method rather than about typing is that both artefacts meant to
+catch it encoded the same mistake. The unit test titled "THE POINT" asserted `enabled === false`
+on a service whose interface has no `enabled`, and the probe's construction check reported
+`enabledIsFalse: true` for a member that did not exist. A claim proved only by artefacts that
+share its premise is not proved.
+
+Fixed by correcting the table against the declared interfaces, and by adding the check that was
+missing: each shape is now compared with the real implementation class upstream registers under
+that id, through the only part of an interface that survives to runtime, the prototype's
+methods. Reintroducing the defect now fails the probe with six problems naming the real class.
+
+**R13-2 — a silent default wearing no label (fixed).** A guarded name with no shape collapsed to
+`{ dispose }` and nothing said so. Every guarded name must now be either shaped or listed in
+`SECLAB_NO_SHAPE_NEEDED` with a reason; a name on neither is a failure, and the wrapper emits a
+distinct event if it ever happens at runtime. The reviewer also found that no member kind could
+express an inert `IDisposable`, so the obvious repair to a missing shape would have returned a
+promise to a `DisposableStore`; a `disposable-method` kind now exists, with a test that fails
+if it returns something thenable.
+
+**R13-3 — the probe did not watch the mechanism (fixed).** Withholding the contribution that
+registers another connection's agents is what closes R12-2, and the probe only read the service
+registry, inferring containment from a sibling. It now reads the workbench contributions
+registry and constructs the agent-registering contribution for real, asserting it is never built
+in a tab window and is still built in an ordinary one. The baseline arm no longer passes on any
+failure: it must show the providers, the contributions and the forged-agent-id check vulnerable
+by name, so a probe whose scope had narrowed cannot still report a passing control. Writing that
+check immediately exposed a further error of the same family — the contributions are registered
+under their own `ID` constants, not under the names the wrapper uses for shapes, and conflating
+the two had made all three read as `<not registered>`.
+
+**Verified sound by the reviewer**, with the method named: constructor substitution is honoured
+by `Reflect.construct`, and disposal and the delayed-proxy path are correct in both window
+kinds; `_serviceBrand` is type-only and no production code does `instanceof` on the wrapped
+classes; the authority is stamped before any delayed service can be constructed and a tab cannot
+write it; `remoteAgentHostAuthenticationService` is correctly left unwrapped, since it registers
+no agent and holds no credential; seven of the nine original unit tests were non-vacuous.
+
+**Named as unverified:** no ordinary window was booted, so the change from upstream's
+topological dependency walk to re-entrant resolution inside the wrapper's constructor is
+reasoned rather than run. Recorded as the open item for the runtime proof. Also recorded, as a
+residual rather than a finding against 0019: the remote agent-host service itself stays
+unwrapped and reconciles connections from a workspace-writable setting, so containment of the
+dial still rests on 0015, which is where round 12 and the reh-push harness left it.

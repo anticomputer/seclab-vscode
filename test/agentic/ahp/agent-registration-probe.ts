@@ -24,6 +24,12 @@
 // service. A probe that could not report `vulnerable` would not be evidence of anything.
 
 import { getSingletonServiceDescriptors } from 'vs/platform/instantiation/common/extensions.js';
+// From patch-src, not from the upstream tree: in the BASELINE arm that module does not exist,
+// because the patch has not been applied. `sync-patch --check` (run by the unit suite) keeps
+// patch-src and the shipped patch byte-identical, so this is the same code that ships.
+import { assertShapesMatchRealServices, unshapedProblems } from '/patchsrc/seclabNullProviders.ts';
+import { Registry } from 'vs/platform/registry/common/platform.js';
+import { Extensions as WorkbenchExtensions } from 'vs/workbench/common/contributions.js';
 import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation.js';
 import { IWorkbenchEnvironmentService } from 'vs/workbench/services/environment/common/environmentService.js';
 
@@ -38,14 +44,37 @@ const MODE = process.env.PROBE_MODE === 'gated' ? 'gated' : 'baseline';
 const COVERED = [
 	'cloudSandboxTelemetryService', 'cloudSandboxApiService', 'cloudSandboxDraftPreparationService',
 	'cloudSandboxModelCatalogService', 'cloudSandboxAgentHostService', 'missionControlEnvironmentService',
-	'missionControlSharingService', 'missionControlAvailabilityService',
+	'missionControlSharingService', 'missionControlEnvironmentService',
 	'remoteAgentHostConnectionCustomizationService', 'agentHostAdvertisedAuthenticationResolver',
 ];
 
 const GUARD = 'SeclabGuardedProvider';
 
+/**
+ * The three workbench contributions patch 0019 withholds. These are the actual mechanism that
+ * closes R12-2: `RemoteAgentHostContribution._registerAgent` is the only site in the tree that
+ * registers a chat agent for a connection other than this window's own. Until review round 13
+ * this probe never looked at them at all, and inferred containment from a sibling service's
+ * registration instead.
+ */
+const CONTRIBUTIONS = [
+	'workbench.contrib.remoteAgentHostContribution',
+	'workbench.contrib.editorCloudSandbox',
+	'workbench.contrib.missionControl',
+];
+/**
+ * The names the registration wrapper looks shapes up by, which are NOT the registry ids above:
+ * a contribution is registered under its own `ID` constant. Both are needed, and conflating
+ * them is what made the first version of this check report "<not registered>" for all three.
+ */
+const CONTRIBUTION_SHAPE_NAMES = ['remoteAgentHostContribution', 'editorCloudSandboxContribution', 'missionControlContribution'];
+
+/** The one that registers another connection's agents. */
+const AGENT_REGISTERING = 'workbench.contrib.remoteAgentHostContribution';
+
 interface Finding { readonly check: string; readonly verdict: 'vulnerable' | 'contained'; readonly detail: unknown }
 const findings: Finding[] = [];
+const shapeProblems: string[] = [];
 const add = (check: string, verdict: Finding['verdict'], detail: unknown) => findings.push({ check, verdict, detail });
 
 // ---------------------------------------------------------------------------------------
@@ -91,7 +120,7 @@ function constructAs(authority: string | undefined, ctor: unknown): { built: boo
 
 const sample = (() => {
 	for (const [id, descriptor] of getSingletonServiceDescriptors()) {
-		if ((id as { toString(): string }).toString() === 'missionControlAvailabilityService') {
+		if ((id as { toString(): string }).toString() === 'missionControlEnvironmentService') {
 			return (descriptor as { ctor?: unknown }).ctor;
 		}
 	}
@@ -100,11 +129,11 @@ const sample = (() => {
 
 if (!sample) {
 	add('provider-construction', 'vulnerable', { reason: 'the sampled provider is not registered at all' });
-} else if (registered.get('missionControlAvailabilityService') !== GUARD) {
+} else if (registered.get('missionControlEnvironmentService') !== GUARD) {
 	// Baseline: there is no guard, so a tab window gets the real provider. Constructing the
 	// real one here would reach its own dependency graph, which is not what is under test;
 	// that it is registered unguarded is already the finding.
-	add('provider-construction', 'vulnerable', { ctor: registered.get('missionControlAvailabilityService') });
+	add('provider-construction', 'vulnerable', { ctor: registered.get('missionControlEnvironmentService') });
 } else {
 	const tab = constructAs('seclab+t-probe', sample);
 	const ordinary = constructAs(undefined, sample);
@@ -120,22 +149,89 @@ if (!sample) {
 }
 
 // ---------------------------------------------------------------------------------------
-// 3. The claim this probe is really about, stated as its own check so a run cannot read
-//    containment into the other two passing for unrelated reasons.
+// 3. The three workbench contributions, read from the real contributions registry. This is
+//    the mechanism that actually closes R12-2, and until review round 13 the probe did not
+//    look at it: it inferred containment from a sibling service's registration instead.
 // ---------------------------------------------------------------------------------------
-const remoteAgentsReachable = registered.get('cloudSandboxAgentHostService') !== GUARD;
-add('forged-agent-id', remoteAgentsReachable ? 'vulnerable' : 'contained', {
-	note: remoteAgentsReachable
-		? 'a provider for an agent host that is not this window own is live, so an agent id forged by a tab can select an agent belonging to another connection'
-		: 'no provider for any other agent host is constructible in a tab window, so there is no other connection agent for a forged id to name',
-});
+const contributionCtors = new Map<string, string>();
+{
+	const reg = Registry.as(WorkbenchExtensions.Workbench) as unknown as { contributionsById?: Map<string, { ctor?: { name?: string } }> };
+	const byId = reg.contributionsById;
+	if (!(byId instanceof Map)) {
+		// Upstream changed how contributions are stored. Fail in both modes rather than check
+		// nothing and report containment.
+		add('contributions-readable', 'vulnerable', { reason: 'the workbench contributions registry could not be read' });
+	} else {
+		for (const id of CONTRIBUTIONS) {
+			contributionCtors.set(id, byId.get(id)?.ctor?.name ?? '<not registered>');
+		}
+		const unguarded = CONTRIBUTIONS.filter(id => contributionCtors.get(id) !== GUARD);
+		add('contributions-guarded', unguarded.length ? 'vulnerable' : 'contained',
+			{ ctors: Object.fromEntries(contributionCtors), unguarded });
+	}
+}
+
+// The agent-registering contribution, constructed for real in a tab window. If the real class
+// is never built, `_registerAgent` never runs, and there is no other connection's agent for a
+// forged id to name. This is an observation, not a restatement of check 1.
+const remoteCtor = (() => {
+	const reg = Registry.as(WorkbenchExtensions.Workbench) as unknown as { contributionsById?: Map<string, { ctor?: unknown }> };
+	return reg.contributionsById instanceof Map ? reg.contributionsById.get(AGENT_REGISTERING)?.ctor : undefined;
+})();
+
+if (!remoteCtor) {
+	add('forged-agent-id', 'vulnerable', { reason: 'the agent-registering contribution is not registered under the expected id' });
+} else if (contributionCtors.get(AGENT_REGISTERING) !== GUARD) {
+	add('forged-agent-id', 'vulnerable', {
+		ctor: contributionCtors.get(AGENT_REGISTERING),
+		note: 'the contribution that registers another connection agents is live in a tab window, so an agent id forged by a tab can select one of them',
+	});
+} else {
+	const tab = constructAs('seclab+t-probe', remoteCtor);
+	const ordinary = constructAs(undefined, remoteCtor);
+	add('forged-agent-id', !tab.built && ordinary.built ? 'contained' : 'vulnerable', {
+		builtRealInTab: tab.built,
+		ordinaryUnaffected: ordinary.built,
+		note: 'CONTAINED: the agent-registering contribution is never constructed in a tab window, so a forged agent id has no other connection agent to name',
+	});
+}
+
+// ---------------------------------------------------------------------------------------
+// 4. Baseline only: every shape is checked against the REAL class upstream registers under
+//    that id. Review round 13 found shapes filed under the wrong service name, which no test
+//    that named the shapes itself could catch.
+// ---------------------------------------------------------------------------------------
+if (MODE === 'baseline') {
+	const realCtors = new Map<string, unknown>();
+	for (const [id, descriptor] of getSingletonServiceDescriptors()) {
+		realCtors.set(String(id), (descriptor as { ctor?: unknown }).ctor);
+	}
+	const problems = assertShapesMatchRealServices(realCtors);
+	const unshaped = unshapedProblems([...COVERED, ...CONTRIBUTION_SHAPE_NAMES]);
+	if (problems.length || unshaped.length) {
+		shapeProblems.push(...problems, ...unshaped);
+	}
+}
 
 const vulnerable = findings.filter(f => f.verdict === 'vulnerable');
-const expected = MODE === 'baseline' ? 'vulnerable' : 'contained';
+// The baseline is the control, and it must be vulnerable for the RIGHT reasons: the providers
+// and the contributions are live. Accepting any failure would let a probe whose own scope had
+// narrowed (an upstream rename, an unreadable registry) still report a passing control.
+const BASELINE_MUST_SHOW = ['providers-guarded', 'contributions-guarded', 'forged-agent-id'];
+const baselineOk = BASELINE_MUST_SHOW.every(c => findings.some(f => f.check === c && f.verdict === 'vulnerable'));
 const actual = vulnerable.length ? 'vulnerable' : 'contained';
-console.log(JSON.stringify({ mode: MODE, actual, expected, findings }, undefined, '\t'));
+const expected = MODE === 'baseline' ? 'vulnerable' : 'contained';
+const ok = MODE === 'baseline' ? baselineOk : actual === 'contained';
 
-if (actual !== expected) {
-	console.error(`agent-registration probe: ${MODE} should be ${expected}, got ${actual}`);
+console.log(JSON.stringify({ mode: MODE, actual, expected, shapeProblems, findings }, undefined, '\t'));
+
+if (shapeProblems.length) {
+	console.error(`agent-registration probe: ${shapeProblems.length} shape problem(s):\n  ${shapeProblems.join('\n  ')}`);
+	process.exit(1);
+}
+if (!ok) {
+	console.error(MODE === 'baseline'
+		? `agent-registration probe: the baseline control must show ${BASELINE_MUST_SHOW.join(', ')} vulnerable; it showed ${vulnerable.map(f => f.check).join(', ') || 'nothing'}`
+		: `agent-registration probe: gated should be contained, got ${actual}`);
 	process.exit(1);
 }
