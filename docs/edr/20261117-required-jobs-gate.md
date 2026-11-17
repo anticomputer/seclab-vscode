@@ -63,8 +63,10 @@ repository's token while handling PR-controlled events, and are almost always us
   a vacuous success. No gate that reads job outcomes can tell those apart. Only review (Copilot's,
   with every thread resolved, and the owner's) or a check that refuses changes to the CI code itself
   can (RJG-1, an owner decision recorded separately).
-- **Residual: a forged status.** A PR that skips or guts `lint` and adds a workflow requesting
-  `statuses: write` could post `required-jobs-ran` itself, after the gate's last post. Both come
+- **Residual: a forged status.** A PR that skips or guts `lint` escapes the validator, so its
+  workflows can request any write scope the validator would refuse. With `statuses: write` it can
+  post `required-jobs-ran` itself, after the gate's last post. With `actions: write` it can cancel
+  the gate's runs first, so it doesn't even need to win the race (review RJG-7). Both come
   from the Actions token, so GitHub can't tell them apart. The repository's read-only default
   doesn't stop this, because a same-repository workflow can request the scope explicitly; it
   stops forks only. Closing it needs a status source a workflow can't impersonate, such as a
@@ -72,6 +74,10 @@ repository's token while handling PR-controlled events, and are almost always us
 - **`landing verify` after the merge** checks the job outcomes from main's code as it was before
   the merge, and refuses when run from a checkout that already contains the commit (RJG-5). Its
   read of the `required-jobs-ran` status is advisory, since merged code could post that context.
+- The gate's file is pinned byte for byte (`GATE_SHA256` in the validator), so a change to it is a
+  deliberate, reviewed change to both (review RJG-8).
+- Every run counts: a manually cancelled run of a required workflow keeps that commit at
+  `failure` until it's re-run, even if another run of the same file passed.
 - A required workflow renamed on main must be renamed in the gate in the same change; the
   validator fails until it is.
 
