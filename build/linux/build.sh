@@ -78,7 +78,7 @@ if [[ -d "$KEEP" ]]; then
 	nm_restore "$SRC" "$KEEP"
 fi
 . /repo/build/linux/install-stamp.sh
-stamp="$(install_stamp "$stamp_kind" "$SRC")"
+stamp="$(install_stamp "$stamp_kind" "$SRC")" || { echo "build: no install stamp" >&2; exit 1; }
 if [[ ! -f node_modules/.seclab-stamp ]] || [[ "$(cat node_modules/.seclab-stamp)" != "$stamp" ]]; then
 	nm_keep_aside "$SRC" "$KEEP"
 	# Pinned prebuilt ripgrep in the postinstall's cache (a fresh private TMPDIR): no GitHub API

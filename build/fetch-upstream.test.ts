@@ -107,3 +107,54 @@ test('install stamp: changes with any lockfile (extensions included) and with th
 		fs.rmSync(scratch, { recursive: true, force: true });
 	}
 });
+
+test('fetch-upstream: excludes and config on the volume or in user config hide nothing (FU-10)', () => {
+	try {
+		const { dest, fetch } = setup();
+		fetch('v2');
+		put(dest, 'src/vs/planted.ts', 'x');
+		put(dest, '.git/info/exclude', 'src/vs/planted.ts\n');
+		git(dest, 'config', 'status.showUntrackedFiles', 'no');
+		put(scratch, '.gitconfig', `[core]\n\texcludesFile = ${path.join(scratch, 'ignore')}\n\tsparseCheckout = true\n`);
+		put(scratch, 'ignore', 'src/vs/planted2.ts\n');
+		put(dest, 'src/vs/planted2.ts', 'y');
+		fetch('v2');
+		assert.ok(!fs.existsSync(path.join(dest, 'src/vs/planted.ts')), 'a file hidden by info/exclude is removed');
+		assert.ok(!fs.existsSync(path.join(dest, 'src/vs/planted2.ts')), 'a file hidden by a global excludesFile is removed');
+		assert.equal(fs.readFileSync(path.join(dest, 'src/vs/a.ts'), 'utf8'), 'a2\n');
+	} finally {
+		fs.rmSync(scratch, { recursive: true, force: true });
+	}
+});
+
+test('fetch-upstream: a .git that is a file (another repository) is refused (FU-9)', () => {
+	try {
+		const { dest, fetch } = setup();
+		fetch('v2');
+		const elsewhere = path.join(scratch, 'elsewhere.git');
+		fs.renameSync(path.join(dest, '.git'), elsewhere);
+		fs.writeFileSync(path.join(dest, '.git'), `gitdir: ${elsewhere}\n`);
+		assert.throws(() => fetch('v2'), /not a directory/);
+		fs.rmSync(path.join(dest, '.git'));
+		fs.symlinkSync(elsewhere, path.join(dest, '.git'));
+		assert.throws(() => fetch('v2'), /not a directory/);
+	} finally {
+		fs.rmSync(scratch, { recursive: true, force: true });
+	}
+});
+
+test('install stamp: a symlinked lockfile is refused; a lockfile under an odd path still counts (FU-11)', () => {
+	try {
+		const { dest, fetch } = setup();
+		const stamp = () => execFileSync('bash', ['-euo', 'pipefail', '-c', `. "${path.join(repo, 'build', 'linux', 'install-stamp.sh')}"; install_stamp cfs1 "$1"`, 'x', dest], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+		fetch('v1');
+		put(dest, 'extensions/odd\nname/package-lock.json', '{"o":1}\n');
+		const s1 = stamp();
+		put(dest, 'extensions/odd\nname/package-lock.json', '{"o":2}\n');
+		assert.notEqual(stamp(), s1, 'a lockfile under a path with a newline is an input');
+		fs.symlinkSync(path.join(dest, 'package-lock.json'), path.join(dest, 'extensions', 'package-lock.json'));
+		assert.throws(stamp, /symlinked/);
+	} finally {
+		fs.rmSync(scratch, { recursive: true, force: true });
+	}
+});
