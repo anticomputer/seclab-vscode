@@ -15,13 +15,13 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 82 | 187 | 196 | 22 | 501 |
-| fixed-untested | 0 | 5 | 56 | 163 | 58 | 282 |
+| fixed | 14 | 82 | 189 | 200 | 22 | 507 |
+| fixed-untested | 0 | 5 | 56 | 164 | 58 | 283 |
 | accepted-residual | 0 | 1 | 12 | 68 | 20 | 101 |
 | deferred | 2 | 2 | 14 | 9 | 2 | 29 |
 | open | 0 | 2 | 14 | 14 | 6 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 6 | 6 |
-| **all** | 16 | 92 | 283 | 450 | 114 | 955 |
+| **all** | 16 | 92 | 285 | 455 | 114 | 962 |
 
 ## Baseline: open high and critical findings
 
@@ -518,6 +518,7 @@ tabd/src/obs: the event stream, sbx collector, OCI Falco sensor, Tab Activity vi
 | Finding | Sev | Status | Component | Summary | Gap or disposition |
 |---|---|---|---|---|---|
 | [20261104-fixture-safety](20261104-fixture-safety.md) **UU-6** | low | fixed-untested | sbx obs collector | sbx's clipboard bridge could reappear after the collector's start-time kill, re-exposing the host clipboard to the tab. | \`stop_clipboard_bridge\` fails closed and a watchdog re-kills reappearances (sandbox/rootfs/opt/seclab/bin/seclab-obs-collect); the containment LL-1 check only covers the start-time stop, nothing restarts the bridge mid-run. |
+| [20261104-harness-teardown](20261104-harness-teardown.md) **PS-7** | low | fixed-untested | teardown / clean-host | The teardown test left its inert fake docker script under .work/. | Test hygiene inside the test itself; a test of the test's own cleanup adds nothing. |
 | [20261104-tab-observability](20261104-tab-observability.md) **AR-1** | low | accepted-residual | obs integrity model | tab-vm-root events, including collector heartbeats, are forgeable by root inside the tab VM and are evidence, never proof. | accepted by an agent: Integrity is fixed by source, tab-vm-root is labelled as such everywhere, and no decision is based on it alone. |
 | [20261104-tab-observability](20261104-tab-observability.md) **AR-2** | low | accepted-residual | obs OCI Falco sensor | Under OCI the privileged Falco sees every container on the Docker host; only rules for the exact tab container ids are loaded. | accepted by an agent: Only rules for the exact tab container ids are loaded and its only output is stdout to tabd. |
 | [20261104-tab-observability](20261104-tab-observability.md) **BA-L2** | low | fixed-untested | obs hub | Beacon detections derived from broker timing bypassed the hub's rate buckets. | hub.brokerTiming now takes from a '#broker-beacon' finding bucket, but no test floods broker timings to assert the limit. |
@@ -754,6 +755,13 @@ Every other commit the register cites is on main's history, or on the branch its
 | R-3 | low | fixed | The lexical \`startsWith\` profile check could be bypassed through a symlink inside ~/.seclab-test. | b3f191c · `test/containment/teardown.test.ts` "a profile reached through a symlink out of the test roots is refused (R-3)" |
 | R-4 | low | accepted-residual | The snapshot's HMAC key is stored next to the hashed names it protects. | accepted by an agent: The file is local and mode 0600; the key exists only to defeat precomputed dictionaries over file names, not to keep a secret from a local reader. |
 | R-5 | low | fixed | A tab created under one driver could be GC'd by a supervisor on another, forgetting the record while the sandbox stayed orphaned. | e0a83dc · `tabd/test/supervisor.test.ts` "supervisor: GC removes only stopped tabs unused past the cutoff; never in-use or vault-holding tabs" |
+| PS-1 | medium | fixed | A Falco sensor outlived its SIGKILLed tabd for hours; teardown never hashed the profile's tabd state dir and clean-host had no Falco rule, so both reported clean. | patch:af7a8e785b93473d6606c8798a7a6021c233f3e7 · `test/containment/teardown.test.ts` "PS-1: verify removes the dead-pid orphan" |
+| PS-2 | medium | fixed | The orphan sweep judged a tabd dead from our own ps, so a live sensor from another pid namespace sharing the Docker engine could be removed. | patch:af7a8e785b93473d6606c8798a7a6021c233f3e7 · `test/containment/teardown.test.ts` "PS-2: a sensor owned by another pid namespace survives" |
+| PS-3 | low | fixed | A ps that failed partway was read as the full process table by the orphan sweep. | patch:af7a8e785b93473d6606c8798a7a6021c233f3e7 · `test/containment/teardown.test.ts` "PS-3: a failed ps leaves the sweep unknown" |
+| PS-4 | low | fixed | A failed docker listing made clean-host list no Falco sensors and possibly report the host clean. | patch:af7a8e785b93473d6606c8798a7a6021c233f3e7 · `test/containment/teardown.test.ts` "PS-4: clean-host reports a failed Falco listing" |
+| PS-5 | low | fixed | On Linux the root pid namespace link is identical across machines, so cloned machines on one engine differed only by boot time. | patch:af7a8e785b93473d6606c8798a7a6021c233f3e7 · `test/clean-host.ts` "falco orphan cases OK" |
+| PS-6 | low | fixed | Sensors the sweep cannot judge (older tabd, other namespace, changed macOS hostname) were skipped silently. | patch:af7a8e785b93473d6606c8798a7a6021c233f3e7 · `test/containment/teardown.test.ts` "PS-6: verify notes the foreign sensor it could not judge" |
+| PS-7 | low | fixed-untested | The teardown test left its inert fake docker script under .work/. | Test hygiene inside the test itself; a test of the test's own cleanup adds nothing. |
 
 ### [20261104-m0-tabd-code](20261104-m0-tabd-code.md)
 

@@ -118,3 +118,57 @@ The coordinator asked for `make clean-host`. The repo has no Makefile, and
 - The process match relies on unique paths appearing in command lines. Electron
   helpers and tabd's `sbx exec` streams may not carry the path, and they are
   covered as descendants.
+
+## Addendum (2026-11-17): Falco sensors outlive their tabd
+Three `seclab-falco-*` containers kept running on the development host after their runs ended,
+the oldest for about four hours. They were found by hand ([review round 3](../security-reviews/20261104-harness-teardown.md#round-3-falco-sensors-ps-1)).
+
+**Why they survived.** tabd runs Falco as `docker run -i --rm`, named
+`seclab-falco-<sha256(state dir)[0:8]>-<tabd pid>` and labelled `seclab.obs=falco`,
+`seclab.state`, `seclab.pid`. There is no `seclab.run` or `seclab.tab` label, so nothing that
+claims resources by run or by tab ever matched them. When tabd is SIGKILLed (teardown's
+escalation, or a crash), its docker client dies with it and the container keeps running with
+no reader. Then:
+- teardown found a run's sensor only by hashing the manifest's `stateDirs`. The editor-driven
+  harnesses record a `userDataDir` instead, and the Tab Manager's tabd keeps its state under
+  the profile (`User/globalStorage/seclab.tab-manager/tabd`). `runTabs()` already read that
+  dir, but the Falco lookup didn't;
+- `clean-host` had no Falco rule at all: the names don't match its tab patterns;
+- tabd's own `cleanupStale` sweeps only at the next Falco start in the same state dir, and a
+  test profile is deleted before that can happen.
+
+**Decision.**
+- Teardown hashes every state dir of the run, the profile's included, so a run's own sensor
+  is a leftover that fails the run until removed.
+- Teardown and `clean-host` both remove any `seclab.obs=falco` container whose tabd is gone:
+  the pid in its name and `seclab.pid` label is dead, or now runs something other than a tabd
+  command line (`tabd/src/main.ts`, `dist/tabd.js`). `clean-host` also removes the sensor of a
+  stray test tabd it kills in the same pass, running or not, because an orphan has no reader.
+- This is the one host-wide sweep in teardown, an exception to "scope is per run". An
+  orphaned sensor has no owner left by construction, and the rule claims only sensors whose
+  owner is provably gone: a live tabd's sensor, a label that disagrees with the name, and any
+  other name are never touched. If docker or the process table can't be listed in full,
+  nothing is removed, and `clean-host` says so rather than reporting the host clean.
+- **A pid is only judged by its own namespace.** One Docker engine can serve several pid
+  namespaces (a remote engine, a VM or devcontainer on the same socket, other users under
+  `hidepid`), and a pid missing from our `ps` says nothing about theirs. tabd labels its
+  sensor `seclab.host` (a hash of the pid namespace, the uid and, on Linux, the hostname and
+  boot id; the root namespace's link is the same on every Linux machine) and `seclab.boot`
+  (boot time), and the sweep only judges sensors whose labels match its own, boot within
+  10 s. macOS leaves the hostname out because it follows the network. Sensors from an older
+  tabd without the labels, or from another namespace, are never claimed: teardown notes any
+  whose pid isn't running here without failing, and `clean-host` lists them to check by hand.
+  A clock step larger than the slack keeps a sensor rather than removing it.
+- The live check is the pid, not the state-dir hash, because the real editor's state dir
+  contains a space and `ps` doesn't preserve argv boundaries. A pid reused by another tabd
+  keeps an orphan alive until that tabd exits; that errs on the side of keeping.
+
+**Proof.** `teardown.test.ts` plants inert `sleep` containers with Falco's name and labels:
+one whose pid is dead, one tagged with the run profile's tabd state, one owned by a live fake
+tabd, and one whose pid is dead but whose owner labels name another namespace. Against main's
+teardown the first two survived while verify reported clean; with the fix both are removed,
+the live and the foreign ones survive, and verify passes. A `ps` that prints part of the table
+and fails leaves the sweep unknown, and `clean-host` with a failing docker shows the failure.
+`clean-host` on main didn't list the leftovers; with the fix the dry run lists both with the
+reason. `clean-host --self-test` pins the classifier (dead pid, reused pid, live tabd, label
+mismatch, unlabelled, other namespace, other boot, foreign names).
