@@ -85,6 +85,10 @@ model appears after its diff tab opened), the model is rebuilt and resent.
   (its folder carries a second canary) and creates an untitled document there. On main the media
   preview reaches the tab as a custom-editor input with its host path; on the patched build it is
   anonymous. The untitled control fails on `a5239620`, which predates the EDT-10 fix.
+- Final proof, 2026-11-17, with every case above: this branch at `bb91e728` (build run
+  44176135490) passes 4 of 4 runs (no canary in any label or URI; the media preview and the
+  host editors anonymous; the user's untitled document a text tab of the tab's own); main
+  `6589051b` fails `DOCSYNC-R3 …` and `EDT-1 …`. No focus steal; the teardown gate passed every run.
 - Typecheck: the patched file adds no error against the pinned tree.
 - Review: [20261116-editor-tab-provenance](../security-reviews/20261116-editor-tab-provenance.md),
   three rounds; no high or critical finding.
