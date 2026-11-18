@@ -1592,7 +1592,7 @@ landing_self_test() {
 	# Each scenario holds what it claims, in the commit itself (Copilot review on PR 63).
 	local o g
 	for g in "$gutted:build/check-required-checks.ts" "$pins:build/check-pins.ts" "$obs_exit:tabd/src/obs/detect.ts"; do
-		[[ "$(git -C "$ROOT" show "$g" | head -n1)" == 'process.exit(0);' ]] || { echo "landing self-test: scenario ${g%%:*} doesn't carry its gutted ${g#*:}" >&2; exit 1; }
+		[[ "$(git -C "$ROOT" show "$g")" == 'process.exit(0);'$'\n'* ]] || { echo "landing self-test: scenario ${g%%:*} doesn't carry its gutted ${g#*:}" >&2; exit 1; }
 	done
 	for o in "$obs_regen" "$obs_stale" "$obs_exit"; do
 		if landing_revalidate "$old" "$o" obs-docs; then echo "landing self-test: a merge changing a module the validator executes passed (Copilot review on PR 63)" >&2; exit 1; fi
