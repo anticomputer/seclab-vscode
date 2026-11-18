@@ -49,6 +49,8 @@ const FILES = {
 	management: 'services/extensionManagement/common/extensionManagementService.ts',
 	enablement: 'services/extensionManagement/browser/extensionEnablementService.ts',
 	migration: 'contrib/extensions/browser/unsupportedExtensionsMigrationContribution.ts',
+	localization: 'contrib/localization/electron-browser/localization.contribution.ts',
+	gallery: 'services/extensionManagement/electron-browser/extensionGalleryManifestService.ts',
 } as const;
 type Key = keyof typeof FILES;
 
@@ -142,6 +144,7 @@ function build(patched: boolean, patch = PATCH, filter = FILTER): Build {
 		areSameExtensions: (a: { id: string }, b: { id: string }) => a.id === b.id,
 		nls: { localize: (_k: string, m: string) => m },
 		localize: (_k: string, m: string) => m,
+		IWorkbenchEnvironmentService: {},
 	};
 	return { sources, refusals, deps };
 }
@@ -402,8 +405,9 @@ async function languagePackFanOut(b: Build, authority: string): Promise<{ update
 
 /** Every command a window can send the host's extension management that changes it. */
 const HOST_CHANGES = ['install', 'installFromLocation', 'installExtensionsFromProfile', 'installFromGallery', 'installGalleryExtensions', 'uninstall', 'uninstallExtensions',
-	'toggleApplicationScope', 'copyExtensions', 'updateMetadata', 'resetPinnedStateForAllUserExtensions', 'download', 'cleanUp'];
-const HOST_READS = ['getInstalled', 'getManifest', 'getTargetPlatform', 'getExtensionsControlManifest', 'zip'];
+	'toggleApplicationScope', 'copyExtensions', 'updateMetadata', 'resetPinnedStateForAllUserExtensions', 'cleanUp'];
+// `download` fills the host's download cache to install in the tab (review ENV-35).
+const HOST_READS = ['getInstalled', 'getManifest', 'getTargetPlatform', 'getExtensionsControlManifest', 'zip', 'download'];
 
 /** The commands that reach the host's extension management from a window on `authority`. */
 async function hostManagement(b: Build, authority: string): Promise<string[]> {
@@ -441,6 +445,71 @@ async function enablement(b: Build, authority: string): Promise<string[]> {
 		_onEnablementChanged: { fire: () => { } },
 	}, [own], 1);
 	return changed;
+}
+
+/**
+ * The host's global enablement in a window on `authority`: whether a click enables or disables a
+ * host extension's id there, and whether an install event from the tab reaches its reset.
+ */
+async function globalEnablement(b: Build, authority: string): Promise<{ written: string[]; events: boolean }> {
+	const written: string[] = [];
+	const cls = b.sources.enablement.indexOf('export class SeclabGlobalExtensionEnablementService');
+	if (cls < 0) {
+		// Upstream's: every write lands, and the extension management's events reach it.
+		return { written: ['enable', 'disable'], events: true };
+	}
+	const src = b.sources.enablement.slice(cls);
+	const NONE = () => ({ dispose() { } });
+	const ctor = slice(src, /\n\tconstructor\(/)!.replace(/^constructor/, 'function make').replace(/@I\w+ /g, '').replace('super(', 'this.superArgs = (');
+	const self: Record<string, unknown> = {
+		superEnable: async () => { written.push('enable'); return true; },
+		superDisable: async () => { written.push('disable'); return true; },
+	};
+	const deps = { ...b.deps, Event: { None: NONE } };
+	evaluate<(...a: unknown[]) => void>(ctor, 'make', deps).call(self, {}, { onDidInstallExtensions: () => NONE() }, { remoteAuthority: authority });
+	self.seclabRefused = evaluate(asFunction(slice(src, /\n\tprivate seclabRefused\(/)!), 'seclabRefused', deps);
+	for (const [name, sup] of [['enableExtension', 'superEnable'], ['disableExtension', 'superDisable']]) {
+		const m = asFunction(slice(src, new RegExp(`\\n\\toverride async ${name}\\(`))!.replace(/^(async )?function override /, '$1function ')).replace(`super.${name}(`, `this.${sup}(`);
+		await evaluate<(...a: unknown[]) => Promise<unknown>>(m, name, deps).call(self, { id: 'host.ext' });
+	}
+	const ems = (self.superArgs as unknown as unknown[] | undefined);
+	return { written, events: (self.superArgs as { onDidInstallExtensions?: unknown } | undefined)?.onDidInstallExtensions !== NONE && ems !== undefined };
+}
+
+/** Whether the localization contribution listens to install and uninstall events in a window on `authority`. */
+function localization(b: Build, authority: string): boolean {
+	let listens = false;
+	const ctor = slice(b.sources.localization, /\n\tconstructor\(/)!.replace(/^constructor/, 'function make').replace(/@I\w+ /g, '').replace(/(?:private|protected|public) readonly /g, '').replace('super();', '');
+	evaluate<(...a: unknown[]) => void>(ctor, 'make', b.deps).call({
+		checkAndInstall: () => { }, _register: (d: unknown) => d,
+		extensionManagementService: { onDidInstallExtensions: () => { listens = true; }, onDidUninstallExtension: () => { listens = true; } },
+	}, {}, {}, {}, {}, { onDidInstallExtensions: () => { listens = true; }, onDidUninstallExtension: () => { listens = true; } }, {}, {}, {}, { remoteAuthority: authority });
+	return listens;
+}
+
+/** The marketplace access token each channel gets, in a window whose server is `authority`. */
+function galleryTokens(b: Build, authority: string): Record<string, unknown> {
+	const src = b.sources.gallery;
+	const start = src.indexOf('const channels');
+	const code = src.slice(start, src.indexOf('this.getExtensionGalleryManifest().then', start));
+	const sent: Record<string, unknown> = {};
+	const channel = (name: string) => ({ call: (_c: string, a: unknown[]) => { sent[name] = a[1]; return Promise.resolve(); } });
+	const update = evaluate<(...a: unknown[]) => (m: unknown) => void>(`function make(sharedProcessService, remoteAgentService) {\n${code}\nreturn updateChannels;\n}`, 'make', b.deps)
+		.call({ extensionGalleryAccessToken: 'TOKEN', extensionGalleryServiceIndexUrl: 'x', logService: { trace: () => { }, error: () => { } } },
+			{ getChannel: () => channel('shared') }, { getConnection: () => ({ remoteAuthority: authority, getChannel: () => channel('remote') }) });
+	update(null);
+	return sent;
+}
+
+/** Whether a publisher trusted in a window on `authority` is kept for later installs. */
+function trustKept(b: Build, authority: string): boolean {
+	let stored = false;
+	evaluate<(...a: unknown[]) => void>(asFunction(slice(b.sources.management, /\n\ttrustPublishers\(/)!), 'trustPublishers', { ...b.deps, TrustedPublishersStorageKey: 'k', StorageScope: { APPLICATION: -1 }, StorageTarget: { USER: 0 } }).call({
+		instantiationService: { invokeFunction: (f: (a: unknown) => unknown) => f({ get: () => ({ remoteAuthority: authority }) }) },
+		getTrustedPublishersFromStorage: () => ({}),
+		storageService: { store: () => { stored = true; } },
+	}, { publisher: 'p', publisherDisplayName: 'P' });
+	return stored;
 }
 
 /** Whether the unsupported-extensions migration runs on the tab's server in a window on `authority`. */
@@ -619,6 +688,22 @@ async function leaks(b: Build): Promise<string[]> {
 	if ((await enablement(b, TAB)).includes('host.ext')) {
 		out.push('a tab extension\'s pack changes a host extension\'s enablement');
 	}
+	const ge = await globalEnablement(b, TAB);
+	if (ge.written.length > 0) {
+		out.push('a tab window changes the host\'s global enablement');
+	}
+	if (ge.events) {
+		out.push('a tab\'s install event reaches the host\'s global enablement');
+	}
+	if (localization(b, TAB)) {
+		out.push('a tab\'s install events prompt to change the host\'s display language');
+	}
+	if (galleryTokens(b, TAB).remote !== undefined) {
+		out.push('the tab\'s server gets the marketplace token');
+	}
+	if (trustKept(b, TAB)) {
+		out.push('a publisher trusted in a tab window is trusted for the host');
+	}
 	if (migration(b, TAB)) {
 		out.push('the unsupported-extensions migration runs on the tab\'s data');
 	}
@@ -664,7 +749,9 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'mcp discovery: a reply naming host directories', 'mcp global configuration: a reply naming host directories', 'mcp management: a reply naming a host readme',
 	'mcp management: a server carrying URLs the renderer loads', 'mcp management: an event naming a host readme', 'mcp management: a host location as a config record value',
 	'install locally: the host installs what the tab names', 'the host takes an extension change from a tab window',
-	'a tab extension\'s pack changes a host extension\'s enablement', 'the unsupported-extensions migration runs on the tab\'s data', 'a tab language-pack manifest updates on the host',
+	'a tab extension\'s pack changes a host extension\'s enablement', 'a tab window changes the host\'s global enablement', 'a tab\'s install event reaches the host\'s global enablement',
+	'a tab\'s install events prompt to change the host\'s display language', 'the tab\'s server gets the marketplace token', 'a publisher trusted in a tab window is trusted for the host',
+	'the unsupported-extensions migration runs on the tab\'s data', 'a tab language-pack manifest updates on the host',
 	'a tab language-pack manifest uninstalls on the host', 'mcp management: a server claiming a local keeps its URLs', 'install remote extensions locally: the host installs what the tab names',
 	'a tab manifest installs its pack on the host',
 	'the tab server picks installs the window retries', 'extension management: a host location under a manifest key elsewhere', 'loggers: a reply registering a host file', 'loggers: an event registering a host file'];
@@ -677,7 +764,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 	['a tab window takes none of them, and logs each refusal', async () => {
 		const b = build(true);
 		assert.deepEqual(await leaks(b), []);
-		assert.deepEqual([...new Set(b.refusals)].sort(), ['environment', 'extension-management', 'extensions', 'host-install', 'loggers', 'mcp-discovery', 'mcp-management', 'profiles', 'watcher']);
+		assert.deepEqual([...new Set(b.refusals)].sort(), ['environment', 'extension-management', 'extensions', 'host-enablement', 'host-install', 'loggers', 'mcp-discovery', 'mcp-management', 'profiles', 'watcher']);
 	}],
 	['a tab window takes a genuine server unchanged', async () => {
 		const b = build(true);
@@ -720,6 +807,8 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.deepEqual(await hostManagement(b, TAB), HOST_READS);
 		assert.deepEqual(await enablement(b, TAB), ['tab.pack']);
 		assert.deepEqual([...new Set(b.refusals.splice(before0))], ['host-install']);
+		// The host keeps its own marketplace token.
+		assert.equal(galleryTokens(b, TAB).shared, 'TOKEN');
 		// A tab language pack still updates and uninstalls in the tab.
 		const before = b.refusals.length;
 		assert.deepEqual(await languagePackFanOut(b, TAB), { updated: ['remote'], uninstalled: ['remote'] });
@@ -752,6 +841,10 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.deepEqual(await hostManagement(b, other), [...HOST_CHANGES, ...HOST_READS]);
 		assert.deepEqual(await enablement(b, other), ['tab.pack', 'host.ext']);
 		assert.equal(migration(b, other), true);
+		assert.deepEqual(await globalEnablement(b, other), { written: ['enable', 'disable'], events: true });
+		assert.equal(localization(b, other), true);
+		assert.deepEqual(galleryTokens(b, other), { shared: 'TOKEN', remote: 'TOKEN' });
+		assert.equal(trustKept(b, other), true);
 		assert.equal((await loggers(b, other, [{ id: 'x', name: 'x', resource: HOST }], { added: [], removed: [] })).replyRefused, false);
 		assert.deepEqual(b.refusals, []);
 	}],
@@ -793,8 +886,13 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['language packs fan out from a tab', { patch: ["+		if (!authority || !seclabIsTabAuthority(authority) || server !== this.extensionManagementServerService.remoteExtensionManagementServer) {", "+		if (true) {"] }, 'a tab language-pack manifest updates on the host'],
 			['uninstall fans out from a tab', { patch: ["isLanguagePackExtension(extension.manifest) && !this.seclabFromTab(server)) {\n \t\t\t\tconst otherServers", "isLanguagePackExtension(extension.manifest)) {\n \t\t\t\tconst otherServers"] }, 'a tab language-pack manifest uninstalls on the host'],
 			['only a local is stripped', { filter: ["		const s = server(v);", "		const s = v && typeof v === 'object' && Object.hasOwn(v, 'local') ? v : server(v);"] }, 'mcp management: a server claiming a local keeps its URLs'],
+			['global enablement writable', { patch: ["+		if (this.seclabTab) {\n+			seclabRefuseServerLocation(this.seclabTab, 'host-enablement');", "+		if (false) {\n+			seclabRefuseServerLocation(this.seclabTab, 'host-enablement');"] }, 'a tab window changes the host\'s global enablement'],
+			['install events reach global enablement', { patch: ["super(storageService, tab ? Object.assign(Object.create(extensionManagementService), { onDidInstallExtensions: Event.None }) : extensionManagementService);", "super(storageService, extensionManagementService);"] }, 'a tab\'s install event reaches the host\'s global enablement'],
+			['localization listens in a tab window', { patch: ["+		if (seclabIsTabAuthority(environmentService.remoteAuthority)) {\n+			return;", "+		if (false) {\n+			return;"] }, 'a tab\'s install events prompt to change the host\'s display language'],
+			['marketplace token to a tab', { patch: ["noToken ? undefined : this.extensionGalleryAccessToken", "this.extensionGalleryAccessToken"] }, 'the tab\'s server gets the marketplace token'],
+			['publisher trust kept from a tab', { patch: ["+		if (seclabIsTabAuthority(this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority))) {\n+			return;", "+		if (false) {\n+			return;"] }, 'a publisher trusted in a tab window is trusted for the host'],
 			['the host channel takes changes', { filter: ["			if (!SECLAB_HOST_EXTENSION_READS.has(command)) {", "			if (false) {"] }, 'the host takes an extension change from a tab window'],
-			['the host channel unwrapped', { patch: ["seclabHostExtensionsChannel(sharedProcessService.getChannel('extensions'), remoteAgentConnection?.remoteAuthority)", "sharedProcessService.getChannel('extensions')"] }, 'the host takes an extension change from a tab window'],
+			['the host channel unwrapped', { patch: ["seclabHostExtensionsChannel(sharedProcessService.getChannel('extensions'), environmentService.remoteAuthority)", "sharedProcessService.getChannel('extensions')"] }, 'the host takes an extension change from a tab window'],
 			['enablement reaches host extensions', { patch: ["+			if (own.length !== extensions.length) {", "+			if (false) {"] }, 'a tab extension\'s pack changes a host extension\'s enablement'],
 			['migration in a tab window', { patch: ["remoteExtensionManagementServer && !seclabIsTabAuthority(environmentService.remoteAuthority)) {", "remoteExtensionManagementServer) {"] }, 'the unsupported-extensions migration runs on the tab\'s data'],
 			['any manifest key is skipped', { filter: ["	return key === 'manifest' && (owner.length === 0", "	return key === 'manifest' || (owner.length === 0"] }, 'extension management: a host location under a manifest key elsewhere'],
