@@ -50,6 +50,18 @@
 # 0059: every location a tab's server names is on the tab's own file system, or the window refuses
 # it; the host installs nothing from the tab (reviews R5-17, ENV-13).
 0059-seclab-tab-server-environment-stays-in-the-tab.patch
+# 0053-0055: what a tab window sends its tab with a terminal (review DOCSYNC-R5, RFU1R-2,
+# RFU1R2-1, RFU1R-3): the tab's own terminal settings, its own extension host's environment
+# collections, and only its own documents' paths. After 0034, whose files 0053 and 0055 touch.
+0053-seclab-no-host-terminal-settings-for-tabs.patch
+0054-seclab-tab-own-terminal-env-collections.patch
+0055-seclab-no-host-file-path-to-tab-terminals.patch
+# 0056: a tab window's terminal icons are codicons or images on the tab's own file system (R5-9).
+0056-seclab-no-foreign-terminal-icons-in-tabs.patch
+# 0057: choosing or saving a terminal profile in a tab window writes the tab's settings, never the host's (R5-14).
+0057-seclab-tab-profile-writes-stay-in-the-tab.patch
+# 0058: terminal profile descriptions in Settings are plain text and codicons (R5-15).
+0058-seclab-plain-text-terminal-profile-descriptions.patch
 0035-seclab-document-sync-provenance.patch
 0036-seclab-tab-configuration-snapshot.patch
 # 0038: a tab's host learns only that host-side editors exist, not their URIs or labels (EDR editor-tab-provenance).

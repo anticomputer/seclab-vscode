@@ -1,0 +1,47 @@
+diff -ruN a/src/vs/workbench/api/browser/mainThreadTerminalService.ts b/src/vs/workbench/api/browser/mainThreadTerminalService.ts
+--- a/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 10:51:47
++++ b/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 10:51:47
+@@ -114,7 +114,12 @@
+ 			if (hostOS === undefined) {
+ 				throw new Error('Remote extension host operating system is required to restore terminal environment collections.');
+ 			}
+-			const collectionAsArray = [...this._environmentVariableService.getMergedCollection(_extHostContext.remoteAuthority, hostOS).collections.entries()];
++			// seclab: in a tab window each extension host gets only the collections it set itself: the
++			// tab's never reach the window's own (patch 0054, review R5-11; the tab's own is filtered
++			// by the service).
++			const seclabOrigin = (c: { remoteAuthority?: string | null }) => (c.remoteAuthority?.toLowerCase() ?? null) === (_extHostContext.remoteAuthority?.toLowerCase() ?? null);
++			const collectionAsArray = [...this._environmentVariableService.getMergedCollection(_extHostContext.remoteAuthority, hostOS).collections.entries()]
++				.filter(([, c]) => !seclabIsTabAuthority(this._environmentService.remoteAuthority) || seclabOrigin(c as { remoteAuthority?: string | null }));
+ 			const serializedCollections: [string, ISerializableEnvironmentVariableCollection][] = collectionAsArray.map(e => {
+ 				return [e[0], serializeEnvironmentVariableCollection(e[1].map)];
+ 			});
+@@ -473,6 +478,14 @@
+ 	}
+ 
+ 	$setEnvironmentVariableCollection(extensionIdentifier: string, persistent: boolean, collection: ISerializableEnvironmentVariableCollection | undefined, descriptionMap: ISerializableEnvironmentDescriptionMap): void {
++		// seclab: collections are keyed by an id the extension host names, so in a tab window a tab
++		// can't replace or delete another host's entry (patch 0054, review R5-8). The window's own
++		// extension host can, so a tab can't keep it from an id by taking the id first (R5-11).
++		const seclabEntry = this._environmentVariableService.collections.get(extensionIdentifier) as { readonly remoteAuthority?: string | null } | undefined;
++		if (seclabEntry && this._extHostContext.remoteAuthority !== null && seclabIsTabAuthority(this._environmentService.remoteAuthority)
++			&& (seclabEntry.remoteAuthority?.toLowerCase() ?? null) !== (this._extHostContext.remoteAuthority?.toLowerCase() ?? null)) {
++			return;
++		}
+ 		if (collection) {
+ 			const translatedCollection = {
+ 				persistent,
+diff -ruN a/src/vs/workbench/contrib/terminal/common/environmentVariableService.ts b/src/vs/workbench/contrib/terminal/common/environmentVariableService.ts
+--- a/src/vs/workbench/contrib/terminal/common/environmentVariableService.ts	2026-11-18 10:51:47
++++ b/src/vs/workbench/contrib/terminal/common/environmentVariableService.ts	2026-11-18 10:51:47
+@@ -91,6 +91,11 @@
+ 					this._logService.warn(`Ignoring terminal PATH contributions with an invalid origin for extension '${extensionIdentifier}'.`);
+ 				}
+ 				const originAuthority = typeof collection.remoteAuthority === 'string' ? collection.remoteAuthority.toLowerCase() : collection.remoteAuthority;
++				// seclab: a tab gets only the collections its own extension host set (patch 0054): another
++				// host's (the window's local one) can carry host values. Inline: also in the REH bundle.
++				if (/^seclab\+/.test(targetAuthority ?? '') && originAuthority !== targetAuthority) {
++					return;
++				}
+ 				const map = new Map(collection.map);
+ 				let filteredPath = false;
+ 				for (const [key, mutator] of map) {

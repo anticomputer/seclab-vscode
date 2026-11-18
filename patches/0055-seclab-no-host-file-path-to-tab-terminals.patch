@@ -1,0 +1,108 @@
+diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts
+--- a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 10:51:47
++++ b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 10:51:47
+@@ -26,7 +26,8 @@
+ import type * as performance from '../../../../../base/common/performance.js';
+ import { RemoteTerminalChannelEvent, RemoteTerminalChannelRequest } from './terminal.js';
+ import { ConfigurationResolverExpression } from '../../../../services/configurationResolver/common/configurationResolverExpression.js';
+-import { seclabIsTabWindow, seclabTabSetting } from '../seclabTabTerminalSettings.js';
++import { seclabIsTabWindow, seclabTabSetting, seclabUriInTab, seclabWorkspaceInTab } from '../seclabTabTerminalSettings.js';
++import { hash } from '../../../../../base/common/hash.js';
+ 
+ export const REMOTE_TERMINAL_CHANNEL_NAME = 'remoteterminal';
+ 
+@@ -194,18 +195,24 @@
+ 			filterByScheme: [Schemas.file, Schemas.vscodeUserData, Schemas.vscodeRemote]
+ 		});
+ 
++		// seclab: a tab's REH learns only its own folders' and documents' paths, never a host or
++		// another tab's (patch 0055, reviews RFU1R-3, R5-2).
++		const seclabTab = seclabIsTabWindow(this._remoteAuthority);
++		const own = (uri: URI | undefined) => !seclabTab || seclabUriInTab(uri, this._remoteAuthority);
++		const ownFolders = workspaceFolders.filter(f => own(f.uri));
++		const ownLabel = workspace.configuration ? own(workspace.configuration) : ownFolders.length === workspaceFolders.length;
+ 		const args: ICreateTerminalProcessArguments = {
+ 			configuration,
+ 			resolvedVariables,
+ 			envVariableCollections,
+ 			shellLaunchConfig,
+-			workspaceId: workspace.id,
+-			workspaceName: this._labelService.getWorkspaceLabel(workspace),
+-			workspaceFolders,
+-			activeWorkspaceFolder,
+-			activeFileResource,
++			workspaceId: this._seclabWorkspaceId(workspace.id),
++			workspaceName: ownLabel ? this._labelService.getWorkspaceLabel(workspace) : ownFolders.map(f => f.name).join(', '),
++			workspaceFolders: ownFolders,
++			activeWorkspaceFolder: activeWorkspaceFolder && own(activeWorkspaceFolder.uri) ? activeWorkspaceFolder : null,
++			activeFileResource: own(activeFileResource) ? activeFileResource : undefined,
+ 			shouldPersistTerminal,
+-			options,
++			options: options.workspaceFolder && !own(options.workspaceFolder.uri) ? { ...options, workspaceFolder: undefined } : options,
+ 			cols,
+ 			rows,
+ 			unicodeVersion,
+@@ -215,8 +222,28 @@
+ 	}
+ 
+ 	requestDetachInstance(workspaceId: string, instanceId: number): Promise<IProcessDetails | undefined> {
+-		return this._channel.call(RemoteTerminalChannelRequest.RequestDetachInstance, [workspaceId, instanceId]);
++		// seclab: a terminal dragged in from another window names that window's workspace, whose id
++		// can derive from a host path; a tab's REH is never told it (patch 0055, review R5-16).
++		if (seclabIsTabWindow(this._remoteAuthority) && workspaceId !== this._workspaceContextService.getWorkspace().id) {
++			return Promise.resolve(undefined);
++		}
++		return this._channel.call(RemoteTerminalChannelRequest.RequestDetachInstance, [this._seclabWorkspaceId(workspaceId), instanceId]);
+ 	}
++
++	/**
++	 * seclab: the workspace id a tab's REH is told. A workspace that isn't the tab's own (a host
++	 * workspace file, or a host folder beside the tab's) has an id derived from a host path, so the
++	 * REH gets one derived from the tab's authority and its own folders instead (patch 0055,
++	 * review R5-12). Every other id passes unchanged.
++	 */
++	private _seclabWorkspaceId(id: string): string {
++		const workspace = this._workspaceContextService.getWorkspace();
++		if (!seclabIsTabWindow(this._remoteAuthority) || id !== workspace.id || seclabWorkspaceInTab(workspace, this._remoteAuthority)) {
++			return id;
++		}
++		const own = workspace.folders.filter(f => seclabUriInTab(f.uri, this._remoteAuthority)).map(f => f.uri.toString());
++		return `seclab-${(hash([this._remoteAuthority, ...own]) >>> 0).toString(16)}`;
++	}
+ 	acceptDetachInstanceReply(requestId: number, persistentProcessId: number): Promise<void> {
+ 		return this._channel.call(RemoteTerminalChannelRequest.AcceptDetachInstanceReply, [requestId, persistentProcessId]);
+ 	}
+@@ -287,7 +314,7 @@
+ 		return this._channel.call(RemoteTerminalChannelRequest.GetDefaultSystemShell, [osOverride]);
+ 	}
+ 	getProfiles(profiles: unknown, defaultProfile: unknown, includeDetectedProfiles?: boolean): Promise<ITerminalProfile[]> {
+-		return this._channel.call(RemoteTerminalChannelRequest.GetProfiles, [this._workspaceContextService.getWorkspace().id, profiles, defaultProfile, includeDetectedProfiles]);
++		return this._channel.call(RemoteTerminalChannelRequest.GetProfiles, [this._seclabWorkspaceId(this._workspaceContextService.getWorkspace().id), profiles, defaultProfile, includeDetectedProfiles]);
+ 	}
+ 	acceptPtyHostResolvedVariables(requestId: number, resolved: string[]): Promise<void> {
+ 		return this._channel.call(RemoteTerminalChannelRequest.AcceptPtyHostResolvedVariables, [requestId, resolved]);
+@@ -304,7 +331,7 @@
+ 	setTerminalLayoutInfo(layout?: ITerminalsLayoutInfoById): Promise<void> {
+ 		const workspace = this._workspaceContextService.getWorkspace();
+ 		const args: ISetTerminalLayoutInfoArgs = {
+-			workspaceId: workspace.id,
++			workspaceId: this._seclabWorkspaceId(workspace.id),
+ 			tabs: layout ? layout.tabs : [],
+ 			background: layout ? layout.background : null
+ 		};
+@@ -330,13 +357,13 @@
+ 	getTerminalLayoutInfo(): Promise<ITerminalsLayoutInfo | undefined> {
+ 		const workspace = this._workspaceContextService.getWorkspace();
+ 		const args: IGetTerminalLayoutInfoArgs = {
+-			workspaceId: workspace.id,
++			workspaceId: this._seclabWorkspaceId(workspace.id),
+ 		};
+ 		return this._channel.call<ITerminalsLayoutInfo>(RemoteTerminalChannelRequest.GetTerminalLayoutInfo, args);
+ 	}
+ 
+ 	reviveTerminalProcesses(workspaceId: string, state: ISerializedTerminalState[], dateTimeFormatLocate: string): Promise<void> {
+-		return this._channel.call(RemoteTerminalChannelRequest.ReviveTerminalProcesses, [workspaceId, state, dateTimeFormatLocate]);
++		return this._channel.call(RemoteTerminalChannelRequest.ReviveTerminalProcesses, [this._seclabWorkspaceId(workspaceId), state, dateTimeFormatLocate]);
+ 	}
+ 
+ 	getRevivedPtyNewId(id: number): Promise<number | undefined> {

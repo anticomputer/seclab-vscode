@@ -1,0 +1,62 @@
+diff -ruN a/src/vs/platform/terminal/common/terminalProfiles.ts b/src/vs/platform/terminal/common/terminalProfiles.ts
+--- a/src/vs/platform/terminal/common/terminalProfiles.ts	2026-11-18 10:51:48
++++ b/src/vs/platform/terminal/common/terminalProfiles.ts	2026-11-18 10:51:48
+@@ -9,7 +9,22 @@
+ import { IExtensionTerminalProfile, ITerminalProfile, TerminalIcon } from './terminal.js';
+ import { ThemeIcon } from '../../../base/common/themables.js';
+ import { isObject, isString, type SingleOrMany } from '../../../base/common/types.js';
++import { escapeMarkdownSyntaxTokens } from '../../../base/common/htmlContent.js';
+ 
++/**
++ * seclab: these descriptions render as markdown in the trusted window's Settings editor, and in a
++ * tab window the profiles come from the tab's REH and the contributed ones from its extensions, so
++ * a name or path could carry an image the window fetches. The text is escaped and the icon must be
++ * a codicon id (patch 0058, review R5-15).
++ */
++function seclabText(value: unknown): string {
++	return escapeMarkdownSyntaxTokens(String(value));
++}
++function seclabIconId(icon: unknown): string {
++	const id = ThemeIcon.isThemeIcon(icon) ? icon.id : icon;
++	return isString(id) && /^[a-z0-9-]+(~[a-z0-9-]+)?$/i.test(id) ? id : Codicon.terminal.id;
++}
++
+ export function createProfileSchemaEnums(detectedProfiles: ITerminalProfile[], extensionProfiles?: readonly IExtensionTerminalProfile[]): {
+ 	values: (string | null)[] | undefined;
+ 	markdownDescriptions: string[] | undefined;
+@@ -39,28 +54,28 @@
+ }
+ 
+ function createProfileDescription(profile: ITerminalProfile): string {
+-	let description = `$(${ThemeIcon.isThemeIcon(profile.icon) ? profile.icon.id : profile.icon ? profile.icon : Codicon.terminal.id}) ${profile.profileName}\n- path: ${profile.path}`;
++	let description = `$(${seclabIconId(profile.icon)}) ${seclabText(profile.profileName)}\n- path: ${seclabText(profile.path)}`;
+ 	if (profile.args) {
+ 		if (isString(profile.args)) {
+-			description += `\n- args: "${profile.args}"`;
++			description += `\n- args: "${seclabText(profile.args)}"`;
+ 		} else {
+-			description += `\n- args: [${profile.args.length === 0 ? '' : `'${profile.args.join(`','`)}'`}]`;
++			description += `\n- args: [${profile.args.length === 0 ? '' : `'${profile.args.map(seclabText).join(`','`)}'`}]`;
+ 		}
+ 	}
+ 	if (profile.overrideName !== undefined) {
+-		description += `\n- overrideName: ${profile.overrideName}`;
++		description += `\n- overrideName: ${seclabText(profile.overrideName)}`;
+ 	}
+ 	if (profile.color) {
+-		description += `\n- color: ${profile.color}`;
++		description += `\n- color: ${seclabText(profile.color)}`;
+ 	}
+ 	if (profile.env) {
+-		description += `\n- env: ${JSON.stringify(profile.env)}`;
++		description += `\n- env: ${seclabText(JSON.stringify(profile.env))}`;
+ 	}
+ 	return description;
+ }
+ 
+ function createExtensionProfileDescription(profile: IExtensionTerminalProfile): string {
+-	const description = `$(${ThemeIcon.isThemeIcon(profile.icon) ? profile.icon.id : profile.icon ? profile.icon : Codicon.terminal.id}) ${profile.title}\n- extensionIdentifier: ${profile.extensionIdentifier}`;
++	const description = `$(${seclabIconId(profile.icon)}) ${seclabText(profile.title)}\n- extensionIdentifier: ${seclabText(profile.extensionIdentifier)}`;
+ 	return description;
+ }
+ 

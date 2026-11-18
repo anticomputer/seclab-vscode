@@ -1,0 +1,295 @@
+diff -ruN a/src/vs/workbench/api/browser/mainThreadTerminalService.ts b/src/vs/workbench/api/browser/mainThreadTerminalService.ts
+--- a/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 10:51:47
++++ b/src/vs/workbench/api/browser/mainThreadTerminalService.ts	2026-11-18 10:51:47
+@@ -26,6 +26,7 @@
+ import { TerminalCapability } from '../../../platform/terminal/common/capabilities/capabilities.js';
+ import { ITerminalCompletionService } from '../../contrib/terminalContrib/suggest/browser/terminalCompletionService.js';
+ import { IWorkbenchEnvironmentService } from '../../services/environment/common/environmentService.js';
++import { seclabIsTabAuthority } from '../../services/extensions/common/seclabRpcFilter.js';
+ import { hasKey } from '../../../base/common/types.js';
+ 
+ interface TerminalProcessProxyEntry extends IDisposable {
+@@ -128,6 +129,11 @@
+ 
+ 	private async _updateDefaultProfile() {
+ 		const remoteAuthority = this._environmentService.remoteAuthority;
++		// seclab: in a tab window the profiles resolve from the tab's settings (patch 0053), so the
++		// window's own (host-side) extension host is sent none; it runs no terminal there.
++		if (this._extHostContext.remoteAuthority === null && seclabIsTabAuthority(remoteAuthority)) {
++			return;
++		}
+ 		const defaultProfile = this._terminalProfileResolverService.getDefaultProfile({ remoteAuthority, os: this._os });
+ 		const defaultAutomationProfile = this._terminalProfileResolverService.getDefaultProfile({ remoteAuthority, os: this._os, allowAutomationShell: true });
+ 		this._proxy.$acceptDefaultProfile(...await Promise.all([defaultProfile, defaultAutomationProfile]));
+diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 10:51:47
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 10:51:47
+@@ -24,6 +24,8 @@
+ import { Disposable } from '../../../../base/common/lifecycle.js';
+ import { isString, type SingleOrMany } from '../../../../base/common/types.js';
+ import { seclabIsTabAuthority } from '../../../services/extensions/common/seclabRpcFilter.js';
++import { seclabTabSetting } from '../common/seclabTabTerminalSettings.js';
++import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
+ 
+ export interface IProfileContextProvider {
+ 	getDefaultSystemShell(remoteAuthority: string | undefined, os: OperatingSystem): Promise<string>;
+@@ -54,7 +56,8 @@
+ 		private readonly _logService: ITerminalLogService,
+ 		private readonly _terminalProfileService: ITerminalProfileService,
+ 		private readonly _workspaceContextService: IWorkspaceContextService,
+-		private readonly _remoteAgentService: IRemoteAgentService
++		private readonly _remoteAgentService: IRemoteAgentService,
++		private readonly _seclabEnvironment?: IWorkbenchEnvironmentService
+ 	) {
+ 		super();
+ 
+@@ -192,7 +195,7 @@
+ 	private async _getUnresolvedDefaultProfile(options: IShellLaunchConfigResolveOptions): Promise<ITerminalProfile> {
+ 		// If agent host shell is allowed, prefer that.
+ 		if (options.allowAgentHostShell) {
+-			const raw = this._configurationService.getValue(`terminal.integrated.agentHostProfile.${this._getOsKey(options.os)}`);
++			const raw = this._seclabProfileSetting(`terminal.integrated.agentHostProfile.${this._getOsKey(options.os)}`);
+ 			if (isString(raw)) {
+ 				await this._terminalProfileService.profilesReady;
+ 			}
+@@ -274,8 +277,23 @@
+ 		};
+ 	}
+ 
++	// seclab: in a tab window the automation and agent-host profiles come from the tab's own settings
++	// (patch 0053): the host user's would reach the tab's REH and extension host ($acceptDefaultProfile).
++	private _seclabProfileSetting(key: string): unknown {
++		const authority = this._seclabTabAuthority();
++		return authority
++			? seclabTabSetting(this._configurationService, this._workspaceContextService.getWorkspace(), authority, key)
++			: this._configurationService.getValue(key);
++	}
++
++	/** The window's own authority if it is a tab's, read from the environment (review R5-13). */
++	private _seclabTabAuthority(): string | undefined {
++		const authority = this._seclabEnvironment?.remoteAuthority ?? this._remoteAgentService.getConnection()?.remoteAuthority;
++		return authority && seclabIsTabAuthority(authority) ? authority : undefined;
++	}
++
+ 	private _getUnresolvedAutomationShellProfile(options: IShellLaunchConfigResolveOptions): ITerminalProfile | undefined {
+-		const automationProfile = this._configurationService.getValue(`terminal.integrated.automationProfile.${this._getOsKey(options.os)}`);
++		const automationProfile = this._seclabProfileSetting(`terminal.integrated.automationProfile.${this._getOsKey(options.os)}`);
+ 		if (this._isValidAutomationProfile(automationProfile, options.os)) {
+ 			automationProfile.icon = this._getCustomIcon(automationProfile.icon) || Codicon.tools;
+ 			return automationProfile;
+@@ -285,7 +303,7 @@
+ 	}
+ 
+ 	private _getUnresolvedAgentHostShellProfile(options: IShellLaunchConfigResolveOptions): ITerminalProfile | undefined {
+-		const agentHostProfile = this._configurationService.getValue(`terminal.integrated.agentHostProfile.${this._getOsKey(options.os)}`);
++		const agentHostProfile = this._seclabProfileSetting(`terminal.integrated.agentHostProfile.${this._getOsKey(options.os)}`);
+ 
+ 		// Allow a string value as a reference to a named profile under
+ 		// `terminal.integrated.profiles.<os>` — same convention as
+@@ -410,7 +428,8 @@
+ 		@ITerminalInstanceService terminalInstanceService: ITerminalInstanceService,
+ 		@ITerminalProfileService terminalProfileService: ITerminalProfileService,
+ 		@IWorkspaceContextService workspaceContextService: IWorkspaceContextService,
+-		@IRemoteAgentService remoteAgentService: IRemoteAgentService
++		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
++		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService
+ 	) {
+ 		super(
+ 			{
+@@ -436,7 +455,8 @@
+ 			logService,
+ 			terminalProfileService,
+ 			workspaceContextService,
+-			remoteAgentService
++			remoteAgentService,
++			environmentService
+ 		);
+ 	}
+ }
+diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 10:51:47
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileService.ts	2026-11-18 10:51:47
+@@ -24,6 +24,8 @@
+ import { IExtensionService } from '../../../services/extensions/common/extensions.js';
+ import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
+ import { hasKey, isString } from '../../../../base/common/types.js';
++import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
++import { seclabIsTabWindow, seclabTabSetting } from '../common/seclabTabTerminalSettings.js';
+ 
+ /*
+  * Links TerminalService with TerminalProfileResolverService
+@@ -68,7 +70,8 @@
+ 		@IExtensionService private readonly _extensionService: IExtensionService,
+ 		@IRemoteAgentService private _remoteAgentService: IRemoteAgentService,
+ 		@IWorkbenchEnvironmentService private readonly _environmentService: IWorkbenchEnvironmentService,
+-		@ITerminalInstanceService private readonly _terminalInstanceService: ITerminalInstanceService
++		@ITerminalInstanceService private readonly _terminalInstanceService: ITerminalInstanceService,
++		@IWorkspaceContextService private readonly _seclabWorkspace: IWorkspaceContextService
+ 	) {
+ 		super();
+ 
+@@ -117,7 +120,7 @@
+ 	getDefaultProfile(os?: OperatingSystem): ITerminalProfile | undefined {
+ 		let defaultProfileName: string | undefined;
+ 		if (os) {
+-			defaultProfileName = this._configurationService.getValue(`${TerminalSettingPrefix.DefaultProfile}${this._getOsKey(os)}`);
++			defaultProfileName = this._seclabSetting(`${TerminalSettingPrefix.DefaultProfile}${this._getOsKey(os)}`) as string | undefined;
+ 			if (!defaultProfileName || !isString(defaultProfileName)) {
+ 				return undefined;
+ 			}
+@@ -205,10 +208,22 @@
+ 			return this._availableProfiles || [];
+ 		}
+ 		const platform = await this.getPlatformKey();
+-		this._defaultProfileName = this._configurationService.getValue(`${TerminalSettingPrefix.DefaultProfile}${platform}`) ?? undefined;
+-		return primaryBackend.getProfiles(this._configurationService.getValue(`${TerminalSettingPrefix.Profiles}${platform}`), this._defaultProfileName, includeDetectedProfiles);
++		this._defaultProfileName = (this._seclabSetting(`${TerminalSettingPrefix.DefaultProfile}${platform}`) as string | undefined) ?? undefined;
++		return primaryBackend.getProfiles(this._seclabSetting(`${TerminalSettingPrefix.Profiles}${platform}`), this._defaultProfileName, includeDetectedProfiles);
+ 	}
+ 
++	/**
++	 * seclab: in a tab window the profile settings come from the tab's own layers (patch 0053): the
++	 * profiles go to the tab's REH, and the default profile's name picks among the names the REH
++	 * returns, so the host user's would be confirmable by guessing (reviews RFU1R-2, R5-10).
++	 */
++	private _seclabSetting(key: string): unknown {
++		const window = this._environmentService.remoteAuthority;
++		return window && seclabIsTabWindow(window)
++			? seclabTabSetting(this._configurationService, this._seclabWorkspace.getWorkspace(), window, key)
++			: this._configurationService.getValue(key);
++	}
++
+ 	private _updateWebContextKey(): void {
+ 		this._webExtensionContributedProfileContextKey.set(isWeb && this._contributedProfiles.length > 0);
+ 	}
+@@ -296,7 +311,7 @@
+ 				}
+ 			}
+ 			const key = await this.getPlatformKey();
+-			const defaultProfileName = this._configurationService.getValue(`${TerminalSettingPrefix.DefaultProfile}${key}`);
++			const defaultProfileName = this._seclabSetting(`${TerminalSettingPrefix.DefaultProfile}${key}`);
+ 			const contributedDefaultProfile = this.contributedProfiles.find(p => p.title === defaultProfileName);
+ 			return contributedDefaultProfile;
+ 		}
+diff -ruN a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts
+--- a/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 10:51:47
++++ b/src/vs/workbench/contrib/terminal/common/remote/remoteTerminalChannel.ts	2026-11-18 10:51:47
+@@ -26,6 +26,7 @@
+ import type * as performance from '../../../../../base/common/performance.js';
+ import { RemoteTerminalChannelEvent, RemoteTerminalChannelRequest } from './terminal.js';
+ import { ConfigurationResolverExpression } from '../../../../services/configurationResolver/common/configurationResolverExpression.js';
++import { seclabIsTabWindow, seclabTabSetting } from '../seclabTabTerminalSettings.js';
+ 
+ export const REMOTE_TERMINAL_CHANNEL_NAME = 'remoteterminal';
+ 
+@@ -132,6 +133,18 @@
+ 	): Promise<ICreateTerminalProcessResult> {
+ 		// Be sure to first wait for the remote configuration
+ 		await this._configurationService.whenRemoteConfigurationLoaded();
++		// seclab: the host user's terminal env and cwd settings stay on the host (patch 0053).
++		if (seclabIsTabWindow(this._remoteAuthority)) {
++			const workspace = this._workspaceContextService.getWorkspace();
++			const tab = <T>(key: keyof ICompleteTerminalConfiguration) => seclabTabSetting<T>(this._configurationService, workspace, this._remoteAuthority, key);
++			configuration = {
++				...configuration,
++				'terminal.integrated.env.windows': tab<ICompleteTerminalConfiguration['terminal.integrated.env.windows']>('terminal.integrated.env.windows') ?? {},
++				'terminal.integrated.env.osx': tab<ICompleteTerminalConfiguration['terminal.integrated.env.osx']>('terminal.integrated.env.osx') ?? {},
++				'terminal.integrated.env.linux': tab<ICompleteTerminalConfiguration['terminal.integrated.env.linux']>('terminal.integrated.env.linux') ?? {},
++				'terminal.integrated.cwd': tab<string>('terminal.integrated.cwd') ?? '',
++			};
++		}
+ 
+ 		// We will use the resolver service to resolve all the variables in the config / launch config
+ 		// But then we will keep only some variables, since the rest need to be resolved on the remote side
+diff -ruN a/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts b/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts
+--- a/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts	1969-12-31 19:00:00
++++ b/src/vs/workbench/contrib/terminal/common/seclabTabTerminalSettings.ts	2026-11-18 10:51:47
+@@ -0,0 +1,57 @@
++/*---------------------------------------------------------------------------------------------
++ *  seclab: the terminal settings a `seclab+` window sends its tab (patch 0053, reviews DOCSYNC-R5,
++ *  RFU1R-2, RFU1R2-1). The settings read here are all registered `restricted`, so patch 0036
++ *  never lets a host value of theirs reach the tab's extension host; the window must not send
++ *  them to the tab's REH or extension host by another path either. Dependency-free: this file is
++ *  in the REH bundle too, which must not load the RPC filter module.
++ *--------------------------------------------------------------------------------------------*/
++
++import { UriComponents } from '../../../../base/common/uri.js';
++import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
++import { IWorkspace } from '../../../../platform/workspace/common/workspace.js';
++
++export function seclabIsTabWindow(remoteAuthority: string | null | undefined): boolean {
++	return typeof remoteAuthority === 'string' && /^seclab\+/.test(remoteAuthority);
++}
++
++/** A resource on the tab's own file system: `vscode-remote` on the window's authority. */
++export function seclabUriInTab(uri: UriComponents | null | undefined, remoteAuthority: string): boolean {
++	return !!uri && uri.scheme === 'vscode-remote' && uri.authority === remoteAuthority;
++}
++
++const isMap = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
++
++/** Upstream's merge of one configuration layer over another: maps merge key by key, recursively. */
++function merge(base: unknown, over: unknown): unknown {
++	if (!isMap(base) || !isMap(over)) {
++		return over;
++	}
++	const out: Record<string, unknown> = Object.create(null);
++	for (const k of Object.keys(base)) {
++		out[k] = base[k];
++	}
++	for (const k of Object.keys(over)) {
++		out[k] = merge(out[k], over[k]);
++	}
++	return out;
++}
++
++/** Whether the workspace's settings are the tab's (patch 0036's test): its file, or else every folder, on the tab. */
++export function seclabWorkspaceInTab(workspace: IWorkspace, remoteAuthority: string): boolean {
++	return workspace.configuration
++		? seclabUriInTab(workspace.configuration, remoteAuthority)
++		: workspace.folders.every(f => seclabUriInTab(f.uri, remoteAuthority));
++}
++
++/**
++ * `key` from the layers the tab owns: the defaults, the REH's remote user settings and, when the
++ * workspace is the tab's own (patch 0036's test: its workspace file, or else every folder, on the
++ * tab's authority), the workspace and folder settings. Never the host user's, application or
++ * policy values, or a host-side workspace's.
++ */
++export function seclabTabSetting<T>(configurationService: IConfigurationService, workspace: IWorkspace, remoteAuthority: string, key: string): T | undefined {
++	const v = configurationService.inspect<T>(key);
++	const workspaceInTab = seclabWorkspaceInTab(workspace, remoteAuthority);
++	const layers: unknown[] = [v.defaultValue, v.userRemoteValue, ...(workspaceInTab ? [v.workspaceValue, v.workspaceFolderValue] : [])];
++	return layers.filter(l => l !== undefined).reduce(merge, undefined) as T | undefined;
++}
+diff -ruN a/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts b/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts
+--- a/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts	2026-11-18 10:51:47
++++ b/src/vs/workbench/contrib/terminal/electron-browser/terminalProfileResolverService.ts	2026-11-18 10:51:47
+@@ -13,6 +13,7 @@
+ import { IConfigurationResolverService } from '../../../services/configurationResolver/common/configurationResolver.js';
+ import { IHistoryService } from '../../../services/history/common/history.js';
+ import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
++import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
+ 
+ export class ElectronTerminalProfileResolverService extends BaseTerminalProfileResolverService {
+ 
+@@ -24,7 +25,8 @@
+ 		@IWorkspaceContextService workspaceContextService: IWorkspaceContextService,
+ 		@ITerminalProfileService terminalProfileService: ITerminalProfileService,
+ 		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
+-		@ITerminalInstanceService terminalInstanceService: ITerminalInstanceService
++		@ITerminalInstanceService terminalInstanceService: ITerminalInstanceService,
++		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService
+ 	) {
+ 		super(
+ 			{
+@@ -49,7 +51,8 @@
+ 			logService,
+ 			terminalProfileService,
+ 			workspaceContextService,
+-			remoteAgentService
++			remoteAgentService,
++			environmentService
+ 		);
+ 	}
+ }

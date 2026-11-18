@@ -1,0 +1,38 @@
+diff -ruN a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts
+--- a/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 10:51:47
++++ b/src/vs/workbench/contrib/terminal/browser/terminalProfileResolverService.ts	2026-11-18 10:51:48
+@@ -18,13 +18,13 @@
+ import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
+ import { debounce } from '../../../../base/common/decorators.js';
+ import { ThemeIcon } from '../../../../base/common/themables.js';
+-import { isUriComponents, URI } from '../../../../base/common/uri.js';
++import { isUriComponents, URI, UriComponents } from '../../../../base/common/uri.js';
+ import { deepClone } from '../../../../base/common/objects.js';
+ import { ITerminalInstanceService } from './terminal.js';
+ import { Disposable } from '../../../../base/common/lifecycle.js';
+ import { isString, type SingleOrMany } from '../../../../base/common/types.js';
+ import { seclabIsTabAuthority } from '../../../services/extensions/common/seclabRpcFilter.js';
+-import { seclabTabSetting } from '../common/seclabTabTerminalSettings.js';
++import { seclabTabSetting, seclabUriInTab } from '../common/seclabTabTerminalSettings.js';
+ import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
+ 
+ export interface IProfileContextProvider {
+@@ -183,11 +183,16 @@
+ 		if (ThemeIcon.isThemeIcon(icon)) {
+ 			return icon;
+ 		}
++		// seclab: in a tab window a profile or launch config can come from the tab, and an image icon
++		// becomes a CSS url() the trusted window fetches, past the tab's broker. Keep only images on
++		// the tab's own file system; anything else falls back to a codicon (patch 0056, review R5-9).
++		const seclabTab = this._seclabTabAuthority();
++		const seclabOk = (u: URI | UriComponents) => !seclabTab || seclabUriInTab(u, seclabTab);
+ 		if (URI.isUri(icon) || isUriComponents(icon)) {
+-			return URI.revive(icon);
++			return seclabOk(icon) ? URI.revive(icon) : undefined;
+ 		}
+ 		if ((URI.isUri(icon.light) || isUriComponents(icon.light)) && (URI.isUri(icon.dark) || isUriComponents(icon.dark))) {
+-			return { light: URI.revive(icon.light), dark: URI.revive(icon.dark) };
++			return seclabOk(icon.light) && seclabOk(icon.dark) ? { light: URI.revive(icon.light), dark: URI.revive(icon.dark) } : undefined;
+ 		}
+ 		return undefined;
+ 	}
