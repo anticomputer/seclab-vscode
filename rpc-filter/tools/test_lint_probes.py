@@ -424,7 +424,28 @@ class CommentScopeTest(unittest.TestCase):
                 status, out = lint(root)
                 self.assertEqual(status, 1, out)
                 self.assertIn("destructive-fs", out)
-        self.assertEqual(L._js_lines("a\r\nb\rc\u2028d\u2029e\u000bf\n"), ["a", "b", "c", "d", "e\u000bf"])
+        self.assertEqual(L._js_lines("a\r\nb\rc\u2028d\u2029e\u000bf\n"), ["a", "b", "c\u2028d\u2029e\u000bf"])
+
+    def test_a_literal_line_separator_fails_closed(self):
+        # Inside a string U+2028/U+2029 end no line, so `/*` there is string text and the call runs.
+        for sep in ("\u2028", "\u2029"):
+            with self.subTest(sep=repr(sep)):
+                root = tree_copy(self)
+                path = os.path.join(root, "test/containment/rogue-reh/probes.js")
+                with open(path, "a", encoding="utf-8") as fh:
+                    fh.write("\nconst seclabLintS = 'x" + sep + "/*'; fs.rmSync(seclabLintP);\n// */\n")
+                status, out = lint(root)
+                self.assertEqual(status, 1, out)
+                self.assertIn("line-separator", out)
+
+    def test_a_shell_payload_is_not_scanned_as_javascript(self):
+        root = tree_copy(self)
+        path = os.path.join(root, "test/containment/rogue-reh/seclab-lint-case.sh")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("# note /*\nprintf '%s' 'https://example.test/x'\n# */\n")
+        status, out = lint(root)
+        self.assertEqual(status, 1, out)
+        self.assertIn("external-host", out)
 
     def test_a_number_member_is_not_a_spread(self):
         code, found = L._code_only(L._strip_comments("const q = 1..return / 2; const s = '/'; const x = { [K]: 1 };\n", [])), []
