@@ -265,7 +265,7 @@
 				"quote": "**Responses are filtered at the customer, one surface at a time.**"
 			},
 			"note": "Patch 0033 and seclabFromTab (ADR 20261116-response-side-control): commands, command: links and markdown from tab data go through the filter; remote images and HTML are dropped. Hover and completion are wired; check_drift.py::check_responses refuses any other reachable registration until its customer is wired. Pre-control and control runs in the ADR.",
-			"commit": "patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11",
+			"commit": "804c4466e299",
 			"test": {
 				"file": "test/containment/filter-module.test.ts",
 				"name": "response: a denied command runs in the tab, never on the trusted side, and is logged when the tab lacks it"
@@ -14103,7 +14103,7 @@
 			"severity": "medium",
 			"summary": "The docsync probe (0035's runtime regression test) no longer runs on builds with the RPC filter, and 0038 hides the host untitled URIs it relied on.",
 			"status": "fixed",
-			"commit": "patch:8516d7e64629cf5d19d6317cdc727ddccb719883",
+			"commit": "4f08d38cd8c0",
 			"test": {
 				"file": "test/docsync/probe.ts",
 				"name": "DOCSYNC no host canary in any tab document (settings, keybindings, window log, host file and its diff)"
@@ -17090,7 +17090,7 @@
 			"component": "RPC drift check (rpc-filter/tools/check_drift.py)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:75101c46c2b1d1d6fa6b68a18eeeaef691eb57c8",
+			"commit": "0acfca5e6b5d",
 			"test": {
 				"file": "rpc-filter/tools/test_enforcement.py",
 				"name": "test_a_stale_inventory_fails_even_when_the_policy_agrees_with_it"
@@ -17105,7 +17105,7 @@
 			"component": "RPC inventory generator (rpc-filter/tools/extract_inventory.py)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:f95d9ca0065beb34441e8be260117784485c7654",
+			"commit": "a393f1049e1a",
 			"gap": "The fallback constant is gone and the generator exits 2 without a pinned SHA; no test runs it without upstream.lock."
 		},
 		{
@@ -17117,7 +17117,7 @@
 			"component": "docs/ARCHITECTURE.md",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:f95d9ca0065beb34441e8be260117784485c7654",
+			"commit": "a393f1049e1a",
 			"gap": "Documentation only; nothing to test."
 		},
 		{
@@ -17156,7 +17156,7 @@
 			"component": "build (fetch-upstream, build.sh)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:addb6c92039bda4742149bf52e1e843f9896472c",
+			"commit": "43f576ac6bf7",
 			"test": {
 				"file": "build/fetch-upstream.test.ts",
 				"name": "install stamp: changes with any lockfile (extensions included) and with the pin, not with node_modules"
@@ -17171,7 +17171,7 @@
 			"component": "build (fetch-upstream, build.sh)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:addb6c92039bda4742149bf52e1e843f9896472c",
+			"commit": "43f576ac6bf7",
 			"test": {
 				"file": "build/fetch-upstream.test.ts",
 				"name": "fetch-upstream: same pin, a tracked file hidden by skip-worktree or sparse state is restored"
@@ -17186,7 +17186,7 @@
 			"component": "build (fetch-upstream, build.sh)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:addb6c92039bda4742149bf52e1e843f9896472c",
+			"commit": "43f576ac6bf7",
 			"test": {
 				"file": "build/fetch-upstream.test.ts",
 				"name": "fetch-upstream: a pin change drops files earlier patches added, keeps ignored build state"
@@ -17261,7 +17261,7 @@
 			"component": "build (fetch-upstream, build.sh)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:57e5c88c532b526beb5d6f2a2cd90e1c41e74de3",
+			"commit": "1a20d8c378a5",
 			"test": {
 				"file": "build/fetch-upstream.test.ts",
 				"name": "fetch-upstream: a .git that is a file (another repository) is refused (FU-9)"
@@ -17276,7 +17276,7 @@
 			"component": "build (fetch-upstream, build.sh)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:57e5c88c532b526beb5d6f2a2cd90e1c41e74de3",
+			"commit": "1a20d8c378a5",
 			"test": {
 				"file": "build/fetch-upstream.test.ts",
 				"name": "fetch-upstream: excludes and config on the volume or in user config hide nothing (FU-10)"
@@ -17291,7 +17291,7 @@
 			"component": "build (fetch-upstream, build.sh)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:57e5c88c532b526beb5d6f2a2cd90e1c41e74de3",
+			"commit": "1a20d8c378a5",
 			"test": {
 				"file": "build/fetch-upstream.test.ts",
 				"name": "install stamp: a symlinked lockfile is refused; a lockfile under an odd path still counts (FU-11)"
@@ -17321,7 +17321,7 @@
 			"component": "build (fetch-upstream)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:487f76b0ca9b3a6fd687e02cba41dbb3d7fbceaf",
+			"commit": "e1e142283e88",
 			"test": {
 				"file": "build/fetch-upstream.test.ts",
 				"name": "fetch-upstream: the volume\\'s own config, attributes and hooks are not honoured (PR 25 review)"
@@ -17336,7 +17336,7 @@
 			"component": "build (fetch-upstream)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:487f76b0ca9b3a6fd687e02cba41dbb3d7fbceaf",
+			"commit": "e1e142283e88",
 			"test": {
 				"file": "build/fetch-upstream.test.ts",
 				"name": "fetch-upstream: a kept core.worktree can\\'t redirect the reset and clean (PR 25 review)"
@@ -17351,7 +17351,7 @@
 			"component": "clean-host",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:2848116491643bd83cae84ccd30326c4a724474d",
+			"commit": "3038fec837a9",
 			"test": {
 				"file": "test/clean-host.ts",
 				"name": "should be ${want}"
@@ -17366,7 +17366,7 @@
 			"component": "harness runners",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:df10a26c4325e739cf8ffc2e1027424ee9364ad6",
+			"commit": "06331a8200bb",
 			"gap": "Shown by hand with a bogus value refusing before any resource exists; the runners have no unit seam for their start-up order."
 		},
 		{
@@ -17378,7 +17378,7 @@
 			"component": "clean-host",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:9e526b3fb2ba6f2bac3721801eb02a38ad14b69b",
+			"commit": "a57f83956a2e",
 			"test": {
 				"file": "test/clean-host.ts",
 				"name": "imageLease threw"
@@ -17393,7 +17393,7 @@
 			"component": "build (fetch-upstream)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:4b72119f6c072b7e795581cceef913f32fced684",
+			"commit": "8d3debb8c6f2",
 			"test": {
 				"file": "build/fetch-upstream.test.ts",
 				"name": "fetch-upstream: a linked .git/config or .git/info reaches nothing outside DEST (PR 25 review)"
@@ -17408,7 +17408,7 @@
 			"component": "build (fetch-upstream)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:4b72119f6c072b7e795581cceef913f32fced684",
+			"commit": "8d3debb8c6f2",
 			"test": {
 				"file": "build/fetch-upstream.test.ts",
 				"name": "fetch-upstream: a linked .git/config or .git/info reaches nothing outside DEST (PR 25 review)"
@@ -17423,7 +17423,7 @@
 			"component": "build (fetch-upstream)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:2d8a18566780b7d60e4a6166d9c887d1eefc8aeb",
+			"commit": "48ff929404b3",
 			"test": {
 				"file": "build/fetch-upstream.test.ts",
 				"name": "fetch-upstream: a replacement ref or a self-ignoring directory changes nothing (PR 25 review)"
@@ -17438,7 +17438,7 @@
 			"component": "build (fetch-upstream)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:2d8a18566780b7d60e4a6166d9c887d1eefc8aeb",
+			"commit": "48ff929404b3",
 			"test": {
 				"file": "build/fetch-upstream.test.ts",
 				"name": "fetch-upstream: a replacement ref or a self-ignoring directory changes nothing (PR 25 review)"
@@ -17453,7 +17453,7 @@
 			"component": "clean-host leases (image builders)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:4bb7e65462e8a4fbd2b0f2467cb36d7957443af1",
+			"commit": "1847c4a80872",
 			"test": {
 				"file": "test/clean-host.ts",
 				"name": "the per-build lease isn't written before the tag is published"
@@ -17468,7 +17468,7 @@
 			"component": "clean-host leases (image builders)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:781f2a0019590039de3250a5442e0370195dd928",
+			"commit": "6ea943d41b41",
 			"test": {
 				"file": "test/clean-host.ts",
 				"name": "a lease step is in an && list, which set -e doesn't stop on"
@@ -17483,7 +17483,7 @@
 			"component": "clean-host leases (image builders)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:781f2a0019590039de3250a5442e0370195dd928",
+			"commit": "6ea943d41b41",
 			"test": {
 				"file": "test/clean-host.ts",
 				"name": "sbx per-build templates: got"
@@ -17498,7 +17498,7 @@
 			"component": "test runners (per-build tab images)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:3a42cde40f45a91f88586c27f630478402170bec",
+			"commit": "9c25b47685fb",
 			"test": {
 				"file": "test/driver/driver.test.ts",
 				"name": "every tab suite runner forwards SECLAB_TAB_IMAGE to tabd (PR 25 review)"
@@ -17513,7 +17513,7 @@
 			"component": "clean-host leases (image builders)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:95b17d6e25fb7640145d3754b4cefe20a8d844a7",
+			"commit": "5d4ad0169562",
 			"test": {
 				"file": "test/clean-host.ts",
 				"name": "lease lock: a deletion ran while a build held the lock"
@@ -17528,7 +17528,7 @@
 			"component": "clean-host leases (image builders)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:0e54f42a848437084876c37796f695d9357937c8",
+			"commit": "bffc019293b7",
 			"test": {
 				"file": "test/clean-host.ts",
 				"name": "lease lock: an old lock was broken or removed by a non-holder"
@@ -17543,7 +17543,7 @@
 			"component": "clean-host leases (image builders)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:f8b1174486f5daf26e4b25d675ded5064d429fc1",
+			"commit": "6ea722783750",
 			"test": {
 				"file": "test/clean-host.ts",
 				"name": "lease lock: the lease of seclab-tab-oci:b-proof.lock held the lock of seclab-tab-oci:b-proof"
@@ -17950,7 +17950,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba",
+			"commit": "d8d534d994bd",
 			"test": {
 				"file": "seclab",
 				"name": "a refused branch fetch ($args) left an earlier build"
@@ -17965,7 +17965,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:fbef4bc17bf6d9d319b15326a47ae538accf8d74",
+			"commit": "9c926a451a2d",
 			"gap": "Call-site wiring; the check itself is unit-tested."
 		},
 		{
@@ -17977,7 +17977,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:fbef4bc17bf6d9d319b15326a47ae538accf8d74",
+			"commit": "9c926a451a2d",
 			"gap": "Probe wiring that needs a real macOS build."
 		},
 		{
@@ -17993,7 +17993,7 @@
 				"file": "test/app-build.test.ts",
 				"name": "fetched-app binding: the release app must be a build of a commit on origin/main"
 			},
-			"commit": "patch:fbef4bc17bf6d9d319b15326a47ae538accf8d74"
+			"commit": "9c926a451a2d"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18019,7 +18019,7 @@
 				"file": "test/app-build.test.ts",
 				"name": "fetched-app binding: the release app must be a build of a commit on origin/main"
 			},
-			"commit": "patch:fbef4bc17bf6d9d319b15326a47ae538accf8d74"
+			"commit": "9c926a451a2d"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18034,7 +18034,7 @@
 				"file": "test/app-build.test.ts",
 				"name": "fetched-app binding: a test build runs only from .work/test-builds, and GIT_DIR is ignored"
 			},
-			"commit": "patch:fbef4bc17bf6d9d319b15326a47ae538accf8d74"
+			"commit": "9c926a451a2d"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18049,7 +18049,7 @@
 				"file": "test/app-build.test.ts",
 				"name": "fetched-app binding: a test build runs only from .work/test-builds, and GIT_DIR is ignored"
 			},
-			"commit": "patch:fbef4bc17bf6d9d319b15326a47ae538accf8d74"
+			"commit": "9c926a451a2d"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18079,7 +18079,7 @@
 				"file": "seclab",
 				"name": "a refused release fetch left no app-fetch-pending marker"
 			},
-			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba"
+			"commit": "d8d534d994bd"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18090,7 +18090,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba",
+			"commit": "d8d534d994bd",
 			"gap": "Build-script plumbing; needs a full Linux build to exercise."
 		},
 		{
@@ -18102,7 +18102,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba",
+			"commit": "d8d534d994bd",
 			"gap": "Agentic harness wiring that needs a real macOS run; the check itself is unit-tested."
 		},
 		{
@@ -18114,7 +18114,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba",
+			"commit": "d8d534d994bd",
 			"gap": "Probe wiring that needs a real macOS build."
 		},
 		{
@@ -18126,7 +18126,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba",
+			"commit": "d8d534d994bd",
 			"gap": "Shell helper; the TypeScript equivalent is unit-tested."
 		},
 		{
@@ -18142,7 +18142,7 @@
 				"file": "test/app-build.test.ts",
 				"name": "fetched-app binding: missing, unreadable or commitless build info"
 			},
-			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba"
+			"commit": "d8d534d994bd"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18157,7 +18157,7 @@
 				"file": "seclab",
 				"name": "a refused branch fetch ($args) left an earlier build"
 			},
-			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba"
+			"commit": "d8d534d994bd"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18187,7 +18187,7 @@
 				"file": "seclab",
 				"name": "an earlier app that couldn't be removed still cleared the marker (FAB3-1)"
 			},
-			"commit": "patch:d074d4d7f03e98ba2e554773daa53deee4945c96"
+			"commit": "c5e433a3101a"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18202,7 +18202,7 @@
 				"file": "test/app-build.test.ts",
 				"name": "fetched-app binding: a .git planted beside an app does not choose its HEAD (FAB3-2)"
 			},
-			"commit": "patch:d074d4d7f03e98ba2e554773daa53deee4945c96"
+			"commit": "c5e433a3101a"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18217,7 +18217,7 @@
 				"file": "seclab",
 				"name": "the marker was written through a symlink (FAB3-3)"
 			},
-			"commit": "patch:d074d4d7f03e98ba2e554773daa53deee4945c96"
+			"commit": "c5e433a3101a"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18228,7 +18228,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:d074d4d7f03e98ba2e554773daa53deee4945c96",
+			"commit": "c5e433a3101a",
 			"gap": "Build-script plumbing; needs a full Linux build to exercise."
 		},
 		{
@@ -18259,7 +18259,7 @@
 				"file": "seclab",
 				"name": "the driver ran an editor beside a REH-only build's info"
 			},
-			"commit": "patch:e0fc801676a5c19dcb4490b0ccf0e8afe33e46d6"
+			"commit": "2f7b492680d5"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18270,7 +18270,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:e0fc801676a5c19dcb4490b0ccf0e8afe33e46d6",
+			"commit": "2f7b492680d5",
 			"gap": "Probe wiring that needs a real macOS build."
 		},
 		{
@@ -18282,7 +18282,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:a143e347c3a07fe4e8f5763078e609106fa17392",
+			"commit": "63a0b995f87e",
 			"test": {
 				"file": "seclab",
 				"name": "the driver replaced an explicit SECLAB_APP_SHA with HEAD"
@@ -18297,7 +18297,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:a143e347c3a07fe4e8f5763078e609106fa17392",
+			"commit": "63a0b995f87e",
 			"test": {
 				"file": "test/driver/driver.test.ts",
 				"name": "a printed launch line carries the commit the run was prepared for (PR 42 review)"
@@ -18312,7 +18312,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:1dfedecb04644bd06f5b6822898d3551c2eaf5f4",
+			"commit": "6d52cc3c4eb2",
 			"test": {
 				"file": "seclab",
 				"name": "a fetch ran into a destination another fetch holds"
@@ -18679,7 +18679,7 @@
 			"component": "pin-age lint (build/release-dates.ts imageDate)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:c07e5ee2eb8c0a26930fc2551e49c6dec0221b89",
+			"commit": "14898471b342",
 			"test": {
 				"file": "build/release-dates.test.ts",
 				"name": "BMP-1: an index is dated by the newest platform we run, not by linux/amd64 alone"
@@ -18694,7 +18694,7 @@
 			"component": "dependency register (deps/registry.json)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:7ff28ec62393f984dca05398cfc2f91d95928b86",
+			"commit": "4f83beab3d75",
 			"gap": "A register data fix; deps check's pin scan already fails on a missed pin site, but nothing checks the used list itself."
 		},
 		{
@@ -18721,12 +18721,12 @@
 			"component": "patch 0033 completion items",
 			"owner": "rpc",
 			"status": "fixed-before-landing",
-			"commit": "patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11",
+			"commit": "804c4466e299",
 			"test": {
 				"file": "test/containment/filter-module.test.ts",
 				"name": "response: a tab snippet that reads the clipboard is refused (review RSC-1)"
 			},
-			"preFix": "patch:05ae24b5b2650a1b9200c14ee15e2ec10ea39ba1",
+			"preFix": "e1c00412cb48",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261116-response-side-control.md",
 				"quote": "The case `response: a tab snippet that reads the clipboard is refused (review RSC-1)` fails on"
@@ -18741,7 +18741,7 @@
 			"component": "seclabFromTab markdown sanitiser",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11",
+			"commit": "804c4466e299",
 			"test": {
 				"file": "test/containment/filter-module.test.ts",
 				"name": "response: no image or HTML form survives in tab markdown (review RSC-2)"
@@ -18756,7 +18756,7 @@
 			"component": "findings register, ADR response-side-control",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11",
+			"commit": "804c4466e299",
 			"gap": "A register and record correction; nothing to test."
 		},
 		{
@@ -18768,7 +18768,7 @@
 			"component": "ADR response-side-control, RPC-LOCKDOWN, seclabRpcFilter.ts",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11",
+			"commit": "804c4466e299",
 			"gap": "Documentation corrections; nothing to test."
 		},
 		{
@@ -18804,7 +18804,7 @@
 			"component": "rpc-filter/tools/check_drift.py check_responses",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:5bd455e45dd47dbc1e3308a840ba2331116a024e",
+			"commit": "efcd07a6eb65",
 			"test": {
 				"file": "rpc-filter/tools/test_enforcement.py",
 				"name": "test_mutants_of_the_real_patch_fail"
@@ -18819,7 +18819,7 @@
 			"component": "test/containment/arg-validators.test.ts provider selectors",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:4441fc7324901c4f9643cc87f74adad8b51a4b83",
+			"commit": "5fbe017e1bd8",
 			"test": {
 				"file": "test/containment/filter-module.test.ts",
 				"name": "response: a provider selector keeps only documents the tab owns (review on #48)"
@@ -18834,12 +18834,12 @@
 			"component": "patch 0033 completion resolve",
 			"owner": "rpc",
 			"status": "fixed-before-landing",
-			"commit": "patch:762f068d55f3c7b49a412d7e406500dc5f759f82",
+			"commit": "c7aa333c125e",
 			"test": {
 				"file": "test/containment/filter-module.test.ts",
 				"name": "response: a resolved tab completion cannot write through __proto__ (review on #48)"
 			},
-			"preFix": "patch:829ada9c890ad6172812a74fc45a6c0b47266ec6",
+			"preFix": "69b981b3ca3c",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261117-response-control-pr-review.md",
 				"quote": "`response: a resolved tab completion cannot write through __proto__ (review on #48)` fails on"
@@ -18854,7 +18854,7 @@
 			"component": "rpc-filter/patch-src/seclabRpcFilter.ts seclabOutsideCode",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:762f068d55f3c7b49a412d7e406500dc5f759f82",
+			"commit": "c7aa333c125e",
 			"test": {
 				"file": "test/containment/filter-module.test.ts",
 				"name": "response: oversized tab markdown never reaches the lexer (review on #48)"
@@ -18869,7 +18869,7 @@
 			"component": "test/containment/response-probe",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:d1fde84c20f1b024d268bf9b1900d0cf18a132c1",
+			"commit": "0fd065af3c76",
 			"test": {
 				"file": "test/containment/harness-hygiene.test.ts",
 				"name": "response probe: its image vectors are required, each rule failing on a mutant"
@@ -18884,7 +18884,7 @@
 			"component": "rpc-filter/patch-src/seclabRpcFilter.ts seclabOutsideCode",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:e3ead87d5089c17533a53728a4650baeafa9fd20",
+			"commit": "8781771c3b37",
 			"test": {
 				"file": "test/containment/filter-module.test.ts",
 				"name": "response: oversized tab markdown never reaches the lexer (review on #48)"
@@ -18899,7 +18899,7 @@
 			"component": "MainThreadSearch $handleFileMatch / $handleTextMatch validators",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:f078b985c01c81ea1b267707ab076fd5951c39c5",
+			"commit": "6de560a59e67",
 			"test": {
 				"file": "test/containment/arg-validators.test.ts",
 				"name": "a file result carrying results on a host resource"
@@ -18914,7 +18914,7 @@
 			"component": "Search view messages (patch 0051), check_drift.py RESPONSE_NONE",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:f078b985c01c81ea1b267707ab076fd5951c39c5",
+			"commit": "6de560a59e67",
 			"test": {
 				"file": "test/containment/search-responses.test.ts",
 				"name": "patch 0051 sanitises tab search messages and the query sent to a tab"
@@ -18941,7 +18941,7 @@
 			"component": "MainThreadSearch $handleFileMatch",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:f078b985c01c81ea1b267707ab076fd5951c39c5",
+			"commit": "6de560a59e67",
 			"test": {
 				"file": "test/containment/arg-validators.test.ts",
 				"name": "an untitled file result"
@@ -18956,7 +18956,7 @@
 			"component": "MainThreadSearch $handleFileMatch",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:f078b985c01c81ea1b267707ab076fd5951c39c5",
+			"commit": "6de560a59e67",
 			"test": {
 				"file": "test/containment/arg-validators.test.ts",
 				"name": "tab providers and search: the legitimate shapes pass"
@@ -18971,7 +18971,7 @@
 			"component": "test/containment/search-probe.ts",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "patch:f078b985c01c81ea1b267707ab076fd5951c39c5",
+			"commit": "6de560a59e67",
 			"gap": "The harness itself; its runs are the evidence (EDR search-in-tabs)."
 		},
 		{
@@ -18983,7 +18983,7 @@
 			"component": "ARCHITECTURE, RPC-LOCKDOWN, policy.json, check_drift.py",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "patch:f078b985c01c81ea1b267707ab076fd5951c39c5",
+			"commit": "6de560a59e67",
 			"gap": "Documentation corrections; nothing to test."
 		},
 		{
@@ -18995,7 +18995,7 @@
 			"component": "tabTextMatches validator",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:d7246e204420fb3ae2dbc315fadabf52c11973d1",
+			"commit": "2cfec63982fd",
 			"test": {
 				"file": "test/containment/arg-validators.test.ts",
 				"name": "a text result that revives as a host URI"
@@ -19026,7 +19026,7 @@
 			"component": "search review record, register",
 			"owner": "rpc",
 			"status": "fixed-untested",
-			"commit": "patch:d7246e204420fb3ae2dbc315fadabf52c11973d1",
+			"commit": "2cfec63982fd",
 			"gap": "Record corrections; nothing to test."
 		},
 		{
@@ -19038,7 +19038,7 @@
 			"component": "teardown / clean-host / tabd Falco",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:9b50c3106f34f904224c0d9b34049b4e681cc269",
+			"commit": "2f8160733035",
 			"test": {
 				"file": "test/containment/teardown.test.ts",
 				"name": "PS-8: a sensor still being removed is waited for"
@@ -19053,7 +19053,7 @@
 			"component": "teardown / clean-host / tabd Falco",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:9b50c3106f34f904224c0d9b34049b4e681cc269",
+			"commit": "2f8160733035",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "obs review PS-8: tabd exits only once its Falco container is removed"
@@ -19068,7 +19068,7 @@
 			"component": "teardown / clean-host / tabd Falco",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:9b50c3106f34f904224c0d9b34049b4e681cc269",
+			"commit": "2f8160733035",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "obs review PS-8: tabd exits only once its Falco container is removed"
@@ -19083,7 +19083,7 @@
 			"component": "teardown / clean-host / tabd Falco",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:9b50c3106f34f904224c0d9b34049b4e681cc269",
+			"commit": "2f8160733035",
 			"test": {
 				"file": "test/containment/teardown.test.ts",
 				"name": "PS-8: a failed listing never counts as gone"
@@ -19102,7 +19102,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "obs review PS-8: tabd exits only once its Falco container is removed"
 			},
-			"commit": "patch:9b50c3106f34f904224c0d9b34049b4e681cc269"
+			"commit": "2f8160733035"
 		},
 		{
 			"record": "20261104-harness-teardown.md",
@@ -19117,7 +19117,7 @@
 				"file": "test/containment/teardown.test.ts",
 				"name": "PS-13: a stalled docker ends at the deadline"
 			},
-			"commit": "patch:9b50c3106f34f904224c0d9b34049b4e681cc269"
+			"commit": "2f8160733035"
 		}
 	]
 }
