@@ -10204,9 +10204,9 @@
 			"commit": "95a1f55",
 			"test": {
 				"file": "test/docsync/probe.ts",
-				"name": "hijack 1b: the tab registered a filesystem provider for `output`"
+				"name": "hijack 1: the filter refused the tab providers for host schemes (decision log)"
 			},
-			"note": "Record cites pre-rebase 95a1f55; landed as 95a1f55. The rule is now per model (born as this text file's own model under a provider this host registered)."
+			"note": "Record cites pre-rebase 95a1f55; landed as 95a1f55. The rule is now per model (born as this text file's own model under a provider this host registered). Since EDT-11 (2026-11-18) the RPC filter refuses the tab's provider registration before 0035 is reached; the probe asserts the refusal and that no window-log canary reaches a tab document."
 		},
 		{
 			"record": "20261109-document-sync-provenance.md",
@@ -14102,8 +14102,13 @@
 			"anchor": "EDT-11",
 			"severity": "medium",
 			"summary": "The docsync probe (0035's runtime regression test) no longer runs on builds with the RPC filter, and 0038 hides the host untitled URIs it relied on.",
-			"status": "open",
-			"gap": "Rework the docsync probe to drive host-side actions from the window through the headless driver and pass test URIs on a test-only channel."
+			"status": "fixed",
+			"commit": "patch:8516d7e64629cf5d19d6317cdc727ddccb719883",
+			"test": {
+				"file": "test/docsync/probe.ts",
+				"name": "DOCSYNC no host canary in any tab document (settings, keybindings, window log, host file and its diff)"
+			},
+			"note": "The probe drives host actions from the window through the headless driver (docs/edr/20261118-docsync-probe-driven.md); it passes on main and fails without 0035."
 		},
 		{
 			"record": "20261116-editor-tab-provenance.md",
