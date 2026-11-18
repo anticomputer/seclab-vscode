@@ -18,7 +18,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
-import { dirname, join } from 'node:path';
+import { posix, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -41,6 +41,9 @@ const FILES = {
 	loggers: 'contrib/remote/common/remote.contribution.ts',
 	native: 'services/extensionManagement/electron-browser/nativeExtensionManagementService.ts',
 	remoteManagement: 'services/extensionManagement/electron-browser/remoteExtensionManagementService.ts',
+	mcpDiscovery: 'contrib/mcp/common/discovery/nativeMcpRemoteDiscovery.ts',
+	mcpGlobal: 'contrib/mcp/common/mcpCopilotGlobalConfigurationService.ts',
+	mcpManagement: 'services/mcp/common/mcpWorkbenchManagementService.ts',
 } as const;
 type Key = keyof typeof FILES;
 
@@ -104,7 +107,7 @@ function build(patched: boolean, patch = PATCH, filter = FILTER): Build {
 	// versions of the patch, which had fewer or other ones), and the module-level seclab functions
 	// of the patched files.
 	const named = (src: string, re: RegExp) => [...src.matchAll(re)].map(m => m[1]);
-	const helperNames = named(filter, /\n(?:export )?function (seclab(?:TabUris|TabUri|UriOnTab|TabServerChannel|NoGallerySource|ExtensionManifest|TabExtensionsChannel))\b/g);
+	const helperNames = named(filter, /\n(?:export )?function (seclab(?:TabUris|TabUri|UriOnTab|TabServerChannel|NoGallerySource|ExtensionManifest|UnrevivedManifest|TabExtensionsChannel))\b/g);
 	const consts = ['SECLAB_URI_KEYS', 'SECLAB_URI_MARKS', 'SECLAB_MANIFEST_KEYS'].map(c => new RegExp(`\\nconst ${c}\\b[^\\n]+`).exec(filter)?.[0] ?? '').join('\n');
 	const stubs: Record<string, unknown> = {
 		seclabIsTabAuthority: (a: unknown) => typeof a === 'string' && /^seclab\+/.test(a),
@@ -129,6 +132,7 @@ function build(patched: boolean, patch = PATCH, filter = FILTER): Build {
 		Event: {},
 		platform: { language: 'en' },
 		CancellationToken: { None: {} },
+		posix,
 		Promises: { settled: (ps: Promise<unknown>[]) => Promise.all(ps) },
 		areSameExtensions: (a: { id: string }, b: { id: string }) => a.id === b.id,
 		nls: { localize: (_k: string, m: string) => m },
@@ -239,7 +243,8 @@ async function profiles(b: Build, authority: string, reply: unknown, event: unkn
 	let replyRefused = false;
 	try {
 		await channel.call('createProfile');
-	} catch {
+	} catch (e) {
+		assert.match((e as Error).message, /outside the tab/);
 		replyRefused = true;
 	}
 	const events: unknown[] = [];
@@ -259,7 +264,8 @@ async function management(b: Build, authority: string, reply: unknown, event: un
 	let got: unknown;
 	try {
 		got = await channel.call(command);
-	} catch {
+	} catch (e) {
+		assert.match((e as Error).message, /outside the tab/);
 		replyRefused = true;
 	}
 	const events: unknown[] = [];
@@ -274,7 +280,8 @@ async function loggers(b: Build, authority: string, registered: unknown[], event
 	let replyRefused = false;
 	try {
 		await channel.call('getRegisteredLoggers');
-	} catch {
+	} catch (e) {
+		assert.match((e as Error).message, /outside the tab/);
 		replyRefused = true;
 	}
 	const events: unknown[] = [];
@@ -283,7 +290,8 @@ async function loggers(b: Build, authority: string, registered: unknown[], event
 }
 
 /** Whether the host's extension management, in a window on `authority`, installs a package from `vsix`. */
-const WS = '/Users/someone/projects/ws';
+// NFC, as a workspace folder's URI carries it; ENV-21 sends it NFD.
+const WS = '/Users/someone/proj\u00e9cts/ws';
 async function hostInstall(b: Build, authority: string, vsix: { scheme: string; path?: string }): Promise<boolean> {
 	const fn = evaluate<(v: unknown) => Promise<unknown>>(
 		asFunction(slice(b.sources.native, /\n\toverride async install\(/)!).replace('super.install(', 'this.superInstall('), 'install', { ...b.deps, Schemas: { vscodeRemote: 'vscode-remote', file: 'file' } });
@@ -295,8 +303,9 @@ async function hostInstall(b: Build, authority: string, vsix: { scheme: string; 
 			downloadVsix: async (v: unknown) => ({ location: v, cleanup: async () => { } }),
 			superInstall: async () => { installed = true; },
 		}, vsix);
-	} catch {
-		// refused
+	} catch (e) {
+		// Only the patch's own refusal counts; any other error is the suite's.
+		assert.match((e as Error).message, /sandboxed tab/);
 	}
 	return installed;
 }
@@ -323,6 +332,36 @@ async function failedInstalls(b: Build, authority: string): Promise<number> {
 	});
 	return r.failed.length;
 }
+
+/** Whether a tab server's MCP discovery reply naming host directories reaches the window, at `site`. */
+async function mcpDiscovery(b: Build, source: string, authority: string): Promise<boolean> {
+	const raw = { call: async () => ({ platform: 1, homedir: { $mid: 1, scheme: 'file', authority: '', path: '/Users/someone' }, copilotHome: { $mid: 1, scheme: 'file', authority: '', path: '/Users/someone/.copilot' } }), listen: () => () => ({ dispose() { } }) };
+	const channel = wrapper(b, source, /INativeMcpDiscoveryHelperService>\((seclab\w+)\(channel,/)?.(raw, authority, 'mcp-discovery') ?? raw;
+	try {
+		await channel.call('load');
+		return true;
+	} catch (e) {
+		assert.match((e as Error).message, /outside the tab/);
+		return false;
+	}
+}
+
+/** The tab server's MCP management channel: whether a reply naming a host readme reaches the window, and a genuine reply. */
+async function mcpManagement(b: Build, authority: string, reply: unknown): Promise<{ refused: boolean; reply?: unknown }> {
+	const raw = { call: async () => structuredClone(reply), listen: () => () => ({ dispose() { } }) };
+	const name = /(seclab\w+)\(remoteAgentConnection\.getChannel<IChannel>\('mcpManagement'\)/.exec(b.sources.mcpManagement)?.[1];
+	const channel = name ? (b.deps[name] as (c: unknown, a: string, s: string, k: unknown) => typeof raw)(raw, authority, 'mcp-management', b.deps.seclabUnrevivedManifest) : raw;
+	try {
+		return { refused: false, reply: await channel.call('getInstalled') };
+	} catch (e) {
+		assert.match((e as Error).message, /outside the tab/);
+		return { refused: true };
+	}
+}
+const mcpServer = (authority: string, readme: unknown) => ({
+	name: 'srv', config: { type: 'stdio', command: 'node', args: ['s.js'] }, mcpResource: remote(authority, '/home/agent/.seclab-reh/data/User/mcp.json'),
+	readmeUrl: readme, manifest: { name: 'srv', packages: [{ registryType: 'npm', identifier: 'x', transport: { type: 'stdio' } }], remotes: [{ type: 'sse', url: 'http://192.0.2.1/', scheme: 'https', path: '/' }] },
+});
 
 const GALLERY = { identifier: { id: 'tab.ext', uuid: '00000000-0000-4000-8000-000000000000' }, name: 'ext', version: '1.0.0', assets: { manifest: { uri: 'http://192.0.2.1/m', fallbackUri: 'http://192.0.2.1/m' }, download: { uri: 'http://192.0.2.1/x.vsix', fallbackUri: 'http://192.0.2.1/x.vsix' } } };
 const local = (authority: string, location: unknown) => ({
@@ -411,6 +450,21 @@ async function leaks(b: Build): Promise<string[]> {
 	if (await hostInstall(b, TAB, { scheme: 'file', path: `${WS.toUpperCase()}/out/x.vsix` })) {
 		out.push('a host file in the tab workspace installs on the host');
 	}
+	if (await hostInstall(b, TAB, { scheme: 'file', path: `${WS.replace(/\/ws$/, '/other/../ws')}/x.vsix` })) {
+		out.push('a host file in the tab workspace by a dot-dot path installs on the host');
+	}
+	if (await hostInstall(b, TAB, { scheme: 'file', path: `${WS.normalize('NFD')}/x.vsix` })) {
+		out.push('a host file in the tab workspace by its NFD path installs on the host');
+	}
+	if (await mcpDiscovery(b, b.sources.mcpDiscovery, TAB)) {
+		out.push('mcp discovery: a reply naming host directories');
+	}
+	if (await mcpDiscovery(b, b.sources.mcpGlobal, TAB)) {
+		out.push('mcp global configuration: a reply naming host directories');
+	}
+	if (!(await mcpManagement(b, TAB, [mcpServer(TAB, HOST)])).refused) {
+		out.push('mcp management: a reply naming a host readme');
+	}
 	if (await hostDependencies(b, TAB)) {
 		out.push('a tab manifest installs its pack on the host');
 	}
@@ -434,7 +488,10 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'profiles: a reply naming a host file', 'profiles: an event naming a host file', 'watcher: a change to a host file', 'extensions: one in a host directory',
 	'host strings kept in a checked tab URI', 'extension management: a reply naming a host location', 'extension management: an event naming a host location',
 	'extension management: onInstallExtension carrying a gallery entry', 'extension management: onDidInstallExtensions carrying a gallery entry',
-	'a tab package installs on the host', 'a host file in the tab workspace installs on the host', 'a tab manifest installs its pack on the host',
+	'a tab package installs on the host', 'a host file in the tab workspace installs on the host',
+	'a host file in the tab workspace by a dot-dot path installs on the host', 'a host file in the tab workspace by its NFD path installs on the host',
+	'mcp discovery: a reply naming host directories', 'mcp global configuration: a reply naming host directories', 'mcp management: a reply naming a host readme',
+	'a tab manifest installs its pack on the host',
 	'the tab server picks installs the window retries', 'extension management: a host location under a manifest key elsewhere', 'loggers: a reply registering a host file', 'loggers: an event registering a host file'];
 
 const tests: Array<[string, () => Promise<void>]> = [
@@ -445,7 +502,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 	['a tab window takes none of them, and logs each refusal', async () => {
 		const b = build(true);
 		assert.deepEqual(await leaks(b), []);
-		assert.deepEqual([...new Set(b.refusals)].sort(), ['environment', 'extension-management', 'extensions', 'host-install', 'loggers', 'profiles', 'watcher']);
+		assert.deepEqual([...new Set(b.refusals)].sort(), ['environment', 'extension-management', 'extensions', 'host-install', 'loggers', 'mcp-discovery', 'mcp-management', 'profiles', 'watcher']);
 	}],
 	['a tab window takes a genuine server unchanged', async () => {
 		const b = build(true);
@@ -478,6 +535,12 @@ const tests: Array<[string, () => Promise<void>]> = [
 		// A host VSIX outside the tab's workspace still installs on the host from a tab window.
 		assert.equal(await hostInstall(b, TAB, { scheme: 'file', path: '/Users/someone/Downloads/x.vsix' }), true);
 		assert.equal(await hostInstall(b, TAB, { scheme: 'file', path: `${WS}-other/x.vsix` }), true);
+		// MCP discovery on the tab, and an installed MCP server whose manifest carries URL parts.
+		const genuineDiscovery = { call: async () => ({ platform: 3, homedir: remote(TAB, '/home/agent') }), listen: () => () => ({ dispose() { } }) };
+		await (wrapper(b, b.sources.mcpDiscovery, /INativeMcpDiscoveryHelperService>\((seclab\w+)\(channel,/)!(genuineDiscovery, TAB, 'mcp-discovery')).call('load');
+		const mm = await mcpManagement(b, TAB, [mcpServer(TAB, remote(TAB, '/srv/README.md'))]);
+		assert.equal(mm.refused, false);
+		assert.deepEqual((mm.reply as Array<{ manifest: unknown }>)[0].manifest, mcpServer(TAB, null).manifest);
 		assert.deepEqual(b.refusals, []);
 	}],
 	['a window that is not a tab keeps upstream behaviour', async () => {
@@ -493,6 +556,8 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.equal(await hostInstall(b, other, remote(other, '/x.vsix')), true);
 		assert.equal(await hostDependencies(b, other), true);
 		assert.equal(await failedInstalls(b, other), 1);
+		assert.equal(await mcpDiscovery(b, b.sources.mcpDiscovery, other), true);
+		assert.equal((await mcpManagement(b, other, [mcpServer(other, HOST)])).refused, false);
 		assert.equal((await loggers(b, other, [{ id: 'x', name: 'x', resource: HOST }], { added: [], removed: [] })).replyRefused, false);
 		assert.deepEqual(b.refusals, []);
 	}],
@@ -518,9 +583,14 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['only one install event stripped', { filter: ["event === 'onInstallExtension' || event === 'onDidInstallExtensions'", "event === 'onDidInstallExtensions'"] }, 'extension management: onInstallExtension carrying a gallery entry'],
 			['host install from a tab window', { patch: ["+		if (authority && seclabIsTabAuthority(authority) && (vsix.scheme === Schemas.vscodeRemote || (vsix.scheme === Schemas.file && inTab(vsix.path)))) {", "+		if (false) {"] }, 'a tab package installs on the host'],
 			['host files in the tab workspace install', { patch: ["(vsix.scheme === Schemas.vscodeRemote || (vsix.scheme === Schemas.file && inTab(vsix.path)))", "vsix.scheme === Schemas.vscodeRemote"] }, 'a host file in the tab workspace installs on the host'],
-			['workspace match is case-sensitive', { patch: ["+			return p.toLowerCase() === root || p.toLowerCase().startsWith(`${root}/`);", "+			return p === f.uri.path || p.startsWith(`${f.uri.path}`);"] }, 'a host file in the tab workspace installs on the host'],
+			['workspace match is case-sensitive', { patch: [".normalize('NFC').toLowerCase().replace", ".normalize('NFC').replace"] }, 'a host file in the tab workspace installs on the host'],
 			['tab manifests install their packs on the host', { patch: ["+		const authority = this.seclabEnvironment.remoteAuthority;\n+		if (authority && seclabIsTabAuthority(authority)) {", "+		const authority = this.seclabEnvironment.remoteAuthority;\n+		if (false) {"] }, 'a tab manifest installs its pack on the host'],
 			['startup retries the tab\'s failed installs', { patch: ["+		const authority = this.environmentService.remoteAuthority;\n+		if (authority && seclabIsTabAuthority(authority)) {\n+			if (summary", "+		const authority = this.environmentService.remoteAuthority;\n+		if (false) {\n+			if (summary"] }, 'the tab server picks installs the window retries'],
+			['paths compared unresolved', { patch: ["posix.normalize(p).normalize('NFC').toLowerCase()", "p.toLowerCase()"] }, 'a host file in the tab workspace by a dot-dot path installs on the host'],
+			['paths compared unnormalised', { patch: [".normalize('NFC').toLowerCase().replace", ".toLowerCase().replace"] }, 'a host file in the tab workspace by its NFD path installs on the host'],
+			['mcp discovery unchecked', { patch: ["ProxyChannel.toService<INativeMcpDiscoveryHelperService>(seclabTabServerChannel(channel, connection.remoteAuthority, 'mcp-discovery'));", "ProxyChannel.toService<INativeMcpDiscoveryHelperService>(channel);"] }, 'mcp discovery: a reply naming host directories'],
+			['mcp global configuration unchecked', { patch: ["ProxyChannel.toService<INativeMcpDiscoveryHelperService>(seclabTabServerChannel(channel, connection.remoteAuthority, 'mcp-discovery')).load());", "ProxyChannel.toService<INativeMcpDiscoveryHelperService>(channel).load());"] }, 'mcp global configuration: a reply naming host directories'],
+			['mcp management unchecked', { patch: ["seclabTabServerChannel(remoteAgentConnection.getChannel<IChannel>('mcpManagement'), remoteAgentConnection.remoteAuthority, 'mcp-management', seclabUnrevivedManifest)", "remoteAgentConnection.getChannel<IChannel>('mcpManagement')"] }, 'mcp management: a reply naming a host readme'],
 			['any manifest key is skipped', { filter: ["	return key === 'manifest' && (owner.length === 0", "	return key === 'manifest' || (owner.length === 0"] }, 'extension management: a host location under a manifest key elsewhere'],
 			['logger channel unwrapped', { patch: ["new RemoteLoggerChannelClient(loggerService, seclabTabServerChannel(channel, connection.remoteAuthority, 'loggers'))", "new RemoteLoggerChannelClient(loggerService, channel)"] }, 'loggers: an event registering a host file'],
 		];
