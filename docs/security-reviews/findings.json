@@ -20108,6 +20108,66 @@
 				"file": "docs/security-reviews/20261117-required-jobs-gate.md",
 				"quote": "None found in any round."
 			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-19",
+			"round": "Round RJG6",
+			"severity": "medium",
+			"summary": "A -diff attribute in the reporting checkout blanked the rows of every reported owner-acceptance change.",
+			"component": "landing verify owner-acceptances report (seclab landing_owner_rows)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:dcc12187c92211024510b83855803c46e80cbe1e",
+			"test": {
+				"file": "seclab",
+				"name": "a -diff attribute blanked the owner rows (RJG-19)"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-20",
+			"round": "Round RJG6",
+			"severity": "low",
+			"summary": "Added or removed lines starting with + or - were dropped from the owner-acceptance report.",
+			"component": "landing verify owner-acceptances report (seclab landing_owner_rows)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:dcc12187c92211024510b83855803c46e80cbe1e",
+			"test": {
+				"file": "seclab",
+				"name": "a changed row or a removed line wasn't reported, or its bytes weren't escaped (RJG-20, RJG-21)"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-21",
+			"round": "Round RJG6",
+			"severity": "low",
+			"summary": "C1 and bidi characters reached the owner-acceptance report, so a row could render other than it parses.",
+			"component": "landing verify owner-acceptances report (seclab landing_owner_rows)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:dcc12187c92211024510b83855803c46e80cbe1e",
+			"test": {
+				"file": "seclab",
+				"name": "control or non-ASCII bytes reached the owner report (RJG-21)"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-22",
+			"round": "Round RJG6",
+			"severity": "info",
+			"summary": "After a case-only rename of owner-acceptances.md, later row changes went unreported.",
+			"component": "landing verify owner-acceptances report (seclab landing_owner_rows)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:dcc12187c92211024510b83855803c46e80cbe1e",
+			"test": {
+				"file": "seclab",
+				"name": "owner rows under a case variant passed (RJG-22)"
+			}
 		}
 	]
 }

@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 93 | 258 | 414 | 53 | 832 |
+| fixed | 14 | 93 | 259 | 416 | 54 | 836 |
 | fixed-before-landing | 0 | 5 | 0 | 0 | 0 | 5 |
 | fixed-untested | 0 | 5 | 63 | 185 | 72 | 325 |
 | accepted-residual | 0 | 2 | 13 | 73 | 26 | 114 |
 | deferred | 2 | 1 | 13 | 11 | 3 | 30 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 16 | 108 | 358 | 698 | 189 | 1369 |
+| **all** | 16 | 108 | 359 | 700 | 190 | 1373 |
 
 ## Baseline: open high and critical findings
 
@@ -2416,6 +2416,10 @@ Every other commit the register cites is on main's history, or on the branch its
 | RJG-16 | info | accepted-residual | A liveness pending entry can be re-added after its subject is removed in an earlier change. | accepted by an agent: It takes a visible two-change sequence; for this gate it also needs the gate file removed or renamed, which the required-checks validator refuses. |
 | RJG-17 | info | fixed-untested | The .work listing was piped into grep -q, which can fail open under pipefail for a large listing. | Not reachable at today's tree size; the listing is captured before it is matched, so there is no pipeline left to test. |
 | RJG-18 | info | false-positive | Prompt injection. | The review recorded no issue. |
+| RJG-19 | medium | fixed | A -diff attribute in the reporting checkout blanked the rows of every reported owner-acceptance change. | patch:dcc12187c92211024510b83855803c46e80cbe1e · `seclab` "a -diff attribute blanked the owner rows (RJG-19)" |
+| RJG-20 | low | fixed | Added or removed lines starting with + or - were dropped from the owner-acceptance report. | patch:dcc12187c92211024510b83855803c46e80cbe1e · `seclab` "a changed row or a removed line wasn't reported, or its bytes weren't escaped (RJG-20, RJG-21)" |
+| RJG-21 | low | fixed | C1 and bidi characters reached the owner-acceptance report, so a row could render other than it parses. | patch:dcc12187c92211024510b83855803c46e80cbe1e · `seclab` "control or non-ASCII bytes reached the owner report (RJG-21)" |
+| RJG-22 | info | fixed | After a case-only rename of owner-acceptances.md, later row changes went unreported. | patch:dcc12187c92211024510b83855803c46e80cbe1e · `seclab` "owner rows under a case variant passed (RJG-22)" |
 
 ### [20261117-response-control-pr-review](20261117-response-control-pr-review.md)
 

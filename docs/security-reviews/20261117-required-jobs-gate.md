@@ -59,3 +59,14 @@ A check of the RJG-15 fix.
 |---|---|---|---|---|---|
 | RJG-17 | Info | re-validation | The `.work` listing was piped into `grep -q`, a shape that fails open under `pipefail` once the listing is large enough for the writer to take SIGPIPE; not reachable at today's size. | Fixed | The listing is captured first, then matched. |
 | RJG-18 | Info | prompt injection | None found in any round. | No finding | — |
+
+## Round RJG6
+`landing verify`'s report of merged changes to `owner-acceptances.md` (the compensating control
+for HHHH-4).
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| RJG-19 | Medium | owner report | A `-diff` or binary attribute on the file in the reporting checkout, landed in an earlier change, made every later report show the commit with no rows. | Fixed | The diff runs with `--text` and no attributes file. |
+| RJG-20 | Low | owner report | Added or removed lines starting with `+` or `-` (markdown bullets) were dropped from the report. | Fixed | Every added and removed line after the hunk header is reported. |
+| RJG-21 | Low | owner report | Only C0 controls were removed: C1 and bidi characters reached the reader, so a row could render other than it parses. | Fixed | Every byte outside printable ASCII is shown as `?`. |
+| RJG-22 | Info | owner report | The report watched one literal path: after a case-only rename, later row changes went unreported. | Fixed | A merged path that is the file under another case, or a merged tree without the file, is refused. |
