@@ -21463,6 +21463,17 @@
 				"file": "test/containment/reh-environment.test.ts",
 				"name": "a tab window takes none of them, and logs each refusal"
 			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-68",
+			"round": "patch 0059 round 18",
+			"severity": "low",
+			"summary": "A tab can make host extensions unavailable in its own window: the extension registry checks dependency loops by id across the host's and the tab's extensions, so a tab extension claiming an id that closes a cycle removes the host extension in it, and activation resolves a host extension's dependency through the tab's claimed id. An availability loss contained to that window, not an escape. Tab Manager can't be hit: the product pins it to the local host, so the local copy takes its id, and it has no dependencies.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "deferred",
+			"followUp": "Partition the extension description registry by tab in tab windows, tracked as its own item (coordinator, 2026-11-18). Cutting host-to-tab dependency links is ruled out, since it breaks genuine cross-host dependencies. test/containment/reh-environment.test.ts \"Tab Manager stays out of reach of a tab claiming its id\" keeps Tab Manager out of reach meanwhile."
 		}
 	]
 }
