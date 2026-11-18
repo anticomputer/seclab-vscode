@@ -1273,10 +1273,14 @@ driver_bind() { # TGZ
 	local info
 	info="$(cd "$(dirname "$1")" && pwd)/build-info.json"
 	DRIVER_BIND=()
-	if [[ -f "$info" && ! -L "$info" ]] && jq -e '(.repoSha | type == "string") and (.targets | test("editor"))' "$info" >/dev/null 2>&1; then
+	if [[ -L "$info" ]] || { [[ -f "$info" ]] && ! jq -e '.targets | type == "string" and test("editor")' "$info" >/dev/null 2>&1; }; then
+		# A later REH-only build's info: the editor beside it is from an earlier build (Copilot review on PR 42).
+		echo "refusing: $info isn't an editor build's (a later REH-only build, or a symlink); rebuild the editor (./seclab build linux editor)" >&2
+		exit 2
+	elif [[ -f "$info" ]] && jq -e '.repoSha | type == "string"' "$info" >/dev/null 2>&1; then
 		DRIVER_BIND=(-v "$info:/build-info.json:ro" -e "SECLAB_APP_SHA=$(git_clean -C "$ROOT" rev-parse HEAD)")
 	else
-		echo "warning: $info doesn't record the commit of an editor build (a dirty tree, or no build info); this run isn't bound to a commit" >&2
+		echo "warning: $info doesn't record a commit (a dirty tree's build, or no build info); this run isn't bound to a commit" >&2
 	fi
 }
 
@@ -1323,6 +1327,18 @@ fetch_self_test() {
 	rm -f "$tmp/.work/app-fetch-pending"
 	rc=0; ( ROOT="$tmp"; fetch_macos x ) >/dev/null 2>&1 || rc=$?
 	[[ $rc -ne 0 && -f "$tmp/.work/app-fetch-pending" ]] || { echo "fetch self-test: a refused release fetch left no app-fetch-pending marker" >&2; rm -rf "$tmp"; exit 1; }
+	# The Linux driver's binding: an editor build's info binds, a REH-only build's refuses, a dirty
+	# build's (no commit) or none runs unbound (Copilot review on PR 42).
+	mkdir -p "$tmp/out"
+	printf '{"repoSha":"%s","targets":"reh"}' "$(git_clean -C "$ROOT" rev-parse HEAD)" > "$tmp/out/build-info.json"
+	rc=0; ( driver_bind "$tmp/out/e.tgz" ) >/dev/null 2>&1 || rc=$?
+	[[ $rc -ne 0 ]] || { echo "fetch self-test: the driver ran an editor beside a REH-only build's info" >&2; rm -rf "$tmp"; exit 1; }
+	printf '{"repoSha":"%s","targets":"editor"}' "$(git_clean -C "$ROOT" rev-parse HEAD)" > "$tmp/out/build-info.json"
+	[[ "$(driver_bind "$tmp/out/e.tgz" 2>/dev/null; echo "${#DRIVER_BIND[@]}")" == 4 ]] || { echo "fetch self-test: an editor build's info didn't bind the driver" >&2; rm -rf "$tmp"; exit 1; }
+	printf '{"targets":"editor"}' > "$tmp/out/build-info.json"
+	rc=0; [[ "$(driver_bind "$tmp/out/e.tgz" 2>/dev/null; echo "${#DRIVER_BIND[@]}")" == 0 ]] || rc=1
+	rm -f "$tmp/out/build-info.json"
+	[[ $rc -eq 0 && "$(driver_bind "$tmp/out/e.tgz" 2>/dev/null; echo "${#DRIVER_BIND[@]}")" == 0 ]] || { echo "fetch self-test: a dirty build's info, or none, didn't run unbound" >&2; rm -rf "$tmp"; exit 1; }
 	rm -rf "$tmp"
 	echo "fetch self-test: ok"
 }

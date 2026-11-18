@@ -130,7 +130,9 @@ function variantApp(v: Variant, base: string): string {
 
 async function runVariant(v: Variant): Promise<void> {
 	console.log(`\n== ${v}`);
-	const base = path.join(repo, '.work', 'window-log-probe', v);
+	// Under .work/test-builds, so a test build's altered copies run from where test builds may
+	// (Copilot review on PR 42).
+	const base = path.join(repo, '.work', 'test-builds', 'window-log-probe', v);
 	const userData = path.join(os.homedir(), '.seclab-test', `wl-${v}`);
 	checkUserDataDir(userData);
 	const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
