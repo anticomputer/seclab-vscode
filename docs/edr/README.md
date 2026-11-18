@@ -126,6 +126,7 @@ Same rules as ADRs:
 | 2026-11-16 | [A tab can't take over a host scheme: provider registrations refused (DOCSYNC-R7)](20261116-scheme-squatting.md) | accepted |
 | 2026-11-16 | [Host telemetry ids stay out of tabs: telemetry off, checked at build and release](20261116-tab-telemetry-ids.md) | accepted |
 | 2026-11-16 | [A tab's workspace data names only the tab's folder (DOCSYNC-R6)](20261116-workspace-data.md) | accepted |
+| 2026-11-17 | [Fetched-app binding: a run launches only the build it was asked to test](20261117-fetched-app-binding.md) | accepted |
 | 2026-11-17 | [Findings fixed before they land, and a register that rebases cleanly](20261117-fixed-before-landing.md) | accepted |
 | 2026-11-17 | [Link check: retry GitHub's rate limits instead of accepting them](20261117-link-check-retries.md) | accepted |
 | 2026-11-17 | [Code-OSS 1.145.0 → 1.145.3](20261117-upstream-1145-3.md) | accepted |
