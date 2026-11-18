@@ -344,8 +344,10 @@ class _SlashContext:
 
 
 def _js_lines(text: str) -> list:
-    """The text split at JavaScript line terminators (LF, CRLF, CR, U+2028, U+2029)."""
-    lines = re.split("\r\n|[\n\r\u2028\u2029]", text)
+    """The text split at LF, CRLF and CR. U+2028 and U+2029 also end a line in JavaScript, except
+    inside a string literal, so splitting there could move a string boundary; a payload holding
+    one literally fails the lint instead (`line-separator`; PR review on #27)."""
+    lines = re.split("\r\n|[\n\r]", text)
     return lines[:-1] if lines and lines[-1] == "" else lines
 
 
@@ -621,15 +623,23 @@ def main(argv: list | None = None) -> int:
             violations.append((rel, 0, "missing", "payload file not found"))
             continue
         with open(path, "r", encoding="utf-8") as fh:
-            # JavaScript's line terminators only: str.splitlines() also splits on U+000B, U+000C,
-            # U+001C-U+001E and U+0085, which end no `//` comment in JavaScript (PR review on #27).
+            # Not str.splitlines(): it also splits on U+000B, U+000C, U+001C-U+001E and U+0085,
+            # which end no `//` comment in JavaScript (PR review on #27).
             lines = _js_lines(fh.read())
+        is_js = rel.endswith(".js")
+        for n, line in enumerate(lines, start=1):
+            if is_js and ("\u2028" in line or "\u2029" in line):
+                violations.append((rel, n, "line-separator",
+                                   "a literal U+2028 or U+2029: JavaScript ends a line there except "
+                                   "inside a string, so this lint could misread the boundaries; "
+                                   "write it escaped (\\u2028) in a string"))
         # Which lines hold code comes from the comment scanner, not from a line's first characters:
         # a code line can start with `*` (a continued product), and those were skipped (PR review on
         # #27). A rule still matches the whole line, comment included, which only adds matches.
+        # The scanner knows JavaScript only: in a shell payload every line counts as code.
         ambiguous: list = []
         unlexable: list = []
-        text = _strip_comments("\n".join(lines), ambiguous, unlexable)
+        text = _strip_comments("\n".join(lines), ambiguous, unlexable) if is_js else "\n".join(lines)
         for n, rid in sorted(set(unlexable)):
             violations.append((rel, n, rid, {
                 "html-comment": "`<!--` (or `-->` at a line start) is a line comment to Node in a "
