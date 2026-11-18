@@ -1274,6 +1274,11 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 			if (e && e.event !== undefined && (e.event !== 'workflow_run' || e.run === undefined || !onlyWorkflowRun)) {
 				errors.push(`subject ${s.id}: event: workflow_run is only for a run of a workflow that runs on workflow_run alone`);
 			}
+			// Such a workflow is proven only by a workflow_run run: unmarked, verify-runs would take a
+			// dispatch or scheduled run of the file instead (Copilot review on PR 63).
+			if (e && onlyWorkflowRun && e.event !== 'workflow_run') {
+				errors.push(`subject ${s.id}: every evidence for a workflow_run-only workflow is marked event: workflow_run`);
+			}
 		}
 		for (const e of s.evidence) {
 			const kinds = ['run', 'ci', 'record'].filter(k => k in e);
@@ -1713,6 +1718,7 @@ async function selfTest(): Promise<void> {
 				throw new Error('self-test: RJG-13 pending added back to a proven subject passed');
 			}
 		}
+		injections.push(['CR63-8 unmarked run evidence for a workflow_run-only workflow', pend({ pending: undefined, evidence: [{ run: 5, workflow: 'gate.yml', sha: 'a'.repeat(40), date: '2026-11-02' }] }), /every evidence for a workflow_run-only workflow is marked event: workflow_run/]);
 		injections.push(['RJG gate with no subject', withReg(reg(), { '.github/workflows/gate.yml': gateYml }), /workflow:gate .* add it to/]);
 	}
 	for (const [name, tree, want] of injections) {
