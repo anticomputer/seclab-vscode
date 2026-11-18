@@ -17,31 +17,49 @@ at launch compared the app's recorded commit with the commit under test.
 
 ## Decision
 - **Fetch.** `fetch macos-branch` and `fetch macos-<variant>` clear their destination
-  (`.work/app-branch`, `.work/test-builds/<variant>`) before checking anything, so a refusal or
-  failure leaves no app there. `fetch macos` keeps the release app (`.work/app`) until a new one
+  (`.work/app-branch`, `.work/test-builds/<variant>`) before checking anything, usage errors
+  included, so a refusal or failure leaves no app there. `fetch macos` keeps the release app (`.work/app`) until a new one
   verifies: it may be the editor in use, and a failed fetch of a newer build shouldn't remove it.
 - **Launch.** `test/app-build.ts` checks every launch: `launchEditorInBackground`
-  (`test/harness.ts`, behind `test/window.ts launch` and the probes that print its line) and the
-  headless driver (`test/driver/editor.ts`). It reads the `build-info.json` the fetch placed beside
+  (`test/harness.ts`, behind `test/window.ts launch` and the probes that print its line), the
+  headless driver (`test/driver/editor.ts`), and `test/driver/local-window.ts` before it runs the
+  app's CLI. A probe's altered copy of an app (`test/observability/window-log-probe.ts`) keeps
+  its source's build info. It reads the `build-info.json` the fetch placed beside
   the app (`build-info-app.json` for a test variant): a regular file, not a symlink, with a full
   `repoSha`. The commit the run is asked to test is:
   - `SECLAB_APP_SHA` (40 hex) when set, for an app anywhere;
   - otherwise this checkout's HEAD, for a branch or test-variant build;
-  - otherwise, for the release app, any main build in HEAD's history.
-  A macOS app with no build info is refused. A Linux editor this checkout built
+  - otherwise, for the release app, a build of a commit on origin/main (the release location
+    itself, not a symlink there).
+  A test build (build info with `testBuild`) runs only from `.work/test-builds/`, whatever
+  `SECLAB_APP_SHA` says. Paths are compared canonically, and git runs with no inherited
+  `GIT_*` variables. A macOS app with no build info is refused. A Linux editor this checkout built
   (`./seclab build linux editor`, the driver's container runs) has none and isn't checked.
 - The check runs before the focus watcher or anything else starts, so a refusal launches nothing.
+- **Test REH.** `./seclab image oci --test-variant V` builds a tab image only from a REH whose
+  `build-info-test-V.json` records the commit under test (the same rule). A local Linux build
+  records the host checkout's HEAD as `repoSha` (no `runId`), since git inside the build
+  container can't read a worktree's HEAD.
 
 ## Proof
 - `test/app-build.test.ts` (unit): a stale branch build (an ancestor commit) is refused and the
   build of HEAD passes; `SECLAB_APP_SHA` wins either way and must be full; the release app must be
-  in HEAD's history; a missing, symlinked, non-object or commitless build info is refused; a test
-  variant's `build-info-app.json` is the file read. Neutralising the HEAD comparison, or the
-  history check, fails it.
+  a build of a commit on origin/main, and a symlinked release location gets the HEAD rule; a test
+  build runs only from `.work/test-builds/`; an inherited `GIT_DIR` doesn't move HEAD; a missing,
+  symlinked, non-object or commitless build info is refused; a test variant's
+  `build-info-app.json` is the file read. Neutralising each rule fails it.
 - With a stale app injected into `.work/app-branch` (build info naming 26137e98): a refused
   `fetch macos-branch` of a main build, and a failed fetch of a run that doesn't exist, each left
-  `.work/app-branch` absent; `test/window.ts launch` and `test/driver/shot.ts` each refused the
-  stale app with exit 1 and started no process.
+  `.work/app-branch` absent, as did usage errors (no run id, an empty one, two) for the branch and
+  a variant; `test/window.ts launch` and `test/driver/shot.ts` each refused the stale app with
+  exit 1 and started no process; `image oci --test-variant` refused a REH whose build info names
+  another commit.
+
+## Limits
+- The build info is bound to the directory, not to the bundle's bytes: an app edited in place,
+  or a stale bundle beside a fresh build info, passes. Binding needs a digest of the extracted
+  bundle recorded at fetch time (review FAB-5, deferred). The check-to-launch window is unguarded.
+- The release app is any build of a main commit, not necessarily the newest.
 
 ## Consequences
 - A run from a branch checkout that tests a build of another commit (a newer main build, or a

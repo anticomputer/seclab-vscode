@@ -8,14 +8,15 @@ import { appBuildProblem } from './app-build.ts';
 
 const scratchRoot = path.join(import.meta.dirname, '..', '.work', 'test-scratch');
 
-function repo(): { root: string; head: string; old: string } {
+function repo(tag = ''): { root: string; head: string; old: string } {
 	fs.mkdirSync(scratchRoot, { recursive: true });
 	const root = fs.mkdtempSync(path.join(scratchRoot, 'app-build-'));
 	const git = (...a: string[]) => execFileSync('git', ['-C', root, '-c', 'user.name=t', '-c', 'user.email=t@t.invalid', '-c', 'commit.gpgsign=false', ...a], { encoding: 'utf8' }).trim();
 	git('init', '-q');
 	git('commit', '-q', '--allow-empty', '-m', 'old');
 	const old = git('rev-parse', 'HEAD');
-	git('commit', '-q', '--allow-empty', '-m', 'head');
+	git('commit', '-q', '--allow-empty', '-m', `head${tag}`);
+	git('update-ref', 'refs/remotes/origin/main', old);
 	return { root, head: git('rev-parse', 'HEAD'), old };
 }
 
@@ -40,12 +41,44 @@ test('fetched-app binding: a stale branch build is refused, the build of HEAD is
 	assert.match(appBuildProblem(app(branch, { repoSha: r.head }), { ...darwin, expect: r.head.slice(0, 12) }) ?? '', /full 40-hex/);
 });
 
-test('fetched-app binding: the release app must be in HEAD history', () => {
+test('fetched-app binding: the release app must be a build of a commit on origin/main', () => {
 	const r = repo();
 	const release = path.join(r.root, '.work', 'app');
 	const o = { repoRoot: r.root, platform: 'darwin' };
 	assert.equal(appBuildProblem(app(release, { repoSha: r.old }), o), undefined);
-	assert.match(appBuildProblem(app(release, { repoSha: 'a'.repeat(40) }), o) ?? '', /isn't in this checkout's history/);
+	// HEAD (a branch commit) isn't on origin/main (review FAB-4).
+	assert.match(appBuildProblem(app(release, { repoSha: r.head }), o) ?? '', /isn't on origin\/main/);
+	assert.match(appBuildProblem(app(release, { repoSha: 'a'.repeat(40) }), o) ?? '', /isn't on origin\/main/);
+	// A symlinked release location doesn't get the release rule (review FAB-6).
+	fs.rmSync(release, { recursive: true });
+	const elsewhere = path.join(r.root, 'elsewhere');
+	const e = app(elsewhere, { repoSha: r.old });
+	fs.symlinkSync(elsewhere, release);
+	assert.match(appBuildProblem(path.join(release, path.basename(e)), o) ?? '', /stale or different build/);
+});
+
+test('fetched-app binding: a test build runs only from .work/test-builds, and GIT_DIR is ignored', () => {
+	const r = repo();
+	const o = { repoRoot: r.root, platform: 'darwin' };
+	const tb = { repoSha: r.head, testBuild: { variant: 'containment' } };
+	// Even when SECLAB_APP_SHA names its commit (review FAB-4, FAB-8).
+	assert.match(appBuildProblem(app(path.join(r.root, '.work', 'app-branch'), tb), { ...o, expect: r.head }) ?? '', /is a test build/);
+	assert.match(appBuildProblem(app(path.join(r.root, '.work', 'app'), { ...tb, repoSha: r.old }), o) ?? '', /is a test build/);
+	assert.equal(appBuildProblem(app(path.join(r.root, '.work', 'test-builds', 'containment'), tb, 'build-info-app.json'), o), undefined);
+	// An inherited GIT_DIR doesn't move HEAD to another repository (review FAB-7).
+	const other = repo('-other');
+	assert.notEqual(other.head, r.head);
+	const saved = process.env.GIT_DIR;
+	process.env.GIT_DIR = path.join(other.root, '.git');
+	try {
+		assert.equal(appBuildProblem(app(path.join(r.root, '.work', 'app-branch2'), { repoSha: r.head }), o), undefined);
+	} finally {
+		if (saved === undefined) {
+			delete process.env.GIT_DIR;
+		} else {
+			process.env.GIT_DIR = saved;
+		}
+	}
 });
 
 test('fetched-app binding: missing, unreadable or commitless build info', () => {
