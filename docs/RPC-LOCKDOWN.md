@@ -418,7 +418,7 @@ Two properties of the digest matter:
   build over a stale surface. **Open work**, noted in §7.
 
 <!-- seclab:begin baseline -->
-Current baseline at `dcd3ad6e368f`: **4239 surfaces, 4188 denied, 51 not denied** (22 allow, 16 allow_with_constraint, 4 prompt, 9 rewrite).
+Current baseline at `dcd3ad6e368f`: **4239 surfaces, 4186 denied, 53 not denied** (22 allow, 18 allow_with_constraint, 4 prompt, 9 rewrite).
 <!-- seclab:end baseline -->
 
 ### 4.1 What is reachable right now
@@ -468,6 +468,8 @@ any becomes reachable without one.
 | `rpc:MainThreadFileSystem.$ensureActivation` | allow_with_constraint |
 | `rpc:MainThreadFileSystem.$readFile` | allow_with_constraint |
 | `rpc:MainThreadFileSystem.$writeFile` | allow_with_constraint |
+| `rpc:MainThreadLanguageFeatures.$registerCompletionsProvider` | allow_with_constraint |
+| `rpc:MainThreadLanguageFeatures.$registerHoverProvider` | allow_with_constraint |
 | `rpc:MainThreadLanguageFeatures.$unregister` | allow |
 | `rpc:MainThreadSecretState.$deletePassword` | rewrite |
 | `rpc:MainThreadSecretState.$getKeys` | rewrite |
