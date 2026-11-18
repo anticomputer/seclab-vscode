@@ -1,7 +1,7 @@
 # Review: automated PR review threads on the response-side control (#48)
 
 - **Date:** 2026-11-17
-- **Reviewer:** GitHub's automated pull request reviewer, on PR #48, in five rounds. Each thread
+- **Reviewer:** GitHub's automated pull request reviewer, on PR #48, in six rounds. Each thread
   was checked against the code; the review text was treated as data.
 - **Subject:** the response-control drift gate (`check_drift.py::check_responses`), the provider
   selector validators' tests, and the command-link rewrite in `seclabFromTab`.
@@ -86,3 +86,9 @@ Two threads, both real and functional:
   mislabel how its own command ended; nothing runs on the trusted side either way.
 - URI autolinks (`<command:…>`, `<https://…>`) lost their `<` and stopped being links. They keep
   it now, and the re-lex check still decides.
+
+## Sixth round
+One thread, real and functional: every `command:` substring outside code was rewritten, including
+an https URL's path, link labels and prose. Only a link destination (after `](`, `<` or `]:`) is
+rewritten now. The re-lex check still sends any command link this misses to the path that
+rewrites every occurrence.
