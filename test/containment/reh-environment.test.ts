@@ -40,6 +40,7 @@ const FILES = {
 	extensions: 'services/extensionManagement/electron-browser/extensionManagementServerService.ts',
 	loggers: 'contrib/remote/common/remote.contribution.ts',
 	native: 'services/extensionManagement/electron-browser/nativeExtensionManagementService.ts',
+	remoteManagement: 'services/extensionManagement/electron-browser/remoteExtensionManagementService.ts',
 } as const;
 type Key = keyof typeof FILES;
 
@@ -103,7 +104,7 @@ function build(patched: boolean, patch = PATCH, filter = FILTER): Build {
 	// versions of the patch, which had fewer or other ones), and the module-level seclab functions
 	// of the patched files.
 	const named = (src: string, re: RegExp) => [...src.matchAll(re)].map(m => m[1]);
-	const helperNames = named(filter, /\n(?:export )?function (seclab(?:TabUris|TabUri|UriOnTab|TabServerChannel|NoGallerySource|TabExtensionsChannel))\b/g);
+	const helperNames = named(filter, /\n(?:export )?function (seclab(?:TabUris|TabUri|UriOnTab|TabServerChannel|NoGallerySource|ExtensionManifest|TabExtensionsChannel))\b/g);
 	const consts = ['SECLAB_URI_KEYS', 'SECLAB_URI_MARKS', 'SECLAB_MANIFEST_KEYS'].map(c => new RegExp(`\\nconst ${c}\\b[^\\n]+`).exec(filter)?.[0] ?? '').join('\n');
 	const stubs: Record<string, unknown> = {
 		seclabIsTabAuthority: (a: unknown) => typeof a === 'string' && /^seclab\+/.test(a),
@@ -127,6 +128,9 @@ function build(patched: boolean, patch = PATCH, filter = FILTER): Build {
 		ProtocolConstants: { ReconnectionGraceTime: 10800000 },
 		Event: {},
 		platform: { language: 'en' },
+		CancellationToken: { None: {} },
+		Promises: { settled: (ps: Promise<unknown>[]) => Promise.all(ps) },
+		areSameExtensions: (a: { id: string }, b: { id: string }) => a.id === b.id,
 		nls: { localize: (_k: string, m: string) => m },
 	};
 	return { sources, refusals, deps };
@@ -279,13 +283,15 @@ async function loggers(b: Build, authority: string, registered: unknown[], event
 }
 
 /** Whether the host's extension management, in a window on `authority`, installs a package from `vsix`. */
-async function hostInstall(b: Build, authority: string, vsix: { scheme: string }): Promise<boolean> {
+const WS = '/Users/someone/projects/ws';
+async function hostInstall(b: Build, authority: string, vsix: { scheme: string; path?: string }): Promise<boolean> {
 	const fn = evaluate<(v: unknown) => Promise<unknown>>(
 		asFunction(slice(b.sources.native, /\n\toverride async install\(/)!).replace('super.install(', 'this.superInstall('), 'install', { ...b.deps, Schemas: { vscodeRemote: 'vscode-remote', file: 'file' } });
 	let installed = false;
 	try {
 		await fn.call({
 			nativeEnvironmentService: { remoteAuthority: authority },
+			seclabWorkspace: { getWorkspace: () => ({ folders: [{ uri: remote(authority, `${WS}/`) }] }) },
 			downloadVsix: async (v: unknown) => ({ location: v, cleanup: async () => { } }),
 			superInstall: async () => { installed = true; },
 		}, vsix);
@@ -293,6 +299,29 @@ async function hostInstall(b: Build, authority: string, vsix: { scheme: string }
 		// refused
 	}
 	return installed;
+}
+
+/** Whether the host installs the extensions a tab server's reply manifest names (packs, dependencies). */
+async function hostDependencies(b: Build, authority: string): Promise<boolean> {
+	const fn = evaluate<(l: unknown) => Promise<void>>(asFunction(slice(b.sources.remoteManagement, /\n\tprivate async installUIDependenciesAndPackedExtensions\(/)!), 'installUIDependenciesAndPackedExtensions', b.deps);
+	let installed = false;
+	await fn.call({
+		seclabEnvironment: { remoteAuthority: authority },
+		getAllUIDependenciesAndPackedExtensions: async (m: { extensionPack?: string[] }) => (m.extensionPack ?? []).map(id => ({ identifier: { id } })),
+		localExtensionManagementServer: { extensionManagementService: { getInstalled: async () => [], installFromGallery: async () => { installed = true; } } },
+		logService: { info: () => { } },
+	}, { identifier: { id: 'tab.pack' }, manifest: { name: 'pack', extensionPack: ['attacker.ui-ext'] } });
+	return installed;
+}
+
+/** The failed installs a tab server reports, as the window's startup retry would see them. */
+async function failedInstalls(b: Build, authority: string): Promise<number> {
+	const fn = evaluate<() => Promise<{ failed: unknown[] }>>(asFunction(slice(b.sources.scanner, /\n\t(?:async )?whenExtensionsReady\(/)!), 'whenExtensionsReady', b.deps);
+	const r = await fn.call({
+		withChannel: (cb: (c: unknown) => Promise<unknown>) => cb({ call: async () => ({ failed: [{ id: 'attacker.ext', installOptions: { profileLocation: HOST } }] }) }),
+		environmentService: { remoteAuthority: authority },
+	});
+	return r.failed.length;
 }
 
 const GALLERY = { identifier: { id: 'tab.ext', uuid: '00000000-0000-4000-8000-000000000000' }, name: 'ext', version: '1.0.0', assets: { manifest: { uri: 'http://192.0.2.1/m', fallbackUri: 'http://192.0.2.1/m' }, download: { uri: 'http://192.0.2.1/x.vsix', fallbackUri: 'http://192.0.2.1/x.vsix' } } };
@@ -379,6 +408,19 @@ async function leaks(b: Build): Promise<string[]> {
 	if (await hostInstall(b, TAB, remote(TAB, '/home/agent/x.vsix'))) {
 		out.push('a tab package installs on the host');
 	}
+	if (await hostInstall(b, TAB, { scheme: 'file', path: `${WS.toUpperCase()}/out/x.vsix` })) {
+		out.push('a host file in the tab workspace installs on the host');
+	}
+	if (await hostDependencies(b, TAB)) {
+		out.push('a tab manifest installs its pack on the host');
+	}
+	if (await failedInstalls(b, TAB) > 0) {
+		out.push('the tab server picks installs the window retries');
+	}
+	const nested = await management(b, TAB, [], [{ identifier: { id: 'tab.ext' }, context: { manifest: { settings: HOST } }, local: local(TAB, remote(TAB, '/ext')), profileLocation: remote(TAB, '/p') }]);
+	if (nested.events.length > 0) {
+		out.push('extension management: a host location under a manifest key elsewhere');
+	}
 	const lg = await loggers(b, TAB, [{ id: 'x', name: 'x', resource: HOST }], { added: [{ id: 'y', name: 'y', resource: HOST }], removed: [] });
 	if (!lg.replyRefused) {
 		out.push('loggers: a reply registering a host file');
@@ -392,7 +434,8 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'profiles: a reply naming a host file', 'profiles: an event naming a host file', 'watcher: a change to a host file', 'extensions: one in a host directory',
 	'host strings kept in a checked tab URI', 'extension management: a reply naming a host location', 'extension management: an event naming a host location',
 	'extension management: onInstallExtension carrying a gallery entry', 'extension management: onDidInstallExtensions carrying a gallery entry',
-	'a tab package installs on the host', 'loggers: a reply registering a host file', 'loggers: an event registering a host file'];
+	'a tab package installs on the host', 'a host file in the tab workspace installs on the host', 'a tab manifest installs its pack on the host',
+	'the tab server picks installs the window retries', 'extension management: a host location under a manifest key elsewhere', 'loggers: a reply registering a host file', 'loggers: an event registering a host file'];
 
 const tests: Array<[string, () => Promise<void>]> = [
 	['the baseline takes every location a tab server names', async () => {
@@ -432,8 +475,9 @@ const tests: Array<[string, () => Promise<void>]> = [
 		const lg = await loggers(b, TAB, [{ id: 'x', name: 'x', resource: remote(TAB, '/logs/x.log') }], { added: [{ id: 'y', name: 'y', resource: remote(TAB, '/logs/y.log') }], removed: [] });
 		assert.equal(lg.replyRefused, false);
 		assert.equal(lg.events.length, 1);
-		// A host VSIX still installs on the host from a tab window.
-		assert.equal(await hostInstall(b, TAB, { scheme: 'file' }), true);
+		// A host VSIX outside the tab's workspace still installs on the host from a tab window.
+		assert.equal(await hostInstall(b, TAB, { scheme: 'file', path: '/Users/someone/Downloads/x.vsix' }), true);
+		assert.equal(await hostInstall(b, TAB, { scheme: 'file', path: `${WS}-other/x.vsix` }), true);
 		assert.deepEqual(b.refusals, []);
 	}],
 	['a window that is not a tab keeps upstream behaviour', async () => {
@@ -447,6 +491,8 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.equal((await management(b, other, [local(other, HOST)], {})).replyRefused, false);
 		assert.equal(JSON.stringify((await management(b, other, [], [{ source: GALLERY }])).events).includes('192.0.2.1'), true);
 		assert.equal(await hostInstall(b, other, remote(other, '/x.vsix')), true);
+		assert.equal(await hostDependencies(b, other), true);
+		assert.equal(await failedInstalls(b, other), 1);
 		assert.equal((await loggers(b, other, [{ id: 'x', name: 'x', resource: HOST }], { added: [], removed: [] })).replyRefused, false);
 		assert.deepEqual(b.refusals, []);
 	}],
@@ -458,7 +504,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['a URI only when marked $mid 1', { filter: ['		if (SECLAB_URI_MARKS.some(k => Object.hasOwn(o, k))) {', '		if (o.$mid === 1) {'] }, 'environment: a host file marked $mid 2'],
 			['only $mid or scheme marks a URI', { filter: ["const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'path', 'external', 'fsPath', '_sep'];", "const SECLAB_URI_MARKS = ['$mid', 'scheme'];"] }, 'environment: a host fsPath with no scheme or $mid'],
 			['path alone does not mark a URI', { filter: ["const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'path', 'external', 'fsPath', '_sep'];", "const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'external', 'fsPath', '_sep'];"] }, 'environment: a host path with no other URI key'],
-			['deep values pass', { filter: ['		if (depth > 32) {\n			throw foreign();', '		if (depth > 32) {\n			return v;'] }, 'environment: a host file nested deeper than the walk'],
+			['deep values pass', { filter: ['		if (at.length > 32) {\n			throw foreign();', '		if (at.length > 32) {\n			return v;'] }, 'environment: a host file nested deeper than the walk'],
 			['URIs not rebuilt', { filter: ["			return { $mid: 1, scheme: o.scheme, authority: o.authority, path: o.path ?? '', query: o.query ?? '', fragment: o.fragment ?? '' };", '			return o;'] }, 'environment: host strings in a revived URI'],
 			['environment unchecked', { patch: ['+				data = seclabTabUris(remoteAuthority, data);', '+				data = data;'] }, 'environment: the host user settings file as settingsPath'],
 			['refusal reads as no remote', { patch: ['+		if (seclabIsTabAuthority(this._environmentService.remoteAuthority)) {\n+			return this.getRawEnvironment();', '+		if (false) {\n+			return this.getRawEnvironment();'] }, 'a refused environment reads as no remote'],
@@ -470,7 +516,12 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['management channel unwrapped', { patch: ["seclabTabExtensionsChannel(remoteAgentConnection.getChannel<IChannel>('extensions'), remoteAgentConnection.remoteAuthority)", "remoteAgentConnection.getChannel<IChannel>('extensions')"] }, 'extension management: a reply naming a host location'],
 			['gallery sources kept', { filter: ["			return { ...e, source: undefined };", "			return e;"] }, 'extension management: onDidInstallExtensions carrying a gallery entry'],
 			['only one install event stripped', { filter: ["event === 'onInstallExtension' || event === 'onDidInstallExtensions'", "event === 'onDidInstallExtensions'"] }, 'extension management: onInstallExtension carrying a gallery entry'],
-			['host install from a tab window', { patch: ["+		if (vsix.scheme === Schemas.vscodeRemote && authority && seclabIsTabAuthority(authority)) {", "+		if (false) {"] }, 'a tab package installs on the host'],
+			['host install from a tab window', { patch: ["+		if (authority && seclabIsTabAuthority(authority) && (vsix.scheme === Schemas.vscodeRemote || (vsix.scheme === Schemas.file && inTab(vsix.path)))) {", "+		if (false) {"] }, 'a tab package installs on the host'],
+			['host files in the tab workspace install', { patch: ["(vsix.scheme === Schemas.vscodeRemote || (vsix.scheme === Schemas.file && inTab(vsix.path)))", "vsix.scheme === Schemas.vscodeRemote"] }, 'a host file in the tab workspace installs on the host'],
+			['workspace match is case-sensitive', { patch: ["+			return p.toLowerCase() === root || p.toLowerCase().startsWith(`${root}/`);", "+			return p === f.uri.path || p.startsWith(`${f.uri.path}`);"] }, 'a host file in the tab workspace installs on the host'],
+			['tab manifests install their packs on the host', { patch: ["+		const authority = this.seclabEnvironment.remoteAuthority;\n+		if (authority && seclabIsTabAuthority(authority)) {", "+		const authority = this.seclabEnvironment.remoteAuthority;\n+		if (false) {"] }, 'a tab manifest installs its pack on the host'],
+			['startup retries the tab\'s failed installs', { patch: ["+		const authority = this.environmentService.remoteAuthority;\n+		if (authority && seclabIsTabAuthority(authority)) {\n+			if (summary", "+		const authority = this.environmentService.remoteAuthority;\n+		if (false) {\n+			if (summary"] }, 'the tab server picks installs the window retries'],
+			['any manifest key is skipped', { filter: ["	return key === 'manifest' && (owner.length === 0", "	return key === 'manifest' || (owner.length === 0"] }, 'extension management: a host location under a manifest key elsewhere'],
 			['logger channel unwrapped', { patch: ["new RemoteLoggerChannelClient(loggerService, seclabTabServerChannel(channel, connection.remoteAuthority, 'loggers'))", "new RemoteLoggerChannelClient(loggerService, channel)"] }, 'loggers: an event registering a host file'],
 		];
 		for (const [name, m, leak] of mutants) {
