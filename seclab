@@ -1888,6 +1888,9 @@ case "${1:-help}" in
 			# every run: the baseline control must report vulnerable, or the gated arm proves
 			# nothing (finding R12-2).
 			agent-registration) shift; "$ROOT/test/agentic/ahp/agent-registration.sh" "$@" ;;
+			# Patch 0019 in the shipped build: an ordinary window and a tab window, each the
+			# other's control. Needs a fetched, attested app (./seclab fetch macos-branch).
+			window-proof) shift; mode="${1:-}"; shift || true; node "$ROOT/test/agentic/window-proof.ts" "$mode" "$@" ;;
 			*) usage; exit 2 ;;
 		esac ;;
 	tab)

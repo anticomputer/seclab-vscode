@@ -211,7 +211,7 @@ revert it explicitly.
 acceptance, because increment 4 closes it; the register reports exactly that one problem on this
 branch, which is the accurate state until 0019 lands with increment 3.
 
-## The real-build run, and why it has not happened yet
+## The real-build run, and what it showed
 
 A macOS build of this branch was dispatched and succeeded: Actions run `44158800692`, head
 `4f8caab0`. Every required check passed on that commit except the docs gate, which fails for
@@ -243,3 +243,40 @@ The question the runs exist to settle is the one the round 13 reviewer named and
 by reading: patch 0019 changes dependency construction from upstream's topological graph walk to
 re-entrant resolution inside the wrapper's constructor. That is reasoned to be equivalent, and
 reasoning is not a booted window.
+
+## The run, 2026-11-17
+
+Build `44211916571`, head `8a240550`, provenance verified against this repository's build-macos
+workflow on this branch. Driven only through the headless driver, in the background.
+
+- **Ordinary window.** Restores on the patched build, and nothing is nulled. This is the half
+  that answers the question review round 13 could not settle by reading: patch 0019 changes
+  dependency construction from upstream's topological graph walk to re-entrant resolution inside
+  the wrapper's constructor, and an ordinary window reaching `AfterRestored` with no provider
+  withheld is that equivalence actually exercised rather than argued.
+- **Tab window.** A real tab, claimed through tabd as the containment harnesses do, so the
+  window attaches to something rather than to an authority that resolves to nothing. Its gate
+  log records five providers withheld, naming each:
+  `remoteAgentHostContribution`, `editorCloudSandboxContribution`, `missionControlContribution`,
+  `agentHostAdvertisedAuthenticationResolver` and `missionControlSharingService`. The first is
+  the one that closes R12-2; the last is a shaped provider, so the shape table is exercised too,
+  not merely the withholding.
+
+Each run is the other's control, as planned before either was run.
+
+### The run found a defect in its own measurement first
+
+The first tab run reported no events at all, which read exactly like a patch that had done
+nothing. The patch was working perfectly. The gate log's lines are a logger timestamp and level
+followed by the event JSON, and the reader parsed the whole line and swallowed the failure, so
+every event was dropped.
+
+That is the project's recurring failure in its purest form: an absence produced by the
+measurement rather than by the system, and indistinguishable from containment. The reader now
+locates the JSON on the line, and a line it cannot parse is an error rather than a skip — only a
+trailing partial line is tolerated, because a log can be read mid-write. A tab run whose gate log
+is empty also fails outright now, since that would mean the sink was never installed and a
+withheld provider's event would have been dropped in silence rather than recorded.
+
+Worth stating plainly: had the reader been written to ignore unreadable lines and the patch been
+broken, this run would have reported the same thing, and the result would have been believed.
