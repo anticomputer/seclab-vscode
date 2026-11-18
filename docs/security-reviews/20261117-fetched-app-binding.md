@@ -56,3 +56,5 @@ A re-review of the round FAB2 fixes. Nothing at high or above.
 |---|---|---|---|---|---|
 | CR42-1 | Low | Linux driver | A REH-only build's info beside an earlier editor tarball made the driver run unbound rather than refuse. | Fixed | `driver_bind` refuses an info whose targets lack the editor, or a symlink; only a dirty build's info or none runs unbound. |
 | CR42-2 | Low | probe copies | A test build's altered copies sat outside `.work/test-builds`, so the location rule refused them. | Fixed | The copies live under `.work/test-builds/window-log-probe/`. |
+| CR42-3 | Low | Linux driver | `driver_bind` replaced an explicit `SECLAB_APP_SHA` with HEAD, so the requested build was refused and HEAD's accepted. | Fixed | HEAD only when the variable is unset. |
+| CR42-4 | Low | launch lines | A probe prepared with `SECLAB_APP_SHA` printed a launch line without it, and the agentic check re-read its own environment. | Fixed | The line carries it for the launcher (40 hex only); the runner records it at prepare and checks against the record. |

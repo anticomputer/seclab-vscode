@@ -18263,6 +18263,36 @@
 			"status": "fixed-untested",
 			"commit": "patch:e0fc801676a5c19dcb4490b0ccf0e8afe33e46d6",
 			"gap": "Probe wiring that needs a real macOS build."
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "CR42-3",
+			"round": "Copilot review of PR 42",
+			"severity": "low",
+			"summary": "driver_bind replaced an explicit SECLAB_APP_SHA with HEAD.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:a143e347c3a07fe4e8f5763078e609106fa17392",
+			"test": {
+				"file": "seclab",
+				"name": "the driver replaced an explicit SECLAB_APP_SHA with HEAD"
+			}
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "CR42-4",
+			"round": "Copilot review of PR 42",
+			"severity": "low",
+			"summary": "A printed launch line dropped SECLAB_APP_SHA; the agentic check re-read its env.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:a143e347c3a07fe4e8f5763078e609106fa17392",
+			"test": {
+				"file": "test/driver/driver.test.ts",
+				"name": "a printed launch line carries the commit the run was prepared for (PR 42 review)"
+			}
 		}
 	]
 }

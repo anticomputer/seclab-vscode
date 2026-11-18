@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 85 | 229 | 369 | 48 | 745 |
+| fixed | 14 | 85 | 229 | 371 | 48 | 747 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 58 | 175 | 62 | 300 |
 | accepted-residual | 0 | 1 | 12 | 72 | 23 | 108 |
 | deferred | 2 | 1 | 14 | 10 | 3 | 30 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 24 | 24 |
-| **all** | 16 | 94 | 325 | 640 | 166 | 1241 |
+| **all** | 16 | 94 | 325 | 642 | 166 | 1243 |
 
 ## Baseline: open high and critical findings
 
@@ -2161,6 +2161,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | FAB3-5 | info | false-positive | Prompt injection. | The review recorded no issue. |
 | CR42-1 | low | fixed | A REH-only build info beside an earlier editor made the driver run unbound. | patch:e0fc801676a5c19dcb4490b0ccf0e8afe33e46d6 · `seclab` "the driver ran an editor beside a REH-only build's info" |
 | CR42-2 | low | fixed-untested | Altered copies of a test build sat outside .work/test-builds. | Probe wiring that needs a real macOS build. |
+| CR42-3 | low | fixed | driver_bind replaced an explicit SECLAB_APP_SHA with HEAD. | patch:a143e347c3a07fe4e8f5763078e609106fa17392 · `seclab` "the driver replaced an explicit SECLAB_APP_SHA with HEAD" |
+| CR42-4 | low | fixed | A printed launch line dropped SECLAB_APP_SHA; the agentic check re-read its env. | patch:a143e347c3a07fe4e8f5763078e609106fa17392 · `test/driver/driver.test.ts` "a printed launch line carries the commit the run was prepared for (PR 42 review)" |
 
 ### [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md)
 
