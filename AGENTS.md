@@ -498,7 +498,8 @@ Electron with `ELECTRON_RUN_AS_NODE=1`); nothing is installed.
   - a high or critical finding must end `fixed` with a test, or accepted by the project owner: a
     row in `docs/security-reviews/owner-acceptances.md` (full key, date, scope, closing condition),
     which only the coordinator writes on an explicit owner decision, in an earlier change than the
-    closure. Committed records never quote or paraphrase a conversation. The baseline of highs open
+    closure. A row may come before the finding's record lands: such a pending row expires after 7 days
+    ([EDR](docs/edr/20261118-pending-owner-acceptances.md)). Committed records never quote or paraphrase a conversation. The baseline of highs open
     when the register started only shrinks: remove an entry from it when it's fixed, and never add
     one.
   - when you fix a registered finding, update its entry (commit, test) in the same change.

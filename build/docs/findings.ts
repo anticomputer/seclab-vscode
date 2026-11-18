@@ -772,6 +772,42 @@ const normWs = (s: string) => s.replace(/\s+/g, ' ').trim();
 interface OwnerRow { date: string; scope: string; closing: string; line: number }
 const OWNER_HEAD = /^\|\s*Finding\s*\|\s*Date\s*\|\s*Scope\s*\|\s*Closing condition\s*\|\s*Decision\s*\|\s*$/;
 const QUOTES = /["“”«»„‘’‚‹›＂]/;
+// A real calendar date in YYYY-MM-DD: it parses, and round-trips (2026-02-30 doesn't) (PRR58-2, -7).
+function realDate(d: string): boolean {
+	const t = Date.parse(`${d}T00:00:00Z`);
+	return /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === d;
+}
+// A row's cells as the gate reads them: backticks and spaces trimmed, `\|` in the key a pipe.
+function ownerCells(line: string): string[] {
+	const c = cells(line).map(x => x.replace(/^`|`$/g, '').trim());
+	c[0] = (c[0] ?? '').replace(/\\\|/g, '|');
+	return c;
+}
+// From `git log --reverse --format=%x00%cs -p -- owner-acceptances.md` (oldest first): for each key,
+// the earliest of the first commit that added a row for it and every Date its rows have ever had,
+// read the way the gate reads rows, so neither re-dating nor re-adding extends it (HHHH-5, PRR58-6).
+function ownerFirstSeen(history: string): Map<string, string> {
+	const out = new Map<string, string>();
+	for (const chunk of history.split('\0').slice(1)) {
+		const [date, ...lines] = chunk.split('\n');
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+			continue;
+		}
+		for (const l of lines) {
+			if (/^\+\s*\|/.test(l) && !/^\+\+\+/.test(l)) {
+				const c = ownerCells(l.slice(1));
+				const k = c[0];
+				if (!k || k === 'Finding' || /^[-: ]+$/.test(k)) {
+					continue;
+				}
+				const cell = realDate(c[1] ?? '') ? c[1] : date;
+				const was = out.get(k);
+				out.set(k, [was ?? date, date, cell].sort()[0]);
+			}
+		}
+	}
+	return out;
+}
 function parseOwnerFile(text: string): { rows: Map<string, OwnerRow>; problems: string[] } {
 	const rows = new Map<string, OwnerRow>();
 	const problems: string[] = [];
@@ -804,8 +840,7 @@ function parseOwnerFile(text: string): { rows: Map<string, OwnerRow>; problems: 
 		}
 	});
 	for (let i = head + 2; head >= 0 && i < end; i++) {
-		const c = cells(lines[i]).map(x => x.replace(/^`|`$/g, '').trim());
-		c[0] = (c[0] ?? '').replace(/\\\|/g, '|');
+		const c = ownerCells(lines[i]);
 		const [key, date, scope, closing, decision] = c;
 		if (c.length !== 5 || !/^\d{4}-\d{2}-\d{2}$/.test(date ?? '') || !nonEmpty(scope) || !nonEmpty(closing) || decision !== OWNER_DECISION) {
 			problems.push(`${at(i)}: a row is | record.md#anchor | YYYY-MM-DD | scope | closing condition | ${OWNER_DECISION} |`);
@@ -856,7 +891,14 @@ function refProblem(tree: Tree, r: Ref, what: string): string | undefined {
 	return norm(tree.read(r.file)).includes(norm(r.quote)) ? undefined : `${what} quote not found in ${r.file}: "${r.quote.slice(0, 80)}"`;
 }
 
-function check(tree: Tree, reg: Register, renderedView?: string, base?: Register, change?: Change): string[] {
+// Pending owner rows (review HHHH): `now` is the time the rows' age is judged at; `mainRecords` are
+// the review record file names on origin/main, from the host.
+// `firstSeen`: for each owner-row key, the date of the first commit on this history that added a row
+// for it (ownerFirstSeen over the host's history), so re-dating or re-adding never restarts it (HHHH-5).
+interface CheckOpts { now?: number; mainRecords?: Set<string>; firstSeen?: Map<string, string> }
+const PENDING_DAYS = 7;
+const DAY_MS = 86_400_000;
+function check(tree: Tree, reg: Register, renderedView?: string, base?: Register, change?: Change, opts: CheckOpts = {}): string[] {
 	const p = schemaProblems(reg);
 	if (p.length) {
 		return p;
@@ -1039,9 +1081,41 @@ function check(tree: Tree, reg: Register, renderedView?: string, base?: Register
 	// entry's acceptedBy owner: that is the required order (the row first, the closure later).
 	const ownerParsed = tree.exists(OWNER_FILE) ? parseOwnerFile(tree.read(OWNER_FILE)) : { rows: new Map<string, OwnerRow>(), problems: [] };
 	p.push(...ownerParsed.problems);
+	// A pending row (HHHH) names a finding whose record isn't on main or this tree yet: the owner's
+	// decision lands first, the record and its entry later. It lasts PENDING_DAYS from its date;
+	// once its entry exists it is an ordinary row. A key whose record exists is never pending.
 	for (const [k, row] of ownerParsed.rows) {
-		if (!byKey.has(k) && !reg.findings.some(f => f.wasKey === k && moved.get(k) === f)) {
-			p.push(`${OWNER_FILE}:${row.line}: ${k} isn't in the register`);
+		if (byKey.has(k) || reg.findings.some(f => f.wasKey === k && moved.get(k) === f)) {
+			continue;
+		}
+		// record#anchor, both present, or never pending (PR #58 review).
+		const km = /^([^#\s]+)#(\S.*)$/.exec(k);
+		const rec = km ? km[1] : '';
+		const at = `${OWNER_FILE}:${row.line}: ${k}`;
+		if (!km || !isRecordName(rec) || inTree.has(rec) || tree.exists(`${REVIEWS}/${rec}`)) {
+			p.push(`${at} isn't in the register`);
+		} else if (!opts.mainRecords || !opts.mainRecords.size) {
+			// An absent or empty list is unjudgeable, never "nothing on main" (HHHH-6).
+			p.push(`${at} isn't in the register, and without main's record list a pending row can't be judged`);
+		} else if (opts.mainRecords.has(rec)) {
+			p.push(`${at} isn't in the register, and its record ${rec} is on main: a pending row is only for a record that hasn't landed`);
+		} else {
+			// The clock starts at the earliest of the row's date and the first commit that had the key,
+			// so no later edit restarts it (HHHH-5); a date after the run's (UTC) day, or one that isn't
+			// a real date, fails (HHHH-7, PR #58 review).
+			const now = opts.now ?? Date.now();
+			const dateOk = realDate;
+			const seen = opts.firstSeen?.get(k);
+			if (!dateOk(row.date)) {
+				p.push(`${at}: a pending row's date ${row.date} isn't a real date`);
+			} else if (row.date > new Date(now).toISOString().slice(0, 10)) {
+				p.push(`${at}: a pending row's date ${row.date} is in the future`);
+			} else {
+				const start = seen && dateOk(seen) && seen < row.date ? seen : row.date;
+				if ((now - Date.parse(`${start}T00:00:00Z`)) / DAY_MS > PENDING_DAYS) {
+					p.push(`${at} has been pending since ${start}, over ${PENDING_DAYS} days: land its record and entry, or remove the row`);
+				}
+			}
 		}
 	}
 	for (const f of reg.findings) {
@@ -1293,13 +1367,13 @@ function selfTest(): number {
 		],
 	});
 	const mkTree = (files: Map<string, string>): Tree => ({ exists: p => files.has(p) || [...files.keys()].some(k => k.startsWith(`${p}/`)), read: p => files.get(p) ?? '', list: d => [...new Set([...files.keys()].filter(k => k.startsWith(`${d}/`)).map(k => k.slice(d.length + 1).split('/')[0]))].sort() });
-	const run = (files: Map<string, string>, r: Register, view = true, baseReg?: Register, change?: Change) => {
+	const run = (files: Map<string, string>, r: Register, view = true, baseReg?: Register, change?: Change, opts?: CheckOpts) => {
 		const tree = mkTree(files);
 		const ok = schemaProblems(r).length === 0;
 		if (view && ok) {
 			files.set(VIEW, render(r, tree));
 		}
-		return check(tree, r, ok ? render(r, tree) : undefined, baseReg, change);
+		return check(tree, r, ok ? render(r, tree) : undefined, baseReg, change, opts);
 	};
 	let failed = 0;
 	const expect = (name: string, problems: string[], pattern: RegExp | null) => {
@@ -1371,6 +1445,66 @@ function selfTest(): number {
 		delete rs.findings[0].commit;
 		delete rs.findings[0].test;
 		expect('a row for a sibling key does not close the shorter key (exact match)', run(sib, rs), /20261101-a\.md#A-1: acceptedBy owner, but .* has no row for it/);
+		// HHHH: a pending row names a finding whose record hasn't landed; it expires after 7 days.
+		const pRow = ownerRow('20261103-p.md#P-1');
+		const pend = base();
+		pend.set(OWNER_FILE, ownerTable(pRow));
+		const day = (d: string) => Date.parse(`${d}T12:00:00Z`);
+		const onMain = new Set(['20261101-a.md']);
+		expect('control: a pending row for a record not yet on main passes within 7 days (HHHH)', run(pend, reg(), true, undefined, undefined, { now: day('2026-11-14'), mainRecords: onMain }), null);
+		expect('a pending row unmatched for over 7 days fails (HHHH-1)', run(pend, reg(), true, undefined, undefined, { now: day('2026-11-20'), mainRecords: onMain }), /has been pending since 2026-11-12, over 7 days/);
+		expect('a pending row naming a record already on main fails (HHHH-2)', run(pend, reg(), true, undefined, undefined, { now: day('2026-11-14'), mainRecords: new Set([...onMain, '20261103-p.md']) }), /its record 20261103-p\.md is on main/);
+		const pTree = base();
+		pTree.set(OWNER_FILE, ownerTable(ownerRow('20261101-a.md#A-9')));
+		expect('a row naming an unregistered finding in a record on this tree is never pending (HHHH-2)', run(pTree, reg(), true, undefined, undefined, { now: day('2026-11-14'), mainRecords: onMain }), /20261101-a\.md#A-9 isn.t in the register$/);
+		const pReg = base();
+		pReg.set(OWNER_FILE, ownerTable(ownerRow('register#X-1')));
+		expect('a row naming a register-only key is never pending (HHHH-2)', run(pReg, reg(), true, undefined, undefined, { now: day('2026-11-14'), mainRecords: onMain }), /register#X-1 isn.t in the register$/);
+		expect('without main record names a pending row fails closed (HHHH-3)', run(pend, reg(), true, undefined, undefined, { now: day('2026-11-14') }), /without main.s record list/);
+		expect('a re-dated or re-added pending row is judged from its first commit (HHHH-5)', run(pend, reg(), true, undefined, undefined, { now: day('2026-11-14'), mainRecords: onMain, firstSeen: new Map([['20261103-p.md#P-1', '2026-11-01']]) }), /has been pending since 2026-11-01, over 7 days/);
+		const hist = `\0${'2026-11-01'}\n+| \`20261103-p.md#P-1\` |   2026-11-12 | s | c | d |\n+++ b/x\n\0${'2026-11-10'}\n-| 20261103-p.md#P-1 | 2026-11-12 | s | c | d |\n\0${'2026-11-20'}\n+| 20261103-p.md#P-1 | 2026-11-20 | s | c | d |\n+| 20261103-p.md#P\\|2 | 2026-11-20 | s | c | d |\n`;
+		const fsn = ownerFirstSeen(hist);
+		expect('first-seen dates read rows as the gate does: backticks, spacing and escaped pipes (PR #58 review)', fsn.get('20261103-p.md#P-1') === '2026-11-01' && fsn.get('20261103-p.md#P|2') === '2026-11-20' && fsn.size === 2 ? [] : [JSON.stringify([...fsn])], null);
+		const early = ownerFirstSeen(`\0${'2026-11-18'}\n+| 20261103-p.md#P-1 | 2026-11-12 | s | c | d |\n\0${'2026-11-19'}\n-| 20261103-p.md#P-1 | 2026-11-12 | s | c | d |\n+| 20261103-p.md#P-1 | 2026-11-20 | s | c | d |\n`);
+		const bogus = ownerFirstSeen(`\0${'2026-11-18'}\n+| 20261103-p.md#P-1 | 2026-02-30 | s | c | d |\n\0${'2026-11-19'}\n-| 20261103-p.md#P-1 | 2026-02-30 | s | c | d |\n+| 20261103-p.md#P-1 | 2026-11-20 | s | c | d |\n`);
+		expect('an impossible historical date never becomes the first date (PRR58-7)', bogus.get('20261103-p.md#P-1') === '2026-11-18' ? [] : [String(bogus.get('20261103-p.md#P-1'))], null);
+		const pBog = base();
+		pBog.set(OWNER_FILE, ownerTable(ownerRow('20261103-p.md#P-1').replace('2026-11-12', '2026-11-20')));
+		expect('a row once dated impossibly and later corrected still expires from its first commit (PRR58-7)', run(pBog, reg(), true, undefined, undefined, { now: day('2026-11-27'), mainRecords: onMain, firstSeen: bogus }), /pending since 2026-11-18, over 7 days/);
+		const pRe = base();
+		pRe.set(OWNER_FILE, ownerTable(ownerRow('20261103-p.md#P-1').replace('2026-11-12', '2026-11-20')));
+		expect('a pending row dated before its first commit and later re-dated keeps its first date (PRR58-6)', run(pRe, reg(), true, undefined, undefined, { now: day('2026-11-20'), mainRecords: onMain, firstSeen: early }), /pending since 2026-11-12, over 7 days/);
+		for (const badKey of ['20261103-p.mdX', '20261103-p.md#']) {
+			const pk = base();
+			pk.set(OWNER_FILE, ownerTable(ownerRow(badKey)));
+			expect(`a row key without record and anchor is never pending: ${badKey} (PR #58 review)`, run(pk, reg(), true, undefined, undefined, { now: day('2026-11-14'), mainRecords: onMain }), /isn.t in the register$|a row is/);
+		}
+		for (const badDate of ['2026-13-01', '2026-11-00']) {
+			const pd = base();
+			pd.set(OWNER_FILE, ownerTable(ownerRow('20261103-p.md#P-1').replace('2026-11-12', badDate)));
+			expect(`a pending row dated ${badDate} is reported, not thrown (PR #58 review)`, run(pd, reg(), true, undefined, undefined, { now: day('2026-11-14'), mainRecords: onMain }), /isn.t a real date/);
+		}
+		const pTom = base();
+		pTom.set(OWNER_FILE, ownerTable(ownerRow('20261103-p.md#P-1').replace('2026-11-12', '2026-11-15')));
+		expect('a pending row dated tomorrow fails (PR #58 review)', run(pTom, reg(), true, undefined, undefined, { now: day('2026-11-14'), mainRecords: onMain }), /is in the future/);
+		expect('an empty main record list fails closed like a missing one (HHHH-6)', run(pend, reg(), true, undefined, undefined, { now: day('2026-11-14'), mainRecords: new Set() }), /without main.s record list/);
+		const pBad = base();
+		pBad.set(OWNER_FILE, ownerTable(ownerRow('20261103-p.md#P-1').replace('2026-11-12', '2026-02-30')));
+		expect('a pending row with an impossible date says so (HHHH-7)', run(pBad, reg(), true, undefined, undefined, { now: day('2026-02-20'), mainRecords: onMain }), /isn.t a real date/);
+		const pTomorrow = base();
+		pTomorrow.set(OWNER_FILE, ownerTable(ownerRow('20261103-p.md#P-1').replace('2026-11-12', '2026-11-13')));
+		expect('a future-dated pending row committed earlier is judged from its commit (HHHH-7)', run(pTomorrow, reg(), true, undefined, undefined, { now: day('2026-11-20'), mainRecords: onMain, firstSeen: new Map([['20261103-p.md#P-1', '2026-11-12']]) }), /pending since 2026-11-12, over 7 days/);
+		expect('control: removing an expired pending row passes (HHHH-8)', run(base(), reg(), true, undefined, { files: new Set([OWNER_FILE]), before: new Map([[OWNER_FILE, ownerTable(pRow)]]), ownerBefore: ownerTable(pRow) }, { now: day('2026-11-30'), mainRecords: onMain }), null);
+		expect('a pending row dated in the future fails (HHHH-3)', run(pend, reg(), true, undefined, undefined, { now: day('2026-11-05'), mainRecords: onMain }), /is in the future/);
+		// The flow: the row lands alone; a later change brings the record and the owner-accepted high.
+		const pFull = base();
+		pFull.set(OWNER_FILE, ownerTable(pRow));
+		pFull.set(`${REVIEWS}/20261103-p.md`, rec('2026-11-03', `## Round P\n${table}| P-1 | **High** | x | bad | Accepted | r |\n`));
+		const pr2 = reg();
+		pr2.findings.push({ record: '20261103-p.md', anchor: 'P-1', severity: 'high', summary: 's', component: 'c', owner: 'o', status: 'accepted-residual', acceptedBy: 'owner', rationale: 'r' });
+		const pLate = { now: day('2026-12-30'), mainRecords: onMain };
+		expect('control: the record and its owner-accepted high land after the pending row, and the row then never expires (HHHH)', run(pFull, pr2, true, reg(), { files: new Set([`${REVIEWS}/20261103-p.md`]), before: new Map([[OWNER_FILE, ownerTable(pRow)]]) }, pLate), null);
+		expect('the pending row and the closure in one change still fail (UUU-4, HHHH)', run(pFull, pr2, true, reg(), { files: new Set([OWNER_FILE, `${REVIEWS}/20261103-p.md`]), before: new Map() }, pLate), /land the owner's row first/);
 		const q = base();
 		q.set(OWNER_FILE, `${ownerTable(ownerRow('20261101-a.md#A-1'))}\nNote: the owner said "fine".\n`);
 		expect('quotation marks in owner-acceptances.md fail: decisions, never quotes', run(q, r), /quotation marks/);
@@ -2309,8 +2443,8 @@ function main(): number {
 		const i = opts.indexOf(name);
 		return i >= 0 ? opts[i + 1] : undefined;
 	};
-	if (mode !== 'check' || opts.length % 2 || opts.some((o, i) => i % 2 === 0 && !['--base', '--changed', '--before', '--landed'].includes(o)) || opts.some((o, i) => i % 2 === 1 && !o) || (opts.includes('--before') && !opts.includes('--changed'))) {
-		console.error('usage: findings.ts check [--base FILE] [--changed FILE [--before DIR]] [--landed landed|exact] | write | commits | baseline | extract [DIR] | --self-test');
+	if (mode !== 'check' || opts.length % 2 || opts.some((o, i) => i % 2 === 0 && !['--base', '--changed', '--before', '--landed', '--main-records', '--owner-history'].includes(o)) || opts.some((o, i) => i % 2 === 1 && !o) || (opts.includes('--before') && !opts.includes('--changed'))) {
+		console.error('usage: findings.ts check [--base FILE] [--changed FILE [--before DIR]] [--landed landed|exact] [--main-records FILE] [--owner-history FILE] | write | commits | baseline | extract [DIR] | --self-test');
 		return 2;
 	}
 	// --base: the register at the merge base (written by ./seclab from git; empty when the base
@@ -2343,7 +2477,11 @@ function main(): number {
 	} else {
 		console.log('findings: no --changed list; the rule that a decision lands before the closure (UUU-4) is skipped');
 	}
-	const problems = check(tree, reg, sp.length ? undefined : render(reg, tree), base, change);
+	const mrFile = opt('--main-records');
+	const mainRecords = mrFile ? new Set(fs.readFileSync(path.resolve(repo, mrFile), 'utf8').split('\n').filter(Boolean)) : undefined;
+	const ohFile = opt('--owner-history');
+	const firstSeen = ohFile ? ownerFirstSeen(fs.readFileSync(path.resolve(repo, ohFile), 'utf8')) : undefined;
+	const problems = check(tree, reg, sp.length ? undefined : render(reg, tree), base, change, { mainRecords, firstSeen });
 	problems.forEach(x => console.log(logLine(x)));
 	if (!sp.length) {
 		anchorClashes(reg, base).warn.forEach(x => console.log(`findings: warning: ${x}`));

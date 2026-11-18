@@ -182,6 +182,9 @@ script run by a required job: what runs it is the docs job, and its evidence is 
   request's head, relative to `main` (same owner, or the same key: a clash; otherwise a warning).
   It is local and advisory: as a required check it would fail two PRs that see each other at once,
   and its result would depend on other PRs' state rather than the change.
+- Amended by review HHHH ([EDR](20261118-pending-owner-acceptances.md)): an owner row may name a
+  finding whose record hasn't landed on `main`, for at most seven days, so the owner's decision can
+  land before the change that brings and closes the finding.
 - A high the register already had (on `main` or at the merge base, under its key or a `wasKey`)
   closes on a `patch:` fix commit only once that change is on `main`; a high new in a change may cite
   that change's own commits. Either way a fix whose revert is also in the history closes nothing.
