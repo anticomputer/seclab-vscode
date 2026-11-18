@@ -209,8 +209,10 @@ test('the patch gates the queued path, which never reaches the dispatch function
 	// One implementation...
 	assert.equal((added.match(/private seclabCheckSession\(/g) ?? []).length, 1);
 	// ...called on entry to `sendRequestInternal`, from the queued path and from the dispatch
-	// function, and from nowhere else.
-	assert.equal((added.match(/this\.seclabCheckSession\(sessionResource\);/g) ?? []).length, 3);
+	// function, and before the four mutations a refusal must not leave behind (resend, drain,
+	// migration, send-now), and from nowhere else.
+	assert.equal((added.match(/this\.seclabCheckSession\(sessionResource\);/g) ?? []).length, 4);
+	assert.equal((added.match(/this\.seclabCheckSession\(/g) ?? []).length, 7);
 
 	// The queued call must sit inside the `options?.queue` branch, above the queueing itself,
 	// or the message is already on its way to the host by the time it is checked. Ordering is
@@ -292,4 +294,27 @@ test('the upstream facts patch 0018 depends on are pinned, each to the file that
 
 	// The one remaining route to `defaultValue` is closed by upstream's scope filter.
 	assert.ok(pinned('src/vs/workbench/api/common/configurationExtensionPoint.ts', 'const allowedScopes ='), 'configurationDefaults scope filter');
+});
+
+test('a refusal on a bypass path comes before the transcript or the queue is changed', () => {
+	// PR #43 review. Upstream removes the turn before a resend dispatches, dequeues before the
+	// drain dispatches, empties the source queue before a migration sends, and reorders or
+	// removes before a send-now. A check only at dispatch refused AFTER those, so a refusal in a
+	// tab window lost the user's transcript or queue. Each check must sit before its mutation.
+	// The mutations themselves are upstream context lines in the same hunk, so the ordering is
+	// read from the patch text that ships.
+	const patch = readFileSync(new URL('../../../patches/0018-seclab-agent-host-sessions-only.patch', import.meta.url), 'utf8');
+	const before = (check: string, mutation: string, what: string) => {
+		const at = patch.indexOf(check);
+		assert.ok(at >= 0, `${what}: the check should be in the patch`);
+		const next = patch.indexOf(mutation, at);
+		assert.ok(next > at && next - at < 400, `${what}: the check must come right before ${mutation}`);
+	};
+	before('+\t\tthis.seclabCheckSession(model.sessionResource);', 'const cts = this._pendingRequests.get(request.session.sessionResource);', 'resend');
+	before('+\t\t\tthis.seclabCheckSession(model.sessionResource);', 'model.dequeueSteeringBatch()', 'drain');
+	before('+\t\tthis.seclabCheckSession(targetResource);', '// Remove each remaining pending request from the original session', 'migration');
+	before('cancelled or the message removed', 'if (this._isServerManagedQueue(sessionResource)) {', 'send-now');
+	// The drain checks only when something is queued: restoring a session drains, and an empty
+	// queue in a tab window must not throw.
+	assert.match(patch, /\+\t\tif \(model\.getPendingRequests\(\)\.length\) \{\n\+\t\t\tthis\.seclabCheckSession\(model\.sessionResource\);/);
 });

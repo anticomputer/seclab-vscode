@@ -244,6 +244,8 @@ type Path = 'sendRequest' | 'resendRequest' | 'queue-drain' | 'migrateRequests';
 interface Observation {
 	readonly path: Path; readonly window: 'tab' | 'ordinary'; readonly session: Foreign;
 	readonly invocations: number; readonly controllerPrompts: number; readonly threw: string | undefined; readonly gateReasons: string[];
+	/** The restored session's transcript (request ids, each answered) and queue, unchanged afterwards. */
+	readonly kept: boolean;
 }
 
 /** One request down one path, in a fresh service with the history restored into it. */
@@ -262,9 +264,15 @@ async function issue(path: Path, window: 'tab' | 'ordinary', session: Foreign, h
 	};
 	process.on('unhandledRejection', onRejection);
 	let threw: string | undefined;
+	let kept = false;
 	try {
 		const svc = chatService(store, window === 'tab' ? TAB_AUTHORITY : undefined, session);
 		const model = store.add(svc.loadSessionFromData(history)).object;
+		const snapshot = () => JSON.stringify({
+			requests: model.getRequests().map(r => [r.id, !!r.response]),
+			pending: model.getPendingRequests().map(p => p.request.id),
+		});
+		const atStart = snapshot();
 		try {
 			if (path === 'sendRequest') {
 				const r = await svc.sendRequest(model.sessionResource, 'probe: new request');
@@ -287,13 +295,14 @@ async function issue(path: Path, window: 'tab' | 'ordinary', session: Foreign, h
 		}
 		await settle();
 		threw ??= rejections[0];
+		kept = snapshot() === atStart;
 		await svc.waitForModelDisposals?.();
 	} finally {
 		store.dispose();
 		process.off('unhandledRejection', onRejection);
 	}
 	const gateReasons = gateLog.slice(logged).filter(e => e.detail?.gateRule === 'ahp-sessions.chat').map(e => String(e.detail?.reason));
-	return { path, window, session, invocations: invocations - before, controllerPrompts: controllerPrompts - promptsBefore, threw, gateReasons };
+	return { path, window, session, invocations: invocations - before, controllerPrompts: controllerPrompts - promptsBefore, threw, gateReasons, kept };
 }
 
 const PATHS = ['sendRequest', 'resendRequest', 'queue-drain', 'migrateRequests'] as const;
@@ -331,14 +340,17 @@ const BYPASS = [['resendRequest', 'local', 'deny:unresolved'], ['resendRequest',
 const containedBypass = ([path, session, reason]: typeof BYPASS[number]) =>
 	`CONTAINED: ${path} in a tab window does not dispatch the ${session} session, and the gate log records ${reason}`;
 const GATE_MODULE = 'the tree has no gate-log module';
+/** A refusal must not cost the user the history it refused to resend or the queue it refused to drain (PR #43 review). */
+const keptBypass = ([path, session]: typeof BYPASS[number]) =>
+	`KEPT: ${path} refused in a tab window leaves the ${session} session's transcript and queue as they were`;
 
 // PROBE_EXPECT=gated on a baseline tree applies the gated assertions there, and the run passes only
 // if they fail exactly where the missing patch predicts: every one in pristine upstream, and only
 // the bypass ones without 0018. This is the literal "the test fails without the patch".
 const EXPECT = (process.env.PROBE_EXPECT ?? TREE) as Tree;
 const PREDICTED_FAILURES: Record<Exclude<Tree, 'gated'>, string[]> = {
-	'upstream': [CONTAINED_SEND, ...BYPASS.map(containedBypass), GATE_MODULE],
-	'no-0018': BYPASS.map(containedBypass),
+	'upstream': [CONTAINED_SEND, ...BYPASS.map(containedBypass), ...BYPASS.map(keptBypass), GATE_MODULE],
+	'no-0018': [...BYPASS.map(containedBypass), ...BYPASS.map(keptBypass)],
 };
 
 if (EXPECT === 'gated') {
@@ -349,6 +361,7 @@ if (EXPECT === 'gated') {
 	for (const b of BYPASS) {
 		const o = find(b[0], 'tab', b[1]);
 		expect(!dispatched(o) && o.gateReasons.includes(b[2]), containedBypass(b));
+		expect(o.kept, keptBypass(b));
 	}
 	expect(!gate.absent, GATE_MODULE);
 } else if (EXPECT === 'upstream') {
