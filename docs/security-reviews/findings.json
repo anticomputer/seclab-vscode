@@ -21301,6 +21301,51 @@
 			"status": "fixed-untested",
 			"commit": "patch:5b862080dc41ea932e4c7b8ce13770c802eae087",
 			"gap": "A record, harness or test-fixture correction; nothing to test."
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "PR66-1",
+			"round": "PR #66 review",
+			"severity": "low",
+			"summary": "Workspace enablement is kept by id, so a tab extension claiming a host extension's id, enabled or disabled for the workspace from a tab window, changed the host copy's state there too.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:d1fc727cafc712da8e44022b35e4383385774578",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "PR66-2",
+			"round": "PR #66 review",
+			"severity": "medium",
+			"summary": "When the environment was refused, local history fell back to the host's own history directory for the tab's files.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:d1fc727cafc712da8e44022b35e4383385774578",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "PR66-3",
+			"round": "PR #66 review",
+			"severity": "medium",
+			"summary": "A location left out of the environment, or null, passed the check, and its consumers (local history, terminal history, the terminal and MCP sandboxes) fell back to the host's.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:d1fc727cafc712da8e44022b35e4383385774578",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
 		}
 	]
 }

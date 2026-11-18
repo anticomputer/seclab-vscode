@@ -115,6 +115,13 @@ two refusals ([EDR](../edr/20261118-tab-server-environment.md)).
 | ENV-57 | Info | tests | The harness saved the REH log before the evidence, so a failed save lost the evidence. | fixed | Evidence first; the log best effort. | none |
 | ENV-58 | Info | tests | The arming test didn't cover the hook's new startup path. | fixed | Three startup cases. | test/builds/rogue-reh-arming.ts "a run expired when the server starts: early not called" |
 | ENV-59 | Info | tests | The saved REH log is the tab's text, unmarked. | fixed | Kept under `untrusted/` with a header. | none |
+| PR66-1 | Low | extensions | Workspace enablement is kept by id, so a tab extension claiming a host extension's id, enabled or disabled for the workspace from a tab window, changed the host copy's state there too. | fixed | A tab extension sharing an id with a host extension is left alone. | test/containment/reh-environment.test.ts "a tab window takes none of them, and logs each refusal" |
+| PR66-2 | Medium | environment | When the environment was refused, local history fell back to the host's own history directory for the tab's files. | fixed | In a tab window local history is unavailable instead. | same |
+| PR66-3 | Medium | environment | A location left out of the environment, or null, passed the check, and its consumers (local history, terminal history, the terminal and MCP sandboxes) fell back to the host's. | fixed | Every location a genuine server sends is required, each an object. | same |
+
+PR66-1 to PR66-3 came from the automated pull request review on #66, after round 14. The final
+test's case fails on the round-14 tree with exactly those five leaks (three missing locations,
+local history and the shared id) and passes on the fix.
 
 Round 14 reviewed the test-only rogue-REH hook change (`test/builds/variants.json` requires a round
 for a hook change): the hook now arms a run staged before a server starts as that server starts,
