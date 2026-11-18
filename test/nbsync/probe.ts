@@ -40,7 +40,11 @@ const appArg = rest.includes('--app') ? path.resolve(rest[rest.indexOf('--app') 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const tabId = () => (readManifest(base).tabs ?? [])[0];
 // Bounded (review SQ-6): the tab can stall anything read from its workspace.
-const inTab = (args: string[], timeoutMs = 30_000) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
+// A failed or timed-out run yields no stdout: a FIFO could emit a report and then stall (PH-3).
+const inTab = (args: string[], timeoutMs = 30_000) => {
+	const r = spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
+	return r.status === 0 && !r.error ? r : { ...r, stdout: '' };
+};
 const KINDS = ['hostIpynb', 'hostNb', 'detect'] as const;
 type Canaries = Record<typeof KINDS[number], string>;
 const SYNC = ['notebooks', 'notebooks-cell', 'onopen', 'onopen-cell', 'onchange', 'onchange-cell', 'celldocs'];
@@ -147,7 +151,7 @@ async function check(measure: boolean): Promise<boolean> {
 	const hitOk = (h: any) => !!h && typeof h.channel === 'string' && /^[a-z-]{1,20}$/.test(h.channel) && typeof h.phase === 'string' && /^[a-z-]{1,30}$/.test(h.phase) && typeof h.sha256 === 'string' && /^[0-9a-f]{64}$/.test(h.sha256);
 	// The report is the tab's: its check must reject anything malformed without throwing, or the
 	// run would end before its teardown gate (review EDT-18). Every value meets a type check first.
-	const validReport = (rep: any) => !!rep && rep.schema === 'seclab-nbsync-report/1' && rep.arm === armed && typeof rep.done === 'boolean'
+	const validReport = (rep: any) => !!rep && rep.schema === 'seclab-nbsync-report/1' && !!armed && rep.arm === armed && typeof rep.done === 'boolean'
 		&& Array.isArray(rep.hits) && rep.hits.length <= 5000 && rep.hits.every(hitOk)
 		&& !!rep.schemes && typeof rep.schemes === 'object' && Object.entries(rep.schemes).every(([k, v]) => /^[a-z-]{1,20}:[a-z0-9.+-]{1,40}$/.test(k) && Number.isInteger(v))
 		&& !!rep.steps && typeof rep.steps === 'object' && Object.entries(rep.steps).every(([k, v]) => /^[a-z-]{1,30}$/.test(k) && typeof v === 'string' && /^[\x20-\x7e]{0,60}$/.test(v))
@@ -176,7 +180,7 @@ async function check(measure: boolean): Promise<boolean> {
 	const results: Array<{ name: string; ok: boolean }> = [];
 	const expect = (name: string, ok: boolean) => results.push({ name, ok });
 	expect('report present, from this run, and matches the schema', valid);
-	expect('the report check rejects a malformed tab value without throwing', hostileRejected);
+	expect('the report schema check rejects a malformed tab value without throwing', hostileRejected);
 	const byHash = new Map(KINDS.map(k => [sha(c[k]), k]));
 	const hits: Array<{ kind: string; channel: string; phase: string }> = valid
 		? (rep.hits as Array<{ channel: string; phase: string; sha256: string }>).filter(h => byHash.has(h.sha256)).map(h => ({ kind: byHash.get(h.sha256)!, channel: h.channel, phase: h.phase }))

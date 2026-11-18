@@ -45,7 +45,11 @@ const asserted: Array<keyof Canaries> = ['settingsComment', 'keybindingsComment'
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const tabId = () => (readManifest(base).tabs ?? [])[0];
 // Bounded (review SQ-6): the tab can stall anything read from its workspace.
-const inTab = (args: string[], timeoutMs = 30_000) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 64 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
+// A failed or timed-out run yields no stdout: a FIFO could emit a report and then stall (PH-3).
+const inTab = (args: string[], timeoutMs = 30_000) => {
+	const r = spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 64 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
+	return r.status === 0 && !r.error ? r : { ...r, stdout: '' };
+};
 
 if (mode === 'prepare') {
 	checkUserDataDir(userData);
@@ -176,14 +180,25 @@ if (mode === 'prepare') {
 		&& Array.isArray(rep.hits) && rep.hits.every((h: any) => schemeOk(h?.scheme) && typeof h?.sha256 === 'string' && /^[0-9a-f]{64}$/.test(h?.sha256))
 		&& ['precreated', 'foreignSeen'].every(f => typeof rep.perf?.[f] === 'boolean') && typeof rep.perf?.removedAt === 'string'
 		&& typeof rep.seeded === 'boolean' && typeof rep.untitledForeign === 'boolean'
+		&& !!rep.hijack && typeof rep.hijack === 'object' && ['providers', 'hostSchemeAsks', 'untitledClaims', 'hostUntitledSeen'].every(f => isCount(rep.hijack[f])) && ['fsUserdata', 'fsOutput'].every(f => typeof rep.hijack[f] === 'string')
 		&& ['editSaved', 'untitledTyped', 'tabUntitled', 'gitDoc', 'cellDoc'].every(f => typeof rep.controls?.[f] === 'boolean');
-	const hostileRejected = (() => {
+	// Each guard on its own: a malformed scheme with a valid hash, a valid scheme with a malformed hash.
+	const rejects = (r: unknown) => {
 		try {
-			return !validReport({ schema: 'seclab-docsync-report/1', done: true, steps: [], schemes: {}, hits: [{ scheme: { toString: null }, sha256: { toString: null } }] });
+			return !validReport(r);
 		} catch {
 			return false;
 		}
-	})();
+	};
+	const hostileBase = { schema: 'seclab-docsync-report/1', done: true, steps: [], schemes: {} };
+	const hostileRejected = rejects({ ...hostileBase, hits: [{ scheme: { toString: null }, sha256: '0'.repeat(64) }] })
+		&& rejects({ ...hostileBase, hits: [{ scheme: 'file', sha256: { toString: null } }] })
+		// Otherwise valid, with one counter the summary would convert: rejected, not converted later.
+		&& rejects({
+			...hostileBase, hits: [], perf: { precreated: false, foreignSeen: false, removedAt: '' }, seeded: false, untitledForeign: false,
+			hijack: { providers: { toString: null }, hostSchemeAsks: 0, untitledClaims: 0, hostUntitledSeen: 0, fsUserdata: '', fsOutput: '' },
+			controls: { editSaved: false, untitledTyped: false, tabUntitled: false, gitDoc: false, cellDoc: false },
+		});
 	let valid = false;
 	try {
 		valid = validReport(rep);
@@ -191,7 +206,7 @@ if (mode === 'prepare') {
 		// a malformed report is invalid
 	}
 	expect('report present and matches the schema', valid);
-	expect('the report check rejects a malformed tab value without throwing', hostileRejected);
+	expect('the report schema check rejects a malformed tab value without throwing', hostileRejected);
 	const armed = (() => {
 		try {
 			return (fs.readFileSync(armFile, 'utf8').match(/^[0-9a-f]{32}$/) ?? [])[0];

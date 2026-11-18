@@ -56,7 +56,11 @@ type Canaries = Record<typeof KINDS[number] | typeof DETECT, string>;
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const tabId = () => (readManifest(base).tabs ?? [])[0];
 // Bounded (review SQ-6): the tab can stall anything read from its workspace.
-const inTab = (args: string[], timeoutMs = 30_000) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 64 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
+// A failed or timed-out run yields no stdout: a FIFO could emit a report and then stall (PH-3).
+const inTab = (args: string[], timeoutMs = 30_000) => {
+	const r = spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 64 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
+	return r.status === 0 && !r.error ? r : { ...r, stdout: '' };
+};
 const basic = (canary: string) => `Basic ${Buffer.from(`probe:${canary}`).toString('base64')}`;
 const settings = (c: Canaries, tabSize: number, proxyCanary: string) => JSON.stringify({
 	'security.workspace.trust.enabled': false,
@@ -172,7 +176,7 @@ if (mode === 'prepare') {
 	})();
 	// The report is the tab's: its check must reject anything malformed without throwing, or the
 	// run would end before its teardown gate (review EDT-18). Every value meets a type check first.
-	const validReport = (rep: any) => !!rep && rep.schema === 'seclab-configsync-report/1' && rep.arm === armed && typeof rep.done === 'boolean'
+	const validReport = (rep: any) => !!rep && rep.schema === 'seclab-configsync-report/1' && !!armed && rep.arm === armed && typeof rep.done === 'boolean'
 		&& Array.isArray(rep.hits) && rep.hits.every((h: any) => ['initial', 'after-change'].includes(h?.phase) && typeof h?.sha256 === 'string' && /^[0-9a-f]{64}$/.test(h?.sha256))
 		&& Array.isArray(rep.keys) && rep.keys.every((k: unknown) => typeof k === 'string' && /^[\x20-\x7e]{1,300}$/.test(k))
 		&& ['tabSizeInitial', 'colorInitial', 'changeSeen'].every(f => typeof rep.controls?.[f] === 'boolean');
@@ -200,7 +204,7 @@ if (mode === 'prepare') {
 	const results: Array<{ name: string; ok: boolean; detail?: string }> = [];
 	const expect = (name: string, ok: boolean, detail = '') => results.push({ name, ok, detail });
 	expect('report present, from this run, and matches the schema', valid);
-	expect('the report check rejects a malformed tab value without throwing', hostileRejected);
+	expect('the report schema check rejects a malformed tab value without throwing', hostileRejected);
 	const byHash = new Map([...KINDS, DETECT].map(k => [sha(c[k]), k]));
 	const hits = valid ? (rep.hits as Array<{ phase: string; sha256: string }>).map(h => `${byHash.get(h.sha256) ?? 'unknown'}@${h.phase}`) : [];
 	if (valid) {

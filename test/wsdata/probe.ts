@@ -31,7 +31,11 @@ const measure = rest.includes('--measure');
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const tabId = () => (readManifest(base).tabs ?? [])[0];
 // Bounded (as review SQ-6): the tab can stall anything read from its workspace.
-const inTab = (args: string[], timeoutMs = 30_000) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
+// A failed or timed-out run yields no stdout: a FIFO could emit a report and then stall (PH-3).
+const inTab = (args: string[], timeoutMs = 30_000) => {
+	const r = spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
+	return r.status === 0 && !r.error ? r : { ...r, stdout: '' };
+};
 
 if (mode !== 'drive' || !appArg) {
 	console.error('usage: probe.ts drive --app PATH [--measure]');
