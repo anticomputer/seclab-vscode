@@ -7,7 +7,7 @@
 // recorded `ageExempt`); an unknown date fails.
 //   upstream:<sha>, git:<url>@<sha>, actions        commit date (GitHub)
 //   tool:<name>:<arch>@sha256, asset:ripgrep-v…     GitHub release publish date
-//   images                                          image config `created` (linux/amd64)
+//   images                                          image config `created` (an index: newest of amd64, arm64)
 //   pip:<file>                                      every `==` pin: first upload to PyPI
 //   npm installs of name@x.y.z in tracked Dockerfiles   npm publish time (CFS packument locally,
 //                                                       the public registry in CI only)
