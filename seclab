@@ -1447,6 +1447,13 @@ landing_verify() {
 # Proof of the RJG-1 control: merges that gut a validator (and use the gutting) are refused by
 # this main's validators even though the gutted code passes its own tree; a clean merge passes.
 # The scenario commits are made in a scratch worktree and reachable from no ref.
+# Make FILE exit 0 before doing anything, checked: an injection that fails must fail the
+# self-test, never leave a weaker scenario (Copilot review on PR 63).
+landing_gut() { # FILE
+	{ echo 'process.exit(0);'; cat "$1"; } > "$1.new" || { echo "landing self-test: couldn't write a gutted $1" >&2; exit 1; }
+	mv "$1.new" "$1" || { echo "landing self-test: couldn't place a gutted $1" >&2; exit 1; }
+	[[ "$(head -n1 "$1")" == 'process.exit(0);' ]] || { echo "landing self-test: $1 wasn't gutted" >&2; exit 1; }
+}
 landing_self_test() {
 	local old src gutted pins clean id=(-c user.name=seclab-self-test -c user.email=self-test@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null)
 	old="$(git -C "$ROOT" rev-parse HEAD)"
@@ -1468,8 +1475,9 @@ landing_self_test() {
 	mkdir -p "$src/.work"
 	# 1. A gutted lint: the required-checks validator exits before it checks, and the change sets
 	#    `if: false` on the lint job, which that validator exists to refuse.
-	{ echo 'process.exit(0);'; cat "$src/build/check-required-checks.ts"; } > "$src/.work/gut.ts" && mv "$src/.work/gut.ts" "$src/build/check-required-checks.ts"
-	awk '{print} /^  lint:$/ && !d {print "    if: false"; d=1}' "$src/.github/workflows/workflow-lint.yml" > "$src/.work/wl.yml" && mv "$src/.work/wl.yml" "$src/.github/workflows/workflow-lint.yml"
+	landing_gut "$src/build/check-required-checks.ts"
+	awk '{print} /^  lint:$/ && !d {print "    if: false"; d=1}' "$src/.github/workflows/workflow-lint.yml" > "$src/.github/workflows/workflow-lint.yml.new" || { echo "landing self-test: couldn't inject if: false" >&2; exit 1; }
+	mv "$src/.github/workflows/workflow-lint.yml.new" "$src/.github/workflows/workflow-lint.yml" || exit 1
 	grep -q '^    if: false$' "$src/.github/workflows/workflow-lint.yml" || { echo "landing self-test: couldn't inject if: false on lint" >&2; exit 1; }
 	git -C "$src" "${id[@]}" commit -qam 'landing self-test: gutted lint'
 	gutted="$(git -C "$src" rev-parse HEAD)"
@@ -1477,7 +1485,7 @@ landing_self_test() {
 	docker run --rm --network none -v "$src:/repo:ro" -w /repo "$(node_image)" node build/check-required-checks.ts >/dev/null || { echo "landing self-test: the gutted validator refused its own tree (the scenario proves nothing)" >&2; exit 1; }
 	# 2. A gutted pin check hiding an unpinned image.
 	git -C "$src" checkout -q --detach "$old"
-	{ echo 'process.exit(0);'; cat "$src/build/check-pins.ts"; } > "$src/.work/gut.ts" && mv "$src/.work/gut.ts" "$src/build/check-pins.ts"
+	landing_gut "$src/build/check-pins.ts"
 	mkdir -p "$src/test/landing-self-test" && printf 'FROM %s:%s\n' debian trixie-slim > "$src/test/landing-self-test/Dockerfile"
 	git -C "$src" add test/landing-self-test/Dockerfile
 	git -C "$src" "${id[@]}" commit -qam 'landing self-test: gutted pin check'
@@ -1543,7 +1551,7 @@ landing_self_test() {
 	#     review on PR 63). Unchanged, the step passes (the clean merge).
 	local obs_regen obs_stale obs_exit
 	git -C "$src" checkout -q -f --detach "$old"
-	{ echo 'process.exit(0);'; cat "$src/tabd/src/obs/detect.ts"; } > "$src/.work/detect.ts" && mv "$src/.work/detect.ts" "$src/tabd/src/obs/detect.ts"
+	landing_gut "$src/tabd/src/obs/detect.ts"
 	sed -i.bak 's/^export const SCHEMA_VERSION = \([0-9]*\);/export const SCHEMA_VERSION = 98;/' "$src/tabd/src/obs/schema.ts" && rm -f "$src/tabd/src/obs/schema.ts.bak"
 	git -C "$src" "${id[@]}" commit -qam 'landing self-test: an executed module exits early, docs stale'
 	obs_exit="$(git -C "$src" rev-parse HEAD)"
@@ -1572,7 +1580,11 @@ landing_self_test() {
 	rm -rf "$ROOT/.work/landing-victim-dir"
 	rm -f "$canary" "$victim"
 	landing_revalidate "$old" "$clean" required-checks pins obs-docs || { echo "landing self-test: a clean merge was refused" >&2; exit 1; }
-	local o
+	# Each scenario holds what it claims, in the commit itself (Copilot review on PR 63).
+	local o g
+	for g in "$gutted:build/check-required-checks.ts" "$pins:build/check-pins.ts" "$obs_exit:tabd/src/obs/detect.ts"; do
+		[[ "$(git -C "$ROOT" show "$g" | head -n1)" == 'process.exit(0);' ]] || { echo "landing self-test: scenario ${g%%:*} doesn't carry its gutted ${g#*:}" >&2; exit 1; }
+	done
 	for o in "$obs_regen" "$obs_stale" "$obs_exit"; do
 		if landing_revalidate "$old" "$o" obs-docs; then echo "landing self-test: a merge changing a module the validator executes passed (Copilot review on PR 63)" >&2; exit 1; fi
 		grep -q "which this validator executes, changed in the merge" "$ROOT/.work/landing-verify.obs-docs.log" || { echo "landing self-test: an executed-module change wasn't refused for its reason" >&2; exit 1; }
