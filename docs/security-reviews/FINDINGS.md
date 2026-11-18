@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 211 | 307 | 44 | 660 |
+| fixed | 14 | 84 | 211 | 308 | 44 | 661 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 52 | 161 | 58 | 276 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-| **all** | 16 | 93 | 301 | 561 | 148 | 1119 |
+| **all** | 16 | 93 | 301 | 562 | 148 | 1120 |
 
 ## Baseline: open high and critical findings
 
@@ -2098,6 +2098,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | WSD-1 | low | fixed-untested | The wsdata harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
 | WSD-2 | medium | fixed | The wsdata leak check looked for the canary token only, but the host folder's name is one token to the tab's tokenizer, so the host folder reaching the tab went unflagged. | patch:c3df90a7f6f584393bea95b792d3ee7870942da8 · `test/wsdata/probe.ts` "WSD-2 the leak check catches the host folder" |
 | WSD-3 | low | fixed | The wsdata report check ran a regex on a tab-controlled value before its type check, so a crafted object threw before the teardown gate. | patch:c3df90a7f6f584393bea95b792d3ee7870942da8 · `test/wsdata/probe.ts` "WSD-3 the report check rejects a malformed tab value without throwing" |
+| WSD-4 | low | fixed | The wsdata run manifest didn't list its generated directories, so the teardown gate left the workspace, the packaged VSIX and the host-folder fixture in .work. | patch:52bd43f21fceef45c686b2e5489949c8e6210bbe · `test/containment/teardown.ts` "generated fixture workspaces removed from the host" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

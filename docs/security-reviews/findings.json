@@ -16507,6 +16507,21 @@
 				"file": "test/wsdata/probe.ts",
 				"name": "WSD-3 the report check rejects a malformed tab value without throwing"
 			}
+		},
+		{
+			"record": "20261117-workspace-data-probe.md",
+			"round": "Copilot review (PR #37, second pass)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"anchor": "WSD-4",
+			"severity": "low",
+			"summary": "The wsdata run manifest didn't list its generated directories, so the teardown gate left the workspace, the packaged VSIX and the host-folder fixture in .work.",
+			"status": "fixed",
+			"commit": "patch:52bd43f21fceef45c686b2e5489949c8e6210bbe",
+			"test": {
+				"file": "test/containment/teardown.ts",
+				"name": "generated fixture workspaces removed from the host"
+			}
 		}
 	]
 }
