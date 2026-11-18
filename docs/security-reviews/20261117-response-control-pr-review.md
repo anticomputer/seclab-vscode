@@ -107,3 +107,24 @@ Two threads, both real and functional, about reference definitions: a bare desti
 (`[r]: command:…`) was cut at a `)` in its arguments, and an angle-bracket destination after
 `]:` lost its `<`. A bare reference destination now ends only at whitespace, and the
 angle-bracket rule covers `]:` as well as `](`.
+
+## Runtime proof of PRC-3 (2026-11-18)
+The coordinator required a runtime probe for PRC-3, since a fix is done only once a probe shows
+it in the shipped build. `test/containment/response-probe.ts` has a fourth vector for it:
+- a completion item accepted with `^`, whose resolve reply carries an own `__proto__` key in its
+  label object;
+- no API field can hold that key, but an extension shares its extension host's realm, so the
+  probe extension rewrites `JSON.stringify`'s output for that one reply (the RPC protocol
+  serialises replies with it);
+- after accepting the item, the harness asks the trusted renderer, through the headless driver,
+  only whether `Object.prototype` has the key.
+
+It also needs a positive control: the item was offered and resolved, and its reply carried the key.
+
+| Mode | Build | Run | `Object.prototype` | Checks |
+|---|---|---|---|---|
+| `resolve-reviewed` | the reviewed commit of #48 (`19aa5f4c`, on `anticomputer-rpc-prc3-reviewed`) | 44319561648 | polluted | 17/17 |
+| `control` | main (`3fee3b55`) | 44279029454 | unchanged | 17/17 |
+
+`resolve-reviewed` judges every other vector as the control does, since the reviewed commit
+already closed RSC-1 and RSC-2; both runs passed those too. Each run's teardown was clean.

@@ -99,6 +99,11 @@ the probe file's own editor. Each run's teardown was clean.
   - The snippet inserted the variable as literal text.
 - **`fixture:test/containment/response-probe`:** run by `test/containment/response-probe.ts`
   in all three modes on 2026-11-17 (runs above).
+- **Addendum (2026-11-18), PRC-3.** A fourth vector resolves a completion whose label carries an
+  own `__proto__` key on the wire; the driver asks the trusted renderer whether
+  `Object.prototype` gained it. The reviewed commit of #48 (`19aa5f4c`, run 44319561648): it did.
+  Main (`3fee3b55`, run 44279029454): it didn't. Both 17/17
+  ([record](../security-reviews/20261117-response-control-pr-review.md)).
 
 ## Consequences
 - Hover and completion work in tabs again, with their commands subject to the same verdicts as
