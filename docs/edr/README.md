@@ -119,6 +119,7 @@ Same rules as ADRs:
 | 2026-11-12 | [Probe records hold facts, the clipboard is a canary, and nothing internal enters the repo](20261112-probe-records-canary-clipboard.md) | accepted |
 | 2026-11-12 | [Publish gate: only what can be shown to be public is published](20261112-publish-gate.md) | accepted |
 | 2026-11-12 | [A tab receives only its own settings: the configuration snapshot filter (patch 0036)](20261112-tab-configuration-snapshot.md) | accepted |
+| 2026-11-16 | [Which agents can exist in a tab window, and why increment 4 closes increment 3's gap](20261116-agent-registration-inventory.md) | accepted |
 | 2026-11-16 | [Host editors stay anonymous to a tab: provenance for the editor-tab model (patch 0038)](20261116-editor-tab-provenance.md) | accepted |
 | 2026-11-16 | [Host notebooks and a tab: notebook sync measurement (DOCSYNC-R2)](20261116-notebook-sync.md) | accepted |
 | 2026-11-16 | [Landing through pull requests: rebase merge with auto-merge](20261116-pr-landing.md) | accepted (partly superseded by [20261117-pr-landing-review](20261117-pr-landing-review.md)) |
