@@ -1107,7 +1107,8 @@ const SECLAB_COMMAND_LINK = /command:([^\s?)\]"'<>]+)/gi;
 /**
  * Rewrite every `command:<id>?<args>` in `value`. The query is JSON that encodeURIComponent
  * leaves `'`, `(`, `)`, `!`, `*` and `~` in, so it ends only at whitespace, `"`, `<`, `>`, `]`, a
- * backtick, or a `)` that closes the markdown link around it (parentheses inside are balanced).
+ * backtick, or a `)` that closes the markdown link around it (parentheses inside are balanced);
+ * in an angle-bracket destination, only at its `>`.
  * A pattern that stopped at `'` or the first `)` cut the arguments short (PR review on #48).
  */
 function seclabCommandLinks(value: string, rewrite: (rawId: string, query: string | undefined) => string): string {
@@ -1117,12 +1118,18 @@ function seclabCommandLinks(value: string, rewrite: (rawId: string, query: strin
 	for (let m = SECLAB_COMMAND_LINK.exec(value); m; m = SECLAB_COMMAND_LINK.exec(value)) {
 		let end = SECLAB_COMMAND_LINK.lastIndex;
 		let query: string | undefined;
+		// In an angle-bracket destination (`[x](<command:…>)`) the query runs to the `>`: a `)` in
+		// it is no terminator, balanced or not (PR review on #48).
+		const angle = m.index > 0 && value[m.index - 1] === '<';
 		if (value[end] === '?') {
 			let j = end + 1;
 			for (let depth = 0; j < value.length; j++) {
 				const c = value[j];
-				if (/[\s"<>\]`]/.test(c)) {
+				if (angle ? /[<>\n]/.test(c) : /[\s"<>\]`]/.test(c)) {
 					break;
+				}
+				if (angle) {
+					continue;
 				}
 				if (c === '(') {
 					depth++;

@@ -40,7 +40,9 @@ if (!MARKED) {
 }
 registerHooks({
 	resolve(specifier, context, next) {
-		if (specifier.endsWith('base/common/marked/marked.js')) {
+		// Not for the wrapper's own import of the real module: SECLAB_MARKED can be a path that ends
+		// the same way, and redirecting it would make the wrapper import itself (PR review on #48).
+		if (specifier.endsWith('base/common/marked/marked.js') && !context.parentURL?.endsWith('/filter-stubs/marked-counting.mjs')) {
 			return { url: pathToFileURL(join(HERE, 'filter-stubs', 'marked-counting.mjs')).href, shortCircuit: true };
 		}
 		for (const [suffix, stub] of Object.entries(STUBS)) {
@@ -291,6 +293,13 @@ test('response: angle-bracket link destinations keep working (review on #48)', a
 	assert.ok(m, out);
 	await run(tokenOf(m[1]));
 	assert.deepEqual(ran, [['pub.ext.own', [1]]]);
+	// Inside angle brackets a `)` in the arguments is no terminator.
+	const paren = s.markdown({ value: '[run](<command:pub.ext.own?%5B%22a)b%22%5D>)' }).value;
+	const pm = paren.match(/^\[run\]\(<(command:_seclab\.tabCommand\?[^>\s]+)>\)$/);
+	assert.ok(pm, paren);
+	ran.length = 0;
+	await run(tokenOf(pm[1]));
+	assert.deepEqual(ran, [['pub.ext.own', ['a)b']]]);
 	// A `<` that only looks like a link destination, outside a link, is still escaped.
 	for (const v of ['x](<span a>)\n<img src="https://example.test/s.png">\n', 'a ](<img src="https://example.test/t.png">)']) {
 		assert.doesNotMatch(s.markdown({ value: v }).value, OPENS_IMAGE_OR_TAG, v);
@@ -469,13 +478,14 @@ if (!process.env.SECLAB_FILTER_SRC_DIR) {
 		['HTML is escaped with a backslash', "? lt : '&lt;');", "? lt : '\\\\<');"],
 		['the clipboard snippet is allowed', 'return typeof insertText === \'string\' && !SECLAB_SNIPPET_CLIPBOARD.test(insertText);', 'return typeof insertText === \'string\';'],
 		['command links are kept', 'out += value.slice(last, m.index) + rewrite(m[1], query);', 'out += value.slice(last, end);'],
-		['the query stops at an apostrophe', 'if (/[\\s"<>\\]`]/.test(c)) {', 'if (/[\\s"\'<>\\]`]/.test(c)) {'],
+		['the query stops at an apostrophe', ': /[\\s"<>\\]`]/.test(c)) {', ': /[\\s"\'<>\\]`]/.test(c)) {'],
 		['the query stops at the first parenthesis', 'if (depth === 0) {\n\t\t\t\t\t\tbreak;', 'if (true) {\n\t\t\t\t\t\tbreak;'],
 		['an unknown token runs', "if (!entry) {\n\t\tthrow denied();", "if (!entry) {\n\t\treturn undefined;"],
 		['a host scheme stays in the selector', ".filter(f => f.scheme === undefined || f.scheme === 'vscode-remote')", ".filter(() => true)"],
 		['code is escaped like text', 'kept += rewrite(src.slice(at, start), true) + src.slice(start, end);', 'kept += rewrite(src.slice(at, end), true);'],
 		['oversized markdown is lexed', 'if (value.length > SECLAB_MARKDOWN_MAX) {\n\t\treturn all;', 'if (false) {\n\t\treturn all;'],
 		['angle link destinations are escaped', 'keepLinks && /', 'false && /'],
+		['an angle destination ends at a parenthesis', "const angle = m.index > 0 && value[m.index - 1] === '<';", 'const angle = false;'],
 		['a resolved key may be __proto__', "if (key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {", 'if (true) {'],
 		['the result is not lexed again', 'return seclabRendersInert(kept) ? kept : all;', 'return kept;'],
 		['the renderer\'s length cut is ignored', 'if (md.length > SECLAB_MARKDOWN_MAX) {', 'if (false) {'],

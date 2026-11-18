@@ -1746,7 +1746,7 @@ case "${1:-help}" in
 					echo "seclab test filter-module: no pinned upstream at $up (build/fetch-upstream.sh $ROOT/.work/upstream/vscode, or set SECLAB_UPSTREAM)" >&2
 					exit 1
 				fi
-				docker run --rm --network none --tmpfs /scratch -e SECLAB_SCRATCH=/scratch -e SECLAB_MARKED=/marked/marked.js -v "$up/src/vs/base/common/marked:/marked:ro" -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --experimental-transform-types --no-warnings test/containment/filter-module.test.ts ;;
+				docker run --rm --network none --tmpfs /scratch -e SECLAB_SCRATCH=/scratch -e SECLAB_MARKED=/up/src/vs/base/common/marked/marked.js -v "$up/src/vs/base/common/marked:/up/src/vs/base/common/marked:ro" -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --experimental-transform-types --no-warnings test/containment/filter-module.test.ts ;;
 			# Patch 0009: a tab window registers, runs and sends no built-in chat tools or requests.
 			chat-gate) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/chat-gate.test.ts ;;
 			# Patch 0034: a tab window resolves no host variables in its REH's terminal launch config.

@@ -68,7 +68,9 @@ exports.activate = async function (context) {
 			mark(via === 'hover' ? 'own-hover' : 'own-completion', { ran: true, inTab: process.env.SECLAB_TAB === '1' });
 		}));
 		const selector = { language: 'plaintext' };
-		const ports = ['img1', 'img2', 'img3'].map(k => Number(targets[k])).filter(p => Number.isSafeInteger(p) && p > 1024 && p < 65536);
+		// The harness refuses ports below 1024; whatever happens, `ready` says whether the images are armed,
+		// so a run can't pass its checks with none of the image vectors in it (PR review on #48).
+		const ports = ['img1', 'img2', 'img3'].map(k => Number(targets[k])).filter(p => Number.isSafeInteger(p) && p >= 1024 && p < 65536);
 		const images = ports.length === 3 ? [
 			`![a](https://127.0.0.1:${ports[0]}/a.png)`,
 			`![x![]y](https://127.0.0.1:${ports[1]}/b.png)`,
@@ -112,7 +114,7 @@ exports.activate = async function (context) {
 		}));
 		const doc = vscode.Uri.joinPath(folder.uri, 'probe.txt');
 		await vscode.window.showTextDocument(doc).then(undefined, () => undefined);
-		mark('ready', { ready: true });
+		mark('ready', { ready: true, imagesArmed: images !== '' });
 	}
 };
 
