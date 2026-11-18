@@ -47,3 +47,9 @@ Live runs after these fixes on main `6589051b`: nbsync, telemetryid and configsy
 | # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
 |---|---|---|---|---|---|---|
 | PH-11 | Low | harness | PH-6's no-data rule also covered docsync's tab-log collection, so a failed or timed-out log read erased a canary already emitted, and the absence checks passed on missing evidence. | fixed | The logs come from their own bounded call that keeps what it read, and a control requires the collection to complete. A docsync run on main `6589051b` passes it. | test/docsync/probe.ts "control: the tab-side logs were collected (no timeout or failure)" |
+
+## Copilot review (PR #45, third pass)
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| PH-12 | Low | harness | docsync's check accepted scheme counters with an extra `toString: null`, and its summary's default `.sort()` stringified each entry, so two such schemes threw before the teardown gate. | fixed | The summary sorts by scheme name only. Each check passes two such counters through the summary, which must print them without throwing; with the default sort it fails. | test/docsync/probe.ts "the report schema check passes nothing the summary cannot print (PH-12)" |
