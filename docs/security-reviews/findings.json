@@ -16747,6 +16747,36 @@
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_property_names_and_contextual_words"
 			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-16",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "lint_probes read a private name such as o.#return as a keyword, so a following slash read as a regex moved a string boundary and hid a computed record key.",
+			"component": "rpc-filter/tools/lint_probes.py _SlashContext",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:2e1ee5d968b6ea6a09a4158f96b80cfbcf5e3823",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_property_names_and_contextual_words"
+			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-17",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "medium",
+			"summary": "lint_probes did not treat Annex B HTML-like comments (<!--, line-leading -->) as Node does in CommonJS, so x <!-- /* read as a block comment and hid lines Node runs, such as a raw record write.",
+			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:2e1ee5d968b6ea6a09a4158f96b80cfbcf5e3823",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_an_html_like_comment_fails_closed"
+			}
 		}
 	]
 }
