@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 239 | 385 | 51 | 780 |
+| fixed | 14 | 91 | 239 | 391 | 51 | 786 |
 | fixed-before-landing | 0 | 2 | 0 | 0 | 0 | 2 |
 | fixed-untested | 0 | 5 | 59 | 180 | 65 | 309 |
 | accepted-residual | 0 | 1 | 12 | 72 | 25 | 110 |
 | deferred | 2 | 1 | 13 | 10 | 3 | 29 |
 | open | 0 | 2 | 12 | 15 | 8 | 37 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 102 | 335 | 662 | 178 | 1293 |
+| **all** | 16 | 102 | 335 | 668 | 178 | 1299 |
 
 ## Baseline: open high and critical findings
 
@@ -807,6 +807,12 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR16-9 | low | fixed | With no owner identity of its own, tabd's stale-sensor cleanup still removed unlabelled same-tag sensors, possibly another namespace's. | dccea87ccdfa · `tabd/test/obs.test.ts` "obs review CR16-6: a stale Falco sensor of the same state tag" |
 | CR16-10 | low | fixed | The macOS identity change reordered the Linux owner-hash inputs, so sensors labelled by an earlier build looked foreign and were never reclaimed. | dccea87ccdfa · `tabd/test/obs.test.ts` "obs review CR16-10: on Linux the owner hash keeps its input order" |
 | CR16-11 | low | fixed | A ps that failed to spawn had no stdout, so the liveness check threw before its kill(pid, 0) fallback and aborted cleanup. | dccea87ccdfa · `test/clean-host.ts` "pid liveness: got" |
+| PS-8 | low | fixed | tabd exited before its own Falco removal finished and the gate listed straight after its own rm -f, which fails while a removal is in progress: a flaky leak report. | patch:9b50c3106f34f904224c0d9b34049b4e681cc269 · `test/containment/teardown.test.ts` "PS-8: a sensor still being removed is waited for" |
+| PS-9 | low | fixed | An add refused after close left a readiness waiter whose timeout became an unhandled rejection. | patch:9b50c3106f34f904224c0d9b34049b4e681cc269 · `tabd/test/obs.test.ts` "obs review PS-8: tabd exits only once its Falco container is removed" |
+| PS-10 | low | fixed | A failed Falco removal would have been re-thrown to every later stop(). | patch:9b50c3106f34f904224c0d9b34049b4e681cc269 · `tabd/test/obs.test.ts` "obs review PS-8: tabd exits only once its Falco container is removed" |
+| PS-11 | low | fixed | clean-host read a failed docker listing as the sensor gone. | patch:9b50c3106f34f904224c0d9b34049b4e681cc269 · `test/containment/teardown.test.ts` "PS-8: a failed listing never counts as gone" |
+| PS-12 | low | fixed | Closed during the first add's stale-sensor cleanup, apply() still created a readiness waiter that timed out unhandled. | patch:9b50c3106f34f904224c0d9b34049b4e681cc269 · `tabd/test/obs.test.ts` "obs review PS-8: tabd exits only once its Falco container is removed" |
+| PS-13 | low | fixed | The 20 s removal bound did not cover the docker calls, so a stalled daemon could hang teardown or clean-host. | patch:9b50c3106f34f904224c0d9b34049b4e681cc269 · `test/containment/teardown.test.ts` "PS-13: a stalled docker ends at the deadline" |
 
 ### [20261104-m0-tabd-code](20261104-m0-tabd-code.md)
 
