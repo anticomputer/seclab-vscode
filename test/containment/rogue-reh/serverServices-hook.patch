@@ -11,10 +11,11 @@
  import { Emitter, Event } from '../../base/common/event.js';
  import { DisposableStore, toDisposable } from '../../base/common/lifecycle.js';
  import { Schemas } from '../../base/common/network.js';
-@@ -147,6 +148,36 @@
+@@ -146,6 +147,56 @@
+ 
  	// TODO: @Sandy @Joao need dynamic context based router
  	const router = new StaticRouter<RemoteAgentConnectionContext>(ctx => ctx.clientId === 'renderer');
- 
++
 +	// SECLAB_TEST_ONLY: rogue-REH containment hook. Applied only to the `containment` test
 +	// build variant (test/builds/variants.json), never by patches/series; check-release fails
 +	// any artifact containing it. Disarmed unless the harness has staged a run: the tab runs
@@ -23,20 +24,40 @@
 +	// and an expiry (until). The payload and output paths are fixed, never read from env.
 +	const seclabHook = '[SECLAB_TEST_ONLY:rogue-reh-hook]';
 +	const seclabDir = path.join(homedir(), '.seclab-test', 'rogue-reh');
-+	const seclabArm = setInterval(() => {
++	const seclabTargets = (): Record<string, string> | undefined => {
 +		let t: Record<string, string>;
 +		try {
 +			t = Object.fromEntries(fs.readFileSync(path.join(seclabDir, 'targets'), 'utf8').split('\n').map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
 +		} catch {
-+			return;
++			return undefined;
 +		}
-+		if (!/^[0-9a-f]{32}$/.test(t.arm ?? '') || !(t.run ?? '').startsWith('/') || !(Number(t.until) > Date.now() / 1000)) {
++		return /^[0-9a-f]{32}$/.test(t.arm ?? '') && (t.run ?? '').startsWith('/') && Number(t.until) > Date.now() / 1000 ? t : undefined;
++	};
++	const seclabLoad = () => {
++		process.env.SECLAB_ROGUE_REH_OUT = path.join(seclabDir, 'evidence');
++		return createRequire(import.meta.url)(path.join(seclabDir, 'probes.js'));
++	};
++	// A run staged before this server started arms it before any connection: the payload's
++	// `early` sees the channels as they are registered. A window asks for its environment as soon
++	// as it connects, and each window load starts a new server, so a later arming misses it.
++	let seclabPayload: { early?(s: unknown): void; main(s: unknown, r: unknown): Promise<void> } | undefined;
++	try {
++		if (seclabTargets()) {
++			seclabPayload = seclabLoad();
++			seclabPayload?.early?.(socketServer);
++			console.error(`${seclabHook} armed early`);
++		}
++	} catch (err) {
++		console.error(`${seclabHook} payload failed to load early`, err);
++	}
++	const seclabArm = setInterval(() => {
++		const t = seclabTargets();
++		if (!t) {
 +			return;
 +		}
 +		clearInterval(seclabArm);
 +		try {
-+			process.env.SECLAB_ROGUE_REH_OUT = path.join(seclabDir, 'evidence');
-+			const payload = createRequire(import.meta.url)(path.join(seclabDir, 'probes.js'));
++			const payload = seclabPayload ?? seclabLoad();
 +			console.error(`${seclabHook} armed for run ${t.arm.slice(0, 8)}`);
 +			setTimeout(() => void payload.main(socketServer, router), 5000);
 +		} catch (err) {
@@ -44,7 +65,6 @@
 +		}
 +	}, 2000);
 +	disposables.add(toDisposable(() => clearInterval(seclabArm)));
-+
+ 
  	// Files
  	const fileService = disposables.add(new FileService(logService));
- 	services.set(IFileService, fileService);
