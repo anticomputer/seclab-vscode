@@ -53,3 +53,10 @@ Live runs after these fixes on main `6589051b`: nbsync, telemetryid and configsy
 | # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
 |---|---|---|---|---|---|---|
 | PH-12 | Low | harness | docsync's check accepted scheme counters with an extra `toString: null`, and its summary's default `.sort()` stringified each entry, so two such schemes threw before the teardown gate. | fixed | The summary sorts by scheme name only. Each check passes two such counters through the summary, which must print them without throwing; with the default sort it fails. | test/docsync/probe.ts "the report schema check passes nothing the summary cannot print (PH-12)" |
+
+## Copilot review (PR #45, fourth pass)
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| PH-13 | Low | harness | The log collection ended in `; true`, so a failed `cat` or `find` still counted as collected, and the absence checks could pass without the extension-host logs. | fixed | The command keeps both exit statuses and fails if either fails; the partial output is still kept. A docsync run on main `6589051b` passes the control. | test/docsync/probe.ts "control: the tab-side logs were collected (no timeout or failure)" |
+| PH-14 | Info | harness | `check --measure` judged only schema and focus assertions, so a failed log collection still passed a measurement run. | fixed | Both measurement filters keep the collection control. | none |
