@@ -13,11 +13,13 @@ import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import type { ObsEvent } from '../../tabd/src/obs/schema.ts';
 import { exitedOrTimeout, verifyTeardown, writeManifest, writeSnapshot } from '../containment/teardown.ts';
-import { lockRun } from '../harness.ts';
+import { lockRun, tabImageArgs } from '../harness.ts';
 import { liveMark } from '../liveness.ts';
 import { honeypots, LOADER_IN_TAB, loaderScript, TASK_COMMAND, writeStdinTo } from './loader.ts';
 
 const driver = process.argv[2] ?? 'sbx';
+// Validated before anything is created: a bad SECLAB_TAB_IMAGE exits here (Copilot review on PR 25).
+const tabImage = tabImageArgs(driver);
 if (driver !== 'sbx' && driver !== 'oci') {
 	throw new Error('usage: run.ts [sbx|oci]');
 }
@@ -44,7 +46,7 @@ fs.writeFileSync(path.join(work, 'state', 'broker-policy.json'), JSON.stringify(
 
 const client = new TabdClient({
 	command: process.execPath,
-	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', path.join(work, 'tabs')],
+	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', path.join(work, 'state'), '--driver', driver, '--allowed-root', path.join(work, 'tabs'), ...tabImage],
 	env: { HOME: process.env.HOME, USER: process.env.USER },
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));
