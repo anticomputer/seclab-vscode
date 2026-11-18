@@ -17931,6 +17931,128 @@
 				"file": "docs/security-reviews/20261117-level-b-filtered-losses.md",
 				"quote": "The ungated checkout"
 			}
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB-1",
+			"round": "Round FAB",
+			"severity": "medium",
+			"summary": "Usage errors exited before the test-build location was cleared.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a",
+			"gap": "Shell dispatch around network fetches; proven by injected runs recorded in the EDR."
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB-2",
+			"round": "Round FAB",
+			"severity": "medium",
+			"summary": "local-window ran the app CLI before the build check.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a",
+			"gap": "Call-site wiring; the check itself is unit-tested."
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB-3",
+			"round": "Round FAB",
+			"severity": "medium",
+			"summary": "Altered probe copies had no build info, blocking the negative controls.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a",
+			"gap": "Probe wiring that needs a real macOS build."
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB-4",
+			"round": "Round FAB",
+			"severity": "low",
+			"summary": "The release app passed with any HEAD ancestor or a test build.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "test/app-build.test.ts",
+				"name": "fetched-app binding: the release app must be a build of a commit on origin/main"
+			},
+			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a"
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB-5",
+			"round": "Round FAB",
+			"severity": "low",
+			"summary": "Build info is bound to the directory, not to the bundle bytes.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "deferred",
+			"followUp": "Record a digest of the extracted bundle at fetch time and verify it at launch."
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB-6",
+			"round": "Round FAB",
+			"severity": "low",
+			"summary": "Lexical path compare could select the wrong rule.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "test/app-build.test.ts",
+				"name": "fetched-app binding: the release app must be a build of a commit on origin/main"
+			},
+			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a"
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB-7",
+			"round": "Round FAB",
+			"severity": "info",
+			"summary": "An inherited GIT_DIR could move HEAD.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "test/app-build.test.ts",
+				"name": "fetched-app binding: a test build runs only from .work/test-builds, and GIT_DIR is ignored"
+			},
+			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a"
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB-8",
+			"round": "Round FAB",
+			"severity": "info",
+			"summary": "A test build passed any run; variant REH images were unbound.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "test/app-build.test.ts",
+				"name": "fetched-app binding: a test build runs only from .work/test-builds, and GIT_DIR is ignored"
+			},
+			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a"
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB-9",
+			"round": "Round FAB",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-fetched-app-binding.md",
+				"quote": "None found."
+			}
 		}
 	]
 }

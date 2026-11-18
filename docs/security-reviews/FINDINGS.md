@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 85 | 225 | 363 | 46 | 733 |
+| fixed | 14 | 85 | 225 | 365 | 48 | 737 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 54 | 171 | 62 | 292 |
+| fixed-untested | 0 | 5 | 57 | 171 | 62 | 295 |
 | accepted-residual | 0 | 1 | 12 | 72 | 23 | 108 |
-| deferred | 2 | 1 | 14 | 9 | 3 | 29 |
+| deferred | 2 | 1 | 14 | 10 | 3 | 30 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
-| false-positive | 0 | 0 | 0 | 0 | 21 | 21 |
-| **all** | 16 | 94 | 317 | 629 | 161 | 1217 |
+| false-positive | 0 | 0 | 0 | 0 | 22 | 22 |
+| **all** | 16 | 94 | 320 | 632 | 164 | 1226 |
 
 ## Baseline: open high and critical findings
 
@@ -212,6 +212,9 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261109-liveness-gate](20261109-liveness-gate.md) **—** | medium | accepted-residual | liveness gate (mark log) | \`$RUNNER_TEMP/liveness.log\` has no integrity: host-side code in the job could forge every liveness mark. | accepted by an agent: Tabs cannot reach the log and SECLAB_LIVENESS_LOG is not in the tab environment; integrity is out of reach while marks are host-side text appended in the job. |
 | [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md) **GATE-8** | medium | fixed-untested | seclab verify_signed_image | Locally, an existing .work/deps-verified marker skips cosign and attestation verification | The marker is gone: verify_signed_image verifies on every use, and review SSS-2 removed tool reuse by tag. No test drives the seclab shell function with a forged marker or tag. |
 | [20261112-gate-fail-open](20261112-gate-fail-open.md) **SSS-2** | medium | fixed-untested | build/tools/tool.sh | Tool images were reused by content tag, which any local process could point at another image, replacing the verifier. | The image is rebuilt from cache on every use; no test retags a tool image and checks it is rebuilt. |
+| [20261117-fetched-app-binding](20261117-fetched-app-binding.md) **FAB-1** | medium | fixed-untested | fetched-app binding (fetch, test/app-build.ts) | Usage errors exited before the test-build location was cleared. | Shell dispatch around network fetches; proven by injected runs recorded in the EDR. |
+| [20261117-fetched-app-binding](20261117-fetched-app-binding.md) **FAB-2** | medium | fixed-untested | fetched-app binding (fetch, test/app-build.ts) | local-window ran the app CLI before the build check. | Call-site wiring; the check itself is unit-tested. |
+| [20261117-fetched-app-binding](20261117-fetched-app-binding.md) **FAB-3** | medium | fixed-untested | fetched-app binding (fetch, test/app-build.ts) | Altered probe copies had no build info, blocking the negative controls. | Probe wiring that needs a real macOS build. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-21** | medium | fixed-untested | Level B check (test/containment) | The comments scoped tampering to OCI, though sbx syncs non-held paths such as the targets. | Wording; the digest test covers detection on both drivers. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-3** | medium | fixed-untested | Level B check (test/containment) | The gap text claimed Level A covers a host run of fsmonitor. | Wording only. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-B** | low | fixed-untested | campaign fixture | Fixture C2 port/path and stage query matched published Contagious-Interview IOCs. | Stand-ins (192.0.2.10:8443/api/v1/ping, stage.loader-standin.example.test) are in the fixture, but no check enforces neutral IOCs; only fixture-lint's host allow-list would catch a non-reserved host. |
@@ -352,6 +355,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-3** | low | fixed-untested | docs/ARCHITECTURE.md | ARCHITECTURE's as-built line still described a three-patch queue after the bump edited it. | Documentation only; nothing to test. |
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-4** | low | fixed-untested | findings register (build/docs/findings.ts upstream exemption) | The register exempts only the current upstream pin, so after a bump, entries citing the old pin's SHA (or a file path containing it) carry citations that can't resolve. | Fixed by the register session: a prefix of any pin upstream.lock has held on main counts as the upstream commit, and hex inside a file path isn't a citation. Its tests are recorded against its own round; none of this round's tests drives it. |
 | [20261117-copilot-review-pr25](20261117-copilot-review-pr25.md) **CR25-4** | low | fixed-untested | harness runners | A bad SECLAB_TAB_IMAGE exited the containment run after it created resources and before their cleanup was registered. | Shown by hand with a bogus value refusing before any resource exists; the runners have no unit seam for their start-up order. |
+| [20261117-fetched-app-binding](20261117-fetched-app-binding.md) **FAB-5** | low | deferred | fetched-app binding (fetch, test/app-build.ts) | Build info is bound to the directory, not to the bundle bytes. | follow-up: Record a digest of the extracted bundle at fetch time and verify it at launch. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-26** | low | accepted-residual | Level B check (test/containment) | A tab that tampers with a non-held arming file and restores it before the check is not caught. | accepted by an agent: The ungated checkout race the write-back ADR records; a host run descended from the editor is marked regardless. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-4** | low | accepted-residual | Level B check (test/containment) | The excusing denial is matched profile-wide, with no window, tab or time binding. | accepted by an agent: With host facts hard, the denial only explains an in-tab non-run, which a tab could equally cause by breaking its own probe. |
 | [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md) **FXF-8** | low | fixed-untested | Level B check (test/containment) | The vector list was written out three times. | A refactor to one list; FXF-6 covers its effect. |
@@ -2123,6 +2127,20 @@ Every other commit the register cites is on main's history, or on the branch its
 | FU-10 | low | fixed | Exclude files and git config on the volume or the user could hide a planted file from the clean and the check. | patch:57e5c88c532b526beb5d6f2a2cd90e1c41e74de3 · `build/fetch-upstream.test.ts` "fetch-upstream: excludes and config on the volume or in user config hide nothing (FU-10)" |
 | FU-11 | low | fixed | The install stamp hashed unframed input, skipped symlinked lockfiles and mis-read paths with newlines. | patch:57e5c88c532b526beb5d6f2a2cd90e1c41e74de3 · `build/fetch-upstream.test.ts` "install stamp: a symlinked lockfile is refused; a lockfile under an odd path still counts (FU-11)" |
 | FU-12 | info | false-positive | Upstream reuses a cached marketplace built-in by version without re-checking its hash. | Nothing we ship reads that cache: the local volume build makes only the REH and fetches none, and desktop builds start on fresh runners. |
+
+### [20261117-fetched-app-binding](20261117-fetched-app-binding.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| FAB-1 | medium | fixed-untested | Usage errors exited before the test-build location was cleared. | Shell dispatch around network fetches; proven by injected runs recorded in the EDR. |
+| FAB-2 | medium | fixed-untested | local-window ran the app CLI before the build check. | Call-site wiring; the check itself is unit-tested. |
+| FAB-3 | medium | fixed-untested | Altered probe copies had no build info, blocking the negative controls. | Probe wiring that needs a real macOS build. |
+| FAB-4 | low | fixed | The release app passed with any HEAD ancestor or a test build. | patch:1ffe02d661e2e6589573a4364d88b0457af00a2a · `test/app-build.test.ts` "fetched-app binding: the release app must be a build of a commit on origin/main" |
+| FAB-5 | low | deferred | Build info is bound to the directory, not to the bundle bytes. | follow-up: Record a digest of the extracted bundle at fetch time and verify it at launch. |
+| FAB-6 | low | fixed | Lexical path compare could select the wrong rule. | patch:1ffe02d661e2e6589573a4364d88b0457af00a2a · `test/app-build.test.ts` "fetched-app binding: the release app must be a build of a commit on origin/main" |
+| FAB-7 | info | fixed | An inherited GIT_DIR could move HEAD. | patch:1ffe02d661e2e6589573a4364d88b0457af00a2a · `test/app-build.test.ts` "fetched-app binding: a test build runs only from .work/test-builds, and GIT_DIR is ignored" |
+| FAB-8 | info | fixed | A test build passed any run; variant REH images were unbound. | patch:1ffe02d661e2e6589573a4364d88b0457af00a2a · `test/app-build.test.ts` "fetched-app binding: a test build runs only from .work/test-builds, and GIT_DIR is ignored" |
+| FAB-9 | info | false-positive | Prompt injection. | The review recorded no issue. |
 
 ### [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md)
 
