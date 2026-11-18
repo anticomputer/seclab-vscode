@@ -490,11 +490,14 @@ const MAX_FILTER_STRING = 256;
 /**
  * A document selector a tab registers a provider for. The registry is window-wide, so a filter
  * that matched a trusted document (user settings, an output channel, a host file) would paint
- * the tab's content inside it. Accepted: a non-empty array of plain filters, each with
- * `$serialized: true`, `scheme` absent or `vscode-remote` (patch 0033 narrows an absent scheme
- * to `vscode-remote` for a tab), `language` and `pattern` short strings or absent, `exclusive`
- * boolean or absent, `isBuiltin` absent or false (it would order the tab ahead of built-ins),
- * and nothing else: no notebook type, no RelativePattern, no unknown key.
+ * the tab's content inside it. Patch 0033 keeps only the tab's own documents
+ * (`seclabFromTab(...).selector`: a filter for another scheme is dropped, an absent scheme becomes
+ * `vscode-remote`), so a bundled provider's usual selector, which also names `untitled` and
+ * notebook-cell schemes, still registers (PR review on #48). Accepted here: a non-empty array of
+ * plain filters, each with `$serialized: true`, `scheme`, `language` and `pattern` short strings
+ * or absent, `exclusive` and `isBuiltin` booleans or absent (every bundled extension sends
+ * `isBuiltin: true`, which only lowers the provider's priority), and nothing else: no notebook
+ * type, no RelativePattern, no unknown key.
  */
 function tabSelector(v: unknown): string | undefined {
 	if (!Array.isArray(v) || v.length === 0 || v.length > MAX_SELECTOR_FILTERS) {
@@ -509,19 +512,15 @@ function tabSelector(v: unknown): string | undefined {
 				return `a document filter carries ${key.slice(0, 32)}`;
 			}
 		}
-		if (f.scheme !== undefined && f.scheme !== 'vscode-remote') {
-			return 'a document filter names a scheme the tab does not own';
-		}
-		for (const key of ['language', 'pattern'] as const) {
+		for (const key of ['scheme', 'language', 'pattern'] as const) {
 			if (f[key] !== undefined && (typeof f[key] !== 'string' || (f[key] as string).length > MAX_FILTER_STRING)) {
 				return `a document filter's ${key} is not a short string`;
 			}
 		}
-		if (f.exclusive !== undefined && typeof f.exclusive !== 'boolean') {
-			return 'a document filter\'s exclusive is not a boolean';
-		}
-		if (f.isBuiltin !== undefined && f.isBuiltin !== false) {
-			return 'a tab provider cannot claim to be built in';
+		for (const key of ['exclusive', 'isBuiltin'] as const) {
+			if (f[key] !== undefined && typeof f[key] !== 'boolean') {
+				return `a document filter's ${key} is not a boolean`;
+			}
 		}
 	}
 	return undefined;

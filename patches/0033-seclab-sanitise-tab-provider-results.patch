@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts b/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts
---- a/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts	2026-11-16 13:20:33
-+++ b/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts	2026-11-16 18:40:03
+--- a/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts	2026-11-17 23:42:24
++++ b/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts	2026-11-17 23:42:24
 @@ -33,6 +33,7 @@
  import * as search from '../../contrib/search/common/search.js';
  import * as typeh from '../../contrib/typeHierarchy/common/typeHierarchy.js';
@@ -85,9 +85,9 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts b/src/vs/
 +		return item;
 +	}
 +
-+	/** seclab: a tab's selector without a scheme matches only its own (remote) documents. */
++	/** seclab: a tab's selector matches only its own (remote) documents. */
 +	private _seclabSelector(selector: IDocumentFilterDto[]): IDocumentFilterDto[] {
-+		return this._seclabFromTab ? selector.map(f => f.scheme === undefined ? { ...f, scheme: 'vscode-remote' } : f) : selector;
++		return this._seclabFromTab ? this._seclabFromTab.selector(selector) : selector;
  	}
  
  	$registerInlineCompletionsSupport(
