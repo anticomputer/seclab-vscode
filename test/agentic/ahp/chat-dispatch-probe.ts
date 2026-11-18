@@ -113,9 +113,13 @@ let invocations = 0;
 let controllerPrompts = 0;
 const PROBE_SCHEME = 'seclabProbeRemote';
 
-/** `migrateRequests` fires its sends without awaiting them, so a refusal surfaces here. */
-let rejections: string[] = [];
-process.on('unhandledRejection', err => { rejections.push((err as Error)?.message ?? String(err)); });
+/**
+ * `migrateRequests` fires its sends without awaiting them, so a refusal surfaces as an unhandled
+ * rejection. A listener is installed only while an arm runs (Node's default, which fails the
+ * process, applies outside them), and a rejection other than a tab window's refusal fails the
+ * run rather than being swallowed (review round 15).
+ */
+const unexpectedRejections: string[] = [];
 
 /** Two distinct connection objects: the window's own agent host, and some other one. */
 const OWN_CONNECTION = { name: 'own' };
@@ -248,7 +252,15 @@ async function issue(path: Path, window: 'tab' | 'ordinary', session: Foreign, h
 	const before = invocations;
 	const promptsBefore = controllerPrompts;
 	const logged = gateLog.length;
-	rejections = [];
+	const rejections: string[] = [];
+	const onRejection = (err: unknown) => {
+		const message = (err as Error)?.message ?? String(err);
+		rejections.push(message);
+		if (!(window === 'tab' && message === 'Unsupported operation')) {
+			unexpectedRejections.push(`${path} (${window}, ${session}): ${message}`);
+		}
+	};
+	process.on('unhandledRejection', onRejection);
 	let threw: string | undefined;
 	try {
 		const svc = chatService(store, window === 'tab' ? TAB_AUTHORITY : undefined, session);
@@ -278,6 +290,7 @@ async function issue(path: Path, window: 'tab' | 'ordinary', session: Foreign, h
 		await svc.waitForModelDisposals?.();
 	} finally {
 		store.dispose();
+		process.off('unhandledRejection', onRejection);
 	}
 	const gateReasons = gateLog.slice(logged).filter(e => e.detail?.gateRule === 'ahp-sessions.chat').map(e => String(e.detail?.reason));
 	return { path, window, session, invocations: invocations - before, controllerPrompts: controllerPrompts - promptsBefore, threw, gateReasons };
@@ -300,6 +313,9 @@ const dispatched = (o: Observation) => o.invocations > 0 || o.controllerPrompts 
 
 const problems: string[] = [];
 const expect = (ok: boolean, what: string) => { if (!ok) { problems.push(what); } };
+
+// A rejection no arm expects is a broken measurement, in every tree and every expectation.
+expect(unexpectedRejections.length === 0, `unexpected rejections: ${unexpectedRejections.join('; ')}`);
 
 // Every tree: the harness really dispatches. Without this a refusal below could be a harness
 // that never ran an agent at all, which is the absence this project keeps mistaking for a result.
