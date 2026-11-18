@@ -44,6 +44,8 @@ const FILES = {
 	profileText: 'platform/terminal/common/terminalProfiles.ts',
 	htmlContent: 'base/common/htmlContent.ts',
 	helper: 'workbench/contrib/terminal/common/seclabTabTerminalSettings.ts',
+	tooltip: 'workbench/contrib/terminal/browser/terminalTooltip.ts',
+	links: 'workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts',
 } as const;
 type Key = keyof typeof FILES;
 const OURS = ['0053-seclab-no-host-terminal-settings-for-tabs.patch', '0054-seclab-tab-own-terminal-env-collections.patch', '0055-seclab-no-host-file-path-to-tab-terminals.patch', '0056-seclab-no-foreign-terminal-icons-in-tabs.patch',
@@ -154,6 +156,8 @@ const SETTINGS: Record<string, Layers> = {
 	'terminal.integrated.automationProfile.linux': { defaultValue: null, userLocalValue: { path: '/bin/sh', args: [HOST] } },
 	'terminal.integrated.agentHostProfile.linux': { defaultValue: null, policyValue: { path: '/bin/sh', args: [HOST] } },
 	'terminal.integrated.detectLocale': { defaultValue: 'auto' },
+	// Upstream merges arrays by replacing, so the host user's list is the effective one when the tab sets none.
+	'terminal.integrated.allowedLinkSchemes': { defaultValue: ['file', 'http', 'https'], userLocalValue: [`host${HOST}`] },
 };
 const isMap = (v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v);
 const deepMerge = (a: unknown, b: unknown): unknown => isMap(a) && isMap(b)
@@ -197,6 +201,8 @@ interface Observed {
 	profileWrites: Array<{ key: string; value: unknown; target: number }>;
 	descriptions: string[];
 	detachSent: unknown[] | undefined;
+	hover: string;
+	schemeWrites: Array<{ key: string; value: unknown; target: number | undefined }>;
 }
 
 async function observe(src: Record<Key, string>, authority: string, activeFile: unknown, kind: WorkspaceKind = 'tab'): Promise<Observed> {
@@ -360,14 +366,19 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 
 	// R5-15: profile descriptions the Settings editor renders as markdown.
 	const escapeMarkdownSyntaxTokens = method(src.htmlContent, 'escapeMarkdownSyntaxTokens', {})!;
+	// Upstream's, with ThemeIcon's name and modifier expressions inlined.
+	const escapeIcons = (t: string) => t.replace(/(\\)?\$\([A-Za-z0-9-]+(?:~[A-Za-z]+)?\)/g, (m: string, e: string) => e ? m : `\\${m}`);
+	const escapeUntrustedMarkdown = method(src.htmlContent, 'escapeUntrustedMarkdown', { escapeMarkdownSyntaxTokens, escapeIcons })!;
 	const profileText = stripTypeScriptTypes(src.profileText, { mode: 'transform' }).replace(/^import .*$/gm, '').replace(/^export /gm, '');
-	const { createProfileSchemaEnums } = new Function('Codicon', 'ThemeIcon', 'isString', 'isObject', 'localize', 'URI', 'isUriComponents', 'escapeMarkdownSyntaxTokens',
+	const { createProfileSchemaEnums } = new Function('Codicon', 'ThemeIcon', 'isString', 'isObject', 'localize', 'URI', 'isUriComponents', 'escapeMarkdownSyntaxTokens', 'escapeUntrustedMarkdown',
 		`${profileText}\nreturn { createProfileSchemaEnums };`)(
 		{ terminal: { id: 'terminal' } }, { isThemeIcon: (i: unknown) => isMap(i) && typeof (i as { id?: unknown }).id === 'string' }, (v: unknown) => typeof v === 'string', isMap,
-		(_k: string, m: string) => m, { isUri: () => false }, () => false, escapeMarkdownSyntaxTokens) as { createProfileSchemaEnums: (p: unknown[], e?: unknown[]) => { markdownDescriptions: string[] } };
+		(_k: string, m: string) => m, { isUri: () => false }, () => false, escapeMarkdownSyntaxTokens, escapeUntrustedMarkdown) as { createProfileSchemaEnums: (p: unknown[], e?: unknown[]) => { markdownDescriptions: string[] } };
 	const IMG = '![](https://collector.example.invalid/p.png)';
+	// R5-20: an autolink, and a new line forging another entry's fields.
+	const LINK = '<https://collector.example.invalid/a>';
 	const descriptions = createProfileSchemaEnums(
-		[{ profileName: `rehp ${IMG}`, path: `/bin/sh ${IMG}`, args: [IMG], icon: `terminal) ${IMG} $(x` }],
+		[{ profileName: `rehp ${IMG} ${LINK}`, path: `/bin/sh ${IMG}\n- path: forged`, args: [IMG], icon: `terminal) ${IMG} $(x` }],
 		[{ title: `contributed ${IMG}`, extensionIdentifier: 'tab.ext', id: 'p', icon: 'terminal' }]).markdownDescriptions;
 
 	// R5-16: a terminal dragged in from another window names that window's workspace.
@@ -384,11 +395,40 @@ async function observe(src: Record<Key, string>, authority: string, activeFile: 
 		_environmentVariableService: { collections: hostCollections, set: (k: string, v: unknown) => hostCollections.set(k, v), delete: (k: string) => hostCollections.delete(k) },
 	}, 'host.ui-extension', false, undefined, []);
 
+	// R5-18: the terminal tab's hover, with a title and command line the tab's shell and REH chose.
+	class MarkdownString { constructor(public value: string) { } }
+	const tooltipDeps = {
+		MarkdownString, escapeUntrustedMarkdown, seclabIsTabWindow: h.seclabIsTabWindow, basename: (p: string) => p.split('/').pop(), asArray: (v: unknown) => Array.isArray(v) ? v : [v],
+		localize: (_k: unknown, m: string, ...a: unknown[]) => m.replace(/\{(\d)\}/g, (_x, i) => String(a[+i])),
+		StorageScope: { APPLICATION: -1 }, StorageTarget: { USER: 0 }, TerminalStorageKeys: { TabsShowDetailed: 'k' },
+	};
+	const getShellProcessTooltip = method(src.tooltip, 'getShellProcessTooltip', tooltipDeps)!;
+	const term = { remoteAuthority: authority, title: `bash ${IMG}`, processId: 7, statusList: { statuses: [] }, shellLaunchConfig: { executable: `/bin/sh${IMG}`, args: [IMG] } };
+	// Its return type is an object literal, which the slicer would take for the body.
+	const tooltipSrc = src.tooltip.replace('): { content: MarkdownString; actions: IHoverAction[] } {', ') {');
+	const hover = (method(tooltipSrc, 'getInstanceHoverInfo', { ...tooltipDeps, getShellProcessTooltip })!(term, { get: () => '1', store: () => { } }) as { content: { value: string } }).content.value;
+
+	// R5-19: "Allow <scheme>" on a link the tab's shell printed.
+	const schemeWrites: Observed['schemeWrites'] = [];
+	const at = src.links.indexOf('label: nls.localize(\'allow\'');
+	const open = src.links.indexOf('run: () => {', at) + 'run: () => '.length;
+	let end = open + 1;
+	for (let depth = 1; depth > 0; end++) {
+		depth += src.links[end] === '{' ? 1 : src.links[end] === '}' ? -1 : 0;
+	}
+	const allowRun = new Function('ConfigurationTarget', 'IWorkbenchEnvironmentService', 'IWorkspaceContextService', 'seclabIsTabWindow', 'seclabTabSetting',
+		`return ${stripTypeScriptTypes(`(function (scheme, terminalConfigurationService, resolve) ${src.links.slice(open, end)})`, { mode: 'transform' }).trim().replace(/;$/, '')};`)(
+		ConfigurationTarget, 'env', 'workspace', h.seclabIsTabWindow, h.seclabTabSetting) as (...a: unknown[]) => void;
+	allowRun.call({
+		_configurationService: { ...cfg, updateValue: (key: string, value: unknown, target?: number) => { schemeWrites.push({ key, value: structuredClone(value), target }); } },
+		_instantiationService: { invokeFunction: (f: (a: unknown) => unknown) => f({ get: (id: string) => id === 'env' ? { remoteAuthority: authority } : { getWorkspace: () => workspace } }) },
+	}, 'tabchosen', { config: { allowedLinkSchemes: cfg.getValue('terminal.integrated.allowedLinkSchemes') } }, () => { });
+
 	assert.ok(sent, 'createProcess sent nothing');
 	return {
 		createProcess: sent!, getProfiles, automation, agentHost, collections: [...merged.collections.keys()].sort(), localDefaultProfile,
 		hostCollectionDeleted: !hostCollections.has('host.ui-extension'), localCollections, pickedDefault, contributedDefault, foreignIcon, ownIcon, noConnection,
-		profileWrites, descriptions, detachSent,
+		profileWrites, descriptions, detachSent, hover, schemeWrites,
 	};
 }
 
@@ -462,6 +502,18 @@ async function leaks(src: Record<Key, string>, authority: string): Promise<strin
 	if (sees(o.detachSent)) {
 		out.push('foreign workspace id on detach');
 	}
+	if (o.descriptions.some(d => /(^|[^\\])<https?:/.test(d) || d.includes('\n- path: forged'))) {
+		out.push('link or forged line in a profile description');
+	}
+	if (/(^|[^\\])!\[/.test(o.hover)) {
+		out.push('markdown image in the terminal hover');
+	}
+	if (o.schemeWrites.some(w => w.target !== 4)) {
+		out.push('link scheme allowed in host settings');
+	}
+	if (o.schemeWrites.some(w => sees(w.value))) {
+		out.push('host link schemes in the written list');
+	}
 	for (const kind of ['hostFolder', 'hostFile'] as const) {
 		const w = await observe(src, authority, remoteFile(authority), kind);
 		const { configuration, ...rest } = w.createProcess;
@@ -479,6 +531,7 @@ const EVERY_LEAK = ['active file: host file', 'active file: another tab file', '
 	'tab profile to the host extension host', 'tab deletes a host collection', 'tab collection to the host extension host',
 	'host default profile picks a REH profile', 'host default profile picks a contributed profile', 'foreign profile icon', 'automation profile without a connection',
 	'REH profile written to host settings', 'markdown image in a profile description', 'foreign workspace id on detach',
+	'link or forged line in a profile description', 'markdown image in the terminal hover', 'link scheme allowed in host settings', 'host link schemes in the written list',
 	'hostFolder: workspace settings', 'hostFolder: folder paths or name', 'hostFile: workspace settings', 'hostFile: folder paths or name'];
 
 /** A mutant of one of our patches: `from` replaced by `to` in its added lines, exactly once. */
@@ -581,7 +634,11 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['tab collections to the host extension host', mutant(OURS[1], "+				.filter(([, c]) => !seclabIsTabAuthority(this._environmentService.remoteAuthority) || seclabOrigin(c as { remoteAuthority?: string | null }));", "+				.filter(() => true);"), 'tab collection to the host extension host'],
 			['profile writes to the host', mutant(OURS[4], '+		return this._seclabTab() ? ConfigurationTarget.USER_REMOTE : ConfigurationTarget.USER;', '+		return ConfigurationTarget.USER;'), 'REH profile written to host settings'],
 			['tab profile writes extend the host profiles', mutant(OURS[4], '+		if (!tab) {\n+			return this._configurationService.getValue(key);', '+		if (true) {\n+			return this._configurationService.getValue(key);'), 'host profiles copied into the tab'],
-			['profile text as markdown', mutant(OURS[5], '+	return escapeMarkdownSyntaxTokens(String(value));', '+	return String(value);'), 'markdown image in a profile description'],
+			['profile text as markdown', mutant(OURS[5], '+	return escapeUntrustedMarkdown(String(value));', '+	return String(value);'), 'markdown image in a profile description'],
+			['profile text keeps links', mutant(OURS[5], '+	return escapeUntrustedMarkdown(String(value));', '+	return escapeMarkdownSyntaxTokens(String(value));'), 'link or forged line in a profile description'],
+			['hover title as markdown', mutant(OURS[5], '? escapeUntrustedMarkdown(instance.title) : instance.title', '? instance.title : instance.title'), 'markdown image in the terminal hover'],
+			['link scheme to the host', mutant(OURS[4], '[...(Array.isArray(own) ? own : []), scheme], ConfigurationTarget.USER_REMOTE);', '[...(Array.isArray(own) ? own : []), scheme]);'), 'link scheme allowed in host settings'],
+			['link schemes from the merged list', mutant(OURS[4], '+									if (tab && seclabIsTabWindow(tab)) {', '+									if (false) {'), 'host link schemes in the written list'],
 			['detach with a foreign id', mutant(OURS[2], '+		if (seclabIsTabWindow(this._remoteAuthority) && workspaceId !== this._workspaceContextService.getWorkspace().id) {', '+		if (false) {'), 'foreign workspace id on detach'],
 			['foreign icons kept', mutant(OURS[3], '+		const seclabOk = (u: URI | UriComponents) => !seclabTab || seclabUriInTab(u, seclabTab);', '+		const seclabOk = (_u: URI | UriComponents) => true;'), 'foreign profile icon'],
 		];
