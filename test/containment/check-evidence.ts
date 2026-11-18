@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { deserialize, mintCanary, scan, serialize } from '../canary/canary.ts';
 import { beaconPort, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, editorPid, ensureVsceImage, lockRun, tabImageProblem, VSCE_IMAGE } from '../harness.ts';
-import { armingDigest, armingRecord, brokerProxy, checkEvidence, hostRunChecks, levelBVectors, markFilteredLosses, parseArmingRecord, readEvidence, report, rpcDecisions, unattributedMarkers, withheldEvidence, type ArmingRecord, type Check } from './assert.ts';
+import { armingRecord, brokerProxy, checkEvidence, hostRunChecks, levelBVectors, markFilteredLosses, parseArmingRecord, readEvidence, report, rpcDecisions, unattributedMarkers, withheldEvidence, type ArmingRecord, type Check } from './assert.ts';
 import { materialiseFixture, readManifest, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 import { partitionFindings, seedTabManagerState, stateItems } from './state-db.ts';
 
