@@ -19466,6 +19466,59 @@
 				"name": "PS-13: a stalled docker ends at the deadline"
 			},
 			"commit": "2f8160733035"
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R12-1",
+			"severity": "medium",
+			"summary": "A chat request submitted with options.queue returned before the gate and reached the agent host through the pending-message sync, unchecked and with no verdict logged",
+			"component": "patch 0018 chat session gate",
+			"owner": "agentic",
+			"status": "fixed",
+			"commit": "4a4d0d45",
+			"test": {
+				"file": "test/agentic/gate/chat-sessions.test.ts",
+				"name": "the patch gates the queued path, which never reaches the dispatch function"
+			}
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R12-2",
+			"severity": "high",
+			"summary": "The agent a request is dispatched to is chosen from the caller, an participant mention in the request text or participant detection, none of which are constrained by the gated session resource",
+			"component": "chat agent selection in a tab window",
+			"owner": "agentic",
+			"status": "open",
+			"note": "Deferred to increment 4 (patch 0019), whose subject is which agent-host providers may exist in a tab window. Fixing it inside 0018 would mean guessing at the registration set rather than constraining it, and increment 3 does not claim the property this premise would be needed for.",
+			"gap": "Nothing constrains the agent id a request is dispatched to, so patch 0018's property rests on the unpinned premise that every agent implementation registered in a tab window belongs to that window's own gated connection. Closing it needs the registration set itself constrained, which is increment 4 (patch 0019), plus an upstream invariant pinning the agent-selection path and a runtime probe that dispatches a gate-passing session at a different agent and shows it refused."
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R12-3",
+			"severity": "low",
+			"summary": "The gate log capped decisions per connection number, so tab-driven chat verdicts could silently crowd out other refusals sharing connection 0",
+			"component": "patch 0015 window gate log",
+			"owner": "agentic",
+			"status": "fixed",
+			"commit": "4a4d0d45",
+			"test": {
+				"file": "test/agentic/gate/chat-sessions.test.ts",
+				"name": "the gate log counts per rule, so one rule cannot crowd out the refusals of another"
+			}
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R12-4",
+			"severity": "low",
+			"summary": "Two upstream facts the gate's argument depends on were unpinned: the spread that carries the advertised flag into the resolution, and the scope filter that rejects a configurationDefaults override of the enablement setting",
+			"component": "upstream invariants for patch 0018",
+			"owner": "agentic",
+			"status": "fixed",
+			"commit": "4a4d0d45",
+			"test": {
+				"file": "test/agentic/gate/chat-sessions.test.ts",
+				"name": "the upstream facts patch 0018 depends on are pinned, each to the file that states them"
+			}
 		}
 	]
 }
