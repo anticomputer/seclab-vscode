@@ -14951,7 +14951,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"commit": "c0981d7dca94",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "obs detect: rpc.deny-burst from trusted filter denials only"
@@ -14966,7 +14966,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"commit": "c0981d7dca94",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
@@ -14981,7 +14981,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"commit": "c0981d7dca94",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
@@ -14996,7 +14996,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"commit": "c0981d7dca94",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
@@ -15011,7 +15011,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"commit": "c0981d7dca94",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
@@ -15026,7 +15026,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"commit": "c0981d7dca94",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
@@ -15041,7 +15041,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"commit": "c0981d7dca94",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "obs supervisor: collector gates the REH"
@@ -15056,7 +15056,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"commit": "c0981d7dca94",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "obs supervisor: collector gates the REH"
@@ -15071,7 +15071,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"commit": "c0981d7dca94",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "obs hub: contiguous seq, rate limit summarised"
@@ -15086,7 +15086,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"commit": "c0981d7dca94",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
@@ -15101,7 +15101,7 @@
 			"component": "obs window decision logs",
 			"owner": "obs",
 			"status": "fixed",
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb",
+			"commit": "c0981d7dca94",
 			"test": {
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
@@ -15120,7 +15120,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "obs supervisor: collector gates the REH"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15135,7 +15135,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15150,7 +15150,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15165,7 +15165,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15180,7 +15180,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "obs supervisor: collector gates the REH"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15195,7 +15195,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15210,7 +15210,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15225,7 +15225,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15240,7 +15240,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "obs supervisor: collector gates the REH"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15255,7 +15255,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "obs hub: contiguous seq, rate limit summarised"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15270,7 +15270,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15285,7 +15285,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15300,7 +15300,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15315,7 +15315,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "obs detect: rpc.deny-burst from trusted filter denials only"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15330,7 +15330,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15345,7 +15345,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261104-tab-observability.md",
@@ -15360,7 +15360,7 @@
 				"file": "tabd/test/obs.test.ts",
 				"name": "window decision logs (CR10): bytes not text"
 			},
-			"commit": "patch:c97300c0f16aca1bfba8d07e2bb2a34e8ccd23eb"
+			"commit": "c0981d7dca94"
 		},
 		{
 			"record": "20261117-link-check-retries.md",
@@ -15557,7 +15557,7 @@
 			"component": "findings register: fix-commit lines",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
+			"commit": "d67a63bd9646",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an anchor with a tab fails the schema (DDDD-1)"
@@ -15572,7 +15572,7 @@
 			"component": "findings register: log output",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
+			"commit": "d67a63bd9646",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an anchor that starts a workflow command fails the schema (DDDD-2)"
@@ -15587,7 +15587,7 @@
 			"component": "findings register: clash scope",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
+			"commit": "d67a63bd9646",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "reuses with another meaning is warned, across owners (DDDD-3)"
@@ -15602,7 +15602,7 @@
 			"component": "findings register: clash noise",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
+			"commit": "d67a63bd9646",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "editing an entry whose clash the base already had is not warned (DDDD-4)"
@@ -15617,7 +15617,7 @@
 			"component": "findings register: self-test",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
+			"commit": "d67a63bd9646",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "control: a clash warning across owners never fails the check (DDDD-5)"
@@ -15632,7 +15632,7 @@
 			"component": "findings register: new highs",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
+			"commit": "d67a63bd9646",
 			"test": {
 				"file": "seclab",
 				"name": "a reverted fix passed ancestry (EEEE-1)"
@@ -15647,7 +15647,7 @@
 			"component": "findings register: log output",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
+			"commit": "d67a63bd9646",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "every printed line is one line and never a workflow command (EEEE-2)"
@@ -15662,7 +15662,7 @@
 			"component": "findings register: host contract",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:0f1f68fe6a6246116c2ee1851cf1cc07d3a2566c",
+			"commit": "d67a63bd9646",
 			"test": {
 				"file": "seclab",
 				"name": "a fix-commit line with no severity flag passed (EEEE-3)"
@@ -15677,7 +15677,7 @@
 			"component": "findings register: clash freshness",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a clash the base had across owners fails once one owner holds both (FFFF-1)"
@@ -15692,7 +15692,7 @@
 			"component": "findings register: generic IDs",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a generic round ID reused by its owner is a warning, not a failure (FFFF-2)"
@@ -15707,7 +15707,7 @@
 			"component": "findings register: stale heads",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a stale PR head does not claim an entry main already has (FFFF-3)"
@@ -15722,7 +15722,7 @@
 			"component": "findings register: own PR",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "PR heads to compare weren't own-PR, fork and ancestor filtered (FFFF-4, FFFF-6)"
@@ -15737,7 +15737,7 @@
 			"component": "findings register: unreadable input",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a PR register that does not parse is reported, not dropped (FFFF-5)"
@@ -15752,7 +15752,7 @@
 			"component": "findings register: untrusted PRs",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "PR heads to compare weren't own-PR, fork and ancestor filtered (FFFF-4, FFFF-6)"
@@ -15767,7 +15767,7 @@
 			"component": "findings register: evidence",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a landed fixed-before-landing entry whose failing-run quote is gone fails (GGGG-5)"
@@ -15782,7 +15782,7 @@
 			"component": "findings register: absent base",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "fixed-before-landing with no base register fails (GGGG-6)"
@@ -15797,7 +15797,7 @@
 			"component": "findings register: comparison point",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "a docs workflow step runs the gate without DOCS_BASE (GGGG-7)"
@@ -15812,7 +15812,7 @@
 			"component": "findings register: main",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "doesn't judge fixed-before-landing against its base (GGGG-8)"
@@ -15827,7 +15827,7 @@
 			"component": "findings register: merge",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a finding one side removed is refused by merge3, never dropped (GGGG-9)"
@@ -15842,7 +15842,7 @@
 			"component": "findings register: markers",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "an 8-character conflict marker wasn't seen (GGGG-10)"
@@ -15857,7 +15857,7 @@
 			"component": "findings register: branch entries",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a branch fixed-before-landing entry is not failed for evidence not yet on this tree (GGGG-11)"
@@ -15872,7 +15872,7 @@
 			"component": "findings register: rebase-resolve",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "a refreshed view that wasn't conflicted wasn't staged, or a file with markers was (GGGG-12)"
@@ -15887,7 +15887,7 @@
 			"component": "findings register: test strength",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "a block-run gate step without its own DOCS_BASE passed (GGGG-13)"
@@ -15902,7 +15902,7 @@
 			"component": "findings register: log output",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a legacy workflow command anywhere in a printed line is broken (PRR11-1)"
@@ -15917,7 +15917,7 @@
 			"component": "findings register: reverted fixes",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "a pinned fix that was reverted later passed ancestry (PRR11-2)"
@@ -15932,7 +15932,7 @@
 			"component": "findings register: reverted fixes",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "a fix that reverts the unsafe change was taken for a reverted fix (PRR11-3)"
@@ -15947,7 +15947,7 @@
 			"component": "findings register: branch entries",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "landing a branch fixed-before-landing entry judges it as new (PRR11-4)"
@@ -15962,7 +15962,7 @@
 			"component": "findings register: evidence",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a landed fixed-before-landing entry turned into fixed fails (PRR11-5)"
@@ -15977,7 +15977,7 @@
 			"component": "findings register: local runs",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "on main with no range a landed fixed-before-landing entry is not re-judged (PRR11-6)"
@@ -15992,7 +15992,7 @@
 			"component": "findings register: local runs",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "on main with no range an entry HEAD^1 had open is not refused (PRR11-7)"
@@ -16007,7 +16007,7 @@
 			"component": "findings register: new refs",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "a new branch or tag pushed at a landed commit wasn't landed history (PRR11-8)"
@@ -16022,7 +16022,7 @@
 			"component": "findings register: landed entries",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "a landed entry whose reviewed commit is its own fix passed (PRR11-9)"
@@ -16037,7 +16037,7 @@
 			"component": "findings register: clashes",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "gh ran outside this checkout (PRR11-10)"
@@ -16052,7 +16052,7 @@
 			"component": "findings register: local runs",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "on main with no range a transition from HEAD^1 is not judged (PRR11-11)"
@@ -16067,7 +16067,7 @@
 			"component": "findings register: local runs",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "uncommitted edits on main without a range weren't judged exactly (PRR11-12)"
@@ -16082,7 +16082,7 @@
 			"component": "findings register: reverted fixes",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:afc8f597037319b3bd9155002f9e840c9cf6cc9c",
+			"commit": "880199067cdf",
 			"test": {
 				"file": "seclab",
 				"name": "a fix whose revert was reverted was taken as reverted (PRR11-13)"
