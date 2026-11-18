@@ -42,7 +42,7 @@ const BLOCKED = new Set(['000', '403', '']);
  *  gate keeps tab writes out of the host checkout until reviewed); default: the host file. */
 export function readEvidence(ws: string, vector: string, read?: (p: string) => string | undefined): Evidence | undefined {
 	const f = path.join(ws, '.seclab-evidence', `${vector}.json`);
-	const text = read ? read(f) : (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : undefined);
+	const text = read ? read(f) : readRegular(f, 1 << 20, ws)?.toString('utf8');
 	try {
 		return text ? JSON.parse(text) as Evidence : undefined;
 	} catch {
@@ -258,7 +258,13 @@ export function listTree(ws: string): { files: string[]; unreadable: string[] } 
 				continue;
 			}
 			if (e.isDirectory()) {
-				walk(r);
+				// A directory swapped for a symlink since it was listed would lead out of the
+				// workspace: it counts as unreadable, never as its target's contents.
+				if (resolvesInside(ws, path.join(ws, r))) {
+					walk(r);
+				} else {
+					unreadable.push(r);
+				}
 			} else {
 				files.push(r);
 			}
@@ -286,13 +292,23 @@ const EXPECTED_ADDITION = (driver: string, r: string) => r.startsWith('.seclab-e
  *  most `max` bytes; undefined for anything else. On OCI a tab can put a FIFO, a symlink or a huge
  *  file where an arming file was, and the check must still finish and tear down (Copilot review
  *  on PR 26). */
-export function readRegular(file: string, max = 16 << 20): Buffer | undefined {
+export function readRegular(file: string, max = 16 << 20, root?: string): Buffer | undefined {
 	let fd: number | undefined;
 	try {
 		fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | fs.constants.O_NOFOLLOW);
 		const st = fs.fstatSync(fd);
 		if (!st.isFile() || st.size > max) {
 			return undefined;
+		}
+		// O_NOFOLLOW guards the last component only: a symlinked parent could lead out of the
+		// workspace (Copilot review on PR 26). The opened file must be the one its real path names,
+		// inside the root; a parent swapped out and back around the open leaves a different inode.
+		if (root !== undefined) {
+			const real = fs.realpathSync.native(file);
+			const at = fs.statSync(real);
+			if (!resolvesInside(root, real) || at.ino !== st.ino || at.dev !== st.dev) {
+				return undefined;
+			}
 		}
 		const buf = Buffer.alloc(st.size + 1);
 		let n = 0, got: number;
@@ -312,11 +328,22 @@ export function readRegular(file: string, max = 16 << 20): Buffer | undefined {
 	}
 }
 
+/** Whether the real path `p` lies under `root`'s real path (no symlinked parent leads out). */
+export function resolvesInside(root: string, p: string): boolean {
+	try {
+		const r = fs.realpathSync.native(root);
+		const q = fs.realpathSync.native(p);
+		return q.startsWith(r + path.sep);
+	} catch {
+		return false;
+	}
+}
+
 /** sha256 of each listed workspace file (null when absent or not a plain readable file). */
 export function armingDigest(ws: string, rels: string[]): Record<string, string | null> {
 	const out: Record<string, string | null> = {};
 	for (const rel of [...rels].sort()) {
-		const b = readRegular(path.join(ws, rel));
+		const b = readRegular(path.join(ws, rel), undefined, ws);
 		out[rel] = b ? createHash('sha256').update(b).digest('hex') : null;
 	}
 	return out;
