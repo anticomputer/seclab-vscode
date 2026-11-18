@@ -160,7 +160,7 @@ if (mode === 'prepare') {
 	// Tab-side text outputs: the REH and extension-host logs and the workspace tree.
 	// Collected with its own bounded call that keeps whatever it read: a failed or timed-out read must
 	// not erase evidence already emitted, and a control requires the collection to complete (PH-11).
-	const logRun = tabId() ? spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, 'sh', '-c', 'cat /run/user/$(id -u)/seclab/reh.log; find "$HOME" -maxdepth 7 -name "*.log" -size -8M -exec cat {} + 2>/dev/null; true'], { encoding: 'utf8', maxBuffer: 64 << 20, timeout: 60_000, killSignal: 'SIGKILL' }) : undefined;
+	const logRun = tabId() ? spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, 'sh', '-c', 'cat /run/user/$(id -u)/seclab/reh.log; a=$?; find "$HOME" -maxdepth 7 -name "*.log" -size -8M -exec cat {} + 2>/dev/null; b=$?; [ "$a" -eq 0 ] && [ "$b" -eq 0 ]'], { encoding: 'utf8', maxBuffer: 64 << 20, timeout: 60_000, killSignal: 'SIGKILL' }) : undefined;
 	const tabLogs = logRun?.stdout ?? '';
 	const logsCollected = !!logRun && logRun.status === 0 && !logRun.error && tabLogs.length > 0;
 	const wsText = [...treeTexts(ws).values()].join('\n');
@@ -278,10 +278,10 @@ if (mode === 'prepare') {
 	if (gate.every(c => c.ok)) {
 		fs.renameSync(path.join(base, 'run.json'), path.join(base, `run-checked-${Date.now()}.json`));
 	}
-	for (const c of [...(measure ? results.filter(r => /schema|focus/.test(r.name)) : results), ...gate]) {
+	for (const c of [...(measure ? results.filter(r => /schema|focus|logs were collected/.test(r.name)) : results), ...gate]) {
 		console.log(`${c.ok ? 'OK  ' : 'FAIL'}  ${c.name}${c.ok || !c.detail ? '' : `  ${c.detail}`}`);
 	}
-	const relevant = measure ? results.filter(r => /schema|focus/.test(r.name)) : results;
+	const relevant = measure ? results.filter(r => /schema|focus|logs were collected/.test(r.name)) : results;
 	process.exit(relevant.every(r => r.ok) && gate.every(c => c.ok) ? 0 : 1);
 } else {
 	console.error('usage: probe.ts prepare [--app PATH] | seed | check [--measure]');
