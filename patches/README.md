@@ -210,7 +210,7 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   or drops the event or extension, and logs `data:server-locations`. A refused environment stays a
   failure rather than reading as "no remote", whose callers fall back to host locations. Upstream
   trusted all of it, so a server naming the host user's settings file had the window read it as the
-  tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-50;
+  tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-51;
   [EDR](../docs/edr/20261118-tab-server-environment.md)).
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
