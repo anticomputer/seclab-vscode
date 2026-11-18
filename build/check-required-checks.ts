@@ -235,6 +235,7 @@ function selfTest(): void {
 		['a job with an empty body', good.replace('  unit:\n    name: unit\n    runs-on: x\n    steps:\n      - run: x\n', '  unit:\n'), /must be named/],
 		['CR-7 a required job indented 6 hiding if', good.replace('    name: unit\n    runs-on: x\n    steps:\n      - run: x\n', '      name: unit\n      if: false\n      runs-on: x\n      steps:\n        - run: x\n'), /not indented 4/],
 		['CR-7 if after a column-0 comment', good.replace('    steps:\n', '# note\n    if: false\n    steps:\n'), /job-level if/],
+		['a job-level if after a multiline quoted step value', good.replace('      - run: x\n', '      - run: "true\nignored"\n    if: false\n'), /unfinished quoted or flow value/],
 		['a job after an open quoted scalar', 'name: "x\n' + good.replace('on:\n', '"\non:\n'), /open flow collection or quoted scalar/],
 		['a flow-style job', good.replace('  unit:\n    name: unit\n    runs-on: x\n    steps:\n      - run: x\n', '  unit: {name: unit, if: false}\n'), /not found|declared/],
 	];

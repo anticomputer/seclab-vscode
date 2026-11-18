@@ -560,6 +560,11 @@ export function jobBody(lines: string[], start: number): { body: string[]; bad?:
 			continue;
 		}
 		if (/^ {0,2}\S/.test(l)) {
+			// A quoted or flow value left open runs on past this line (`run: "true` ... `ignored"` at
+			// column 0), so this isn't where the job ends (Copilot review on PR 32).
+			if (anyOpen(body, false)) {
+				return { body, bad: 'an unfinished quoted or flow value' };
+			}
 			break;
 		}
 		if (/\t/.test(/^\s*/.exec(l)![0])) {
