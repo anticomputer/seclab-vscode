@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 93 | 263 | 420 | 55 | 845 |
-| fixed-before-landing | 0 | 5 | 0 | 0 | 0 | 5 |
+| fixed | 14 | 91 | 263 | 422 | 55 | 845 |
+| fixed-before-landing | 0 | 7 | 0 | 0 | 0 | 7 |
 | fixed-untested | 0 | 5 | 63 | 185 | 73 | 326 |
 | accepted-residual | 0 | 2 | 13 | 73 | 26 | 114 |
 | deferred | 2 | 1 | 13 | 11 | 3 | 30 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 16 | 108 | 363 | 704 | 192 | 1383 |
+| **all** | 16 | 108 | 363 | 706 | 192 | 1385 |
 
 ## Baseline: open high and critical findings
 
@@ -2400,7 +2400,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
 | RJG-1 | high | accepted-residual | A required job runs code the PR controls, so a PR can gut a job and it still concludes success. | accepted by the project owner (owner-acceptances.md): Accepted by the project owner (2026-11-17) with two compensating controls: landing verify re-runs the old main's validators over the merged tree, and the coordinator reviews every PR touching the workflows, seclab or build/ before it is armed. |
-| RJG-2 | high | fixed | The gate judged only the latest run of each required workflow, so a job skipped on the PR run passed when it ran on push. | patch:81bad4a97589002a1a7d89c558be4e2c95181459 · `build/check-required-checks.ts` "gate script RJG-2: lint ran on push but was skipped on the PR run" |
+| RJG-2 | high | fixed-before-landing | The gate judged only the latest run of each required workflow, so a job skipped on the PR run passed when it ran on push. | patch:81bad4a97589002a1a7d89c558be4e2c95181459 · `build/check-required-checks.ts` "gate script RJG-2: lint ran on push but was skipped on the PR run" · failed on patch:f2b081dc18a9b9de5da5e5b55a4bddcd853675fe |
 | RJG-3 | medium | fixed-untested | The EDR understated the residual and overstated what landing verify refuses. | A record correction; nothing to run. |
 | RJG-4 | medium | fixed | The gate invariants matched block style only, so a flow-style uses step or a commented pair list passed. | patch:81bad4a97589002a1a7d89c558be4e2c95181459 · `build/check-required-checks.ts` "RJG-4 a flow-style uses step" |
 | RJG-5 | medium | fixed-untested | landing verify used its own checkout's list unchecked and put pairs into an API path and jq unvalidated. | The checkout and pair checks guard the live API path; no test drives landing verify against the API. |
@@ -2408,7 +2408,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | RJG-7 | medium | fixed-untested | The forged-status residual named only statuses: write, not actions: write cancelling the gate. | A record correction; nothing to run. |
 | RJG-8 | medium | fixed | Nothing constrained the gate script or extra steps. | patch:6d5969053dd30eb7742bce91536a0e271338017f · `build/check-required-checks.ts` "RJG-8 an extra step" |
 | RJG-9 | medium | fixed-untested | An empty required list, or a checkout on another branch, made landing verify check nothing. | The list and ancestry checks guard the live API path; no test drives landing verify against the API. |
-| RJG-10 | high | fixed | A merged validator replaced by a symlink made its re-validation step run the link target and pass. | patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72 · `seclab` "a merged validator symlink passed this main's validators (RJG-10)" |
+| RJG-10 | high | fixed-before-landing | A merged validator replaced by a symlink made its re-validation step run the link target and pass. | patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72 · `seclab` "a merged validator symlink passed this main's validators (RJG-10)" · failed on patch:15c25708112e4f8bb02707f89fa07d8b3a30c2ee |
 | RJG-11 | medium | fixed | The overlay wrote the old main's files through a merged symlink, outside the worktree. | patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72 · `seclab` "the overlay wrote through a merged symlink (RJG-11)" |
 | RJG-12 | medium | fixed | The overlay undo list came from the merged tree, so it could remove files outside the worktree. | patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72 · `seclab` "a merged tree tracking .work passed (RJG-12)" |
 | RJG-13 | low | fixed | A later change could re-date a liveness pending entry and postpone its expiry indefinitely. | patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72 · `build/liveness/liveness.ts` "RJG-13 a re-dated pending entry passed" |
@@ -2431,6 +2431,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR63-6 | medium | fixed | Running the merged tabd/src/obs modules let a merge end the observability-docs re-validation early with success. | patch:a02969369fc96f074971ee540184a9a02a6d5645 · `seclab` "an executed-module change wasn't refused for its reason" |
 | RJG-25 | info | fixed-untested | The required-checks self-test banner hardcoded the gate-edit case count. | A count in the self-test banner; the cases themselves are unchanged and still run. |
 | CR63-7 | low | fixed | The landing self-test's early-exit injection could fail silently, leaving a weaker scenario. | patch:1a1a933aa893e6c696d0c3026bcb896681a27625 · `seclab` "doesn't carry its gutted" |
+| CR63-8 | low | fixed | A workflow_run-only workflow accepted run evidence without the event marker, so a dispatch run could stand as proof. | patch:db45b479624ff2df8ffe1027442ca445a22d49a3 · `build/liveness/liveness.ts` "CR63-8 unmarked run evidence for a workflow_run-only workflow" |
+| CR63-9 | low | fixed | RJG-2 and RJG-10 were registered fixed rather than fixed-before-landing, and the RJG-10 scenario exercised RJG-11. | patch:6edf167e5d35296c430097a224b105b9d8030654 · `seclab` "the RJG-10 scenario carries no symlink" |
 
 ### [20261117-response-control-pr-review](20261117-response-control-pr-review.md)
 

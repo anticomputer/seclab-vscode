@@ -83,6 +83,8 @@ Copilot's review of the gate PR.
 | CR63-5 | Medium | gate | `workflow_run`'s `requested` type doesn't fire for a re-run, so an earlier success stood while a re-run was in flight. | Fixed | The gate also runs on `in_progress`; the validator requires that types line. |
 | CR63-6 | Medium | re-validation | Running the merged `tabd/src/obs` modules let a merge end the observability-docs step early with success. | Fixed | A merge that changes a module the validator executes is refused for coordinator review. |
 | CR63-7 | Low | tests | The early-exit scenario's injection wrote through a removed scratch directory and failed silently (left of `&&`), so the self-test passed a weaker scenario. | Fixed | Every gutting is written beside its target and checked, and each gutted scenario's commit is checked before it is judged. |
+| CR63-8 | Low | liveness | A workflow whose only trigger is `workflow_run` accepted run evidence without the `event: workflow_run` marker, so a dispatch or scheduled run of it could stand as proof. | Fixed | Every evidence for such a workflow must carry the marker. |
+| CR63-9 | Low | register | RJG-2 and RJG-10 were registered `fixed`, but both arose and were fixed inside this change, so they are `fixed-before-landing`; and the RJG-10 scenario linked to a host file, so it exercised RJG-11 instead. | Fixed | Both are `fixed-before-landing` with the evidence below; the RJG-10 scenario links to `/dev/null`. |
 
 ## Round RJG7
 A review of the Copilot-review fixes (a workflow change).
@@ -102,3 +104,7 @@ pending, during which an earlier success stands; the proof PR checks that a re-r
 | # | Sev | Area | Finding | Disposition | Fix |
 |---|---|---|---|---|---|
 | RJG-25 | Info | tests | The required-checks self-test banner added a hardcoded 40 for the gate-edit cases, so a dropped case left the total unchanged. | Fixed | Each case array is counted and named. |
+
+## Evidence: highs fixed before landing
+- **RJG-2.** The case `gate script RJG-2: lint ran on push but was skipped on the PR run` fails on the reviewed commit's gate script: run with a stub `gh` answering as that script's own jq filter would (the latest push or pull_request run of each file), on a PR run that skipped `lint` (run 5) and a later push run that ran it (run 7), it posts `success` where the case wants `failure`.
+- **RJG-10.** The case `a merged validator symlink passed this main's validators (RJG-10)` fails on the reviewed commit: `./seclab landing --self-test`, with `landing_overlay` taken from the RJG-1 compensating controls commit, stops on it.
