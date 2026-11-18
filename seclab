@@ -1393,7 +1393,7 @@ landing_verify() {
 	fi
 	# ... and is a main the commit descends from, not another branch with its own list (RJG-9).
 	git -C "$ROOT" merge-base --is-ancestor HEAD "$sha" || { echo "landing verify: $sha doesn't descend from this checkout; run it from main as it was before the merge" >&2; return 2; }
-	repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner)" || return 2
+	repo="$(landing_repo)" || return 2
 	[[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "landing verify: bad repository" >&2; return 2; }
 	pairs="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/check-required-checks.ts --list)" || return 2
 	# The required contexts must all be there: an empty or trimmed list would check nothing (RJG-9).
@@ -1604,6 +1604,16 @@ landing_self_test() {
 		|| { echo "landing self-test: an unannounced owner-acceptance row wasn't reported with its commit (HHHH-4)" >&2; exit 1; }
 	[[ "$(grep -c 'OWNER ACCEPTANCES changed' <<<"$report")" == 1 ]] || { echo "landing self-test: the owner report named a commit that didn't change the file" >&2; exit 1; }
 	[[ "$(landing_owner_rows "$old" "$clean")" == "landing verify: owner acceptances: unchanged" ]] || { echo "landing self-test: a clean merge reported owner-acceptance changes" >&2; exit 1; }
+	# A failed read of a change fails the report (Copilot review on PR 63): git's diff fails here.
+	local stub="$ROOT/.work/landing-stub" realgit
+	realgit="$(command -v git)"
+	rm -rf "$stub" && mkdir -p "$stub"
+	printf '#!/bin/bash\ncase "$*" in *"diff --text"*) exit 1 ;; esac\nexec %q "$@"\n' "$realgit" > "$stub/git" && chmod +x "$stub/git"
+	if ( PATH="$stub:$PATH" landing_owner_rows "$old" "$owner_tip" ) >/dev/null 2>&1; then echo "landing self-test: an owner report whose diff failed passed" >&2; exit 1; fi
+	# The repository comes from this checkout, not the caller's directory (Copilot review on PR 63).
+	printf '#!/bin/bash\n[[ "$PWD" == %q ]] && echo o/this || echo o/elsewhere\n' "$ROOT" > "$stub/gh" && chmod +x "$stub/gh"
+	[[ "$(cd / && PATH="$stub:$PATH" landing_repo)" == o/this ]] || { echo "landing self-test: landing verify took the repository from the caller's directory" >&2; exit 1; }
+	rm -rf "$stub"
 	report="$(landing_owner_rows "$owner_tip" "$owner2")"
 	[[ "$report" == *"  removed: | 20261101-x.md#X-1 | 2026-11-18 | seclabcanary_scope |"* && "$report" == *"  added or changed: | 20261101-x.md#X-1 | 2026-11-18 | seclabcanary_scope2????? |"* && "$report" == *"  removed: - seclabcanary_bullet"* ]] \
 		|| { echo "landing self-test: a changed row or a removed line wasn't reported, or its bytes weren't escaped (RJG-20, RJG-21)" >&2; exit 1; }
@@ -1627,6 +1637,8 @@ landing_self_test() {
 # Rows are the merged tree's text: printed as data with control characters removed, never run.
 # Does NAMES (one path per line) hold FILE under another case? No pipeline: grep -q on the reading
 # side can fail open under pipefail once the list is large (Copilot review on PR 63).
+# The repository of this checkout, whatever the caller's directory (Copilot review on PR 63).
+landing_repo() { findings_gh repo view --json nameWithOwner --jq .nameWithOwner; }
 landing_case_variant() { # NAMES FILE
 	local same
 	same="$(grep -ix -- "$2" <<<"$1")" || return 1
@@ -1645,8 +1657,12 @@ landing_owner_rows() { # OLD SHA
 		# --text, and no attributes file: a -diff or binary attribute can't blank the rows (RJG-19).
 		# Every added and removed line after the hunk header, whatever it starts with (RJG-20);
 		# escaped to printable ASCII, so no control, C1 or bidi character reaches the reader (RJG-21).
-		git -C "$ROOT" -c core.attributesfile=/dev/null diff --text --no-ext-diff --no-textconv --no-color -U0 "$c^" "$c" -- "$file" \
-			| LC_ALL=C awk '/^@@/ { h = 1; next } h && /^\+/ { print "  added or changed: " substr($0, 2) } h && /^-/ { print "  removed: " substr($0, 2) }' \
+		# Read first, so a failed read fails the report instead of printing nothing (Copilot review on
+		# PR 63): the caller's || suspends set -e here.
+		local d
+		d="$(git -C "$ROOT" -c core.attributesfile=/dev/null diff --text --no-ext-diff --no-textconv --no-color -U0 "$c^" "$c" -- "$file")" \
+			|| { echo "landing verify: can't read the change to $file in $c" >&2; return 2; }
+		LC_ALL=C awk '/^@@/ { h = 1; next } h && /^\+/ { print "  added or changed: " substr($0, 2) } h && /^-/ { print "  removed: " substr($0, 2) }' <<<"$d" \
 			| LC_ALL=C sed 's/[^ -~]/?/g'
 	done
 	(( n )) || echo "landing verify: owner acceptances: unchanged"
