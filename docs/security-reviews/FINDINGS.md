@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 249 | 408 | 52 | 814 |
+| fixed | 14 | 91 | 249 | 409 | 52 | 815 |
 | fixed-before-landing | 0 | 5 | 0 | 0 | 0 | 5 |
 | fixed-untested | 0 | 5 | 59 | 182 | 71 | 317 |
 | accepted-residual | 0 | 1 | 13 | 73 | 25 | 112 |
 | deferred | 2 | 1 | 13 | 10 | 3 | 29 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 105 | 345 | 688 | 185 | 1339 |
+| **all** | 16 | 105 | 345 | 689 | 185 | 1340 |
 
 ## Baseline: open high and critical findings
 
@@ -1434,6 +1434,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR43-2 | info | fixed-untested | derive_tree's plain checkout refused to switch a reused tree holding the previous run's patches to a new pin | Harness hygiene, shown with a simulated pin change; no test runs the helper itself. |
 | CR43-3 | info | fixed-untested | window-proof did not run teardown on SIGINT or SIGTERM | Uses the shared exitOnSignals helper; no test runs window-proof itself, which needs a fetched macOS build. |
 | CR43-4 | info | fixed-untested | window-proof's ordinary arm had no positive evidence that the real classes were built, since creation marks name the wrapper and the gate log exists only in tab windows | The 0019 wrapper now marks real and stand-in construction; the evidence is the real-build run recorded in the EDR, not a unit test. |
+| CR43-5 | low | fixed | A refusal on a bypass path came after upstream had removed the turn, dequeued the message, emptied the source queue or reordered and removed it, so refusing in a tab window cost the user that history or queue | patch:fffb77212d7e6fef6552ca6524ad535e1e88f239 · `test/agentic/gate/chat-sessions.test.ts` "a refusal on a bypass path comes before the transcript or the queue is changed" |
 
 ### [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md)
 

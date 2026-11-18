@@ -19691,6 +19691,20 @@
 			"status": "fixed-untested",
 			"commit": "patch:05ab7e1bdfb7abcd1d402fe515775b25cbcd6098",
 			"gap": "The 0019 wrapper now marks real and stand-in construction; the evidence is the real-build run recorded in the EDR, not a unit test."
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "CR43-5",
+			"severity": "low",
+			"summary": "A refusal on a bypass path came after upstream had removed the turn, dequeued the message, emptied the source queue or reordered and removed it, so refusing in a tab window cost the user that history or queue",
+			"component": "patch 0018 chat session gate",
+			"owner": "agentic",
+			"status": "fixed",
+			"commit": "patch:fffb77212d7e6fef6552ca6524ad535e1e88f239",
+			"test": {
+				"file": "test/agentic/gate/chat-sessions.test.ts",
+				"name": "a refusal on a bypass path comes before the transcript or the queue is changed"
+			}
 		}
 	]
 }
