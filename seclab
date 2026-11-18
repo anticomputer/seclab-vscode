@@ -1447,6 +1447,12 @@ landing_verify() {
 landing_self_test() {
 	local old src gutted pins clean id=(-c user.name=seclab-self-test -c user.email=self-test@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null)
 	old="$(git -C "$ROOT" rev-parse HEAD)"
+	# Path shapes the overlay may write (RJG-14): relative, plain components only.
+	local bad_path
+	for bad_path in /etc/x ../x a/../b ./a a//b a/ '' 'a b'; do
+		if landing_safe_path "$ROOT/.work" "$bad_path"; then echo "landing self-test: the overlay accepted the path '$bad_path' (RJG-14)" >&2; exit 1; fi
+	done
+	landing_safe_path "$ROOT/.work" build/check-pins.ts || { echo "landing self-test: the overlay refused a plain relative path" >&2; exit 1; }
 	src="$ROOT/.work/landing-self-test"
 	git -C "$ROOT" worktree remove --force "$src" 2>/dev/null || true
 	rm -rf "$src"
@@ -1469,6 +1475,22 @@ landing_self_test() {
 	git -C "$src" "${id[@]}" commit -qam 'landing self-test: gutted pin check'
 	pins="$(git -C "$src" rev-parse HEAD)"
 	git -C "$src" ls-files -z | docker run -i --rm --network none -v "$src:/repo:ro" -w /repo "$(node_image)" node build/check-pins.ts - >/dev/null || { echo "landing self-test: the gutted pin check refused its own tree (the scenario proves nothing)" >&2; exit 1; }
+	# 4. A gutted lint by symlink (RJG-10, RJG-11): the validator's entry links to a host file, and
+	#    the change sets `if: false` on lint. Refused, and the file it links to is untouched.
+	local canary="$ROOT/.work/landing-canary" victim="$ROOT/.work/landing-victim" symlinked tracked
+	printf 'seclabcanary_landing\n' > "$canary"
+	printf 'seclabcanary_victim\n' > "$victim"
+	git -C "$src" checkout -q --detach "$gutted"
+	rm "$src/build/check-required-checks.ts" && ln -s "$canary" "$src/build/check-required-checks.ts"
+	git -C "$src" add build/check-required-checks.ts
+	git -C "$src" "${id[@]}" commit -qm 'landing self-test: validator replaced by a symlink'
+	symlinked="$(git -C "$src" rev-parse HEAD)"
+	# 5. A tracked .work/ (RJG-12): an overlay list naming a file outside the worktree.
+	git -C "$src" checkout -q --detach "$old"
+	mkdir -p "$src/.work" && printf '../landing-victim\n' > "$src/.work/landing-overlay.txt"
+	git -C "$src" add -f .work/landing-overlay.txt
+	git -C "$src" "${id[@]}" commit -qm 'landing self-test: tracked .work'
+	tracked="$(git -C "$src" rev-parse HEAD)"
 	# 3. A clean merge.
 	git -C "$src" checkout -q --detach "$old"
 	echo '' >> "$src/raw-idea.md"
@@ -1477,32 +1499,54 @@ landing_self_test() {
 	git -C "$ROOT" worktree remove --force "$src"
 	if landing_revalidate "$old" "$gutted" required-checks; then echo "landing self-test: a merged gutted lint passed this main's validators (RJG-1)" >&2; exit 1; fi
 	if landing_revalidate "$old" "$pins" pins; then echo "landing self-test: a merged gutted pin check passed this main's validators (RJG-1)" >&2; exit 1; fi
+	if landing_revalidate "$old" "$symlinked" required-checks; then echo "landing self-test: a merged validator symlink passed this main's validators (RJG-10)" >&2; exit 1; fi
+	[[ "$(cat "$canary")" == seclabcanary_landing ]] || { echo "landing self-test: the overlay wrote through a merged symlink (RJG-11)" >&2; exit 1; }
+	if landing_revalidate "$old" "$tracked" required-checks; then echo "landing self-test: a merged tree tracking .work passed (RJG-12)" >&2; exit 1; fi
+	[[ -f "$victim" ]] || { echo "landing self-test: a merged overlay list removed a file outside the worktree (RJG-12)" >&2; exit 1; }
+	rm -f "$canary" "$victim"
 	landing_revalidate "$old" "$clean" required-checks pins || { echo "landing self-test: a clean merge was refused" >&2; exit 1; }
-	echo "landing self-test: ok (gutted lint and gutted pin check refused by the old main's validators; clean merge passes)"
+	echo "landing self-test: ok (gutted lint, gutted pin check, symlinked validator and tracked .work refused; nothing outside the worktree touched; clean merge passes)"
 }
 LANDING_STEPS="required-checks workflow-echo workflow-tools pins deps source liveness secrets docs findings obs-docs"
+# A relative path with no empty, `.` or `..` component, none of whose components under DIR is a
+# symlink (RJG-10, RJG-11, RJG-14): a write or removal through it stays inside DIR.
+landing_safe_path() { # DIR REL
+	local dir="$1" rel="$2" p="" c
+	local -a parts
+	[[ "$rel" =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$ && "/$rel/" != */../* && "/$rel/" != */./* ]] || return 1
+	IFS=/ read -ra parts <<<"$rel"
+	for c in "${parts[@]}"; do
+		p="${p:+$p/}$c"
+		[[ ! -L "$dir/$p" ]] || return 1
+	done
+}
 landing_overlay() { # WT OLD ENTRY...: WT back to its commit, then OLD's copy of each entry's import closure
-	local wt="$1" old="$2" e f files
+	local wt="$1" old="$2" e f files list="$ROOT/.work/landing-overlay.txt"
 	shift 2
-	# Undo the previous step's overlay, writing in place (a replaced inode can read as missing
-	# through Docker Desktop's bind mount for a moment).
-	if [[ -f "$wt/.work/landing-overlay.txt" ]]; then
+	# The list of what the previous step wrote lives in this checkout, never in the merged tree
+	# (RJG-12). Undo it, writing in place (a replaced inode can read as missing through Docker
+	# Desktop's bind mount for a moment).
+	if [[ -s "$list" ]]; then
 		while read -r f; do
+			landing_safe_path "$wt" "$f" || { echo "landing verify: unsafe path in the overlay list" >&2; return 1; }
 			if git -C "$wt" cat-file -e "HEAD:$f" 2>/dev/null; then git -C "$wt" show "HEAD:$f" > "$wt/$f" || return 1; else rm -f "$wt/$f"; fi
-		done < "$wt/.work/landing-overlay.txt"
+		done < "$list"
 	fi
-	mkdir -p "$wt/.work" && : > "$wt/.work/landing-overlay.txt"
-	[[ -z "$(git -C "$wt" status --porcelain --untracked-files=all)" ]] || { echo "landing verify: the merged worktree isn't its commit after the reset" >&2; return 1; }
+	: > "$list"
+	[[ -z "$(git -C "$wt" status --porcelain --untracked-files=all)" ]] || { echo "landing verify: the merged worktree isn't its commit" >&2; return 1; }
 	for e in "$@"; do
-		[[ "$e" =~ ^[A-Za-z0-9._/-]+\.ts$ && "$e" != *..* ]] || { echo "landing verify: bad validator entry $e" >&2; return 1; }
+		landing_safe_path "$wt" "$e" && [[ "$e" == *.ts ]] || { echo "landing verify: bad validator entry $e" >&2; return 1; }
 		files="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --input-type=module -e \
 			'const m = await import("/repo/build/import-closure.ts"); console.log(m.closure("/repo", process.argv[1]).join("\n"));' "$e")" || return 1
 		[[ -n "$files" ]] || { echo "landing verify: no closure for $e" >&2; return 1; }
 		for f in $files; do
-			[[ "$f" =~ ^[A-Za-z0-9._/-]+$ && "$f" != *..* ]] || { echo "landing verify: bad closure path" >&2; return 1; }
+			# The merged tree must not put a symlink anywhere on the path: the old code would be
+			# written through it, and the validator would run whatever it points at (RJG-10).
+			landing_safe_path "$wt" "$f" || { echo "landing verify: REFUSED: $f is not a plain path in the merged tree (a symlink on it?)" >&2; return 1; }
+			echo "$f" >> "$list"
 			mkdir -p "$wt/$(dirname "$f")"
-			echo "$f" >> "$wt/.work/landing-overlay.txt"
 			git -C "$ROOT" show "$old:$f" > "$wt/$f" || return 1
+			[[ -f "$wt/$f" && ! -L "$wt/$f" ]] && git -C "$ROOT" show "$old:$f" | cmp -s - "$wt/$f" || { echo "landing verify: REFUSED: $f didn't take the old main's copy" >&2; return 1; }
 		done
 	done
 }
@@ -1545,6 +1589,10 @@ landing_revalidate() { # OLD SHA [STEP...]
 	# The validators that run are this checkout's files: they must be exactly its HEAD's.
 	git -C "$ROOT" diff --quiet HEAD -- seclab build tabd/tools || { echo "landing verify: this checkout's seclab, build/ or tabd/tools differ from its HEAD; run it from a clean main checkout" >&2; return 2; }
 	git -C "$ROOT" merge-base --is-ancestor "$old" "$sha" || { echo "landing verify: $sha doesn't descend from $old" >&2; return 2; }
+	# The steps write their scratch under the worktree's .work/ (gitignored): a merged tree that
+	# tracks anything there could point those writes elsewhere (RJG-11).
+	[[ -z "$(git -C "$ROOT" ls-tree "$sha" -- .work)" ]] || { echo "landing verify: REFUSED: $sha tracks .work" >&2; return 1; }
+	rm -f "$ROOT/.work/landing-overlay.txt"
 	wt="$ROOT/.work/landing-verify"
 	git -C "$ROOT" worktree remove --force "$wt" 2>/dev/null || true
 	rm -rf "$wt"
