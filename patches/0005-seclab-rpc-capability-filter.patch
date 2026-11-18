@@ -3654,7 +3654,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-06 18:50:32
-@@ -0,0 +1,1335 @@
+@@ -0,0 +1,1359 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -4807,6 +4807,14 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 + */
 +const SECLAB_IMAGE_OPEN = /!\[/g;
 +const SECLAB_HTML_OPEN = /<(?=[A-Za-z/!?])/g;
++/** A link destination in angle brackets, right after `](`: `<` then no `<`, `>` or newline, then `>`. */
++const SECLAB_ANGLE_DESTINATION = /^<[^<>\n\\]*>/;
++
++/** Every tag opener becomes an entity; with `keepLinks`, not the `<` of an angle link destination. */
++function seclabEscapeTags(text: string, keepLinks: boolean): string {
++	return text.replace(SECLAB_HTML_OPEN, (lt, i: number) =>
++		keepLinks && /\]\(\s*$/.test(text.slice(Math.max(0, i - 64), i)) && SECLAB_ANGLE_DESTINATION.test(text.slice(i)) ? lt : '&lt;');
++}
 +/** A snippet that reads the clipboard (upstream SnippetParser.guessNeedsClipboard, widened). */
 +const SECLAB_SNIPPET_CLIPBOARD = /\$\{?\s*CLIPBOARD/;
 +
@@ -4818,7 +4826,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +interface SeclabMdToken { readonly type: string; readonly raw?: string; readonly href?: string; readonly tokens?: readonly SeclabMdToken[]; readonly items?: readonly SeclabMdToken[] }
 +
 +/**
-+ * `rewrite` applied to tab markdown outside code. Code spans and blocks render their text
++ * `rewrite` applied to tab markdown outside code, keeping angle-bracket link destinations
++ * (`[x](<https://…>)`, whose `<` is no tag). Code spans and blocks render their text
 + * literally, so escaping in them shows `Promise&lt;T>` instead of `Promise<T>` (PR review on #48).
 + * Code is found with the renderer's own lexer, and kept only where its tokens tile the source
 + * exactly; anything else is rewritten whole. Escaping can change how the rest lexes (a backtick
@@ -4826,22 +4835,24 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 + * or HTML token, a command link other than the token link, or is longer than the renderer keeps,
 + * every part of the source is rewritten instead, code included, as before.
 + */
-+function seclabOutsideCode(value: string, rewrite: (s: string) => string): string {
-+	const all = rewrite(value);
++function seclabOutsideCode(value: string, rewrite: (s: string, keepLinks: boolean) => string): string {
++	const all = rewrite(value, false);
++	// Past the renderer's cut it would lex only a prefix, and lexing all of it here could freeze
++	// the window: no lexer runs on oversized input (PR review on #48).
++	if (value.length > SECLAB_MARKDOWN_MAX) {
++		return all;
++	}
 +	try {
 +		const src = value.replace(/\r\n?/g, '\n');
 +		const code: Array<[number, number]> = [];
 +		seclabCodeRanges(src, 0, SECLAB_MARKED.lexer(src, { ...SECLAB_MARKED.defaults, gfm: true }) as unknown as readonly SeclabMdToken[], code);
-+		if (!code.length) {
-+			return all;
-+		}
 +		let kept = '';
 +		let at = 0;
 +		for (const [start, end] of code) {
-+			kept += rewrite(src.slice(at, start)) + src.slice(start, end);
++			kept += rewrite(src.slice(at, start), true) + src.slice(start, end);
 +			at = end;
 +		}
-+		kept += rewrite(src.slice(at));
++		kept += rewrite(src.slice(at), true);
 +		return seclabRendersInert(kept) ? kept : all;
 +	} catch {
 +		return all;
@@ -4903,6 +4914,12 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +	 * `vscode-remote`. Nothing left matches nothing.
 +	 */
 +	selector<F extends { readonly scheme?: string }>(selector: readonly F[]): F[];
++	/**
++	 * A resolved item merged into the one shown, one level deep. Upstream's recursive `mixin`
++	 * treats a JSON-parsed own `__proto__` key like any other and writes through it into
++	 * Object.prototype (PR review on #48).
++	 */
++	resolved<T extends object>(item: T, resolved: T): T;
 +}
 +
 +/**
@@ -4935,9 +4952,8 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +		},
 +		markdown(md) {
 +			const raw = typeof md === 'string' ? md : (md && typeof (md as { value?: unknown }).value === 'string' ? (md as { value: string }).value : '');
-+			const value = seclabOutsideCode(raw, part => seclabCommandLinks(part
-+				.replace(SECLAB_IMAGE_OPEN, '!\\[')
-+				.replace(SECLAB_HTML_OPEN, '&lt;'), (rawId, query) => {
++			const value = seclabOutsideCode(raw, (part, keepLinks) => seclabCommandLinks(seclabEscapeTags(part
++				.replace(SECLAB_IMAGE_OPEN, '!\\['), keepLinks), (rawId, query) => {
 +					let id: string;
 +					let args: unknown[] = [];
 +					try {
@@ -4964,6 +4980,14 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +		},
 +		snippetAllowed(insertText) {
 +			return typeof insertText === 'string' && !SECLAB_SNIPPET_CLIPBOARD.test(insertText);
++		},
++		resolved(item, resolved) {
++			for (const key of Object.keys(resolved)) {
++				if (key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {
++					(item as Record<string, unknown>)[key] = (resolved as Record<string, unknown>)[key];
++				}
++			}
++			return item;
 +		},
 +		selector(selector) {
 +			return selector
