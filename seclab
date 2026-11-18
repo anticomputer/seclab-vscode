@@ -1491,16 +1491,24 @@ landing_self_test() {
 	git -C "$src" "${id[@]}" commit -qam 'landing self-test: gutted pin check'
 	pins="$(git -C "$src" rev-parse HEAD)"
 	git -C "$src" ls-files -z | docker run -i --rm --network none -v "$src:/repo:ro" -w /repo "$(node_image)" node build/check-pins.ts - >/dev/null || { echo "landing self-test: the gutted pin check refused its own tree (the scenario proves nothing)" >&2; exit 1; }
-	# 4. A gutted lint by symlink (RJG-10, RJG-11): the validator's entry links to a host file, and
-	#    the change sets `if: false` on lint. Refused, and the file it links to is untouched.
-	local canary="$ROOT/.work/landing-canary" victim="$ROOT/.work/landing-victim" symlinked tracked
+	# 4. A gutted lint by symlink: the validator's entry links to /dev/null, which runs as an empty
+	#    module and exits 0 (RJG-10), and the change sets `if: false` on lint. Refused.
+	# 4b. The same link to a host file (RJG-11): refused, and the file it links to is untouched.
+	local canary="$ROOT/.work/landing-canary" victim="$ROOT/.work/landing-victim" symlinked to_host tracked
 	printf 'seclabcanary_landing\n' > "$canary"
 	printf 'seclabcanary_victim\n' > "$victim"
 	git -C "$src" checkout -q --detach "$gutted"
-	rm "$src/build/check-required-checks.ts" && ln -s "$canary" "$src/build/check-required-checks.ts"
+	rm "$src/build/check-required-checks.ts" || exit 1
+	ln -s /dev/null "$src/build/check-required-checks.ts" || exit 1
 	git -C "$src" add build/check-required-checks.ts
-	git -C "$src" "${id[@]}" commit -qm 'landing self-test: validator replaced by a symlink'
+	git -C "$src" "${id[@]}" commit -qm 'landing self-test: validator replaced by a symlink to /dev/null'
 	symlinked="$(git -C "$src" rev-parse HEAD)"
+	[[ "$(git -C "$ROOT" ls-tree "$symlinked" -- build/check-required-checks.ts | cut -c1-6)" == 120000 ]] || { echo "landing self-test: the RJG-10 scenario carries no symlink" >&2; exit 1; }
+	rm "$src/build/check-required-checks.ts" || exit 1
+	ln -s "$canary" "$src/build/check-required-checks.ts" || exit 1
+	git -C "$src" add build/check-required-checks.ts
+	git -C "$src" "${id[@]}" commit -qm 'landing self-test: validator replaced by a symlink to a host file'
+	to_host="$(git -C "$src" rev-parse HEAD)"
 	# 5. A tracked .work/ (RJG-12): an overlay list naming a file outside the worktree.
 	git -C "$src" checkout -q --detach "$old"
 	mkdir -p "$src/.work" && printf '../landing-victim\n' > "$src/.work/landing-overlay.txt"
@@ -1572,6 +1580,7 @@ landing_self_test() {
 	if landing_revalidate "$old" "$gutted" required-checks; then echo "landing self-test: a merged gutted lint passed this main's validators (RJG-1)" >&2; exit 1; fi
 	if landing_revalidate "$old" "$pins" pins; then echo "landing self-test: a merged gutted pin check passed this main's validators (RJG-1)" >&2; exit 1; fi
 	if landing_revalidate "$old" "$symlinked" required-checks; then echo "landing self-test: a merged validator symlink passed this main's validators (RJG-10)" >&2; exit 1; fi
+	if landing_revalidate "$old" "$to_host" required-checks; then echo "landing self-test: a merged validator symlink to a host file passed (RJG-11)" >&2; exit 1; fi
 	[[ "$(cat "$canary")" == seclabcanary_landing ]] || { echo "landing self-test: the overlay wrote through a merged symlink (RJG-11)" >&2; exit 1; }
 	if landing_revalidate "$old" "$tracked" required-checks; then echo "landing self-test: a merged tree tracking .work passed (RJG-12)" >&2; exit 1; fi
 	[[ -f "$victim" ]] || { echo "landing self-test: a merged overlay list removed a file outside the worktree (RJG-12)" >&2; exit 1; }
