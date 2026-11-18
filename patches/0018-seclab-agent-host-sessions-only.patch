@@ -1,5 +1,5 @@
 diff --git a/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts b/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts
-index 0842031..40fcc58 100644
+index 0842031c..0e5972c5 100644
 --- a/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts
 +++ b/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts
 @@ -37,6 +37,8 @@ import { isVirtualWorkspace } from '../../../../../platform/workspace/common/vir
@@ -11,7 +11,19 @@ index 0842031..40fcc58 100644
  import { IChatEntitlementService } from '../../../../services/chat/common/chatEntitlementService.js';
  import { requiresCopilotAgentHost, IManagedSettingsService } from '../../../../../platform/policy/common/copilotManagedSettings.js';
  import { IAccountPolicyGateService, whenAccountPolicySettled } from '../../../../services/policies/common/accountPolicyService.js';
-@@ -1638,6 +1640,14 @@ export class ChatService extends Disposable implements IChatService {
+@@ -1546,6 +1548,11 @@ export class ChatService extends Disposable implements IChatService {
+ 	}
+ 
+ 	private async sendRequestInternal(sessionResource: URI, request: string, options: IChatSendRequestOptions | undefined, isSubmission: boolean): Promise<ChatSendResult> {
++		// seclab patch 0018: also checked on entry, in addition to the two checks after the
++		// resource is re-targeted. Before either of those, an untitled session is materialised,
++		// which hands the request text to that session type's item controller. `migrateRequests`
++		// and `sendPendingRequestImmediately` reach this without passing 0009 (review round 14).
++		this.seclabCheckSession(sessionResource);
+ 		if (isLocalChatSessionSubjectToManagedPolicy(sessionResource, this._sessionModels.get(sessionResource)?.initialLocation ?? ChatAgentLocation.Chat) && !this.policyInitialized) {
+ 			await whenAccountPolicySettled(this.accountPolicyGateService);
+ 		}
+@@ -1638,6 +1645,14 @@ export class ChatService extends Disposable implements IChatService {
  		};
  
  		if (options?.queue) {
@@ -26,7 +38,7 @@ index 0842031..40fcc58 100644
  			const queued = this.queuePendingRequest(model, sessionResource, request, options, transferredMode);
  			notifyAccepted();
  			if (!options.pauseQueue) {
-@@ -1839,7 +1849,36 @@ export class ChatService extends Disposable implements IChatService {
+@@ -1839,7 +1854,36 @@ export class ChatService extends Disposable implements IChatService {
  		return newTokenSource.token;
  	}
  
@@ -35,10 +47,10 @@ index 0842031..40fcc58 100644
 +	 * session is dispatched on the paths that bypass `sendRequest`. Throws otherwise, with the
 +	 * reason in the window's gate log, so a refusal is provable rather than an absence.
 +	 *
-+	 * Called from every point at which a request leaves this service for a model or an agent
-+	 * host, and from none earlier: `sendRequestInternal` re-targets the session resource twice
-+	 * after entry, so a check at entry would have authorised a resource that is not the one
-+	 * dispatched (security review round 1).
++	 * Called on entry to `sendRequestInternal`, before anything leaves this service, and again
++	 * at every point a request is dispatched: `sendRequestInternal` re-targets the session
++	 * resource twice after entry, so the entry check alone would have authorised a resource that
++	 * is not the one dispatched (security review round 1). Both must pass.
 +	 */
 +	private seclabCheckSession(sessionResource: URI): void {
 +		const authority = this.seclabEnvironmentService.remoteAuthority;

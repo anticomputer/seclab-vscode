@@ -208,8 +208,9 @@ test('the patch gates the queued path, which never reaches the dispatch function
 
 	// One implementation...
 	assert.equal((added.match(/private seclabCheckSession\(/g) ?? []).length, 1);
-	// ...called from the queued path and from the dispatch function, and from nowhere else.
-	assert.equal((added.match(/this\.seclabCheckSession\(sessionResource\);/g) ?? []).length, 2);
+	// ...called on entry to `sendRequestInternal`, from the queued path and from the dispatch
+	// function, and from nowhere else.
+	assert.equal((added.match(/this\.seclabCheckSession\(sessionResource\);/g) ?? []).length, 3);
 
 	// The queued call must sit inside the `options?.queue` branch, above the queueing itself,
 	// or the message is already on its way to the host by the time it is checked. Ordering is
@@ -224,6 +225,22 @@ test('the patch gates the queued path, which never reaches the dispatch function
 
 	// And the dispatch-function call must be the first statement of `_sendRequestAsync`.
 	assert.match(patch, /private _sendRequestAsync\([^)]*\)[^\n]*\n\+\t\tthis\.seclabCheckSession\(sessionResource\);/);
+});
+
+test('sendRequestInternal is checked on entry, before an untitled session hands the prompt to its controller', () => {
+	// Security review round 14. `migrateRequests` and `sendPendingRequestImmediately` call
+	// `sendRequestInternal` directly, so 0009 never sees them. Before either later check, the
+	// first send to an untitled session materialises it, handing the request text to that
+	// session type's item controller. The entry check is the first statement; the two later
+	// checks stay, because the resource is re-targeted after entry (round 1).
+	// `./seclab test chat-dispatch` drives this path in the real ChatService.
+	const patch = readFileSync(new URL('../../../patches/0018-seclab-agent-host-sessions-only.patch', import.meta.url), 'utf8');
+	assert.match(patch, /private async sendRequestInternal\([^)]*\)[^\n]*\n(\+\t\t\/\/[^\n]*\n)*\+\t\tthis\.seclabCheckSession\(sessionResource\);/);
+	const entry = patch.indexOf('private async sendRequestInternal(');
+	const materialise = patch.indexOf('_materializeUntitledSession(', entry);
+	const check = patch.indexOf('this.seclabCheckSession(sessionResource);', entry);
+	assert.ok(entry >= 0 && check > entry, 'the entry check should be in the patch');
+	assert.ok(materialise < 0 || check < materialise, 'the entry check must come before materialisation');
 });
 
 test('the gate refuses by throwing, and never by returning a value a caller could ignore', () => {

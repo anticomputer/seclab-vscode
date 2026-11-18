@@ -28,7 +28,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { DrivenEditor } from '../driver/editor.ts';
-import { checkUserDataDir, repoRoot } from '../harness.ts';
+import { checkUserDataDir, editorPortableDir, repoRoot } from '../harness.ts';
 import { exitedOrTimeout, teardownGate, writeManifest, writeSnapshot } from '../containment/teardown.ts';
 
 const [mode, userDataArg] = process.argv.slice(2);
@@ -50,9 +50,11 @@ const EXPECT_TAB = Object.values(CONTRIBUTIONS).sort();
 // --- Validate before touching anything (PR #43 review) --------------------------------------
 const userData = path.resolve(userDataArg);
 checkUserDataDir(userData);
-if (fs.existsSync(userData) || fs.lstatSync(userData, { throwIfNoEntry: false })) {
-	console.error(`window-proof: ${userData} already exists; this run only uses a profile it creates itself, so every log it reads is this launch's`);
-	process.exit(2);
+for (const p of [userData, editorPortableDir(userData)]) {
+	if (fs.existsSync(p) || fs.lstatSync(p, { throwIfNoEntry: false })) {
+		console.error(`window-proof: ${p} already exists; this run only uses a profile (and portable dir) it creates itself, so every log it reads is this launch's (./seclab clean-host lists strays)`);
+		process.exit(2);
+	}
 }
 
 // --- The run dir, outside the profile, and its manifest before any resource exists ----------
