@@ -95,6 +95,10 @@ if (!fs.existsSync(mainBundle) || !fs.readFileSync(mainBundle, 'utf8').includes(
 const storeCanary = mintCanary('clipboard');
 // One loopback listener per image form; it counts connections and never answers.
 const images = await loopbackCounters(3);
+if (images.ports.some(p => p < 1024)) {
+	console.error(`response-probe: image ports ${images.ports.join(', ')} include a privileged one (SECLAB_BEACON_PORT?); the probe extension would leave its image vectors out. Refusing.`);
+	process.exit(2);
+}
 const imagePorts = images.ports;
 const imageHits = images.hits;
 process.on('exit', () => images.close());
@@ -180,6 +184,8 @@ try {
 	ed = await DrivenEditor.launch({ app, userData, folderUri: `vscode-remote://seclab+${tabId}${ws}`, env: { SECLAB_TEST_CLIPBOARD_CANARY: storeCanary.value } });
 	const e = ed;
 	c('setup', await waitFor(() => exists('ready'), 180_000), 'the probe registered its providers and opened its file');
+	const ready = exists('ready') ? JSON.parse(fs.readFileSync(path.join(ws, '.seclab-response', 'ready'), 'utf8')) as { imagesArmed?: unknown } : {};
+	c('setup', ready.imagesArmed === true, 'the probe armed its hover image vectors (all three ports valid)');
 	await e.waitFor(`[...document.querySelectorAll('.view-line')].some(l => l.textContent.includes('hoverword'))`, 60_000);
 
 	const mouse = async (type: string, x: number, y: number) =>

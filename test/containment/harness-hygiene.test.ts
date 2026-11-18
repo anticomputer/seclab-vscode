@@ -94,7 +94,38 @@ console.log(JSON.stringify({ refused: r.refused, problems: r.problems }));`;
 	return { ...out, profileKept };
 }
 
+/** The response probe can't pass with its image vectors silently left out (PR review on #48). */
+function imageRules(ext: string, harness: string): string[] {
+	const p: string[] = [];
+	if (!/p >= 1024 && p < 65536/.test(ext)) {
+		p.push('the extension drops valid image ports');
+	}
+	if (!/mark\('ready', \{[^}]*imagesArmed: images !== ''/.test(ext)) {
+		p.push('the extension does not report whether its images are armed');
+	}
+	if (!/c\('setup', ready\.imagesArmed === true,/.test(harness)) {
+		p.push('the harness does not require the image vectors');
+	}
+	return p;
+}
+
 const tests: Array<[string, () => void | Promise<void>]> = [
+	['response probe: its image vectors are required, each rule failing on a mutant', () => {
+		const ext = fs.readFileSync(path.join(HERE, 'response-probe', 'extension.js'), 'utf8');
+		const harness = fs.readFileSync(path.join(HERE, 'response-probe.ts'), 'utf8');
+		assert.deepEqual(imageRules(ext, harness), []);
+		const mutants: Array<[string, string, string, 'ext' | 'harness']> = [
+			['ports from 1025 only', 'p >= 1024 && p < 65536', 'p > 1024 && p < 65536', 'ext'],
+			['no armed report', "imagesArmed: images !== ''", 'imagesArmed: true', 'ext'],
+			['the harness ignores it', 'ready.imagesArmed === true,', 'true,', 'harness'],
+		];
+		for (const [name, from, to, which] of mutants) {
+			const src = which === 'ext' ? ext : harness;
+			assert.ok(src.includes(from), `mutant "${name}" no longer applies; update it`);
+			const m = src.replace(from, to);
+			assert.notDeepEqual(which === 'ext' ? imageRules(m, harness) : imageRules(ext, m), [], `mutant survived: ${name}`);
+		}
+	}],
 	['loopback counters: a fixed SECLAB_BEACON_PORT goes to one listener, the rest get their own ports', async () => {
 		const { loopbackCounters } = await import(path.join(HERE, '..', 'harness.ts'));
 		const free = await new Promise<number>(res => { const t = net.createServer().listen(0, '127.0.0.1', () => { const p = (t.address() as net.AddressInfo).port; t.close(() => res(p)); }); });
