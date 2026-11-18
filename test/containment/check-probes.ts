@@ -279,6 +279,15 @@ const predicates: Record<string, (r: Result) => string | null> = {
 		served(r) < 1 ? 'the server never answered getEnvironmentData with the lie, so this proves nothing'
 			: tokens(r).length > 0 ? 'the host file\'s canary reached the tab\'s REH'
 				: !deniedRefs.has('data:server-locations') ? 'no refusal of the environment in the decision log' : null,
+	// Patches 0053-0054 (DOCSYNC-R5): the window still asks the REH for profiles and starts its
+	// terminal, but sends none of the host user's terminal settings.
+	'reh-terminal-host-settings': r =>
+		fact(r, 'sawGetProfiles') !== true || fact(r, 'sawCreateProcess') !== true ? 'the window never sent getProfiles and createProcess'
+			: tokens(r).length > 0 ? 'a host terminal setting\'s canary reached the REH' : null,
+	// The scan found the default profile's control canary, and nothing the host user set.
+	'reh-exthost-terminal-profile': r =>
+		fact(r, 'sawControl') !== true ? 'the scan did not find the default profile\'s control canary, so it proves nothing'
+			: tokens(r).length > 0 ? 'a host terminal setting\'s canary is in the tab\'s extension host' : null,
 };
 
 /** How many times the rogue REH served its lie: a positive safe integer, else 0 (PR review on #66). */
@@ -332,6 +341,12 @@ const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
 		fact(r, 'pathCanary') === true && fact(r, 'envCanary') === true ? null : 'the host setting canary did not come back in both the profile path and its env',
 	'reh-environment-host-settings': r =>
 		served(r) > 0 && tokens(r).some(t => t.startsWith('seclabcanary_HOSTREMOTE_')) ? null : 'the host file named as the tab\'s settings did not reach the REH',
+	'reh-terminal-host-settings': r =>
+		tokens(r).some(t => t.startsWith('seclabcanary_TERMINALENV_')) && tokens(r).some(t => t.startsWith('seclabcanary_TERMINALPROFILES_'))
+			? null : 'the host terminal env and profiles canaries did not both reach the REH',
+	'reh-exthost-terminal-profile': r =>
+		fact(r, 'sawControl') !== true ? 'the scan did not find the default profile\'s control canary, so it proves nothing'
+			: tokens(r).some(t => t.startsWith('seclabcanary_TERMINALAUTOMATI_')) ? null : 'the host automation profile canary is not in the tab\'s extension host',
 	// A restart is proven only by a new extension host process settling the attempt, never by
 	// an outcome that was simply not written (review rounds 14 and 15).
 	'host-restart-extension-host': r => {

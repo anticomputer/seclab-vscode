@@ -359,6 +359,22 @@
       "policyRef": "data:server-locations",
       "patchedOutcome": "succeeded",
       "why": "the REH answers getEnvironmentData with settingsPath pointing at a host file, which the window then reads as the tab's settings layer (and writes the tab's settings into); its terminal env canary comes back in createProcess (review R5-17). On the patched build the lie is still served, so the outcome is succeeded and the predicate checks no canary arrived and the window logged refusing the environment"
+    },
+    "reh-terminal-host-settings": {
+      "required": true,
+      "runner": "reh-push",
+      "surface": "credential-access",
+      "policyRef": "data:remoteterminal-host-settings",
+      "patchedOutcome": "succeeded",
+      "why": "the window sends the tab's REH the host user's terminal.integrated.env.<os> and cwd in createProcess, and terminal.integrated.profiles.<os> in getProfiles, though 0036 withholds those restricted settings from the tab's extension host (review DOCSYNC-R5, RFU1R-2). On the patched build both calls still happen, so the outcome is succeeded and the predicate checks no host canary arrived"
+    },
+    "reh-exthost-terminal-profile": {
+      "required": true,
+      "runner": "reh-push",
+      "surface": "credential-access",
+      "policyRef": "data:exthost-terminal-default-profile",
+      "patchedOutcome": "succeeded",
+      "why": "$acceptDefaultProfile gives the tab's extension host the host user's terminal.integrated.automationProfile.<os>, args and env included (review DOCSYNC-R5, RFU1R2-1); the rogue REH reads its extension host's memory for the canary. A control canary the REH puts in the default profile it offers travels in the same message and must be found on both builds, so an empty scan never reads as containment"
     }
   }
 }
