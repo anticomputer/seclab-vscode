@@ -41,3 +41,9 @@ Five threads, each checked against the code and fixed before merge.
 Each self-test was also run offline (`check` with no recorded run) with one guard removed at a time:
 configsync, nbsync and docsync (hash, scheme, hijack) all fail it; with the guards in, they pass.
 Live runs after these fixes on main `6589051b`: nbsync, telemetryid and configsync pass every assertion.
+
+## Copilot review (PR #45, second pass)
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| PH-11 | Low | harness | PH-6's no-data rule also covered docsync's tab-log collection, so a failed or timed-out log read erased a canary already emitted, and the absence checks passed on missing evidence. | fixed | The logs come from their own bounded call that keeps what it read, and a control requires the collection to complete. A docsync run on main `6589051b` passes it. | test/docsync/probe.ts "control: the tab-side logs were collected (no timeout or failure)" |
