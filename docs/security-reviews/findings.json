@@ -18236,6 +18236,33 @@
 				"file": "docs/security-reviews/20261117-fetched-app-binding.md",
 				"quote": "| FAB3-5 | Info | prompt injection | None found."
 			}
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "CR42-1",
+			"round": "Copilot review of PR 42",
+			"severity": "low",
+			"summary": "A REH-only build info beside an earlier editor made the driver run unbound.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "the driver ran an editor beside a REH-only build's info"
+			},
+			"commit": "patch:e0fc801676a5c19dcb4490b0ccf0e8afe33e46d6"
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "CR42-2",
+			"round": "Copilot review of PR 42",
+			"severity": "low",
+			"summary": "Altered copies of a test build sat outside .work/test-builds.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:e0fc801676a5c19dcb4490b0ccf0e8afe33e46d6",
+			"gap": "Probe wiring that needs a real macOS build."
 		}
 	]
 }
