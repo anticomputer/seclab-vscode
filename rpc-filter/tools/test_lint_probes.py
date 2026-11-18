@@ -412,6 +412,28 @@ class CommentScopeTest(unittest.TestCase):
         L._strip_comments("s = '\\u00e9 \u00e9';\nr = /\\d\u00e9/;\n// \u00e9 \\\n", None, found)
         self.assertEqual(found, [])
 
+    def test_only_javascript_line_terminators_end_a_comment(self):
+        # U+000B and U+0085 end a line for str.splitlines() but not a `//` comment in JavaScript:
+        # the `/*` after them is comment text, and the next line runs.
+        for sep in ("\u000b", "\u0085"):
+            with self.subTest(sep=repr(sep)):
+                root = tree_copy(self)
+                path = os.path.join(root, "test/containment/rogue-reh/probes.js")
+                with open(path, "a", encoding="utf-8") as fh:
+                    fh.write("\n// note" + sep + "/*\nfs.rmSync(seclabLintP);\n// */\n")
+                status, out = lint(root)
+                self.assertEqual(status, 1, out)
+                self.assertIn("destructive-fs", out)
+        self.assertEqual(L._js_lines("a\r\nb\rc\u2028d\u2029e\u000bf\n"), ["a", "b", "c", "d", "e\u000bf"])
+
+    def test_a_number_member_is_not_a_spread(self):
+        code, found = L._code_only(L._strip_comments("const q = 1..return / 2; const s = '/'; const x = { [K]: 1 };\n", [])), []
+        self.assertIn("[K]", code)
+        found = []
+        L._strip_comments("const q = 1..return / 2; const s = '/';\n", found)
+        self.assertEqual(found, [])
+        self.assertIn("fs.writeFileSync", L._strip_comments("x = [...typeof /[//]/]; fs.writeFileSync(o, r);\n"))
+
     def test_a_hashbang_line_is_a_comment(self):
         # Node ignores the first line; scanning it as code read `/*` as a block comment.
         root = tree_copy(self)

@@ -266,7 +266,7 @@ class _SlashContext:
 
     def __init__(self) -> None:
         self.toks: list = []
-        self.in_word, self.adjacent, self.parens = False, "", []
+        self.in_word, self.adjacent, self.parens, self.dots = False, "", [], 0
 
     def _push(self, tok: tuple) -> None:
         self.toks = (self.toks + [tok])[-3:]
@@ -282,15 +282,17 @@ class _SlashContext:
             return
         self.in_word = False
         if ch.isspace():
-            self.adjacent = ""
+            self.adjacent, self.dots = "", 0
             return
+        self.dots = self.dots + 1 if ch == "." and self.adjacent == "." else (1 if ch == "." else 0)
         last = self.toks[-1] if self.toks else None
         if ch in "+-" and self.adjacent == ch and last == ("p", ch):
             self.toks[-1] = ("p", ch * 2)
-        elif ch == "." and self.adjacent == "." and last in (("a", "."), ("p", "..")):
+        elif ch == "." and self.dots == 3 and self.toks[-2:] == [("a", "."), ("a", ".")]:
             # `...` is one token (spread or rest) and expects an operand; it is not member
-            # access, so a word after it keeps its keyword meaning (PR review on #27).
-            self.toks[-1] = ("p", last[1] + ".")
+            # access, so a word after it keeps its keyword meaning. Only a complete `...`:
+            # `1..return` is a number's member access (PR review on #27).
+            self.toks[-2:] = [("p", "...")]
         elif ch == "(":
             before = self.toks[-2] if len(self.toks) > 1 else None
             if last and last[0] == "w" and last[1] in _CONTROL_WORDS and before != ("a", "."):
@@ -339,6 +341,12 @@ class _SlashContext:
                 return "unsure"  # a label
             return "div"
         return "div"
+
+
+def _js_lines(text: str) -> list:
+    """The text split at JavaScript line terminators (LF, CRLF, CR, U+2028, U+2029)."""
+    lines = re.split("\r\n|[\n\r\u2028\u2029]", text)
+    return lines[:-1] if lines and lines[-1] == "" else lines
 
 
 def _regex_end(text: str, i: int) -> int | None:
@@ -613,7 +621,9 @@ def main(argv: list | None = None) -> int:
             violations.append((rel, 0, "missing", "payload file not found"))
             continue
         with open(path, "r", encoding="utf-8") as fh:
-            lines = fh.read().splitlines()
+            # JavaScript's line terminators only: str.splitlines() also splits on U+000B, U+000C,
+            # U+001C-U+001E and U+0085, which end no `//` comment in JavaScript (PR review on #27).
+            lines = _js_lines(fh.read())
         # Which lines hold code comes from the comment scanner, not from a line's first characters:
         # a code line can start with `*` (a continued product), and those were skipped (PR review on
         # #27). A rule still matches the whole line, comment included, which only adds matches.
