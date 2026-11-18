@@ -21311,7 +21311,7 @@
 			"component": "patch 0059: tab server locations and host extension management",
 			"owner": "rpc",
 			"status": "fixed",
-			"commit": "patch:d1fc727cafc712da8e44022b35e4383385774578",
+			"commit": "patch:17e47ac2a6183761cc35c1179761c1403774d048",
 			"test": {
 				"file": "test/containment/reh-environment.test.ts",
 				"name": "a tab window takes none of them, and logs each refusal"
@@ -21346,6 +21346,93 @@
 				"file": "test/containment/reh-environment.test.ts",
 				"name": "a tab window takes none of them, and logs each refusal"
 			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-60",
+			"round": "patch 0059 round 15",
+			"severity": "low",
+			"summary": "The PR66-1 check compared ids only, but workspace enablement matches by uuid first, so a tab extension carrying a host extension's uuid under another id still changed the host copy's state for the workspace.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:17e47ac2a6183761cc35c1179761c1403774d048",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-61",
+			"round": "patch 0059 round 15",
+			"severity": "low",
+			"summary": "The PR66-1 check read the host's extensions from the window's combined list, which stays empty when the tab's server fails its part of the listing, so no id collided.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:17e47ac2a6183761cc35c1179761c1403774d048",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-62",
+			"round": "patch 0059 round 15",
+			"severity": "low",
+			"summary": "An uninstall the tab reports reset the workspace enablement of any extension with that identity, a host extension's included.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:17e47ac2a6183761cc35c1179761c1403774d048",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-63",
+			"round": "patch 0059 round 16",
+			"severity": "low",
+			"summary": "Round 15's check asked the host for the current profile's extensions, but workspace enablement holds for every profile, so a host extension installed only in another profile could still be claimed.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:17e47ac2a6183761cc35c1179761c1403774d048",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-64",
+			"round": "patch 0059 round 16",
+			"severity": "low",
+			"summary": "Round 15's check looked at what the host had installed when the entry was written, so an entry naming an extension the host installed later, or had uninstalled, still took effect.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:17e47ac2a6183761cc35c1179761c1403774d048",
+			"test": {
+				"file": "test/containment/reh-environment.test.ts",
+				"name": "a tab window takes none of them, and logs each refusal"
+			}
+		},
+		{
+			"record": "20261118-tab-server-environment.md",
+			"anchor": "ENV-65",
+			"round": "patch 0059 round 16",
+			"severity": "info",
+			"summary": "Round 15 made `_reset` asynchronous in tab windows, so a tab's own uninstalled extension briefly kept its workspace entry.",
+			"component": "patch 0059: tab server locations and host extension management",
+			"owner": "rpc",
+			"status": "fixed-untested",
+			"commit": "patch:17e47ac2a6183761cc35c1179761c1403774d048",
+			"gap": "Upstream code restored; nothing of ours to test."
 		}
 	]
 }

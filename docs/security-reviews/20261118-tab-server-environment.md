@@ -115,13 +115,32 @@ two refusals ([EDR](../edr/20261118-tab-server-environment.md)).
 | ENV-57 | Info | tests | The harness saved the REH log before the evidence, so a failed save lost the evidence. | fixed | Evidence first; the log best effort. | none |
 | ENV-58 | Info | tests | The arming test didn't cover the hook's new startup path. | fixed | Three startup cases. | test/builds/rogue-reh-arming.ts "a run expired when the server starts: early not called" |
 | ENV-59 | Info | tests | The saved REH log is the tab's text, unmarked. | fixed | Kept under `untrusted/` with a header. | none |
-| PR66-1 | Low | extensions | Workspace enablement is kept by id, so a tab extension claiming a host extension's id, enabled or disabled for the workspace from a tab window, changed the host copy's state there too. | fixed | A tab extension sharing an id with a host extension is left alone. | test/containment/reh-environment.test.ts "a tab window takes none of them, and logs each refusal" |
+| ENV-60 | Low | extensions | The PR66-1 check compared ids only, but workspace enablement matches by uuid first, so a tab extension carrying a host extension's uuid under another id still changed the host copy's state for the workspace. | fixed | Round 16's fix: in a tab window a host extension takes its global state only. | test/containment/reh-environment.test.ts "a tab window takes none of them, and logs each refusal" |
+| ENV-61 | Low | extensions | The PR66-1 check read the host's extensions from the window's combined list, which stays empty when the tab's server fails its part of the listing, so no id collided. | fixed | Same. | same |
+| ENV-62 | Low | extensions | An uninstall the tab reports reset the workspace enablement of any extension with that identity, a host extension's included. | fixed | Same: a reset of a host extension's workspace entry changes nothing a tab window reads. | same |
+| ENV-63 | Low | extensions | Round 15's check asked the host for the current profile's extensions, but workspace enablement holds for every profile, so a host extension installed only in another profile could still be claimed. | fixed | Round 16's fix: the read ignores the workspace's lists for host extensions, whichever profile. | test/containment/reh-environment.test.ts "a tab window takes none of them, and logs each refusal" |
+| ENV-64 | Low | extensions | Round 15's check looked at what the host had installed when the entry was written, so an entry naming an extension the host installed later, or had uninstalled, still took effect. | fixed | Same: whenever the entry was written. | same |
+| ENV-65 | Info | extensions | Round 15 made `_reset` asynchronous in tab windows, so a tab's own uninstalled extension briefly kept its workspace entry. | fixed-untested | Upstream's `_reset` is back. | none |
+| PR66-1 | Low | extensions | Workspace enablement is kept by id, so a tab extension claiming a host extension's id, enabled or disabled for the workspace from a tab window, changed the host copy's state there too. | fixed | Round 16's fix: in a tab window a host extension takes its global state only, whatever the workspace's lists hold. | test/containment/reh-environment.test.ts "a tab window takes none of them, and logs each refusal" |
 | PR66-2 | Medium | environment | When the environment was refused, local history fell back to the host's own history directory for the tab's files. | fixed | In a tab window local history is unavailable instead. | same |
 | PR66-3 | Medium | environment | A location left out of the environment, or null, passed the check, and its consumers (local history, terminal history, the terminal and MCP sandboxes) fell back to the host's. | fixed | Every location a genuine server sends is required, each an object. | same |
 
 PR66-1 to PR66-3 came from the automated pull request review on #66, after round 14. The final
 test's case fails on the round-14 tree with exactly those five leaks (three missing locations,
 local history and the shared id) and passes on the fix.
+
+Round 15 reviewed the PR-review fixes and found ENV-60 to ENV-62, ways past the PR66-1 fix. They
+are rated as PR66-1 is: the state reached is a host extension's enablement for the tab's workspace,
+in the tab's window. The final test's case fails on the PR-review fix tree with exactly those three
+leaks.
+
+Round 16 reviewed the round-15 fix and found ENV-63 to ENV-65: every check on the write could be
+raced or sidestepped. A tab window's workspace storage belongs to the tab's `vscode-remote`
+workspace, which only tab windows open, and a tab window never sets a host extension's workspace
+enablement, so the fix is at the read: in a tab window a host extension takes its global state
+only, and the round-15 check goes. The final test's case fails on the PR-review fix tree and on the
+round-15 fix tree, each with its two leaks (a workspace entry under a host id and under a host
+uuid), and passes on the round-16 fix.
 
 Round 14 reviewed the test-only rogue-REH hook change (`test/builds/variants.json` requires a round
 for a hook change): the hook now arms a run staged before a server starts as that server starts,

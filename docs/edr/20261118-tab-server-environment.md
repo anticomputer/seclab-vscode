@@ -55,7 +55,9 @@ control is central rather than per route:
 - the window's channel to the host's own extension management takes reads only (and `download`,
   which fills the download cache to install in the tab); every change is refused;
 - the host's global enablement, kept by id in storage the host's windows share, is read-only; a
-  tab window enables and disables for its workspace;
+  tab window enables and disables the tab's own extensions for its workspace. Workspace enablement
+  is kept by identity too, which the tab's extensions claim, so in a tab window a host extension
+  takes its global state only, whatever the workspace's lists hold (PR review on #66, rounds 15-16);
 - the host-shared settings a tab window could reach by id are left alone: auto-update lists,
   publisher trust, the synced extension ignore list, the "AI features" setting through a tab
   extension claiming the chat extension's id, Extension Bisect, one-time migrations, profiles made
@@ -101,6 +103,6 @@ management from tab windows; ARCHITECTURE §4.8 lists what changes.
 - A tab whose server lies about any location fails to connect, rather than running with host files.
 - 0053 and 0057 can treat the remote user settings layer as the tab's own.
 - Host extensions are managed from a window that isn't a tab (ARCHITECTURE §4.8).
-- 0059 is large (about 345 added lines over 25 upstream files) for one concern, a tab's server
+- 0059 is large (about 350 added lines over 25 upstream files) for one concern, a tab's server
   steering the host through what it names; the range for RPC follow-ons is full, and splitting it
   would leave each part's guarantee depending on the others.

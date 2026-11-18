@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 98 | 285 | 442 | 60 | 899 |
+| fixed | 14 | 98 | 285 | 447 | 60 | 904 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
-| fixed-untested | 0 | 5 | 63 | 186 | 79 | 333 |
+| fixed-untested | 0 | 5 | 63 | 186 | 80 | 334 |
 | accepted-residual | 0 | 2 | 13 | 73 | 26 | 114 |
 | deferred | 2 | 1 | 13 | 13 | 3 | 32 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 18 | 115 | 385 | 729 | 203 | 1450 |
+| **all** | 18 | 115 | 385 | 734 | 204 | 1456 |
 
 ## Baseline: open high and critical findings
 
@@ -538,6 +538,7 @@ The RPC filter patch series, the RPC lockdown design, probes and the rogue REH. 
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-56** | info | fixed-untested | patch 0059: tab server locations and host extension management | The EDR described a runtime vector the harness no longer runs. | A record, harness or test-fixture correction; nothing to test. |
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-57** | info | fixed-untested | patch 0059: tab server locations and host extension management | The harness saved the REH log before the evidence, so a failed save lost the evidence. | A record, harness or test-fixture correction; nothing to test. |
 | [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-59** | info | fixed-untested | patch 0059: tab server locations and host extension management | The saved REH log is the tab's text, unmarked. | A record, harness or test-fixture correction; nothing to test. |
+| [20261118-tab-server-environment](20261118-tab-server-environment.md) **ENV-65** | info | fixed-untested | patch 0059: tab server locations and host extension management | Round 15 made \`_reset\` asynchronous in tab windows, so a tab's own uninstalled extension briefly kept its workspace entry. | Upstream code restored; nothing of ours to test. |
 | [docs/RPC-LOCKDOWN.md](../../docs/RPC-LOCKDOWN.md) **RPC-R3** | info | accepted-residual | rpc-filter policy coverage | Methods denied pending validators and the response-side control: SCM, tree views, output channels, status bar, decorations, tab-registered language features, tasks, debug, URI handlers. | accepted by an agent: Deny-by-default is the fork's chosen posture: these surfaces stay denied until a structural response-side control exists (RPC-R2), so the gap is visible loss of function rather than a containment hole. Extensions still activate, run their own commands, keep per-tab state and secrets, and read/write/search their own workspace. |
 
 ### Security findings register
@@ -2565,9 +2566,15 @@ Every other commit the register cites is on main's history, or on the branch its
 | ENV-57 | info | fixed-untested | The harness saved the REH log before the evidence, so a failed save lost the evidence. | A record, harness or test-fixture correction; nothing to test. |
 | ENV-58 | info | fixed | The arming test didn't cover the hook's new startup path. | patch:5b862080dc41ea932e4c7b8ce13770c802eae087 · `test/builds/rogue-reh-arming.ts` "a run expired when the server starts: early not called" |
 | ENV-59 | info | fixed-untested | The saved REH log is the tab's text, unmarked. | A record, harness or test-fixture correction; nothing to test. |
-| PR66-1 | low | fixed | Workspace enablement is kept by id, so a tab extension claiming a host extension's id, enabled or disabled for the workspace from a tab window, changed the host copy's state there too. | patch:d1fc727cafc712da8e44022b35e4383385774578 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
+| PR66-1 | low | fixed | Workspace enablement is kept by id, so a tab extension claiming a host extension's id, enabled or disabled for the workspace from a tab window, changed the host copy's state there too. | patch:17e47ac2a6183761cc35c1179761c1403774d048 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
 | PR66-2 | medium | fixed | When the environment was refused, local history fell back to the host's own history directory for the tab's files. | patch:d1fc727cafc712da8e44022b35e4383385774578 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
 | PR66-3 | medium | fixed | A location left out of the environment, or null, passed the check, and its consumers (local history, terminal history, the terminal and MCP sandboxes) fell back to the host's. | patch:d1fc727cafc712da8e44022b35e4383385774578 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
+| ENV-60 | low | fixed | The PR66-1 check compared ids only, but workspace enablement matches by uuid first, so a tab extension carrying a host extension's uuid under another id still changed the host copy's state for the workspace. | patch:17e47ac2a6183761cc35c1179761c1403774d048 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
+| ENV-61 | low | fixed | The PR66-1 check read the host's extensions from the window's combined list, which stays empty when the tab's server fails its part of the listing, so no id collided. | patch:17e47ac2a6183761cc35c1179761c1403774d048 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
+| ENV-62 | low | fixed | An uninstall the tab reports reset the workspace enablement of any extension with that identity, a host extension's included. | patch:17e47ac2a6183761cc35c1179761c1403774d048 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
+| ENV-63 | low | fixed | Round 15's check asked the host for the current profile's extensions, but workspace enablement holds for every profile, so a host extension installed only in another profile could still be claimed. | patch:17e47ac2a6183761cc35c1179761c1403774d048 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
+| ENV-64 | low | fixed | Round 15's check looked at what the host had installed when the entry was written, so an entry naming an extension the host installed later, or had uninstalled, still took effect. | patch:17e47ac2a6183761cc35c1179761c1403774d048 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
+| ENV-65 | info | fixed-untested | Round 15 made \`_reset\` asynchronous in tab windows, so a tab's own uninstalled extension briefly kept its workspace entry. | Upstream code restored; nothing of ours to test. |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
