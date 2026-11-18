@@ -214,11 +214,11 @@
 		},
 		{
 			"id": "fixture:test/docsync/probe-extension",
-			"runBy": "test/docsync/probe.ts prepare|seed|check, with the editor launched by test/window.ts (macOS, sbx, local only)",
+			"runBy": "test/docsync/probe.ts drive, with the editor driven headlessly (test/driver/editor.ts) in an sbx tab (macOS, local only)",
 			"evidence": [
 				{
-					"record": "docs/edr/20261109-document-sync-provenance.md",
-					"date": "2026-11-10"
+					"record": "docs/edr/20261118-docsync-probe-driven.md",
+					"date": "2026-11-18"
 				}
 			]
 		},
