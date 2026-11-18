@@ -234,13 +234,11 @@ test('sendRequestInternal is checked on entry, before an untitled session hands 
 	// session type's item controller. The entry check is the first statement; the two later
 	// checks stay, because the resource is re-targeted after entry (round 1).
 	// `./seclab test chat-dispatch` drives this path in the real ChatService.
+	// The entry check must be the first added statement after the signature, with only comment
+	// lines between: that is what puts it ahead of the materialisation further down, which is
+	// upstream code outside every hunk and so cannot be located in the patch text itself.
 	const patch = readFileSync(new URL('../../../patches/0018-seclab-agent-host-sessions-only.patch', import.meta.url), 'utf8');
 	assert.match(patch, /private async sendRequestInternal\([^)]*\)[^\n]*\n(\+\t\t\/\/[^\n]*\n)*\+\t\tthis\.seclabCheckSession\(sessionResource\);/);
-	const entry = patch.indexOf('private async sendRequestInternal(');
-	const materialise = patch.indexOf('_materializeUntitledSession(', entry);
-	const check = patch.indexOf('this.seclabCheckSession(sessionResource);', entry);
-	assert.ok(entry >= 0 && check > entry, 'the entry check should be in the patch');
-	assert.ok(materialise < 0 || check < materialise, 'the entry check must come before materialisation');
 });
 
 test('the gate refuses by throwing, and never by returning a value a caller could ignore', () => {
