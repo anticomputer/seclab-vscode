@@ -16445,6 +16445,21 @@
 			"status": "fixed-untested",
 			"commit": "patch:1d7c429da322594b3fadd6b5205fcef5ba198872",
 			"gap": "Nothing in the tab runs before the probe is installed, so no run plants the symlink."
+		},
+		{
+			"record": "20261117-scheme-squatting-probe.md",
+			"round": "Copilot review (PR #33, fourth pass)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"anchor": "SQ-8",
+			"severity": "low",
+			"summary": "The squat run manifest didn't list its generated workspace, so the teardown gate left it and the staged probe VSIX in .work.",
+			"status": "fixed",
+			"commit": "patch:0b5e8f33cecacad85ed7cc22efd55b3bf70b6aee",
+			"test": {
+				"file": "test/containment/teardown.ts",
+				"name": "generated fixture workspaces removed from the host"
+			}
 		}
 	]
 }
