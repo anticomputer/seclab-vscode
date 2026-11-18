@@ -492,7 +492,13 @@ def check_enforcement(mapping: dict, policy: dict, repo_root: str) -> list:
         with open(series_path, encoding="utf-8") as fh:
             series = fh.read()
 
-    for prefix in sorted(denied_prefixes):
+    # An entry for a constrained surface (``data:``, ``allow_with_constraint``)
+    # names its patch and symbol too, and goes stale the same way: review
+    # ENV-14 found one naming a function that never existed.
+    named = {k for k, v in enforcement.items()
+             if k != "note" and isinstance(v, dict)
+             and (v.get("patch") or v.get("symbol"))}
+    for prefix in sorted(denied_prefixes | named):
         entry = enforcement[prefix]
         if entry.get("unenforced_accepted"):
             # Explicitly accepted as unenforced. Not a pass for the surface --
