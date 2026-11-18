@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   lint:
+    # RJG proof (EDR required-jobs-gate): a skipped required job must keep this PR blocked. Never merge.
+    if: false
     name: lint
     runs-on: ubuntu-24.04
     timeout-minutes: 25
