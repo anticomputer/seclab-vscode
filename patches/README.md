@@ -183,6 +183,18 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   one file's text matches in pieces of at most the RPC filter's bound (`MAX_TEXT_MATCHES`); the
   window merges matches for one resource. Upstream batched whole files, so a file with more
   matching lines had its whole batch refused in a tab (PR review on #52).
+- `0059-seclab-tab-server-environment-stays-in-the-tab.patch`: `remoteAgentEnvironmentChannel.ts`,
+  `abstractRemoteAgentService.ts`, `remoteUserDataProfiles.ts`, `remoteFileSystemProviderClient.ts`,
+  `remoteExtensionsScanner.ts` and `extensionManagementServerService.ts`. A tab's server names where the window keeps that tab's settings,
+  storage, logs, profiles and extensions. In a tab window every such location must be `vscode-remote`
+  on the window's own authority, and is rebuilt from its components (`seclabTabUris` in the filter
+  module). That covers the `getEnvironmentData` reply, the profiles and extension management
+  channels' replies and events, file change events and scanned extensions. A foreign location refuses the environment or reply,
+  or drops the event or extension, and logs `data:server-locations`. A refused environment stays a
+  failure rather than reading as "no remote", whose callers fall back to host locations. Upstream
+  trusted all of it, so a server naming the host user's settings file had the window read it as the
+  tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-10;
+  [EDR](../docs/edr/20261118-tab-server-environment.md)).
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
