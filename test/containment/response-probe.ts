@@ -47,7 +47,7 @@ import * as path from 'node:path';
 import { mintCanary } from '../canary/canary.ts';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { DrivenEditor } from '../driver/editor.ts';
-import { beaconPort, checkUserDataDir, ensureVsceImage, lockRun, repoRoot, VSCE_IMAGE } from '../harness.ts';
+import { loopbackCounters, checkUserDataDir, ensureVsceImage, lockRun, repoRoot, VSCE_IMAGE } from '../harness.ts';
 import { report, rpcDecisions, type Check } from './assert.ts';
 import { exitOnSignals, reapOrRefuse, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
@@ -94,19 +94,10 @@ if (!fs.existsSync(mainBundle) || !fs.readFileSync(mainBundle, 'utf8').includes(
 }
 const storeCanary = mintCanary('clipboard');
 // One loopback listener per image form; it counts connections and never answers.
-const imagePorts: number[] = [];
-const imageHits: number[] = [0, 0, 0];
-const listeners: net.Server[] = [];
-for (let i = 0; i < 3; i++) {
-	imagePorts.push(await beaconPort());
-	const srv = net.createServer(sock => {
-		imageHits[i]++;
-		sock.destroy();
-	});
-	await new Promise<void>((res, rej) => srv.once('error', rej).listen(imagePorts[i], '127.0.0.1', () => res()));
-	listeners.push(srv);
-}
-process.on('exit', () => listeners.forEach(l => l.close()));
+const images = await loopbackCounters(3);
+const imagePorts = images.ports;
+const imageHits = images.hits;
+process.on('exit', () => images.close());
 fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\nuntil=${Math.floor(Date.now() / 1000) + 3600}\nclipboard=variant\n`
 	+ imagePorts.map((p, i) => `img${i + 1}=${p}\n`).join(''));
 fs.writeFileSync(path.join(ws, 'probe.txt'), 'hoverword is here\n\n\n');

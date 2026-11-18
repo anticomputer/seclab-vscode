@@ -62,6 +62,29 @@ export function tabImageArgs(driver: string): string[] {
 	return ['--image', image];
 }
 
+/**
+ * `count` loopback listeners that count connections and never answer. The first takes
+ * SECLAB_BEACON_PORT when it is set (a fixed port can be bound only once); the others bind an
+ * ephemeral port. `ports` holds the port each one actually bound (PR review on #48).
+ */
+export async function loopbackCounters(count: number): Promise<{ ports: number[]; hits: number[]; close(): void }> {
+	const ports: number[] = [];
+	const hits: number[] = [];
+	const servers: net.Server[] = [];
+	for (let i = 0; i < count; i++) {
+		const want = i === 0 ? await beaconPort() : 0;
+		hits.push(0);
+		const srv = net.createServer(sock => {
+			hits[i]++;
+			sock.destroy();
+		});
+		await new Promise<void>((res, rej) => srv.once('error', rej).listen(want, '127.0.0.1', () => res()));
+		ports.push((srv.address() as net.AddressInfo).port);
+		servers.push(srv);
+	}
+	return { ports, hits, close: () => servers.forEach(srv => srv.close()) };
+}
+
 /** SECLAB_BEACON_PORT, or a free loopback port. */
 export async function beaconPort(): Promise<number> {
 	const fixed = Number(process.env.SECLAB_BEACON_PORT ?? 0);

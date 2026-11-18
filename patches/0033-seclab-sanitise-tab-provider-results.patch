@@ -1,6 +1,6 @@
 diff -ruN a/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts b/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts
---- a/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts	2026-11-17 23:42:24
-+++ b/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts	2026-11-17 23:42:24
+--- a/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts	2026-11-18 00:20:58
++++ b/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts	2026-11-18 00:20:58
 @@ -33,6 +33,7 @@
  import * as search from '../../contrib/search/common/search.js';
  import * as typeh from '../../contrib/typeHierarchy/common/typeHierarchy.js';
@@ -62,7 +62,7 @@ diff -ruN a/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts b/src/vs/
 -					const newSuggestion = MainThreadLanguageFeatures._inflateSuggestDto(suggestion.range, result, extensionId);
 -					return mixin(suggestion, newSuggestion, true);
 +					const newSuggestion = this._seclabCompletion(MainThreadLanguageFeatures._inflateSuggestDto(suggestion.range, result, extensionId));
-+					return this._seclabSnippet(mixin(suggestion, newSuggestion, true));
++					return this._seclabSnippet(this._seclabFromTab ? this._seclabFromTab.resolved(suggestion, newSuggestion) : mixin(suggestion, newSuggestion, true));
  				});
  			};
  		}

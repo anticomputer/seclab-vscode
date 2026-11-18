@@ -13,6 +13,7 @@
 
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
+import * as net from 'node:net';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -94,6 +95,32 @@ console.log(JSON.stringify({ refused: r.refused, problems: r.problems }));`;
 }
 
 const tests: Array<[string, () => void | Promise<void>]> = [
+	['loopback counters: a fixed SECLAB_BEACON_PORT goes to one listener, the rest get their own ports', async () => {
+		const { loopbackCounters } = await import(path.join(HERE, '..', 'harness.ts'));
+		const free = await new Promise<number>(res => { const t = net.createServer().listen(0, '127.0.0.1', () => { const p = (t.address() as net.AddressInfo).port; t.close(() => res(p)); }); });
+		const before = process.env.SECLAB_BEACON_PORT;
+		process.env.SECLAB_BEACON_PORT = String(free);
+		try {
+			const c = await loopbackCounters(3);
+			try {
+				assert.equal(c.ports[0], free);
+				assert.equal(new Set(c.ports).size, 3, `ports not distinct: ${c.ports}`);
+				for (const p of c.ports) {
+					await new Promise<void>(res => net.connect(p, '127.0.0.1').on('close', () => res()).on('error', () => res()));
+				}
+				await new Promise(r => setTimeout(r, 100));
+				assert.deepEqual(c.hits, [1, 1, 1]);
+			} finally {
+				c.close();
+			}
+		} finally {
+			if (before === undefined) {
+				delete process.env.SECLAB_BEACON_PORT;
+			} else {
+				process.env.SECLAB_BEACON_PORT = before;
+			}
+		}
+	}],
 	['the reap refuses, keeping the profile, when docker cannot list or removal leaves a container', () => {
 		const unlisted = reapWith('unlisted');
 		assert.ok(unlisted.refused && unlisted.problems.some(p => /could not list.*docker/.test(p)) && unlisted.profileKept, JSON.stringify(unlisted));
