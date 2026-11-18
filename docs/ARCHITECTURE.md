@@ -253,6 +253,16 @@ User-visible consequences of containment, so they read as design rather than bug
   keybindings. A terminal whose working folder is a host folder doesn't start either. Every
   terminal in a tab window runs in the tab; open a local terminal from a normal window
   (project owner decision 2026-11-16; patch 0050, [ADR](adr/20261116-no-host-terminal-in-tabs.md)).
+- **Host extensions are managed from a normal window.** A tab window lists the host's extensions
+  but doesn't install, update, uninstall, enable or disable them, language packs included, and
+  "Install Locally" is refused: in a tab window which extensions those actions reach is the tab's
+  server's to say. Manage host extensions from a window that isn't a tab. In a tab window,
+  extensions are enabled and disabled for the open workspace only: the global Enable and Disable
+  actions are refused, and with no folder open nothing can be enabled or disabled. Extension
+  Bisect, auto-update settings, whether an extension syncs, managing trusted publishers and making
+  a profile from a template are refused in a tab window too. A publisher trusted while installing into the tab is asked
+  about again next time, and the tab's server gets no marketplace access token, so it can't use an
+  authenticated or private marketplace (patch 0059, [EDR](edr/20261118-tab-server-environment.md)).
 - **Host editors are anonymous to tab extensions.** Settings, keybindings, output or a host file
   open in a tab window appear to the tab's extensions as an `Editor` tab with no file or URI
   (patch 0038, [EDR](edr/20261116-editor-tab-provenance.md)).

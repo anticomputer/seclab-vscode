@@ -137,4 +137,5 @@ Same rules as ADRs:
 | 2026-11-18 | [The document-sync probe drives host actions from the window (EDT-11)](20261118-docsync-probe-driven.md) | accepted |
 | 2026-11-18 | [New highs closed by their own change show their test failing on main](20261118-new-highs-failing-baseline.md) | accepted |
 | 2026-11-18 | [Pending owner acceptances: the owner's decision before the finding's record](20261118-pending-owner-acceptances.md) | accepted |
+| 2026-11-18 | [A tab's server says where the tab's files are; the window checks it](20261118-tab-server-environment.md) | proposed |
 <!-- index:end -->
