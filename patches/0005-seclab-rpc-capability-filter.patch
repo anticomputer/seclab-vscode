@@ -94,7 +94,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/rpcProtocol.ts b/src/vs/
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b/src/vs/workbench/services/extensions/common/seclabArgValidators.ts
 --- a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabArgValidators.ts	2026-11-06 18:50:32
-@@ -0,0 +1,585 @@
+@@ -0,0 +1,584 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: named argument validators for the RPC capability filter.
 + *
@@ -587,11 +587,14 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b
 +/**
 + * A document selector a tab registers a provider for. The registry is window-wide, so a filter
 + * that matched a trusted document (user settings, an output channel, a host file) would paint
-+ * the tab's content inside it. Accepted: a non-empty array of plain filters, each with
-+ * `$serialized: true`, `scheme` absent or `vscode-remote` (patch 0033 narrows an absent scheme
-+ * to `vscode-remote` for a tab), `language` and `pattern` short strings or absent, `exclusive`
-+ * boolean or absent, `isBuiltin` absent or false (it would order the tab ahead of built-ins),
-+ * and nothing else: no notebook type, no RelativePattern, no unknown key.
++ * the tab's content inside it. Patch 0033 keeps only the tab's own documents
++ * (`seclabFromTab(...).selector`: a filter for another scheme is dropped, an absent scheme becomes
++ * `vscode-remote`), so a bundled provider's usual selector, which also names `untitled` and
++ * notebook-cell schemes, still registers (PR review on #48). Accepted here: a non-empty array of
++ * plain filters, each with `$serialized: true`, `scheme`, `language` and `pattern` short strings
++ * or absent, `exclusive` and `isBuiltin` booleans or absent (every bundled extension sends
++ * `isBuiltin: true`, which only lowers the provider's priority), and nothing else: no notebook
++ * type, no RelativePattern, no unknown key.
 + */
 +function tabSelector(v: unknown): string | undefined {
 +	if (!Array.isArray(v) || v.length === 0 || v.length > MAX_SELECTOR_FILTERS) {
@@ -606,19 +609,15 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabArgValidators.ts b
 +				return `a document filter carries ${key.slice(0, 32)}`;
 +			}
 +		}
-+		if (f.scheme !== undefined && f.scheme !== 'vscode-remote') {
-+			return 'a document filter names a scheme the tab does not own';
-+		}
-+		for (const key of ['language', 'pattern'] as const) {
++		for (const key of ['scheme', 'language', 'pattern'] as const) {
 +			if (f[key] !== undefined && (typeof f[key] !== 'string' || (f[key] as string).length > MAX_FILTER_STRING)) {
 +				return `a document filter's ${key} is not a short string`;
 +			}
 +		}
-+		if (f.exclusive !== undefined && typeof f.exclusive !== 'boolean') {
-+			return 'a document filter\'s exclusive is not a boolean';
-+		}
-+		if (f.isBuiltin !== undefined && f.isBuiltin !== false) {
-+			return 'a tab provider cannot claim to be built in';
++		for (const key of ['exclusive', 'isBuiltin'] as const) {
++			if (f[key] !== undefined && typeof f[key] !== 'boolean') {
++				return `a document filter's ${key} is not a boolean`;
++			}
 +		}
 +	}
 +	return undefined;
@@ -734,7 +733,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 +	['MainThreadFileSystem.$readFile', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadFileSystem.$readFile', constraint: 'the positional URI rule: every UriComponents argument revives, canonically, to vscode-remote://seclab+<this tab> or untitled:', uriRule: true }],
 +	['MainThreadFileSystem.$writeFile', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadFileSystem.$writeFile', constraint: 'same as $readFile', uriRule: true }],
 +	['MainThreadLanguageFeatures.$registerCompletionsProvider', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadLanguageFeatures.$registerCompletionsProvider', constraint: 'the same selector rule as $registerHoverProvider; trigger characters are at most 64 one-character strings; the extension id is a claim used for display only; every item\'s command and markdown documentation pass through seclabFromTab, on the first result and on resolve, so an accepted item\'s command runs under the command verdict or in the tab', validator: 'tabCompletionProvider' }],
-+	['MainThreadLanguageFeatures.$registerHoverProvider', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadLanguageFeatures.$registerHoverProvider', constraint: 'the selector names only this tab\'s documents (scheme vscode-remote, or no scheme, which patch 0033 narrows to vscode-remote), no notebook type, RelativePattern, built-in claim or unknown key; the hover markdown the tab returns passes through seclabFromTab before it reaches the hover widget: command: links become the token command, which runs under the command verdict or in the tab, isTrusted enables only that command, HTML is off and images other than data: are dropped', validator: 'tabHoverProvider' }],
++	['MainThreadLanguageFeatures.$registerHoverProvider', { verdict: 'allow_with_constraint', ref: 'rpc:MainThreadLanguageFeatures.$registerHoverProvider', constraint: 'the selector is plain filters (short-string scheme, language and pattern, boolean exclusive and isBuiltin; no notebook type, RelativePattern or unknown key), and patch 0033 keeps only this tab\'s documents: a filter for another scheme is dropped and an absent scheme becomes vscode-remote (seclabFromTab.selector); isBuiltin, which every bundled extension sends, only lowers the provider\'s priority; the hover markdown the tab returns passes through seclabFromTab before it reaches the hover widget: command: links become the token command, which runs under the command verdict or in the tab, isTrusted enables only that command, HTML is off and images other than data: are dropped', validator: 'tabHoverProvider' }],
 +	['MainThreadLanguageFeatures.$unregister', { verdict: 'allow', ref: 'rpc:MainThreadLanguageFeatures.$unregister' }],
 +	['MainThreadLanguageModels.$cancelLanguageModelChatRequest', { verdict: 'deny', ref: 'rpc:MainThreadLanguageModels.$cancelLanguageModelChatRequest' }],
 +	['MainThreadLanguageModels.$countTokens', { verdict: 'deny', ref: 'rpc:MainThreadLanguageModels.$countTokens' }],
@@ -3655,7 +3654,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-06 18:50:32
-@@ -0,0 +1,1242 @@
+@@ -0,0 +1,1335 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -3668,6 +3667,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 + *--------------------------------------------------------------------------------------------*/
 +
 +import { setSeclabChannelGuard } from '../../../../base/parts/ipc/common/ipc.js';
++import { Marked } from '../../../../base/common/marked/marked.js';
 +import { URI } from '../../../../base/common/uri.js';
 +import { CommandsRegistry, ICommandService } from '../../../../platform/commands/common/commands.js';
 +import { RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
@@ -3830,7 +3830,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 + * and fails the release check on a build that is in fact correct. The whole
 + * line is generated by `emit_policy.py`, which is also why it is not typed.
 + */
-+export const SECLAB_ENFORCING_MARKER = 'seclabRpcFilterEnforcing:0518a3d86ba0ef4dd0c4af6103fe89d51cc47b09ccc9bc34e40401dfa55367e0';
++export const SECLAB_ENFORCING_MARKER = 'seclabRpcFilterEnforcing:ea884005c50ac5dd802d2bcd8de49c62411f356718432ae20b30160422992380';
 +
 +/** Max bytes for one log line, and for the tab-chosen `ref` inside it. */
 +const SECLAB_LOG_LINE_MAX = 4096;
@@ -4810,12 +4810,99 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +/** A snippet that reads the clipboard (upstream SnippetParser.guessNeedsClipboard, widened). */
 +const SECLAB_SNIPPET_CLIPBOARD = /\$\{?\s*CLIPBOARD/;
 +
++/** The renderer's markdown lexer, with its defaults; also used to check what we produce. */
++const SECLAB_MARKED = new Marked();
++/** The renderer cuts longer markdown (markdownRenderer.ts preprocessMarkdownString). */
++const SECLAB_MARKDOWN_MAX = 100_000;
++
++interface SeclabMdToken { readonly type: string; readonly raw?: string; readonly href?: string; readonly tokens?: readonly SeclabMdToken[]; readonly items?: readonly SeclabMdToken[] }
++
++/**
++ * `rewrite` applied to tab markdown outside code. Code spans and blocks render their text
++ * literally, so escaping in them shows `Promise&lt;T>` instead of `Promise<T>` (PR review on #48).
++ * Code is found with the renderer's own lexer, and kept only where its tokens tile the source
++ * exactly; anything else is rewritten whole. Escaping can change how the rest lexes (a backtick
++ * freed from an escaped attribute re-pairs), so the result is lexed again: if it holds any image
++ * or HTML token, a command link other than the token link, or is longer than the renderer keeps,
++ * every part of the source is rewritten instead, code included, as before.
++ */
++function seclabOutsideCode(value: string, rewrite: (s: string) => string): string {
++	const all = rewrite(value);
++	try {
++		const src = value.replace(/\r\n?/g, '\n');
++		const code: Array<[number, number]> = [];
++		seclabCodeRanges(src, 0, SECLAB_MARKED.lexer(src, { ...SECLAB_MARKED.defaults, gfm: true }) as unknown as readonly SeclabMdToken[], code);
++		if (!code.length) {
++			return all;
++		}
++		let kept = '';
++		let at = 0;
++		for (const [start, end] of code) {
++			kept += rewrite(src.slice(at, start)) + src.slice(start, end);
++			at = end;
++		}
++		kept += rewrite(src.slice(at));
++		return seclabRendersInert(kept) ? kept : all;
++	} catch {
++		return all;
++	}
++}
++
++/**
++ * The source ranges of code tokens, where the tokens tile their parent's source exactly from its
++ * start. A parent whose children don't (a link's text after `[`, a list item's de-indented
++ * lines) contributes no code: all of it is rewritten.
++ */
++function seclabCodeRanges(raw: string, offset: number, tokens: readonly SeclabMdToken[], out: Array<[number, number]>): void {
++	let at = 0;
++	for (const t of tokens) {
++		if (typeof t.raw !== 'string' || !raw.startsWith(t.raw, at)) {
++			return;
++		}
++		if (t.type === 'code' || t.type === 'codespan') {
++			out.push([offset + at, offset + at + t.raw.length]);
++		} else {
++			const children = t.tokens ?? t.items;
++			if (children && children.length) {
++				seclabCodeRanges(t.raw, offset + at, children, out);
++			}
++		}
++		at += t.raw.length;
++	}
++}
++
++/** No image, no HTML and no command link but the token link, under either GFM setting. */
++function seclabRendersInert(md: string): boolean {
++	if (md.length > SECLAB_MARKDOWN_MAX) {
++		return false;
++	}
++	for (const gfm of [true, false]) {
++		let inert = true;
++		SECLAB_MARKED.walkTokens(SECLAB_MARKED.lexer(md, { ...SECLAB_MARKED.defaults, gfm }), t => {
++			const tok = t as unknown as SeclabMdToken;
++			if (tok.type === 'image' || tok.type === 'html' || (tok.type === 'link' && /^\s*command:/i.test(tok.href ?? '') && !(tok.href ?? '').startsWith(`command:${SECLAB_TAB_COMMAND}?`))) {
++				inert = false;
++			}
++		});
++		if (!inert) {
++			return false;
++		}
++	}
++	return true;
++}
++
 +/** Rewrites one tab's data for trusted UI. */
 +export interface SeclabFromTab {
 +	command(cmd: { readonly id: string; readonly title?: string; readonly tooltip?: string; readonly arguments?: unknown[] } | undefined): { id: string; title: string; tooltip?: string; arguments: unknown[] } | undefined;
 +	markdown(md: unknown): SeclabMarkdown;
 +	/** False when a snippet from tab data would read the host clipboard (review RSC-1). */
 +	snippetAllowed(insertText: string): boolean;
++	/**
++	 * A provider's document selector, kept to the tab's own documents: a filter for another
++	 * scheme (a host file, `untitled`, a notebook cell) is dropped, an absent scheme becomes
++	 * `vscode-remote`. Nothing left matches nothing.
++	 */
++	selector<F extends { readonly scheme?: string }>(selector: readonly F[]): F[];
 +}
 +
 +/**
@@ -4848,7 +4935,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +		},
 +		markdown(md) {
 +			const raw = typeof md === 'string' ? md : (md && typeof (md as { value?: unknown }).value === 'string' ? (md as { value: string }).value : '');
-+			const value = seclabCommandLinks(raw
++			const value = seclabOutsideCode(raw, part => seclabCommandLinks(part
 +				.replace(SECLAB_IMAGE_OPEN, '!\\[')
 +				.replace(SECLAB_HTML_OPEN, '&lt;'), (rawId, query) => {
 +					let id: string;
@@ -4864,7 +4951,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +						return link('', []);
 +					}
 +					return link(id, args);
-+				});
++				}));
 +			// Anything the link rewrite missed stays inert: only the token command is enabled. HTML
 +			// is off and every tag opener is escaped above, so no <img>, <a> or <span> block reaches
 +			// the renderer (a trusted string would otherwise pass `<span …>` blocks through).
@@ -4877,6 +4964,11 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +		},
 +		snippetAllowed(insertText) {
 +			return typeof insertText === 'string' && !SECLAB_SNIPPET_CLIPBOARD.test(insertText);
++		},
++		selector(selector) {
++			return selector
++				.filter(f => f.scheme === undefined || f.scheme === 'vscode-remote')
++				.map(f => f.scheme === undefined ? { ...f, scheme: 'vscode-remote' } : f);
 +		},
 +	};
 +}

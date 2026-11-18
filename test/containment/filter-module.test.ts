@@ -31,8 +31,18 @@ const STUBS: Record<string, string> = {
 	'platform/commands/common/commands.js': 'commands.mjs',
 	'platform/contextkey/common/contextkey.js': 'contextkey.mjs',
 };
+// The markdown sanitiser uses the renderer's own lexer: upstream's vendored marked, never a stub.
+// `./seclab test filter-module` mounts it from the pinned upstream checkout.
+const MARKED = process.env.SECLAB_MARKED;
+if (!MARKED) {
+	console.error('filter-module: set SECLAB_MARKED to the pinned upstream\'s src/vs/base/common/marked/marked.js (./seclab test filter-module does)');
+	process.exit(1);
+}
 registerHooks({
 	resolve(specifier, context, next) {
+		if (specifier.endsWith('base/common/marked/marked.js')) {
+			return { url: pathToFileURL(MARKED).href, shortCircuit: true };
+		}
 		for (const [suffix, stub] of Object.entries(STUBS)) {
 			if (specifier.endsWith(suffix)) {
 				return { url: pathToFileURL(join(HERE, 'filter-stubs', stub)).href, shortCircuit: true };
@@ -203,6 +213,41 @@ test('response: a tab command link keeps arguments with quotes and parentheses (
 	}
 });
 
+test('response: a provider selector keeps only documents the tab owns (review on #48)', () => {
+	const s = F.seclabFromTab(AUTH, async () => undefined);
+	const ts = [
+		{ $serialized: true, language: 'typescript', scheme: 'vscode-remote', isBuiltin: true },
+		{ $serialized: true, language: 'typescript', scheme: 'untitled', isBuiltin: true },
+		{ $serialized: true, language: 'typescript', scheme: 'file', isBuiltin: true },
+		{ $serialized: true, language: 'typescript', isBuiltin: true },
+	];
+	assert.deepEqual(s.selector(ts), [
+		{ $serialized: true, language: 'typescript', scheme: 'vscode-remote', isBuiltin: true },
+		{ $serialized: true, language: 'typescript', scheme: 'vscode-remote', isBuiltin: true },
+	]);
+	assert.deepEqual(s.selector([{ scheme: 'vscode-userdata' }, { scheme: 'output' }]), []);
+});
+
+test('response: code in tab markdown is shown as written; everything else is still escaped (review on #48)', () => {
+	const s = F.seclabFromTab(AUTH, async () => undefined);
+	const fence = '```typescript\nfunction f(): Promise<Result> { return ![x](https://example.test/c.png); }\n```\n';
+	const out = s.markdown({ value: `${fence}\nUse \`Map<K, V>\` and \`command:workbench.action.reloadWindow\`, not <img src="https://example.test/t.png"> or ![i](https://example.test/u.png).` }).value;
+	assert.ok(out.startsWith(fence), out);
+	assert.ok(out.includes('`Map<K, V>`') && out.includes('`command:workbench.action.reloadWindow`'), out);
+	assert.doesNotMatch(out.slice(fence.length).replace(/`[^`]*`/g, ''), OPENS_IMAGE_OR_TAG);
+});
+
+test('response: escaping that re-pairs a backtick falls back to escaping the code too (review on #48)', () => {
+	const s = F.seclabFromTab(AUTH, async () => undefined);
+	// Escaping the tag frees the backtick in its attribute, which then closes the code span early,
+	// so the image in it would render. The lexed result shows an image, so nothing is kept.
+	const out = s.markdown({ value: '<a b="`"> `![x](https://example.test/r.png)`' }).value;
+	assert.doesNotMatch(out, OPENS_IMAGE_OR_TAG, out);
+	// Longer than the renderer keeps: its cut could split a code span, so nothing is kept.
+	const long = s.markdown({ value: 'a'.repeat(100_000) + ' `<b>`' }).value;
+	assert.ok(long.endsWith('`&lt;b>`'), long.slice(-12));
+});
+
 /** Markup that could open an image or a tag: an unescaped `![`, or `<` before a tag character. */
 const OPENS_IMAGE_OR_TAG = /(?<!\\)!\[|<(?=[A-Za-z/!?])/;
 
@@ -357,6 +402,10 @@ if (!process.env.SECLAB_FILTER_SRC_DIR) {
 		['the query stops at an apostrophe', 'if (/[\\s"<>\\]`]/.test(c)) {', 'if (/[\\s"\'<>\\]`]/.test(c)) {'],
 		['the query stops at the first parenthesis', 'if (depth === 0) {\n\t\t\t\t\t\tbreak;', 'if (true) {\n\t\t\t\t\t\tbreak;'],
 		['an unknown token runs', "if (!entry) {\n\t\tthrow denied();", "if (!entry) {\n\t\treturn undefined;"],
+		['a host scheme stays in the selector', ".filter(f => f.scheme === undefined || f.scheme === 'vscode-remote')", ".filter(() => true)"],
+		['code is escaped like text', 'if (!code.length) {\n\t\t\treturn all;', 'if (true) {\n\t\t\treturn all;'],
+		['the result is not lexed again', 'return seclabRendersInert(kept) ? kept : all;', 'return kept;'],
+		['the renderer\'s length cut is ignored', 'if (md.length > SECLAB_MARKDOWN_MAX) {', 'if (false) {'],
 	];
 	const src = readFileSync(join(SRC_DIR, 'seclabRpcFilter.ts'), 'utf8');
 	const scratch = mkdtempSync(join(process.env.SECLAB_SCRATCH ?? tmpdir(), 'seclab-filter-mutants-'));

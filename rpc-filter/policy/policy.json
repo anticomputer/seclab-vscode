@@ -496,13 +496,14 @@
           "residual_impact": [
             "ui-spoofing"
           ],
-          "constraint": "the selector names only this tab's documents (scheme vscode-remote, or no scheme, which patch 0033 narrows to vscode-remote), no notebook type, RelativePattern, built-in claim or unknown key; the hover markdown the tab returns passes through seclabFromTab before it reaches the hover widget: command: links become the token command, which runs under the command verdict or in the tab, isTrusted enables only that command, HTML is off and images other than data: are dropped",
+          "constraint": "the selector is plain filters (short-string scheme, language and pattern, boolean exclusive and isBuiltin; no notebook type, RelativePattern or unknown key), and patch 0033 keeps only this tab's documents: a filter for another scheme is dropped and an absent scheme becomes vscode-remote (seclabFromTab.selector); isBuiltin, which every bundled extension sends, only lowers the provider's priority; the hover markdown the tab returns passes through seclabFromTab before it reaches the hover widget: command: links become the token command, which runs under the command verdict or in the tab, isTrusted enables only that command, HTML is off and images other than data: are dropped",
           "validator": "tabHoverProvider",
           "response": "seclabFromTab",
           "response_patch": "0033-seclab-sanitise-tab-provider-results.patch",
           "response_wiring": [
             "hoverProvider.register(this._seclabSelector(selector)",
-            "contents: hover.contents.map(c => seclab.markdown(c))"
+            "contents: hover.contents.map(c => seclab.markdown(c))",
+            "return this._seclabFromTab ? this._seclabFromTab.selector(selector) : selector;"
           ],
           "rationale": "The registry is window-wide, so the selector decides which documents' hovers the tab paints; limited to the tab's own remote documents it cannot paint inside user settings or an output channel. What the tab returns is the risk the response-side control exists for (ADR 20261116-response-side-control): command: links would run on the global ICommandService on a click, and remote images would be fetched by the trusted renderer outside the broker. Both are rewritten in the customer before the widget sees them.",
           "evidence": [
@@ -531,7 +532,8 @@
             "return this._seclabSnippet(mixin(suggestion, newSuggestion, true));",
             "command: seclab.command(item.command)",
             "seclab.markdown(item.documentation)",
-            "!this._seclabFromTab.snippetAllowed(item.insertText)"
+            "!this._seclabFromTab.snippetAllowed(item.insertText)",
+            "return this._seclabFromTab ? this._seclabFromTab.selector(selector) : selector;"
           ],
           "rationale": "An accepted completion item's command runs on the global ICommandService with no origin, a weaker gesture than a click; _inflateSuggestDto carries it from a positional array, which no shape walk over the RPC traffic would find, so the control is applied where the item is built. additionalTextEdits apply to the model the completion was requested in, which the selector limits to the tab's own documents.",
           "evidence": [
