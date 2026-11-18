@@ -185,12 +185,13 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   matching lines had its whole batch refused in a tab (PR review on #52).
 - `0059-seclab-tab-server-environment-stays-in-the-tab.patch`: `remoteAgentEnvironmentChannel.ts`,
   `abstractRemoteAgentService.ts`, `remoteUserDataProfiles.ts`, `remoteFileSystemProviderClient.ts`,
-  `remoteExtensionsScanner.ts`, `extensionManagementServerService.ts`, `nativeExtensionManagementService.ts`
-  and `remote.contribution.ts`. A tab's server names where the window keeps that tab's settings,
+  `remoteExtensionsScanner.ts`, `extensionManagementServerService.ts`, `nativeExtensionManagementService.ts`,
+  `remoteExtensionManagementService.ts`, `remote.contribution.ts`, `nativeMcpRemoteDiscovery.ts`,
+  `mcpCopilotGlobalConfigurationService.ts` and `mcpWorkbenchManagementService.ts`. A tab's server names where the window keeps that tab's settings,
   storage, logs, profiles and extensions. In a tab window every such location must be `vscode-remote`
   on the window's own authority, and is rebuilt from its components (`seclabTabUris` in the filter
-  module). That covers the `getEnvironmentData` reply, the profiles, logger and extension management
-  channels' replies and events, file change events and scanned extensions. Install events from the
+  module). That covers the `getEnvironmentData` reply, the profiles, logger, extension management and MCP
+  management channels' replies and events, MCP discovery, file change events and scanned extensions. Install events from the
   tab lose any gallery entry; the host never installs a package from the tab's file system or from
   the tab's workspace folders ("Install Locally" and friends), nor the packs and dependencies a tab
   extension's manifest names, and the window doesn't retry installs the tab's server reports failed
@@ -198,7 +199,7 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   or drops the event or extension, and logs `data:server-locations`. A refused environment stays a
   failure rather than reading as "no remote", whose callers fall back to host locations. Upstream
   trusted all of it, so a server naming the host user's settings file had the window read it as the
-  tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-18;
+  tab's settings and write the tab's settings into it (reviews R5-17, ENV-1 to ENV-21;
   [EDR](../docs/edr/20261118-tab-server-environment.md)).
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this

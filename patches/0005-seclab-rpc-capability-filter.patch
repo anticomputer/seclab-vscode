@@ -3798,7 +3798,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabPolicyData.ts b/sr
 diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts
 --- a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	1969-12-31 19:00:00
 +++ b/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts	2026-11-06 18:50:32
-@@ -0,0 +1,1587 @@
+@@ -0,0 +1,1588 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab-vscode: RPC capability filter.
 + *
@@ -4774,7 +4774,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +/** Whether the walk takes `key` of the object at path `owner` as sent, unchecked. */
 +export type SeclabSkip = (owner: readonly (string | number)[], key: string) => boolean;
 +
-+export type SeclabServerLocationSite = 'environment' | 'profiles' | 'watcher' | 'extensions' | 'extension-management' | 'loggers' | 'host-install';
++export type SeclabServerLocationSite = 'environment' | 'profiles' | 'watcher' | 'extensions' | 'extension-management' | 'loggers' | 'host-install' | 'mcp-discovery' | 'mcp-management';
 +
 +/**
 + * Record that a tab window refused a location its server named outside the tab (patch 0059). The
@@ -4875,11 +4875,12 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +}
 +
 +/**
-+ * The `manifest` of an extension where upstream's extension management client leaves it unrevived
-+ * (`transformIncomingExtension`): an extension that is a reply, an element of one, or the `local` of
-+ * one or of an event's result. Anywhere else it is walked (review ENV-17).
++ * The `manifest` of an extension or MCP server where upstream's management clients leave it
++ * unrevived (`transformIncomingExtension`, `transformIncomingServer`): one that is a reply, an
++ * element of one, or the `local` of one or of an event's result. Anywhere else it is walked
++ * (reviews ENV-17, ENV-20).
 + */
-+function seclabExtensionManifest(owner: readonly (string | number)[], key: string): boolean {
++export function seclabUnrevivedManifest(owner: readonly (string | number)[], key: string): boolean {
 +	return key === 'manifest' && (owner.length === 0
 +		|| (owner.length === 1 && (typeof owner[0] === 'number' || owner[0] === 'local'))
 +		|| (owner.length === 2 && typeof owner[0] === 'number' && owner[1] === 'local'));
@@ -4910,7 +4911,7 @@ diff -ruN a/src/vs/workbench/services/extensions/common/seclabRpcFilter.ts b/src
 +	if (!seclabIsTabAuthority(remoteAuthority)) {
 +		return channel;
 +	}
-+	const checked = seclabTabServerChannel(channel, remoteAuthority, 'extension-management', seclabExtensionManifest);
++	const checked = seclabTabServerChannel(channel, remoteAuthority, 'extension-management', seclabUnrevivedManifest);
 +	return {
 +		call: <T>(command: string, arg?: unknown, token?: CancellationToken) => (command === 'getManifest' ? channel : checked).call<T>(command, arg, token),
 +		listen: <T>(event: string, arg?: unknown): Event<T> => event === 'onInstallExtension' || event === 'onDidInstallExtensions'
