@@ -82,6 +82,7 @@ Copilot's review of the gate PR.
 | CR63-4 | Low | re-validation | The observability-docs step overlaid the generator's product inputs with the old main's, so a regenerated schema change was refused and a stale one passed. | Fixed | Only validator code (`build/`, `tabd/tools/`) is overlaid; a changed product module is refused for review (CR63-6), so neither case is judged against the old main's inputs. |
 | CR63-5 | Medium | gate | `workflow_run`'s `requested` type doesn't fire for a re-run, so an earlier success stood while a re-run was in flight. | Fixed | The gate also runs on `in_progress`; the validator requires that types line. |
 | CR63-6 | Medium | re-validation | Running the merged `tabd/src/obs` modules let a merge end the observability-docs step early with success. | Fixed | A merge that changes a module the validator executes is refused for coordinator review. |
+| CR63-7 | Low | tests | The early-exit scenario's injection wrote through a removed scratch directory and failed silently (left of `&&`), so the self-test passed a weaker scenario. | Fixed | Every gutting is written beside its target and checked, and each gutted scenario's commit is checked before it is judged. |
 
 ## Round RJG7
 A review of the Copilot-review fixes (a workflow change).
