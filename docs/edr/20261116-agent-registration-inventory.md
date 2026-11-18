@@ -390,3 +390,10 @@ head `8a240550`, before the resolver had a shape), with the tab image from that 
 reported the same five providers withheld but **no transport refusal**: the factory's
 `createResolver` call failed before 0015's gate could refuse and log, which is finding CR43-1.
 That build also predates the construction marks, so the run failed on those too, as it should.
+
+**A refusal keeps what it refuses (CR43-5).** After that run, 0018 gained checks before the four
+mutations on the bypass paths (removing the turn, dequeuing, emptying the source queue, reordering
+or removing a queued message), so a refusal no longer costs a tab window its restored history or
+queue. The chat-dispatch probe now also requires each refused arm to leave the session's transcript
+and queue as they were. The change is in the chat service only; patch 0019, which the real-build
+run above exercises, is unchanged since that run.
