@@ -27,7 +27,7 @@ const SCRATCH = process.env.SECLAB_SCRATCH ?? path.join(HERE, '..', '..', '.work
  */
 const REAP_ROOT = process.env.SECLAB_SCRATCH ? path.join(os.homedir(), '.seclab-test', 'harness-hygiene') : SCRATCH;
 /** The harnesses that wipe a run directory and run an editor or tab. */
-const HARNESSES = ['host-terminal.ts', 'reh-push.ts', 'response-probe.ts'];
+const HARNESSES = ['host-terminal.ts', 'reh-push.ts', 'response-probe.ts', 'search-probe.ts'];
 
 function problems(src: string): string[] {
 	const p: string[] = [];

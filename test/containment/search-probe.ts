@@ -30,7 +30,7 @@ import { TabdClient } from '../../tabd/src/client.ts';
 import { DrivenEditor } from '../driver/editor.ts';
 import { checkUserDataDir, ensureVsceImage, lockRun, repoRoot, VSCE_IMAGE } from '../harness.ts';
 import { report, rpcDecisions, type Check } from './assert.ts';
-import { teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
+import { exitOnSignals, reapOrRefuse, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
 const IMAGE = 'seclab-tab-oci:test-containment';
 
@@ -57,6 +57,8 @@ const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manage
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 // ------------------------------------------------------------------ prepare
+// The previous run's manifest is its only record: reap it before wiping the directory.
+reapOrRefuse(base, 'search-probe');
 fs.rmSync(base, { recursive: true, force: true });
 fs.rmSync(userData, { recursive: true, force: true });
 fs.mkdirSync(path.join(ws, '.seclab'), { recursive: true });
@@ -71,6 +73,7 @@ fs.writeFileSync(path.join(ws, 'sub', needle), `the token is ${token}\n`);
 writeSnapshot(base);
 writeManifest(base, { driver: 'oci', userDataDir: userData, stateDirs: [stateDir], workspaces: [ws] });
 let ed: DrivenEditor | undefined;
+exitOnSignals();
 process.on('exit', code => {
 	if (!teardownGate(base) && code === 0) {
 		process.exitCode = 1;
