@@ -9,6 +9,7 @@ test/containment/probe-safety.js:persistence
 test/containment/rogue-extension/probe-safety.js:persistence
 test/containment/rogue-reh/probe-safety.js:persistence
 test/containment/benign-extension/probe-safety.js:persistence
+test/containment/response-probe/probe-safety.js:persistence
 test/containment/probe-safety.test.ts:non-test-host
 test/containment/probe-safety.test.ts:host-secret-path
 
