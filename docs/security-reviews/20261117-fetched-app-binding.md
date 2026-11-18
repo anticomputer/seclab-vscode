@@ -39,3 +39,14 @@ agentic harness the change had not touched.
 | FAB2-6 | Low | Linux driver | The Linux editor tarball was never bound to a commit. | Fixed | The build info beside the tarball goes beside the extracted editor, with this checkout's HEAD as the commit; a REH-only build's info is refused. |
 | FAB2-7 | Low | fetch | The dispatcher hardcoded the branch location, and FAB-1 had no automated test. | Fixed | Usage is checked inside the fetch after the clear; `./seclab fetch --self-test` runs in CI. |
 | FAB2-8 | Info | prompt injection | None found. | No finding | — |
+
+## Round FAB3
+A re-review of the round FAB2 fixes. Nothing at high or above.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| FAB3-1 | Medium | release fetch | `rm -rf dest && mv`: under `set -e` a failed removal skipped the move, yet the marker was cleared and the fetch reported success. | Fixed | Each install step is checked on its own; the marker is cleared only after both. |
+| FAB3-2 | Medium | checkout | A `.git` planted at or above the app could choose the HEAD it was compared with, and move the release rule and its marker away. | Fixed | A nested checkout counts only as a direct child of `.work` holding the app in its own `.work`; the release rule and its marker stay this checkout's. |
+| FAB3-3 | Low | marker | The marker write followed a symlink. | Fixed | The marker is removed before it is written. |
+| FAB3-4 | Low | local builds | A failed `git status` read as a clean tree. | Fixed | A failed status counts as not clean. |
+| FAB3-5 | Info | prompt injection | None found. | No finding | — |

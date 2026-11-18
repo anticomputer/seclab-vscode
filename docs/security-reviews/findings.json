@@ -18164,6 +18164,78 @@
 				"file": "docs/security-reviews/20261117-fetched-app-binding.md",
 				"quote": "| FAB2-8 | Info | prompt injection | None found."
 			}
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB3-1",
+			"round": "Round FAB3",
+			"severity": "medium",
+			"summary": "A failed removal skipped the install, yet cleared the marker.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "an earlier app that couldn't be removed still cleared the marker (FAB3-1)"
+			},
+			"commit": "patch:d074d4d7f03e98ba2e554773daa53deee4945c96"
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB3-2",
+			"round": "Round FAB3",
+			"severity": "medium",
+			"summary": "A planted .git could choose the HEAD an app is compared with.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "test/app-build.test.ts",
+				"name": "fetched-app binding: a .git planted beside an app does not choose its HEAD (FAB3-2)"
+			},
+			"commit": "patch:d074d4d7f03e98ba2e554773daa53deee4945c96"
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB3-3",
+			"round": "Round FAB3",
+			"severity": "low",
+			"summary": "The marker write followed a symlink.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "the marker was written through a symlink (FAB3-3)"
+			},
+			"commit": "patch:d074d4d7f03e98ba2e554773daa53deee4945c96"
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB3-4",
+			"round": "Round FAB3",
+			"severity": "low",
+			"summary": "A failed git status read as a clean tree.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:d074d4d7f03e98ba2e554773daa53deee4945c96",
+			"gap": "Build-script plumbing; needs a full Linux build to exercise."
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB3-5",
+			"round": "Round FAB3",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-fetched-app-binding.md",
+				"quote": "| FAB3-5 | Info | prompt injection | None found."
+			}
 		}
 	]
 }
