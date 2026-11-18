@@ -212,7 +212,7 @@ test('the patch gates the queued path, which never reaches the dispatch function
 	// function, and before the four mutations a refusal must not leave behind (resend, drain,
 	// migration, send-now), and from nowhere else.
 	assert.equal((added.match(/this\.seclabCheckSession\(sessionResource\);/g) ?? []).length, 4);
-	assert.equal((added.match(/this\.seclabCheckSession\(/g) ?? []).length, 7);
+	assert.equal((added.match(/this\.seclabCheckSession\(/g) ?? []).length, 8);
 
 	// The queued call must sit inside the `options?.queue` branch, above the queueing itself,
 	// or the message is already on its way to the host by the time it is checked. Ordering is
@@ -312,8 +312,12 @@ test('a refusal on a bypass path comes before the transcript or the queue is cha
 	};
 	before('+\t\tthis.seclabCheckSession(model.sessionResource);', 'const cts = this._pendingRequests.get(request.session.sessionResource);', 'resend');
 	before('+\t\t\tthis.seclabCheckSession(model.sessionResource);', 'model.dequeueSteeringBatch()', 'drain');
-	before('+\t\tthis.seclabCheckSession(targetResource);', '// Remove each remaining pending request from the original session', 'migration');
-	before('cancelled or the message removed', 'if (this._isServerManagedQueue(sessionResource)) {', 'send-now');
+	before('+\t\t\tthis.seclabCheckSession(targetResource);', '// Remove each remaining pending request from the original session', 'migration');
+	// Anchored on the call itself and on the first upstream line after it, never on comment text,
+	// so moving the check below the reorder or removal fails here (review round 17).
+	assert.match(patch, /\+\t\tthis\.seclabCheckSession\(sessionResource\);\n \n \t\tif \(this\._isServerManagedQueue\(sessionResource\)\) \{/, 'send-now: the check must be the line before the reorder/remove split');
+	// A migration checks BOTH ends, source first: the text is the source session's (round 17).
+	assert.match(patch, /\+\t\t\tthis\.seclabCheckSession\(originalResource\);\n\+\t\t\tthis\.seclabCheckSession\(targetResource\);/);
 	// The drain checks only when something is queued: restoring a session drains, and an empty
 	// queue in a tab window must not throw.
 	assert.match(patch, /\+\t\tif \(model\.getPendingRequests\(\)\.length\) \{\n\+\t\t\tthis\.seclabCheckSession\(model\.sessionResource\);/);
