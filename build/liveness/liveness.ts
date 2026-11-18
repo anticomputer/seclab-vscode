@@ -1257,7 +1257,17 @@ export async function check(files: string[], read: (f: string) => string, opts: 
 			} else if (!p || typeof p !== 'object' || Object.keys(p).sort().join(',') !== 'proof,since' || !realPastDate(p.since) || !Number.isSafeInteger(p.proof) || p.proof! <= 0) {
 				errors.push(`subject ${s.id}: pending needs exactly since (a real, past YYYY-MM-DD) and proof (the proof PR's number)`);
 			} else {
-				notes.push(`pending: ${s.id} since ${p.since}; proof PR ${p.proof} records its first run (the weekly refresh fails after ${PENDING_DAYS} days)`);
+				// Append-only against the base register (RJG-13): a later change can't re-date it, and
+				// a subject the base already had can't become pending.
+				const was = opts.base ? (opts.base.subjects ?? []).find(x => x && x.id === s.id) : undefined;
+				const wasSince = (was?.pending as Partial<Pending> | undefined)?.since;
+				if (was && wasSince === undefined) {
+					errors.push(`subject ${s.id}: the base register has it without pending; pending can't be added back`);
+				} else if (wasSince !== undefined && wasSince !== p.since) {
+					errors.push(`subject ${s.id}: pending since can't change (the base register has ${String(wasSince)})`);
+				} else {
+					notes.push(`pending: ${s.id} since ${p.since}; proof PR ${p.proof} records its first run (the weekly refresh fails after ${PENDING_DAYS} days)`);
+				}
 			}
 		}
 		for (const e of s.evidence) {
@@ -1684,6 +1694,25 @@ async function selfTest(): Promise<void> {
 		injections.push(['RJG pending with an extra key', pend({ pending: { since: '2026-11-01', proof: 7, days: 99 } as unknown as Pending }), /pending needs exactly since/]);
 		injections.push(['RJG pending kept beside run evidence', pend({ evidence: [{ run: 5, workflow: 'gate.yml', sha: 'a'.repeat(40), date: '2026-11-02', event: 'workflow_run' }] }), /has run evidence; drop pending/]);
 		injections.push(['RJG workflow_run evidence for a dispatch workflow', withReg({ ...reg(), subjects: reg().subjects.map(x => x.id === 'workflow:weekly' ? { ...x, evidence: x.evidence.map(e => ({ ...e, event: 'workflow_run' as const })) } : x) }), /event: workflow_run is only for/]);
+		{ // RJG-13: re-dating against the base register, or making a known subject pending, fails
+			const baseReg = (since?: string) => {
+				const r = reg();
+				r.subjects = [...r.subjects, { id: 'workflow:gate', runBy: 'x', evidence: since ? [] : [{ run: 5, workflow: 'gate.yml', sha: 'a'.repeat(40), date: '2026-11-02', event: 'workflow_run' }], ...(since ? { pending: { since, proof: 7 } } : {}) } as Subject];
+				return r;
+			};
+			const same = await run(pend({}), baseReg('2026-11-01'));
+			if (same.errors.length) {
+				throw new Error(`self-test: an unchanged pending entry was refused against its base:\n${same.errors.join('\n')}`);
+			}
+			const redated = await run(pend({ pending: { since: '2026-11-03', proof: 7 } }), baseReg('2026-11-01'));
+			if (!redated.errors.some(e => /pending since can't change \(the base register has 2026-11-01\)/.test(e))) {
+				throw new Error('self-test: RJG-13 a re-dated pending entry passed');
+			}
+			const readded = await run(pend({}), baseReg());
+			if (!readded.errors.some(e => /pending can't be added back/.test(e))) {
+				throw new Error('self-test: RJG-13 pending added back to a proven subject passed');
+			}
+		}
 		injections.push(['RJG gate with no subject', withReg(reg(), { '.github/workflows/gate.yml': gateYml }), /workflow:gate .* add it to/]);
 	}
 	for (const [name, tree, want] of injections) {
