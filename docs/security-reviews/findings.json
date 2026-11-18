@@ -16316,7 +16316,7 @@
 			"summary": "Re-dating a pending row, or deleting and re-adding it, restarted its seven days",
 			"component": "findings register: expiry",
 			"status": "fixed",
-			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"commit": "715d0fbeb13e",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a re-dated or re-added pending row is judged from its first commit (HHHH-5)"
@@ -16331,7 +16331,7 @@
 			"summary": "An empty list of main's records was read as nothing on main",
 			"component": "findings register: main's records",
 			"status": "fixed",
-			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"commit": "715d0fbeb13e",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an empty main record list fails closed like a missing one (HHHH-6)"
@@ -16346,7 +16346,7 @@
 			"summary": "A date a day ahead stretched the pending window, and an impossible date was reported as a future one",
 			"component": "findings register: dates",
 			"status": "fixed",
-			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"commit": "715d0fbeb13e",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a pending row with an impossible date says so (HHHH-7)"
@@ -16377,7 +16377,7 @@
 			"component": "findings register: row keys",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"commit": "715d0fbeb13e",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a row key without record and anchor is never pending"
@@ -16392,7 +16392,7 @@
 			"component": "findings register: dates",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"commit": "715d0fbeb13e",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "is reported, not thrown (PR #58 review)"
@@ -16407,7 +16407,7 @@
 			"component": "findings register: dates",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"commit": "715d0fbeb13e",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a pending row dated tomorrow fails (PR #58 review)"
@@ -16422,7 +16422,7 @@
 			"component": "findings register: first seen",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"commit": "715d0fbeb13e",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "first-seen dates read rows as the gate does: backticks, spacing and escaped pipes (PR #58 review)"
@@ -16437,7 +16437,7 @@
 			"component": "findings register: first seen",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"commit": "715d0fbeb13e",
 			"test": {
 				"file": "seclab",
 				"name": "the history isn't oldest first"
@@ -16452,7 +16452,7 @@
 			"component": "findings register: first seen",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"commit": "715d0fbeb13e",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a pending row dated before its first commit and later re-dated keeps its first date (PRR58-6)"
@@ -16467,7 +16467,7 @@
 			"component": "findings register: first seen",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21",
+			"commit": "715d0fbeb13e",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an impossible historical date never becomes the first date (PRR58-7)"
@@ -16482,12 +16482,12 @@
 			"component": "findings register: grandfathering",
 			"owner": "register",
 			"status": "fixed-before-landing",
-			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"commit": "514e717c28e2",
 			"test": {
 				"file": "seclab",
 				"name": "naming a fix already on main skipped the evidence (IIII-3)"
 			},
-			"preFix": "patch:5d33e10bebac7269e42d48c0020d033705ee6ca2",
+			"preFix": "c2dc6c7a499a",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261110-security-findings-register.md",
 				"quote": "naming a fix already on main skipped the evidence (IIII-3) failed on the reviewed commit and passes with the fix"
@@ -16502,7 +16502,7 @@
 			"component": "findings register: main",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"commit": "514e717c28e2",
 			"test": {
 				"file": "seclab",
 				"name": "findings_check doesn't run the own-fix check against its base (IIII-7, IIII-4)"
@@ -16517,7 +16517,7 @@
 			"component": "findings register: evidence",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"commit": "514e717c28e2",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "dropping a fixed entry preFix evidence fails (IIII-5)"
@@ -16532,7 +16532,7 @@
 			"component": "findings register: severity",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"commit": "514e717c28e2",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a key raised to high in this change is listed for the own-fix check (IIII-6)"
@@ -16547,7 +16547,7 @@
 			"component": "findings register: wiring",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"commit": "514e717c28e2",
 			"test": {
 				"file": "seclab",
 				"name": "findings_check doesn't run the own-fix check against its base (IIII-7, IIII-4)"
@@ -16562,7 +16562,7 @@
 			"component": "findings register: resolution",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"commit": "514e717c28e2",
 			"test": {
 				"file": "seclab",
 				"name": "a patch: preFix passed (IIII-8)"
@@ -16577,7 +16577,7 @@
 			"component": "findings register: wiring",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"commit": "514e717c28e2",
 			"test": {
 				"file": "seclab",
 				"name": "findings_check doesn't judge fixed-before-landing against its base (GGGG-8)"
@@ -16592,7 +16592,7 @@
 			"component": "findings register: test strength",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"commit": "514e717c28e2",
 			"test": {
 				"file": "seclab",
 				"name": "the control (the same base by SHA) failed (IIII-10)"
@@ -16607,7 +16607,7 @@
 			"component": "findings register: test strength",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"commit": "514e717c28e2",
 			"test": {
 				"file": "seclab",
 				"name": "the tripwire matched text outside findings_check (IIII-11)"
@@ -16622,7 +16622,7 @@
 			"component": "findings register: schema",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"commit": "514e717c28e2",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a patch: preFix on a fixed entry fails the schema (IIII-12)"
@@ -16637,7 +16637,7 @@
 			"component": "findings register: grandfathering",
 			"owner": "register",
 			"status": "fixed",
-			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"commit": "514e717c28e2",
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "a grandfathered high that carries a preFix is still listed for its evidence check (PRR61-1)"
