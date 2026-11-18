@@ -1,5 +1,5 @@
 diff --git a/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts b/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts
-index 0842031c..0e5972c5 100644
+index 0842031c..a1296dd8 100644
 --- a/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts
 +++ b/src/vs/workbench/contrib/chat/common/chatService/chatServiceImpl.ts
 @@ -37,6 +37,8 @@ import { isVirtualWorkspace } from '../../../../../platform/workspace/common/vir
@@ -11,7 +11,17 @@ index 0842031c..0e5972c5 100644
  import { IChatEntitlementService } from '../../../../services/chat/common/chatEntitlementService.js';
  import { requiresCopilotAgentHost, IManagedSettingsService } from '../../../../../platform/policy/common/copilotManagedSettings.js';
  import { IAccountPolicyGateService, whenAccountPolicySettled } from '../../../../services/policies/common/accountPolicyService.js';
-@@ -1546,6 +1548,11 @@ export class ChatService extends Disposable implements IChatService {
+@@ -1454,6 +1456,9 @@ export class ChatService extends Disposable implements IChatService {
+ 		if (model.isReadOnly.get() || model.isInputBlocked.get()) {
+ 			return;
+ 		}
++		// seclab patch 0018: also checked before the in-flight request is cancelled and the turn
++		// removed, so a refused retry keeps the transcript (PR #43 review).
++		this.seclabCheckSession(model.sessionResource);
+ 
+ 		const cts = this._pendingRequests.get(request.session.sessionResource);
+ 		if (cts) {
+@@ -1546,6 +1551,11 @@ export class ChatService extends Disposable implements IChatService {
  	}
  
  	private async sendRequestInternal(sessionResource: URI, request: string, options: IChatSendRequestOptions | undefined, isSubmission: boolean): Promise<ChatSendResult> {
@@ -23,7 +33,7 @@ index 0842031c..0e5972c5 100644
  		if (isLocalChatSessionSubjectToManagedPolicy(sessionResource, this._sessionModels.get(sessionResource)?.initialLocation ?? ChatAgentLocation.Chat) && !this.policyInitialized) {
  			await whenAccountPolicySettled(this.accountPolicyGateService);
  		}
-@@ -1638,6 +1645,14 @@ export class ChatService extends Disposable implements IChatService {
+@@ -1638,6 +1648,14 @@ export class ChatService extends Disposable implements IChatService {
  		};
  
  		if (options?.queue) {
@@ -38,7 +48,7 @@ index 0842031c..0e5972c5 100644
  			const queued = this.queuePendingRequest(model, sessionResource, request, options, transferredMode);
  			notifyAccepted();
  			if (!options.pauseQueue) {
-@@ -1839,7 +1854,36 @@ export class ChatService extends Disposable implements IChatService {
+@@ -1839,7 +1857,36 @@ export class ChatService extends Disposable implements IChatService {
  		return newTokenSource.token;
  	}
  
@@ -75,6 +85,39 @@ index 0842031c..0e5972c5 100644
  		const followupsCancelToken = this.refreshFollowupsCancellationToken(sessionResource);
  		let request: ChatRequestModel | undefined;
  		const agentPart = parsedRequest.parts.find((r): r is ChatRequestAgentPart => r instanceof ChatRequestAgentPart);
+@@ -2394,6 +2441,12 @@ export class ChatService extends Disposable implements IChatService {
+ 		if (this._isServerManagedQueue(model.sessionResource)) {
+ 			return;
+ 		}
++		// seclab patch 0018: also checked before anything is dequeued, so a refused drain keeps
++		// the queue (PR #43 review). Only when there is something to dequeue: restoring a session
++		// drains too, and an empty queue is not a request.
++		if (model.getPendingRequests().length) {
++			this.seclabCheckSession(model.sessionResource);
++		}
+ 
+ 		// Dequeue consecutive steering requests from the same initiator and combine them into one
+ 		const steeringRequests = model.dequeueSteeringBatch();
+@@ -2698,6 +2751,9 @@ export class ChatService extends Disposable implements IChatService {
+ 		if (pendingRequests.length === 0) {
+ 			return;
+ 		}
++		// seclab patch 0018: also checked before the source queue is emptied, so a refused
++		// migration keeps it (PR #43 review).
++		this.seclabCheckSession(targetResource);
+ 
+ 		// Remove each remaining pending request from the original session
+ 		for (const pending of pendingRequests) {
+@@ -2833,6 +2889,9 @@ export class ChatService extends Disposable implements IChatService {
+ 		if (!target) {
+ 			return;
+ 		}
++		// seclab patch 0018: also checked before the queue is reordered, the in-flight request
++		// cancelled or the message removed, so a refusal keeps all three (PR #43 review).
++		this.seclabCheckSession(sessionResource);
+ 
+ 		if (this._isServerManagedQueue(sessionResource)) {
+ 			// Agent host queues are drained by the server, which intentionally
 diff --git a/src/vs/platform/agentHost/common/seclabChatSessions.ts b/src/vs/platform/agentHost/common/seclabChatSessions.ts
 new file mode 100644
 index 0000000..0000000
