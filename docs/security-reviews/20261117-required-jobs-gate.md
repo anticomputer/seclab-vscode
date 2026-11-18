@@ -80,3 +80,11 @@ Copilot's review of the gate PR.
 | CR63-2 | Medium | gate | An API read failure exited before the status post, leaving an earlier `success`. | Fixed | An EXIT trap posts `failure` on any error before the final post. |
 | CR63-3 | Low | owner report | The case-variant check was a `grep -q` pipeline, which can fail open under `pipefail` with a long list. | Fixed | A captured, pipeline-free check. |
 | CR63-4 | Low | re-validation | The observability-docs step overlaid the generator's product inputs with the old main's, so a regenerated schema change was refused and a stale one passed. | Fixed | Only validator code (`build/`, `tabd/tools/`) is overlaid. |
+
+## Round RJG7
+A review of the Copilot-review fixes (a workflow change).
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| RJG-23 | Low | gate | The EXIT trap doesn't run when the step is cancelled (SIGINT), timed out or killed, so such a run left an earlier success standing. | Fixed | Each run posts pending before it reads anything, and the trap also covers INT and TERM. |
+| RJG-24 | Info | re-validation | With only `build/` and `tabd/tools/` overlaid, the observability-docs step runs the merged `tabd/src/obs` modules (contained: no network, read-only); no validator's decision logic is swappable, since every other closure is under `build/`. | Accepted residual | That step checks the merged docs against the merged code, which is its intent. |
