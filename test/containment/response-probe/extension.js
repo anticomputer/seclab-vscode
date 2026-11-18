@@ -17,6 +17,9 @@
 // - hover images in three forms (plain, nested, inside a <span> HTML block), each naming its own
 //   loopback port from the targets file. The harness counts TCP connections on each.
 //
+// - a completion item whose resolved label carries an own `__proto__` key on the wire (PRC-3),
+//   which a recursive merge in the trusted renderer follows into Object.prototype.
+//
 // Inert unless armed: the workspace's .seclab/targets must carry this run's nonce, a run
 // directory that contains the workspace, and an unexpired `until`.
 const fs = require('node:fs');
@@ -105,6 +108,40 @@ exports.activate = async function (context) {
 				return [item];
 			},
 		}, '@', '#'));
+		// PRC-3 (PR review on #48): resolving this item returns a label object that, on the wire, carries
+		// an own `__proto__` key. No API field can hold that key, but an extension shares its extension
+		// host's realm, so for this one reply it rewrites JSON.stringify's output (the RPC protocol
+		// serialises replies with it). A recursive merge in the trusted renderer then writes
+		// `seclabPrc3Polluted` onto its Object.prototype; the harness asks the renderer whether it did.
+		const PROTO_MARK = 'SECLABPROTOMARK';
+		context.subscriptions.push(vscode.languages.registerCompletionItemProvider(selector, {
+			provideCompletionItems() {
+				const item = new vscode.CompletionItem({ label: 'seclabResolveProto', detail: 'pending' }, vscode.CompletionItemKind.Text);
+				item.insertText = '';
+				item.preselect = true;
+				return [item];
+			},
+			resolveCompletionItem(item) {
+				const stringify = JSON.stringify;
+				const restore = setTimeout(() => { JSON.stringify = stringify; }, 5000);
+				JSON.stringify = function (...args) {
+					const out = stringify.apply(JSON, args);
+					if (typeof out === 'string' && out.includes(`"${PROTO_MARK}"`)) {
+						JSON.stringify = stringify;
+						clearTimeout(restore);
+						mark('injected', { injected: true });
+						return out.replace(`"${PROTO_MARK}"`, '"x","__proto__":{"seclabPrc3Polluted":true}');
+					}
+					return out;
+				};
+				// In place: the extension host sends the label it captured before calling resolve.
+				if (item.label && typeof item.label === 'object') {
+					item.label.detail = PROTO_MARK;
+				}
+				mark('resolved', { resolved: true });
+				return item;
+			},
+		}, '^'));
 		context.subscriptions.push(vscode.languages.registerHoverProvider(selector, {
 			provideHover() {
 				const md = new vscode.MarkdownString(`seclab-response-probe [hostlink](command:${HOVER_HOST_COMMAND}) [ownlink](command:${OWN_COMMAND}?${encodeURIComponent(JSON.stringify(['hover']))})\n\n${images}`);
