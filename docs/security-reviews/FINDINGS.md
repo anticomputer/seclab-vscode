@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 212 | 329 | 44 | 683 |
+| fixed | 14 | 84 | 212 | 331 | 44 | 685 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 52 | 161 | 58 | 276 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-| **all** | 16 | 93 | 302 | 583 | 148 | 1142 |
+| **all** | 16 | 93 | 302 | 585 | 148 | 1144 |
 
 ## Baseline: open high and critical findings
 
@@ -2104,6 +2104,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | PRR-20 | low | fixed | lint_probes took the last dot of a spread for member access, so \[...typeof /\[//\]/\] read typeof as a property and the regex's // as a comment that hid a write. | patch:139c6de1faed74efe79e6be8b405ec09d8eb74af · `rpc-filter/tools/test_lint_probes.py` "test_a_comment_after_a_slash_on_its_line_fails_closed" |
 | PRR-21 | low | fixed | lint_probes split payloads with str.splitlines(), which breaks at U+000B and U+0085; a /* after one read as a block comment and hid executable lines from the content rules. | patch:cbf7c638be8743b8ddc01b5441b0afe409763f61 · `rpc-filter/tools/test_lint_probes.py` "test_only_javascript_line_terminators_end_a_comment" |
 | PRR-22 | low | fixed | lint_probes merged two dots into a spread too early, so in 1..return the return read as a keyword and a following slash moved a string boundary. | patch:cbf7c638be8743b8ddc01b5441b0afe409763f61 · `rpc-filter/tools/test_lint_probes.py` "test_a_number_member_is_not_a_spread" |
+| PRR-23 | low | fixed | lint_probes split lines at U+2028/U+2029, which end no line inside a JavaScript string, so a /* after one read as a block comment and hid an executable call. | patch:8fb1846b3ed30a22cab7a52a1345de2eecc4d9c4 · `rpc-filter/tools/test_lint_probes.py` "test_a_literal_line_separator_fails_closed" |
+| PRR-24 | low | fixed | lint_probes applied JavaScript comment syntax to .sh payloads, so a # ... /* line hid the next shell line from the content rules. | patch:8fb1846b3ed30a22cab7a52a1345de2eecc4d9c4 · `rpc-filter/tools/test_lint_probes.py` "test_a_shell_payload_is_not_scanned_as_javascript" |
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 
