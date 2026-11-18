@@ -662,6 +662,6 @@ export class ObsGlue {
 		}
 		this.sessions.clear();
 		this.hub.close();
-		return this.falco?.stop().catch(() => undefined) ?? Promise.resolve();
+		return this.falco?.close().catch(() => undefined) ?? Promise.resolve();
 	}
 }

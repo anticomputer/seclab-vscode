@@ -17,7 +17,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { checkIsolatedProfile, NODE_IMAGE, repoRoot } from '../harness.ts';
 import { sensorOwner } from '../../tabd/src/obs/falco.ts';
-import { hostFalcoOrphans, reapPreviousRun, runLeftovers, runProcesses, strayHelpers, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
+import { awaitGone, hostFalcoOrphans, removeSensorsWithin, reapPreviousRun, runLeftovers, runProcesses, strayHelpers, verifyTeardown, writeManifest, writeSnapshot } from './teardown.ts';
 
 const repo = path.resolve(import.meta.dirname, '../..');
 const base = path.join(repo, '.work', 'teardown-test');
@@ -88,6 +88,35 @@ check('verify passes overall', checks.every(c => c.ok), checks.filter(c => !c.ok
 
 writeSnapshot(runDir);
 check('a clean run verifies clean', verifyTeardown(runDir).every(c => c.ok));
+
+// PS-8: a sensor whose removal is already in progress (by its own tabd) is still listed for a
+// moment, and a second `rm -f` fails at once. The gate waits for it to go, bounded; a failed
+// listing never counts as gone, and one still there after the wait is reported.
+{
+	let clock = 0;
+	const pause = (s: number) => {
+		clock += s * 1000;
+	};
+	let polls = 0;
+	const goneAfter3 = () => (++polls <= 3 ? ['seclab-falco-0123abcd-7', 'seclab-falco-ffffffff-8'] : ['seclab-falco-ffffffff-8']);
+	check('PS-8: a sensor still being removed is waited for, not reported', awaitGone(['seclab-falco-0123abcd-7'], goneAfter3, pause, 20_000, () => clock) && polls === 4);
+	clock = 0;
+	check('PS-8: one that never goes is reported after the wait', !awaitGone(['seclab-falco-0123abcd-7'], () => ['seclab-falco-0123abcd-7'], pause, 20_000, () => clock) && clock >= 20_000);
+	clock = 0;
+	check('PS-8: a failed listing never counts as gone', !awaitGone(['seclab-falco-0123abcd-7'], () => undefined, pause, 5_000, () => clock));
+	check('PS-8: nothing to wait for returns at once', awaitGone([], () => undefined, pause, 5_000, () => clock));
+	// PS-13: one deadline covers the docker calls too: a stalled daemon (each call takes 15 s, then
+	// times out) ends the wait at 20 s, each call gets only the time left, and that is not "gone".
+	clock = 0;
+	const budgets: number[] = [];
+	const stalled = (_a: string[], ms: number) => {
+		budgets.push(ms);
+		clock += Math.min(ms, 15_000);
+		return undefined;
+	};
+	const ok13 = removeSensorsWithin(['seclab-falco-0123abcd-7', 'seclab-falco-0123abcd-9'], stalled, pause, 20_000, () => clock);
+	check('PS-13: a stalled docker ends at the deadline, never as gone', !ok13 && clock <= 20_000 + 250 && budgets[0] === 20_000 && budgets[1] === 5_000 && budgets.length <= 3, JSON.stringify({ clock, budgets }));
+}
 
 // OCI leftovers: a container labelled as a tab known only from the run's tabd state (not
 // recorded in run.json: T-2b) is found, removed, and the run verifies clean once it's gone.

@@ -626,6 +626,114 @@ test('obs falco: events map to drafts; other containers and non-JSON are ignored
 	hub.close();
 });
 
+test('obs review PS-8: tabd exits only once its Falco container is removed, and starts none after close', async () => {
+	const { FalcoSensor, falcoRules } = await import('../src/obs/falco.ts');
+	const { createHash } = await import('node:crypto');
+	const dir = path.join(SCRATCH, 'falco-ps8');
+	const hub = new ObsHub({});
+	const f = fakeChild();
+	let spawned = 0;
+	let releaseRm: () => void = () => undefined;
+	const rmDone = new Promise<void>(r => {
+		releaseRm = r;
+	});
+	let rmFinished = false;
+	const sensor = new FalcoSensor({
+		hub, rulesDir: dir, name: 'seclab-falco-0a1b2c3d-2', labels: { 'seclab.obs': 'falco', 'seclab.state': '0a1b2c3d' },
+		spawnDocker: () => {
+			spawned++;
+			return f.child;
+		},
+		runDocker: async a => {
+			if (a[0] === 'rm') {
+				await rmDone; // a slow removal (seconds on a loaded CI runner)
+				rmFinished = true;
+			}
+			return { code: 0, stdout: '', stderr: '' };
+		},
+		pidAlive: () => true, readyTimeoutMs: 2000,
+	});
+	const tab = mintTabId();
+	const added = sensor.add(tab, 'a'.repeat(12) + 'b'.repeat(52), false);
+	await tick(20);
+	f.stdout.write(`${JSON.stringify({ rule: 'Falco internal: metrics snapshot', output_fields: { 'falco.sha256_rules_file.rules_yaml': createHash('sha256').update(falcoRules([{ shortId: 'a'.repeat(12), deep: false }])).digest('hex') } })}\n`);
+	await added;
+	// The tab stops (glue calls remove without awaiting it); then the supervisor exits.
+	void sensor.remove(tab);
+	await tick(20);
+	let closed = false;
+	const closing = sensor.close().then(() => {
+		closed = true;
+	});
+	await tick(50);
+	assert.equal(closed, false, 'PS-8: close waits for the removal already in flight');
+	releaseRm();
+	await closing;
+	assert.ok(rmFinished && closed);
+	// Whatever was still queued can't bring Falco back once the supervisor is exiting.
+	const unhandled: unknown[] = [];
+	const onUnhandled = (e: unknown) => unhandled.push(e);
+	process.on('unhandledRejection', onUnhandled);
+	await assert.rejects(sensor.add(tab, 'c'.repeat(64), false), /closed/);
+	assert.equal(spawned, 1, 'PS-8: no Falco started after close');
+	await tick(2200); // past the readiness timeout
+	process.off('unhandledRejection', onUnhandled);
+	assert.deepEqual(unhandled, [], 'PS-9: a refused add leaves no readiness waiter to time out');
+	// PS-12: closed while the first add is still in its stale-sensor cleanup: still refused before
+	// any readiness waiter exists.
+	let releasePs: () => void = () => undefined;
+	const psHeld = new Promise<void>(r => {
+		releasePs = r;
+	});
+	const h = fakeChild();
+	let spawned12 = 0;
+	const slowClean = new FalcoSensor({
+		hub, rulesDir: dir, name: 'seclab-falco-0a1b2c3d-4', labels: { 'seclab.obs': 'falco', 'seclab.state': '0a1b2c3d' },
+		spawnDocker: () => {
+			spawned12++;
+			return h.child;
+		},
+		runDocker: async a => {
+			if (a[0] === 'ps') {
+				await psHeld;
+			}
+			return { code: 0, stdout: '', stderr: '' };
+		},
+		pidAlive: () => true, readyTimeoutMs: 2000,
+	});
+	process.on('unhandledRejection', onUnhandled);
+	const pending12 = slowClean.add(tab, 'a'.repeat(12) + 'b'.repeat(52), false);
+	await tick(20);
+	await slowClean.close();
+	releasePs();
+	await assert.rejects(pending12, /closed/);
+	await tick(2200);
+	process.off('unhandledRejection', onUnhandled);
+	assert.equal(spawned12, 0, 'PS-12: nothing started');
+	assert.deepEqual(unhandled, [], 'PS-12: no readiness waiter left to time out');
+	// PS-10: a removal that failed is not re-thrown to later callers.
+	const g = fakeChild();
+	const failing = new FalcoSensor({
+		hub, rulesDir: dir, name: 'seclab-falco-0a1b2c3d-3', labels: { 'seclab.obs': 'falco', 'seclab.state': '0a1b2c3d' },
+		spawnDocker: () => g.child,
+		runDocker: async a => {
+			if (a[0] === 'rm') {
+				throw new Error('docker gone');
+			}
+			return { code: 0, stdout: '', stderr: '' };
+		},
+		pidAlive: () => true, readyTimeoutMs: 2000,
+	});
+	const added2 = failing.add(tab, 'a'.repeat(12) + 'b'.repeat(52), false);
+	await tick(20);
+	g.stdout.write(`${JSON.stringify({ rule: 'Falco internal: metrics snapshot', output_fields: { 'falco.sha256_rules_file.rules_yaml': createHash('sha256').update(falcoRules([{ shortId: 'a'.repeat(12), deep: false }])).digest('hex') } })}\n`);
+	await added2;
+	await failing.stop();
+	await failing.stop();
+	await failing.close();
+	hub.close();
+});
+
 // ---- security review regressions -------------------------------------------------------------
 
 test('obs review CR16-10: on Linux the owner hash keeps its input order, so earlier labels still match', async t => {
