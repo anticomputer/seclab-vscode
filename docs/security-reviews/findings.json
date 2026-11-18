@@ -17956,7 +17956,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a",
+			"commit": "patch:fbef4bc17bf6d9d319b15326a47ae538accf8d74",
 			"gap": "Call-site wiring; the check itself is unit-tested."
 		},
 		{
@@ -17968,7 +17968,7 @@
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a",
+			"commit": "patch:fbef4bc17bf6d9d319b15326a47ae538accf8d74",
 			"gap": "Probe wiring that needs a real macOS build."
 		},
 		{
@@ -17984,7 +17984,7 @@
 				"file": "test/app-build.test.ts",
 				"name": "fetched-app binding: the release app must be a build of a commit on origin/main"
 			},
-			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a"
+			"commit": "patch:fbef4bc17bf6d9d319b15326a47ae538accf8d74"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18010,7 +18010,7 @@
 				"file": "test/app-build.test.ts",
 				"name": "fetched-app binding: the release app must be a build of a commit on origin/main"
 			},
-			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a"
+			"commit": "patch:fbef4bc17bf6d9d319b15326a47ae538accf8d74"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18025,7 +18025,7 @@
 				"file": "test/app-build.test.ts",
 				"name": "fetched-app binding: a test build runs only from .work/test-builds, and GIT_DIR is ignored"
 			},
-			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a"
+			"commit": "patch:fbef4bc17bf6d9d319b15326a47ae538accf8d74"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18040,7 +18040,7 @@
 				"file": "test/app-build.test.ts",
 				"name": "fetched-app binding: a test build runs only from .work/test-builds, and GIT_DIR is ignored"
 			},
-			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a"
+			"commit": "patch:fbef4bc17bf6d9d319b15326a47ae538accf8d74"
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
