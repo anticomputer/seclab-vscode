@@ -44,7 +44,7 @@ const MODE = process.env.PROBE_MODE === 'gated' ? 'gated' : 'baseline';
 const COVERED = [
 	'cloudSandboxTelemetryService', 'cloudSandboxApiService', 'cloudSandboxDraftPreparationService',
 	'cloudSandboxModelCatalogService', 'cloudSandboxAgentHostService', 'missionControlEnvironmentService',
-	'missionControlSharingService', 'missionControlEnvironmentService',
+	'missionControlSharingService', 'missionControlAvailabilityService',
 	'remoteAgentHostConnectionCustomizationService', 'agentHostAdvertisedAuthenticationResolver',
 ];
 
@@ -75,7 +75,21 @@ const AGENT_REGISTERING = 'workbench.contrib.remoteAgentHostContribution';
 interface Finding { readonly check: string; readonly verdict: 'vulnerable' | 'contained'; readonly detail: unknown }
 const findings: Finding[] = [];
 const shapeProblems: string[] = [];
+/**
+ * The probe could not look at something it is meant to look at: a name it lists twice, a
+ * provider or contribution not registered under the id it expects, a registry it cannot read.
+ * These fail BOTH arms. Recording them as `vulnerable` would let the baseline control pass on a
+ * lookup failure, so the control would stop controlling (PR #43 review).
+ */
+const measurementProblems: string[] = [];
 const add = (check: string, verdict: Finding['verdict'], detail: unknown) => findings.push({ check, verdict, detail });
+
+for (const [what, names] of [['COVERED', COVERED], ['CONTRIBUTIONS', CONTRIBUTIONS], ['CONTRIBUTION_SHAPE_NAMES', CONTRIBUTION_SHAPE_NAMES]] as const) {
+	const dupes = names.filter((n, i) => names.indexOf(n) !== i);
+	if (dupes.length) {
+		measurementProblems.push(`${what} lists ${dupes.join(', ')} more than once, so it checks fewer things than it counts`);
+	}
+}
 
 // ---------------------------------------------------------------------------------------
 // 1. What the real registry actually holds, read back rather than assumed.
@@ -93,7 +107,7 @@ if (covered.length !== COVERED.length) {
 	// Upstream renamed or moved a provider. Fail rather than quietly checking fewer things:
 	// a probe that silently narrows its own scope is the failure mode this project keeps
 	// finding, so this is an error in both modes.
-	add('providers-present', 'vulnerable', { expected: COVERED.length, found: covered.length, missing: COVERED.filter(n => !registered.has(n)) });
+	measurementProblems.push(`providers not registered under the expected id: ${COVERED.filter(n => !registered.has(n)).join(', ')}`);
 } else if (unguarded.length) {
 	add('providers-guarded', 'vulnerable', { unguarded, ctors: unguarded.map(n => registered.get(n)) });
 } else {
@@ -128,7 +142,7 @@ const sample = (() => {
 })();
 
 if (!sample) {
-	add('provider-construction', 'vulnerable', { reason: 'the sampled provider is not registered at all' });
+	measurementProblems.push('the sampled provider, missionControlEnvironmentService, is not registered at all');
 } else if (registered.get('missionControlEnvironmentService') !== GUARD) {
 	// Baseline: there is no guard, so a tab window gets the real provider. Constructing the
 	// real one here would reach its own dependency graph, which is not what is under test;
@@ -160,14 +174,22 @@ const contributionCtors = new Map<string, string>();
 	if (!(byId instanceof Map)) {
 		// Upstream changed how contributions are stored. Fail in both modes rather than check
 		// nothing and report containment.
-		add('contributions-readable', 'vulnerable', { reason: 'the workbench contributions registry could not be read' });
+		measurementProblems.push('the workbench contributions registry could not be read');
 	} else {
 		for (const id of CONTRIBUTIONS) {
-			contributionCtors.set(id, byId.get(id)?.ctor?.name ?? '<not registered>');
+			const ctor = byId.get(id)?.ctor;
+			if (!ctor) {
+				// A wrong id or a moved registration is a lookup failure, not a live contribution.
+				measurementProblems.push(`no contribution is registered under ${id}`);
+				continue;
+			}
+			contributionCtors.set(id, ctor.name ?? '<anonymous>');
 		}
-		const unguarded = CONTRIBUTIONS.filter(id => contributionCtors.get(id) !== GUARD);
-		add('contributions-guarded', unguarded.length ? 'vulnerable' : 'contained',
-			{ ctors: Object.fromEntries(contributionCtors), unguarded });
+		const unguarded = CONTRIBUTIONS.filter(id => contributionCtors.has(id) && contributionCtors.get(id) !== GUARD);
+		if (contributionCtors.size === CONTRIBUTIONS.length) {
+			add('contributions-guarded', unguarded.length ? 'vulnerable' : 'contained',
+				{ ctors: Object.fromEntries(contributionCtors), unguarded });
+		}
 	}
 }
 
@@ -180,7 +202,7 @@ const remoteCtor = (() => {
 })();
 
 if (!remoteCtor) {
-	add('forged-agent-id', 'vulnerable', { reason: 'the agent-registering contribution is not registered under the expected id' });
+	measurementProblems.push(`the agent-registering contribution is not registered under ${AGENT_REGISTERING}`);
 } else if (contributionCtors.get(AGENT_REGISTERING) !== GUARD) {
 	add('forged-agent-id', 'vulnerable', {
 		ctor: contributionCtors.get(AGENT_REGISTERING),
@@ -223,8 +245,12 @@ const actual = vulnerable.length ? 'vulnerable' : 'contained';
 const expected = MODE === 'baseline' ? 'vulnerable' : 'contained';
 const ok = MODE === 'baseline' ? baselineOk : actual === 'contained';
 
-console.log(JSON.stringify({ mode: MODE, actual, expected, shapeProblems, findings }, undefined, '\t'));
+console.log(JSON.stringify({ mode: MODE, actual, expected, measurementProblems, shapeProblems, findings }, undefined, '\t'));
 
+if (measurementProblems.length) {
+	console.error(`agent-registration probe: ${measurementProblems.length} measurement problem(s), so nothing this arm reports is evidence:\n  ${measurementProblems.join('\n  ')}`);
+	process.exit(1);
+}
 if (shapeProblems.length) {
 	console.error(`agent-registration probe: ${shapeProblems.length} shape problem(s):\n  ${shapeProblems.join('\n  ')}`);
 	process.exit(1);
