@@ -381,6 +381,17 @@ test('response: only link destinations named command: are rewritten (review on #
 	assert.ok(m, out);
 	await run(tokenOf(m[1]));
 	assert.deepEqual(ran, [['pub.ext.own', [1]]]);
+	// A bare reference destination ends at whitespace, so a `)` in its arguments is kept.
+	const ref = s.markdown({ value: '[run][r]\n\n[r]: command:pub.ext.own?%5B%22a)b%22%5D' }).value;
+	const rm = ref.match(/\[r\]: (command:_seclab\.tabCommand\?\S+)$/);
+	assert.ok(rm, ref);
+	ran.length = 0;
+	await run(tokenOf(rm[1]));
+	assert.deepEqual(ran, [['pub.ext.own', ['a)b']]]);
+	// An angle-bracket reference destination keeps its brackets.
+	for (const value of ['[docs][r]\n\n[r]: <https://example.test/a b>', '[docs][r]\n\n[r]: <docs/README.md>']) {
+		assert.equal(s.markdown({ value }).value, value);
+	}
 });
 
 test('response: code in tab markdown is shown as written; everything else is still escaped (review on #48)', () => {
@@ -569,6 +580,8 @@ if (!process.env.SECLAB_FILTER_SRC_DIR) {
 		['every command: is rewritten', 'if (onlyDestinations && !SECLAB_DESTINATION_BEFORE.test(', 'if (false && !SECLAB_DESTINATION_BEFORE.test('],
 		['oversized markdown is rewritten whole', 'return rewrite(value.slice(0, SECLAB_MARKDOWN_MAX), false);', 'return rewrite(value, false);'],
 		['email autolinks are escaped', "|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@", "|(?!)[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"],
+		['a bare reference ends at a parenthesis', "const bareRef = !angle && /", 'const bareRef = false && /'],
+		['angle reference destinations are escaped', '/\\](?:\\(|:)\\s*$/.test(text.slice(', '/\\]\\(\\s*$/.test(text.slice('],
 		['a resolved key may be __proto__', "if (key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {", 'if (true) {'],
 		['the result is not lexed again', 'return seclabRendersInert(kept) ? kept : all;', 'return kept;'],
 		['the renderer\'s length cut is ignored', 'if (md.length > SECLAB_MARKDOWN_MAX) {', 'if (false) {'],
