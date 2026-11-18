@@ -1177,8 +1177,11 @@ const SECLAB_IMAGE_OPEN = /!\[/g;
 const SECLAB_HTML_OPEN = /<(?=[A-Za-z/!?])/g;
 /** A link destination in angle brackets, right after `](`: `<` then no `<`, `>` or newline, then `>`. */
 const SECLAB_ANGLE_DESTINATION = /^<[^<>\n\\]*>/;
-/** A URI autolink as CommonMark has it: `<`, a scheme, `:`, no space, `<` or `>`, then `>`. */
-const SECLAB_AUTOLINK = /^<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>/;
+/**
+ * A URI autolink as CommonMark has it (`<`, a scheme, `:`, no space, `<` or `>`, then `>`), or an
+ * email autolink (`<first!last@example.test>`).
+ */
+const SECLAB_AUTOLINK = /^<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*)>/;
 
 /**
  * Every tag opener becomes an entity; with `keepLinks`, not the `<` of an angle link destination
@@ -1210,12 +1213,13 @@ interface SeclabMdToken { readonly type: string; readonly raw?: string; readonly
  * every part of the source is rewritten instead, code included, as before.
  */
 function seclabOutsideCode(value: string, rewrite: (s: string, keepLinks: boolean) => string): string {
-	const all = rewrite(value, false);
-	// Past the renderer's cut it would lex only a prefix, and lexing all of it here could freeze
-	// the window: no lexer runs on oversized input (PR review on #48).
+	// Past the renderer's cut it would show only a prefix, and rewriting or lexing all of it here
+	// could freeze the window: oversized input is cut to that prefix first, then escaped whole,
+	// with no lexer run (PR review on #48).
 	if (value.length > SECLAB_MARKDOWN_MAX) {
-		return all;
+		return rewrite(value.slice(0, SECLAB_MARKDOWN_MAX), false);
 	}
+	const all = rewrite(value, false);
 	try {
 		const src = value.replace(/\r\n?/g, '\n');
 		const code: Array<[number, number]> = [];

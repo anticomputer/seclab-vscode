@@ -282,6 +282,11 @@ test('response: oversized tab markdown never reaches the lexer (review on #48)',
 	const out = s.markdown({ value: 'a'.repeat(100_001) + ' <img src="https://example.test/x.png">' }).value;
 	assert.equal((globalThis as any).seclabLexerRuns, 0);
 	assert.doesNotMatch(out, OPENS_IMAGE_OR_TAG);
+	// Rewriting is bounded too: only the prefix the renderer would show mints tokens.
+	const many = s.markdown({ value: 'command:pub.ext.own '.repeat(30_000) }).value;
+	const minted = many.split(`command:${F.SECLAB_TAB_COMMAND}?`).length - 1;
+	assert.ok(minted > 0 && minted <= Math.ceil(100_000 / 'command:pub.ext.own '.length), `${minted} tokens minted for oversized markdown`);
+	assert.equal((globalThis as any).seclabLexerRuns, 0);
 });
 
 test('response: angle-bracket link destinations keep working (review on #48)', async () => {
@@ -345,6 +350,19 @@ test('response: a URI autolink stays a link, and a command autolink runs the tok
 	assert.deepEqual(ran, [['pub.ext.own', [1]]]);
 	// Tag-like text that is no autolink is still escaped.
 	assert.doesNotMatch(s.markdown({ value: '<img src="https://example.test/a.png">' }).value, OPENS_IMAGE_OR_TAG);
+});
+
+test('response: an email autolink keeps its whole address under either GFM setting (review on #48)', async () => {
+	const { Marked } = await import(pathToFileURL(MARKED).href);
+	const s = F.seclabFromTab(AUTH, async () => undefined);
+	const out = s.markdown({ value: 'mail <first!last@example.test> today' }).value;
+	assert.equal(out, 'mail <first!last@example.test> today');
+	for (const gfm of [true, false]) {
+		const hrefs: string[] = [];
+		const m = new Marked();
+		m.walkTokens(m.lexer(out, { ...m.defaults, gfm }), (t: { type: string; href?: string }) => { if (t.type === 'link') { hrefs.push(t.href ?? ''); } });
+		assert.deepEqual(hrefs, ['mailto:first!last@example.test'], `gfm ${gfm}`);
+	}
 });
 
 test('response: only link destinations named command: are rewritten (review on #48)', async () => {
@@ -542,13 +560,15 @@ if (!process.env.SECLAB_FILTER_SRC_DIR) {
 		['an unknown token runs', "if (!entry) {\n\t\tthrow denied();", "if (!entry) {\n\t\treturn undefined;"],
 		['a host scheme stays in the selector', ".filter(f => f.scheme === undefined || f.scheme === 'vscode-remote')", ".filter(() => true)"],
 		['code is escaped like text', 'kept += rewrite(src.slice(at, start), true) + src.slice(start, end);', 'kept += rewrite(src.slice(at, end), true);'],
-		['oversized markdown is lexed', 'if (value.length > SECLAB_MARKDOWN_MAX) {\n\t\treturn all;', 'if (false) {\n\t\treturn all;'],
+		['oversized markdown is lexed', 'if (value.length > SECLAB_MARKDOWN_MAX) {\n\t\treturn rewrite(', 'if (false) {\n\t\treturn rewrite('],
 		['angle link destinations are escaped', '&& SECLAB_ANGLE_DESTINATION.test(text.slice(i)))', '&& false)'],
 		['an angle destination ends at a parenthesis', "const angle = m.index > 0 && value[m.index - 1] === '<';", 'const angle = false;'],
 		['every tab failure is a refusal', "if (SECLAB_TAB_LACKS_COMMAND.test(err instanceof Error ? err.message : '')) {", 'if (true) {'],
 		['no tab failure is a refusal', "if (SECLAB_TAB_LACKS_COMMAND.test(err instanceof Error ? err.message : '')) {", 'if (false) {'],
 		['autolinks are escaped', '|| SECLAB_AUTOLINK.test(text.slice(i))) ? lt', '|| false) ? lt'],
 		['every command: is rewritten', 'if (onlyDestinations && !SECLAB_DESTINATION_BEFORE.test(', 'if (false && !SECLAB_DESTINATION_BEFORE.test('],
+		['oversized markdown is rewritten whole', 'return rewrite(value.slice(0, SECLAB_MARKDOWN_MAX), false);', 'return rewrite(value, false);'],
+		['email autolinks are escaped', "|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@", "|(?!)[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"],
 		['a resolved key may be __proto__', "if (key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {", 'if (true) {'],
 		['the result is not lexed again', 'return seclabRendersInert(kept) ? kept : all;', 'return kept;'],
 		['the renderer\'s length cut is ignored', 'if (md.length > SECLAB_MARKDOWN_MAX) {', 'if (false) {'],
