@@ -1,7 +1,7 @@
 // The response-side control (ADR 20261116-response-side-control), proven in a real OCI tab of
 // the containment test build, driven headlessly.
 //
-//   node test/containment/response-probe.ts pre-control|control <user-data-dir> --app <test app.app>
+//   node test/containment/response-probe.ts pre-control|reviewed|resolve-reviewed|control <user-data-dir> --app <test app.app>
 //
 // The tab image is seclab-tab-oci:test-containment, built from the same run's REH. The run
 // refuses an image without the containment variant's hooks.
@@ -35,6 +35,13 @@
 // canary (pre-control also fetches the plain image). Control: no image port sees a connection,
 // and the snippet inserts the variable as literal text.
 //
+// PRC-3 (PR review on #48), judged in a fourth mode, `resolve-reviewed` (the reviewed commit of
+// #48, otherwise a control build): a completion item accepted with `^` whose resolve reply carries
+// an own `__proto__` key in its label object. Every build before the fix merged the resolved item
+// with upstream's recursive `mixin`, which follows that key into the trusted renderer's
+// Object.prototype; the harness asks the renderer, through the driver, only whether
+// `Object.prototype` has the key. Control: it doesn't, and the reply did carry the key.
+//
 // Inert beyond the escape it measures (EDR fixture safety): the extension writes markers only
 // in its own workspace, no network target exists, and teardown stops the editor's whole tree
 // (including any host shell the pre-control build opened) and removes the tab and profile.
@@ -58,8 +65,8 @@ const COMPLETION_REF = 'cmd:workbench.action.openDefaultKeybindingsFile';
 const argv = process.argv.slice(2);
 const [mode, userDataArg] = argv;
 const appArg = argv[argv.indexOf('--app') + 1];
-if ((mode !== 'pre-control' && mode !== 'reviewed' && mode !== 'control') || !userDataArg || !argv.includes('--app') || !appArg) {
-	console.error('usage: response-probe.ts pre-control|reviewed|control <user-data-dir> --app <test app.app>');
+if ((mode !== 'pre-control' && mode !== 'reviewed' && mode !== 'resolve-reviewed' && mode !== 'control') || !userDataArg || !argv.includes('--app') || !appArg) {
+	console.error('usage: response-probe.ts pre-control|reviewed|resolve-reviewed|control <user-data-dir> --app <test app.app>');
 	process.exit(2);
 }
 const app = path.resolve(appArg);
@@ -304,6 +311,15 @@ try {
 		results.snippetCanary = f.sawCanary === true;
 		results.snippetLiteral = f.literalVariable === true;
 	}
+
+	// PRC-3: accept the resolve item with `^` then Enter (accepting resolves it), then ask the
+	// trusted renderer whether its Object.prototype gained the key. A boolean, nothing else read.
+	results.protoShown = await accept('^', 'seclabResolveProto');
+	results.protoResolved = await waitFor(() => exists('resolved'), 20_000);
+	results.protoInjected = await waitFor(() => exists('injected'), 10_000);
+	await sleep(2000);
+	results.protoPolluted = await e.evaluate<boolean>(`Object.prototype.hasOwnProperty('seclabPrc3Polluted')`);
+
 	await sleep(2000);
 	[results.imgPlain, results.imgNested, results.imgSpan] = imageHits;
 } catch (err) {
@@ -325,7 +341,14 @@ c('control', results.completionShown === true && results.completionOwnShown === 
 c('control', results.completionOwnRan === true, 'positive control: the own-command completion ran in the tab');
 c('control', results.listenersUp === true, 'positive control: each image port\'s listener counted the harness\'s own connection');
 c('control', results.snippetShown === true && results.snippetInserted === true, 'positive control: the snippet item was offered, accepted and inserted');
-if (mode === 'control') {
+c('control', results.protoShown === true && results.protoResolved === true && results.protoInjected === true, 'positive control: the resolve item was offered and resolved, and its reply carried the __proto__ key');
+// PRC-3: every build before the fix merged resolved items recursively; resolve-reviewed is the
+// reviewed commit of #48, otherwise judged as the control.
+c('prc-3', mode === 'control' ? results.protoPolluted === false : results.protoPolluted === true,
+	mode === 'control' ? 'control: resolving a tab completion left the trusted renderer\'s Object.prototype unchanged'
+		: `${mode}: resolving a tab completion wrote onto the trusted renderer's Object.prototype`, `${results.protoPolluted}`);
+const asControl = mode === 'control' || mode === 'resolve-reviewed';
+if (asControl) {
 	c('rsc-2', results.imgPlain === 0 && results.imgNested === 0 && results.imgSpan === 0, 'control: no hover image form reached a loopback port', `${results.imgPlain}/${results.imgNested}/${results.imgSpan}`);
 	c('rsc-1', results.snippetCanary === false && results.snippetLiteral === true, 'control: the snippet inserted the variable as text, not the canary store\'s content');
 } else {
