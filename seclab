@@ -2348,6 +2348,16 @@ case "${1:-help}" in
 					exit 1
 				fi
 				docker run --rm --network none -e SECLAB_WORKBENCH_SRC=/up/vs/workbench -v "$up/src/vs:/up/vs:ro" -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --experimental-transform-types --no-warnings test/containment/reh-environment.test.ts ;;
+			# Patches 0053-0055: a tab window sends its tab no host terminal settings, collections or file paths.
+			terminal-settings)
+				up="${SECLAB_UPSTREAM:-${RUNNER_TEMP:+$RUNNER_TEMP/upstream/vscode}}"
+				up="${up:-$ROOT/.work/upstream/vscode}"
+				term="$up/src/vs"
+				if [ ! -d "$term" ]; then
+					echo "seclab test terminal-settings: no pinned upstream at $up (build/fetch-upstream.sh $ROOT/.work/upstream/vscode, or set SECLAB_UPSTREAM)" >&2
+					exit 1
+				fi
+				docker run --rm --network none -e SECLAB_VS_SRC=/up/vs -v "$term:/up/vs:ro" -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --experimental-transform-types --no-warnings test/containment/terminal-settings.test.ts ;;
 			# Patch 0051: a tab's search messages are untrusted, and the query sent to it carries no host editor.
 			search-responses) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/search-responses.test.ts ;;
 			# Patch 0060: the host user's files.exclude and search.exclude never reach a tab (SRCH-3).
@@ -2374,7 +2384,7 @@ case "${1:-help}" in
 			decision-line) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/decision-line.test.ts ;;
 			# Every pure RPC-filter suite, so adding one to CI is a single edit.
 			rpc-filter)
-				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators decision-line check-probes push-refusal filter-module chat-gate terminal-variables host-terminal harness-hygiene search-responses search-split reh-environment search-excludes auto-replies; do
+				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators decision-line check-probes push-refusal filter-module chat-gate terminal-variables host-terminal harness-hygiene search-responses search-split reh-environment search-excludes auto-replies terminal-settings; do
 					printf '\n=== %s\n' "$t"
 					"$0" test "$t" || exit 1
 				done ;;
