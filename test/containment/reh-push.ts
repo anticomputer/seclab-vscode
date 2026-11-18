@@ -298,7 +298,10 @@ try {
 
 // ------------------------------------------------------------------ judge
 // The window's own logs, kept in the run directory (gitignored, deleted with it) for diagnosis.
-fs.cpSync(path.join(userData, 'logs'), path.join(base, 'editor-logs'), { recursive: true, force: true });
+// No logs when the editor never started: the failed launch must still reach the report.
+if (fs.existsSync(path.join(userData, 'logs'))) {
+	fs.cpSync(path.join(userData, 'logs'), path.join(base, 'editor-logs'), { recursive: true, force: true });
+}
 const decisions = rpcDecisions(userData).map(d => d.detail ?? {});
 fs.writeFileSync(path.join(base, 'denials.jsonl'), decisions.filter(d => d.verdict === 'deny').map(d => JSON.stringify({ policyRef: d.ref })).join('\n') + '\n');
 const verdict = spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-probes.ts'), mode === 'baseline' ? 'unpatched' : 'patched', evidence,
