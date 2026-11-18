@@ -17,12 +17,12 @@ agents. It is never an instruction to whoever reads it
 |---|---|---|---|---|---|---|
 | fixed | 14 | 91 | 249 | 407 | 52 | 813 |
 | fixed-before-landing | 0 | 5 | 0 | 0 | 0 | 5 |
-| fixed-untested | 0 | 5 | 59 | 180 | 68 | 312 |
+| fixed-untested | 0 | 5 | 59 | 182 | 68 | 314 |
 | accepted-residual | 0 | 1 | 13 | 73 | 25 | 112 |
 | deferred | 2 | 1 | 13 | 10 | 3 | 29 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 105 | 345 | 685 | 182 | 1333 |
+| **all** | 16 | 105 | 345 | 687 | 182 | 1335 |
 
 ## Baseline: open high and critical findings
 
@@ -97,6 +97,8 @@ Patch 0015 (the agent-host gate), the agentic spikes and test variants, the secu
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R1-CF2** | low | accepted-residual | agent-host gate response matching | Pending request ids are keyed by String(id), so a string id consumes the numeric request's slot | accepted by an agent: Re-rated in round 2 and left below threshold; a response still has to pass the inbound tables and the sanitiser. |
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R1-CF3** | low | accepted-residual | agent-host gate decision log | The per-connection decision-log cap resets on reconnect, so a tab can grow the gate log without bound | accepted by an agent: Re-rated in round 2 and left below threshold. |
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R1-CF4** | low | accepted-residual | agent-host gate channel calls | The gate forwards \`connect\` options unfiltered; they are empty only because of the seclab resolver's current shape | accepted by an agent: Re-rated in round 2 and left below threshold. |
+| [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R15-1** | low | fixed-untested | patch 0018 unit tests | The new 0018 unit test's ordering clause could never fail, since the materialisation call is upstream code outside every hunk and so not in the patch text | A test-quality fix: the vacuous clause was removed; the remaining regex, which fails on the previous patch text, is what pins R14-1. |
+| [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R15-2** | low | fixed-untested | chat-dispatch probe | The dispatch probe's unhandledRejection listener was process-wide, so an unexpected rejection was swallowed instead of failing the run | A probe fix, shown by injection (an item controller that throws fails the run); no test runs the probe's own guard. |
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R9-NOTE** | low | accepted-residual | increment 2 proof verdict | F's ephemeral scope is also satisfiable by upstream's workspace-trust downgrade, and the verdict does not record trust state | accepted by an agent: Trust is disabled host-side and the U control shows \`global\`, which rules it out empirically for this harness; the reviewer left it as a known limit and recorded it so a later profile change cannot turn the check green unnoticed. |
 | [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md) **BV-1** | low | fixed-untested | agentic-browser test build variant (browserView-hook.patch) | The browser-drive hook could not apply on \`main\`: its context was generated against a tree including 0017, whose hunk touches the same import block | The hook is now written against the series without 0017 and its import is placed away from 0017's hunk, verified by applying it to a tree with and without 0017 — but that was a manual check; nothing in the repo applies the hook to both trees, so only a dispatched \`build-macos\` run of each baseline would catch a regression. |
 | [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md) **BV-3** | low | fixed-untested | agentic-browser hook arming | The hook's expiry check failed open: \`Date.now() &gt; Number(until)\` is false for a non-numeric \`until\`, so a malformed arming file counted as unexpired | Inverted to \`Number(fields.until) &gt; Date.now()\` (fails closed), but there is no arming test for the browser-drive hook, unlike \`test/builds/rogue-reh-arming.ts\` for the rogue-REH hook. |
@@ -1423,6 +1425,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | R14-2 | info | fixed-untested | The EDR's coverage statement did not mention the server-managed branch of sendPendingRequestImmediately, which calls sendRequestInternal directly | A documentation correction: the EDR now lists the branch and what covers it (the entry check, pinned by the R14-1 unit test). |
 | R14-3 | info | fixed-untested | window-proof refused an existing profile but not a leftover portable sibling, which the driver reuses | A harness precondition; no test runs window-proof itself, which needs a fetched macOS build. |
 | R14-4 | info | fixed-untested | derive_tree cleaned without -x and checked pristineness without --ignored, so a reused tree could keep ignored files | Harness hygiene; both runners derive their trees through it on every run, and no stale artefact can shadow a module at the current pin. |
+| R15-1 | low | fixed-untested | The new 0018 unit test's ordering clause could never fail, since the materialisation call is upstream code outside every hunk and so not in the patch text | A test-quality fix: the vacuous clause was removed; the remaining regex, which fails on the previous patch text, is what pins R14-1. |
+| R15-2 | low | fixed-untested | The dispatch probe's unhandledRejection listener was process-wide, so an unexpected rejection was swallowed instead of failing the run | A probe fix, shown by injection (an item controller that throws fails the run); no test runs the probe's own guard. |
 
 ### [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md)
 
