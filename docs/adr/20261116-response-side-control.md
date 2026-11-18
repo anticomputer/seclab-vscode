@@ -102,7 +102,8 @@ the probe file's own editor. Each run's teardown was clean.
 - **Addendum (2026-11-18), PRC-3.** A fourth vector resolves a completion whose label carries an
   own `__proto__` key on the wire; the driver asks the trusted renderer whether
   `Object.prototype` gained it. The reviewed commit of #48 (`19aa5f4c`, run 44319561648): it did.
-  Main (`3fee3b55`, run 44279029454): it didn't. Both 17/17
+  Main (`3fee3b55`, run 44279029454): it didn't, after the window applied an edit only the
+  resolve reply carries (17/17 and 18/18)
   ([record](../security-reviews/20261117-response-control-pr-review.md)).
 
 ## Consequences

@@ -40,7 +40,8 @@
 // an own `__proto__` key in its label object. Every build before the fix merged the resolved item
 // with upstream's recursive `mixin`, which follows that key into the trusted renderer's
 // Object.prototype; the harness asks the renderer, through the driver, only whether
-// `Object.prototype` has the key. Control: it doesn't, and the reply did carry the key.
+// `Object.prototype` has the key, once the window has applied an edit only the resolve reply
+// carries. Control: it doesn't, and the reply did carry the key.
 //
 // Inert beyond the escape it measures (EDR fixture safety): the extension writes markers only
 // in its own workspace, no network target exists, and teardown stops the editor's whole tree
@@ -109,7 +110,12 @@ if (images.ports.some(p => p < 1024)) {
 const imagePorts = images.ports;
 const imageHits = images.hits;
 process.on('exit', () => images.close());
-fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\nuntil=${Math.floor(Date.now() / 1000) + 3600}\nclipboard=variant\n`
+// The resolve-only edit is the control's proof that the window merged the reply. Other modes
+// leave it out: there the polluted prototype is that proof, and it breaks the renderer's edit
+// application, so accepting would stall. SECLAB_PRC3_DROP_EDIT=1 leaves it out of a control run
+// too, to show that control's merge check fails without it.
+const dropEdit = mode !== 'control' || process.env.SECLAB_PRC3_DROP_EDIT === '1';
+fs.writeFileSync(path.join(ws, '.seclab', 'targets'), `arm=${arm}\nrun=${base}\nuntil=${Math.floor(Date.now() / 1000) + 3600}\nclipboard=variant\n${dropEdit ? 'prc3edit=0\n' : ''}`
 	+ imagePorts.map((p, i) => `img${i + 1}=${p}\n`).join(''));
 fs.writeFileSync(path.join(ws, 'probe.txt'), 'hoverword is here\n\n\n');
 writeSnapshot(base);
@@ -317,7 +323,8 @@ try {
 	results.protoShown = await accept('^', 'seclabResolveProto');
 	results.protoResolved = await waitFor(() => exists('resolved'), 20_000);
 	results.protoInjected = await waitFor(() => exists('injected'), 10_000);
-	await sleep(2000);
+	// The window applied the resolve-only edit, so it merged the reply: read the prototype after that.
+	results.protoMerged = dropEdit && mode !== 'control' ? undefined : await waitFor(() => exists('merged'), 20_000);
 	results.protoPolluted = await e.evaluate<boolean>(`Object.prototype.hasOwnProperty('seclabPrc3Polluted')`);
 
 	await sleep(2000);
@@ -342,6 +349,9 @@ c('control', results.completionOwnRan === true, 'positive control: the own-comma
 c('control', results.listenersUp === true, 'positive control: each image port\'s listener counted the harness\'s own connection');
 c('control', results.snippetShown === true && results.snippetInserted === true, 'positive control: the snippet item was offered, accepted and inserted');
 c('control', results.protoShown === true && results.protoResolved === true && results.protoInjected === true, 'positive control: the resolve item was offered and resolved, and its reply carried the __proto__ key');
+if (mode === 'control') {
+	c('control', results.protoMerged === true, 'positive control: the window applied the resolve-only edit, so it took the resolved reply in');
+}
 // PRC-3: every build before the fix merged resolved items recursively; resolve-reviewed is the
 // reviewed commit of #48, otherwise judged as the control.
 c('prc-3', mode === 'control' ? results.protoPolluted === false : results.protoPolluted === true,

@@ -119,12 +119,19 @@ it in the shipped build. `test/containment/response-probe.ts` has a fourth vecto
 - after accepting the item, the harness asks the trusted renderer, through the headless driver,
   only whether `Object.prototype` has the key.
 
-It also needs a positive control: the item was offered and resolved, and its reply carried the key.
+It also needs positive controls: the item was offered and resolved, and its reply carried the key.
+
+A clean prototype could also mean the window never merged the reply, so in `control` the reply
+also carries an edit (`additionalTextEdits`), which the window applies only from the item it
+merged. The harness waits for that edit before reading the prototype (PR review on #55). In the
+other modes the polluted prototype is the proof of the merge. Pollution also breaks the
+renderer's edit application, so accepting would stall there, and those modes leave the edit out.
 
 | Mode | Build | Run | `Object.prototype` | Checks |
 |---|---|---|---|---|
 | `resolve-reviewed` | the reviewed commit of #48 (`19aa5f4c`, on `anticomputer-rpc-prc3-reviewed`) | 44319561648 | polluted | 17/17 |
-| `control` | main (`3fee3b55`) | 44279029454 | unchanged | 17/17 |
+| `control` | main (`3fee3b55`) | 44279029454 | unchanged, edit applied | 18/18 |
+| `control`, edit withheld (`SECLAB_PRC3_DROP_EDIT=1`) | main (`3fee3b55`) | 44279029454 | unchanged | fails only the merge check |
 
 `resolve-reviewed` judges every other vector as the control does, since the reviewed commit
 already closed RSC-1 and RSC-2; both runs passed those too. Each run's teardown was clean.
