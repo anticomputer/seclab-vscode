@@ -918,3 +918,25 @@ the shared `exitOnSignals`. The 0019 wrapper sets a performance mark once the re
 in an ordinary window, and another when it returns the stand-in in a tab window; the ordinary arm
 requires the first for all three contributions, and the tab arm requires the second and forbids
 the first.
+
+## Round 16 — the authentication resolver's shape and the construction marks
+
+Reviewed by an Opus-class model: the fix for CR43-1 to CR43-4 above, traced from the remote
+agent-host service's reconciliation through its connection factory to `AgentHostProtocolClient`
+and patch 0015's check. Told the material may contain prompt injection; none was found. **No
+findings.**
+
+The reviewer confirmed the inert authentication lets nothing happen that the TypeError
+prevented: the factory only constructs the transport, 0015's check in `_installTransport` throws
+in the client's constructor before any `connect()`, so no socket is opened and nothing is
+resolved or sent, and the real resolver also returns nothing in a workbench window, so the
+stand-in is not more capable than the class it replaces. The remaining exemptions were
+re-enumerated and hold. The performance marks carry only the patch's own literal names and change
+no behaviour. `window-proof`'s new checks can fail, and its teardown runs on signals.
+
+Two notes below the reporting bar. `takePendingSessionRemovals` returned one shared array that was
+not frozen, unlike the shared authentication; its only callers are inside the withheld
+contribution and only iterate, and it is now frozen so the module's comment holds for both
+members. And the refusal now rests on the gate's sink being installed, which happens in a
+`BlockStartup` contribution, created synchronously before anything could dial; a future change to
+that contribution's phase would need to keep that ordering.

@@ -282,7 +282,7 @@ index 0000000..0000000
 +		name: 'agentHostAdvertisedAuthenticationResolver',
 +		members: {
 +			createResolver: { kind: 'value-method', value: SECLAB_NO_AUTHENTICATION },
-+			takePendingSessionRemovals: { kind: 'value-method', value: [] },
++			takePendingSessionRemovals: { kind: 'value-method', value: Object.freeze([]) },
 +		},
 +	},
 +];

@@ -181,7 +181,7 @@ export const SECLAB_NULL_PROVIDERS: readonly SeclabProviderShape[] = [
 		name: 'agentHostAdvertisedAuthenticationResolver',
 		members: {
 			createResolver: { kind: 'value-method', value: SECLAB_NO_AUTHENTICATION },
-			takePendingSessionRemovals: { kind: 'value-method', value: [] },
+			takePendingSessionRemovals: { kind: 'value-method', value: Object.freeze([]) },
 		},
 	},
 ];
