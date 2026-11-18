@@ -212,7 +212,9 @@ test('the patch gates the queued path, which never reaches the dispatch function
 	// function, and before the four mutations a refusal must not leave behind (resend, drain,
 	// migration, send-now), and from nowhere else.
 	assert.equal((added.match(/this\.seclabCheckSession\(sessionResource\);/g) ?? []).length, 4);
-	assert.equal((added.match(/this\.seclabCheckSession\(/g) ?? []).length, 8);
+	assert.equal((added.match(/this\.seclabCheckSession\(/g) ?? []).length, 6);
+	// The migration reads the verdict for both ends instead, and acts on it without throwing.
+	assert.equal((added.match(/this\.seclabSessionVerdict\((originalResource|targetResource)\)/g) ?? []).length, 2);
 
 	// The queued call must sit inside the `options?.queue` branch, above the queueing itself,
 	// or the message is already on its way to the host by the time it is checked. Ordering is
@@ -312,12 +314,16 @@ test('a refusal on a bypass path comes before the transcript or the queue is cha
 	};
 	before('+\t\tthis.seclabCheckSession(model.sessionResource);', 'const cts = this._pendingRequests.get(request.session.sessionResource);', 'resend');
 	before('+\t\t\tthis.seclabCheckSession(model.sessionResource);', 'model.dequeueSteeringBatch()', 'drain');
-	before('+\t\t\tthis.seclabCheckSession(targetResource);', '// Remove each remaining pending request from the original session', 'migration');
+	before('+\t\tconst seclabRefusal = this.seclabSessionVerdict(originalResource);', '// Remove each remaining pending request from the original session', 'migration');
 	// Anchored on the call itself and on the first upstream line after it, never on comment text,
 	// so moving the check below the reorder or removal fails here (review round 17).
 	assert.match(patch, /\+\t\tthis\.seclabCheckSession\(sessionResource\);\n \n \t\tif \(this\._isServerManagedQueue\(sessionResource\)\) \{/, 'send-now: the check must be the line before the reorder/remove split');
 	// A migration checks BOTH ends, source first: the text is the source session's (round 17).
-	assert.match(patch, /\+\t\t\tthis\.seclabCheckSession\(originalResource\);\n\+\t\t\tthis\.seclabCheckSession\(targetResource\);/);
+	// The whole construct is pinned, so a refusal can neither be skipped nor turned into a
+	// best-effort carry-on: it logs and returns before the queue is touched, and catches nothing,
+	// so an error other than the gate's verdict still propagates (round 17 follow-up).
+	assert.match(patch, /\+\t\tconst seclabRefusal = this\.seclabSessionVerdict\(originalResource\);\n\+\t\tconst seclabVerdict = seclabRefusal !== 'allow' \? seclabRefusal : this\.seclabSessionVerdict\(targetResource\);\n\+\t\tif \(seclabVerdict !== 'allow'\) \{\n\+\t\t\tseclabAhpEmit\(seclabChatSessionEvent\(seclabVerdict\)\);\n\+\t\t\treturn;\n\+\t\t\}/);
+	assert.doesNotMatch(patch.slice(patch.indexOf('const seclabRefusal'), patch.indexOf('// Remove each remaining pending request')), /catch/);
 	// The drain checks only when something is queued: restoring a session drains, and an empty
 	// queue in a tab window must not throw.
 	assert.match(patch, /\+\t\tif \(model\.getPendingRequests\(\)\.length\) \{\n\+\t\t\tthis\.seclabCheckSession\(model\.sessionResource\);/);
