@@ -19877,12 +19877,12 @@
 			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
 			"owner": "fork-build",
 			"status": "fixed-before-landing",
-			"commit": "patch:81bad4a97589002a1a7d89c558be4e2c95181459",
+			"commit": "3e9399b49c34",
 			"test": {
 				"file": "build/check-required-checks.ts",
 				"name": "gate script RJG-2: lint ran on push but was skipped on the PR run"
 			},
-			"preFix": "patch:f2b081dc18a9b9de5da5e5b55a4bddcd853675fe",
+			"preFix": "91093a563825",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261117-required-jobs-gate.md",
 				"quote": "**RJG-2.** The case `gate script RJG-2: lint ran on push but was skipped on the PR run` fails on the reviewed commit's gate script: run with a stub `gh` answering as that script's own jq filter would (the latest push or pull_request run of each file), on a PR run that skipped `lint` (run 5) and a later push run that ran it (run 7), it posts `success` where the case wants `failure`."
@@ -19897,7 +19897,7 @@
 			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:81bad4a97589002a1a7d89c558be4e2c95181459",
+			"commit": "3e9399b49c34",
 			"gap": "A record correction; nothing to run."
 		},
 		{
@@ -19909,7 +19909,7 @@
 			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:81bad4a97589002a1a7d89c558be4e2c95181459",
+			"commit": "3e9399b49c34",
 			"test": {
 				"file": "build/check-required-checks.ts",
 				"name": "RJG-4 a flow-style uses step"
@@ -19924,7 +19924,7 @@
 			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:81bad4a97589002a1a7d89c558be4e2c95181459",
+			"commit": "3e9399b49c34",
 			"gap": "The checkout and pair checks guard the live API path; no test drives landing verify against the API."
 		},
 		{
@@ -19936,7 +19936,7 @@
 			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:6d5969053dd30eb7742bce91536a0e271338017f",
+			"commit": "3657d83a886d",
 			"test": {
 				"file": "build/check-required-checks.ts",
 				"name": "gate script RJG-6"
@@ -19951,7 +19951,7 @@
 			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:6d5969053dd30eb7742bce91536a0e271338017f",
+			"commit": "3657d83a886d",
 			"gap": "A record correction; nothing to run."
 		},
 		{
@@ -19963,7 +19963,7 @@
 			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:6d5969053dd30eb7742bce91536a0e271338017f",
+			"commit": "3657d83a886d",
 			"test": {
 				"file": "build/check-required-checks.ts",
 				"name": "RJG-8 an extra step"
@@ -19978,7 +19978,7 @@
 			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:6d5969053dd30eb7742bce91536a0e271338017f",
+			"commit": "3657d83a886d",
 			"gap": "The list and ancestry checks guard the live API path; no test drives landing verify against the API."
 		},
 		{
@@ -19990,12 +19990,12 @@
 			"component": "landing verify re-validation (seclab landing_overlay)",
 			"owner": "fork-build",
 			"status": "fixed-before-landing",
-			"commit": "patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72",
+			"commit": "4f6918a16e8a",
 			"test": {
 				"file": "seclab",
 				"name": "a merged validator symlink passed this main's validators (RJG-10)"
 			},
-			"preFix": "patch:15c25708112e4f8bb02707f89fa07d8b3a30c2ee",
+			"preFix": "0292068ba867",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261117-required-jobs-gate.md",
 				"quote": "**RJG-10.** The case `a merged validator symlink passed this main's validators (RJG-10)` fails on the reviewed commit: `./seclab landing --self-test`, with `landing_overlay` taken from the RJG-1 compensating controls commit, stops on it."
@@ -20010,7 +20010,7 @@
 			"component": "landing verify re-validation (seclab landing_overlay)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72",
+			"commit": "4f6918a16e8a",
 			"test": {
 				"file": "seclab",
 				"name": "the overlay wrote through a merged symlink (RJG-11)"
@@ -20025,7 +20025,7 @@
 			"component": "landing verify re-validation (seclab landing_overlay)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72",
+			"commit": "4f6918a16e8a",
 			"test": {
 				"file": "seclab",
 				"name": "a merged tree tracking .work passed (RJG-12)"
@@ -20040,7 +20040,7 @@
 			"component": "liveness pending subjects (build/liveness/liveness.ts)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72",
+			"commit": "4f6918a16e8a",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "RJG-13 a re-dated pending entry passed"
@@ -20055,7 +20055,7 @@
 			"component": "landing verify re-validation (seclab landing_overlay)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72",
+			"commit": "4f6918a16e8a",
 			"test": {
 				"file": "seclab",
 				"name": "the overlay accepted the path"
@@ -20070,7 +20070,7 @@
 			"component": "landing verify re-validation (seclab landing_revalidate)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:a6eb7ada44b07274e6d7eb8dc73608e176b34192",
+			"commit": "5cfb230c1352",
 			"test": {
 				"file": "seclab",
 				"name": "a merged .Work symlink passed (RJG-15)"
@@ -20101,7 +20101,7 @@
 			"component": "landing verify re-validation (seclab landing_revalidate)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:a6eb7ada44b07274e6d7eb8dc73608e176b34192",
+			"commit": "5cfb230c1352",
 			"gap": "Not reachable at today's tree size; the listing is captured before it is matched, so there is no pipeline left to test."
 		},
 		{
@@ -20128,7 +20128,7 @@
 			"component": "landing verify owner-acceptances report (seclab landing_owner_rows)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:dcc12187c92211024510b83855803c46e80cbe1e",
+			"commit": "150b5c45a6c3",
 			"test": {
 				"file": "seclab",
 				"name": "a -diff attribute blanked the owner rows (RJG-19)"
@@ -20143,7 +20143,7 @@
 			"component": "landing verify owner-acceptances report (seclab landing_owner_rows)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:dcc12187c92211024510b83855803c46e80cbe1e",
+			"commit": "150b5c45a6c3",
 			"test": {
 				"file": "seclab",
 				"name": "a changed row or a removed line wasn't reported, or its bytes weren't escaped (RJG-20, RJG-21)"
@@ -20158,7 +20158,7 @@
 			"component": "landing verify owner-acceptances report (seclab landing_owner_rows)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:dcc12187c92211024510b83855803c46e80cbe1e",
+			"commit": "150b5c45a6c3",
 			"test": {
 				"file": "seclab",
 				"name": "control or non-ASCII bytes reached the owner report (RJG-21)"
@@ -20173,7 +20173,7 @@
 			"component": "landing verify owner-acceptances report (seclab landing_owner_rows)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:dcc12187c92211024510b83855803c46e80cbe1e",
+			"commit": "150b5c45a6c3",
 			"test": {
 				"file": "seclab",
 				"name": "owner rows under a case variant passed (RJG-22)"
@@ -20188,7 +20188,7 @@
 			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:768d0263d121af9bc9394e77adac4552c37da4b9",
+			"commit": "8bdaa4f22324",
 			"test": {
 				"file": "build/check-required-checks.ts",
 				"name": "gate script: push runs alone are pending until the PR run is judged"
@@ -20203,7 +20203,7 @@
 			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:768d0263d121af9bc9394e77adac4552c37da4b9",
+			"commit": "8bdaa4f22324",
 			"test": {
 				"file": "build/check-required-checks.ts",
 				"name": "gate script: an API read failure after an earlier success posts failure"
@@ -20218,7 +20218,7 @@
 			"component": "landing verify owner-acceptances report (seclab landing_owner_rows)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:768d0263d121af9bc9394e77adac4552c37da4b9",
+			"commit": "8bdaa4f22324",
 			"test": {
 				"file": "seclab",
 				"name": "a case variant before 10000 canonical paths was missed"
@@ -20233,7 +20233,7 @@
 			"component": "landing verify re-validation (seclab landing_overlay)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:768d0263d121af9bc9394e77adac4552c37da4b9",
+			"commit": "8bdaa4f22324",
 			"test": {
 				"file": "seclab",
 				"name": "an executed-module change wasn't refused for its reason"
@@ -20248,7 +20248,7 @@
 			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:98e970de05a95f2b386bcfcf5f5d8ee67640a6c6",
+			"commit": "2a96ee213985",
 			"test": {
 				"file": "build/check-required-checks.ts",
 				"name": "gate script RJG-23: a run killed mid-read after an earlier success leaves no success"
@@ -20263,7 +20263,7 @@
 			"component": "landing verify re-validation (seclab landing_overlay)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:a02969369fc96f074971ee540184a9a02a6d5645",
+			"commit": "11ad080cb2c5",
 			"test": {
 				"file": "seclab",
 				"name": "a merge changing a module the validator executes passed"
@@ -20278,7 +20278,7 @@
 			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:a02969369fc96f074971ee540184a9a02a6d5645",
+			"commit": "11ad080cb2c5",
 			"test": {
 				"file": "build/check-required-checks.ts",
 				"name": "gate misses re-runs (no in_progress)"
@@ -20293,7 +20293,7 @@
 			"component": "landing verify re-validation (seclab landing_overlay)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:a02969369fc96f074971ee540184a9a02a6d5645",
+			"commit": "11ad080cb2c5",
 			"test": {
 				"file": "seclab",
 				"name": "an executed-module change wasn't refused for its reason"
@@ -20308,7 +20308,7 @@
 			"component": "required-checks validator self-test (build/check-required-checks.ts)",
 			"owner": "fork-build",
 			"status": "fixed-untested",
-			"commit": "patch:32fe8854fd98ec6419c5844b46d241d5f01057d9",
+			"commit": "78f7de32ce9c",
 			"gap": "A count in the self-test banner; the cases themselves are unchanged and still run."
 		},
 		{
@@ -20320,7 +20320,7 @@
 			"component": "landing verify self-test (seclab landing_self_test)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:1a1a933aa893e6c696d0c3026bcb896681a27625",
+			"commit": "baea75ecc9b8",
 			"test": {
 				"file": "seclab",
 				"name": "doesn't carry its gutted"
@@ -20335,7 +20335,7 @@
 			"component": "liveness pending subjects (build/liveness/liveness.ts)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:db45b479624ff2df8ffe1027442ca445a22d49a3",
+			"commit": "6b5af33be90f",
 			"test": {
 				"file": "build/liveness/liveness.ts",
 				"name": "CR63-8 unmarked run evidence for a workflow_run-only workflow"
@@ -20350,7 +20350,7 @@
 			"component": "landing verify self-test (seclab landing_self_test)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:6edf167e5d35296c430097a224b105b9d8030654",
+			"commit": "51ca5b0937ac",
 			"test": {
 				"file": "seclab",
 				"name": "the RJG-10 scenario carries no symlink"
@@ -20365,7 +20365,7 @@
 			"component": "landing verify owner-acceptances report (seclab landing_owner_rows)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:2954c15d3979f70b93df1eeace38d78de2243e87",
+			"commit": "b0b49346bb99",
 			"test": {
 				"file": "seclab",
 				"name": "an owner report whose diff failed passed"
@@ -20380,7 +20380,7 @@
 			"component": "landing verify (seclab landing_verify)",
 			"owner": "fork-build",
 			"status": "fixed",
-			"commit": "patch:2954c15d3979f70b93df1eeace38d78de2243e87",
+			"commit": "b0b49346bb99",
 			"test": {
 				"file": "seclab",
 				"name": "landing verify took the repository from the caller's directory"

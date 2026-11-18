@@ -53,9 +53,8 @@
 		},
 		{
 			"id": "workflow:required-jobs-ran",
-			"runBy": "workflow_run after ci-unit, workflow-lint, docs-check or patch-build completes, from main's copy only (EDR required-jobs-gate); first run on proof PR 54 once the gate is on main",
-			"evidence": [],
-			"pending": { "since": "2026-11-18", "proof": 54 }
+			"runBy": "workflow_run after ci-unit, workflow-lint, docs-check or patch-build completes, from main's copy only (EDR required-jobs-gate); its run on proof PR 54 posted failure (lint skipped)",
+			"evidence": [{ "run": 44421895223, "workflow": "required-jobs-ran.yml", "sha": "a60349cb237e606a079f32e68599682c39516de4", "date": "2026-11-18", "event": "workflow_run" }]
 		},
 		{
 			"id": "hook:containment/rogue-reh",

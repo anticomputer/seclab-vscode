@@ -138,5 +138,13 @@ repository's token while handling PR-controlled events, and are almost always us
 
 ## Proof
 On proof PR 54, which sets `if: false` on the `lint` job, the gate must post `failure` and the PR
-must stay blocked; it is closed unmerged. `landing verify` on its head must refuse. A normal PR must get `success`. The
+must stay blocked; it is closed unmerged. `landing verify` on its head must refuse.
+
+- **The gate on the skipped lint (2026-11-18).** After the gate landed (main a60349cb), proof PR 54
+  was rebased onto it (head a26c5d2c). Gate run 44421895223 (`workflow_run`, main's copy) posted
+  `required-jobs-ran` failure on that head: `unit:success lint:skipped docs:failure patch-build:success`.
+  PR 54 reads BLOCKED through the API. Its `docs` job fails as well: the `ci: run` block's
+  `./seclab lint workflows` rejects the constant `if: false` (actionlint), a second layer.
+- **On main itself** the gate leaves the merged commit pending (push runs only), as designed.
+- **A normal PR** gets `success`: the PR recording this proof. A normal PR must get `success`. The
 runs are recorded below once the gate is on main.
