@@ -774,3 +774,24 @@ reasoned rather than run. Recorded as the open item for the runtime proof. Also 
 residual rather than a finding against 0019: the remote agent-host service itself stays
 unwrapped and reconciles connections from a workspace-writable setting, so containment of the
 dial still rests on 0015, which is where round 12 and the reh-push harness left it.
+
+## How the two highs were shown to fail before they were fixed
+
+Both highs on this branch were raised by this branch's own review rounds and fixed before it
+landed, so each entry records the commit its regression test fails on as well as the commit that
+fixed it. Neither test existed at the commit it is said to fail on — a regression test added by a
+fix never does — so in both cases the test as written was run against the earlier code.
+
+**R12-2.** The probe check
+`CONTAINED: the agent-registering contribution is never constructed in a tab window, so a forged agent id has no other connection agent to name`
+fails on the reviewed commit, which carries patch 0018 without patch 0019. Run with 0019 removed
+from `patches/series`, the gated arm of `./seclab test agent-registration` reports the
+contribution live, the probe prints `gated should be contained, got vulnerable`, and the run
+exits 1. With 0019 in the series the same arm reports it contained.
+
+**R13-1.** The unit test
+`THE REAL POINT: a shape is checked against the service it claims to stand in for`
+fails on the reviewed commit, which carries patch 0019 with the shape table as first written.
+Restoring that table — the environment service's members filed under the availability service's
+name — makes the probe fail with six shape problems, each naming the real class, and makes the
+unit test fail on the swapped pair. With the corrected table both pass.
