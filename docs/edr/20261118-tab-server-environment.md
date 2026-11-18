@@ -35,7 +35,11 @@ filter module, applies to everything a tab's server says about where the tab's f
   the walk skip it;
 - plain objects and arrays are walked whole, to a bounded depth; manifests are passed over only
   where upstream leaves them unrevived, and MCP `config.env` and `config.headers` are checked as
-  records of strings, numbers and nulls.
+  records of strings, numbers and nulls;
+- the environment must carry every location a genuine server sends (settings, logs, storage,
+  local history, user home, profiles home and the rest), each an object: a missing or null one
+  would make its consumers fall back to the host's own, and local history doesn't fall back to
+  the host's directory when the environment is refused (PR review on #66).
 
 It applies to the `getEnvironmentData` reply (a foreign location refuses the environment, which
 stays a failure rather than reading as "no remote"), the `userDataProfiles`, `logger`, `extensions`
@@ -97,6 +101,6 @@ management from tab windows; ARCHITECTURE §4.8 lists what changes.
 - A tab whose server lies about any location fails to connect, rather than running with host files.
 - 0053 and 0057 can treat the remote user settings layer as the tab's own.
 - Host extensions are managed from a window that isn't a tab (ARCHITECTURE §4.8).
-- 0059 is large (about 350 added lines over 24 upstream files) for one concern, a tab's server
+- 0059 is large (about 345 added lines over 25 upstream files) for one concern, a tab's server
   steering the host through what it names; the range for RPC follow-ons is full, and splitting it
   would leave each part's guarantee depending on the others.

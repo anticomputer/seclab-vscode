@@ -191,10 +191,10 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   `extensionsActions.ts`, `extensionManagementService.ts`, `extensionEnablementService.ts`,
   `unsupportedExtensionsMigrationContribution.ts`, `localization.contribution.ts`,
   `extensionGalleryManifestService.ts`, `extensionsResource.ts`, `extensions.contribution.ts`,
-  `extensionBisect.ts`, `userDataProfileImportExportService.ts` and `workbench.common.main.ts`. A tab's server names where the window keeps that tab's settings,
+  `extensionBisect.ts`, `userDataProfileImportExportService.ts`, `workingCopyHistoryService.ts` and `workbench.common.main.ts`. A tab's server names where the window keeps that tab's settings,
   storage, logs, profiles and extensions. In a tab window every such location must be `vscode-remote`
   on the window's own authority, and is rebuilt from its components (`seclabTabUris` in the filter
-  module). That covers the `getEnvironmentData` reply, the profiles, logger, extension management and MCP
+  module); none may be left out, and local history doesn't fall back to the host's. That covers the `getEnvironmentData` reply, the profiles, logger, extension management and MCP
   management channels' replies and events (URI-shaped values; MCP servers also lose their icon and links), MCP discovery, file change events and scanned extensions. Install events from the
   tab lose any gallery entry; the host never installs a package from the tab's file system or from
   the tab's workspace folders, nor any extension a tab names from the gallery ("Install Locally",

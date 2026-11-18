@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 98 | 283 | 441 | 60 | 896 |
+| fixed | 14 | 98 | 285 | 442 | 60 | 899 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
 | fixed-untested | 0 | 5 | 63 | 186 | 79 | 333 |
 | accepted-residual | 0 | 2 | 13 | 73 | 26 | 114 |
 | deferred | 2 | 1 | 13 | 13 | 3 | 32 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 18 | 115 | 383 | 728 | 203 | 1447 |
+| **all** | 18 | 115 | 385 | 729 | 203 | 1450 |
 
 ## Baseline: open high and critical findings
 
@@ -2565,6 +2565,9 @@ Every other commit the register cites is on main's history, or on the branch its
 | ENV-57 | info | fixed-untested | The harness saved the REH log before the evidence, so a failed save lost the evidence. | A record, harness or test-fixture correction; nothing to test. |
 | ENV-58 | info | fixed | The arming test didn't cover the hook's new startup path. | patch:5b862080dc41ea932e4c7b8ce13770c802eae087 · `test/builds/rogue-reh-arming.ts` "a run expired when the server starts: early not called" |
 | ENV-59 | info | fixed-untested | The saved REH log is the tab's text, unmarked. | A record, harness or test-fixture correction; nothing to test. |
+| PR66-1 | low | fixed | Workspace enablement is kept by id, so a tab extension claiming a host extension's id, enabled or disabled for the workspace from a tab window, changed the host copy's state there too. | patch:d1fc727cafc712da8e44022b35e4383385774578 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
+| PR66-2 | medium | fixed | When the environment was refused, local history fell back to the host's own history directory for the tab's files. | patch:d1fc727cafc712da8e44022b35e4383385774578 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
+| PR66-3 | medium | fixed | A location left out of the environment, or null, passed the check, and its consumers (local history, terminal history, the terminal and MCP sandboxes) fell back to the host's. | patch:d1fc727cafc712da8e44022b35e4383385774578 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
