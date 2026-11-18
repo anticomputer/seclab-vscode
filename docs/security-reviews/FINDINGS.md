@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 93 | 261 | 418 | 54 | 840 |
+| fixed | 14 | 93 | 261 | 419 | 54 | 841 |
 | fixed-before-landing | 0 | 5 | 0 | 0 | 0 | 5 |
 | fixed-untested | 0 | 5 | 63 | 185 | 72 | 325 |
-| accepted-residual | 0 | 2 | 13 | 73 | 26 | 114 |
+| accepted-residual | 0 | 2 | 13 | 73 | 27 | 115 |
 | deferred | 2 | 1 | 13 | 11 | 3 | 30 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 16 | 108 | 361 | 702 | 190 | 1377 |
+| **all** | 16 | 108 | 361 | 703 | 191 | 1379 |
 
 ## Baseline: open high and critical findings
 
@@ -422,6 +422,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261117-required-checks-review](20261117-required-checks-review.md) **CR-23** | info | accepted-residual | required-checks validator (build/check-required-checks.ts, liveness.ts job reader) | Workflow-level defaults can make a required job steps no-ops. | accepted by an agent: The validator bounds skipping, not vacuous success; the control outside the pull request is the pending required-jobs gate (EDR pr-landing-review). |
 | [20261117-required-jobs-gate](20261117-required-jobs-gate.md) **RJG-16** | info | accepted-residual | liveness pending subjects (build/liveness/liveness.ts) | A liveness pending entry can be re-added after its subject is removed in an earlier change. | accepted by an agent: It takes a visible two-change sequence; for this gate it also needs the gate file removed or renamed, which the required-checks validator refuses. |
 | [20261117-required-jobs-gate](20261117-required-jobs-gate.md) **RJG-17** | info | fixed-untested | landing verify re-validation (seclab landing_revalidate) | The .work listing was piped into grep -q, which can fail open under pipefail for a large listing. | Not reachable at today's tree size; the listing is captured before it is matched, so there is no pipeline left to test. |
+| [20261117-required-jobs-gate](20261117-required-jobs-gate.md) **RJG-24** | info | accepted-residual | landing verify re-validation (seclab landing_overlay) | The observability-docs re-validation runs the merged tabd/src/obs modules, contained. | accepted by an agent: The step checks the merged docs against the merged code, which is its intent; it runs with no network and a read-only mount, and no validator decision logic is swappable. |
 
 ### RPC follow-ups
 
@@ -2424,6 +2425,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR63-2 | medium | fixed | An API read failure in the gate exited before the post, leaving an earlier success. | patch:768d0263d121af9bc9394e77adac4552c37da4b9 · `build/check-required-checks.ts` "gate script: an API read failure after an earlier success posts failure" |
 | CR63-3 | low | fixed | The owner-file case-variant check was a grep -q pipeline that can fail open under pipefail. | patch:768d0263d121af9bc9394e77adac4552c37da4b9 · `seclab` "a case variant before 10000 canonical paths was missed" |
 | CR63-4 | low | fixed | The observability-docs re-validation overlaid product inputs with the old main, refusing a regenerated change and passing a stale one. | patch:768d0263d121af9bc9394e77adac4552c37da4b9 · `seclab` "a regenerated product-input change was refused" |
+| RJG-23 | low | fixed | A gate run cancelled, timed out or killed left an earlier success standing: the EXIT trap does not run then. | patch:98e970de05a95f2b386bcfcf5f5d8ee67640a6c6 · `build/check-required-checks.ts` "gate script RJG-23: a run killed mid-read after an earlier success leaves no success" |
+| RJG-24 | info | accepted-residual | The observability-docs re-validation runs the merged tabd/src/obs modules, contained. | accepted by an agent: The step checks the merged docs against the merged code, which is its intent; it runs with no network and a read-only mount, and no validator decision logic is swappable. |
 
 ### [20261117-response-control-pr-review](20261117-response-control-pr-review.md)
 
