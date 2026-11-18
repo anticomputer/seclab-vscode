@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 235 | 379 | 48 | 767 |
+| fixed | 14 | 91 | 235 | 380 | 48 | 768 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 59 | 177 | 62 | 303 |
+| fixed-untested | 0 | 5 | 59 | 178 | 62 | 304 |
 | accepted-residual | 0 | 1 | 12 | 72 | 24 | 109 |
 | deferred | 2 | 1 | 14 | 10 | 3 | 30 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
-| false-positive | 0 | 0 | 0 | 0 | 25 | 25 |
-| **all** | 16 | 100 | 332 | 652 | 168 | 1268 |
+| false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
+| **all** | 16 | 100 | 332 | 654 | 169 | 1271 |
 
 ## Baseline: open high and critical findings
 
@@ -370,6 +370,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261117-link-check-retries](20261117-link-check-retries.md) **LCR-7** | low | fixed-untested | docs link check (lychee) | GitHub's secondary rate limit (403) could be cached and replayed red. | An argument; nothing to test offline. |
 | [20261117-required-checks-review](20261117-required-checks-review.md) **CR-2** | low | fixed-untested | required-checks validator (build/check-required-checks.ts, liveness.ts job reader) | A supersede link resolved by basename across record kinds, and any mention counted as a back-link. | docs-check has no self-test; the whole tree is checked on every push, and a moved back-link was shown failing. |
 | [20261117-required-checks-review](20261117-required-checks-review.md) **CR-3** | low | fixed-untested | required-checks validator (build/check-required-checks.ts, liveness.ts job reader) | After update-branch the procedure re-armed before the new review, and the EDR named no resolver. | Procedure text in AGENTS.md and the EDR. |
+| [20261118-bump-alpine-zizmor-nginx](20261118-bump-alpine-zizmor-nginx.md) **BMP-2** | low | fixed-untested | dependency register (deps/registry.json) | The dependency register's alpine entry omitted one of its pin sites from its used list. | A register data fix; deps check's pin scan already fails on a missed pin site, but nothing checks the used list itself. |
 | [docs/adr/20261104-extension-placement-hardening.md](../../docs/adr/20261104-extension-placement-hardening.md) **ADR-EPH-1** | low | open | patch 0003 / extension placement | Installing an extension in an empty local window still writes it to the host extensions dir; blocking local installs needs a further shared-process patch. | Recorded only as an ADR open item: no patch blocks local installs, and no test covers the write-but-never-run behaviour (it is the same gap as m0 3-1's missing Level B case). |
 | [20261104-broker-folder-open-loaders](20261104-broker-folder-open-loaders.md) **5** | info | fixed-untested | tab.event contract (tabd / Tab Manager) | If the client counts Workspace Trust or "allow automatic tasks" as a user action, the gate is open when runOn: folderOpen fires. | The spec fix is in schema/protocol.v1.json and the Tab Manager only sends tab.userAction on keyboard/mouse selection changes, but no test asserts that consent interactions (Workspace Trust, automatic tasks, security dialogs) never produce userAction. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **L-2** | info | accepted-residual | campaign fixture arming | The stage's run-dir check accepts any path containing \`/.work/\`, not only this worktree's. | accepted by an agent: The marker is written with the \`wx\` flag, so the worst case is creating one new file in some other \`.work/\` directory. |
@@ -2317,6 +2318,14 @@ Every other commit the register cites is on main's history, or on the branch its
 | WSD-2 | medium | fixed | The wsdata leak check looked for the canary token only, but the host folder's name is one token to the tab's tokenizer, so the host folder reaching the tab went unflagged. | c641339d64e2 · `test/wsdata/probe.ts` "WSD-2 the leak check catches the host folder" |
 | WSD-3 | low | fixed | The wsdata report check ran a regex on a tab-controlled value before its type check, so a crafted object threw before the teardown gate. | c641339d64e2 · `test/wsdata/probe.ts` "WSD-3 the report check rejects a malformed tab value without throwing" |
 | WSD-4 | low | fixed | The wsdata run manifest didn't list its generated directories, so the teardown gate left the workspace, the packaged VSIX and the host-folder fixture in .work. | 1800161230e1 · `test/containment/teardown.ts` "generated fixture workspaces removed from the host" |
+
+### [20261118-bump-alpine-zizmor-nginx](20261118-bump-alpine-zizmor-nginx.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| BMP-1 | low | fixed | The pin-age lint dated an image index by its linux/amd64 config only, so a newer image in the index, such as an arm64 rebuild, passed the 7-day hold. | patch:c07e5ee2eb8c0a26930fc2551e49c6dec0221b89 · `build/release-dates.test.ts` "BMP-1: an index is dated by the newest platform we run, not by linux/amd64 alone" |
+| BMP-2 | low | fixed-untested | The dependency register's alpine entry omitted one of its pin sites from its used list. | A register data fix; deps check's pin scan already fails on a missed pin site, but nothing checks the used list itself. |
+| BMP-3 | info | false-positive | Prompt injection. | The review recorded no issue. |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
