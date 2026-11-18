@@ -23,7 +23,9 @@ at launch compared the app's recorded commit with the commit under test.
   newer build shouldn't remove it. Instead it writes `.work/app-fetch-pending` (a fresh
   file) first and removes it only once the earlier app is gone and the new one moved in, each
   step checked; while it exists, runs refuse the release app.
-  `./seclab fetch --self-test` (CI) checks every refusal that needs no network.
+  One fetch runs per destination at a time, for its whole lifecycle (`<dest>.fetch-lock`, taken
+  before the clear or marker and released only by its holder); a second fetch is refused and
+  touches nothing. `./seclab fetch --self-test` (CI) checks every refusal that needs no network.
 - **Launch.** `test/app-build.ts` checks every launch: `launchEditorInBackground`
   (`test/harness.ts`, behind `test/window.ts launch` and the probes that print its line), the
   headless driver (`test/driver/editor.ts`), and `test/driver/local-window.ts` before it runs the
