@@ -16777,6 +16777,36 @@
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_an_html_like_comment_fails_closed"
 			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-18",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "lint_probes split an escaped or U+200C-continued identifier and read its tail as a keyword, so a following slash moved a string boundary and hid a computed record key.",
+			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:c3a2850dabcb376d3751a9a15a84b3ff1b98e1ae",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_identifier_escapes_and_non_ascii_code_fail_closed"
+			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-19",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "lint_probes scanned a leading #! line, which Node ignores, as code, so a /* in it hid the following lines from the content rules.",
+			"component": "rpc-filter/tools/lint_probes.py _strip_comments",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:c3a2850dabcb376d3751a9a15a84b3ff1b98e1ae",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_a_hashbang_line_is_a_comment"
+			}
 		}
 	]
 }
