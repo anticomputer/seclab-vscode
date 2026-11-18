@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 241 | 400 | 51 | 797 |
-| fixed-before-landing | 0 | 2 | 0 | 0 | 0 | 2 |
+| fixed | 14 | 91 | 245 | 405 | 52 | 807 |
+| fixed-before-landing | 0 | 3 | 0 | 0 | 0 | 3 |
 | fixed-untested | 0 | 5 | 59 | 180 | 65 | 309 |
-| accepted-residual | 0 | 1 | 12 | 73 | 25 | 111 |
-| deferred | 2 | 1 | 14 | 10 | 3 | 30 |
+| accepted-residual | 0 | 1 | 13 | 73 | 25 | 112 |
+| deferred | 2 | 1 | 13 | 10 | 3 | 29 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 102 | 337 | 678 | 178 | 1311 |
+| **all** | 16 | 103 | 341 | 683 | 179 | 1322 |
 
 ## Baseline: open high and critical findings
 
@@ -518,7 +518,7 @@ The findings register and its gate.
 | Finding | Sev | Status | Component | Summary | Gap or disposition |
 |---|---|---|---|---|---|
 | [20261110-security-findings-register](20261110-security-findings-register.md) **BBBB-1** | medium | fixed-untested | findings register: baseline listing | The baseline listing wrote into .work without creating it, so a fresh runner failed before the growth check | One-line fix; the self-test runs where .work already exists. |
-| [20261110-security-findings-register](20261110-security-findings-register.md) **HHHH-4** | medium | deferred | findings register: row authorship | The gate checks an owner row's shape, not who wrote it, so a pending row lets a session that writes a row itself close a new high two landings later | follow-up: Owner decision: make owner-row authorship machine-checkable (a required reviewer on owner-acceptances.md, or signed commits); routed to the coordinator 2026-11-18 |
+| [20261110-security-findings-register](20261110-security-findings-register.md) **HHHH-4** | medium | accepted-residual | findings register: row authorship | The gate checks an owner row's shape, not who wrote it, so a pending row lets a session that writes a row itself close a new high two landings later | accepted by the project owner (owner-acceptances.md): Owner decision 2026-11-18: owner rows stay a process control until automation has a separate identity, which enables a required reviewer; meanwhile the coordinator gives a go-ahead before any PR touching owner-acceptances.md is armed |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **VVV-4** | medium | fixed-untested | findings register: pre-register branches | A branch forked before the register would fail the docs job once it lands | Shell control flow in seclab's findings_check; not covered by the host self-test. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **WWW-3** | medium | fixed-untested | findings register: ancestry | After the history rewrite every cited fix commit was off the new history | Enforced by the docs job's ancestry step over the remapped register, not by a self-test case. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **XXX-2** | medium | accepted-residual | findings register: no-conversations rule | The no-conversations rule is enforced only on owner-acceptances.md; elsewhere it rests on authors and review | accepted by an agent: No checker can tell a paraphrase from a statement. The register's own paraphrases were reworded; the project's records and the deps exception approvals were restated as neutral decisions by the redaction change, so build/deps.ts SS-5 now repeats a decision statement, not a quote. |
@@ -1826,7 +1826,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | PRR11-11 | low | fixed | On main with no range, the fixed-before-landing to fixed transition rule still compared with HEAD^1 | 880199067cdf · `build/docs/findings.ts` "on main with no range a transition from HEAD^1 is not judged (PRR11-11)" |
 | PRR11-12 | low | fixed | On main with no range, uncommitted register edits were exempted as landed history | 880199067cdf · `seclab` "uncommitted edits on main without a range weren't judged exactly (PRR11-12)" |
 | PRR11-13 | low | fixed | A fix whose revert was itself reverted still counted as reverted | 880199067cdf · `seclab` "a fix whose revert was reverted was taken as reverted (PRR11-13)" |
-| HHHH-4 | medium | deferred | The gate checks an owner row's shape, not who wrote it, so a pending row lets a session that writes a row itself close a new high two landings later | follow-up: Owner decision: make owner-row authorship machine-checkable (a required reviewer on owner-acceptances.md, or signed commits); routed to the coordinator 2026-11-18 |
+| HHHH-4 | medium | accepted-residual | The gate checks an owner row's shape, not who wrote it, so a pending row lets a session that writes a row itself close a new high two landings later | accepted by the project owner (owner-acceptances.md): Owner decision 2026-11-18: owner rows stay a process control until automation has a separate identity, which enables a required reviewer; meanwhile the coordinator gives a go-ahead before any PR touching owner-acceptances.md is armed |
 | HHHH-5 | medium | fixed | Re-dating a pending row, or deleting and re-adding it, restarted its seven days | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "a re-dated or re-added pending row is judged from its first commit (HHHH-5)" |
 | HHHH-6 | low | fixed | An empty list of main's records was read as nothing on main | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "an empty main record list fails closed like a missing one (HHHH-6)" |
 | HHHH-7 | low | fixed | A date a day ahead stretched the pending window, and an impossible date was reported as a future one | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "a pending row with an impossible date says so (HHHH-7)" |
@@ -1838,6 +1838,17 @@ Every other commit the register cites is on main's history, or on the branch its
 | PRR58-5 | low | fixed | An uncommitted last owner row made the first-seen lookup stop the check | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `seclab` "the history isn't oldest first" |
 | PRR58-6 | low | fixed | A pending row dated before its first commit could be re-dated to restart its window | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "a pending row dated before its first commit and later re-dated keeps its first date (PRR58-6)" |
 | PRR58-7 | low | fixed | An impossible historical Date could become the first date, then be rejected, so the window fell back to the current date | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "an impossible historical date never becomes the first date (PRR58-7)" |
+| IIII-3 | high | fixed-before-landing | Naming any commit already on main as the fix exempted a new high from the failing-baseline evidence | patch:999e986cc3176c15b2364319307c1d57672db879 · `seclab` "naming a fix already on main skipped the evidence (IIII-3)" · failed on patch:5d33e10bebac7269e42d48c0020d033705ee6ca2 |
+| IIII-4 | medium | fixed | On main the own-fix check compared with origin/main's register, the tree's own, and listed nothing | patch:999e986cc3176c15b2364319307c1d57672db879 · `seclab` "findings_check doesn't run the own-fix check against its base (IIII-7, IIII-4)" |
+| IIII-5 | medium | fixed | A later change could drop a fixed entry's preFix and preFixRef | patch:999e986cc3176c15b2364319307c1d57672db879 · `build/docs/findings.ts` "dropping a fixed entry preFix evidence fails (IIII-5)" |
+| IIII-6 | medium | fixed | A key registered medium and raised to high later escaped the own-fix rule | patch:999e986cc3176c15b2364319307c1d57672db879 · `build/docs/findings.ts` "a key raised to high in this change is listed for the own-fix check (IIII-6)" |
+| IIII-7 | low | fixed | No tripwire held the own-fix check's call in findings_check | patch:999e986cc3176c15b2364319307c1d57672db879 · `seclab` "findings_check doesn't run the own-fix check against its base (IIII-7, IIII-4)" |
+| IIII-8 | low | fixed | A patch: preFix could resolve to a different commit than meant | patch:999e986cc3176c15b2364319307c1d57672db879 · `seclab` "a patch: preFix passed (IIII-8)" |
+| IIII-9 | low | fixed | The GGGG-8 tripwire searched the whole file and matched its own text, so it could never fail | patch:999e986cc3176c15b2364319307c1d57672db879 · `seclab` "findings_check doesn't judge fixed-before-landing against its base (GGGG-8)" |
+| IIII-10 | low | fixed | IIII-8's test used an empty commit's patch-id, so another rule refused it before the SHA rule | patch:999e986cc3176c15b2364319307c1d57672db879 · `seclab` "the control (the same base by SHA) failed (IIII-10)" |
+| IIII-11 | low | fixed | Nothing pinned the tripwires' body scoping, so a whole-file search stayed green | patch:999e986cc3176c15b2364319307c1d57672db879 · `seclab` "the tripwire matched text outside findings_check (IIII-11)" |
+| IIII-12 | info | fixed | The schema accepted a patch: preFix on a fixed entry | patch:999e986cc3176c15b2364319307c1d57672db879 · `build/docs/findings.ts` "a patch: preFix on a fixed entry fails the schema (IIII-12)" |
+| PRR61-1 | medium | fixed | A landed high was no longer listed for the own-fix check, so a later change could set its fix to its own preFix | patch:999e986cc3176c15b2364319307c1d57672db879 · `build/docs/findings.ts` "a grandfathered high that carries a preFix is still listed for its evidence check (PRR61-1)" |
 
 ### [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md)
 

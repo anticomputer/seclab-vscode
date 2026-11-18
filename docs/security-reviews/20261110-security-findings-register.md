@@ -433,3 +433,41 @@ Third pass: one thread, true, fixed in the same change.
 | # | Sev | Area | Finding | Disposition | Fix | Regression test |
 |---|---|---|---|---|---|---|
 | PRR58-7 | Low | first seen | An impossible historical Date (`2026-02-30`) could become the first date, then be rejected, so the window fell back to the current date. | Fixed | Historical dates pass the same round-trip check as the current one. | self-test "an impossible historical date never becomes the first date (PRR58-7)" |
+
+## Round IIII (a new high closed by its own change shows its test failing on main)
+Scope: a high new in a change, registered `fixed` by that change's fix, carries `preFix` (a `main`
+commit the fix descends from) and `preFixRef`, as `fixed-before-landing` does
+([EDR](../edr/20261118-new-highs-failing-baseline.md)). Reviewed by an Opus-class model. One high,
+three mediums and two lows from the review, and one low found while proving the fixes, all fixed in
+the same change before it landed. IIII-1 and IIII-2 tag the self-tests written with the change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| IIII-3 | High | grandfathering | Naming any commit already on `main` as the fix exempted a new high from the evidence. | Fixed | Every listed entry needs `preFix`; an old fix cites one before it. | `seclab` host self-test "naming a fix already on main skipped the evidence (IIII-3)" |
+| IIII-4 | Medium | main | On `main`, `origin/main`'s register is the tree's own, so the check listed nothing. | Fixed | On `main` it compares with the base's register. | `seclab` host self-test "findings_check doesn't run the own-fix check against its base (IIII-7, IIII-4)" |
+| IIII-5 | Medium | evidence | A later change could drop a `fixed` entry's `preFix` and `preFixRef`. | Fixed | They never change while it is fixed. | self-test "dropping a fixed entry preFix evidence fails (IIII-5)" |
+| IIII-6 | Medium | severity | A key registered medium and raised to high later escaped the rule. | Fixed | Only a key already high on `main` or the base is grandfathered. | self-test "a key raised to high in this change is listed for the own-fix check (IIII-6)" |
+| IIII-7 | Low | wiring | No tripwire held the new check's call in `findings_check`. | Fixed | A tripwire on `findings_check`'s body. | `seclab` host self-test "findings_check doesn't run the own-fix check against its base (IIII-7, IIII-4)" |
+| IIII-8 | Low | resolution | A `patch:` preFix could resolve to a different commit than meant. | Fixed | `preFix` is on `main`, so it is a SHA. | `seclab` host self-test "a patch: preFix passed (IIII-8)" |
+| IIII-9 | Low | wiring | The GGGG-8 tripwire searched the whole file and matched its own text, so it could never fail. | Fixed | Both tripwires search `findings_check`'s body only; each proved by removing its call. | `seclab` host self-test "findings_check doesn't judge fixed-before-landing against its base (GGGG-8)" |
+
+IIII-3 was found in review of the unmerged change and fixed in it, so it is registered
+fixed-before-landing: the host self-test naming a fix already on main skipped the evidence (IIII-3)
+failed on the reviewed commit and passes with the fix.
+
+Re-review of the fixes by the same reviewer: IIII-3 to IIII-9 verified closed, IIII-3's evidence
+chain and HEAD's HHHH-4 closure checked. Three more, about the strength of the cited tests, fixed in
+the same change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| IIII-10 | Low | test strength | IIII-8's test used an empty commit's patch-id, so a malformed-line rule refused it before the SHA rule. | Fixed | The case names a real main commit the fix descends from, which only the SHA rule refuses. | `seclab` host self-test "the control (the same base by SHA) failed (IIII-10)" |
+| IIII-11 | Low | test strength | Nothing pinned the tripwires' body scoping, so a return to a whole-file search stayed green. | Fixed | A synthetic file with the call missing and its text in a tripwire must not match. | `seclab` host self-test "the tripwire matched text outside findings_check (IIII-11)" |
+| IIII-12 | Info | schema | The schema still accepted a `patch:` preFix on a `fixed` entry. | Fixed | Only a SHA. | self-test "a patch: preFix on a fixed entry fails the schema (IIII-12)" |
+
+## Round PRR61 (pull request #61's automated review)
+Two threads. One restated IIII-10, already fixed in this change. The other is true and fixed here.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| PRR61-1 | Medium | grandfathering | A landed high was no longer listed, so a later change could set its fix to its own preFix and pass. | Fixed | An entry that carries a preFix is always listed, so its evidence is always checked. | self-test "a grandfathered high that carries a preFix is still listed for its evidence check (PRR61-1)" |
