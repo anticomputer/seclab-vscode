@@ -16931,7 +16931,7 @@
 			"status": "fixed",
 			"test": {
 				"file": "test/telemetryid/probe.ts",
-				"name": "the report check rejects a malformed tab value without throwing"
+				"name": "the report schema check rejects a malformed tab value without throwing"
 			}
 		},
 		{
@@ -16947,6 +16947,72 @@
 			"test": {
 				"file": "test/containment/teardown.ts",
 				"name": "generated fixture workspaces removed from the host"
+			}
+		},
+		{
+			"record": "20261117-probe-harness-hygiene.md",
+			"round": "Copilot review (PR #45)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"commit": "patch:9723f3c517b43437b39b91effd63371bfbb16f20",
+			"anchor": "PH-6",
+			"severity": "low",
+			"summary": "The bounded sbx exec still returned stdout produced before a timeout or failure, so a FIFO could emit a report and then stall.",
+			"status": "fixed-untested",
+			"gap": "tabExec's unit test covers the contract; the inline inTab wrappers have no test of their own."
+		},
+		{
+			"record": "20261117-probe-harness-hygiene.md",
+			"round": "Copilot review (PR #45)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"commit": "patch:9723f3c517b43437b39b91effd63371bfbb16f20",
+			"anchor": "PH-7",
+			"severity": "low",
+			"summary": "With the host arm file missing, a report with no arm passed the run-provenance check in three probes.",
+			"status": "fixed-untested",
+			"gap": "No run removes the host arm file."
+		},
+		{
+			"record": "20261117-probe-harness-hygiene.md",
+			"round": "Copilot review (PR #45)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"commit": "patch:9723f3c517b43437b39b91effd63371bfbb16f20",
+			"anchor": "PH-8",
+			"severity": "info",
+			"summary": "check --measure judged only schema and focus assertions, so the new self-test was ignored there.",
+			"status": "fixed-untested",
+			"gap": "A naming fix; no measure-mode run is part of the proof."
+		},
+		{
+			"record": "20261117-probe-harness-hygiene.md",
+			"round": "Copilot review (PR #45)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"commit": "patch:9723f3c517b43437b39b91effd63371bfbb16f20",
+			"anchor": "PH-9",
+			"severity": "low",
+			"summary": "docsync printed the tab's hijack counters and strings unvalidated, so a crafted value threw before the teardown gate.",
+			"status": "fixed",
+			"test": {
+				"file": "test/docsync/probe.ts",
+				"name": "the report schema check rejects a malformed tab value without throwing"
+			}
+		},
+		{
+			"record": "20261117-probe-harness-hygiene.md",
+			"round": "Copilot review (PR #45)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"commit": "patch:9723f3c517b43437b39b91effd63371bfbb16f20",
+			"anchor": "PH-10",
+			"severity": "info",
+			"summary": "docsync's hostile self-test failed the scheme check first, so the hash's type check went unexercised.",
+			"status": "fixed",
+			"test": {
+				"file": "test/docsync/probe.ts",
+				"name": "the report schema check rejects a malformed tab value without throwing"
 			}
 		}
 	]
