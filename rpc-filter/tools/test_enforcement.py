@@ -677,12 +677,14 @@ class ResponseGateTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
         os.makedirs(os.path.join(self.root, "patches"))
         with open(os.path.join(self.root, "patches", "0033-x.patch"), "w") as fh:
-            fh.write("+++ b/x.ts\n+\tthis._s = seclabFromTab(authority, run);\n")
+            fh.write("+++ b/x.ts\n+\tthis._s = seclabFromTab(authority, run);\n"
+                     "+\t\treturn hover && s ? s.markdown(hover) : hover;\n")
         with open(os.path.join(self.root, "patches", "series"), "w") as fh:
             fh.write("0033-x.patch\n")
         self.policy = {"rpc": {"MainThreadLanguageFeatures": {"methods": {
             "$registerHoverProvider": {"verdict": "allow_with_constraint", "response": "seclabFromTab",
-                                       "response_patch": "0033-x.patch"}}}}}
+                                       "response_patch": "0033-x.patch",
+                                       "response_wiring": ["s.markdown(hover)"]}}}}}
 
     def gate(self):
         return CD.check_responses(self.policy, self.root)
@@ -706,6 +708,44 @@ class ResponseGateTest(unittest.TestCase):
         with open(os.path.join(self.root, "patches", "0033-x.patch"), "w") as fh:
             fh.write("+++ b/x.ts\n // seclabFromTab( is only context here\n")
         self.assertTrue(any("never calls seclabFromTab" in e for e in self.gate()))
+
+    def test_a_registration_must_name_its_wiring(self):
+        del self.method()["response_wiring"]
+        self.assertTrue(any("declares no response_wiring" in e for e in self.gate()))
+        self.method()["response_wiring"] = []
+        self.assertTrue(any("declares no response_wiring" in e for e in self.gate()))
+
+    def test_wiring_in_a_comment_or_context_does_not_count(self):
+        # A call elsewhere in the patch is not this registration's customer (PR review on #48).
+        for body in ("+\tthis._s = seclabFromTab(authority, run);\n+\t\t// return s.markdown(hover);\n+\t\treturn hover;\n",
+                     "+\tthis._s = seclabFromTab(authority, run);\n+\t\t/* s.markdown(hover) */ return hover;\n",
+                     "+\tthis._s = seclabFromTab(authority, run);\n \t\treturn s.markdown(hover);\n"):
+            with open(os.path.join(self.root, "patches", "0033-x.patch"), "w") as fh:
+                fh.write("+++ b/x.ts\n" + body)
+            self.assertTrue(any("is not in 0033-x.patch's added code" in e for e in self.gate()), body)
+
+    def test_mutants_of_the_real_patch_fail(self):
+        # The shipped policy against 0033 with one customer's sanitisation removed.
+        name = "0033-seclab-sanitise-tab-provider-results.patch"
+        with open(os.path.join(CD.REPO_ROOT, "patches", name), encoding="utf-8") as fh:
+            real = fh.read()
+        hover = "+\t\t\t\treturn hover && seclab ? { ...hover, contents: hover.contents.map(c => seclab.markdown(c)) } : hover;\n"
+        mutants = {
+            "the hover is returned as the tab sent it": (hover, "+\t\t\t\treturn hover;\n"),
+            "the hover rewrite is commented out": (hover, "+\t\t\t\t// " + hover[1:].lstrip("\t") + "+\t\t\t\treturn hover;\n"),
+            "resolved completions skip the sanitiser": (
+                "+\t\t\t\t\tconst newSuggestion = this._seclabCompletion(MainThreadLanguageFeatures._inflateSuggestDto(suggestion.range, result, extensionId));\n",
+                "+\t\t\t\t\tconst newSuggestion = MainThreadLanguageFeatures._inflateSuggestDto(suggestion.range, result, extensionId);\n"),
+        }
+        policy = CD._load(CD.POLICY)
+        for label, (old, new) in mutants.items():
+            with self.subTest(label):
+                self.assertEqual(real.count(old), 1, "mutant no longer applies; update it: " + label)
+                with open(os.path.join(self.root, "patches", name), "w", encoding="utf-8") as fh:
+                    fh.write(real.replace(old, new))
+                with open(os.path.join(self.root, "patches", "series"), "w") as fh:
+                    fh.write(name + "\n")
+                self.assertTrue(any("response_wiring" in e for e in CD.check_responses(policy, self.root)), label)
 
     def test_a_denied_registration_needs_nothing(self):
         self.method()["verdict"] = "deny"
