@@ -165,6 +165,7 @@ at all is listed under `noFindings` in `findings.json`.
 | 2026-11-17 | [regression tests for broker low findings, and HH-1's check (round 20)](20261117-broker-finding-tests-2.md) | - "broker: regression tests for six low fixed-untested findings": | see record |
 | 2026-11-17 | [Copilot's review of the 1.145.3 bump PR (round CR25)](20261117-copilot-review-pr25.md) | Copilot code review's inline threads on pull request 25 (the 1.145.3 bump), | see record |
 | 2026-11-17 | [fetch-upstream cleans a previous pin's files (round FU)](20261117-fetch-upstream-clean.md) | round FU, by an Opus-class model, of the build/fetch-upstream.sh fix on the | see record |
+| 2026-11-17 | [Level B's expected losses on a filtered build (round FXF)](20261117-level-b-filtered-losses.md) | seven rounds, by an Opus-class model, of the change that makes the editor-driven | see record |
 | 2026-11-17 | [link-check retries (round LCR)](20261117-link-check-retries.md) | round LCR, by an Opus-class model, of the lychee change in | see record |
 | 2026-11-17 | [Review: automated PR review threads on the RPC follow-ups (#9, #14, #20, #27)](20261117-pr-review-threads.md) | see record | see record |
 | 2026-11-17 | [probe harnesses and the tab's workspace (follow-up to PR #24, #33, #37)](20261117-probe-harness-hygiene.md) | the configsync, docsync, edtabs, nbsync and telemetryid probe harnesses on main, for | see record |
