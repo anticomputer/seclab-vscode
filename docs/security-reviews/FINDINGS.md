@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 211 | 322 | 44 | 675 |
+| fixed | 14 | 84 | 212 | 329 | 44 | 683 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 52 | 161 | 58 | 276 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-| **all** | 16 | 93 | 301 | 576 | 148 | 1134 |
+| **all** | 16 | 93 | 302 | 583 | 148 | 1142 |
 
 ## Baseline: open high and critical findings
 
@@ -2096,6 +2096,14 @@ Every other commit the register cites is on main's history, or on the branch its
 | PRR-12 | low | fixed | A misread slash moved a string boundary with no comment involved (n++ / 2; s = '/'), so _code_only blanked a computed record key after it. | patch:2a6b06661b108e0ff4ec98f2293de4092e68474c · `rpc-filter/tools/test_lint_probes.py` "test_a_misread_slash_cannot_move_a_string_boundary" |
 | PRR-13 | low | fixed | The comment scanner ended a template at the backtick of a template nested in ${...}, misreading the rest of the line. | patch:2a6b06661b108e0ff4ec98f2293de4092e68474c · `rpc-filter/tools/test_lint_probes.py` "test_nested_templates_keep_their_boundaries" |
 | PRR-14 | low | fixed | The content rules chose code lines by their first characters, so a code line starting with * escaped every content rule. | patch:2a6b06661b108e0ff4ec98f2293de4092e68474c · `rpc-filter/tools/test_lint_probes.py` "test_a_code_line_starting_with_a_star_is_linted" |
+| PRR-15 | low | fixed | lint_probes read a slash after debugger (and other statement-ending reserved words) as division, so a regex statement after it hid a write behind its closing slashes. | patch:05e88dc75f104e00236cda983d9af49a727885aa · `rpc-filter/tools/test_lint_probes.py` "test_property_names_and_contextual_words" |
+| PRR-16 | low | fixed | lint_probes read a private name such as o.#return as a keyword, so a following slash read as a regex moved a string boundary and hid a computed record key. | patch:2e1ee5d968b6ea6a09a4158f96b80cfbcf5e3823 · `rpc-filter/tools/test_lint_probes.py` "test_property_names_and_contextual_words" |
+| PRR-17 | medium | fixed | lint_probes did not treat Annex B HTML-like comments (&lt;!--, line-leading --&gt;) as Node does in CommonJS, so x &lt;!-- /* read as a block comment and hid lines Node runs, such as a raw record write. | patch:2e1ee5d968b6ea6a09a4158f96b80cfbcf5e3823 · `rpc-filter/tools/test_lint_probes.py` "test_an_html_like_comment_fails_closed" |
+| PRR-18 | low | fixed | lint_probes split an escaped or U+200C-continued identifier and read its tail as a keyword, so a following slash moved a string boundary and hid a computed record key. | patch:c3a2850dabcb376d3751a9a15a84b3ff1b98e1ae · `rpc-filter/tools/test_lint_probes.py` "test_identifier_escapes_and_non_ascii_code_fail_closed" |
+| PRR-19 | low | fixed | lint_probes scanned a leading #! line, which Node ignores, as code, so a /* in it hid the following lines from the content rules. | patch:c3a2850dabcb376d3751a9a15a84b3ff1b98e1ae · `rpc-filter/tools/test_lint_probes.py` "test_a_hashbang_line_is_a_comment" |
+| PRR-20 | low | fixed | lint_probes took the last dot of a spread for member access, so \[...typeof /\[//\]/\] read typeof as a property and the regex's // as a comment that hid a write. | patch:139c6de1faed74efe79e6be8b405ec09d8eb74af · `rpc-filter/tools/test_lint_probes.py` "test_a_comment_after_a_slash_on_its_line_fails_closed" |
+| PRR-21 | low | fixed | lint_probes split payloads with str.splitlines(), which breaks at U+000B and U+0085; a /* after one read as a block comment and hid executable lines from the content rules. | patch:cbf7c638be8743b8ddc01b5441b0afe409763f61 · `rpc-filter/tools/test_lint_probes.py` "test_only_javascript_line_terminators_end_a_comment" |
+| PRR-22 | low | fixed | lint_probes merged two dots into a spread too early, so in 1..return the return read as a keyword and a following slash moved a string boundary. | patch:cbf7c638be8743b8ddc01b5441b0afe409763f61 · `rpc-filter/tools/test_lint_probes.py` "test_a_number_member_is_not_a_spread" |
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 

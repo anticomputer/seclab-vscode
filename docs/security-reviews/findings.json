@@ -16822,6 +16822,36 @@
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_comment_after_a_slash_on_its_line_fails_closed"
 			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-21",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "lint_probes split payloads with str.splitlines(), which breaks at U+000B and U+0085; a /* after one read as a block comment and hid executable lines from the content rules.",
+			"component": "rpc-filter/tools/lint_probes.py main",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:cbf7c638be8743b8ddc01b5441b0afe409763f61",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_only_javascript_line_terminators_end_a_comment"
+			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-22",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "lint_probes merged two dots into a spread too early, so in 1..return the return read as a keyword and a following slash moved a string boundary.",
+			"component": "rpc-filter/tools/lint_probes.py _SlashContext",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:cbf7c638be8743b8ddc01b5441b0afe409763f61",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_a_number_member_is_not_a_spread"
+			}
 		}
 	]
 }
