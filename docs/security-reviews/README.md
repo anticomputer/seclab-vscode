@@ -36,7 +36,9 @@ the process and the index.
    test it is `fixed-untested`, which counts as open. A finding this review raised in a change
    that fixes and tests it before landing is `fixed-before-landing`: add `preFix`, the reviewed
    commit, and `preFixRef`, a quote that names the test and records it failing there
-   ([EDR](../edr/20261117-fixed-before-landing.md)). A high or critical must end `fixed` on `main`
+   ([EDR](../edr/20261117-fixed-before-landing.md)). A high that a change both registers and fixes,
+   in code already on `main`, is `fixed` with the same two fields: `preFix` is a `main` commit the
+   fix descends from ([EDR](../edr/20261118-new-highs-failing-baseline.md)). A high or critical must end `fixed` on `main`
    or accepted by the project owner: a row in `owner-acceptances.md` here (the
    finding's full key, the date, the scope, the closing condition, "accepted by the project
    owner"), written only by the coordinator on an explicit owner decision and landed in an earlier
