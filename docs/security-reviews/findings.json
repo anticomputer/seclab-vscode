@@ -17014,6 +17014,21 @@
 				"file": "test/docsync/probe.ts",
 				"name": "the report schema check rejects a malformed tab value without throwing"
 			}
+		},
+		{
+			"record": "20261117-probe-harness-hygiene.md",
+			"round": "Copilot review (PR #45, second pass)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"anchor": "PH-11",
+			"severity": "low",
+			"summary": "Clearing stdout on a failed read also dropped docsync's tab logs, so a canary already emitted could vanish and the absence checks pass on missing evidence.",
+			"status": "fixed",
+			"commit": "patch:8cbaf3f21161e53601280f24ab3d760f61d40d41",
+			"test": {
+				"file": "test/docsync/probe.ts",
+				"name": "control: the tab-side logs were collected (no timeout or failure)"
+			}
 		}
 	]
 }
