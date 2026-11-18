@@ -23,7 +23,8 @@ import { proofChecks, takeoverCanaryConfig } from './verdict.ts';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../../tabd/src/client.ts';
-import { beaconPort, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, ensureVsceImage, lockRun, repoRoot, VSCE_IMAGE } from '../../harness.ts';
+import { beaconPort, checkIsolatedProfile, checkUserDataDir, editorLaunchCommand, editorLaunchRecord, ensureVsceImage, lockRun, repoRoot, VSCE_IMAGE } from '../../harness.ts';
+import { appBuildProblem } from '../../app-build.ts';
 import { report, type Check } from '../../containment/assert.ts';
 import { beaconSpawn } from './marks.ts';
 import { readManifest, reapPreviousRun, teardownGate, writeManifest, writeSnapshot } from '../../containment/teardown.ts';
@@ -80,6 +81,12 @@ if (mode === 'prepare') {
 	const buildInfo = path.join(path.dirname(app), 'build-info.json');
 	if (!fs.existsSync(app) || !fs.existsSync(buildInfo)) {
 		console.error(`no app or build-info.json for build ${build} at ${app}`);
+		process.exit(2);
+	}
+	// The build this run is asked to test (EDR fetched-app-binding, review FAB2-3).
+	const problem = appBuildProblem(app, { repoRoot, expect: process.env.SECLAB_APP_SHA || undefined });
+	if (problem) {
+		console.error(`refusing: ${problem}`);
 		process.exit(2);
 	}
 	// A previous run's claim points at the old fixture; start from clean state.
@@ -253,8 +260,27 @@ if (mode === 'prepare') {
 	const checks: Check[] = [];
 	const meta = JSON.parse(fs.readFileSync(path.join(userData, 'seclab-run-build.json'), 'utf8')) as { build: 'u' | 'g'; buildInfo: { repoSha: string } };
 	const build = meta.build;
-	// The verdict refuses a run whose build is not the one requested.
-	checks.push({ vector: 'build', name: `ran the requested build (${build}, repo ${meta.buildInfo.repoSha.slice(0, 7)})`, ok: true, detail: meta.buildInfo.repoSha });
+	// The verdict refuses a run whose build is not the one requested: the window that ran was
+	// launched from this build's app, whose build info still names the commit recorded at prepare
+	// and passes the build check (review FAB2-3).
+	const launched = (() => {
+		try {
+			return (JSON.parse(fs.readFileSync(editorLaunchRecord(userData), 'utf8')) as { app?: string }).app;
+		} catch {
+			return undefined;
+		}
+	})();
+	const nowInfo = (() => {
+		try {
+			return (JSON.parse(fs.readFileSync(path.join(path.dirname(APPS[build]), 'build-info.json'), 'utf8')) as { repoSha?: string }).repoSha;
+		} catch {
+			return undefined;
+		}
+	})();
+	const buildProblem = appBuildProblem(APPS[build], { repoRoot, expect: process.env.SECLAB_APP_SHA || undefined });
+	const buildOk = launched === path.resolve(APPS[build]) && nowInfo === meta.buildInfo.repoSha && buildProblem === undefined;
+	checks.push({ vector: 'build', name: `ran the requested build (${build}, repo ${String(meta.buildInfo.repoSha).slice(0, 7)})`, ok: buildOk,
+		detail: buildOk ? meta.buildInfo.repoSha : `launched ${launched ?? 'nothing recorded'}; build info now ${nowInfo ?? 'missing'}; ${buildProblem ?? 'build check passed'}` });
 
 	// The tab's own report. Never the deciding fact; it is diagnostics and a canary carrier.
 	// The tab's workspace is an overlay, so this is collected with one exec after the run.

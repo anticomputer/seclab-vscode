@@ -123,6 +123,6 @@ test_build=null
 # local test REH can be bound to the commit under test (EDR fetched-app-binding).
 [[ -z "$VARIANT" ]] || test_build="$(/repo/build/test-variant.sh record "$VARIANT" reh)"
 jq -nc --arg t "$UPSTREAM_TAG" --arg u "$UPSTREAM_SHA" --arg a "$ARCH" --arg g "$TARGETS" --arg r "${GITHUB_SHA:-${SECLAB_REPO_SHA:-}}" --arg i "${GITHUB_RUN_ID:-}" --argjson tb "$test_build" \
-	'{upstreamTag: $t, upstreamSha: $u, arch: $a, targets: $g} + (if $r == "" then {} else {repoSha: $r, runId: $i} end) + (if $tb == null then {} else {testBuild: $tb} end)' \
+	'{upstreamTag: $t, upstreamSha: $u, arch: $a, targets: $g} + (if $r == "" then {} else {repoSha: $r} end) + (if $i == "" then {} else {runId: $i} end) + (if $tb == null then {} else {testBuild: $tb} end)' \
 	> "/out/build-info${VARIANT:+-test-$VARIANT}.json"
 ls -la /out

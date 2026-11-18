@@ -46,6 +46,10 @@ test('fetched-app binding: the release app must be a build of a commit on origin
 	const release = path.join(r.root, '.work', 'app');
 	const o = { repoRoot: r.root, platform: 'darwin' };
 	assert.equal(appBuildProblem(app(release, { repoSha: r.old }), o), undefined);
+	// A release fetch that didn't complete leaves its marker: the old app isn't taken as asked for (FAB2-1).
+	fs.writeFileSync(path.join(r.root, '.work', 'app-fetch-pending'), 'run 1\n');
+	assert.match(appBuildProblem(path.join(release, 'seclab-vscode.app'), o) ?? '', /didn't complete/);
+	fs.rmSync(path.join(r.root, '.work', 'app-fetch-pending'));
 	// HEAD (a branch commit) isn't on origin/main (review FAB-4).
 	assert.match(appBuildProblem(app(release, { repoSha: r.head }), o) ?? '', /isn't on origin\/main/);
 	assert.match(appBuildProblem(app(release, { repoSha: 'a'.repeat(40) }), o) ?? '', /isn't on origin\/main/);
@@ -86,6 +90,10 @@ test('fetched-app binding: missing, unreadable or commitless build info', () => 
 	const o = { repoRoot: r.root, platform: 'darwin' };
 	assert.match(appBuildProblem(app(path.join(r.root, 'none')), o) ?? '', /no build-info.json/);
 	assert.equal(appBuildProblem(app(path.join(r.root, 'linux')), { ...o, platform: 'linux' }), undefined);
+	// A Linux build info from a later REH-only build isn't the editor's (review FAB2-6).
+	const lo = { ...o, platform: 'linux' };
+	assert.match(appBuildProblem(app(path.join(r.root, 'lreh'), { repoSha: r.head, targets: 'reh' }), lo) ?? '', /without the editor/);
+	assert.equal(appBuildProblem(app(path.join(r.root, 'led'), { repoSha: r.head, targets: 'editor' }), lo), undefined);
 	assert.match(appBuildProblem(app(path.join(r.root, 'nosha'), { upstreamSha: r.head }), o) ?? '', /records no commit/);
 	assert.match(appBuildProblem(app(path.join(r.root, 'arr'), [r.head]), o) ?? '', /not a JSON object/);
 	const linked = path.join(r.root, 'linked');
@@ -98,4 +106,18 @@ test('fetched-app binding: missing, unreadable or commitless build info', () => 
 	const v = app(variant, { repoSha: r.old }, 'build-info-app.json');
 	fs.writeFileSync(path.join(variant, 'build-info.json'), JSON.stringify({ repoSha: r.head }));
 	assert.match(appBuildProblem(v, o) ?? '', /stale or different build/);
+});
+
+test('fetched-app binding: a build in a nested checkout is that checkout HEAD build (A/B baseline)', () => {
+	const r = repo();
+	const nested = path.join(r.root, '.work', 'ubranch');
+	fs.mkdirSync(nested, { recursive: true });
+	const git = (...a: string[]) => execFileSync('git', ['-C', nested, '-c', 'user.name=t', '-c', 'user.email=t@t.invalid', '-c', 'commit.gpgsign=false', ...a], { encoding: 'utf8' }).trim();
+	git('init', '-q');
+	git('commit', '-q', '--allow-empty', '-m', 'baseline');
+	const base = git('rev-parse', 'HEAD');
+	const o = { repoRoot: r.root, platform: 'darwin' };
+	const dir = path.join(nested, '.work', 'test-builds', 'agentic-browser');
+	assert.equal(appBuildProblem(app(dir, { repoSha: base, testBuild: {} }, 'build-info-app.json'), o), undefined);
+	assert.match(appBuildProblem(app(dir, { repoSha: r.head, testBuild: {} }, 'build-info-app.json'), o) ?? '', /stale or different build/);
 });

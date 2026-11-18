@@ -5,8 +5,9 @@
 //
 // The commit a run is asked to test:
 //   SECLAB_APP_SHA=<40 hex>   that commit, whatever the app's location;
-//   otherwise, a branch or test-variant build (anything but the release location) must be this
-//   checkout's HEAD, and the release app (.work/app) a build of a commit on origin/main.
+//   otherwise, a branch or test-variant build (anything but the release location) must be the
+//   HEAD of the checkout it was fetched into (this one, or one nested in its .work, such as an A/B
+//   run's baseline worktree), and the release app (.work/app) a build of a commit on origin/main.
 // A test build (build info with `testBuild`) runs only from .work/test-builds/ (review FAB-4, FAB-8).
 // A Linux editor without a fetched build-info.json is one this checkout built (./seclab build
 // linux editor) and is not checked here.
@@ -52,14 +53,21 @@ export function appBuildProblem(app: string, opts: { repoRoot: string; expect?: 
 	if (typeof info === 'string') {
 		return info;
 	}
+	// A local Linux build info names its targets; one without the editor is a later REH build's.
+	if ('targets' in info && !/\beditor\b/.test(String((info as { targets?: unknown }).targets))) {
+		return `${file} is from a build without the editor (targets ${JSON.stringify((info as { targets?: unknown }).targets)}), not this app's`;
+	}
 	const sha = info.repoSha;
 	if (typeof sha !== 'string' || !HEX40.test(sha)) {
 		return `${file} records no commit (repoSha)`;
 	}
-	// No inherited GIT_DIR and the like: HEAD is this checkout's (review FAB-7).
+	// The checkout the app was fetched into: this one, or a checkout nested in its .work (an A/B
+	// run's baseline worktree builds its own commit). Its HEAD is the commit under test.
+	const checkout = owningCheckout(dir, real(opts.repoRoot));
+	// No inherited GIT_DIR and the like: HEAD is that checkout's (review FAB-7).
 	const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/.test(k)));
-	const git = (...args: string[]) => execFileSync('git', ['-C', opts.repoRoot, ...args], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-	if ('testBuild' in info && !isUnder(dir, real(path.join(opts.repoRoot, '.work', 'test-builds')))) {
+	const git = (...args: string[]) => execFileSync('git', ['-C', checkout, ...args], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+	if ('testBuild' in info && !isUnder(dir, real(path.join(checkout, '.work', 'test-builds')))) {
 		return `${app} is a test build (its build info has testBuild): it runs only from .work/test-builds/`;
 	}
 	if (opts.expect !== undefined) {
@@ -72,11 +80,14 @@ export function appBuildProblem(app: string, opts: { repoRoot: string; expect?: 
 	try {
 		head = git('rev-parse', 'HEAD');
 	} catch {
-		return `can't read this checkout's HEAD to check ${app}; set SECLAB_APP_SHA`;
+		return `can't read the HEAD of ${checkout} to check ${app}; set SECLAB_APP_SHA`;
 	}
 	// The release rule is for the release location itself, not wherever a symlink there points.
-	const releasePath = path.join(opts.repoRoot, '.work', 'app');
+	const releasePath = path.join(checkout, '.work', 'app');
 	if (!isLink(releasePath) && dir === real(releasePath)) {
+		if (fs.existsSync(path.join(checkout, '.work', 'app-fetch-pending')) || isLink(path.join(checkout, '.work', 'app-fetch-pending'))) {
+			return `${app}: the last ./seclab fetch macos didn't complete (.work/app-fetch-pending), so this may not be the build asked for; fetch again, or set SECLAB_APP_SHA`;
+		}
 		try {
 			git('merge-base', '--is-ancestor', sha, 'refs/remotes/origin/main');
 			return undefined;
@@ -85,7 +96,19 @@ export function appBuildProblem(app: string, opts: { repoRoot: string; expect?: 
 		}
 	}
 	return sha === head ? undefined
-		: `${app} was built from ${sha}, not this checkout's HEAD ${head}: a stale or different build. Fetch the build of HEAD, or set SECLAB_APP_SHA to the commit this run tests`;
+		: `${app} was built from ${sha}, not the HEAD ${head} of ${checkout}: a stale or different build. Fetch the build of HEAD, or set SECLAB_APP_SHA to the commit this run tests`;
+}
+
+/** The nearest directory at or above `dir` holding a .git entry, if it is `root` or inside it; else `root`. */
+function owningCheckout(dir: string, root: string): string {
+	for (let d = dir; ; d = path.dirname(d)) {
+		if (fs.existsSync(path.join(d, '.git'))) {
+			return d === root || isUnder(d, root) ? d : root;
+		}
+		if (path.dirname(d) === d) {
+			return root;
+		}
+	}
 }
 
 /** The canonical path (case and symlinks resolved), or the path itself when it doesn't exist (review FAB-6). */

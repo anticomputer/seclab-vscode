@@ -351,6 +351,7 @@ test/safety/fixture-lint.sh --self-test
 ./seclab lint publish --self-test
 ./seclab lint workflows
 ./seclab findings --self-test
+./seclab fetch --self-test
 ```
 
 Verified commands (one entry point: `./seclab help`):
