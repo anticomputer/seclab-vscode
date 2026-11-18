@@ -18640,7 +18640,7 @@
 			"owner": "fork-build",
 			"status": "accepted-residual",
 			"acceptedBy": "agent",
-			"rationale": "The validator bounds skipping, not vacuous success; the required-jobs gate EDR records the limit.",
+			"rationale": "The validator bounds skipping, not vacuous success; the control outside the pull request is the pending required-jobs gate (EDR pr-landing-review).",
 			"ref": {
 				"file": "docs/security-reviews/20261117-required-checks-review.md",
 				"quote": "bounds skipping, not vacuous success"
