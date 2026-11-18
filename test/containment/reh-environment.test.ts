@@ -651,8 +651,10 @@ const tests: Array<[string, () => Promise<void>]> = [
 		const mm = await mcpManagement(b, TAB, [mcpServer(TAB, remote(TAB, '/srv/README.md'))]);
 		assert.equal(mm.refused, false);
 		// A tab language pack still updates and uninstalls in the tab.
+		const before = b.refusals.length;
 		assert.deepEqual(await languagePackFanOut(b, TAB), { updated: ['remote'], uninstalled: ['remote'] });
-		b.refusals.length = 0;
+		// The two fan-outs it refused, and nothing else; every other genuine step must log none (ENV-32).
+		assert.deepEqual(b.refusals.splice(before), ['host-install', 'host-install']);
 		// ENV-24: env and headers are the config author's records; their keys may be URI key names.
 		const rec = await mcpManagement(b, TAB, [{ ...mcpServer(TAB, remote(TAB, '/r.md')), config: { type: 'http', url: 'http://192.0.2.1/', headers: { authority: 'x', path: '/' } } }, { ...mcpServer(TAB, remote(TAB, '/r.md')), config: { type: 'stdio', command: 'node', env: { path: '/usr/bin', scheme: 'a', PORT: 3000, UNSET: null } } }]);
 		assert.equal(rec.refused, false);
