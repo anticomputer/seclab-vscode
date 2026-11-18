@@ -19475,7 +19475,7 @@
 			"component": "patch 0018 chat session gate",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:3947c1af628d840d96b0b3d4f2f35fd7d010dac3",
+			"commit": "7b24cb3c7a1c",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "the patch gates the queued path, which never reaches the dispatch function"
@@ -19490,12 +19490,12 @@
 			"owner": "agentic",
 			"status": "fixed-before-landing",
 			"note": "closed by patch 0019 rather than inside 0018: IChatAgentData carries an extension id and no connection, so there is no comparison the chat gate could make. 0019 removes the only site that registers an agent for another connection, so the premise holds by construction. Proved by ./seclab test agent-registration, whose baseline arm on pristine upstream reports vulnerable.",
-			"commit": "patch:530fb513c78e6cf1a1a60fdaeaa50df1cb36734d",
+			"commit": "a30fc55bc6dc",
 			"test": {
 				"file": "test/agentic/ahp/agent-registration-probe.ts",
 				"name": "CONTAINED: the agent-registering contribution is never constructed in a tab window, so a forged agent id has no other connection agent to name"
 			},
-			"preFix": "patch:7945a720bb24c4ffc25078cd07b2088481d5645e",
+			"preFix": "e95a11101a24",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261106-agentic-ahp-gate.md",
 				"quote": "**R12-2.** The probe check\n`CONTAINED: the agent-registering contribution is never constructed in a tab window, so a forged agent id has no other connection agent to name`\nfails on the reviewed commit, which carries patch 0018 without patch 0019."
@@ -19509,7 +19509,7 @@
 			"component": "patch 0015 window gate log",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:3947c1af628d840d96b0b3d4f2f35fd7d010dac3",
+			"commit": "7b24cb3c7a1c",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "the gate log counts per rule, so one rule cannot crowd out the refusals of another"
@@ -19523,7 +19523,7 @@
 			"component": "upstream invariants for patch 0018",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:3947c1af628d840d96b0b3d4f2f35fd7d010dac3",
+			"commit": "7b24cb3c7a1c",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "the upstream facts patch 0018 depends on are pinned, each to the file that states them"
@@ -19537,12 +19537,12 @@
 			"component": "patch 0019 null-provider shapes",
 			"owner": "agentic",
 			"status": "fixed-before-landing",
-			"commit": "patch:91ace45ce0723d04afdb8c2aff88b8cc4236cd01",
+			"commit": "788312cc1e0d",
 			"test": {
 				"file": "test/agentic/gate/null-providers.test.ts",
 				"name": "THE REAL POINT: a shape is checked against the service it claims to stand in for"
 			},
-			"preFix": "patch:530fb513c78e6cf1a1a60fdaeaa50df1cb36734d",
+			"preFix": "a30fc55bc6dc",
 			"preFixRef": {
 				"file": "docs/security-reviews/20261106-agentic-ahp-gate.md",
 				"quote": "**R13-1.** The unit test\n`THE REAL POINT: a shape is checked against the service it claims to stand in for`\nfails on the reviewed commit, which carries patch 0019 with the shape table as first written."
@@ -19556,7 +19556,7 @@
 			"component": "patch 0019 null-provider shapes",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:91ace45ce0723d04afdb8c2aff88b8cc4236cd01",
+			"commit": "788312cc1e0d",
 			"test": {
 				"file": "test/agentic/gate/null-providers.test.ts",
 				"name": "a guarded name is shaped or recorded, never silently empty"
@@ -19570,7 +19570,7 @@
 			"component": "patch 0019 probe",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:91ace45ce0723d04afdb8c2aff88b8cc4236cd01",
+			"commit": "788312cc1e0d",
 			"test": {
 				"file": "test/agentic/ahp/agent-registration-probe.ts",
 				"name": "the actual mechanism that"
@@ -19584,7 +19584,7 @@
 			"component": "patch 0018 chat session gate",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:e782e8d5be650c1463cc74f8fd5fef15b460f93f",
+			"commit": "8276845e41bb",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "sendRequestInternal is checked on entry, before an untitled session hands the prompt to its controller"
@@ -19598,7 +19598,7 @@
 			"component": "increment 3 records",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "patch:6a57fa7a9a147200c40d62392f27a4b4b8828965",
+			"commit": "0e861e51f1ca",
 			"gap": "A documentation correction: the EDR now lists the branch and what covers it (the entry check, pinned by the R14-1 unit test)."
 		},
 		{
@@ -19609,7 +19609,7 @@
 			"component": "window-proof harness",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "patch:e782e8d5be650c1463cc74f8fd5fef15b460f93f",
+			"commit": "8276845e41bb",
 			"gap": "A harness precondition; no test runs window-proof itself, which needs a fetched macOS build."
 		},
 		{
@@ -19620,7 +19620,7 @@
 			"component": "agentic probe runners",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "patch:e782e8d5be650c1463cc74f8fd5fef15b460f93f",
+			"commit": "8276845e41bb",
 			"gap": "Harness hygiene; both runners derive their trees through it on every run, and no stale artefact can shadow a module at the current pin."
 		},
 		{
@@ -19631,7 +19631,7 @@
 			"component": "patch 0018 unit tests",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "patch:88f81684f0c936095692d7324cd62216ccbe50bb",
+			"commit": "e19e7f75943e",
 			"gap": "A test-quality fix: the vacuous clause was removed; the remaining regex, which fails on the previous patch text, is what pins R14-1."
 		},
 		{
@@ -19642,7 +19642,7 @@
 			"component": "chat-dispatch probe",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "patch:88f81684f0c936095692d7324cd62216ccbe50bb",
+			"commit": "e19e7f75943e",
 			"gap": "A probe fix, shown by injection (an item controller that throws fails the run); no test runs the probe's own guard."
 		},
 		{
@@ -19653,7 +19653,7 @@
 			"component": "patch 0019 null-provider shapes",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:05ab7e1bdfb7abcd1d402fe515775b25cbcd6098",
+			"commit": "d3ee80c0df39",
 			"test": {
 				"file": "test/agentic/gate/null-providers.test.ts",
 				"name": "the authentication resolver stand-in supplies createResolver, which the remote agent-host factory calls first"
@@ -19667,7 +19667,7 @@
 			"component": "agentic probe runners",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "patch:05ab7e1bdfb7abcd1d402fe515775b25cbcd6098",
+			"commit": "d3ee80c0df39",
 			"gap": "Harness hygiene, shown with a simulated pin change; no test runs the helper itself."
 		},
 		{
@@ -19678,7 +19678,7 @@
 			"component": "window-proof harness",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "patch:05ab7e1bdfb7abcd1d402fe515775b25cbcd6098",
+			"commit": "d3ee80c0df39",
 			"gap": "Uses the shared exitOnSignals helper; no test runs window-proof itself, which needs a fetched macOS build."
 		},
 		{
@@ -19689,7 +19689,7 @@
 			"component": "window-proof harness",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "patch:05ab7e1bdfb7abcd1d402fe515775b25cbcd6098",
+			"commit": "d3ee80c0df39",
 			"gap": "The 0019 wrapper now marks real and stand-in construction; the evidence is the real-build run recorded in the EDR, not a unit test."
 		},
 		{
@@ -19700,7 +19700,7 @@
 			"component": "patch 0018 chat session gate",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:fffb77212d7e6fef6552ca6524ad535e1e88f239",
+			"commit": "5c7adb6b8684",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "a refusal on a bypass path comes before the transcript or the queue is changed"
@@ -19714,7 +19714,7 @@
 			"component": "patch 0018 chat session gate",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:9a072f2ec275436526be006a612cc3964faa859d",
+			"commit": "a5f66570689a",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "a refusal on a bypass path comes before the transcript or the queue is changed"
@@ -19728,7 +19728,7 @@
 			"component": "patch 0018 chat session gate",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "patch:9a072f2ec275436526be006a612cc3964faa859d",
+			"commit": "a5f66570689a",
 			"gap": "migrateRequests now catches the gate's refusal and returns; the chat-dispatch probe's migration arm shows the refusal logged and the queue kept, but no test drives the commit flow that calls it."
 		},
 		{
@@ -19739,7 +19739,7 @@
 			"component": "chat-dispatch probe and 0018 unit tests",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "patch:9a072f2ec275436526be006a612cc3964faa859d",
+			"commit": "a5f66570689a",
 			"gap": "A test-quality fix: a send-now probe arm and a code-anchored assertion; nothing tests the tests themselves."
 		},
 		{
@@ -19750,7 +19750,7 @@
 			"component": "patch 0018 chat session gate",
 			"owner": "agentic",
 			"status": "fixed",
-			"commit": "patch:d2937efd13e340d55c75e1673f2b31cc2f1d2c64",
+			"commit": "02af0f4220b4",
 			"test": {
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "a refusal on a bypass path comes before the transcript or the queue is changed"
@@ -19764,7 +19764,7 @@
 			"component": "patch 0018 unit tests",
 			"owner": "agentic",
 			"status": "fixed-untested",
-			"commit": "patch:d2937efd13e340d55c75e1673f2b31cc2f1d2c64",
+			"commit": "02af0f4220b4",
 			"gap": "A test-quality fix: the unit test now pins the whole migration construct and that it holds no catch; nothing tests the test itself."
 		},
 		{
