@@ -325,7 +325,10 @@ try {
 	results.protoInjected = await waitFor(() => exists('injected'), 10_000);
 	// The window applied the resolve-only edit, so it merged the reply: read the prototype after that.
 	results.protoMerged = dropEdit && mode !== 'control' ? undefined : await waitFor(() => exists('merged'), 20_000);
-	results.protoPolluted = await e.evaluate<boolean>(`Object.prototype.hasOwnProperty('seclabPrc3Polluted')`);
+	const polluted = () => e.evaluate<boolean>(`Object.prototype.hasOwnProperty('seclabPrc3Polluted')`);
+	// Control reads once, after the window applied the merged edit. The other modes have no such
+	// signal, and Enter returns before the reply is processed, so they poll (PR review on #55).
+	results.protoPolluted = mode === 'control' ? await polluted() : await waitFor(polluted, 20_000);
 
 	await sleep(2000);
 	[results.imgPlain, results.imgNested, results.imgSpan] = imageHits;

@@ -126,6 +126,8 @@ also carries an edit (`additionalTextEdits`), which the window applies only from
 merged. The harness waits for that edit before reading the prototype (PR review on #55). In the
 other modes the polluted prototype is the proof of the merge. Pollution also breaks the
 renderer's edit application, so accepting would stall there, and those modes leave the edit out.
+They poll for the key for up to 20 seconds instead, since Enter returns before the reply is
+processed (PR review on #55).
 
 | Mode | Build | Run | `Object.prototype` | Checks |
 |---|---|---|---|---|
