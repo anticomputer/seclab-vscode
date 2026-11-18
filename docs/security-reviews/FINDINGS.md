@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 249 | 410 | 52 | 816 |
+| fixed | 14 | 91 | 249 | 411 | 52 | 817 |
 | fixed-before-landing | 0 | 5 | 0 | 0 | 0 | 5 |
-| fixed-untested | 0 | 5 | 59 | 184 | 71 | 319 |
+| fixed-untested | 0 | 5 | 59 | 185 | 71 | 320 |
 | accepted-residual | 0 | 1 | 13 | 73 | 25 | 112 |
-| deferred | 2 | 1 | 13 | 10 | 3 | 29 |
+| deferred | 2 | 1 | 13 | 11 | 3 | 30 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 105 | 345 | 692 | 185 | 1343 |
+| **all** | 16 | 105 | 345 | 695 | 185 | 1346 |
 
 ## Baseline: open high and critical findings
 
@@ -101,6 +101,8 @@ Patch 0015 (the agent-host gate), the agentic spikes and test variants, the secu
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R15-2** | low | fixed-untested | chat-dispatch probe | The dispatch probe's unhandledRejection listener was process-wide, so an unexpected rejection was swallowed instead of failing the run | A probe fix, shown by injection (an item controller that throws fails the run); no test runs the probe's own guard. |
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R17-2** | low | fixed-untested | patch 0018 chat session gate | The migration check threw synchronously out of migrateRequests, aborting its caller's commit halfway | migrateRequests now catches the gate's refusal and returns; the chat-dispatch probe's migration arm shows the refusal logged and the queue kept, but no test drives the commit flow that calls it. |
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R17-3** | low | fixed-untested | chat-dispatch probe and 0018 unit tests | The send-now check had no behavioural coverage, and its ordering assertion was anchored on a comment | A test-quality fix: a send-now probe arm and a code-anchored assertion; nothing tests the tests themselves. |
+| [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R17-5** | low | fixed-untested | patch 0018 unit tests | No assertion pinned the migration's catch body, so a best-effort carry-on would have passed the unit tests | A test-quality fix: the unit test now pins the whole migration construct and that it holds no catch; nothing tests the test itself. |
+| [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R17-6** | low | deferred | chat-dispatch probe | Cancelling an in-flight request on the resend and send-now paths has no behavioural coverage, since the probe's restored session has nothing in flight | follow-up: With the increment that opens chat in tab windows (project owner decision, 2026-11-17): in a tab window a request can be in flight only in a session the gate allows, so a behavioural arm needs an allowed in-flight session. Until then the checks' position before both cancels is pinned by the patch-text ordering assertions. |
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R9-NOTE** | low | accepted-residual | increment 2 proof verdict | F's ephemeral scope is also satisfiable by upstream's workspace-trust downgrade, and the verdict does not record trust state | accepted by an agent: Trust is disabled host-side and the U control shows \`global\`, which rules it out empirically for this harness; the reviewer left it as a known limit and recorded it so a later profile change cannot turn the check green unnoticed. |
 | [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md) **BV-1** | low | fixed-untested | agentic-browser test build variant (browserView-hook.patch) | The browser-drive hook could not apply on \`main\`: its context was generated against a tree including 0017, whose hunk touches the same import block | The hook is now written against the series without 0017 and its import is placed away from 0017's hunk, verified by applying it to a tree with and without 0017 — but that was a manual check; nothing in the repo applies the hook to both trees, so only a dispatched \`build-macos\` run of each baseline would catch a regression. |
 | [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md) **BV-3** | low | fixed-untested | agentic-browser hook arming | The hook's expiry check failed open: \`Date.now() &gt; Number(until)\` is false for a non-numeric \`until\`, so a malformed arming file counted as unexpired | Inverted to \`Number(fields.until) &gt; Date.now()\` (fails closed), but there is no arming test for the browser-drive hook, unlike \`test/builds/rogue-reh-arming.ts\` for the rogue-REH hook. |
@@ -1440,6 +1442,9 @@ Every other commit the register cites is on main's history, or on the branch its
 | R17-1 | low | fixed | migrateRequests checked only the target, so a session the window may not dispatch could have its queued text drained into one it may | patch:9a072f2ec275436526be006a612cc3964faa859d · `test/agentic/gate/chat-sessions.test.ts` "a refusal on a bypass path comes before the transcript or the queue is changed" |
 | R17-2 | low | fixed-untested | The migration check threw synchronously out of migrateRequests, aborting its caller's commit halfway | migrateRequests now catches the gate's refusal and returns; the chat-dispatch probe's migration arm shows the refusal logged and the queue kept, but no test drives the commit flow that calls it. |
 | R17-3 | low | fixed-untested | The send-now check had no behavioural coverage, and its ordering assertion was anchored on a comment | A test-quality fix: a send-now probe arm and a code-anchored assertion; nothing tests the tests themselves. |
+| R17-4 | low | fixed | The try/catch around the two migration checks swallowed any error, so an error other than the gate's refusal became a silent, unlogged no-op | patch:d2937efd13e340d55c75e1673f2b31cc2f1d2c64 · `test/agentic/gate/chat-sessions.test.ts` "a refusal on a bypass path comes before the transcript or the queue is changed" |
+| R17-5 | low | fixed-untested | No assertion pinned the migration's catch body, so a best-effort carry-on would have passed the unit tests | A test-quality fix: the unit test now pins the whole migration construct and that it holds no catch; nothing tests the test itself. |
+| R17-6 | low | deferred | Cancelling an in-flight request on the resend and send-now paths has no behavioural coverage, since the probe's restored session has nothing in flight | follow-up: With the increment that opens chat in tab windows (project owner decision, 2026-11-17): in a tab window a request can be in flight only in a session the gate allows, so a behavioural arm needs an allowed in-flight session. Until then the checks' position before both cancels is pinned by the patch-text ordering assertions. |
 
 ### [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md)
 
