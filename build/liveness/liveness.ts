@@ -596,6 +596,9 @@ export function jobProblems(yml: string, job: string, label: string): { problems
 		out.push(`${label}: job \`${job}\` not found under jobs:`);
 		return { problems: out, body: [], found: false };
 	}
+	if (anyOpen(lines.slice(0, start), false)) {
+		out.push(`${label}: job \`${job}\` follows an open flow collection or quoted scalar, so it may not be the job`);
+	}
 	if (decls !== 1) {
 		out.push(`${label}: job \`${job}\` is declared ${decls} times`);
 	}
@@ -642,6 +645,11 @@ export function jobContexts(yml: string): Array<{ id: string; context: string }>
 	const lines = yml.split('\n');
 	const at = lines.findIndex(l => /^jobs\s*:/.test(l));
 	if (at < 0 || lines.filter(l => /^["']?jobs["']?\s*:/.test(l)).length !== 1 || lines[at].replace(/^jobs\s*:/, '').replace(/\s+#.*$/, '').trim()) {
+		return undefined;
+	}
+	// A `jobs:` line inside an open flow mapping or quoted scalar is text, and the real jobs are
+	// elsewhere (Copilot review on PR 32).
+	if (anyOpen(lines.slice(0, at), false)) {
 		return undefined;
 	}
 	const out: Array<{ id: string; context: string }> = [];

@@ -128,6 +128,12 @@ export function permissionsProblems(files: Record<string, string>, writeOk: (f: 
 			bad('a complex or merge key');
 			continue;
 		}
+		// An alias as a mapping key (`*p :` with `&p permissions` elsewhere) names the key the
+		// anchor holds, which a text scan can't see (Copilot review on PR 32).
+		if (lines.some(l => /^\s*(?:-\s+)?\*[^\s:]*\s*:/.test(l) || /[{,]\s*\*[^\s:,}]*\s*:/.test(l))) {
+			bad('an alias as a mapping key');
+			continue;
+		}
 		const pair = (scope: string, value: string, where: number) => {
 			if (!/^[a-z][a-z-]*$/.test(scope) || !/^(read|write|none)$/.test(value)) {
 				bad(`line ${where + 1}: unreadable permission ${JSON.stringify(`${scope}: ${value}`)}`);
@@ -141,7 +147,10 @@ export function permissionsProblems(files: Record<string, string>, writeOk: (f: 
 			if (!m) {
 				// Only where `permissions` could be a key: right before a colon, comments aside. A step
 				// named "Verify permissions" isn't one (Copilot review on PR 32).
-				if (/permissions["']?\s*:/.test(lines[i].replace(/(^|\s)#.*$/, ''))) {
+				// A quoted `permissions` key anywhere is one; otherwise quoted values are text, so a
+				// label like 'Verify permissions: read-only' isn't (Copilot review on PR 32).
+				const code = lines[i].replace(/(^|\s)#.*$/, '');
+				if (/(["'])permissions\1\s*:/.test(code) || /(^|[^\w-])permissions\s*:/.test(code.replace(/'(?:[^']|'')*'|"[^"\\]*"/g, '""'))) {
 					bad(`line ${i + 1}: a permissions key it can't read`);
 				}
 				continue;
@@ -226,6 +235,7 @@ function selfTest(): void {
 		['a job with an empty body', good.replace('  unit:\n    name: unit\n    runs-on: x\n    steps:\n      - run: x\n', '  unit:\n'), /must be named/],
 		['CR-7 a required job indented 6 hiding if', good.replace('    name: unit\n    runs-on: x\n    steps:\n      - run: x\n', '      name: unit\n      if: false\n      runs-on: x\n      steps:\n        - run: x\n'), /not indented 4/],
 		['CR-7 if after a column-0 comment', good.replace('    steps:\n', '# note\n    if: false\n    steps:\n'), /job-level if/],
+		['a job after an open quoted scalar', 'name: "x\n' + good.replace('on:\n', '"\non:\n'), /open flow collection or quoted scalar/],
 		['a flow-style job', good.replace('  unit:\n    name: unit\n    runs-on: x\n    steps:\n      - run: x\n', '  unit: {name: unit, if: false}\n'), /not found|declared/],
 	];
 	const wf = (job: string) => `on:\n  push:\n  pull_request:\njobs:\n${job}`;
@@ -249,6 +259,10 @@ function selfTest(): void {
 		['a plain scalar does not hide a later escaped key', { 'x.yml': wf('  a:\n    permissions:\n      "check\\x73": write\n    steps:\n      - run: printf "%s\\n" ok\n') }, /double-quoted YAML escape/],
 		['an escaped key after a plain-scalar value on a flow line', { 'x.yml': wf('  a:\n    steps:\n      - { run: x, "per\\x6dissions": {checks: write} }\n') }, /double-quoted YAML escape/],
 		['a plain scope value with a backslash', { 'x.yml': wf('  a:\n    permissions:\n      checks: wr\\ite\n    steps:\n      - run: x\n') }, /unreadable permission/],
+		['an alias as a block permissions key', { 'x.yml': wf('  a:\n    name: &p permissions\n    steps:\n      - run: x\n') + '*p :\n  checks: write\n' }, /an alias as a mapping key/],
+		['an alias as a flow permissions key', { 'x.yml': wf('  a:\n    name: &p permissions\n    steps:\n      - { run: x, *p : {checks: write} }\n') }, /an alias as a mapping key/],
+		['a quoted label holding permissions:', { 'x.yml': wf("  a:\n    steps:\n      - name: 'Verify permissions: read-only'\n        run: x\n      - name: \"Check permissions: none\"\n        run: y\n") }, null],
+		['a quoted permissions key in a flow step', { 'x.yml': wf("  a:\n    steps:\n      - { name: x, 'permissions': {checks: write} }\n") }, /can't read|permissions/],
 		['checks: read is fine', { 'x.yml': wf('  a:\n    permissions:\n      checks: read\n    steps:\n      - run: x\n') }, null],
 		['control: the real four and an unrelated job', { 'x.yml': wf('  other:\n    name: other\n    steps:\n      - run: x\n') }, null],
 		['a decoy job named lint', { 'shadow.yml': wf('  a:\n    name: lint\n    steps:\n      - run: x\n') }, /reports the required context `lint`/],
@@ -259,6 +273,7 @@ function selfTest(): void {
 		['a decoy id lint with a null name', { 'shadow.yml': wf('  lint:\n    name: null\n    steps:\n      - run: x\n') }, /can't be read in full/],
 		['a decoy id lint with a ~ name', { 'shadow.yml': wf('  lint:\n    name: ~\n    steps:\n      - run: x\n') }, /can't be read in full/],
 		['a decoy id lint with an empty quoted name', { 'shadow.yml': wf("  lint:\n    name: ''\n    steps:\n      - run: x\n") }, /can't be read in full/],
+		['a decoy jobs block inside a quoted name', { 'shadow.yml': '{name: "x\njobs:\n  a:\n    name: ok\n", jobs: {lint: {steps: [{run: x}]}}, on: push}\n' }, /can't be read in full/],
 		['flow-style jobs', { 'shadow.yml': 'on: push\njobs: {a: {name: lint}}\n' }, /can't be read in full/],
 		['a flow-style job', { 'shadow.yml': wf('  a: {name: lint}\n') }, /can't be read in full/],
 		['CR-7 a name indented 6', { 'shadow.yml': wf('  a:\n      name: lint\n      steps:\n        - run: x\n') }, /can't be read in full/],
@@ -278,7 +293,7 @@ function selfTest(): void {
 			throw new Error(`required-checks self-test "${name}": got ${JSON.stringify(got)}`);
 		}
 	}
-	console.log(`required-checks self-test: ${cases.length + 35} cases OK`);
+	console.log(`required-checks self-test: ${cases.length + 40} cases OK`);
 }
 
 if (import.meta.main) {
