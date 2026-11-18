@@ -19705,6 +19705,42 @@
 				"file": "test/agentic/gate/chat-sessions.test.ts",
 				"name": "a refusal on a bypass path comes before the transcript or the queue is changed"
 			}
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R17-1",
+			"severity": "low",
+			"summary": "migrateRequests checked only the target, so a session the window may not dispatch could have its queued text drained into one it may",
+			"component": "patch 0018 chat session gate",
+			"owner": "agentic",
+			"status": "fixed",
+			"commit": "patch:9a072f2ec275436526be006a612cc3964faa859d",
+			"test": {
+				"file": "test/agentic/gate/chat-sessions.test.ts",
+				"name": "a refusal on a bypass path comes before the transcript or the queue is changed"
+			}
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R17-2",
+			"severity": "low",
+			"summary": "The migration check threw synchronously out of migrateRequests, aborting its caller's commit halfway",
+			"component": "patch 0018 chat session gate",
+			"owner": "agentic",
+			"status": "fixed-untested",
+			"commit": "patch:9a072f2ec275436526be006a612cc3964faa859d",
+			"gap": "migrateRequests now catches the gate's refusal and returns; the chat-dispatch probe's migration arm shows the refusal logged and the queue kept, but no test drives the commit flow that calls it."
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R17-3",
+			"severity": "low",
+			"summary": "The send-now check had no behavioural coverage, and its ordering assertion was anchored on a comment",
+			"component": "chat-dispatch probe and 0018 unit tests",
+			"owner": "agentic",
+			"status": "fixed-untested",
+			"commit": "patch:9a072f2ec275436526be006a612cc3964faa859d",
+			"gap": "A test-quality fix: a send-now probe arm and a code-anchored assertion; nothing tests the tests themselves."
 		}
 	]
 }
