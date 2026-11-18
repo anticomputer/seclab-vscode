@@ -15,14 +15,22 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
+<<<<<<< HEAD
 | fixed | 14 | 84 | 212 | 335 | 45 | 690 |
+=======
+| fixed | 14 | 84 | 211 | 313 | 45 | 667 |
+>>>>>>> 20a4b38 (register: PH-12)
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 52 | 166 | 59 | 282 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
+<<<<<<< HEAD
 | **all** | 16 | 93 | 302 | 594 | 150 | 1155 |
+=======
+| **all** | 16 | 93 | 301 | 572 | 150 | 1132 |
+>>>>>>> 20a4b38 (register: PH-12)
 
 ## Baseline: open high and critical findings
 
@@ -2128,6 +2136,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | PH-9 | low | fixed | docsync printed the tab's hijack counters and strings unvalidated, so a crafted value threw before the teardown gate. | patch:9723f3c517b43437b39b91effd63371bfbb16f20 · `test/docsync/probe.ts` "the report schema check rejects a malformed tab value without throwing" |
 | PH-10 | info | fixed | docsync's hostile self-test failed the scheme check first, so the hash's type check went unexercised. | patch:9723f3c517b43437b39b91effd63371bfbb16f20 · `test/docsync/probe.ts` "the report schema check rejects a malformed tab value without throwing" |
 | PH-11 | low | fixed | Clearing stdout on a failed read also dropped docsync's tab logs, so a canary already emitted could vanish and the absence checks pass on missing evidence. | patch:8cbaf3f21161e53601280f24ab3d760f61d40d41 · `test/docsync/probe.ts` "control: the tab-side logs were collected (no timeout or failure)" |
+| PH-12 | low | fixed | docsync's summary sorted tab-made scheme counters with the default sort, which stringified them, so a crafted counter threw before the teardown gate. | patch:02b6d44c3b825edb06e4d754462469d2009ef618 · `test/docsync/probe.ts` "the report schema check passes nothing the summary cannot print (PH-12)" |
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 
