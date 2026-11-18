@@ -114,6 +114,12 @@ exports.activate = async function (context) {
 		// serialises replies with it). A recursive merge in the trusted renderer then writes
 		// `seclabPrc3Polluted` onto its Object.prototype; the harness asks the renderer whether it did.
 		const PROTO_MARK = 'SECLABPROTOMARK';
+		const MERGE_MARK = 'seclabmerged ';
+		context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(e => {
+			if (e.document.uri.path.endsWith('/probe.txt') && e.contentChanges.some(c => c.text === MERGE_MARK)) {
+				mark('merged', { merged: true });
+			}
+		}));
 		context.subscriptions.push(vscode.languages.registerCompletionItemProvider(selector, {
 			provideCompletionItems() {
 				const item = new vscode.CompletionItem({ label: 'seclabResolveProto', detail: 'pending' }, vscode.CompletionItemKind.Text);
@@ -137,6 +143,12 @@ exports.activate = async function (context) {
 				// In place: the extension host sends the label it captured before calling resolve.
 				if (item.label && typeof item.label === 'object') {
 					item.label.detail = PROTO_MARK;
+				}
+				// A harmless edit only the resolve reply carries: the window applies it from the item it
+				// merged, so its arrival shows the trusted side took the reply in (PR review on #55).
+				// Left out when the harness proves that this observation can fail (`prc3edit=0`).
+				if (targets.prc3edit !== '0') {
+					item.additionalTextEdits = [vscode.TextEdit.insert(new vscode.Position(0, 0), MERGE_MARK)];
 				}
 				mark('resolved', { resolved: true });
 				return item;
