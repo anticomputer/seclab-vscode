@@ -8,7 +8,7 @@
   lint (#14), the host-terminal proof harness (#20), and the reaper added for PRR-4 (#27).
 
 ## Verdict
-All fourteen threads point at real gaps, and fixing them turned up three more (PRR-13, PRR-14, PRR-17). Two are as stated. One wasn't as stated but hid a wider gap.
+All sixteen threads point at real gaps, and fixing them turned up three more (PRR-13, PRR-14, PRR-17). Two are as stated. One wasn't as stated but hid a wider gap.
 Two were narrower than stated. None is exploitable on main; each is a gate or harness that
 could pass, or leave things behind, for the wrong reason.
 
@@ -31,6 +31,8 @@ could pass, or leave things behind, for the wrong reason.
 | PRR-15 | low | `lint_probes.py` slash classification (#27) | Reserved words outside the regex and unsure lists read as division, but `debugger` (like other statement-ending keywords) can be followed by a newline and a regex statement, whose closing slashes then hid a write as a comment | fixed |
 | PRR-16 | low | `lint_probes.py` slash classification (#27) | `#` was its own token, so a private name such as `o.#return` read as a keyword and a following `/` as a regex, moving a string boundary that hid a computed record key | fixed |
 | PRR-17 | medium | `lint_probes.py` comment scanner (found fixing PRR-16) | Payloads are CommonJS scripts, where Node reads `<!--` and a line-leading `-->` as line comments (Annex B). The scanner didn't, so `x <!-- /*` read as a block comment and hid following lines, including a raw record write, that Node runs | fixed |
+| PRR-18 | low | `lint_probes.py` tokeniser (#27) | An identifier written with an escape (`x\u{61}return`) or a U+200C continuation was split, and its trailing `return` read as a keyword, so a following slash moved a string boundary and hid a computed record key | fixed |
+| PRR-19 | low | `lint_probes.py` comment scanner (#27) | A leading `#!` line, which Node ignores, was scanned as code, so a `/*` in it hid the following lines from the content rules | fixed |
 
 ## What changed
 - PRR-1: `MainThreadLogger.$log` joins the presence-pinned must-deny set. A
@@ -80,4 +82,8 @@ could pass, or leave things behind, for the wrong reason.
 - PRR-16: `#` starts a word, so a private name is never a keyword.
 - PRR-17: `<!--` in code, or `-->` with nothing but whitespace or comments before it on its
   line, is reported as `html-comment`. The payloads have none, and they have no use for it.
+- PRR-18: a `\` or non-ASCII character in code, outside literals and comments, is
+  `identifier-escape`. Payload code has no use for them, and past ASCII Python's identifier and
+  whitespace classes differ from JavaScript's.
+- PRR-19: a leading `#!` line is a comment, as in Node.
 - Each has a `test_lint_probes.py` case that fails on the previous lint.
