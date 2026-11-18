@@ -16,32 +16,36 @@
  */
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const SRC = process.env.SECLAB_SERVICES_SRC;
+const SRC = process.env.SECLAB_WORKBENCH_SRC;
 if (!SRC) {
-	console.error('reh-environment: set SECLAB_SERVICES_SRC to the pinned src/vs/workbench/services (./seclab test reh-environment does)');
+	console.error('reh-environment: set SECLAB_WORKBENCH_SRC to the pinned src/vs/workbench (./seclab test reh-environment does)');
 	process.exit(1);
 }
-const PATCH = readFileSync(join(REPO, 'patches', '0059-seclab-tab-server-environment-stays-in-the-tab.patch'), 'utf8');
+// Absent on a tree without the patch (main before it), where the suite runs upstream's code.
+const PATCH_FILE = join(REPO, 'patches', '0059-seclab-tab-server-environment-stays-in-the-tab.patch');
+const PATCH = existsSync(PATCH_FILE) ? readFileSync(PATCH_FILE, 'utf8') : '';
 const FILTER = readFileSync(join(REPO, 'rpc-filter', 'patch-src', 'seclabRpcFilter.ts'), 'utf8');
 const FILES = {
-	environment: 'remote/common/remoteAgentEnvironmentChannel.ts',
-	agent: 'remote/common/abstractRemoteAgentService.ts',
-	profiles: 'userDataProfile/common/remoteUserDataProfiles.ts',
-	watcher: 'remote/common/remoteFileSystemProviderClient.ts',
-	scanner: 'remote/common/remoteExtensionsScanner.ts',
-	extensions: 'extensionManagement/electron-browser/extensionManagementServerService.ts',
+	environment: 'services/remote/common/remoteAgentEnvironmentChannel.ts',
+	agent: 'services/remote/common/abstractRemoteAgentService.ts',
+	profiles: 'services/userDataProfile/common/remoteUserDataProfiles.ts',
+	watcher: 'services/remote/common/remoteFileSystemProviderClient.ts',
+	scanner: 'services/remote/common/remoteExtensionsScanner.ts',
+	extensions: 'services/extensionManagement/electron-browser/extensionManagementServerService.ts',
+	loggers: 'contrib/remote/common/remote.contribution.ts',
+	native: 'services/extensionManagement/electron-browser/nativeExtensionManagementService.ts',
 } as const;
 type Key = keyof typeof FILES;
 
 /** Apply one file's hunks of a `diff -ruN` patch, each exactly once. */
 function applyFile(source: string, patch: string, rel: string): string {
-	const sec = patch.split(/^(?=diff -ruN )/m).find(p => p.split('\n')[0].includes(`/services/${rel} `));
+	const sec = patch.split(/^(?=diff -ruN )/m).find(p => p.split('\n')[0].includes(`/workbench/${rel} `));
 	if (!sec) {
 		return source;
 	}
@@ -51,7 +55,7 @@ function applyFile(source: string, patch: string, rel: string): string {
 		const old = lines.filter(l => l[0] === ' ' || l[0] === '-').map(l => l.slice(1)).join('\n');
 		const neu = lines.filter(l => l[0] === ' ' || l[0] === '+').map(l => l.slice(1)).join('\n');
 		assert.equal(out.split(old).length - 1, 1, `a 0059 hunk no longer applies to ${rel}`);
-		out = out.replace(old, neu);
+		out = out.replace(old, () => neu);
 	}
 	return out;
 }
@@ -81,7 +85,7 @@ function evaluate<T>(code: string, result: string, deps: Record<string, unknown>
 }
 
 /** A method as a standalone function: `async name(…) {…}` becomes `async function name(…) {…}`. */
-const asFunction = (m: string) => m.replace(/^(?:(?:private|protected|public|static) )*(async )?/, '$1function ').replace(/^(async )?function ([A-Za-z_$][\w$]*)<[^>(]*>\(/, '$1function $2(');
+const asFunction = (m: string) => m.replace(/^(?:(?:private|protected|public|static|override) )*(async )?/, '$1function ').replace(/^(async )?function ([A-Za-z_$][\w$]*)<[^>(]*>\(/, '$1function $2(');
 
 interface Build {
 	sources: Record<Key, string>;
@@ -95,24 +99,35 @@ function build(patched: boolean, patch = PATCH, filter = FILTER): Build {
 		const text = readFileSync(join(SRC!, rel), 'utf8');
 		return [k, patched ? applyFile(text, patch, rel) : text];
 	})) as Record<Key, string>;
-	const tabUris = slice(filter, /\nexport function seclabTabUris<T>\(/)!.replace(/^export /, '');
-	const onTab = slice(filter, /\nexport function seclabTabUri<T>\(/)!.replace(/^export /, '');
-	const serverChannel = slice(filter, /\nexport function seclabTabServerChannel\(/)!.replace(/^export /, '');
-	const keys = /\nconst SECLAB_URI_KEYS = [^\n]+/.exec(filter)![0];
-	const marks = /\nconst SECLAB_URI_MARKS = [^\n]+/.exec(filter)![0];
-	const helpers = evaluate<Record<string, unknown>>(`${keys}\n${marks}\n${tabUris}\n${onTab}\n${serverChannel}`, '{ seclabTabUris, seclabTabUri, seclabTabServerChannel }', {
+	// The filter's helpers that this version of it has (the suite also runs against reviewed
+	// versions of the patch, which had fewer or other ones), and the module-level seclab functions
+	// of the patched files.
+	const named = (src: string, re: RegExp) => [...src.matchAll(re)].map(m => m[1]);
+	const helperNames = named(filter, /\n(?:export )?function (seclab(?:TabUris|TabUri|UriOnTab|TabServerChannel|NoGallerySource|TabExtensionsChannel))\b/g);
+	const consts = ['SECLAB_URI_KEYS', 'SECLAB_URI_MARKS', 'SECLAB_MANIFEST_KEYS'].map(c => new RegExp(`\\nconst ${c}\\b[^\\n]+`).exec(filter)?.[0] ?? '').join('\n');
+	const stubs: Record<string, unknown> = {
 		seclabIsTabAuthority: (a: unknown) => typeof a === 'string' && /^seclab\+/.test(a),
 		seclabRefuseServerLocation: (_a: string, site: string) => { refusals.push(site); },
-	});
+		seclabRefuseEnvironment: () => { refusals.push('environment'); },
+		Schemas: { vscodeRemote: 'vscode-remote', file: 'file' },
+	};
+	const helpers = evaluate<Record<string, unknown>>(
+		`${consts}\n${helperNames.map(n => slice(filter, new RegExp(`\\n(?:export )?function ${n}(?:<T>)?\\(`))!.replace(/^export /, '')).join('\n')}`,
+		`{ ${helperNames.join(', ')} }`, stubs);
+	const moduleNames = [...new Set(Object.values(sources).flatMap(src => named(src, /\nfunction (seclab\w+)\(/g)))];
+	const modules = evaluate<Record<string, unknown>>(
+		moduleNames.map(n => Object.values(sources).map(src => slice(src, new RegExp(`\\nfunction ${n}\\(`))).find(Boolean)!).join('\n'),
+		`{ ${moduleNames.join(', ')} }`, { ...stubs, ...helpers });
 	const deps: Record<string, unknown> = {
+		...stubs,
 		...helpers,
-		seclabIsTabAuthority: (a: unknown) => typeof a === 'string' && /^seclab\+/.test(a),
-		seclabRefuseServerLocation: (_a: string, site: string) => { refusals.push(site); },
+		...modules,
 		URI: { revive: (u: unknown) => u },
 		revive: (v: unknown) => v,
 		ProtocolConstants: { ReconnectionGraceTime: 10800000 },
 		Event: {},
 		platform: { language: 'en' },
+		nls: { localize: (_k: string, m: string) => m },
 	};
 	return { sources, refusals, deps };
 }
@@ -160,6 +175,8 @@ const LIES: Array<[string, (r: Record<string, unknown>) => void]> = [
 	// ENV-8: URI.revive ignores $mid, so any other marker, or none, is still a URI to the window.
 	...[2, 0, null, '1'].map(mid => [`a host file marked $mid ${JSON.stringify(mid)}`, (r: Record<string, unknown>) => { r.settingsPath = { ...HOST, $mid: mid }; }] as [string, (r: Record<string, unknown>) => void]),
 	['a host fsPath with no scheme or $mid', r => { r.userHome = { path: '/Users/someone', fsPath: '/Users/someone' }; }],
+	// ENV-11: URI.revive reads a bare `{path}` as a file URI.
+	['a host path with no other URI key', r => { r.userHome = { path: '/Users/someone' }; }],
 	['URI fields on a profile hiding its host settings', r => {
 		const p = (r.profiles as { all: Array<Record<string, unknown>> }).all[0];
 		Object.assign(p, { scheme: 'vscode-remote', path: '/' });
@@ -194,12 +211,27 @@ async function getEnvironment(b: Build, authority: string): Promise<'null' | 're
 	}
 }
 
+/**
+ * The seclab function a source wraps a channel in, found by the call around `getChannel(…)` (or
+ * undefined: upstream hands the raw channel on). Called as `(raw, authority, site, skipKeys)`;
+ * each version's wrapper takes the arguments it needs.
+ */
+function wrapper(b: Build, source: string, call: RegExp): ((raw: Channel, authority: string, site: string, skipKeys?: Set<string>) => Channel) | undefined {
+	const name = call.exec(source)?.[1];
+	const fn = name ? b.deps[name] : undefined;
+	assert.ok(!name || typeof fn === 'function', `${name} wraps a channel, but this build has no such function`);
+	return fn as ((raw: Channel, authority: string, site: string, skipKeys?: Set<string>) => Channel) | undefined;
+}
+interface Channel {
+	call(command: string, arg?: unknown): Promise<unknown>;
+	listen(event: string, arg?: unknown): (l: (e: unknown) => void) => { dispose(): void };
+}
+
 /** The channel the profiles service gets: patched, the wrapper; else the raw channel. */
 async function profiles(b: Build, authority: string, reply: unknown, event: unknown): Promise<{ replyRefused: boolean; events: unknown[] }> {
 	const raw = { call: async () => structuredClone(reply), listen: () => (l: (e: unknown) => void) => { l(structuredClone(event)); return { dispose() { } }; } };
 	// Patched, the service is given seclabTabServerChannel(…, 'profiles'); upstream, the raw channel.
-	const wrapped = /seclabTabServerChannel\(connection\.getChannel\('userDataProfiles'\), connection\.remoteAuthority, 'profiles'\)/.test(b.sources.profiles);
-	const channel = wrapped ? (b.deps.seclabTabServerChannel as (c: unknown, a: string, s: string) => typeof raw)(raw, authority, 'profiles') : raw;
+	const channel = wrapper(b, b.sources.profiles, /(seclab\w+)\(connection\.getChannel\('userDataProfiles'\)/)?.(raw, authority, 'profiles') ?? raw;
 	let replyRefused = false;
 	try {
 		await channel.call('createProfile');
@@ -211,22 +243,59 @@ async function profiles(b: Build, authority: string, reply: unknown, event: unkn
 	return { replyRefused, events };
 }
 
-/** The extension management channel: patched, wrapped with `manifest` left alone; else raw. */
-async function management(b: Build, authority: string, reply: unknown, event: unknown): Promise<{ replyRefused: boolean; reply?: unknown; events: unknown[] }> {
+/** The extension management channel: patched, seclabTabExtensionsChannel; else raw. */
+function managementChannel(b: Build, authority: string, reply: unknown, event: unknown) {
 	const raw = { call: async () => structuredClone(reply), listen: () => (l: (e: unknown) => void) => { l(structuredClone(event)); return { dispose() { } }; } };
-	const m = /seclabTabServerChannel\(remoteAgentConnection\.getChannel<IChannel>\('extensions'\), remoteAgentConnection\.remoteAuthority, 'extension-management', new Set\(\['manifest'\]\)\)/.test(b.sources.extensions);
-	const channel = m ? (b.deps.seclabTabServerChannel as (c: unknown, a: string, s: string, k: Set<string>) => typeof raw)(raw, authority, 'extension-management', new Set(['manifest'])) : raw;
+	return wrapper(b, b.sources.extensions, /(seclab\w+)\(remoteAgentConnection\.getChannel<IChannel>\('extensions'\)/)?.(raw, authority, 'extension-management', new Set(['manifest'])) ?? raw;
+}
+
+async function management(b: Build, authority: string, reply: unknown, event: unknown, command = 'getInstalled', eventName = 'onDidInstallExtensions'): Promise<{ replyRefused: boolean; reply?: unknown; events: unknown[] }> {
+	const channel = managementChannel(b, authority, reply, event);
 	let replyRefused = false;
 	let got: unknown;
 	try {
-		got = await channel.call('getInstalled');
+		got = await channel.call(command);
 	} catch {
 		replyRefused = true;
 	}
 	const events: unknown[] = [];
-	channel.listen('onDidInstallExtensions')((e: unknown) => events.push(e));
+	channel.listen(eventName)((e: unknown) => events.push(e));
 	return { replyRefused, reply: got, events };
 }
+
+/** The remote logger channel: patched, wrapped with site 'loggers'; else raw. Returns what the window registers. */
+async function loggers(b: Build, authority: string, registered: unknown[], event: unknown): Promise<{ replyRefused: boolean; events: unknown[] }> {
+	const raw = { call: async () => structuredClone(registered), listen: () => (l: (e: unknown) => void) => { l(structuredClone(event)); return { dispose() { } }; } };
+	const channel = wrapper(b, b.sources.loggers, /new RemoteLoggerChannelClient\(loggerService, (seclab\w+)\(channel,/)?.(raw, authority, 'loggers') ?? raw;
+	let replyRefused = false;
+	try {
+		await channel.call('getRegisteredLoggers');
+	} catch {
+		replyRefused = true;
+	}
+	const events: unknown[] = [];
+	channel.listen('onDidChangeLoggers')((e: unknown) => events.push(e));
+	return { replyRefused, events };
+}
+
+/** Whether the host's extension management, in a window on `authority`, installs a package from `vsix`. */
+async function hostInstall(b: Build, authority: string, vsix: { scheme: string }): Promise<boolean> {
+	const fn = evaluate<(v: unknown) => Promise<unknown>>(
+		asFunction(slice(b.sources.native, /\n\toverride async install\(/)!).replace('super.install(', 'this.superInstall('), 'install', { ...b.deps, Schemas: { vscodeRemote: 'vscode-remote', file: 'file' } });
+	let installed = false;
+	try {
+		await fn.call({
+			nativeEnvironmentService: { remoteAuthority: authority },
+			downloadVsix: async (v: unknown) => ({ location: v, cleanup: async () => { } }),
+			superInstall: async () => { installed = true; },
+		}, vsix);
+	} catch {
+		// refused
+	}
+	return installed;
+}
+
+const GALLERY = { identifier: { id: 'tab.ext', uuid: '00000000-0000-4000-8000-000000000000' }, name: 'ext', version: '1.0.0', assets: { manifest: { uri: 'http://192.0.2.1/m', fallbackUri: 'http://192.0.2.1/m' }, download: { uri: 'http://192.0.2.1/x.vsix', fallbackUri: 'http://192.0.2.1/x.vsix' } } };
 const local = (authority: string, location: unknown) => ({
 	identifier: { id: 'tab.ext' }, location, readmeUrl: remote(authority, '/ext/README.md'),
 	// A manifest names files by `path`, and may carry `scheme` keys (resourceLabelFormatters).
@@ -301,11 +370,29 @@ async function leaks(b: Build): Promise<string[]> {
 	if (mg.events.length > 0) {
 		out.push('extension management: an event naming a host location');
 	}
+	for (const eventName of ['onInstallExtension', 'onDidInstallExtensions']) {
+		const g = await management(b, TAB, [], [{ identifier: { id: 'tab.ext' }, source: GALLERY, profileLocation: remote(TAB, '/p') }], 'getInstalled', eventName);
+		if (JSON.stringify(g.events).includes('192.0.2.1')) {
+			out.push(`extension management: ${eventName} carrying a gallery entry`);
+		}
+	}
+	if (await hostInstall(b, TAB, remote(TAB, '/home/agent/x.vsix'))) {
+		out.push('a tab package installs on the host');
+	}
+	const lg = await loggers(b, TAB, [{ id: 'x', name: 'x', resource: HOST }], { added: [{ id: 'y', name: 'y', resource: HOST }], removed: [] });
+	if (!lg.replyRefused) {
+		out.push('loggers: a reply registering a host file');
+	}
+	if (lg.events.length > 0) {
+		out.push('loggers: an event registering a host file');
+	}
 	return out;
 }
 const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host strings in a revived URI', 'a refused environment reads as no remote',
 	'profiles: a reply naming a host file', 'profiles: an event naming a host file', 'watcher: a change to a host file', 'extensions: one in a host directory',
-	'host strings kept in a checked tab URI', 'extension management: a reply naming a host location', 'extension management: an event naming a host location'];
+	'host strings kept in a checked tab URI', 'extension management: a reply naming a host location', 'extension management: an event naming a host location',
+	'extension management: onInstallExtension carrying a gallery entry', 'extension management: onDidInstallExtensions carrying a gallery entry',
+	'a tab package installs on the host', 'loggers: a reply registering a host file', 'loggers: an event registering a host file'];
 
 const tests: Array<[string, () => Promise<void>]> = [
 	['the baseline takes every location a tab server names', async () => {
@@ -315,7 +402,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 	['a tab window takes none of them, and logs each refusal', async () => {
 		const b = build(true);
 		assert.deepEqual(await leaks(b), []);
-		assert.deepEqual([...new Set(b.refusals)].sort(), ['environment', 'extension-management', 'extensions', 'profiles', 'watcher']);
+		assert.deepEqual([...new Set(b.refusals)].sort(), ['environment', 'extension-management', 'extensions', 'host-install', 'loggers', 'profiles', 'watcher']);
 	}],
 	['a tab window takes a genuine server unchanged', async () => {
 		const b = build(true);
@@ -331,6 +418,22 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.equal(mg.replyRefused, false);
 		assert.deepEqual((mg.reply as Array<{ manifest: unknown }>)[0].manifest, local(TAB, null).manifest);
 		assert.equal(mg.events.length, 1);
+		// ENV-12: a manifest reply names files by `path` and labels by `scheme`, and is taken as sent.
+		const manifest = local(TAB, null).manifest;
+		const gm = await management(b, TAB, manifest, {}, 'getManifest');
+		assert.equal(gm.replyRefused, false);
+		assert.deepEqual(gm.reply, manifest);
+		// An install from a VSIX on the tab keeps its source; only a gallery entry is removed.
+		const vsix = await management(b, TAB, [], [{ identifier: { id: 'tab.ext' }, source: remote(TAB, '/x.vsix'), local: local(TAB, remote(TAB, '/ext')), profileLocation: remote(TAB, '/p') }]);
+		assert.deepEqual((vsix.events[0] as Array<{ source: unknown }>)[0].source, { ...remote(TAB, '/x.vsix'), query: '', fragment: '' });
+		const g = await management(b, TAB, [], [{ identifier: { id: 'tab.ext' }, source: GALLERY, local: local(TAB, remote(TAB, '/ext')), profileLocation: remote(TAB, '/p') }]);
+		assert.equal((g.events[0] as Array<{ source: unknown; local: unknown }>)[0].source, undefined);
+		assert.ok((g.events[0] as Array<{ local: unknown }>)[0].local);
+		const lg = await loggers(b, TAB, [{ id: 'x', name: 'x', resource: remote(TAB, '/logs/x.log') }], { added: [{ id: 'y', name: 'y', resource: remote(TAB, '/logs/y.log') }], removed: [] });
+		assert.equal(lg.replyRefused, false);
+		assert.equal(lg.events.length, 1);
+		// A host VSIX still installs on the host from a tab window.
+		assert.equal(await hostInstall(b, TAB, { scheme: 'file' }), true);
 		assert.deepEqual(b.refusals, []);
 	}],
 	['a window that is not a tab keeps upstream behaviour', async () => {
@@ -342,6 +445,9 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.equal(watcher(b, other, changes(other)).length, 2);
 		assert.equal((await scan(b, other, extensions(other))).length, 2);
 		assert.equal((await management(b, other, [local(other, HOST)], {})).replyRefused, false);
+		assert.equal(JSON.stringify((await management(b, other, [], [{ source: GALLERY }])).events).includes('192.0.2.1'), true);
+		assert.equal(await hostInstall(b, other, remote(other, '/x.vsix')), true);
+		assert.equal((await loggers(b, other, [{ id: 'x', name: 'x', resource: HOST }], { added: [], removed: [] })).replyRefused, false);
 		assert.deepEqual(b.refusals, []);
 	}],
 	['each mutant of 0059 lets its lie through', async () => {
@@ -350,7 +456,8 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['any authority', { filter: [' || o.authority !== remoteAuthority', ''] }, 'environment: another tab as mcpResource'],
 			['containers may carry URI fields', { filter: ['Object.keys(o).some(k => !SECLAB_URI_KEYS.has(k)) || ', ''] }, 'environment: a URI marker and fields on the reply hiding a host settingsPath'],
 			['a URI only when marked $mid 1', { filter: ['		if (SECLAB_URI_MARKS.some(k => Object.hasOwn(o, k))) {', '		if (o.$mid === 1) {'] }, 'environment: a host file marked $mid 2'],
-			['only $mid or scheme marks a URI', { filter: ["const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'external', 'fsPath', '_sep'];", "const SECLAB_URI_MARKS = ['$mid', 'scheme'];"] }, 'environment: a host fsPath with no scheme or $mid'],
+			['only $mid or scheme marks a URI', { filter: ["const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'path', 'external', 'fsPath', '_sep'];", "const SECLAB_URI_MARKS = ['$mid', 'scheme'];"] }, 'environment: a host fsPath with no scheme or $mid'],
+			['path alone does not mark a URI', { filter: ["const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'path', 'external', 'fsPath', '_sep'];", "const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'external', 'fsPath', '_sep'];"] }, 'environment: a host path with no other URI key'],
 			['deep values pass', { filter: ['		if (depth > 32) {\n			throw foreign();', '		if (depth > 32) {\n			return v;'] }, 'environment: a host file nested deeper than the walk'],
 			['URIs not rebuilt', { filter: ["			return { $mid: 1, scheme: o.scheme, authority: o.authority, path: o.path ?? '', query: o.query ?? '', fragment: o.fragment ?? '' };", '			return o;'] }, 'environment: host strings in a revived URI'],
 			['environment unchecked', { patch: ['+				data = seclabTabUris(remoteAuthority, data);', '+				data = data;'] }, 'environment: the host user settings file as settingsPath'],
@@ -360,7 +467,11 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['watcher unchecked', { patch: ['+					return resource ? [{ ...(c as object), resource }] : [];', '+					return [c];'] }, 'watcher: a change to a host file'],
 			['watcher keeps the sent resource', { patch: ['+					return resource ? [{ ...(c as object), resource }] : [];', '+					return resource ? [c] : [];'] }, 'host strings kept in a checked tab URI'],
 			['scan unchecked', { patch: ['+						return location ? [{ ...e, extensionLocation: location }] : [];', '+						return [e];'] }, 'extensions: one in a host directory'],
-			['management channel unwrapped', { patch: ["seclabTabServerChannel(remoteAgentConnection.getChannel<IChannel>('extensions'), remoteAgentConnection.remoteAuthority, 'extension-management', new Set(['manifest']))", "remoteAgentConnection.getChannel<IChannel>('extensions')"] }, 'extension management: a reply naming a host location'],
+			['management channel unwrapped', { patch: ["seclabTabExtensionsChannel(remoteAgentConnection.getChannel<IChannel>('extensions'), remoteAgentConnection.remoteAuthority)", "remoteAgentConnection.getChannel<IChannel>('extensions')"] }, 'extension management: a reply naming a host location'],
+			['gallery sources kept', { filter: ["			return { ...e, source: undefined };", "			return e;"] }, 'extension management: onDidInstallExtensions carrying a gallery entry'],
+			['only one install event stripped', { filter: ["event === 'onInstallExtension' || event === 'onDidInstallExtensions'", "event === 'onDidInstallExtensions'"] }, 'extension management: onInstallExtension carrying a gallery entry'],
+			['host install from a tab window', { patch: ["+		if (vsix.scheme === Schemas.vscodeRemote && authority && seclabIsTabAuthority(authority)) {", "+		if (false) {"] }, 'a tab package installs on the host'],
+			['logger channel unwrapped', { patch: ["new RemoteLoggerChannelClient(loggerService, seclabTabServerChannel(channel, connection.remoteAuthority, 'loggers'))", "new RemoteLoggerChannelClient(loggerService, channel)"] }, 'loggers: an event registering a host file'],
 		];
 		for (const [name, m, leak] of mutants) {
 			const [pf, pt] = m.patch ?? ['', ''];
@@ -371,7 +482,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 			if (m.filter) {
 				assert.equal(FILTER.split(ff).length - 1, 1, `mutant text not found once in the filter: ${name}`);
 			}
-			const found = await leaks(build(true, m.patch ? PATCH.replace(pf, pt) : PATCH, m.filter ? FILTER.replace(ff, ft) : FILTER));
+			const found = await leaks(build(true, m.patch ? PATCH.replace(pf, () => pt) : PATCH, m.filter ? FILTER.replace(ff, () => ft) : FILTER));
 			assert.ok(found.includes(leak), `mutant not caught by its own leak (${leak}): ${name}; found ${JSON.stringify(found)}`);
 		}
 	}],
