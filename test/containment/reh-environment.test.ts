@@ -51,6 +51,9 @@ const FILES = {
 	migration: 'contrib/extensions/browser/unsupportedExtensionsMigrationContribution.ts',
 	localization: 'contrib/localization/electron-browser/localization.contribution.ts',
 	gallery: 'services/extensionManagement/electron-browser/extensionGalleryManifestService.ts',
+	main: 'workbench.common.main.ts',
+	profileResource: 'services/userDataProfile/browser/extensionsResource.ts',
+	contribution: 'contrib/extensions/browser/extensions.contribution.ts',
 } as const;
 type Key = keyof typeof FILES;
 
@@ -106,6 +109,12 @@ interface Build {
 
 function build(patched: boolean, patch = PATCH, filter = FILTER): Build {
 	const refusals: string[] = [];
+	// A hunk for a file the suite doesn't list would go untested: every section must be one it lists (review ENV-42).
+	const listed = new Set(Object.values(FILES).map(rel => `/workbench/${rel} `));
+	for (const sec of patched ? patch.split(/^(?=diff -ruN )/m).slice(1) : []) {
+		const head = sec.split('\n')[0];
+		assert.ok([...listed].some(l => head.includes(l)), `0059 patches a file the suite doesn't list: ${head}`);
+	}
 	const sources = Object.fromEntries((Object.entries(FILES) as Array<[Key, string]>).map(([k, rel]) => {
 		const text = readFileSync(join(SRC!, rel), 'utf8');
 		return [k, patched ? applyFile(text, patch, rel) : text];
@@ -426,7 +435,7 @@ async function hostManagement(b: Build, authority: string): Promise<string[]> {
 }
 
 /** The extensions whose enablement changes when a tab window enables a tab extension whose pack names a host one. */
-async function enablement(b: Build, authority: string): Promise<string[]> {
+async function enablement(b: Build, authority: string, state = 2): Promise<string[]> {
 	const changed: string[] = [];
 	const own = { identifier: { id: 'tab.pack' }, location: { scheme: 'vscode-remote', authority, path: '/ext' } };
 	const host = { identifier: { id: 'host.ext' }, location: { scheme: 'file', authority: '', path: '/Users/someone/.vscode/extensions/host.ext' } };
@@ -443,7 +452,7 @@ async function enablement(b: Build, authority: string): Promise<string[]> {
 		_setUserEnablementState: async (e: { identifier: { id: string } }) => { changed.push(e.identifier.id); return true; },
 		environmentService: { remoteAuthority: authority },
 		_onEnablementChanged: { fire: () => { } },
-	}, [own], 1);
+	}, [own], state);
 	return changed;
 }
 
@@ -510,6 +519,22 @@ function trustKept(b: Build, authority: string): boolean {
 		storageService: { store: () => { stored = true; } },
 	}, { publisher: 'p', publisherDisplayName: 'P' });
 	return stored;
+}
+
+/** Whether the one-time migrations that write host-shared state run in a window on `authority`: publisher trust, the built-in chat extension's enablement. */
+function migrations(b: Build, authority: string): string[] {
+	const ran: string[] = [];
+	const cls = b.sources.contribution.slice(b.sources.contribution.indexOf('class TrustedPublishersInitializer'));
+	const ctor = slice(cls, /\n\tconstructor\(/)!.replace(/^constructor/, 'function make').replace(/@I\w+ /g, '');
+	evaluate<(...a: unknown[]) => void>(ctor, 'make', { ...b.deps, StorageScope: { APPLICATION: -1 }, StorageTarget: { MACHINE: 1 }, ExtensionType: { User: 1 } })(
+		{ getInstalled: () => { ran.push('publisher trust'); return new Promise(() => { }); } }, { profiles: [{}] }, {}, { get: () => undefined, store: () => { } }, { remoteAuthority: authority });
+	// The chat migration reads its flag only when it may run (and stops there: the flag says it ran).
+	const read: string[] = [];
+	evaluate<() => void>(asFunction(slice(b.sources.enablement, /\n\tprivate ensureChatExtensionInitialDisabledState\(/)!), 'ensureChatExtensionInitialDisabledState', { ...b.deps, StorageScope: { PROFILE: 0 } }).call({
+		_chatExtensionId: 'chat', environmentService: { remoteAuthority: authority, isSessionsWindow: false },
+		storageService: { getBoolean: () => { read.push('chat'); return true; } },
+	});
+	return [...ran, ...read.map(() => 'chat enablement')];
 }
 
 /** Whether the unsupported-extensions migration runs on the tab's server in a window on `authority`. */
@@ -704,6 +729,18 @@ async function leaks(b: Build): Promise<string[]> {
 	if (trustKept(b, TAB)) {
 		out.push('a publisher trusted in a tab window is trusted for the host');
 	}
+	if (!/registerSingleton\(IGlobalExtensionEnablementService, SeclabGlobalExtensionEnablementService,/.test(b.sources.main)) {
+		out.push('the host\'s global enablement is registered unguarded');
+	}
+	if (!/createInstance\(SeclabGlobalExtensionEnablementService\)/.test(b.sources.profileResource)) {
+		out.push('profile import builds an unguarded enablement service');
+	}
+	if (migrations(b, TAB).length > 0) {
+		out.push('a tab window runs a one-time migration of host state');
+	}
+	if ((await enablement(b, TAB, 1)).length > 0) {
+		out.push('a tab window makes a global enablement change');
+	}
 	if (migration(b, TAB)) {
 		out.push('the unsupported-extensions migration runs on the tab\'s data');
 	}
@@ -751,7 +788,8 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'install locally: the host installs what the tab names', 'the host takes an extension change from a tab window',
 	'a tab extension\'s pack changes a host extension\'s enablement', 'a tab window changes the host\'s global enablement', 'a tab\'s install event reaches the host\'s global enablement',
 	'a tab\'s install events prompt to change the host\'s display language', 'the tab\'s server gets the marketplace token', 'a publisher trusted in a tab window is trusted for the host',
-	'the unsupported-extensions migration runs on the tab\'s data', 'a tab language-pack manifest updates on the host',
+	'the host\'s global enablement is registered unguarded', 'profile import builds an unguarded enablement service',
+	'a tab window runs a one-time migration of host state', 'a tab window makes a global enablement change', 'the unsupported-extensions migration runs on the tab\'s data', 'a tab language-pack manifest updates on the host',
 	'a tab language-pack manifest uninstalls on the host', 'mcp management: a server claiming a local keeps its URLs', 'install remote extensions locally: the host installs what the tab names',
 	'a tab manifest installs its pack on the host',
 	'the tab server picks installs the window retries', 'extension management: a host location under a manifest key elsewhere', 'loggers: a reply registering a host file', 'loggers: an event registering a host file'];
@@ -841,6 +879,8 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.deepEqual(await hostManagement(b, other), [...HOST_CHANGES, ...HOST_READS]);
 		assert.deepEqual(await enablement(b, other), ['tab.pack', 'host.ext']);
 		assert.equal(migration(b, other), true);
+		assert.deepEqual(migrations(b, other), ['publisher trust', 'chat enablement']);
+		assert.deepEqual(await enablement(b, other, 1), ['tab.pack', 'host.ext']);
 		assert.deepEqual(await globalEnablement(b, other), { written: ['enable', 'disable'], events: true });
 		assert.equal(localization(b, other), true);
 		assert.deepEqual(galleryTokens(b, other), { shared: 'TOKEN', remote: 'TOKEN' });
@@ -886,6 +926,11 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['language packs fan out from a tab', { patch: ["+		if (!authority || !seclabIsTabAuthority(authority) || server !== this.extensionManagementServerService.remoteExtensionManagementServer) {", "+		if (true) {"] }, 'a tab language-pack manifest updates on the host'],
 			['uninstall fans out from a tab', { patch: ["isLanguagePackExtension(extension.manifest) && !this.seclabFromTab(server)) {\n \t\t\t\tconst otherServers", "isLanguagePackExtension(extension.manifest)) {\n \t\t\t\tconst otherServers"] }, 'a tab language-pack manifest uninstalls on the host'],
 			['only a local is stripped', { filter: ["		const s = server(v);", "		const s = v && typeof v === 'object' && Object.hasOwn(v, 'local') ? v : server(v);"] }, 'mcp management: a server claiming a local keeps its URLs'],
+			['upstream enablement registered', { patch: ["registerSingleton(IGlobalExtensionEnablementService, SeclabGlobalExtensionEnablementService,", "registerSingleton(IGlobalExtensionEnablementService, GlobalExtensionEnablementService,"] }, 'the host\'s global enablement is registered unguarded'],
+			['profile import unguarded', { patch: ["createInstance(SeclabGlobalExtensionEnablementService))", "createInstance(GlobalExtensionEnablementService))"] }, 'profile import builds an unguarded enablement service'],
+			['publisher-trust migration in a tab', { patch: ["if (!seclabIsTabAuthority(environmentService.remoteAuthority) && !storageService.get(", "if (!storageService.get("] }, 'a tab window runs a one-time migration of host state'],
+			['chat migration in a tab', { patch: ["if (!this._chatExtensionId || seclabIsTabAuthority(this.environmentService.remoteAuthority) ||", "if (!this._chatExtensionId ||"] }, 'a tab window runs a one-time migration of host state'],
+			['global enablement from a tab', { patch: ["+			if (newState === EnablementState.EnabledGlobally || newState === EnablementState.DisabledGlobally) {", "+			if (false) {"] }, 'a tab window makes a global enablement change'],
 			['global enablement writable', { patch: ["+		if (this.seclabTab) {\n+			seclabRefuseServerLocation(this.seclabTab, 'host-enablement');", "+		if (false) {\n+			seclabRefuseServerLocation(this.seclabTab, 'host-enablement');"] }, 'a tab window changes the host\'s global enablement'],
 			['install events reach global enablement', { patch: ["super(storageService, tab ? Object.assign(Object.create(extensionManagementService), { onDidInstallExtensions: Event.None }) : extensionManagementService);", "super(storageService, extensionManagementService);"] }, 'a tab\'s install event reaches the host\'s global enablement'],
 			['localization listens in a tab window', { patch: ["+		if (seclabIsTabAuthority(environmentService.remoteAuthority)) {\n+			return;", "+		if (false) {\n+			return;"] }, 'a tab\'s install events prompt to change the host\'s display language'],
