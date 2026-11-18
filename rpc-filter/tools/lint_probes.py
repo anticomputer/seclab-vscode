@@ -360,7 +360,7 @@ def _regex_end(text: str, i: int) -> int | None:
     return None
 
 
-def _strip_comments(text: str, ambiguous: list | None = None, html: list | None = None) -> str:
+def _strip_comments(text: str, ambiguous: list | None = None, unlexable: list | None = None) -> str:
     """The text with comments blanked to spaces and string literals kept (positions and newlines
     kept). Blanking whole lines that start with `*` or `//` removed a block comment's closing
     `*/` while its `/**` stayed, so the scanner below read the code after it as comment: the
@@ -373,7 +373,10 @@ def _strip_comments(text: str, ambiguous: list | None = None, html: list | None 
 
     A payload is a CommonJS script, where Node also reads `<!--`, and `-->` at the start of a
     line, as line comments (ECMAScript Annex B). The lint doesn't: in `x <!-- /*` Node runs the
-    next lines while this scanner would read a block comment. Such code lines go into `html`."""
+    next lines while this scanner would read a block comment. Such code lines go into
+    `unlexable`, as `(line, rule)`, with code this scanner doesn't tokenise as JavaScript does: a
+    `\\` (an identifier escape such as `x\\u{61}return`) or a non-ASCII character (U+200C inside
+    an identifier, U+FEFF as whitespace). A leading `#!` line is a comment, as in Node."""
     out, i, n = list(text), 0, len(text)
     ctx = _SlashContext()
     # Open `${` substitutions, innermost last: the brace depth inside each. Its closing `}` goes
@@ -396,6 +399,10 @@ def _strip_comments(text: str, ambiguous: list | None = None, html: list | None 
         ctx.operand()
         return j + 1
 
+    if text.startswith("#!"):
+        while i < n and text[i] != "\n":
+            out[i] = " "
+            i += 1
     while i < n:
         ch = text[i]
         if substitutions and ch == "{":
@@ -409,9 +416,9 @@ def _strip_comments(text: str, ambiguous: list | None = None, html: list | None 
         if ch == "`":
             i = template_text(i + 1)
             continue
-        if html is not None and (text.startswith("<!--", i) or (
+        if unlexable is not None and (text.startswith("<!--", i) or (
                 text.startswith("-->", i) and not "".join(out[text.rfind("\n", 0, i) + 1:i]).strip())):
-            html.append(text.count("\n", 0, i) + 1)
+            unlexable.append((text.count("\n", 0, i) + 1, "html-comment"))
         if ch == "/" and i + 1 < n and text[i + 1] == "/":
             ctx.gap()
             while i < n and text[i] != "\n":
@@ -447,6 +454,8 @@ def _strip_comments(text: str, ambiguous: list | None = None, html: list | None 
             i += 1
             ctx.operand()
             continue
+        if unlexable is not None and (ch == "\\" or ord(ch) > 127):
+            unlexable.append((text.count("\n", 0, i) + 1, "identifier-escape"))
         ctx.code(ch)
         i += 1
     return "".join(out)
@@ -605,18 +614,22 @@ def main(argv: list | None = None) -> int:
         # a code line can start with `*` (a continued product), and those were skipped (PR review on
         # #27). A rule still matches the whole line, comment included, which only adds matches.
         ambiguous: list = []
-        html: list = []
-        text = _strip_comments("\n".join(lines), ambiguous, html)
-        for n in sorted(set(html)):
-            violations.append((rel, n, "html-comment",
-                               "`<!--` (or `-->` at a line start) is a line comment to Node in a "
-                               "CommonJS script, but not to this lint, which could then misread the "
-                               "lines after it; remove it"))
+        unlexable: list = []
+        text = _strip_comments("\n".join(lines), ambiguous, unlexable)
+        for n, rid in sorted(set(unlexable)):
+            violations.append((rel, n, rid, {
+                "html-comment": "`<!--` (or `-->` at a line start) is a line comment to Node in a "
+                                "CommonJS script, but not to this lint, which could then misread the "
+                                "lines after it; remove it",
+                "identifier-escape": "a `\\` or non-ASCII character in code (an identifier escape, "
+                                     "U+200C/U+200D, U+FEFF): this lint doesn't tokenise them as "
+                                     "JavaScript does, so it could misread the line; use plain ASCII",
+            }[rid]))
         code_lines = text.split("\n")
         code = []
         for n, line in enumerate(lines, start=1):
             stripped = line.strip()
-            if not code_lines[n - 1].strip() or (n == 1 and stripped.startswith("#!")):
+            if not code_lines[n - 1].strip():
                 continue
             code.append((n, line))
             for rid, pattern, why in RULES:
