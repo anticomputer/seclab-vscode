@@ -28,5 +28,6 @@ Copilot reviewed the fixes again on the next push.
 | CR25-7 | Low | fetch-upstream | A symlinked `.git/info` made the clean-up delete files in its target. | Fixed | Any symlink under `.git` is refused, and `info/` is removed whole. |
 | CR25-8 | Low | fetch-upstream | A kept replacement ref (including a packed one) made the reset and the check use another commit's tree while `HEAD` still named the pin. | Fixed | Every git call runs with replacement objects off. |
 | CR25-9 | Low | fetch-upstream | An untracked directory holding a `.gitignore` of `*` hid itself from both the clean and the check. | Fixed | The clean ignores ignore files (`-x`), keeping only the install and download caches. |
+| CR25-10 | Low | clean-host | A per-build tag's lease was written after the tag existed, so a concurrent clean-host could prune a cache-hit proof image first. | Fixed | Both builders write the lease before the tag is published; the clean-host self-test checks the order. |
 
 No prompt-injection text was found in the review comments.

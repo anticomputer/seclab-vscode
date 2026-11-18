@@ -17431,6 +17431,21 @@
 				"file": "build/fetch-upstream.test.ts",
 				"name": "fetch-upstream: a replacement ref or a self-ignoring directory changes nothing (PR 25 review)"
 			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-10",
+			"round": "Round CR25 (second review)",
+			"severity": "low",
+			"summary": "A per-build tag lease was written after the tag existed; a concurrent clean-host could prune it.",
+			"component": "clean-host leases (image builders)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:4bb7e65462e8a4fbd2b0f2467cb36d7957443af1",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "the per-build lease isn't written before the tag is published"
+			}
 		}
 	]
 }
