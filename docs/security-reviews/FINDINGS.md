@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 237 | 384 | 48 | 774 |
+| fixed | 14 | 91 | 237 | 385 | 48 | 775 |
 | fixed-before-landing | 0 | 2 | 0 | 0 | 0 | 2 |
 | fixed-untested | 0 | 5 | 59 | 179 | 63 | 306 |
 | accepted-residual | 0 | 1 | 12 | 72 | 24 | 109 |
 | deferred | 2 | 1 | 13 | 10 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 102 | 333 | 659 | 172 | 1282 |
+| **all** | 16 | 102 | 333 | 660 | 172 | 1283 |
 
 ## Baseline: open high and critical findings
 
@@ -2320,6 +2320,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | PRC-3 | high | fixed-before-landing | Resolving a tab completion merged the result with upstream's recursive mixin, which follows a JSON-parsed own __proto__ key into the trusted renderer's Object.prototype. | patch:762f068d55f3c7b49a412d7e406500dc5f759f82 · `test/containment/filter-module.test.ts` "response: a resolved tab completion cannot write through __proto__ (review on #48)" · failed on patch:829ada9c890ad6172812a74fc45a6c0b47266ec6 |
 | PRC-4 | low | fixed | Tab markdown of any length reached the synchronous lexer before the length check, so a huge hover or completion document could stall the trusted UI. | patch:762f068d55f3c7b49a412d7e406500dc5f759f82 · `test/containment/filter-module.test.ts` "response: oversized tab markdown never reaches the lexer (review on #48)" |
 | PRC-5 | low | fixed | With SECLAB_BEACON_PORT=1024 the response probe's extension silently left out all three image payloads, so a control run could pass without testing any image vector. | patch:d1fde84c20f1b024d268bf9b1900d0cf18a132c1 · `test/containment/harness-hygiene.test.ts` "response probe: its image vectors are required, each rule failing on a mutant" |
+| PRC-6 | low | fixed | After PRC-4, oversized tab markdown still went through the whole rewrite (a token minted per command:) before the length guard, so a large response could still stall the trusted UI. | patch:e3ead87d5089c17533a53728a4650baeafa9fd20 · `test/containment/filter-module.test.ts` "response: oversized tab markdown never reaches the lexer (review on #48)" |
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 
