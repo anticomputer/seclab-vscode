@@ -287,6 +287,10 @@ class _SlashContext:
         last = self.toks[-1] if self.toks else None
         if ch in "+-" and self.adjacent == ch and last == ("p", ch):
             self.toks[-1] = ("p", ch * 2)
+        elif ch == "." and self.adjacent == "." and last in (("a", "."), ("p", "..")):
+            # `...` is one token (spread or rest) and expects an operand; it is not member
+            # access, so a word after it keeps its keyword meaning (PR review on #27).
+            self.toks[-1] = ("p", last[1] + ".")
         elif ch == "(":
             before = self.toks[-2] if len(self.toks) > 1 else None
             if last and last[0] == "w" and last[1] in _CONTROL_WORDS and before != ("a", "."):

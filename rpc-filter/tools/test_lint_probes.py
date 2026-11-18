@@ -306,6 +306,7 @@ class CommentScopeTest(unittest.TestCase):
             "for (;;) { break\n/\\//.test(u); fs.writeFileSync('out', raw); }",
             "async function f(y) { for await (const x of y) /\\//.test(x); fs.writeFileSync('out', raw); }",
             "debugger\n/\\//; fs.writeFileSync('out', raw);",
+            "const seclabLintX = [...typeof /[//]/]; fs.writeFileSync('out', raw);",
         ):
             with self.subTest(code=code):
                 root = tree_copy(self)
