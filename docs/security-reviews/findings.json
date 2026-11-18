@@ -17080,9 +17080,12 @@
 			"summary": "The RPC drift check certified the 1.145.3 bump without seeing it: it compares committed artefacts only, so the unregenerated 1.145.0 inventory passed against the 1.145.0 policy.",
 			"component": "RPC drift check (rpc-filter/tools/check_drift.py)",
 			"owner": "fork-build",
-			"status": "fixed-untested",
-			"commit": "patch:f95d9ca0065beb34441e8be260117784485c7654",
-			"gap": "Proven by injection (upstream.lock pointed back at 1.145.0 makes check.sh exit 2), but no self-test or unit test drives check_drift.py with an inventory of another SHA."
+			"status": "fixed",
+			"commit": "patch:75101c46c2b1d1d6fa6b68a18eeeaef691eb57c8",
+			"test": {
+				"file": "rpc-filter/tools/test_enforcement.py",
+				"name": "test_a_stale_inventory_fails_even_when_the_policy_agrees_with_it"
+			}
 		},
 		{
 			"record": "20261116-upstream-1145-3.md",

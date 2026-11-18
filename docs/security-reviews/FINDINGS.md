@@ -15,9 +15,9 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 215 | 352 | 45 | 710 |
+| fixed | 14 | 84 | 216 | 352 | 45 | 711 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 53 | 170 | 60 | 288 |
+| fixed-untested | 0 | 5 | 52 | 170 | 60 | 287 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
@@ -212,7 +212,6 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261109-liveness-gate](20261109-liveness-gate.md) **—** | medium | accepted-residual | liveness gate (mark log) | \`$RUNNER_TEMP/liveness.log\` has no integrity: host-side code in the job could forge every liveness mark. | accepted by an agent: Tabs cannot reach the log and SECLAB_LIVENESS_LOG is not in the tab environment; integrity is out of reach while marks are host-side text appended in the job. |
 | [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md) **GATE-8** | medium | fixed-untested | seclab verify_signed_image | Locally, an existing .work/deps-verified marker skips cosign and attestation verification | The marker is gone: verify_signed_image verifies on every use, and review SSS-2 removed tool reuse by tag. No test drives the seclab shell function with a forged marker or tag. |
 | [20261112-gate-fail-open](20261112-gate-fail-open.md) **SSS-2** | medium | fixed-untested | build/tools/tool.sh | Tool images were reused by content tag, which any local process could point at another image, replacing the verifier. | The image is rebuilt from cache on every use; no test retags a tool image and checks it is rebuilt. |
-| [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-1** | medium | fixed-untested | RPC drift check (rpc-filter/tools/check_drift.py) | The RPC drift check certified the 1.145.3 bump without seeing it: it compares committed artefacts only, so the unregenerated 1.145.0 inventory passed against the 1.145.0 policy. | Proven by injection (upstream.lock pointed back at 1.145.0 makes check.sh exit 2), but no self-test or unit test drives check_drift.py with an inventory of another SHA. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-B** | low | fixed-untested | campaign fixture | Fixture C2 port/path and stage query matched published Contagious-Interview IOCs. | Stand-ins (192.0.2.10:8443/api/v1/ping, stage.loader-standin.example.test) are in the fixture, but no check enforces neutral IOCs; only fixture-lint's host allow-list would catch a non-reserved host. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-D** | low | fixed-untested | campaign fixture arming | Tab-side code could rewrite \`targets\` to aim an escaped stage at user files; the marker write followed links and truncated. | The stage requires \`run\` under \`/.work/\` or \`/.seclab-test/\` and writes the marker with \`wx\`, but no test drives a targets file with a hostile run dir. |
 | [20261104-campaign-fixture](20261104-campaign-fixture.md) **CI-F** | low | fixed-untested | campaign fixture teardown | Planted inert files were left in the host checkout when the run used KEEP=1. | \`disarmCampaign\` is called unconditionally in \`cleanup()\` (test/containment/run.ts), but nothing runs the suite with KEEP=1 to prove the planted .git/.envrc are gone. |
@@ -2057,7 +2056,7 @@ Every other commit the register cites is on main's history, or on the branch its
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
-| UB-1 | medium | fixed-untested | The RPC drift check certified the 1.145.3 bump without seeing it: it compares committed artefacts only, so the unregenerated 1.145.0 inventory passed against the 1.145.0 policy. | Proven by injection (upstream.lock pointed back at 1.145.0 makes check.sh exit 2), but no self-test or unit test drives check_drift.py with an inventory of another SHA. |
+| UB-1 | medium | fixed | The RPC drift check certified the 1.145.3 bump without seeing it: it compares committed artefacts only, so the unregenerated 1.145.0 inventory passed against the 1.145.0 policy. | patch:75101c46c2b1d1d6fa6b68a18eeeaef691eb57c8 · `rpc-filter/tools/test_enforcement.py` "test_a_stale_inventory_fails_even_when_the_policy_agrees_with_it" |
 | UB-2 | low | fixed-untested | The RPC inventory generator fell back to a hard-coded 1.145.0 SHA when upstream.lock named none. | The fallback constant is gone and the generator exits 2 without a pinned SHA; no test runs it without upstream.lock. |
 | UB-3 | low | fixed-untested | ARCHITECTURE's as-built line still described a three-patch queue after the bump edited it. | Documentation only; nothing to test. |
 | UB-4 | low | fixed-untested | The register exempts only the current upstream pin, so after a bump, entries citing the old pin's SHA (or a file path containing it) carry citations that can't resolve. | Fixed by the register session: a prefix of any pin upstream.lock has held on main counts as the upstream commit, and hex inside a file path isn't a citation. Its tests are recorded against its own round; none of this round's tests drives it. |
