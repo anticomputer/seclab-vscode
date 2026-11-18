@@ -29,19 +29,9 @@ NONCE="$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 RUN="$ROOT/.work/agentic/agent-registration/$(date -u +%Y%m%dT%H%M%SZ)-$NONCE"
 mkdir -p "$RUN"
 
-# The gated tree: pristine upstream plus every patch `series` lists, in order.
-if [[ -d "$GATED" ]]; then
-	git -C "$GATED" checkout -q -- . && git -C "$GATED" clean -fdq
-else
-	git -C "$SRC" worktree add -q --detach "$GATED" HEAD
-fi
-applied=0
-while read -r p; do
-	case "$p" in \#*|'') continue ;; esac
-	git -C "$GATED" apply -p1 "$ROOT/patches/$p" || { echo "agent-registration: $p does not apply" >&2; exit 2; }
-	applied=$((applied + 1))
-done < "$ROOT/patches/series"
-echo "agent-registration: gated tree = pinned upstream + $applied patch(es)"
+# The gated tree: pristine upstream at the verified pin plus every patch `series` lists, in order.
+. "$ROOT/test/agentic/ahp/derive-tree.sh"
+derive_tree "$GATED"
 
 run_arm() { # arm, source tree
 	docker run --rm --network none -u "$(id -u):$(id -g)" \

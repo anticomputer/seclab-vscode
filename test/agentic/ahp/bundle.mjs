@@ -51,6 +51,20 @@ const prototypePatches = {
 	},
 };
 
+// A probe that reads the window's gate log imports `seclab-probe:gatecheck`. In a patched tree
+// that is the tree's own seclabAhpGateCheck; pristine upstream has none, so it becomes a module
+// exporting only `absent`, which the probe must check before it reads any event.
+const optionalGateCheck = {
+	name: 'optional-gatecheck',
+	setup(build) {
+		build.onResolve({ filter: /^seclab-probe:gatecheck$/ }, () => {
+			const real = `${SRC}/platform/agentHost/common/seclabAhpGateCheck.ts`;
+			return fs.existsSync(real) ? { path: real } : { path: 'gatecheck', namespace: 'absent-gatecheck' };
+		});
+		build.onLoad({ filter: /.*/, namespace: 'absent-gatecheck' }, () => ({ contents: 'export const absent = true;', loader: 'js' }));
+	},
+};
+
 // Browser-layer modules touch DOM globals at load. No DOM behaviour is under test (these
 // probes exercise protocol, file, configuration, auth and tool-dispatch logic only), so
 // inert placeholders are enough for the modules to load.
@@ -75,7 +89,7 @@ const r = await esbuild.build({
 	loader: { '.css': 'empty', '.svg': 'empty', '.png': 'empty', '.ttf': 'empty' },
 	nodePaths: ['/shared/vscode/node_modules'],
 	external: ['electron'],
-	plugins: MODE === 'gated' ? [chatActionsStub, prototypePatches] : [chatActionsStub],
+	plugins: MODE === 'gated' ? [chatActionsStub, prototypePatches, optionalGateCheck] : [chatActionsStub, optionalGateCheck],
 	banner: { js: banner },
 });
 const upstream = Object.keys(r.metafile.inputs).filter(p => p.includes('src/vs/')).length;
