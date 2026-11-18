@@ -73,6 +73,10 @@ Three more landing problems sit in the same tool:
    merge driver was not chosen: it would need configuration in every clone, and couldn't
    regenerate the view.
 
+Amended by [new highs failing on main](20261118-new-highs-failing-baseline.md) (2026-11-18): a high
+found in code already on `main` and closed by its own change carries the same `preFix`/`preFixRef`
+evidence on a `fixed` entry, with `preFix` a `main` commit.
+
 ## Consequences
 - RSC-1 and R12-2 can land as `fixed-before-landing` in the pull requests that fix them, with no
   owner acceptance.

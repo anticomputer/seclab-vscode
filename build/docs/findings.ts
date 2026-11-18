@@ -566,6 +566,15 @@ function merge3(b: Register | undefined, o: Register, t: Register): { reg?: Regi
 	return clashes.length ? { clashes } : { reg, clashes };
 }
 
+// The host's input for a high closed by its own change (IIII): "<key>\t<fix commit>\t<preFix or ->"
+// for each `fixed` high that neither the base nor main's register had (by key or wasKey). Entries
+// already on main are grandfathered. The host decides whether the fix is the change's own.
+function ownFixLines(reg: Register, base?: Register, main?: Register): string[] {
+	const had = new Set([...(base?.findings ?? []), ...(main?.findings ?? [])].filter(f => !f.branch).map(keyOf));
+	return reg.findings.filter(f => f.status === 'fixed' && isHigh(f) && !f.branch && f.commit && !had.has(keyOf(f)) && !(f.wasKey && had.has(f.wasKey)))
+		.map(f => `${logLine(keyOf(f))}\t${f.commit}\t${f.preFix ?? '-'}\n`);
+}
+
 // Every line the checker prints is register-derived text: one line, never a workflow command (EEEE-2).
 // The runner takes `::cmd::` only at the start of a line (after leading spaces), but the legacy
 // `##[cmd]` form anywhere in it (actions/runner@7afce9ed, src/Runner.Common/ActionCommand.cs,
@@ -729,8 +738,19 @@ function schemaProblems(reg: Register): string[] {
 		if (!isFixed(f) && f.test !== undefined) {
 			p.push(`${at}: test only applies to fixed and fixed-before-landing`);
 		}
-		if (f.status !== 'fixed-before-landing' && (f.preFix !== undefined || f.preFixRef !== undefined)) {
-			p.push(`${at}: preFix and preFixRef only apply to fixed-before-landing`);
+		if (!isFixed(f) && (f.preFix !== undefined || f.preFixRef !== undefined)) {
+			p.push(`${at}: preFix and preFixRef only apply to fixed and fixed-before-landing`);
+		}
+		// On `fixed`, the failing-baseline evidence of a high closed by its own change (IIII): both
+		// fields together, checked as for fixed-before-landing.
+		if (f.status === 'fixed' && (f.preFix !== undefined || f.preFixRef !== undefined)) {
+			if (typeof f.preFix !== 'string' || !isRef(f.preFixRef) || (!/^[0-9a-f]{7,40}$/.test(f.preFix) && !PATCH_EXACT.test(f.preFix))) {
+				p.push(`${at}: preFix (a SHA or patch:<patch-id>) and preFixRef { file, quote } go together`);
+			} else if (pathProblem(f.preFixRef!.file)) {
+				p.push(`${at}: preFixRef: ${pathProblem(f.preFixRef!.file)}`);
+			} else if (f.test && nonEmpty(f.test.name) && (!f.preFixRef!.quote.includes(f.test.name) || !/fail/i.test(f.preFixRef!.quote))) {
+				p.push(`${at}: preFixRef.quote must name the test (test.name) and record it failing on the base`);
+			}
 		}
 		if (nonEmpty(f.anchor)) {
 			const k = keyOf(f);
@@ -1166,6 +1186,13 @@ function check(tree: Tree, reg: Register, renderedView?: string, base?: Register
 		const f = byKey.get(keyOf(bf)) ?? moved.get(keyOf(bf));
 		if (bf.status === 'fixed-before-landing' && !bf.branch && f && f.status === 'fixed') {
 			p.push(`${keyOf(f)}: was fixed-before-landing; it keeps that status and its preFix evidence (it may reopen, not become fixed)`);
+		}
+	}
+	// A fixed entry's failing-baseline record is evidence for its whole life too (IIII).
+	for (const f of reg.findings.filter(x => x.status === 'fixed' && !x.branch && x.preFixRef)) {
+		const m = refProblem(tree, f.preFixRef!, 'preFixRef');
+		if (m) {
+			p.push(`${keyOf(f)}: ${m}`);
 		}
 	}
 	// A branch entry is judged when it lands: its evidence isn't on this tree yet, as for its record
@@ -1765,7 +1792,7 @@ function selfTest(): number {
 		expect('a preFixRef quote that does not name the failing test fails the schema (GGGG-1)', run(gFiles(), gQuote, true, reg(), gChange([gRec, 'tabd/test/unit.test.ts'])), /preFixRef.quote must name the test/);
 		const gFixed = reg();
 		gFixed.findings[0].preFix = 'abcdef1';
-		expect('preFix on a fixed entry fails the schema (GGGG-1)', run(base(), gFixed), /preFix and preFixRef only apply to fixed-before-landing/);
+		expect('preFix on a fixed entry without its preFixRef fails the schema (GGGG-1, IIII)', run(base(), gFixed), /preFix \(a SHA or patch:<patch-id>\) and preFixRef \{ file, quote \} go together/);
 		expect('prefix lines mark a new fixed-before-landing entry for the host (GGGG-1)', prefixLines(gReg(), reg()).some(l => /^20261102-g\.md#G-1\tpatch:2{40}\tpatch:1{40}\t1\n$/.test(l)) ? [] : ['no new line'], null);
 		expect('control: one the base had is not judged again (GGGG-1)', prefixLines(gReg(), gReg()).some(l => /\t1\n$/.test(l)) ? ['judged again'] : [], null);
 		expect('a fixed-before-landing high closes like fixed: it is in commit lines for ancestry (GGGG-1)', commitLines(gReg(), reg()).some(l => l.startsWith('20261102-g.md#G-1\t')) ? [] : ['missing'], null);
@@ -1837,6 +1864,25 @@ function selfTest(): number {
 			const gone = reg();
 			gone.findings.splice(1, 1);
 			expect('a finding one side removed is refused by merge3, never dropped (GGGG-9)', merge3(m0, reg(), gone).clashes, /removed on one side/);
+		}
+		// IIII: a new high closed by its own change is listed for the host, with its preFix; a high the
+		// base or main already had is grandfathered.
+		{
+			const ih = reg();
+			const nh: Finding = { record: null, anchor: 'R5-14', severity: 'high', summary: 's', component: 'c', owner: 'o', status: 'fixed', commit: 'patch:3333333333333333333333333333333333333333', test: { file: 'tabd/test/unit.test.ts', name: 'rejects the bad thing' }, ref: { file: EDR, quote: 'only on main' } };
+			ih.findings.push(nh);
+			expect('a new fixed high is listed for the own-fix check (IIII-1)', ownFixLines(ih, reg(), reg()).some(l => /^register#R5-14\tpatch:3{40}\t-\n$/.test(l)) ? [] : ['not listed'], null);
+			expect('control: a fixed high main already had is grandfathered (IIII-1)', ownFixLines(ih, reg(), ih).length ? ['listed'] : [], null);
+			expect('control: the existing fixed high A-1 at the base is grandfathered (IIII-1)', ownFixLines(reg(), reg(), undefined).length ? ['listed'] : [], null);
+			const ip = JSON.parse(JSON.stringify(ih)) as Register;
+			Object.assign(ip.findings[4], { preFix: 'abcdef1', preFixRef: { file: EDR, quote: 'rejects the bad thing fails on main' } });
+			const ef = base();
+			ef.set(EDR, `${USERQ}\nonly on main\nrejects the bad thing fails on main\n`);
+			expect('control: a fixed high with its failing-baseline evidence passes the schema (IIII)', run(ef, ip), null);
+			expect('the own-fix line carries the preFix (IIII-1)', ownFixLines(ip, reg(), reg()).some(l => l.endsWith('\tabcdef1\n')) ? [] : ['missing'], null);
+			const iq = JSON.parse(JSON.stringify(ip)) as Register;
+			iq.findings[4].preFixRef = { file: EDR, quote: 'only on main' };
+			expect('a fixed high whose preFixRef does not record the test failing fails the schema (IIII)', run(ef, iq), /must name the test .* failing on the base/);
 		}
 		// GGGG-3: the register round-trips through the writer byte for byte.
 		const fmt = base();
@@ -2343,6 +2389,24 @@ function main(): number {
 			console.error(`findings: ${c.historical.length} round-label citations are their records' own (append-only, listed in FINDINGS.md)`);
 		}
 		return sp.length || c?.problems.length ? 1 : 0;
+	}
+	if (mode === 'ownfix') { // --base FILE --main FILE
+		sp.forEach(x => console.error(x));
+		const a = process.argv.slice(3);
+		if (a.length !== 4 || a[0] !== '--base' || a[2] !== '--main' || !a[1] || !a[3]) {
+			console.error('usage: findings.ts ownfix --base FILE --main FILE');
+			return 2;
+		}
+		const load = (f: string) => {
+			const t = fs.readFileSync(path.resolve(repo, f), 'utf8');
+			const r = t.trim() ? JSON.parse(t) as Register : undefined;
+			if (r && !Array.isArray(r.findings)) {
+				throw new Error(`${f}: no findings array`);
+			}
+			return r;
+		};
+		process.stdout.write(sp.length ? '' : ownFixLines(reg, load(a[1]), load(a[3])).join(''));
+		return sp.length ? 1 : 0;
 	}
 	if (mode === 'prefix') { // [--base FILE]
 		sp.forEach(x => console.error(x));

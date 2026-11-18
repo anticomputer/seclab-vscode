@@ -495,7 +495,9 @@ Electron with `ELECTRON_RUN_AS_NODE=1`); nothing is installed.
   - add one entry per finding to `docs/security-reviews/findings.json` (status `fixed` with the
     fix commit and the regression test's file and name; `fixed-before-landing` when this change
     raised, fixed and tested it, with `preFix` and `preFixRef` naming the reviewed commit the test
-    failed on; or `fixed-untested`, `accepted-residual`
+    failed on; a high this change both finds and fixes is `fixed` with the same `preFix` (a `main`
+    commit its fix descends from) and `preFixRef` ([EDR](docs/edr/20261118-new-highs-failing-baseline.md));
+    or `fixed-untested`, `accepted-residual`
     with who accepted it, `deferred`, `open`, `false-positive`), then run `./seclab docs write`;
   - new records use unique explicit IDs (`ROUND-n`) in a findings table with a Sev column;
   - a high or critical finding must end `fixed` with a test, or accepted by the project owner: a

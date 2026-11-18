@@ -270,6 +270,32 @@ findings_ancestry() { # TIP MAIN; stdin: "<key>\t<sha or patch:id>\t<1 if it mus
 # an ancestor of the fix, and (BASE given) neither was there before this change: the vulnerable code
 # and its fix arrive together. On main BASE is the push's previous head (GGGG-8). Every fix is also
 # judged by findings_ancestry.
+# A high new in a change and closed by that change's own fix (IIII). stdin from findings.ts ownfix:
+# "<key>\t<fix>\t<preFix or ->". If the fix was already on BASE's history it isn't the change's own:
+# grandfathered. Otherwise preFix is required: a commit on BASE's history (on main) that the fix
+# descends from, where the review record shows the test failing. A pre-existing main commit can't
+# come from an add-then-revert pair inside the change, so CCCC-1 holds.
+findings_own_fix() { # TIP BASE
+	local tip base key fix pre extra cf cp bad=0
+	tip="$(git -C "$ROOT" rev-parse -q --verify "$1^{commit}")" || { echo "findings: no commit to check own fixes against" >&2; return 1; }
+	base="$(git -C "$ROOT" rev-parse -q --verify "$2^{commit}")" || { echo "findings: the base $2 isn't a commit" >&2; return 1; }
+	while IFS=$'\t' read -r key fix pre extra; do
+		[[ -z "$key$fix$pre$extra" ]] && continue
+		if [[ -z "$key" || -n "$extra" || ! "$fix" =~ ^([0-9a-f]{7,40}|patch:[0-9a-f]{40})$ || ! "$pre" =~ ^(-|[0-9a-f]{7,40}|patch:[0-9a-f]{40})$ ]]; then
+			echo "findings: malformed own-fix line from findings.ts ownfix; refusing to judge it" >&2; bad=1; continue
+		fi
+		cf="$(findings_commit_on "$fix" "$tip")" || continue # findings_ancestry reports a fix that isn't here
+		git -C "$ROOT" merge-base --is-ancestor "$cf" "$base" 2>/dev/null && continue
+		if [[ "$pre" == - ]]; then
+			echo "findings: $key: a new high closed by this change's own fix needs preFix (a main commit the fix descends from) and preFixRef recording its test failing there" >&2; bad=1; continue
+		fi
+		cp="$(findings_commit_on "$pre" "$tip")" || { echo "findings: $key: preFix $pre is no commit on this history" >&2; bad=1; continue; }
+		if [[ "$cp" == "$cf" ]] || ! git -C "$ROOT" merge-base --is-ancestor "$cp" "$cf" 2>/dev/null || ! git -C "$ROOT" merge-base --is-ancestor "$cp" "$base" 2>/dev/null; then
+			echo "findings: $key: preFix must be a commit on main (the change's base or before it) that the fix descends from" >&2; bad=1
+		fi
+	done
+	return $bad
+}
 findings_commit_on() { # TOKEN TIP -> the commit on TIP's history that TOKEN (SHA or patch:) names
 	local c
 	if [[ "$1" =~ ^patch:[0-9a-f]{40}$ ]]; then
@@ -880,6 +906,11 @@ findings_check() {
 	local onmain=0; [[ "$mb" == "$(git -C "$ROOT" rev-parse HEAD)" ]] && onmain=1
 	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts prefix --base .work/findings-base.json)" || exit 1
 	if [[ "$lmode" == landed ]]; then findings_prefix HEAD <<<"$list" || exit 1; else findings_prefix HEAD "$rev" <<<"$list" || exit 1; fi
+	# IIII: a high new here and closed by this change's own fix shows its test failing on main.
+	if [[ "$lmode" != landed ]]; then
+		list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts ownfix --base .work/findings-base.json --main .work/findings-main.json)" || exit 1
+		findings_own_fix HEAD "$rev" <<<"$list" || exit 1
+	fi
 	findings_patch_reset
 	list="$(docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts shas --base .work/findings-base.json)" || exit 1
 	# A new upstream pin changes which tokens are exempt, so every citation answers (ZZZ-1).
@@ -1144,6 +1175,20 @@ findings_host_self_test() {
 	fso="$(ROOT="$fsr"; findings_owner_history | tr '\0' '~' | awk '/^~/ { printf "%s ", $0 }')"
 	[[ "$fso" == "~2026-11-01 ~2026-11-10 ~2026-11-20 " ]] || { echo "findings host self-test: a re-dated owner row's first appearance was lost (HHHH-5): the history isn't oldest first: $fso" >&2; exit 1; }
 	rm -rf "$fsr"
+	# IIII: a new high closed by its own fix needs a main preFix the fix descends from.
+	local ib if1 ibr
+	ib="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid git -C "$ROOT" commit-tree -p "$root" -m 'selftest: main base' "$(git -C "$ROOT" rev-parse "$root^{tree}")")"
+	if1="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid git -C "$ROOT" commit-tree -p "$ib" -m 'selftest: own fix' "$(git -C "$ROOT" rev-parse "$p1^{tree}")")"
+	ibr="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid git -C "$ROOT" commit-tree -p "$ib" -m 'selftest: branch-only commit' "$(git -C "$ROOT" rev-parse "$head^{tree}")")"
+	if printf 'k\t%s\t-\n' "$if1" | findings_own_fix "$if1" "$ib" 2>/dev/null; then echo "findings host self-test: a new high closed by its own fix passed without preFix (IIII-2)" >&2; exit 1; fi
+	printf 'k\t%s\t%s\n' "$if1" "$ib" | findings_own_fix "$if1" "$ib" || { echo "findings host self-test: the control (preFix = the change's base on main) failed (IIII-2)" >&2; exit 1; }
+	printf 'k\t%s\t%s\n' "$if1" "$root" | findings_own_fix "$if1" "$ib" || { echo "findings host self-test: the control (preFix = an older main commit) failed (IIII-2)" >&2; exit 1; }
+	if printf 'k\t%s\t%s\n' "$if1" "$if1" | findings_own_fix "$if1" "$ib" 2>/dev/null; then echo "findings host self-test: a preFix equal to the fix passed (IIII-2)" >&2; exit 1; fi
+	local if2; if2="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid git -C "$ROOT" commit-tree -p "$ibr" -m 'selftest: fix after a branch commit' "$(git -C "$ROOT" rev-parse "$p1^{tree}")")"
+	if printf 'k\t%s\t%s\n' "$if2" "$ibr" | findings_own_fix "$if2" "$ib" 2>/dev/null; then echo "findings host self-test: a preFix that is not on main passed (IIII-2)" >&2; exit 1; fi
+	if printf 'k\t%s\t%s\n' "$if1" "$ibr" | findings_own_fix "$if1" "$ib" 2>/dev/null; then echo "findings host self-test: a preFix the fix doesn't descend from passed (IIII-2)" >&2; exit 1; fi
+	printf 'k\t%s\t-\n' "$ib" | findings_own_fix "$if1" "$ib" || { echo "findings host self-test: a fix already on main was not grandfathered (IIII-2)" >&2; exit 1; }
+	if printf 'k\t%s\t-\textra\n' "$if1" | findings_own_fix "$if1" "$ib" 2>/dev/null; then echo "findings host self-test: a malformed own-fix line passed (IIII-2)" >&2; exit 1; fi
 	# GGGG-10: a conflict marker of any size is seen.
 	local mk="$ROOT/.work/findings-markers-selftest.md"
 	printf 'a\n<<<<<<<< ours\nb\n' > "$mk"; findings_has_markers "$mk" || { echo "findings host self-test: an 8-character conflict marker wasn't seen (GGGG-10)" >&2; exit 1; }
