@@ -74,6 +74,10 @@ jobs:
         # No token: lychee (built from pinned source by ./seclab tool lychee) gets no
         # credentials. GitHub's 429 and 503 are retried with backoff and paced per host, never
         # cached; a link still dead after the retries fails (EDR link-check-retries).
+        # The same range as the gate above: this step re-runs the register check, which on main
+        # must compare with the push's previous head, not the last commit's parent.
+        env:
+          DOCS_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: ./seclab docs check --online
       - name: Export the lychee cache
         if: always() && github.event_name == 'push'

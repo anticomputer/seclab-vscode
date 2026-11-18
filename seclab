@@ -546,6 +546,13 @@ findings_remap() { # BRANCH [--patch]
 findings_main_base() { # PREVIOUS_HEAD
 	local prev="$1" head
 	head="$(git -C "$ROOT" rev-parse HEAD)"
+	# CI always knows the push's previous head; without it, a landing of several commits would be
+	# judged against its last commit's parent alone (a citation of an earlier commit of the same
+	# push then reads as landed before the change).
+	if [[ -z "$prev" && "${GITHUB_ACTIONS:-}" == true ]]; then
+		echo "findings: on main in CI with no previous head (DOCS_BASE); refusing to compare with HEAD^1" >&2
+		return 1
+	fi
 	if [[ -z "$prev" || "$prev" =~ ^0+$ || "$prev" == "$head" ]]; then
 		git -C "$ROOT" rev-parse -q --verify 'HEAD^1^{commit}' || { echo "findings: HEAD is main with no parent to compare with" >&2; return 1; }
 	elif [[ ! "$prev" =~ ^[0-9a-f]{40}$ ]] || ! git -C "$ROOT" cat-file -e "$prev^{commit}" 2>/dev/null; then
@@ -664,7 +671,8 @@ findings_host_self_test() {
 	# XXX-6: on main, a force-pushed previous head compares with its merge base, never with less.
 	local p1 got side
 	p1="$(git -C "$ROOT" rev-parse -q --verify 'HEAD^1^{commit}')" || { echo "findings host self-test: HEAD has no parent" >&2; exit 1; }
-	got="$(findings_main_base "")" && [[ "$got" == "$p1" ]] || { echo "findings host self-test: the control (no previous head) didn't give HEAD^1" >&2; exit 1; }
+	got="$(GITHUB_ACTIONS='' findings_main_base "")" && [[ "$got" == "$p1" ]] || { echo "findings host self-test: the control (no previous head) didn't give HEAD^1" >&2; exit 1; }
+	if GITHUB_ACTIONS=true findings_main_base "" >/dev/null 2>&1; then echo "findings host self-test: CI on main without DOCS_BASE compared with HEAD^1" >&2; exit 1; fi
 	got="$(findings_main_base "$root")" && [[ "$got" == "$root" ]] || { echo "findings host self-test: the control (an ancestor) wasn't used as is" >&2; exit 1; }
 	side="$(GIT_AUTHOR_NAME=selftest GIT_AUTHOR_EMAIL=selftest@example.invalid GIT_COMMITTER_NAME=selftest GIT_COMMITTER_EMAIL=selftest@example.invalid git -C "$ROOT" commit-tree -p "$root" -m side "$(git -C "$ROOT" rev-parse "$root^{tree}")")" || { echo "findings host self-test: can't make a side commit" >&2; exit 1; }
 	got="$(findings_main_base "$side")" && [[ "$got" == "$root" ]] || { echo "findings host self-test: a force-pushed previous head didn't compare with its merge base (XXX-6)" >&2; exit 1; }
