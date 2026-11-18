@@ -11,3 +11,4 @@ date, the scope, the closing condition and the decision, and no quotation marks 
 |---|---|---|---|---|
 | 20261104-rpc-lockdown-design.md#4 | 2026-11-12 | residual 1, deferred laundering | closes when the response-side control lands with probes | accepted by the project owner |
 | register#INC-4-R1 | 2026-11-12 | closed pull request refs, orphaned commits and cached views of pre-rewrite history | none: accepted with no purge request | accepted by the project owner |
+| 20261110-security-findings-register.md#HHHH-4 | 2026-11-18 | owner rows are written only by the coordinator; the gate checks their shape, not their author | a separate identity for automation enables a required reviewer on owner-acceptances.md | accepted by the project owner |
