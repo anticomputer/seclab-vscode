@@ -18715,11 +18715,16 @@
 			"summary": "A tab completion inserted as a snippet naming ${CLIPBOARD} makes the window read the host clipboard into the tab's document, around the policy's deny of MainThreadClipboard.$readText.",
 			"component": "patch 0033 completion items",
 			"owner": "rpc",
-			"status": "fixed",
+			"status": "fixed-before-landing",
 			"commit": "patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11",
 			"test": {
 				"file": "test/containment/filter-module.test.ts",
 				"name": "response: a tab snippet that reads the clipboard is refused (review RSC-1)"
+			},
+			"preFix": "patch:05ae24b5b2650a1b9200c14ee15e2ec10ea39ba1",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261116-response-side-control.md",
+				"quote": "The case `response: a tab snippet that reads the clipboard is refused (review RSC-1)` fails on"
 			}
 		},
 		{
