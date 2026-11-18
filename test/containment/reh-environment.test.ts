@@ -47,6 +47,7 @@ const FILES = {
 	workbench: 'contrib/extensions/browser/extensionsWorkbenchService.ts',
 	actions: 'contrib/extensions/browser/extensionsActions.ts',
 	management: 'services/extensionManagement/common/extensionManagementService.ts',
+	history: 'services/workingCopy/common/workingCopyHistoryService.ts',
 	enablement: 'services/extensionManagement/browser/extensionEnablementService.ts',
 	migration: 'contrib/extensions/browser/unsupportedExtensionsMigrationContribution.ts',
 	localization: 'contrib/localization/electron-browser/localization.contribution.ts',
@@ -203,6 +204,10 @@ const LIES: Array<[string, (r: Record<string, unknown>) => void]> = [
 	// ENV-8: URI.revive ignores $mid, so any other marker, or none, is still a URI to the window.
 	...[2, 0, null, '1'].map(mid => [`a host file marked $mid ${JSON.stringify(mid)}`, (r: Record<string, unknown>) => { r.settingsPath = { ...HOST, $mid: mid }; }] as [string, (r: Record<string, unknown>) => void]),
 	['a host fsPath with no scheme or $mid', r => { r.userHome = { path: '/Users/someone', fsPath: '/Users/someone' }; }],
+	// PR review on #66: a location left out, or null, makes its consumers fall back to the host's.
+	['a host fallback: localHistoryHome left out', r => { delete r.localHistoryHome; }],
+	['a host fallback: userHome null', r => { r.userHome = null; }],
+	['a host fallback: profiles home left out', r => { delete (r.profiles as Record<string, unknown>).home; }],
 	// ENV-11: URI.revive reads a bare `{path}` as a file URI.
 	['a host path with no other URI key', r => { r.userHome = { path: '/Users/someone' }; }],
 	['URI fields on a profile hiding its host settings', r => {
@@ -224,7 +229,7 @@ async function environment(b: Build, authority: string, reply: unknown): Promise
 	try {
 		return { refused: false, env: await fn({ call: async () => structuredClone(reply) }, authority, undefined) };
 	} catch (e) {
-		assert.match((e as Error).message, /outside the tab/);
+		assert.match((e as Error).message, /outside the tab|left out a location/);
 		return { refused: true };
 	}
 }
@@ -437,9 +442,9 @@ async function hostManagement(b: Build, authority: string): Promise<string[]> {
 }
 
 /** The extensions whose enablement changes when a tab window enables a tab extension whose pack names a host one. */
-async function enablement(b: Build, authority: string, state = 2): Promise<string[]> {
+async function enablement(b: Build, authority: string, state = 2, ownId = 'tab.pack'): Promise<string[]> {
 	const changed: string[] = [];
-	const own = { identifier: { id: 'tab.pack' }, location: { scheme: 'vscode-remote', authority, path: '/ext' } };
+	const own = { identifier: { id: ownId }, location: { scheme: 'vscode-remote', authority, path: '/ext' } };
 	const host = { identifier: { id: 'host.ext' }, location: { scheme: 'file', authority: '', path: '/Users/someone/.vscode/extensions/host.ext' } };
 	const set = evaluate<(...a: unknown[]) => Promise<unknown>>(asFunction(slice(b.sources.enablement, /\n\tasync setEnablement\(/)!), 'setEnablement', {
 		...b.deps, EnablementState: { EnabledGlobally: 1, EnabledWorkspace: 2, DisabledGlobally: 3, DisabledWorkspace: 4, DisabledByTrustRequirement: 5, DisabledByExtensionDependency: 6 },
@@ -610,6 +615,18 @@ function aiActions(b: Build, authority: string): string[] {
 		}
 	}
 	return offered;
+}
+
+/** Where local history goes in a window on `authority` whose environment was refused: the host's directory, or none. */
+async function historyHome(b: Build, authority: string): Promise<string> {
+	let home = 'none';
+	await evaluate<() => Promise<void>>(asFunction(slice(b.sources.history, /\n\tprivate async resolveLocalHistoryHome\(/)!), 'resolveLocalHistoryHome', b.deps).call({
+		remoteAgentService: { getEnvironment: () => Promise.reject(new Error('refused')) },
+		environmentService: { remoteAuthority: authority, localHistoryHome: { scheme: 'file', path: '/Users/someone/History' } },
+		localHistoryHome: { complete: (v: { path: string }) => { home = v.path; }, error: () => { home = 'refused'; } },
+		logService: { trace: () => { } },
+	});
+	return home;
 }
 
 /** Whether the unsupported-extensions migration runs on the tab's server in a window on `authority`. */
@@ -785,6 +802,12 @@ async function leaks(b: Build): Promise<string[]> {
 	if ((await hostManagement(b, TAB)).some(c => HOST_CHANGES.includes(c))) {
 		out.push('the host takes an extension change from a tab window');
 	}
+	if (await historyHome(b, TAB) === '/Users/someone/History') {
+		out.push('local history falls back to the host');
+	}
+	if ((await enablement(b, TAB, 2, 'host.ext')).includes('host.ext')) {
+		out.push('a tab extension sharing a host id changes its enablement here');
+	}
 	if ((await enablement(b, TAB)).includes('host.ext')) {
 		out.push('a tab extension\'s pack changes a host extension\'s enablement');
 	}
@@ -866,7 +889,7 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'a host file in the tab workspace by a dot-dot path installs on the host', 'a host file in the tab workspace by its NFD path installs on the host',
 	'mcp discovery: a reply naming host directories', 'mcp global configuration: a reply naming host directories', 'mcp management: a reply naming a host readme',
 	'mcp management: a server carrying URLs the renderer loads', 'mcp management: an event naming a host readme', 'mcp management: a host location as a config record value',
-	'install locally: the host installs what the tab names', 'the host takes an extension change from a tab window',
+	'install locally: the host installs what the tab names', 'the host takes an extension change from a tab window', 'local history falls back to the host', 'a tab extension sharing a host id changes its enablement here',
 	'a tab extension\'s pack changes a host extension\'s enablement', 'a tab window changes the host\'s global enablement', 'a tab\'s install event reaches the host\'s global enablement',
 	'a tab\'s install events prompt to change the host\'s display language', 'the tab\'s server gets the marketplace token', 'a publisher trusted in a tab window is trusted for the host',
 	'the host\'s global enablement is registered unguarded', 'profile import builds an unguarded enablement service',
@@ -963,6 +986,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.deepEqual(await hostManagement(b, other), [...HOST_CHANGES, ...HOST_READS]);
 		assert.deepEqual(await enablement(b, other), ['tab.pack', 'host.ext']);
 		assert.equal(migration(b, other), true);
+		assert.equal(await historyHome(b, other), '/Users/someone/History');
 		assert.deepEqual(migrations(b, other), ['publisher trust', 'chat enablement']);
 		assert.deepEqual([...new Set(await hostSettings(b, other))], ['bisect', 'auto-update', 'untrust', 'sync ignore', 'dismissed notifications', 'profile import']);
 		assert.deepEqual(aiActions(b, other), ['EnableAIFeaturesGloballyAction', 'DisableAIFeaturesGloballyAction']);
@@ -978,7 +1002,9 @@ const tests: Array<[string, () => Promise<void>]> = [
 		const mutants: Array<[string, { patch?: [string, string]; filter?: [string, string] }, string]> = [
 			['any scheme', { filter: ["o.scheme !== 'vscode-remote' || ", ''] }, 'environment: a host scheme carrying the tab authority'],
 			['any authority', { filter: [' || o.authority !== remoteAuthority', ''] }, 'environment: another tab as mcpResource'],
-			['containers may carry URI fields', { filter: ['Object.keys(o).some(k => !SECLAB_URI_KEYS.has(k)) || ', ''] }, 'environment: a URI marker and fields on the reply hiding a host settingsPath'],
+			// 'containers may carry URI fields' is no longer observable: a URI-shaped container is
+			// rebuilt as a URI, losing its other fields, and the environment then lacks locations it
+			// must have and is refused (PR review on #66). The rule stays as defence in depth.
 			['a URI only when marked $mid 1', { filter: ['		if (SECLAB_URI_MARKS.some(k => Object.hasOwn(o, k))) {', '		if (o.$mid === 1) {'] }, 'environment: a host file marked $mid 2'],
 			['only $mid or scheme marks a URI', { filter: ["const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'path', 'external', 'fsPath', '_sep'];", "const SECLAB_URI_MARKS = ['$mid', 'scheme'];"] }, 'environment: a host fsPath with no scheme or $mid'],
 			['path alone does not mark a URI', { filter: ["const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'path', 'external', 'fsPath', '_sep'];", "const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'external', 'fsPath', '_sep'];"] }, 'environment: a host path with no other URI key'],
@@ -1012,6 +1038,9 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['language packs fan out from a tab', { patch: ["+		if (!authority || !seclabIsTabAuthority(authority) || server !== this.extensionManagementServerService.remoteExtensionManagementServer) {", "+		if (true) {"] }, 'a tab language-pack manifest updates on the host'],
 			['uninstall fans out from a tab', { patch: ["isLanguagePackExtension(extension.manifest) && !this.seclabFromTab(server)) {\n \t\t\t\tconst otherServers", "isLanguagePackExtension(extension.manifest)) {\n \t\t\t\tconst otherServers"] }, 'a tab language-pack manifest uninstalls on the host'],
 			['only a local is stripped', { filter: ["		const s = server(v);", "		const s = v && typeof v === 'object' && Object.hasOwn(v, 'local') ? v : server(v);"] }, 'mcp management: a server claiming a local keeps its URLs'],
+			['locations may be left out', { patch: ["'localHistoryHome', 'userHome'].some(k => !d[k] || typeof d[k] !== 'object')", "'localHistoryHome', 'userHome'].some(() => false)"] }, 'environment: a host fallback: localHistoryHome left out'],
+			['local history falls back', { patch: ["+		if (!historyHome && seclabIsTabAuthority(this.environmentService.remoteAuthority)) {", "+		if (false) {"] }, 'local history falls back to the host'],
+			['host ids enabled for the workspace', { patch: ["const own = extensions.filter(e => onTab(e) && !hostIds.includes(e.identifier.id.toLowerCase()));", "const own = extensions.filter(e => onTab(e));"] }, 'a tab extension sharing a host id changes its enablement here'],
 			['bisect in a tab window', { patch: ["+		if (seclabIsTabAuthority(this._envService.remoteAuthority)) {\n+			throw new Error('Extension Bisect", "+		if (false) {\n+			throw new Error('Extension Bisect"] }, 'a tab window changes host extension settings: bisect'],
 			['auto-update from a tab', { patch: ["(patch 0059, review ENV-45).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "(patch 0059, review ENV-45).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (false) {"] }, 'a tab window changes host extension settings: auto-update'],
 			['untrust from a tab', { patch: ["(patch 0059, reviews ENV-46, ENV-50).\n+		const seclabTab = this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority);\n+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "(patch 0059, reviews ENV-46, ENV-50).\n+		const seclabTab = this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority);\n+		if (false) {"] }, 'a tab window changes host extension settings: untrust'],
