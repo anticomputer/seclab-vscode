@@ -18789,6 +18789,36 @@
 			"status": "open",
 			"followUp": "Extend the gate to push methods that carry markdown or commands into UI, or record explicit exemptions (rpc session).",
 			"gap": "The gate covers registrations only; pushes rely on default deny."
+		},
+		{
+			"record": "20261117-response-control-pr-review.md",
+			"anchor": "PRC-1",
+			"round": "automated PR review threads on #48 (2026-11-17)",
+			"severity": "low",
+			"summary": "check_responses accepted any added seclabFromTab( in the named patch, so a registration whose customer never applied the sanitiser (return hover;, or a commented-out rewrite) still passed.",
+			"component": "rpc-filter/tools/check_drift.py check_responses",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:863db6bb223957a5c9adadf7291145ebe15a4ae5",
+			"test": {
+				"file": "rpc-filter/tools/test_enforcement.py",
+				"name": "test_mutants_of_the_real_patch_fail"
+			}
+		},
+		{
+			"record": "20261117-response-control-pr-review.md",
+			"anchor": "PRC-2",
+			"round": "automated PR review threads on #48 (2026-11-17)",
+			"severity": "low",
+			"summary": "No test reached tabSelector: the empty-argument case stopped at arity, so removing the scheme guard that keeps tab providers off host documents left the suite green.",
+			"component": "test/containment/arg-validators.test.ts provider selectors",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:bcd5b0110b8b4d43950482938b0c6534a96b7e06",
+			"test": {
+				"file": "test/containment/arg-validators.test.ts",
+				"name": "provider selectors: host schemes, odd fields and non-filters are refused, for hover and completion"
+			}
 		}
 	]
 }

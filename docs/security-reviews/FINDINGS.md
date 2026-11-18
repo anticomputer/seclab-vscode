@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 237 | 380 | 48 | 770 |
+| fixed | 14 | 91 | 237 | 382 | 48 | 772 |
 | fixed-before-landing | 0 | 1 | 0 | 0 | 0 | 1 |
 | fixed-untested | 0 | 5 | 59 | 179 | 63 | 306 |
 | accepted-residual | 0 | 1 | 12 | 72 | 24 | 109 |
 | deferred | 2 | 1 | 13 | 10 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 101 | 333 | 655 | 172 | 1277 |
+| **all** | 16 | 101 | 333 | 657 | 172 | 1279 |
 
 ## Baseline: open high and critical findings
 
@@ -2310,6 +2310,13 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR-22 | low | fixed | A quote after a bracket inside a plain scalar read as an open value. | 0c9c31b7 · `build/check-required-checks.ts` "a plain-scalar command holding a quoted bracket" |
 | CR-23 | info | accepted-residual | Workflow-level defaults can make a required job steps no-ops. | accepted by an agent: The validator bounds skipping, not vacuous success; the control outside the pull request is the pending required-jobs gate (EDR pr-landing-review). |
 | CR-24 | low | fixed | A lone-quote plain label and JSON inside a single-quoted value failed lint. | 858bdff7 · `build/check-required-checks.ts` "JSON with a permissions key inside a single-quoted value" |
+
+### [20261117-response-control-pr-review](20261117-response-control-pr-review.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| PRC-1 | low | fixed | check_responses accepted any added seclabFromTab( in the named patch, so a registration whose customer never applied the sanitiser (return hover;, or a commented-out rewrite) still passed. | patch:863db6bb223957a5c9adadf7291145ebe15a4ae5 · `rpc-filter/tools/test_enforcement.py` "test_mutants_of_the_real_patch_fail" |
+| PRC-2 | low | fixed | No test reached tabSelector: the empty-argument case stopped at arity, so removing the scheme guard that keeps tab providers off host documents left the suite green. | patch:bcd5b0110b8b4d43950482938b0c6534a96b7e06 · `test/containment/arg-validators.test.ts` "provider selectors: host schemes, odd fields and non-filters are refused, for hover and completion" |
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 
