@@ -15,8 +15,9 @@ import type { Readable, Writable } from 'node:stream';
 import { CdpPipe } from './cdp.ts';
 import {
 	appType, checkUserDataDir, editorLaunchRecord, editorPortableDir, editorStderrLog, editorWindowId, focusStealLog,
-	frontmostPid, killTree, preparePortable, startFocusWatch,
+	frontmostPid, killTree, preparePortable, repoRoot, startFocusWatch,
 } from '../harness.ts';
+import { requireAppBuild } from '../app-build.ts';
 
 /** What patch 0012's bootstrap (out/mainImpl.js) logs when it sets the policy there; a runtime
  *  string, so it survives minification. */
@@ -97,6 +98,7 @@ export class DrivenEditor {
 		const userData = path.resolve(opts.userData);
 		checkUserDataDir(userData);
 		const app = path.resolve(opts.app);
+		requireAppBuild(app, repoRoot);
 		if (process.platform === 'darwin' && !hasBootstrapPolicy(app)) {
 			throw new Error(`${app}: its bootstrap doesn't make the app background-only, so a direct launch could take focus; use a build with patch 0012's bootstrap policy`);
 		}

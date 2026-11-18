@@ -1263,6 +1263,10 @@ fetch_macos() {
 	local repo="anticomputer/seclab-vscode"
 	local artifact="seclab-vscode-darwin-arm64" branch_build="${FETCH_BRANCH_BUILD:-}"
 	[[ -n "$branch_build" ]] && { dest="$ROOT/.work/app-branch"; artifact="seclab-vscode-darwin-arm64-branch"; }
+	# A test build's location never keeps an earlier build: it's cleared before anything is checked,
+	# so a refused or failed fetch leaves no app there for a later step to take as this run's
+	# (EDR fetched-app-binding). The release location keeps the app in use until a new one verifies.
+	[[ -n "$branch_build" ]] && rm -rf "$dest"
 	if [[ -z "$run" ]]; then
 		# Only builds of main triggered by a push (reviewed code), never dispatch/PR runs.
 		run="$(gh run list -R "$repo" --workflow build-macos.yml --branch main --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
@@ -1338,6 +1342,7 @@ fetch_test_variant() {
 		|| { echo "unknown test variant '$variant' (test/builds/variants.json)" >&2; exit 2; }
 	[[ "$run" =~ ^[0-9]+$ ]] || { echo "usage: ./seclab fetch macos-$variant RUN_ID" >&2; exit 2; }
 	local dest="$ROOT/.work/test-builds/$variant" meta branch event conclusion workflow head_sha
+	rm -rf "$dest"
 	meta="$(gh run view -R "$repo" "$run" --json headBranch,event,conclusion,workflowName,headSha --jq '[.headBranch,.event,.conclusion,.workflowName,.headSha]|join(" ")')"
 	read -r branch event conclusion workflow head_sha <<<"$meta"
 	if [[ "$workflow" != "build-macos" || "$conclusion" != "success" || "$event" != "workflow_dispatch" || ! "$branch" =~ ^[A-Za-z0-9._/-]{1,100}$ || ! "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
@@ -1510,7 +1515,7 @@ case "${1:-help}" in
 			# Scratch dirs on a named volume: Docker Desktop's bind-mount inode numbers are not
 			# stable, which trips tabd's (dev, ino) workspace identity check.
 			unit) docker run --rm -v "$ROOT:/repo" -v seclab-test-scratch:/repo/.work/test-scratch -w /repo "$(node_image)" \
-				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts tabd/test/obs.test.ts tabd/test/writeback.test.ts tabd/test/writeback-feed.test.ts tabd/test/inspect.test.ts tabd/test/broker-control.test.ts tabd/test/broker-supervisor.test.ts tabd/test/broker-image.test.ts build/patch-reach-imports.test.ts build/check-sole-consumer.test.ts test/agentic/gate/gate.test.ts test/agentic/gate/marks.test.ts build/linux/nm-keep.test.ts build/linux/lock-fill.test.ts build/fetch-upstream.test.ts test/driver/driver.test.ts test/harness/tab-exec.test.ts test/safety/gate-inputs.test.ts test/agentic/gate/fixed-settings.test.ts test/agentic/browser/verdict.test.ts test/agentic/runner/verdict.test.ts test/agentic/browser/tab-beacon.test.ts build/secret-rules/secret-rules.test.ts test/tab-manager/tab-manager.test.ts && python3 sandbox/test/test_wb_mount.py' ;;
+				sh -c 'chown "$(id -u)" .work/test-scratch 2>/dev/null; node --test tabd/test/unit.test.ts tabd/test/supervisor.test.ts tabd/test/obs.test.ts tabd/test/writeback.test.ts tabd/test/writeback-feed.test.ts tabd/test/inspect.test.ts tabd/test/broker-control.test.ts tabd/test/broker-supervisor.test.ts tabd/test/broker-image.test.ts build/patch-reach-imports.test.ts build/check-sole-consumer.test.ts test/agentic/gate/gate.test.ts test/agentic/gate/marks.test.ts build/linux/nm-keep.test.ts build/linux/lock-fill.test.ts build/fetch-upstream.test.ts test/driver/driver.test.ts test/harness/tab-exec.test.ts test/safety/gate-inputs.test.ts test/agentic/gate/fixed-settings.test.ts test/agentic/browser/verdict.test.ts test/agentic/runner/verdict.test.ts test/agentic/browser/tab-beacon.test.ts build/secret-rules/secret-rules.test.ts test/tab-manager/tab-manager.test.ts test/app-build.test.ts && python3 sandbox/test/test_wb_mount.py' ;;
 			# e2e drives sbx/docker on the host, so it runs on the host. It uses the editor's own
 			# Node when SECLAB_NODE points at it, else an already-present node (nothing is installed).
 			e2e) shift; "${SECLAB_NODE:-node}" "$ROOT/tabd/test/e2e.ts" "${1:-sbx}" ;;

@@ -406,6 +406,9 @@ node test/containment/teardown.test.ts   # teardown regression: orphaned editor 
 xattr -dr com.apple.quarantine .work/app/seclab-vscode.app
 # Testing an unlanded branch in the real app: dispatch build-macos on it, then fetch its
 # attested test build into .work/app-branch/ (never the release location; EDR branch-test-builds).
+# A refused or failed fetch leaves .work/app-branch empty, and every launch (test/window.ts, the
+# driver) refuses an app whose build-info.json commit isn't HEAD (the release app: a main build in
+# HEAD's history). Testing another commit: SECLAB_APP_SHA=<40-hex> (EDR fetched-app-binding).
 gh workflow run build-macos.yml --ref <branch>
 ./seclab fetch macos-branch <RUN_ID>
 # A test build variant (EDR test-build-variants): patches/series + the reviewed test-only hooks

@@ -11,6 +11,7 @@ import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { requireAppBuild } from './app-build.ts';
 
 export const repoRoot = path.resolve(import.meta.dirname, '..');
 
@@ -369,6 +370,7 @@ export async function launchEditorInBackground(userData: string, folderUri: stri
 	if (editorPid(userData)) {
 		throw new Error(`an editor already runs with ${userData}; tear it down first`);
 	}
+	requireAppBuild(app, repoRoot);
 	startFocusWatch(userData);
 	fs.mkdirSync(userData, { recursive: true });
 	preparePortable(userData);
