@@ -193,6 +193,20 @@ const tests: Array<[string, () => void]> = [
 		assert.ok(failed(run({ expectations: exp, reh: reh({ sawProfileEnv: false }) }).out, /reh-profile-config-host-setting patched predicate holds/));
 		assert.ok(failed(run({ expectations: exp, reh: reh({ unresolved: false }) }).out, /reh-profile-config-host-setting patched predicate holds/));
 	}],
+	['the environment probe needs the lie served and the canary on a baseline, and a logged refusal after patch 0059', () => {
+		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-environment-host-settings': { required: true, policyRef: 'data:server-locations', patchedOutcome: 'succeeded', why: 'synthetic' } } };
+		const reh = (facts: Record<string, unknown>) => ({ results: [{ id: 'reh-environment-host-settings', policyRef: 'data:server-locations', outcome: 'succeeded', facts: { served: 1, createProcess: 1, canaryTokens: [], ...facts } }] });
+		const leaked = { canaryTokens: ['seclabcanary_HOSTREMOTE_1'] };
+		assert.ok(!failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh(leaked) }).out, /reh-environment-host-settings/));
+		assert.ok(failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh({}) }).out, /reh-environment-host-settings shows the escape itself/));
+		assert.ok(failed(run({ mode: 'unpatched', expectations: exp, rpc: UNPATCHED_RPC, reh: reh({ ...leaked, served: 0 }) }).out, /reh-environment-host-settings shows the escape itself/));
+		const denied = { denials: [...GOOD_DENIALS, 'data:server-locations'] };
+		assert.equal(run({ expectations: exp, reh: reh({}), ...denied }).status, 0);
+		assert.ok(failed(run({ expectations: exp, reh: reh(leaked), ...denied }).out, /reh-environment-host-settings patched predicate holds/));
+		// A lie never served, or a refusal never logged, proves nothing.
+		assert.ok(failed(run({ expectations: exp, reh: reh({ served: 0 }), ...denied }).out, /reh-environment-host-settings patched predicate holds/));
+		assert.ok(failed(run({ expectations: exp, reh: reh({}) }).out, /reh-environment-host-settings patched predicate holds/));
+	}],
 	['a probe run only by its own harness is not judged without that selection, and is required with it', () => {
 		const spec = { required: true, runner: 'reh-push', policyRef: 'data:remoteterminal-profile-path', patchedOutcome: 'succeeded', why: 'synthetic' };
 		const exp = { schema: 1, probes: GOOD_EXPECT_PROBES, rehProbes: { 'reh-profile-config-host-setting': spec } };

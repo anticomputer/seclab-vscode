@@ -351,6 +351,14 @@
       "policyRef": "data:remoteterminal-profile-path",
       "patchedOutcome": "succeeded",
       "why": "the REH offers a profile whose path and env name ${config:<setting>} (and answers getDefaultSystemShell with that path), and the host user's defaultProfile names it; the window resolves the profile path and its env against the host user's settings and sends the values back in createProcess (review RFU-1, RFU1R-1). On the patched build the call still happens, so the outcome is succeeded and the predicate checks both came back unresolved, with no canary"
+    },
+    "reh-environment-host-settings": {
+      "required": true,
+      "runner": "reh-environment",
+      "surface": "credential-access",
+      "policyRef": "data:server-locations",
+      "patchedOutcome": "succeeded",
+      "why": "the REH answers getEnvironmentData with settingsPath pointing at a host file, which the window then reads as the tab's settings layer (and writes the tab's settings into); its terminal env canary comes back in createProcess (review R5-17). On the patched build the lie is still served, so the outcome is succeeded and the predicate checks no canary arrived and the window logged refusing the environment"
     }
   }
 }

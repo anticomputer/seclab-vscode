@@ -2337,6 +2337,16 @@ case "${1:-help}" in
 					exit 1
 				fi
 				docker run --rm --network none -e SECLAB_TEXT_SEARCH_MANAGER=/up/textSearchManager.ts -v "$tsm:/up/textSearchManager.ts:ro" -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --experimental-transform-types --no-warnings test/containment/search-split.test.ts ;;
+			# Patch 0059: a tab window takes no location its server names outside the tab.
+			reh-environment)
+				up="${SECLAB_UPSTREAM:-${RUNNER_TEMP:+$RUNNER_TEMP/upstream/vscode}}"
+				up="${up:-$ROOT/.work/upstream/vscode}"
+				svc="$up/src/vs/workbench/services"
+				if [ ! -d "$svc" ]; then
+					echo "seclab test reh-environment: no pinned upstream at $up (build/fetch-upstream.sh $ROOT/.work/upstream/vscode, or set SECLAB_UPSTREAM)" >&2
+					exit 1
+				fi
+				docker run --rm --network none -e SECLAB_SERVICES_SRC=/up/services -v "$svc:/up/services:ro" -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --experimental-transform-types --no-warnings test/containment/reh-environment.test.ts ;;
 			# Patch 0051: a tab's search messages are untrusted, and the query sent to it carries no host editor.
 			search-responses) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/search-responses.test.ts ;;
 			# RPC filter: patches 0030/0031 never register upstream's push handlers in a tab window.
@@ -2345,7 +2355,7 @@ case "${1:-help}" in
 			decision-line) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/decision-line.test.ts ;;
 			# Every pure RPC-filter suite, so adding one to CI is a single edit.
 			rpc-filter)
-				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators decision-line check-probes push-refusal filter-module chat-gate terminal-variables host-terminal harness-hygiene search-responses search-split; do
+				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators decision-line check-probes push-refusal filter-module chat-gate terminal-variables host-terminal harness-hygiene search-responses search-split reh-environment; do
 					printf '\n=== %s\n' "$t"
 					"$0" test "$t" || exit 1
 				done ;;

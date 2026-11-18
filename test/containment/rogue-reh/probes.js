@@ -227,6 +227,53 @@ function observeProfileLaunch(args) {
 		delete launch.env[PROFILE_ENV_KEY];
 	}
 }
+/**
+ * The server's environment (review R5-17, patch 0059). This REH answers the window's
+ * getEnvironmentData with every location as a genuine server sends it, except settingsPath,
+ * which it points at a file the harness wrote on the host, outside the tab, and it puts URI fields
+ * on the reply itself so a check that stops at the first URI skips it, and marks the lie with a
+ * `$mid` other than a URI's. That file's only
+ * content is terminal.integrated.env.linux with a HOSTREMOTE canary. A window that trusts the reply
+ * reads the host file as the tab's settings, and the canary comes back here in the next
+ * $createProcess's terminal configuration. The harness reloads the window once this is armed, so
+ * the window asks again. Facts only: how many replies carried the lie, and the canary tokens seen.
+ */
+const ENV_REF = 'data:server-locations';
+const envProbe = { armed: false, served: 0, createProcess: 0, tokens: new Set() };
+function armEnvironmentLie(socketServer, ctx, hostSettings) {
+	const channels = socketServer && socketServer.channels;
+	const get = channels && (channels.get ? (n) => channels.get(n) : (n) => channels[n]);
+	const env = get && get('remoteextensionsenvironment');
+	const term = terminalChannel(socketServer);
+	if (!env || typeof env.call !== 'function' || !term || typeof term.call !== 'function') {
+		return;
+	}
+	const target = safety.safePath(ctx, hostSettings, 'host settings file');
+	const envCall = env.call.bind(env);
+	env.call = async (c, command, arg, ...rest) => {
+		const result = await envCall(c, command, arg, ...rest);
+		if (command === 'getEnvironmentData' && result && typeof result === 'object') {
+			// Marked $mid 2: the window's URI.revive ignores the marker (review ENV-8).
+			result.settingsPath = { $mid: 2, scheme: 'file', authority: '', path: target };
+			// URI fields on the reply itself, as if it were one URI on the tab (review ENV-1): a check
+			// that stops walking at the first URI-shaped object would skip the whole reply.
+			const authority = arg && typeof arg.remoteAuthority === 'string' ? arg.remoteAuthority : '';
+			Object.assign(result, { scheme: 'vscode-remote', authority, path: '/' });
+			envProbe.served++;
+		}
+		return result;
+	};
+	const termCall = term.call.bind(term);
+	term.call = async (c, command, args, ...rest) => {
+		if (command === '$createProcess' && args && args.configuration) {
+			envProbe.createProcess++;
+			safety.canaryTokens(args.configuration).forEach(t => envProbe.tokens.add(t));
+		}
+		return termCall(c, command, args, ...rest);
+	};
+	envProbe.armed = true;
+}
+
 function captureCreatedPtys(channel) {
 	const svc = channel && (channel._ptyHostService || channel.ptyHostService);
 	if (!svc || typeof svc.createProcess !== 'function' || svc.__seclabCaptured) {
@@ -352,6 +399,23 @@ async function runRehProbes(socketServer, router) {
 	const ctx = safety.context(targets);
 	if (!ctx.armed) {
 		return [{ id: safety.lit('harness'), policyRef: safety.lit(''), outcome: OUTCOME.error, error: KIND.notArmed }];
+	}
+	if (targets.only === 'environment') {
+		// The environment proof (patch 0059) runs this alone. `ready` is written once the lie is in
+		// place, so the harness knows to reload; `done` once it has opened a terminal after that.
+		armEnvironmentLie(socketServer, ctx, targets.hostsettings);
+		if (envProbe.armed && typeof targets.ready === 'string' && /^\/[A-Za-z0-9._\/-]+$/.test(targets.ready)) {
+			fs.writeFileSync(safety.safeWrite(ctx, targets.ready, 'armed marker'), '');
+		}
+		await waitForReady(targets.done);
+		if (!envProbe.armed) {
+			inconclusive(results, 'reh-environment-host-settings', ENV_REF, KIND.noEmitter);
+		} else {
+			await probe(results, 'reh-environment-host-settings', ENV_REF, async () => ({
+				served: envProbe.served, createProcess: envProbe.createProcess, canaryTokens: [...envProbe.tokens].sort().slice(0, 16),
+			}));
+		}
+		return results;
 	}
 	if (targets.only === 'push') {
 		// The server-initiated push proof (patches 0030/0031) runs these alone, after recording
