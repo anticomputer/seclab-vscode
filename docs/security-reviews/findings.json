@@ -17476,6 +17476,21 @@
 				"file": "test/clean-host.ts",
 				"name": "sbx per-build templates: got"
 			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-13",
+			"round": "Round CR25 (second review)",
+			"severity": "low",
+			"summary": "The obs and e2e-broker suites ignored SECLAB_TAB_IMAGE and tested the shared image.",
+			"component": "test runners (per-build tab images)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:3a42cde40f45a91f88586c27f630478402170bec",
+			"test": {
+				"file": "test/driver/driver.test.ts",
+				"name": "every tab suite runner forwards SECLAB_TAB_IMAGE to tabd (PR 25 review)"
+			}
 		}
 	]
 }

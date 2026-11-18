@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 84 | 215 | 351 | 45 | 709 |
+| fixed | 14 | 84 | 215 | 352 | 45 | 710 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 53 | 170 | 60 | 288 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 20 | 20 |
-| **all** | 16 | 93 | 306 | 614 | 157 | 1186 |
+| **all** | 16 | 93 | 306 | 615 | 157 | 1187 |
 
 ## Baseline: open high and critical findings
 
@@ -2096,6 +2096,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | CR25-10 | low | fixed | A per-build tag lease was written after the tag existed; a concurrent clean-host could prune it. | patch:4bb7e65462e8a4fbd2b0f2467cb36d7957443af1 · `test/clean-host.ts` "the per-build lease isn't written before the tag is published" |
 | CR25-11 | low | fixed | A failing mkdir in an &amp;&amp; list let the tag publish unleased. | patch:781f2a0019590039de3250a5442e0370195dd928 · `test/clean-host.ts` "a lease step is in an &amp;&amp; list, which set -e doesn't stop on" |
 | CR25-12 | low | fixed | Per-build sbx templates were never expired by clean-host. | patch:781f2a0019590039de3250a5442e0370195dd928 · `test/clean-host.ts` "sbx per-build templates: got" |
+| CR25-13 | low | fixed | The obs and e2e-broker suites ignored SECLAB_TAB_IMAGE and tested the shared image. | patch:3a42cde40f45a91f88586c27f630478402170bec · `test/driver/driver.test.ts` "every tab suite runner forwards SECLAB_TAB_IMAGE to tabd (PR 25 review)" |
 
 ### [20261117-fetch-upstream-clean](20261117-fetch-upstream-clean.md)
 
