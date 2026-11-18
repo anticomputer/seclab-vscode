@@ -58,12 +58,18 @@ const FILES = {
 	importExport: 'services/userDataProfile/browser/userDataProfileImportExportService.ts',
 	profileResource: 'services/userDataProfile/browser/extensionsResource.ts',
 	contribution: 'contrib/extensions/browser/extensions.contribution.ts',
+	// The server's own channels, which a genuine tab's server runs (PR review on #66).
+	serverExtensions: '../platform/extensionManagement/common/extensionManagementIpc.ts',
+	serverMcp: '../platform/mcp/common/mcpManagementIpc.ts',
 } as const;
+
+/** A file's path in the patch's headers, `src/vs/…`. */
+const headerPath = (rel: string) => `/vs/${posix.normalize(`workbench/${rel}`)} `;
 type Key = keyof typeof FILES;
 
 /** Apply one file's hunks of a `diff -ruN` patch, each exactly once. */
 function applyFile(source: string, patch: string, rel: string): string {
-	const sec = patch.split(/^(?=diff -ruN )/m).find(p => p.split('\n')[0].includes(`/workbench/${rel} `));
+	const sec = patch.split(/^(?=diff -ruN )/m).find(p => p.split('\n')[0].includes(headerPath(rel)));
 	if (!sec) {
 		return source;
 	}
@@ -114,7 +120,7 @@ interface Build {
 function build(patched: boolean, patch = PATCH, filter = FILTER): Build {
 	const refusals: string[] = [];
 	// A hunk for a file the suite doesn't list would go untested: every section must be one it lists (review ENV-42).
-	const listed = new Set(Object.values(FILES).map(rel => `/workbench/${rel} `));
+	const listed = new Set(Object.values(FILES).map(headerPath));
 	for (const sec of patched ? patch.split(/^(?=diff -ruN )/m).slice(1) : []) {
 		const head = sec.split('\n')[0];
 		assert.ok([...listed].some(l => head.includes(l)), `0059 patches a file the suite doesn't list: ${head}`);
@@ -693,6 +699,90 @@ function uninstallDropsHost(b: Build, authority: string): boolean {
 	return dropped;
 }
 
+/** A server-side URI: `instanceof` works on it, and it crosses the wire as upstream's does. */
+class ServerUri {
+	readonly scheme: string; readonly authority: string; readonly path: string;
+	constructor(scheme: string, authority: string, path: string) { this.scheme = scheme; this.authority = authority; this.path = path; }
+	toJSON() { return { $mid: 1, scheme: this.scheme, authority: this.authority, path: this.path }; }
+}
+const serverFile = (path: string) => new ServerUri('file', '', path);
+
+/**
+ * A genuine tab's server, through upstream's own extension and MCP management channels (with
+ * whatever 0059 does to them), across the wire, into this window's checks. Each problem found.
+ */
+async function serverRoundTrip(b: Build): Promise<string[]> {
+	const problems: string[] = [];
+	const transformer = { transformOutgoingURI: (u: ServerUri) => u.scheme === 'file' ? new ServerUri('vscode-remote', TAB, u.path) : u };
+	const cloneAndChange = (o: unknown, f: (v: unknown) => unknown): unknown => {
+		const r = f(o);
+		return r !== undefined ? r : Array.isArray(o) ? o.map(x => cloneAndChange(x, f)) : o && typeof o === 'object' && !(o instanceof ServerUri) ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, cloneAndChange(v, f)])) : o;
+	};
+	const server = (src: string, call: RegExp, service: Record<string, unknown>) => {
+		const deps: Record<string, unknown> = { URI: ServerUri, cloneAndChange, Event: { map: (_e: unknown, f: unknown) => f }, language: 'en', transformIncomingURI: (u: unknown) => u, transformIncomingOptions: (o: unknown) => o, transformIncomingExtension: (e: unknown) => e, transformIncomingServer: (e: unknown) => e };
+		for (const n of ['transformOutgoingURI', 'transformOutgoingExtension', 'seclabOutgoingSource', 'seclabOutgoingResult']) {
+			const m = slice(src, new RegExp(`\\nfunction ${n}(?:<\\w+>)?\\(`));
+			if (m) {
+				deps[n] = evaluate(m, n, deps);
+			}
+		}
+		const self = { getUriTransformer: () => transformer, service, onInstallExtension: 0, onDidInstallExtensions: 0 };
+		const wire = (v: unknown) => JSON.parse(JSON.stringify(v));
+		return {
+			call: async (command: string, args: unknown[]) => wire(await evaluate<(...a: unknown[]) => Promise<unknown>>(asFunction(slice(src, call)!), 'call', deps).call(self, 'ctx', command, args)),
+			event: (event: string, e: unknown) => wire((evaluate<(...a: unknown[]) => (x: unknown) => unknown>(asFunction(slice(src, /\n\tlisten(?:<T>)?\(context/)!), 'listen', deps).call(self, 'ctx', event))(e)),
+		};
+	};
+	const local = () => ({ identifier: { id: 'tab.own' }, type: 1, isValid: true, manifest: { name: 'own', publisher: 'tab' }, location: serverFile('/Users/someone/.vscode-server/extensions/tab.own') });
+	const ext = server(b.sources.serverExtensions, /\n\tasync call\(/, { install: async () => local(), installFromGallery: async () => local(), installFromLocation: async () => local() });
+	const through = async (guard: string, reply: unknown) => {
+		const ch = (b.deps[guard] as (c: unknown, a: string) => { call: (c: string) => Promise<unknown> })({ call: async () => reply }, TAB);
+		try {
+			await ch.call('x');
+			return true;
+		} catch {
+			return false;
+		}
+	};
+	const heard = (guard: string, e: unknown) => {
+		let got = false;
+		(b.deps[guard] as (c: unknown, a: string) => { listen: (n: string) => (l: () => void) => void })({ listen: () => (l: (v: unknown) => void) => l(e) }, TAB).listen('onDidInstallExtensions')(() => { got = true; });
+		return got;
+	};
+	for (const command of ['install', 'installFromGallery', 'installFromLocation']) {
+		if (!await through('seclabTabExtensionsChannel', await ext.call(command, []))) {
+			problems.push(`a genuine ${command} reply is refused`);
+		}
+	}
+	const result = { identifier: { id: 'tab.own' }, operation: 2, source: serverFile('/Users/someone/tab.own.vsix'), local: local(), profileLocation: serverFile('/Users/someone/.vscode-server/extensions/extensions.json') };
+	if (!heard('seclabTabExtensionsChannel', ext.event('onDidInstallExtensions', [result]))) {
+		problems.push('a genuine VSIX install event is dropped');
+	}
+	const mcpLocal = () => ({ name: 's', id: 's', config: { type: 'stdio', command: 'x' }, mcpResource: serverFile('/Users/someone/.vscode-server/data/User/mcp.json') });
+	const mcp = server(b.sources.serverMcp, /\n\tasync call<T>\(/, { install: async () => mcpLocal(), installFromGallery: async () => mcpLocal(), updateMetadata: async () => mcpLocal() });
+	for (const command of ['install', 'installFromGallery', 'updateMetadata']) {
+		if (!await through('seclabTabMcpChannel', await mcp.call(command, []))) {
+			problems.push(`a genuine MCP ${command} reply is refused`);
+		}
+	}
+	return problems;
+}
+
+/** Whether a window on `authority` drops a running host extension when the tab's server reports an update under its id. */
+function updateDropsHost(b: Build, authority: string): boolean {
+	let toRemove: unknown[] = [];
+	const listener = slice(b.sources.extensionService, /onDidInstallExtensions\(\(result/)!.replace(/^onDidInstallExtensions\(\(result\) => /, 'function listener(result) ');
+	const fn = evaluate<(...a: unknown[]) => void>(listener, 'listener', { ...b.deps, isCI: false, InstallOperation: { Install: 1, Update: 2, Migrate: 3 }, DeltaExtensionsQueueItem: function (_a: unknown, r: unknown[]) { toRemove = r; } });
+	fn.call({
+		_environmentService: { remoteAuthority: authority },
+		_safeInvokeIsEnabled: () => true,
+		_handleDeltaExtensions: () => { },
+		_logService: { info: () => { } },
+	}, [{ operation: 2, local: { identifier: { id: 'host.ext' }, isValid: true, location: { scheme: 'vscode-remote', authority: TAB, path: '/ext' } } }]);
+	// `_deltaExtensions` removes the running copy for a bare id; for an extension, only one on its scheme.
+	return toRemove.some(r => typeof r === 'string' || (r as { location: { scheme: string } }).location.scheme === 'file');
+}
+
 /** Where local history goes in a window on `authority` whose environment was refused: the host's directory, or none. */
 async function historyHome(b: Build, authority: string): Promise<string> {
 	let home = 'none';
@@ -893,6 +983,9 @@ async function leaks(b: Build): Promise<string[]> {
 	if (uninstallDropsHost(b, TAB)) {
 		out.push('an uninstall the tab reports drops a running host extension');
 	}
+	if (updateDropsHost(b, TAB)) {
+		out.push('an update the tab reports drops a running host extension');
+	}
 	if ((await enablement(b, TAB)).includes('host.ext')) {
 		out.push('a tab extension\'s pack changes a host extension\'s enablement');
 	}
@@ -974,7 +1067,7 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'a host file in the tab workspace by a dot-dot path installs on the host', 'a host file in the tab workspace by its NFD path installs on the host',
 	'mcp discovery: a reply naming host directories', 'mcp global configuration: a reply naming host directories', 'mcp management: a reply naming a host readme',
 	'mcp management: a server carrying URLs the renderer loads', 'mcp management: an event naming a host readme', 'mcp management: a host location as a config record value',
-	'install locally: the host installs what the tab names', 'the host takes an extension change from a tab window', 'local history falls back to the host', 'a workspace entry under a host id changes a host extension here', 'a workspace entry under a host uuid changes a host extension here', 'a tab extension claiming a host dependency turns the host extension off', 'an uninstall the tab reports drops a running host extension',
+	'install locally: the host installs what the tab names', 'the host takes an extension change from a tab window', 'local history falls back to the host', 'a workspace entry under a host id changes a host extension here', 'a workspace entry under a host uuid changes a host extension here', 'a tab extension claiming a host dependency turns the host extension off', 'an uninstall the tab reports drops a running host extension', 'an update the tab reports drops a running host extension',
 	'a tab extension\'s pack changes a host extension\'s enablement', 'a tab window changes the host\'s global enablement', 'a tab\'s install event reaches the host\'s global enablement',
 	'a tab\'s install events prompt to change the host\'s display language', 'the tab\'s server gets the marketplace token', 'a publisher trusted in a tab window is trusted for the host',
 	'the host\'s global enablement is registered unguarded', 'profile import builds an unguarded enablement service',
@@ -1006,6 +1099,8 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.equal(p.replyRefused, false);
 		assert.equal(p.events.length, 1);
 		assert.deepEqual(ids(await scan(b, TAB, extensions(TAB).slice(0, 1))), ['tab.own']);
+		// PR review on #66: what a genuine server's own channels send passes this window's checks.
+		assert.deepEqual(await serverRoundTrip(b), []);
 		const tabExt = { ...HOST_EXT, identifier: { id: 'tab.own' }, location: { scheme: 'vscode-remote', authority: TAB, path: '/ext' } };
 		assert.equal(workspaceState(b, TAB, tabExt, { id: 'tab.own' }), ENABLEMENT.DisabledWorkspace);
 		const mg = await management(b, TAB, [local(TAB, remote(TAB, '/ext'))], { local: local(TAB, remote(TAB, '/ext')), profileLocation: remote(TAB, '/p') });
@@ -1094,6 +1189,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.equal(workspaceState(b, other, HOST_EXT, { id: 'host.ext' }), ENABLEMENT.DisabledWorkspace);
 		assert.equal(hostDependsOnTab(b, other), true);
 		assert.equal(uninstallDropsHost(b, other), true);
+		assert.equal(updateDropsHost(b, other), true);
 		assert.deepEqual(migrations(b, other), ['publisher trust', 'chat enablement']);
 		assert.deepEqual([...new Set(await hostSettings(b, other))], ['bisect', 'auto-update', 'untrust', 'sync ignore', 'dismissed notifications', 'profile import']);
 		assert.deepEqual(aiActions(b, other), ['EnableAIFeaturesGloballyAction', 'DisableAIFeaturesGloballyAction']);
@@ -1148,6 +1244,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['locations may be left out', { patch: ["'localHistoryHome', 'userHome'].some(k => !d[k] || typeof d[k] !== 'object')", "'localHistoryHome', 'userHome'].some(() => false)"] }, 'environment: a host fallback: localHistoryHome left out'],
 			['local history falls back', { patch: ["+		if (!historyHome && seclabIsTabAuthority(this.environmentService.remoteAuthority)) {", "+		if (false) {"] }, 'local history falls back to the host'],
 			['host extensions depend on the tab', { patch: ["(!this.seclabOnTab(e) || this.seclabOnTab(extension)) &&", ""] }, 'a tab extension claiming a host dependency turns the host extension off'],
+			['tab updates drop host extensions', { patch: ["new DeltaExtensionsQueueItem(extensions, seclabIsTabAuthority(this._environmentService.remoteAuthority) ? updated : toRemove)", "new DeltaExtensionsQueueItem(extensions, toRemove)"] }, 'an update the tab reports drops a running host extension'],
 			['tab uninstalls drop host extensions', { patch: ["event.server.id !== 'local' && running &&", "false &&"] }, 'an uninstall the tab reports drops a running host extension'],
 			['host extensions take the workspace enablement', { patch: ["enablementState = this.seclabOnTab(extension) ? this._getUserEnablementState", "enablementState = true ? this._getUserEnablementState"] }, 'a workspace entry under a host id changes a host extension here'],
 			['bisect in a tab window', { patch: ["+		if (seclabIsTabAuthority(this._envService.remoteAuthority)) {\n+			throw new Error('Extension Bisect", "+		if (false) {\n+			throw new Error('Extension Bisect"] }, 'a tab window changes host extension settings: bisect'],
