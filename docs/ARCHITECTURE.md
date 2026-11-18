@@ -257,8 +257,9 @@ User-visible consequences of containment, so they read as design rather than bug
   but doesn't install, update, uninstall, enable or disable them, language packs included, and
   "Install Locally" is refused: in a tab window which extensions those actions reach is the tab's
   server's to say. Manage host extensions from a window that isn't a tab. In a tab window,
-  extensions are enabled and disabled for the open workspace only: the global Enable and Disable
-  actions are refused, and with no folder open nothing can be enabled or disabled. Extension
+  the tab's extensions are enabled and disabled for the open workspace only: the global Enable and
+  Disable actions are refused, with no folder open nothing can be enabled or disabled, and a host
+  extension keeps its global state there, whatever was set for the workspace. Extension
   Bisect, auto-update settings, whether an extension syncs, managing trusted publishers and making
   a profile from a template are refused in a tab window too. A publisher trusted while installing into the tab is asked
   about again next time, and the tab's server gets no marketplace access token, so it can't use an
