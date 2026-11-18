@@ -366,3 +366,27 @@ fixed and, where it was a check that could not fail, shown failing by injection:
   the renderer log, and keeps its run records in a run dir outside the profile, with the profile,
   the tabd state, the workspace and the driver recorded before anything starts and teardown run in
   both modes.
+
+## The run at the 1.145.3 pin, 2026-11-18
+
+Build `44349999476`, head `cf6b4d7b`, provenance verified against this repository's build-macos
+workflow on this branch, and the required checks green on that exact commit. Driven only through
+the headless driver, in the background, each arm with a profile the run created; the tab image's
+REH is built from the same upstream commit as the app. Both arms ended with the teardown gate
+clean and the focus watcher reporting no steal.
+
+- **Ordinary window.** Reached `Restored`; each of the three guarded contributions has its
+  creation mark and no construction error; and the wrapper's mark that the **real class was
+  built** is present for all three, with no stand-in mark and no provider withheld. This is the
+  positive answer to the question review round 13 left as reasoned: re-entrant resolution inside
+  the wrapper's constructor builds the real classes in a booted window.
+- **Tab window.** Reached `Restored`; the three contributions returned the stand-in (marks
+  present, no real-class mark); the gate log names five providers withheld, now including the
+  authentication resolver, which the remote agent-host factory reaches for the remote host the
+  tab's workspace lists; and patch 0015 logged **one transport refusal** for that host.
+
+**The control.** The same tab arm on the earlier attested build of this branch (`44211916571`,
+head `8a240550`, before the resolver had a shape), with the tab image from that build's upstream,
+reported the same five providers withheld but **no transport refusal**: the factory's
+`createResolver` call failed before 0015's gate could refuse and log, which is finding CR43-1.
+That build also predates the construction marks, so the run failed on those too, as it should.
