@@ -121,3 +121,14 @@ test('SECLAB_TAB_IMAGE: only our tab images, and only the kind the driver runs',
 		assert.match(tabImageProblem(bad, 'sbx') ?? '', /must name a seclab-tab image/, bad);
 	}
 });
+
+test('every tab suite runner forwards SECLAB_TAB_IMAGE to tabd (PR 25 review)', () => {
+	// The ./seclab test suites that start tabd: each passes tabImageArgs, so a proof image is
+	// never silently replaced by the shared :local one.
+	const repo = path.resolve(import.meta.dirname, '../..');
+	for (const f of ['tabd/test/e2e.ts', 'tabd/test/e2e-broker.ts', 'test/containment/run.ts', 'test/canary/run.ts', 'test/secrets/run.ts', 'test/observability/run.ts']) {
+		const text = fs.readFileSync(path.join(repo, f), 'utf8');
+		assert.match(text, /tabImageArgs\(driver\)/, f);
+		assert.match(text, /'tabd\/src\/main\.ts'\)[^\n]*(\n[^\n]*){0,2}\.\.\.tab[Ii]mage/, f);
+	}
+});

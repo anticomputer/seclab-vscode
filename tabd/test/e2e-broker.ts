@@ -17,9 +17,12 @@ import * as path from 'node:path';
 import { TabdClient } from '../src/client.ts';
 import { checkFence, parsePolicyJson } from '../src/fence.ts';
 import { teardownGate, writeManifest, writeSnapshot } from '../../test/containment/teardown.ts';
+import { tabImageArgs } from '../../test/harness.ts';
 
 const argv = process.argv.slice(2);
 const driver = argv[0] === 'sbx' || argv[0] === 'oci' ? argv.shift()! : 'oci';
+// Validated before anything is created: a bad SECLAB_TAB_IMAGE exits here (Copilot review on PR 25).
+const tabImage = tabImageArgs(driver);
 const brokerImage = argv[0] ?? 'seclab-broker:dev';
 const SBX = '/opt/homebrew/bin/sbx';
 const repo = path.resolve(import.meta.dirname, '../..');
@@ -47,7 +50,7 @@ process.on('exit', code => {
 const client = new TabdClient({
 	command: process.execPath,
 	args: [path.join(repo, 'tabd/src/main.ts'), '--state-dir', state, '--driver', driver, '--broker', 'required',
-		'--broker-image', brokerImage, '--allowed-root', path.join(work, 'tabs')],
+		'--broker-image', brokerImage, '--allowed-root', path.join(work, 'tabs'), ...tabImage],
 	env: { HOME: process.env.HOME, USER: process.env.USER, PATH: '/usr/bin:/bin' },
 });
 client.on('stderr', (s: string) => process.stderr.write(`[tabd] ${s}`));
