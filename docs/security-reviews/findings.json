@@ -19622,6 +19622,28 @@
 			"status": "fixed-untested",
 			"commit": "patch:e782e8d5be650c1463cc74f8fd5fef15b460f93f",
 			"gap": "Harness hygiene; both runners derive their trees through it on every run, and no stale artefact can shadow a module at the current pin."
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R15-1",
+			"severity": "low",
+			"summary": "The new 0018 unit test's ordering clause could never fail, since the materialisation call is upstream code outside every hunk and so not in the patch text",
+			"component": "patch 0018 unit tests",
+			"owner": "agentic",
+			"status": "fixed-untested",
+			"commit": "patch:88f81684f0c936095692d7324cd62216ccbe50bb",
+			"gap": "A test-quality fix: the vacuous clause was removed; the remaining regex, which fails on the previous patch text, is what pins R14-1."
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "R15-2",
+			"severity": "low",
+			"summary": "The dispatch probe's unhandledRejection listener was process-wide, so an unexpected rejection was swallowed instead of failing the run",
+			"component": "chat-dispatch probe",
+			"owner": "agentic",
+			"status": "fixed-untested",
+			"commit": "patch:88f81684f0c936095692d7324cd62216ccbe50bb",
+			"gap": "A probe fix, shown by injection (an item controller that throws fails the run); no test runs the probe's own guard."
 		}
 	]
 }
