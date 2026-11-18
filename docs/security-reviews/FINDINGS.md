@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 249 | 407 | 52 | 813 |
+| fixed | 14 | 91 | 249 | 408 | 52 | 814 |
 | fixed-before-landing | 0 | 5 | 0 | 0 | 0 | 5 |
-| fixed-untested | 0 | 5 | 59 | 182 | 68 | 314 |
+| fixed-untested | 0 | 5 | 59 | 182 | 71 | 317 |
 | accepted-residual | 0 | 1 | 13 | 73 | 25 | 112 |
 | deferred | 2 | 1 | 13 | 10 | 3 | 29 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 105 | 345 | 687 | 182 | 1335 |
+| **all** | 16 | 105 | 345 | 688 | 185 | 1339 |
 
 ## Baseline: open high and critical findings
 
@@ -110,6 +110,9 @@ Patch 0015 (the agent-host gate), the agentic spikes and test variants, the secu
 | [20261105-agents-in-tab-spike](20261105-agents-in-tab-spike.md) **6** | info | accepted-residual | fixture-safety lint opt-outs | Lint opt-outs in the spike harness (per-line pragmas plus allowlist entries) were accepted as justified | accepted by an agent: The reviewer judged each opt-out justified: per-line pragmas plus reviewed allowlist entries, with \`./seclab lint fixtures\` still covering the rest. |
 | [20261105-secure-agentic-experiences-design](20261105-secure-agentic-experiences-design.md) **17** | info | deferred | credential rewrite (patch 0020), openExternal rules | Provider-table keys need canonicalising and openExternal should be restricted to https public hosts | follow-up: increment 5 / patch 0020 (agentic), plan §4.2 step 1 and §5.2; fuzz with A1 and B1 |
 | [20261105-secure-agentic-experiences-design](20261105-secure-agentic-experiences-design.md) **DR-FACTS** | info | fixed-untested | design records (plan, research, ADR) | Nine factual errors in the plan, research and ADR (tool-set bound, host MCP configs, unregistered settings, channel list, debugEnv, null service, patch estimate, dangling links, an unverified citation) | documentation corrections; no check enforces that the plan and research stay consistent with upstream |
+| [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **CR43-2** | info | fixed-untested | agentic probe runners | derive_tree's plain checkout refused to switch a reused tree holding the previous run's patches to a new pin | Harness hygiene, shown with a simulated pin change; no test runs the helper itself. |
+| [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **CR43-3** | info | fixed-untested | window-proof harness | window-proof did not run teardown on SIGINT or SIGTERM | Uses the shared exitOnSignals helper; no test runs window-proof itself, which needs a fetched macOS build. |
+| [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **CR43-4** | info | fixed-untested | window-proof harness | window-proof's ordinary arm had no positive evidence that the real classes were built, since creation marks name the wrapper and the gate log exists only in tab windows | The 0019 wrapper now marks real and stand-in construction; the evidence is the real-build run recorded in the EDR, not a unit test. |
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R14-2** | info | fixed-untested | increment 3 records | The EDR's coverage statement did not mention the server-managed branch of sendPendingRequestImmediately, which calls sendRequestInternal directly | A documentation correction: the EDR now lists the branch and what covers it (the entry check, pinned by the R14-1 unit test). |
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R14-3** | info | fixed-untested | window-proof harness | window-proof refused an existing profile but not a leftover portable sibling, which the driver reuses | A harness precondition; no test runs window-proof itself, which needs a fetched macOS build. |
 | [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R14-4** | info | fixed-untested | agentic probe runners | derive_tree cleaned without -x and checked pristineness without --ignored, so a reused tree could keep ignored files | Harness hygiene; both runners derive their trees through it on every run, and no stale artefact can shadow a module at the current pin. |
@@ -1427,6 +1430,10 @@ Every other commit the register cites is on main's history, or on the branch its
 | R14-4 | info | fixed-untested | derive_tree cleaned without -x and checked pristineness without --ignored, so a reused tree could keep ignored files | Harness hygiene; both runners derive their trees through it on every run, and no stale artefact can shadow a module at the current pin. |
 | R15-1 | low | fixed-untested | The new 0018 unit test's ordering clause could never fail, since the materialisation call is upstream code outside every hunk and so not in the patch text | A test-quality fix: the vacuous clause was removed; the remaining regex, which fails on the previous patch text, is what pins R14-1. |
 | R15-2 | low | fixed-untested | The dispatch probe's unhandledRejection listener was process-wide, so an unexpected rejection was swallowed instead of failing the run | A probe fix, shown by injection (an item controller that throws fails the run); no test runs the probe's own guard. |
+| CR43-1 | low | fixed | The authentication resolver's stand-in had no shape, so the unwrapped remote agent-host service's connection factory threw a TypeError on createResolver before patch 0015's gate could refuse a tab-written remote host and log the refusal | patch:05ab7e1bdfb7abcd1d402fe515775b25cbcd6098 · `test/agentic/gate/null-providers.test.ts` "the authentication resolver stand-in supplies createResolver, which the remote agent-host factory calls first" |
+| CR43-2 | info | fixed-untested | derive_tree's plain checkout refused to switch a reused tree holding the previous run's patches to a new pin | Harness hygiene, shown with a simulated pin change; no test runs the helper itself. |
+| CR43-3 | info | fixed-untested | window-proof did not run teardown on SIGINT or SIGTERM | Uses the shared exitOnSignals helper; no test runs window-proof itself, which needs a fetched macOS build. |
+| CR43-4 | info | fixed-untested | window-proof's ordinary arm had no positive evidence that the real classes were built, since creation marks name the wrapper and the gate log exists only in tab windows | The 0019 wrapper now marks real and stand-in construction; the evidence is the real-build run recorded in the EDR, not a unit test. |
 
 ### [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md)
 

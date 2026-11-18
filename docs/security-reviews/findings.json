@@ -19644,6 +19644,53 @@
 			"status": "fixed-untested",
 			"commit": "patch:88f81684f0c936095692d7324cd62216ccbe50bb",
 			"gap": "A probe fix, shown by injection (an item controller that throws fails the run); no test runs the probe's own guard."
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "CR43-1",
+			"severity": "low",
+			"summary": "The authentication resolver's stand-in had no shape, so the unwrapped remote agent-host service's connection factory threw a TypeError on createResolver before patch 0015's gate could refuse a tab-written remote host and log the refusal",
+			"component": "patch 0019 null-provider shapes",
+			"owner": "agentic",
+			"status": "fixed",
+			"commit": "patch:05ab7e1bdfb7abcd1d402fe515775b25cbcd6098",
+			"test": {
+				"file": "test/agentic/gate/null-providers.test.ts",
+				"name": "the authentication resolver stand-in supplies createResolver, which the remote agent-host factory calls first"
+			}
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "CR43-2",
+			"severity": "info",
+			"summary": "derive_tree's plain checkout refused to switch a reused tree holding the previous run's patches to a new pin",
+			"component": "agentic probe runners",
+			"owner": "agentic",
+			"status": "fixed-untested",
+			"commit": "patch:05ab7e1bdfb7abcd1d402fe515775b25cbcd6098",
+			"gap": "Harness hygiene, shown with a simulated pin change; no test runs the helper itself."
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "CR43-3",
+			"severity": "info",
+			"summary": "window-proof did not run teardown on SIGINT or SIGTERM",
+			"component": "window-proof harness",
+			"owner": "agentic",
+			"status": "fixed-untested",
+			"commit": "patch:05ab7e1bdfb7abcd1d402fe515775b25cbcd6098",
+			"gap": "Uses the shared exitOnSignals helper; no test runs window-proof itself, which needs a fetched macOS build."
+		},
+		{
+			"record": "20261106-agentic-ahp-gate.md",
+			"anchor": "CR43-4",
+			"severity": "info",
+			"summary": "window-proof's ordinary arm had no positive evidence that the real classes were built, since creation marks name the wrapper and the gate log exists only in tab windows",
+			"component": "window-proof harness",
+			"owner": "agentic",
+			"status": "fixed-untested",
+			"commit": "patch:05ab7e1bdfb7abcd1d402fe515775b25cbcd6098",
+			"gap": "The 0019 wrapper now marks real and stand-in construction; the evidence is the real-build run recorded in the EDR, not a unit test."
 		}
 	]
 }
