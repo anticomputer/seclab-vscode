@@ -23,6 +23,7 @@ that did reach `main` had the weaker bar.
      says it failed.
 2. The host checks the commits (`findings_own_fix`):
    - the fix is on the change's history;
+   - `preFix` is a SHA (it is on `main`, so it is stable);
    - `preFix` is a different commit that the fix descends from;
    - `preFix` is on the base's history, so on `main`.
 
@@ -32,9 +33,12 @@ that did reach `main` had the weaker bar.
    later still closes nothing (EEEE-1, PRR11-2).
 3. `findings.ts` lists such entries (`ownfix`) and checks the two fields' shape. `preFixRef` is checked
    for the entry's whole life, as a test is.
-4. Grandfathered: an entry `main` already has, and a `fixed` high whose fix commit was already on the
-   change's base (an old fix registered late), need neither field. A local check on `main` with no
-   landing range skips the commit check, as it skips the other new-entry rules.
+4. Grandfathered: a key that `main` or the base already had as a high needs neither field. A key
+   raised to high in the change is judged like a new one. A fix commit already on `main` is no
+   exemption: an old fix registered late cites a `preFix` before it (review IIII-3). Once landed, a
+   `fixed` entry keeps its `preFix` and `preFixRef` unchanged (IIII-5). On `main` the check compares
+   with the base's register, not `origin/main`'s, which is the tree's own (IIII-4). A local check
+   on `main` with no landing range skips the commit check, as it skips the other new-entry rules.
 
 ## Consequences
 - RPC follow-ups adds `preFix` and `preFixRef` to R5-14; any in-flight pull request closing a new

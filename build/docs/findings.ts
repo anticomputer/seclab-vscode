@@ -569,9 +569,13 @@ function merge3(b: Register | undefined, o: Register, t: Register): { reg?: Regi
 // The host's input for a high closed by its own change (IIII): "<key>\t<fix commit>\t<preFix or ->"
 // for each `fixed` high that neither the base nor main's register had (by key or wasKey). Entries
 // already on main are grandfathered. The host decides whether the fix is the change's own.
+// A key that the base or main had already as a high is grandfathered (coordinator, 2026-11-18); a
+// key that was lower there and is raised to high now is judged like a new one (IIII-6).
 function ownFixLines(reg: Register, base?: Register, main?: Register): string[] {
-	const had = new Set([...(base?.findings ?? []), ...(main?.findings ?? [])].filter(f => !f.branch).map(keyOf));
-	return reg.findings.filter(f => f.status === 'fixed' && isHigh(f) && !f.branch && f.commit && !had.has(keyOf(f)) && !(f.wasKey && had.has(f.wasKey)))
+	const had = new Set([...(base?.findings ?? []), ...(main?.findings ?? [])].filter(f => !f.branch && isHigh(f)).map(keyOf));
+	// Grandfathering waives adding evidence, never checking it: an entry that carries a preFix is
+	// always listed, so its fix still descends from it (PRR61-1).
+	return reg.findings.filter(f => f.status === 'fixed' && isHigh(f) && !f.branch && f.commit && (f.preFix !== undefined || (!had.has(keyOf(f)) && !(f.wasKey && had.has(f.wasKey)))))
 		.map(f => `${logLine(keyOf(f))}\t${f.commit}\t${f.preFix ?? '-'}\n`);
 }
 
@@ -744,8 +748,9 @@ function schemaProblems(reg: Register): string[] {
 		// On `fixed`, the failing-baseline evidence of a high closed by its own change (IIII): both
 		// fields together, checked as for fixed-before-landing.
 		if (f.status === 'fixed' && (f.preFix !== undefined || f.preFixRef !== undefined)) {
-			if (typeof f.preFix !== 'string' || !isRef(f.preFixRef) || (!/^[0-9a-f]{7,40}$/.test(f.preFix) && !PATCH_EXACT.test(f.preFix))) {
-				p.push(`${at}: preFix (a SHA or patch:<patch-id>) and preFixRef { file, quote } go together`);
+			// On a fixed entry preFix is a main commit, so a SHA (IIII-12).
+			if (typeof f.preFix !== 'string' || !isRef(f.preFixRef) || !/^[0-9a-f]{7,40}$/.test(f.preFix)) {
+				p.push(`${at}: preFix (a main commit's SHA) and preFixRef { file, quote } go together`);
 			} else if (pathProblem(f.preFixRef!.file)) {
 				p.push(`${at}: preFixRef: ${pathProblem(f.preFixRef!.file)}`);
 			} else if (f.test && nonEmpty(f.test.name) && (!f.preFixRef!.quote.includes(f.test.name) || !/fail/i.test(f.preFixRef!.quote))) {
@@ -1186,6 +1191,13 @@ function check(tree: Tree, reg: Register, renderedView?: string, base?: Register
 		const f = byKey.get(keyOf(bf)) ?? moved.get(keyOf(bf));
 		if (bf.status === 'fixed-before-landing' && !bf.branch && f && f.status === 'fixed') {
 			p.push(`${keyOf(f)}: was fixed-before-landing; it keeps that status and its preFix evidence (it may reopen, not become fixed)`);
+		}
+	}
+	// A fixed entry keeps the failing-baseline evidence it landed with (IIII-5).
+	for (const bf of change?.landed ? [] : base?.findings ?? []) {
+		const f = byKey.get(keyOf(bf)) ?? moved.get(keyOf(bf));
+		if (bf.status === 'fixed' && !bf.branch && (bf.preFix !== undefined || bf.preFixRef !== undefined) && f && f.status === 'fixed' && (f.preFix !== bf.preFix || JSON.stringify(f.preFixRef) !== JSON.stringify(bf.preFixRef))) {
+			p.push(`${keyOf(f)}: its preFix and preFixRef are evidence it landed with; they never change while it is fixed`);
 		}
 	}
 	// A fixed entry's failing-baseline record is evidence for its whole life too (IIII).
@@ -1792,7 +1804,7 @@ function selfTest(): number {
 		expect('a preFixRef quote that does not name the failing test fails the schema (GGGG-1)', run(gFiles(), gQuote, true, reg(), gChange([gRec, 'tabd/test/unit.test.ts'])), /preFixRef.quote must name the test/);
 		const gFixed = reg();
 		gFixed.findings[0].preFix = 'abcdef1';
-		expect('preFix on a fixed entry without its preFixRef fails the schema (GGGG-1, IIII)', run(base(), gFixed), /preFix \(a SHA or patch:<patch-id>\) and preFixRef \{ file, quote \} go together/);
+		expect('preFix on a fixed entry without its preFixRef fails the schema (GGGG-1, IIII)', run(base(), gFixed), /preFix \(a main commit.s SHA\) and preFixRef \{ file, quote \} go together/);
 		expect('prefix lines mark a new fixed-before-landing entry for the host (GGGG-1)', prefixLines(gReg(), reg()).some(l => /^20261102-g\.md#G-1\tpatch:2{40}\tpatch:1{40}\t1\n$/.test(l)) ? [] : ['no new line'], null);
 		expect('control: one the base had is not judged again (GGGG-1)', prefixLines(gReg(), gReg()).some(l => /\t1\n$/.test(l)) ? ['judged again'] : [], null);
 		expect('a fixed-before-landing high closes like fixed: it is in commit lines for ancestry (GGGG-1)', commitLines(gReg(), reg()).some(l => l.startsWith('20261102-g.md#G-1\t')) ? [] : ['missing'], null);
@@ -1879,10 +1891,33 @@ function selfTest(): number {
 			const ef = base();
 			ef.set(EDR, `${USERQ}\nonly on main\nrejects the bad thing fails on main\n`);
 			expect('control: a fixed high with its failing-baseline evidence passes the schema (IIII)', run(ef, ip), null);
+			const ipp = JSON.parse(JSON.stringify(ip)) as Register;
+			ipp.findings[4].preFix = 'patch:4444444444444444444444444444444444444444';
+			expect('a patch: preFix on a fixed entry fails the schema (IIII-12)', run(ef, ipp), /preFix \(a main commit.s SHA\)/);
+			expect('a grandfathered high that carries a preFix is still listed for its evidence check (PRR61-1)', ownFixLines(ip, ip, ip).some(l => l.endsWith('\tabcdef1\n')) ? [] : ['not listed'], null);
 			expect('the own-fix line carries the preFix (IIII-1)', ownFixLines(ip, reg(), reg()).some(l => l.endsWith('\tabcdef1\n')) ? [] : ['missing'], null);
 			const iq = JSON.parse(JSON.stringify(ip)) as Register;
 			iq.findings[4].preFixRef = { file: EDR, quote: 'only on main' };
 			expect('a fixed high whose preFixRef does not record the test failing fails the schema (IIII)', run(ef, iq), /must name the test .* failing on the base/);
+		}
+		{
+			// IIII-6: a key raised to high is judged; one the base had as a high is grandfathered.
+			const lowB = reg();
+			lowB.findings.push({ record: null, anchor: 'R5-14', severity: 'medium', summary: 's', component: 'c', owner: 'o', status: 'fixed', commit: 'abcdef1', test: { file: 'tabd/test/unit.test.ts', name: 'rejects the bad thing' }, ref: { file: EDR, quote: 'only on main' } });
+			const highN = JSON.parse(JSON.stringify(lowB)) as Register;
+			highN.findings[4].severity = 'high';
+			expect('a key raised to high in this change is listed for the own-fix check (IIII-6)', ownFixLines(highN, lowB, lowB).length === 1 ? [] : ['not listed'], null);
+			expect('control: a key main had as a high is grandfathered (IIII-6)', ownFixLines(highN, highN, highN).length ? ['listed'] : [], null);
+			// IIII-5: landed failing-baseline evidence can't be dropped or changed.
+			const withEv = JSON.parse(JSON.stringify(highN)) as Register;
+			Object.assign(withEv.findings[4], { preFix: 'abcdef2', preFixRef: { file: EDR, quote: 'rejects the bad thing fails on main' } });
+			const dropped = JSON.parse(JSON.stringify(withEv)) as Register;
+			delete dropped.findings[4].preFix;
+			delete dropped.findings[4].preFixRef;
+			const ef2 = base();
+			ef2.set(EDR, `${USERQ}\nonly on main\nrejects the bad thing fails on main\n`);
+			expect('dropping a fixed entry preFix evidence fails (IIII-5)', run(ef2, dropped, true, withEv, { files: new Set(), before: new Map() }), /evidence it landed with/);
+			expect('control: keeping it passes (IIII-5)', run(ef2, withEv, true, withEv, { files: new Set(), before: new Map() }).filter(x => /evidence it landed with/.test(x)), null);
 		}
 		// GGGG-3: the register round-trips through the writer byte for byte.
 		const fmt = base();
