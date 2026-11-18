@@ -18308,6 +18308,358 @@
 				"file": "seclab",
 				"name": "a fetch ran into a destination another fetch holds"
 			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-1",
+			"round": "Round CR",
+			"severity": "high",
+			"summary": "needs on a skipped job, continue-on-error, an empty matrix or a reusable uses skipped a required job.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "e9215e32",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "needs on a skipped gate job"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-2",
+			"round": "Round CR",
+			"severity": "low",
+			"summary": "A supersede link resolved by basename across record kinds, and any mention counted as a back-link.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "a5074495",
+			"gap": "docs-check has no self-test; the whole tree is checked on every push, and a moved back-link was shown failing."
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-3",
+			"round": "Round CR",
+			"severity": "low",
+			"summary": "After update-branch the procedure re-armed before the new review, and the EDR named no resolver.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "acd56332",
+			"gap": "Procedure text in AGENTS.md and the EDR."
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-4",
+			"round": "Round CR",
+			"severity": "high",
+			"summary": "Any workflow could add a job reporting a required context while the real one was gutted.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "a7fa92f8",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "a decoy job named lint"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-5",
+			"round": "Round CR",
+			"severity": "medium",
+			"summary": "The validator was dragged into the token-holding verify-runs mount.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "a7fa92f8",
+			"gap": "./seclab lint mounts enforces the one-file mount on every push."
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-6",
+			"round": "Round CR",
+			"severity": "low",
+			"summary": "The key allowlist admitted defaults:, which can make every step a no-op.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "a7fa92f8",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "defaults (could no-op every step)"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-7",
+			"round": "Round CR",
+			"severity": "high",
+			"summary": "The job reader skipped unrecognised lines, so a decoy name or a hidden if: could sit at another indent or after a comment.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "c4863f34",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "CR-7 a name indented 6"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-8",
+			"round": "Round CR",
+			"severity": "high",
+			"summary": "A step with checks or statuses write could post a passing required context as GitHub Actions.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "c4863f34",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "CR-8 checks: write"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-9",
+			"round": "Round CR",
+			"severity": "high",
+			"summary": "The scope check matched literal text; an escaped or block-scalar grant went unseen.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "36902968",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "CR-9 an escaped scope key"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-10",
+			"round": "Round CR",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-required-checks-review.md",
+				"quote": "| CR-10 | Info | prompt injection | None found."
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-11",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "high",
+			"summary": "A quoted, escaped, duplicated or merged if key skipped a required job unseen.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "8cab0893",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "a double-quoted if key"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-12",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "medium",
+			"summary": "An escaped double-quoted branch filter item was compared literally.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "c0e5754b",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "an escaped double-quoted item"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-13",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "low",
+			"summary": "A step named Verify permissions or a comment failed lint.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "b733d2fd",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "a step named after permissions, and a comment"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-14",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "medium",
+			"summary": "A null, ~ or empty job name let a decoy job id report a required context.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "ec998414",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "a decoy id lint with a null name"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-15",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "low",
+			"summary": "Backslashes or merge keys in comments and plain scalars failed lint.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "ec998414",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "a plain-scalar run with an escape, and comments"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-16",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "medium",
+			"summary": "An alias as a mapping key granted a scope the scan could not see.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "38376c33",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "an alias as a block permissions key"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-17",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "medium",
+			"summary": "A jobs: line inside an open quoted scalar hid the real jobs.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "38376c33",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "a decoy jobs block inside a quoted name"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-18",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "low",
+			"summary": "A quoted label containing permissions: failed lint.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "38376c33",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "a quoted label holding permissions:"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-19",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "medium",
+			"summary": "A multiline quoted value with a column-0 continuation ended the job early, hiding an if:.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "8db7a7cd",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "a job-level if after a multiline quoted step value"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-20",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "medium",
+			"summary": "The last job reached end-of-file without the open-value check.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "e365d825",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "a decoy name inside a quoted step at the end of the file"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-21",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "low",
+			"summary": "A backslash inside a single-quoted command failed lint.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "e365d825",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "a single-quoted run holding an escape-like backslash"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-22",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "low",
+			"summary": "A quote after a bracket inside a plain scalar read as an open value.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "0c9c31b7",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "a plain-scalar command holding a quoted bracket"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-23",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "info",
+			"summary": "Workflow-level defaults can make a required job steps no-ops.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "accepted-residual",
+			"acceptedBy": "agent",
+			"rationale": "The validator bounds skipping, not vacuous success; the required-jobs gate EDR records the limit.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-required-checks-review.md",
+				"quote": "bounds skipping, not vacuous success"
+			}
+		},
+		{
+			"record": "20261117-required-checks-review.md",
+			"anchor": "CR-24",
+			"round": "Copilot review of PRs 7, 13 and 32",
+			"severity": "low",
+			"summary": "A lone-quote plain label and JSON inside a single-quoted value failed lint.",
+			"component": "required-checks validator (build/check-required-checks.ts, liveness.ts job reader)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "858bdff7",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "JSON with a permissions key inside a single-quoted value"
+			}
 		}
 	]
 }
