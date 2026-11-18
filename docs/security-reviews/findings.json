@@ -19876,11 +19876,16 @@
 			"summary": "The gate judged only the latest run of each required workflow, so a job skipped on the PR run passed when it ran on push.",
 			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml, build/check-required-checks.ts, seclab landing verify)",
 			"owner": "fork-build",
-			"status": "fixed",
+			"status": "fixed-before-landing",
 			"commit": "patch:81bad4a97589002a1a7d89c558be4e2c95181459",
 			"test": {
 				"file": "build/check-required-checks.ts",
 				"name": "gate script RJG-2: lint ran on push but was skipped on the PR run"
+			},
+			"preFix": "patch:f2b081dc18a9b9de5da5e5b55a4bddcd853675fe",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261117-required-jobs-gate.md",
+				"quote": "**RJG-2.** The case `gate script RJG-2: lint ran on push but was skipped on the PR run` fails on the reviewed commit's gate script: run with a stub `gh` answering as that script's own jq filter would (the latest push or pull_request run of each file), on a PR run that skipped `lint` (run 5) and a later push run that ran it (run 7), it posts `success` where the case wants `failure`."
 			}
 		},
 		{
@@ -19984,11 +19989,16 @@
 			"summary": "A merged validator replaced by a symlink made its re-validation step run the link target and pass.",
 			"component": "landing verify re-validation (seclab landing_overlay)",
 			"owner": "fork-build",
-			"status": "fixed",
+			"status": "fixed-before-landing",
 			"commit": "patch:348ba09f23bc1ef0cbc6d9e41d1b4cfb3f0d5b72",
 			"test": {
 				"file": "seclab",
 				"name": "a merged validator symlink passed this main's validators (RJG-10)"
+			},
+			"preFix": "patch:15c25708112e4f8bb02707f89fa07d8b3a30c2ee",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261117-required-jobs-gate.md",
+				"quote": "**RJG-10.** The case `a merged validator symlink passed this main's validators (RJG-10)` fails on the reviewed commit: `./seclab landing --self-test`, with `landing_overlay` taken from the RJG-1 compensating controls commit, stops on it."
 			}
 		},
 		{
@@ -20314,6 +20324,36 @@
 			"test": {
 				"file": "seclab",
 				"name": "doesn't carry its gutted"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "CR63-8",
+			"round": "Copilot review (PR 63)",
+			"severity": "low",
+			"summary": "A workflow_run-only workflow accepted run evidence without the event marker, so a dispatch run could stand as proof.",
+			"component": "liveness pending subjects (build/liveness/liveness.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:db45b479624ff2df8ffe1027442ca445a22d49a3",
+			"test": {
+				"file": "build/liveness/liveness.ts",
+				"name": "CR63-8 unmarked run evidence for a workflow_run-only workflow"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "CR63-9",
+			"round": "Copilot review (PR 63)",
+			"severity": "low",
+			"summary": "RJG-2 and RJG-10 were registered fixed rather than fixed-before-landing, and the RJG-10 scenario exercised RJG-11.",
+			"component": "landing verify self-test (seclab landing_self_test)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:6edf167e5d35296c430097a224b105b9d8030654",
+			"test": {
+				"file": "seclab",
+				"name": "the RJG-10 scenario carries no symlink"
 			}
 		}
 	]
