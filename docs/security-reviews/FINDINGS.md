@@ -15,22 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-<<<<<<< HEAD
-| fixed | 14 | 84 | 212 | 335 | 45 | 690 |
-=======
-| fixed | 14 | 84 | 211 | 313 | 45 | 667 |
->>>>>>> 20a4b38 (register: PH-12)
+| fixed | 14 | 84 | 212 | 337 | 45 | 692 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 52 | 166 | 59 | 282 |
+| fixed-untested | 0 | 5 | 52 | 166 | 60 | 283 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-<<<<<<< HEAD
-| **all** | 16 | 93 | 302 | 594 | 150 | 1155 |
-=======
-| **all** | 16 | 93 | 301 | 572 | 150 | 1132 |
->>>>>>> 20a4b38 (register: PH-12)
+| **all** | 16 | 93 | 302 | 596 | 151 | 1158 |
 
 ## Baseline: open high and critical findings
 
@@ -159,6 +151,7 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-7** | info | accepted-residual | patch 0038 editor-tab model | A desktop web-worker host in a tab window is unfiltered by 0038, which keys on the host's own authority. | accepted by an agent: Tab-installed extensions never run in the desktop local web worker; 0038 is desktop-only. Revisit if the web build is ever in scope. |
 | [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-5** | info | fixed-untested | nbsync harness | The nbsync probe's prepare, launch, check flow could not pass on a filtered build: only drive read the serializer refusal. | A harness fix; its prepare, launch, check run on main 6589051b passed, but no test runs the harness itself. |
 | [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-6** | info | fixed-untested | probe harnesses | Probe profiles were shared by every worktree while each run guard is per worktree. | A naming fix in four harnesses; nothing runs two worktrees at once to test it. |
+| [20261117-probe-harness-hygiene](20261117-probe-harness-hygiene.md) **PH-14** | info | fixed-untested | probe harnesses | check --measure dropped the log-collection control from its verdict. | A filter fix; no measure-mode run is part of the proof. |
 | [20261117-probe-harness-hygiene](20261117-probe-harness-hygiene.md) **PH-8** | info | fixed-untested | probe harnesses | check --measure judged only schema and focus assertions, so the new self-test was ignored there. | A naming fix; no measure-mode run is part of the proof. |
 | [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md) **SQ-1** | info | fixed-untested | probe harnesses | The squat probe's profile was shared by every worktree while its run guard is per worktree. | A naming fix; nothing runs two worktrees at once to test it. |
 | [docs/edr/20261116-notebook-sync.md](../../docs/edr/20261116-notebook-sync.md) **DOCSYNC-R9** | info | deferred | window→tab pushes (notebook sync) | Notebooks don't work in tabs; enabling them needs per-model notebook provenance, a serializer that reads only the tab's files, and 0035's cell rule for tab-created notebooks. | follow-up: With the RPC follow-ups session's landing D, which needs a validator for MainThreadNotebook (coordinator, 2026-11-16). The plan is in the EDR's Decision section; test/nbsync/probe.ts must pass with notebooks on. |
@@ -2128,8 +2121,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | PH-1 | low | fixed-untested | Four probe harnesses copied the VSIX into the running tab's workspace from the host, where a tab symlink could redirect it. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
 | PH-2 | low | fixed-untested | Four probe harnesses read the arm back from the tab's workspace unguarded, so a tab could end the check before its teardown gate. | No run of these probes has the tab remove its arming file; the squat probe tests the pattern (SQ-5). |
 | PH-3 | low | fixed-untested | Four probe harnesses ran sbx exec without a timeout, so a FIFO at the report path stalled the check forever. | tabExec's unit test covers the bound (SQ-6); these harnesses bound spawnSync the same way without their own test. |
-| PH-4 | low | fixed | Four probe harnesses ran regexes on tab-controlled report values before their type checks, so a crafted object threw before the teardown gate. | patch:63924c8a337637cf84b1fc00ec90fb17bb8df39e · `test/telemetryid/probe.ts` "the report schema check rejects a malformed tab value without throwing" |
-| PH-5 | low | fixed | Five probe run manifests didn't list their generated directories, so the teardown gate left them in .work. | patch:63924c8a337637cf84b1fc00ec90fb17bb8df39e · `test/containment/teardown.ts` "generated fixture workspaces removed from the host" |
+| PH-4 | low | fixed | Four probe harnesses ran regexes on tab-controlled report values before their type checks, so a crafted object threw before the teardown gate. | patch:dd5646dadaaaba8a1b256fda5ca79bb1e334b33e · `test/telemetryid/probe.ts` "the report schema check rejects a malformed tab value without throwing" |
+| PH-5 | low | fixed | Five probe run manifests didn't list their generated directories, so the teardown gate left them in .work. | patch:dd5646dadaaaba8a1b256fda5ca79bb1e334b33e · `test/containment/teardown.ts` "generated fixture workspaces removed from the host" |
 | PH-6 | low | fixed-untested | The bounded sbx exec still returned stdout produced before a timeout or failure, so a FIFO could emit a report and then stall. | tabExec's unit test covers the contract; the inline inTab wrappers have no test of their own. |
 | PH-7 | low | fixed-untested | With the host arm file missing, a report with no arm passed the run-provenance check in three probes. | No run removes the host arm file. |
 | PH-8 | info | fixed-untested | check --measure judged only schema and focus assertions, so the new self-test was ignored there. | A naming fix; no measure-mode run is part of the proof. |
@@ -2137,6 +2130,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | PH-10 | info | fixed | docsync's hostile self-test failed the scheme check first, so the hash's type check went unexercised. | patch:9723f3c517b43437b39b91effd63371bfbb16f20 · `test/docsync/probe.ts` "the report schema check rejects a malformed tab value without throwing" |
 | PH-11 | low | fixed | Clearing stdout on a failed read also dropped docsync's tab logs, so a canary already emitted could vanish and the absence checks pass on missing evidence. | patch:8cbaf3f21161e53601280f24ab3d760f61d40d41 · `test/docsync/probe.ts` "control: the tab-side logs were collected (no timeout or failure)" |
 | PH-12 | low | fixed | docsync's summary sorted tab-made scheme counters with the default sort, which stringified them, so a crafted counter threw before the teardown gate. | patch:02b6d44c3b825edb06e4d754462469d2009ef618 · `test/docsync/probe.ts` "the report schema check passes nothing the summary cannot print (PH-12)" |
+| PH-13 | low | fixed | docsync's log collection ended in a forced success, so a failed read still counted as collected and the absence checks could pass without the extension-host logs. | patch:1eb2091895d21904444f369421b794ecb0d2db66 · `test/docsync/probe.ts` "control: the tab-side logs were collected (no timeout or failure)" |
+| PH-14 | info | fixed-untested | check --measure dropped the log-collection control from its verdict. | A filter fix; no measure-mode run is part of the proof. |
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 
