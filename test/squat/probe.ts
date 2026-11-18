@@ -52,7 +52,8 @@ fs.rmSync(base, { recursive: true, force: true });
 fs.mkdirSync(path.join(ws, '.seclab'), { recursive: true });
 fs.writeFileSync(runFile, JSON.stringify({ marker }));
 writeSnapshot(base);
-writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir] });
+// The workspace and the packaged probe: the teardown gate removes both and checks (SQ-8).
+writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir], workspaces: [ws, path.join(base, 'vsix')] });
 fs.writeFileSync(path.join(ws, 'README.md'), '# squat probe workspace\n');
 fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
 fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({

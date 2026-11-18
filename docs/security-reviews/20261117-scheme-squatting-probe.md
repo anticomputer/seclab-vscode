@@ -43,3 +43,9 @@ Two threads on the fixed probe, both checked against the code and fixed before m
 | # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
 |---|---|---|---|---|---|---|
 | SQ-7 | Low | harness | As the PR #24 and #37 reviews found in the edtabs and wsdata probes (EDT-17, WSD-1), this harness copied its VSIX into the tab's workspace from the host after the tab was running, where a tab symlink could redirect the copy onto a host file. | fixed | The VSIX is staged before the tab is claimed. Nothing in the tab runs before the probe is installed, so no run plants the symlink. | none |
+
+## Copilot review (PR #33, fourth pass)
+
+| # | Sev | Area | Finding | Disposition | Fix / reason | Regression test |
+|---|---|---|---|---|---|---|
+| SQ-8 | Low | harness | The run manifest didn't list the generated workspace, so the teardown gate never removed it: the workspace with the staged probe VSIX (and, after a setup failure, its arming file) stayed in `.work` after a passing run. | fixed | The manifest lists the workspace and the packaged VSIX's folder; the teardown gate removes both and checks they are gone. | test/containment/teardown.ts "generated fixture workspaces removed from the host" |
