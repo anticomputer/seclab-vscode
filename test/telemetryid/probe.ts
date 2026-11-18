@@ -35,7 +35,11 @@ const appArg = rest.includes('--app') ? path.resolve(rest[rest.indexOf('--app') 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const tabId = () => (readManifest(base).tabs ?? [])[0];
 // Bounded (review SQ-6): the tab can stall anything read from its workspace.
-const inTab = (args: string[], timeoutMs = 30_000) => spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
+// A failed or timed-out run yields no stdout: a FIFO could emit a report and then stall (PH-3).
+const inTab = (args: string[], timeoutMs = 30_000) => {
+	const r = spawnSync(SBX, ['exec', '-u', 'agent', `seclab-${tabId()}`, ...args], { encoding: 'utf8', maxBuffer: 16 << 20, timeout: timeoutMs, killSignal: 'SIGKILL' });
+	return r.status === 0 && !r.error ? r : { ...r, stdout: '' };
+};
 
 if (mode === 'prepare') {
 	checkUserDataDir(userData);
@@ -114,7 +118,7 @@ if (mode === 'prepare') {
 	const field = (f: any) => !!f && typeof f.sha256 === 'string' && /^[0-9a-f]{64}$/.test(f.sha256) && typeof f.shape === 'string' && /^[\x20-\x7e]{0,120}$/.test(f.shape);
 	// The report is the tab's: its check must reject anything malformed without throwing, or the
 	// run would end before its teardown gate (review EDT-18). Every value meets a type check first.
-	const validReport = (rep: any) => !!rep && rep.schema === 'seclab-telemetryid-report/1' && rep.arm === armed && field(rep.machineId) && field(rep.sessionId)
+	const validReport = (rep: any) => !!rep && rep.schema === 'seclab-telemetryid-report/1' && !!armed && rep.arm === armed && field(rep.machineId) && field(rep.sessionId)
 		&& (rep.devDeviceId === null || field(rep.devDeviceId));
 	const hostileRejected = (() => {
 		try {
@@ -140,7 +144,7 @@ if (mode === 'prepare') {
 	const results: Array<{ name: string; ok: boolean }> = [];
 	const expect = (name: string, ok: boolean) => results.push({ name, ok });
 	expect('report present, from this run, and matches the schema', valid);
-	expect('the report check rejects a malformed tab value without throwing', hostileRejected);
+	expect('the report schema check rejects a malformed tab value without throwing', hostileRejected);
 	if (valid) {
 		console.log(`tab machineId: ${rep.machineId.shape} (${rep.machineId.sha256 === sha(seeded.machineId) ? 'THE HOST\'S' : 'not the host\'s'})`);
 		console.log(`tab sessionId: ${rep.sessionId.shape}; devDeviceId: ${rep.devDeviceId ? rep.devDeviceId.shape : 'not readable (proposed API)'}`);
