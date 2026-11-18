@@ -17029,6 +17029,21 @@
 				"file": "test/docsync/probe.ts",
 				"name": "control: the tab-side logs were collected (no timeout or failure)"
 			}
+		},
+		{
+			"record": "20261117-probe-harness-hygiene.md",
+			"round": "Copilot review (PR #45, third pass)",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"anchor": "PH-12",
+			"severity": "low",
+			"summary": "docsync's summary sorted tab-made scheme counters with the default sort, which stringified them, so a crafted counter threw before the teardown gate.",
+			"status": "fixed",
+			"commit": "patch:02b6d44c3b825edb06e4d754462469d2009ef618",
+			"test": {
+				"file": "test/docsync/probe.ts",
+				"name": "the report schema check passes nothing the summary cannot print (PH-12)"
+			}
 		}
 	]
 }
