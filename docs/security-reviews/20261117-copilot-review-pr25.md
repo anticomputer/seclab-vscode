@@ -34,5 +34,6 @@ Copilot reviewed the fixes again on the next push.
 | CR25-13 | Low | runners | `test obs` and `test e2e-broker` started tabd without the `SECLAB_TAB_IMAGE` override, so a proof run there tested the shared `:local` image. | Fixed | Both validate and forward it; a unit test checks every suite runner that starts tabd. |
 | CR25-14 | Low | clean-host | clean-host deleted a per-build tag on a decision made when listing; a build that renewed it meanwhile (a cache hit, same image) lost its fresh tag. | Fixed | A per-tag lease lock, held by the builders from the lease until publication; clean-host deletes only under it, after re-reading the lease. |
 | CR25-15 | Low | clean-host | Breaking a stale lease lock raced: two contenders could both judge it stale, and the second remove the first's fresh lock. | Fixed | Only the holder removes a lock; builders wait and then fail, clean-host skips a locked tag and reports old locks for removal by hand. |
+| CR25-16 | Low | clean-host | Leases and lock directories shared a namespace: the lease of a tag ending in `.lock` sat at another tag's lock path and blocked it for good. | Fixed | Locks live in `seclab-image-leases/locks/`, apart from the leases. |
 
 No prompt-injection text was found in the review comments.
