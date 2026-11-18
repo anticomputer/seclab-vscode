@@ -17940,9 +17940,12 @@
 			"summary": "Usage errors exited before the test-build location was cleared.",
 			"component": "fetched-app binding (fetch, test/app-build.ts)",
 			"owner": "fork-build",
-			"status": "fixed-untested",
-			"commit": "patch:1ffe02d661e2e6589573a4364d88b0457af00a2a",
-			"gap": "Shell dispatch around network fetches; proven by injected runs recorded in the EDR."
+			"status": "fixed",
+			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba",
+			"test": {
+				"file": "seclab",
+				"name": "a refused branch fetch ($args) left an earlier build"
+			}
 		},
 		{
 			"record": "20261117-fetched-app-binding.md",
@@ -18052,6 +18055,114 @@
 			"ref": {
 				"file": "docs/security-reviews/20261117-fetched-app-binding.md",
 				"quote": "None found."
+			}
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB2-1",
+			"round": "Round FAB2",
+			"severity": "medium",
+			"summary": "A refused release fetch left the earlier app, which runs accepted.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "a refused release fetch left no app-fetch-pending marker"
+			},
+			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba"
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB2-2",
+			"round": "Round FAB2",
+			"severity": "medium",
+			"summary": "A dirty tree build recorded HEAD; local build info looked like CI.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba",
+			"gap": "Build-script plumbing; needs a full Linux build to exercise."
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB2-3",
+			"round": "Round FAB2",
+			"severity": "medium",
+			"summary": "The agentic build check could not fail; no build check at prepare.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba",
+			"gap": "Agentic harness wiring that needs a real macOS run; the check itself is unit-tested."
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB2-4",
+			"round": "Round FAB2",
+			"severity": "low",
+			"summary": "Probe copies were judged by their location, not their source.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba",
+			"gap": "Probe wiring that needs a real macOS build."
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB2-5",
+			"round": "Round FAB2",
+			"severity": "low",
+			"summary": "Shell git sites kept inherited GIT_ variables.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba",
+			"gap": "Shell helper; the TypeScript equivalent is unit-tested."
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB2-6",
+			"round": "Round FAB2",
+			"severity": "low",
+			"summary": "The Linux driver tarball was never bound to a commit.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "test/app-build.test.ts",
+				"name": "fetched-app binding: missing, unreadable or commitless build info"
+			},
+			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba"
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB2-7",
+			"round": "Round FAB2",
+			"severity": "low",
+			"summary": "Hardcoded branch location; no automated FAB-1 test.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"test": {
+				"file": "seclab",
+				"name": "a refused branch fetch ($args) left an earlier build"
+			},
+			"commit": "patch:affc83a624aeeaf36764a11efd155cae5b0b01ba"
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "FAB2-8",
+			"round": "Round FAB2",
+			"severity": "info",
+			"summary": "Prompt injection.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "false-positive",
+			"rationale": "The review recorded no issue.",
+			"ref": {
+				"file": "docs/security-reviews/20261117-fetched-app-binding.md",
+				"quote": "| FAB2-8 | Info | prompt injection | None found."
 			}
 		}
 	]
