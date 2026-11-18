@@ -15,22 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-<<<<<<< HEAD
-| fixed | 14 | 84 | 212 | 333 | 44 | 687 |
-=======
-| fixed | 14 | 84 | 211 | 311 | 45 | 665 |
->>>>>>> 6a1e533 (register: PH-6 to PH-10; PH-4's test renamed)
+| fixed | 14 | 84 | 212 | 335 | 45 | 690 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
 | fixed-untested | 0 | 5 | 52 | 166 | 59 | 282 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
-<<<<<<< HEAD
-| **all** | 16 | 93 | 302 | 590 | 148 | 1149 |
-=======
-| **all** | 16 | 93 | 301 | 570 | 150 | 1130 |
->>>>>>> 6a1e533 (register: PH-6 to PH-10; PH-4's test renamed)
+| **all** | 16 | 93 | 302 | 594 | 150 | 1155 |
 
 ## Baseline: open high and critical findings
 
@@ -2135,6 +2127,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | PH-8 | info | fixed-untested | check --measure judged only schema and focus assertions, so the new self-test was ignored there. | A naming fix; no measure-mode run is part of the proof. |
 | PH-9 | low | fixed | docsync printed the tab's hijack counters and strings unvalidated, so a crafted value threw before the teardown gate. | patch:9723f3c517b43437b39b91effd63371bfbb16f20 · `test/docsync/probe.ts` "the report schema check rejects a malformed tab value without throwing" |
 | PH-10 | info | fixed | docsync's hostile self-test failed the scheme check first, so the hash's type check went unexercised. | patch:9723f3c517b43437b39b91effd63371bfbb16f20 · `test/docsync/probe.ts` "the report schema check rejects a malformed tab value without throwing" |
+| PH-11 | low | fixed | Clearing stdout on a failed read also dropped docsync's tab logs, so a canary already emitted could vanish and the absence checks pass on missing evidence. | patch:8cbaf3f21161e53601280f24ab3d760f61d40d41 · `test/docsync/probe.ts` "control: the tab-side logs were collected (no timeout or failure)" |
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 
