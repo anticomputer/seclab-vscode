@@ -970,6 +970,9 @@ export function seclabRefusePush(remoteAuthority: string | null | undefined, ref
 }
 
 /** Where a tab's server named a location outside the tab (patch 0059). */
+/** Whether the walk takes `key` of the object at path `owner` as sent, unchecked. */
+export type SeclabSkip = (owner: readonly (string | number)[], key: string) => boolean;
+
 export type SeclabServerLocationSite = 'environment' | 'profiles' | 'watcher' | 'extensions' | 'extension-management' | 'loggers' | 'host-install';
 
 /**
@@ -989,7 +992,8 @@ const SECLAB_URI_KEYS = new Set(['$mid', 'scheme', 'authority', 'path', 'query',
 /**
  * Keys that make a plain object a URI candidate. `URI.revive` ignores `$mid` and builds a URI from
  * any object, so any of these marks one (reviews ENV-8, ENV-11). Manifests, which name files by
- * `path` and use `scheme` keys of their own, are passed over with `skipKeys`.
+ * `path` and use `scheme` keys of their own, are passed over with `skip`, where upstream never
+ * revives them.
  */
 const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'path', 'external', 'fsPath', '_sep'];
 
@@ -1001,16 +1005,16 @@ const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'path', 'external', 'fs
  * A URI candidate is a plain object with any of SECLAB_URI_MARKS. It must be marked `$mid: 1` and
  * carry nothing but URI keys, so URI fields set on a container can't make the walk skip it
  * (reviews ENV-1, ENV-8). Plain objects and arrays are walked whole; other objects (buffers) pass.
- * Values under `skipKeys` (an extension's `manifest`, which upstream doesn't revive) pass as they are.
+ * A value `skip` names (an extension's own `manifest`, which upstream doesn't revive) passes as it is.
  */
-export function seclabTabUris<T>(remoteAuthority: string, value: T, skipKeys?: ReadonlySet<string>): T {
+export function seclabTabUris<T>(remoteAuthority: string, value: T, skip?: SeclabSkip): T {
 	const foreign = () => new Error('seclab: the tab\'s server named a location outside the tab');
-	const walk = (v: unknown, depth: number): unknown => {
-		if (depth > 32) {
+	const walk = (v: unknown, at: readonly (string | number)[]): unknown => {
+		if (at.length > 32) {
 			throw foreign();
 		}
 		if (Array.isArray(v)) {
-			return v.map(x => walk(x, depth + 1));
+			return v.map((x, i) => walk(x, [...at, i]));
 		}
 		if (!v || typeof v !== 'object') {
 			return v;
@@ -1030,12 +1034,12 @@ export function seclabTabUris<T>(remoteAuthority: string, value: T, skipKeys?: R
 		const out: Record<string, unknown> = {};
 		for (const k of Object.keys(o)) {
 			if (k !== '__proto__') {
-				out[k] = skipKeys?.has(k) ? o[k] : walk(o[k], depth + 1);
+				out[k] = skip?.(at, k) ? o[k] : walk(o[k], [...at, k]);
 			}
 		}
 		return out;
 	};
-	return walk(value, 0) as T;
+	return walk(value, []) as T;
 }
 
 /**
@@ -1043,13 +1047,13 @@ export function seclabTabUris<T>(remoteAuthority: string, value: T, skipKeys?: R
  * tab window a reply naming a location outside the tab is refused and an event naming one dropped,
  * each logged for `site` (patch 0059, reviews ENV-3, ENV-10). Other windows get `channel` itself.
  */
-export function seclabTabServerChannel(channel: IChannel, remoteAuthority: string, site: SeclabServerLocationSite, skipKeys?: ReadonlySet<string>): IChannel {
+export function seclabTabServerChannel(channel: IChannel, remoteAuthority: string, site: SeclabServerLocationSite, skip?: SeclabSkip): IChannel {
 	if (!seclabIsTabAuthority(remoteAuthority)) {
 		return channel;
 	}
 	const check = (v: unknown): unknown => {
 		try {
-			return seclabTabUris(remoteAuthority, v, skipKeys);
+			return seclabTabUris(remoteAuthority, v, skip);
 		} catch (e) {
 			seclabRefuseServerLocation(remoteAuthority, site);
 			throw e;
@@ -1069,7 +1073,16 @@ export function seclabTabServerChannel(channel: IChannel, remoteAuthority: strin
 	};
 }
 
-const SECLAB_MANIFEST_KEYS: ReadonlySet<string> = new Set(['manifest']);
+/**
+ * The `manifest` of an extension where upstream's extension management client leaves it unrevived
+ * (`transformIncomingExtension`): an extension that is a reply, an element of one, or the `local` of
+ * one or of an event's result. Anywhere else it is walked (review ENV-17).
+ */
+function seclabExtensionManifest(owner: readonly (string | number)[], key: string): boolean {
+	return key === 'manifest' && (owner.length === 0
+		|| (owner.length === 1 && (typeof owner[0] === 'number' || owner[0] === 'local'))
+		|| (owner.length === 2 && typeof owner[0] === 'number' && owner[1] === 'local'));
+}
 
 /** An install event with any `source` other than a wire URI (a gallery entry) has it removed. */
 function seclabNoGallerySource(e: unknown): unknown {
@@ -1088,7 +1101,7 @@ function seclabNoGallerySource(e: unknown): unknown {
 /**
  * The tab server's `extensions` channel as a tab window may use it: every location must be on the
  * tab (review ENV-10); manifests, which name files by `path` and are never revived, aren't walked
- * (`getManifest` replies and `manifest` fields, ENV-12); and install events lose any gallery entry
+ * (`getManifest` replies and extensions' own `manifest`, ENV-12, ENV-17); and install events lose any gallery entry
  * as their `source`, since that entry's URLs would decide what the window fetches, and where it
  * installs it, on the host (ENV-13).
  */
@@ -1096,7 +1109,7 @@ export function seclabTabExtensionsChannel(channel: IChannel, remoteAuthority: s
 	if (!seclabIsTabAuthority(remoteAuthority)) {
 		return channel;
 	}
-	const checked = seclabTabServerChannel(channel, remoteAuthority, 'extension-management', SECLAB_MANIFEST_KEYS);
+	const checked = seclabTabServerChannel(channel, remoteAuthority, 'extension-management', seclabExtensionManifest);
 	return {
 		call: <T>(command: string, arg?: unknown, token?: CancellationToken) => (command === 'getManifest' ? channel : checked).call<T>(command, arg, token),
 		listen: <T>(event: string, arg?: unknown): Event<T> => event === 'onInstallExtension' || event === 'onDidInstallExtensions'
