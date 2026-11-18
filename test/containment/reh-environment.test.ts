@@ -48,6 +48,7 @@ const FILES = {
 	actions: 'contrib/extensions/browser/extensionsActions.ts',
 	management: 'services/extensionManagement/common/extensionManagementService.ts',
 	history: 'services/workingCopy/common/workingCopyHistoryService.ts',
+	extensionService: 'services/extensions/common/abstractExtensionService.ts',
 	enablement: 'services/extensionManagement/browser/extensionEnablementService.ts',
 	migration: 'contrib/extensions/browser/unsupportedExtensionsMigrationContribution.ts',
 	localization: 'contrib/localization/electron-browser/localization.contribution.ts',
@@ -662,6 +663,36 @@ function aiActions(b: Build, authority: string): string[] {
 	return offered;
 }
 
+/** Whether a window on `authority` turns a host extension off because a tab extension claiming its dependency's id is. */
+function hostDependsOnTab(b: Build, authority: string): boolean {
+	const dep = { identifier: { id: 'dep.x' }, location: { scheme: 'vscode-remote', authority: TAB, path: '/ext' }, manifest: { main: 'x', api: 'none' } };
+	const host = { ...HOST_EXT, manifest: { extensionDependencies: ['dep.x'] } };
+	const self: Record<string, unknown> = {
+		environmentService: { remoteAuthority: authority },
+		extensionManagementServerService: { getExtensionManagementServer: (e: { location: { scheme: string } }) => e.location.scheme },
+		_computeEnablementState: (e: unknown) => e === dep ? 9 : 1,
+		isEnabledEnablementState: (e: number) => e === 1 || e === 2,
+	};
+	enablementHelpers(b, self);
+	self.extensionManagementServerService = { getExtensionManagementServer: (e: { location: { scheme: string } }) => e.location.scheme };
+	const fn = evaluate<(...a: unknown[]) => boolean>(asFunction(slice(b.sources.enablement, /\n\tprivate _isDisabledByExtensionDependency\(/)!), '_isDisabledByExtensionDependency', { ...b.deps, EnablementState: { ...ENABLEMENT, DisabledByExtensionKind: 7 } });
+	return fn.call(self, host, [host, dep], { trusted: true, virtual: false }, new Map());
+}
+
+/** Whether a window on `authority` drops a running host extension when the tab's server reports its id uninstalled. */
+function uninstallDropsHost(b: Build, authority: string): boolean {
+	let dropped = false;
+	const listener = slice(b.sources.extensionService, /onDidUninstallExtension\(\(event/)!.replace(/^onDidUninstallExtension\(\(event\) => /, 'function listener(event) ');
+	const fn = evaluate<(...a: unknown[]) => void>(listener, 'listener', { ...b.deps, isCI: false, DeltaExtensionsQueueItem: function (this: { toRemove: unknown }, _a: unknown, r: unknown) { this.toRemove = r; } });
+	fn.call({
+		_environmentService: { remoteAuthority: authority },
+		_registry: { getExtensionDescription: () => ({ extensionLocation: { scheme: 'file', path: '/Users/someone/.vscode/extensions/host.ext' } }) },
+		_handleDeltaExtensions: () => { dropped = true; },
+		_logService: { info: () => { } },
+	}, { identifier: { id: 'host.ext' }, server: { id: 'remote' } });
+	return dropped;
+}
+
 /** Where local history goes in a window on `authority` whose environment was refused: the host's directory, or none. */
 async function historyHome(b: Build, authority: string): Promise<string> {
 	let home = 'none';
@@ -856,6 +887,12 @@ async function leaks(b: Build): Promise<string[]> {
 	if (workspaceState(b, TAB, HOST_EXT, { id: 'evil.tab', uuid: 'host-uuid' }) === ENABLEMENT.DisabledWorkspace) {
 		out.push('a workspace entry under a host uuid changes a host extension here');
 	}
+	if (hostDependsOnTab(b, TAB)) {
+		out.push('a tab extension claiming a host dependency turns the host extension off');
+	}
+	if (uninstallDropsHost(b, TAB)) {
+		out.push('an uninstall the tab reports drops a running host extension');
+	}
 	if ((await enablement(b, TAB)).includes('host.ext')) {
 		out.push('a tab extension\'s pack changes a host extension\'s enablement');
 	}
@@ -937,7 +974,7 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'a host file in the tab workspace by a dot-dot path installs on the host', 'a host file in the tab workspace by its NFD path installs on the host',
 	'mcp discovery: a reply naming host directories', 'mcp global configuration: a reply naming host directories', 'mcp management: a reply naming a host readme',
 	'mcp management: a server carrying URLs the renderer loads', 'mcp management: an event naming a host readme', 'mcp management: a host location as a config record value',
-	'install locally: the host installs what the tab names', 'the host takes an extension change from a tab window', 'local history falls back to the host', 'a workspace entry under a host id changes a host extension here', 'a workspace entry under a host uuid changes a host extension here',
+	'install locally: the host installs what the tab names', 'the host takes an extension change from a tab window', 'local history falls back to the host', 'a workspace entry under a host id changes a host extension here', 'a workspace entry under a host uuid changes a host extension here', 'a tab extension claiming a host dependency turns the host extension off', 'an uninstall the tab reports drops a running host extension',
 	'a tab extension\'s pack changes a host extension\'s enablement', 'a tab window changes the host\'s global enablement', 'a tab\'s install event reaches the host\'s global enablement',
 	'a tab\'s install events prompt to change the host\'s display language', 'the tab\'s server gets the marketplace token', 'a publisher trusted in a tab window is trusted for the host',
 	'the host\'s global enablement is registered unguarded', 'profile import builds an unguarded enablement service',
@@ -1038,6 +1075,8 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.equal(migration(b, other), true);
 		assert.equal(await historyHome(b, other), '/Users/someone/History');
 		assert.equal(workspaceState(b, other, HOST_EXT, { id: 'host.ext' }), ENABLEMENT.DisabledWorkspace);
+		assert.equal(hostDependsOnTab(b, other), true);
+		assert.equal(uninstallDropsHost(b, other), true);
 		assert.deepEqual(migrations(b, other), ['publisher trust', 'chat enablement']);
 		assert.deepEqual([...new Set(await hostSettings(b, other))], ['bisect', 'auto-update', 'untrust', 'sync ignore', 'dismissed notifications', 'profile import']);
 		assert.deepEqual(aiActions(b, other), ['EnableAIFeaturesGloballyAction', 'DisableAIFeaturesGloballyAction']);
@@ -1091,6 +1130,8 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['only a local is stripped', { filter: ["		const s = server(v);", "		const s = v && typeof v === 'object' && Object.hasOwn(v, 'local') ? v : server(v);"] }, 'mcp management: a server claiming a local keeps its URLs'],
 			['locations may be left out', { patch: ["'localHistoryHome', 'userHome'].some(k => !d[k] || typeof d[k] !== 'object')", "'localHistoryHome', 'userHome'].some(() => false)"] }, 'environment: a host fallback: localHistoryHome left out'],
 			['local history falls back', { patch: ["+		if (!historyHome && seclabIsTabAuthority(this.environmentService.remoteAuthority)) {", "+		if (false) {"] }, 'local history falls back to the host'],
+			['host extensions depend on the tab', { patch: ["(!this.seclabOnTab(e) || this.seclabOnTab(extension)) &&", ""] }, 'a tab extension claiming a host dependency turns the host extension off'],
+			['tab uninstalls drop host extensions', { patch: ["event.server.id !== 'local' && running &&", "false &&"] }, 'an uninstall the tab reports drops a running host extension'],
 			['host extensions take the workspace enablement', { patch: ["enablementState = this.seclabOnTab(extension) ? this._getUserEnablementState", "enablementState = true ? this._getUserEnablementState"] }, 'a workspace entry under a host id changes a host extension here'],
 			['bisect in a tab window', { patch: ["+		if (seclabIsTabAuthority(this._envService.remoteAuthority)) {\n+			throw new Error('Extension Bisect", "+		if (false) {\n+			throw new Error('Extension Bisect"] }, 'a tab window changes host extension settings: bisect'],
 			['auto-update from a tab', { patch: ["(patch 0059, review ENV-45).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "(patch 0059, review ENV-45).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (false) {"] }, 'a tab window changes host extension settings: auto-update'],
