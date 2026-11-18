@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 98 | 285 | 447 | 60 | 904 |
+| fixed | 14 | 98 | 285 | 449 | 60 | 906 |
 | fixed-before-landing | 2 | 7 | 0 | 0 | 0 | 9 |
 | fixed-untested | 0 | 5 | 63 | 186 | 80 | 334 |
 | accepted-residual | 0 | 2 | 13 | 73 | 26 | 114 |
 | deferred | 2 | 1 | 13 | 13 | 3 | 32 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 27 | 27 |
-| **all** | 18 | 115 | 385 | 734 | 204 | 1456 |
+| **all** | 18 | 115 | 385 | 736 | 204 | 1458 |
 
 ## Baseline: open high and critical findings
 
@@ -2575,6 +2575,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | ENV-63 | low | fixed | Round 15's check asked the host for the current profile's extensions, but workspace enablement holds for every profile, so a host extension installed only in another profile could still be claimed. | patch:17e47ac2a6183761cc35c1179761c1403774d048 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
 | ENV-64 | low | fixed | Round 15's check looked at what the host had installed when the entry was written, so an entry naming an extension the host installed later, or had uninstalled, still took effect. | patch:17e47ac2a6183761cc35c1179761c1403774d048 · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
 | ENV-65 | info | fixed-untested | Round 15 made \`_reset\` asynchronous in tab windows, so a tab's own uninstalled extension briefly kept its workspace entry. | Upstream code restored; nothing of ours to test. |
+| ENV-66 | low | fixed | A tab extension claiming a host extension's dependency id, with no API and reported invalid, turned the host extension off in the tab window through the dependency rule. | patch:4ac299b590206cc54e2d7899b9e331b3b015331a · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
+| ENV-67 | low | fixed | An uninstall the tab's server reported, carried as a bare id, removed a running host extension sharing the id from the tab window. | patch:4ac299b590206cc54e2d7899b9e331b3b015331a · `test/containment/reh-environment.test.ts` "a tab window takes none of them, and logs each refusal" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 

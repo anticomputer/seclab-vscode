@@ -121,6 +121,8 @@ two refusals ([EDR](../edr/20261118-tab-server-environment.md)).
 | ENV-63 | Low | extensions | Round 15's check asked the host for the current profile's extensions, but workspace enablement holds for every profile, so a host extension installed only in another profile could still be claimed. | fixed | Round 16's fix: the read ignores the workspace's lists for host extensions, whichever profile. | test/containment/reh-environment.test.ts "a tab window takes none of them, and logs each refusal" |
 | ENV-64 | Low | extensions | Round 15's check looked at what the host had installed when the entry was written, so an entry naming an extension the host installed later, or had uninstalled, still took effect. | fixed | Same: whenever the entry was written. | same |
 | ENV-65 | Info | extensions | Round 15 made `_reset` asynchronous in tab windows, so a tab's own uninstalled extension briefly kept its workspace entry. | fixed-untested | Upstream's `_reset` is back. | none |
+| ENV-66 | Low | extensions | A tab extension claiming a host extension's dependency id, with no API and reported invalid, turned the host extension off in the tab window through the dependency rule. | fixed | In a tab window a host extension doesn't take a tab extension as its dependency. | test/containment/reh-environment.test.ts "a tab window takes none of them, and logs each refusal" |
+| ENV-67 | Low | extensions | An uninstall the tab's server reported, carried as a bare id, removed a running host extension sharing the id from the tab window. | fixed | Such an uninstall never removes a host extension. | same |
 | PR66-1 | Low | extensions | Workspace enablement is kept by id, so a tab extension claiming a host extension's id, enabled or disabled for the workspace from a tab window, changed the host copy's state there too. | fixed | Round 16's fix: in a tab window a host extension takes its global state only, whatever the workspace's lists hold. | test/containment/reh-environment.test.ts "a tab window takes none of them, and logs each refusal" |
 | PR66-2 | Medium | environment | When the environment was refused, local history fell back to the host's own history directory for the tab's files. | fixed | In a tab window local history is unavailable instead. | same |
 | PR66-3 | Medium | environment | A location left out of the environment, or null, passed the check, and its consumers (local history, terminal history, the terminal and MCP sandboxes) fell back to the host's. | fixed | Every location a genuine server sends is required, each an object. | same |
@@ -142,6 +144,10 @@ only, and the round-15 check goes. The final test's case fails on the PR-review 
 round-15 fix tree, each with its two leaks (a workspace entry under a host id and under a host
 uuid), and passes on the round-16 fix.
 
+Round 17 reviewed the round-16 fix and found ENV-66 and ENV-67, two other ways a tab could turn a
+host extension off in its own window. Both are rated as PR66-1 is. The final test's case fails on
+the round-16 docs tree with exactly those two leaks and passes on the round-17 fix.
+
 Round 14 reviewed the test-only rogue-REH hook change (`test/builds/variants.json` requires a round
 for a hook change): the hook now arms a run staged before a server starts as that server starts,
 still only for a well-formed, unexpired run, and still only in the containment test build.
@@ -150,5 +156,7 @@ still only for a well-formed, unexpired run, and still only in the containment t
 Rounds 4 to 8 each found another workbench route by which a tab extension's identity or manifest
 drove the host's own extension management. From round 8 the fix is central: a tab window's host
 extension management is read-only, and the host-shared extension settings it could reach by id are
-left alone. That makes host extension management a tab limitation (ARCHITECTURE §4.8), which
-awaits the coordinator's confirmation.
+left alone. That makes host extension management a tab limitation (ARCHITECTURE §4.8), approved by the
+project owner on 2026-11-18, including Extension Bisect, auto-update settings, the synced
+extension ignore list, trusted-publisher management and profiles from a template, since each
+changes host extension state. The per-route guards stay as defence in depth.
