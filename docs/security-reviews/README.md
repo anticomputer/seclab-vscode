@@ -40,7 +40,8 @@ the process and the index.
    or accepted by the project owner: a row in `owner-acceptances.md` here (the
    finding's full key, the date, the scope, the closing condition, "accepted by the project
    owner"), written only by the coordinator on an explicit owner decision and landed in an earlier
-   change than the closure. No record quotes or paraphrases a conversation.
+   change than the closure. A row may land before its finding's record: it is pending for at most
+   seven days ([EDR](../edr/20261118-pending-owner-acceptances.md)). No record quotes or paraphrases a conversation.
    Every commit an entry you add or modify cites must be on `main`'s history (or its entry's
    branch). After rebasing, squashing or deleting a branch the register names, run
    `./seclab findings remap --branch <name>`; it reports anything it can't follow. Cite a commit

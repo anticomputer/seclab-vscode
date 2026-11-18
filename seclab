@@ -781,6 +781,11 @@ liveness_base() { # OUT
 	fi
 	echo "liveness: tombstones compared with ${rev:0:12}"
 }
+# owner-acceptances.md's history on HEAD, oldest first, each commit as "\0<YYYY-MM-DD>" then its patch:
+# findings.ts reads each key's first added row from it (HHHH-5), parsing rows as the gate does.
+findings_owner_history() {
+	git -C "$ROOT" log --reverse --format=%x00%cs -p HEAD -- docs/security-reviews/owner-acceptances.md
+}
 # ON_MAIN DOCS_BASE IN_CI: how fixed-before-landing entries are judged. "exact": against the change's
 # range (a PR, or main with the push's previous head). "landed": main with no range (a local run),
 # already judged in CI with its exact range, so HEAD^1 isn't mistaken for it (PRR11-6). An update of
@@ -855,7 +860,14 @@ findings_check() {
 	local onmain0=0; [[ "$mb" == "$(git -C "$ROOT" rev-parse HEAD)" ]] && onmain0=1
 	lmode="$(findings_landing_mode "$onmain0" "${DOCS_BASE:-}" "${GITHUB_ACTIONS:-}" "${GITHUB_REF:-}" "$dirty")" || exit 1
 	[[ "$lmode" == landed ]] && echo "findings: on main with no landing range; fixed-before-landing entries count as landed (judged in CI against the push's range)"
-	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts check --base .work/findings-base.json --changed .work/findings-changed.txt --before .work/findings-before --landed "$lmode"
+	# main's review record names, for pending owner rows (HHHH): a row may name a finding not yet in
+	# the register only while its record isn't on main.
+	git -C "$ROOT" ls-tree --name-only "$main" -- docs/security-reviews/ | sed 's#^docs/security-reviews/##' > "$ROOT/.work/findings-main-records.txt" || { echo "findings: can't list main's review records" >&2; exit 1; }
+	[[ -s "$ROOT/.work/findings-main-records.txt" ]] || { echo "findings: main has no review records listed; refusing to judge pending owner rows" >&2; exit 1; }
+	# Each owner row's first appearance on this history (HHHH-5): a pending row's clock can't be
+	# restarted by re-dating or re-adding it. Fixed-string pickaxe over the owner file's history.
+	findings_owner_history > "$ROOT/.work/findings-owner-history.txt" || { echo "findings: can't read owner-acceptances.md's history" >&2; exit 1; }
+	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node build/docs/findings.ts check --base .work/findings-base.json --changed .work/findings-changed.txt --before .work/findings-before --landed "$lmode" --main-records .work/findings-main-records.txt --owner-history .work/findings-owner-history.txt
 	findings_patch_reset
 	if git -C "$ROOT" cat-file -e "$main:docs/security-reviews/findings.json" 2>/dev/null; then
 		git -C "$ROOT" show "$main:docs/security-reviews/findings.json" > "$ROOT/.work/findings-main.json" || exit 1
@@ -1119,6 +1131,19 @@ findings_host_self_test() {
 	gdir="$(cd / && PATH="$gb:$PATH" findings_gh pr list)"
 	[[ "$gdir" == "$(cd "$ROOT" && pwd -P)" ]] || { echo "findings host self-test: gh ran outside this checkout (PRR11-10): $gdir" >&2; exit 1; }
 	rm -rf "$gb"
+	# HHHH-5: a row's first appearance survives deleting and re-adding it (with a new date) later.
+	local fsr="$ROOT/.work/findings-firstseen-selftest" fso
+	rm -rf "$fsr"; mkdir -p "$fsr/docs/security-reviews"
+	git -C "$fsr" init -q || { echo "findings host self-test: can't make the first-seen scratch repo" >&2; exit 1; }
+	printf '| Finding | Date |\n|---|---|\n| 20261103-p.md#P-1 | 2026-11-12 |\n' > "$fsr/docs/security-reviews/owner-acceptances.md"
+	git -C "$fsr" add -A && GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid GIT_COMMITTER_DATE=2026-11-01T12:00:00Z git -C "$fsr" commit -qm a || exit 1
+	printf '| Finding | Date |\n|---|---|\n' > "$fsr/docs/security-reviews/owner-acceptances.md"
+	git -C "$fsr" add -A && GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid GIT_COMMITTER_DATE=2026-11-10T12:00:00Z git -C "$fsr" commit -qm b || exit 1
+	printf '| Finding | Date |\n|---|---|\n| 20261103-p.md#P-1 | 2026-11-20 |\n' > "$fsr/docs/security-reviews/owner-acceptances.md"
+	git -C "$fsr" add -A && GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid GIT_COMMITTER_DATE=2026-11-20T12:00:00Z git -C "$fsr" commit -qm c || exit 1
+	fso="$(ROOT="$fsr"; findings_owner_history | tr '\0' '~' | awk '/^~/ { printf "%s ", $0 }')"
+	[[ "$fso" == "~2026-11-01 ~2026-11-10 ~2026-11-20 " ]] || { echo "findings host self-test: a re-dated owner row's first appearance was lost (HHHH-5): the history isn't oldest first: $fso" >&2; exit 1; }
+	rm -rf "$fsr"
 	# GGGG-10: a conflict marker of any size is seen.
 	local mk="$ROOT/.work/findings-markers-selftest.md"
 	printf 'a\n<<<<<<<< ours\nb\n' > "$mk"; findings_has_markers "$mk" || { echo "findings host self-test: an 8-character conflict marker wasn't seen (GGGG-10)" >&2; exit 1; }
