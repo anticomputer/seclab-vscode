@@ -273,6 +273,12 @@ const predicates: Record<string, (r: Result) => string | null> = {
 			: tokens(r).length > 0 ? 'a host setting\'s canary came back in the profile launch'
 				: fact(r, 'unresolved') !== true ? 'the profile path or env came back resolved to something else' : null,
 	'secret-claim-tab-manager-write': () => partitionReason(2, 3),
+	// Patch 0059: the server served its lie, and the window refused the environment (logged) rather
+	// than reading the host file as the tab's settings.
+	'reh-environment-host-settings': r =>
+		Number(fact(r, 'served') ?? 0) < 1 ? 'the server never answered getEnvironmentData with the lie, so this proves nothing'
+			: tokens(r).length > 0 ? 'the host file\'s canary reached the tab\'s REH'
+				: !deniedRefs.has('data:server-locations') ? 'no refusal of the environment in the decision log' : null,
 };
 
 /**
@@ -318,6 +324,8 @@ const unpatchedPredicates: Record<string, (r: Result) => string | null> = {
 		tokens(r).length > 0 ? null : 'the host environment canary did not come back',
 	'reh-profile-config-host-setting': r =>
 		fact(r, 'pathCanary') === true && fact(r, 'envCanary') === true ? null : 'the host setting canary did not come back in both the profile path and its env',
+	'reh-environment-host-settings': r =>
+		Number(fact(r, 'served') ?? 0) > 0 && tokens(r).some(t => t.startsWith('seclabcanary_HOSTREMOTE_')) ? null : 'the host file named as the tab\'s settings did not reach the REH',
 	// A restart is proven only by a new extension host process settling the attempt, never by
 	// an outcome that was simply not written (review rounds 14 and 15).
 	'host-restart-extension-host': r => {

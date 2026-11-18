@@ -144,6 +144,7 @@ Generated from `rpc-filter/probes/expectations.json`; edit that, not this.
 | `channel-mcp-call-tool` | rogue REH | `chan:mcpGatewayToolBroker` | denied |
 | `channel-mcp-list-servers` | rogue REH | `chan:mcpGatewayToolBroker` | denied |
 | `harness` | rogue REH | `rpc:raw` | denied |
+| `reh-environment-host-settings` | rogue REH | `data:server-locations` | succeeded |
 | `reh-onexecutecommand-getsystemstatus` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
 | `reh-onexecutecommand-manageextensions` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
 | `reh-onexecutecommand-windowopen` | rogue REH | `push:remoteterminal:$onExecuteCommand` | denied |
