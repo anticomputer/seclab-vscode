@@ -67,6 +67,16 @@ class EnforcementGateTest(unittest.TestCase):
         self.assertTrue(errors)
         self.assertIn("checkRpcRenamedAway", errors[0])
 
+    def test_a_constrained_surface_entry_naming_a_missing_symbol_fails(self):
+        # Review ENV-14: an entry for a surface that is constrained rather than
+        # denied named a function that never existed, and nothing checked it.
+        self.policy["enforcement"]["data:x"] = {
+            "mechanism": "the window checks it", "patch": "0005-filter.patch",
+            "symbol": "seclabNeverDefined"}
+        errors = self.run_gate()
+        self.assertTrue(errors)
+        self.assertIn("seclabNeverDefined", errors[0])
+
     def test_a_patch_missing_from_the_series_fails(self):
         # The patch exists on disk but nothing applies it, so the code never
         # reaches the build. This is a real failure mode: 0011 sat unapplied.

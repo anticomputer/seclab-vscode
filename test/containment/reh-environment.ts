@@ -18,18 +18,25 @@
 // to the REH in $createProcess. Patched: the window refuses the environment and logs
 // `data:server-locations`, and no canary reaches the REH.
 //
+// Between 1 and 2, a second vector (review ENV-13), with no rogue code at all: the workspace holds a
+// VSIX whose manifest says it is a UI extension, and "Extensions: Install from VSIX..." picks it.
+// The tab's server reads the manifest, and the window installs a UI extension on the host. Baseline:
+// it lands in the profile's own (portable) extensions directory. Patched: the host refuses a package
+// on the tab's file system and logs `host-install`.
+//
 // Inert (EDR fixture safety): the window only reads the host file, which this run wrote in its own
-// directory; nothing writes outside the run. Teardown runs on every exit and fails the run on
-// anything left.
+// directory. The VSIX has a manifest and nothing else (no code), and lands, if at all, in this run's
+// isolated profile. Teardown runs on every exit and fails the run on anything left.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { crc32 } from 'node:zlib';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { mintCanary } from '../canary/canary.ts';
 import { DrivenEditor } from '../driver/editor.ts';
-import { checkUserDataDir, lockRun, repoRoot } from '../harness.ts';
+import { checkUserDataDir, editorPortableDir, lockRun, repoRoot } from '../harness.ts';
 import { report, rpcDecisions, type Check } from './assert.ts';
 import { exitOnSignals, reapOrRefuse, teardownGate, writeManifest, writeSnapshot } from './teardown.ts';
 
@@ -59,6 +66,34 @@ const evidence = path.join(base, 'evidence');
 const hostSettings = path.join(base, 'host-settings.json');
 const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manager', 'tabd');
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const VSIX_ID = 'seclabtest.seclab-probe-host-install';
+
+/** A zip of `files`, stored (no compression): enough for a VSIX the editor reads. */
+function storedZip(files: Record<string, string>): Buffer {
+	const local: Buffer[] = [];
+	const central: Buffer[] = [];
+	let offset = 0;
+	for (const [name, text] of Object.entries(files)) {
+		const data = Buffer.from(text);
+		const n = Buffer.from(name);
+		const crc = crc32(data);
+		const head = Buffer.alloc(30);
+		head.writeUInt32LE(0x04034b50, 0); head.writeUInt16LE(20, 4); head.writeUInt32LE(crc, 14);
+		head.writeUInt32LE(data.length, 18); head.writeUInt32LE(data.length, 22); head.writeUInt16LE(n.length, 26);
+		const dir = Buffer.alloc(46);
+		dir.writeUInt32LE(0x02014b50, 0); dir.writeUInt16LE(20, 4); dir.writeUInt16LE(20, 6); dir.writeUInt32LE(crc, 16);
+		dir.writeUInt32LE(data.length, 20); dir.writeUInt32LE(data.length, 24); dir.writeUInt16LE(n.length, 28); dir.writeUInt32LE(offset, 42);
+		local.push(head, n, data);
+		central.push(dir, n);
+		offset += head.length + n.length + data.length;
+	}
+	const cd = Buffer.concat(central);
+	const end = Buffer.alloc(22);
+	const count = Object.keys(files).length;
+	end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(count, 8); end.writeUInt16LE(count, 10);
+	end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16);
+	return Buffer.concat([...local, cd, end]);
+}
 
 // ------------------------------------------------------------------ prepare
 reapOrRefuse(base, 'reh-environment');
@@ -69,6 +104,10 @@ fs.mkdirSync(evidence, { recursive: true });
 const arm = randomBytes(16).toString('hex');
 const canary = mintCanary('host-remote');
 fs.writeFileSync(path.join(ws, 'README.md'), 'reh-environment proof workspace\n');
+// A UI extension package with no code: only its manifest.
+fs.writeFileSync(path.join(ws, 'seclab-probe.vsix'), storedZip({
+	'extension/package.json': JSON.stringify({ name: 'seclab-probe-host-install', publisher: 'seclabtest', version: '0.0.1', engines: { vscode: '*' }, extensionKind: ['ui'] }),
+}));
 // The host file the lying server names: outside the tab's mount, in this run's directory.
 fs.writeFileSync(hostSettings, JSON.stringify({ 'terminal.integrated.env.linux': { SECLAB_HOST_REMOTE: canary.value } }, null, '\t'));
 writeSnapshot(base);
@@ -148,6 +187,16 @@ try {
 	// Positive control: the genuine server's environment is accepted, and terminals work.
 	c('control', await terminal('before', 3), 'the window took the genuine server environment: a terminal ran a command in the tab');
 
+	// ENV-13: install the tab's VSIX from the window, as a user would.
+	await ed.command('Extensions: Install from VSIX...');
+	await sleep(3000);
+	await ed.cdp.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'a', code: 'KeyA', modifiers: 4, windowsVirtualKeyCode: 65, commands: ['selectAll'] }, ed.session);
+	await ed.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 4, windowsVirtualKeyCode: 65 }, ed.session);
+	await ed.type(path.join(ws, 'seclab-probe.vsix'));
+	await sleep(1500);
+	await ed.key('Enter');
+	await sleep(15_000);
+
 	for (const f of ['probes.js', 'probe-safety.js']) {
 		const src = f === 'probes.js' ? path.join(import.meta.dirname, 'rogue-reh', 'probes.js') : path.join(import.meta.dirname, 'probe-safety.js');
 		const r = inTab(`mkdir -p ${REH_DIR} && cat > ${REH_DIR}/${f}`, fs.readFileSync(src, 'utf8'));
@@ -193,5 +242,14 @@ const verdict = spawnSync(process.execPath, [path.join(import.meta.dirname, 'che
 console.log(`${verdict.stdout}${verdict.stderr}`.trim());
 c('probes', verdict.status === 0, 'check-probes accepts the environment probe', `exit ${verdict.status}`);
 const refusals = decisions.filter(d => d.ref === 'data:server-locations' && d.verdict === 'deny').length;
-fs.writeFileSync(path.join(base, 'facts.json'), JSON.stringify({ mode, refusals, checks: checks.map(k => ({ name: k.name, ok: k.ok })) }, null, '\t'));
+// ENV-13: did the tab's package land on the host, and was a host install refused?
+const hostExtensions = path.join(editorPortableDir(userData), 'extensions');
+const hostInstalled = (() => { try { return fs.readdirSync(hostExtensions).some(n => n.startsWith(`${VSIX_ID}-`)); } catch { return false; } })();
+const hostInstallRefusals = decisions.filter(d => d.ref === 'data:server-locations' && d.verdict === 'deny' && d.reason === 'a location outside the tab (host-install)').length;
+if (mode === 'baseline') {
+	c('host-install', hostInstalled, 'the tab\'s UI-extension VSIX installed on the host');
+} else {
+	c('host-install', !hostInstalled && hostInstallRefusals > 0, 'the host refused the tab\'s VSIX and logged host-install', `installed ${hostInstalled}, refusals ${hostInstallRefusals}`);
+}
+fs.writeFileSync(path.join(base, 'facts.json'), JSON.stringify({ mode, refusals, hostInstalled, hostInstallRefusals, checks: checks.map(k => ({ name: k.name, ok: k.ok })) }, null, '\t'));
 process.exit(report(checks) ? 0 : 1);
