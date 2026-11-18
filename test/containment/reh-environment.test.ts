@@ -1052,6 +1052,23 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.deepEqual((mm.reply as Array<{ manifest: unknown }>)[0].manifest, mcpServer(TAB, null).manifest);
 		assert.deepEqual(b.refusals, []);
 	}],
+	// ENV-68 (deferred): a tab can make host extensions unavailable in its own window by claiming
+	// ids in their dependency graph. Tab Manager must stay out of reach: the product pins it to the
+	// local host, so the local copy always takes its id, and it has no dependencies to claim.
+	['Tab Manager stays out of reach of a tab claiming its id', async () => {
+		const product = JSON.parse(readFileSync(join(REPO, 'build', 'product', 'overrides.json'), 'utf8'));
+		assert.deepEqual(product.extensionKind?.['seclab.tab-manager'], ['ui']);
+		const manifest = JSON.parse(readFileSync(join(REPO, 'extensions', 'seclab-tab-manager', 'package.json'), 'utf8'));
+		assert.equal(`${manifest.publisher}.${manifest.name}`, 'seclab.tab-manager');
+		assert.deepEqual(manifest.extensionDependencies ?? [], []);
+		assert.deepEqual(manifest.extensionPack ?? [], []);
+		const native = readFileSync(join(SRC!, 'services', 'extensions', 'electron-browser', 'nativeExtensionService.ts'), 'utf8');
+		const pick = evaluate<(...a: unknown[]) => number | null>(asFunction(slice(native, /\n\tpublic static pickExtensionHostKind\(/)!.replace(/^public /, '')), 'pickExtensionHostKind',
+			{ ExtensionHostKind: { LocalProcess: 1, LocalWebWorker: 2, Remote: 3 }, ExtensionRunningPreference: { None: 0, Local: 1, Remote: 2 } });
+		for (const preference of [0, 1, 2]) {
+			assert.equal(pick(['ui'], true, true, preference, true, false), 1, `preference ${preference}`);
+		}
+	}],
 	['a window that is not a tab keeps upstream behaviour', async () => {
 		const other = 'ssh-remote+box';
 		const b = build(true);
