@@ -15,8 +15,8 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 92 | 237 | 380 | 48 | 771 |
-| fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
+| fixed | 14 | 91 | 237 | 380 | 48 | 770 |
+| fixed-before-landing | 0 | 1 | 0 | 0 | 0 | 1 |
 | fixed-untested | 0 | 5 | 59 | 179 | 63 | 306 |
 | accepted-residual | 0 | 1 | 12 | 72 | 24 | 109 |
 | deferred | 2 | 1 | 13 | 10 | 3 | 29 |
@@ -2048,7 +2048,7 @@ Every other commit the register cites is on main's history, or on the branch its
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
-| RSC-1 | high | fixed | A tab completion inserted as a snippet naming ${CLIPBOARD} makes the window read the host clipboard into the tab's document, around the policy's deny of MainThreadClipboard.$readText. | patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11 · `test/containment/filter-module.test.ts` "response: a tab snippet that reads the clipboard is refused (review RSC-1)" |
+| RSC-1 | high | fixed-before-landing | A tab completion inserted as a snippet naming ${CLIPBOARD} makes the window read the host clipboard into the tab's document, around the policy's deny of MainThreadClipboard.$readText. | patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11 · `test/containment/filter-module.test.ts` "response: a tab snippet that reads the clipboard is refused (review RSC-1)" · failed on patch:05ae24b5b2650a1b9200c14ee15e2ec10ea39ba1 |
 | RSC-2 | medium | fixed | Remote images reached the trusted hover renderer from tab markdown: nested and reference image forms survived the strip patterns, and a &lt;span&gt; HTML block passed an &lt;img&gt; through under a truthy isTrusted. | patch:f7b0c6cb172a8bab03adc19c2eff903154f3ff11 · `test/containment/filter-module.test.ts` "response: no image or HTML form survives in tab markdown (review RSC-2)" |
 | RSC-3 | low | fixed-untested | RPC-R2 was marked fixed though its markdown and image parts were neither fixed nor proven. | A register and record correction; nothing to test. |
 | RSC-4 | info | fixed-untested | The ADR, RPC-LOCKDOWN and a code comment didn't match the code (token routing, whether a tab sees tokens, kept images, scheme-less selectors, styled spans). | Documentation corrections; nothing to test. |

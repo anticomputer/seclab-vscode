@@ -17,7 +17,7 @@ shows each reproducing on the reviewed build before the fix.
 
 | ID | Sev | Component | Finding | Status |
 |---|---|---|---|---|
-| RSC-1 | high | patch 0033, completion items | A tab completion inserted as a snippet naming `${CLIPBOARD}` makes the window read the host clipboard and insert it into the tab's document, which document sync then gives the tab. That gets around the policy's deny of `MainThreadClipboard.$readText`. The resolve round-trip can supply the snippet too | fixed |
+| RSC-1 | high | patch 0033, completion items | A tab completion inserted as a snippet naming `${CLIPBOARD}` makes the window read the host clipboard and insert it into the tab's document, which document sync then gives the tab. That gets around the policy's deny of `MainThreadClipboard.$readText`. The resolve round-trip can supply the snippet too | fixed before landing |
 | RSC-2 | medium | `seclabFromTab` markdown | Remote images still reached the trusted hover renderer. A nested image `![x![]y](…)` and the reference form survive the two strip patterns. Because `isTrusted` is a truthy object, a `<span>` HTML block passes through whole, with an `<img>` inside it. The CSP admits `https:` images, so the renderer fetches a URL the tab chose, outside the broker, on hover | fixed |
 | RSC-3 | low | register, ADR | RPC-R2 was marked fixed although its markdown and image parts were neither fixed nor proven | fixed |
 | RSC-4 | info | ADR, RPC-LOCKDOWN, code comment | The records didn't match the code: the token handler's routing, whether a tab sees tokens, which images were kept, how a selector without a scheme is handled, and a comment claiming no styled span reaches the renderer | fixed |
@@ -41,6 +41,9 @@ shows each reproducing on the reviewed build before the fix.
 ## What changed in response
 - RSC-1: 0033 inserts a tab snippet that names `CLIPBOARD` as plain text, on the first result
   and after resolve (`_seclabSnippet`, `seclabFromTab.snippetAllowed`).
+  The case `response: a tab snippet that reads the clipboard is refused (review RSC-1)` fails on
+  the reviewed commit (the control as reviewed, before this fix): run against that commit's
+  sources, it reports the snippet allowed. It passes with the fix.
 - RSC-2: tab markdown escapes every image opener and every tag opener instead of stripping
   images by pattern.
 - `test/containment/filter-module.test.ts` covers the review's bypass forms and the snippet
