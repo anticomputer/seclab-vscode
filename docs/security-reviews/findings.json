@@ -16303,8 +16303,9 @@
 			"severity": "medium",
 			"summary": "The gate checks an owner row's shape, not who wrote it, so a pending row lets a session that writes a row itself close a new high two landings later",
 			"component": "findings register: row authorship",
-			"status": "deferred",
-			"followUp": "Owner decision: make owner-row authorship machine-checkable (a required reviewer on owner-acceptances.md, or signed commits); routed to the coordinator 2026-11-18"
+			"status": "accepted-residual",
+			"acceptedBy": "owner",
+			"rationale": "Owner decision 2026-11-18: owner rows stay a process control until automation has a separate identity, which enables a required reviewer; meanwhile the coordinator gives a go-ahead before any PR touching owner-acceptances.md is armed"
 		},
 		{
 			"record": "20261110-security-findings-register.md",
@@ -16470,6 +16471,176 @@
 			"test": {
 				"file": "build/docs/findings.ts",
 				"name": "an impossible historical date never becomes the first date (PRR58-7)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "IIII-3",
+			"round": "Round IIII",
+			"severity": "high",
+			"summary": "Naming any commit already on main as the fix exempted a new high from the failing-baseline evidence",
+			"component": "findings register: grandfathering",
+			"owner": "register",
+			"status": "fixed-before-landing",
+			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"test": {
+				"file": "seclab",
+				"name": "naming a fix already on main skipped the evidence (IIII-3)"
+			},
+			"preFix": "patch:5d33e10bebac7269e42d48c0020d033705ee6ca2",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261110-security-findings-register.md",
+				"quote": "naming a fix already on main skipped the evidence (IIII-3) failed on the reviewed commit and passes with the fix"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "IIII-4",
+			"round": "Round IIII",
+			"severity": "medium",
+			"summary": "On main the own-fix check compared with origin/main's register, the tree's own, and listed nothing",
+			"component": "findings register: main",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"test": {
+				"file": "seclab",
+				"name": "findings_check doesn't run the own-fix check against its base (IIII-7, IIII-4)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "IIII-5",
+			"round": "Round IIII",
+			"severity": "medium",
+			"summary": "A later change could drop a fixed entry's preFix and preFixRef",
+			"component": "findings register: evidence",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "dropping a fixed entry preFix evidence fails (IIII-5)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "IIII-6",
+			"round": "Round IIII",
+			"severity": "medium",
+			"summary": "A key registered medium and raised to high later escaped the own-fix rule",
+			"component": "findings register: severity",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a key raised to high in this change is listed for the own-fix check (IIII-6)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "IIII-7",
+			"round": "Round IIII",
+			"severity": "low",
+			"summary": "No tripwire held the own-fix check's call in findings_check",
+			"component": "findings register: wiring",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"test": {
+				"file": "seclab",
+				"name": "findings_check doesn't run the own-fix check against its base (IIII-7, IIII-4)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "IIII-8",
+			"round": "Round IIII",
+			"severity": "low",
+			"summary": "A patch: preFix could resolve to a different commit than meant",
+			"component": "findings register: resolution",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"test": {
+				"file": "seclab",
+				"name": "a patch: preFix passed (IIII-8)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "IIII-9",
+			"round": "Round IIII",
+			"severity": "low",
+			"summary": "The GGGG-8 tripwire searched the whole file and matched its own text, so it could never fail",
+			"component": "findings register: wiring",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"test": {
+				"file": "seclab",
+				"name": "findings_check doesn't judge fixed-before-landing against its base (GGGG-8)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "IIII-10",
+			"round": "Round IIII",
+			"severity": "low",
+			"summary": "IIII-8's test used an empty commit's patch-id, so another rule refused it before the SHA rule",
+			"component": "findings register: test strength",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"test": {
+				"file": "seclab",
+				"name": "the control (the same base by SHA) failed (IIII-10)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "IIII-11",
+			"round": "Round IIII",
+			"severity": "low",
+			"summary": "Nothing pinned the tripwires' body scoping, so a whole-file search stayed green",
+			"component": "findings register: test strength",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"test": {
+				"file": "seclab",
+				"name": "the tripwire matched text outside findings_check (IIII-11)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "IIII-12",
+			"round": "Round IIII",
+			"severity": "info",
+			"summary": "The schema accepted a patch: preFix on a fixed entry",
+			"component": "findings register: schema",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a patch: preFix on a fixed entry fails the schema (IIII-12)"
+			}
+		},
+		{
+			"record": "20261110-security-findings-register.md",
+			"anchor": "PRR61-1",
+			"round": "Round PRR61",
+			"severity": "medium",
+			"summary": "A landed high was no longer listed for the own-fix check, so a later change could set its fix to its own preFix",
+			"component": "findings register: grandfathering",
+			"owner": "register",
+			"status": "fixed",
+			"commit": "patch:999e986cc3176c15b2364319307c1d57672db879",
+			"test": {
+				"file": "build/docs/findings.ts",
+				"name": "a grandfathered high that carries a preFix is still listed for its evidence check (PRR61-1)"
 			}
 		},
 		{
