@@ -27,8 +27,8 @@ repository's token while handling PR-controlled events, and are almost always us
   rebase merge makes a commit with push runs only, which the gate leaves pending. It then re-runs
   that old main's own validators over the merged tree (below). Landing step 8 runs it.
 - **`.github/workflows/required-jobs-ran.yml`**, a pre-merge gate. It is the one exception to the
-  `workflow_run` ban, scoped to this file. It runs when any required workflow is requested or
-  completes, from main's copy, and posts the commit status `required-jobs-ran` on the head SHA:
+  `workflow_run` ban, scoped to this file. It runs when any required workflow is requested, starts
+  (`in_progress`, which a re-run fires and `requested` doesn't) or completes, from main's copy, and posts the commit status `required-jobs-ran` on the head SHA:
   - success when every required job concluded success, in every push and pull_request run, and a
     pull_request run of each required file has been judged (push runs alone can't vouch for a PR
     run that hasn't started; Copilot review on PR 63);
@@ -71,8 +71,10 @@ repository's token while handling PR-controlled events, and are almost always us
     source, liveness, gitleaks over the merged commits), the docs check (records, paired docs,
     observability docs) and the findings register, in containers, over a worktree of the merged
     commit. For each step the worktree gets the old main's copy of the validator code in that
-    validator's import closure (files under `build/` and `tabd/tools/`; a product module it reads
-    as input, such as `tabd/src/obs` for the observability docs, stays the merged tree's), and the old main's shell logic runs with the worktree as its root, so the validator
+    validator's import closure (files under `build/` and `tabd/tools/`). A product module the
+    validator executes, such as `tabd/src/obs` for the observability-docs generator, can't be
+    judged by running it, since a merged copy can end the process early with success: when one
+    differs from the old main, the step refuses and names it, for the coordinator to review; and the old main's shell logic runs with the worktree as its root, so the validator
     is the old main's while everything it judges is the merged tree's. A merge whose gutted
     validator hid a problem is refused right after it lands. `./seclab landing --self-test`
     proves it: a merged gutted lint (the required-checks validator exits early, and `lint` gets
