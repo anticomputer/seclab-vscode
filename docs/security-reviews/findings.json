@@ -369,7 +369,7 @@
 			"component": "window→tab pushes (editor tabs)",
 			"owner": "docsync",
 			"status": "fixed",
-			"commit": "patch:dab3fe81132fb1c9cc2ead24b9d3c6885b93540e",
+			"commit": "1688ec816271",
 			"test": {
 				"file": "test/edtabs/probe.ts",
 				"name": "DOCSYNC-R3 no host path reaches the tab through the editor-tab model (profile canary)"
@@ -13944,7 +13944,7 @@
 			"severity": "medium",
 			"summary": "Webview subclasses that show files (media preview, custom-editor diffs) were exempt from the ownership rule, so a host file path reached the tab.",
 			"status": "fixed",
-			"commit": "patch:fe5db5019c1bfbb872ac3bc817e84a82587b4f5a",
+			"commit": "f64c184e1c87",
 			"test": {
 				"file": "test/edtabs/probe.ts",
 				"name": "EDT-1 a host media file dropped in the window reaches the tab without its path"
@@ -13959,7 +13959,7 @@
 			"severity": "low",
 			"summary": "A host-created untitled editor counted as the tab's own, so its first line reached the tab as a label.",
 			"status": "fixed-untested",
-			"commit": "patch:51b6187248504a8445988543b599f94779258e01",
+			"commit": "3343b5481716",
 			"gap": "No runtime case opens a host-created untitled document with content; the rule is 0035's untitled predicate."
 		},
 		{
@@ -13971,7 +13971,7 @@
 			"severity": "low",
 			"summary": "A filesystem provider registered later by the tab could claim host editors already open in its scheme (latent under the RPC filter).",
 			"status": "fixed-untested",
-			"commit": "patch:51b6187248504a8445988543b599f94779258e01",
+			"commit": "3343b5481716",
 			"gap": "Not reachable at run time today: the RPC filter refuses a tab's provider registration."
 		},
 		{
@@ -13983,7 +13983,7 @@
 			"severity": "info",
 			"summary": "The edtabs probe could pass without the host editors reaching the tab's model.",
 			"status": "fixed",
-			"commit": "patch:51b6187248504a8445988543b599f94779258e01",
+			"commit": "3343b5481716",
 			"test": {
 				"file": "test/edtabs/probe.ts",
 				"name": "control: the host editors reached the tab"
@@ -14046,7 +14046,7 @@
 			"severity": "low",
 			"summary": "EDT-1's regression test never opened a media preview, so restoring the webview exemption would have passed it.",
 			"status": "fixed",
-			"commit": "patch:fe5db5019c1bfbb872ac3bc817e84a82587b4f5a",
+			"commit": "f64c184e1c87",
 			"test": {
 				"file": "test/edtabs/probe.ts",
 				"name": "EDT-1 a host media file dropped in the window reaches the tab without its path"
@@ -14061,7 +14061,7 @@
 			"severity": "low",
 			"summary": "A multi-diff's source id has no model, so tab-owned multi-diffs went anonymous.",
 			"status": "fixed-untested",
-			"commit": "patch:fe5db5019c1bfbb872ac3bc817e84a82587b4f5a",
+			"commit": "f64c184e1c87",
 			"gap": "The RPC filter refuses a tab's commands, so no runtime case opens a tab-owned multi-diff."
 		},
 		{
@@ -14073,7 +14073,7 @@
 			"severity": "low",
 			"summary": "An untitled editor joins its group before its model exists, so the user's own untitled tab stayed anonymous.",
 			"status": "fixed",
-			"commit": "patch:fe5db5019c1bfbb872ac3bc817e84a82587b4f5a",
+			"commit": "f64c184e1c87",
 			"test": {
 				"file": "test/edtabs/probe.ts",
 				"name": "control: an untitled document the user created in the window shows to the tab as its own text tab (EDT-10)"
@@ -14099,7 +14099,7 @@
 			"severity": "info",
 			"summary": "A setup failure skipped the edtabs probe's teardown gate.",
 			"status": "fixed-untested",
-			"commit": "patch:fe5db5019c1bfbb872ac3bc817e84a82587b4f5a",
+			"commit": "f64c184e1c87",
 			"gap": "Harness structure; no test injects a setup failure."
 		},
 		{
@@ -14111,7 +14111,7 @@
 			"severity": "low",
 			"summary": "Ownership changes rebuilt the whole tab model, so onDidChangeTabs listeners never saw an untitled tab turn from unknown to text.",
 			"status": "fixed",
-			"commit": "patch:93f8922bb5609fa398e186c0b03abe5877a031e9",
+			"commit": "d9d10beb1e7b",
 			"test": {
 				"file": "test/edtabs/probe.ts",
 				"name": "control: the tab learned of its untitled text tab through onDidChangeTabs (EDT-13)"
@@ -16284,7 +16284,7 @@
 			"severity": "low",
 			"summary": "Every model add fired 0035's origin change, rebuilding the whole document state: quadratic in a tab's background opens up to MainThreadDocuments' 50 held references, a constant factor past it.",
 			"status": "fixed",
-			"commit": "patch:242beb7ed662461e98405cd03a34629f83855fed",
+			"commit": "436ca0449157",
 			"test": {
 				"file": "test/edtabs/probe.ts",
 				"name": "EDT-14 a background document open does not rebuild the document state"
@@ -16299,7 +16299,7 @@
 			"severity": "info",
 			"summary": "After the tab ran, the edtabs harness wrote into the tab's workspace from the host, read its arming file back unguarded and read its report through an unbounded sbx exec (SQ-4 to SQ-6's pattern).",
 			"status": "fixed-untested",
-			"commit": "patch:db139299fd5c1290210afc6c075ff4a1f8124c9e",
+			"commit": "c9825814f6f5",
 			"gap": "The squat probe and tabExec's unit test cover the pattern (SQ-4 to SQ-6); this harness mirrors the fixes without its own hostile-workspace test."
 		},
 		{
@@ -16307,7 +16307,7 @@
 			"round": "Copilot review (PR #24, fourth pass)",
 			"owner": "docsync",
 			"component": "edtabs harness",
-			"commit": "patch:4e3ee594ef4366ce33e0c576a144047e620946a3",
+			"commit": "84c8c3965014",
 			"severity": "low",
 			"anchor": "EDT-16",
 			"summary": "A scale phase's marker was written even when every open failed, so the EDT-14 check could run on no workload.",
@@ -16322,7 +16322,7 @@
 			"round": "Copilot review (PR #24, fourth pass)",
 			"owner": "docsync",
 			"component": "edtabs harness",
-			"commit": "patch:4e3ee594ef4366ce33e0c576a144047e620946a3",
+			"commit": "84c8c3965014",
 			"severity": "low",
 			"anchor": "EDT-17",
 			"summary": "The harness copied the VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file.",
@@ -16334,7 +16334,7 @@
 			"round": "Copilot review (PR #24, fourth pass)",
 			"owner": "docsync",
 			"component": "edtabs harness",
-			"commit": "patch:4e3ee594ef4366ce33e0c576a144047e620946a3",
+			"commit": "84c8c3965014",
 			"severity": "low",
 			"anchor": "EDT-18",
 			"summary": "The report check ran a regex on a tab-controlled value before its type check, so a crafted object threw before the teardown gate.",
