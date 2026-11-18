@@ -573,6 +573,11 @@ async function hostSettings(b: Build, authority: string): Promise<string[]> {
 		getTrustedPublishersFromStorage: () => ({ host: {} }),
 		storageService: { store: () => { changed.push('untrust'); } },
 	}, 'host'));
+	await attempt('sync ignore', () => evaluate<(...a: unknown[]) => Promise<void>>(asFunction(slice(b.sources.workbench, /\n\tasync toggleExtensionIgnoredToSync\(/)!), 'toggleExtensionIgnoredToSync', b.deps).call({
+		seclabEnvironment: { remoteAuthority: authority }, local: [], getAllPackedExtensions: () => [], isExtensionIgnoredToSync: () => false,
+		extensionsSyncManagementService: { updateIgnoredExtensions: async () => { changed.push('sync ignore'); } },
+		userDataAutoSyncService: { triggerSync: async () => { } },
+	}, { identifier: { id: 'host.ext' } }));
 	const guard = slice(b.sources.importExport, /\n\tprivate seclabNoImport\(/);
 	const self = {
 		instantiationService: { invokeFunction: (f: (a: unknown) => unknown) => f({ get: () => ({ remoteAuthority: authority }) }) },
@@ -581,6 +586,27 @@ async function hostSettings(b: Build, authority: string): Promise<string[]> {
 	};
 	await attempt('import', () => evaluate<(...a: unknown[]) => Promise<unknown>>(asFunction(slice(b.sources.importExport, /\n\tprivate async doCreateProfile\(/)!), 'doCreateProfile', b.deps).call(self, {}, false, true, undefined, () => { }));
 	return changed;
+}
+
+/** Which "AI features" actions a tab extension claiming the chat extension's id is offered in a window on `authority`. */
+function aiActions(b: Build, authority: string): string[] {
+	const offered: string[] = [];
+	for (const name of ['EnableAIFeaturesGloballyAction', 'DisableAIFeaturesGloballyAction']) {
+		const cls = b.sources.actions.slice(b.sources.actions.indexOf(`class ${name} `));
+		const self = {
+			enabled: false,
+			extension: { identifier: { id: 'pub.chat' }, local: { location: { scheme: 'vscode-remote', authority, path: '/ext' } }, enablementState: 1, state: 1 },
+			productService: { defaultChatAgent: { chatExtensionId: 'pub.chat' } },
+			configurationService: { inspect: () => ({ value: true }), getValue: () => false },
+		};
+		evaluate<() => void>(asFunction(slice(cls, /\n\tupdate\(/)!), 'update', {
+			...b.deps, ExtensionIdentifier: { equals: (a: string, c: string) => a === c }, EnablementState: { DisabledWorkspace: 4, EnabledWorkspace: 2 }, ExtensionState: { Installed: 1 }, ChatAIDisabledSettingId: 'chat.disableAIFeatures',
+		}).call(self);
+		if (self.enabled) {
+			offered.push(name);
+		}
+	}
+	return offered;
 }
 
 /** Whether the unsupported-extensions migration runs on the tab's server in a window on `authority`. */
@@ -787,6 +813,9 @@ async function leaks(b: Build): Promise<string[]> {
 	for (const what of new Set(await hostSettings(b, TAB))) {
 		out.push(`a tab window changes host extension settings: ${what}`);
 	}
+	if (aiActions(b, TAB).length > 0) {
+		out.push('a tab extension offers the host\'s AI features setting');
+	}
 	if ((await enablement(b, TAB, 1)).length > 0) {
 		out.push('a tab window makes a global enablement change');
 	}
@@ -840,7 +869,8 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'the host\'s global enablement is registered unguarded', 'profile import builds an unguarded enablement service',
 	'a tab window runs a one-time migration of host state', 'a tab window changes host extension settings: bisect',
 	'a tab window changes host extension settings: auto-update', 'a tab window changes host extension settings: untrust',
-	'a tab window changes host extension settings: profile import', 'a tab window makes a global enablement change', 'the unsupported-extensions migration runs on the tab\'s data', 'a tab language-pack manifest updates on the host',
+	'a tab window changes host extension settings: sync ignore', 'a tab window changes host extension settings: profile import',
+	'a tab extension offers the host\'s AI features setting', 'a tab window makes a global enablement change', 'the unsupported-extensions migration runs on the tab\'s data', 'a tab language-pack manifest updates on the host',
 	'a tab language-pack manifest uninstalls on the host', 'mcp management: a server claiming a local keeps its URLs', 'install remote extensions locally: the host installs what the tab names',
 	'a tab manifest installs its pack on the host',
 	'the tab server picks installs the window retries', 'extension management: a host location under a manifest key elsewhere', 'loggers: a reply registering a host file', 'loggers: an event registering a host file'];
@@ -931,7 +961,8 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.deepEqual(await enablement(b, other), ['tab.pack', 'host.ext']);
 		assert.equal(migration(b, other), true);
 		assert.deepEqual(migrations(b, other), ['publisher trust', 'chat enablement']);
-		assert.deepEqual([...new Set(await hostSettings(b, other))], ['bisect', 'auto-update', 'untrust', 'profile import']);
+		assert.deepEqual([...new Set(await hostSettings(b, other))], ['bisect', 'auto-update', 'untrust', 'sync ignore', 'profile import']);
+		assert.deepEqual(aiActions(b, other), ['EnableAIFeaturesGloballyAction', 'DisableAIFeaturesGloballyAction']);
 		assert.deepEqual(await enablement(b, other, 1), ['tab.pack', 'host.ext']);
 		assert.deepEqual(await globalEnablement(b, other), { written: ['enable', 'disable'], events: true });
 		assert.equal(localization(b, other), true);
@@ -979,8 +1010,10 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['uninstall fans out from a tab', { patch: ["isLanguagePackExtension(extension.manifest) && !this.seclabFromTab(server)) {\n \t\t\t\tconst otherServers", "isLanguagePackExtension(extension.manifest)) {\n \t\t\t\tconst otherServers"] }, 'a tab language-pack manifest uninstalls on the host'],
 			['only a local is stripped', { filter: ["		const s = server(v);", "		const s = v && typeof v === 'object' && Object.hasOwn(v, 'local') ? v : server(v);"] }, 'mcp management: a server claiming a local keeps its URLs'],
 			['bisect in a tab window', { patch: ["+		if (seclabIsTabAuthority(this._envService.remoteAuthority)) {\n+			throw new Error('Extension Bisect", "+		if (false) {\n+			throw new Error('Extension Bisect"] }, 'a tab window changes host extension settings: bisect'],
-			['auto-update from a tab', { patch: ["+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "+		if (false) {"] }, 'a tab window changes host extension settings: auto-update'],
-			['untrust from a tab', { patch: ["+		// seclab: the trusted publishers are the host's (patch 0059, review ENV-46).\n+		if (seclabIsTabAuthority(", "+		// seclab: the trusted publishers are the host's (patch 0059, review ENV-46).\n+		if (false && seclabIsTabAuthority("] }, 'a tab window changes host extension settings: untrust'],
+			['auto-update from a tab', { patch: ["(patch 0059, review ENV-45).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "(patch 0059, review ENV-45).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (false) {"] }, 'a tab window changes host extension settings: auto-update'],
+			['untrust from a tab', { patch: ["(patch 0059, reviews ENV-46, ENV-50).\n+		const seclabTab = this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority);\n+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "(patch 0059, reviews ENV-46, ENV-50).\n+		const seclabTab = this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority);\n+		if (false) {"] }, 'a tab window changes host extension settings: untrust'],
+			['sync ignore from a tab', { patch: ["(patch 0059, review ENV-48).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "(patch 0059, review ENV-48).\n+		const seclabTab = this.seclabEnvironment.remoteAuthority;\n+		if (false) {"] }, 'a tab window changes host extension settings: sync ignore'],
+			['AI features from a tab extension', { patch: ["+		if (seclabIsTabAuthority(this.extension.local.location.authority)) {", "+		if (false) {"] }, 'a tab extension offers the host\'s AI features setting'],
 			['profile import in a tab', { patch: [" 	private async doCreateProfile(profileTemplate: IUserDataProfileTemplate, temporaryProfile: boolean, extensions: boolean, options: IUserDataProfileOptions | undefined, progress: (message: string) => void): Promise<IUserDataProfile | undefined> {\n+		this.seclabNoImport();\n", " 	private async doCreateProfile(profileTemplate: IUserDataProfileTemplate, temporaryProfile: boolean, extensions: boolean, options: IUserDataProfileOptions | undefined, progress: (message: string) => void): Promise<IUserDataProfile | undefined> {\n+\n"] }, 'a tab window changes host extension settings: profile import'],
 			['upstream enablement registered', { patch: ["registerSingleton(IGlobalExtensionEnablementService, SeclabGlobalExtensionEnablementService,", "registerSingleton(IGlobalExtensionEnablementService, GlobalExtensionEnablementService,"] }, 'the host\'s global enablement is registered unguarded'],
 			['profile import unguarded', { patch: ["createInstance(SeclabGlobalExtensionEnablementService))", "createInstance(GlobalExtensionEnablementService))"] }, 'profile import builds an unguarded enablement service'],
@@ -991,7 +1024,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['install events reach global enablement', { patch: ["super(storageService, tab ? Object.assign(Object.create(extensionManagementService), { onDidInstallExtensions: Event.None }) : extensionManagementService);", "super(storageService, extensionManagementService);"] }, 'a tab\'s install event reaches the host\'s global enablement'],
 			['localization listens in a tab window', { patch: ["+		if (seclabIsTabAuthority(environmentService.remoteAuthority)) {\n+			return;", "+		if (false) {\n+			return;"] }, 'a tab\'s install events prompt to change the host\'s display language'],
 			['marketplace token to a tab', { patch: ["noToken ? undefined : this.extensionGalleryAccessToken", "this.extensionGalleryAccessToken"] }, 'the tab\'s server gets the marketplace token'],
-			['publisher trust kept from a tab', { patch: ["review ENV-38).\n+		if (seclabIsTabAuthority(this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority))) {", "review ENV-38).\n+		if (false) {"] }, 'a publisher trusted in a tab window is trusted for the host'],
+			['publisher trust kept from a tab', { patch: ["review ENV-38).\n+		const seclabTab = this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority);\n+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "review ENV-38).\n+		const seclabTab = this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority);\n+		if (false) {"] }, 'a publisher trusted in a tab window is trusted for the host'],
 			['the host channel takes changes', { filter: ["			if (!SECLAB_HOST_EXTENSION_READS.has(command)) {", "			if (false) {"] }, 'the host takes an extension change from a tab window'],
 			['the host channel unwrapped', { patch: ["seclabHostExtensionsChannel(sharedProcessService.getChannel('extensions'), environmentService.remoteAuthority)", "sharedProcessService.getChannel('extensions')"] }, 'the host takes an extension change from a tab window'],
 			['enablement reaches host extensions', { patch: ["+			if (own.length !== extensions.length) {", "+			if (false) {"] }, 'a tab extension\'s pack changes a host extension\'s enablement'],
