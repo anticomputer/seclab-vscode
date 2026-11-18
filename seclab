@@ -1278,7 +1278,8 @@ driver_bind() { # TGZ
 		echo "refusing: $info isn't an editor build's (a later REH-only build, or a symlink); rebuild the editor (./seclab build linux editor)" >&2
 		exit 2
 	elif [[ -f "$info" ]] && jq -e '.repoSha | type == "string"' "$info" >/dev/null 2>&1; then
-		DRIVER_BIND=(-v "$info:/build-info.json:ro" -e "SECLAB_APP_SHA=$(git_clean -C "$ROOT" rev-parse HEAD)")
+		# An explicit SECLAB_APP_SHA is the commit asked for; HEAD only when it's unset (Copilot review on PR 42).
+		DRIVER_BIND=(-v "$info:/build-info.json:ro" -e "SECLAB_APP_SHA=${SECLAB_APP_SHA:-$(git_clean -C "$ROOT" rev-parse HEAD)}")
 	else
 		echo "warning: $info doesn't record a commit (a dirty tree's build, or no build info); this run isn't bound to a commit" >&2
 	fi
@@ -1296,7 +1297,7 @@ install_app() { # STAGED_APP DEST [PENDING]
 # Offline: every refusal that needs no network leaves no test build behind, and the release
 # location marked as not fetched (reviews FAB-1, FAB2-1, FAB2-7). Runs against a scratch ROOT.
 fetch_self_test() {
-	local tmp v rc
+	local tmp v rc z=0000000000000000000000000000000000000002
 	mkdir -p "$ROOT/.work"
 	tmp="$(mktemp -d "$ROOT/.work/fetch-self-test.XXXXXX")"
 	mkdir -p "$tmp/test/builds" && cp "$ROOT/test/builds/variants.json" "$tmp/test/builds/"
@@ -1335,6 +1336,7 @@ fetch_self_test() {
 	[[ $rc -ne 0 ]] || { echo "fetch self-test: the driver ran an editor beside a REH-only build's info" >&2; rm -rf "$tmp"; exit 1; }
 	printf '{"repoSha":"%s","targets":"editor"}' "$(git_clean -C "$ROOT" rev-parse HEAD)" > "$tmp/out/build-info.json"
 	[[ "$(driver_bind "$tmp/out/e.tgz" 2>/dev/null; echo "${#DRIVER_BIND[@]}")" == 4 ]] || { echo "fetch self-test: an editor build's info didn't bind the driver" >&2; rm -rf "$tmp"; exit 1; }
+	[[ "$(SECLAB_APP_SHA=$z; driver_bind "$tmp/out/e.tgz" 2>/dev/null; echo "${DRIVER_BIND[3]}")" == "SECLAB_APP_SHA=$z" ]] || { echo "fetch self-test: the driver replaced an explicit SECLAB_APP_SHA with HEAD" >&2; rm -rf "$tmp"; exit 1; }
 	printf '{"targets":"editor"}' > "$tmp/out/build-info.json"
 	rc=0; [[ "$(driver_bind "$tmp/out/e.tgz" 2>/dev/null; echo "${#DRIVER_BIND[@]}")" == 0 ]] || rc=1
 	rm -f "$tmp/out/build-info.json"

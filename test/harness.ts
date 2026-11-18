@@ -312,7 +312,11 @@ export function preparePortable(userData: string): void {
 /** The same, as one copy-pasteable shell line (for "prepare" steps that print the command). */
 export function editorLaunchCommand(userData: string, folderUri: string, env: Record<string, string> = {}, app?: string, rpcTrace?: string): string {
 	const envArgs = Object.entries(env).map(([k, v]) => ` --env ${shq(`${k}=${v}`)}`).join('');
-	return `node test/window.ts launch${app ? ` --app ${shq(app)}` : ''}${rpcTrace ? ` --rpc-trace ${shq(rpcTrace)}` : ''}${envArgs} ${shq(userData)} ${shq(folderUri)}`;
+	// The commit the run was prepared for goes to the launcher, which checks the app against it
+	// (EDR fetched-app-binding); never to the editor's environment (Copilot review on PR 42).
+	const sha = process.env.SECLAB_APP_SHA;
+	const launcherEnv = sha && /^[0-9a-f]{40}$/.test(sha) ? `SECLAB_APP_SHA=${sha} ` : '';
+	return `${launcherEnv}node test/window.ts launch${app ? ` --app ${shq(app)}` : ''}${rpcTrace ? ` --rpc-trace ${shq(rpcTrace)}` : ''}${envArgs} ${shq(userData)} ${shq(folderUri)}`;
 }
 
 function shq(s: string): string {
