@@ -18819,6 +18819,41 @@
 				"file": "test/containment/filter-module.test.ts",
 				"name": "response: a provider selector keeps only documents the tab owns (review on #48)"
 			}
+		},
+		{
+			"record": "20261117-response-control-pr-review.md",
+			"anchor": "PRC-3",
+			"round": "automated PR review threads on #48 (2026-11-17)",
+			"severity": "high",
+			"summary": "Resolving a tab completion merged the result with upstream's recursive mixin, which follows a JSON-parsed own __proto__ key into the trusted renderer's Object.prototype.",
+			"component": "patch 0033 completion resolve",
+			"owner": "rpc",
+			"status": "fixed-before-landing",
+			"commit": "patch:762f068d55f3c7b49a412d7e406500dc5f759f82",
+			"test": {
+				"file": "test/containment/filter-module.test.ts",
+				"name": "response: a resolved tab completion cannot write through __proto__ (review on #48)"
+			},
+			"preFix": "patch:829ada9c890ad6172812a74fc45a6c0b47266ec6",
+			"preFixRef": {
+				"file": "docs/security-reviews/20261117-response-control-pr-review.md",
+				"quote": "`response: a resolved tab completion cannot write through __proto__ (review on #48)` fails on"
+			}
+		},
+		{
+			"record": "20261117-response-control-pr-review.md",
+			"anchor": "PRC-4",
+			"round": "automated PR review threads on #48 (2026-11-17)",
+			"severity": "low",
+			"summary": "Tab markdown of any length reached the synchronous lexer before the length check, so a huge hover or completion document could stall the trusted UI.",
+			"component": "rpc-filter/patch-src/seclabRpcFilter.ts seclabOutsideCode",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:762f068d55f3c7b49a412d7e406500dc5f759f82",
+			"test": {
+				"file": "test/containment/filter-module.test.ts",
+				"name": "response: oversized tab markdown never reaches the lexer (review on #48)"
+			}
 		}
 	]
 }

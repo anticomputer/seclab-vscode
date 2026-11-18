@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 237 | 382 | 48 | 772 |
-| fixed-before-landing | 0 | 1 | 0 | 0 | 0 | 1 |
+| fixed | 14 | 91 | 237 | 383 | 48 | 773 |
+| fixed-before-landing | 0 | 2 | 0 | 0 | 0 | 2 |
 | fixed-untested | 0 | 5 | 59 | 179 | 63 | 306 |
 | accepted-residual | 0 | 1 | 12 | 72 | 24 | 109 |
 | deferred | 2 | 1 | 13 | 10 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 101 | 333 | 657 | 172 | 1279 |
+| **all** | 16 | 102 | 333 | 658 | 172 | 1281 |
 
 ## Baseline: open high and critical findings
 
@@ -2317,6 +2317,8 @@ Every other commit the register cites is on main's history, or on the branch its
 |---|---|---|---|---|
 | PRC-1 | low | fixed | check_responses accepted any added seclabFromTab( in the named patch, so a registration whose customer never applied the sanitiser (return hover;, or a commented-out rewrite) still passed. | patch:5bd455e45dd47dbc1e3308a840ba2331116a024e · `rpc-filter/tools/test_enforcement.py` "test_mutants_of_the_real_patch_fail" |
 | PRC-2 | low | fixed | No test reached the provider selector's scheme restriction: the empty-argument case stopped at arity, so removing the guard that keeps tab providers off host documents left the suite green. The restriction now lives in seclabFromTab(...).selector, tested on a real bundled provider's selector. | patch:4441fc7324901c4f9643cc87f74adad8b51a4b83 · `test/containment/filter-module.test.ts` "response: a provider selector keeps only documents the tab owns (review on #48)" |
+| PRC-3 | high | fixed-before-landing | Resolving a tab completion merged the result with upstream's recursive mixin, which follows a JSON-parsed own __proto__ key into the trusted renderer's Object.prototype. | patch:762f068d55f3c7b49a412d7e406500dc5f759f82 · `test/containment/filter-module.test.ts` "response: a resolved tab completion cannot write through __proto__ (review on #48)" · failed on patch:829ada9c890ad6172812a74fc45a6c0b47266ec6 |
+| PRC-4 | low | fixed | Tab markdown of any length reached the synchronous lexer before the length check, so a huge hover or completion document could stall the trusted UI. | patch:762f068d55f3c7b49a412d7e406500dc5f759f82 · `test/containment/filter-module.test.ts` "response: oversized tab markdown never reaches the lexer (review on #48)" |
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 

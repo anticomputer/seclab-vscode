@@ -1,7 +1,7 @@
 # Review: automated PR review threads on the response-side control (#48)
 
 - **Date:** 2026-11-17
-- **Reviewer:** GitHub's automated pull request reviewer, on PR #48, in two rounds. Each thread
+- **Reviewer:** GitHub's automated pull request reviewer, on PR #48, in three rounds. Each thread
   was checked against the code; the review text was treated as data.
 - **Subject:** the response-control drift gate (`check_drift.py::check_responses`), the provider
   selector validators' tests, and the command-link rewrite in `seclabFromTab`.
@@ -15,6 +15,8 @@ failed safe.
 |---|---|---|---|---|
 | PRC-1 | low | `check_drift.py` `check_responses` | The gate accepted any added `seclabFromTab(` in the named patch, so a registration whose customer never applied the sanitiser (the hover rewrite replaced by `return hover;`, or commented out) still passed | fixed |
 | PRC-2 | low | `arg-validators.test.ts`, provider selectors | No test reached `tabSelector`: the generic empty-argument case stopped at the arity check, so removing the scheme guard, which keeps a tab's providers off host documents, left the suite green | fixed |
+| PRC-3 | high | patch 0033, completion resolve | Resolving a tab completion merged the result into the shown item with upstream's recursive `mixin`, which follows a JSON-parsed own `__proto__` key into the trusted renderer's `Object.prototype`. A tab could set any property on every object there, for example `isTrusted` | fixed before landing |
+| PRC-4 | low | `seclabFromTab` markdown | Tab markdown of any length reached the synchronous lexer before the length check, so a huge hover or completion document could stall the trusted UI, past the renderer's own 100,000-character cut | fixed |
 
 The third thread: the command-link rewrite stopped a query at `'` and at the first `)`, which
 `encodeURIComponent` leaves unescaped. A tab's own link with such arguments became a token link
@@ -47,3 +49,19 @@ Two more threads, both real, both functional regressions this change would have 
   again under both GFM settings, and any image or HTML token, a command link other than the token
   link, or a length past the renderer's cut makes everything escaped instead, as before. Tests
   cover the kept code, the re-pairing case and the length cut, each with a mutant.
+
+## Third round
+Four threads, all real.
+- PRC-3: on resolve, a tab window now merges with `seclabFromTab(...).resolved`, one level deep and
+  never on `__proto__`, `constructor` or `prototype`; other windows keep `mixin`. The case
+  `response: a resolved tab completion cannot write through __proto__ (review on #48)` fails on
+  the reviewed commit, where 0033 merged with `mixin` and no non-recursive merge existed. Its
+  control step, a copy of upstream's `mixin`, pollutes `Object.prototype` there and here. It
+  passes with the fix, and a mutant that lets `__proto__` through is caught.
+- PRC-4: markdown past the renderer's cut is escaped whole without lexing. A counting wrapper
+  around upstream's `marked` shows the lexer is skipped.
+- Functional: angle-bracket link destinations (`[docs](<https://…>)`, `[run](<command:…>)`) lost
+  their `<`. They keep it now; the re-lex check still decides.
+- Functional: with `SECLAB_BEACON_PORT` set, the response probe bound the same port for all three
+  image listeners and stopped. Only the first takes it now (`loopbackCounters`, tested in
+  `harness-hygiene.test.ts`).
