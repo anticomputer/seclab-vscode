@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 248 | 407 | 52 | 812 |
+| fixed | 14 | 91 | 249 | 407 | 52 | 813 |
 | fixed-before-landing | 0 | 5 | 0 | 0 | 0 | 5 |
-| fixed-untested | 0 | 5 | 59 | 180 | 65 | 309 |
+| fixed-untested | 0 | 5 | 59 | 180 | 68 | 312 |
 | accepted-residual | 0 | 1 | 13 | 73 | 25 | 112 |
 | deferred | 2 | 1 | 13 | 10 | 3 | 29 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 105 | 344 | 685 | 179 | 1329 |
+| **all** | 16 | 105 | 345 | 685 | 182 | 1333 |
 
 ## Baseline: open high and critical findings
 
@@ -108,6 +108,9 @@ Patch 0015 (the agent-host gate), the agentic spikes and test variants, the secu
 | [20261105-agents-in-tab-spike](20261105-agents-in-tab-spike.md) **6** | info | accepted-residual | fixture-safety lint opt-outs | Lint opt-outs in the spike harness (per-line pragmas plus allowlist entries) were accepted as justified | accepted by an agent: The reviewer judged each opt-out justified: per-line pragmas plus reviewed allowlist entries, with \`./seclab lint fixtures\` still covering the rest. |
 | [20261105-secure-agentic-experiences-design](20261105-secure-agentic-experiences-design.md) **17** | info | deferred | credential rewrite (patch 0020), openExternal rules | Provider-table keys need canonicalising and openExternal should be restricted to https public hosts | follow-up: increment 5 / patch 0020 (agentic), plan §4.2 step 1 and §5.2; fuzz with A1 and B1 |
 | [20261105-secure-agentic-experiences-design](20261105-secure-agentic-experiences-design.md) **DR-FACTS** | info | fixed-untested | design records (plan, research, ADR) | Nine factual errors in the plan, research and ADR (tool-set bound, host MCP configs, unregistered settings, channel list, debugEnv, null service, patch estimate, dangling links, an unverified citation) | documentation corrections; no check enforces that the plan and research stay consistent with upstream |
+| [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R14-2** | info | fixed-untested | increment 3 records | The EDR's coverage statement did not mention the server-managed branch of sendPendingRequestImmediately, which calls sendRequestInternal directly | A documentation correction: the EDR now lists the branch and what covers it (the entry check, pinned by the R14-1 unit test). |
+| [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R14-3** | info | fixed-untested | window-proof harness | window-proof refused an existing profile but not a leftover portable sibling, which the driver reuses | A harness precondition; no test runs window-proof itself, which needs a fetched macOS build. |
+| [20261106-agentic-ahp-gate](20261106-agentic-ahp-gate.md) **R14-4** | info | fixed-untested | agentic probe runners | derive_tree cleaned without -x and checked pristineness without --ignored, so a reused tree could keep ignored files | Harness hygiene; both runners derive their trees through it on every run, and no stale artefact can shadow a module at the current pin. |
 | [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md) **BV-2** | info | fixed-untested | agentic-browser test build variant (browserView-hook.patch) | The hook duplicated an import of a module the file already imports | Removed by inlining \`getAgentBrowserViewCreationDefaults\`; only a dispatched variant build compiles the hooked tree, so nothing in CI on this branch would catch a reintroduced duplicate import. |
 | [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md) **BV-6** | info | fixed-untested | test/builds/variants.json | The variant's \`review\` field named a record that did not cover the variant | \`variants.json\` now points at this record, but no check validates that a variant's \`review\` field names a record that actually reviews it (build/test-variant.sh does not read the field). |
 | [20261106-agentic-real-tab-spike](20261106-agentic-real-tab-spike.md) **9** | info | fixed-untested | record accuracy (EDR real-tab spike) | The EDR's run ID did not match the committed measurement | A documentation correction; \`./seclab docs check\` validates links and records but does not check that a cited run ID matches the committed measurement file. |
@@ -1416,6 +1419,10 @@ Every other commit the register cites is on main's history, or on the branch its
 | R13-1 | high | fixed-before-landing | The shape named missionControlAvailabilityService carried the neighbouring environment service's members, so the availability stand-in had no \`available\` and the environment service fell through to an empty stand-in; the unit test and the probe both asserted against the wrong interface and so could not fail | patch:91ace45ce0723d04afdb8c2aff88b8cc4236cd01 · `test/agentic/gate/null-providers.test.ts` "THE REAL POINT: a shape is checked against the service it claims to stand in for" · failed on patch:530fb513c78e6cf1a1a60fdaeaa50df1cb36734d |
 | R13-2 | medium | fixed | Eleven of thirteen guarded names had no shape and silently became an empty stand-in with nothing reporting the miss, and no member kind could express an inert IDisposable | patch:91ace45ce0723d04afdb8c2aff88b8cc4236cd01 · `test/agentic/gate/null-providers.test.ts` "a guarded name is shaped or recorded, never silently empty" |
 | R13-3 | medium | fixed | The probe never observed the three workbench contributions, which are the mechanism that closes R12-2, and its third check restated its first; the baseline control passed on any failure | patch:91ace45ce0723d04afdb8c2aff88b8cc4236cd01 · `test/agentic/ahp/agent-registration-probe.ts` "the actual mechanism that" |
+| R14-1 | medium | fixed | migrateRequests and sendPendingRequestImmediately call sendRequestInternal directly, and before either of 0018's checks the first send to an untitled session hands the request text to that session type's item controller | patch:e782e8d5be650c1463cc74f8fd5fef15b460f93f · `test/agentic/gate/chat-sessions.test.ts` "sendRequestInternal is checked on entry, before an untitled session hands the prompt to its controller" |
+| R14-2 | info | fixed-untested | The EDR's coverage statement did not mention the server-managed branch of sendPendingRequestImmediately, which calls sendRequestInternal directly | A documentation correction: the EDR now lists the branch and what covers it (the entry check, pinned by the R14-1 unit test). |
+| R14-3 | info | fixed-untested | window-proof refused an existing profile but not a leftover portable sibling, which the driver reuses | A harness precondition; no test runs window-proof itself, which needs a fetched macOS build. |
+| R14-4 | info | fixed-untested | derive_tree cleaned without -x and checked pristineness without --ignored, so a reused tree could keep ignored files | Harness hygiene; both runners derive their trees through it on every run, and no stale artefact can shadow a module at the current pin. |
 
 ### [20261106-agentic-browser-variant](20261106-agentic-browser-variant.md)
 
