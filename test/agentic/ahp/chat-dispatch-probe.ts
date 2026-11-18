@@ -2,12 +2,14 @@
 // agent run, and which patch stops each one.
 //
 // What this settles. Patch 0009 throws at the top of `ChatService.sendRequest` in every `seclab+`
-// window, and that refusal is kept (project owner decision, 2026-11-17). Two public entry points
-// reach the dispatch function without passing through `sendRequest`: `resendRequest`, and the
-// queue drain behind `processPendingRequests`. Patch 0018 is a second layer on exactly those
-// paths: in a tab window it refuses to dispatch any session but the window's own agent-host
-// session. This probe issues real requests down all three paths and counts the agent
-// invocations that result, rather than reading the code and inferring them.
+// window, and that refusal is kept (project owner decision, 2026-11-17). Three public entry points
+// reach dispatch without passing through `sendRequest`: `resendRequest`, the queue drain behind
+// `processPendingRequests`, and `migrateRequests`, whose first send to an untitled session hands
+// the request text to that session type's item controller (review round 14). Patch 0018 is a
+// second layer on exactly those paths: in a tab window it refuses to dispatch any session but the
+// window's own agent-host session. This probe issues real requests down all four paths and
+// counts the agent invocations and controller prompts that result, rather than reading the code
+// and inferring them.
 //
 // The ChatService, the chat model, the request parser, the agent service and the queue are all
 // upstream's, bundled from the tree under test. Around them sit upstream's own test services
@@ -24,6 +26,7 @@
 //
 //   PROBE_TREE=gated|upstream|no-0018   (set by chat-dispatch.sh, one container per tree)
 
+import { CancellationToken } from 'vs/base/common/cancellation.js';
 import { DisposableStore } from 'vs/base/common/lifecycle.js';
 import { Event } from 'vs/base/common/event.js';
 import { observableValue } from 'vs/base/common/observable.js';
@@ -101,6 +104,19 @@ gate.seclabAhpInstallWindow?.(e => gateLog.push(e as typeof gateLog[number]));
 /** Every time the agent actually runs. This, not a return value, is what "dispatched" means. */
 let invocations = 0;
 
+/**
+ * Every time a session type's item controller receives request text. Materialising an untitled
+ * session hands the prompt to the controller before any agent runs, so on the `migrateRequests`
+ * path this, as well as an invocation, counts as the request leaving the service (review round
+ * 14).
+ */
+let controllerPrompts = 0;
+const PROBE_SCHEME = 'seclabProbeRemote';
+
+/** `migrateRequests` fires its sends without awaiting them, so a refusal surfaces here. */
+let rejections: string[] = [];
+process.on('unhandledRejection', err => { rejections.push((err as Error)?.message ?? String(err)); });
+
 /** Two distinct connection objects: the window's own agent host, and some other one. */
 const OWN_CONNECTION = { name: 'own' };
 const OTHER_CONNECTION = { name: 'other' };
@@ -143,7 +159,14 @@ function chatService(store: DisposableStore, authority: string | undefined, fore
 	inst.stub(IConfigurationService, new TestConfigurationService());
 	inst.stub(ICommandService, { executeCommand: async () => undefined });
 	inst.stub(IChatService, new MockChatService());
-	inst.stub(IChatSessionsService, new MockChatSessionsService());
+	// A contributed session type whose item controller records the prompts it is handed, and
+	// whose content provider lets an untitled session of that type be opened.
+	const sessions = new MockChatSessionsService();
+	sessions.createNewChatSessionItem = async (_type, request) => { if (request.prompt) { controllerPrompts++; } return undefined; };
+	store.add(sessions.registerChatSessionContentProvider(PROBE_SCHEME, {
+		provideChatSessionContent: (resource: URI) => Promise.resolve({ sessionResource: resource, history: [], onWillDispose: Event.None, dispose: () => { } }),
+	}));
+	inst.stub(IChatSessionsService, sessions);
 	inst.stub(IAgentHostConnectionsService, connections(foreign));
 	inst.stub(ILanguageModelsService, new NullLanguageModelsService());
 	// The window kind, as patches 0009 and 0018 read it. `IWorkbenchEnvironmentService` refines
@@ -213,17 +236,19 @@ async function recordHistory(): Promise<ISerializableChatData> {
 	}
 }
 
-type Path = 'sendRequest' | 'resendRequest' | 'queue-drain';
+type Path = 'sendRequest' | 'resendRequest' | 'queue-drain' | 'migrateRequests';
 interface Observation {
 	readonly path: Path; readonly window: 'tab' | 'ordinary'; readonly session: Foreign;
-	readonly invocations: number; readonly threw: string | undefined; readonly gateReasons: string[];
+	readonly invocations: number; readonly controllerPrompts: number; readonly threw: string | undefined; readonly gateReasons: string[];
 }
 
 /** One request down one path, in a fresh service with the history restored into it. */
 async function issue(path: Path, window: 'tab' | 'ordinary', session: Foreign, history: ISerializableChatData): Promise<Observation> {
 	const store = new DisposableStore();
 	const before = invocations;
+	const promptsBefore = controllerPrompts;
 	const logged = gateLog.length;
+	rejections = [];
 	let threw: string | undefined;
 	try {
 		const svc = chatService(store, window === 'tab' ? TAB_AUTHORITY : undefined, session);
@@ -234,24 +259,34 @@ async function issue(path: Path, window: 'tab' | 'ordinary', session: Foreign, h
 				if (r.kind === 'sent') { await r.data.responseCompletePromise; }
 			} else if (path === 'resendRequest') {
 				await svc.resendRequest(model.getRequests()[0]);
-			} else {
+			} else if (path === 'queue-drain') {
 				svc.processPendingRequests(model.sessionResource);
+			} else {
+				// The restored queue moves to an untitled session of a contributed type, as when a
+				// session is committed; the first send there materialises it.
+				const untitled = URI.from({ scheme: PROBE_SCHEME, path: '/untitled-probe' });
+				const target = await svc.acquireOrLoadSession(untitled, ChatAgentLocation.Chat, CancellationToken.None);
+				if (!target) { throw new Error('probe: the untitled target session did not open'); }
+				store.add(target);
+				svc.migrateRequests(model.sessionResource, untitled);
 			}
 		} catch (err) {
 			threw = (err as Error).message;
 		}
 		await settle();
+		threw ??= rejections[0];
 		await svc.waitForModelDisposals?.();
 	} finally {
 		store.dispose();
 	}
 	const gateReasons = gateLog.slice(logged).filter(e => e.detail?.gateRule === 'ahp-sessions.chat').map(e => String(e.detail?.reason));
-	return { path, window, session, invocations: invocations - before, threw, gateReasons };
+	return { path, window, session, invocations: invocations - before, controllerPrompts: controllerPrompts - promptsBefore, threw, gateReasons };
 }
 
+const PATHS = ['sendRequest', 'resendRequest', 'queue-drain', 'migrateRequests'] as const;
 const history = await recordHistory();
 const observations: Observation[] = [];
-for (const path of ['sendRequest', 'resendRequest', 'queue-drain'] as const) {
+for (const path of PATHS) {
 	observations.push(await issue(path, 'ordinary', 'local', history));
 	observations.push(await issue(path, 'tab', 'local', history));
 	if (path !== 'sendRequest') {
@@ -260,21 +295,23 @@ for (const path of ['sendRequest', 'resendRequest', 'queue-drain'] as const) {
 }
 const find = (path: Path, window: 'tab' | 'ordinary', session: Foreign = 'local') =>
 	observations.find(o => o.path === path && o.window === window && o.session === session)!;
-const dispatched = (o: Observation) => o.invocations > 0;
+/** The request left the service: an agent ran, or an item controller was handed the prompt. */
+const dispatched = (o: Observation) => o.invocations > 0 || o.controllerPrompts > 0;
 
 const problems: string[] = [];
 const expect = (ok: boolean, what: string) => { if (!ok) { problems.push(what); } };
 
 // Every tree: the harness really dispatches. Without this a refusal below could be a harness
 // that never ran an agent at all, which is the absence this project keeps mistaking for a result.
-for (const path of ['sendRequest', 'resendRequest', 'queue-drain'] as const) {
+for (const path of PATHS) {
 	expect(dispatched(find(path, 'ordinary')), `${path} in an ordinary window did not dispatch, so a refusal in a tab window would mean nothing`);
 }
 
 /** The gated tree's assertions, named, so the same ones can be shown failing on a baseline. */
 const CONTAINED_SEND = 'CONTAINED: sendRequest in a tab window is refused by patch 0009 before any session check';
 const BYPASS = [['resendRequest', 'local', 'deny:unresolved'], ['resendRequest', 'other-connection', 'deny:other-connection'],
-	['queue-drain', 'local', 'deny:unresolved'], ['queue-drain', 'other-connection', 'deny:other-connection']] as const;
+	['queue-drain', 'local', 'deny:unresolved'], ['queue-drain', 'other-connection', 'deny:other-connection'],
+	['migrateRequests', 'local', 'deny:unresolved'], ['migrateRequests', 'other-connection', 'deny:other-connection']] as const;
 const containedBypass = ([path, session, reason]: typeof BYPASS[number]) =>
 	`CONTAINED: ${path} in a tab window does not dispatch the ${session} session, and the gate log records ${reason}`;
 const GATE_MODULE = 'the tree has no gate-log module';
@@ -304,7 +341,7 @@ if (EXPECT === 'gated') {
 } else {
 	// The control for 0018: 0009 still refuses sendRequest, and the bypass paths dispatch.
 	expect(!dispatched(find('sendRequest', 'tab')), 'CONTROL (no 0018): sendRequest is still refused, by 0009');
-	for (const path of ['resendRequest', 'queue-drain'] as const) {
+	for (const path of ['resendRequest', 'queue-drain', 'migrateRequests'] as const) {
 		for (const session of ['local', 'other-connection'] as const) {
 			expect(dispatched(find(path, 'tab', session)), `CONTROL (no 0018): ${path} in a tab window dispatches a ${session} session`);
 		}

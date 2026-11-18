@@ -13,13 +13,14 @@ derive_tree() {
 	if [[ -e "$dest/.git" ]]; then
 		git -C "$dest" checkout -q --detach "$UPSTREAM_SHA" \
 			&& git -C "$dest" reset -q --hard "$UPSTREAM_SHA" \
-			&& git -C "$dest" clean -fdq
+			&& git -C "$dest" clean -fdxq
 	else
 		git -C "$SRC" worktree prune
 		git -C "$SRC" worktree add -q --detach "$dest" "$UPSTREAM_SHA"
 	fi
 	[[ "$(git -C "$dest" rev-parse HEAD)" == "$UPSTREAM_SHA" ]] || { echo "derive_tree: $dest is not at $UPSTREAM_SHA" >&2; return 2; }
-	[[ -z "$(git -C "$dest" status --porcelain)" ]] || { echo "derive_tree: $dest is not pristine after the reset" >&2; return 2; }
+	# --ignored too: an ignored leftover would survive `clean` without -x and still be bundled.
+	[[ -z "$(git -C "$dest" status --porcelain --ignored)" ]] || { echo "derive_tree: $dest is not pristine after the reset" >&2; return 2; }
 	while read -r p; do
 		case "$p" in \#*|'') continue ;; esac
 		if [[ -n "$skip" && "$p" =~ $skip ]]; then continue; fi
