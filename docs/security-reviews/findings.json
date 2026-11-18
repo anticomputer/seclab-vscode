@@ -17446,6 +17446,36 @@
 				"file": "test/clean-host.ts",
 				"name": "the per-build lease isn't written before the tag is published"
 			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-11",
+			"round": "Round CR25 (second review)",
+			"severity": "low",
+			"summary": "A failing mkdir in an && list let the tag publish unleased.",
+			"component": "clean-host leases (image builders)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:781f2a0019590039de3250a5442e0370195dd928",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "a lease step is in an && list, which set -e doesn't stop on"
+			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-12",
+			"round": "Round CR25 (second review)",
+			"severity": "low",
+			"summary": "Per-build sbx templates were never expired by clean-host.",
+			"component": "clean-host leases (image builders)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:781f2a0019590039de3250a5442e0370195dd928",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "sbx per-build templates: got"
+			}
 		}
 	]
 }
