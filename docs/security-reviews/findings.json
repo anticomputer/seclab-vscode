@@ -16882,6 +16882,72 @@
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_shell_payload_is_not_scanned_as_javascript"
 			}
+		},
+		{
+			"record": "20261117-probe-harness-hygiene.md",
+			"round": "Findings",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"commit": "patch:b57602371cad5f64c6d0c5f4deb381965987079b",
+			"severity": "low",
+			"anchor": "PH-1",
+			"summary": "Four probe harnesses copied the VSIX into the running tab's workspace from the host, where a tab symlink could redirect it.",
+			"status": "fixed-untested",
+			"gap": "Nothing in the tab runs before the probe is installed, so no run plants the symlink."
+		},
+		{
+			"record": "20261117-probe-harness-hygiene.md",
+			"round": "Findings",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"commit": "patch:b57602371cad5f64c6d0c5f4deb381965987079b",
+			"severity": "low",
+			"anchor": "PH-2",
+			"summary": "Four probe harnesses read the arm back from the tab's workspace unguarded, so a tab could end the check before its teardown gate.",
+			"status": "fixed-untested",
+			"gap": "No run of these probes has the tab remove its arming file; the squat probe tests the pattern (SQ-5)."
+		},
+		{
+			"record": "20261117-probe-harness-hygiene.md",
+			"round": "Findings",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"commit": "patch:b57602371cad5f64c6d0c5f4deb381965987079b",
+			"severity": "low",
+			"anchor": "PH-3",
+			"summary": "Four probe harnesses ran sbx exec without a timeout, so a FIFO at the report path stalled the check forever.",
+			"status": "fixed-untested",
+			"gap": "tabExec's unit test covers the bound (SQ-6); these harnesses bound spawnSync the same way without their own test."
+		},
+		{
+			"record": "20261117-probe-harness-hygiene.md",
+			"round": "Findings",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"commit": "patch:b57602371cad5f64c6d0c5f4deb381965987079b",
+			"severity": "low",
+			"anchor": "PH-4",
+			"summary": "Four probe harnesses ran regexes on tab-controlled report values before their type checks, so a crafted object threw before the teardown gate.",
+			"status": "fixed",
+			"test": {
+				"file": "test/telemetryid/probe.ts",
+				"name": "the report check rejects a malformed tab value without throwing"
+			}
+		},
+		{
+			"record": "20261117-probe-harness-hygiene.md",
+			"round": "Findings",
+			"owner": "docsync",
+			"component": "probe harnesses",
+			"commit": "patch:b57602371cad5f64c6d0c5f4deb381965987079b",
+			"severity": "low",
+			"anchor": "PH-5",
+			"summary": "Five probe run manifests didn't list their generated directories, so the teardown gate left them in .work.",
+			"status": "fixed",
+			"test": {
+				"file": "test/containment/teardown.ts",
+				"name": "generated fixture workspaces removed from the host"
+			}
 		}
 	]
 }

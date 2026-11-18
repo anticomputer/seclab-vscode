@@ -15,14 +15,22 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
+<<<<<<< HEAD
 | fixed | 14 | 84 | 212 | 331 | 44 | 685 |
+=======
+| fixed | 14 | 84 | 211 | 310 | 44 | 663 |
+>>>>>>> 34b4b69 (register: PH-1 to PH-5)
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 52 | 161 | 58 | 276 |
+| fixed-untested | 0 | 5 | 52 | 164 | 58 | 279 |
 | accepted-residual | 0 | 1 | 12 | 70 | 23 | 106 |
 | deferred | 2 | 1 | 14 | 9 | 3 | 29 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 14 | 14 |
+<<<<<<< HEAD
 | **all** | 16 | 93 | 302 | 585 | 148 | 1144 |
+=======
+| **all** | 16 | 93 | 301 | 567 | 148 | 1125 |
+>>>>>>> 34b4b69 (register: PH-1 to PH-5)
 
 ## Baseline: open high and critical findings
 
@@ -131,6 +139,9 @@ Patch 0035 (host documents don't sync into a tab) and its 0036+ siblings. Branch
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-5** | low | accepted-residual | patch 0038 editor-tab model | Webview panels pass by scheme, so a host-side panel's title and view type reach the tab. | accepted by an agent: Under the RPC filter a tab cannot create webview panels, so every panel in a tab window is the window's own; none carries host data in its title. |
 | [20261116-editor-tab-provenance](20261116-editor-tab-provenance.md) **EDT-9** | low | fixed-untested | patch 0038 editor-tab model | A multi-diff's source id has no model, so tab-owned multi-diffs went anonymous. | The RPC filter refuses a tab's commands, so no runtime case opens a tab-owned multi-diff. |
 | [20261116-tab-telemetry-ids](20261116-tab-telemetry-ids.md) **TEL-2** | low | accepted-residual | telemetry selection at run time | A host process that opens a tab window with VSCODE_DEV set makes the window a dev build, which enables real telemetry and gives that tab the host ids. | accepted by an agent: Coordinator, 2026-11-16: kept as a recorded residual, no patch. A process that can set the editor's launch environment on the host is already outside the threat model, and a tab cannot set it. |
+| [20261117-probe-harness-hygiene](20261117-probe-harness-hygiene.md) **PH-1** | low | fixed-untested | probe harnesses | Four probe harnesses copied the VSIX into the running tab's workspace from the host, where a tab symlink could redirect it. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
+| [20261117-probe-harness-hygiene](20261117-probe-harness-hygiene.md) **PH-2** | low | fixed-untested | probe harnesses | Four probe harnesses read the arm back from the tab's workspace unguarded, so a tab could end the check before its teardown gate. | No run of these probes has the tab remove its arming file; the squat probe tests the pattern (SQ-5). |
+| [20261117-probe-harness-hygiene](20261117-probe-harness-hygiene.md) **PH-3** | low | fixed-untested | probe harnesses | Four probe harnesses ran sbx exec without a timeout, so a FIFO at the report path stalled the check forever. | tabExec's unit test covers the bound (SQ-6); these harnesses bound spawnSync the same way without their own test. |
 | [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md) **SQ-4** | low | fixed-untested | probe harnesses | The squat harness wrote its stop file into the tab's workspace from the host after the run, so a tab symlink there could redirect the write to a host file. | The sentinel check can't fail on sbx, whose share doesn't carry the tab's symlink to the host; no run on a driver whose share does. |
 | [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md) **SQ-7** | low | fixed-untested | probe harnesses | The squat harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
 | [20261117-workspace-data-probe](20261117-workspace-data-probe.md) **WSD-1** | low | fixed-untested | probe harnesses | The wsdata harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
@@ -2078,6 +2089,7 @@ Every other commit the register cites is on main's history, or on the branch its
 | LCR2-4 | info | false-positive | The cache key is not bumped for the new host. | The review recorded no issue. |
 | LCR2-5 | info | false-positive | Prompt injection. | The review recorded no issue. |
 
+<<<<<<< HEAD
 ### [20261117-pr-review-threads](20261117-pr-review-threads.md)
 
 | Finding | Sev | Status | Summary | Evidence |
@@ -2106,6 +2118,17 @@ Every other commit the register cites is on main's history, or on the branch its
 | PRR-22 | low | fixed | lint_probes merged two dots into a spread too early, so in 1..return the return read as a keyword and a following slash moved a string boundary. | patch:cbf7c638be8743b8ddc01b5441b0afe409763f61 · `rpc-filter/tools/test_lint_probes.py` "test_a_number_member_is_not_a_spread" |
 | PRR-23 | low | fixed | lint_probes split lines at U+2028/U+2029, which end no line inside a JavaScript string, so a /* after one read as a block comment and hid an executable call. | patch:8fb1846b3ed30a22cab7a52a1345de2eecc4d9c4 · `rpc-filter/tools/test_lint_probes.py` "test_a_literal_line_separator_fails_closed" |
 | PRR-24 | low | fixed | lint_probes applied JavaScript comment syntax to .sh payloads, so a # ... /* line hid the next shell line from the content rules. | patch:8fb1846b3ed30a22cab7a52a1345de2eecc4d9c4 · `rpc-filter/tools/test_lint_probes.py` "test_a_shell_payload_is_not_scanned_as_javascript" |
+=======
+### [20261117-probe-harness-hygiene](20261117-probe-harness-hygiene.md)
+
+| Finding | Sev | Status | Summary | Evidence |
+|---|---|---|---|---|
+| PH-1 | low | fixed-untested | Four probe harnesses copied the VSIX into the running tab's workspace from the host, where a tab symlink could redirect it. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
+| PH-2 | low | fixed-untested | Four probe harnesses read the arm back from the tab's workspace unguarded, so a tab could end the check before its teardown gate. | No run of these probes has the tab remove its arming file; the squat probe tests the pattern (SQ-5). |
+| PH-3 | low | fixed-untested | Four probe harnesses ran sbx exec without a timeout, so a FIFO at the report path stalled the check forever. | tabExec's unit test covers the bound (SQ-6); these harnesses bound spawnSync the same way without their own test. |
+| PH-4 | low | fixed | Four probe harnesses ran regexes on tab-controlled report values before their type checks, so a crafted object threw before the teardown gate. | patch:b57602371cad5f64c6d0c5f4deb381965987079b · `test/telemetryid/probe.ts` "the report check rejects a malformed tab value without throwing" |
+| PH-5 | low | fixed | Five probe run manifests didn't list their generated directories, so the teardown gate left them in .work. | patch:b57602371cad5f64c6d0c5f4deb381965987079b · `test/containment/teardown.ts` "generated fixture workspaces removed from the host" |
+>>>>>>> 34b4b69 (register: PH-1 to PH-5)
 
 ### [20261117-scheme-squatting-probe](20261117-scheme-squatting-probe.md)
 
