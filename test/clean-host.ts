@@ -90,9 +90,11 @@ function leaseDir(): string {
  *  the tag is published. Undefined when anyone else has it: the caller leaves the tag alone. Only
  *  the holder removes a lock; a stale one (a crashed build) is reported, never broken, since
  *  breaking it races another contender's fresh lock (Copilot review on PR 25). */
-export function withTagLock<T>(dir: string, name: string, fn: () => T): T | undefined {
-	const lock = path.join(dir, `${name}.lock`);
-	fs.mkdirSync(dir, { recursive: true });
+export function withTagLock<T>(leases: string, name: string, fn: () => T): T | undefined {
+	// Locks have a directory of their own, so a lease and a lock never share a name (a tag ending
+	// in .lock would otherwise lease another tag's lock path; Copilot review on PR 25).
+	const lock = path.join(leases, 'locks', name);
+	fs.mkdirSync(path.dirname(lock), { recursive: true });
 	try {
 		fs.mkdirSync(lock);
 	} catch {
@@ -194,6 +196,9 @@ if (args.has('--self-test')) {
 		if (lockAt < 0 || releaseAt < 0 || !(lockAt < leaseAt && publishAt < releaseAt)) {
 			bad.push(`${file}: the lease lock isn't held from the lease until the tag is published`);
 		}
+		if (!text.includes('lock="$lease/locks/$TAG"')) {
+			bad.push(`${file}: the lease lock isn't in the locks directory, apart from the leases`);
+		}
 		// Only the holder removes it: the exit trap and the release, never a "stale" break.
 		if ((text.match(/rmdir "\$lock"/g) ?? []).length !== 2) {
 			bad.push(`${file}: the lease lock is removed somewhere other than its holder's trap and release`);
@@ -208,21 +213,32 @@ if (args.has('--self-test')) {
 	{
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clean-host-lock-')); // the self-test's container, never the host
 		try {
-			fs.mkdirSync(path.join(dir, 'seclab-tab:b-x.lock'));
+			fs.mkdirSync(path.join(dir, 'locks', 'seclab-tab:b-x'), { recursive: true });
 			if (withTagLock(dir, 'seclab-tab:b-x', () => 'ran') !== undefined) {
 				bad.push('lease lock: a deletion ran while a build held the lock');
 			}
 			// An old lock is never broken: two contenders could both judge it stale, and the second
 			// would remove the first's fresh lock.
 			const old = new Date(Date.now() - 20 * 60_000);
-			fs.utimesSync(path.join(dir, 'seclab-tab:b-x.lock'), old, old);
-			if (withTagLock(dir, 'seclab-tab:b-x', () => 'ran') !== undefined || !fs.existsSync(path.join(dir, 'seclab-tab:b-x.lock'))) {
+			fs.utimesSync(path.join(dir, 'locks', 'seclab-tab:b-x'), old, old);
+			if (withTagLock(dir, 'seclab-tab:b-x', () => 'ran') !== undefined || !fs.existsSync(path.join(dir, 'locks', 'seclab-tab:b-x'))) {
 				bad.push('lease lock: an old lock was broken or removed by a non-holder');
 			}
 			// A holder's lock excludes a concurrent contender, and the holder alone releases it.
-			fs.rmSync(path.join(dir, 'seclab-tab:b-x.lock'), { recursive: true, force: true });
+			fs.rmSync(path.join(dir, 'locks', 'seclab-tab:b-x'), { recursive: true, force: true });
 			const inner = withTagLock(dir, 'seclab-tab:b-x', () => withTagLock(dir, 'seclab-tab:b-x', () => 'ran'));
-			if (inner !== undefined || fs.existsSync(path.join(dir, 'seclab-tab:b-x.lock'))) {
+			// A lease and a lock never share a path: the lease of a tag ending in .lock doesn't hold
+			// another tag's lock (Copilot review on PR 25).
+			const leases = fs.mkdtempSync(path.join(os.tmpdir(), 'clean-host-leases-'));
+			try {
+				fs.writeFileSync(path.join(leases, 'seclab-tab-oci:b-proof.lock'), '1\n');
+				if (withTagLock(leases, 'seclab-tab-oci:b-proof', () => 'ran') !== 'ran') {
+					bad.push('lease lock: the lease of seclab-tab-oci:b-proof.lock held the lock of seclab-tab-oci:b-proof');
+				}
+			} finally {
+				fs.rmSync(leases, { recursive: true, force: true });
+			}
+			if (inner !== undefined || fs.existsSync(path.join(dir, 'locks', 'seclab-tab:b-x'))) {
 				bad.push('lease lock: a contender entered while the lock was held, or the holder kept it after use');
 			}
 		} finally {
@@ -600,10 +616,11 @@ for (const n of [...imageIds.keys()].filter(n => OURS.image.test(n))) {
 // Lease locks are removed only by their holder; one older than 15 minutes is probably a crashed
 // build's, and is reported for removal by hand once no build runs (never broken automatically).
 try {
-	for (const f of fs.readdirSync(leaseDir()).filter(f => f.endsWith('.lock'))) {
-		const age = Date.now() - fs.statSync(path.join(leaseDir(), f)).mtimeMs;
+	const locks = path.join(leaseDir(), 'locks');
+	for (const f of fs.readdirSync(locks)) {
+		const age = Date.now() - fs.statSync(path.join(locks, f)).mtimeMs;
 		if (age > 15 * 60_000) {
-			items.push({ kind: 'lease lock', name: path.join(leaseDir(), f), state: `${Math.round(age / 60_000)} min`, remove: false,
+			items.push({ kind: 'lease lock', name: path.join(locks, f), state: `${Math.round(age / 60_000)} min`, remove: false,
 				why: 'held long: a crashed build? rmdir it by hand once no build or clean-host runs', del: () => false });
 		}
 	}

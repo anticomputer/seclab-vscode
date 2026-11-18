@@ -110,7 +110,10 @@ if [[ "$TAG" == seclab-tab:b-* ]]; then
 	# One lock per tag, shared with clean-host: held from the lease until the tag is published, so a
 	# cleanup that decided earlier can't delete the tag this build renews (Copilot review on PR 25).
 	# Only its holder ever removes it: breaking a "stale" lock races another contender's fresh one.
-	lock="$lease/$TAG.lock" got=0
+	# Locks have a directory of their own: a lease and a lock never share a name (Copilot review
+	# on PR 25: a tag ending in .lock would otherwise lease another tag's lock path).
+	mkdir -p "$lease/locks"
+	lock="$lease/locks/$TAG" got=0
 	for _ in $(seq 1 600); do
 		if mkdir "$lock" 2>/dev/null; then got=1; break; fi
 		sleep 1
