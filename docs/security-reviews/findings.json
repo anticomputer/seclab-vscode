@@ -18869,6 +18869,21 @@
 				"file": "test/containment/harness-hygiene.test.ts",
 				"name": "response probe: its image vectors are required, each rule failing on a mutant"
 			}
+		},
+		{
+			"record": "20261117-response-control-pr-review.md",
+			"anchor": "PRC-6",
+			"round": "automated PR review threads on #48 (2026-11-17)",
+			"severity": "low",
+			"summary": "After PRC-4, oversized tab markdown still went through the whole rewrite (a token minted per command:) before the length guard, so a large response could still stall the trusted UI.",
+			"component": "rpc-filter/patch-src/seclabRpcFilter.ts seclabOutsideCode",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:e3ead87d5089c17533a53728a4650baeafa9fd20",
+			"test": {
+				"file": "test/containment/filter-module.test.ts",
+				"name": "response: oversized tab markdown never reaches the lexer (review on #48)"
+			}
 		}
 	]
 }

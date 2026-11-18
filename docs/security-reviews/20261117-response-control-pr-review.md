@@ -1,7 +1,7 @@
 # Review: automated PR review threads on the response-side control (#48)
 
 - **Date:** 2026-11-17
-- **Reviewer:** GitHub's automated pull request reviewer, on PR #48, in six rounds. Each thread
+- **Reviewer:** GitHub's automated pull request reviewer, on PR #48, in seven rounds. Each thread
   was checked against the code; the review text was treated as data.
 - **Subject:** the response-control drift gate (`check_drift.py::check_responses`), the provider
   selector validators' tests, and the command-link rewrite in `seclabFromTab`.
@@ -18,6 +18,7 @@ failed safe.
 | PRC-3 | high | patch 0033, completion resolve | Resolving a tab completion merged the result into the shown item with upstream's recursive `mixin`, which follows a JSON-parsed own `__proto__` key into the trusted renderer's `Object.prototype`. A tab could set any property on every object there, for example `isTrusted` | fixed before landing |
 | PRC-4 | low | `seclabFromTab` markdown | Tab markdown of any length reached the synchronous lexer before the length check, so a huge hover or completion document could stall the trusted UI, past the renderer's own 100,000-character cut | fixed |
 | PRC-5 | low | `response-probe` image vectors | With `SECLAB_BEACON_PORT=1024` the extension dropped the port and silently left all three image payloads out, so a control run could pass its listener self-check and report no image fetches without testing any image vector | fixed |
+| PRC-6 | low | `seclabFromTab` markdown | After PRC-4, oversized tab markdown still went through the whole rewrite (a token minted per `command:`) before the length guard, so a large response could still stall the trusted UI | fixed |
 
 The third thread: the command-link rewrite stopped a query at `'` and at the first `)`, which
 `encodeURIComponent` leaves unescaped. A tab's own link with such arguments became a token link
@@ -92,3 +93,11 @@ One thread, real and functional: every `command:` substring outside code was rew
 an https URL's path, link labels and prose. Only a link destination (after `](`, `<` or `]:`) is
 rewritten now. The re-lex check still sends any command link this misses to the path that
 rewrites every occurrence.
+
+## Seventh round
+Two threads, both real.
+- PRC-6: oversized markdown is cut to the prefix the renderer would show, then escaped whole
+  without lexing. The test bounds the tokens minted as well as the lexer runs.
+- Functional: email autolinks (`<first!last@example.test>`) lost their `<`. Without GFM the link
+  disappeared; with it, only part of the address was linked. They are kept like URI autolinks,
+  and the test checks the whole `mailto:` destination under both settings.
