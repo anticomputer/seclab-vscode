@@ -70,3 +70,13 @@ for HHHH-4).
 | RJG-20 | Low | owner report | Added or removed lines starting with `+` or `-` (markdown bullets) were dropped from the report. | Fixed | Every added and removed line after the hunk header is reported. |
 | RJG-21 | Low | owner report | Only C0 controls were removed: C1 and bidi characters reached the reader, so a row could render other than it parses. | Fixed | Every byte outside printable ASCII is shown as `?`. |
 | RJG-22 | Info | owner report | The report watched one literal path: after a case-only rename, later row changes went unreported. | Fixed | A merged path that is the file under another case, or a merged tree without the file, is refused. |
+
+## Copilot review (PR 63)
+Copilot's review of the gate PR.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| CR63-1 | Medium | gate | Push runs that finished before a PR opened could leave `success` standing until the gate ran after the PR's runs, a window in which a PR run that skips `lint` could be merged. | Fixed | The gate runs on `requested` too, and posts `success` only once a pull_request run of each required file has been judged. |
+| CR63-2 | Medium | gate | An API read failure exited before the status post, leaving an earlier `success`. | Fixed | An EXIT trap posts `failure` on any error before the final post. |
+| CR63-3 | Low | owner report | The case-variant check was a `grep -q` pipeline, which can fail open under `pipefail` with a long list. | Fixed | A captured, pipeline-free check. |
+| CR63-4 | Low | re-validation | The observability-docs step overlaid the generator's product inputs with the old main's, so a regenerated schema change was refused and a stale one passed. | Fixed | Only validator code (`build/`, `tabd/tools/`) is overlaid. |
