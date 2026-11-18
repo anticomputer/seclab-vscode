@@ -1100,8 +1100,47 @@ export interface SeclabMarkdown {
 	readonly supportHtml?: boolean;
 }
 
-/** `command:<id>?<args>` as the opener parses it: JSON in the query, an array or one value. */
-const SECLAB_COMMAND_LINK = /command:([^\s?)\]"'<>]+)(\?[^\s)\]"'<>]*)?/gi;
+/** The start of `command:<id>`; its `?<args>` query is scanned by seclabCommandLinks. */
+const SECLAB_COMMAND_LINK = /command:([^\s?)\]"'<>]+)/gi;
+
+/**
+ * Rewrite every `command:<id>?<args>` in `value`. The query is JSON that encodeURIComponent
+ * leaves `'`, `(`, `)`, `!`, `*` and `~` in, so it ends only at whitespace, `"`, `<`, `>`, `]`, a
+ * backtick, or a `)` that closes the markdown link around it (parentheses inside are balanced).
+ * A pattern that stopped at `'` or the first `)` cut the arguments short (PR review on #48).
+ */
+function seclabCommandLinks(value: string, rewrite: (rawId: string, query: string | undefined) => string): string {
+	let out = '';
+	let last = 0;
+	SECLAB_COMMAND_LINK.lastIndex = 0;
+	for (let m = SECLAB_COMMAND_LINK.exec(value); m; m = SECLAB_COMMAND_LINK.exec(value)) {
+		let end = SECLAB_COMMAND_LINK.lastIndex;
+		let query: string | undefined;
+		if (value[end] === '?') {
+			let j = end + 1;
+			for (let depth = 0; j < value.length; j++) {
+				const c = value[j];
+				if (/[\s"<>\]`]/.test(c)) {
+					break;
+				}
+				if (c === '(') {
+					depth++;
+				} else if (c === ')') {
+					if (depth === 0) {
+						break;
+					}
+					depth--;
+				}
+			}
+			query = value.slice(end, j);
+			end = j;
+		}
+		out += value.slice(last, m.index) + rewrite(m[1], query);
+		last = end;
+		SECLAB_COMMAND_LINK.lastIndex = end;
+	}
+	return out + value.slice(last);
+}
 /**
  * What opens an image or raw HTML in tab markdown. No pattern can strip images: nested and
  * reference forms survive any pass (review RSC-2). So every `![` loses its image marker (the
@@ -1151,10 +1190,9 @@ export function seclabFromTab(
 		},
 		markdown(md) {
 			const raw = typeof md === 'string' ? md : (md && typeof (md as { value?: unknown }).value === 'string' ? (md as { value: string }).value : '');
-			const value = raw
+			const value = seclabCommandLinks(raw
 				.replace(SECLAB_IMAGE_OPEN, '!\\[')
-				.replace(SECLAB_HTML_OPEN, '&lt;')
-				.replace(SECLAB_COMMAND_LINK, (_m, rawId: string, query: string | undefined) => {
+				.replace(SECLAB_HTML_OPEN, '&lt;'), (rawId, query) => {
 					let id: string;
 					let args: unknown[] = [];
 					try {

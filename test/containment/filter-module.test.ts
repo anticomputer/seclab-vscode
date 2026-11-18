@@ -184,6 +184,25 @@ test('response: tab markdown loses command links, HTML and remote images', () =>
 	assert.equal(s.markdown(undefined).value, '');
 });
 
+test('response: a tab command link keeps arguments with quotes and parentheses (review on #48)', async () => {
+	const ran: unknown[] = [];
+	const s = F.seclabFromTab(AUTH, async (id: string, args: unknown[]) => { ran.push([id, args]); return 'ok'; });
+	const forms: Array<[string, unknown[], string]> = [
+		['[run](command:pub.ext.own?%5B%22don\'t%22%5D)', ['don\'t'], ''],
+		['[run](command:pub.ext.own?%5B%22a(b)c%22%5D)', ['a(b)c'], ''],
+		['(see [run](command:pub.ext.own?%5B1%5D))', [1], ')'],
+	];
+	for (const [value, args, after] of forms) {
+		const out = s.markdown({ value }).value;
+		const m = out.match(/\((command:_seclab\.tabCommand\?[^)\s]+)\)(.*)$/);
+		assert.ok(m, `no token link in ${out}`);
+		assert.equal(m[2], after, `text after the link changed: ${out}`);
+		ran.length = 0;
+		await run(tokenOf(m[1]));
+		assert.deepEqual(ran, [['pub.ext.own', args]], value);
+	}
+});
+
 /** Markup that could open an image or a tag: an unescaped `![`, or `<` before a tag character. */
 const OPENS_IMAGE_OR_TAG = /(?<!\\)!\[|<(?=[A-Za-z/!?])/;
 
@@ -334,7 +353,9 @@ if (!process.env.SECLAB_FILTER_SRC_DIR) {
 		['HTML is kept', ".replace(SECLAB_HTML_OPEN, '&lt;')", ".replace(SECLAB_HTML_OPEN, '<')"],
 		['HTML is escaped with a backslash', ".replace(SECLAB_HTML_OPEN, '&lt;')", ".replace(SECLAB_HTML_OPEN, '\\\\<')"],
 		['the clipboard snippet is allowed', 'return typeof insertText === \'string\' && !SECLAB_SNIPPET_CLIPBOARD.test(insertText);', 'return typeof insertText === \'string\';'],
-		['command links are kept', '.replace(SECLAB_COMMAND_LINK,', '.replace(/$^/,'],
+		['command links are kept', 'out += value.slice(last, m.index) + rewrite(m[1], query);', 'out += value.slice(last, end);'],
+		['the query stops at an apostrophe', 'if (/[\\s"<>\\]`]/.test(c)) {', 'if (/[\\s"\'<>\\]`]/.test(c)) {'],
+		['the query stops at the first parenthesis', 'if (depth === 0) {\n\t\t\t\t\t\tbreak;', 'if (true) {\n\t\t\t\t\t\tbreak;'],
 		['an unknown token runs', "if (!entry) {\n\t\tthrow denied();", "if (!entry) {\n\t\treturn undefined;"],
 	];
 	const src = readFileSync(join(SRC_DIR, 'seclabRpcFilter.ts'), 'utf8');
