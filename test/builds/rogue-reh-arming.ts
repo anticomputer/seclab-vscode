@@ -63,7 +63,8 @@ const stageTargets = (lines: string) => inTab(`cat > ${DIR}/targets`, lines);
 try {
 	await client.request('tab.ensureRunning', { tabId });
 	// The stand-in payload: records that it was loaded and what it was handed. Nothing else.
-	const payload = `module.exports = { main(socketServer, router) { const fs = require('fs'); fs.mkdirSync(process.env.SECLAB_ROGUE_REH_OUT, { recursive: true }); fs.writeFileSync(process.env.SECLAB_ROGUE_REH_OUT + '/loaded', JSON.stringify({ server: typeof socketServer?.registerChannel, router: typeof router })); } };\n`;
+	// \`early\` records each call: the hook calls it at a server's start, for a run staged before.
+	const payload = `module.exports = { main(socketServer, router) { const fs = require('fs'); fs.mkdirSync(process.env.SECLAB_ROGUE_REH_OUT, { recursive: true }); fs.writeFileSync(process.env.SECLAB_ROGUE_REH_OUT + '/loaded', JSON.stringify({ server: typeof socketServer?.registerChannel, router: typeof router })); }, early(socketServer) { const fs = require('fs'); fs.mkdirSync(process.env.SECLAB_ROGUE_REH_OUT, { recursive: true }); fs.appendFileSync(process.env.SECLAB_ROGUE_REH_OUT + '/early', typeof socketServer?.registerChannel + '\\n'); } };\n`;
 	const st = inTab(`mkdir -p ${DIR} && cat > ${DIR}/probes.js`, payload);
 	assert.equal(st.status, 0, st.stderr);
 	const now = Math.floor(Date.now() / 1000);
@@ -91,6 +92,31 @@ try {
 			got = loaded();
 		}
 		assert.deepEqual(JSON.parse(got || '{}'), { server: 'function', router: 'object' });
+	});
+	// The startup path (review ENV-58): a run staged before a server starts. Each case restarts the
+	// tab's REH, inside the tab, and asks tabd to bring it back, as a new window load would.
+	const restart = async () => {
+		inTab('kill "$(cat /run/user/$(id -u)/seclab/reh.pid)" 2>/dev/null; true');
+		await sleep(2000);
+		await client.request('tab.ensureRunning', { tabId });
+		await sleep(3000);
+	};
+	const early = () => inTab(`cat ${DIR}/evidence/early 2>/dev/null`).stdout.trim();
+	await check('a run expired when the server starts: early not called', async () => {
+		inTab(`rm -f ${DIR}/evidence/early`);
+		stageTargets(`arm=${arm}\nrun=/x\nuntil=${now - 60}\n`);
+		await restart();
+		assert.equal(early(), '');
+	});
+	await check('a malformed nonce when the server starts: early not called', async () => {
+		stageTargets(`arm=not-a-nonce\nrun=/x\nuntil=${now + 600}\n`);
+		await restart();
+		assert.equal(early(), '');
+	});
+	await check('a well-formed, unexpired run staged before the server starts: early called once, with the server', async () => {
+		stageTargets(`arm=${arm}\nrun=/x\nuntil=${now + 600}\n`);
+		await restart();
+		assert.equal(early(), 'function');
 	});
 } finally {
 	await client.request('tab.remove', { tabId }).catch(e => {

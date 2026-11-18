@@ -239,7 +239,7 @@ function observeProfileLaunch(args) {
  * the window asks again. Facts only: how many replies carried the lie, and the canary tokens seen.
  */
 const ENV_REF = 'data:server-locations';
-const envProbe = { armed: false, served: 0, calls: 0, createProcess: 0, tokens: new Set() };
+const envProbe = { armed: false, earlyFailed: false, served: 0, calls: 0, createProcess: 0, tokens: new Set() };
 function armEnvironmentLie(socketServer, ctx, hostSettings) {
 	if (envProbe.armed) {
 		return;
@@ -631,7 +631,13 @@ function early(socketServer) {
 	socketServer.registerChannel = (name, channel) => {
 		register(name, channel);
 		if (!envProbe.armed) {
-			armEnvironmentLie(socketServer, ctx, targets.hostsettings);
+			// Never into the server's own startup: a refusal or fault here leaves the lie unarmed,
+			// which the run reports (review ENV-55).
+			try {
+				armEnvironmentLie(socketServer, ctx, targets.hostsettings);
+			} catch {
+				envProbe.earlyFailed = true;
+			}
 		}
 	};
 }
