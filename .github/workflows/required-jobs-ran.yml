@@ -18,7 +18,7 @@ on:
   # The one workflow_run trigger: a scoped exception to CI hardening (EDR 20261117-required-jobs-gate).
   workflow_run: # zizmor: ignore[dangerous-triggers] runs main's copy, executes nothing from the PR
     workflows: [ci-unit, workflow-lint, docs-check, patch-build]
-    types: [requested, completed]
+    types: [requested, in_progress, completed]
 
 permissions: {}
 

@@ -1538,9 +1538,15 @@ landing_self_test() {
 	git -C "$src" "${id[@]}" commit -qm 'landing self-test: owner rows under a case variant'
 	owner_twin="$(git -C "$src" rev-parse HEAD)"
 	git -C "$src" checkout -q -f --detach "$owner2"
-	# 10. A product input the validator reads, changed and its output regenerated, passes; changed
-	#     without regenerating, it is refused (Copilot review on PR 63).
-	local obs_regen obs_stale
+	# 10. A product module the validator executes, changed: refused for coordinator review, whether
+	#     its output was regenerated, left stale, or the module ends the process early (Copilot
+	#     review on PR 63). Unchanged, the step passes (the clean merge).
+	local obs_regen obs_stale obs_exit
+	git -C "$src" checkout -q -f --detach "$old"
+	{ echo 'process.exit(0);'; cat "$src/tabd/src/obs/detect.ts"; } > "$src/.work/detect.ts" && mv "$src/.work/detect.ts" "$src/tabd/src/obs/detect.ts"
+	sed -i.bak 's/^export const SCHEMA_VERSION = \([0-9]*\);/export const SCHEMA_VERSION = 98;/' "$src/tabd/src/obs/schema.ts" && rm -f "$src/tabd/src/obs/schema.ts.bak"
+	git -C "$src" "${id[@]}" commit -qam 'landing self-test: an executed module exits early, docs stale'
+	obs_exit="$(git -C "$src" rev-parse HEAD)"
 	git -C "$src" checkout -q -f --detach "$old"
 	sed -i.bak 's/^export const SCHEMA_VERSION = \([0-9]*\);/export const SCHEMA_VERSION = 99;/' "$src/tabd/src/obs/schema.ts" && rm -f "$src/tabd/src/obs/schema.ts.bak"
 	grep -q '^export const SCHEMA_VERSION = 99;' "$src/tabd/src/obs/schema.ts" || { echo "landing self-test: couldn't change the schema version" >&2; exit 1; }
@@ -1565,9 +1571,12 @@ landing_self_test() {
 	[[ "$(cat "$ROOT/.work/landing-victim-dir/findings-base.json")" == seclabcanary_victim ]] || { echo "landing self-test: a step wrote through a merged .Work symlink (RJG-15)" >&2; exit 1; }
 	rm -rf "$ROOT/.work/landing-victim-dir"
 	rm -f "$canary" "$victim"
-	landing_revalidate "$old" "$clean" required-checks pins || { echo "landing self-test: a clean merge was refused" >&2; exit 1; }
-	landing_revalidate "$old" "$obs_regen" obs-docs || { echo "landing self-test: a regenerated product-input change was refused (Copilot review on PR 63)" >&2; exit 1; }
-	if landing_revalidate "$old" "$obs_stale" obs-docs; then echo "landing self-test: a product-input change with stale output passed" >&2; exit 1; fi
+	landing_revalidate "$old" "$clean" required-checks pins obs-docs || { echo "landing self-test: a clean merge was refused" >&2; exit 1; }
+	local o
+	for o in "$obs_regen" "$obs_stale" "$obs_exit"; do
+		if landing_revalidate "$old" "$o" obs-docs; then echo "landing self-test: a merge changing a module the validator executes passed (Copilot review on PR 63)" >&2; exit 1; fi
+		grep -q "which this validator executes, changed in the merge" "$ROOT/.work/landing-verify.obs-docs.log" || { echo "landing self-test: an executed-module change wasn't refused for its reason" >&2; exit 1; }
+	done
 	local report
 	report="$(landing_owner_rows "$old" "$owner_tip")"
 	[[ "$report" == *"OWNER ACCEPTANCES changed in $owner"* && "$report" == *"added or changed: | 20261101-x.md#X-1 | 2026-11-18 | seclabcanary_scope |"* ]] \
@@ -1658,7 +1667,17 @@ landing_overlay() { # WT OLD ENTRY...: WT back to its commit, then OLD's copy of
 			# Only validator code is the old main's: build/ and tabd/tools/. A product module the
 			# validator reads as input (tabd/src/obs for the observability docs) stays the merged
 			# tree's, so a merge that changes it is judged on what it merged (Copilot review on PR 63).
-			[[ "$f" == build/* || "$f" == tabd/tools/* ]] || continue
+			# A product module the validator executes (tabd/src/obs for the observability docs) can't
+			# be judged by running it: a merged copy can end the process early with success. When one
+			# differs from the old main the step refuses, for the coordinator to review (Copilot review
+			# on PR 63); unchanged, it is the old main's anyway.
+			if [[ "$f" != build/* && "$f" != tabd/tools/* ]]; then
+				if ! git -C "$ROOT" diff --quiet "$old" "$(git -C "$wt" rev-parse HEAD)" -- "$f"; then
+					echo "landing verify: REFUSED: $f, which this validator executes, changed in the merge; it can't be re-validated by running it (coordinator review)" >&2
+					return 1
+				fi
+				continue
+			fi
 			# The merged tree must not put a symlink anywhere on the path: the old code would be
 			# written through it, and the validator would run whatever it points at (RJG-10).
 			landing_safe_path "$wt" "$f" || { echo "landing verify: REFUSED: $f is not a plain path in the merged tree (a symlink on it?)" >&2; return 1; }
