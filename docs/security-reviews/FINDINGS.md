@@ -2083,22 +2083,22 @@ Every other commit the register cites is on main's history, or on the branch its
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
 | SQ-1 | info | fixed-untested | The squat probe's profile was shared by every worktree while its run guard is per worktree. | A naming fix; nothing runs two worktrees at once to test it. |
-| SQ-2 | low | fixed | The squat probe's window-log step never ran (a modal was still open) and had no positive control, so its no-provider-call claim for the log was unexercised. | patch:860143884c3381dd84c0984557fd7ef1e086b9a1 · `test/squat/probe.ts` "control: the window opened its own log in an output editor" |
-| SQ-3 | low | fixed | The squat probe validated named report fields but printed and stored the tab's whole objects, so a rogue report could carry arbitrary text into host output and evidence. | patch:860143884c3381dd84c0984557fd7ef1e086b9a1 · `test/squat/probe.ts` "reach neither host output nor evidence (SQ-3)" |
+| SQ-2 | low | fixed | The squat probe's window-log step never ran (a modal was still open) and had no positive control, so its no-provider-call claim for the log was unexercised. | f448a99ed690 · `test/squat/probe.ts` "control: the window opened its own log in an output editor" |
+| SQ-3 | low | fixed | The squat probe validated named report fields but printed and stored the tab's whole objects, so a rogue report could carry arbitrary text into host output and evidence. | f448a99ed690 · `test/squat/probe.ts` "reach neither host output nor evidence (SQ-3)" |
 | SQ-4 | low | fixed-untested | The squat harness wrote its stop file into the tab's workspace from the host after the run, so a tab symlink there could redirect the write to a host file. | The sentinel check can't fail on sbx, whose share doesn't carry the tab's symlink to the host; no run on a driver whose share does. |
-| SQ-5 | low | fixed | The squat harness read the arming file back from the tab's workspace unguarded, so a tab that deleted it made the run skip the teardown gate. | patch:1c8e2b8fdc62e871c4c9a478e9bceae983a22a88 · `test/squat/probe.ts` "control (SQ-5)" |
-| SQ-6 | low | fixed | The squat harness read the tab's report through an unbounded sbx exec, so a FIFO at the report path stalled the run before its teardown gate. | patch:e843b3ad0cd7bbb58703145430e8cf85c181cb7e · `test/harness/tab-exec.test.ts` "a FIFO with no writer at the read path times out to no data (SQ-6)" |
+| SQ-5 | low | fixed | The squat harness read the arming file back from the tab's workspace unguarded, so a tab that deleted it made the run skip the teardown gate. | 40bc8ca7d109 · `test/squat/probe.ts` "control (SQ-5)" |
+| SQ-6 | low | fixed | The squat harness read the tab's report through an unbounded sbx exec, so a FIFO at the report path stalled the run before its teardown gate. | 8e3a123a88ce · `test/harness/tab-exec.test.ts` "a FIFO with no writer at the read path times out to no data (SQ-6)" |
 | SQ-7 | low | fixed-untested | The squat harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
-| SQ-8 | low | fixed | The squat run manifest didn't list its generated workspace, so the teardown gate left it and the staged probe VSIX in .work. | patch:0b5e8f33cecacad85ed7cc22efd55b3bf70b6aee · `test/containment/teardown.ts` "generated fixture workspaces removed from the host" |
+| SQ-8 | low | fixed | The squat run manifest didn't list its generated workspace, so the teardown gate left it and the staged probe VSIX in .work. | bf2596423383 · `test/containment/teardown.ts` "generated fixture workspaces removed from the host" |
 
 ### [20261117-workspace-data-probe](20261117-workspace-data-probe.md)
 
 | Finding | Sev | Status | Summary | Evidence |
 |---|---|---|---|---|
 | WSD-1 | low | fixed-untested | The wsdata harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file. | Nothing in the tab runs before the probe is installed, so no run plants the symlink. |
-| WSD-2 | medium | fixed | The wsdata leak check looked for the canary token only, but the host folder's name is one token to the tab's tokenizer, so the host folder reaching the tab went unflagged. | patch:c3df90a7f6f584393bea95b792d3ee7870942da8 · `test/wsdata/probe.ts` "WSD-2 the leak check catches the host folder" |
-| WSD-3 | low | fixed | The wsdata report check ran a regex on a tab-controlled value before its type check, so a crafted object threw before the teardown gate. | patch:c3df90a7f6f584393bea95b792d3ee7870942da8 · `test/wsdata/probe.ts` "WSD-3 the report check rejects a malformed tab value without throwing" |
-| WSD-4 | low | fixed | The wsdata run manifest didn't list its generated directories, so the teardown gate left the workspace, the packaged VSIX and the host-folder fixture in .work. | patch:52bd43f21fceef45c686b2e5489949c8e6210bbe · `test/containment/teardown.ts` "generated fixture workspaces removed from the host" |
+| WSD-2 | medium | fixed | The wsdata leak check looked for the canary token only, but the host folder's name is one token to the tab's tokenizer, so the host folder reaching the tab went unflagged. | c641339d64e2 · `test/wsdata/probe.ts` "WSD-2 the leak check catches the host folder" |
+| WSD-3 | low | fixed | The wsdata report check ran a regex on a tab-controlled value before its type check, so a crafted object threw before the teardown gate. | c641339d64e2 · `test/wsdata/probe.ts` "WSD-3 the report check rejects a malformed tab value without throwing" |
+| WSD-4 | low | fixed | The wsdata run manifest didn't list its generated directories, so the teardown gate left the workspace, the packaged VSIX and the host-folder fixture in .work. | 1800161230e1 · `test/containment/teardown.ts` "generated fixture workspaces removed from the host" |
 
 ### Not from a review record (incidents, residuals recorded elsewhere)
 
