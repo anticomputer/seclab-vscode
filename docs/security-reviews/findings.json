@@ -20226,7 +20226,7 @@
 			"commit": "patch:768d0263d121af9bc9394e77adac4552c37da4b9",
 			"test": {
 				"file": "seclab",
-				"name": "a regenerated product-input change was refused"
+				"name": "an executed-module change wasn't refused for its reason"
 			}
 		},
 		{
@@ -20249,15 +20249,44 @@
 			"anchor": "RJG-24",
 			"round": "Round RJG7",
 			"severity": "info",
-			"summary": "The observability-docs re-validation runs the merged tabd/src/obs modules, contained.",
+			"summary": "The observability-docs re-validation ran the merged tabd/src/obs modules.",
 			"component": "landing verify re-validation (seclab landing_overlay)",
 			"owner": "fork-build",
-			"status": "accepted-residual",
-			"acceptedBy": "agent",
-			"rationale": "The step checks the merged docs against the merged code, which is its intent; it runs with no network and a read-only mount, and no validator decision logic is swappable.",
-			"ref": {
-				"file": "docs/security-reviews/20261117-required-jobs-gate.md",
-				"quote": "which is its intent"
+			"status": "fixed",
+			"commit": "patch:a02969369fc96f074971ee540184a9a02a6d5645",
+			"test": {
+				"file": "seclab",
+				"name": "a merge changing a module the validator executes passed"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "CR63-5",
+			"round": "Copilot review (PR 63)",
+			"severity": "medium",
+			"summary": "workflow_run requested does not fire for a re-run, so an earlier gate success stood during a re-run.",
+			"component": "required-jobs gate (.github/workflows/required-jobs-ran.yml)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:a02969369fc96f074971ee540184a9a02a6d5645",
+			"test": {
+				"file": "build/check-required-checks.ts",
+				"name": "gate misses re-runs (no in_progress)"
+			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "CR63-6",
+			"round": "Copilot review (PR 63)",
+			"severity": "medium",
+			"summary": "Running the merged tabd/src/obs modules let a merge end the observability-docs re-validation early with success.",
+			"component": "landing verify re-validation (seclab landing_overlay)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:a02969369fc96f074971ee540184a9a02a6d5645",
+			"test": {
+				"file": "seclab",
+				"name": "an executed-module change wasn't refused for its reason"
 			}
 		}
 	]
