@@ -16364,7 +16364,7 @@
 			"severity": "info",
 			"summary": "The squat probe's profile was shared by every worktree while its run guard is per worktree.",
 			"status": "fixed-untested",
-			"commit": "patch:860143884c3381dd84c0984557fd7ef1e086b9a1",
+			"commit": "f448a99ed690",
 			"gap": "A naming fix; nothing runs two worktrees at once to test it."
 		},
 		{
@@ -16376,7 +16376,7 @@
 			"severity": "low",
 			"summary": "The squat probe's window-log step never ran (a modal was still open) and had no positive control, so its no-provider-call claim for the log was unexercised.",
 			"status": "fixed",
-			"commit": "patch:860143884c3381dd84c0984557fd7ef1e086b9a1",
+			"commit": "f448a99ed690",
 			"test": {
 				"file": "test/squat/probe.ts",
 				"name": "control: the window opened its own log in an output editor"
@@ -16391,7 +16391,7 @@
 			"severity": "low",
 			"summary": "The squat probe validated named report fields but printed and stored the tab's whole objects, so a rogue report could carry arbitrary text into host output and evidence.",
 			"status": "fixed",
-			"commit": "patch:860143884c3381dd84c0984557fd7ef1e086b9a1",
+			"commit": "f448a99ed690",
 			"test": {
 				"file": "test/squat/probe.ts",
 				"name": "reach neither host output nor evidence (SQ-3)"
@@ -16406,7 +16406,7 @@
 			"severity": "low",
 			"summary": "The squat harness wrote its stop file into the tab's workspace from the host after the run, so a tab symlink there could redirect the write to a host file.",
 			"status": "fixed-untested",
-			"commit": "patch:1c8e2b8fdc62e871c4c9a478e9bceae983a22a88",
+			"commit": "40bc8ca7d109",
 			"gap": "The sentinel check can't fail on sbx, whose share doesn't carry the tab's symlink to the host; no run on a driver whose share does."
 		},
 		{
@@ -16418,7 +16418,7 @@
 			"severity": "low",
 			"summary": "The squat harness read the arming file back from the tab's workspace unguarded, so a tab that deleted it made the run skip the teardown gate.",
 			"status": "fixed",
-			"commit": "patch:1c8e2b8fdc62e871c4c9a478e9bceae983a22a88",
+			"commit": "40bc8ca7d109",
 			"test": {
 				"file": "test/squat/probe.ts",
 				"name": "control (SQ-5)"
@@ -16433,7 +16433,7 @@
 			"severity": "low",
 			"summary": "The squat harness read the tab's report through an unbounded sbx exec, so a FIFO at the report path stalled the run before its teardown gate.",
 			"status": "fixed",
-			"commit": "patch:e843b3ad0cd7bbb58703145430e8cf85c181cb7e",
+			"commit": "8e3a123a88ce",
 			"test": {
 				"file": "test/harness/tab-exec.test.ts",
 				"name": "a FIFO with no writer at the read path times out to no data (SQ-6)"
@@ -16448,7 +16448,7 @@
 			"severity": "low",
 			"summary": "The squat harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file.",
 			"status": "fixed-untested",
-			"commit": "patch:1d7c429da322594b3fadd6b5205fcef5ba198872",
+			"commit": "65c0f30b3b5b",
 			"gap": "Nothing in the tab runs before the probe is installed, so no run plants the symlink."
 		},
 		{
@@ -16460,7 +16460,7 @@
 			"severity": "low",
 			"summary": "The squat run manifest didn't list its generated workspace, so the teardown gate left it and the staged probe VSIX in .work.",
 			"status": "fixed",
-			"commit": "patch:0b5e8f33cecacad85ed7cc22efd55b3bf70b6aee",
+			"commit": "bf2596423383",
 			"test": {
 				"file": "test/containment/teardown.ts",
 				"name": "generated fixture workspaces removed from the host"
@@ -16471,7 +16471,7 @@
 			"round": "Copilot review (PR #37)",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:c3df90a7f6f584393bea95b792d3ee7870942da8",
+			"commit": "c641339d64e2",
 			"anchor": "WSD-1",
 			"severity": "low",
 			"summary": "The wsdata harness copied its VSIX into the running tab's workspace from the host, where a tab symlink could redirect it onto a host file.",
@@ -16483,7 +16483,7 @@
 			"round": "Copilot review (PR #37)",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:c3df90a7f6f584393bea95b792d3ee7870942da8",
+			"commit": "c641339d64e2",
 			"anchor": "WSD-2",
 			"severity": "medium",
 			"summary": "The wsdata leak check looked for the canary token only, but the host folder's name is one token to the tab's tokenizer, so the host folder reaching the tab went unflagged.",
@@ -16498,7 +16498,7 @@
 			"round": "Copilot review (PR #37)",
 			"owner": "docsync",
 			"component": "probe harnesses",
-			"commit": "patch:c3df90a7f6f584393bea95b792d3ee7870942da8",
+			"commit": "c641339d64e2",
 			"anchor": "WSD-3",
 			"severity": "low",
 			"summary": "The wsdata report check ran a regex on a tab-controlled value before its type check, so a crafted object threw before the teardown gate.",
@@ -16517,7 +16517,7 @@
 			"severity": "low",
 			"summary": "The wsdata run manifest didn't list its generated directories, so the teardown gate left the workspace, the packaged VSIX and the host-folder fixture in .work.",
 			"status": "fixed",
-			"commit": "patch:52bd43f21fceef45c686b2e5489949c8e6210bbe",
+			"commit": "1800161230e1",
 			"test": {
 				"file": "test/containment/teardown.ts",
 				"name": "generated fixture workspaces removed from the host"
