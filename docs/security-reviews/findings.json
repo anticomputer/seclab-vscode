@@ -16807,6 +16807,21 @@
 				"file": "rpc-filter/tools/test_lint_probes.py",
 				"name": "test_a_hashbang_line_is_a_comment"
 			}
+		},
+		{
+			"record": "20261117-pr-review-threads.md",
+			"anchor": "PRR-20",
+			"round": "automated PR review threads (2026-11-17)",
+			"severity": "low",
+			"summary": "lint_probes took the last dot of a spread for member access, so [...typeof /[//]/] read typeof as a property and the regex's // as a comment that hid a write.",
+			"component": "rpc-filter/tools/lint_probes.py _SlashContext",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:139c6de1faed74efe79e6be8b405ec09d8eb74af",
+			"test": {
+				"file": "rpc-filter/tools/test_lint_probes.py",
+				"name": "test_a_comment_after_a_slash_on_its_line_fails_closed"
+			}
 		}
 	]
 }
