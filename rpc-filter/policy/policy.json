@@ -500,6 +500,10 @@
           "validator": "tabHoverProvider",
           "response": "seclabFromTab",
           "response_patch": "0033-seclab-sanitise-tab-provider-results.patch",
+          "response_wiring": [
+            "hoverProvider.register(this._seclabSelector(selector)",
+            "contents: hover.contents.map(c => seclab.markdown(c))"
+          ],
           "rationale": "The registry is window-wide, so the selector decides which documents' hovers the tab paints; limited to the tab's own remote documents it cannot paint inside user settings or an output channel. What the tab returns is the risk the response-side control exists for (ADR 20261116-response-side-control): command: links would run on the global ICommandService on a click, and remote images would be fetched by the trusted renderer outside the broker. Both are rewritten in the customer before the widget sees them.",
           "evidence": [
             "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts#L268-L290",
@@ -520,6 +524,15 @@
           "validator": "tabCompletionProvider",
           "response": "seclabFromTab",
           "response_patch": "0033-seclab-sanitise-tab-provider-results.patch",
+          "response_wiring": [
+            "completionProvider.register(this._seclabSelector(selector)",
+            "suggestions: result[ISuggestResultDtoField.completions].map(d => this._seclabSnippet(this._seclabCompletion(",
+            "const newSuggestion = this._seclabCompletion(",
+            "return this._seclabSnippet(mixin(suggestion, newSuggestion, true));",
+            "command: seclab.command(item.command)",
+            "seclab.markdown(item.documentation)",
+            "!this._seclabFromTab.snippetAllowed(item.insertText)"
+          ],
           "rationale": "An accepted completion item's command runs on the global ICommandService with no origin, a weaker gesture than a click; _inflateSuggestDto carries it from a positional array, which no shape walk over the RPC traffic would find, so the control is applied where the item is built. additionalTextEdits apply to the model the completion was requested in, which the selector limits to the tab's own documents.",
           "evidence": [
             "https://github.com/microsoft/vscode/blob/a717861c07586a53d83b80d742cd3f59b20a6273/src/vs/workbench/api/browser/mainThreadLanguageFeatures.ts#L571-L645"

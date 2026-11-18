@@ -780,9 +780,11 @@ def check_responses(policy: dict, repo_root: str) -> list:
     The RPC filter screens requests, never what a tab returns. A provider, tree, SCM, status
     bar or decoration registration hands the trusted renderer data that can carry a command,
     a command: link, trusted markdown or a remote image (RPC-LOCKDOWN residual 11). So a
-    reachable `$register*` method must either declare `"response": "seclabFromTab"` and name the
-    patch that applies it (in patches/series, calling `seclabFromTab(`), or be listed in
-    RESPONSE_NONE with the reason its results never reach UI (ADR response-side-control).
+    reachable `$register*` method must either declare `"response": "seclabFromTab"`, name the
+    patch that applies it (in patches/series, calling `seclabFromTab(`) and list in
+    `response_wiring` the expressions in that patch's added code that apply it to this
+    registration's results, or be listed in RESPONSE_NONE with the reason its results never reach
+    UI (ADR response-side-control).
     """
     errors = []
     series_path = os.path.join(repo_root, "patches", "series")
@@ -810,11 +812,49 @@ def check_responses(policy: dict, repo_root: str) -> list:
                 continue
             with open(os.path.join(repo_root, "patches", patch), "r", encoding="utf-8") as fh:
                 text = fh.read()
-            added = "\n".join(l[1:] for l in text.splitlines() if l.startswith("+") and not l.startswith("+++"))
+            added = _without_comments("\n".join(
+                l[1:] for l in text.splitlines() if l.startswith("+") and not l.startswith("+++")))
             if "seclabFromTab(" not in added:
                 errors.append("%s names response_patch %s, which never calls seclabFromTab."
                               % (key, patch))
+            # Calling the sanitiser somewhere proves nothing about this registration: its own
+            # customer must apply it. Each registration names the expressions that do, and each
+            # must be added code, not context or a comment (PR review on #48).
+            wiring = entry.get("response_wiring")
+            if not isinstance(wiring, list) or not wiring or not all(isinstance(w, str) and w.strip() for w in wiring):
+                errors.append("%s declares no response_wiring: list the expressions in %s that apply "
+                              "seclabFromTab to what this registration returns." % (key, patch))
+                continue
+            for w in wiring:
+                if w not in added:
+                    errors.append("%s: response_wiring %r is not in %s's added code (comments "
+                                  "excluded)." % (key, w, patch))
     return errors
+
+
+def _without_comments(code: str) -> str:
+    """TypeScript with `//` and `/* */` comments removed, string literals kept. A comment never
+    counts as wiring; a string that looks like one only makes the check stricter."""
+    out, i, n = [], 0, len(code)
+    while i < n:
+        if code.startswith("//", i):
+            while i < n and code[i] != "\n":
+                i += 1
+            continue
+        if code.startswith("/*", i):
+            end = code.find("*/", i + 2)
+            i = n if end < 0 else end + 2
+            continue
+        if code[i] in "'\"`":
+            q, j = code[i], i + 1
+            while j < n and code[j] != q and not (q != "`" and code[j] == "\n"):
+                j += 2 if code[j] == "\\" else 1
+            out.append(code[i:j + 1])
+            i = j + 1
+            continue
+        out.append(code[i])
+        i += 1
+    return "".join(out)
 
 
 def main(argv=None) -> int:
