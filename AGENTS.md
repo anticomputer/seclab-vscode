@@ -167,6 +167,9 @@ RPC-lockdown session adds. Keep them consistent with this file.
   3. `gh pr create --base main --head <yours> --title "…" --body-file FILE`.
   4. If your change touches code that ci-linux covers, wait for ci-linux `oci` to pass on the PR
      head. It isn't a required check, so auto-merge won't wait for it.
+     If it touches `docs/security-reviews/owner-acceptances.md`, get the coordinator's go-ahead
+     before arming: the gate checks a row's shape, not who wrote it, so the coordinator confirms
+     each row against an owner decision (owner acceptance of review HHHH-4).
   5. Wait for Copilot's review (copilot-pull-request-reviewer, usually a few minutes), and handle
      every thread before arming. Check each claim against the code:
      - a real issue is fixed with a regression test, and registered in the findings register if
