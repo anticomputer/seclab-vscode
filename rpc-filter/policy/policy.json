@@ -1317,7 +1317,7 @@
     },
     "server-locations": {
       "verdict": "allow_with_constraint",
-      "mechanism": "every location a tab's server names (its environment reply: settings, storage, logs, profiles, home; the profiles and extension management channels' replies and events; file change events; scanned extensions' locations) must be vscode-remote on the tab's own authority, rebuilt from its components; else the environment or reply is refused, or the event or extension dropped, and the key logged",
+      "mechanism": "every location a tab's server names (its environment reply: settings, storage, logs, profiles, home; the profiles, logger and extension management channels' replies and events; file change events; scanned extensions' locations) must be vscode-remote on the tab's own authority, rebuilt from its components; else the environment or reply is refused, or the event or extension dropped, and the key logged. Install events lose any gallery entry, and the host never installs a package from the tab's file system",
       "impact": [
         "credential-access",
         "code-execution"
@@ -1833,9 +1833,9 @@
       "whole_class": false
     },
     "data:server-locations": {
-      "mechanism": "the window requires every location a tab's server names to be on the tab's own file system before using it (seclabTabUris), at the environment reply, the profiles and extension management channels, file change events and the extension scan",
+      "mechanism": "the window requires every location a tab's server names to be on the tab's own file system before using it (seclabTabUris), at the environment reply, the profiles, logger and extension management channels, file change events and the extension scan; install events from the tab lose any gallery entry, and the host never installs a package from the tab's file system",
       "patch": "0059-seclab-tab-server-environment-stays-in-the-tab.patch",
-      "symbol": "seclabTabProfilesChannel"
+      "symbol": "seclabTabServerChannel"
     },
     "data:": {
       "mechanism": "tab-supplied data is constrained at its sink, chiefly the URI authority check",
@@ -1930,7 +1930,7 @@
       "unenforced_accepted": true
     },
     "push:extensions:onDidInstallExtensions": {
-      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with nothing refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. Found only after the sweep's extends/alias and lookbehind defects were fixed, which is why it is open work rather than a regression.",
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table; the push still reaches the window. Since patch 0059 every location it names must be on the tab, and a gallery entry it carries is removed (data:server-locations), so it can't steer a host fetch or install; nor does the host install a package from the tab's file system.",
       "unenforced_accepted": true
     },
     "push:extensions:onDidUninstallExtension": {
@@ -1942,7 +1942,7 @@
       "unenforced_accepted": true
     },
     "push:extensions:onInstallExtension": {
-      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with nothing refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. Found only after the sweep's extends/alias and lookbehind defects were fixed, which is why it is open work rather than a regression.",
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table; the push still reaches the window. Since patch 0059 every location it names must be on the tab, and a gallery entry it carries is removed (data:server-locations), so it can't steer a host fetch or install; nor does the host install a package from the tab's file system.",
       "unenforced_accepted": true
     },
     "push:extensions:onUninstallExtension": {
@@ -1950,11 +1950,11 @@
       "unenforced_accepted": true
     },
     "push:logger:onDidChangeLoggers": {
-      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with nothing refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. Found only after the sweep's extends/alias and lookbehind defects were fixed, which is why it is open work rather than a regression.",
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table; the push still reaches the window. Since patch 0059 a logger it registers, or makes visible, must be a file on the tab's own file system, or the event is dropped (data:server-locations), so it can no longer name a host file.",
       "unenforced_accepted": true
     },
     "push:logger:onDidChangeVisibility": {
-      "mechanism": "ACCEPTED UNENFORCED. Denied in the table, with nothing refusing it on this branch. Recorded explicitly so the gate reports it rather than passing in silence. Found only after the sweep's extends/alias and lookbehind defects were fixed, which is why it is open work rather than a regression.",
+      "mechanism": "ACCEPTED UNENFORCED. Denied in the table; the push still reaches the window. Since patch 0059 a logger it registers, or makes visible, must be a file on the tab's own file system, or the event is dropped (data:server-locations), so it can no longer name a host file.",
       "unenforced_accepted": true
     }
   },

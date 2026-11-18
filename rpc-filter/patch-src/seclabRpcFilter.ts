@@ -970,7 +970,7 @@ export function seclabRefusePush(remoteAuthority: string | null | undefined, ref
 }
 
 /** Where a tab's server named a location outside the tab (patch 0059). */
-export type SeclabServerLocationSite = 'environment' | 'profiles' | 'watcher' | 'extensions' | 'extension-management';
+export type SeclabServerLocationSite = 'environment' | 'profiles' | 'watcher' | 'extensions' | 'extension-management' | 'loggers' | 'host-install';
 
 /**
  * Record that a tab window refused a location its server named outside the tab (patch 0059). The
@@ -988,10 +988,10 @@ export function seclabRefuseServerLocation(remoteAuthority: string, site: Seclab
 const SECLAB_URI_KEYS = new Set(['$mid', 'scheme', 'authority', 'path', 'query', 'fragment', 'external', 'fsPath', '_sep']);
 /**
  * Keys that make a plain object a URI candidate. `URI.revive` ignores `$mid` and builds a URI from
- * any object, so any of these marks one (review ENV-8); `path`, `query` and `fragment` alone don't,
- * since manifests use `path` for files inside an extension.
+ * any object, so any of these marks one (reviews ENV-8, ENV-11). Manifests, which name files by
+ * `path` and use `scheme` keys of their own, are passed over with `skipKeys`.
  */
-const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'external', 'fsPath', '_sep'];
+const SECLAB_URI_MARKS = ['$mid', 'scheme', 'authority', 'path', 'external', 'fsPath', '_sep'];
 
 /**
  * `value`, as a tab's server sent it, with every URI in it required to be on the tab's own file
@@ -1066,6 +1066,42 @@ export function seclabTabServerChannel(channel: IChannel, remoteAuthority: strin
 			}
 			listener.call(thisArgs, checked);
 		}, undefined, disposables),
+	};
+}
+
+const SECLAB_MANIFEST_KEYS: ReadonlySet<string> = new Set(['manifest']);
+
+/** An install event with any `source` other than a wire URI (a gallery entry) has it removed. */
+function seclabNoGallerySource(e: unknown): unknown {
+	if (Array.isArray(e)) {
+		return e.map(seclabNoGallerySource);
+	}
+	if (e && typeof e === 'object' && Object.hasOwn(e, 'source')) {
+		const source = (e as { source?: unknown }).source;
+		if (source !== undefined && (!source || typeof source !== 'object' || (source as { $mid?: unknown }).$mid !== 1)) {
+			return { ...e, source: undefined };
+		}
+	}
+	return e;
+}
+
+/**
+ * The tab server's `extensions` channel as a tab window may use it: every location must be on the
+ * tab (review ENV-10); manifests, which name files by `path` and are never revived, aren't walked
+ * (`getManifest` replies and `manifest` fields, ENV-12); and install events lose any gallery entry
+ * as their `source`, since that entry's URLs would decide what the window fetches, and where it
+ * installs it, on the host (ENV-13).
+ */
+export function seclabTabExtensionsChannel(channel: IChannel, remoteAuthority: string): IChannel {
+	if (!seclabIsTabAuthority(remoteAuthority)) {
+		return channel;
+	}
+	const checked = seclabTabServerChannel(channel, remoteAuthority, 'extension-management', SECLAB_MANIFEST_KEYS);
+	return {
+		call: <T>(command: string, arg?: unknown, token?: CancellationToken) => (command === 'getManifest' ? channel : checked).call<T>(command, arg, token),
+		listen: <T>(event: string, arg?: unknown): Event<T> => event === 'onInstallExtension' || event === 'onDidInstallExtensions'
+			? (listener, thisArgs, disposables) => checked.listen<T>(event, arg)(e => listener.call(thisArgs, seclabNoGallerySource(e) as T), undefined, disposables)
+			: checked.listen<T>(event, arg),
 	};
 }
 
