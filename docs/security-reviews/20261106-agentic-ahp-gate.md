@@ -887,3 +887,34 @@ ordinary windows return `allow` on the first line, so nothing changes there; the
 entries and patch ids are correct. Noted as scope, not a finding: opening an untitled session of
 a contributed type (`getOrCreateChatSession`) is reachable in a tab window without a check, carries
 no request text, and is bounded by 0019's provider registration.
+
+## Automated PR review on #43, second pass
+
+Five threads on the pushes after the narrowed claim, four distinct findings, all real.
+
+| id | Sev | finding |
+|---|---|---|
+| CR43-1 | low | The authentication resolver's stand-in had no shape, on the recorded reason that only the withheld contribution reaches it; the unwrapped remote agent-host service's connection factory calls `createResolver(address)` first, so a tab-written remote-host entry threw a TypeError before patch 0015's gate could refuse it and log the refusal |
+| CR43-2 | info | `derive_tree`'s plain checkout refused to switch a reused tree holding the previous run's patches to a new pin when a patched file also changed between pins |
+| CR43-3 | info | `window-proof` did not run teardown on SIGINT or SIGTERM |
+| CR43-4 | info | `window-proof`'s ordinary arm had no positive evidence that the real classes were built: the creation marks name the wrapper, and the gate log exists only in tab windows |
+
+**CR43-1 (fixed).** The dial still failed closed, but with an unlogged TypeError rather than
+0015's refusal, which is the evidence `reh-push` requires and the property this project relies
+on: a refusal that is not logged cannot be told apart from nothing happening. The exemption's
+reason was a claim about the tree that was not checked against the unwrapped service. The
+resolver now has a shape: a synchronous `createResolver` returning an authentication that
+resolves nothing, and `takePendingSessionRemovals` returning none, through a new `value-method`
+member kind that the shape check compares with the real class. Re-reading every remaining
+exemption's consumers found no other service reached from outside the withheld contributions,
+the other guarded services or the separate agents window. The unit test `the authentication
+resolver stand-in supplies createResolver, which the remote agent-host factory calls first`
+fails on the previous module. `window-proof`'s tab arm now lists a remote agent host in the
+tab's workspace and requires 0015's logged refusal in the real build.
+
+**CR43-2 to CR43-4 (fixed).** `derive_tree` checks out with force; with a simulated pin change
+the previous helper refused and the fixed one derived the tree at the pin. `window-proof` calls
+the shared `exitOnSignals`. The 0019 wrapper sets a performance mark once the real class is built
+in an ordinary window, and another when it returns the stand-in in a tab window; the ordinary arm
+requires the first for all three contributions, and the tab arm requires the second and forbids
+the first.
