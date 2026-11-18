@@ -1,7 +1,7 @@
 # Review: automated PR review threads on the response-side control (#48)
 
 - **Date:** 2026-11-17
-- **Reviewer:** GitHub's automated pull request reviewer, on PR #48, in four rounds. Each thread
+- **Reviewer:** GitHub's automated pull request reviewer, on PR #48, in five rounds. Each thread
   was checked against the code; the review text was treated as data.
 - **Subject:** the response-control drift gate (`check_drift.py::check_responses`), the provider
   selector validators' tests, and the command-link rewrite in `seclabFromTab`.
@@ -77,3 +77,12 @@ Three threads, all real.
 - Functional: run directly with `SECLAB_MARKED` set to upstream's path, the test's resolve hook
   redirected the counting wrapper's own import to itself. The wrapper's import is excluded now,
   and the runner mounts marked at the upstream path so the standard run covers it.
+
+## Fifth round
+Two threads, both real and functional:
+- A token command that ran in the tab and failed was reported as a refusal (`Unsupported
+  operation` and a deny event), hiding its own error. Only upstream's "does not exist" or
+  "Unknown command" rejection is a refusal now. The tab chooses the message, so it can only
+  mislabel how its own command ended; nothing runs on the trusted side either way.
+- URI autolinks (`<command:…>`, `<https://…>`) lost their `<` and stopped being links. They keep
+  it now, and the re-lex check still decides.
