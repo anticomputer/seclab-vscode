@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 91 | 240 | 391 | 51 | 787 |
+| fixed | 14 | 91 | 241 | 400 | 51 | 797 |
 | fixed-before-landing | 0 | 2 | 0 | 0 | 0 | 2 |
 | fixed-untested | 0 | 5 | 59 | 180 | 65 | 309 |
-| accepted-residual | 0 | 1 | 12 | 72 | 25 | 110 |
-| deferred | 2 | 1 | 13 | 10 | 3 | 29 |
+| accepted-residual | 0 | 1 | 12 | 73 | 25 | 111 |
+| deferred | 2 | 1 | 14 | 10 | 3 | 30 |
 | open | 0 | 2 | 11 | 15 | 8 | 36 |
 | false-positive | 0 | 0 | 0 | 0 | 26 | 26 |
-| **all** | 16 | 102 | 335 | 668 | 178 | 1299 |
+| **all** | 16 | 102 | 337 | 678 | 178 | 1311 |
 
 ## Baseline: open high and critical findings
 
@@ -518,6 +518,7 @@ The findings register and its gate.
 | Finding | Sev | Status | Component | Summary | Gap or disposition |
 |---|---|---|---|---|---|
 | [20261110-security-findings-register](20261110-security-findings-register.md) **BBBB-1** | medium | fixed-untested | findings register: baseline listing | The baseline listing wrote into .work without creating it, so a fresh runner failed before the growth check | One-line fix; the self-test runs where .work already exists. |
+| [20261110-security-findings-register](20261110-security-findings-register.md) **HHHH-4** | medium | deferred | findings register: row authorship | The gate checks an owner row's shape, not who wrote it, so a pending row lets a session that writes a row itself close a new high two landings later | follow-up: Owner decision: make owner-row authorship machine-checkable (a required reviewer on owner-acceptances.md, or signed commits); routed to the coordinator 2026-11-18 |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **VVV-4** | medium | fixed-untested | findings register: pre-register branches | A branch forked before the register would fail the docs job once it lands | Shell control flow in seclab's findings_check; not covered by the host self-test. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **WWW-3** | medium | fixed-untested | findings register: ancestry | After the history rewrite every cited fix commit was off the new history | Enforced by the docs job's ancestry step over the remapped register, not by a self-test case. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **XXX-2** | medium | accepted-residual | findings register: no-conversations rule | The no-conversations rule is enforced only on owner-acceptances.md; elsewhere it rests on authors and review | accepted by an agent: No checker can tell a paraphrase from a statement. The register's own paraphrases were reworded; the project's records and the deps exception approvals were restated as neutral decisions by the redaction change, so build/deps.ts SS-5 now repeats a decision statement, not a quote. |
@@ -526,6 +527,7 @@ The findings register and its gate.
 | [20261110-security-findings-register](20261110-security-findings-register.md) **AAAA-5** | low | fixed-untested | findings register: weekly ratchet | The week-ago comparison point was chosen by any commit's date and skipped silently without a register | Fixed in the workflow step; workflow steps have no test. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **BBBB-2** | low | fixed-untested | findings register: growth | The old register was read back through the bind mount, which can serve a partial file | Fixed by reading from stdin; the race isn't reproducible on demand. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **CCCC-6** | low | fixed-untested | findings register: earlier rounds | AAAA-2's rationale and AAAA-4's test rested on the withdrawn rule | Register and record text; nothing to test. |
+| [20261110-security-findings-register](20261110-security-findings-register.md) **HHHH-8** | low | accepted-residual | findings register: expiry | An expired pending row fails every landing until someone removes it | accepted by an agent: Failing on expiry is the coordinator's design; any change may remove an expired pending row |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **RRR-1** | low | fixed-untested | findings register: liveness-refresh workflow | The baseline listing step gated the liveness refresh job | Fixed by moving the listing into its own contents: read job; no check covers workflow job structure. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **TTT-7** | low | fixed-untested | findings register: base on main | On main without a usable previous head the base was HEAD itself | A shell guard in seclab's findings_check; the host self-test covers base resolution but not this branch. |
 | [20261110-security-findings-register](20261110-security-findings-register.md) **UUU-6** | low | fixed-untested | findings register: base on main | On main the pre-register fallback compared the register with itself | A shell guard in seclab's findings_check; not covered by the host self-test. |
@@ -1824,6 +1826,18 @@ Every other commit the register cites is on main's history, or on the branch its
 | PRR11-11 | low | fixed | On main with no range, the fixed-before-landing to fixed transition rule still compared with HEAD^1 | 880199067cdf · `build/docs/findings.ts` "on main with no range a transition from HEAD^1 is not judged (PRR11-11)" |
 | PRR11-12 | low | fixed | On main with no range, uncommitted register edits were exempted as landed history | 880199067cdf · `seclab` "uncommitted edits on main without a range weren't judged exactly (PRR11-12)" |
 | PRR11-13 | low | fixed | A fix whose revert was itself reverted still counted as reverted | 880199067cdf · `seclab` "a fix whose revert was reverted was taken as reverted (PRR11-13)" |
+| HHHH-4 | medium | deferred | The gate checks an owner row's shape, not who wrote it, so a pending row lets a session that writes a row itself close a new high two landings later | follow-up: Owner decision: make owner-row authorship machine-checkable (a required reviewer on owner-acceptances.md, or signed commits); routed to the coordinator 2026-11-18 |
+| HHHH-5 | medium | fixed | Re-dating a pending row, or deleting and re-adding it, restarted its seven days | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "a re-dated or re-added pending row is judged from its first commit (HHHH-5)" |
+| HHHH-6 | low | fixed | An empty list of main's records was read as nothing on main | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "an empty main record list fails closed like a missing one (HHHH-6)" |
+| HHHH-7 | low | fixed | A date a day ahead stretched the pending window, and an impossible date was reported as a future one | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "a pending row with an impossible date says so (HHHH-7)" |
+| HHHH-8 | low | accepted-residual | An expired pending row fails every landing until someone removes it | accepted by an agent: Failing on expiry is the coordinator's design; any change may remove an expired pending row |
+| PRR58-1 | low | fixed | A pending owner-row key with no # or no anchor could pass as pending | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "a row key without record and anchor is never pending" |
+| PRR58-2 | low | fixed | An invalid pending-row date threw instead of being reported | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "is reported, not thrown (PR #58 review)" |
+| PRR58-3 | low | fixed | A pending row dated tomorrow passed | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "a pending row dated tomorrow fails (PR #58 review)" |
+| PRR58-4 | low | fixed | The first-seen lookup matched only one spelling of a row, so a backticked row could be re-dated | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "first-seen dates read rows as the gate does: backticks, spacing and escaped pipes (PR #58 review)" |
+| PRR58-5 | low | fixed | An uncommitted last owner row made the first-seen lookup stop the check | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `seclab` "the history isn't oldest first" |
+| PRR58-6 | low | fixed | A pending row dated before its first commit could be re-dated to restart its window | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "a pending row dated before its first commit and later re-dated keeps its first date (PRR58-6)" |
+| PRR58-7 | low | fixed | An impossible historical Date could become the first date, then be rejected, so the window fell back to the current date | patch:611e6d1fd2b9f3da0a04cb22d4a866572b717b21 · `build/docs/findings.ts` "an impossible historical date never becomes the first date (PRR58-7)" |
 
 ### [20261112-gate-fail-open-audit](20261112-gate-fail-open-audit.md)
 

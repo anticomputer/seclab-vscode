@@ -393,3 +393,43 @@ Eighth pass: one thread, true, fixed in the same change.
 | # | Sev | Area | Finding | Disposition | Fix | Regression test |
 |---|---|---|---|---|---|---|
 | PRR11-13 | Low | reverted fixes | A fix whose revert was itself reverted (the fix reapplied) still counted as reverted. | Fixed | The newest revert or reapplication after the fix decides. | `seclab` host self-test "a fix whose revert was reverted was taken as reverted (PRR11-13)" |
+
+## Round HHHH (pending owner acceptances)
+Scope: an owner row that may name a finding whose record hasn't landed, for at most seven days
+([EDR](../edr/20261118-pending-owner-acceptances.md)). Reviewed by an Opus-class model. Checked and
+sound: `register#` keys and malformed keys are never pending, a pending key can't be claimed by an
+unvalidated `wasKey`, and the row and its closure in one change still fail (UUU-4). No high or
+critical; two mediums, two lows and one low accepted as designed. HHHH-1 to HHHH-3 tag the self-tests
+written with the change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| HHHH-4 | Medium | row authorship | The gate checks a row's shape, not who wrote it, so a pending row lets a session that writes a row itself close a new high two landings later. | Deferred: making authorship machine-checkable (a required reviewer or signed commits) is an owner decision | — | — |
+| HHHH-5 | Medium | expiry | Re-dating a pending row, or deleting and re-adding it, restarted its seven days. | Fixed | Age counts from the earlier of the row's date and the first commit that added its key. | self-test "a re-dated or re-added pending row is judged from its first commit (HHHH-5)" |
+| HHHH-6 | Low | main's records | An empty list of main's records was read as "nothing on main". | Fixed | An empty list fails like a missing one. | self-test "an empty main record list fails closed like a missing one (HHHH-6)" |
+| HHHH-7 | Low | dates | A date a day ahead stretched the window to about eight days, and an impossible date was reported as a future one. | Fixed | The first commit bounds the window; an impossible date says so. | self-test "a pending row with an impossible date says so (HHHH-7)" |
+| HHHH-8 | Low | expiry | An expired row fails every landing until someone removes it. | Accepted | Failing on expiry is the coordinator's design; any change may remove an expired pending row. | self-test "control: removing an expired pending row passes (HHHH-8)" |
+
+## Round PRR58 (pull request #58's automated review)
+Scope: the five threads the automated pull-request reviewer opened on #58 (pending owner rows),
+checked against the code. All true, all fixed in the same change. No high or critical.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| PRR58-1 | Low | row keys | A key with no `#`, or no anchor after it, could pass as pending. | Fixed | A pending key is `record#anchor` with both parts. | self-test "a row key without record and anchor is never pending" |
+| PRR58-2 | Low | dates | A date like `2026-13-01` threw instead of being reported. | Fixed | An invalid timestamp is reported as not a real date. | self-test "is reported, not thrown (PR #58 review)" |
+| PRR58-3 | Low | dates | A row dated tomorrow passed. | Fixed | A date after the run's UTC day fails. | self-test "a pending row dated tomorrow fails (PR #58 review)" |
+| PRR58-4 | Low | first seen | The first-seen lookup matched only one spelling of a row, so a backticked row could be re-dated. | Fixed | The owner file's history is parsed as the gate reads rows. | self-test "first-seen dates read rows as the gate does: backticks, spacing and escaped pipes (PR #58 review)" |
+| PRR58-5 | Low | first seen | An uncommitted last row made the lookup exit non-zero and stopped the check. | Fixed | The history is read in one `git log`; a row with no commit uses its own date. | `seclab` host self-test "the history isn't oldest first" |
+
+Second pass: one thread, true, fixed in the same change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| PRR58-6 | Low | first seen | A row dated before its first commit could be re-dated to restart its window, since only the commit date was kept. | Fixed | The earliest of the first commit and every Date the key's rows have had starts the clock. | self-test "a pending row dated before its first commit and later re-dated keeps its first date (PRR58-6)" |
+
+Third pass: one thread, true, fixed in the same change.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression test |
+|---|---|---|---|---|---|---|
+| PRR58-7 | Low | first seen | An impossible historical Date (`2026-02-30`) could become the first date, then be rejected, so the window fell back to the current date. | Fixed | Historical dates pass the same round-trip check as the current one. | self-test "an impossible historical date never becomes the first date (PRR58-7)" |
