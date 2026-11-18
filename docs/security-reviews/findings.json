@@ -20288,6 +20288,18 @@
 				"file": "seclab",
 				"name": "an executed-module change wasn't refused for its reason"
 			}
+		},
+		{
+			"record": "20261117-required-jobs-gate.md",
+			"anchor": "RJG-25",
+			"round": "Round RJG8",
+			"severity": "info",
+			"summary": "The required-checks self-test banner hardcoded the gate-edit case count.",
+			"component": "required-checks validator self-test (build/check-required-checks.ts)",
+			"owner": "fork-build",
+			"status": "fixed-untested",
+			"commit": "patch:32fe8854fd98ec6419c5844b46d241d5f01057d9",
+			"gap": "A count in the self-test banner; the cases themselves are unchanged and still run."
 		}
 	]
 }
