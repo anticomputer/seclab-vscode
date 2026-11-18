@@ -49,7 +49,9 @@ fs.rmSync(base, { recursive: true, force: true });
 fs.mkdirSync(path.join(ws, '.seclab'), { recursive: true });
 fs.writeFileSync(runFile, JSON.stringify({ canary }));
 writeSnapshot(base);
-writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir] });
+// The workspace, the packaged probe and the host-folder fixture: the teardown gate removes them
+// and checks (WSD-4).
+writeManifest(base, { driver: 'sbx', userDataDir: userData, stateDirs: [stateDir], workspaces: [ws, path.join(base, 'vsix'), path.join(base, 'host')] });
 fs.writeFileSync(path.join(ws, 'README.md'), '# wsdata probe workspace\n');
 const hostDir = path.join(base, 'host', `${canary}_folder`);
 fs.mkdirSync(hostDir, { recursive: true });
