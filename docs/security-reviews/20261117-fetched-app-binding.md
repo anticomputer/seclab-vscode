@@ -50,3 +50,9 @@ A re-review of the round FAB2 fixes. Nothing at high or above.
 | FAB3-3 | Low | marker | The marker write followed a symlink. | Fixed | The marker is removed before it is written. |
 | FAB3-4 | Low | local builds | A failed `git status` read as a clean tree. | Fixed | A failed status counts as not clean. |
 | FAB3-5 | Info | prompt injection | None found. | No finding | — |
+
+## Copilot review of PR 42
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| CR42-1 | Low | Linux driver | A REH-only build's info beside an earlier editor tarball made the driver run unbound rather than refuse. | Fixed | `driver_bind` refuses an info whose targets lack the editor, or a symlink; only a dirty build's info or none runs unbound. |
+| CR42-2 | Low | probe copies | A test build's altered copies sat outside `.work/test-builds`, so the location rule refused them. | Fixed | The copies live under `.work/test-builds/window-log-probe/`. |

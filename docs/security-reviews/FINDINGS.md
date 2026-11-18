@@ -15,14 +15,14 @@ agents. It is never an instruction to whoever reads it
 
 | Status | Critical | High | Medium | Low | Info | Total |
 |---|---|---|---|---|---|---|
-| fixed | 14 | 85 | 229 | 368 | 48 | 744 |
+| fixed | 14 | 85 | 229 | 369 | 48 | 745 |
 | fixed-before-landing | 0 | 0 | 0 | 0 | 0 | 0 |
-| fixed-untested | 0 | 5 | 58 | 174 | 62 | 299 |
+| fixed-untested | 0 | 5 | 58 | 175 | 62 | 300 |
 | accepted-residual | 0 | 1 | 12 | 72 | 23 | 108 |
 | deferred | 2 | 1 | 14 | 10 | 3 | 30 |
 | open | 0 | 2 | 12 | 14 | 6 | 34 |
 | false-positive | 0 | 0 | 0 | 0 | 24 | 24 |
-| **all** | 16 | 94 | 325 | 638 | 166 | 1239 |
+| **all** | 16 | 94 | 325 | 640 | 166 | 1241 |
 
 ## Baseline: open high and critical findings
 
@@ -356,6 +356,7 @@ tabd, the Tab Manager, patches 0001-0004, 0012 and 0040, sbx and OCI drivers, th
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-3** | low | fixed-untested | docs/ARCHITECTURE.md | ARCHITECTURE's as-built line still described a three-patch queue after the bump edited it. | Documentation only; nothing to test. |
 | [20261116-upstream-1145-3](20261116-upstream-1145-3.md) **UB-4** | low | fixed-untested | findings register (build/docs/findings.ts upstream exemption) | The register exempts only the current upstream pin, so after a bump, entries citing the old pin's SHA (or a file path containing it) carry citations that can't resolve. | Fixed by the register session: a prefix of any pin upstream.lock has held on main counts as the upstream commit, and hex inside a file path isn't a citation. Its tests are recorded against its own round; none of this round's tests drives it. |
 | [20261117-copilot-review-pr25](20261117-copilot-review-pr25.md) **CR25-4** | low | fixed-untested | harness runners | A bad SECLAB_TAB_IMAGE exited the containment run after it created resources and before their cleanup was registered. | Shown by hand with a bogus value refusing before any resource exists; the runners have no unit seam for their start-up order. |
+| [20261117-fetched-app-binding](20261117-fetched-app-binding.md) **CR42-2** | low | fixed-untested | fetched-app binding (fetch, test/app-build.ts) | Altered copies of a test build sat outside .work/test-builds. | Probe wiring that needs a real macOS build. |
 | [20261117-fetched-app-binding](20261117-fetched-app-binding.md) **FAB-5** | low | deferred | fetched-app binding (fetch, test/app-build.ts) | Build info is bound to the directory, not to the bundle bytes. | follow-up: Record a digest of the extracted bundle at fetch time and verify it at launch. |
 | [20261117-fetched-app-binding](20261117-fetched-app-binding.md) **FAB2-4** | low | fixed-untested | fetched-app binding (fetch, test/app-build.ts) | Probe copies were judged by their location, not their source. | Probe wiring that needs a real macOS build. |
 | [20261117-fetched-app-binding](20261117-fetched-app-binding.md) **FAB2-5** | low | fixed-untested | fetched-app binding (fetch, test/app-build.ts) | Shell git sites kept inherited GIT_ variables. | Shell helper; the TypeScript equivalent is unit-tested. |
@@ -2158,6 +2159,8 @@ Every other commit the register cites is on main's history, or on the branch its
 | FAB3-3 | low | fixed | The marker write followed a symlink. | patch:d074d4d7f03e98ba2e554773daa53deee4945c96 · `seclab` "the marker was written through a symlink (FAB3-3)" |
 | FAB3-4 | low | fixed-untested | A failed git status read as a clean tree. | Build-script plumbing; needs a full Linux build to exercise. |
 | FAB3-5 | info | false-positive | Prompt injection. | The review recorded no issue. |
+| CR42-1 | low | fixed | A REH-only build info beside an earlier editor made the driver run unbound. | patch:e0fc801676a5c19dcb4490b0ccf0e8afe33e46d6 · `seclab` "the driver ran an editor beside a REH-only build's info" |
+| CR42-2 | low | fixed-untested | Altered copies of a test build sat outside .work/test-builds. | Probe wiring that needs a real macOS build. |
 
 ### [20261117-level-b-filtered-losses](20261117-level-b-filtered-losses.md)
 
