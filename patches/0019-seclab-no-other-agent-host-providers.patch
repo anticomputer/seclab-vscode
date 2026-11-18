@@ -1,14 +1,15 @@
 diff --git a/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts b/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts
-index 78ac107..c8b8198 100644
+index 78ac1070..a21a3ec8 100644
 --- a/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts
 +++ b/src/vs/workbench/contrib/chat/browser/remoteAgentHost/remoteAgentHost.contribution.ts
-@@ -9,6 +9,13 @@ import { CloudSandboxAutoConnectOnOpenSettingId, CloudSandboxEarlyPreparationSet
+@@ -9,6 +9,14 @@ import { CloudSandboxAutoConnectOnOpenSettingId, CloudSandboxEarlyPreparationSet
  import { RemoteAgentHostsEnabledSettingId, WorkspaceRemoteAgentHostsSettingId } from '../../../../../platform/agentHost/common/remoteAgentHostService.js';
  import { ConfigurationScope, Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../../platform/configuration/common/configurationRegistry.js';
  import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
 +import { Event } from '../../../../../base/common/event.js';
 +import { Disposable } from '../../../../../base/common/lifecycle.js';
 +import { constObservable } from '../../../../../base/common/observable.js';
++import { mark } from '../../../../../base/common/performance.js';
 +import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 +import { isSeclabAuthority, seclabAhpEmit } from '../../../../../platform/agentHost/common/seclabAhpGateCheck.js';
 +import { SECLAB_NO_SHAPE_NEEDED, SECLAB_NULL_PROVIDERS, seclabNullProvider, seclabNullProviderEvent } from '../../../../../platform/agentHost/common/seclabNullProviders.js';
@@ -16,7 +17,7 @@ index 78ac107..c8b8198 100644
  import { Registry } from '../../../../../platform/registry/common/platform.js';
  import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../../common/contributions.js';
  import { CloudSandboxAgentHostService } from './cloudSandboxAgentHostService.js';
-@@ -34,20 +41,57 @@ class MissionControlContribution {
+@@ -34,20 +42,62 @@ class MissionControlContribution {
  	) { }
  }
  
@@ -51,11 +52,16 @@ index 78ac107..c8b8198 100644
 +			if (!isSeclabAuthority(environmentService.remoteAuthority)) {
 +				// An ordinary window: the real service, built by the instantiation service so
 +				// that its own dependencies are injected exactly as upstream declares them.
-+				return instantiationService.createInstance(real as any);
++				const instance = instantiationService.createInstance(real as any);
++				// Set only once the real class is built: positive evidence for a run, in a window
++				// with no gate log, that the real constructor ran (PR #43 review).
++				mark(`code/seclab/guarded/real/${name}`);
++				return instance;
 +			}
 +			// Emitted, not inferred: a run asserts that this provider resolved to the null one
 +			// rather than reading anything into the absence of a connection.
 +			seclabAhpEmit(seclabNullProviderEvent(name) as any);
++			mark(`code/seclab/guarded/null/${name}`);
 +			const shape = SECLAB_NULL_PROVIDERS.find(p => p.name === name);
 +			if (!shape && !(name in SECLAB_NO_SHAPE_NEEDED)) {
 +				// A guarded name with neither a shape nor a recorded reason to need none used to
@@ -92,7 +98,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/src/vs/platform/agentHost/common/seclabNullProviders.ts
-@@ -0,0 +1,221 @@
+@@ -0,0 +1,248 @@
 +/*---------------------------------------------------------------------------------------------
 + *  seclab patch 0019: no other agent-host providers in a tab window.
 + *
@@ -123,7 +129,7 @@ index 0000000..0000000
 + *--------------------------------------------------------------------------------------------*/
 +
 +/** What a member is, which decides how its safe value is wrapped. */
-+export type SeclabMemberKind = 'observable' | 'event' | 'property' | 'method' | 'disposable-method';
++export type SeclabMemberKind = 'observable' | 'event' | 'property' | 'method' | 'disposable-method' | 'value-method';
 +
 +export interface SeclabMember {
 +	readonly kind: SeclabMemberKind;
@@ -171,6 +177,11 @@ index 0000000..0000000
 +				// mean the right SHAPE of nothing, not merely nothing (review round 13).
 +				inert[name] = () => deps.noDisposable;
 +				break;
++			case 'value-method':
++				// A synchronous method whose caller uses the result at once, so it returns the
++				// contained value itself rather than a promise of it.
++				inert[name] = () => member.value;
++				break;
 +			case 'method':
 +				// Async, because every method these interfaces declare either returns void or a
 +				// promise, and a caller that awaits a plain `undefined` is fine either way.
@@ -211,6 +222,15 @@ index 0000000..0000000
 + * The probe caught exactly that mismatch before this shipped, which is why the names are not
 + * prettier.
 + */
++/**
++ * An `IAgentHostAdvertisedAuthentication` that authenticates nothing. Frozen, and shared by
++ * every caller: it holds no state, so there is nothing for one connection to leak to another.
++ */
++export const SECLAB_NO_AUTHENTICATION: Readonly<{ resolve(agents: readonly unknown[]): Promise<readonly unknown[]>; dispose(): void }> = Object.freeze({
++	resolve: async () => [],
++	dispose: () => undefined,
++});
++
 +export const SECLAB_NULL_PROVIDERS: readonly SeclabProviderShape[] = [
 +	{
 +		// `IMissionControlSharingService`.
@@ -251,6 +271,20 @@ index 0000000..0000000
 +			available: { kind: 'observable', value: false },
 +		},
 +	},
++	{
++		// `IAgentHostAdvertisedAuthenticationResolver`. Not reached only from the withheld
++		// contribution, as first recorded: the remote agent-host service, which stays unwrapped,
++		// calls `createResolver(address)` in its connection factory BEFORE it builds the protocol
++		// client. Absent, that call threw a TypeError, so a tab-written remote-host entry failed
++		// before patch 0015's gate could refuse and log it (PR #43 review). The contained value is
++		// an authentication that resolves nothing, so the client is built and the gate refuses its
++		// transport, as 0015 intends.
++		name: 'agentHostAdvertisedAuthenticationResolver',
++		members: {
++			createResolver: { kind: 'value-method', value: SECLAB_NO_AUTHENTICATION },
++			takePendingSessionRemovals: { kind: 'value-method', value: [] },
++		},
++	},
 +];
 +
 +/**
@@ -268,7 +302,6 @@ index 0000000..0000000
 +	cloudSandboxModelCatalogService: 'reached only from the withheld cloud-sandbox contributions',
 +	cloudSandboxAgentHostService: 'the provider this patch exists to remove; nothing else may reach it',
 +	remoteAgentHostConnectionCustomizationService: 'its only tab-window caller is reached through the withheld editor cloud-sandbox contribution',
-+	agentHostAdvertisedAuthenticationResolver: 'reached only from the withheld remote agent-host contribution',
 +	remoteAgentHostContribution: 'a withheld workbench contribution, not a service anything resolves',
 +	editorCloudSandboxContribution: 'a withheld workbench contribution, not a service anything resolves',
 +	missionControlContribution: 'a withheld workbench contribution, not a service anything resolves',
@@ -307,7 +340,7 @@ index 0000000..0000000
 +		for (const [member, { kind }] of Object.entries(shape.members)) {
 +			// Only methods live on the prototype; observables and plain properties are instance
 +			// fields and cannot be checked this way, so they are not claimed to be.
-+			if ((kind === 'method' || kind === 'disposable-method') && !real.has(member)) {
++			if ((kind === 'method' || kind === 'disposable-method' || kind === 'value-method') && !real.has(member)) {
 +				problems.push(`${shape.name}.${member} is not a method of the real ${(ctor as { name?: string }).name}`);
 +			}
 +		}

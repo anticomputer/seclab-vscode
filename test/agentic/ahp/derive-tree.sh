@@ -11,7 +11,9 @@
 derive_tree() {
 	local dest="$1" skip="${2:-}" applied=0 p
 	if [[ -e "$dest/.git" ]]; then
-		git -C "$dest" checkout -q --detach "$UPSTREAM_SHA" \
+		# Forced: the tree still holds the previous run's applied patches, and a plain checkout
+		# refuses to switch revisions over local changes to a file the new pin also changes.
+		git -C "$dest" checkout -q -f --detach "$UPSTREAM_SHA" \
 			&& git -C "$dest" reset -q --hard "$UPSTREAM_SHA" \
 			&& git -C "$dest" clean -fdxq
 	else

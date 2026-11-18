@@ -28,8 +28,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { TabdClient } from '../../tabd/src/client.ts';
 import { DrivenEditor } from '../driver/editor.ts';
-import { checkUserDataDir, editorPortableDir, repoRoot } from '../harness.ts';
-import { exitedOrTimeout, teardownGate, writeManifest, writeSnapshot } from '../containment/teardown.ts';
+import { checkUserDataDir, editorPortableDir, beaconPort, repoRoot } from '../harness.ts';
+import { exitOnSignals, exitedOrTimeout, teardownGate, writeManifest, writeSnapshot } from '../containment/teardown.ts';
 
 const [mode, userDataArg] = process.argv.slice(2);
 const IMAGE = process.env.SECLAB_TAB_IMAGE ?? 'seclab-tab-oci:local';
@@ -64,6 +64,8 @@ const stateDir = path.join(userData, 'User', 'globalStorage', 'seclab.tab-manage
 writeManifest(runDir, { userDataDir: userData, stateDirs: [stateDir], driver: 'oci', workspaces: mode === 'tab' ? [ws] : [] });
 // The stat-only host snapshot the teardown gate diffs against, taken before the editor exists.
 writeSnapshot(runDir);
+// SIGINT and SIGTERM end through `exit`, so the teardown below runs for them too (PR #43 review).
+exitOnSignals();
 process.on('exit', code => {
 	if (!teardownGate(runDir) && code === 0) {
 		process.exitCode = 1;
@@ -125,10 +127,25 @@ const nullProviders = (events: Record<string, unknown>[]): string[] => events
 	.filter(e => (e.detail as { gateRule?: string } | undefined)?.gateRule === 'seclab.null-provider.registered')
 	.map(e => String((e.detail as { provider?: string }).provider)).sort();
 
+/** Patch 0015's gate refusing an agent-host transport, as reh-push counts it. */
+const refusals = (events: Record<string, unknown>[]): number => events.filter(e => {
+	const d = e.detail as { gateRule?: string; verdict?: string } | undefined;
+	return e.source === 'ahp-gate' && d?.gateRule === 'ahp-gate.refused' && d?.verdict === 'deny';
+}).length;
+
 // --- The tab, claimed through tabd as the containment harnesses do --------------------------
 let tabId = '';
 if (mode === 'tab') {
-	fs.mkdirSync(ws, { recursive: true });
+	fs.mkdirSync(path.join(ws, '.vscode'), { recursive: true });
+	// A remote agent host the tab's own workspace lists, as a tab can. The unwrapped remote
+	// agent-host service builds a connection for it, which asks the (nulled) authentication
+	// resolver first; patch 0015's gate must then refuse the transport and log it. Before the
+	// resolver had a shape this threw a TypeError instead, and no refusal was logged (PR #43
+	// review). The port is a free loopback port nothing listens on: inert either way.
+	const port = await beaconPort();
+	fs.writeFileSync(path.join(ws, '.vscode', 'settings.json'), JSON.stringify({
+		'chat.workspaceRemoteAgentHosts': [{ address: `127.0.0.1:${port}/seclab-window-proof`, name: 'seclab-window-proof' }],
+	}, null, '\t'));
 	const tabd = new TabdClient({
 		command: process.execPath,
 		args: [path.join(repoRoot, 'tabd/src/main.ts'), '--state-dir', stateDir, '--driver', 'oci', '--image', IMAGE, '--allowed-root', runDir],
@@ -167,9 +184,11 @@ try {
 	// The gate log is written through a buffered logger. Wait for the tab's events to land; give
 	// the ordinary window the same time, so a withheld provider there would be seen too.
 	const deadline = Date.now() + 20_000;
-	while (Date.now() < deadline && !(mode === 'tab' && EXPECT_TAB.every(p => nullProviders(gateEvents()).includes(p)))) {
+	const tabDone = () => EXPECT_TAB.every(p => nullProviders(gateEvents()).includes(p)) && refusals(gateEvents()) > 0;
+	while (Date.now() < deadline && !(mode === 'tab' && tabDone())) {
 		await new Promise(r => setTimeout(r, 1000));
 	}
+	marks = await ed.evaluate<string[]>(MARKS);
 } finally {
 	await ed.close();
 }
@@ -181,9 +200,13 @@ const rendererLogs = logFiles('renderer.log');
 const rendererText = rendererLogs.map(f => fs.readFileSync(f, 'utf8')).join('\n');
 const failedToCreate = Object.keys(CONTRIBUTIONS).filter(id => rendererText.includes(`Unable to create workbench contribution '${id}'`));
 const sessions = fs.existsSync(path.join(userData, 'logs')) ? fs.readdirSync(path.join(userData, 'logs')) : [];
+// The wrapper's own marks: `real` once the real class is built, `null` when the stand-in is
+// returned. Independent of the gate log, which exists only in tab windows (PR #43 review).
+const guarded = (kind: 'real' | 'null') => EXPECT_TAB.filter(p => marks.includes(`code/seclab/guarded/${kind}/${p}`));
 const measured = {
 	mode, runDir, restored, sessions: sessions.length, rendererLogBytes: rendererText.length,
-	created: created(marks), failedToCreate, gateEvents: events.length, nullProviders: providers,
+	created: created(marks), failedToCreate, builtReal: guarded('real'), builtNull: guarded('null'),
+	gateEvents: events.length, nullProviders: providers, transportRefusals: refusals(events),
 };
 console.log(JSON.stringify(measured, undefined, '\t'));
 
@@ -193,15 +216,24 @@ if (sessions.length !== 1) { problems.push(`expected exactly one log session in 
 if (!rendererText.length) { problems.push('the renderer log is empty, so a construction error would not have been seen'); }
 if (created(marks).length !== Object.keys(CONTRIBUTIONS).length) { problems.push(`not every contribution has a creation mark: ${created(marks).join(', ') || 'none'}`); }
 if (failedToCreate.length) { problems.push(`contributions whose constructor threw: ${failedToCreate.join(', ')}`); }
-if (mode === 'ordinary' && providers.length) {
-	problems.push(`a provider was withheld in an ordinary window: ${providers.join(', ')}`);
+if (mode === 'ordinary') {
+	// Positive: each real constructor ran to completion. Not merely that nothing was withheld.
+	const notReal = EXPECT_TAB.filter(p => !guarded('real').includes(p));
+	if (notReal.length) { problems.push(`no mark that the real class was built for: ${notReal.join(', ')}`); }
+	if (guarded('null').length || providers.length) {
+		problems.push(`a provider was withheld in an ordinary window: ${[...guarded('null'), ...providers].join(', ')}`);
+	}
 }
 if (mode === 'tab') {
 	// An empty gate log means the sink was never installed, so a withheld provider's event
 	// would have been dropped in silence. That is a broken measurement, not containment.
 	if (!events.length) { problems.push('the gate log is empty, so nothing was measured'); }
-	const missing = EXPECT_TAB.filter(p => !providers.includes(p));
-	if (missing.length) { problems.push(`these were not withheld: ${missing.join(', ')}`); }
+	const missing = EXPECT_TAB.filter(p => !providers.includes(p) || !guarded('null').includes(p));
+	if (missing.length) { problems.push(`these were not withheld (gate event and mark): ${missing.join(', ')}`); }
+	if (guarded('real').length) { problems.push(`a real class was built in a tab window: ${guarded('real').join(', ')}`); }
+	if (!refusals(events)) {
+		problems.push('the workspace remote host was not refused by patch 0015 with a logged refusal; the connection failed some other way, or was never attempted');
+	}
 }
 if (problems.length) {
 	console.error(`window-proof ${mode}: ${problems.join('; ')}`);
