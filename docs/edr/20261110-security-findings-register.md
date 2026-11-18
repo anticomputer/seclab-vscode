@@ -185,6 +185,9 @@ script run by a required job: what runs it is the docs job, and its evidence is 
 - Amended by review HHHH ([EDR](20261118-pending-owner-acceptances.md)): an owner row may name a
   finding whose record hasn't landed on `main`, for at most seven days, so the owner's decision can
   land before the change that brings and closes the finding.
+- Amended by review JJJJ: "on `main`" means the commit on `main` that carries the fix is on the
+  checked tree's history, not that the tree contains all of `main`, so a branch or checkout behind a
+  newer `origin/main` still sees a fix that landed before its base.
 - A high the register already had (on `main` or at the merge base, under its key or a `wasKey`)
   closes on a `patch:` fix commit only once that change is on `main`; a high new in a change may cite
   that change's own commits. Either way a fix whose revert is also in the history closes nothing.
