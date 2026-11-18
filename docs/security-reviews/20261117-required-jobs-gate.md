@@ -90,3 +90,14 @@ A review of the Copilot-review fixes (a workflow change).
 |---|---|---|---|---|---|
 | RJG-23 | Low | gate | The EXIT trap doesn't run when the step is cancelled (SIGINT), timed out or killed, so such a run left an earlier success standing. | Fixed | Each run posts pending before it reads anything, and the trap also covers INT and TERM. |
 | RJG-24 | Info | re-validation | With only `build/` and `tabd/tools/` overlaid, the observability-docs step runs the merged `tabd/src/obs` modules (contained: no network, read-only). | Fixed | Superseded by CR63-6: a merge that changes those modules is refused for coordinator review, so merged product code is never run. |
+
+## Round RJG8
+A review of the second round of Copilot-review fixes (a workflow change). Nothing above info;
+the executed-module refusal held against content, deletion, symlink, directory and mode changes.
+One residual: the seconds between a re-run starting and its `in_progress` gate run posting
+pending, during which an earlier success stands; the proof PR checks that a re-run fires
+`in_progress`.
+
+| # | Sev | Area | Finding | Disposition | Fix |
+|---|---|---|---|---|---|
+| RJG-25 | Info | tests | The required-checks self-test banner added a hardcoded 40 for the gate-edit cases, so a dropped case left the total unchanged. | Fixed | Each case array is counted and named. |
