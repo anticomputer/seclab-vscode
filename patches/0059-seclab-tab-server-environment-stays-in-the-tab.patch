@@ -1,6 +1,30 @@
+diff -ruN a/src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts b/src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts
+--- a/src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts	2026-11-18 12:13:30
++++ b/src/vs/workbench/services/extensionManagement/electron-browser/extensionManagementServerService.ts	2026-11-18 12:13:30
+@@ -16,6 +16,7 @@
+ import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
+ import { NativeExtensionManagementService } from './nativeExtensionManagementService.js';
+ import { Disposable } from '../../../../base/common/lifecycle.js';
++import { seclabTabServerChannel } from '../../extensions/common/seclabRpcFilter.js';
+ 
+ export class ExtensionManagementServerService extends Disposable implements IExtensionManagementServerService {
+ 
+@@ -36,7 +37,11 @@
+ 		this.localExtensionManagementServer = { extensionManagementService: localExtensionManagementService, id: 'local', label: localize('local', "Local") };
+ 		const remoteAgentConnection = remoteAgentService.getConnection();
+ 		if (remoteAgentConnection) {
+-			const extensionManagementService = instantiationService.createInstance(NativeRemoteExtensionManagementService, remoteAgentConnection.getChannel<IChannel>('extensions'), this.localExtensionManagementServer);
++			// seclab: in a tab window each location the server's extension management names must be on
++			// the tab, or the reply is refused and the event dropped: a host `file:` location would route
++			// the extension to the host's own management service (patch 0059, review ENV-10).
++			const channel = seclabTabServerChannel(remoteAgentConnection.getChannel<IChannel>('extensions'), remoteAgentConnection.remoteAuthority, 'extension-management', new Set(['manifest']));
++			const extensionManagementService = instantiationService.createInstance(NativeRemoteExtensionManagementService, channel, this.localExtensionManagementServer);
+ 			this.remoteExtensionManagementServer = {
+ 				id: 'remote',
+ 				extensionManagementService,
 diff -ruN a/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts b/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts
---- a/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts	2026-11-18 12:53:15
-+++ b/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts	2026-11-18 12:53:15
+--- a/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts	2026-11-18 12:13:30
++++ b/src/vs/workbench/services/remote/common/abstractRemoteAgentService.ts	2026-11-18 12:13:30
 @@ -20,6 +20,7 @@
  import { IProductService } from '../../../../platform/product/common/productService.js';
  import { IUserDataProfileService } from '../../userDataProfile/common/userDataProfile.js';
@@ -23,8 +47,8 @@ diff -ruN a/src/vs/workbench/services/remote/common/abstractRemoteAgentService.t
  	}
  
 diff -ruN a/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts b/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts
---- a/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 12:53:15
-+++ b/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 12:53:15
+--- a/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 12:13:30
++++ b/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChannel.ts	2026-11-18 12:13:30
 @@ -14,6 +14,7 @@
  import { revive } from '../../../../base/common/marshalling.js';
  import { IUserDataProfile } from '../../../../platform/userDataProfile/common/userDataProfile.js';
@@ -54,26 +78,30 @@ diff -ruN a/src/vs/workbench/services/remote/common/remoteAgentEnvironmentChanne
  			? data.reconnectionGraceTime
  			: ProtocolConstants.ReconnectionGraceTime;
 diff -ruN a/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts b/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts
---- a/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts	2026-11-18 12:53:15
-+++ b/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts	2026-11-18 12:53:15
+--- a/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts	2026-11-18 12:13:30
++++ b/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts	2026-11-18 12:13:30
 @@ -18,6 +18,7 @@
  import { IWorkbenchExtensionManagementService } from '../../extensionManagement/common/extensionManagement.js';
  import { Mutable } from '../../../../base/common/types.js';
  import { InstallExtensionSummary } from '../../../../platform/extensionManagement/common/extensionManagement.js';
-+import { seclabIsTabAuthority, seclabRefuseServerLocation, seclabUriOnTab } from '../../extensions/common/seclabRpcFilter.js';
++import { seclabIsTabAuthority, seclabRefuseServerLocation, seclabTabUri } from '../../extensions/common/seclabRpcFilter.js';
  
  class RemoteExtensionsScannerService implements IRemoteExtensionsScannerService {
  
-@@ -53,10 +54,18 @@
+@@ -53,10 +54,22 @@
  						this.environmentService.extensionDevelopmentLocationURI,
  						languagePack
  					]);
 -					scannedExtensions.forEach((extension) => {
 +					// seclab: in a tab window an extension the tab's server lists outside the tab's own
 +					// file system is dropped and logged: the window would read its contributions from a
-+					// host directory (patch 0059, review ENV-6).
++					// host directory. A kept location is rebuilt from its components (patch 0059, reviews
++					// ENV-6, ENV-9).
 +					const authority = this.environmentService.remoteAuthority;
-+					const own = authority && seclabIsTabAuthority(authority) ? scannedExtensions.filter(e => seclabUriOnTab(authority, e.extensionLocation)) : scannedExtensions;
++					const own = authority && seclabIsTabAuthority(authority) ? scannedExtensions.flatMap(e => {
++						const location = seclabTabUri(authority, e.extensionLocation);
++						return location ? [{ ...e, extensionLocation: location }] : [];
++					}) : scannedExtensions;
 +					if (own.length !== scannedExtensions.length) {
 +						seclabRefuseServerLocation(authority!, 'extensions');
 +					}
@@ -86,20 +114,21 @@ diff -ruN a/src/vs/workbench/services/remote/common/remoteExtensionsScanner.ts b
  				[]
  			);
 diff -ruN a/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts b/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts
---- a/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts	2026-11-18 12:53:15
-+++ b/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts	2026-11-18 12:53:15
-@@ -12,7 +12,35 @@
+--- a/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts	2026-11-18 12:13:30
++++ b/src/vs/workbench/services/remote/common/remoteFileSystemProviderClient.ts	2026-11-18 12:13:30
+@@ -12,7 +12,39 @@
  import { ILogService } from '../../../../platform/log/common/log.js';
  import { IRemoteAgentEnvironment } from '../../../../platform/remote/common/remoteAgentEnvironment.js';
  import { IRemoteAgentConnection, IRemoteAgentService } from './remoteAgentService.js';
 +import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
 +import { Event } from '../../../../base/common/event.js';
-+import { seclabIsTabAuthority, seclabRefuseServerLocation, seclabUriOnTab } from '../../extensions/common/seclabRpcFilter.js';
++import { seclabIsTabAuthority, seclabRefuseServerLocation, seclabTabUri } from '../../extensions/common/seclabRpcFilter.js';
  
 +/**
 + * seclab: a tab's server reports file changes by resource; in a tab window one outside the tab's
 + * own file system (a host file) is dropped and logged, so the window never re-reads or prompts on
-+ * a host file because the tab said it changed (patch 0059, review ENV-5).
++ * a host file because the tab said it changed. A kept resource is rebuilt from its components
++ * (patch 0059, reviews ENV-5, ENV-9).
 + */
 +function seclabTabWatcherChannel(channel: IChannel, remoteAuthority: string): IChannel {
 +	if (!seclabIsTabAuthority(remoteAuthority)) {
@@ -109,7 +138,10 @@ diff -ruN a/src/vs/workbench/services/remote/common/remoteFileSystemProviderClie
 +		call: (command, arg, token) => channel.call(command, arg, token),
 +		listen: <T>(event: string, arg?: unknown): Event<T> => event !== 'fileChange' ? channel.listen<T>(event, arg) : (listener, thisArgs, disposables) => channel.listen<T>(event, arg)(e => {
 +			if (Array.isArray(e)) {
-+				const own = e.filter(c => seclabUriOnTab(remoteAuthority, (c as { resource?: unknown } | null)?.resource));
++				const own = e.flatMap(c => {
++					const resource = seclabTabUri(remoteAuthority, (c as { resource?: unknown } | null)?.resource);
++					return resource ? [{ ...(c as object), resource }] : [];
++				});
 +				if (own.length !== e.length) {
 +					seclabRefuseServerLocation(remoteAuthority, 'watcher');
 +				}
@@ -124,7 +156,7 @@ diff -ruN a/src/vs/workbench/services/remote/common/remoteFileSystemProviderClie
  export const REMOTE_FILE_SYSTEM_CHANNEL_NAME = 'remoteFilesystem';
  
  export class RemoteFileSystemProviderClient extends DiskFileSystemProviderClient {
-@@ -51,6 +79,6 @@
+@@ -51,6 +83,6 @@
  	}
  
  	private constructor(remoteAgentEnvironment: IRemoteAgentEnvironment, connection: IRemoteAgentConnection) {
@@ -133,57 +165,23 @@ diff -ruN a/src/vs/workbench/services/remote/common/remoteFileSystemProviderClie
  	}
  }
 diff -ruN a/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts b/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts
---- a/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts	2026-11-18 12:53:15
-+++ b/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts	2026-11-18 12:53:15
-@@ -16,7 +16,42 @@
+--- a/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts	2026-11-18 12:13:30
++++ b/src/vs/workbench/services/userDataProfile/common/remoteUserDataProfiles.ts	2026-11-18 12:13:30
+@@ -16,6 +16,7 @@
  import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
  import { UserDataProfilesService } from '../../../../platform/userDataProfile/common/userDataProfileIpc.js';
  import { ErrorNoTelemetry } from '../../../../base/common/errors.js';
-+import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
-+import { Event } from '../../../../base/common/event.js';
-+import { seclabIsTabAuthority, seclabRefuseServerLocation, seclabTabUris } from '../../extensions/common/seclabRpcFilter.js';
++import { seclabTabServerChannel } from '../../extensions/common/seclabRpcFilter.js';
  
-+/**
-+ * seclab: the profiles a tab's server reports, in its replies and its change events, name where the
-+ * window keeps that tab's settings, extensions and MCP config. In a tab window each location must be
-+ * on the tab's own file system: a reply naming another is refused, an event dropped, both logged
-+ * (patch 0059, review ENV-3).
-+ */
-+function seclabTabProfilesChannel(channel: IChannel, remoteAuthority: string): IChannel {
-+	if (!seclabIsTabAuthority(remoteAuthority)) {
-+		return channel;
-+	}
-+	const check = <T>(v: T): T => {
-+		try {
-+			return seclabTabUris(remoteAuthority, v);
-+		} catch (e) {
-+			seclabRefuseServerLocation(remoteAuthority, 'profiles');
-+			throw e;
-+		}
-+	};
-+	return {
-+		call: async <T>(command: string, arg?: unknown, token?: Parameters<IChannel['call']>[2]) => check(await channel.call<T>(command, arg, token)),
-+		listen: <T>(event: string, arg?: unknown): Event<T> => (listener, thisArgs, disposables) => channel.listen<T>(event, arg)(e => {
-+			let checked: T;
-+			try {
-+				checked = check(e);
-+			} catch {
-+				return;
-+			}
-+			listener.call(thisArgs, checked);
-+		}, undefined, disposables),
-+	};
-+}
-+
  const associatedRemoteProfilesKey = 'associatedRemoteProfiles';
  
- export const IRemoteUserDataProfilesService = createDecorator<IRemoteUserDataProfilesService>('IRemoteUserDataProfilesService');
-@@ -57,7 +92,7 @@
+@@ -57,7 +58,8 @@
  			return;
  		}
  
 -		this.remoteUserDataProfilesService = new UserDataProfilesService(environment.profiles.all, environment.profiles.home, connection.getChannel('userDataProfiles'));
-+		this.remoteUserDataProfilesService = new UserDataProfilesService(environment.profiles.all, environment.profiles.home, seclabTabProfilesChannel(connection.getChannel('userDataProfiles'), connection.remoteAuthority));
++		// seclab: in a tab window each location in the server's profiles must be on the tab (patch 0059, review ENV-3).
++		this.remoteUserDataProfilesService = new UserDataProfilesService(environment.profiles.all, environment.profiles.home, seclabTabServerChannel(connection.getChannel('userDataProfiles'), connection.remoteAuthority, 'profiles'));
  		this._register(this.userDataProfilesService.onDidChangeProfiles(e => this.onDidChangeLocalProfiles(e)));
  
  		// Associate current local profile with remote profile
