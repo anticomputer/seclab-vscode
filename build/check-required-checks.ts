@@ -302,7 +302,7 @@ export const GATE = 'required-jobs-ran.yml';
 /** The reviewed gate, byte for byte. Its shape rules don't constrain what the script does, and a
  *  doctored copy on main would pass every future PR, so a change to it changes this constant in
  *  the same reviewed change (review RJG-8). */
-export const GATE_SHA256 = '176930babd84a6612cd547c0117fc3cde76d384810002cced63aa6cfac68b27c';
+export const GATE_SHA256 = '1f77c6aa421320be2a9a16aacb0c756114b2050ed4d5d1fec9976bd7db255ad0';
 const GATE_EXPRESSIONS = new Set(['github.token', 'github.repository', 'github.event.workflow_run.head_sha']);
 export function gateProblems(files: Record<string, string>): string[] {
 	const yml = files[GATE];
@@ -323,7 +323,7 @@ export function gateProblems(files: Record<string, string>): string[] {
 	if (lines.some(l => /\buses["']?\s*:/.test(l.replace(/(^|\s)#.*$/, '')))) {
 		bad('has a uses: step (no checkout, no artifact download, no action at all)');
 	}
-	const FLOW_OK = new Set(['permissions: {}', '    workflows: [ci-unit, workflow-lint, docs-check, patch-build]', '    types: [completed]']);
+	const FLOW_OK = new Set(['permissions: {}', '    workflows: [ci-unit, workflow-lint, docs-check, patch-build]', '    types: [requested, completed]']);
 	lines.forEach((l, i) => {
 		if (/[{}[\]]/.test(l.replace(/\$\{\{[^}]*\}\}/g, '').replace(/\s+#.*$/, '')) && !FLOW_OK.has(l.replace(/\s+#.*$/, ''))) {
 			bad(`line ${i + 1}: a flow collection outside the fixed trigger and permissions lines`);
@@ -505,7 +505,7 @@ all="$*"
 echo "$all" >> "$FIX/log"
 case "$all" in
   *"-X POST"*) for a; do case "$a" in state=*) echo "\${a#state=}" > "$FIX/state";; esac; done ;;
-  *"/workflows/"*"/runs?"*) [[ "$1 $2" == "api --paginate" ]] || exit 9; w="\${all#*/workflows/}"; w="\${w%%/*}"; [[ -f "$FIX/runs-$w" ]] && cat "$FIX/runs-$w"; true ;;
+  *"/workflows/"*"/runs?"*) [[ "$1 $2" == "api --paginate" ]] || exit 9; [[ -f "$FIX/fail-runs" ]] && exit 1; w="\${all#*/workflows/}"; w="\${w%%/*}"; [[ -f "$FIX/runs-$w" ]] && cat "$FIX/runs-$w"; true ;;
   *"/runs/"*"/jobs?"*) i="\${all#*/runs/}"; i="\${i%%/*}"; cat "$FIX/job-$i" ;;
   *) exit 8 ;;
 esac
@@ -526,18 +526,20 @@ esac
 		}
 	};
 	const allGreen: Record<string, string> = {
-		'runs-ci-unit.yml': '1 completed\n', 'runs-workflow-lint.yml': '2 completed\n', 'runs-docs-check.yml': '3 completed\n', 'runs-patch-build.yml': '4 completed\n',
+		'runs-ci-unit.yml': '1 completed pull_request\n', 'runs-workflow-lint.yml': '2 completed pull_request\n', 'runs-docs-check.yml': '3 completed pull_request\n', 'runs-patch-build.yml': '4 completed pull_request\n',
 		'job-1': 'success\n', 'job-2': 'success\n', 'job-3': 'success\n', 'job-4': 'success\n',
 	};
 	const gateRuns: Array<[string, Record<string, string>, string]> = [
 		['gate script: every required job ran to success', allGreen, 'success'],
-		['gate script RJG-2: lint ran on push but was skipped on the PR run', { ...allGreen, 'runs-workflow-lint.yml': '2 completed\n5 completed\n', 'job-5': 'skipped\n' }, 'failure'],
-		['gate script RJG-2: the skipped run listed first', { ...allGreen, 'runs-workflow-lint.yml': '5 completed\n2 completed\n', 'job-5': 'skipped\n' }, 'failure'],
+		['gate script RJG-2: lint ran on push but was skipped on the PR run', { ...allGreen, 'runs-workflow-lint.yml': '2 completed push\n5 completed pull_request\n', 'job-5': 'skipped\n' }, 'failure'],
+		['gate script RJG-2: the skipped run listed first', { ...allGreen, 'runs-workflow-lint.yml': '5 completed pull_request\n2 completed push\n', 'job-5': 'skipped\n' }, 'failure'],
 		['gate script: a cancelled required job', { ...allGreen, 'job-3': 'cancelled\n' }, 'failure'],
 		['gate script: a required job missing from its run', { ...allGreen, 'job-4': 'missing\n' }, 'failure'],
 		['gate script: no run of a required workflow', Object.fromEntries(Object.entries(allGreen).filter(([k]) => k !== 'runs-docs-check.yml')), 'failure'],
-		['gate script: a required run still in progress', { ...allGreen, 'runs-ci-unit.yml': '1 in_progress\n' }, 'pending'],
-		['gate script: a failure beats a pending run', { ...allGreen, 'runs-ci-unit.yml': '1 in_progress\n', 'job-3': 'failure\n' }, 'failure'],
+		['gate script: a required run still in progress', { ...allGreen, 'runs-ci-unit.yml': '1 in_progress pull_request\n' }, 'pending'],
+		['gate script: a failure beats a pending run', { ...allGreen, 'runs-ci-unit.yml': '1 in_progress pull_request\n', 'job-3': 'failure\n' }, 'failure'],
+		['gate script: push runs alone are pending until the PR run is judged', { ...allGreen, 'runs-workflow-lint.yml': '2 completed push\n' }, 'pending'],
+		['gate script: an API read failure after an earlier success posts failure', { ...allGreen, 'state': 'success\n', 'fail-runs': '' }, 'failure'],
 	];
 	for (const [name, fixture, want] of gateRuns) {
 		const got = runGate(fixture);

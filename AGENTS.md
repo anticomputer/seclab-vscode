@@ -196,7 +196,7 @@ RPC-lockdown session adds. Keep them consistent with this file.
   8. After the merge, from a checkout of `main` as it was before the merge (a detached
      worktree of the old `main` SHA, so the PR can't change the check), run `./seclab landing
      verify <new main SHA>`. It refuses unless `unit`, `lint`, `docs` and `patch-build` each ran
-     and concluded success, and the `required-jobs-ran` gate posted success. It then re-runs that
+     and concluded success, and reports the `required-jobs-ran` status. It then re-runs that
      old `main`'s own validators (the lint job's, the docs check and the findings register) over
      the merged tree in containers, so a validator the change gutted is caught here
      ([EDR](docs/edr/20261117-required-jobs-gate.md)). It also lists every merged commit that
@@ -419,7 +419,7 @@ build/apply-patches.sh --check  # patch queue == patches/series (no unlisted pat
 ./seclab findings growth [DAYS] # the baseline isn't larger than the register's last change DAYS (7) days old
 ./seclab findings rebase-resolve  # in a conflicted rebase: merge findings.json by entry, regenerate the views, stage; refuses real clashes
 ./seclab findings clashes [--ref REF]...   # this change's new finding IDs against every open PR head (gh); same-owner clash exits 1
-./seclab landing verify <sha>   # after a merge, from the old main: every required job ran to success, the required-jobs-ran gate is green, and the old main's validators pass the merged tree
+./seclab landing verify <sha>   # after a merge, from the old main: every required job ran to success (the required-jobs-ran status is reported), and the old main's validators pass the merged tree
 ./seclab landing --self-test    # merges that gut a validator are refused by the old main's validators; a clean merge passes
 build/check-release.sh .work/out/seclab-reh-linux-arm64.tar.gz   # no test hooks in a release artifact (also: <app>/Contents/Resources/app)
 node test/containment/teardown.test.ts   # teardown regression: orphaned editor tree + leftover tab pod are stopped/removed

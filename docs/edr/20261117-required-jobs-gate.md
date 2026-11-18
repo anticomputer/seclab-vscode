@@ -22,15 +22,21 @@ repository's token while handling PR-controlled events, and are almost always us
 ## Decision
 - **`./seclab landing verify <sha>`**, run after a merge from a main checkout older than the PR. For
   each required workflow file, it reads the latest run for the commit through the API, and requires
-  the required job to have concluded `success`. It also requires the gate's status below to be
-  `success`. Skipped, cancelled, failed, still running or missing all refuse. It then re-runs
+  the required job to have concluded `success`. Skipped, cancelled, failed, still running or
+  missing all refuse. It reports the gate's status on the merged commit without requiring it: a
+  rebase merge makes a commit with push runs only, which the gate leaves pending. It then re-runs
   that old main's own validators over the merged tree (below). Landing step 8 runs it.
 - **`.github/workflows/required-jobs-ran.yml`**, a pre-merge gate. It is the one exception to the
-  `workflow_run` ban, scoped to this file. It runs when any required workflow completes, from
-  main's copy, and posts the commit status `required-jobs-ran` on the head SHA:
-  - success when every required job concluded success;
-  - pending while a required run is unfinished;
-  - failure for anything else, including a missing run or job.
+  `workflow_run` ban, scoped to this file. It runs when any required workflow is requested or
+  completes, from main's copy, and posts the commit status `required-jobs-ran` on the head SHA:
+  - success when every required job concluded success, in every push and pull_request run, and a
+    pull_request run of each required file has been judged (push runs alone can't vouch for a PR
+    run that hasn't started; Copilot review on PR 63);
+  - pending while a required run is unfinished, or no pull_request run has been judged yet; a
+    run's `requested` event re-posts pending, so an earlier success doesn't stand while a new
+    run (a re-run, say) is in flight;
+  - failure for anything else, including a missing run or job, and any error before the final
+    post (an EXIT trap posts failure, so an API failure can't leave an earlier success standing).
 
   The coordinator makes it a required check once it has posted a green status on a real PR. A PR
   that deletes or disables CI then never gets the status, so it stays blocked.
@@ -60,8 +66,9 @@ repository's token while handling PR-controlled events, and are almost always us
     the lint job's validators (required-checks, workflow-echo, actionlint and zizmor, pins, deps,
     source, liveness, gitleaks over the merged commits), the docs check (records, paired docs,
     observability docs) and the findings register, in containers, over a worktree of the merged
-    commit. For each step the worktree gets the old main's copy of that validator's import
-    closure, and the old main's shell logic runs with the worktree as its root, so the validator
+    commit. For each step the worktree gets the old main's copy of the validator code in that
+    validator's import closure (files under `build/` and `tabd/tools/`; a product module it reads
+    as input, such as `tabd/src/obs` for the observability docs, stays the merged tree's), and the old main's shell logic runs with the worktree as its root, so the validator
     is the old main's while everything it judges is the merged tree's. A merge whose gutted
     validator hid a problem is refused right after it lands. `./seclab landing --self-test`
     proves it: a merged gutted lint (the required-checks validator exits early, and `lint` gets
@@ -113,8 +120,9 @@ repository's token while handling PR-controlled events, and are almost always us
   stops forks only. Closing it needs a status source a workflow can't impersonate, such as a
   GitHub App.
 - **`landing verify` after the merge** checks the job outcomes from main's code as it was before
-  the merge, and refuses when run from a checkout that already contains the commit (RJG-5). Its
-  read of the `required-jobs-ran` status is advisory, since merged code could post that context.
+  the merge, and refuses when run from a checkout that already contains the commit (RJG-5). It
+  reports the `required-jobs-ran` status and doesn't require it, since merged code could post that
+  context and the gate leaves a rebase-merged commit pending.
 - The gate's file is pinned byte for byte (`GATE_SHA256` in the validator), so a change to it is a
   deliberate, reviewed change to both (review RJG-8).
 - Every run counts: a manually cancelled run of a required workflow keeps that commit at
