@@ -52,6 +52,8 @@ const FILES = {
 	localization: 'contrib/localization/electron-browser/localization.contribution.ts',
 	gallery: 'services/extensionManagement/electron-browser/extensionGalleryManifestService.ts',
 	main: 'workbench.common.main.ts',
+	bisect: 'services/extensionManagement/browser/extensionBisect.ts',
+	importExport: 'services/userDataProfile/browser/userDataProfileImportExportService.ts',
 	profileResource: 'services/userDataProfile/browser/extensionsResource.ts',
 	contribution: 'contrib/extensions/browser/extensions.contribution.ts',
 } as const;
@@ -439,7 +441,7 @@ async function enablement(b: Build, authority: string, state = 2): Promise<strin
 	const changed: string[] = [];
 	const own = { identifier: { id: 'tab.pack' }, location: { scheme: 'vscode-remote', authority, path: '/ext' } };
 	const host = { identifier: { id: 'host.ext' }, location: { scheme: 'file', authority: '', path: '/Users/someone/.vscode/extensions/host.ext' } };
-	await evaluate<(...a: unknown[]) => Promise<unknown>>(asFunction(slice(b.sources.enablement, /\n\tasync setEnablement\(/)!), 'setEnablement', {
+	const set = evaluate<(...a: unknown[]) => Promise<unknown>>(asFunction(slice(b.sources.enablement, /\n\tasync setEnablement\(/)!), 'setEnablement', {
 		...b.deps, EnablementState: { EnabledGlobally: 1, EnabledWorkspace: 2, DisabledGlobally: 3, DisabledWorkspace: 4, DisabledByTrustRequirement: 5, DisabledByExtensionDependency: 6 },
 	}).call({
 		extensionsManager: { whenInitialized: async () => { }, extensions: [own, host] },
@@ -453,6 +455,11 @@ async function enablement(b: Build, authority: string, state = 2): Promise<strin
 		environmentService: { remoteAuthority: authority },
 		_onEnablementChanged: { fire: () => { } },
 	}, [own], state);
+	try {
+		await set;
+	} catch (e) {
+		assert.match((e as Error).message, /for the workspace/);
+	}
 	return changed;
 }
 
@@ -535,6 +542,45 @@ function migrations(b: Build, authority: string): string[] {
 		storageService: { getBoolean: () => { read.push('chat'); return true; } },
 	});
 	return [...ran, ...read.map(() => 'chat enablement')];
+}
+
+/** Which host-shared extension settings a window on `authority` changes: bisect, auto-update, publisher trust removed, a profile from a template. */
+async function hostSettings(b: Build, authority: string): Promise<string[]> {
+	const changed: string[] = [];
+	const attempt = async (what: string, f: () => Promise<unknown> | unknown) => {
+		try {
+			await f();
+		} catch (e) {
+			assert.match((e as Error).message, /sandboxed tab/);
+		}
+		void what;
+	};
+	await attempt('bisect', () => evaluate<(...a: unknown[]) => Promise<void>>(asFunction(slice(b.sources.bisect, /\n\tasync start\(/)!), 'start', { ...b.deps, StorageScope: { APPLICATION: -1 }, StorageTarget: { MACHINE: 1 }, BisectState: class { }, ExtensionBisectService: { _storageKey: 'k' } }).call({
+		_envService: { remoteAuthority: authority }, isActive: false, _state: undefined,
+		_storageService: { store: () => { changed.push('bisect'); }, flush: async () => { } },
+	}, [{ identifier: { id: 'host.ext' } }]));
+	await attempt('auto-update', () => evaluate<(...a: unknown[]) => Promise<void>>(asFunction(slice(b.sources.workbench, /\n\tasync updateAutoUpdateEnablementFor\(/)!), 'updateAutoUpdateEnablementFor', { ...b.deps, isString: (v: unknown) => typeof v === 'string' }).call({
+		seclabEnvironment: { remoteAuthority: authority },
+		isAutoUpdateEnabled: () => false, isAutoUpdateEnabledFor: () => true,
+		extensionManagementService: { updateMetadata: async () => { changed.push('auto-update'); } },
+		getPublishersToAutoUpdate: () => [], setPublishersToAutoUpdate: () => { changed.push('auto-update'); },
+		getEnabledAutoUpdateExtensions: () => [], setEnabledAutoUpdateExtensions: () => { changed.push('auto-update'); },
+		getDisabledAutoUpdateExtensions: () => [], setDisabledAutoUpdateExtensions: () => { changed.push('auto-update'); },
+		_onChange: { fire: () => { } }, _onDidChangeExtensionsAutoUpdate: { fire: () => { } }, local: [], updateExtensionsPinnedState: async () => { },
+	}, { identifier: { id: 'host.ext' }, publisher: 'host', local: { pinned: false } }, false));
+	await attempt('untrust', () => evaluate<(...a: unknown[]) => void>(asFunction(slice(b.sources.management, /\n\tuntrustPublishers\(/)!), 'untrustPublishers', { ...b.deps, TrustedPublishersStorageKey: 'k', StorageScope: { APPLICATION: -1 }, StorageTarget: { USER: 0 } }).call({
+		instantiationService: { invokeFunction: (f: (a: unknown) => unknown) => f({ get: () => ({ remoteAuthority: authority }) }) },
+		getTrustedPublishersFromStorage: () => ({ host: {} }),
+		storageService: { store: () => { changed.push('untrust'); } },
+	}, 'host'));
+	const guard = slice(b.sources.importExport, /\n\tprivate seclabNoImport\(/);
+	const self = {
+		instantiationService: { invokeFunction: (f: (a: unknown) => unknown) => f({ get: () => ({ remoteAuthority: authority }) }) },
+		getProfileToImport: async () => { changed.push('profile import'); return undefined; },
+		seclabNoImport: guard ? evaluate(asFunction(guard), 'seclabNoImport', b.deps) : () => { },
+	};
+	await attempt('import', () => evaluate<(...a: unknown[]) => Promise<unknown>>(asFunction(slice(b.sources.importExport, /\n\tprivate async doCreateProfile\(/)!), 'doCreateProfile', b.deps).call(self, {}, false, true, undefined, () => { }));
+	return changed;
 }
 
 /** Whether the unsupported-extensions migration runs on the tab's server in a window on `authority`. */
@@ -738,6 +784,9 @@ async function leaks(b: Build): Promise<string[]> {
 	if (migrations(b, TAB).length > 0) {
 		out.push('a tab window runs a one-time migration of host state');
 	}
+	for (const what of new Set(await hostSettings(b, TAB))) {
+		out.push(`a tab window changes host extension settings: ${what}`);
+	}
 	if ((await enablement(b, TAB, 1)).length > 0) {
 		out.push('a tab window makes a global enablement change');
 	}
@@ -789,7 +838,9 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'a tab extension\'s pack changes a host extension\'s enablement', 'a tab window changes the host\'s global enablement', 'a tab\'s install event reaches the host\'s global enablement',
 	'a tab\'s install events prompt to change the host\'s display language', 'the tab\'s server gets the marketplace token', 'a publisher trusted in a tab window is trusted for the host',
 	'the host\'s global enablement is registered unguarded', 'profile import builds an unguarded enablement service',
-	'a tab window runs a one-time migration of host state', 'a tab window makes a global enablement change', 'the unsupported-extensions migration runs on the tab\'s data', 'a tab language-pack manifest updates on the host',
+	'a tab window runs a one-time migration of host state', 'a tab window changes host extension settings: bisect',
+	'a tab window changes host extension settings: auto-update', 'a tab window changes host extension settings: untrust',
+	'a tab window changes host extension settings: profile import', 'a tab window makes a global enablement change', 'the unsupported-extensions migration runs on the tab\'s data', 'a tab language-pack manifest updates on the host',
 	'a tab language-pack manifest uninstalls on the host', 'mcp management: a server claiming a local keeps its URLs', 'install remote extensions locally: the host installs what the tab names',
 	'a tab manifest installs its pack on the host',
 	'the tab server picks installs the window retries', 'extension management: a host location under a manifest key elsewhere', 'loggers: a reply registering a host file', 'loggers: an event registering a host file'];
@@ -880,6 +931,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.deepEqual(await enablement(b, other), ['tab.pack', 'host.ext']);
 		assert.equal(migration(b, other), true);
 		assert.deepEqual(migrations(b, other), ['publisher trust', 'chat enablement']);
+		assert.deepEqual([...new Set(await hostSettings(b, other))], ['bisect', 'auto-update', 'untrust', 'profile import']);
 		assert.deepEqual(await enablement(b, other, 1), ['tab.pack', 'host.ext']);
 		assert.deepEqual(await globalEnablement(b, other), { written: ['enable', 'disable'], events: true });
 		assert.equal(localization(b, other), true);
@@ -926,6 +978,10 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['language packs fan out from a tab', { patch: ["+		if (!authority || !seclabIsTabAuthority(authority) || server !== this.extensionManagementServerService.remoteExtensionManagementServer) {", "+		if (true) {"] }, 'a tab language-pack manifest updates on the host'],
 			['uninstall fans out from a tab', { patch: ["isLanguagePackExtension(extension.manifest) && !this.seclabFromTab(server)) {\n \t\t\t\tconst otherServers", "isLanguagePackExtension(extension.manifest)) {\n \t\t\t\tconst otherServers"] }, 'a tab language-pack manifest uninstalls on the host'],
 			['only a local is stripped', { filter: ["		const s = server(v);", "		const s = v && typeof v === 'object' && Object.hasOwn(v, 'local') ? v : server(v);"] }, 'mcp management: a server claiming a local keeps its URLs'],
+			['bisect in a tab window', { patch: ["+		if (seclabIsTabAuthority(this._envService.remoteAuthority)) {\n+			throw new Error('Extension Bisect", "+		if (false) {\n+			throw new Error('Extension Bisect"] }, 'a tab window changes host extension settings: bisect'],
+			['auto-update from a tab', { patch: ["+		if (seclabTab && seclabIsTabAuthority(seclabTab)) {", "+		if (false) {"] }, 'a tab window changes host extension settings: auto-update'],
+			['untrust from a tab', { patch: ["+		// seclab: the trusted publishers are the host's (patch 0059, review ENV-46).\n+		if (seclabIsTabAuthority(", "+		// seclab: the trusted publishers are the host's (patch 0059, review ENV-46).\n+		if (false && seclabIsTabAuthority("] }, 'a tab window changes host extension settings: untrust'],
+			['profile import in a tab', { patch: [" 	private async doCreateProfile(profileTemplate: IUserDataProfileTemplate, temporaryProfile: boolean, extensions: boolean, options: IUserDataProfileOptions | undefined, progress: (message: string) => void): Promise<IUserDataProfile | undefined> {\n+		this.seclabNoImport();\n", " 	private async doCreateProfile(profileTemplate: IUserDataProfileTemplate, temporaryProfile: boolean, extensions: boolean, options: IUserDataProfileOptions | undefined, progress: (message: string) => void): Promise<IUserDataProfile | undefined> {\n+\n"] }, 'a tab window changes host extension settings: profile import'],
 			['upstream enablement registered', { patch: ["registerSingleton(IGlobalExtensionEnablementService, SeclabGlobalExtensionEnablementService,", "registerSingleton(IGlobalExtensionEnablementService, GlobalExtensionEnablementService,"] }, 'the host\'s global enablement is registered unguarded'],
 			['profile import unguarded', { patch: ["createInstance(SeclabGlobalExtensionEnablementService))", "createInstance(GlobalExtensionEnablementService))"] }, 'profile import builds an unguarded enablement service'],
 			['publisher-trust migration in a tab', { patch: ["if (!seclabIsTabAuthority(environmentService.remoteAuthority) && !storageService.get(", "if (!storageService.get("] }, 'a tab window runs a one-time migration of host state'],
@@ -935,7 +991,7 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['install events reach global enablement', { patch: ["super(storageService, tab ? Object.assign(Object.create(extensionManagementService), { onDidInstallExtensions: Event.None }) : extensionManagementService);", "super(storageService, extensionManagementService);"] }, 'a tab\'s install event reaches the host\'s global enablement'],
 			['localization listens in a tab window', { patch: ["+		if (seclabIsTabAuthority(environmentService.remoteAuthority)) {\n+			return;", "+		if (false) {\n+			return;"] }, 'a tab\'s install events prompt to change the host\'s display language'],
 			['marketplace token to a tab', { patch: ["noToken ? undefined : this.extensionGalleryAccessToken", "this.extensionGalleryAccessToken"] }, 'the tab\'s server gets the marketplace token'],
-			['publisher trust kept from a tab', { patch: ["+		if (seclabIsTabAuthority(this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority))) {\n+			return;", "+		if (false) {\n+			return;"] }, 'a publisher trusted in a tab window is trusted for the host'],
+			['publisher trust kept from a tab', { patch: ["review ENV-38).\n+		if (seclabIsTabAuthority(this.instantiationService.invokeFunction(accessor => accessor.get(IWorkbenchEnvironmentService).remoteAuthority))) {", "review ENV-38).\n+		if (false) {"] }, 'a publisher trusted in a tab window is trusted for the host'],
 			['the host channel takes changes', { filter: ["			if (!SECLAB_HOST_EXTENSION_READS.has(command)) {", "			if (false) {"] }, 'the host takes an extension change from a tab window'],
 			['the host channel unwrapped', { patch: ["seclabHostExtensionsChannel(sharedProcessService.getChannel('extensions'), environmentService.remoteAuthority)", "sharedProcessService.getChannel('extensions')"] }, 'the host takes an extension change from a tab window'],
 			['enablement reaches host extensions', { patch: ["+			if (own.length !== extensions.length) {", "+			if (false) {"] }, 'a tab extension\'s pack changes a host extension\'s enablement'],
