@@ -17509,6 +17509,21 @@
 				"file": "test/clean-host.ts",
 				"name": "lease lock: a deletion ran while a build held the lock"
 			}
+		},
+		{
+			"record": "20261117-copilot-review-pr25.md",
+			"anchor": "CR25-15",
+			"round": "Round CR25 (second review)",
+			"severity": "low",
+			"summary": "Breaking a stale lease lock let a second contender remove a fresh lock.",
+			"component": "clean-host leases (image builders)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:0e54f42a848437084876c37796f695d9357937c8",
+			"test": {
+				"file": "test/clean-host.ts",
+				"name": "lease lock: an old lock was broken or removed by a non-holder"
+			}
 		}
 	]
 }
