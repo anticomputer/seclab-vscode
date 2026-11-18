@@ -88,7 +88,7 @@ usage: ./seclab <command>
 EOF
 }
 
-ZIZMOR_IMAGE="ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9"
+ZIZMOR_IMAGE="ghcr.io/zizmorcore/zizmor:1.32.0@sha256:3014cc8f68f663935f69b3c3e0e41f5ce102b268d97db13db0f62208747f860d"
 # Tools pinned in build/tools/tools.json, verified and built locally (EDR 20261105-pinned-tools):
 # cosign and actionlint are publisher-signed release artifacts, gitleaks and lychee are built
 # from pinned source. Prints the local image tag; fails closed.
@@ -114,7 +114,7 @@ lint_workflows() {
 	local actionlint
 	actionlint="$(tool_image actionlint)"
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$actionlint" -no-color
-	verify_signed_image "$ZIZMOR_IMAGE" '^https://github\.com/docker/github-builder/\.github/workflows/build\.yml@' zizmorcore/zizmor refs/tags/v1.31.1
+	verify_signed_image "$ZIZMOR_IMAGE" '^https://github\.com/docker/github-builder/\.github/workflows/build\.yml@' zizmorcore/zizmor refs/tags/v1.32.0
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$ZIZMOR_IMAGE" --offline --no-progress --persona=regular .github/workflows
 	# Actions logs here are public: no workflow or CI script echoes env, secrets or host data.
 	docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" sh -ec 'node build/check-workflow-echo.ts --self-test; node build/check-workflow-echo.ts'

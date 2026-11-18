@@ -322,4 +322,4 @@ for p in "$@"; do
 	i=$((i+1))
 done
 # shellcheck disable=SC2086 # paths are repo/build paths without spaces; split on purpose
-exec docker run --rm --network none -v "$SELF:/check-release.sh:ro" -v "$(dirname "$SELF")/../patches:/patches:ro" -e SECLAB_PATCHES=/patches $mounts alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f sh /check-release.sh --inner /x "$MODE" $args
+exec docker run --rm --network none -v "$SELF:/check-release.sh:ro" -v "$(dirname "$SELF")/../patches:/patches:ro" -e SECLAB_PATCHES=/patches $mounts alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f sh /check-release.sh --inner /x "$MODE" $args
