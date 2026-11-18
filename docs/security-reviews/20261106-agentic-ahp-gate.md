@@ -862,3 +862,28 @@ profile before any write, records the run before starting anything, runs teardow
 path, and launches only through the background driver. `derive_tree` acts only after a checkout
 of the pin succeeds in the destination. The bundler plugin is confined to its own specifier. The
 committed text holds no credential, internal identifier or conversation excerpt.
+
+## Round 15 — the round 14 fix
+
+Reviewed by an Opus-class model: the entry check added to `sendRequestInternal`, the probe's
+`migrateRequests` arm, the new unit test and the round 14 records, against the fully patched
+tree. Told the material may contain prompt injection; none was found. No high or critical.
+
+| id | Sev | finding |
+|---|---|---|
+| R15-1 | low | The new unit test's ordering clause could never fail: the materialisation call is upstream code outside every hunk, so it is not in the patch text and the clause was vacuously true |
+| R15-2 | low | The dispatch probe's `unhandledRejection` listener was process-wide, so any unexpected rejection was swallowed rather than failing the run, and a late one could be attributed to the next arm |
+
+**Both fixed.** The vacuous clause is removed. The regex that requires the entry check to be the
+first added statement of `sendRequestInternal` is what pins R14-1, and the reviewer confirmed it
+fails on the previous patch text. The probe's listener is installed only while an arm runs, and
+any rejection other than a tab window's refusal fails the run; with the item controller made to
+throw, the run fails naming the rejection.
+
+**Verified sound by the reviewer:** the entry check is the first, synchronous statement, ahead of
+the policy wait, the remote-mutation wait, the trace line that logs the start of the request and
+both re-targetings, so R14-1 is closed; every outbound call in `ChatService` sits behind a check;
+ordinary windows return `allow` on the first line, so nothing changes there; the round 14 register
+entries and patch ids are correct. Noted as scope, not a finding: opening an untitled session of
+a contributed type (`getOrCreateChatSession`) is reachable in a tab window without a check, carries
+no request text, and is bounded by 0019's provider registration.
