@@ -11,6 +11,7 @@
 #   0035-0039              document and config sync
 #   0040-0049              fork build
 #   0050-0059              RPC capability filter follow-ons (0030-0034 is full)
+#   0060-0069              RPC capability filter follow-ons (2)
 0001-build-skip-copilot-shim-without-extension.patch
 0002-extensionkind-product-default.patch
 0003-no-workspace-extensions-in-local-windows.patch
