@@ -68,3 +68,17 @@ available rather than wait.
   recorded `ageExempt` with an EDR, never a CFS bypass.
 - **CI and local transports differ** (EDR cfs-local-builds), but both now resolve only
   versions CFS serves.
+
+## Addendum (review BMP-1, 2026-11-18)
+An image pinned by an index digest is dated by the **newest** config `created` over the
+images we pull from it, linux/amd64 (hosted runners) and linux/arm64 (Docker Desktop on Apple
+silicon), not by linux/amd64 alone (`imageDate` in `build/release-dates.ts`; tests in
+`build/release-dates.test.ts`). An index with neither platform is dated over every image in it.
+- **Why not every platform:** the hold protects the bytes we run, and a platform we never pull
+  doesn't reach a build. Dating every image also multiplies the anonymous Docker Hub manifest
+  reads the required `lint` check makes on every push (8 or more per index instead of 3); a
+  trial run of that rule hit HTTP 429 locally.
+- **Residual:** an index digest can be younger than the hold when only a platform we don't pull
+  was added or rebuilt (the `nginx:alpine` pin `fed7e14b…` holds a riscv64 image from
+  2026-11-13, while its amd64 and arm64 images are from 2026-11-05). Accepted: those bytes are
+  never fetched.

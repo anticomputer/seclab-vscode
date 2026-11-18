@@ -90,31 +90,52 @@ export async function npmDatePublic(name: string, version: string): Promise<stri
 	return t;
 }
 
-/** An image's build date (the config's `created`; for an index, its linux/amd64 image). */
-export async function imageDate(pin: string): Promise<string> {
+// The platforms we pull: hosted runners (amd64) and Docker Desktop on Apple silicon (arm64).
+const RUN_ARCHES = new Set(['amd64', 'arm64']);
+
+type Get = (kind: 'manifests' | 'blobs', digest: string) => Promise<Buffer | string>;
+
+/**
+ * An image's build date: the config's `created`. For an index, the newest `created` over the
+ * images we run from it (linux/amd64 and linux/arm64), so neither platform we pull is younger
+ * than the date the hold is measured from (review BMP-1); an index with neither is dated over
+ * every image it holds. Attestation manifests aside. `get` is injectable for the self-test.
+ */
+export async function imageDate(pin: string, get?: Get): Promise<string> {
 	const ref = parseRef(pin);
 	if (!ref?.digest) {
 		throw new Error(`not a digest pin: ${pin.slice(0, 80)}`);
 	}
-	const reg = new Registry(ref);
-	let m = JSON.parse((await reg.byDigest('manifests', ref.digest)).toString()) as {
+	if (!get) {
+		const reg = new Registry(ref);
+		get = (kind, digest) => reg.byDigest(kind, digest);
+	}
+	const fetchJson = async (kind: 'manifests' | 'blobs', digest: string) => JSON.parse((await get!(kind, digest)).toString());
+	const top = await fetchJson('manifests', ref.digest) as {
 		manifests?: Array<{ digest: string; platform?: { os?: string; architecture?: string }; annotations?: Record<string, string> }>;
-		config?: { digest: string };
 	};
-	if (m.manifests) {
-		const images = m.manifests.filter(x => !x.annotations?.['vnd.docker.reference.type'] && x.platform?.os !== 'unknown');
-		const pick = images.find(x => x.platform?.os === 'linux' && x.platform.architecture === 'amd64') ?? images[0];
-		if (!pick) {
-			throw new Error(`${pin.slice(0, 60)}: index has no image`);
+	let digests = [ref.digest];
+	if (top.manifests) {
+		const images = top.manifests.filter(x => !x.annotations?.['vnd.docker.reference.type'] && x.platform?.os !== 'unknown');
+		const run = images.filter(x => x.platform?.os === 'linux' && RUN_ARCHES.has(x.platform.architecture ?? ''));
+		digests = (run.length ? run : images).map(x => x.digest);
+	}
+	if (!digests.length) {
+		throw new Error(`${pin.slice(0, 60)}: index has no image`);
+	}
+	let newest = '';
+	for (const d of digests) {
+		const m = (d === ref.digest ? top : await fetchJson('manifests', d)) as { config?: { digest: string } };
+		if (!m.config?.digest) {
+			throw new Error(`${pin.slice(0, 60)}: manifest has no config`);
 		}
-		m = JSON.parse((await reg.byDigest('manifests', pick.digest)).toString());
+		const cfg = await fetchJson('blobs', m.config.digest) as { created?: string };
+		if (!cfg.created || Number.isNaN(Date.parse(cfg.created))) {
+			throw new Error(`${pin.slice(0, 60)}: config has no created date`);
+		}
+		if (!newest || Date.parse(cfg.created) > Date.parse(newest)) {
+			newest = cfg.created;
+		}
 	}
-	if (!m.config?.digest) {
-		throw new Error(`${pin.slice(0, 60)}: manifest has no config`);
-	}
-	const cfg = JSON.parse((await reg.byDigest('blobs', m.config.digest)).toString()) as { created?: string };
-	if (!cfg.created) {
-		throw new Error(`${pin.slice(0, 60)}: config has no created date`);
-	}
-	return cfg.created;
+	return newest;
 }
