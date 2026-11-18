@@ -44,6 +44,8 @@ const FILES = {
 	mcpDiscovery: 'contrib/mcp/common/discovery/nativeMcpRemoteDiscovery.ts',
 	mcpGlobal: 'contrib/mcp/common/mcpCopilotGlobalConfigurationService.ts',
 	mcpManagement: 'services/mcp/common/mcpWorkbenchManagementService.ts',
+	workbench: 'contrib/extensions/browser/extensionsWorkbenchService.ts',
+	actions: 'contrib/extensions/browser/extensionsActions.ts',
 } as const;
 type Key = keyof typeof FILES;
 
@@ -107,7 +109,7 @@ function build(patched: boolean, patch = PATCH, filter = FILTER): Build {
 	// versions of the patch, which had fewer or other ones), and the module-level seclab functions
 	// of the patched files.
 	const named = (src: string, re: RegExp) => [...src.matchAll(re)].map(m => m[1]);
-	const helperNames = named(filter, /\n(?:export )?function (seclab(?:TabUris|TabUri|UriOnTab|TabServerChannel|NoGallerySource|ExtensionManifest|UnrevivedManifest|TabExtensionsChannel))\b/g);
+	const helperNames = named(filter, /\n(?:export )?function (seclab(?:TabUris|TabUri|UriOnTab|TabServerChannel|NoGallerySource|ExtensionManifest|UnrevivedManifest|TabExtensionsChannel|TabMcpChannel))\b/g);
 	const consts = ['SECLAB_URI_KEYS', 'SECLAB_URI_MARKS', 'SECLAB_MANIFEST_KEYS'].map(c => new RegExp(`\\nconst ${c}\\b[^\\n]+`).exec(filter)?.[0] ?? '').join('\n');
 	const stubs: Record<string, unknown> = {
 		seclabIsTabAuthority: (a: unknown) => typeof a === 'string' && /^seclab\+/.test(a),
@@ -136,6 +138,7 @@ function build(patched: boolean, patch = PATCH, filter = FILTER): Build {
 		Promises: { settled: (ps: Promise<unknown>[]) => Promise.all(ps) },
 		areSameExtensions: (a: { id: string }, b: { id: string }) => a.id === b.id,
 		nls: { localize: (_k: string, m: string) => m },
+		localize: (_k: string, m: string) => m,
 	};
 	return { sources, refusals, deps };
 }
@@ -347,16 +350,55 @@ async function mcpDiscovery(b: Build, source: string, authority: string): Promis
 }
 
 /** The tab server's MCP management channel: whether a reply naming a host readme reaches the window, and a genuine reply. */
-async function mcpManagement(b: Build, authority: string, reply: unknown): Promise<{ refused: boolean; reply?: unknown }> {
-	const raw = { call: async () => structuredClone(reply), listen: () => () => ({ dispose() { } }) };
+async function mcpManagement(b: Build, authority: string, reply: unknown, event?: unknown): Promise<{ refused: boolean; reply?: unknown; events: unknown[] }> {
+	const raw = { call: async () => structuredClone(reply), listen: () => (l: (e: unknown) => void) => { if (event !== undefined) { l(structuredClone(event)); } return { dispose() { } }; } };
 	const name = /(seclab\w+)\(remoteAgentConnection\.getChannel<IChannel>\('mcpManagement'\)/.exec(b.sources.mcpManagement)?.[1];
 	const channel = name ? (b.deps[name] as (c: unknown, a: string, s: string, k: unknown) => typeof raw)(raw, authority, 'mcp-management', b.deps.seclabUnrevivedManifest) : raw;
+	const events: unknown[] = [];
+	channel.listen('onDidInstallMcpServers')((e: unknown) => events.push(e));
 	try {
-		return { refused: false, reply: await channel.call('getInstalled') };
+		return { refused: false, reply: await channel.call('getInstalled'), events };
 	} catch (e) {
 		assert.match((e as Error).message, /outside the tab/);
-		return { refused: true };
+		return { refused: true, events };
 	}
+}
+const ICON = { dark: 'https://198.51.100.7/i.png', light: 'https://198.51.100.7/i.png' };
+
+/** Whether "Install Locally" (installInServer to the host) of a tab server's extension reaches the install. */
+async function installLocally(b: Build, authority: string): Promise<boolean> {
+	const fn = evaluate<(e: unknown, s: unknown) => Promise<void>>(asFunction(slice(b.sources.workbench, /\n\tasync installInServer\(/)!), 'installInServer', b.deps);
+	const localServer = { id: 'local' };
+	let installed = false;
+	try {
+		await fn.call({
+			seclabEnvironment: { remoteAuthority: authority },
+			extensionManagementServerService: { localExtensionManagementServer: localServer },
+			doInstall: async () => { installed = true; },
+		}, { identifier: { id: 'attacker.ext' } }, localServer);
+	} catch (e) {
+		assert.match((e as Error).message, /sandboxed tab/);
+	}
+	return installed;
+}
+
+/** Whether "Install Remote Extensions Locally..." installs the gallery entry a tab server's extension names on the host. */
+async function installRemoteLocally(b: Build, authority: string): Promise<boolean> {
+	const cls = b.sources.actions.slice(b.sources.actions.indexOf('export class InstallRemoteExtensionsInLocalAction'));
+	const fn = evaluate<(e: unknown[]) => Promise<void>>(asFunction(slice(cls, /\n\tprotected async installExtensions\(/)!), 'installExtensions', b.deps);
+	let installed = false;
+	try {
+		await fn.call({
+			seclabEnvironment: { remoteAuthority: authority },
+			extensionGalleryService: { isEnabled: () => true, getExtensions: async () => [{ identifier: { id: 'attacker.ext' } }] },
+			extensionManagementServerService: { localExtensionManagementServer: { extensionManagementService: { getTargetPlatform: async () => 'darwin-arm64', installFromGallery: async () => { installed = true; }, install: async () => { installed = true; } } } },
+			fileService: { del: async () => { } },
+			logService: { error: () => { } },
+		}, [{ identifier: { id: 'attacker.ext' }, local: {} }]);
+	} catch (e) {
+		assert.match((e as Error).message, /sandboxed tab/);
+	}
+	return installed;
 }
 const mcpServer = (authority: string, readme: unknown) => ({
 	name: 'srv', config: { type: 'stdio', command: 'node', args: ['s.js'] }, mcpResource: remote(authority, '/home/agent/.seclab-reh/data/User/mcp.json'),
@@ -465,6 +507,25 @@ async function leaks(b: Build): Promise<string[]> {
 	if (!(await mcpManagement(b, TAB, [mcpServer(TAB, HOST)])).refused) {
 		out.push('mcp management: a reply naming a host readme');
 	}
+	const mi = await mcpManagement(b, TAB, [{ ...mcpServer(TAB, remote(TAB, '/r.md')), icon: ICON, galleryUrl: 'https://198.51.100.7/g', repositoryUrl: 'https://198.51.100.7/r' }],
+		[{ name: 'srv', local: { ...mcpServer(TAB, remote(TAB, '/r.md')), icon: ICON }, mcpResource: remote(TAB, '/m.json') }]);
+	if (JSON.stringify(mi.reply ?? null).includes('198.51.100.7') || JSON.stringify(mi.events).includes('198.51.100.7')) {
+		out.push('mcp management: a server carrying URLs the renderer loads');
+	}
+	const me = await mcpManagement(b, TAB, [], [{ name: 'srv', local: mcpServer(TAB, HOST), mcpResource: remote(TAB, '/m.json') }]);
+	if (me.events.length > 0) {
+		out.push('mcp management: an event naming a host readme');
+	}
+	const mr = await mcpManagement(b, TAB, [{ ...mcpServer(TAB, remote(TAB, '/r.md')), config: { type: 'stdio', command: 'node', env: { HOME: HOST } } }]);
+	if (!mr.refused) {
+		out.push('mcp management: a host location as a config record value');
+	}
+	if (await installLocally(b, TAB)) {
+		out.push('install locally: the host installs what the tab names');
+	}
+	if (await installRemoteLocally(b, TAB)) {
+		out.push('install remote extensions locally: the host installs what the tab names');
+	}
 	if (await hostDependencies(b, TAB)) {
 		out.push('a tab manifest installs its pack on the host');
 	}
@@ -491,6 +552,8 @@ const EVERY_LEAK = [...LIES.map(l => `environment: ${l[0]}`), 'environment: host
 	'a tab package installs on the host', 'a host file in the tab workspace installs on the host',
 	'a host file in the tab workspace by a dot-dot path installs on the host', 'a host file in the tab workspace by its NFD path installs on the host',
 	'mcp discovery: a reply naming host directories', 'mcp global configuration: a reply naming host directories', 'mcp management: a reply naming a host readme',
+	'mcp management: a server carrying URLs the renderer loads', 'mcp management: an event naming a host readme', 'mcp management: a host location as a config record value',
+	'install locally: the host installs what the tab names', 'install remote extensions locally: the host installs what the tab names',
 	'a tab manifest installs its pack on the host',
 	'the tab server picks installs the window retries', 'extension management: a host location under a manifest key elsewhere', 'loggers: a reply registering a host file', 'loggers: an event registering a host file'];
 
@@ -540,6 +603,9 @@ const tests: Array<[string, () => Promise<void>]> = [
 		await (wrapper(b, b.sources.mcpDiscovery, /INativeMcpDiscoveryHelperService>\((seclab\w+)\(channel,/)!(genuineDiscovery, TAB, 'mcp-discovery')).call('load');
 		const mm = await mcpManagement(b, TAB, [mcpServer(TAB, remote(TAB, '/srv/README.md'))]);
 		assert.equal(mm.refused, false);
+		// ENV-24: env and headers are the config author's records; their keys may be URI key names.
+		const rec = await mcpManagement(b, TAB, [{ ...mcpServer(TAB, remote(TAB, '/r.md')), config: { type: 'http', url: 'http://192.0.2.1/', headers: { authority: 'x', path: '/' } } }, { ...mcpServer(TAB, remote(TAB, '/r.md')), config: { type: 'stdio', command: 'node', env: { path: '/usr/bin', scheme: 'a' } } }]);
+		assert.equal(rec.refused, false);
 		assert.deepEqual((mm.reply as Array<{ manifest: unknown }>)[0].manifest, mcpServer(TAB, null).manifest);
 		assert.deepEqual(b.refusals, []);
 	}],
@@ -558,6 +624,8 @@ const tests: Array<[string, () => Promise<void>]> = [
 		assert.equal(await failedInstalls(b, other), 1);
 		assert.equal(await mcpDiscovery(b, b.sources.mcpDiscovery, other), true);
 		assert.equal((await mcpManagement(b, other, [mcpServer(other, HOST)])).refused, false);
+		assert.equal(await installLocally(b, other), true);
+		assert.equal(await installRemoteLocally(b, other), true);
 		assert.equal((await loggers(b, other, [{ id: 'x', name: 'x', resource: HOST }], { added: [], removed: [] })).replyRefused, false);
 		assert.deepEqual(b.refusals, []);
 	}],
@@ -584,13 +652,18 @@ const tests: Array<[string, () => Promise<void>]> = [
 			['host install from a tab window', { patch: ["+		if (authority && seclabIsTabAuthority(authority) && (vsix.scheme === Schemas.vscodeRemote || (vsix.scheme === Schemas.file && inTab(vsix.path)))) {", "+		if (false) {"] }, 'a tab package installs on the host'],
 			['host files in the tab workspace install', { patch: ["(vsix.scheme === Schemas.vscodeRemote || (vsix.scheme === Schemas.file && inTab(vsix.path)))", "vsix.scheme === Schemas.vscodeRemote"] }, 'a host file in the tab workspace installs on the host'],
 			['workspace match is case-sensitive', { patch: [".normalize('NFC').toLowerCase().replace", ".normalize('NFC').replace"] }, 'a host file in the tab workspace installs on the host'],
-			['tab manifests install their packs on the host', { patch: ["+		const authority = this.seclabEnvironment.remoteAuthority;\n+		if (authority && seclabIsTabAuthority(authority)) {", "+		const authority = this.seclabEnvironment.remoteAuthority;\n+		if (false) {"] }, 'a tab manifest installs its pack on the host'],
+			['tab manifests install their packs on the host', { patch: ["review ENV-15).\n+		const authority = this.seclabEnvironment.remoteAuthority;\n+		if (authority && seclabIsTabAuthority(authority)) {", "review ENV-15).\n+		const authority = this.seclabEnvironment.remoteAuthority;\n+		if (false) {"] }, 'a tab manifest installs its pack on the host'],
 			['startup retries the tab\'s failed installs', { patch: ["+		const authority = this.environmentService.remoteAuthority;\n+		if (authority && seclabIsTabAuthority(authority)) {\n+			if (summary", "+		const authority = this.environmentService.remoteAuthority;\n+		if (false) {\n+			if (summary"] }, 'the tab server picks installs the window retries'],
 			['paths compared unresolved', { patch: ["posix.normalize(p).normalize('NFC').toLowerCase()", "p.toLowerCase()"] }, 'a host file in the tab workspace by a dot-dot path installs on the host'],
 			['paths compared unnormalised', { patch: [".normalize('NFC').toLowerCase().replace", ".toLowerCase().replace"] }, 'a host file in the tab workspace by its NFD path installs on the host'],
 			['mcp discovery unchecked', { patch: ["ProxyChannel.toService<INativeMcpDiscoveryHelperService>(seclabTabServerChannel(channel, connection.remoteAuthority, 'mcp-discovery'));", "ProxyChannel.toService<INativeMcpDiscoveryHelperService>(channel);"] }, 'mcp discovery: a reply naming host directories'],
 			['mcp global configuration unchecked', { patch: ["ProxyChannel.toService<INativeMcpDiscoveryHelperService>(seclabTabServerChannel(channel, connection.remoteAuthority, 'mcp-discovery')).load());", "ProxyChannel.toService<INativeMcpDiscoveryHelperService>(channel).load());"] }, 'mcp global configuration: a reply naming host directories'],
-			['mcp management unchecked', { patch: ["seclabTabServerChannel(remoteAgentConnection.getChannel<IChannel>('mcpManagement'), remoteAgentConnection.remoteAuthority, 'mcp-management', seclabUnrevivedManifest)", "remoteAgentConnection.getChannel<IChannel>('mcpManagement')"] }, 'mcp management: a reply naming a host readme'],
+			['mcp management unchecked', { patch: ["seclabTabMcpChannel(remoteAgentConnection.getChannel<IChannel>('mcpManagement'), remoteAgentConnection.remoteAuthority)", "remoteAgentConnection.getChannel<IChannel>('mcpManagement')"] }, 'mcp management: a reply naming a host readme'],
+			['mcp servers keep their URLs', { filter: ["		const { icon: _i, galleryUrl: _g, repositoryUrl: _r, ...rest } = v as Record<string, unknown>;\n		return rest;", "		return v;"] }, 'mcp management: a server carrying URLs the renderer loads'],
+			['mcp events reach the window unchecked', { filter: ["checked.listen<T>(event, arg)(e => listener.call(thisArgs, servers(e) as T), undefined, disposables)", "channel.listen<T>(event, arg)(e => listener.call(thisArgs, servers(e) as T), undefined, disposables)"] }, 'mcp management: an event naming a host readme'],
+			['config records take any value', { filter: [" || Object.values(r).some(x => typeof x !== 'string')", ""] }, 'mcp management: a host location as a config record value'],
+			['install locally from a tab window', { patch: ["+		if (authority && seclabIsTabAuthority(authority) && server === this.extensionManagementServerService.localExtensionManagementServer) {", "+		if (false) {"] }, 'install locally: the host installs what the tab names'],
+			['install remote extensions locally from a tab window', { patch: ["+		// the tab's server's to name (patch 0059, review ENV-22).\n+		const authority = this.seclabEnvironment.remoteAuthority;\n+		if (authority && seclabIsTabAuthority(authority)) {", "+		// the tab's server's to name (patch 0059, review ENV-22).\n+		const authority = this.seclabEnvironment.remoteAuthority;\n+		if (false) {"] }, 'install remote extensions locally: the host installs what the tab names'],
 			['any manifest key is skipped', { filter: ["	return key === 'manifest' && (owner.length === 0", "	return key === 'manifest' || (owner.length === 0"] }, 'extension management: a host location under a manifest key elsewhere'],
 			['logger channel unwrapped', { patch: ["new RemoteLoggerChannelClient(loggerService, seclabTabServerChannel(channel, connection.remoteAuthority, 'loggers'))", "new RemoteLoggerChannelClient(loggerService, channel)"] }, 'loggers: an event registering a host file'],
 		];
