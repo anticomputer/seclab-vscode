@@ -364,11 +364,35 @@ class CommentScopeTest(unittest.TestCase):
         # `of` and `default` can be identifiers: unsure, so a later quote fails closed.
         for text in ("let of = 4; q = of / 2; s = '/';\n", "q = o.x || default / 2; s = '/';\n"):
             self.assertEqual(amb(text)[1], [1], text)
+        # A private field or method is a name, never a keyword.
+        for text in ("class C { #return = 4; f(o) { const q = o.#return / 2; const s = '/'; const x = { [K]: 1 }; } }\n",
+                     "class C { #if() { return 4; } f(o) { const q = o.#if() / 2; const s = '/'; const x = { [K]: 1 }; } }\n",
+                     "class C { #return = 4; f() { const q = this.#return / 2; const s = '/'; const x = { [K]: 1 }; } }\n"):
+            code, found = amb(text)
+            self.assertEqual(found, [], text)
+            self.assertIn("[K]", code, text)
         # Any reserved word but a value keyword is unsure; a value keyword reads as division.
         for word in ("debugger", "class", "var", "try", "finally", "import", "export"):
             self.assertEqual(amb(word + "\n/a/; s = '/';\n")[1], [2], word)
         for word in ("this", "null", "true"):
             self.assertEqual(amb("x = " + word + " / 2; s = '/';\n")[1], [], word)
+
+    def test_an_html_like_comment_fails_closed(self):
+        # Node runs the write (line 1 is an Annex B comment to it); a block-comment reading of
+        # `/*` would hide it from the lint.
+        for code in ("seclabLintX <!-- /*\nfs.writeFileSync('out', raw);\n// */",
+                     "/* a\n*/ --> /*\nfs.writeFileSync('out', raw);\n// */"):
+            with self.subTest(code=code):
+                root = tree_copy(self)
+                path = os.path.join(root, "test/containment/rogue-reh/probes.js")
+                with open(path, "a", encoding="utf-8") as fh:
+                    fh.write("\n" + code + "\n")
+                status, out = lint(root)
+                self.assertEqual(status, 1, out)
+                self.assertIn("html-comment", out)
+        found = []
+        L._strip_comments("s = '<!-- -->';\nt = `<!--`;\nx = a-- > b;\n", None, found)
+        self.assertEqual(found, [])
 
     def test_nested_templates_keep_their_boundaries(self):
         found = []
