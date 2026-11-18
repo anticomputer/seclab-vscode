@@ -18293,6 +18293,21 @@
 				"file": "test/driver/driver.test.ts",
 				"name": "a printed launch line carries the commit the run was prepared for (PR 42 review)"
 			}
+		},
+		{
+			"record": "20261117-fetched-app-binding.md",
+			"anchor": "CR42-5",
+			"round": "Copilot review of PR 42",
+			"severity": "low",
+			"summary": "Two fetches into one destination could interleave.",
+			"component": "fetched-app binding (fetch, test/app-build.ts)",
+			"owner": "fork-build",
+			"status": "fixed",
+			"commit": "patch:1dfedecb04644bd06f5b6822898d3551c2eaf5f4",
+			"test": {
+				"file": "seclab",
+				"name": "a fetch ran into a destination another fetch holds"
+			}
 		}
 	]
 }
