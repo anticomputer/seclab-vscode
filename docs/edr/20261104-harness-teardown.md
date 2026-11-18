@@ -182,3 +182,10 @@ mismatch, unlabelled, other namespace, other boot, foreign names).
   is judged.
 - `clean-host` removes a stray tabd's sensor only after confirming that tabd exited.
 
+**Removal in progress (2026-11-18, [round 5](../security-reviews/20261104-harness-teardown.md#round-5-a-sensor-reported-left-over-while-still-being-removed-ps-8)).**
+A sensor can still be listed for a moment while it is being removed, and a second `rm -f`
+fails at once. tabd now waits for its own removal before exiting, and teardown and
+`clean-host` wait (bounded, 20 s, docker calls included) for a removed sensor to disappear
+before checking. What is
+still listed after the wait is a leak; a failed listing never counts as gone.
+

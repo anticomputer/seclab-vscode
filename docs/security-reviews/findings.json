@@ -19023,6 +19023,96 @@
 			"status": "fixed-untested",
 			"commit": "patch:d7246e204420fb3ae2dbc315fadabf52c11973d1",
 			"gap": "Record corrections; nothing to test."
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "PS-8",
+			"round": "Round 5: a sensor reported left over while still being removed (PS-8)",
+			"severity": "low",
+			"summary": "tabd exited before its own Falco removal finished and the gate listed straight after its own rm -f, which fails while a removal is in progress: a flaky leak report.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:9b50c3106f34f904224c0d9b34049b4e681cc269",
+			"test": {
+				"file": "test/containment/teardown.test.ts",
+				"name": "PS-8: a sensor still being removed is waited for"
+			}
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "PS-9",
+			"round": "Round 5: a sensor reported left over while still being removed (PS-8)",
+			"severity": "low",
+			"summary": "An add refused after close left a readiness waiter whose timeout became an unhandled rejection.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:9b50c3106f34f904224c0d9b34049b4e681cc269",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs review PS-8: tabd exits only once its Falco container is removed"
+			}
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "PS-10",
+			"round": "Round 5: a sensor reported left over while still being removed (PS-8)",
+			"severity": "low",
+			"summary": "A failed Falco removal would have been re-thrown to every later stop().",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:9b50c3106f34f904224c0d9b34049b4e681cc269",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs review PS-8: tabd exits only once its Falco container is removed"
+			}
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "PS-11",
+			"round": "Round 5: a sensor reported left over while still being removed (PS-8)",
+			"severity": "low",
+			"summary": "clean-host read a failed docker listing as the sensor gone.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"commit": "patch:9b50c3106f34f904224c0d9b34049b4e681cc269",
+			"test": {
+				"file": "test/containment/teardown.test.ts",
+				"name": "PS-8: a failed listing never counts as gone"
+			}
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "PS-12",
+			"round": "Round 5: a sensor reported left over while still being removed (PS-8)",
+			"severity": "low",
+			"summary": "Closed during the first add's stale-sensor cleanup, apply() still created a readiness waiter that timed out unhandled.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "tabd/test/obs.test.ts",
+				"name": "obs review PS-8: tabd exits only once its Falco container is removed"
+			},
+			"commit": "patch:9b50c3106f34f904224c0d9b34049b4e681cc269"
+		},
+		{
+			"record": "20261104-harness-teardown.md",
+			"anchor": "PS-13",
+			"round": "Round 5: a sensor reported left over while still being removed (PS-8)",
+			"severity": "low",
+			"summary": "The 20 s removal bound did not cover the docker calls, so a stalled daemon could hang teardown or clean-host.",
+			"component": "teardown / clean-host / tabd Falco",
+			"owner": "obs",
+			"status": "fixed",
+			"test": {
+				"file": "test/containment/teardown.test.ts",
+				"name": "PS-13: a stalled docker ends at the deadline"
+			},
+			"commit": "patch:9b50c3106f34f904224c0d9b34049b4e681cc269"
 		}
 	]
 }

@@ -83,3 +83,25 @@ CR16-7), all fixed; nothing at medium or above remains.
 | CR16-9 | Low | Wrong-container kill | (Code review of the fix.) With no owner identity of its own (no boot id), tabd's stale-sensor cleanup still removed unlabelled same-tag sensors whose pid wasn't alive locally, which could be another namespace's. | Fixed | A supervisor with no identity removes no stale sensor; teardown and `clean-host` report them. | `obs.test.ts`: an unknown identity removes nothing, labelled or not |
 | CR16-10 | Low | Leak reported clean | (Code review of the fix.) Adding the macOS UUID reordered the Linux owner-hash inputs, so sensors labelled by an earlier build looked foreign after an upgrade and nothing reclaimed them. | Fixed | Linux keeps its input order (hostname, pid namespace, boot id, uid); the macOS UUID takes the boot id's place. | `obs.test.ts`: the Linux hash equals the earlier order's |
 | CR16-11 | Low | Robustness | (Code review of the fix.) A `ps` that failed to spawn has no stdout, so the liveness check threw before its `kill(pid, 0)` fallback and aborted cleanup. | Fixed | Missing stdout reads as empty; the probe decides. | `clean-host --self-test`: a spawn failure with EPERM is alive, with ESRCH gone |
+
+## Round 5: a sensor reported left over while still being removed (PS-8)
+A ci-linux `oci` run failed the teardown gate "no Falco sensor outlives its tabd" for a sensor
+whose tabd had exited, while the pull request run on the same head passed. Checked against the
+code and reproduced: nothing leaked. tabd removes Falco when the last tab stops, but runs that
+removal without awaiting it; on exit its shutdown found no Falco child and returned, so tabd
+exited while its own `docker rm -f` was still running. The gate's `rm -f` then failed at once
+("removal ... is already in progress") while `docker ps -a` still listed the container, and the
+listing straight after read that as a leak. With a removal in flight, the old remove-then-list
+failed 5 of 5 times and the fix 0 of 5. Fixed, then reviewed by the `security-review` agent
+(Opus-class), which found three lows, and by Copilot code review, which found two more; all
+fixed. Nothing at medium or above remains.
+
+| # | Sev | Area | Finding | Disposition | Fix | Regression |
+|---|---|---|---|---|---|---|
+| PS-8 | Low | Leak reported clean (false positive) | tabd exited before its own Falco removal finished, and the teardown gate listed the container straight after its own `rm -f`, which fails while a removal is in progress: a flaky failure, and a queued `add` could have started Falco again after shutdown. | Fixed | Every `stop()` waits for a removal already in flight; tabd's shutdown uses `close()`, which also refuses to start Falco again. Teardown and `clean-host` remove sensors and wait, bounded (20 s), until docker no longer lists them; a failed listing never counts as gone. | `obs.test.ts` and `teardown.test.ts` PS-8 cases |
+| PS-9 | Low | Robustness | (Review of the fix.) An `add` refused after close still left a readiness waiter whose timeout became an unhandled rejection. | Fixed | The closed check comes before any waiter exists. | `obs.test.ts`: no unhandled rejection past the timeout |
+| PS-10 | Low | Robustness | (Review of the fix.) A failed removal would have been re-thrown to every later `stop()`. | Fixed | The stored removal never rejects. | `obs.test.ts`: repeated stops after a failed removal |
+| PS-11 | Low | Leak reported clean | (Review of the fix.) `clean-host` read a failed `docker ps` as the sensor gone. | Fixed | It reports success only from the bounded wait, which needs a listing. | the `awaitGone` failed-listing case |
+| PS-12 | Low | Robustness | (Code review.) Closed while the first `add` was still in its stale-sensor cleanup, `apply()` went on to create a readiness waiter that later timed out unhandled. | Fixed | The closed check is repeated after the cleanup, before any waiter exists. | `obs.test.ts`: close during a held cleanup leaves no waiter and starts nothing |
+| PS-13 | Low | Robustness | (Code review.) The 20 s bound didn't cover the docker calls: a stalled daemon could hang teardown or `clean-host` in `rm -f` or the listing. | Fixed | One deadline covers every `rm -f` and listing, each given only the time left; a call that times out never counts as gone. | `teardown.test.ts`: a stalled docker ends at the deadline |
+
