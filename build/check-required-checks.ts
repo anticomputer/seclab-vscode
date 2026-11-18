@@ -8,7 +8,9 @@
 //   - its workflow triggers on bare `push:` and `pull_request:`, with no filters under them.
 //   node build/check-required-checks.ts [--self-test]
 
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import * as os from 'node:os';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { jobContexts, jobProblems, triggers } from './liveness/liveness.ts';
@@ -492,7 +494,62 @@ function selfTest(): void {
 			throw new Error(`required-checks self-test "${name}": got ${JSON.stringify(got)}`);
 		}
 	}
-	console.log(`required-checks self-test: ${cases.length + 40} cases OK`);
+	// The gate's own script, run with bash against a stub gh serving fixture runs (RJG-2, RJG-6): it
+	// judges every run of each file and reads every page. The stub ignores --jq and serves what the
+	// filter would yield: "<id> <status>" lines per file, a conclusion per run.
+	const lines = g.split('\n');
+	const at = lines.findIndex(l => /^ {8}run: \|$/.test(l));
+	const script = lines.slice(at + 1).filter(l => l === '' || l.startsWith('          ')).map(l => l.slice(10)).join('\n');
+	const stub = `#!/bin/bash
+all="$*"
+echo "$all" >> "$FIX/log"
+case "$all" in
+  *"-X POST"*) for a; do case "$a" in state=*) echo "\${a#state=}" > "$FIX/state";; esac; done ;;
+  *"/workflows/"*"/runs?"*) [[ "$1 $2" == "api --paginate" ]] || exit 9; w="\${all#*/workflows/}"; w="\${w%%/*}"; [[ -f "$FIX/runs-$w" ]] && cat "$FIX/runs-$w"; true ;;
+  *"/runs/"*"/jobs?"*) i="\${all#*/runs/}"; i="\${i%%/*}"; cat "$FIX/job-$i" ;;
+  *) exit 8 ;;
+esac
+`;
+	const runGate = (fixture: Record<string, string>): string => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rjg-'));
+		try {
+			fs.mkdirSync(path.join(dir, 'bin'));
+			fs.writeFileSync(path.join(dir, 'bin', 'gh'), stub, { mode: 0o755 });
+			for (const [k, v] of Object.entries(fixture)) {
+				fs.writeFileSync(path.join(dir, k), v);
+			}
+			const r = spawnSync('bash', ['-c', script], { env: { PATH: `${dir}/bin:${process.env.PATH}`, FIX: dir, SHA: 'a'.repeat(40), REPO: 'o/r' }, encoding: 'utf8' });
+			const state = fs.existsSync(path.join(dir, 'state')) ? fs.readFileSync(path.join(dir, 'state'), 'utf8').trim() : `none (exit ${r.status})`;
+			return state;
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	};
+	const allGreen: Record<string, string> = {
+		'runs-ci-unit.yml': '1 completed\n', 'runs-workflow-lint.yml': '2 completed\n', 'runs-docs-check.yml': '3 completed\n', 'runs-patch-build.yml': '4 completed\n',
+		'job-1': 'success\n', 'job-2': 'success\n', 'job-3': 'success\n', 'job-4': 'success\n',
+	};
+	const gateRuns: Array<[string, Record<string, string>, string]> = [
+		['gate script: every required job ran to success', allGreen, 'success'],
+		['gate script RJG-2: lint ran on push but was skipped on the PR run', { ...allGreen, 'runs-workflow-lint.yml': '2 completed\n5 completed\n', 'job-5': 'skipped\n' }, 'failure'],
+		['gate script RJG-2: the skipped run listed first', { ...allGreen, 'runs-workflow-lint.yml': '5 completed\n2 completed\n', 'job-5': 'skipped\n' }, 'failure'],
+		['gate script: a cancelled required job', { ...allGreen, 'job-3': 'cancelled\n' }, 'failure'],
+		['gate script: a required job missing from its run', { ...allGreen, 'job-4': 'missing\n' }, 'failure'],
+		['gate script: no run of a required workflow', Object.fromEntries(Object.entries(allGreen).filter(([k]) => k !== 'runs-docs-check.yml')), 'failure'],
+		['gate script: a required run still in progress', { ...allGreen, 'runs-ci-unit.yml': '1 in_progress\n' }, 'pending'],
+		['gate script: a failure beats a pending run', { ...allGreen, 'runs-ci-unit.yml': '1 in_progress\n', 'job-3': 'failure\n' }, 'failure'],
+	];
+	for (const [name, fixture, want] of gateRuns) {
+		const got = runGate(fixture);
+		if (got !== want) {
+			throw new Error(`required-checks self-test "${name}": posted ${got}, want ${want}`);
+		}
+	}
+	// RJG-6: without --paginate the stub refuses, so the gate posts nothing (fail closed) and this fails.
+	if (!script.includes('gh api --paginate "repos/$REPO/actions/workflows/$wf/runs?')) {
+		throw new Error('required-checks self-test "gate script RJG-6": the runs list is not read with --paginate');
+	}
+	console.log(`required-checks self-test: ${cases.length + 40 + gateRuns.length} cases OK`);
 }
 
 if (import.meta.main) {
