@@ -134,6 +134,15 @@ if (args.has('--self-test')) {
 	} catch (e) {
 		bad.push(`imageLease threw: ${(e as Error).message}`);
 	}
+	// The builders write a per-build tag's lease before the tag exists, so a concurrent clean-host
+	// never sees it unleased (Copilot review on PR 25).
+	for (const [file, publish] of [['sandbox/oci/build-images.sh', 'docker build -q -t "$TAG"'], ['sandbox/sbx/build-template.sh', 'sbx template save "$B" "$TAG"']]) {
+		const text = fs.readFileSync(path.join(repoRoot, file), 'utf8');
+		const leaseAt = text.indexOf('date +%s > "$lease/$TAG"'), publishAt = text.indexOf(publish);
+		if (leaseAt < 0 || publishAt < 0 || leaseAt > publishAt) {
+			bad.push(`${file}: the per-build lease isn't written before the tag is published`);
+		}
+	}
 	// Per-build tags: a week from the later of creation and lease, so a cached (old) image tagged
 	// just now is live.
 	const day = 24 * 3_600_000, now = 100 * day;
