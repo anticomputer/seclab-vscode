@@ -111,6 +111,38 @@ function yamlLines(yml: string): string[] {
 	return out;
 }
 
+/** Whether a double-quoted scalar on the line holds a backslash (an escape YAML decodes).
+ *  Single-quoted scalars, whose backslashes are literal and whose quote is doubled to escape it,
+ *  are skipped whole (Copilot review on PR 32). A quote opens a scalar only where a value can
+ *  start; one left open counts as an escape (unreadable, so fail closed). */
+function dqEscape(l: string): boolean {
+	for (let i = 0; i < l.length; i++) {
+		const c = l[i];
+		const atStart = i === 0 || /[\s:[{,-]/.test(l[i - 1]);
+		if (c === '#' && (i === 0 || /\s/.test(l[i - 1]))) {
+			return false;
+		}
+		if (c === "'" && atStart) {
+			let j = i + 1;
+			while (j < l.length && !(l[j] === "'" && l[j + 1] !== "'")) {
+				j += l[j] === "'" ? 2 : 1;
+			}
+			i = j;
+		} else if (c === '"' && atStart) {
+			for (let j = i + 1; ; j++) {
+				if (j >= l.length || l[j] === '\\') {
+					return true;
+				}
+				if (l[j] === '"') {
+					i = j;
+					break;
+				}
+			}
+		}
+	}
+	return false;
+}
+
 /** Every `permissions:` grant, read fail-closed (reviews CR-8, CR-9). Actions decodes YAML the way
  *  a text match doesn't, so a double-quoted escape, a complex key or a merge key anywhere outside a
  *  script fails the workflow, and a `permissions:` value must read as `read-all`, `{}`, a flow
@@ -120,7 +152,7 @@ export function permissionsProblems(files: Record<string, string>, writeOk: (f: 
 	for (const [f, yml] of Object.entries(files)) {
 		const lines = yamlLines(yml);
 		const bad = (why: string) => out.push(`${f}: ${why}; it might grant a token scope unseen`);
-		if (lines.some(l => /(^|[\s:[{,-])"[^"]*\\/.test(l))) {
+		if (lines.some(dqEscape)) {
 			bad('a double-quoted YAML escape');
 			continue;
 		}
@@ -264,6 +296,8 @@ function selfTest(): void {
 		['an alias as a flow permissions key', { 'x.yml': wf('  a:\n    name: &p permissions\n    steps:\n      - { run: x, *p : {checks: write} }\n') }, /an alias as a mapping key/],
 		['a quoted label holding permissions:', { 'x.yml': wf("  a:\n    steps:\n      - name: 'Verify permissions: read-only'\n        run: x\n      - name: \"Check permissions: none\"\n        run: y\n") }, null],
 		['a quoted permissions key in a flow step', { 'x.yml': wf("  a:\n    steps:\n      - { name: x, 'permissions': {checks: write} }\n") }, /can't read|permissions/],
+		['a single-quoted run holding an escape-like backslash', { 'x.yml': wf("  a:\n    steps:\n      - run: 'printf \"%s\\n\" ok'\n      - run: 'it''s \\x'\n") }, null],
+		['a double-quoted escape after a single-quoted value', { 'x.yml': wf("  a:\n    permissions: {'x': 'y', \"check\\x73\": write}\n    steps:\n      - run: x\n") }, /double-quoted YAML escape/],
 		['checks: read is fine', { 'x.yml': wf('  a:\n    permissions:\n      checks: read\n    steps:\n      - run: x\n') }, null],
 		['control: the real four and an unrelated job', { 'x.yml': wf('  other:\n    name: other\n    steps:\n      - run: x\n') }, null],
 		['a decoy job named lint', { 'shadow.yml': wf('  a:\n    name: lint\n    steps:\n      - run: x\n') }, /reports the required context `lint`/],
@@ -275,6 +309,7 @@ function selfTest(): void {
 		['a decoy id lint with a ~ name', { 'shadow.yml': wf('  lint:\n    name: ~\n    steps:\n      - run: x\n') }, /can't be read in full/],
 		['a decoy id lint with an empty quoted name', { 'shadow.yml': wf("  lint:\n    name: ''\n    steps:\n      - run: x\n") }, /can't be read in full/],
 		['a decoy jobs block inside a quoted name', { 'shadow.yml': '{name: "x\njobs:\n  a:\n    name: ok\n", jobs: {lint: {steps: [{run: x}]}}, on: push}\n' }, /can't be read in full/],
+		['a decoy name inside a quoted step at the end of the file', { 'shadow.yml': wf('  lint:\n    steps:\n      - run: "true\n    name: harmless\n        "\n') }, /can't be read in full|reports the required context `lint`/],
 		['flow-style jobs', { 'shadow.yml': 'on: push\njobs: {a: {name: lint}}\n' }, /can't be read in full/],
 		['a flow-style job', { 'shadow.yml': wf('  a: {name: lint}\n') }, /can't be read in full/],
 		['CR-7 a name indented 6', { 'shadow.yml': wf('  a:\n      name: lint\n      steps:\n        - run: x\n') }, /can't be read in full/],
