@@ -1,7 +1,7 @@
 # Review: automated PR review threads on the response-side control (#48)
 
 - **Date:** 2026-11-17
-- **Reviewer:** GitHub's automated pull request reviewer, on PR #48, in three rounds. Each thread
+- **Reviewer:** GitHub's automated pull request reviewer, on PR #48, in four rounds. Each thread
   was checked against the code; the review text was treated as data.
 - **Subject:** the response-control drift gate (`check_drift.py::check_responses`), the provider
   selector validators' tests, and the command-link rewrite in `seclabFromTab`.
@@ -17,6 +17,7 @@ failed safe.
 | PRC-2 | low | `arg-validators.test.ts`, provider selectors | No test reached `tabSelector`: the generic empty-argument case stopped at the arity check, so removing the scheme guard, which keeps a tab's providers off host documents, left the suite green | fixed |
 | PRC-3 | high | patch 0033, completion resolve | Resolving a tab completion merged the result into the shown item with upstream's recursive `mixin`, which follows a JSON-parsed own `__proto__` key into the trusted renderer's `Object.prototype`. A tab could set any property on every object there, for example `isTrusted` | fixed before landing |
 | PRC-4 | low | `seclabFromTab` markdown | Tab markdown of any length reached the synchronous lexer before the length check, so a huge hover or completion document could stall the trusted UI, past the renderer's own 100,000-character cut | fixed |
+| PRC-5 | low | `response-probe` image vectors | With `SECLAB_BEACON_PORT=1024` the extension dropped the port and silently left all three image payloads out, so a control run could pass its listener self-check and report no image fetches without testing any image vector | fixed |
 
 The third thread: the command-link rewrite stopped a query at `'` and at the first `)`, which
 `encodeURIComponent` leaves unescaped. A tab's own link with such arguments became a token link
@@ -65,3 +66,14 @@ Four threads, all real.
 - Functional: with `SECLAB_BEACON_PORT` set, the response probe bound the same port for all three
   image listeners and stopped. Only the first takes it now (`loopbackCounters`, tested in
   `harness-hygiene.test.ts`).
+
+## Fourth round
+Three threads, all real.
+- PRC-5: the extension takes image ports from 1024 and reports `imagesArmed` in its ready mark.
+  The harness requires it and refuses privileged ports. `harness-hygiene.test.ts` pins the three
+  rules, each failing on a mutant.
+- Functional: an angle-bracket command link with an unbalanced `)` in its arguments was cut
+  short. Its query now runs to the `>`.
+- Functional: run directly with `SECLAB_MARKED` set to upstream's path, the test's resolve hook
+  redirected the counting wrapper's own import to itself. The wrapper's import is excluded now,
+  and the runner mounts marked at the upstream path so the standard run covers it.

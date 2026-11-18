@@ -18854,6 +18854,21 @@
 				"file": "test/containment/filter-module.test.ts",
 				"name": "response: oversized tab markdown never reaches the lexer (review on #48)"
 			}
+		},
+		{
+			"record": "20261117-response-control-pr-review.md",
+			"anchor": "PRC-5",
+			"round": "automated PR review threads on #48 (2026-11-17)",
+			"severity": "low",
+			"summary": "With SECLAB_BEACON_PORT=1024 the response probe's extension silently left out all three image payloads, so a control run could pass without testing any image vector.",
+			"component": "test/containment/response-probe",
+			"owner": "rpc",
+			"status": "fixed",
+			"commit": "patch:d1fde84c20f1b024d268bf9b1900d0cf18a132c1",
+			"test": {
+				"file": "test/containment/harness-hygiene.test.ts",
+				"name": "response probe: its image vectors are required, each rule failing on a mutant"
+			}
 		}
 	]
 }
