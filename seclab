@@ -2342,11 +2342,12 @@ case "${1:-help}" in
 				up="${SECLAB_UPSTREAM:-${RUNNER_TEMP:+$RUNNER_TEMP/upstream/vscode}}"
 				up="${up:-$ROOT/.work/upstream/vscode}"
 				wb="$up/src/vs/workbench"
-				if [ ! -d "$wb" ]; then
+				# The suite reads the server's own channels too (src/vs/platform), so it mounts src/vs.
+				if [ ! -d "$wb" ] || [ ! -d "$up/src/vs/platform" ]; then
 					echo "seclab test reh-environment: no pinned upstream at $up (build/fetch-upstream.sh $ROOT/.work/upstream/vscode, or set SECLAB_UPSTREAM)" >&2
 					exit 1
 				fi
-				docker run --rm --network none -e SECLAB_WORKBENCH_SRC=/up/workbench -v "$wb:/up/workbench:ro" -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --experimental-transform-types --no-warnings test/containment/reh-environment.test.ts ;;
+				docker run --rm --network none -e SECLAB_WORKBENCH_SRC=/up/vs/workbench -v "$up/src/vs:/up/vs:ro" -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --experimental-transform-types --no-warnings test/containment/reh-environment.test.ts ;;
 			# Patch 0051: a tab's search messages are untrusted, and the query sent to it carries no host editor.
 			search-responses) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/search-responses.test.ts ;;
 			# RPC filter: patches 0030/0031 never register upstream's push handlers in a tab window.
