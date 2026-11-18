@@ -1755,6 +1755,17 @@ case "${1:-help}" in
 			host-terminal) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/host-terminal.test.ts ;;
 			# Harnesses reap the previous run before wiping it, and tear down on SIGINT/SIGTERM.
 			harness-hygiene) docker run --rm --network none --tmpfs /scratch:exec -e SECLAB_SCRATCH=/scratch -e HOME=/scratch/home -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/harness-hygiene.test.ts ;;
+			# Patch 0052: upstream's own text search collector, run on one huge file, sends it in pieces
+			# the filter accepts (the pinned textSearchManager.ts, mounted from the upstream checkout).
+			search-split)
+				up="${SECLAB_UPSTREAM:-${RUNNER_TEMP:+$RUNNER_TEMP/upstream/vscode}}"
+				up="${up:-$ROOT/.work/upstream/vscode}"
+				tsm="$up/src/vs/workbench/services/search/common/textSearchManager.ts"
+				if [ ! -f "$tsm" ]; then
+					echo "seclab test search-split: no pinned upstream at $up (build/fetch-upstream.sh $ROOT/.work/upstream/vscode, or set SECLAB_UPSTREAM)" >&2
+					exit 1
+				fi
+				docker run --rm --network none -e SECLAB_TEXT_SEARCH_MANAGER=/up/textSearchManager.ts -v "$tsm:/up/textSearchManager.ts:ro" -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node --experimental-transform-types --no-warnings test/containment/search-split.test.ts ;;
 			# Patch 0051: a tab's search messages are untrusted, and the query sent to it carries no host editor.
 			search-responses) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/search-responses.test.ts ;;
 			# RPC filter: patches 0030/0031 never register upstream's push handlers in a tab window.
@@ -1763,7 +1774,7 @@ case "${1:-help}" in
 			decision-line) docker run --rm --network none -v "$ROOT:/repo:ro" -w /repo "$(node_image)" node test/containment/decision-line.test.ts ;;
 			# Every pure RPC-filter suite, so adding one to CI is a single edit.
 			rpc-filter)
-				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators decision-line check-probes push-refusal filter-module chat-gate terminal-variables host-terminal harness-hygiene search-responses; do
+				for t in probe-safety uri-constraint channel-guard policy-invariants command-taint decision-log log-throttle evidence-shape arg-validators decision-line check-probes push-refusal filter-module chat-gate terminal-variables host-terminal harness-hygiene search-responses search-split; do
 					printf '\n=== %s\n' "$t"
 					"$0" test "$t" || exit 1
 				done ;;

@@ -22,6 +22,12 @@ the extension host serves search itself: it registers its file and text search p
 - `$unregisterProvider`: the handle map is per extension host, so it reaches only this host's own
   providers.
 
+Patch 0052 makes the extension host send one file's text matches in pieces within
+`tabTextMatches`' bound. Upstream batched whole files, and a file with more matching lines had its
+whole batch refused (PR review on #52). The window merges matches for one resource, and
+`test/containment/search-split.test.ts` runs upstream's own collector on such a file, with and
+without the patch.
+
 Both registrations name patch 0051 as their response control (`check_drift.py`'s
 `check_responses`). The patch makes the provider's completion messages untrusted plain text, and
 drops open editors outside the tab's file system from the query the tab is sent

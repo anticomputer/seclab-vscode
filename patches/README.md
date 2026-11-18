@@ -174,6 +174,15 @@ with explicit exceptions, that a target must not reach. Both are enforced by `bu
   keybinding (`remoteName != seclab`) and its handler returns, the Explorer's "Open in …
   Terminal" items are hidden for host (`file:`) folders, and `terminalProcessManager` refuses any
   pty outside the window's own tab. Applies after 0034, which edits the same file.
+- `0051-seclab-sanitise-tab-search-responses.patch`: `mainThreadSearch.ts`. What a tab's search
+  provider returns reaches the Search view only through `seclabFromTab`: its completion messages
+  become untrusted, bounded plain text, and open editors outside the tab's file system are
+  dropped from the query the tab is sent (reviews SRCH-2, SRCH-3;
+  [EDR](../docs/edr/20261117-search-in-tabs.md)).
+- `0052-seclab-split-large-text-matches.patch`: `textSearchManager.ts`. The extension host sends
+  one file's text matches in pieces of at most the RPC filter's bound (`MAX_TEXT_MATCHES`); the
+  window merges matches for one resource. Upstream batched whole files, so a file with more
+  matching lines had its whole batch refused in a tab (PR review on #52).
 
 Test-only patches are **not** kept here. `build/prepare.sh` applies this
 directory unconditionally, so a fixture placed here would ship in release
